@@ -135,6 +135,12 @@ function App(): React.JSX.Element {
   const audioContext = useRef<AudioContext | undefined>(undefined);
   const mediaStream = useRef<MediaStream | undefined>(undefined);
   const hoverTimer = useRef<number | undefined>(undefined);
+  const modeRef = useRef<WindowMode>("compact");
+
+  const updateMode = useCallback((nextMode: WindowMode) => {
+    modeRef.current = nextMode;
+    setMode(nextMode);
+  }, []);
 
   const stopMicrophone = useCallback(async () => {
     mediaStream.current?.getTracks().forEach((track) => {
@@ -176,12 +182,15 @@ function App(): React.JSX.Element {
     }
   }, [stopMicrophone]);
 
-  const changeMode = useCallback(async (expanded: boolean) => {
-    const targetMode: WindowMode = expanded ? "expanded" : "compact";
-    setMode(targetMode);
-    const confirmedMode = await window.sidecar.setExpanded(expanded);
-    if (confirmedMode !== targetMode) setMode(confirmedMode);
-  }, []);
+  const changeMode = useCallback(
+    async (expanded: boolean) => {
+      const targetMode: WindowMode = expanded ? "expanded" : "compact";
+      updateMode(targetMode);
+      const confirmedMode = await window.sidecar.setExpanded(expanded);
+      if (confirmedMode !== targetMode) updateMode(confirmedMode);
+    },
+    [updateMode],
+  );
 
   const cancelHoverTransition = useCallback(() => {
     if (hoverTimer.current === undefined) return;
@@ -204,14 +213,14 @@ function App(): React.JSX.Element {
   );
 
   const handleHitRegionEnter = useCallback(() => {
-    if (mode === "compact") scheduleMode(true);
+    if (modeRef.current === "compact") scheduleMode(true);
     else cancelHoverTransition();
-  }, [cancelHoverTransition, mode, scheduleMode]);
+  }, [cancelHoverTransition, scheduleMode]);
 
   const handleHitRegionLeave = useCallback(() => {
-    if (mode === "compact") cancelHoverTransition();
+    if (modeRef.current === "compact") cancelHoverTransition();
     else scheduleMode(false);
-  }, [cancelHoverTransition, mode, scheduleMode]);
+  }, [cancelHoverTransition, scheduleMode]);
 
   usePointerPassthrough(handleHitRegionEnter, handleHitRegionLeave);
 
@@ -219,7 +228,7 @@ function App(): React.JSX.Element {
     void window.sidecar.getBootstrap().then((value) => {
       setBootstrap(value);
       setDisplay(value.display);
-      setMode(value.mode);
+      updateMode(value.mode);
       setMicrophoneStatus(value.microphoneStatus);
       if (value.profile === "microphone") {
         window.setTimeout(() => void startMicrophone(), 500);
@@ -227,8 +236,8 @@ function App(): React.JSX.Element {
       window.sidecar.notifyReady();
     });
     const removeLifecycle = window.sidecar.onLifecycle((eventName) => {
-      if (eventName === "mode:compact") setMode("compact");
-      if (eventName === "mode:expanded") setMode("expanded");
+      if (eventName === "mode:compact") updateMode("compact");
+      if (eventName === "mode:expanded") updateMode("expanded");
     });
     const removeMicrophone = window.sidecar.onStartMicrophone(() => {
       void startMicrophone();
@@ -241,7 +250,7 @@ function App(): React.JSX.Element {
       removeDisplay();
       void stopMicrophone();
     };
-  }, [cancelHoverTransition, startMicrophone, stopMicrophone]);
+  }, [cancelHoverTransition, startMicrophone, stopMicrophone, updateMode]);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {

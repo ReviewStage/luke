@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evidenceEnd, evidenceStart, updateEvidenceBlock } from "./update-pr-evidence.mjs";
+import {
+  evidenceEnd,
+  evidenceStart,
+  isCurrentPullHead,
+  updateEvidenceBlock,
+} from "./update-pr-evidence.mjs";
 
 const evidence = {
   artifactUrl: "https://github.example/artifact/1",
@@ -32,4 +37,10 @@ test("replaces only the existing automated evidence block", () => {
   assert.doesNotMatch(result, /stale evidence/);
   assert.match(result, /Keep this/);
   assert.equal(result.match(new RegExp(evidenceStart, "g"))?.length, 1);
+});
+
+test("updates evidence only for the current pull request head", () => {
+  assert.equal(isCurrentPullHead({ head: { sha: "current" } }, "current"), true);
+  assert.equal(isCurrentPullHead({ head: { sha: "newer" } }, "stale"), false);
+  assert.equal(isCurrentPullHead({}, "missing"), false);
 });

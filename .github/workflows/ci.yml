@@ -44,7 +44,7 @@ jobs:
       - run: ./scripts/verify.sh
       - name: Preserve visual evidence
         id: visual-evidence
-        if: always()
+        if: ${{ always() && !cancelled() }}
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: app-visual-evidence-${{ github.event.pull_request.number || github.run_id }}
@@ -54,6 +54,7 @@ jobs:
       - name: Link evidence from the pull request description
         if: >-
           always() &&
+          !cancelled() &&
           github.event_name == 'pull_request' &&
           github.event.pull_request.head.repo.full_name == github.repository &&
           steps.visual-evidence.outputs.artifact-url != ''

@@ -3,6 +3,10 @@ import { pathToFileURL } from "node:url";
 export const evidenceStart = "<!-- automated-visual-evidence:start -->";
 export const evidenceEnd = "<!-- automated-visual-evidence:end -->";
 
+export function isCurrentPullHead(pull, headSha) {
+  return pull.head?.sha === headSha;
+}
+
 export function updateEvidenceBlock(body, evidence) {
   const block = [
     evidenceStart,
@@ -57,10 +61,17 @@ async function main() {
   }
 
   const pull = await githubRequest(`/repos/${repository}/pulls/${pullRequest}`);
+  const headSha = requiredEnvironment("HEAD_SHA");
+  if (!isCurrentPullHead(pull, headSha)) {
+    process.stdout.write(
+      `Skipped visual evidence for stale commit ${headSha}; PR head is ${pull.head?.sha ?? "unknown"}\n`,
+    );
+    return;
+  }
   const body = updateEvidenceBlock(pull.body ?? "", {
     artifactUrl: requiredEnvironment("ARTIFACT_URL"),
     runUrl: requiredEnvironment("RUN_URL"),
-    headSha: requiredEnvironment("HEAD_SHA"),
+    headSha,
   });
 
   await githubRequest(`/repos/${repository}/pulls/${pullRequest}`, {
