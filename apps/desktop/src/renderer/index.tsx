@@ -46,8 +46,8 @@ function Waveform({
   analyser?: AnalyserNode;
   speaking?: boolean;
 }): React.JSX.Element {
-  const container = useRef<HTMLSpanElement | null>(null);
   const bars = useRef<Array<HTMLSpanElement | null>>([]);
+  const [voiceActive, setVoiceActive] = useState(false);
   const fixtureLevels = [0.42, 0.62, 0.82, 1, 0.78, 0.58, 0.38];
 
   useEffect(() => {
@@ -58,7 +58,7 @@ function Waveform({
     const values = new Uint8Array(analyser.fftSize);
     let frame = 0;
     let animationFrame = 0;
-    let wasSpeaking = speaking;
+    let wasSpeaking = false;
     let lastVoiceAt = 0;
     const draw = () => {
       let rms = 0;
@@ -71,11 +71,10 @@ function Waveform({
       rms = Math.min(1, Math.sqrt(energy / values.length) * 4.5);
       const now = performance.now();
       if (rms > 0.12) lastVoiceAt = now;
-      const nextSpeaking = speaking || now - lastVoiceAt < 220;
+      const nextSpeaking = now - lastVoiceAt < 220;
       if (nextSpeaking !== wasSpeaking) {
         wasSpeaking = nextSpeaking;
-        container.current?.setAttribute("data-speaking", String(wasSpeaking));
-        container.current?.setAttribute("aria-hidden", String(!wasSpeaking));
+        setVoiceActive(wasSpeaking);
       }
       bars.current.forEach((bar, index) => {
         if (!bar) return;
@@ -88,19 +87,19 @@ function Waveform({
     animationFrame = requestAnimationFrame(draw);
     return () => {
       cancelAnimationFrame(animationFrame);
-      container.current?.setAttribute("data-speaking", "false");
-      container.current?.setAttribute("aria-hidden", "true");
+      setVoiceActive(false);
     };
-  }, [analyser, speaking]);
+  }, [analyser]);
+
+  const isSpeaking = speaking || voiceActive;
 
   return (
     <span
-      ref={container}
       className="waveform"
       role="img"
       aria-label="Live speech activity"
-      aria-hidden={!speaking}
-      data-speaking={String(speaking)}
+      aria-hidden={!isSpeaking}
+      data-speaking={String(isSpeaking)}
     >
       {[0, 1, 2, 3, 4, 5, 6].map((index) => (
         <span
