@@ -51,26 +51,24 @@ function Waveform({
   const fixtureLevels = [0.42, 0.62, 0.82, 1, 0.78, 0.58, 0.38];
 
   useEffect(() => {
-    if (!analyser && !speaking) return;
+    // Fixture speech is intentionally static so screenshots and recordings are
+    // repeatable. Only a live microphone analyser needs animation frames.
+    if (!analyser) return;
 
-    const values = analyser ? new Uint8Array(analyser.fftSize) : undefined;
+    const values = new Uint8Array(analyser.fftSize);
     let frame = 0;
     let animationFrame = 0;
     let wasSpeaking = speaking;
     let lastVoiceAt = 0;
     const draw = () => {
       let rms = 0;
-      if (analyser && values) {
-        analyser.getByteTimeDomainData(values);
-        let energy = 0;
-        for (const value of values) {
-          const normalized = (value - 128) / 128;
-          energy += normalized * normalized;
-        }
-        rms = Math.min(1, Math.sqrt(energy / values.length) * 4.5);
-      } else {
-        rms = 0.48 + Math.sin(frame / 8) * 0.12;
+      analyser.getByteTimeDomainData(values);
+      let energy = 0;
+      for (const value of values) {
+        const normalized = (value - 128) / 128;
+        energy += normalized * normalized;
       }
+      rms = Math.min(1, Math.sqrt(energy / values.length) * 4.5);
       const now = performance.now();
       if (rms > 0.12) lastVoiceAt = now;
       const nextSpeaking = speaking || now - lastVoiceAt < 220;
