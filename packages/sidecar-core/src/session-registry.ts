@@ -175,7 +175,6 @@ export class InMemorySessionRegistry {
     const mutationEpoch = this.#providerMutationEpochs.get(providerId) ?? 0;
     const attempt = this.#startProviderRefreshAttempt(providerId);
     const observations = await adapter.observe();
-    const next = this.#nextProviderStore(adapter.provider, providerId, observations);
     const latestAttempt = this.#latestAppliedRefreshAttempts.get(providerId) ?? 0;
     if (
       latestAttempt >= attempt ||
@@ -183,6 +182,7 @@ export class InMemorySessionRegistry {
     ) {
       return this.snapshot();
     }
+    const next = this.#nextProviderStore(adapter.provider, providerId, observations);
     this.#latestAppliedRefreshAttempts.set(providerId, attempt);
     this.#commit(next);
     return this.snapshot();
