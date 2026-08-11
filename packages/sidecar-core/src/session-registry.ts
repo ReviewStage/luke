@@ -100,7 +100,9 @@ function normalizedProviderId(provider: SessionProvider): string {
 export class InMemorySessionRegistry {
   #revision = 0;
   #sessions: SessionStore = new Map();
-  #providerRefreshGenerations = new Map<string, number>();
+  #providerMutationEpochs = new Map<string, number>();
+  #nextProviderRefreshAttempts = new Map<string, number>();
+  #latestAppliedRefreshAttempts = new Map<string, number>();
   #listeners = new Set<SessionRegistryListener>();
 
   get revision(): number {
@@ -146,12 +148,11 @@ export class InMemorySessionRegistry {
     });
     const existing = this.#sessions.get(identity.providerId)?.get(identity.providerSessionId);
     const session = normalizeSession(provider, observation, existing?.attention);
-    this.#advanceProviderRefreshGeneration(identity.providerId);
     const next = copyStore(this.#sessions);
     const providerSessions = next.get(identity.providerId) ?? new Map();
     providerSessions.set(identity.providerSessionId, session);
     next.set(identity.providerId, providerSessions);
-    this.#commit(next);
+    this.#commit(next, identity.providerId);
     return copySession(session);
   }
 
@@ -164,17 +165,27 @@ export class InMemorySessionRegistry {
     observations: readonly ProviderSessionObservation[],
   ): SessionRegistrySnapshot {
     const providerId = normalizedProviderId(provider);
-    this.#advanceProviderRefreshGeneration(providerId);
-    return this.#replaceProvider(provider, providerId, observations);
+    this.#commit(this.#nextProviderStore(provider, providerId, observations), providerId);
+    return this.snapshot();
   }
 
   /** Reads a provider adapter and applies its newest full observation as one update. */
   async refresh(adapter: SessionProviderAdapter): Promise<SessionRegistrySnapshot> {
     const providerId = normalizedProviderId(adapter.provider);
-    const generation = this.#advanceProviderRefreshGeneration(providerId);
+    const mutationEpoch = this.#providerMutationEpochs.get(providerId) ?? 0;
+    const attempt = this.#startProviderRefreshAttempt(providerId);
     const observations = await adapter.observe();
-    if (this.#providerRefreshGenerations.get(providerId) !== generation) return this.snapshot();
-    return this.#replaceProvider(adapter.provider, providerId, observations);
+    const next = this.#nextProviderStore(adapter.provider, providerId, observations);
+    const latestAttempt = this.#latestAppliedRefreshAttempts.get(providerId) ?? 0;
+    if (
+      latestAttempt >= attempt ||
+      (this.#providerMutationEpochs.get(providerId) ?? 0) !== mutationEpoch
+    ) {
+      return this.snapshot();
+    }
+    this.#latestAppliedRefreshAttempts.set(providerId, attempt);
+    this.#commit(next);
+    return this.snapshot();
   }
 
   /** Stores Luke's latest attention decision without mutating provider-owned data. */
@@ -204,21 +215,20 @@ export class InMemorySessionRegistry {
     const normalizedIdentity = normalizeSessionIdentity(identity);
     const existingProviderSessions = this.#sessions.get(normalizedIdentity.providerId);
     if (!existingProviderSessions?.has(normalizedIdentity.providerSessionId)) return false;
-    this.#advanceProviderRefreshGeneration(normalizedIdentity.providerId);
     const next = copyStore(this.#sessions);
     const providerSessions = next.get(normalizedIdentity.providerId);
     if (!providerSessions) throw new Error("Session provider disappeared during removal");
     providerSessions.delete(normalizedIdentity.providerSessionId);
     if (providerSessions.size === 0) next.delete(normalizedIdentity.providerId);
-    this.#commit(next);
+    this.#commit(next, normalizedIdentity.providerId);
     return true;
   }
 
-  #replaceProvider(
+  #nextProviderStore(
     provider: SessionProvider,
     providerId: string,
     observations: readonly ProviderSessionObservation[],
-  ): SessionRegistrySnapshot {
+  ): SessionStore {
     const existingForProvider = this.#sessions.get(providerId);
     const replacement: ProviderSessions = new Map();
 
@@ -243,20 +253,24 @@ export class InMemorySessionRegistry {
     const next = copyStore(this.#sessions);
     if (replacement.size === 0) next.delete(providerId);
     else next.set(providerId, replacement);
-    this.#commit(next);
-    return this.snapshot();
+    return next;
   }
 
-  #advanceProviderRefreshGeneration(providerId: string): number {
-    const nextGeneration = (this.#providerRefreshGenerations.get(providerId) ?? 0) + 1;
-    this.#providerRefreshGenerations.set(providerId, nextGeneration);
-    return nextGeneration;
+  #startProviderRefreshAttempt(providerId: string): number {
+    const nextAttempt = (this.#nextProviderRefreshAttempts.get(providerId) ?? 0) + 1;
+    this.#nextProviderRefreshAttempts.set(providerId, nextAttempt);
+    return nextAttempt;
   }
 
-  #commit(next: SessionStore): void {
-    if (sameSessions(this.#sessions, next)) return;
+  #commit(next: SessionStore, invalidateRefreshesForProvider?: string): boolean {
+    if (sameSessions(this.#sessions, next)) return false;
+    if (invalidateRefreshesForProvider) {
+      const nextEpoch = (this.#providerMutationEpochs.get(invalidateRefreshesForProvider) ?? 0) + 1;
+      this.#providerMutationEpochs.set(invalidateRefreshesForProvider, nextEpoch);
+    }
     this.#sessions = next;
     this.#revision += 1;
     for (const listener of this.#listeners) listener(this.snapshot());
+    return true;
   }
 }

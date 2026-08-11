@@ -124,6 +124,35 @@ test("ignores an older overlapping refresh after a newer provider snapshot is ap
   );
 });
 
+test("keeps a valid refresh after a rejected or unchanged direct update", async () => {
+  const registry = new InMemorySessionRegistry();
+  registry.upsert(codex, observation("active", 10));
+  let resolveObservation: ((value: readonly ProviderSessionObservation[]) => void) | undefined;
+  const pendingObservation = new Promise<readonly ProviderSessionObservation[]>((resolve) => {
+    resolveObservation = resolve;
+  });
+  const refresh = registry.refresh({
+    provider: codex,
+    observe: async () => pendingObservation,
+  });
+
+  registry.upsert(codex, observation("active", 10));
+  assert.throws(
+    () =>
+      registry.replaceProvider(codex, [observation("duplicate", 20), observation("duplicate", 30)]),
+    /Duplicate session observation: duplicate/,
+  );
+
+  if (!resolveObservation) throw new Error("Refresh observation did not start");
+  resolveObservation([observation("active", 40, { title: "Refreshed observation" })]);
+  await refresh;
+
+  assert.equal(
+    registry.get({ providerId: codex.id, providerSessionId: "active" })?.title,
+    "Refreshed observation",
+  );
+});
+
 test("registry snapshots are isolated and listeners only receive effective updates", () => {
   const registry = new InMemorySessionRegistry();
   const revisions: number[] = [];
