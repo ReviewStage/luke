@@ -185,9 +185,15 @@ function App(): React.JSX.Element {
   const changeMode = useCallback(
     async (expanded: boolean) => {
       const targetMode: WindowMode = expanded ? "expanded" : "compact";
-      updateMode(targetMode);
-      const confirmedMode = await window.sidecar.setExpanded(expanded);
-      if (confirmedMode !== targetMode) updateMode(confirmedMode);
+      const previousMode = modeRef.current;
+      modeRef.current = targetMode;
+      try {
+        const confirmedMode = await window.sidecar.setExpanded(expanded);
+        updateMode(confirmedMode);
+      } catch (error) {
+        modeRef.current = previousMode;
+        throw error;
+      }
     },
     [updateMode],
   );
@@ -299,13 +305,14 @@ function App(): React.JSX.Element {
         </div>
       </div>
 
-      <div className="expanded-stage" aria-hidden={mode !== "expanded"}>
-        <section
-          className="expanded-panel"
-          data-hit-region
-          onPointerEnter={cancelHoverTransition}
-          onPointerLeave={() => scheduleMode(false)}
-        >
+      <div
+        className="expanded-stage"
+        aria-hidden={mode !== "expanded"}
+        data-hit-region
+        onPointerEnter={cancelHoverTransition}
+        onPointerLeave={() => scheduleMode(false)}
+      >
+        <section className="expanded-panel">
           <header className="panel-header">
             <div className="header-status">
               {hasAudioSignal ? (
