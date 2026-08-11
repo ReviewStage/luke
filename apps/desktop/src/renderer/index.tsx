@@ -134,11 +134,22 @@ function App(): React.JSX.Element {
   const mediaStream = useRef<MediaStream | undefined>(undefined);
   const hoverTimer = useRef<number | undefined>(undefined);
   const modeRef = useRef<WindowMode>("compact");
+  const modeGeneration = useRef(0);
 
   const updateMode = useCallback((nextMode: WindowMode) => {
     modeRef.current = nextMode;
     setMode(nextMode);
   }, []);
+
+  const applyAuthoritativeMode = useCallback(
+    (nextMode: WindowMode) => {
+      // A lifecycle notification can originate outside this renderer (for
+      // example from the tray). Ignore an older IPC result that arrives later.
+      modeGeneration.current += 1;
+      updateMode(nextMode);
+    },
+    [updateMode],
+  );
 
   const stopMicrophone = useCallback(async () => {
     mediaStream.current?.getTracks().forEach((track) => {
@@ -156,9 +167,11 @@ function App(): React.JSX.Element {
     setMicrophoneStatus(permission);
     if (permission !== "granted") return;
 
+    let stream: MediaStream | undefined;
+    let context: AudioContext | undefined;
     try {
       await stopMicrophone();
-      const stream = await navigator.mediaDevices.getUserMedia({
+      stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           autoGainControl: true,
           echoCancellation: true,
@@ -166,7 +179,7 @@ function App(): React.JSX.Element {
         },
         video: false,
       });
-      const context = new AudioContext({ latencyHint: "interactive" });
+      context = new AudioContext({ latencyHint: "interactive" });
       const source = context.createMediaStreamSource(stream);
       const nextAnalyser = context.createAnalyser();
       nextAnalyser.fftSize = 256;
@@ -176,6 +189,14 @@ function App(): React.JSX.Element {
       audioContext.current = context;
       setAnalyser(nextAnalyser);
     } catch (error) {
+      stream?.getTracks().forEach((track) => {
+        track.stop();
+      });
+      try {
+        await context?.close();
+      } catch {
+        // Preserve the original setup error if browser cleanup also fails.
+      }
       setMicrophoneError(error instanceof Error ? error.message : String(error));
     }
   }, [stopMicrophone]);
@@ -184,12 +205,14 @@ function App(): React.JSX.Element {
     async (expanded: boolean) => {
       const targetMode: WindowMode = expanded ? "expanded" : "compact";
       const previousMode = modeRef.current;
+      const generation = modeGeneration.current + 1;
+      modeGeneration.current = generation;
       modeRef.current = targetMode;
       try {
         const confirmedMode = await window.sidecar.setExpanded(expanded);
-        updateMode(confirmedMode);
+        if (modeGeneration.current === generation) updateMode(confirmedMode);
       } catch (error) {
-        modeRef.current = previousMode;
+        if (modeGeneration.current === generation) modeRef.current = previousMode;
         throw error;
       }
     },
@@ -229,10 +252,11 @@ function App(): React.JSX.Element {
   usePointerPassthrough(handleHitRegionEnter, handleHitRegionLeave);
 
   useEffect(() => {
+    const bootstrapGeneration = modeGeneration.current;
     void window.sidecar.getBootstrap().then((value) => {
       setBootstrap(value);
       setDisplay(value.display);
-      updateMode(value.mode);
+      if (modeGeneration.current === bootstrapGeneration) applyAuthoritativeMode(value.mode);
       setMicrophoneStatus(value.microphoneStatus);
       if (value.profile === "microphone") {
         window.setTimeout(() => void startMicrophone(), 500);
@@ -240,8 +264,8 @@ function App(): React.JSX.Element {
       window.sidecar.notifyReady();
     });
     const removeLifecycle = window.sidecar.onLifecycle((eventName) => {
-      if (eventName === "mode:compact") updateMode("compact");
-      if (eventName === "mode:expanded") updateMode("expanded");
+      if (eventName === "mode:compact") applyAuthoritativeMode("compact");
+      if (eventName === "mode:expanded") applyAuthoritativeMode("expanded");
     });
     const removeMicrophone = window.sidecar.onStartMicrophone(() => {
       void startMicrophone();
@@ -254,7 +278,7 @@ function App(): React.JSX.Element {
       removeDisplay();
       void stopMicrophone();
     };
-  }, [cancelHoverTransition, startMicrophone, stopMicrophone, updateMode]);
+  }, [applyAuthoritativeMode, cancelHoverTransition, startMicrophone, stopMicrophone]);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
