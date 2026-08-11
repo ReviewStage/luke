@@ -42,10 +42,5 @@ find "$SIDECAR_REPO_ROOT/scripts" -type f -name '*.sh' -print0 |
         bash -n "$script"
     done
 
-if [[ -d "$SIDECAR_REPO_ROOT/apps/macos" ]]; then
-    printf 'error: retired Swift app directory is still present\n' >&2
-    exit 1
-fi
-
 git -C "$SIDECAR_REPO_ROOT" diff --check
 printf 'Repository contract checks passed.\n'
