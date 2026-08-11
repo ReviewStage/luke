@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { packager } from "@electron/packager";
+import { packageIgnorePatterns } from "./package-layout.mjs";
 
 if (process.platform !== "darwin") {
   throw new Error("Packaging Luke requires macOS");
@@ -12,7 +13,6 @@ const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(scriptDirectory, "..");
 const outputRoot = path.join(appRoot, "out");
 const helperPath = path.join(appRoot, ".build", "native", "mac-screen-geometry");
-const escapedAppRoot = appRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 if (!fs.existsSync(helperPath)) {
   throw new Error(`macOS screen-geometry helper is missing: ${helperPath}`);
@@ -39,10 +39,7 @@ const appPaths = await packager({
       "Luke uses microphone input when you press to talk. Audio processing stays in the active voice session.",
     NSPrefersDisplaySafeAreaCompatibilityMode: false,
   },
-  ignore: [
-    new RegExp(`^${escapedAppRoot}/(?:\\.build|native|node_modules|scripts|src|tests)(?:$|/)`),
-    /\.map$/,
-  ],
+  ignore: packageIgnorePatterns,
 });
 
 const packageRoot = appPaths[0];

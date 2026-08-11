@@ -48,6 +48,7 @@ function Waveform({
 }): React.JSX.Element {
   const container = useRef<HTMLSpanElement | null>(null);
   const bars = useRef<Array<HTMLSpanElement | null>>([]);
+  const fixtureLevels = [0.42, 0.62, 0.82, 1, 0.78, 0.58, 0.38];
 
   useEffect(() => {
     if (!analyser && !speaking) return;
@@ -55,7 +56,7 @@ function Waveform({
     const values = analyser ? new Uint8Array(analyser.fftSize) : undefined;
     let frame = 0;
     let animationFrame = 0;
-    let wasSpeaking = false;
+    let wasSpeaking = speaking;
     let lastVoiceAt = 0;
     const draw = () => {
       let rms = 0;
@@ -100,8 +101,8 @@ function Waveform({
       className="waveform"
       role="img"
       aria-label="Live speech activity"
-      aria-hidden="true"
-      data-speaking="false"
+      aria-hidden={!speaking}
+      data-speaking={String(speaking)}
     >
       {[0, 1, 2, 3, 4, 5, 6].map((index) => (
         <span
@@ -110,6 +111,7 @@ function Waveform({
           ref={(element) => {
             bars.current[index] = element;
           }}
+          style={speaking ? { transform: `scaleY(${fixtureLevels[index]})` } : undefined}
         />
       ))}
     </span>

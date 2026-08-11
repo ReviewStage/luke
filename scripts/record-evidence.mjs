@@ -7,20 +7,11 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { packagedAppExecutable } from "../apps/desktop/scripts/package-layout.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const evidenceRoot = path.join(repoRoot, "artifacts", "evidence");
-const appExecutable = path.join(
-  repoRoot,
-  "apps",
-  "desktop",
-  "out",
-  "Luke-darwin-arm64",
-  "Luke.app",
-  "Contents",
-  "MacOS",
-  "Luke",
-);
+const appExecutable = packagedAppExecutable(repoRoot);
 const recordingPath = path.join(evidenceRoot, "app-hover-transition.mov");
 const mp4Path = path.join(evidenceRoot, "app-hover-transition.mp4");
 const gifPath = path.join(evidenceRoot, "app-hover-transition.gif");
