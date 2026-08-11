@@ -41,3 +41,12 @@ untracked.
 Biome is the executable style policy for TypeScript, JavaScript, JSON,
 Markdown, and CSS. Husky runs the same checks against staged files as a local
 convenience; `./scripts/check.sh` and CI remain authoritative.
+
+## TypeScript value sets and keys
+
+- Do not use stringly typed fixed value sets. Define `as const`
+  SCREAMING_SNAKE_CASE objects, derive unions with
+  `typeof VALUE_SET[keyof typeof VALUE_SET]`, and use the constants at call
+  sites. Raw strings are only for freeform, user-facing text.
+- Do not construct keys by concatenating or interpolating identifiers. Use
+  nested objects or nested `Map` instances keyed by the original identifiers.
