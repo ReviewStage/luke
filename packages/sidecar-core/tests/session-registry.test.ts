@@ -98,6 +98,32 @@ test("refresh atomically replaces one adapter's sessions and preserves attention
   assert.equal(registry.get({ providerId: "codex", providerSessionId: "stale" }), undefined);
 });
 
+test("ignores an older overlapping refresh after a newer provider snapshot is applied", async () => {
+  const registry = new InMemorySessionRegistry();
+  let resolveOlderObservation: ((value: readonly ProviderSessionObservation[]) => void) | undefined;
+  const olderObservation = new Promise<readonly ProviderSessionObservation[]>((resolve) => {
+    resolveOlderObservation = resolve;
+  });
+
+  const olderRefresh = registry.refresh({
+    provider: codex,
+    observe: async () => olderObservation,
+  });
+  await registry.refresh({
+    provider: codex,
+    observe: async () => [observation("active", 20, { title: "Newer observation" })],
+  });
+
+  if (!resolveOlderObservation) throw new Error("Older observation did not start");
+  resolveOlderObservation([observation("active", 10, { title: "Older observation" })]);
+  await olderRefresh;
+
+  assert.equal(
+    registry.get({ providerId: codex.id, providerSessionId: "active" })?.title,
+    "Newer observation",
+  );
+});
+
 test("registry snapshots are isolated and listeners only receive effective updates", () => {
   const registry = new InMemorySessionRegistry();
   const revisions: number[] = [];

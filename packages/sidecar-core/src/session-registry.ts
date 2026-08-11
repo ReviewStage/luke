@@ -86,6 +86,12 @@ function copyStore(store: ReadonlyMap<string, ProviderSessions>): SessionStore {
   return new Map([...store].map(([providerId, sessions]) => [providerId, new Map(sessions)]));
 }
 
+function normalizedProviderId(provider: SessionProvider): string {
+  const providerId = provider.id.trim();
+  if (!providerId) throw new Error("provider id must not be empty");
+  return providerId;
+}
+
 /**
  * A portable, in-memory source of truth for normalized sessions. It never
  * persists observations, and only replaces records after a provider snapshot
@@ -94,6 +100,7 @@ function copyStore(store: ReadonlyMap<string, ProviderSessions>): SessionStore {
 export class InMemorySessionRegistry {
   #revision = 0;
   #sessions: SessionStore = new Map();
+  #providerRefreshGenerations = new Map<string, number>();
   #listeners = new Set<SessionRegistryListener>();
 
   get revision(): number {
@@ -139,6 +146,7 @@ export class InMemorySessionRegistry {
     });
     const existing = this.#sessions.get(identity.providerId)?.get(identity.providerSessionId);
     const session = normalizeSession(provider, observation, existing?.attention);
+    this.#advanceProviderRefreshGeneration(identity.providerId);
     const next = copyStore(this.#sessions);
     const providerSessions = next.get(identity.providerId) ?? new Map();
     providerSessions.set(identity.providerSessionId, session);
@@ -155,40 +163,18 @@ export class InMemorySessionRegistry {
     provider: SessionProvider,
     observations: readonly ProviderSessionObservation[],
   ): SessionRegistrySnapshot {
-    const providerId = provider.id.trim();
-    if (!providerId) throw new Error("provider id must not be empty");
-    const existingForProvider = this.#sessions.get(providerId);
-    const replacement: ProviderSessions = new Map();
-
-    for (const observation of observations) {
-      const { providerSessionId } = normalizeSessionIdentity({
-        providerId,
-        providerSessionId: observation.providerSessionId,
-      });
-      if (replacement.has(providerSessionId)) {
-        throw new Error(`Duplicate session observation: ${observation.providerSessionId}`);
-      }
-      replacement.set(
-        providerSessionId,
-        normalizeSession(
-          provider,
-          observation,
-          existingForProvider?.get(providerSessionId)?.attention,
-        ),
-      );
-    }
-
-    const next = copyStore(this.#sessions);
-    if (replacement.size === 0) next.delete(providerId);
-    else next.set(providerId, replacement);
-    this.#commit(next);
-    return this.snapshot();
+    const providerId = normalizedProviderId(provider);
+    this.#advanceProviderRefreshGeneration(providerId);
+    return this.#replaceProvider(provider, providerId, observations);
   }
 
-  /** Reads a provider adapter and applies its full observation as one update. */
+  /** Reads a provider adapter and applies its newest full observation as one update. */
   async refresh(adapter: SessionProviderAdapter): Promise<SessionRegistrySnapshot> {
+    const providerId = normalizedProviderId(adapter.provider);
+    const generation = this.#advanceProviderRefreshGeneration(providerId);
     const observations = await adapter.observe();
-    return this.replaceProvider(adapter.provider, observations);
+    if (this.#providerRefreshGenerations.get(providerId) !== generation) return this.snapshot();
+    return this.#replaceProvider(adapter.provider, providerId, observations);
   }
 
   /** Stores Luke's latest attention decision without mutating provider-owned data. */
@@ -218,6 +204,7 @@ export class InMemorySessionRegistry {
     const normalizedIdentity = normalizeSessionIdentity(identity);
     const existingProviderSessions = this.#sessions.get(normalizedIdentity.providerId);
     if (!existingProviderSessions?.has(normalizedIdentity.providerSessionId)) return false;
+    this.#advanceProviderRefreshGeneration(normalizedIdentity.providerId);
     const next = copyStore(this.#sessions);
     const providerSessions = next.get(normalizedIdentity.providerId);
     if (!providerSessions) throw new Error("Session provider disappeared during removal");
@@ -225,6 +212,45 @@ export class InMemorySessionRegistry {
     if (providerSessions.size === 0) next.delete(normalizedIdentity.providerId);
     this.#commit(next);
     return true;
+  }
+
+  #replaceProvider(
+    provider: SessionProvider,
+    providerId: string,
+    observations: readonly ProviderSessionObservation[],
+  ): SessionRegistrySnapshot {
+    const existingForProvider = this.#sessions.get(providerId);
+    const replacement: ProviderSessions = new Map();
+
+    for (const observation of observations) {
+      const { providerSessionId } = normalizeSessionIdentity({
+        providerId,
+        providerSessionId: observation.providerSessionId,
+      });
+      if (replacement.has(providerSessionId)) {
+        throw new Error(`Duplicate session observation: ${observation.providerSessionId}`);
+      }
+      replacement.set(
+        providerSessionId,
+        normalizeSession(
+          provider,
+          observation,
+          existingForProvider?.get(providerSessionId)?.attention,
+        ),
+      );
+    }
+
+    const next = copyStore(this.#sessions);
+    if (replacement.size === 0) next.delete(providerId);
+    else next.set(providerId, replacement);
+    this.#commit(next);
+    return this.snapshot();
+  }
+
+  #advanceProviderRefreshGeneration(providerId: string): number {
+    const nextGeneration = (this.#providerRefreshGenerations.get(providerId) ?? 0) + 1;
+    this.#providerRefreshGenerations.set(providerId, nextGeneration);
+    return nextGeneration;
   }
 
   #commit(next: SessionStore): void {
