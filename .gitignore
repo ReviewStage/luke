@@ -1,8 +1,18 @@
 .DS_Store
 .build/
 artifacts/
-*.xcuserstate
-xcuserdata/
+coverage/
+node_modules/
+apps/*/out/
+apps/*/dist/
+apps/*/.vite/
+*.tsbuildinfo
+npm-debug.log*
+
+# Local secrets. Commit an explicit example file when configuration needs one.
+.env
+.env.*
+!.env.example
 
 # Local agent context is not a repository input.
 .context/

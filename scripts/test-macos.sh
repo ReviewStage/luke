@@ -8,17 +8,17 @@ source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 sidecar_require_macos
 "$SCRIPT_DIRECTORY/check.sh"
 
-rm -rf -- "$SIDECAR_RESULT_BUNDLE_PATH"
-mkdir -p "$(dirname -- "$SIDECAR_RESULT_BUNDLE_PATH")"
+cd "$SIDECAR_REPO_ROOT"
+npm run package
 
-xcodebuild \
-    -project "$SIDECAR_REPO_ROOT/Luke.xcodeproj" \
-    -scheme Luke \
-    -configuration Debug \
-    -destination 'platform=macOS' \
-    -derivedDataPath "$SIDECAR_DERIVED_DATA_PATH" \
-    -resultBundlePath "$SIDECAR_RESULT_BUNDLE_PATH" \
-    CODE_SIGNING_ALLOWED=NO \
-    test
+PACKAGED_APP=$(find "$SIDECAR_DESKTOP_APP_ROOT/out" -type d -path '*/Luke.app' -print -quit)
+if [[ -z "$PACKAGED_APP" ]]; then
+    printf 'error: Electron Packager did not produce Luke.app\n' >&2
+    exit 1
+fi
+if [[ ! -x "$PACKAGED_APP/Contents/Resources/mac-screen-geometry" ]]; then
+    printf 'error: packaged app is missing the AppKit screen-geometry helper\n' >&2
+    exit 1
+fi
 
-printf 'macOS test results: %s\n' "$SIDECAR_RESULT_BUNDLE_PATH"
+printf 'Packaged macOS app: %s\n' "$PACKAGED_APP"

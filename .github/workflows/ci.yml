@@ -8,40 +8,60 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  core-checks:
-    name: Platform-independent checks
+  portable:
+    name: TypeScript checks
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - uses: swift-actions/setup-swift@7ca6abe6b3b0e8b5421b88be48feee39cbf52c6a # v2
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          swift-version: "6.0.3"
+          node-version-file: .nvmrc
+          cache: npm
       - run: ./scripts/bootstrap.sh
       - run: ./scripts/check.sh
 
   macos:
     name: macOS app and evidence
     runs-on: macos-15
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
       - uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
         with:
           xcode-version: "16.2"
       - run: ./scripts/bootstrap.sh
-      - run: ./scripts/test-macos.sh
-      - run: ./scripts/evidence.sh
-      - name: Preserve test results
-        if: always()
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
-        with:
-          name: macos-test-results
-          path: artifacts/test-results/App.xcresult
-          if-no-files-found: warn
+      - run: ./scripts/verify.sh
       - name: Preserve visual evidence
+        id: visual-evidence
         if: always()
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
-          name: app-visual-evidence
-          path: artifacts/evidence/app-development.png
+          name: app-visual-evidence-${{ github.event.pull_request.number || github.run_id }}
+          path: artifacts/evidence/
           if-no-files-found: error
+          retention-days: 90
+      - name: Link evidence from the pull request description
+        if: >-
+          always() &&
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          steps.visual-evidence.outputs.artifact-url != ''
+        env:
+          ARTIFACT_URL: ${{ steps.visual-evidence.outputs.artifact-url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node scripts/update-pr-evidence.mjs

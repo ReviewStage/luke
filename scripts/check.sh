@@ -5,10 +5,8 @@ SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=scripts/lib/workspace.sh
 source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 
-sidecar_require_command swift
+sidecar_require_node
 "$SCRIPT_DIRECTORY/repository-checks.sh"
 
-swift test \
-    --package-path "$SIDECAR_REPO_ROOT" \
-    --scratch-path "$SIDECAR_SWIFT_BUILD_PATH" \
-    --parallel
+cd "$SIDECAR_REPO_ROOT"
+npm run check

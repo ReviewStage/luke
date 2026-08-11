@@ -1,0 +1,36 @@
+{
+  "name": "luke",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A notch-attached desktop sidecar for coding-agent sessions",
+  "packageManager": "npm@11.11.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "npm run build --workspace @luke/desktop",
+    "check": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "evidence:record": "node scripts/record-evidence.mjs",
+    "format": "biome format --write .",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "package": "npm run package --workspace @luke/desktop",
+    "prepare": "husky",
+    "start": "npm run start --workspace @luke/desktop --",
+    "test": "npm run test:harness && npm run test --workspaces --if-present",
+    "test:harness": "node --test scripts/*.test.mjs",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "lint-staged": {
+    "*.{js,jsx,mjs,ts,tsx,json,md,css}": "biome check --write --no-errors-on-unmatched"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.8",
+    "husky": "9.1.7",
+    "lint-staged": "17.3.0"
+  }
+}

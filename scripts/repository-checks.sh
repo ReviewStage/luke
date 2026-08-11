@@ -9,8 +9,17 @@ required_files=(
     AGENTS.md
     WORKFLOW.md
     README.md
-    Package.swift
-    Luke.xcodeproj/project.pbxproj
+    package.json
+    package-lock.json
+    biome.json
+    .nvmrc
+    .husky/pre-commit
+    tsconfig.base.json
+    apps/desktop/package.json
+    apps/desktop/scripts/package.mjs
+    apps/desktop/native/macos/ScreenGeometry.swift
+    packages/sidecar-core/package.json
+    scripts/verify.sh
     .conductor/settings.toml
     .github/pull_request_template.md
     .github/workflows/ci.yml
@@ -23,10 +32,20 @@ for required_file in "${required_files[@]}"; do
     fi
 done
 
+if [[ ! -x "$SIDECAR_REPO_ROOT/.husky/pre-commit" ]]; then
+    printf 'error: Husky pre-commit hook must be executable\n' >&2
+    exit 1
+fi
+
 find "$SIDECAR_REPO_ROOT/scripts" -type f -name '*.sh' -print0 |
     while IFS= read -r -d '' script; do
         bash -n "$script"
     done
+
+if [[ -d "$SIDECAR_REPO_ROOT/apps/macos" ]]; then
+    printf 'error: retired Swift app directory is still present\n' >&2
+    exit 1
+fi
 
 git -C "$SIDECAR_REPO_ROOT" diff --check
 printf 'Repository contract checks passed.\n'
