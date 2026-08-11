@@ -56,6 +56,13 @@ top-center attachment with no invented hardware geometry.
 The app currently uses synthetic fixture data. It requires no coding-agent
 sessions, credentials, transcripts, or personal data.
 
+## Pull-request media
+
+Keep generated screenshots and recordings out of product branches. Inline PR
+media is stored on the shared `pr-assets` branch under `pr-<number>/` and linked
+with its `raw.githubusercontent.com` URL. Keep that one branch: deleting it
+breaks rendered images in open and historical PRs.
+
 ## Repository map
 
 - `apps/desktop/` — Electron main/preload processes, React renderer, macOS adapter, and app packaging
