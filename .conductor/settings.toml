@@ -1,0 +1,36 @@
+"$schema" = "https://conductor.build/schemas/settings.repo.schema.json"
+
+[scripts]
+setup = "./scripts/bootstrap.sh"
+run_mode = "concurrent"
+
+[scripts.run.check]
+command = "./scripts/check.sh"
+available_in = [ "local", "cloud" ]
+icon = "circle-check"
+
+[scripts.run.app]
+command = "./scripts/run.sh"
+available_in = [ "local" ]
+default = true
+icon = "play"
+
+[scripts.run.mac-test]
+command = "./scripts/test-macos.sh"
+available_in = [ "local" ]
+icon = "test-tube"
+
+[scripts.run.verify]
+command = "./scripts/verify.sh"
+available_in = [ "local" ]
+icon = "badge-check"
+
+[scripts.run.evidence]
+command = "./scripts/evidence.sh"
+available_in = [ "local" ]
+icon = "camera"
+
+[scripts.run.record-evidence]
+command = "npm run evidence:record"
+available_in = [ "local" ]
+icon = "video"
