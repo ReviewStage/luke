@@ -26,11 +26,17 @@ On macOS, launch the fixture app or run complete validation:
 ./scripts/verify.sh
 ```
 
+Run the public landing page locally with:
+
+```sh
+npm run dev --workspace @luke/web
+```
+
 Use `./scripts/run.sh --profile speaking` to preview the deterministic waveform
 to the left of the notch without requesting microphone access.
 
 The run command directly owns the Electron process, so Control-C stops it.
-`verify.sh` packages the app and writes deterministic visual evidence to
+`verify.sh` packages the desktop app and writes deterministic visual evidence to
 `artifacts/evidence/app-smoke-expanded.png`,
 `artifacts/evidence/app-smoke-compact.png`, and
 `artifacts/evidence/app-smoke-speaking.png`.
@@ -53,6 +59,7 @@ sessions, credentials, transcripts, or personal data.
 ## Repository map
 
 - `apps/desktop/` — Electron main/preload processes, React renderer, macOS adapter, and app packaging
+- `apps/web/` — Vite React public landing page
 - `packages/sidecar-core/` — platform-independent models, fixtures, geometry, and tests
 - `scripts/` — canonical non-interactive development commands
 - `.conductor/settings.toml` — shared Conductor command configuration
