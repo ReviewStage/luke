@@ -1,0 +1,8 @@
+.DS_Store
+.build/
+artifacts/
+*.xcuserstate
+xcuserdata/
+
+# Local agent context is not a repository input.
+.context/
