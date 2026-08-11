@@ -1,16 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  ATTENTION_DISPOSITION,
   InMemorySessionRegistry,
   maximumSessionSummaryLength,
   type ProviderSessionObservation,
+  SESSION_STATUS,
   type SessionProvider,
-  sessionKey,
   supportsSessionControl,
 } from "../src";
 
 const codex: SessionProvider = { id: "codex", displayName: "Codex" };
 const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };
+const TEST_CONTROL = {
+  OPEN: "open",
+  INTERRUPT: "interrupt",
+} as const;
+const TEST_CONTROL_WITH_WHITESPACE = " open ";
 
 function observation(
   providerSessionId: string,
@@ -20,45 +26,49 @@ function observation(
   return {
     providerSessionId,
     title: "Implement the shared session core",
-    status: "working",
+    status: SESSION_STATUS.WORKING,
     observedAt,
     ...overrides,
   };
 }
 
-test("normalizes provider observations into bounded, collision-free session records", () => {
+test("normalizes provider observations without conflating provider-local identities", () => {
   const registry = new InMemorySessionRegistry();
   const session = registry.upsert(
     codex,
     observation("run:42", 100, {
       title: "  Implement the shared session core  ",
       summary: `  ${"a".repeat(maximumSessionSummaryLength + 1)}  `,
-      controls: [{ id: " open ", label: " Open workspace " }],
+      controls: [{ id: TEST_CONTROL_WITH_WHITESPACE, label: " Open workspace " }],
     }),
   );
+  registry.upsert(claude, observation("run:42", 90));
 
-  assert.equal(session.id, "codex:run%3A42");
+  assert.deepEqual(
+    { providerId: session.providerId, providerSessionId: session.providerSessionId },
+    { providerId: codex.id, providerSessionId: "run:42" },
+  );
   assert.equal(session.title, "Implement the shared session core");
   assert.equal(session.summary?.length, maximumSessionSummaryLength);
-  assert.deepEqual(session.controls, [{ id: "open", label: "Open workspace" }]);
-  assert.deepEqual(session.attention, { disposition: "silent", decidedAt: 100 });
-  assert.equal(supportsSessionControl(session, "open"), true);
-  assert.equal(supportsSessionControl(session, "interrupt"), false);
-  assert.equal(
-    sessionKey({ providerId: "codex:local", providerSessionId: "run:42" }),
-    "codex%3Alocal:run%3A42",
-  );
+  assert.deepEqual(session.controls, [{ id: TEST_CONTROL.OPEN, label: "Open workspace" }]);
+  assert.deepEqual(session.attention, {
+    disposition: ATTENTION_DISPOSITION.SILENT,
+    decidedAt: 100,
+  });
+  assert.equal(supportsSessionControl(session, TEST_CONTROL.OPEN), true);
+  assert.equal(supportsSessionControl(session, TEST_CONTROL.INTERRUPT), false);
+  assert.equal(registry.list().length, 2);
 });
 
 test("refresh atomically replaces one adapter's sessions and preserves attention decisions", async () => {
   const registry = new InMemorySessionRegistry();
   registry.upsert(codex, observation("stale", 10));
   registry.upsert(codex, observation("active", 20));
-  registry.upsert(claude, observation("review", 30, { status: "waiting" }));
+  registry.upsert(claude, observation("review", 30, { status: SESSION_STATUS.WAITING }));
   registry.setAttention(
     { providerId: "codex", providerSessionId: "active" },
     {
-      disposition: "speak-at-turn-end",
+      disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
       decidedAt: 40,
       summary: "A review decision is ready.",
     },
@@ -70,16 +80,20 @@ test("refresh atomically replaces one adapter's sessions and preserves attention
   });
 
   assert.deepEqual(
-    registry.list().map((session) => session.id),
-    ["codex:new", "codex:active", "claude-code:review"],
+    registry.list().map(({ providerId, providerSessionId }) => ({ providerId, providerSessionId })),
+    [
+      { providerId: codex.id, providerSessionId: "new" },
+      { providerId: codex.id, providerSessionId: "active" },
+      { providerId: claude.id, providerSessionId: "review" },
+    ],
   );
   assert.equal(
     registry.get({ providerId: "codex", providerSessionId: "active" })?.attention.disposition,
-    "speak-at-turn-end",
+    ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
   );
   assert.equal(
     registry.get({ providerId: "claude-code", providerSessionId: "review" })?.status,
-    "waiting",
+    SESSION_STATUS.WAITING,
   );
   assert.equal(registry.get({ providerId: "codex", providerSessionId: "stale" }), undefined);
 });
@@ -97,7 +111,7 @@ test("registry snapshots are isolated and listeners only receive effective updat
   registry.upsert(codex, observation("active", 10));
   registry.setAttention(
     { providerId: "codex", providerSessionId: "active" },
-    { disposition: "speak-during-turn", decidedAt: 11 },
+    { disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN, decidedAt: 11 },
   );
   unsubscribe();
   registry.remove({ providerId: "codex", providerSessionId: "active" });

@@ -1,5 +1,14 @@
 import type { ProviderSessionObservation, SessionControl, SessionProvider } from "./session";
 
+export const PROVIDER_CONTROL_RESULT_STATUS = {
+  ACCEPTED: "accepted",
+  REJECTED: "rejected",
+  UNSUPPORTED: "unsupported",
+} as const;
+
+export type ProviderControlResultStatus =
+  (typeof PROVIDER_CONTROL_RESULT_STATUS)[keyof typeof PROVIDER_CONTROL_RESULT_STATUS];
+
 /** A provider adapter has no dependency on Electron, a renderer, or live UI state. */
 export interface SessionProviderAdapter {
   readonly provider: SessionProvider;
@@ -17,9 +26,9 @@ export interface ProviderControlRequest {
  * deliberately provides no fallback path such as terminal input injection.
  */
 export type ProviderControlResult =
-  | { status: "accepted" }
-  | { status: "rejected"; reason: string }
-  | { status: "unsupported" };
+  | { status: typeof PROVIDER_CONTROL_RESULT_STATUS.ACCEPTED }
+  | { status: typeof PROVIDER_CONTROL_RESULT_STATUS.REJECTED; reason: string }
+  | { status: typeof PROVIDER_CONTROL_RESULT_STATUS.UNSUPPORTED };
 
 /**
  * Optional extension for adapters with a reliable provider-owned control path.

@@ -1,14 +1,20 @@
-/**
- * The provider-independent lifecycle state Luke can present for a coding-agent
- * session. Attention is intentionally modeled separately because it is Luke's
- * decision, not a provider-owned lifecycle state.
- */
-export type SessionStatus = "working" | "waiting" | "complete" | "unknown";
+export const SESSION_STATUS = {
+  WORKING: "working",
+  WAITING: "waiting",
+  COMPLETE: "complete",
+  UNKNOWN: "unknown",
+} as const;
 
-/**
- * The three possible outcomes of Luke's bounded attention evaluation.
- */
-export type AttentionDisposition = "silent" | "speak-during-turn" | "speak-at-turn-end";
+export type SessionStatus = (typeof SESSION_STATUS)[keyof typeof SESSION_STATUS];
+
+export const ATTENTION_DISPOSITION = {
+  SILENT: "silent",
+  SPEAK_DURING_TURN: "speak-during-turn",
+  SPEAK_AT_TURN_END: "speak-at-turn-end",
+} as const;
+
+export type AttentionDisposition =
+  (typeof ATTENTION_DISPOSITION)[keyof typeof ATTENTION_DISPOSITION];
 
 /**
  * A bounded, display-safe result from Luke's attention evaluation. The summary
@@ -57,8 +63,6 @@ export interface ProviderSessionObservation {
  * any future capability-gated controls.
  */
 export interface NormalizedSession extends SessionIdentity {
-  /** Stable across display-name changes and safe to use as a UI list key. */
-  id: string;
   provider: SessionProvider;
   title: string;
   status: SessionStatus;
@@ -70,18 +74,6 @@ export interface NormalizedSession extends SessionIdentity {
 
 export const maximumSessionTitleLength = 160;
 export const maximumSessionSummaryLength = 500;
-
-const knownSessionStatuses: readonly SessionStatus[] = [
-  "working",
-  "waiting",
-  "complete",
-  "unknown",
-];
-const knownAttentionDispositions: readonly AttentionDisposition[] = [
-  "silent",
-  "speak-during-turn",
-  "speak-at-turn-end",
-];
 
 function requiredText(value: string, field: string): string {
   const normalized = value.trim();
@@ -103,7 +95,9 @@ function timestamp(value: number, field: string): number {
 }
 
 function normalizeStatus(status: SessionStatus): SessionStatus {
-  if (!knownSessionStatuses.includes(status)) throw new Error(`Unknown session status: ${status}`);
+  if (!Object.values(SESSION_STATUS).includes(status)) {
+    throw new Error(`Unknown session status: ${status}`);
+  }
   return status;
 }
 
@@ -124,24 +118,25 @@ function normalizeControls(
   });
 }
 
-/** Converts a provider-local identity into a collision-free, stable session key. */
-export function sessionKey(identity: SessionIdentity): string {
-  const providerId = requiredText(identity.providerId, "provider id");
-  const providerSessionId = requiredText(identity.providerSessionId, "provider session id");
-  return `${encodeURIComponent(providerId)}:${encodeURIComponent(providerSessionId)}`;
+/** Normalizes the two-part identity used to locate a session in the registry. */
+export function normalizeSessionIdentity(identity: SessionIdentity): SessionIdentity {
+  return {
+    providerId: requiredText(identity.providerId, "provider id"),
+    providerSessionId: requiredText(identity.providerSessionId, "provider session id"),
+  };
 }
 
 /** Creates the silent default used until an attention evaluator returns a decision. */
 export function silentAttention(observedAt: number): AttentionDecision {
   return {
-    disposition: "silent",
+    disposition: ATTENTION_DISPOSITION.SILENT,
     decidedAt: timestamp(observedAt, "observedAt"),
   };
 }
 
 /** Ensures an attention decision is safe to share with the rest of the app. */
 export function normalizeAttention(decision: AttentionDecision): AttentionDecision {
-  if (!knownAttentionDispositions.includes(decision.disposition)) {
+  if (!Object.values(ATTENTION_DISPOSITION).includes(decision.disposition)) {
     throw new Error(`Unknown attention disposition: ${decision.disposition}`);
   }
   const summary = boundedText(decision.summary, maximumSessionSummaryLength);
@@ -162,13 +157,14 @@ export function normalizeSession(
   observation: ProviderSessionObservation,
   attention = silentAttention(observation.observedAt),
 ): NormalizedSession {
-  const providerId = requiredText(provider.id, "provider id");
-  const providerSessionId = requiredText(observation.providerSessionId, "provider session id");
+  const { providerId, providerSessionId } = normalizeSessionIdentity({
+    providerId: provider.id,
+    providerSessionId: observation.providerSessionId,
+  });
   const observedAt = timestamp(observation.observedAt, "observedAt");
   const summary = boundedText(observation.summary, maximumSessionSummaryLength);
 
   return {
-    id: sessionKey({ providerId, providerSessionId }),
     providerId,
     providerSessionId,
     provider: {

@@ -4,10 +4,10 @@ import {
   type NormalizedSession,
   normalizeAttention,
   normalizeSession,
+  normalizeSessionIdentity,
   type ProviderSessionObservation,
   type SessionIdentity,
   type SessionProvider,
-  sessionKey,
 } from "./session";
 
 export interface SessionRegistrySnapshot {
@@ -16,6 +16,9 @@ export interface SessionRegistrySnapshot {
 }
 
 export type SessionRegistryListener = (snapshot: SessionRegistrySnapshot) => void;
+
+type ProviderSessions = Map<string, NormalizedSession>;
+type SessionStore = Map<string, ProviderSessions>;
 
 function copySession(session: NormalizedSession): NormalizedSession {
   return {
@@ -41,7 +44,6 @@ function sameControls(
 
 function sameSession(first: NormalizedSession, second: NormalizedSession): boolean {
   return (
-    first.id === second.id &&
     first.providerId === second.providerId &&
     first.providerSessionId === second.providerSessionId &&
     first.provider.id === second.provider.id &&
@@ -57,17 +59,31 @@ function sameSession(first: NormalizedSession, second: NormalizedSession): boole
   );
 }
 
-function sameSessions(
+function sameProviderSessions(
   first: ReadonlyMap<string, NormalizedSession>,
-  second: ReadonlyMap<string, NormalizedSession>,
+  second: ProviderSessions,
 ): boolean {
   return (
     first.size === second.size &&
-    [...first].every(([id, session]) => {
-      const candidate = second.get(id);
+    [...first].every(([providerSessionId, session]) => {
+      const candidate = second.get(providerSessionId);
       return candidate !== undefined && sameSession(session, candidate);
     })
   );
+}
+
+function sameSessions(first: ReadonlyMap<string, ProviderSessions>, second: SessionStore): boolean {
+  return (
+    first.size === second.size &&
+    [...first].every(([providerId, sessions]) => {
+      const candidate = second.get(providerId);
+      return candidate !== undefined && sameProviderSessions(sessions, candidate);
+    })
+  );
+}
+
+function copyStore(store: ReadonlyMap<string, ProviderSessions>): SessionStore {
+  return new Map([...store].map(([providerId, sessions]) => [providerId, new Map(sessions)]));
 }
 
 /**
@@ -77,7 +93,7 @@ function sameSessions(
  */
 export class InMemorySessionRegistry {
   #revision = 0;
-  #sessions = new Map<string, NormalizedSession>();
+  #sessions: SessionStore = new Map();
   #listeners = new Set<SessionRegistryListener>();
 
   get revision(): number {
@@ -85,15 +101,21 @@ export class InMemorySessionRegistry {
   }
 
   get(identity: SessionIdentity): NormalizedSession | undefined {
-    const session = this.#sessions.get(sessionKey(identity));
+    const normalizedIdentity = normalizeSessionIdentity(identity);
+    const session = this.#sessions
+      .get(normalizedIdentity.providerId)
+      ?.get(normalizedIdentity.providerSessionId);
     return session && copySession(session);
   }
 
   list(): readonly NormalizedSession[] {
     return [...this.#sessions.values()]
+      .flatMap((sessions) => [...sessions.values()])
       .sort(
         (first, second) =>
-          second.observedAt - first.observedAt || first.id.localeCompare(second.id),
+          second.observedAt - first.observedAt ||
+          first.providerId.localeCompare(second.providerId) ||
+          first.providerSessionId.localeCompare(second.providerSessionId),
       )
       .map(copySession);
   }
@@ -111,15 +133,16 @@ export class InMemorySessionRegistry {
   }
 
   upsert(provider: SessionProvider, observation: ProviderSessionObservation): NormalizedSession {
-    const identity = {
+    const identity = normalizeSessionIdentity({
       providerId: provider.id,
       providerSessionId: observation.providerSessionId,
-    };
-    const key = sessionKey(identity);
-    const existing = this.#sessions.get(key);
+    });
+    const existing = this.#sessions.get(identity.providerId)?.get(identity.providerSessionId);
     const session = normalizeSession(provider, observation, existing?.attention);
-    const next = new Map(this.#sessions);
-    next.set(key, session);
+    const next = copyStore(this.#sessions);
+    const providerSessions = next.get(identity.providerId) ?? new Map();
+    providerSessions.set(identity.providerSessionId, session);
+    next.set(identity.providerId, providerSessions);
     this.#commit(next);
     return copySession(session);
   }
@@ -134,28 +157,30 @@ export class InMemorySessionRegistry {
   ): SessionRegistrySnapshot {
     const providerId = provider.id.trim();
     if (!providerId) throw new Error("provider id must not be empty");
-    const existingForProvider = new Map(
-      [...this.#sessions]
-        .filter(([, session]) => session.providerId === providerId)
-        .map(([id, session]) => [id, session]),
-    );
-    const replacement = new Map<string, NormalizedSession>();
+    const existingForProvider = this.#sessions.get(providerId);
+    const replacement: ProviderSessions = new Map();
 
     for (const observation of observations) {
-      const key = sessionKey({ providerId, providerSessionId: observation.providerSessionId });
-      if (replacement.has(key)) {
+      const { providerSessionId } = normalizeSessionIdentity({
+        providerId,
+        providerSessionId: observation.providerSessionId,
+      });
+      if (replacement.has(providerSessionId)) {
         throw new Error(`Duplicate session observation: ${observation.providerSessionId}`);
       }
       replacement.set(
-        key,
-        normalizeSession(provider, observation, existingForProvider.get(key)?.attention),
+        providerSessionId,
+        normalizeSession(
+          provider,
+          observation,
+          existingForProvider?.get(providerSessionId)?.attention,
+        ),
       );
     }
 
-    const next = new Map(
-      [...this.#sessions].filter(([, session]) => session.providerId !== providerId),
-    );
-    for (const [id, session] of replacement) next.set(id, session);
+    const next = copyStore(this.#sessions);
+    if (replacement.size === 0) next.delete(providerId);
+    else next.set(providerId, replacement);
     this.#commit(next);
     return this.snapshot();
   }
@@ -171,30 +196,38 @@ export class InMemorySessionRegistry {
     identity: SessionIdentity,
     attention: AttentionDecision,
   ): NormalizedSession | undefined {
-    const key = sessionKey(identity);
-    const existing = this.#sessions.get(key);
+    const normalizedIdentity = normalizeSessionIdentity(identity);
+    const existing = this.#sessions
+      .get(normalizedIdentity.providerId)
+      ?.get(normalizedIdentity.providerSessionId);
     if (!existing) return undefined;
 
     const nextSession: NormalizedSession = {
       ...existing,
       attention: normalizeAttention(attention),
     };
-    const next = new Map(this.#sessions);
-    next.set(key, nextSession);
+    const next = copyStore(this.#sessions);
+    const providerSessions = next.get(normalizedIdentity.providerId);
+    if (!providerSessions) throw new Error("Session provider disappeared during attention update");
+    providerSessions.set(normalizedIdentity.providerSessionId, nextSession);
     this.#commit(next);
     return copySession(nextSession);
   }
 
   remove(identity: SessionIdentity): boolean {
-    const key = sessionKey(identity);
-    if (!this.#sessions.has(key)) return false;
-    const next = new Map(this.#sessions);
-    next.delete(key);
+    const normalizedIdentity = normalizeSessionIdentity(identity);
+    const existingProviderSessions = this.#sessions.get(normalizedIdentity.providerId);
+    if (!existingProviderSessions?.has(normalizedIdentity.providerSessionId)) return false;
+    const next = copyStore(this.#sessions);
+    const providerSessions = next.get(normalizedIdentity.providerId);
+    if (!providerSessions) throw new Error("Session provider disappeared during removal");
+    providerSessions.delete(normalizedIdentity.providerSessionId);
+    if (providerSessions.size === 0) next.delete(normalizedIdentity.providerId);
     this.#commit(next);
     return true;
   }
 
-  #commit(next: Map<string, NormalizedSession>): void {
+  #commit(next: SessionStore): void {
     if (sameSessions(this.#sessions, next)) return;
     this.#sessions = next;
     this.#revision += 1;
