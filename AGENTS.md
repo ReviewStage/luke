@@ -16,8 +16,8 @@ Canonical commands:
 - `./scripts/verify.sh` — complete macOS validation plus visual evidence
 - `./scripts/run.sh` — launch the deterministic fixture app
 - `./scripts/evidence.sh` — write the fixture PNG under `artifacts/`
-- `npm run evidence:record` — record the fixture transition on a physical Mac
-- `npm run lint:fix` — apply repository formatting and safe lint fixes
+- `pnpm evidence:record` — record the fixture transition on a physical Mac
+- `pnpm lint:fix` — apply repository formatting and safe lint fixes
 
 Trust constraints:
 

@@ -9,4 +9,4 @@ sidecar_require_node
 "$SCRIPT_DIRECTORY/repository-checks.sh"
 
 cd "$SIDECAR_REPO_ROOT"
-npm run check
+pnpm check

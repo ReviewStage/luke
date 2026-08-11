@@ -14,9 +14,9 @@ mkdir -p "$SIDECAR_BUILD_ROOT" "$SIDECAR_ARTIFACT_ROOT/evidence"
 cd "$SIDECAR_REPO_ROOT"
 
 if [[ $(uname -s) == Darwin ]]; then
-    npm ci
+    pnpm install --frozen-lockfile
 else
-    ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci
+    ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile
 fi
 
 printf 'Sidecar workspace bootstrapped at %s\n' "$SIDECAR_REPO_ROOT"

@@ -7,7 +7,7 @@ apps/*/out/
 apps/*/dist/
 apps/*/.vite/
 *.tsbuildinfo
-npm-debug.log*
+pnpm-debug.log*
 
 # Local secrets. Commit an explicit example file when configuration needs one.
 .env

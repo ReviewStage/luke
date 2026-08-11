@@ -8,6 +8,7 @@ in brand-neutral TypeScript packages.
 ## Requirements
 
 - Node.js 22.12 or newer
+- pnpm 9.15.0
 - macOS 14 or newer with Xcode Command Line Tools for the app workflow
 
 ## Development
@@ -29,7 +30,7 @@ On macOS, launch the fixture app or run complete validation:
 Run the public landing page locally with:
 
 ```sh
-npm run dev --workspace @luke/web
+pnpm --filter @luke/web dev
 ```
 
 Use `./scripts/run.sh --profile speaking` to preview the deterministic waveform
@@ -41,7 +42,7 @@ The run command directly owns the Electron process, so Control-C stops it.
 `artifacts/evidence/app-smoke-compact.png`, and
 `artifacts/evidence/app-smoke-speaking.png`.
 
-For PR motion evidence, run `npm run evidence:record` on a Mac with `ffmpeg`
+For PR motion evidence, run `pnpm evidence:record` on a Mac with `ffmpeg`
 installed and Screen & System Audio Recording permission granted to Conductor.
 It records the fixture-only compact/expanded transition against a synthetic
 backdrop and writes MP4 and GIF versions under `artifacts/evidence/`. Generated

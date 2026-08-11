@@ -31,6 +31,6 @@ available_in = [ "local" ]
 icon = "camera"
 
 [scripts.run.record-evidence]
-command = "npm run evidence:record"
+command = "pnpm evidence:record"
 available_in = [ "local" ]
 icon = "video"

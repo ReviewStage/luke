@@ -8,12 +8,12 @@ source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 sidecar_require_macos
 sidecar_require_node
 sidecar_require_command sips
-if [[ ! -d "$SIDECAR_REPO_ROOT/node_modules" ]]; then
+if [[ ! -x "$SIDECAR_ELECTRON_BIN" ]]; then
     "$SCRIPT_DIRECTORY/bootstrap.sh"
 fi
 
 cd "$SIDECAR_REPO_ROOT"
-npm run package
+pnpm package
 PACKAGED_APP=$(find "$SIDECAR_DESKTOP_APP_ROOT/out" -type d -path '*/Luke.app' -print -quit)
 APP_EXECUTABLE="$PACKAGED_APP/Contents/MacOS/Luke"
 if [[ ! -x "$APP_EXECUTABLE" ]]; then

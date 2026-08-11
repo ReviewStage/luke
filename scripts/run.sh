@@ -12,5 +12,5 @@ if [[ ! -x "$SIDECAR_ELECTRON_BIN" ]]; then
 fi
 
 cd "$SIDECAR_REPO_ROOT"
-exec npm run start --workspace @luke/desktop -- \
+exec pnpm start -- \
     --fixture "$SIDECAR_FIXTURE_SCENARIO" "$@"

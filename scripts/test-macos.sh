@@ -9,7 +9,7 @@ sidecar_require_macos
 "$SCRIPT_DIRECTORY/check.sh"
 
 cd "$SIDECAR_REPO_ROOT"
-npm run package
+pnpm package
 
 PACKAGED_APP=$(find "$SIDECAR_DESKTOP_APP_ROOT/out" -type d -path '*/Luke.app' -print -quit)
 if [[ -z "$PACKAGED_APP" ]]; then

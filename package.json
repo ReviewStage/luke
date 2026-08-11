@@ -3,27 +3,23 @@
   "version": "0.0.0",
   "private": true,
   "description": "A notch-attached desktop sidecar for coding-agent sessions",
-  "packageManager": "npm@11.11.0",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
+  "packageManager": "pnpm@9.15.0",
   "engines": {
     "node": ">=22.12.0"
   },
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
-    "check": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "build": "pnpm --recursive --if-present run build",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "evidence:record": "node scripts/record-evidence.mjs",
     "format": "biome format --write .",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
-    "package": "npm run package --workspace @luke/desktop",
+    "package": "pnpm --filter @luke/desktop package",
     "prepare": "husky",
-    "start": "npm run start --workspace @luke/desktop --",
-    "test": "npm run test:harness && npm run test --workspaces --if-present",
+    "start": "pnpm --filter @luke/desktop start",
+    "test": "pnpm test:harness && pnpm --recursive --if-present run test",
     "test:harness": "node --test scripts/*.test.mjs",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "pnpm --recursive --if-present run typecheck"
   },
   "lint-staged": {
     "*.{js,jsx,mjs,ts,tsx,json,md,css}": "biome check --write --no-errors-on-unmatched"
