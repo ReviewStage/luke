@@ -10,12 +10,13 @@ import { fileURLToPath } from "node:url";
 import { packagedAppExecutable } from "../apps/desktop/scripts/package-layout.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const desktopRoot = path.join(repoRoot, "apps", "desktop");
 const evidenceRoot = path.join(repoRoot, "artifacts", "evidence");
 const appExecutable = packagedAppExecutable(repoRoot);
 const recordingPath = path.join(evidenceRoot, "app-hover-transition.mov");
 const mp4Path = path.join(evidenceRoot, "app-hover-transition.mp4");
 const gifPath = path.join(evidenceRoot, "app-hover-transition.gif");
-const electronExecutable = path.join(repoRoot, "node_modules", ".bin", "electron");
+const electronExecutable = path.join(desktopRoot, "node_modules", ".bin", "electron");
 
 function delay(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -101,7 +102,7 @@ async function connectCdp(webSocketUrl) {
 
 async function main() {
   if (process.platform !== "darwin") throw new Error("Screen recording requires macOS");
-  await run("npm", ["run", "package"], { cwd: repoRoot });
+  await run("pnpm", ["package"], { cwd: repoRoot });
   await fs.access(appExecutable);
   await fs.mkdir(evidenceRoot, { recursive: true });
   await Promise.all(

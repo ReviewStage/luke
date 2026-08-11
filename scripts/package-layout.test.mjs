@@ -20,7 +20,7 @@ test("packaging excludes source and workspace-only inputs", () => {
     "/src/main.ts",
     "/tests/window.test.ts",
     "/dist/main.js.map",
-    "/package-lock.json",
+    "/pnpm-lock.yaml",
     "/tsconfig.json",
   ]) {
     assert.equal(isIgnored(relativePath), true, relativePath);

@@ -7,13 +7,13 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "build:native": "node scripts/build-native.mjs",
-    "package": "npm run build:native && npm run build && node scripts/package.mjs",
-    "start": "npm run build:native && npm run build && electron .",
+    "package": "pnpm build:native && pnpm build && node scripts/package.mjs",
+    "start": "pnpm build:native && pnpm build && electron .",
     "typecheck": "tsc --project tsconfig.json"
   },
   "devDependencies": {
     "@electron/packager": "20.2.1",
-    "@sidecar/core": "*",
+    "@sidecar/core": "workspace:*",
     "@types/node": "26.2.0",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",

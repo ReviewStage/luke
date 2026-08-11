@@ -10,7 +10,7 @@ SIDECAR_FIXTURE_SCENARIO=smoke
 SIDECAR_EXPANDED_EVIDENCE_PATH="$SIDECAR_ARTIFACT_ROOT/evidence/app-smoke-expanded.png"
 SIDECAR_COMPACT_EVIDENCE_PATH="$SIDECAR_ARTIFACT_ROOT/evidence/app-smoke-compact.png"
 SIDECAR_SPEAKING_EVIDENCE_PATH="$SIDECAR_ARTIFACT_ROOT/evidence/app-smoke-speaking.png"
-SIDECAR_ELECTRON_BIN="$SIDECAR_REPO_ROOT/node_modules/.bin/electron"
+SIDECAR_ELECTRON_BIN="$SIDECAR_DESKTOP_APP_ROOT/node_modules/.bin/electron"
 
 export SIDECAR_REPO_ROOT
 export SIDECAR_DESKTOP_APP_ROOT
@@ -39,7 +39,7 @@ sidecar_require_macos() {
 
 sidecar_require_node() {
     sidecar_require_command node
-    sidecar_require_command npm
+    sidecar_require_command pnpm
     if ! node -e '
         const [major, minor] = process.versions.node.split(".").map(Number);
         process.exit(major > 22 || (major === 22 && minor >= 12) ? 0 : 1);

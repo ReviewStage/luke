@@ -3,7 +3,7 @@ import process from "node:process";
 
 export const packageIgnorePatterns = [
   /^\/(?:\.build|native|node_modules|out|scripts|src|tests)(?:$|\/)/,
-  /^\/(?:\.gitignore|package-lock\.json|tsconfig\.json)$/,
+  /^\/(?:\.gitignore|pnpm-lock\.yaml|tsconfig\.json)$/,
   /\.map$/,
 ];
 

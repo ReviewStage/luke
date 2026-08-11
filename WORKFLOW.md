@@ -10,8 +10,8 @@
 3. Run `./scripts/check.sh` for portable-only work. For a macOS, Electron-window,
    native-adapter, microphone, or desktop UI change, run `./scripts/verify.sh`;
    it packages the desktop app and generates visual evidence. Inspect all PNGs.
-   For a web UI change, run `npm run dev --workspace @luke/web` and inspect the
-   page in a browser. For desktop motion changes, run `npm run evidence:record`
+   For a web UI change, run `pnpm --filter @luke/web dev` and inspect the page in
+   a browser. For desktop motion changes, run `pnpm evidence:record`
    on a physical Mac and inspect the generated MP4 or GIF before publishing it.
 4. Review the complete diff for secrets, machine-specific paths, generated
    files, unsafe IPC, unsupported provider behavior, and accidental scope
@@ -20,7 +20,7 @@
    section. For every UI change, upload an inspected verification screenshot to
    the PR description's Evidence section through GitHub's PR editor. For desktop
    UI, use a PNG from `./scripts/verify.sh` in `artifacts/evidence/`; for web UI,
-   capture the page after running `npm run dev --workspace @luke/web`. CI
+   capture the page after running `pnpm --filter @luke/web dev`. CI
    maintains the automated-evidence link there. Attach physical-device
    screenshots or recordings through GitHub's PR editor and call out
    physical-notch checks that remain.

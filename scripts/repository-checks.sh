@@ -10,7 +10,8 @@ required_files=(
     WORKFLOW.md
     README.md
     package.json
-    package-lock.json
+    pnpm-lock.yaml
+    pnpm-workspace.yaml
     biome.json
     .nvmrc
     .husky/pre-commit
