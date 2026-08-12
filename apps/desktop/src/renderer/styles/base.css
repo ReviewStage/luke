@@ -41,8 +41,8 @@
      makes the shape read as a physical object being nudged rather than a box
      being resized. `--spring-peek` is loose and quick because the move is
      small; `--spring-panel` is far more damped because a 620px surface that
-     wobbles looks broken rather than lively. The window carries
-     SPRING_OVERSHOOT_ALLOWANCE either side so neither can clip. */
+     wobbles looks broken rather than lively. The window carries SURFACE_MARGIN
+     on every side so neither the overshoot nor the shadow can clip. */
   --spring-peek: linear(
     0,
     0.026,
@@ -111,6 +111,18 @@
   --expand-delay: 150ms;
   --peek-delay: 60ms;
   --row-stagger: 32ms;
+
+  /* At rest the surface is true black, because it has to pass for part of a
+     physical camera housing. Once it grows past the housing it is a panel
+     floating over the desktop instead, so it takes a hairline edge, a shadow,
+     and just enough translucency to admit the wallpaper is back there. A real
+     blur of that wallpaper is not available to us: a transparent Electron
+     window has no backdrop for `backdrop-filter` to sample, so it would cost a
+     render surface on the one element that animates and return nothing. */
+  --surface-rest: #000;
+  --surface-lifted: rgba(0, 0, 0, 0.96);
+  --surface-edge: inset 0 0 0 0.5px rgba(255, 255, 255, 0.07);
+  --surface-shadow: 0 10px 26px rgba(0, 0, 0, 0.46), 0 2px 7px rgba(0, 0, 0, 0.3);
 
   --capsule-radius: 13px;
   --peek-radius: 19px;
@@ -185,14 +197,25 @@ button {
   width: var(--capsule-width);
   height: var(--capsule-height);
   border-radius: 0 0 var(--capsule-radius) var(--capsule-radius);
-  background: #000;
+  background: var(--surface-rest);
   transform: translateX(-50%);
   /* Held back by `--duration-exit` so the shape never shrinks out from under
      content that is still on screen. */
   transition:
     width var(--duration-collapse) var(--motion-morph) var(--duration-exit),
     height var(--duration-collapse) var(--motion-morph) var(--duration-exit),
-    border-radius var(--duration-collapse) var(--motion-morph) var(--duration-exit);
+    border-radius var(--duration-collapse) var(--motion-morph) var(--duration-exit),
+    background-color var(--duration-collapse) var(--motion-exit),
+    box-shadow var(--duration-quick) var(--motion-exit);
+}
+
+/* The lift arrives once the shape has settled rather than during it: a blurred
+   shadow is repainted on every frame that changes the element's size, and the
+   spring is the one moment that cannot afford the extra paint. */
+.app-stage[data-presentation="peek"] .panel-surface,
+.app-stage[data-presentation="panel"] .panel-surface {
+  background: var(--surface-lifted);
+  box-shadow: var(--surface-edge), var(--surface-shadow);
 }
 
 /* Under the pointer: wide enough to say what the count means, on a spring
@@ -201,8 +224,10 @@ button {
   width: var(--peek-width);
   border-radius: 0 0 var(--peek-radius) var(--peek-radius);
   transition-duration: var(--duration-peek);
-  transition-timing-function: var(--spring-peek);
-  transition-delay: 0s;
+  transition-timing-function:
+    var(--spring-peek), var(--spring-peek), var(--spring-peek), var(--motion-exit),
+    var(--motion-exit);
+  transition-delay: 0s, 0s, 0s, 0s, var(--duration-peek);
 }
 
 .app-stage[data-presentation="panel"] .panel-surface {
@@ -210,8 +235,10 @@ button {
   height: var(--panel-height, 520px);
   border-radius: 0 0 var(--panel-radius) var(--panel-radius);
   transition-duration: var(--duration-panel);
-  transition-timing-function: var(--spring-panel);
-  transition-delay: 0s;
+  transition-timing-function:
+    var(--spring-panel), var(--spring-panel), var(--spring-panel), var(--motion-exit),
+    var(--motion-exit);
+  transition-delay: 0s, 0s, 0s, 0s, var(--duration-panel);
 }
 
 .compact-stage {

@@ -1,11 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  CAPSULE_SIDE_WIDTH,
-  PEEK_SIDE_GROWTH,
-  positionNotchWindow,
-  SPRING_OVERSHOOT_ALLOWANCE,
-} from "../src";
+import { CAPSULE_SIDE_WIDTH, PEEK_SIDE_GROWTH, positionNotchWindow, SURFACE_MARGIN } from "../src";
 
 const notchedDisplay = {
   bounds: { x: 0, y: 0, width: 1512, height: 982 },
@@ -25,10 +20,10 @@ test("anchors the compact window to the physical top edge", () => {
   });
 
   assert.deepEqual(result, {
-    x: 513,
+    x: 497,
     y: 0,
-    width: 486,
-    height: 38,
+    width: 518,
+    height: 68,
     notch: {
       topInset: 38,
       housingWidth: 210,
@@ -38,7 +33,7 @@ test("anchors the compact window to the physical top edge", () => {
   });
 });
 
-test("a compact window holds the peek it can grow into, plus room to overshoot", () => {
+test("a compact window holds the peek, the overshoot, and the shadow", () => {
   const result = positionNotchWindow(notchedDisplay, "compact", {
     displayId: 1,
     safeAreaTop: 38,
@@ -46,7 +41,7 @@ test("a compact window holds the peek it can grow into, plus room to overshoot",
     hasNotch: true,
   });
 
-  assert.equal(result.width, peekWidth(210) + SPRING_OVERSHOOT_ALLOWANCE * 2);
+  assert.equal(result.width, peekWidth(210) + SURFACE_MARGIN * 2);
   // The capsule at rest stays centred on the housing inside that window.
   assert.equal(
     (peekWidth(210) - result.notch.housingWidth) / 2,
@@ -63,10 +58,10 @@ test("uses a top-center fallback without inventing a notch", () => {
     "compact",
   );
 
-  assert.equal(result.x, -1098);
+  assert.equal(result.x, -1114);
   assert.equal(result.y, -200);
-  assert.equal(result.width, peekWidth(0) + SPRING_OVERSHOOT_ALLOWANCE * 2);
-  assert.equal(result.height, 32);
+  assert.equal(result.width, peekWidth(0) + SURFACE_MARGIN * 2);
+  assert.equal(result.height, 32 + SURFACE_MARGIN);
   assert.equal(result.notch.hasNotch, false);
   assert.equal(result.notch.topInset, 25);
   assert.equal(result.notch.source, "work-area");
@@ -75,10 +70,10 @@ test("uses a top-center fallback without inventing a notch", () => {
 test("keeps the expanded panel attached to the same display edge", () => {
   const result = positionNotchWindow(notchedDisplay, "expanded");
 
-  assert.equal(result.x, 432);
+  assert.equal(result.x, 416);
   assert.equal(result.y, 0);
-  assert.equal(result.width, 620 + SPRING_OVERSHOOT_ALLOWANCE * 2);
-  assert.equal(result.height, 520 + SPRING_OVERSHOOT_ALLOWANCE);
+  assert.equal(result.width, 620 + SURFACE_MARGIN * 2);
+  assert.equal(result.height, 520 + SURFACE_MARGIN);
 });
 
 test("never grows a window past the display it is on", () => {

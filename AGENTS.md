@@ -72,6 +72,14 @@ and `opacity` only — animating width, height, padding, or font-size on the
 wings, the count badge, or the rows re-shapes text on every frame and is what
 makes the motion stutter.
 
+The surface is true black at rest and only takes its edge, shadow, and
+translucency once it has grown past the camera housing — the capsule has to
+pass for part of a physical object. The lift is delayed until the shape
+settles, because a blurred shadow repaints on every frame that resizes the
+element. `backdrop-filter` is not an option: a transparent window has no
+backdrop to sample, so it would buy a render surface on the animating element
+and return nothing.
+
 In either direction the shape and its content must not cross, or content is
 left drawn on the desktop: growing, the surface leads and content follows;
 shrinking, content leaves over `--duration-exit` before the surface moves.

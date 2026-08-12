@@ -35,13 +35,15 @@ export interface NotchWindowLayout extends Rectangle {
  * The window is a stage for a shape the renderer draws and animates; it is not
  * the shape itself. A compact window therefore has to hold the widest thing
  * that can be drawn without the window resizing — the peek the capsule grows
- * into under the pointer — plus enough slack for a spring to overshoot its
- * target before settling. Everything the shape does not cover is transparent
- * and passes the pointer through.
+ * into under the pointer — plus a margin for what falls outside the shape: a
+ * spring overshooting its target, and the shadow the peek and the panel cast.
+ * A clipped shadow is a hard edge, so the margin runs along the bottom too.
+ * Everything the shape does not cover is transparent and passes the pointer
+ * through.
  */
 export const CAPSULE_SIDE_WIDTH = 36;
 export const PEEK_SIDE_GROWTH = 88;
-export const SPRING_OVERSHOOT_ALLOWANCE = 14;
+export const SURFACE_MARGIN = 30;
 const peekSideWidth = CAPSULE_SIDE_WIDTH + PEEK_SIDE_GROWTH;
 const panelWidth = 620;
 const panelHeight = 520;
@@ -76,15 +78,12 @@ export function positionNotchWindow(
   const housingWidth = notch.hasNotch ? notch.housingWidth : 0;
   const width =
     mode === "expanded"
-      ? Math.min(panelWidth + SPRING_OVERSHOOT_ALLOWANCE * 2, display.bounds.width)
-      : Math.min(
-          housingWidth + peekSideWidth * 2 + SPRING_OVERSHOOT_ALLOWANCE * 2,
-          display.bounds.width,
-        );
+      ? Math.min(panelWidth + SURFACE_MARGIN * 2, display.bounds.width)
+      : Math.min(housingWidth + peekSideWidth * 2 + SURFACE_MARGIN * 2, display.bounds.width);
   const height =
     mode === "expanded"
-      ? Math.min(panelHeight + SPRING_OVERSHOOT_ALLOWANCE, display.bounds.height)
-      : Math.min(Math.max(32, notch.topInset), display.bounds.height);
+      ? Math.min(panelHeight + SURFACE_MARGIN, display.bounds.height)
+      : Math.min(Math.max(32, notch.topInset) + SURFACE_MARGIN, display.bounds.height);
   const x = Math.round(display.bounds.x + (display.bounds.width - width) / 2);
 
   return {

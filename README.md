@@ -71,6 +71,16 @@ The header is anchored to the notch, not to a state: the count sits to the right
 of the housing and the provider marks and speech meter to its left, in the same
 place in all three. Growing only unfolds captions around them.
 
+At rest the surface is true black, because it is pretending to be part of a
+camera housing. Once it grows past the housing it is a panel floating over the
+desktop instead, so the peek and the panel take a hairline edge, a soft shadow,
+and just enough translucency to admit the wallpaper is back there. The lift
+arrives once the shape has settled, so a blurred shadow is never repainted
+mid-spring. A real blur of the desktop is not available here: a transparent
+Electron window gives `backdrop-filter` no backdrop to sample, and reaching the
+desktop would mean native vibrancy, which cannot be masked to a shape that
+animates.
+
 The window is a stage, never the shape. It snaps to the size a state needs and
 the renderer animates the surface inside it, so the motion stays on the
 compositor — and because a compact window is already wide enough to hold the
