@@ -7,7 +7,7 @@
 // desktop change whose evidence never got produced.
 import { pathToFileURL } from "node:url";
 import { githubRequest, requiredEnvironment } from "./lib/github.mjs";
-import { changedMarker, evidenceEnd, evidenceStart } from "./update-pr-evidence.mjs";
+import { evidenceEnd, evidenceStart } from "./update-pr-evidence.mjs";
 
 export const EXEMPTION_LABEL = "evidence-exempt";
 
@@ -30,30 +30,21 @@ export function classifyChanges(filenames) {
 }
 
 /**
- * How many captured scenarios CI reported as differing from the default branch,
- * or undefined when CI has not reported on this commit.
- *
- * The marker is read only from CI's own block and only when it names the head
- * commit. A description is author-controlled text: read from the whole body, a
- * pasted marker would forge CI's verdict, and read without the commit, a block
- * left by an earlier push would vouch for code it never rendered.
- */
-export function scenariosShown(body, headSha) {
-  const { automated } = splitEvidence(body);
-  const marker = new RegExp(
-    `<!--\\s*${changedMarker}:\\s*(\\d+)\\s+sha:\\s*([0-9a-f]+)\\s*-->`,
-  ).exec(automated);
-  if (!marker) return undefined;
-  return headSha === undefined || marker[2] === headSha ? Number(marker[1]) : undefined;
-}
-
-/**
  * Markdown that a reader will actually see. An image inside an HTML comment or a
  * fenced code block renders as nothing, so counting it as evidence would let a
  * description satisfy the gate while showing the reviewer no picture at all.
+ *
+ * Stripping repeats until the text stops changing: one pass over nested comment
+ * openers can leave a `<!--` behind and reveal what it was hiding.
  */
 export function visibleText(markdown) {
-  return markdown.replace(/<!--[\s\S]*?-->/g, "").replace(/```[\s\S]*?```|`[^`\n]*`/g, "");
+  let text = markdown;
+  for (let pass = 0; pass < 10; pass += 1) {
+    const stripped = text.replace(/<!--[\s\S]*?-->/g, "").replace(/```[\s\S]*?```|`[^`\n]*`/g, "");
+    if (stripped === text) return stripped;
+    text = stripped;
+  }
+  return text.replace(/<!--|-->|```/g, "");
 }
 
 /** Separates CI's block from the description an author controls. */
@@ -67,11 +58,19 @@ export function splitEvidence(body) {
   };
 }
 
+/**
+ * `shown` is the number of scenarios CI found to differ from the default
+ * branch, passed from the macOS job's own output. It is never read back from the
+ * description: a pull-request body is author-editable in full, including the
+ * markers that delimit CI's block, so any verdict recovered from it can be
+ * forged by pasting a convincing-looking block ahead of the real one. Undefined
+ * means no macOS job reported into this run.
+ */
 export function evaluateEvidence({
   body = "",
   labels = [],
   filenames = [],
-  headSha,
+  shown,
   evidenceRunSucceeded = true,
 }) {
   const changed = classifyChanges(filenames);
@@ -83,7 +82,6 @@ export function evaluateEvidence({
   }
 
   const { authored } = splitEvidence(body);
-  const shown = scenariosShown(body, headSha);
   const authoredImage = IMAGE_PATTERN.test(visibleText(authored));
   const failures = [];
   const notes = [];
@@ -103,8 +101,8 @@ export function evaluateEvidence({
       );
     } else if (shown === undefined) {
       notes.push(
-        "The macOS job has not published evidence for this commit yet; the check that runs " +
-          "after it is the one that decides.",
+        "This run has no macOS evidence to judge; the check in the run that built this " +
+          "commit is the one that decides.",
       );
     } else if (shown === 0) {
       failures.push(
@@ -157,7 +155,9 @@ async function main() {
     body: pull.data.body ?? "",
     labels: (pull.data.labels ?? []).map((label) => label.name),
     filenames: await changedFilenames(repository, pullRequest),
-    headSha: pull.data.head?.sha,
+    shown: /^\d+$/.test(process.env.EVIDENCE_SCENARIOS_SHOWN ?? "")
+      ? Number(process.env.EVIDENCE_SCENARIOS_SHOWN)
+      : undefined,
     evidenceRunSucceeded: evidenceRun === "success" || evidenceRun === "skipped",
   });
 

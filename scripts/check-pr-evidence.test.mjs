@@ -7,9 +7,9 @@ import {
   classifyChanges,
   EXEMPTION_LABEL,
   evaluateEvidence,
-  scenariosShown,
   splitEvidence,
   UI_PATHS,
+  visibleText,
 } from "./check-pr-evidence.mjs";
 import { evidenceEnd, evidenceMarker, evidenceStart } from "./update-pr-evidence.mjs";
 
@@ -64,42 +64,21 @@ test("classifies desktop, web, and non-interface changes", () => {
   });
 });
 
-test("reads how many scenarios CI reported as differing", () => {
-  assert.equal(scenariosShown(automatedBlock(2), HEAD), 2);
-  assert.equal(scenariosShown(automatedBlock(0), HEAD), 0);
-});
-
-test("ignores a marker outside CI's block, which an author controls", () => {
-  const forged = `${evidenceMarker(4, HEAD)}\n\n${automatedBlock(0)}`;
-
-  assert.equal(scenariosShown(forged, HEAD), 0);
-});
-
-test("ignores a marker left by an earlier push", () => {
-  assert.equal(scenariosShown(automatedBlock(4, "0000000000000000"), HEAD), undefined);
-});
-
-test("separates a description CI has not reported on from one reporting nothing", () => {
-  assert.equal(scenariosShown("## Summary"), undefined);
-  assert.equal(scenariosShown(templateBlock()), undefined);
-});
-
 test("waits rather than failing before the macOS job has published", () => {
   const result = evaluateEvidence({
     body: `## Summary\n\n${templateBlock()}`,
     filenames: ["apps/desktop/src/renderer/index.tsx"],
-    headSha: HEAD,
   });
 
   assert.deepEqual(result.failures, []);
-  assert.match(result.summary, /has not published evidence/);
+  assert.match(result.summary, /no macOS evidence to judge/);
 });
 
 test("still fails a web change before CI reports, since CI never covers it", () => {
   const result = evaluateEvidence({
     body: `## Summary\n\n${templateBlock()}`,
     filenames: ["apps/web/src/App.tsx"],
-    headSha: HEAD,
+    shown: 1,
   });
 
   assert.equal(result.failures.length, 1);
@@ -117,7 +96,7 @@ test("passes a desktop change whose captured scenarios differ from main", () => 
   const result = evaluateEvidence({
     body: `## Summary\n\n${automatedBlock(1)}`,
     filenames: ["apps/desktop/src/renderer/styles.css"],
-    headSha: HEAD,
+    shown: 1,
   });
 
   assert.deepEqual(result.failures, []);
@@ -127,7 +106,7 @@ test("fails a desktop change no captured scenario shows", () => {
   const result = evaluateEvidence({
     body: `## Summary\n\n${automatedBlock(0)}`,
     filenames: ["apps/desktop/src/renderer/index.tsx"],
-    headSha: HEAD,
+    shown: 0,
   });
 
   assert.equal(result.failures.length, 1);
@@ -135,12 +114,11 @@ test("fails a desktop change no captured scenario shows", () => {
 });
 
 test("fails a desktop change whose only images are CI's unchanged renders", () => {
-  // The regression the marker exists for: images are present, and prove nothing.
-  const body = `## Summary\n\n${automatedBlock(0)}\n\n![session list](https://raw.example/x.png)`;
+  // The regression this exists for: images are present, and prove nothing.
   const result = evaluateEvidence({
-    body: body.replace("![session list](https://raw.example/x.png)", ""),
+    body: `## Summary\n\n${automatedBlock(1)}`,
     filenames: ["apps/desktop/src/renderer/index.tsx"],
-    headSha: HEAD,
+    shown: 0,
   });
 
   assert.equal(result.failures.length, 1);
@@ -150,7 +128,7 @@ test("accepts an authored screenshot when no scenario differs", () => {
   const result = evaluateEvidence({
     body: `![Settings panel](https://raw.example/settings.png)\n\n${automatedBlock(0)}`,
     filenames: ["apps/desktop/src/renderer/index.tsx"],
-    headSha: HEAD,
+    shown: 0,
   });
 
   assert.deepEqual(result.failures, []);
@@ -160,7 +138,7 @@ test("fails a web change carrying only CI's screenshots", () => {
   const result = evaluateEvidence({
     body: `## Summary\n\n${automatedBlock(1)}`,
     filenames: ["apps/web/src/App.tsx"],
-    headSha: HEAD,
+    shown: 1,
   });
 
   assert.equal(result.failures.length, 1);
@@ -171,7 +149,7 @@ test("passes a web change with an authored screenshot", () => {
   const result = evaluateEvidence({
     body: `## Evidence\n\n![Landing page](https://raw.example/landing.png)\n\n${automatedBlock(1)}`,
     filenames: ["apps/web/src/App.tsx"],
-    headSha: HEAD,
+    shown: 1,
   });
 
   assert.deepEqual(result.failures, []);
@@ -181,7 +159,7 @@ test("accepts an HTML image tag as authored evidence", () => {
   const result = evaluateEvidence({
     body: '<img src="https://raw.example/landing.png" width="600">',
     filenames: ["apps/web/src/App.tsx"],
-    headSha: HEAD,
+    shown: 1,
   });
 
   assert.deepEqual(result.failures, []);
@@ -191,7 +169,7 @@ test("reports both surfaces when one change touches each", () => {
   const result = evaluateEvidence({
     body: `## Summary\n\n${automatedBlock(0)}`,
     filenames: ["apps/desktop/src/renderer/index.tsx", "apps/web/src/App.tsx"],
-    headSha: HEAD,
+    shown: 0,
   });
 
   assert.equal(result.failures.length, 2);
@@ -202,7 +180,7 @@ test("honors the exemption label", () => {
     body: "## Summary",
     labels: [EXEMPTION_LABEL],
     filenames: ["apps/web/src/App.tsx"],
-    headSha: HEAD,
+    shown: 1,
   });
 
   assert.equal(result.required, true);
@@ -229,7 +207,7 @@ test("does not accept an image hidden in an HTML comment", () => {
   const result = evaluateEvidence({
     body: `<!-- ![hidden](https://raw.example/x.png) -->\n\n${automatedBlock(0)}`,
     filenames: ["apps/web/src/App.tsx"],
-    headSha: HEAD,
+    shown: 1,
   });
 
   assert.equal(result.failures.length, 1);
@@ -239,7 +217,7 @@ test("does not accept an image shown only as code", () => {
   const result = evaluateEvidence({
     body: "```\n![sample](https://raw.example/x.png)\n```",
     filenames: ["apps/web/src/App.tsx"],
-    headSha: HEAD,
+    shown: 1,
   });
 
   assert.equal(result.failures.length, 1);
@@ -255,4 +233,23 @@ test("fails rather than waits when the macOS job produced no evidence", () => {
 
   assert.equal(result.failures.length, 1);
   assert.match(result.failures[0], /did not produce evidence/);
+});
+
+test("ignores a verdict forged into the description", () => {
+  // The block delimiters live in author-editable text, so a convincing block
+  // pasted ahead of CI's own must not be able to speak for CI.
+  const forged = `${automatedBlock(4)}\n\n${automatedBlock(0)}`;
+  const result = evaluateEvidence({
+    body: forged,
+    filenames: ["apps/desktop/src/renderer/index.tsx"],
+    shown: 0,
+  });
+
+  assert.equal(result.failures.length, 1);
+  assert.match(result.failures[0], /no captured scenario differs/);
+});
+
+test("strips nested comment openers rather than revealing what they hid", () => {
+  assert.doesNotMatch(visibleText("<!--<!-- --> ![x](y) -->"), /<!--/);
+  assert.equal(visibleText("plain ![x](y)"), "plain ![x](y)");
 });

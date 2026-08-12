@@ -37,6 +37,10 @@ jobs:
   macos:
     name: macOS app and evidence
     runs-on: macos-15
+    outputs:
+      # The gate's verdict travels as a job output, which no pull-request author
+      # can write, rather than being read back out of the description.
+      scenarios-shown: ${{ steps.embed-evidence.outputs.scenarios-shown }}
     permissions:
       # `contents: write` publishes screenshots to the durable `pr-assets`
       # branch so they render inline in the pull-request description.
@@ -66,6 +70,7 @@ jobs:
           if-no-files-found: error
           retention-days: 90
       - name: Embed visual evidence in the pull request description
+        id: embed-evidence
         if: >-
           always() &&
           !cancelled() &&
@@ -113,6 +118,7 @@ jobs:
           node-version-file: .nvmrc
       - env:
           EVIDENCE_RUN_RESULT: ${{ needs.macos.result }}
+          EVIDENCE_SCENARIOS_SHOWN: ${{ needs.macos.outputs.scenarios-shown }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}

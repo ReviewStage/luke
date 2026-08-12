@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -216,8 +216,16 @@ async function main() {
     method: "PATCH",
     body: JSON.stringify({ body }),
   });
+  // The count is reported as a job output, not read back from the description.
+  // A pull-request body is author-editable in full — including the markers that
+  // delimit this block — so it can carry the verdict for a human to read but
+  // can never be the thing the gate trusts.
+  const shown = countShown(scenarios);
+  if (process.env.GITHUB_OUTPUT) {
+    await appendFile(process.env.GITHUB_OUTPUT, `scenarios-shown=${shown}\n`);
+  }
   process.stdout.write(
-    `Embedded evidence on PR #${pullRequest}: ${countShown(scenarios)} of ${scenarios.length} scenarios differ from main\n`,
+    `Embedded evidence on PR #${pullRequest}: ${shown} of ${scenarios.length} scenarios differ from main\n`,
   );
 }
 
