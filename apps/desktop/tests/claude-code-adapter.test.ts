@@ -104,6 +104,34 @@ test("keeps stale user-tail sessions unknown instead of inventing activity", asy
   assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
 });
 
+test("keeps stale assistant-tail sessions from staying in attention", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-review",
+    "stale-assistant-tail",
+    [
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
+        cwd: "/Users/test/review",
+        timestamp: "2026-08-11T23:25:00.000Z",
+      },
+    ],
+    TEST_TIME - 20 * 60 * 1000,
+  );
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    activeSessionFreshnessMs: 15 * 60 * 1000,
+    claudeHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60 * 60 * 1000,
+  });
+  const observations = await adapter.observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
+});
+
 test("filters old sessions and preserves the newest duplicate provider id", async (t) => {
   const claudeHome = await temporaryClaudeHome(t);
   await writeSessionFile(

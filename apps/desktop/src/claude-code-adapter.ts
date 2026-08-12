@@ -237,12 +237,13 @@ function statusFromTail(
   now: number,
   activeSessionFreshnessMs: number,
 ): ProviderSessionObservation["status"] {
+  const isFresh = now - observedAt <= activeSessionFreshnessMs;
   if (parsed.eventType === CLAUDE_EVENT_TYPE.RESULT) return SESSION_STATUS.COMPLETE;
-  if (parsed.eventType === CLAUDE_EVENT_TYPE.ASSISTANT) return SESSION_STATUS.WAITING;
+  if (parsed.eventType === CLAUDE_EVENT_TYPE.ASSISTANT) {
+    return isFresh ? SESSION_STATUS.WAITING : SESSION_STATUS.UNKNOWN;
+  }
   if (parsed.eventType === CLAUDE_EVENT_TYPE.USER) {
-    return now - observedAt <= activeSessionFreshnessMs
-      ? SESSION_STATUS.WORKING
-      : SESSION_STATUS.UNKNOWN;
+    return isFresh ? SESSION_STATUS.WORKING : SESSION_STATUS.UNKNOWN;
   }
   return SESSION_STATUS.UNKNOWN;
 }

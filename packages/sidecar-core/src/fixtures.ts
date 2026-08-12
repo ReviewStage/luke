@@ -1,4 +1,10 @@
-export type SessionState = "working" | "attention" | "complete";
+export const SESSION_STATE = {
+  WORKING: "working",
+  ATTENTION: "attention",
+  COMPLETE: "complete",
+} as const;
+
+export type SessionState = (typeof SESSION_STATE)[keyof typeof SESSION_STATE];
 
 export interface SessionSnapshot {
   id: string;
@@ -21,21 +27,21 @@ const smokeFixture: FixtureSnapshot = {
       title: "Bootstrap the desktop shell",
       provider: "Codex",
       detail: "Testing Electron window semantics",
-      state: "working",
+      state: SESSION_STATE.WORKING,
     },
     {
       id: "claude-review",
       title: "Review trust constraints",
       provider: "Claude Code",
       detail: "One architecture decision is ready",
-      state: "attention",
+      state: SESSION_STATE.ATTENTION,
     },
     {
       id: "codex-evidence",
       title: "Capture deterministic evidence",
       provider: "Codex",
       detail: "Fixture requires no live sessions",
-      state: "complete",
+      state: SESSION_STATE.COMPLETE,
     },
   ],
 };
@@ -48,5 +54,5 @@ export function fixtureSnapshot(name: string): FixtureSnapshot {
 }
 
 export function attentionCount(snapshot: FixtureSnapshot): number {
-  return snapshot.sessions.filter((session) => session.state === "attention").length;
+  return snapshot.sessions.filter((session) => session.state === SESSION_STATE.ATTENTION).length;
 }

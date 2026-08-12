@@ -1,6 +1,7 @@
 import {
   ATTENTION_DISPOSITION,
   type NormalizedSession,
+  SESSION_STATE,
   SESSION_STATUS,
   type SessionState,
 } from "@sidecar/core";
@@ -14,9 +15,9 @@ import type {
 } from "../shared/contracts";
 
 const stateLabels: Record<SessionState, string> = {
-  working: "Working",
-  attention: "Needs attention",
-  complete: "Complete",
+  [SESSION_STATE.WORKING]: "Working",
+  [SESSION_STATE.ATTENTION]: "Needs attention",
+  [SESSION_STATE.COMPLETE]: "Complete",
 };
 
 const statusLabels: Record<NormalizedSession["status"], string> = {
@@ -151,9 +152,9 @@ function sessionNeedsAttention(session: NormalizedSession): boolean {
 }
 
 function sessionState(session: NormalizedSession): SessionState {
-  if (sessionNeedsAttention(session)) return "attention";
-  if (session.status === SESSION_STATUS.COMPLETE) return "complete";
-  return "working";
+  if (sessionNeedsAttention(session)) return SESSION_STATE.ATTENTION;
+  if (session.status === SESSION_STATUS.COMPLETE) return SESSION_STATE.COMPLETE;
+  return SESSION_STATE.WORKING;
 }
 
 function displaySessions(bootstrap: AppBootstrap, sessions: readonly NormalizedSession[]) {
@@ -350,7 +351,9 @@ function App(): React.JSX.Element {
   if (!bootstrap || !display) return <div />;
 
   const visibleSessions = displaySessions(bootstrap, sessions);
-  const attention = visibleSessions.filter((session) => session.state === "attention").length;
+  const attention = visibleSessions.filter(
+    (session) => session.state === SESSION_STATE.ATTENTION,
+  ).length;
   const fixtureSpeaking = bootstrap.profile === "speaking";
   const hasAudioSignal = fixtureSpeaking || analyser !== undefined;
   const indicatorState = attention > 0 ? "attention" : "working";
