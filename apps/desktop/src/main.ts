@@ -46,7 +46,9 @@ const fixtureMode = captureMode || fixtureName !== undefined;
 const SESSION_REFRESH_INTERVAL_MS = 5_000;
 const sessionRegistry = new InMemorySessionRegistry();
 const sessionAdapters = [new ClaudeCodeSessionAdapter(), new CodexSessionAdapter()] as const;
-const attentionEvaluator = captureMode ? undefined : openAiAttentionEvaluatorFromEnvironment();
+// A fixture run must stay deterministic and credential-free, so it never builds
+// an evaluator — not just capture runs.
+const attentionEvaluator = fixtureMode ? undefined : openAiAttentionEvaluatorFromEnvironment();
 const attentionReviewer = attentionEvaluator
   ? new SessionAttentionReviewer({
       evaluator: attentionEvaluator,
