@@ -1,12 +1,18 @@
 /**
- * Drawn here rather than pulled from an icon set: three glyphs at one weight,
- * sized to the section headings they label. They are ours, not anyone's brand
- * mark, so they inherit `currentColor` like any other text.
+ * Drawn here rather than pulled from an icon set: a few glyphs at one weight,
+ * sized to the headings and labels they sit in. They are ours, not anyone's
+ * brand mark, so they inherit `currentColor` like any other text.
  */
-function Glyph({ children }: { children: React.ReactNode }): React.JSX.Element {
+function Glyph({
+  children,
+  className = "settings-icon",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}): React.JSX.Element {
   return (
     <svg
-      className="settings-icon"
+      className={className}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -38,6 +44,17 @@ export function MicrophoneIcon(): React.JSX.Element {
       <rect x="9" y="2.6" width="6" height="11" rx="3" />
       <path d="M5.4 11.4a6.6 6.6 0 0 0 13.2 0" />
       <path d="M12 18v3.4" />
+    </Glyph>
+  );
+}
+
+/** Drawn rather than typed: a ↗ character depends on a font having one. */
+export function ExternalIcon(): React.JSX.Element {
+  return (
+    <Glyph className="link-icon">
+      <path d="M9.4 4.6H5.2A1.6 1.6 0 0 0 3.6 6.2v12.6a1.6 1.6 0 0 0 1.6 1.6h12.6a1.6 1.6 0 0 0 1.6-1.6v-4.2" />
+      <path d="M14 3.6h6.4V10" />
+      <path d="M10.4 13.6 20.1 3.9" />
     </Glyph>
   );
 }

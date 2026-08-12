@@ -28,6 +28,12 @@ export interface CredentialProvider {
   displayName: string;
   /** Where the user creates a key, shown beside that provider's field. */
   hint: string;
+  /**
+   * The page that issues this provider's keys. It is opened by provider id
+   * rather than by a URL the renderer supplies, so the only addresses Luke can
+   * ever open are the ones in this file.
+   */
+  apiKeysUrl: string;
   /** Read in order when nothing is stored for this provider. */
   environmentVariables: readonly string[];
 }
@@ -38,6 +44,7 @@ export const CREDENTIAL_PROVIDERS: Readonly<Record<CredentialProviderId, Credent
     id: CREDENTIAL_PROVIDER_ID.CONDUCTOR,
     displayName: "Conductor",
     hint: "Create a key in Conductor under Settings · API keys.",
+    apiKeysUrl: "https://app.conductor.build/users/api-keys",
     environmentVariables: [CONDUCTOR_ENVIRONMENT.API_KEY, CONDUCTOR_ENVIRONMENT.API_TOKEN],
   },
 };

@@ -107,11 +107,8 @@ export function App(): React.JSX.Element {
   const presentationRef = useRef<PanelPresentation>(PANEL_PRESENTATION.CAPSULE);
   const tabRef = useRef<PanelTab>(PANEL_TAB.SESSIONS);
   const credentialEditing = useRef(false);
+  const pointerInside = useRef(false);
   const modeGeneration = useRef(0);
-
-  const setCredentialEditing = useCallback((editing: boolean) => {
-    credentialEditing.current = editing;
-  }, []);
 
   const changeTab = useCallback((next: PanelTab) => {
     tabRef.current = next;
@@ -222,6 +219,7 @@ export function App(): React.JSX.Element {
 
   const handleHitRegionEnter = useCallback(() => {
     cancelHoverTransition();
+    pointerInside.current = true;
     if (presentationRef.current !== PANEL_PRESENTATION.CAPSULE) return;
     hoverTimer.current = window.setTimeout(() => {
       hoverTimer.current = undefined;
@@ -233,6 +231,7 @@ export function App(): React.JSX.Element {
 
   const handleHitRegionLeave = useCallback(() => {
     cancelHoverTransition();
+    pointerInside.current = false;
     const current = presentationRef.current;
     if (current === PANEL_PRESENTATION.CAPSULE) return;
     // A key half-typed is the one thing the pointer must not be allowed to
@@ -248,6 +247,17 @@ export function App(): React.JSX.Element {
       }
     }, LEAVE_DELAY_MS);
   }, [applyPresentation, cancelHoverTransition, changeMode]);
+
+  // An entry that ends while the pointer is already away — Escape out of the
+  // key field, say — leaves the panel held open by nothing, because the pointer
+  // cannot leave a second time. Releasing the hold runs the leave itself.
+  const setCredentialEditing = useCallback(
+    (editing: boolean) => {
+      credentialEditing.current = editing;
+      if (!editing && !pointerInside.current) handleHitRegionLeave();
+    },
+    [handleHitRegionLeave],
+  );
 
   const submitProviderApiKey = useCallback(
     async (providerId: CredentialProviderId, apiKey: string | undefined) => {

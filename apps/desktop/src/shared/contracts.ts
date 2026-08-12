@@ -75,6 +75,12 @@ export interface AppBridge {
     providerId: CredentialProviderId,
     apiKey: string | undefined,
   ): Promise<SettingsUpdateResult>;
+  /**
+   * Opens a provider's own API-key page in the default browser. The renderer
+   * names the provider, not the address, so the set of pages Luke can open is
+   * fixed by this build.
+   */
+  openProviderApiKeys(providerId: CredentialProviderId): void;
   /** Brings the expanded panel forward so it can accept typed input. */
   focusPanel(): void;
   notifyReady(): void;
@@ -90,6 +96,7 @@ export const channels = {
   setPointerInterception: "app:set-pointer-interception",
   requestMicrophone: "app:request-microphone",
   setProviderApiKey: "app:set-provider-api-key",
+  openProviderApiKeys: "app:open-provider-api-keys",
   focusPanel: "app:focus-panel",
   rendererReady: "app:renderer-ready",
   lifecycle: "app:lifecycle",

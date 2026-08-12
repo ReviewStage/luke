@@ -814,13 +814,22 @@ button:disabled {
 .app-stage[data-presentation="panel"] .quit-button,
 .app-stage[data-presentation="panel"] .empty-state,
 .app-stage[data-presentation="panel"] .tab-bar {
-  opacity: 1;
-  transform: none;
-  transition-delay: calc(
+  --row-delay: calc(
     var(--expand-delay) +
     min(var(--row-index, 0), var(--row-fan-limit)) *
     var(--row-stagger)
   );
+
+  opacity: 1;
+  transform: none;
+  transition-delay: var(--row-delay);
+}
+
+/* The one element in the stack that also answers the pointer. A delay list
+   matched to its property list keeps the stagger on the arrival, where it
+   belongs, instead of making the hover wait for the row's turn to appear. */
+.app-stage[data-presentation="panel"] .quit-button {
+  transition-delay: var(--row-delay), var(--row-delay), 0s, 0s;
 }
 
 /* Settings --------------------------------------------------------------- */
@@ -883,7 +892,11 @@ button:disabled {
   color: var(--text-secondary);
   font-size: 11.5px;
   font-weight: 620;
+  /* Arrival first, then feedback: this order is what the panel's delay list
+     above is matched against, so the two are edited together. */
   transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-shape) var(--spring),
     background-color var(--duration-hover) ease,
     color var(--duration-hover) ease;
 }
@@ -931,18 +944,80 @@ button:disabled {
   margin: 0;
 }
 
-/* One provider's key: the field, then what Luke resolved for it. Providers are
-   separated by a rule rather than by nested cards, so the section stays one
-   object however many keys it holds. */
-.credential-field {
+/* One provider per line: mark, name, whether it is connected, and what you can
+   do about that. Providers are separated by a rule rather than by nested cards,
+   so the section stays one object however many keys it holds. */
+.credential {
   display: flex;
   flex-direction: column;
   gap: 9px;
 }
 
-.credential-field + .credential-field {
-  padding-top: 11px;
+.credential + .credential {
+  padding-top: 10px;
   border-top: 1px solid var(--hairline);
+}
+
+.credential-row {
+  display: flex;
+  min-height: 26px;
+  align-items: center;
+  gap: 9px;
+}
+
+.credential-name {
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 620;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A dot and a word: the same way a session row reports its state, so the tab
+   reads at a glance rather than by sentence. */
+.credential-status {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 640;
+}
+
+.credential-status::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--state-idle);
+  content: "";
+}
+
+.credential-status.environment,
+.credential-status.encrypted-file {
+  color: var(--state-complete);
+}
+
+.credential-status.environment::before,
+.credential-status.encrypted-file::before {
+  background: var(--state-complete);
+}
+
+/* Deleting a key is the one destructive control here, so it says so on hover
+   rather than by sitting in red beside the others. */
+.credential-remove:hover {
+  background: color-mix(in srgb, #ff7e7e 12%, transparent);
+  color: #ff9b9b;
+}
+
+/* The field exists only while a key is being entered. */
+.credential-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 /* The place the panel takes typed input. */
@@ -961,10 +1036,43 @@ button:disabled {
   font-weight: 620;
 }
 
-/* Beside a name at label size, so the mark reads as part of the word. */
+/* Beside the provider's name, sized to it: the mark reads as part of the word,
+   not as an icon in a column of its own. */
 .credential-mark {
-  width: 11px;
-  height: 11px;
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
+/* The hint sits opposite the editor's buttons and yields to them. */
+.credential-editor .settings-note {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Reads as a link because that is what it does, though it is a button: the
+   page is opened by the main process, not navigated to here. */
+.link-button {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--state-working);
+  font-size: inherit;
+  font-weight: 640;
+  white-space: nowrap;
+  transition: color var(--duration-hover) ease;
+}
+
+.link-button:hover {
+  color: var(--text-primary);
+}
+
+.link-icon {
+  width: 9px;
+  height: 9px;
+  margin-left: 3px;
+  vertical-align: -1px;
 }
 
 .settings-input {
@@ -1003,16 +1111,6 @@ button:disabled {
   flex: 0 0 auto;
   align-items: center;
   gap: 7px;
-}
-
-/* Where the key came from, in the same colour vocabulary as session state. */
-.credential {
-  color: var(--text-secondary);
-}
-
-.credential.environment,
-.credential.encrypted-file {
-  color: var(--state-complete);
 }
 
 .action-button:disabled,

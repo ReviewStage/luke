@@ -60,10 +60,17 @@ The surface has three sizes and they are all the same black shape:
   count means: what Luke is watching on the left, `2 need you` on the right.
   This is the affordance; nothing is committed by hovering.
 - **Panel** — on a press. Full-width rows, one session per line: provider mark,
-  title, what it is doing, a state chip. A **Settings** tab holds the Conductor
-  cloud API key, microphone access, and Quit. Press the capsule again, or press
-  Escape, to close it; moving the pointer off it closes it just as readily,
-  except on the Settings tab, where a text field is waiting for the keyboard.
+  title, what it is doing, a state chip. A **Settings** tab holds the cloud API
+  keys, microphone access, and Quit. Press the capsule again, or press Escape,
+  to close it; moving the pointer off it closes it just as readily, except while
+  a key is being entered, which is the one thing the pointer must not discard.
+
+Settings lists one line per cloud provider — its mark, its name, and whether it
+is connected. A provider with no key offers **Connect**; one with a stored key
+offers **Edit** and **Delete**. The field appears only while a key is being
+entered, along with a link that opens that provider's own API-key page in your
+browser. Luke opens it by provider id rather than by an address the panel
+supplies, so the pages it can ever open are the ones in its provider registry.
 
 Sessions are ordered by how much they need a person, so whatever is waiting on
 you is the top row and the mark the capsule keeps.
@@ -140,9 +147,10 @@ wrappers, live-session changes, or transcript retention.
 Claude Code and Codex sessions are observed from local provider state and need
 no configuration. A cloud provider has no local state to read, so it stays
 silent until you press the capsule to open the panel, choose the **Settings**
-tab, and paste a key in that provider's row. Each provider holds its own
-credential and also reads its own `<PROVIDER>_API_KEY` from the environment;
-Conductor accepts `CONDUCTOR_API_KEY` or `CONDUCTOR_API_TOKEN`. A provider you
+tab, and connect it with a key. Each provider holds its own credential and also
+reads its own `<PROVIDER>_API_KEY` from the environment; Conductor accepts
+`CONDUCTOR_API_KEY` or `CONDUCTOR_API_TOKEN`, and issues keys at
+<https://app.conductor.build/users/api-keys>. A provider you
 give no key to reports nothing and issues no request. A key you enter is
 encrypted with `safeStorage`, whose key comes from the login Keychain, and it is
 never returned to the renderer. Luke reads only cloud workspaces you created,

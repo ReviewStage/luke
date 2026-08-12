@@ -26,6 +26,9 @@ const bridge: AppBridge = {
       providerId,
       apiKey,
     ) as Promise<SettingsUpdateResult>,
+  openProviderApiKeys: (providerId: CredentialProviderId) => {
+    ipcRenderer.send(channels.openProviderApiKeys, providerId);
+  },
   focusPanel: () => ipcRenderer.send(channels.focusPanel),
   notifyReady: () => ipcRenderer.send(channels.rendererReady),
   quit: () => ipcRenderer.send(channels.quit),

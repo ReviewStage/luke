@@ -22,6 +22,7 @@ import {
   safeStorage,
   screen,
   session,
+  shell,
   systemPreferences,
   Tray,
 } from "electron";
@@ -41,6 +42,7 @@ import {
 } from "./shared/contracts";
 import {
   CREDENTIAL_PROVIDER_ID,
+  CREDENTIAL_PROVIDERS,
   type CredentialProviderId,
   isCredentialProviderId,
 } from "./shared/credential-providers";
@@ -336,6 +338,15 @@ function registerIpc(): void {
       }
     },
   );
+
+  // Where to get a key is a question the panel cannot answer itself, so it
+  // hands the question to the browser. The renderer names a provider rather
+  // than an address: the pages Luke can open are the ones in the provider
+  // registry, and no URL crosses this boundary.
+  ipcMain.on(channels.openProviderApiKeys, (event, providerId: unknown) => {
+    if (!trustedSender(event) || !isCredentialProviderId(providerId)) return;
+    void shell.openExternal(CREDENTIAL_PROVIDERS[providerId].apiKeysUrl);
+  });
 
   // The panel is normally shown without stealing focus. A text field cannot be
   // typed into that way, so the renderer asks for focus when it opens one.
