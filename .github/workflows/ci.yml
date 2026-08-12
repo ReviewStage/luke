@@ -1,7 +1,13 @@
 name: CI
 
 on:
+  # Code events only. A description or label event must never start a run of
+  # this workflow: its build jobs would be skipped, GitHub counts a skipped job
+  # as successful, and the latest run for a commit is the one that decides
+  # mergeability — so editing a description would erase a failed build. The
+  # evidence recheck lives in its own workflow for exactly that reason.
   pull_request:
+    types: [opened, synchronize, reopened]
   push:
     branches: [main]
 
@@ -31,8 +37,14 @@ jobs:
   macos:
     name: macOS app and evidence
     runs-on: macos-15
+    outputs:
+      # The gate's verdict travels as a job output, which no pull-request author
+      # can write, rather than being read back out of the description.
+      scenarios-shown: ${{ steps.embed-evidence.outputs.scenarios-shown }}
     permissions:
-      contents: read
+      # `contents: write` publishes screenshots to the durable `pr-assets`
+      # branch so they render inline in the pull-request description.
+      contents: write
       pull-requests: write
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -57,7 +69,8 @@ jobs:
           path: artifacts/evidence/
           if-no-files-found: error
           retention-days: 90
-      - name: Link evidence from the pull request description
+      - name: Embed visual evidence in the pull request description
+        id: embed-evidence
         if: >-
           always() &&
           !cancelled() &&
@@ -66,9 +79,47 @@ jobs:
           steps.visual-evidence.outputs.artifact-url != ''
         env:
           ARTIFACT_URL: ${{ steps.visual-evidence.outputs.artifact-url }}
+          EVIDENCE_DIRECTORY: artifacts/evidence
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: node scripts/update-pr-evidence.mjs
+      - name: Republish the evidence baseline
+        # Every pull request is compared against the default branch's own
+        # render, so the baseline is refreshed whenever that branch moves.
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        env:
+          EVIDENCE_DIRECTORY: artifacts/evidence
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/publish-evidence-baseline.mjs
+
+  evidence:
+    name: Visual evidence
+    # Runs after the macOS job so that it reads a description CI has already
+    # embedded its screenshots into, and knows whether that job produced any. A
+    # fork's token cannot publish media, so its pull request is reviewed without
+    # this gate.
+    needs: [macos]
+    if: >-
+      always() &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+      - env:
+          EVIDENCE_RUN_RESULT: ${{ needs.macos.result }}
+          EVIDENCE_SCENARIOS_SHOWN: ${{ needs.macos.outputs.scenarios-shown }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: node scripts/check-pr-evidence.mjs

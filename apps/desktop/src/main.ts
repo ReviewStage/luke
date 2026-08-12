@@ -33,8 +33,13 @@ import { openAiAttentionEvaluatorFromEnvironment } from "./openai-attention-eval
 import { SettingsStore } from "./settings-store";
 import {
   type AppBootstrap,
+  type AppSettings,
+  CAPTURE_VIEW,
+  type CaptureView,
+  CREDENTIAL_SOURCE,
   channels,
   type DisplayDiagnostic,
+  isCaptureView,
   type MicrophoneStatus,
   type SettingsUpdateResult,
   type WindowMode,
@@ -47,9 +52,14 @@ import {
 
 const captureOutput = argumentValue("--capture-evidence");
 const profile = argumentValue("--profile") ?? "idle";
+const requestedView = argumentValue("--view");
 const fixtureName = argumentValue("--fixture");
 const fixture = fixtureSnapshot(fixtureName ?? "smoke");
 const captureMode = captureOutput !== undefined;
+if (requestedView !== undefined && !isCaptureView(requestedView)) {
+  throw new Error(`Unknown view: ${requestedView}`);
+}
+const view: CaptureView = requestedView ?? CAPTURE_VIEW.SESSIONS;
 // `--fixture` is enough on its own to make a run deterministic: the panel renders
 // the fixture snapshot and no provider is observed. Capture runs always imply it.
 const fixtureMode = captureMode || fixtureName !== undefined;
@@ -221,12 +231,32 @@ function trustedSender(event: IpcMainEvent | IpcMainInvokeEvent): boolean {
   return url === rendererUrl();
 }
 
+/**
+ * A capture run has to render the same pixels on every machine, so it reports a
+ * fixed settings snapshot instead of whatever this machine's Keychain and
+ * stored keys happen to say. Without this, evidence would differ between a
+ * developer's Mac and a CI runner, and comparing a screenshot against its
+ * baseline would report a change that is not in the diff. Live runs report the
+ * real state.
+ */
+async function bootstrapSettings(): Promise<AppSettings> {
+  if (!captureMode) return settingsStore.snapshot();
+  const sources = Object.values(CREDENTIAL_PROVIDER_ID).map(
+    (providerId) => [providerId, CREDENTIAL_SOURCE.NONE] as const,
+  );
+  return {
+    credentialSources: Object.fromEntries(sources) as AppSettings["credentialSources"],
+    secretStorageAvailable: true,
+  };
+}
+
 function registerIpc(): void {
   ipcMain.handle(channels.bootstrap, async (event): Promise<AppBootstrap> => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
     return {
       mode: windowMode,
       profile,
+      view,
       fixture,
       captureMode,
       fixtureMode,
@@ -238,7 +268,7 @@ function registerIpc(): void {
       microphoneStatus: microphoneStatus(),
       display: displayDiagnostic(),
       sessions: fixtureMode ? [] : sessionRegistry.snapshot().sessions,
-      settings: await settingsStore.snapshot(),
+      settings: await bootstrapSettings(),
     };
   });
 
