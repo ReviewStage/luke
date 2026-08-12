@@ -47,10 +47,12 @@ convenience; `./scripts/check.sh` and CI remain authoritative.
 - Follow the [Conventional Commits 1.0.0
   specification](https://www.conventionalcommits.org/en/v1.0.0/) for commit
   messages.
-- Name pull requests using the `feat: lowercase title` format.
+- Name pull requests using the `type[(optional scope)]: lowercase title` format,
+  choosing the Conventional Commit type that matches the change, such as
+  `feat`, `fix`, `docs`, or `chore`.
 - When work has an associated Linear ticket, use Linear's suggested branch name
-  when available and name the pull request using the
-  `feat(LINEAR-TICKET-ID): lowercase title` format.
+  when available and use the ticket ID as the pull request scope, for example
+  `feat(LINEAR-TICKET-ID): lowercase title`.
 
 ## TypeScript value sets and keys
 
