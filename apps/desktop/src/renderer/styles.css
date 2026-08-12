@@ -369,6 +369,33 @@ h1 {
   white-space: nowrap;
 }
 
+/* A provider mark stays inline in the meta line rather than becoming a leading
+   column, so rows for providers without a mark keep the same alignment. Inline
+   flow also leaves the line's ellipsis truncation intact. */
+.provider-mark {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  margin-right: 6px;
+  border-radius: 5px;
+  vertical-align: -5px;
+}
+
+.provider-mark svg {
+  display: block;
+  width: auto;
+  height: 10px;
+}
+
+/* Conductor's published brand palette: the mark keeps its own colors instead of
+   inheriting the muted meta-line gray. */
+.provider-mark-conductor {
+  background: #282423;
+  color: #eae8e6;
+}
+
 .session-status {
   font-size: 10px;
   font-weight: 650;

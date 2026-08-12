@@ -18,6 +18,7 @@ import type {
 import { CREDENTIAL_SOURCE } from "../shared/contracts";
 import type { CredentialProvider, CredentialProviderId } from "../shared/credential-providers";
 import { CREDENTIAL_PROVIDER_LIST } from "../shared/credential-providers";
+import { ProviderMark } from "./provider-mark";
 
 const credentialLabels: Record<CredentialSource, string> = {
   [CREDENTIAL_SOURCE.NONE]: "Not connected",
@@ -42,6 +43,7 @@ const statusLabels: Record<NormalizedSession["status"], string> = {
 interface DisplaySession {
   id: string;
   title: string;
+  providerId: string;
   provider: string;
   detail: string;
   state: SessionState;
@@ -315,6 +317,7 @@ function displaySessions(bootstrap: AppBootstrap, sessions: readonly NormalizedS
     (session): DisplaySession => ({
       id: session.providerSessionId,
       title: session.title,
+      providerId: session.provider.id,
       provider: session.provider.displayName,
       detail: session.summary ?? statusLabels[session.status],
       state: sessionState(session),
@@ -643,6 +646,7 @@ function App(): React.JSX.Element {
                     <span className="session-copy">
                       <strong>{item.title}</strong>
                       <small>
+                        <ProviderMark providerId={item.providerId} />
                         {item.provider} · {item.detail}
                       </small>
                     </span>
