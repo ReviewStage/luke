@@ -47,8 +47,7 @@ convenience; `./scripts/check.sh` and CI remain authoritative.
 - Follow [Conventional Commits
   1.0.0](https://www.conventionalcommits.org/en/v1.0.0/) for commit messages.
 - Format PR titles as `type[(scope)]: description`, using the matching type
-  (`feat`, `fix`, `docs`, `chore`, etc.). Start the description lowercase, but
-  capitalize proper names normally (`Electron`, `Codex`).
+  (`feat`, `fix`, `docs`, `chore`, etc.).
 - For Linear work, use its suggested branch name when available and the ticket
   ID as the scope: `feat(LUKE-123): add Codex support`.
 
