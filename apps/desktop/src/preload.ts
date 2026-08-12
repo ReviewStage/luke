@@ -1,3 +1,4 @@
+import type { NormalizedSession } from "@sidecar/core";
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   AppBootstrap,
@@ -34,6 +35,12 @@ const bridge: AppBridge = {
       callback(display);
     ipcRenderer.on(channels.displayChanged, listener);
     return () => ipcRenderer.removeListener(channels.displayChanged, listener);
+  },
+  onSessionsChanged: (callback: (sessions: readonly NormalizedSession[]) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, sessions: readonly NormalizedSession[]) =>
+      callback(sessions);
+    ipcRenderer.on(channels.sessionsChanged, listener);
+    return () => ipcRenderer.removeListener(channels.sessionsChanged, listener);
   },
 };
 
