@@ -384,6 +384,61 @@ test("drops a decision for a session that disappeared while it was evaluated", a
   assert.equal(review?.decision.disposition, ATTENTION_DISPOSITION.SILENT);
 });
 
+test("retries a failed evaluation a bounded number of times", async () => {
+  let attempts = 0;
+  const failuresBeforeSuccess = 2;
+  const reviewer = new SessionAttentionReviewer({
+    evaluator: {
+      evaluate: async () => {
+        attempts += 1;
+        if (attempts <= failuresBeforeSuccess) throw new Error("network blip");
+        return speakDecision();
+      },
+    },
+    now: () => DECIDED_AT,
+  });
+
+  const waiting = session(claude, "review", { status: SESSION_STATUS.WAITING });
+  for (let pass = 0; pass < failuresBeforeSuccess; pass += 1) {
+    const [review] = await reviewer.review([waiting]);
+    assert.equal(review?.outcome, ATTENTION_REVIEW_OUTCOME.UNAVAILABLE);
+  }
+
+  const [recovered] = await reviewer.review([waiting]);
+  assert.equal(
+    recovered?.outcome,
+    ATTENTION_REVIEW_OUTCOME.DECIDED,
+    "a passing failure must not permanently drop the development",
+  );
+  assert.deepEqual(recovered?.decision, speakDecision());
+});
+
+test("stops retrying an evaluator that keeps failing", async () => {
+  let attempts = 0;
+  const reviewer = new SessionAttentionReviewer({
+    evaluator: {
+      evaluate: async () => {
+        attempts += 1;
+        return undefined;
+      },
+    },
+    maximumUnavailableRetries: 1,
+    now: () => DECIDED_AT,
+  });
+
+  const waiting = session(claude, "review", { status: SESSION_STATUS.WAITING });
+  await reviewer.review([waiting]);
+  await reviewer.review([waiting]);
+  assert.equal(attempts, 2);
+
+  assert.deepEqual(
+    await reviewer.review([waiting]),
+    [],
+    "a standing misconfiguration must not re-evaluate on every poll",
+  );
+  assert.equal(attempts, 2);
+});
+
 test("bounds one review pass and re-derives the updates it deferred", async () => {
   const evaluator = evaluatorReturning({
     disposition: ATTENTION_DISPOSITION.SILENT,

@@ -29,6 +29,7 @@ const ATTENTION_DISPOSITIONS: readonly AttentionDisposition[] =
 const ATTENTION_REVIEW_DEFAULTS = {
   REPEAT_WINDOW_MS: 10 * 60 * 1000,
   MAXIMUM_UPDATES_PER_REVIEW: 4,
+  MAXIMUM_UNAVAILABLE_RETRIES: 2,
 } as const;
 
 /**
@@ -114,6 +115,8 @@ export interface SessionAttentionReviewerOptions {
   now?: () => number;
   repeatWindowMs?: number;
   maximumUpdatesPerReview?: number;
+  /** How many extra passes may retry one update after an evaluator failure. */
+  maximumUnavailableRetries?: number;
 }
 
 interface SpokenRecord {
@@ -290,8 +293,10 @@ export class SessionAttentionReviewer {
   readonly #now: () => number;
   readonly #maximumUpdatesPerReview: number;
   readonly #ledger: AttentionSpeechLedger;
+  readonly #maximumUnavailableRetries: number;
   #observed = new Map<string, Map<string, NormalizedSession>>();
   readonly #pending = new Map<string, Set<string>>();
+  readonly #unavailableRetries = new Map<string, Map<string, number>>();
 
   constructor(options: SessionAttentionReviewerOptions) {
     this.#evaluator = options.evaluator;
@@ -300,6 +305,10 @@ export class SessionAttentionReviewer {
     this.#maximumUpdatesPerReview = positiveInteger(
       options.maximumUpdatesPerReview,
       ATTENTION_REVIEW_DEFAULTS.MAXIMUM_UPDATES_PER_REVIEW,
+    );
+    this.#maximumUnavailableRetries = nonNegativeNumber(
+      options.maximumUnavailableRetries,
+      ATTENTION_REVIEW_DEFAULTS.MAXIMUM_UNAVAILABLE_RETRIES,
     );
     this.#ledger = new AttentionSpeechLedger({
       ...(options.now ? { now: options.now } : {}),
@@ -338,18 +347,56 @@ export class SessionAttentionReviewer {
       // change the session between this check and the write.
       return evaluated.map((review, index) => {
         const settled = this.#settle(review);
-        if (settled.outcome === ATTENTION_REVIEW_OUTCOME.SUPERSEDED) {
-          // Nothing was said about this state, so it must not stay consumed. A
-          // session that leaves and re-enters it before any pass observes the
-          // step in between would otherwise never be reviewed again.
-          const candidate = selected[index];
-          if (candidate) this.#rewind(candidate.session, baselines[index]);
+        const candidate = selected[index];
+        // A development is only consumed once a decision was actually reached
+        // about it. Anything else must stay derivable, or the update is lost.
+        if (candidate && this.#keepsDevelopmentPending(settled, candidate.session)) {
+          this.#rewind(candidate.session, baselines[index]);
         }
         return settled;
       });
     } finally {
       for (const candidate of selected) this.#clearPending(candidate.session);
     }
+  }
+
+  /**
+   * Decides whether an update stays derivable for a later pass.
+   *
+   * A superseded decision always does: the state changed, so the update cannot
+   * recur on its own. An unavailable evaluator is retried a bounded number of
+   * times instead, because the failure can be either a passing network blip —
+   * where dropping "your session is waiting" would be a real miss — or a
+   * standing misconfiguration, where retrying forever would hammer a paid API
+   * every poll. Retries are per session and reset as soon as one succeeds.
+   */
+  #keepsDevelopmentPending(review: AttentionReview, session: NormalizedSession): boolean {
+    if (review.outcome === ATTENTION_REVIEW_OUTCOME.SUPERSEDED) return true;
+    if (review.outcome !== ATTENTION_REVIEW_OUTCOME.UNAVAILABLE) {
+      this.#clearUnavailableRetries(session);
+      return false;
+    }
+
+    const previous =
+      this.#unavailableRetries.get(session.providerId)?.get(session.providerSessionId) ?? 0;
+    const attempts = previous + 1;
+    if (attempts > this.#maximumUnavailableRetries) {
+      this.#clearUnavailableRetries(session);
+      return false;
+    }
+
+    const providerAttempts =
+      this.#unavailableRetries.get(session.providerId) ?? new Map<string, number>();
+    providerAttempts.set(session.providerSessionId, attempts);
+    this.#unavailableRetries.set(session.providerId, providerAttempts);
+    return true;
+  }
+
+  #clearUnavailableRetries(session: NormalizedSession): void {
+    const providerAttempts = this.#unavailableRetries.get(session.providerId);
+    if (!providerAttempts) return;
+    providerAttempts.delete(session.providerSessionId);
+    if (providerAttempts.size === 0) this.#unavailableRetries.delete(session.providerId);
   }
 
   #rewind(session: NormalizedSession, baseline: NormalizedSession | undefined): void {

@@ -22,7 +22,11 @@ const OPENAI_DEFAULTS = {
   // means fewer decisions are discarded as superseded before they can be used.
   MODEL: "gpt-5.6-luna",
   REQUEST_TIMEOUT_MS: 15_000,
-  MAXIMUM_OUTPUT_TOKENS: 1024,
+  // The decision itself is a few dozen tokens; this cap only bounds a runaway
+  // response. It is set well above that because reasoning tokens are charged
+  // against the same budget, and a model that exhausts it returns `incomplete`
+  // with no output at all — indistinguishable from having nothing to say.
+  MAXIMUM_OUTPUT_TOKENS: 4096,
 } as const;
 
 const OPENAI_RESPONSES_PATH = "/responses";
