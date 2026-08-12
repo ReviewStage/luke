@@ -71,8 +71,13 @@ The header is anchored to the notch, not to a state: the count sits to the right
 of the housing and the provider marks and speech meter to its left, in the same
 place in all three. Growing only unfolds captions around them.
 
-At rest the surface is true black, because it is pretending to be part of a
-camera housing. Once it grows past the housing it is a panel floating over the
+At rest the surface is true black and shaped like the housing it sits beside:
+the convex bottom corners and the concave flare where its sides meet the top
+edge are both derived from the reported notch inset, at the ratios measured off
+the hardware (0.348 and 0.094 of its height). The panel drops the flare and
+rounds its own top corners instead, because by then it is a window hanging off
+the edge rather than part of a physical object. A display with no housing to
+blend into gets a free-floating pill. Once it grows past the housing it is a panel floating over the
 desktop instead, so the peek and the panel take a hairline edge, a soft shadow,
 and just enough translucency to admit the wallpaper is back there. The lift
 arrives once the shape has settled, so a blurred shadow is never repainted

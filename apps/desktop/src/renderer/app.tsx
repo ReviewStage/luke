@@ -304,6 +304,7 @@ export function App(): React.JSX.Element {
     <div
       className="app-stage"
       data-presentation={presentation}
+      data-notch={String(display.notch.hasNotch)}
       data-capture={String(bootstrap.captureMode)}
       style={{ ...notchStyle(display), ...panelHeightStyle(panelHeight) }}
     >

@@ -18,6 +18,22 @@
   overscroll-behavior: contain;
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
   scrollbar-width: thin;
+  /* Rows dissolve into the panel rather than being cut off at its edge, and the
+     fade lifts as the last row arrives. A scroll timeline is exactly the right
+     tool: with nothing to scroll it never becomes active, so a list that fits
+     is left alone without asking JavaScript whether it overflows. */
+  animation: session-scroll-fade linear both;
+  animation-timeline: scroll(self block);
+}
+
+@keyframes session-scroll-fade {
+  from {
+    mask-image: linear-gradient(to bottom, #000 calc(100% - var(--scroll-fade)), transparent 100%);
+  }
+
+  to {
+    mask-image: linear-gradient(to bottom, #000 100%, transparent 100%);
+  }
 }
 
 .session-row {

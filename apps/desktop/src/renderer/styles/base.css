@@ -121,13 +121,14 @@
      render surface on the one element that animates and return nothing. */
   --surface-rest: #000;
   --surface-lifted: rgba(0, 0, 0, 0.96);
+  --surface-fill: var(--surface-rest);
   --surface-edge: inset 0 0 0 0.5px rgba(255, 255, 255, 0.07);
   --surface-shadow: 0 10px 26px rgba(0, 0, 0, 0.46), 0 2px 7px rgba(0, 0, 0, 0.3);
 
-  --capsule-radius: 13px;
-  --peek-radius: 19px;
+  --panel-top-radius: 12px;
   --panel-radius: 30px;
   --wing-inset: 9px;
+  --scroll-fade: 26px;
   --panel-width: 620px;
 }
 
@@ -138,6 +139,12 @@
   --capsule-width: calc(var(--notch-housing-width) + 72px);
   --capsule-height: max(var(--notch-top-inset), 32px);
   --peek-width: calc(var(--notch-housing-width) + 248px);
+  /* Measured off the hardware rather than guessed: the housing's own corners are
+     a convex 0.348 of its height, and where its sides meet the top edge it
+     flares outward on a concave 0.094. Deriving both from the reported inset
+     keeps the capsule matching whatever notch it is sitting beside. */
+  --notch-convex-radius: calc(var(--capsule-height) * 0.348);
+  --notch-concave-radius: calc(var(--capsule-height) * 0.094);
 }
 
 * {
@@ -196,8 +203,8 @@ button {
   left: 50%;
   width: var(--capsule-width);
   height: var(--capsule-height);
-  border-radius: 0 0 var(--capsule-radius) var(--capsule-radius);
-  background: var(--surface-rest);
+  border-radius: 0 0 var(--notch-convex-radius) var(--notch-convex-radius);
+  background: var(--surface-fill);
   transform: translateX(-50%);
   /* Held back by `--duration-exit` so the shape never shrinks out from under
      content that is still on screen. */
@@ -209,12 +216,49 @@ button {
     box-shadow var(--duration-quick) var(--motion-exit);
 }
 
-/* The lift arrives once the shape has settled rather than during it: a blurred
-   shadow is repainted on every frame that changes the element's size, and the
-   spring is the one moment that cannot afford the extra paint. */
+/* Where the shape meets the top edge it flares outward on the same concave
+   curve the housing does, so a capsule beside the notch reads as one object
+   with it rather than as a black rectangle parked next to one. */
+.app-stage[data-notch="true"] .panel-surface::before,
+.app-stage[data-notch="true"] .panel-surface::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: var(--notch-concave-radius);
+  height: var(--notch-concave-radius);
+  opacity: 1;
+  transition: opacity var(--duration-quick) var(--motion-exit);
+}
+
+.app-stage[data-notch="true"] .panel-surface::before {
+  right: 100%;
+  background: radial-gradient(
+    circle at 0 100%,
+    transparent var(--notch-concave-radius),
+    var(--surface-fill) var(--notch-concave-radius)
+  );
+}
+
+.app-stage[data-notch="true"] .panel-surface::after {
+  left: 100%;
+  background: radial-gradient(
+    circle at 100% 100%,
+    transparent var(--notch-concave-radius),
+    var(--surface-fill) var(--notch-concave-radius)
+  );
+}
+
+/* The panel is a window hanging off the edge rather than part of the housing,
+   so it rounds its own top corners instead and drops the flare. */
+.app-stage[data-presentation="panel"] .panel-surface::before,
+.app-stage[data-presentation="panel"] .panel-surface::after {
+  opacity: 0;
+}
+
 .app-stage[data-presentation="peek"] .panel-surface,
 .app-stage[data-presentation="panel"] .panel-surface {
-  background: var(--surface-lifted);
+  --surface-fill: var(--surface-lifted);
+
   box-shadow: var(--surface-edge), var(--surface-shadow);
 }
 
@@ -222,33 +266,26 @@ button {
    loose enough that the capsule reads as something you can press. */
 .app-stage[data-presentation="peek"] .panel-surface {
   width: var(--peek-width);
-  border-radius: 0 0 var(--peek-radius) var(--peek-radius);
   transition-duration: var(--duration-peek);
   transition-timing-function:
     var(--spring-peek), var(--spring-peek), var(--spring-peek), var(--motion-exit),
     var(--motion-exit);
-  transition-delay: 0s, 0s, 0s, 0s, var(--duration-peek);
+  /* The peek's shadow rides with the shape. It is a small, short move over a
+     small surface, so the extra paint per frame is affordable here in a way it
+     is not across the panel's 620px. */
+  transition-delay: 0s;
 }
 
 .app-stage[data-presentation="panel"] .panel-surface {
   width: var(--panel-width);
   height: var(--panel-height, 520px);
-  border-radius: 0 0 var(--panel-radius) var(--panel-radius);
+  border-radius: var(--panel-top-radius) var(--panel-top-radius) var(--panel-radius)
+    var(--panel-radius);
   transition-duration: var(--duration-panel);
   transition-timing-function:
     var(--spring-panel), var(--spring-panel), var(--spring-panel), var(--motion-exit),
     var(--motion-exit);
   transition-delay: 0s, 0s, 0s, 0s, var(--duration-panel);
-}
-
-.compact-stage {
-  position: absolute;
-  z-index: 4;
-  inset: 0;
-}
-
-.app-stage[data-presentation="panel"] .compact-stage {
-  pointer-events: none;
 }
 
 /* Tracks the drawn shape rather than the window, which is always larger than
@@ -424,6 +461,46 @@ button {
   transform: scale(0.94);
 }
 
+/* Nothing to blend into on a display without a housing, so the shape stops
+   pretending: it lifts off the edge and closes into a free-floating pill. */
+.app-stage[data-notch="false"] {
+  --shape-top: 6px;
+}
+
+.app-stage[data-notch="false"] .panel-surface {
+  top: var(--shape-top);
+  height: calc(var(--capsule-height) - var(--shape-top) * 2);
+  border-radius: 999px;
+}
+
+.app-stage[data-notch="false"][data-presentation="panel"] .panel-surface {
+  top: 0;
+  height: var(--panel-height, 520px);
+  border-radius: var(--panel-top-radius) var(--panel-top-radius) var(--panel-radius)
+    var(--panel-radius);
+}
+
+.app-stage[data-notch="false"] .wing,
+.app-stage[data-notch="false"] .compact-hover-target {
+  top: var(--shape-top);
+  height: calc(var(--capsule-height) - var(--shape-top) * 2);
+}
+
+.app-stage[data-notch="false"][data-presentation="panel"] .wing {
+  top: 0;
+  height: var(--capsule-height);
+}
+
+.compact-stage {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+}
+
+.app-stage[data-presentation="panel"] .compact-stage {
+  pointer-events: none;
+}
+
 /* Session count ---------------------------------------------------------- */
 
 .count-badge {
@@ -464,11 +541,12 @@ button {
   color: var(--text-tertiary);
 }
 
-.app-stage[data-presentation="peek"] .count-badge,
+/* The peek adds a caption beside the count, not a bigger count: growing the
+   number as well made the widening read as two separate movements. */
 .app-stage[data-presentation="panel"] .count-badge {
   transform: scale(1);
-  transition-duration: var(--duration-peek);
-  transition-timing-function: var(--spring-peek);
+  transition-duration: var(--duration-panel);
+  transition-timing-function: var(--spring-panel);
 }
 
 /* Out of flow beside the badge, so revealing it never changes the badge's box
