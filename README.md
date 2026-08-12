@@ -20,7 +20,7 @@ From a fresh checkout:
 ./scripts/check.sh
 ```
 
-On macOS, launch the fixture app or run complete validation:
+On macOS, launch the app or run complete validation:
 
 ```sh
 ./scripts/run.sh

@@ -37,9 +37,12 @@ import {
 
 const captureOutput = argumentValue("--capture-evidence");
 const profile = argumentValue("--profile") ?? "idle";
-const fixtureName = argumentValue("--fixture") ?? "smoke";
-const fixture = fixtureSnapshot(fixtureName);
+const fixtureName = argumentValue("--fixture");
+const fixture = fixtureSnapshot(fixtureName ?? "smoke");
 const captureMode = captureOutput !== undefined;
+// `--fixture` is enough on its own to make a run deterministic: the panel renders
+// the fixture snapshot and no provider is observed. Capture runs always imply it.
+const fixtureMode = captureMode || fixtureName !== undefined;
 const SESSION_REFRESH_INTERVAL_MS = 5_000;
 const sessionRegistry = new InMemorySessionRegistry();
 const sessionAdapters = [new ClaudeCodeSessionAdapter(), new CodexSessionAdapter()] as const;
@@ -182,6 +185,7 @@ function registerIpc(): void {
       profile,
       fixture,
       captureMode,
+      fixtureMode,
       packaged: app.isPackaged,
       platform: process.platform,
       electronVersion: process.versions.electron,
@@ -189,7 +193,7 @@ function registerIpc(): void {
       nodeVersion: process.versions.node,
       microphoneStatus: microphoneStatus(),
       display: displayDiagnostic(),
-      sessions: captureMode ? [] : sessionRegistry.snapshot().sessions,
+      sessions: fixtureMode ? [] : sessionRegistry.snapshot().sessions,
     };
   });
 
@@ -232,7 +236,7 @@ function registerIpc(): void {
 }
 
 async function refreshProviderSessions(): Promise<void> {
-  if (captureMode || sessionRefreshRunning) return;
+  if (fixtureMode || sessionRefreshRunning) return;
   sessionRefreshRunning = true;
   try {
     for (const adapter of sessionAdapters) {
@@ -265,7 +269,7 @@ async function reviewSessionAttention(): Promise<void> {
 }
 
 function startSessionObservation(): void {
-  if (captureMode) return;
+  if (fixtureMode) return;
   sessionRegistry.subscribe((snapshot) => {
     panelWindow?.webContents.send(channels.sessionsChanged, snapshot.sessions);
   });
@@ -407,9 +411,26 @@ function handleDisplayChange(): void {
 }
 
 if (!app.requestSingleInstanceLock()) {
+  // Luke runs as an accessory app, so a second launch otherwise exits silently
+  // and looks like the launcher did nothing.
+  process.stderr.write(
+    "Luke is already running; the existing panel was refreshed instead of starting a second copy.\n",
+  );
   app.quit();
 } else {
-  app.on("second-instance", () => setWindowMode("expanded", true));
+  // A repeat launch is usually someone checking the notch capsule, so re-assert
+  // the panel where it already is. Expanding hides the compact capsule, which is
+  // the one thing the relaunch was meant to show. An explicit `--expanded` is a
+  // stated intent rather than a side effect, so it is still honoured.
+  app.on("second-instance", (_event, argv) => {
+    refreshNativeGeometry();
+    if (argv.includes("--expanded")) {
+      setWindowMode("expanded", true);
+      return;
+    }
+    positionPanel();
+    if (panelWindow && !panelWindow.isDestroyed()) panelWindow.showInactive();
+  });
   void app.whenReady().then(() => {
     if (process.platform === "darwin") app.setActivationPolicy("accessory");
     Menu.setApplicationMenu(null);
