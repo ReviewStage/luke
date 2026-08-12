@@ -10,6 +10,8 @@ export type SessionState = (typeof SESSION_STATE)[keyof typeof SESSION_STATE];
 export interface SessionSnapshot {
   id: string;
   title: string;
+  /** The observing provider's stable identity, as an adapter reports it. */
+  providerId: string;
   provider: string;
   detail: string;
   state: SessionState;
@@ -26,6 +28,7 @@ const smokeFixture: FixtureSnapshot = {
     {
       id: "codex-bootstrap",
       title: "Bootstrap the desktop shell",
+      providerId: "codex",
       provider: "Codex",
       detail: "Testing Electron window semantics",
       state: SESSION_STATE.WORKING,
@@ -33,15 +36,17 @@ const smokeFixture: FixtureSnapshot = {
     {
       id: "claude-review",
       title: "Review trust constraints",
+      providerId: "claude-code",
       provider: "Claude Code",
       detail: "One architecture decision is ready",
       state: SESSION_STATE.ATTENTION,
     },
     {
-      id: "codex-evidence",
-      title: "Capture deterministic evidence",
-      provider: "Codex",
-      detail: "Fixture requires no live sessions",
+      id: "conductor-workspace",
+      title: "Observe a cloud workspace",
+      providerId: "conductor",
+      provider: "Conductor",
+      detail: "Cloud session metadata only · no live credentials",
       state: SESSION_STATE.COMPLETE,
     },
   ],
