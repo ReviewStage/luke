@@ -84,7 +84,14 @@ export const ATTENTION_REVIEW_OUTCOME = {
 export type AttentionReviewOutcome =
   (typeof ATTENTION_REVIEW_OUTCOME)[keyof typeof ATTENTION_REVIEW_OUTCOME];
 
-/** The decision a reviewer reached for one session, after deduplication. */
+/**
+ * The decision a reviewer reached for one session. The two fields answer
+ * different questions and must not be conflated: `decision` says whether the
+ * session warrants attention and how urgently, and is what callers store, while
+ * `outcome` says whether Luke should voice it now. A repeated development
+ * carries a speaking `decision` with a `deduplicated` outcome — the session
+ * still needs attention, but saying the same sentence again would be noise.
+ */
 export interface AttentionReview extends SessionIdentity {
   update: AttentionUpdate;
   decision: AttentionDecision;
@@ -374,6 +381,11 @@ export class SessionAttentionReviewer {
    * decision the session has moved past would interrupt with news that is
    * already wrong, and it is deliberately not remembered, so the same sentence
    * stays available once the session genuinely needs it.
+   *
+   * A repeat keeps its disposition. Deduplication decides whether Luke says
+   * something again, not whether the session still warrants attention: a second
+   * turn really did finish, and silencing the decision because the sentence
+   * matches a recent one would hide that development entirely.
    */
   #settle(review: AttentionReview): AttentionReview {
     if (review.decision.disposition === ATTENTION_DISPOSITION.SILENT) return review;
@@ -381,7 +393,7 @@ export class SessionAttentionReviewer {
       return this.#silentReview(review, review.update, ATTENTION_REVIEW_OUTCOME.SUPERSEDED);
     }
     if (!this.#ledger.shouldSpeak(review, review.decision)) {
-      return this.#silentReview(review, review.update, ATTENTION_REVIEW_OUTCOME.DEDUPLICATED);
+      return { ...review, outcome: ATTENTION_REVIEW_OUTCOME.DEDUPLICATED };
     }
 
     this.#ledger.remember(review, review.decision);

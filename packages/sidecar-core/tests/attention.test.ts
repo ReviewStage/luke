@@ -192,11 +192,39 @@ test("reviews only changed sessions and suppresses a repeated decision", async (
   const waiting = session(claude, "review", { status: SESSION_STATUS.WAITING });
   const [repeatReview] = await reviewer.review([waiting]);
   assert.equal(repeatReview?.outcome, ATTENTION_REVIEW_OUTCOME.DEDUPLICATED);
-  assert.deepEqual(repeatReview?.decision, {
-    disposition: ATTENTION_DISPOSITION.SILENT,
-    decidedAt: DECIDED_AT,
-  });
+  assert.deepEqual(
+    repeatReview?.decision,
+    speakDecision(),
+    "a repeat stays worth attention even though Luke will not say it again",
+  );
   assert.equal(evaluator.updates.length, 2);
+});
+
+test("keeps a second real development visible when Luke stays quiet about it", async () => {
+  // Two turns finishing minutes apart produce the same sentence, so the ledger
+  // suppresses the second one. The session still finished twice.
+  const evaluator = evaluatorReturning({
+    disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
+    decidedAt: DECIDED_AT,
+    summary: "Codex finished its turn in billing-api.",
+  });
+  const reviewer = new SessionAttentionReviewer({ evaluator, now: () => DECIDED_AT });
+
+  const complete = session(codex, "build", { status: SESSION_STATUS.COMPLETE });
+  const working = session(codex, "build");
+
+  const [first] = await reviewer.review([complete]);
+  assert.equal(first?.outcome, ATTENTION_REVIEW_OUTCOME.DECIDED);
+
+  await reviewer.review([working]);
+
+  const [second] = await reviewer.review([complete]);
+  assert.equal(second?.outcome, ATTENTION_REVIEW_OUTCOME.DEDUPLICATED);
+  assert.notEqual(
+    second?.decision.disposition,
+    ATTENTION_DISPOSITION.SILENT,
+    "a second completed turn must not be hidden because its sentence matches a recent one",
+  );
 });
 
 test("stays silent when an evaluator fails or answers outside the contract", async () => {
