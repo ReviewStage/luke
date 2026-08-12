@@ -54,8 +54,9 @@ the auxiliary top areas so the black Electron surface can join the physical
 camera housing. Macs and external displays without a notch use the same
 top-center attachment with no invented hardware geometry.
 
-The app currently uses synthetic fixture data. It requires no coding-agent
-sessions, credentials, transcripts, or personal data.
+The evidence mode uses synthetic fixture data. Live mode passively observes
+bounded coding-agent session metadata without requiring provider credentials,
+plugins, hooks, wrappers, live-session changes, or transcript retention.
 
 ## Pull-request media
 
