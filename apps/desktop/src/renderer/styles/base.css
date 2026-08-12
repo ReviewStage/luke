@@ -233,15 +233,22 @@ button:disabled {
   min-height: var(--capsule-height);
   border-radius: 0 0 var(--notch-convex-radius) var(--notch-convex-radius);
   background: var(--surface-fill);
-  transform: translateX(-50%);
+  /* The lift off the top edge is carried here rather than by `top`, so that on a
+     display where it changes between states it travels on the spring with the
+     rest of the shape instead of jumping to its new place. It is 0 wherever the
+     shape meets the edge, which is every state beside a real housing. */
+  transform: translate(-50%, var(--shape-top, 0px));
   /* Held back by `--duration-exit` so the shape never shrinks out from under
-     content that is still on screen. */
+     content that is still on screen. Five properties here, and the per-state
+     rules below override duration, timing, and delay by position — a sixth
+     entry has to be added to those lists too, not left to wrap around. */
   transition:
     width var(--duration-shape) var(--spring) var(--duration-exit),
     height var(--duration-shape) var(--spring) var(--duration-exit),
     border-radius var(--duration-shape) var(--spring) var(--duration-exit),
     background-color var(--duration-shape) var(--motion-exit),
-    box-shadow var(--duration-quick) var(--motion-exit);
+    box-shadow var(--duration-quick) var(--motion-exit),
+    transform var(--duration-shape) var(--spring) var(--duration-exit);
 }
 
 /* Where the shape meets the top edge it flares outward on the same concave
@@ -286,7 +293,8 @@ button:disabled {
   width: var(--peek-width);
   transition-duration: var(--duration-shape);
   transition-timing-function:
-    var(--spring), var(--spring), var(--spring), var(--motion-exit), var(--motion-exit);
+    var(--spring), var(--spring), var(--spring), var(--motion-exit), var(--motion-exit),
+    var(--spring);
   /* The peek's shadow rides with the shape. It is a small, short move over a
      small surface, so the extra paint per frame is affordable here in a way it
      is not across the panel's 620px. */
@@ -299,8 +307,9 @@ button:disabled {
   border-radius: 0 0 var(--panel-radius) var(--panel-radius);
   transition-duration: var(--duration-shape);
   transition-timing-function:
-    var(--spring), var(--spring), var(--spring), var(--motion-exit), var(--motion-exit);
-  transition-delay: 0s, 0s, 0s, 0s, var(--duration-shape);
+    var(--spring), var(--spring), var(--spring), var(--motion-exit), var(--motion-exit),
+    var(--spring);
+  transition-delay: 0s, 0s, 0s, 0s, var(--duration-shape), 0s;
 }
 
 /* Tracks the drawn shape rather than the window, which is always larger than
@@ -519,14 +528,19 @@ button:disabled {
 }
 
 .app-stage[data-notch="false"] .panel-surface {
-  top: var(--shape-top);
   height: calc(var(--capsule-height) - var(--shape-top) * 2);
   min-height: calc(var(--capsule-height) - var(--shape-top) * 2);
   border-radius: 999px;
 }
 
+/* The panel is too large to float, so it meets the top edge like any other
+   display's does. Lowering the lift to zero moves the surface, the wings, and
+   the press target together, because all three are anchored to it. */
+.app-stage[data-notch="false"][data-presentation="panel"] {
+  --shape-top: 0px;
+}
+
 .app-stage[data-notch="false"][data-presentation="panel"] .panel-surface {
-  top: 0;
   height: var(--panel-height, 520px);
   border-radius: 0 0 var(--panel-radius) var(--panel-radius);
 }
@@ -535,19 +549,6 @@ button:disabled {
 .app-stage[data-notch="false"] .compact-hover-target {
   top: var(--shape-top);
   height: calc(var(--capsule-height) - var(--shape-top) * 2);
-}
-
-.app-stage[data-notch="false"][data-presentation="panel"] .wing {
-  top: 0;
-  height: var(--capsule-height);
-}
-
-/* The panel meets the top edge even where the capsule floated, so the strip you
-   press to close it has to grow back with the shape — the press target follows
-   what is drawn, in every state. */
-.app-stage[data-notch="false"][data-presentation="panel"] .compact-hover-target {
-  top: 0;
-  height: var(--capsule-height);
 }
 
 .compact-stage {
