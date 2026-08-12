@@ -161,6 +161,7 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
   #credential: string | undefined;
   #observations: readonly ProviderSessionObservation[] = [];
   #lastAttemptAt = Number.NEGATIVE_INFINITY;
+  #collectPass = 0;
 
   constructor(profile: CloudAdapterProfile, options: CloudAdapterOptions) {
     this.provider = profile.provider;
@@ -195,14 +196,24 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
     }
     this.#lastAttemptAt = now;
 
+    // Observers can overlap: a settings save refreshes this adapter while a
+    // timer-driven pass is still in flight with the key it replaced. Only the
+    // newest pass may write, or sessions read as one credential would be
+    // served as another's until the next refresh.
+    const pass = ++this.#collectPass;
     try {
-      this.#observations = uniqueObservations(
-        await this.collect((segments, query) => this.#requestJson(apiKey, segments, query), now),
-      );
+      const collected = await this.collect(this.#requestForPass(pass, apiKey), now);
+      if (pass === this.#collectPass) this.#observations = uniqueObservations(collected);
     } catch (error) {
       // A rejected credential clears observed state; a transient network or
-      // server failure keeps the previous snapshot until the next attempt.
-      if (error instanceof CloudRequestError && error.failure === CLOUD_FAILURE.UNAUTHORIZED) {
+      // server failure keeps the previous snapshot until the next attempt. A
+      // superseded pass reports on a credential that no longer stands, so its
+      // rejection says nothing about the current one.
+      if (
+        pass === this.#collectPass &&
+        error instanceof CloudRequestError &&
+        error.failure === CLOUD_FAILURE.UNAUTHORIZED
+      ) {
         this.#forgetObservedState();
       }
     }
@@ -252,8 +263,35 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
   }
 
   #forgetObservedState(): void {
+    // A pass still in flight was started under a credential that no longer
+    // stands, so its result must not land.
+    this.#collectPass += 1;
     this.forgetCachedIdentity();
     this.#observations = [];
+  }
+
+  /**
+   * Binds one pass's requests to the credential it started with. A superseded
+   * pass fails instead of issuing another request with a replaced key, and
+   * whatever a request already read is discarded before a subclass can cache
+   * it over state that belongs to the new credential.
+   */
+  #requestForPass(pass: number, apiKey: string): CloudRequest {
+    return async (segments, query) => {
+      this.#assertPassCurrent(pass);
+      const body = await this.#requestJson(apiKey, segments, query);
+      this.#assertPassCurrent(pass);
+      return body;
+    };
+  }
+
+  #assertPassCurrent(pass: number): void {
+    if (pass !== this.#collectPass) {
+      throw new CloudRequestError(
+        CLOUD_FAILURE.TRANSIENT,
+        `${this.provider.displayName} pass was superseded`,
+      );
+    }
   }
 
   #url(segments: readonly string[], query: Readonly<Record<string, string>>): string {

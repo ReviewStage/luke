@@ -1,11 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { SESSION_STATUS } from "@sidecar/core";
-import {
-  CONDUCTOR_PROVIDER,
-  type ConductorFetch,
-  ConductorSessionAdapter,
-} from "../src/conductor-adapter";
+import type { CloudFetch } from "../src/cloud-session-adapter";
+import { CONDUCTOR_PROVIDER, ConductorSessionAdapter } from "../src/conductor-adapter";
 
 const TEST_TIME = Date.parse("2026-08-12T02:45:00.000Z");
 const TEST_BASE_URL = "https://api.conductor.test";
@@ -65,7 +62,7 @@ interface RecordedRequest {
 }
 
 interface FakeConductorApi {
-  fetch: ConductorFetch;
+  fetch: CloudFetch;
   requests: RecordedRequest[];
 }
 
@@ -108,7 +105,7 @@ function sessionPayload(session: TestSession): Record<string, unknown> {
 /** Serves the read-only subset of the public API the adapter is allowed to use. */
 function fakeConductorApi(api: TestApi): FakeConductorApi {
   const requests: RecordedRequest[] = [];
-  const fetch: ConductorFetch = async (url, init) => {
+  const fetch: CloudFetch = async (url, init) => {
     const { pathname } = new URL(url);
     const headers = new Headers(init.headers);
     requests.push({
@@ -157,7 +154,7 @@ function fakeConductorApi(api: TestApi): FakeConductorApi {
 }
 
 function adapterFor(
-  fetch: ConductorFetch,
+  fetch: CloudFetch,
   overrides: {
     apiKey?: string | undefined;
     readApiKey?: () => Promise<string | undefined>;
@@ -287,9 +284,49 @@ test("reports an archived session as complete without requesting its status", as
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.COMPLETE);
+  // The archive time is when the chat settled; the workspace timestamp would
+  // date it by whatever a sibling chat did since.
+  assert.equal(observations[0]?.observedAt, TEST_TIME - 20_000);
   assert.equal(
     api.requests.some((request) => request.pathname.endsWith("/status")),
     false,
+  );
+});
+
+test("drops a long-closed chat instead of letting a busy workspace make it look recent", async () => {
+  // A closed chat carries no timestamp of its own except archivedAt. Falling
+  // back to the workspace timestamp would make a chat closed days ago read as
+  // freshly complete whenever a sibling chat is active — and let it spend a
+  // budget slot a live session needed.
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [
+      ownedWorkspace("workspace-busy", TEST_TIME - 5_000),
+      ownedWorkspace("workspace-quiet", TEST_TIME - 60_000),
+    ],
+    sessions: [
+      {
+        id: "session-closed-days-ago",
+        workspaceId: "workspace-busy",
+        name: SECRET_PROMPT_TEXT,
+        archivedAt: isoTimestamp(TEST_TIME - 3 * 24 * 60 * 60 * 1000),
+      },
+      {
+        id: "session-open",
+        workspaceId: "workspace-quiet",
+        name: SECRET_PROMPT_TEXT,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 30_000,
+      },
+    ],
+  });
+
+  const observations = await adapterFor(api.fetch, { maximumObservedSessions: 1 }).observe();
+
+  assert.deepEqual(
+    observations.map((candidate) => candidate.providerSessionId),
+    ["session-open"],
   );
 });
 
@@ -618,7 +655,7 @@ test("clears observations when Conductor rejects the API key", async () => {
     ],
   });
   let rejectRequests = false;
-  const gatedFetch: ConductorFetch = async (url, init) =>
+  const gatedFetch: CloudFetch = async (url, init) =>
     rejectRequests ? jsonResponse({}, HTTP_STATUS.UNAUTHORIZED) : api.fetch(url, init);
   const adapter = adapterFor(gatedFetch);
 
@@ -646,7 +683,7 @@ test("keeps the previous snapshot when a request fails transiently", async () =>
     ],
   });
   let failRequests = false;
-  const gatedFetch: ConductorFetch = async (url, init) => {
+  const gatedFetch: CloudFetch = async (url, init) => {
     if (failRequests) throw new Error("network unreachable");
     return api.fetch(url, init);
   };

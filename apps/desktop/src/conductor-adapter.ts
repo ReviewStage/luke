@@ -116,6 +116,7 @@ interface ConductorSession {
   id: string;
   workspace: ConductorWorkspace;
   archived: boolean;
+  archivedAt?: number;
   model?: string;
 }
 
@@ -193,7 +194,7 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     const sessions = (
       await Promise.all(
         workspaces.map((workspace) =>
-          this.tolerateItemFailure(() => this.#listSessions(request, workspace)),
+          this.tolerateItemFailure(() => this.#listSessions(request, workspace, now)),
         ),
       )
     )
@@ -264,6 +265,7 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
   async #listSessions(
     request: CloudRequest,
     workspace: ConductorWorkspace,
+    now: number,
   ): Promise<ConductorSession[]> {
     const body = await request(
       [
@@ -279,6 +281,7 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
         .map((record): ConductorSession | undefined => {
           const id = textFromRecord(record, CONDUCTOR_FIELD.ID);
           if (!id) return undefined;
+          const archivedAt = timestampFromRecord(record, CONDUCTOR_FIELD.ARCHIVED_AT);
           const model = (
             textFromRecord(record, CONDUCTOR_FIELD.RESOLVED_MODEL) ??
             textFromRecord(record, CONDUCTOR_FIELD.MODEL)
@@ -287,15 +290,27 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
             id,
             workspace,
             archived: textFromRecord(record, CONDUCTOR_FIELD.ARCHIVED_AT) !== undefined,
+            ...(archivedAt === undefined ? {} : { archivedAt }),
             ...(model ? { model } : {}),
           };
         })
         .filter(isDefined)
-        // Conductor reports no per-session timestamp until its status is read,
-        // so an open chat is preferred over a closed one and the rest of the
-        // workspace is left out. Capping here keeps one crowded workspace from
+        // A chat closed before the observation window opened is already
+        // outside it, so it must not spend budget a live session could hold.
+        .filter(
+          (session) =>
+            session.archivedAt === undefined ||
+            now - session.archivedAt <= CLOUD_ADAPTER_DEFAULTS.MAXIMUM_SESSION_AGE_MS,
+        )
+        // An open chat carries no timestamp until its status is read, so open
+        // chats are preferred over closed ones, then closed ones by how
+        // recently they closed. Capping here keeps one crowded workspace from
         // spending the whole session budget.
-        .sort((first, second) => Number(first.archived) - Number(second.archived))
+        .sort(
+          (first, second) =>
+            Number(first.archived) - Number(second.archived) ||
+            (second.archivedAt ?? 0) - (first.archivedAt ?? 0),
+        )
         .slice(0, CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_SESSIONS_PER_WORKSPACE)
     );
   }
@@ -311,9 +326,11 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       ? undefined
       : await this.tolerateItemFailure(() => this.#sessionStatus(request, session.id));
     // A workspace timestamp covers every chat in that workspace, so it would
-    // make chats a user left hours ago look like they just stopped. The session
-    // status carries the only per-session timestamp Conductor reports.
-    const observedAt = reported?.updatedAt ?? session.workspace.lastActivityAt;
+    // make chats a user left hours ago look like they just stopped. The status
+    // timestamp is per-session, and a closed chat's archive time is the moment
+    // it settled; the workspace timestamp is only the last resort.
+    const observedAt =
+      reported?.updatedAt ?? session.archivedAt ?? session.workspace.lastActivityAt;
     if (now - observedAt > CLOUD_ADAPTER_DEFAULTS.MAXIMUM_SESSION_AGE_MS) return undefined;
 
     const status = this.#statusFor(session, reported?.status, observedAt, now);
