@@ -253,8 +253,13 @@ export function App(): React.JSX.Element {
   // cannot leave a second time. Releasing the hold runs the leave itself.
   const setCredentialEditing = useCallback(
     (editing: boolean) => {
+      // Only a hold that existed can be released. The settings tab reports "not
+      // editing" as it mounts too, and that is not the pointer leaving: opening
+      // Settings from the tray does exactly that with the pointer on the menu
+      // bar, which would otherwise close the panel on arrival.
+      const released = credentialEditing.current && !editing;
       credentialEditing.current = editing;
-      if (!editing && !pointerInside.current) handleHitRegionLeave();
+      if (released && !pointerInside.current) handleHitRegionLeave();
     },
     [handleHitRegionLeave],
   );
