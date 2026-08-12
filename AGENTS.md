@@ -42,6 +42,16 @@ Biome is the executable style policy for TypeScript, JavaScript, JSON,
 Markdown, and CSS. Husky runs the same checks against staged files as a local
 convenience; `./scripts/check.sh` and CI remain authoritative.
 
+## Git workflow
+
+- Follow the [Conventional Commits 1.0.0
+  specification](https://www.conventionalcommits.org/en/v1.0.0/) for commit
+  messages.
+- Name pull requests using the `feat: lowercase title` format.
+- When work has an associated Linear ticket, use Linear's suggested branch name
+  when available and name the pull request using the
+  `feat(LINEAR-TICKET-ID): lowercase title` format.
+
 ## TypeScript value sets and keys
 
 - Do not use stringly typed fixed value sets. Define `as const`
