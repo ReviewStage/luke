@@ -63,9 +63,11 @@ The surface has three sizes and they are all the same black shape:
 
 - **Capsule** — at rest beside the camera housing: the mark of the provider that
   needs you soonest, and the count of tracked sessions.
-- **Peek** — under the pointer. The capsule widens on a spring and says what the
-  count means: what Luke is watching on the left, `2 need you` on the right.
-  This is the affordance; nothing is committed by hovering.
+- **Peek** — under the pointer. The capsule widens on a spring and shows the
+  rest of what it is watching: a mark for every provider with a session, up to
+  the five the room beside the housing holds, and what the count means —
+  `2 need you` — on the right. This is the affordance; nothing is committed by
+  hovering.
 - **Panel** — on a press. Full-width rows, one session per line: provider mark,
   title, what it is doing, a state chip. A **Settings** tab holds the cloud API
   keys, microphone access, and Quit. Press the capsule again, or press Escape,
@@ -84,7 +86,10 @@ you is the top row and the mark the capsule keeps.
 
 The header is anchored to the notch, not to a state: the count sits to the right
 of the housing and the provider marks and speech meter to its left, in the same
-place in all three. Growing only unfolds captions around them.
+place in all three. Growing only reveals the marks the capsule had no room for,
+and each holds its place rather than shifting to make room, so nothing there
+moves during the morph. More providers than fit are counted at the end of the
+row rather than dropped from it.
 
 The surface is opaque black in every state and shaped like the housing it sits
 beside: the convex bottom corners and the concave flare where its sides meet

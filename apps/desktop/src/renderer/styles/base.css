@@ -403,68 +403,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   padding: 0 var(--wing-inset);
 }
 
-/* Always laid out at its full width and simply clipped by the wing in compact
-   mode. Animating the width instead would reflow and re-shape this text on
-   every frame of the morph. */
-/* Laid out once at its natural width and revealed a line at a time: the label
-   arrives with the peek, the provider names only once the panel is open.
-   Nothing here changes size between states, so nothing here can reflow. */
-.wing-copy {
-  display: flex;
-  flex: 0 0 auto;
-  flex-direction: column;
-  gap: 1px;
-  text-align: right;
-  white-space: nowrap;
-}
-
-.wing-copy strong,
-.wing-copy small {
-  opacity: 0;
-  transform: translateX(10px);
-  transition:
-    opacity var(--duration-exit) var(--motion-exit),
-    transform var(--duration-shape) var(--spring);
-}
-
-.app-stage[data-presentation="peek"] .wing-copy strong,
-.app-stage[data-presentation="panel"] .wing-copy strong,
-.app-stage[data-presentation="panel"] .wing-copy small {
-  opacity: 1;
-  transform: none;
-  transition-duration: var(--duration-quick), var(--duration-shape);
-  transition-timing-function: var(--motion-exit), var(--spring);
-}
-
-.app-stage[data-presentation="peek"] .wing-copy strong {
-  transition-delay: var(--peek-delay);
-}
-
-.app-stage[data-presentation="panel"] .wing-copy small {
-  transition-delay: var(--expand-delay);
-}
-
-/* Whatever room the wing has, less the marks and the padding beside them. A
-   provider list longer than that ends in an ellipsis rather than mid-glyph. */
-.wing-copy strong,
-.wing-copy small {
-  max-width: calc((var(--wing-bound) - var(--notch-housing-width)) / 2 - 62px);
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.wing-copy strong {
-  color: var(--text-primary);
-  font-size: 11px;
-  font-weight: 640;
-  letter-spacing: -0.1px;
-}
-
-.wing-copy small {
-  color: var(--text-tertiary);
-  font-size: 9px;
-}
-
 /* Reversed so the first provider — the one that needs a person soonest — is the
    mark nearest the notch, and therefore the one the capsule keeps. The others
    hold their place and only fade, so no mark ever moves during the morph. */
@@ -482,15 +420,30 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   color: var(--text-secondary);
 }
 
-.wing-mark + .wing-mark {
+/* The capsule keeps one mark; the rest belong to the states with room for them.
+   They hold their place and only fade, so no mark ever moves during the morph. */
+.wing-mark + .wing-mark,
+.wing-more {
   opacity: 0;
   transition: opacity var(--duration-exit) var(--motion-exit);
 }
 
 .app-stage[data-presentation="peek"] .wing-mark + .wing-mark,
-.app-stage[data-presentation="panel"] .wing-mark + .wing-mark {
+.app-stage[data-presentation="peek"] .wing-more,
+.app-stage[data-presentation="panel"] .wing-mark + .wing-mark,
+.app-stage[data-presentation="panel"] .wing-more {
   opacity: 1;
   transition-delay: var(--peek-delay);
+}
+
+/* More providers than the wing can hold. Counted rather than dropped, at the
+   far end of the row, where it reads as the remainder of a list. */
+.wing-more {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  font-size: 9.5px;
+  font-weight: 660;
+  letter-spacing: -0.2px;
 }
 
 .wing-marks-empty {
@@ -1254,8 +1207,8 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 
   .panel-surface,
   .expanded-stage,
-  .wing-copy,
   .wing-mark + .wing-mark,
+  .wing-more,
   .count-badge,
   .count-caption,
   .tab-thumb,
