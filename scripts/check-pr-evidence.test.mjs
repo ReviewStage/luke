@@ -9,6 +9,17 @@ import {
 } from "./check-pr-evidence.mjs";
 import { changedMarker, evidenceEnd, evidenceStart } from "./update-pr-evidence.mjs";
 
+/** The block as the pull-request template ships it, before CI has written. */
+function templateBlock() {
+  return [
+    evidenceStart,
+    "### Automated visual evidence",
+    "",
+    "CI will replace this block with the deterministic macOS screenshots.",
+    evidenceEnd,
+  ].join("\n");
+}
+
 function automatedBlock(shown) {
   return [
     evidenceStart,
@@ -38,7 +49,31 @@ test("classifies desktop, web, and non-interface changes", () => {
 test("reads how many scenarios CI reported as differing", () => {
   assert.equal(scenariosShown(automatedBlock(2)), 2);
   assert.equal(scenariosShown(automatedBlock(0)), 0);
-  assert.equal(scenariosShown("## Summary"), 0);
+});
+
+test("separates a description CI has not reported on from one reporting nothing", () => {
+  assert.equal(scenariosShown("## Summary"), undefined);
+  assert.equal(scenariosShown(templateBlock()), undefined);
+});
+
+test("waits rather than failing before the macOS job has published", () => {
+  const result = evaluateEvidence({
+    body: `## Summary\n\n${templateBlock()}`,
+    filenames: ["apps/desktop/src/renderer/index.tsx"],
+  });
+
+  assert.deepEqual(result.failures, []);
+  assert.match(result.summary, /has not published evidence/);
+});
+
+test("still fails a web change before CI reports, since CI never covers it", () => {
+  const result = evaluateEvidence({
+    body: `## Summary\n\n${templateBlock()}`,
+    filenames: ["apps/web/src/App.tsx"],
+  });
+
+  assert.equal(result.failures.length, 1);
+  assert.match(result.failures[0], /web interface/);
 });
 
 test("passes a change that touches no interface", () => {

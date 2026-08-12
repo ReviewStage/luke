@@ -30,13 +30,16 @@ export function classifyChanges(filenames) {
 }
 
 /**
- * How many captured scenarios CI reported as differing from the default branch.
- * A description CI has not written to yet reports none, which is the strict
- * reading: nothing has demonstrated the change.
+ * How many captured scenarios CI reported as differing from the default branch,
+ * or undefined when CI has not reported yet. Only CI writes this marker, and the
+ * pull-request template ships without one, so its absence is a reliable "not
+ * evaluated" rather than "nothing differs". The distinction matters: this check
+ * also runs on a description edit, which can happen seconds after a pull request
+ * is opened and long before the macOS job has produced anything.
  */
 export function scenariosShown(body) {
   const marker = new RegExp(`<!--\\s*${changedMarker}:\\s*(\\d+)\\s*-->`).exec(body);
-  return marker ? Number(marker[1]) : 0;
+  return marker ? Number(marker[1]) : undefined;
 }
 
 /** Separates CI's block from the description an author controls. */
@@ -60,7 +63,9 @@ export function evaluateEvidence({ body = "", labels = [], filenames = [] }) {
   }
 
   const { authored } = splitEvidence(body);
+  const shown = scenariosShown(body);
   const failures = [];
+  const notes = [];
   // A screenshot identical to the one on `main` shows nothing this pull request
   // did, so the presence of an image is not the test. CI reports how many
   // scenarios actually differ; a desktop change passes when at least one does,
@@ -68,13 +73,20 @@ export function evaluateEvidence({ body = "", labels = [], filenames = [] }) {
   // needs authored evidence: CI screenshots only the desktop app, and a pull
   // request touching both surfaces would otherwise pass on desktop evidence
   // alone while the page went uninspected.
-  if (changed.desktop && scenariosShown(body) === 0 && !IMAGE_PATTERN.test(authored)) {
-    failures.push(
-      "This pull request changes the desktop interface, but no captured scenario differs " +
-        "from `main`, so CI's screenshots do not show the change. Add a scenario to " +
-        "`./scripts/evidence.sh` that renders the affected surface, or capture it yourself " +
-        "and publish it with `node scripts/publish-pr-media.mjs <pr> <file>`.",
-    );
+  if (changed.desktop && !IMAGE_PATTERN.test(authored)) {
+    if (shown === undefined) {
+      notes.push(
+        "The macOS job has not published evidence for this commit yet; the check that runs " +
+          "after it is the one that decides.",
+      );
+    } else if (shown === 0) {
+      failures.push(
+        "This pull request changes the desktop interface, but no captured scenario differs " +
+          "from `main`, so CI's screenshots do not show the change. Add a scenario to " +
+          "`./scripts/evidence.sh` that renders the affected surface, or capture it yourself " +
+          "and publish it with `node scripts/publish-pr-media.mjs <pr> <file>`.",
+      );
+    }
   }
   if (changed.web && !IMAGE_PATTERN.test(authored)) {
     failures.push(
@@ -85,11 +97,13 @@ export function evaluateEvidence({ body = "", labels = [], filenames = [] }) {
     );
   }
 
-  return {
-    required: true,
-    failures,
-    summary: failures.length === 0 ? "Visual evidence is attached." : "Visual evidence is missing.",
-  };
+  const summary =
+    failures.length > 0
+      ? "Visual evidence is missing."
+      : notes.length > 0
+        ? notes.join(" ")
+        : "Visual evidence is attached.";
+  return { required: true, failures, notes, summary };
 }
 
 async function changedFilenames(repository, pullRequest) {
