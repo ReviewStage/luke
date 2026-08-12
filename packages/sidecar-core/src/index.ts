@@ -1,3 +1,6 @@
+export * from "./attention";
+export * from "./attention-examples";
+export * from "./attention-prompt";
 export * from "./fixtures";
 export * from "./geometry";
 export * from "./providers";

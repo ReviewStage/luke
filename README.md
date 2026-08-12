@@ -58,6 +58,30 @@ The evidence mode uses synthetic fixture data. Live mode passively observes
 bounded coding-agent session metadata without requiring provider credentials,
 plugins, hooks, wrappers, live-session changes, or transcript retention.
 
+## Attention intelligence
+
+When a session reports a development, Luke asks a background model whether that
+development is worth saying out loud. The model receives one bounded, redacted
+update—provider, session title, previous and current status, and the observed
+summary—and answers with a structured decision: stay silent, speak during the
+turn, or speak once the turn ends. Anything outside that contract, and any API
+failure, leaves Luke silent. Repeated decisions about the same session are
+deduplicated so one development is never announced twice.
+
+The layer is optional. Without `OPENAI_API_KEY`, Luke observes sessions and
+stays silent, and no other behavior changes:
+
+| Variable               | Default                     | Purpose                                    |
+| ---------------------- | --------------------------- | ------------------------------------------ |
+| `OPENAI_API_KEY`       | unset                       | Enables attention review when it is present |
+| `LUKE_ATTENTION_MODEL` | `gpt-5.1`                   | Model used for the decision                |
+| `OPENAI_BASE_URL`      | `https://api.openai.com/v1` | Alternate OpenAI-compatible endpoint       |
+
+Requests set `store: false`, so the API is not asked to retain them. Tune how
+conservative Luke is by editing the redacted examples in
+`packages/sidecar-core/src/attention-examples.ts`; they are synthetic and
+double as the prompt's few-shot guidance and its regression coverage.
+
 ## Pull-request media
 
 Keep generated screenshots and recordings out of product branches. Inline PR
