@@ -61,8 +61,9 @@ The surface has three sizes and they are all the same black shape:
   This is the affordance; nothing is committed by hovering.
 - **Panel** — on a press. Full-width rows, one session per line: provider mark,
   title, what it is doing, a state chip. A **Settings** tab holds the Conductor
-  cloud API key, microphone access, and Quit. Press the capsule again, or Escape, to close it; moving the
-  pointer well away closes it too, after long enough not to feel twitchy.
+  cloud API key, microphone access, and Quit. Press the capsule again, or press
+  Escape, to close it; moving the pointer off it closes it just as readily,
+  except on the Settings tab, where a text field is waiting for the keyboard.
 
 Sessions are ordered by how much they need a person, so whatever is waiting on
 you is the top row and the mark the capsule keeps.
@@ -71,29 +72,29 @@ The header is anchored to the notch, not to a state: the count sits to the right
 of the housing and the provider marks and speech meter to its left, in the same
 place in all three. Growing only unfolds captions around them.
 
-At rest the surface is true black and shaped like the housing it sits beside:
-the convex bottom corners and the concave flare where its sides meet the top
-edge are both derived from the reported notch inset, at the ratios measured off
-the hardware (0.348 and 0.094 of its height). The panel drops the flare and
-rounds its own top corners instead, because by then it is a window hanging off
-the edge rather than part of a physical object. A display with no housing to
-blend into gets a free-floating pill. Once it grows past the housing it is a panel floating over the
-desktop instead, so the peek and the panel take a hairline edge, a soft shadow,
-and just enough translucency to admit the wallpaper is back there. The lift
-arrives once the shape has settled, so a blurred shadow is never repainted
-mid-spring. A real blur of the desktop is not available here: a transparent
-Electron window gives `backdrop-filter` no backdrop to sample, and reaching the
-desktop would mean native vibrancy, which cannot be masked to a shape that
-animates.
+The surface is opaque black in every state and shaped like the housing it sits
+beside: the convex bottom corners and the concave flare where its sides meet
+the top edge are both derived from the reported notch inset, at the ratios
+measured off the hardware (0.348 and 0.094 of its height). The panel keeps that
+flare, so all three states meet the top edge the same way. Depth comes from a
+shadow and a hairline edge rather than from letting anything show through. A
+display with no housing to blend into gets a free-floating pill instead.
+
+The panel's shadow arrives once the shape has settled, so a blurred shadow is
+never repainted mid-spring; the peek's is small enough to ride along with it. A
+real blur of the desktop is not available here: a transparent Electron window
+gives `backdrop-filter` no backdrop to sample, and reaching the desktop would
+mean native vibrancy, which cannot be masked to a shape that animates.
 
 The window is a stage, never the shape. It snaps to the size a state needs and
 the renderer animates the surface inside it, so the motion stays on the
 compositor — and because a compact window is already wide enough to hold the
 peek, hovering never touches the main process at all. Growing, the surface leads
 and the content follows it in; shrinking, the content leaves first and the
-surface closes behind it, so nothing is ever drawn outside the black. The
-shapes move on sampled damped springs and the window carries slack on every side
-for them to overshoot into. The surface also ends where the content does, so a
+surface closes behind it, so nothing is ever drawn outside the black. Every resize runs on one sampled damped
+spring at one duration — a real spring's motion is a property of the spring, not
+of how far it is asked to travel — and the window carries slack on every side
+for the overshoot to land in. The surface also ends where the content does, so a
 session arriving or finishing resizes the panel.
 
 ## Provider marks

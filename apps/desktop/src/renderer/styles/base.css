@@ -37,42 +37,13 @@
      the sum of those two steps: the window may not shrink back until the
      capsule is all that is left.
 
-     Sampled damped springs rather than eased curves: the overshoot is what
-     makes the shape read as a physical object being nudged rather than a box
-     being resized. `--spring-peek` is loose and quick because the move is
-     small; `--spring-panel` is far more damped because a 620px surface that
-     wobbles looks broken rather than lively. The window carries SURFACE_MARGIN
-     on every side so neither the overshoot nor the shadow can clip. */
-  --spring-peek: linear(
-    0,
-    0.026,
-    0.0934,
-    0.1884,
-    0.2991,
-    0.4161,
-    0.5318,
-    0.6409,
-    0.7398,
-    0.8261,
-    0.8988,
-    0.9578,
-    1.0038,
-    1.0377,
-    1.061,
-    1.0754,
-    1.0823,
-    1.0833,
-    1.08,
-    1.0736,
-    1.0651,
-    1.0557,
-    1.0459,
-    1.0363,
-    1.0274,
-    1.0195,
-    1
-  );
-  --spring-panel: linear(
+     One sampled damped spring drives every resize, at one duration. A real
+     spring's motion is a property of the spring, not of how far it is asked to
+     travel, which is why using the same one for a 176px peek and a 482px panel
+     is what makes the two read as the same object rather than two effects. The
+     window carries SURFACE_MARGIN on every side so neither the overshoot nor
+     the shadow can clip. */
+  --spring: linear(
     0,
     0.0285,
     0.0993,
@@ -103,29 +74,20 @@
   );
   --motion-morph: cubic-bezier(0.32, 0.86, 0.28, 1);
   --motion-exit: cubic-bezier(0.4, 0, 0.6, 1);
-  --duration-peek: 320ms;
-  --duration-panel: 460ms;
-  --duration-collapse: 260ms;
+  --duration-shape: 460ms;
   --duration-exit: 90ms;
   --duration-quick: 140ms;
   --expand-delay: 150ms;
   --peek-delay: 60ms;
   --row-stagger: 32ms;
 
-  /* At rest the surface is true black, because it has to pass for part of a
-     physical camera housing. Once it grows past the housing it is a panel
-     floating over the desktop instead, so it takes a hairline edge, a shadow,
-     and just enough translucency to admit the wallpaper is back there. A real
-     blur of that wallpaper is not available to us: a transparent Electron
-     window has no backdrop for `backdrop-filter` to sample, so it would cost a
-     render surface on the one element that animates and return nothing. */
-  --surface-rest: #000;
-  --surface-lifted: rgba(0, 0, 0, 0.96);
-  --surface-fill: var(--surface-rest);
+  /* Opaque in every state: the shape has to pass for part of a physical camera
+     housing, and nothing behind the window should ever show through it. Depth
+     comes from the shadow and the hairline edge instead. */
+  --surface-fill: #000;
   --surface-edge: inset 0 0 0 0.5px rgba(255, 255, 255, 0.07);
   --surface-shadow: 0 10px 26px rgba(0, 0, 0, 0.46), 0 2px 7px rgba(0, 0, 0, 0.3);
 
-  --panel-top-radius: 12px;
   --panel-radius: 30px;
   --wing-inset: 9px;
   --scroll-fade: 26px;
@@ -162,7 +124,14 @@ body,
      container that focus or scrollIntoView can drag the capsule out of. */
   overflow: clip;
   background: transparent;
+  -webkit-user-select: none;
   user-select: none;
+}
+
+/* The one place a selection is wanted. */
+.settings-input {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 button {
@@ -209,10 +178,10 @@ button {
   /* Held back by `--duration-exit` so the shape never shrinks out from under
      content that is still on screen. */
   transition:
-    width var(--duration-collapse) var(--motion-morph) var(--duration-exit),
-    height var(--duration-collapse) var(--motion-morph) var(--duration-exit),
-    border-radius var(--duration-collapse) var(--motion-morph) var(--duration-exit),
-    background-color var(--duration-collapse) var(--motion-exit),
+    width var(--duration-shape) var(--spring) var(--duration-exit),
+    height var(--duration-shape) var(--spring) var(--duration-exit),
+    border-radius var(--duration-shape) var(--spring) var(--duration-exit),
+    background-color var(--duration-shape) var(--motion-exit),
     box-shadow var(--duration-quick) var(--motion-exit);
 }
 
@@ -248,28 +217,17 @@ button {
   );
 }
 
-/* The panel is a window hanging off the edge rather than part of the housing,
-   so it rounds its own top corners instead and drops the flare. */
-.app-stage[data-presentation="panel"] .panel-surface::before,
-.app-stage[data-presentation="panel"] .panel-surface::after {
-  opacity: 0;
-}
-
 .app-stage[data-presentation="peek"] .panel-surface,
 .app-stage[data-presentation="panel"] .panel-surface {
-  --surface-fill: var(--surface-lifted);
-
   box-shadow: var(--surface-edge), var(--surface-shadow);
 }
 
-/* Under the pointer: wide enough to say what the count means, on a spring
-   loose enough that the capsule reads as something you can press. */
+/* Under the pointer: wide enough to say what the count means. */
 .app-stage[data-presentation="peek"] .panel-surface {
   width: var(--peek-width);
-  transition-duration: var(--duration-peek);
+  transition-duration: var(--duration-shape);
   transition-timing-function:
-    var(--spring-peek), var(--spring-peek), var(--spring-peek), var(--motion-exit),
-    var(--motion-exit);
+    var(--spring), var(--spring), var(--spring), var(--motion-exit), var(--motion-exit);
   /* The peek's shadow rides with the shape. It is a small, short move over a
      small surface, so the extra paint per frame is affordable here in a way it
      is not across the panel's 620px. */
@@ -279,13 +237,11 @@ button {
 .app-stage[data-presentation="panel"] .panel-surface {
   width: var(--panel-width);
   height: var(--panel-height, 520px);
-  border-radius: var(--panel-top-radius) var(--panel-top-radius) var(--panel-radius)
-    var(--panel-radius);
-  transition-duration: var(--duration-panel);
+  border-radius: 0 0 var(--panel-radius) var(--panel-radius);
+  transition-duration: var(--duration-shape);
   transition-timing-function:
-    var(--spring-panel), var(--spring-panel), var(--spring-panel), var(--motion-exit),
-    var(--motion-exit);
-  transition-delay: 0s, 0s, 0s, 0s, var(--duration-panel);
+    var(--spring), var(--spring), var(--spring), var(--motion-exit), var(--motion-exit);
+  transition-delay: 0s, 0s, 0s, 0s, var(--duration-shape);
 }
 
 /* Tracks the drawn shape rather than the window, which is always larger than
@@ -303,7 +259,12 @@ button {
   background: none;
   cursor: default;
   transform: translateX(-50%);
+  /* Pressing the capsule is a gesture, not a focus change: a ring drawn around
+     the notch strip is the one thing on screen that cannot look intentional.
+     Keyboard focus never lands here — Escape is handled on the window. */
+  outline: none;
   -webkit-app-region: no-drag;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .app-stage[data-presentation="peek"] .compact-hover-target {
@@ -374,7 +335,7 @@ button {
   transform: translateX(10px);
   transition:
     opacity var(--duration-exit) var(--motion-exit),
-    transform var(--duration-collapse) var(--motion-morph);
+    transform var(--duration-shape) var(--spring);
 }
 
 .app-stage[data-presentation="peek"] .wing-copy strong,
@@ -382,8 +343,8 @@ button {
 .app-stage[data-presentation="panel"] .wing-copy small {
   opacity: 1;
   transform: none;
-  transition-duration: var(--duration-quick), var(--duration-peek);
-  transition-timing-function: var(--motion-exit), var(--spring-peek);
+  transition-duration: var(--duration-quick), var(--duration-shape);
+  transition-timing-function: var(--motion-exit), var(--spring);
 }
 
 .app-stage[data-presentation="peek"] .wing-copy strong {
@@ -476,8 +437,7 @@ button {
 .app-stage[data-notch="false"][data-presentation="panel"] .panel-surface {
   top: 0;
   height: var(--panel-height, 520px);
-  border-radius: var(--panel-top-radius) var(--panel-top-radius) var(--panel-radius)
-    var(--panel-radius);
+  border-radius: 0 0 var(--panel-radius) var(--panel-radius);
 }
 
 .app-stage[data-notch="false"] .wing,
@@ -503,54 +463,41 @@ button {
 
 /* Session count ---------------------------------------------------------- */
 
+/* A number, not a badge. Seventeen sessions overflowed a pill, and a pill was
+   never carrying meaning the colour and the caption were not already carrying.
+   The rounded system face is the one macOS uses for glanceable numerals. */
 .count-badge {
   position: relative;
   display: flex;
-  min-width: 26px;
-  height: 26px;
   align-items: center;
   justify-content: center;
-  padding: 0 8px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 20%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 26%, transparent);
   color: var(--accent);
-  font-size: 14px;
+  font-family: ui-rounded, -apple-system, "SF Pro Rounded", BlinkMacSystemFont, sans-serif;
+  font-size: 16px;
   font-variant-numeric: tabular-nums;
-  font-weight: 700;
-  /* One fixed box that scales. Growing it by animating height, padding and
-     font-size relaid out and re-rastered the number on every frame; a scale
-     from the notch edge is a single composited transform. */
-  transform: scale(0.8);
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  transform: scale(0.88);
   transform-origin: left center;
-  transition:
-    transform var(--duration-collapse) var(--motion-morph),
-    background-color var(--duration-morph) ease,
-    box-shadow var(--duration-morph) ease;
+  transition: transform var(--duration-shape) var(--spring);
   will-change: transform;
 }
 
 .count-badge[data-state="attention"] {
-  background: color-mix(in srgb, var(--accent) 26%, transparent);
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--accent) 42%, transparent),
-    0 0 14px color-mix(in srgb, var(--accent) 26%, transparent);
+  text-shadow: 0 0 14px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 .count-badge[data-empty="true"] {
   color: var(--text-tertiary);
 }
 
-/* The peek adds a caption beside the count, not a bigger count: growing the
-   number as well made the widening read as two separate movements. */
+/* The panel has room for it to sit at full size; the capsule and the peek do
+   not, and growing it there read as a second movement competing with the
+   widening. */
 .app-stage[data-presentation="panel"] .count-badge {
   transform: scale(1);
-  transition-duration: var(--duration-panel);
-  transition-timing-function: var(--spring-panel);
 }
 
-/* Out of flow beside the badge, so revealing it never changes the badge's box
-   and the capsule simply clips it. */
 .count-caption {
   position: absolute;
   top: 50%;
@@ -565,7 +512,7 @@ button {
   transform: translate(-8px, -50%);
   transition:
     opacity var(--duration-exit) var(--motion-exit),
-    transform var(--duration-collapse) var(--motion-morph);
+    transform var(--duration-shape) var(--spring);
   white-space: nowrap;
 }
 
@@ -573,8 +520,8 @@ button {
 .app-stage[data-presentation="panel"] .count-caption {
   opacity: 1;
   transform: translate(0, -50%);
-  transition-duration: var(--duration-quick), var(--duration-peek);
-  transition-timing-function: var(--motion-exit), var(--spring-peek);
+  transition-duration: var(--duration-quick), var(--duration-shape);
+  transition-timing-function: var(--motion-exit), var(--spring);
   transition-delay: var(--peek-delay);
 }
 
@@ -645,7 +592,7 @@ button {
   transform: translateX(-50%) translateY(-10px);
   transition:
     opacity var(--duration-exit) var(--motion-exit),
-    transform var(--duration-collapse) var(--motion-morph),
+    transform var(--duration-shape) var(--spring),
     visibility 0s linear var(--duration-exit);
   will-change: opacity, transform;
 }
@@ -656,7 +603,7 @@ button {
   transform: translateX(-50%) translateY(0);
   transition:
     opacity var(--duration-quick) var(--motion-exit) var(--expand-delay),
-    transform var(--duration-morph) var(--motion-morph) var(--expand-delay),
+    transform var(--duration-morph) var(--spring) var(--expand-delay),
     visibility 0s linear var(--expand-delay);
 }
 
@@ -700,7 +647,7 @@ button {
   border-radius: 8px;
   background: var(--raised-strong);
   transform: translateX(calc(var(--tab-index) * 100%));
-  transition: transform var(--duration-quick) var(--motion-morph);
+  transition: transform var(--duration-quick) var(--spring);
 }
 
 .tab {
@@ -769,7 +716,7 @@ button {
   transform: translateY(6px);
   transition:
     opacity var(--duration-exit) var(--motion-exit),
-    transform var(--duration-morph) var(--motion-morph);
+    transform var(--duration-morph) var(--spring);
 }
 
 .app-stage[data-presentation="panel"] .session-row {

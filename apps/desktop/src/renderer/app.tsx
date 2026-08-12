@@ -10,11 +10,10 @@ import type {
 import { NotchWings } from "./notch-wings";
 import { PanelBody } from "./panel-body";
 import {
-  PANEL_LEAVE_DELAY_MS,
+  LEAVE_DELAY_MS,
   PANEL_PRESENTATION,
   type PanelPresentation,
   PEEK_ENTER_DELAY_MS,
-  PEEK_LEAVE_DELAY_MS,
   presentationForMode,
 } from "./panel-state";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
@@ -32,8 +31,12 @@ function usePointerPassthrough(onHitRegionEnter: () => void, onHitRegionLeave: (
       else onHitRegionLeave();
     };
     const handleMove = (event: MouseEvent) => {
+      // `elementFromPoint` answers null for a point outside the viewport, which
+      // a forwarded move can carry. Comparing that against null read as "still
+      // inside", so leaving by the edge left the panel open until some other
+      // event closed it.
       const target = document.elementFromPoint(event.clientX, event.clientY);
-      update(target?.closest("[data-hit-region]") !== null);
+      update(Boolean(target?.closest("[data-hit-region]")));
     };
     const handleLeave = () => update(false);
     window.addEventListener("mousemove", handleMove, { passive: true });
@@ -235,17 +238,14 @@ export function App(): React.JSX.Element {
     // Settings hold a text field. Someone reaching for the keyboard has not
     // asked for the panel to close, so pointer position stops deciding.
     if (current === PANEL_PRESENTATION.PANEL && tabRef.current === PANEL_TAB.SETTINGS) return;
-    hoverTimer.current = window.setTimeout(
-      () => {
-        hoverTimer.current = undefined;
-        if (presentationRef.current === PANEL_PRESENTATION.PEEK) {
-          applyPresentation(PANEL_PRESENTATION.CAPSULE);
-        } else if (presentationRef.current === PANEL_PRESENTATION.PANEL) {
-          void changeMode(false);
-        }
-      },
-      current === PANEL_PRESENTATION.PEEK ? PEEK_LEAVE_DELAY_MS : PANEL_LEAVE_DELAY_MS,
-    );
+    hoverTimer.current = window.setTimeout(() => {
+      hoverTimer.current = undefined;
+      if (presentationRef.current === PANEL_PRESENTATION.PEEK) {
+        applyPresentation(PANEL_PRESENTATION.CAPSULE);
+      } else if (presentationRef.current === PANEL_PRESENTATION.PANEL) {
+        void changeMode(false);
+      }
+    }, LEAVE_DELAY_MS);
   }, [applyPresentation, cancelHoverTransition, changeMode]);
 
   const submitConductorApiKey = useCallback(async (apiKey: string | undefined) => {
@@ -375,6 +375,9 @@ export function App(): React.JSX.Element {
           data-hit-region
           aria-expanded={panelOpen}
           aria-label={`${tallySummary(tally)}. ${panelOpen ? "Close" : "Open"} the panel`}
+          // Keeps the press from moving focus here at all, so nothing is drawn
+          // around the notch strip and a focused settings field keeps the caret.
+          onMouseDown={(event) => event.preventDefault()}
           onClick={handleCapsulePress}
         />
       </div>

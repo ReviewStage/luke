@@ -60,8 +60,8 @@ convenience; `./scripts/check.sh` and CI remain authoritative.
 
 The window is a stage; the drawn surface is the shape. A window therefore holds
 the largest shape its mode can draw — a compact window holds the peek, so
-hovering costs no IPC at all — plus `SPRING_OVERSHOOT_ALLOWANCE` on every side
-for a spring to overshoot into. Anything the shape does not cover is
+hovering costs no IPC at all — plus `SURFACE_MARGIN` on every side, which is
+what the spring overshoots into and the shadow falls in. Anything the shape does not cover is
 transparent and must stay click-through, so hit regions track the shape rather
 than the window.
 
@@ -72,20 +72,24 @@ and `opacity` only — animating width, height, padding, or font-size on the
 wings, the count badge, or the rows re-shapes text on every frame and is what
 makes the motion stutter.
 
-The surface is true black at rest and only takes its edge, shadow, and
-translucency once it has grown past the camera housing — the capsule has to
-pass for part of a physical object. The lift is delayed until the shape
-settles, because a blurred shadow repaints on every frame that resizes the
-element. `backdrop-filter` is not an option: a transparent window has no
-backdrop to sample, so it would buy a render surface on the animating element
-and return nothing.
+The surface is opaque in every state — it has to pass for part of a physical
+object, and nothing behind the window may show through it — and takes its
+shadow and hairline edge once it has grown past the housing. The panel's
+shadow is delayed until the shape settles, because a blurred shadow repaints on
+every frame that resizes the element; the peek's is small enough to ride along.
+`backdrop-filter` is not an option: a transparent window has no backdrop to
+sample, so it would buy a render surface on the animating element and return
+nothing.
+
+One spring, one duration, for every resize. Reusing it across a 176px peek and
+a 482px panel is what makes them read as the same object.
 
 In either direction the shape and its content must not cross, or content is
 left drawn on the desktop: growing, the surface leads and content follows;
 shrinking, content leaves over `--duration-exit` before the surface moves.
 `setWindowMode` owns the ordering for every caller — the panel, the tray, and
 the motion recorder alike. `COLLAPSE_ANIMATION_MS` is the sum of
-`--duration-exit` and `--duration-collapse`; the three move together.
+`--duration-exit` and `--duration-shape`; the three move together.
 
 ## TypeScript value sets and keys
 

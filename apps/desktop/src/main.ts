@@ -192,11 +192,11 @@ function focusPanelWindow(): void {
 }
 
 /**
- * `--duration-exit` plus `--duration-collapse` in
+ * `--duration-exit` plus `--duration-shape` in
  * apps/desktop/src/renderer/styles/base.css: the content leaves, then the
- * surface shrinks, and only then may the window follow.
+ * surface closes on the spring, and only then may the window follow.
  */
-const COLLAPSE_ANIMATION_MS = 300;
+const COLLAPSE_ANIMATION_MS = 550;
 
 function collapseDelay(): number {
   if (captureMode) return 0;

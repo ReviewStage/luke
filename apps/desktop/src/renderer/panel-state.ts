@@ -15,13 +15,13 @@ export type PanelPresentation = (typeof PANEL_PRESENTATION)[keyof typeof PANEL_P
 
 /** Long enough that sweeping the pointer past the notch does not wake it. */
 export const PEEK_ENTER_DELAY_MS = 60;
-/** Short: leaving the capsule should feel like letting go of it. */
-export const PEEK_LEAVE_DELAY_MS = 110;
 /**
- * Generous. The panel is opened deliberately with a click, so it should not
- * vanish the moment the pointer strays off it to reach for something.
+ * Short, and the same whichever state is being left: a panel that lingered
+ * after the pointer had gone felt like a different object from a peek that
+ * did not. The settings tab opts out of pointer-driven closing entirely,
+ * which is what protects someone reaching for the keyboard.
  */
-export const PANEL_LEAVE_DELAY_MS = 620;
+export const LEAVE_DELAY_MS = 110;
 
 export function presentationForMode(mode: WindowMode): PanelPresentation {
   return mode === "expanded" ? PANEL_PRESENTATION.PANEL : PANEL_PRESENTATION.CAPSULE;
