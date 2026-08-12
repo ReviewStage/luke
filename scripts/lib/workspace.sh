@@ -7,6 +7,11 @@ SIDECAR_CORE_PACKAGE_ROOT="$SIDECAR_REPO_ROOT/packages/sidecar-core"
 SIDECAR_BUILD_ROOT="$SIDECAR_REPO_ROOT/.build"
 SIDECAR_ARTIFACT_ROOT="$SIDECAR_REPO_ROOT/artifacts"
 SIDECAR_FIXTURE_SCENARIO=smoke
+# Evidence is captured at a fixed device scale so a screenshot is legible
+# wherever it was taken. A CI runner has a 1x display and a developer's Mac is
+# 2x, so without this the same command produces evidence at two resolutions and
+# every render differs from its baseline for no reason anyone can see.
+SIDECAR_EVIDENCE_SCALE=2
 SIDECAR_EXPANDED_EVIDENCE_PATH="$SIDECAR_ARTIFACT_ROOT/evidence/app-smoke-expanded.png"
 SIDECAR_COMPACT_EVIDENCE_PATH="$SIDECAR_ARTIFACT_ROOT/evidence/app-smoke-compact.png"
 SIDECAR_SPEAKING_EVIDENCE_PATH="$SIDECAR_ARTIFACT_ROOT/evidence/app-smoke-speaking.png"
@@ -19,6 +24,7 @@ export SIDECAR_CORE_PACKAGE_ROOT
 export SIDECAR_BUILD_ROOT
 export SIDECAR_ARTIFACT_ROOT
 export SIDECAR_FIXTURE_SCENARIO
+export SIDECAR_EVIDENCE_SCALE
 export SIDECAR_EXPANDED_EVIDENCE_PATH
 export SIDECAR_COMPACT_EVIDENCE_PATH
 export SIDECAR_SPEAKING_EVIDENCE_PATH

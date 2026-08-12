@@ -32,16 +32,19 @@ COMPACT_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-compact.XXXXXX")
 SPEAKING_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-speaking.XXXXXX")
 SETTINGS_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-settings.XXXXXX")
 "$APP_EXECUTABLE" \
+    --force-device-scale-factor="$SIDECAR_EVIDENCE_SCALE" \
     --user-data-dir="$EXPANDED_PROFILE" \
     --fixture "$SIDECAR_FIXTURE_SCENARIO" \
     --expanded \
     --capture-evidence "$SIDECAR_EXPANDED_EVIDENCE_PATH"
 "$APP_EXECUTABLE" \
+    --force-device-scale-factor="$SIDECAR_EVIDENCE_SCALE" \
     --user-data-dir="$COMPACT_PROFILE" \
     --fixture "$SIDECAR_FIXTURE_SCENARIO" \
     --compact \
     --capture-evidence "$SIDECAR_COMPACT_EVIDENCE_PATH"
 "$APP_EXECUTABLE" \
+    --force-device-scale-factor="$SIDECAR_EVIDENCE_SCALE" \
     --user-data-dir="$SPEAKING_PROFILE" \
     --fixture "$SIDECAR_FIXTURE_SCENARIO" \
     --profile speaking \
@@ -51,6 +54,7 @@ SETTINGS_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-settings.XXXXXX")
 # screenshots never show. Without it, a change to that surface produces evidence
 # that cannot contain the change.
 "$APP_EXECUTABLE" \
+    --force-device-scale-factor="$SIDECAR_EVIDENCE_SCALE" \
     --user-data-dir="$SETTINGS_PROFILE" \
     --fixture "$SIDECAR_FIXTURE_SCENARIO" \
     --view settings \
@@ -85,9 +89,15 @@ validate_evidence() {
         exit 1
     fi
 
+    # The scale is asserted rather than merely bounded: a runner that ignored
+    # the forced scale factor would otherwise publish evidence at half the
+    # resolution a developer's Mac produces, which reads as a blurry screenshot
+    # and makes every render differ from its baseline.
     local scale_factor=$((actual_width / expected_width))
-    if (( scale_factor < 1 || scale_factor > 4 || actual_height != expected_height * scale_factor )); then
-        printf 'error: evidence PNG has unexpected dimensions: %s\n' "$evidence_path" >&2
+    if (( scale_factor != SIDECAR_EVIDENCE_SCALE || actual_height != expected_height * scale_factor )); then
+        printf 'error: evidence PNG is %sx%s, expected %sx at %sx%s: %s\n' \
+            "$actual_width" "$actual_height" "$SIDECAR_EVIDENCE_SCALE" \
+            "$expected_width" "$expected_height" "$evidence_path" >&2
         exit 1
     fi
 }
