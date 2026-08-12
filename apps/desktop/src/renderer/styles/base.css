@@ -29,6 +29,10 @@
      size; everything layered on it moves with `transform` and `opacity` alone,
      so a frame costs a composite rather than a relayout and a text re-shape.
 
+     `--expand-delay` is measured, not chosen: the surface only reaches far
+     enough left to enclose the tab bar partway through the spring, and content
+     revealed before that is drawn on the desktop.
+
      Whichever direction it runs, the shape and its content must never cross:
      content sits outside the shape it belongs to, so any overlap leaves it
      drawn on the desktop. Growing, the surface leads and the content follows.
@@ -77,7 +81,7 @@
   --duration-shape: 460ms;
   --duration-exit: 90ms;
   --duration-quick: 140ms;
-  --expand-delay: 150ms;
+  --expand-delay: 200ms;
   --peek-delay: 60ms;
   --row-stagger: 32ms;
 
@@ -172,6 +176,12 @@ button {
   left: 50%;
   width: var(--capsule-width);
   height: var(--capsule-height);
+  /* The spring undershoots on the way back, and the capsule is the floor: a
+     shape that dips inside the housing's footprint opens a gap where there is
+     a physical camera, not a screen. Clamping the used size lets the spring
+     keep its overshoot in the direction where there is room for it. */
+  min-width: var(--capsule-width);
+  min-height: var(--capsule-height);
   border-radius: 0 0 var(--notch-convex-radius) var(--notch-convex-radius);
   background: var(--surface-fill);
   transform: translateX(-50%);
@@ -431,6 +441,7 @@ button {
 .app-stage[data-notch="false"] .panel-surface {
   top: var(--shape-top);
   height: calc(var(--capsule-height) - var(--shape-top) * 2);
+  min-height: calc(var(--capsule-height) - var(--shape-top) * 2);
   border-radius: 999px;
 }
 
@@ -603,7 +614,7 @@ button {
   transform: translateX(-50%) translateY(0);
   transition:
     opacity var(--duration-quick) var(--motion-exit) var(--expand-delay),
-    transform var(--duration-morph) var(--spring) var(--expand-delay),
+    transform var(--duration-shape) var(--spring) var(--expand-delay),
     visibility 0s linear var(--expand-delay);
 }
 
@@ -716,7 +727,7 @@ button {
   transform: translateY(6px);
   transition:
     opacity var(--duration-exit) var(--motion-exit),
-    transform var(--duration-morph) var(--spring);
+    transform var(--duration-shape) var(--spring);
 }
 
 .app-stage[data-presentation="panel"] .session-row {
@@ -901,8 +912,7 @@ button {
    Zeroing the tokens every transition is written in terms of is enough — no
    rule has to be overridden. */
 .app-stage[data-capture="true"] {
-  --duration-morph: 0s;
-  --duration-collapse: 0s;
+  --duration-shape: 0s;
   --duration-exit: 0s;
   --duration-quick: 0s;
   --expand-delay: 0s;
