@@ -24,7 +24,13 @@
    maintains the automated-evidence link there. Attach physical-device
    screenshots or recordings through GitHub's PR editor and call out
    physical-notch checks that remain.
-6. When an agent must add inline PR media without the GitHub editor, store it on
+6. When pushing follow-up commits to an open PR, re-read the PR description and
+   update it if the change made it inaccurate or incomplete. Keep the summary,
+   scope, and Evidence section matching the commands and results for the current
+   head commit; refresh screenshots whose UI has changed and drop claims that no
+   longer hold. Leave the description alone when the new commits do not change
+   what it says.
+7. When an agent must add inline PR media without the GitHub editor, store it on
    the shared `pr-assets` branch, not the product branch. Use a per-PR path such
    as `pr-<number>/landing-page.png`, then embed the raw GitHub URL in the PR
    description. Keep `pr-assets` as the one durable media branch: deleting it
