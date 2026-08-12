@@ -50,6 +50,13 @@ panel instead of starting a new one.
 `artifacts/evidence/app-smoke-compact.png`, and
 `artifacts/evidence/app-smoke-speaking.png`.
 
+Luke's menu bar item is drawn by the system rather than by the renderer, so it
+cannot be captured through the app. With Luke running, `./scripts/menu-bar-evidence.sh`
+photographs the right end of the menu bar into
+`artifacts/evidence/menu-bar-item.png`; the terminal needs Screen Recording
+permission the first time. Open the item afterwards to check its menu, which
+offers Settings and Quit.
+
 ## The capsule, the peek, and the panel
 
 The surface has three sizes and they are all the same black shape:
