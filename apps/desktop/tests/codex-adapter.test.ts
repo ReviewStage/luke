@@ -118,6 +118,16 @@ async function writeCodexConfig(codexHome: string, source: string): Promise<void
   await fs.writeFile(path.join(codexHome, "config.toml"), source);
 }
 
+async function writeMalformedCodexState(codexHome: string): Promise<void> {
+  await fs.mkdir(codexHome, { recursive: true });
+  const database = new DatabaseSync(path.join(codexHome, CODEX_STATE_DATABASE), {});
+  try {
+    database.exec("CREATE TABLE unrelated (id TEXT PRIMARY KEY)");
+  } finally {
+    database.close();
+  }
+}
+
 test("observes Codex sessions without exposing transcript-derived metadata", async (t) => {
   const codexHome = await temporaryCodexHome(t);
   await writeCodexState(codexHome, [
@@ -231,6 +241,44 @@ test("observes Codex sessions from CODEX_SQLITE_HOME", async (t) => {
   assert.equal(observations[0]?.title, "Codex: env-home");
 });
 
+test("prefers configured sqlite_home over CODEX_SQLITE_HOME", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const envSqliteHome = path.join(codexHome, "env-sqlite");
+  const previousSqliteHome = process.env[TEST_CODEX_ENVIRONMENT.SQLITE_DIRECTORY];
+  process.env[TEST_CODEX_ENVIRONMENT.SQLITE_DIRECTORY] = envSqliteHome;
+  t.after(() => {
+    if (previousSqliteHome === undefined)
+      delete process.env[TEST_CODEX_ENVIRONMENT.SQLITE_DIRECTORY];
+    else process.env[TEST_CODEX_ENVIRONMENT.SQLITE_DIRECTORY] = previousSqliteHome;
+  });
+  await writeCodexConfig(codexHome, "sqlite_home = 'configured-sqlite'\n");
+  await writeCodexState(envSqliteHome, [
+    {
+      id: "codex-env-home",
+      cwd: "/Users/test/env-home",
+      observedAt: TEST_TIME - 1_000,
+    },
+  ]);
+  await writeCodexState(path.join(codexHome, "configured-sqlite"), [
+    {
+      id: "codex-configured-home",
+      cwd: "/Users/test/configured-home",
+      observedAt: TEST_TIME - 1_000,
+    },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const observations = await adapter.observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.providerSessionId, "codex-configured-home");
+  assert.equal(observations[0]?.title, "Codex: configured-home");
+});
+
 test("observes Codex sessions from the default sqlite subdirectory", async (t) => {
   const codexHome = await temporaryCodexHome(t);
   await writeCodexState(path.join(codexHome, "sqlite"), [
@@ -251,6 +299,29 @@ test("observes Codex sessions from the default sqlite subdirectory", async (t) =
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "codex-default-sqlite");
   assert.equal(observations[0]?.title, "Codex: default-sqlite");
+});
+
+test("falls back when a higher-priority Codex database has an unusable schema", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  await writeMalformedCodexState(path.join(codexHome, "sqlite"));
+  await writeCodexState(codexHome, [
+    {
+      id: "codex-legacy-valid",
+      cwd: "/Users/test/legacy-valid",
+      observedAt: TEST_TIME - 1_000,
+    },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const observations = await adapter.observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.providerSessionId, "codex-legacy-valid");
+  assert.equal(observations[0]?.title, "Codex: legacy-valid");
 });
 
 test("keeps stale unarchived Codex sessions unknown instead of inventing activity", async (t) => {

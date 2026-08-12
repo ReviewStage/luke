@@ -272,8 +272,8 @@ async function stateDatabasePaths(
 ): Promise<string[]> {
   const sqliteHome =
     normalizeDirectory(configuredSqliteHome, codexHome) ??
-    normalizeDirectory(process.env[CODEX_ENVIRONMENT.SQLITE_DIRECTORY], codexHome) ??
-    (await sqliteHomeFromConfig(codexHome));
+    (await sqliteHomeFromConfig(codexHome)) ??
+    normalizeDirectory(process.env[CODEX_ENVIRONMENT.SQLITE_DIRECTORY], codexHome);
   return uniquePaths(
     [
       sqliteHome && path.join(sqliteHome, CODEX_DATABASE_FILE.STATE),
@@ -360,28 +360,25 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
   }
 
   async observe(): Promise<readonly ProviderSessionObservation[]> {
-    let database: SqliteDatabase | undefined;
     for (const databasePath of await stateDatabasePaths(this.#codexHome, this.#sqliteHome)) {
-      database = await openReadOnlyDatabase(this.#sqlite, databasePath);
-      if (database) break;
+      const database = await openReadOnlyDatabase(this.#sqlite, databasePath);
+      if (!database) continue;
+      try {
+        const now = this.#now();
+        const rows = database.prepare(CODEX_THREAD_QUERY).all(this.#maximumSessionRows);
+        return rows
+          .filter((row): row is CodexThreadRow => row !== null && typeof row === "object")
+          .map((row) => observationFromThreadRow(row, now, this.#activeSessionFreshnessMs))
+          .filter((observation): observation is ProviderSessionObservation => {
+            if (!observation) return false;
+            return now - observation.observedAt <= this.#maximumSessionAgeMs;
+          });
+      } catch (error) {
+        if (!canIgnoreSqliteError(error)) throw error;
+      } finally {
+        database.close();
+      }
     }
-    if (!database) return [];
-
-    try {
-      const now = this.#now();
-      const rows = database.prepare(CODEX_THREAD_QUERY).all(this.#maximumSessionRows);
-      return rows
-        .filter((row): row is CodexThreadRow => row !== null && typeof row === "object")
-        .map((row) => observationFromThreadRow(row, now, this.#activeSessionFreshnessMs))
-        .filter((observation): observation is ProviderSessionObservation => {
-          if (!observation) return false;
-          return now - observation.observedAt <= this.#maximumSessionAgeMs;
-        });
-    } catch (error) {
-      if (canIgnoreSqliteError(error)) return [];
-      throw error;
-    } finally {
-      database.close();
-    }
+    return [];
   }
 }
