@@ -16,9 +16,12 @@ import {
   textFromRecord,
   timestampFromRecord,
 } from "./cloud-session-adapter";
+import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "./shared/credential-providers";
 
-const CONDUCTOR_PROVIDER_ID = "conductor";
-const CONDUCTOR_PROVIDER_NAME = "Conductor";
+// Shared with the credential registry so the key the user saves and the
+// provider Luke observes with it can never name different things.
+const CONDUCTOR_PROVIDER_ID = CREDENTIAL_PROVIDER_ID.CONDUCTOR;
+const CONDUCTOR_PROVIDER_NAME = CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.CONDUCTOR].displayName;
 
 const CONDUCTOR_ENVIRONMENT = {
   API_URL: "CONDUCTOR_API_URL",

@@ -6,15 +6,23 @@ import {
   type CredentialSource,
   type SettingsUpdateResult,
 } from "./shared/contracts";
+import {
+  CREDENTIAL_PROVIDER_ID,
+  CREDENTIAL_PROVIDER_LIST,
+  type CredentialProvider,
+  type CredentialProviderId,
+} from "./shared/credential-providers";
 
 const SETTINGS_FILE_NAME = "settings.json";
 const SETTINGS_TEMPORARY_FILE_NAME = "settings.json.tmp";
-const SETTINGS_FILE_VERSION = 1;
+/** Version 2 keys credentials by provider id; version 1 held one Conductor key. */
+const SETTINGS_FILE_VERSION = 2;
 const SETTINGS_FILE_MODE = 0o600;
 
-const CONDUCTOR_ENVIRONMENT = {
-  API_KEY: "CONDUCTOR_API_KEY",
-  API_TOKEN: "CONDUCTOR_API_TOKEN",
+const SETTINGS_FIELD = {
+  API_KEYS: "apiKeys",
+  LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
+  VERSION: "version",
 } as const;
 
 const API_KEY_LENGTH = {
@@ -39,11 +47,16 @@ export interface SettingsStoreOptions {
   directory: () => string;
   cipher: SecretCipher;
   environment?: NodeJS.ProcessEnv;
+  providers?: readonly CredentialProvider[];
 }
 
 interface PersistedSettings {
   version: number;
-  conductorApiKey?: string;
+  /**
+   * Ciphertext by provider id. A provider this build does not know is carried
+   * through untouched so an older build cannot discard a newer one's key.
+   */
+  apiKeys: Readonly<Record<string, string>>;
 }
 
 interface ResolvedApiKey {
@@ -67,22 +80,42 @@ function canIgnoreFilesystemError(error: unknown): boolean {
 
 /**
  * A rejected key never reaches disk, and the reason never echoes the submitted
- * value. Conductor does not publish a key format, so this only rules out values
- * that cannot be sent as an HTTP authorization header.
+ * value. No provider Luke reads publishes a key format, so this only rules out
+ * values that cannot be sent as an HTTP authorization header.
  */
-export function conductorApiKeyRejection(apiKey: string): string | undefined {
+export function apiKeyRejection(apiKey: string): string | undefined {
   if (apiKey.length < API_KEY_LENGTH.MINIMUM) return "That API key is too short.";
   if (apiKey.length > API_KEY_LENGTH.MAXIMUM) return "That API key is too long.";
   if (!PRINTABLE_ASCII.test(apiKey)) return "That API key contains unsupported characters.";
   return undefined;
 }
 
-function environmentApiKey(environment: NodeJS.ProcessEnv): string | undefined {
-  for (const variable of [CONDUCTOR_ENVIRONMENT.API_KEY, CONDUCTOR_ENVIRONMENT.API_TOKEN]) {
+function environmentApiKey(
+  provider: CredentialProvider,
+  environment: NodeJS.ProcessEnv,
+): string | undefined {
+  for (const variable of provider.environmentVariables) {
     const value = environment[variable]?.trim();
-    if (value && !conductorApiKeyRejection(value)) return value;
+    if (value && !apiKeyRejection(value)) return value;
   }
   return undefined;
+}
+
+function storedApiKeys(record: Record<string, unknown>): Record<string, string> {
+  const apiKeys: Record<string, string> = {};
+  const persisted = record[SETTINGS_FIELD.API_KEYS];
+  if (persisted !== null && typeof persisted === "object" && !Array.isArray(persisted)) {
+    for (const [providerId, ciphertext] of Object.entries(persisted)) {
+      if (typeof ciphertext === "string" && ciphertext) apiKeys[providerId] = ciphertext;
+    }
+  }
+  // An installation upgraded from version 1 keeps its Conductor key: the
+  // ciphertext is unchanged, so it decrypts exactly as it did before.
+  const legacy = record[SETTINGS_FIELD.LEGACY_CONDUCTOR_API_KEY];
+  if (typeof legacy === "string" && legacy && !apiKeys[CREDENTIAL_PROVIDER_ID.CONDUCTOR]) {
+    apiKeys[CREDENTIAL_PROVIDER_ID.CONDUCTOR] = legacy;
+  }
+  return apiKeys;
 }
 
 function parsePersistedSettings(source: string): PersistedSettings {
@@ -91,71 +124,111 @@ function parsePersistedSettings(source: string): PersistedSettings {
     throw new Error("Settings file is not an object");
   }
   const record = parsed as Record<string, unknown>;
-  const conductorApiKey = record.conductorApiKey;
+  const version = record[SETTINGS_FIELD.VERSION];
   return {
-    version: typeof record.version === "number" ? record.version : SETTINGS_FILE_VERSION,
-    ...(typeof conductorApiKey === "string" && conductorApiKey ? { conductorApiKey } : {}),
+    version: typeof version === "number" ? version : SETTINGS_FILE_VERSION,
+    apiKeys: storedApiKeys(record),
   };
 }
 
 /**
  * Reads and writes the small set of user-owned settings Luke needs. A stored
- * credential stays in the main process: callers can learn that a key exists and
- * can replace it, but no accessor returns it to a renderer.
+ * credential stays in the main process: callers can learn that a provider has a
+ * key and can replace it, but no accessor returns one to a renderer.
  */
 export class SettingsStore {
   readonly #directory: () => string;
   readonly #cipher: SecretCipher;
   readonly #environment: NodeJS.ProcessEnv;
+  readonly #providers: readonly CredentialProvider[];
   #loading: Promise<PersistedSettings> | undefined;
-  #resolved: ResolvedApiKey | undefined;
-  #pendingWrite: Promise<void> = Promise.resolve();
+  #resolved = new Map<CredentialProviderId, ResolvedApiKey>();
+  #mutations: Promise<void> = Promise.resolve();
 
   constructor(options: SettingsStoreOptions) {
     this.#directory = options.directory;
     this.#cipher = options.cipher;
     this.#environment = options.environment ?? process.env;
+    this.#providers = options.providers ?? CREDENTIAL_PROVIDER_LIST;
   }
 
   async snapshot(): Promise<AppSettings> {
-    const { source } = await this.#resolveApiKey();
+    const sources = await Promise.all(
+      this.#providers.map(
+        async (provider) => [provider.id, (await this.#resolveApiKey(provider)).source] as const,
+      ),
+    );
     return {
-      conductorApiKeySource: source,
+      credentialSources: Object.fromEntries(sources) as Record<
+        CredentialProviderId,
+        CredentialSource
+      >,
       secretStorageAvailable: this.#secretStorageAvailable(),
     };
   }
 
-  /** Main-process only: the resolved key used to authenticate provider reads. */
-  async readConductorApiKey(): Promise<string | undefined> {
-    return (await this.#resolveApiKey()).apiKey;
+  /**
+   * Main-process only: the resolved key used to authenticate that provider's
+   * reads. A provider with no key resolves to nothing, so its adapter observes
+   * nothing and issues no request.
+   */
+  async readApiKey(providerId: CredentialProviderId): Promise<string | undefined> {
+    const provider = this.#providers.find((candidate) => candidate.id === providerId);
+    if (!provider) return undefined;
+    return (await this.#resolveApiKey(provider)).apiKey;
   }
 
   /**
-   * Stores a key encrypted at rest, or clears the stored key when omitted. A key
-   * the user cannot use comes back as a `reason` rather than an exception, so
-   * only an unexpected filesystem failure throws.
+   * Stores one provider's key encrypted at rest, or clears it when omitted. A
+   * key the user cannot use comes back as a `reason` rather than an exception,
+   * so only an unexpected filesystem failure throws.
    */
-  async setConductorApiKey(apiKey: string | undefined): Promise<SettingsUpdateResult> {
+  async setApiKey(
+    providerId: CredentialProviderId,
+    apiKey: string | undefined,
+  ): Promise<SettingsUpdateResult> {
     const normalized = apiKey?.trim();
     const rejection = normalized
       ? !this.#secretStorageAvailable()
         ? "Encrypted credential storage is unavailable on this system."
-        : conductorApiKeyRejection(normalized)
+        : apiKeyRejection(normalized)
       : undefined;
     if (rejection) return { settings: await this.snapshot(), reason: rejection };
 
-    const persisted = await this.#load();
-    const ciphertext = normalized ? this.#cipher.encrypt(normalized).toString("base64") : undefined;
-    const next: PersistedSettings = {
-      version: SETTINGS_FILE_VERSION,
-      ...(ciphertext ? { conductorApiKey: ciphertext } : {}),
-    };
-    if (persisted.conductorApiKey !== next.conductorApiKey) {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      const ciphertext = normalized
+        ? this.#cipher.encrypt(normalized).toString("base64")
+        : undefined;
+      if (persisted.apiKeys[providerId] === ciphertext) return;
+      // Every other provider's ciphertext is carried over, so saving one key
+      // never disturbs another.
+      const apiKeys = { ...persisted.apiKeys };
+      if (ciphertext) apiKeys[providerId] = ciphertext;
+      else delete apiKeys[providerId];
+      const next: PersistedSettings = { version: SETTINGS_FILE_VERSION, apiKeys };
       await this.#write(next);
       this.#loading = Promise.resolve(next);
-      this.#resolved = undefined;
-    }
+      this.#resolved.delete(providerId);
+    });
     return { settings: await this.snapshot() };
+  }
+
+  /**
+   * Runs one settings change at a time. Serializing only the file write is not
+   * enough: a user with more than one provider row can start a second save
+   * before the first lands, and both would read the same stored keys before
+   * either wrote, so the later write would drop the other provider's key.
+   */
+  async #serialize<Result>(operation: () => Promise<Result>): Promise<Result> {
+    const result = this.#mutations.then(operation);
+    // A failed change must not wedge the queue, so the chain forgets its
+    // outcome; the caller still receives the rejection.
+    this.#mutations = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
   }
 
   #secretStorageAvailable(): boolean {
@@ -171,24 +244,26 @@ export class SettingsStore {
    * few seconds, and decrypting on each tick would hit the OS keychain
    * thousands of times a day for a value only the user can change.
    */
-  async #resolveApiKey(): Promise<ResolvedApiKey> {
-    if (this.#resolved) return this.#resolved;
-    const stored = await this.#storedApiKey();
-    const fromEnvironment = stored ? undefined : environmentApiKey(this.#environment);
-    this.#resolved = stored
+  async #resolveApiKey(provider: CredentialProvider): Promise<ResolvedApiKey> {
+    const cached = this.#resolved.get(provider.id);
+    if (cached) return cached;
+    const stored = await this.#storedApiKey(provider);
+    const fromEnvironment = stored ? undefined : environmentApiKey(provider, this.#environment);
+    const resolved: ResolvedApiKey = stored
       ? { apiKey: stored, source: CREDENTIAL_SOURCE.ENCRYPTED_FILE }
       : fromEnvironment
         ? { apiKey: fromEnvironment, source: CREDENTIAL_SOURCE.ENVIRONMENT }
         : { source: CREDENTIAL_SOURCE.NONE };
-    return this.#resolved;
+    this.#resolved.set(provider.id, resolved);
+    return resolved;
   }
 
-  async #storedApiKey(): Promise<string | undefined> {
-    const { conductorApiKey } = await this.#load();
-    if (!conductorApiKey) return undefined;
+  async #storedApiKey(provider: CredentialProvider): Promise<string | undefined> {
+    const ciphertext = (await this.#load()).apiKeys[provider.id];
+    if (!ciphertext) return undefined;
     try {
-      const apiKey = this.#cipher.decrypt(Buffer.from(conductorApiKey, "base64")).trim();
-      return apiKey && !conductorApiKeyRejection(apiKey) ? apiKey : undefined;
+      const apiKey = this.#cipher.decrypt(Buffer.from(ciphertext, "base64")).trim();
+      return apiKey && !apiKeyRejection(apiKey) ? apiKey : undefined;
     } catch {
       // A key encrypted under a different account, or against a rotated
       // Keychain entry, cannot be recovered; the user re-enters it instead.
@@ -211,7 +286,7 @@ export class SettingsStore {
       if (!canIgnoreFilesystemError(error)) throw error;
     }
 
-    let persisted: PersistedSettings = { version: SETTINGS_FILE_VERSION };
+    let persisted: PersistedSettings = { version: SETTINGS_FILE_VERSION, apiKeys: {} };
     if (source) {
       try {
         persisted = parsePersistedSettings(source);
@@ -223,22 +298,19 @@ export class SettingsStore {
     return persisted;
   }
 
+  /** Only ever called from inside `#serialize`, so writes cannot interleave. */
   async #write(persisted: PersistedSettings): Promise<void> {
-    const write = this.#pendingWrite.then(async () => {
-      const directory = this.#directory();
-      const settingsPath = path.join(directory, SETTINGS_FILE_NAME);
-      const temporaryPath = path.join(directory, SETTINGS_TEMPORARY_FILE_NAME);
-      await fs.mkdir(directory, { recursive: true });
-      await fs.writeFile(temporaryPath, `${JSON.stringify(persisted, undefined, 2)}\n`, {
-        encoding: "utf8",
-        mode: SETTINGS_FILE_MODE,
-      });
-      // `mode` only applies when the file is created, so a temporary file left
-      // behind by an interrupted write keeps whatever mode it already had.
-      await fs.chmod(temporaryPath, SETTINGS_FILE_MODE);
-      await fs.rename(temporaryPath, settingsPath);
+    const directory = this.#directory();
+    const settingsPath = path.join(directory, SETTINGS_FILE_NAME);
+    const temporaryPath = path.join(directory, SETTINGS_TEMPORARY_FILE_NAME);
+    await fs.mkdir(directory, { recursive: true });
+    await fs.writeFile(temporaryPath, `${JSON.stringify(persisted, undefined, 2)}\n`, {
+      encoding: "utf8",
+      mode: SETTINGS_FILE_MODE,
     });
-    this.#pendingWrite = write.catch(() => undefined);
-    await write;
+    // `mode` only applies when the file is created, so a temporary file left
+    // behind by an interrupted write keeps whatever mode it already had.
+    await fs.chmod(temporaryPath, SETTINGS_FILE_MODE);
+    await fs.rename(temporaryPath, settingsPath);
   }
 }

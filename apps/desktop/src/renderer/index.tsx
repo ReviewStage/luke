@@ -5,7 +5,7 @@ import {
   SESSION_STATUS,
   type SessionState,
 } from "@sidecar/core";
-import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useId, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type {
   AppBootstrap,
@@ -16,6 +16,8 @@ import type {
   WindowMode,
 } from "../shared/contracts";
 import { CREDENTIAL_SOURCE } from "../shared/contracts";
+import type { CredentialProvider, CredentialProviderId } from "../shared/credential-providers";
+import { CREDENTIAL_PROVIDER_LIST } from "../shared/credential-providers";
 
 const credentialLabels: Record<CredentialSource, string> = {
   [CREDENTIAL_SOURCE.NONE]: "Not connected",
@@ -148,35 +150,43 @@ function Waveform({
 }
 
 /**
- * The credential is write-only from the renderer: this form can replace or
- * clear the stored key, and the main process never sends one back.
+ * One provider's credential. It is write-only from the renderer: the row can
+ * replace or clear that provider's key, and the main process never sends one
+ * back.
  */
-function ConductorSettings({
-  settings,
+function CredentialRow({
+  provider,
+  source,
+  storageUnavailable,
+  focusOnOpen,
   onSubmit,
 }: {
-  settings: AppSettings;
-  onSubmit: (apiKey: string | undefined) => Promise<string | undefined>;
+  provider: CredentialProvider;
+  source: CredentialSource;
+  storageUnavailable: boolean;
+  focusOnOpen: boolean;
+  onSubmit: (
+    providerId: CredentialProviderId,
+    apiKey: string | undefined,
+  ) => Promise<string | undefined>;
 }): React.JSX.Element {
   const [draft, setDraft] = useState("");
   const [rejection, setRejection] = useState<string>();
   const [busy, setBusy] = useState(false);
   const field = useRef<HTMLInputElement | null>(null);
+  const fieldId = useId();
 
-  const storageUnavailable = !settings.secretStorageAvailable;
-  const hasStoredKey = settings.conductorApiKeySource === CREDENTIAL_SOURCE.ENCRYPTED_FILE;
+  const hasStoredKey = source === CREDENTIAL_SOURCE.ENCRYPTED_FILE;
 
   useEffect(() => {
-    // The panel is shown without stealing focus, so typing only works once the
-    // window itself is key. `preventScroll` keeps this from scrolling the panel
-    // body, which is the one scroll container the layout allows.
-    window.sidecar.focusPanel();
-    if (!storageUnavailable) field.current?.focus({ preventScroll: true });
-  }, [storageUnavailable]);
+    // `preventScroll` keeps this from scrolling the panel body, which is the one
+    // scroll container the layout allows.
+    if (focusOnOpen && !storageUnavailable) field.current?.focus({ preventScroll: true });
+  }, [focusOnOpen, storageUnavailable]);
 
   const submit = async (apiKey: string | undefined) => {
     setBusy(true);
-    const failure = await onSubmit(apiKey);
+    const failure = await onSubmit(provider.id, apiKey);
     setBusy(false);
     setRejection(failure);
     if (!failure) setDraft("");
@@ -184,10 +194,10 @@ function ConductorSettings({
 
   return (
     <div className="settings-view">
-      <label className="settings-field" htmlFor="conductor-api-key">
-        <span className="settings-label">Conductor cloud API key</span>
+      <label className="settings-field" htmlFor={fieldId}>
+        <span className="settings-label">{provider.displayName} cloud API key</span>
         <input
-          id="conductor-api-key"
+          id={fieldId}
           ref={field}
           className="settings-input"
           type="password"
@@ -201,9 +211,7 @@ function ConductorSettings({
       </label>
 
       <div className="settings-row">
-        <span className={`settings-state ${settings.conductorApiKeySource}`}>
-          {credentialLabels[settings.conductorApiKeySource]}
-        </span>
+        <span className={`settings-state ${source}`}>{credentialLabels[source]}</span>
         <span className="settings-actions">
           {hasStoredKey ? (
             <button
@@ -226,12 +234,48 @@ function ConductorSettings({
         </span>
       </div>
 
+      <p className="settings-hint">{provider.hint}</p>
+      {rejection ? <p className="settings-error">{rejection}</p> : null}
+    </div>
+  );
+}
+
+/** One row per cloud provider, each with its own credential and its own state. */
+function CredentialSettings({
+  settings,
+  onSubmit,
+}: {
+  settings: AppSettings;
+  onSubmit: (
+    providerId: CredentialProviderId,
+    apiKey: string | undefined,
+  ) => Promise<string | undefined>;
+}): React.JSX.Element {
+  const storageUnavailable = !settings.secretStorageAvailable;
+
+  useEffect(() => {
+    // The panel is shown without stealing focus, so typing only works once the
+    // window itself is key.
+    window.sidecar.focusPanel();
+  }, []);
+
+  return (
+    <div className="settings-list">
+      {CREDENTIAL_PROVIDER_LIST.map((provider, index) => (
+        <CredentialRow
+          key={provider.id}
+          provider={provider}
+          source={settings.credentialSources[provider.id]}
+          storageUnavailable={storageUnavailable}
+          focusOnOpen={index === 0}
+          onSubmit={onSubmit}
+        />
+      ))}
       <p className="settings-hint">
         {storageUnavailable
           ? "This system offers no encrypted credential storage, so Luke will not store a key here."
-          : "Create a key in Conductor under Settings · API keys. Luke reads only cloud workspaces you created and never sends a prompt, message, or any other change."}
+          : "Luke reads only cloud workspaces you created and never sends a prompt, message, or any other change."}
       </p>
-      {rejection ? <p className="settings-error">{rejection}</p> : null}
     </div>
   );
 }
@@ -422,11 +466,14 @@ function App(): React.JSX.Element {
 
   usePointerPassthrough(handleHitRegionEnter, handleHitRegionLeave);
 
-  const submitConductorApiKey = useCallback(async (apiKey: string | undefined) => {
-    const result = await window.sidecar.setConductorApiKey(apiKey);
-    setSettings(result.settings);
-    return result.reason;
-  }, []);
+  const submitProviderApiKey = useCallback(
+    async (providerId: CredentialProviderId, apiKey: string | undefined) => {
+      const result = await window.sidecar.setProviderApiKey(providerId, apiKey);
+      setSettings(result.settings);
+      return result.reason;
+    },
+    [],
+  );
 
   useEffect(() => {
     const bootstrapGeneration = modeGeneration.current;
@@ -587,7 +634,7 @@ function App(): React.JSX.Element {
             </div>
 
             {settingsOpen && settings ? (
-              <ConductorSettings settings={settings} onSubmit={submitConductorApiKey} />
+              <CredentialSettings settings={settings} onSubmit={submitProviderApiKey} />
             ) : (
               <div className="session-list">
                 {visibleSessions.map((item) => (

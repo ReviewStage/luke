@@ -390,6 +390,13 @@ h1 {
 /* Natural height inside the scrolling body, for the same reason session rows
    take theirs: a stretched child would be shrunk below its content instead of
    letting the body scroll. */
+.settings-list {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .settings-view {
   display: flex;
   flex: none;

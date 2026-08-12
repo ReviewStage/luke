@@ -5,6 +5,7 @@ import type {
   ResolvedNotchGeometry,
   WindowMode,
 } from "@sidecar/core";
+import type { CredentialProviderId } from "./credential-providers";
 
 export type { WindowMode } from "@sidecar/core";
 
@@ -21,7 +22,8 @@ export type CredentialSource = (typeof CREDENTIAL_SOURCE)[keyof typeof CREDENTIA
 
 /** Renderer-safe settings. Credentials are never sent to a renderer. */
 export interface AppSettings {
-  conductorApiKeySource: CredentialSource;
+  /** Where each provider's key comes from, keyed by provider id. */
+  credentialSources: Readonly<Record<CredentialProviderId, CredentialSource>>;
   /**
    * Luke stores credentials only through OS-provided encryption. When that is
    * unavailable the app says so rather than falling back to plaintext storage.
@@ -67,7 +69,10 @@ export interface AppBridge {
   setExpanded(expanded: boolean): Promise<WindowMode>;
   setPointerInterception(interceptsPointer: boolean): void;
   requestMicrophone(): Promise<MicrophoneStatus>;
-  setConductorApiKey(apiKey: string | undefined): Promise<SettingsUpdateResult>;
+  setProviderApiKey(
+    providerId: CredentialProviderId,
+    apiKey: string | undefined,
+  ): Promise<SettingsUpdateResult>;
   /** Brings the expanded panel forward so it can accept typed input. */
   focusPanel(): void;
   notifyReady(): void;
@@ -83,7 +88,7 @@ export const channels = {
   setExpanded: "app:set-expanded",
   setPointerInterception: "app:set-pointer-interception",
   requestMicrophone: "app:request-microphone",
-  setConductorApiKey: "app:set-conductor-api-key",
+  setProviderApiKey: "app:set-provider-api-key",
   focusPanel: "app:focus-panel",
   rendererReady: "app:renderer-ready",
   lifecycle: "app:lifecycle",
