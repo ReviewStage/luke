@@ -160,7 +160,7 @@ function sessionState(session: NormalizedSession): SessionState {
 }
 
 function displaySessions(bootstrap: AppBootstrap, sessions: readonly NormalizedSession[]) {
-  if (bootstrap.captureMode) {
+  if (bootstrap.fixtureMode) {
     return bootstrap.fixture.sessions.map(
       (session): DisplaySession => ({
         ...session,
@@ -367,7 +367,7 @@ function App(): React.JSX.Element {
       : active > 0
         ? SESSION_STATE.WORKING
         : SESSION_STATE.UNKNOWN;
-  const hasLiveSessions = !bootstrap.captureMode && sessions.length > 0;
+  const hasLiveSessions = !bootstrap.fixtureMode && sessions.length > 0;
   const sessionSummary =
     visibleSessions.length === 0
       ? "No sessions observed"
@@ -443,13 +443,13 @@ function App(): React.JSX.Element {
               <p className="eyebrow">Notch sidecar</p>
               <h1>Agent activity</h1>
               <p className="subtle">
-                {bootstrap.captureMode
+                {bootstrap.fixtureMode
                   ? "Synthetic sessions · no credentials or live transcripts"
                   : "Live sessions · no credentials or transcripts retained"}
               </p>
             </div>
             <span className="fixture-badge">
-              {hasLiveSessions ? "LIVE" : bootstrap.captureMode ? "FIXTURE · SMOKE" : "IDLE"}
+              {hasLiveSessions ? "LIVE" : bootstrap.fixtureMode ? "FIXTURE · SMOKE" : "IDLE"}
             </span>
           </div>
 

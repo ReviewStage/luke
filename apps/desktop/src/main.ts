@@ -35,9 +35,12 @@ import {
 
 const captureOutput = argumentValue("--capture-evidence");
 const profile = argumentValue("--profile") ?? "idle";
-const fixtureName = argumentValue("--fixture") ?? "smoke";
-const fixture = fixtureSnapshot(fixtureName);
+const fixtureName = argumentValue("--fixture");
+const fixture = fixtureSnapshot(fixtureName ?? "smoke");
 const captureMode = captureOutput !== undefined;
+// `--fixture` is enough on its own to make a run deterministic: the panel renders
+// the fixture snapshot and no provider is observed. Capture runs always imply it.
+const fixtureMode = captureMode || fixtureName !== undefined;
 const SESSION_REFRESH_INTERVAL_MS = 5_000;
 const sessionRegistry = new InMemorySessionRegistry();
 const sessionAdapters = [new ClaudeCodeSessionAdapter(), new CodexSessionAdapter()] as const;
@@ -172,6 +175,7 @@ function registerIpc(): void {
       profile,
       fixture,
       captureMode,
+      fixtureMode,
       packaged: app.isPackaged,
       platform: process.platform,
       electronVersion: process.versions.electron,
@@ -179,7 +183,7 @@ function registerIpc(): void {
       nodeVersion: process.versions.node,
       microphoneStatus: microphoneStatus(),
       display: displayDiagnostic(),
-      sessions: captureMode ? [] : sessionRegistry.snapshot().sessions,
+      sessions: fixtureMode ? [] : sessionRegistry.snapshot().sessions,
     };
   });
 
@@ -222,7 +226,7 @@ function registerIpc(): void {
 }
 
 async function refreshProviderSessions(): Promise<void> {
-  if (captureMode || sessionRefreshRunning) return;
+  if (fixtureMode || sessionRefreshRunning) return;
   sessionRefreshRunning = true;
   try {
     for (const adapter of sessionAdapters) {
@@ -237,7 +241,7 @@ async function refreshProviderSessions(): Promise<void> {
 }
 
 function startSessionObservation(): void {
-  if (captureMode) return;
+  if (fixtureMode) return;
   sessionRegistry.subscribe((snapshot) => {
     panelWindow?.webContents.send(channels.sessionsChanged, snapshot.sessions);
   });
