@@ -1,0 +1,82 @@
+/* The session list: the capsule grows into full-width rows, one per line. */
+
+/* The one scroll container in the app. The root stays `overflow: clip` so a
+   focus or scrollIntoView can never drag the notch capsule out of view, and
+   `overscroll-behavior: contain` keeps that guarantee by stopping a scroll from
+   chaining out to it. `min-height: 0` is what actually permits the scroll: a
+   flex child defaults to its content size, which would push the list past the
+   panel instead of scrolling inside it. The tab bar is outside this box, so it
+   stays reachable however many sessions are observed. */
+.session-list {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 9px;
+  overflow-x: clip;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-width: thin;
+}
+
+.session-row {
+  display: flex;
+  min-height: 66px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 13px;
+  padding: 0 15px;
+  border: 1px solid var(--hairline);
+  border-radius: 17px;
+  background: rgba(255, 255, 255, 0.028);
+}
+
+.session-row[data-state="attention"] {
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+/* Neutral tile: the mark inside carries the provider's own colour, so tinting
+   the tile by state would put two colour systems on top of each other. */
+.row-avatar {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border-radius: 11px;
+  background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  place-items: center;
+}
+
+.row-avatar .provider-mark {
+  width: 17px;
+  height: 17px;
+}
+
+.row-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.row-copy strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 640;
+  letter-spacing: -0.1px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-copy small {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

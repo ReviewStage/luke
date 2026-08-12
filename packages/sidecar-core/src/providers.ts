@@ -1,5 +1,18 @@
 import type { ProviderSessionObservation, SessionControl, SessionProvider } from "./session";
 
+/**
+ * Stable provider identifiers shared by adapters, the registry, and the UI.
+ * They key provider-specific presentation (such as a mark) without a renderer
+ * having to import adapter code or match on a display name.
+ */
+export const PROVIDER_ID = {
+  CLAUDE_CODE: "claude-code",
+  CODEX: "codex",
+  CONDUCTOR: "conductor",
+} as const;
+
+export type ProviderId = (typeof PROVIDER_ID)[keyof typeof PROVIDER_ID];
+
 export const PROVIDER_CONTROL_RESULT_STATUS = {
   ACCEPTED: "accepted",
   REJECTED: "rejected",

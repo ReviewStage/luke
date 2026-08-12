@@ -50,6 +50,40 @@ panel instead of starting a new one.
 `artifacts/evidence/app-smoke-compact.png`, and
 `artifacts/evidence/app-smoke-speaking.png`.
 
+## The panel
+
+Hovering the capsule opens a panel of full-width rows, one session per line:
+provider mark, title, what it is doing, and a state chip. A **Settings** tab
+holds microphone access and Quit. Sessions are ordered by how much they need a
+person, so whatever is waiting on you is always the top row.
+
+Both window modes share one notch-anchored header: the count of tracked sessions
+sits to the right of the camera housing and the provider marks and speech meter
+sit to its left, in the same place in the capsule and in the panel, so expanding
+unfolds the captions around them instead of redrawing the surface.
+
+The window never animates its own frame — it snaps to the size a mode needs and
+the renderer morphs the black surface inside it, which keeps the motion on the
+compositor. Expanding, the surface grows and the content follows it in;
+collapsing, the content leaves first and the surface closes behind it, so
+nothing is ever drawn outside the black shape. The surface ends where the
+content does, so a session arriving or finishing resizes the panel.
+
+## Provider marks
+
+Sessions are labelled with each provider's own mark, inlined as path data in
+`apps/desktop/src/renderer/provider-marks.tsx`: the Claude Code mark via
+[Simple Icons](https://simpleicons.org) (CC0-1.0, sourced from code.claude.com)
+and the Codex mark via [@lobehub/icons](https://github.com/lobehub/lobe-icons)
+(MIT). Each keeps its brand colour — Claude Code's `#D97757` coral and Codex's
+`#B1A7FF → #3941FF` gradient — declared as `--mark-*` custom properties in
+`styles/base.css`. Session state is carried by the count badge, the state chips,
+and the row tints instead, so brand colour and state colour never land on the
+same pixel. The marks are trademarks of Anthropic and OpenAI respectively and
+are used here only to identify which provider a session belongs to; Luke is not
+affiliated with or endorsed by either. A provider with no registered mark falls
+back to a neutral glyph.
+
 For PR motion evidence, run `pnpm evidence:record` on a Mac with `ffmpeg`
 installed and Screen & System Audio Recording permission granted to Conductor.
 It records the fixture-only compact/expanded transition against a synthetic

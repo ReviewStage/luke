@@ -1,3 +1,5 @@
+import { PROVIDER_ID, type ProviderId } from "./providers";
+
 export const SESSION_STATE = {
   WORKING: "working",
   ATTENTION: "attention",
@@ -11,7 +13,7 @@ export interface SessionSnapshot {
   id: string;
   title: string;
   /** The observing provider's stable identity, as an adapter reports it. */
-  providerId: string;
+  providerId: ProviderId;
   provider: string;
   detail: string;
   state: SessionState;
@@ -28,7 +30,7 @@ const smokeFixture: FixtureSnapshot = {
     {
       id: "codex-bootstrap",
       title: "Bootstrap the desktop shell",
-      providerId: "codex",
+      providerId: PROVIDER_ID.CODEX,
       provider: "Codex",
       detail: "Testing Electron window semantics",
       state: SESSION_STATE.WORKING,
@@ -36,7 +38,7 @@ const smokeFixture: FixtureSnapshot = {
     {
       id: "claude-review",
       title: "Review trust constraints",
-      providerId: "claude-code",
+      providerId: PROVIDER_ID.CLAUDE_CODE,
       provider: "Claude Code",
       detail: "One architecture decision is ready",
       state: SESSION_STATE.ATTENTION,
@@ -44,10 +46,20 @@ const smokeFixture: FixtureSnapshot = {
     {
       id: "conductor-workspace",
       title: "Observe a cloud workspace",
-      providerId: "conductor",
+      providerId: PROVIDER_ID.CONDUCTOR,
       provider: "Conductor",
       detail: "Cloud session metadata only · no live credentials",
       state: SESSION_STATE.COMPLETE,
+    },
+    // A fourth session keeps every state and every provider mark visible in the
+    // one screenshot the visual evidence is reviewed from.
+    {
+      id: "claude-observe",
+      title: "Watch the notch geometry adapter",
+      providerId: PROVIDER_ID.CLAUDE_CODE,
+      provider: "Claude Code",
+      detail: "Idle since the last display change",
+      state: SESSION_STATE.UNKNOWN,
     },
   ],
 };

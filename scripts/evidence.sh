@@ -21,14 +21,10 @@ if [[ ! -x "$APP_EXECUTABLE" ]]; then
     exit 1
 fi
 
-mkdir -p "$(dirname -- "$SIDECAR_EXPANDED_EVIDENCE_PATH")"
-rm -f -- \
-    "$SIDECAR_EXPANDED_EVIDENCE_PATH" \
-    "$SIDECAR_COMPACT_EVIDENCE_PATH" \
-    "$SIDECAR_SPEAKING_EVIDENCE_PATH"
+mkdir -p "$SIDECAR_EVIDENCE_ROOT"
+rm -f -- "$SIDECAR_EVIDENCE_ROOT"/app-smoke-*.png
 EXPANDED_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-expanded.XXXXXX")
 COMPACT_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-compact.XXXXXX")
-SPEAKING_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-speaking.XXXXXX")
 "$APP_EXECUTABLE" \
     --user-data-dir="$EXPANDED_PROFILE" \
     --fixture "$SIDECAR_FIXTURE_SCENARIO" \
@@ -39,6 +35,7 @@ SPEAKING_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-speaking.XXXXXX")
     --fixture "$SIDECAR_FIXTURE_SCENARIO" \
     --compact \
     --capture-evidence "$SIDECAR_COMPACT_EVIDENCE_PATH"
+SPEAKING_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-speaking.XXXXXX")
 "$APP_EXECUTABLE" \
     --user-data-dir="$SPEAKING_PROFILE" \
     --fixture "$SIDECAR_FIXTURE_SCENARIO" \

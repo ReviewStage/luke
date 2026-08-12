@@ -98,6 +98,7 @@ let tray: Tray | undefined;
 let selectedDisplayId: number | undefined;
 let nativeScreens = new Map<number, NativeNotchGeometry>();
 let sessionRefreshTimer: NodeJS.Timeout | undefined;
+let collapseTimer: NodeJS.Timeout | undefined;
 let sessionRefreshRunning = false;
 let attentionReviewRunning = false;
 
@@ -141,20 +142,25 @@ function refreshNativeGeometry(): void {
   }
 }
 
-function positionPanel(animate = false): void {
+/**
+ * Resizes without AppKit's frame animation. An animated setBounds re-lays out
+ * the renderer at a new viewport width on every frame — and its duration scales
+ * with the distance moved, so a 482px growth ran far longer than the panel's
+ * own motion. The window now snaps to the size the mode needs and the renderer
+ * animates the capsule into the panel inside it, where the viewport is constant
+ * and the work stays on the compositor.
+ */
+function positionPanel(): void {
   if (!panelWindow || panelWindow.isDestroyed()) return;
   const display = selectedDisplay();
   selectedDisplayId = display.id;
   const layout = layoutFor(display);
-  panelWindow.setBounds(
-    {
-      x: layout.x,
-      y: layout.y,
-      width: layout.width,
-      height: layout.height,
-    },
-    animate && process.platform === "darwin" && !captureMode,
-  );
+  panelWindow.setBounds({
+    x: layout.x,
+    y: layout.y,
+    width: layout.width,
+    height: layout.height,
+  });
   panelWindow.webContents.send(channels.displayChanged, displayDiagnostic(display));
 }
 
@@ -182,14 +188,49 @@ function focusPanelWindow(): void {
   panelWindow.focus();
 }
 
+/**
+ * `--duration-exit` plus `--duration-collapse` in
+ * apps/desktop/src/renderer/styles/base.css: the content leaves, then the
+ * surface shrinks, and only then may the window follow.
+ */
+const COLLAPSE_ANIMATION_MS = 300;
+
+function collapseDelay(): number {
+  if (captureMode) return 0;
+  return systemPreferences.getAnimationSettings().prefersReducedMotion ? 0 : COLLAPSE_ANIMATION_MS;
+}
+
+/**
+ * The two directions are sequenced differently, and the ordering lives here so
+ * every caller gets it — the panel, the tray, and the motion recorder alike.
+ * Growing needs the window first, or the panel has nowhere to unfold into.
+ * Shrinking needs the capsule drawn first, or the window clips the panel out
+ * from under its own collapse.
+ */
 function setWindowMode(mode: WindowMode, requestFocus: boolean): WindowMode {
   windowMode = mode;
   if (!panelWindow || panelWindow.isDestroyed()) return windowMode;
 
   const expanded = mode === "expanded";
   panelWindow.setFocusable(expanded && !captureMode);
-  positionPanel(true);
-  panelWindow.webContents.send(channels.lifecycle, `mode:${mode}`);
+  if (collapseTimer) {
+    clearTimeout(collapseTimer);
+    collapseTimer = undefined;
+  }
+  if (expanded) {
+    positionPanel();
+    panelWindow.webContents.send(channels.lifecycle, `mode:${mode}`);
+  } else {
+    panelWindow.webContents.send(channels.lifecycle, `mode:${mode}`);
+    const delay = collapseDelay();
+    if (delay === 0) positionPanel();
+    else {
+      collapseTimer = setTimeout(() => {
+        collapseTimer = undefined;
+        if (windowMode === "compact") positionPanel();
+      }, delay);
+    }
+  }
 
   if (expanded && requestFocus && !captureMode) {
     focusPanelWindow();
@@ -425,7 +466,7 @@ function createPanel(): void {
       sandbox: true,
       webSecurity: true,
       devTools: !captureMode,
-      backgroundThrottling: true,
+      backgroundThrottling: false,
     },
   });
 
@@ -457,38 +498,40 @@ function createTrayImage(): Electron.NativeImage {
   return image;
 }
 
+function trayMenu(): Electron.Menu {
+  return Menu.buildFromTemplate([
+    {
+      label: "Show notch capsule",
+      click: () => setWindowMode("compact", false),
+    },
+    {
+      label: "Show expanded panel",
+      click: () => setWindowMode("expanded", true),
+    },
+    {
+      label: "Start microphone",
+      click: () => {
+        setWindowMode("expanded", true);
+        panelWindow?.webContents.send(channels.startMicrophone);
+      },
+    },
+    {
+      label: "Re-read display geometry",
+      click: () => {
+        refreshNativeGeometry();
+        positionPanel();
+      },
+    },
+    { type: "separator" },
+    { label: "Quit Luke", role: "quit" },
+  ]);
+}
+
 function createTray(): void {
   if (process.platform !== "darwin") return;
   tray = new Tray(createTrayImage());
   tray.setToolTip("Luke");
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      {
-        label: "Show notch capsule",
-        click: () => setWindowMode("compact", false),
-      },
-      {
-        label: "Show expanded panel",
-        click: () => setWindowMode("expanded", true),
-      },
-      {
-        label: "Start microphone",
-        click: () => {
-          setWindowMode("expanded", true);
-          panelWindow?.webContents.send(channels.startMicrophone);
-        },
-      },
-      {
-        label: "Re-read display geometry",
-        click: () => {
-          refreshNativeGeometry();
-          positionPanel();
-        },
-      },
-      { type: "separator" },
-      { label: "Quit Luke", role: "quit" },
-    ]),
-  );
+  tray.setContextMenu(trayMenu());
   tray.on("click", () => {
     setWindowMode(windowMode === "compact" ? "expanded" : "compact", true);
   });
@@ -557,6 +600,7 @@ if (!app.requestSingleInstanceLock()) {
 
 app.on("before-quit", () => {
   if (sessionRefreshTimer) clearInterval(sessionRefreshTimer);
+  if (collapseTimer) clearTimeout(collapseTimer);
 });
 
 app.on("window-all-closed", () => app.quit());

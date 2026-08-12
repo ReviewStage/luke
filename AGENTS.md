@@ -56,6 +56,19 @@ convenience; `./scripts/check.sh` and CI remain authoritative.
 - For Linear work, use its suggested branch name when available and the ticket
   ID as the scope: `feat(LUKE-123): add Codex support`.
 
+## Panel motion
+
+The window never animates its own frame: it snaps to the size a mode needs, and
+the renderer animates the black surface inside it. An animated `setBounds`
+re-lays out the whole renderer on every frame, because the panel is anchored to
+the viewport's centre. Everything layered on that surface must move with
+`transform` and `opacity` only — animating width, height, padding, or font-size
+on the wings, the count badge, or the rows re-shapes text on every frame and is
+what makes the transition stutter. `setWindowMode` owns the ordering for every
+caller: grow the window before the panel unfolds, and draw the capsule before
+the window shrinks to it. `COLLAPSE_ANIMATION_MS` is the sum of
+`--duration-exit` and `--duration-collapse`; the three move together.
+
 ## TypeScript value sets and keys
 
 - Do not use stringly typed fixed value sets. Define `as const`

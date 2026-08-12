@@ -1,0 +1,681 @@
+:root {
+  color-scheme: dark;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+  font-synthesis: none;
+  background: transparent;
+
+  --state-working: #5cd5ff;
+  --state-attention: #ffa049;
+  --state-complete: #6fdca4;
+  --state-idle: rgba(255, 255, 255, 0.44);
+
+  /* Provider brand colours, used only by the marks: Claude Code's published
+     coral, and the vertical gradient Codex draws its mark with. Session state
+     is carried by the chips, row tints, and count badge instead, so the two
+     colour systems never compete for the same pixel. */
+  --mark-claude-code: #d97757;
+  --mark-codex-top: #b1a7ff;
+  --mark-codex-middle: #7a9dff;
+  --mark-codex-bottom: #3941ff;
+
+  --text-primary: rgba(255, 255, 255, 0.95);
+  --text-secondary: rgba(255, 255, 255, 0.56);
+  --text-tertiary: rgba(255, 255, 255, 0.34);
+  --raised: rgba(255, 255, 255, 0.05);
+  --raised-strong: rgba(255, 255, 255, 0.09);
+  --hairline: rgba(255, 255, 255, 0.08);
+
+  /* One motion vocabulary. The black surface is the only thing that changes
+     size; everything layered on it moves with `transform` and `opacity` alone,
+     so a frame costs a composite rather than a relayout and a text re-shape.
+
+     Whichever direction it runs, the shape and its content must never cross:
+     content sits outside the capsule's footprint, so any overlap leaves it
+     drawn on the desktop. Expanding, the surface leads and the content follows
+     after `--expand-delay`. Collapsing, the content leaves first over
+     `--duration-exit` and the surface only starts shrinking once it has gone.
+     COLLAPSE_ANIMATION_MS in main.ts is the sum of the two collapse steps: the
+     window may not shrink until the capsule is all that is left. */
+  --motion-morph: cubic-bezier(0.32, 0.86, 0.28, 1);
+  --motion-exit: cubic-bezier(0.4, 0, 0.6, 1);
+  --duration-morph: 300ms;
+  --duration-collapse: 210ms;
+  --duration-exit: 90ms;
+  --duration-quick: 140ms;
+  --expand-delay: 120ms;
+  --row-stagger: 32ms;
+
+  --capsule-radius: 13px;
+  --panel-radius: 30px;
+  --wing-inset: 9px;
+  --panel-width: 620px;
+}
+
+.app-stage {
+  /* Mirrors compactSideWidth * 2 in packages/sidecar-core/src/geometry.ts, so
+     the drawn capsule matches the window the compact mode asks for. */
+  --capsule-width: calc(var(--notch-housing-width) + 72px);
+  --capsule-height: max(var(--notch-top-inset), 32px);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  /* `clip` rather than `hidden`: the expanded content keeps its 620x520 layout
+     box while the compact window is only ~38px, so `hidden` leaves a scroll
+     container that focus or scrollIntoView can drag the capsule out of. */
+  overflow: clip;
+  background: transparent;
+  user-select: none;
+}
+
+button {
+  border: 0;
+  color: inherit;
+  cursor: default;
+  font: inherit;
+}
+
+/* Any element that carries a session state gets its accent from one place. */
+[data-state="working"] {
+  --accent: var(--state-working);
+}
+[data-state="attention"] {
+  --accent: var(--state-attention);
+}
+[data-state="complete"] {
+  --accent: var(--state-complete);
+}
+[data-state="unknown"] {
+  --accent: var(--state-idle);
+}
+
+.app-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* The black surface is the whole animation: one leaf element with no children
+   and no text, so growing it costs a rounded-rect fill rather than a relayout
+   of the panel. It also ends where the content does, so a session arriving or
+   finishing stretches the panel instead of leaving a box the wrong size. */
+.panel-surface {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  left: 50%;
+  width: var(--capsule-width);
+  height: var(--capsule-height);
+  border-radius: 0 0 var(--capsule-radius) var(--capsule-radius);
+  background: #000;
+  transform: translateX(-50%);
+  /* Held back by `--duration-exit` so the shape never shrinks out from under
+     content that is still on screen. */
+  transition:
+    width var(--duration-collapse) var(--motion-morph) var(--duration-exit),
+    height var(--duration-collapse) var(--motion-morph) var(--duration-exit),
+    border-radius var(--duration-collapse) var(--motion-morph) var(--duration-exit);
+}
+
+.app-stage[data-mode="expanded"] .panel-surface {
+  width: var(--panel-width);
+  height: var(--panel-height, 520px);
+  border-radius: 0 0 var(--panel-radius) var(--panel-radius);
+  transition-duration: var(--duration-morph);
+  transition-delay: 0s;
+}
+
+.compact-stage {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+}
+
+.app-stage[data-mode="expanded"] .compact-stage {
+  pointer-events: none;
+}
+
+/* Tracks the drawn capsule rather than the window: the window stays expanded
+   until the collapse finishes, and the pixels beyond the capsule must not read
+   as a hover target in the meantime. */
+.compact-hover-target {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: var(--capsule-width);
+  height: var(--capsule-height);
+  transform: translateX(-50%);
+  -webkit-app-region: no-drag;
+}
+
+/* Notch wings ------------------------------------------------------------ */
+
+.wing {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  display: flex;
+  height: max(var(--notch-top-inset), 32px);
+  align-items: center;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.wing-left {
+  right: calc(50% + var(--notch-housing-width) / 2);
+  left: 0;
+  justify-content: flex-end;
+}
+
+.wing-right {
+  right: 0;
+  left: calc(50% + var(--notch-housing-width) / 2);
+  justify-content: flex-start;
+}
+
+.wing-inner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 var(--wing-inset);
+}
+
+/* Always laid out at its full width and simply clipped by the wing in compact
+   mode. Animating the width instead would reflow and re-shape this text on
+   every frame of the morph. */
+.wing-copy {
+  display: flex;
+  width: 138px;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 1px;
+  opacity: 0;
+  text-align: right;
+  transform: translateX(10px);
+  transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-collapse) var(--motion-morph);
+  white-space: nowrap;
+}
+
+.app-stage[data-mode="expanded"] .wing-copy {
+  opacity: 1;
+  transform: none;
+  transition-duration: var(--duration-quick), var(--duration-morph);
+  transition-delay: var(--expand-delay);
+}
+
+.wing-copy strong {
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 640;
+  letter-spacing: -0.1px;
+}
+
+.wing-copy small {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 9px;
+  text-overflow: ellipsis;
+}
+
+/* Reversed so the first provider — the one that needs a person soonest — is the
+   mark nearest the notch, and therefore the one the capsule keeps. The others
+   hold their place and only fade, so no mark ever moves during the morph. */
+.wing-marks {
+  display: flex;
+  height: 22px;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 7px;
+}
+
+.wing-mark {
+  display: flex;
+  align-items: center;
+  color: var(--text-secondary);
+}
+
+.wing-mark + .wing-mark {
+  opacity: 0;
+  transition: opacity var(--duration-exit) var(--motion-exit);
+}
+
+.app-stage[data-mode="expanded"] .wing-mark + .wing-mark {
+  opacity: 1;
+  transition-delay: var(--expand-delay);
+}
+
+.wing-marks-empty {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--state-idle);
+}
+
+.provider-mark {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+/* The two marks fill their 24-unit box very differently — the Claude Code glyph
+   is wide and short, the Codex mark is full-bleed — so each gets a uniform
+   scale to sit at the same optical weight. Proportions are untouched. */
+.provider-mark[data-mark="claude-code"] {
+  color: var(--mark-claude-code);
+  transform: scale(1.12);
+}
+
+.provider-mark[data-mark="codex"] {
+  transform: scale(0.94);
+}
+
+/* Session count ---------------------------------------------------------- */
+
+.count-badge {
+  position: relative;
+  display: flex;
+  min-width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 26%, transparent);
+  color: var(--accent);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  /* One fixed box that scales. Growing it by animating height, padding and
+     font-size relaid out and re-rastered the number on every frame; a scale
+     from the notch edge is a single composited transform. */
+  transform: scale(0.8);
+  transform-origin: left center;
+  transition:
+    transform var(--duration-collapse) var(--motion-morph),
+    background-color var(--duration-morph) ease,
+    box-shadow var(--duration-morph) ease;
+  will-change: transform;
+}
+
+.count-badge[data-state="attention"] {
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 42%, transparent),
+    0 0 14px color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+.count-badge[data-empty="true"] {
+  color: var(--text-tertiary);
+}
+
+.app-stage[data-mode="expanded"] .count-badge {
+  transform: scale(1);
+  transition-duration: var(--duration-morph);
+}
+
+/* Out of flow beside the badge, so revealing it never changes the badge's box
+   and the capsule simply clips it. */
+.count-caption {
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  margin-left: 9px;
+  color: var(--text-secondary);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  opacity: 0;
+  text-transform: uppercase;
+  transform: translate(-8px, -50%);
+  transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-collapse) var(--motion-morph);
+  white-space: nowrap;
+}
+
+.app-stage[data-mode="expanded"] .count-caption {
+  opacity: 1;
+  transform: translate(0, -50%);
+  transition-duration: var(--duration-quick), var(--duration-morph);
+  transition-delay: var(--expand-delay);
+}
+
+/* Waveform --------------------------------------------------------------- */
+
+.waveform {
+  display: flex;
+  width: 28px;
+  height: 22px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  opacity: 0;
+  transform: scale(0.82);
+  transition:
+    opacity 120ms ease,
+    transform 160ms ease;
+}
+
+.waveform[data-speaking="true"] {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.waveform-bar {
+  width: 2px;
+  height: var(--bar-height, 19px);
+  border-radius: 999px;
+  background: var(--state-working);
+  transform: scaleY(0.2);
+  transform-origin: center;
+  transition: transform 90ms linear;
+}
+
+.waveform-bar:nth-child(1),
+.waveform-bar:nth-child(7) {
+  --bar-height: 9px;
+}
+.waveform-bar:nth-child(2),
+.waveform-bar:nth-child(6) {
+  --bar-height: 13px;
+}
+.waveform-bar:nth-child(3),
+.waveform-bar:nth-child(5) {
+  --bar-height: 18px;
+}
+.waveform-bar:nth-child(4) {
+  --bar-height: 23px;
+}
+
+/* Expanded panel --------------------------------------------------------- */
+
+.expanded-stage {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: 50%;
+  width: 620px;
+  max-height: 520px;
+  opacity: 0;
+  /* Hidden outright the moment it finishes fading, so a collapsing panel cannot
+     be left as raster the compositor might re-present while the window resizes.
+     The stage spans the whole window; only the panel inside it is a target, so
+     the transparent area below a short panel stays click-through. */
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(-10px);
+  transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-collapse) var(--motion-morph),
+    visibility 0s linear var(--duration-exit);
+  will-change: opacity, transform;
+}
+
+.app-stage[data-mode="expanded"] .expanded-stage {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+  transition:
+    opacity var(--duration-quick) var(--motion-exit) var(--expand-delay),
+    transform var(--duration-morph) var(--motion-morph) var(--expand-delay),
+    visibility 0s linear var(--expand-delay);
+}
+
+.expanded-panel {
+  display: flex;
+  max-height: 520px;
+  flex-direction: column;
+  padding: calc(max(var(--notch-top-inset), 32px) + 14px) 20px 18px;
+}
+
+.app-stage[data-mode="expanded"] .expanded-panel {
+  pointer-events: auto;
+}
+
+.body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Tabs ------------------------------------------------------------------- */
+
+.tab-bar {
+  position: relative;
+  display: flex;
+  width: calc(var(--tab-count) * 92px);
+  flex: 0 0 auto;
+  padding: 3px;
+  border-radius: 11px;
+  background: var(--raised);
+}
+
+.tab-thumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc((100% - 6px) / var(--tab-count));
+  border-radius: 8px;
+  background: var(--raised-strong);
+  transform: translateX(calc(var(--tab-index) * 100%));
+  transition: transform var(--duration-quick) var(--motion-morph);
+}
+
+.tab {
+  position: relative;
+  flex: 1;
+  padding: 6px 0;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 620;
+  transition: color var(--duration-quick) ease;
+}
+
+.tab[data-active="true"] {
+  color: var(--text-primary);
+}
+
+/* Session primitives ----------------------------------------------------- */
+
+.state-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  color: var(--accent);
+  font-size: 9.5px;
+  font-weight: 660;
+  letter-spacing: 0.1px;
+  white-space: nowrap;
+}
+
+.state-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentcolor;
+}
+
+.empty-state {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 34px 0;
+  text-align: center;
+}
+
+.empty-state strong {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.empty-state small {
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+
+/* Rows fade in behind the surface instead of arriving with it. */
+.session-row {
+  opacity: 0;
+  transform: translateY(6px);
+  transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-morph) var(--motion-morph);
+}
+
+.app-stage[data-mode="expanded"] .session-row {
+  opacity: 1;
+  transform: none;
+  transition-delay: calc(var(--expand-delay) + var(--row-index, 0) * var(--row-stagger));
+}
+
+/* Settings --------------------------------------------------------------- */
+
+/* Scrolls on the same terms as the session list: contained, never chaining out
+   to the root, with the tab bar left outside the scrolling box. */
+.settings {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  overflow-x: clip;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-width: thin;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 13px 15px;
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.022);
+}
+
+.settings-section h2 {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.settings-copy strong {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.settings-copy small {
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+
+.action-button,
+.quiet-button {
+  padding: 8px 13px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 640;
+  transition:
+    background-color var(--duration-quick) ease,
+    color var(--duration-quick) ease;
+  white-space: nowrap;
+}
+
+.action-button {
+  background: color-mix(in srgb, var(--state-working) 15%, transparent);
+  color: var(--state-working);
+}
+
+.action-button:hover {
+  background: color-mix(in srgb, var(--state-working) 22%, transparent);
+}
+
+.quiet-button {
+  background: var(--raised);
+  color: var(--text-secondary);
+}
+
+.quiet-button:hover {
+  background: var(--raised-strong);
+  color: var(--text-primary);
+}
+
+.error-message {
+  margin: 0;
+  color: #ff8c8c;
+  font-size: 10px;
+}
+
+/* Evidence capture screenshots a fixed moment after the renderer reports ready.
+   The panel's height is only known once it has been measured, so without this a
+   capture could land mid-transition and the PNGs would stop being reproducible.
+   Zeroing the tokens every transition is written in terms of is enough — no
+   rule has to be overridden. */
+.app-stage[data-capture="true"] {
+  --duration-morph: 0s;
+  --duration-collapse: 0s;
+  --duration-exit: 0s;
+  --duration-quick: 0s;
+  --expand-delay: 0s;
+  --row-stagger: 0s;
+}
+
+/* COLLAPSE_ANIMATION_MS in app.tsx drops to zero under the same query, so the
+   window still waits for the capsule rather than shrinking under the panel. */
+@media (prefers-reduced-motion: reduce) {
+  .panel-surface,
+  .expanded-stage,
+  .wing-copy,
+  .wing-mark + .wing-mark,
+  .count-badge,
+  .count-caption,
+  .tab-thumb,
+  .waveform,
+  .session-row {
+    transition-duration: 1ms;
+    transition-delay: 0ms;
+  }
+}

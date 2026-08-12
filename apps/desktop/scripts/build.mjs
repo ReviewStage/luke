@@ -34,6 +34,17 @@ await Promise.all([
     logLevel: "info",
   }),
   build({
+    // The stylesheet entry `@import`s the renderer's stylesheets; esbuild
+    // inlines them into the single `styles.css` the renderer HTML links.
+    entryPoints: [path.join(appRoot, "src/renderer/styles/index.css")],
+    outfile: path.join(outputRoot, "renderer/styles.css"),
+    bundle: true,
+    target: "chrome140",
+    minify: true,
+    sourcemap: true,
+    logLevel: "info",
+  }),
+  build({
     entryPoints: [path.join(appRoot, "src/renderer/index.tsx")],
     outfile: path.join(outputRoot, "renderer/renderer.js"),
     bundle: true,
@@ -50,13 +61,7 @@ await Promise.all([
   }),
 ]);
 
-await Promise.all([
-  fs.copyFile(
-    path.join(appRoot, "src/renderer/index.html"),
-    path.join(outputRoot, "renderer/index.html"),
-  ),
-  fs.copyFile(
-    path.join(appRoot, "src/renderer/styles.css"),
-    path.join(outputRoot, "renderer/styles.css"),
-  ),
-]);
+await fs.copyFile(
+  path.join(appRoot, "src/renderer/index.html"),
+  path.join(outputRoot, "renderer/index.html"),
+);
