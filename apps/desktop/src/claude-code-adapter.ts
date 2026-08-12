@@ -27,6 +27,10 @@ const CLAUDE_EVENT_TYPE = {
 
 type ClaudeEventType = (typeof CLAUDE_EVENT_TYPE)[keyof typeof CLAUDE_EVENT_TYPE];
 
+const CLAUDE_CONTENT_TYPE = {
+  TOOL_USE: "tool_use",
+} as const;
+
 const CLAUDE_ADAPTER_DEFAULTS = {
   MAXIMUM_PROJECT_DIRECTORIES: 200,
   MAXIMUM_SESSION_FILES: 40,
@@ -57,6 +61,7 @@ interface SessionFileCandidate {
 }
 
 interface ParsedClaudeSessionTail {
+  assistantUsedTool?: boolean;
   cwd?: string;
   eventType?: ClaudeEventType;
   timestampMs?: number;
@@ -205,6 +210,22 @@ function eventTypeFromRecord(record: Record<string, unknown>): ClaudeEventType |
     : undefined;
 }
 
+function containsToolUseMarker(value: unknown, depth = 0): boolean {
+  if (depth > 4 || value === null || typeof value !== "object") return false;
+  if (
+    !Array.isArray(value) &&
+    "type" in value &&
+    (value as Record<string, unknown>).type === CLAUDE_CONTENT_TYPE.TOOL_USE
+  ) {
+    return true;
+  }
+  return Object.values(value).some((nestedValue) => containsToolUseMarker(nestedValue, depth + 1));
+}
+
+function assistantUsedTool(record: Record<string, unknown>): boolean {
+  return containsToolUseMarker(record.message) || containsToolUseMarker(record.content);
+}
+
 function timestampFromRecord(record: Record<string, unknown>): number | undefined {
   const timestamp = record.timestamp;
   if (typeof timestamp !== "string") return undefined;
@@ -224,7 +245,11 @@ function parseClaudeSessionTail(tail: string): ParsedClaudeSessionTail {
     if (!record) continue;
     parsed.cwd = cwdFromRecord(record) ?? parsed.cwd;
     parsed.timestampMs = timestampFromRecord(record) ?? parsed.timestampMs;
-    parsed.eventType = eventTypeFromRecord(record) ?? parsed.eventType;
+    const eventType = eventTypeFromRecord(record);
+    if (!eventType) continue;
+    parsed.eventType = eventType;
+    parsed.assistantUsedTool =
+      eventType === CLAUDE_EVENT_TYPE.ASSISTANT ? assistantUsedTool(record) : false;
   }
   return parsed;
 }
@@ -238,12 +263,13 @@ function statusFromTail(
   const isFresh = now - observedAt <= activeSessionFreshnessMs;
   if (parsed.eventType === CLAUDE_EVENT_TYPE.RESULT) return SESSION_STATUS.COMPLETE;
   if (parsed.eventType === CLAUDE_EVENT_TYPE.ASSISTANT) {
+    if (parsed.assistantUsedTool) return isFresh ? SESSION_STATUS.WORKING : SESSION_STATUS.UNKNOWN;
     return isFresh ? SESSION_STATUS.WAITING : SESSION_STATUS.UNKNOWN;
   }
   if (parsed.eventType === CLAUDE_EVENT_TYPE.USER) {
     return isFresh ? SESSION_STATUS.WORKING : SESSION_STATUS.UNKNOWN;
   }
-  return SESSION_STATUS.UNKNOWN;
+  return isFresh ? SESSION_STATUS.WORKING : SESSION_STATUS.UNKNOWN;
 }
 
 function workspaceLabel(cwd: string | undefined): string {

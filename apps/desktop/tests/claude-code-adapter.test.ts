@@ -15,6 +15,10 @@ const TEST_CLAUDE_EVENT_TYPE = {
   SYSTEM: "system",
   USER: "user",
 } as const;
+const TEST_CLAUDE_CONTENT_TYPE = {
+  TOOL_RESULT: "tool_result",
+  TOOL_USE: "tool_use",
+} as const;
 
 async function temporaryClaudeHome(t: TestContext): Promise<string> {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "luke-claude-code-"));
@@ -164,6 +168,86 @@ test("ignores trailing system records when finding Claude session status", async
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
+});
+
+test("treats fresh assistant tool use as active work", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-tool",
+    "tool-use",
+    [
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
+        cwd: "/Users/test/tool",
+        timestamp: "2026-08-11T23:44:55.000Z",
+        message: {
+          content: [
+            {
+              type: TEST_CLAUDE_CONTENT_TYPE.TOOL_USE,
+              name: "Read",
+            },
+          ],
+        },
+      },
+    ],
+    TEST_TIME - 1_000,
+  );
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const observations = await adapter.observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
+});
+
+test("keeps fresh sessions active when a large tail has no complete status event", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-large-tail",
+    "large-tail",
+    [
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
+        cwd: "/Users/test/large-tail",
+        timestamp: "2026-08-11T23:44:55.000Z",
+        message: {
+          content: [
+            {
+              type: TEST_CLAUDE_CONTENT_TYPE.TOOL_USE,
+              name: "Read",
+            },
+          ],
+        },
+      },
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.USER,
+        cwd: "/Users/test/large-tail",
+        timestamp: "2026-08-11T23:44:58.000Z",
+        toolUseResult: {
+          type: TEST_CLAUDE_CONTENT_TYPE.TOOL_RESULT,
+          content: "x".repeat(512),
+        },
+      },
+    ],
+    TEST_TIME - 1_000,
+  );
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+    readTailBytes: 128,
+  });
+  const observations = await adapter.observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
 });
 
 test("filters old sessions and preserves the newest duplicate provider id", async (t) => {
