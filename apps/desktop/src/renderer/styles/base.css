@@ -336,10 +336,13 @@ button:disabled {
 }
 
 /* A keyboard can reach this control, and focus it cannot see is worse than a
-   ring: `:focus-visible` draws for the keyboard and never for a press. The ring
-   is inset, because an outline outside this box would be drawn on the desktop
-   above the shape. */
-.compact-hover-target:focus-visible {
+   ring — but the ring belongs to the keyboard alone. `:focus-visible` is not
+   enough on its own: it is a guess about how focus arrived, and the panel takes
+   focus programmatically when it opens, which the engine reads as keyboard
+   modality and rings a plain press. The flag on the root says the keyboard was
+   actually used. The ring is inset, because an outline outside this box would
+   be drawn on the desktop above the shape. */
+html[data-keyboard="true"] .compact-hover-target:focus-visible {
   border-radius: var(--notch-convex-radius);
   outline: 2px solid var(--state-working);
   outline-offset: -4px;

@@ -274,12 +274,42 @@ export function App(): React.JSX.Element {
   );
 
   /** The capsule is a button: pressing it opens the panel, or closes it again. */
-  const handleCapsulePress = useCallback(() => {
-    cancelHoverTransition();
-    void changeMode(presentationRef.current !== PANEL_PRESENTATION.PANEL);
-  }, [cancelHoverTransition, changeMode]);
+  const handleCapsulePress = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      // A press is a gesture, not a focus change, so the pointer hands focus
+      // back. `detail` is 0 when the keyboard activated the button, and there
+      // the focus is the point and stays where the keyboard put it.
+      if (event.detail > 0) event.currentTarget.blur();
+      cancelHoverTransition();
+      void changeMode(presentationRef.current !== PANEL_PRESENTATION.PANEL);
+    },
+    [cancelHoverTransition, changeMode],
+  );
 
   usePointerPassthrough(handleHitRegionEnter, handleHitRegionLeave);
+
+  // `:focus-visible` is a heuristic about how focus arrived, and here it guesses
+  // wrong: the panel takes focus programmatically when it opens, which the
+  // engine can read as keyboard modality and ring the capsule after a plain
+  // press — most reliably the first time the window is ever focused. Modality
+  // is tracked outright instead, so a ring is drawn only once someone has
+  // actually moved focus with the keyboard.
+  useEffect(() => {
+    const root = document.documentElement;
+    const keyboardMoved = (event: KeyboardEvent) => {
+      if (event.key === "Tab" || event.key.startsWith("Arrow")) root.dataset.keyboard = "true";
+    };
+    const pointerUsed = () => {
+      delete root.dataset.keyboard;
+    };
+    // Capture: the flag has to be right before anything reacts to the event.
+    window.addEventListener("keydown", keyboardMoved, true);
+    window.addEventListener("pointerdown", pointerUsed, true);
+    return () => {
+      window.removeEventListener("keydown", keyboardMoved, true);
+      window.removeEventListener("pointerdown", pointerUsed, true);
+    };
+  }, []);
 
   useEffect(() => {
     const bootstrapGeneration = modeGeneration.current;
