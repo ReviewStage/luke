@@ -44,17 +44,13 @@ convenience; `./scripts/check.sh` and CI remain authoritative.
 
 ## Git workflow
 
-- Follow the [Conventional Commits 1.0.0
-  specification](https://www.conventionalcommits.org/en/v1.0.0/) for commit
-  messages.
-- Name pull requests using the `type[(optional scope)]: description` format,
-  choosing the Conventional Commit type that matches the change, such as
-  `feat`, `fix`, `docs`, or `chore`. Start the description with a lowercase
-  letter; use normal capitalization elsewhere for names such as Electron and
-  Codex.
-- When work has an associated Linear ticket, use Linear's suggested branch name
-  when available and use the ticket ID as the pull request scope, for example
-  `feat(LINEAR-TICKET-ID): add Codex support`.
+- Follow [Conventional Commits
+  1.0.0](https://www.conventionalcommits.org/en/v1.0.0/) for commit messages.
+- Format PR titles as `type[(scope)]: description`, using the matching type
+  (`feat`, `fix`, `docs`, `chore`, etc.). Start the description lowercase, but
+  capitalize proper names normally (`Electron`, `Codex`).
+- For Linear work, use its suggested branch name when available and the ticket
+  ID as the scope: `feat(LUKE-123): add Codex support`.
 
 ## TypeScript value sets and keys
 
