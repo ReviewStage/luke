@@ -197,6 +197,25 @@ button {
   background: #000;
 }
 
+/* The one scroll container in the app. The root stays `overflow: clip` so a
+   focus or scrollIntoView can never drag the notch capsule out of view; this
+   keeps that guarantee while letting a long session list scroll instead of
+   being silently cut off.
+   `min-height: 0` is what actually permits it: a flex child defaults to its
+   content size and would otherwise push the footer past the panel. */
+.panel-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  overflow-x: clip;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-width: thin;
+}
+
 .panel-header,
 .summary-row,
 .panel-footer,
@@ -204,6 +223,11 @@ button {
 .diagnostics {
   display: flex;
   align-items: center;
+}
+
+.panel-header,
+.panel-footer {
+  flex: none;
 }
 
 .panel-header,
@@ -278,15 +302,18 @@ h1 {
 
 .session-list {
   display: flex;
-  flex: 1;
+  flex: none;
   flex-direction: column;
   gap: 8px;
 }
 
+/* Rows take their natural height rather than sharing the panel between them.
+   Stretching was fine when the list owned all the leftover space; inside a
+   scrolling body it would make three sessions look different from ten. */
 .session-row {
   display: flex;
   min-height: 62px;
-  flex: 1;
+  flex: none;
   align-items: center;
   gap: 13px;
   padding: 0 15px;

@@ -438,34 +438,40 @@ function App(): React.JSX.Element {
             </div>
           </header>
 
-          <div className="summary-row">
-            <div>
-              <p className="eyebrow">Notch sidecar</p>
-              <h1>Agent activity</h1>
-              <p className="subtle">
-                {bootstrap.fixtureMode
-                  ? "Synthetic sessions · no credentials or live transcripts"
-                  : "Live sessions · no credentials or transcripts retained"}
-              </p>
+          {/* The panel is a fixed 620x520 box, so the body is the one region
+              allowed to scroll. Keeping the header and footer outside it means
+              the microphone state and the controls that act on it can never be
+              pushed off screen by a long session list. */}
+          <div className="panel-body">
+            <div className="summary-row">
+              <div>
+                <p className="eyebrow">Notch sidecar</p>
+                <h1>Agent activity</h1>
+                <p className="subtle">
+                  {bootstrap.fixtureMode
+                    ? "Synthetic sessions · no credentials or live transcripts"
+                    : "Live sessions · no credentials or transcripts retained"}
+                </p>
+              </div>
+              <span className="fixture-badge">
+                {hasLiveSessions ? "LIVE" : bootstrap.fixtureMode ? "FIXTURE · SMOKE" : "IDLE"}
+              </span>
             </div>
-            <span className="fixture-badge">
-              {hasLiveSessions ? "LIVE" : bootstrap.fixtureMode ? "FIXTURE · SMOKE" : "IDLE"}
-            </span>
-          </div>
 
-          <div className="session-list">
-            {visibleSessions.map((item) => (
-              <article className="session-row" key={item.id}>
-                <span className={`status-mark ${item.state}`} />
-                <span className="session-copy">
-                  <strong>{item.title}</strong>
-                  <small>
-                    {item.provider} · {item.detail}
-                  </small>
-                </span>
-                <span className={`session-status ${item.state}`}>{item.label}</span>
-              </article>
-            ))}
+            <div className="session-list">
+              {visibleSessions.map((item) => (
+                <article className="session-row" key={item.id}>
+                  <span className={`status-mark ${item.state}`} />
+                  <span className="session-copy">
+                    <strong>{item.title}</strong>
+                    <small>
+                      {item.provider} · {item.detail}
+                    </small>
+                  </span>
+                  <span className={`session-status ${item.state}`}>{item.label}</span>
+                </article>
+              ))}
+            </div>
           </div>
 
           <footer className="panel-footer">
