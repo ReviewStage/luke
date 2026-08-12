@@ -6,6 +6,7 @@ import {
   InMemorySessionRegistry,
   type NativeNotchGeometry,
   positionNotchWindow,
+  SessionAttentionReviewer,
 } from "@sidecar/core";
 import {
   app,
@@ -25,6 +26,7 @@ import {
 import { ClaudeCodeSessionAdapter } from "./claude-code-adapter";
 import { CodexSessionAdapter } from "./codex-adapter";
 import { readMacScreenGeometry } from "./macos-screen-geometry";
+import { openAiAttentionEvaluatorFromEnvironment } from "./openai-attention-evaluator";
 import {
   type AppBootstrap,
   channels,
@@ -44,6 +46,15 @@ const fixtureMode = captureMode || fixtureName !== undefined;
 const SESSION_REFRESH_INTERVAL_MS = 5_000;
 const sessionRegistry = new InMemorySessionRegistry();
 const sessionAdapters = [new ClaudeCodeSessionAdapter(), new CodexSessionAdapter()] as const;
+// A fixture run must stay deterministic and credential-free, so it never builds
+// an evaluator — not just capture runs.
+const attentionEvaluator = fixtureMode ? undefined : openAiAttentionEvaluatorFromEnvironment();
+const attentionReviewer = attentionEvaluator
+  ? new SessionAttentionReviewer({
+      evaluator: attentionEvaluator,
+      currentSession: (identity) => sessionRegistry.get(identity),
+    })
+  : undefined;
 let windowMode: WindowMode = captureMode
   ? process.argv.includes("--compact")
     ? "compact"
@@ -57,6 +68,7 @@ let selectedDisplayId: number | undefined;
 let nativeScreens = new Map<number, NativeNotchGeometry>();
 let sessionRefreshTimer: NodeJS.Timeout | undefined;
 let sessionRefreshRunning = false;
+let attentionReviewRunning = false;
 
 function argumentValue(name: string): string | undefined {
   const index = process.argv.indexOf(name);
@@ -237,6 +249,24 @@ async function refreshProviderSessions(): Promise<void> {
     process.stderr.write(`Session observation failed: ${message}\n`);
   } finally {
     sessionRefreshRunning = false;
+  }
+  // Attention review runs outside the observation guard so a slow model call
+  // never delays the next provider snapshot.
+  void reviewSessionAttention();
+}
+
+async function reviewSessionAttention(): Promise<void> {
+  if (!attentionReviewer || attentionReviewRunning) return;
+  attentionReviewRunning = true;
+  try {
+    for (const review of await attentionReviewer.review(sessionRegistry.list())) {
+      sessionRegistry.setAttention(review, review.decision);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`Attention review failed: ${message}\n`);
+  } finally {
+    attentionReviewRunning = false;
   }
 }
 
