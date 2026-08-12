@@ -48,6 +48,8 @@ export interface DisplayDiagnostic {
 
 export interface AppBootstrap {
   mode: WindowMode;
+  /** Capture-only: start drawn as the peek, which normally needs a pointer. */
+  startPeeked: boolean;
   profile: string;
   fixture: FixtureSnapshot;
   captureMode: boolean;
@@ -66,7 +68,7 @@ export interface AppBootstrap {
 
 export interface AppBridge {
   getBootstrap(): Promise<AppBootstrap>;
-  setExpanded(expanded: boolean): Promise<WindowMode>;
+  setExpanded(expanded: boolean, focus?: boolean): Promise<WindowMode>;
   setPointerInterception(interceptsPointer: boolean): void;
   requestMicrophone(): Promise<MicrophoneStatus>;
   setProviderApiKey(

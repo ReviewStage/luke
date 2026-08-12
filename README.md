@@ -50,24 +50,36 @@ panel instead of starting a new one.
 `artifacts/evidence/app-smoke-compact.png`, and
 `artifacts/evidence/app-smoke-speaking.png`.
 
-## The panel
+## The capsule, the peek, and the panel
 
-Hovering the capsule opens a panel of full-width rows, one session per line:
-provider mark, title, what it is doing, and a state chip. A **Settings** tab
-holds microphone access and Quit. Sessions are ordered by how much they need a
-person, so whatever is waiting on you is always the top row.
+The surface has three sizes and they are all the same black shape:
 
-Both window modes share one notch-anchored header: the count of tracked sessions
-sits to the right of the camera housing and the provider marks and speech meter
-sit to its left, in the same place in the capsule and in the panel, so expanding
-unfolds the captions around them instead of redrawing the surface.
+- **Capsule** — at rest beside the camera housing: the mark of the provider that
+  needs you soonest, and the count of tracked sessions.
+- **Peek** — under the pointer. The capsule widens on a spring and says what the
+  count means: what Luke is watching on the left, `2 need you` on the right.
+  This is the affordance; nothing is committed by hovering.
+- **Panel** — on a press. Full-width rows, one session per line: provider mark,
+  title, what it is doing, a state chip. A **Settings** tab holds microphone
+  access and Quit. Press the capsule again, or Escape, to close it; moving the
+  pointer well away closes it too, after long enough not to feel twitchy.
 
-The window never animates its own frame — it snaps to the size a mode needs and
-the renderer morphs the black surface inside it, which keeps the motion on the
-compositor. Expanding, the surface grows and the content follows it in;
-collapsing, the content leaves first and the surface closes behind it, so
-nothing is ever drawn outside the black shape. The surface ends where the
-content does, so a session arriving or finishing resizes the panel.
+Sessions are ordered by how much they need a person, so whatever is waiting on
+you is the top row and the mark the capsule keeps.
+
+The header is anchored to the notch, not to a state: the count sits to the right
+of the housing and the provider marks and speech meter to its left, in the same
+place in all three. Growing only unfolds captions around them.
+
+The window is a stage, never the shape. It snaps to the size a state needs and
+the renderer animates the surface inside it, so the motion stays on the
+compositor — and because a compact window is already wide enough to hold the
+peek, hovering never touches the main process at all. Growing, the surface leads
+and the content follows it in; shrinking, the content leaves first and the
+surface closes behind it, so nothing is ever drawn outside the black. The
+shapes move on sampled damped springs and the window carries slack on every side
+for them to overshoot into. The surface also ends where the content does, so a
+session arriving or finishing resizes the panel.
 
 ## Provider marks
 

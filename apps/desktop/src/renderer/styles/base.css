@@ -30,32 +30,102 @@
      so a frame costs a composite rather than a relayout and a text re-shape.
 
      Whichever direction it runs, the shape and its content must never cross:
-     content sits outside the capsule's footprint, so any overlap leaves it
-     drawn on the desktop. Expanding, the surface leads and the content follows
-     after `--expand-delay`. Collapsing, the content leaves first over
-     `--duration-exit` and the surface only starts shrinking once it has gone.
-     COLLAPSE_ANIMATION_MS in main.ts is the sum of the two collapse steps: the
-     window may not shrink until the capsule is all that is left. */
+     content sits outside the shape it belongs to, so any overlap leaves it
+     drawn on the desktop. Growing, the surface leads and the content follows.
+     Shrinking, the content leaves first over `--duration-exit` and the surface
+     only starts closing once it has gone. COLLAPSE_ANIMATION_MS in main.ts is
+     the sum of those two steps: the window may not shrink back until the
+     capsule is all that is left.
+
+     Sampled damped springs rather than eased curves: the overshoot is what
+     makes the shape read as a physical object being nudged rather than a box
+     being resized. `--spring-peek` is loose and quick because the move is
+     small; `--spring-panel` is far more damped because a 620px surface that
+     wobbles looks broken rather than lively. The window carries
+     SPRING_OVERSHOOT_ALLOWANCE either side so neither can clip. */
+  --spring-peek: linear(
+    0,
+    0.026,
+    0.0934,
+    0.1884,
+    0.2991,
+    0.4161,
+    0.5318,
+    0.6409,
+    0.7398,
+    0.8261,
+    0.8988,
+    0.9578,
+    1.0038,
+    1.0377,
+    1.061,
+    1.0754,
+    1.0823,
+    1.0833,
+    1.08,
+    1.0736,
+    1.0651,
+    1.0557,
+    1.0459,
+    1.0363,
+    1.0274,
+    1.0195,
+    1
+  );
+  --spring-panel: linear(
+    0,
+    0.0285,
+    0.0993,
+    0.1943,
+    0.3005,
+    0.4083,
+    0.5115,
+    0.6061,
+    0.69,
+    0.7623,
+    0.8229,
+    0.8727,
+    0.9125,
+    0.9437,
+    0.9674,
+    0.9848,
+    0.9972,
+    1.0056,
+    1.0109,
+    1.0138,
+    1.015,
+    1.015,
+    1.0142,
+    1.0129,
+    1.0114,
+    1.0098,
+    1
+  );
   --motion-morph: cubic-bezier(0.32, 0.86, 0.28, 1);
   --motion-exit: cubic-bezier(0.4, 0, 0.6, 1);
-  --duration-morph: 300ms;
-  --duration-collapse: 210ms;
+  --duration-peek: 320ms;
+  --duration-panel: 460ms;
+  --duration-collapse: 260ms;
   --duration-exit: 90ms;
   --duration-quick: 140ms;
-  --expand-delay: 120ms;
+  --expand-delay: 150ms;
+  --peek-delay: 60ms;
   --row-stagger: 32ms;
 
   --capsule-radius: 13px;
+  --peek-radius: 19px;
   --panel-radius: 30px;
   --wing-inset: 9px;
   --panel-width: 620px;
 }
 
 .app-stage {
-  /* Mirrors compactSideWidth * 2 in packages/sidecar-core/src/geometry.ts, so
-     the drawn capsule matches the window the compact mode asks for. */
+  /* Mirrors CAPSULE_SIDE_WIDTH and PEEK_SIDE_GROWTH in
+     packages/sidecar-core/src/geometry.ts, so the drawn shapes match the window
+     the main process gives them. */
   --capsule-width: calc(var(--notch-housing-width) + 72px);
   --capsule-height: max(var(--notch-top-inset), 32px);
+  --peek-width: calc(var(--notch-housing-width) + 248px);
 }
 
 * {
@@ -125,11 +195,22 @@ button {
     border-radius var(--duration-collapse) var(--motion-morph) var(--duration-exit);
 }
 
-.app-stage[data-mode="expanded"] .panel-surface {
+/* Under the pointer: wide enough to say what the count means, on a spring
+   loose enough that the capsule reads as something you can press. */
+.app-stage[data-presentation="peek"] .panel-surface {
+  width: var(--peek-width);
+  border-radius: 0 0 var(--peek-radius) var(--peek-radius);
+  transition-duration: var(--duration-peek);
+  transition-timing-function: var(--spring-peek);
+  transition-delay: 0s;
+}
+
+.app-stage[data-presentation="panel"] .panel-surface {
   width: var(--panel-width);
   height: var(--panel-height, 520px);
   border-radius: 0 0 var(--panel-radius) var(--panel-radius);
-  transition-duration: var(--duration-morph);
+  transition-duration: var(--duration-panel);
+  transition-timing-function: var(--spring-panel);
   transition-delay: 0s;
 }
 
@@ -139,21 +220,37 @@ button {
   inset: 0;
 }
 
-.app-stage[data-mode="expanded"] .compact-stage {
+.app-stage[data-presentation="panel"] .compact-stage {
   pointer-events: none;
 }
 
-/* Tracks the drawn capsule rather than the window: the window stays expanded
-   until the collapse finishes, and the pixels beyond the capsule must not read
-   as a hover target in the meantime. */
+/* Tracks the drawn shape rather than the window, which is always larger than
+   the capsule: everything the shape does not cover has to stay click-through.
+   It snaps rather than animating, so the wider peek is live from the first
+   frame and the pointer cannot fall out of a region that is still growing. */
 .compact-hover-target {
   position: absolute;
   top: 0;
   left: 50%;
   width: var(--capsule-width);
   height: var(--capsule-height);
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: default;
   transform: translateX(-50%);
   -webkit-app-region: no-drag;
+}
+
+.app-stage[data-presentation="peek"] .compact-hover-target {
+  width: var(--peek-width);
+}
+
+/* The capsule strip keeps taking clicks over an open panel: pressing it is how
+   the panel closes again, and nothing interactive sits under it. */
+.app-stage[data-presentation="panel"] .compact-hover-target {
+  height: max(var(--notch-top-inset), 32px);
+  pointer-events: auto;
 }
 
 /* Notch wings ------------------------------------------------------------ */
@@ -169,14 +266,18 @@ button {
   pointer-events: none;
 }
 
+/* Bounded by the peek rather than the window. A compact window is wider than
+   the capsule so the peek needs no resize, so clipping to the window would let
+   captions spill onto the desktop; clipping to the widest shape they can
+   appear in keeps them inside the black in every state. */
 .wing-left {
   right: calc(50% + var(--notch-housing-width) / 2);
-  left: 0;
+  left: calc(50% - var(--peek-width) / 2);
   justify-content: flex-end;
 }
 
 .wing-right {
-  right: 0;
+  right: calc(50% - var(--peek-width) / 2);
   left: calc(50% + var(--notch-housing-width) / 2);
   justify-content: flex-start;
 }
@@ -191,25 +292,41 @@ button {
 /* Always laid out at its full width and simply clipped by the wing in compact
    mode. Animating the width instead would reflow and re-shape this text on
    every frame of the morph. */
+/* Laid out once at its natural width and revealed a line at a time: the label
+   arrives with the peek, the provider names only once the panel is open.
+   Nothing here changes size between states, so nothing here can reflow. */
 .wing-copy {
   display: flex;
-  width: 138px;
   flex: 0 0 auto;
   flex-direction: column;
   gap: 1px;
-  opacity: 0;
   text-align: right;
+  white-space: nowrap;
+}
+
+.wing-copy strong,
+.wing-copy small {
+  opacity: 0;
   transform: translateX(10px);
   transition:
     opacity var(--duration-exit) var(--motion-exit),
     transform var(--duration-collapse) var(--motion-morph);
-  white-space: nowrap;
 }
 
-.app-stage[data-mode="expanded"] .wing-copy {
+.app-stage[data-presentation="peek"] .wing-copy strong,
+.app-stage[data-presentation="panel"] .wing-copy strong,
+.app-stage[data-presentation="panel"] .wing-copy small {
   opacity: 1;
   transform: none;
-  transition-duration: var(--duration-quick), var(--duration-morph);
+  transition-duration: var(--duration-quick), var(--duration-peek);
+  transition-timing-function: var(--motion-exit), var(--spring-peek);
+}
+
+.app-stage[data-presentation="peek"] .wing-copy strong {
+  transition-delay: var(--peek-delay);
+}
+
+.app-stage[data-presentation="panel"] .wing-copy small {
   transition-delay: var(--expand-delay);
 }
 
@@ -249,9 +366,10 @@ button {
   transition: opacity var(--duration-exit) var(--motion-exit);
 }
 
-.app-stage[data-mode="expanded"] .wing-mark + .wing-mark {
+.app-stage[data-presentation="peek"] .wing-mark + .wing-mark,
+.app-stage[data-presentation="panel"] .wing-mark + .wing-mark {
   opacity: 1;
-  transition-delay: var(--expand-delay);
+  transition-delay: var(--peek-delay);
 }
 
 .wing-marks-empty {
@@ -319,9 +437,11 @@ button {
   color: var(--text-tertiary);
 }
 
-.app-stage[data-mode="expanded"] .count-badge {
+.app-stage[data-presentation="peek"] .count-badge,
+.app-stage[data-presentation="panel"] .count-badge {
   transform: scale(1);
-  transition-duration: var(--duration-morph);
+  transition-duration: var(--duration-peek);
+  transition-timing-function: var(--spring-peek);
 }
 
 /* Out of flow beside the badge, so revealing it never changes the badge's box
@@ -344,11 +464,13 @@ button {
   white-space: nowrap;
 }
 
-.app-stage[data-mode="expanded"] .count-caption {
+.app-stage[data-presentation="peek"] .count-caption,
+.app-stage[data-presentation="panel"] .count-caption {
   opacity: 1;
   transform: translate(0, -50%);
-  transition-duration: var(--duration-quick), var(--duration-morph);
-  transition-delay: var(--expand-delay);
+  transition-duration: var(--duration-quick), var(--duration-peek);
+  transition-timing-function: var(--motion-exit), var(--spring-peek);
+  transition-delay: var(--peek-delay);
 }
 
 /* Waveform --------------------------------------------------------------- */
@@ -423,7 +545,7 @@ button {
   will-change: opacity, transform;
 }
 
-.app-stage[data-mode="expanded"] .expanded-stage {
+.app-stage[data-presentation="panel"] .expanded-stage {
   opacity: 1;
   visibility: visible;
   transform: translateX(-50%) translateY(0);
@@ -440,7 +562,7 @@ button {
   padding: calc(max(var(--notch-top-inset), 32px) + 14px) 20px 18px;
 }
 
-.app-stage[data-mode="expanded"] .expanded-panel {
+.app-stage[data-presentation="panel"] .expanded-panel {
   pointer-events: auto;
 }
 
@@ -545,7 +667,7 @@ button {
     transform var(--duration-morph) var(--motion-morph);
 }
 
-.app-stage[data-mode="expanded"] .session-row {
+.app-stage[data-presentation="panel"] .session-row {
   opacity: 1;
   transform: none;
   transition-delay: calc(var(--expand-delay) + var(--row-index, 0) * var(--row-stagger));

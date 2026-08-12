@@ -48,6 +48,9 @@ import {
 const captureOutput = argumentValue("--capture-evidence");
 const profile = argumentValue("--profile") ?? "idle";
 const fixtureName = argumentValue("--fixture");
+// Evidence only: the peek answers a pointer, which a capture run has no way to
+// produce, so it can be asked for directly.
+const startPeeked = process.argv.includes("--peek");
 const fixture = fixtureSnapshot(fixtureName ?? "smoke");
 const captureMode = captureOutput !== undefined;
 // `--fixture` is enough on its own to make a run deterministic: the panel renders
@@ -267,6 +270,7 @@ function registerIpc(): void {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
     return {
       mode: windowMode,
+      startPeeked,
       profile,
       fixture,
       captureMode,
@@ -283,11 +287,11 @@ function registerIpc(): void {
     };
   });
 
-  ipcMain.handle(channels.setExpanded, (event, expanded: unknown) => {
+  ipcMain.handle(channels.setExpanded, (event, expanded: unknown, focus: unknown) => {
     if (!trustedSender(event) || typeof expanded !== "boolean") {
       throw new Error("Invalid window mode request");
     }
-    return setWindowMode(expanded ? "expanded" : "compact", false);
+    return setWindowMode(expanded ? "expanded" : "compact", focus === true);
   });
 
   ipcMain.on(channels.setPointerInterception, (event, interceptsPointer: unknown) => {

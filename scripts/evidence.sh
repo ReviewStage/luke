@@ -35,6 +35,13 @@ COMPACT_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-compact.XXXXXX")
     --fixture "$SIDECAR_FIXTURE_SCENARIO" \
     --compact \
     --capture-evidence "$SIDECAR_COMPACT_EVIDENCE_PATH"
+PEEK_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-peek.XXXXXX")
+"$APP_EXECUTABLE" \
+    --user-data-dir="$PEEK_PROFILE" \
+    --fixture "$SIDECAR_FIXTURE_SCENARIO" \
+    --compact \
+    --peek \
+    --capture-evidence "$SIDECAR_PEEK_EVIDENCE_PATH"
 SPEAKING_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-speaking.XXXXXX")
 "$APP_EXECUTABLE" \
     --user-data-dir="$SPEAKING_PROFILE" \
@@ -78,10 +85,14 @@ validate_evidence() {
     fi
 }
 
-validate_evidence "$SIDECAR_EXPANDED_EVIDENCE_PATH" 620 520
-validate_evidence "$SIDECAR_COMPACT_EVIDENCE_PATH" 282 38
-validate_evidence "$SIDECAR_SPEAKING_EVIDENCE_PATH" 282 38
+# The window is a stage, not the shape: a compact window holds the peek the
+# capsule grows into, and both carry room for a spring to overshoot.
+validate_evidence "$SIDECAR_EXPANDED_EVIDENCE_PATH" 648 534
+validate_evidence "$SIDECAR_COMPACT_EVIDENCE_PATH" 486 38
+validate_evidence "$SIDECAR_PEEK_EVIDENCE_PATH" 486 38
+validate_evidence "$SIDECAR_SPEAKING_EVIDENCE_PATH" 486 38
 
 printf 'Expanded visual evidence: %s\n' "$SIDECAR_EXPANDED_EVIDENCE_PATH"
 printf 'Compact visual evidence: %s\n' "$SIDECAR_COMPACT_EVIDENCE_PATH"
+printf 'Peek visual evidence: %s\n' "$SIDECAR_PEEK_EVIDENCE_PATH"
 printf 'Speaking visual evidence: %s\n' "$SIDECAR_SPEAKING_EVIDENCE_PATH"

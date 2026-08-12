@@ -13,8 +13,8 @@ import type { CredentialProviderId } from "./shared/credential-providers";
 
 const bridge: AppBridge = {
   getBootstrap: () => ipcRenderer.invoke(channels.bootstrap) as Promise<AppBootstrap>,
-  setExpanded: (expanded: boolean) =>
-    ipcRenderer.invoke(channels.setExpanded, expanded) as Promise<WindowMode>,
+  setExpanded: (expanded: boolean, focus = false) =>
+    ipcRenderer.invoke(channels.setExpanded, expanded, focus) as Promise<WindowMode>,
   setPointerInterception: (interceptsPointer: boolean) => {
     ipcRenderer.send(channels.setPointerInterception, interceptsPointer);
   },

@@ -8,6 +8,14 @@ import type {
 } from "../shared/contracts";
 import { NotchWings } from "./notch-wings";
 import { PanelBody } from "./panel-body";
+import {
+  PANEL_LEAVE_DELAY_MS,
+  PANEL_PRESENTATION,
+  type PanelPresentation,
+  PEEK_ENTER_DELAY_MS,
+  PEEK_LEAVE_DELAY_MS,
+  presentationForMode,
+} from "./panel-state";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { displaySessions, sessionTally, tallySummary } from "./session-model";
 
@@ -87,7 +95,7 @@ export function App(): React.JSX.Element {
   const [bootstrap, setBootstrap] = useState<AppBootstrap>();
   const [sessions, setSessions] = useState<readonly NormalizedSession[]>([]);
   const [display, setDisplay] = useState<DisplayDiagnostic>();
-  const [mode, setMode] = useState<WindowMode>("compact");
+  const [presentation, setPresentation] = useState<PanelPresentation>(PANEL_PRESENTATION.CAPSULE);
   const [tab, setTab] = useState<PanelTab>(PANEL_TAB.SESSIONS);
   const [microphoneStatus, setMicrophoneStatus] = useState<MicrophoneStatus>("not-determined");
   const [microphoneError, setMicrophoneError] = useState<string>();
@@ -96,12 +104,12 @@ export function App(): React.JSX.Element {
   const audioContext = useRef<AudioContext | undefined>(undefined);
   const mediaStream = useRef<MediaStream | undefined>(undefined);
   const hoverTimer = useRef<number | undefined>(undefined);
-  const modeRef = useRef<WindowMode>("compact");
+  const presentationRef = useRef<PanelPresentation>(PANEL_PRESENTATION.CAPSULE);
   const modeGeneration = useRef(0);
 
-  const updateMode = useCallback((nextMode: WindowMode) => {
-    modeRef.current = nextMode;
-    setMode(nextMode);
+  const applyPresentation = useCallback((next: PanelPresentation) => {
+    presentationRef.current = next;
+    setPresentation(next);
   }, []);
 
   const applyAuthoritativeMode = useCallback(
@@ -109,9 +117,9 @@ export function App(): React.JSX.Element {
       // A lifecycle notification can originate outside this renderer (for
       // example from the tray). Ignore an older IPC result that arrives later.
       modeGeneration.current += 1;
-      updateMode(nextMode);
+      applyPresentation(presentationForMode(nextMode));
     },
-    [updateMode],
+    [applyPresentation],
   );
 
   const stopMicrophone = useCallback(async () => {
@@ -164,55 +172,70 @@ export function App(): React.JSX.Element {
     }
   }, [stopMicrophone]);
 
-  const changeMode = useCallback(
-    async (expanded: boolean) => {
-      const targetMode: WindowMode = expanded ? "expanded" : "compact";
-      const previousMode = modeRef.current;
-      const generation = modeGeneration.current + 1;
-      modeGeneration.current = generation;
-      modeRef.current = targetMode;
-      // The main process owns the ordering of the window resize against this
-      // animation, so both directions are the same call from here.
-      try {
-        const confirmedMode = await window.sidecar.setExpanded(expanded);
-        if (modeGeneration.current === generation) updateMode(confirmedMode);
-      } catch (error) {
-        if (modeGeneration.current === generation) modeRef.current = previousMode;
-        throw error;
-      }
-    },
-    [updateMode],
-  );
-
   const cancelHoverTransition = useCallback(() => {
     if (hoverTimer.current === undefined) return;
     window.clearTimeout(hoverTimer.current);
     hoverTimer.current = undefined;
   }, []);
 
-  const scheduleMode = useCallback(
-    (expanded: boolean) => {
-      cancelHoverTransition();
-      hoverTimer.current = window.setTimeout(
-        () => {
-          hoverTimer.current = undefined;
-          void changeMode(expanded);
-        },
-        expanded ? 70 : 180,
-      );
+  /**
+   * Only the panel needs the main process. The capsule and the peek share a
+   * window, so hovering never leaves the renderer — which is what lets the peek
+   * answer the pointer immediately.
+   */
+  const changeMode = useCallback(
+    async (expanded: boolean) => {
+      const previous = presentationRef.current;
+      const generation = modeGeneration.current + 1;
+      modeGeneration.current = generation;
+      presentationRef.current = expanded ? PANEL_PRESENTATION.PANEL : PANEL_PRESENTATION.CAPSULE;
+      try {
+        // Asking for focus is what makes Escape reach the panel someone opened.
+        const confirmedMode = await window.sidecar.setExpanded(expanded, expanded);
+        if (modeGeneration.current === generation) {
+          applyPresentation(presentationForMode(confirmedMode));
+        }
+      } catch (error) {
+        if (modeGeneration.current === generation) presentationRef.current = previous;
+        throw error;
+      }
     },
-    [cancelHoverTransition, changeMode],
+    [applyPresentation],
   );
 
   const handleHitRegionEnter = useCallback(() => {
-    if (modeRef.current === "compact") scheduleMode(true);
-    else cancelHoverTransition();
-  }, [cancelHoverTransition, scheduleMode]);
+    cancelHoverTransition();
+    if (presentationRef.current !== PANEL_PRESENTATION.CAPSULE) return;
+    hoverTimer.current = window.setTimeout(() => {
+      hoverTimer.current = undefined;
+      if (presentationRef.current === PANEL_PRESENTATION.CAPSULE) {
+        applyPresentation(PANEL_PRESENTATION.PEEK);
+      }
+    }, PEEK_ENTER_DELAY_MS);
+  }, [applyPresentation, cancelHoverTransition]);
 
   const handleHitRegionLeave = useCallback(() => {
-    if (modeRef.current === "compact") cancelHoverTransition();
-    else scheduleMode(false);
-  }, [cancelHoverTransition, scheduleMode]);
+    cancelHoverTransition();
+    const current = presentationRef.current;
+    if (current === PANEL_PRESENTATION.CAPSULE) return;
+    hoverTimer.current = window.setTimeout(
+      () => {
+        hoverTimer.current = undefined;
+        if (presentationRef.current === PANEL_PRESENTATION.PEEK) {
+          applyPresentation(PANEL_PRESENTATION.CAPSULE);
+        } else if (presentationRef.current === PANEL_PRESENTATION.PANEL) {
+          void changeMode(false);
+        }
+      },
+      current === PANEL_PRESENTATION.PEEK ? PEEK_LEAVE_DELAY_MS : PANEL_LEAVE_DELAY_MS,
+    );
+  }, [applyPresentation, cancelHoverTransition, changeMode]);
+
+  /** The capsule is a button: pressing it opens the panel, or closes it again. */
+  const handleCapsulePress = useCallback(() => {
+    cancelHoverTransition();
+    void changeMode(presentationRef.current !== PANEL_PRESENTATION.PANEL);
+  }, [cancelHoverTransition, changeMode]);
 
   usePointerPassthrough(handleHitRegionEnter, handleHitRegionLeave);
 
@@ -222,7 +245,12 @@ export function App(): React.JSX.Element {
       setBootstrap(value);
       setSessions(value.sessions);
       setDisplay(value.display);
-      if (modeGeneration.current === bootstrapGeneration) applyAuthoritativeMode(value.mode);
+      if (modeGeneration.current === bootstrapGeneration) {
+        applyAuthoritativeMode(value.mode);
+        if (value.startPeeked && value.mode === "compact") {
+          applyPresentation(PANEL_PRESENTATION.PEEK);
+        }
+      }
       setMicrophoneStatus(value.microphoneStatus);
       if (value.profile === "microphone") {
         window.setTimeout(() => void startMicrophone(), 500);
@@ -246,15 +274,23 @@ export function App(): React.JSX.Element {
       removeSessions();
       void stopMicrophone();
     };
-  }, [applyAuthoritativeMode, cancelHoverTransition, startMicrophone, stopMicrophone]);
+  }, [
+    applyAuthoritativeMode,
+    applyPresentation,
+    cancelHoverTransition,
+    startMicrophone,
+    stopMicrophone,
+  ]);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && mode === "expanded") void changeMode(false);
+      if (event.key === "Escape" && presentation === PANEL_PRESENTATION.PANEL) {
+        void changeMode(false);
+      }
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [changeMode, mode]);
+  }, [changeMode, presentation]);
 
   if (!bootstrap || !display) return <div />;
 
@@ -262,30 +298,24 @@ export function App(): React.JSX.Element {
   const tally = sessionTally(visibleSessions);
   const fixtureSpeaking = bootstrap.profile === "speaking";
   const hasAudioSignal = fixtureSpeaking || analyser !== undefined;
+  const panelOpen = presentation === PANEL_PRESENTATION.PANEL;
 
   return (
     <div
       className="app-stage"
-      data-mode={mode}
+      data-presentation={presentation}
       data-capture={String(bootstrap.captureMode)}
       style={{ ...notchStyle(display), ...panelHeightStyle(panelHeight) }}
     >
-      {/* The surface fills the window in compact mode and the measured panel in
-          expanded mode, so the capsule and the panel are one black shape that
-          stretches with the window instead of two that cross-fade. */}
+      {/* Capsule, peek and panel are all this one shape at different sizes, so
+          the surface is never cross-faded — it is only ever resized. */}
       <span className="panel-surface" aria-hidden="true" />
 
       {/* Inert while hidden: the panel keeps its full layout box behind
           `opacity: 0`, so its buttons stay focusable and the browser will scroll
           them into view, pushing the compact capsule off screen. */}
-      <div className="expanded-stage" aria-hidden={mode !== "expanded"} inert={mode !== "expanded"}>
-        <section
-          className="expanded-panel"
-          ref={panelElement}
-          data-hit-region
-          onPointerEnter={cancelHoverTransition}
-          onPointerLeave={() => scheduleMode(false)}
-        >
+      <div className="expanded-stage" aria-hidden={!panelOpen} inert={!panelOpen}>
+        <section className="expanded-panel" ref={panelElement} data-hit-region>
           <PanelBody
             sessions={visibleSessions}
             tab={tab}
@@ -309,14 +339,16 @@ export function App(): React.JSX.Element {
         hasAudioSignal={hasAudioSignal}
       />
 
-      <div className="compact-stage" inert={mode !== "compact"}>
-        <div
+      <div className="compact-stage">
+        {/* A button, not a hover target: hovering only peeks, pressing commits.
+            It stays live over an open panel so pressing it closes again. */}
+        <button
+          type="button"
           className="compact-hover-target"
           data-hit-region
-          aria-hidden="true"
-          title={tallySummary(tally)}
-          onPointerEnter={() => scheduleMode(true)}
-          onPointerLeave={cancelHoverTransition}
+          aria-expanded={panelOpen}
+          aria-label={`${tallySummary(tally)}. ${panelOpen ? "Close" : "Open"} the panel`}
+          onClick={handleCapsulePress}
         />
       </div>
     </div>

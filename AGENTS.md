@@ -58,15 +58,25 @@ convenience; `./scripts/check.sh` and CI remain authoritative.
 
 ## Panel motion
 
-The window never animates its own frame: it snaps to the size a mode needs, and
-the renderer animates the black surface inside it. An animated `setBounds`
-re-lays out the whole renderer on every frame, because the panel is anchored to
-the viewport's centre. Everything layered on that surface must move with
-`transform` and `opacity` only — animating width, height, padding, or font-size
-on the wings, the count badge, or the rows re-shapes text on every frame and is
-what makes the transition stutter. `setWindowMode` owns the ordering for every
-caller: grow the window before the panel unfolds, and draw the capsule before
-the window shrinks to it. `COLLAPSE_ANIMATION_MS` is the sum of
+The window is a stage; the drawn surface is the shape. A window therefore holds
+the largest shape its mode can draw — a compact window holds the peek, so
+hovering costs no IPC at all — plus `SPRING_OVERSHOOT_ALLOWANCE` on every side
+for a spring to overshoot into. Anything the shape does not cover is
+transparent and must stay click-through, so hit regions track the shape rather
+than the window.
+
+The window never animates its own frame. An animated `setBounds` re-lays out
+the whole renderer on every frame, because the panel is anchored to the
+viewport's centre. Everything layered on the surface must move with `transform`
+and `opacity` only — animating width, height, padding, or font-size on the
+wings, the count badge, or the rows re-shapes text on every frame and is what
+makes the motion stutter.
+
+In either direction the shape and its content must not cross, or content is
+left drawn on the desktop: growing, the surface leads and content follows;
+shrinking, content leaves over `--duration-exit` before the surface moves.
+`setWindowMode` owns the ordering for every caller — the panel, the tray, and
+the motion recorder alike. `COLLAPSE_ANIMATION_MS` is the sum of
 `--duration-exit` and `--duration-collapse`; the three move together.
 
 ## TypeScript value sets and keys
