@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   classifyChanges,
   EXEMPTION_LABEL,
   evaluateEvidence,
   scenariosShown,
   splitEvidence,
+  UI_PATHS,
 } from "./check-pr-evidence.mjs";
 import { changedMarker, evidenceEnd, evidenceStart } from "./update-pr-evidence.mjs";
 
@@ -33,6 +37,18 @@ function automatedBlock(shown) {
     evidenceEnd,
   ].join("\n");
 }
+
+test("every configured interface path still exists", () => {
+  // A renamed directory would leave the prefixes matching nothing, quietly
+  // disabling the gate for the surface it was meant to cover. Failing here
+  // makes that rename loud instead.
+  const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+  for (const prefixes of Object.values(UI_PATHS)) {
+    for (const prefix of prefixes) {
+      assert.ok(existsSync(join(repositoryRoot, prefix)), `missing interface path: ${prefix}`);
+    }
+  }
+});
 
 test("classifies desktop, web, and non-interface changes", () => {
   assert.deepEqual(classifyChanges(["apps/desktop/src/renderer/index.tsx"]), {
