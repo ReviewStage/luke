@@ -23,6 +23,7 @@ import {
   Tray,
 } from "electron";
 import { ClaudeCodeSessionAdapter } from "./claude-code-adapter";
+import { CodexSessionAdapter } from "./codex-adapter";
 import { readMacScreenGeometry } from "./macos-screen-geometry";
 import {
   type AppBootstrap,
@@ -39,7 +40,7 @@ const fixture = fixtureSnapshot(fixtureName);
 const captureMode = captureOutput !== undefined;
 const SESSION_REFRESH_INTERVAL_MS = 5_000;
 const sessionRegistry = new InMemorySessionRegistry();
-const sessionAdapters = [new ClaudeCodeSessionAdapter()] as const;
+const sessionAdapters = [new ClaudeCodeSessionAdapter(), new CodexSessionAdapter()] as const;
 let windowMode: WindowMode = captureMode
   ? process.argv.includes("--compact")
     ? "compact"
