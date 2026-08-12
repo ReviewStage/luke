@@ -2,6 +2,7 @@ export const SESSION_STATE = {
   WORKING: "working",
   ATTENTION: "attention",
   COMPLETE: "complete",
+  UNKNOWN: "unknown",
 } as const;
 
 export type SessionState = (typeof SESSION_STATE)[keyof typeof SESSION_STATE];

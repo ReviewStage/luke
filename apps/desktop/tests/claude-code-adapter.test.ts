@@ -12,6 +12,7 @@ const CLAUDE_PROJECTS_DIRECTORY = "projects";
 const TEST_CLAUDE_EVENT_TYPE = {
   ASSISTANT: "assistant",
   RESULT: "result",
+  SYSTEM: "system",
   USER: "user",
 } as const;
 
@@ -130,6 +131,39 @@ test("keeps stale assistant-tail sessions from staying in attention", async (t) 
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
+});
+
+test("ignores trailing system records when finding Claude session status", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-system",
+    "system-tail",
+    [
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
+        cwd: "/Users/test/system",
+        timestamp: "2026-08-11T23:44:55.000Z",
+      },
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.SYSTEM,
+        cwd: "/Users/test/system",
+        timestamp: "2026-08-11T23:44:58.000Z",
+        turn_duration_ms: 3000,
+      },
+    ],
+    TEST_TIME - 1_000,
+  );
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const observations = await adapter.observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
 });
 
 test("filters old sessions and preserves the newest duplicate provider id", async (t) => {

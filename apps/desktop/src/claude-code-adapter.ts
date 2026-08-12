@@ -22,8 +22,6 @@ const CLAUDE_ENVIRONMENT = {
 const CLAUDE_EVENT_TYPE = {
   ASSISTANT: "assistant",
   RESULT: "result",
-  SUMMARY: "summary",
-  SYSTEM: "system",
   USER: "user",
 } as const;
 

@@ -18,6 +18,7 @@ const stateLabels: Record<SessionState, string> = {
   [SESSION_STATE.WORKING]: "Working",
   [SESSION_STATE.ATTENTION]: "Needs attention",
   [SESSION_STATE.COMPLETE]: "Complete",
+  [SESSION_STATE.UNKNOWN]: "Observed",
 };
 
 const statusLabels: Record<NormalizedSession["status"], string> = {
@@ -154,6 +155,7 @@ function sessionNeedsAttention(session: NormalizedSession): boolean {
 function sessionState(session: NormalizedSession): SessionState {
   if (sessionNeedsAttention(session)) return SESSION_STATE.ATTENTION;
   if (session.status === SESSION_STATUS.COMPLETE) return SESSION_STATE.COMPLETE;
+  if (session.status === SESSION_STATUS.UNKNOWN) return SESSION_STATE.UNKNOWN;
   return SESSION_STATE.WORKING;
 }
 
@@ -354,12 +356,24 @@ function App(): React.JSX.Element {
   const attention = visibleSessions.filter(
     (session) => session.state === SESSION_STATE.ATTENTION,
   ).length;
+  const active = visibleSessions.filter(
+    (session) => session.state === SESSION_STATE.WORKING,
+  ).length;
   const fixtureSpeaking = bootstrap.profile === "speaking";
   const hasAudioSignal = fixtureSpeaking || analyser !== undefined;
-  const indicatorState = attention > 0 ? "attention" : "working";
+  const indicatorState =
+    attention > 0
+      ? SESSION_STATE.ATTENTION
+      : active > 0
+        ? SESSION_STATE.WORKING
+        : SESSION_STATE.UNKNOWN;
   const hasLiveSessions = !bootstrap.captureMode && sessions.length > 0;
   const sessionSummary =
-    visibleSessions.length > 0 ? "All sessions are moving" : "No sessions observed";
+    visibleSessions.length === 0
+      ? "No sessions observed"
+      : active > 0
+        ? "Active sessions observed"
+        : "No active sessions observed";
   const style = notchStyle(display);
 
   return (
