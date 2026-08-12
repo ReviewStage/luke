@@ -233,6 +233,12 @@ function CredentialsSection({
     onEditingChange(editingProviders.length > 0);
   }, [editingProviders, onEditingChange]);
 
+  // A hold has to be released by whatever still exists to release it. Switching
+  // tabs unmounts this section and its fields in one commit, so a field's own
+  // "no longer editing" is reported into a tree that is already going away, and
+  // the panel would stay held open by an entry that is gone.
+  useEffect(() => () => onEditingChange(false), [onEditingChange]);
+
   return (
     <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
       <h2>
