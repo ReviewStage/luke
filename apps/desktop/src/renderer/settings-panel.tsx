@@ -5,7 +5,15 @@ import type { CredentialProvider, CredentialProviderId } from "../shared/credent
 import { CREDENTIAL_PROVIDER_LIST } from "../shared/credential-providers";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import { ProviderMark } from "./provider-marks";
-import { ExternalIcon, KeyIcon, MicrophoneIcon, PowerIcon } from "./settings-icons";
+import {
+  CheckIcon,
+  ExternalIcon,
+  KeyIcon,
+  MicrophoneIcon,
+  PencilIcon,
+  PowerIcon,
+  TrashIcon,
+} from "./settings-icons";
 
 export interface SettingsPanelProps {
   microphoneStatus: MicrophoneStatus;
@@ -30,12 +38,11 @@ const MICROPHONE_STATUS_LABEL: Record<MicrophoneStatus, string> = {
   unknown: "Unknown",
 };
 
-/* Short enough to sit on the provider's own line: the section's note says where
-   a key is kept, so the status only has to say whether there is one. */
-const CREDENTIAL_STATUS: Record<CredentialSource, string> = {
+/* What the check beside the name cannot say on its own. A key kept here needs
+   no words at all: the check is the whole message. */
+const CREDENTIAL_STATUS: Partial<Record<CredentialSource, string>> = {
   [CREDENTIAL_SOURCE.NONE]: "Not connected",
   [CREDENTIAL_SOURCE.ENVIRONMENT]: "From environment",
-  [CREDENTIAL_SOURCE.ENCRYPTED_FILE]: "Connected",
 };
 
 /**
@@ -70,7 +77,11 @@ function ProviderCredential({
   const field = useRef<HTMLInputElement | null>(null);
   const fieldId = `${provider.id}-api-key`;
   const editing = draft !== undefined;
+  // Stored here is what can be edited or deleted; connected includes a key Luke
+  // only reads from the environment, which it has no business changing.
   const stored = source === CREDENTIAL_SOURCE.ENCRYPTED_FILE;
+  const connected = source !== CREDENTIAL_SOURCE.NONE;
+  const status = CREDENTIAL_STATUS[source];
 
   // Opening the tab is not a request to type, so the editor opens only on a
   // press — and then it takes the caret, because opening it is a request to
@@ -95,33 +106,57 @@ function ProviderCredential({
   return (
     <div className="credential">
       <div className="credential-row">
-        {/* The provider's own mark, so a list is read by brand rather than by a
-            word every line would have to repeat. */}
-        <ProviderMark providerId={provider.id} className="credential-mark" />
-        <span className="credential-name">{provider.displayName}</span>
-        <span className={`credential-status ${source}`}>{CREDENTIAL_STATUS[source]}</span>
+        <span className="credential-identity">
+          {/* The provider's own mark, so a list is read by brand rather than by
+              a word every line would have to repeat. */}
+          <ProviderMark providerId={provider.id} className="credential-mark" />
+          <span className="credential-name">{provider.displayName}</span>
+          {connected ? <CheckIcon /> : null}
+        </span>
+        {/* The check already says connected, so the words are kept for what it
+            cannot say: not connected at all, or connected from the environment
+            rather than from a key kept here. */}
+        {status ? <span className="credential-status">{status}</span> : null}
         <span className="settings-actions">
           {stored ? (
             <button
               type="button"
-              className="quiet-button credential-remove"
+              className="icon-button credential-remove"
               disabled={busy}
+              aria-label={`Delete the ${provider.displayName} API key`}
+              title="Delete"
               onClick={() => void submit(undefined)}
             >
-              Delete
+              <TrashIcon />
             </button>
           ) : null}
-          <button
-            type="button"
-            className="quiet-button"
-            disabled={busy || storageUnavailable || editing}
-            onClick={() => {
-              setRejection(undefined);
-              setDraft("");
-            }}
-          >
-            {stored ? "Edit" : "Connect"}
-          </button>
+          {stored ? (
+            <button
+              type="button"
+              className="icon-button"
+              disabled={busy || editing}
+              aria-label={`Replace the ${provider.displayName} API key`}
+              title="Edit"
+              onClick={() => {
+                setRejection(undefined);
+                setDraft("");
+              }}
+            >
+              <PencilIcon />
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="quiet-button"
+              disabled={busy || storageUnavailable || editing}
+              onClick={() => {
+                setRejection(undefined);
+                setDraft("");
+              }}
+            >
+              Connect
+            </button>
+          )}
         </span>
       </div>
 

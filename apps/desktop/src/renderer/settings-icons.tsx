@@ -38,6 +38,36 @@ export function KeyIcon(): React.JSX.Element {
   );
 }
 
+/** Sits beside a provider's name to say it is connected, in the state palette. */
+export function CheckIcon(): React.JSX.Element {
+  return (
+    <Glyph className="credential-check">
+      <path d="M4.8 12.6 9.6 17.3 19.2 6.9" />
+    </Glyph>
+  );
+}
+
+export function PencilIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M16.3 3.8a2.3 2.3 0 0 1 3.9 1.6 2.3 2.3 0 0 1-.7 1.6L8.4 18.1l-4.5 1.1 1.1-4.5z" />
+      <path d="M14.6 5.5l3.9 3.9" />
+    </Glyph>
+  );
+}
+
+export function TrashIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M4.4 6.7h15.2" />
+      <path d="M9.4 6.7V4.6a1.3 1.3 0 0 1 1.3-1.3h2.6a1.3 1.3 0 0 1 1.3 1.3v2.1" />
+      <path d="M6.7 6.7l.9 12.9a1.7 1.7 0 0 0 1.7 1.6h5.4a1.7 1.7 0 0 0 1.7-1.6l.9-12.9" />
+      <path d="M10.4 10.6v6.6" />
+      <path d="M13.6 10.6v6.6" />
+    </Glyph>
+  );
+}
+
 export function MicrophoneIcon(): React.JSX.Element {
   return (
     <Glyph>

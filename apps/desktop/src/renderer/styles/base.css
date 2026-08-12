@@ -979,14 +979,23 @@ button:disabled {
 
 .credential-row {
   display: flex;
-  min-height: 26px;
+  min-height: 28px;
   align-items: center;
   gap: 9px;
 }
 
-.credential-name {
+/* Mark, name, and the check that answers the only question the line asks. */
+.credential-identity {
+  display: flex;
   overflow: hidden;
   flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.credential-name {
+  overflow: hidden;
   min-width: 0;
   color: var(--text-primary);
   font-size: 12px;
@@ -995,34 +1004,56 @@ button:disabled {
   white-space: nowrap;
 }
 
-/* A dot and a word: the same way a session row reports its state, so the tab
-   reads at a glance rather than by sentence. */
-.credential-status {
-  display: flex;
+/* The one green thing on the line, in the same palette a finished session
+   uses, so connected reads the same way complete does. */
+.credential-check {
+  width: 12px;
+  height: 12px;
   flex: 0 0 auto;
-  align-items: center;
-  gap: 5px;
+  color: var(--state-complete);
+  opacity: 1;
+}
+
+.credential-status {
+  flex: 0 0 auto;
   color: var(--text-tertiary);
   font-size: 10px;
   font-weight: 640;
 }
 
-.credential-status::before {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--state-idle);
-  content: "";
+/* Square, quiet, and captioned only for a reader: a trash can and a pencil say
+   what they do, and a label beside each would say it twice. */
+.icon-button {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: var(--raised);
+  color: var(--text-secondary);
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
 }
 
-.credential-status.environment,
-.credential-status.encrypted-file {
-  color: var(--state-complete);
+.icon-button:hover {
+  background: var(--raised-strong);
+  color: var(--text-primary);
 }
 
-.credential-status.environment::before,
-.credential-status.encrypted-file::before {
-  background: var(--state-complete);
+.icon-button:disabled {
+  opacity: 0.4;
+}
+
+.icon-button:disabled:hover {
+  background: var(--raised);
+  color: var(--text-secondary);
+}
+
+.icon-button-glyph {
+  width: 13px;
+  height: 13px;
 }
 
 /* Deleting a key is the one destructive control here, so it says so on hover
@@ -1030,6 +1061,11 @@ button:disabled {
 .credential-remove:hover {
   background: color-mix(in srgb, #ff7e7e 12%, transparent);
   color: #ff9b9b;
+}
+
+.credential-remove:disabled:hover {
+  background: var(--raised);
+  color: var(--text-secondary);
 }
 
 /* The field exists only while a key is being entered. */
