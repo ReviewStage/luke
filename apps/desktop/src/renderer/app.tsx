@@ -18,35 +18,80 @@ import {
   presentationForMode,
 } from "./panel-state";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
+
+/** The two things that take the pointer, named so the test can tell them apart. */
+const HIT_REGION = {
+  CAPSULE: "capsule",
+  PANEL: "panel",
+} as const;
+
 import { displaySessions, sessionTally, tallySummary } from "./session-model";
 
-function usePointerPassthrough(onHitRegionEnter: () => void, onHitRegionLeave: () => void): void {
+function usePointerPassthrough(
+  onHitRegionEnter: () => void,
+  onHitRegionLeave: () => void,
+  presentation: PanelPresentation,
+): void {
   const lastValue = useRef<boolean | undefined>(undefined);
+  const lastPoint = useRef<{ x: number; y: number } | undefined>(undefined);
 
-  useEffect(() => {
-    const update = (interceptsPointer: boolean) => {
+  const update = useCallback(
+    (interceptsPointer: boolean) => {
       if (lastValue.current === interceptsPointer) return;
       lastValue.current = interceptsPointer;
       window.sidecar.setPointerInterception(interceptsPointer);
       if (interceptsPointer) onHitRegionEnter();
       else onHitRegionLeave();
-    };
-    const handleMove = (event: MouseEvent) => {
-      // `elementFromPoint` answers null for a point outside the viewport, which
-      // a forwarded move can carry. Comparing that against null read as "still
+    },
+    [onHitRegionEnter, onHitRegionLeave],
+  );
+
+  const testLastPoint = useCallback(
+    (drawn: PanelPresentation) => {
+      const point = lastPoint.current;
+      if (!point) return;
+      // `elementFromPoint` answers null for a point outside the viewport, which a
+      // forwarded move can carry. Comparing that against null read as "still
       // inside", so leaving by the edge left the panel open until some other
       // event closed it.
-      const target = document.elementFromPoint(event.clientX, event.clientY);
-      update(Boolean(target?.closest("[data-hit-region]")));
+      const region = document.elementFromPoint(point.x, point.y)?.closest("[data-hit-region]");
+      const kind = region?.getAttribute("data-hit-region");
+      // The capsule strip is live in every state — it is how the panel closes
+      // again — while the panel's body counts only while the panel is the shape
+      // being drawn. It is still in the tree for a moment after it closes, and
+      // clicks there belong to the desktop by then.
+      update(
+        kind === HIT_REGION.CAPSULE ||
+          (kind === HIT_REGION.PANEL && drawn === PANEL_PRESENTATION.PANEL),
+      );
+    },
+    [update],
+  );
+
+  useEffect(() => {
+    const handleMove = (event: MouseEvent) => {
+      lastPoint.current = { x: event.clientX, y: event.clientY };
+      testLastPoint(presentation);
     };
-    const handleLeave = () => update(false);
+    const handleLeave = () => {
+      lastPoint.current = undefined;
+      update(false);
+    };
     window.addEventListener("mousemove", handleMove, { passive: true });
     document.documentElement.addEventListener("mouseleave", handleLeave);
     return () => {
       window.removeEventListener("mousemove", handleMove);
       document.documentElement.removeEventListener("mouseleave", handleLeave);
     };
-  }, [onHitRegionEnter, onHitRegionLeave]);
+  }, [presentation, testLastPoint, update]);
+
+  // The shape can change under a pointer that never moves — Escape closes the
+  // panel, and the tray opens it — and what the pointer is over changes with it.
+  // Without this the window keeps intercepting clicks for a shape that is no
+  // longer drawn, and the window is always larger than the shape.
+  useEffect(() => {
+    testLastPoint(presentation);
+  }, [presentation, testLastPoint]);
 }
 
 function notchStyle(display: DisplayDiagnostic): CSSProperties {
@@ -286,7 +331,7 @@ export function App(): React.JSX.Element {
     [cancelHoverTransition, changeMode],
   );
 
-  usePointerPassthrough(handleHitRegionEnter, handleHitRegionLeave);
+  usePointerPassthrough(handleHitRegionEnter, handleHitRegionLeave, presentation);
 
   // `:focus-visible` is a heuristic about how focus arrived, and here it guesses
   // wrong: the panel takes focus programmatically when it opens, which the
@@ -387,7 +432,7 @@ export function App(): React.JSX.Element {
           `opacity: 0`, so its buttons stay focusable and the browser will scroll
           them into view, pushing the compact capsule off screen. */}
       <div className="expanded-stage" aria-hidden={!panelOpen} inert={!panelOpen}>
-        <section className="expanded-panel" ref={panelElement} data-hit-region>
+        <section className="expanded-panel" ref={panelElement} data-hit-region={HIT_REGION.PANEL}>
           <PanelBody
             sessions={visibleSessions}
             tab={tab}
@@ -419,7 +464,7 @@ export function App(): React.JSX.Element {
         <button
           type="button"
           className="compact-hover-target"
-          data-hit-region
+          data-hit-region={HIT_REGION.CAPSULE}
           aria-expanded={panelOpen}
           aria-label={`${tallySummary(tally)}. ${panelOpen ? "Close" : "Open"} the panel`}
           // Keeps the press from moving focus here at all, so nothing is drawn
