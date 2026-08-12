@@ -14,7 +14,9 @@ Canonical commands:
 - `./scripts/check.sh` — run portable repository, type, test, and build checks
 - `./scripts/test-macos.sh` — package and validate the macOS app
 - `./scripts/verify.sh` — complete macOS validation plus visual evidence
-- `./scripts/run.sh` — launch the app against live sessions (`--fixture smoke` for fixture data)
+- `./scripts/run.sh` — launch the app against live sessions, replacing any
+  running instance (`--fixture smoke` for fixture data, `--keep-running` to keep
+  the running instance)
 - `./scripts/evidence.sh` — write the fixture PNG under `artifacts/`
 - `pnpm evidence:record` — record the fixture transition on a physical Mac
 - `pnpm lint:fix` — apply repository formatting and safe lint fixes
