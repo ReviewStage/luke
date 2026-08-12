@@ -24,6 +24,8 @@ export interface AppBootstrap {
   profile: string;
   fixture: FixtureSnapshot;
   captureMode: boolean;
+  /** True when `--fixture` (or a capture run) makes the panel render fixture sessions. */
+  fixtureMode: boolean;
   packaged: boolean;
   platform: string;
   electronVersion: string;

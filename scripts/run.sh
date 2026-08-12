@@ -11,6 +11,7 @@ if [[ ! -x "$SIDECAR_ELECTRON_BIN" ]]; then
     "$SCRIPT_DIRECTORY/bootstrap.sh"
 fi
 
+# Live sessions are the default. Pass `--fixture smoke` for deterministic data;
+# the app honours it on its own, so nothing needs injecting here.
 cd "$SIDECAR_REPO_ROOT"
-exec pnpm start -- \
-    --fixture "$SIDECAR_FIXTURE_SCENARIO" "$@"
+exec pnpm start -- "$@"

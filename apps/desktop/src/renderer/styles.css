@@ -15,7 +15,10 @@ body,
   width: 100%;
   height: 100%;
   margin: 0;
-  overflow: hidden;
+  /* `clip` rather than `hidden`: the expanded stage is 520px tall and stays in
+     layout while the compact window is only ~32px, so `hidden` leaves a scroll
+     container that focus or scrollIntoView can drag the notch capsule out of. */
+  overflow: clip;
   background: transparent;
   user-select: none;
 }
