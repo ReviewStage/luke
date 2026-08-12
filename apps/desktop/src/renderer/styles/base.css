@@ -319,11 +319,21 @@ button:disabled {
   cursor: pointer;
   transform: translateX(-50%);
   /* Pressing the capsule is a gesture, not a focus change: a ring drawn around
-     the notch strip is the one thing on screen that cannot look intentional.
-     Keyboard focus never lands here — Escape is handled on the window. */
+     the notch strip by a mouse press is the one thing on screen that cannot
+     look intentional. */
   outline: none;
   -webkit-app-region: no-drag;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* A keyboard can reach this control, and focus it cannot see is worse than a
+   ring: `:focus-visible` draws for the keyboard and never for a press. The ring
+   is inset, because an outline outside this box would be drawn on the desktop
+   above the shape. */
+.compact-hover-target:focus-visible {
+  border-radius: var(--notch-convex-radius);
+  outline: 2px solid var(--state-working);
+  outline-offset: -4px;
 }
 
 .app-stage[data-presentation="peek"] .compact-hover-target {
@@ -528,6 +538,14 @@ button:disabled {
 }
 
 .app-stage[data-notch="false"][data-presentation="panel"] .wing {
+  top: 0;
+  height: var(--capsule-height);
+}
+
+/* The panel meets the top edge even where the capsule floated, so the strip you
+   press to close it has to grow back with the shape — the press target follows
+   what is drawn, in every state. */
+.app-stage[data-notch="false"][data-presentation="panel"] .compact-hover-target {
   top: 0;
   height: var(--capsule-height);
 }
@@ -1175,7 +1193,25 @@ button:disabled {
 
 /* COLLAPSE_ANIMATION_MS in app.tsx drops to zero under the same query, so the
    window still waits for the capsule rather than shrinking under the panel. */
+/* Reduced motion is answered at the tokens rather than element by element. A
+   list of selectors misses whatever is added later, and it loses outright to the
+   staggered rules, which carry a `.app-stage[data-presentation]` prefix a media
+   query does not add specificity to. Zeroing the vocabulary reaches every rule
+   derived from it, including those. Hover feedback keeps its 70ms: a colour
+   settling is not motion. */
 @media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-shape: 1ms;
+    --duration-exit: 1ms;
+    --duration-quick: 1ms;
+    --duration-fast: 1ms;
+    --expand-delay: 0ms;
+    --peek-delay: 0ms;
+    --row-stagger: 0ms;
+    /* Nothing travels, so the stack has no distance to spring across. */
+    --row-fan: 0px;
+  }
+
   .panel-surface,
   .expanded-stage,
   .wing-copy,
