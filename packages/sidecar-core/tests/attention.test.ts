@@ -258,6 +258,54 @@ test("drops a decision the session already moved past", async () => {
   assert.deepEqual(spokenReview?.decision, speakDecision());
 });
 
+test("re-checks every decision after the slowest evaluation in the pass lands", async () => {
+  const waitingSession = session(claude, "answered", {
+    status: SESSION_STATUS.WAITING,
+    observedAt: DECIDED_AT,
+  });
+  const workingSession = session(claude, "answered", { observedAt: DECIDED_AT });
+  const slowSession = session(claude, "slow", { observedAt: DECIDED_AT - 1_000 });
+  const current = new Map<string, NormalizedSession>([
+    ["answered", waitingSession],
+    ["slow", slowSession],
+  ]);
+  let releaseSlow: (() => void) | undefined;
+
+  const reviewer = new SessionAttentionReviewer({
+    evaluator: {
+      evaluate: async (update) => {
+        if (update.providerSessionId === "slow") {
+          await new Promise<void>((resolve) => {
+            releaseSlow = resolve;
+          });
+        }
+        return speakDecision();
+      },
+    },
+    currentSession: (identity) => current.get(identity.providerSessionId),
+    now: () => DECIDED_AT,
+  });
+
+  const pass = reviewer.review([waitingSession, slowSession]);
+  // Let the answered session's evaluation finish completely, so the pass is
+  // held open only by the slow sibling.
+  await new Promise((resolve) => setImmediate(resolve));
+
+  // A provider refresh lands while the slow sibling still holds the pass open.
+  current.set("answered", workingSession);
+  releaseSlow?.();
+  const reviews = await pass;
+
+  assert.equal(
+    reviews.find((review) => review.providerSessionId === "answered")?.outcome,
+    ATTENTION_REVIEW_OUTCOME.SUPERSEDED,
+  );
+  assert.equal(
+    reviews.find((review) => review.providerSessionId === "slow")?.outcome,
+    ATTENTION_REVIEW_OUTCOME.DECIDED,
+  );
+});
+
 test("drops a decision for a session that disappeared while it was evaluated", async () => {
   const reviewer = new SessionAttentionReviewer({
     evaluator: evaluatorReturning(speakDecision()),

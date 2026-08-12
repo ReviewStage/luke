@@ -319,7 +319,15 @@ export class SessionAttentionReviewer {
     for (const candidate of selected) this.#markPending(candidate.session);
 
     try {
-      return await Promise.all(selected.map((candidate) => this.#reviewUpdate(candidate.update)));
+      const evaluated = await Promise.all(
+        selected.map((candidate) => this.#reviewUpdate(candidate.update)),
+      );
+      // Every speaking decision is settled here, in one uninterrupted step,
+      // rather than as each evaluation lands: waiting on a slower sibling is
+      // itself long enough for a provider to move a session on. Callers apply
+      // the returned decisions without awaiting in between, so nothing can
+      // change the session between this check and the write.
+      return evaluated.map((review) => this.#settle(review));
     } finally {
       for (const candidate of selected) this.#clearPending(candidate.session);
     }
@@ -332,27 +340,32 @@ export class SessionAttentionReviewer {
       providerSessionId: update.providerSessionId,
     };
 
-    if (!decision)
+    if (!decision) {
       return this.#silentReview(identity, update, ATTENTION_REVIEW_OUTCOME.UNAVAILABLE);
-    if (decision.disposition === ATTENTION_DISPOSITION.SILENT) {
-      return { ...identity, update, decision, outcome: ATTENTION_REVIEW_OUTCOME.DECIDED };
     }
-    if (this.#isSuperseded(identity, update)) {
-      return this.#silentReview(identity, update, ATTENTION_REVIEW_OUTCOME.SUPERSEDED);
-    }
-    if (!this.#ledger.shouldSpeak(identity, decision)) {
-      return this.#silentReview(identity, update, ATTENTION_REVIEW_OUTCOME.DEDUPLICATED);
-    }
-
-    this.#ledger.remember(identity, decision);
     return { ...identity, update, decision, outcome: ATTENTION_REVIEW_OUTCOME.DECIDED };
   }
 
   /**
-   * Reports whether the session moved past the state the evaluator reasoned
-   * about. Speaking then would interrupt with news that is already wrong, so the
-   * decision is dropped and the newer state earns its own review.
+   * Admits a speaking decision only if it is still true and still new. A
+   * decision the session has moved past would interrupt with news that is
+   * already wrong, and it is deliberately not remembered, so the same sentence
+   * stays available once the session genuinely needs it.
    */
+  #settle(review: AttentionReview): AttentionReview {
+    if (review.decision.disposition === ATTENTION_DISPOSITION.SILENT) return review;
+    if (this.#isSuperseded(review, review.update)) {
+      return this.#silentReview(review, review.update, ATTENTION_REVIEW_OUTCOME.SUPERSEDED);
+    }
+    if (!this.#ledger.shouldSpeak(review, review.decision)) {
+      return this.#silentReview(review, review.update, ATTENTION_REVIEW_OUTCOME.DEDUPLICATED);
+    }
+
+    this.#ledger.remember(review, review.decision);
+    return review;
+  }
+
+  /** Reports whether the session moved past the state the evaluator reasoned about. */
   #isSuperseded(identity: SessionIdentity, update: AttentionUpdate): boolean {
     if (!this.#currentSession) return false;
     const current = this.#currentSession(identity);
