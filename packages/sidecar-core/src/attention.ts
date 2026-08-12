@@ -73,11 +73,22 @@ export interface AttentionEvaluator {
   evaluate(update: AttentionUpdate): Promise<AttentionDecision | undefined>;
 }
 
+/** Why a reviewed update ended up with the decision it carries. */
+export const ATTENTION_REVIEW_OUTCOME = {
+  DECIDED: "decided",
+  DEDUPLICATED: "deduplicated",
+  SUPERSEDED: "superseded",
+  UNAVAILABLE: "unavailable",
+} as const;
+
+export type AttentionReviewOutcome =
+  (typeof ATTENTION_REVIEW_OUTCOME)[keyof typeof ATTENTION_REVIEW_OUTCOME];
+
 /** The decision a reviewer reached for one session, after deduplication. */
 export interface AttentionReview extends SessionIdentity {
   update: AttentionUpdate;
   decision: AttentionDecision;
-  suppressed: boolean;
+  outcome: AttentionReviewOutcome;
 }
 
 export interface AttentionSpeechLedgerOptions {
@@ -87,6 +98,12 @@ export interface AttentionSpeechLedgerOptions {
 
 export interface SessionAttentionReviewerOptions {
   evaluator: AttentionEvaluator;
+  /**
+   * Reads a session as it stands right now. A model call takes long enough for
+   * a provider to move a session on, so without this the reviewer cannot tell
+   * that the state it reasoned about is gone.
+   */
+  currentSession?: (identity: SessionIdentity) => NormalizedSession | undefined;
   now?: () => number;
   repeatWindowMs?: number;
   maximumUpdatesPerReview?: number;
@@ -253,11 +270,15 @@ export class AttentionSpeechLedger {
 /**
  * Turns registry snapshots into attention decisions. It reviews only sessions
  * that actually changed, bounds how many updates one pass may evaluate, keeps a
- * single evaluation in flight per session, and defaults to silence whenever an
- * evaluator fails or returns something outside the decision contract.
+ * single evaluation in flight per session, discards a decision the session has
+ * already moved past, and defaults to silence whenever an evaluator fails or
+ * returns something outside the decision contract.
  */
 export class SessionAttentionReviewer {
   readonly #evaluator: AttentionEvaluator;
+  readonly #currentSession:
+    | ((identity: SessionIdentity) => NormalizedSession | undefined)
+    | undefined;
   readonly #now: () => number;
   readonly #maximumUpdatesPerReview: number;
   readonly #ledger: AttentionSpeechLedger;
@@ -266,6 +287,7 @@ export class SessionAttentionReviewer {
 
   constructor(options: SessionAttentionReviewerOptions) {
     this.#evaluator = options.evaluator;
+    this.#currentSession = options.currentSession;
     this.#now = options.now ?? Date.now;
     this.#maximumUpdatesPerReview = positiveInteger(
       options.maximumUpdatesPerReview,
@@ -310,18 +332,40 @@ export class SessionAttentionReviewer {
       providerSessionId: update.providerSessionId,
     };
 
-    if (!decision) {
-      return { ...identity, update, decision: silentAttention(this.#now()), suppressed: false };
-    }
+    if (!decision)
+      return this.#silentReview(identity, update, ATTENTION_REVIEW_OUTCOME.UNAVAILABLE);
     if (decision.disposition === ATTENTION_DISPOSITION.SILENT) {
-      return { ...identity, update, decision, suppressed: false };
+      return { ...identity, update, decision, outcome: ATTENTION_REVIEW_OUTCOME.DECIDED };
+    }
+    if (this.#isSuperseded(identity, update)) {
+      return this.#silentReview(identity, update, ATTENTION_REVIEW_OUTCOME.SUPERSEDED);
     }
     if (!this.#ledger.shouldSpeak(identity, decision)) {
-      return { ...identity, update, decision: silentAttention(this.#now()), suppressed: true };
+      return this.#silentReview(identity, update, ATTENTION_REVIEW_OUTCOME.DEDUPLICATED);
     }
 
     this.#ledger.remember(identity, decision);
-    return { ...identity, update, decision, suppressed: false };
+    return { ...identity, update, decision, outcome: ATTENTION_REVIEW_OUTCOME.DECIDED };
+  }
+
+  /**
+   * Reports whether the session moved past the state the evaluator reasoned
+   * about. Speaking then would interrupt with news that is already wrong, so the
+   * decision is dropped and the newer state earns its own review.
+   */
+  #isSuperseded(identity: SessionIdentity, update: AttentionUpdate): boolean {
+    if (!this.#currentSession) return false;
+    const current = this.#currentSession(identity);
+    if (!current) return true;
+    return current.status !== update.status || current.summary !== update.summary;
+  }
+
+  #silentReview(
+    identity: SessionIdentity,
+    update: AttentionUpdate,
+    outcome: AttentionReviewOutcome,
+  ): AttentionReview {
+    return { ...identity, update, decision: silentAttention(this.#now()), outcome };
   }
 
   async #evaluate(update: AttentionUpdate): Promise<AttentionDecision | undefined> {

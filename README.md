@@ -66,7 +66,10 @@ update—provider, session title, previous and current status, and the observed
 summary—and answers with a structured decision: stay silent, speak during the
 turn, or speak once the turn ends. Anything outside that contract, and any API
 failure, leaves Luke silent. Repeated decisions about the same session are
-deduplicated so one development is never announced twice.
+deduplicated so one development is never announced twice, and a decision is
+discarded when the session moves past the state it was made about—answering a
+waiting session while the model is still thinking should not produce a stale
+interruption.
 
 The layer is optional. Without `OPENAI_API_KEY`, Luke observes sessions and
 stays silent, and no other behavior changes:

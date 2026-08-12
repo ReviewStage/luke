@@ -45,7 +45,10 @@ const sessionRegistry = new InMemorySessionRegistry();
 const sessionAdapters = [new ClaudeCodeSessionAdapter(), new CodexSessionAdapter()] as const;
 const attentionEvaluator = captureMode ? undefined : openAiAttentionEvaluatorFromEnvironment();
 const attentionReviewer = attentionEvaluator
-  ? new SessionAttentionReviewer({ evaluator: attentionEvaluator })
+  ? new SessionAttentionReviewer({
+      evaluator: attentionEvaluator,
+      currentSession: (identity) => sessionRegistry.get(identity),
+    })
   : undefined;
 let windowMode: WindowMode = captureMode
   ? process.argv.includes("--compact")
