@@ -31,22 +31,6 @@ export interface AppSettings {
   secretStorageAvailable: boolean;
 }
 
-/**
- * The panel view a capture run opens. Visual evidence is only useful for the
- * surfaces it renders, so a screenshot run names the one it wants rather than
- * always capturing the session list.
- */
-export const CAPTURE_VIEW = {
-  SESSIONS: "sessions",
-  SETTINGS: "settings",
-} as const;
-
-export type CaptureView = (typeof CAPTURE_VIEW)[keyof typeof CAPTURE_VIEW];
-
-export function isCaptureView(value: unknown): value is CaptureView {
-  return Object.values(CAPTURE_VIEW).some((view) => view === value);
-}
-
 /** A rejected update reports why without echoing the submitted value. */
 export interface SettingsUpdateResult {
   settings: AppSettings;
@@ -65,7 +49,6 @@ export interface DisplayDiagnostic {
 export interface AppBootstrap {
   mode: WindowMode;
   profile: string;
-  view: CaptureView;
   fixture: FixtureSnapshot;
   captureMode: boolean;
   /** True when `--fixture` (or a capture run) makes the panel render fixture sessions. */
