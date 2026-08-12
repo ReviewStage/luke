@@ -7,6 +7,7 @@ import {
   type NativeNotchGeometry,
   positionNotchWindow,
   SessionAttentionReviewer,
+  type SessionProviderAdapter,
 } from "@sidecar/core";
 import {
   app,
@@ -38,6 +39,11 @@ import {
   type SettingsUpdateResult,
   type WindowMode,
 } from "./shared/contracts";
+import {
+  CREDENTIAL_PROVIDER_ID,
+  type CredentialProviderId,
+  isCredentialProviderId,
+} from "./shared/credential-providers";
 
 const captureOutput = argumentValue("--capture-evidence");
 const profile = argumentValue("--profile") ?? "idle";
@@ -60,8 +66,12 @@ const settingsStore = new SettingsStore({
   },
 });
 const conductorAdapter = new ConductorSessionAdapter({
-  readApiKey: () => settingsStore.readConductorApiKey(),
+  readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.CONDUCTOR),
 });
+// Saving a key affects only the provider it belongs to, so this maps each
+// credential to the one observer that reads it.
+const adapterByCredentialProvider: ReadonlyMap<CredentialProviderId, SessionProviderAdapter> =
+  new Map([[CREDENTIAL_PROVIDER_ID.CONDUCTOR, conductorAdapter]]);
 const sessionAdapters = [
   new ClaudeCodeSessionAdapter(),
   new CodexSessionAdapter(),
@@ -251,20 +261,25 @@ function registerIpc(): void {
     return requestMicrophone();
   });
 
-  // The renderer can replace or clear the credential but never reads it back;
-  // the reply reports only where a key now comes from.
+  // The renderer can replace or clear a provider's credential but never reads
+  // it back; the reply reports only where each key now comes from.
   ipcMain.handle(
-    channels.setConductorApiKey,
-    async (event, apiKey: unknown): Promise<SettingsUpdateResult> => {
+    channels.setProviderApiKey,
+    async (event, providerId: unknown, apiKey: unknown): Promise<SettingsUpdateResult> => {
       if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      // The provider list is fixed by this build, so an id outside it is a
+      // malformed request rather than something the user can correct.
+      if (!isCredentialProviderId(providerId)) throw new Error("Unknown credential provider");
       if (apiKey !== undefined && typeof apiKey !== "string") {
         throw new Error("Invalid API key request");
       }
       try {
-        const result = await settingsStore.setConductorApiKey(apiKey);
-        // Only the credentialed provider is affected, so the local observers are
-        // left alone rather than re-crawling the filesystem on every save.
-        if (!result.reason) void sessionRegistry.refresh(conductorAdapter);
+        const result = await settingsStore.setApiKey(providerId, apiKey);
+        // Only the provider whose key changed is affected, so the local
+        // observers are left alone rather than re-crawling the filesystem on
+        // every save.
+        const adapter = adapterByCredentialProvider.get(providerId);
+        if (!result.reason && adapter) void sessionRegistry.refresh(adapter);
         return result;
       } catch {
         // A filesystem failure is not something the user can act on, so it is

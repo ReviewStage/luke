@@ -9,6 +9,7 @@ import type {
   WindowMode,
 } from "./shared/contracts";
 import { channels } from "./shared/contracts";
+import type { CredentialProviderId } from "./shared/credential-providers";
 
 const bridge: AppBridge = {
   getBootstrap: () => ipcRenderer.invoke(channels.bootstrap) as Promise<AppBootstrap>,
@@ -19,8 +20,12 @@ const bridge: AppBridge = {
   },
   requestMicrophone: () =>
     ipcRenderer.invoke(channels.requestMicrophone) as Promise<MicrophoneStatus>,
-  setConductorApiKey: (apiKey: string | undefined) =>
-    ipcRenderer.invoke(channels.setConductorApiKey, apiKey) as Promise<SettingsUpdateResult>,
+  setProviderApiKey: (providerId: CredentialProviderId, apiKey: string | undefined) =>
+    ipcRenderer.invoke(
+      channels.setProviderApiKey,
+      providerId,
+      apiKey,
+    ) as Promise<SettingsUpdateResult>,
   focusPanel: () => ipcRenderer.send(channels.focusPanel),
   notifyReady: () => ipcRenderer.send(channels.rendererReady),
   quit: () => ipcRenderer.send(channels.quit),
