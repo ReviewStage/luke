@@ -378,7 +378,7 @@ function App(): React.JSX.Element {
 
   return (
     <div className="app-stage" data-mode={mode} style={style}>
-      <div className="compact-stage" aria-hidden={mode !== "compact"}>
+      <div className="compact-stage" aria-hidden={mode !== "compact"} inert={mode !== "compact"}>
         {display.notch.hasNotch ? <span className="notch-housing" aria-hidden="true" /> : null}
         {hasAudioSignal ? (
           <div className="compact-waveform">
@@ -405,9 +405,13 @@ function App(): React.JSX.Element {
         </div>
       </div>
 
+      {/* Inert while hidden: the panel keeps its 620x520 layout box behind
+          `opacity: 0`, so its buttons stay focusable and the browser will scroll
+          them into view, pushing the compact capsule off screen. */}
       <div
         className="expanded-stage"
         aria-hidden={mode !== "expanded"}
+        inert={mode !== "expanded"}
         data-hit-region
         onPointerEnter={cancelHoverTransition}
         onPointerLeave={() => scheduleMode(false)}
