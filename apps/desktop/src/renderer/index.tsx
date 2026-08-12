@@ -1,4 +1,9 @@
-import type { SessionState } from "@sidecar/core";
+import {
+  ATTENTION_DISPOSITION,
+  type NormalizedSession,
+  SESSION_STATUS,
+  type SessionState,
+} from "@sidecar/core";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type {
@@ -13,6 +18,22 @@ const stateLabels: Record<SessionState, string> = {
   attention: "Needs attention",
   complete: "Complete",
 };
+
+const statusLabels: Record<NormalizedSession["status"], string> = {
+  [SESSION_STATUS.WORKING]: "Working",
+  [SESSION_STATUS.WAITING]: "Waiting",
+  [SESSION_STATUS.COMPLETE]: "Complete",
+  [SESSION_STATUS.UNKNOWN]: "Observed",
+};
+
+interface DisplaySession {
+  id: string;
+  title: string;
+  provider: string;
+  detail: string;
+  state: SessionState;
+  label: string;
+}
 
 function usePointerPassthrough(onHitRegionEnter: () => void, onHitRegionLeave: () => void): void {
   const lastValue = useRef<boolean | undefined>(undefined);
@@ -122,8 +143,44 @@ function notchStyle(display: DisplayDiagnostic): CSSProperties {
   } as CSSProperties;
 }
 
+function sessionNeedsAttention(session: NormalizedSession): boolean {
+  return (
+    session.status === SESSION_STATUS.WAITING ||
+    session.attention.disposition !== ATTENTION_DISPOSITION.SILENT
+  );
+}
+
+function sessionState(session: NormalizedSession): SessionState {
+  if (sessionNeedsAttention(session)) return "attention";
+  if (session.status === SESSION_STATUS.COMPLETE) return "complete";
+  return "working";
+}
+
+function displaySessions(bootstrap: AppBootstrap, sessions: readonly NormalizedSession[]) {
+  if (bootstrap.captureMode) {
+    return bootstrap.fixture.sessions.map(
+      (session): DisplaySession => ({
+        ...session,
+        label: stateLabels[session.state],
+      }),
+    );
+  }
+
+  return sessions.map(
+    (session): DisplaySession => ({
+      id: session.providerSessionId,
+      title: session.title,
+      provider: session.provider.displayName,
+      detail: session.summary ?? statusLabels[session.status],
+      state: sessionState(session),
+      label: statusLabels[session.status],
+    }),
+  );
+}
+
 function App(): React.JSX.Element {
   const [bootstrap, setBootstrap] = useState<AppBootstrap>();
+  const [sessions, setSessions] = useState<readonly NormalizedSession[]>([]);
   const [display, setDisplay] = useState<DisplayDiagnostic>();
   const [mode, setMode] = useState<WindowMode>("compact");
   const [microphoneStatus, setMicrophoneStatus] = useState<MicrophoneStatus>("not-determined");
@@ -254,6 +311,7 @@ function App(): React.JSX.Element {
     const bootstrapGeneration = modeGeneration.current;
     void window.sidecar.getBootstrap().then((value) => {
       setBootstrap(value);
+      setSessions(value.sessions);
       setDisplay(value.display);
       if (modeGeneration.current === bootstrapGeneration) applyAuthoritativeMode(value.mode);
       setMicrophoneStatus(value.microphoneStatus);
@@ -270,11 +328,13 @@ function App(): React.JSX.Element {
       void startMicrophone();
     });
     const removeDisplay = window.sidecar.onDisplayChanged(setDisplay);
+    const removeSessions = window.sidecar.onSessionsChanged(setSessions);
     return () => {
       cancelHoverTransition();
       removeLifecycle();
       removeMicrophone();
       removeDisplay();
+      removeSessions();
       void stopMicrophone();
     };
   }, [applyAuthoritativeMode, cancelHoverTransition, startMicrophone, stopMicrophone]);
@@ -289,12 +349,14 @@ function App(): React.JSX.Element {
 
   if (!bootstrap || !display) return <div />;
 
-  const attention = bootstrap.fixture.sessions.filter(
-    (session) => session.state === "attention",
-  ).length;
+  const visibleSessions = displaySessions(bootstrap, sessions);
+  const attention = visibleSessions.filter((session) => session.state === "attention").length;
   const fixtureSpeaking = bootstrap.profile === "speaking";
   const hasAudioSignal = fixtureSpeaking || analyser !== undefined;
   const indicatorState = attention > 0 ? "attention" : "working";
+  const hasLiveSessions = !bootstrap.captureMode && sessions.length > 0;
+  const sessionSummary =
+    visibleSessions.length > 0 ? "All sessions are moving" : "No sessions observed";
   const style = notchStyle(display);
 
   return (
@@ -316,7 +378,7 @@ function App(): React.JSX.Element {
           aria-label={
             attention > 0
               ? `${attention} session${attention === 1 ? "" : "s"} needs attention`
-              : "Sessions are active"
+              : sessionSummary
           }
           onPointerEnter={() => scheduleMode(true)}
           onPointerLeave={cancelHoverTransition}
@@ -349,7 +411,7 @@ function App(): React.JSX.Element {
                 <small>
                   {attention > 0
                     ? `${attention} session${attention === 1 ? "" : "s"} needs attention`
-                    : "All sessions are moving"}
+                    : sessionSummary}
                 </small>
               </span>
             </div>
@@ -359,13 +421,19 @@ function App(): React.JSX.Element {
             <div>
               <p className="eyebrow">Notch sidecar</p>
               <h1>Agent activity</h1>
-              <p className="subtle">Synthetic sessions · no credentials or live transcripts</p>
+              <p className="subtle">
+                {bootstrap.captureMode
+                  ? "Synthetic sessions · no credentials or live transcripts"
+                  : "Live sessions · no credentials or transcripts retained"}
+              </p>
             </div>
-            <span className="fixture-badge">FIXTURE · SMOKE</span>
+            <span className="fixture-badge">
+              {hasLiveSessions ? "LIVE" : bootstrap.captureMode ? "FIXTURE · SMOKE" : "IDLE"}
+            </span>
           </div>
 
           <div className="session-list">
-            {bootstrap.fixture.sessions.map((item) => (
+            {visibleSessions.map((item) => (
               <article className="session-row" key={item.id}>
                 <span className={`status-mark ${item.state}`} />
                 <span className="session-copy">
@@ -374,7 +442,7 @@ function App(): React.JSX.Element {
                     {item.provider} · {item.detail}
                   </small>
                 </span>
-                <span className={`session-status ${item.state}`}>{stateLabels[item.state]}</span>
+                <span className={`session-status ${item.state}`}>{item.label}</span>
               </article>
             ))}
           </div>

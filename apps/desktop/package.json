@@ -9,6 +9,7 @@
     "build:native": "node scripts/build-native.mjs",
     "package": "pnpm build:native && pnpm build && node scripts/package.mjs",
     "start": "pnpm build:native && pnpm build && electron .",
+    "test": "tsx --test tests/**/*.test.ts",
     "typecheck": "tsc --project tsconfig.json"
   },
   "devDependencies": {
@@ -21,6 +22,7 @@
     "esbuild": "0.28.2",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "tsx": "4.23.12",
     "typescript": "7.0.2"
   }
 }

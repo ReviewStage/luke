@@ -1,7 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { fixtureSnapshot, type NativeNotchGeometry, positionNotchWindow } from "@sidecar/core";
+import {
+  fixtureSnapshot,
+  InMemorySessionRegistry,
+  type NativeNotchGeometry,
+  positionNotchWindow,
+} from "@sidecar/core";
 import {
   app,
   BrowserWindow,
@@ -17,6 +22,7 @@ import {
   systemPreferences,
   Tray,
 } from "electron";
+import { ClaudeCodeSessionAdapter } from "./claude-code-adapter";
 import { readMacScreenGeometry } from "./macos-screen-geometry";
 import {
   type AppBootstrap,
@@ -31,6 +37,9 @@ const profile = argumentValue("--profile") ?? "idle";
 const fixtureName = argumentValue("--fixture") ?? "smoke";
 const fixture = fixtureSnapshot(fixtureName);
 const captureMode = captureOutput !== undefined;
+const SESSION_REFRESH_INTERVAL_MS = 5_000;
+const sessionRegistry = new InMemorySessionRegistry();
+const sessionAdapters = [new ClaudeCodeSessionAdapter()] as const;
 let windowMode: WindowMode = captureMode
   ? process.argv.includes("--compact")
     ? "compact"
@@ -42,6 +51,8 @@ let panelWindow: BrowserWindow | undefined;
 let tray: Tray | undefined;
 let selectedDisplayId: number | undefined;
 let nativeScreens = new Map<number, NativeNotchGeometry>();
+let sessionRefreshTimer: NodeJS.Timeout | undefined;
+let sessionRefreshRunning = false;
 
 function argumentValue(name: string): string | undefined {
   const index = process.argv.indexOf(name);
@@ -159,6 +170,7 @@ function registerIpc(): void {
       mode: windowMode,
       profile,
       fixture,
+      captureMode,
       packaged: app.isPackaged,
       platform: process.platform,
       electronVersion: process.versions.electron,
@@ -166,6 +178,7 @@ function registerIpc(): void {
       nodeVersion: process.versions.node,
       microphoneStatus: microphoneStatus(),
       display: displayDiagnostic(),
+      sessions: captureMode ? [] : sessionRegistry.snapshot().sessions,
     };
   });
 
@@ -205,6 +218,33 @@ function registerIpc(): void {
     process.stdout.write(`Electron evidence: ${destination}\n`);
     app.quit();
   });
+}
+
+async function refreshProviderSessions(): Promise<void> {
+  if (captureMode || sessionRefreshRunning) return;
+  sessionRefreshRunning = true;
+  try {
+    for (const adapter of sessionAdapters) {
+      await sessionRegistry.refresh(adapter);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`Session observation failed: ${message}\n`);
+  } finally {
+    sessionRefreshRunning = false;
+  }
+}
+
+function startSessionObservation(): void {
+  if (captureMode) return;
+  sessionRegistry.subscribe((snapshot) => {
+    panelWindow?.webContents.send(channels.sessionsChanged, snapshot.sessions);
+  });
+  void refreshProviderSessions();
+  sessionRefreshTimer = setInterval(() => {
+    void refreshProviderSessions();
+  }, SESSION_REFRESH_INTERVAL_MS);
+  sessionRefreshTimer.unref();
 }
 
 function configurePermissions(): void {
@@ -349,6 +389,7 @@ if (!app.requestSingleInstanceLock()) {
     createPanel();
     configurePermissions();
     createTray();
+    startSessionObservation();
 
     screen.on("display-added", handleDisplayChange);
     screen.on("display-removed", handleDisplayChange);
@@ -368,5 +409,9 @@ if (!app.requestSingleInstanceLock()) {
     }
   });
 }
+
+app.on("before-quit", () => {
+  if (sessionRefreshTimer) clearInterval(sessionRefreshTimer);
+});
 
 app.on("window-all-closed", () => app.quit());
