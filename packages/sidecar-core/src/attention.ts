@@ -271,8 +271,9 @@ export class AttentionSpeechLedger {
  * Turns registry snapshots into attention decisions. It reviews only sessions
  * that actually changed, bounds how many updates one pass may evaluate, keeps a
  * single evaluation in flight per session, discards a decision the session has
- * already moved past, and defaults to silence whenever an evaluator fails or
- * returns something outside the decision contract.
+ * already moved past without consuming that development, and defaults to
+ * silence whenever an evaluator fails or returns something outside the decision
+ * contract.
  */
 export class SessionAttentionReviewer {
   readonly #evaluator: AttentionEvaluator;
@@ -313,6 +314,7 @@ export class SessionAttentionReviewer {
       .sort((first, second) => second.session.observedAt - first.session.observedAt)
       .slice(0, this.#maximumUpdatesPerReview);
 
+    const baselines = selected.map((candidate) => this.#observedSession(candidate.session));
     // Sessions left out of this pass keep their previous baseline so the same
     // development is derived again once a slot frees up.
     this.#observed = this.#nextObserved(sessions, selected);
@@ -327,10 +329,31 @@ export class SessionAttentionReviewer {
       // itself long enough for a provider to move a session on. Callers apply
       // the returned decisions without awaiting in between, so nothing can
       // change the session between this check and the write.
-      return evaluated.map((review) => this.#settle(review));
+      return evaluated.map((review, index) => {
+        const settled = this.#settle(review);
+        if (settled.outcome === ATTENTION_REVIEW_OUTCOME.SUPERSEDED) {
+          // Nothing was said about this state, so it must not stay consumed. A
+          // session that leaves and re-enters it before any pass observes the
+          // step in between would otherwise never be reviewed again.
+          const candidate = selected[index];
+          if (candidate) this.#rewind(candidate.session, baselines[index]);
+        }
+        return settled;
+      });
     } finally {
       for (const candidate of selected) this.#clearPending(candidate.session);
     }
+  }
+
+  #rewind(session: NormalizedSession, baseline: NormalizedSession | undefined): void {
+    const providerSessions = this.#observed.get(session.providerId);
+    if (!providerSessions) return;
+    if (baseline) {
+      providerSessions.set(session.providerSessionId, baseline);
+      return;
+    }
+    providerSessions.delete(session.providerSessionId);
+    if (providerSessions.size === 0) this.#observed.delete(session.providerId);
   }
 
   async #reviewUpdate(update: AttentionUpdate): Promise<AttentionReview> {

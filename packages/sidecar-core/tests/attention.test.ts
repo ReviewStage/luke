@@ -258,6 +258,44 @@ test("drops a decision the session already moved past", async () => {
   assert.deepEqual(spokenReview?.decision, speakDecision());
 });
 
+test("reviews the development again after the session returns to a superseded state", async () => {
+  const working = session(claude, "review");
+  const waiting = session(claude, "review", { status: SESSION_STATUS.WAITING });
+  let current: NormalizedSession = working;
+  let answeredWhileEvaluating = false;
+
+  const reviewer = new SessionAttentionReviewer({
+    evaluator: {
+      evaluate: async (update) => {
+        if (update.status !== SESSION_STATUS.WAITING) {
+          return { disposition: ATTENTION_DISPOSITION.SILENT, decidedAt: DECIDED_AT };
+        }
+        if (answeredWhileEvaluating) current = working;
+        return speakDecision();
+      },
+    },
+    currentSession: () => current,
+    now: () => DECIDED_AT,
+  });
+
+  await reviewer.review([working]);
+
+  answeredWhileEvaluating = true;
+  const [supersededReview] = await reviewer.review([waiting]);
+  assert.equal(supersededReview?.outcome, ATTENTION_REVIEW_OUTCOME.SUPERSEDED);
+
+  // The session asks again before any pass observed the answered state.
+  answeredWhileEvaluating = false;
+  current = waiting;
+  const [retriedReview] = await reviewer.review([waiting]);
+  assert.equal(
+    retriedReview?.outcome,
+    ATTENTION_REVIEW_OUTCOME.DECIDED,
+    "a superseded development is derived again instead of being consumed with the baseline",
+  );
+  assert.deepEqual(retriedReview?.decision, speakDecision());
+});
+
 test("re-checks every decision after the slowest evaluation in the pass lands", async () => {
   const waitingSession = session(claude, "answered", {
     status: SESSION_STATUS.WAITING,
