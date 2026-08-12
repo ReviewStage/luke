@@ -9,10 +9,19 @@ import { type CSSProperties, useCallback, useEffect, useRef, useState } from "re
 import { createRoot } from "react-dom/client";
 import type {
   AppBootstrap,
+  AppSettings,
+  CredentialSource,
   DisplayDiagnostic,
   MicrophoneStatus,
   WindowMode,
 } from "../shared/contracts";
+import { CREDENTIAL_SOURCE } from "../shared/contracts";
+
+const credentialLabels: Record<CredentialSource, string> = {
+  [CREDENTIAL_SOURCE.NONE]: "Not connected",
+  [CREDENTIAL_SOURCE.ENVIRONMENT]: "Connected · key read from the environment",
+  [CREDENTIAL_SOURCE.ENCRYPTED_FILE]: "Connected · key encrypted on this Mac",
+};
 
 const stateLabels: Record<SessionState, string> = {
   [SESSION_STATE.WORKING]: "Working",
@@ -138,6 +147,95 @@ function Waveform({
   );
 }
 
+/**
+ * The credential is write-only from the renderer: this form can replace or
+ * clear the stored key, and the main process never sends one back.
+ */
+function ConductorSettings({
+  settings,
+  onSubmit,
+}: {
+  settings: AppSettings;
+  onSubmit: (apiKey: string | undefined) => Promise<string | undefined>;
+}): React.JSX.Element {
+  const [draft, setDraft] = useState("");
+  const [rejection, setRejection] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  const field = useRef<HTMLInputElement | null>(null);
+
+  const storageUnavailable = !settings.secretStorageAvailable;
+  const hasStoredKey = settings.conductorApiKeySource === CREDENTIAL_SOURCE.ENCRYPTED_FILE;
+
+  useEffect(() => {
+    // The panel is shown without stealing focus, so typing only works once the
+    // window itself is key. `preventScroll` keeps this from scrolling the panel
+    // body, which is the one scroll container the layout allows.
+    window.sidecar.focusPanel();
+    if (!storageUnavailable) field.current?.focus({ preventScroll: true });
+  }, [storageUnavailable]);
+
+  const submit = async (apiKey: string | undefined) => {
+    setBusy(true);
+    const failure = await onSubmit(apiKey);
+    setBusy(false);
+    setRejection(failure);
+    if (!failure) setDraft("");
+  };
+
+  return (
+    <div className="settings-view">
+      <label className="settings-field" htmlFor="conductor-api-key">
+        <span className="settings-label">Conductor cloud API key</span>
+        <input
+          id="conductor-api-key"
+          ref={field}
+          className="settings-input"
+          type="password"
+          autoComplete="off"
+          spellCheck={false}
+          placeholder={hasStoredKey ? "Replace the stored key" : "Paste an API key"}
+          value={draft}
+          disabled={busy || storageUnavailable}
+          onChange={(event) => setDraft(event.target.value)}
+        />
+      </label>
+
+      <div className="settings-row">
+        <span className={`settings-state ${settings.conductorApiKeySource}`}>
+          {credentialLabels[settings.conductorApiKeySource]}
+        </span>
+        <span className="settings-actions">
+          {hasStoredKey ? (
+            <button
+              type="button"
+              className="quiet-button"
+              disabled={busy}
+              onClick={() => void submit(undefined)}
+            >
+              Remove key
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={busy || storageUnavailable || draft.trim().length === 0}
+            onClick={() => void submit(draft)}
+          >
+            {busy ? "Saving…" : "Save key"}
+          </button>
+        </span>
+      </div>
+
+      <p className="settings-hint">
+        {storageUnavailable
+          ? "This system offers no encrypted credential storage, so Luke will not store a key here."
+          : "Create a key in Conductor under Settings · API keys. Luke reads only cloud workspaces you created and never sends a prompt, message, or any other change."}
+      </p>
+      {rejection ? <p className="settings-error">{rejection}</p> : null}
+    </div>
+  );
+}
+
 function notchStyle(display: DisplayDiagnostic): CSSProperties {
   return {
     "--notch-top-inset": `${display.notch.topInset}px`,
@@ -184,6 +282,8 @@ function displaySessions(bootstrap: AppBootstrap, sessions: readonly NormalizedS
 function App(): React.JSX.Element {
   const [bootstrap, setBootstrap] = useState<AppBootstrap>();
   const [sessions, setSessions] = useState<readonly NormalizedSession[]>([]);
+  const [settings, setSettings] = useState<AppSettings>();
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [display, setDisplay] = useState<DisplayDiagnostic>();
   const [mode, setMode] = useState<WindowMode>("compact");
   const [microphoneStatus, setMicrophoneStatus] = useState<MicrophoneStatus>("not-determined");
@@ -298,23 +398,42 @@ function App(): React.JSX.Element {
     [cancelHoverTransition, changeMode],
   );
 
+  const showSettings = useCallback(
+    (open: boolean) => {
+      setSettingsOpen(open);
+      // Settings hold a text field, so pointer position must not close them.
+      if (open) cancelHoverTransition();
+    },
+    [cancelHoverTransition],
+  );
+
   const handleHitRegionEnter = useCallback(() => {
     if (modeRef.current === "compact") scheduleMode(true);
     else cancelHoverTransition();
   }, [cancelHoverTransition, scheduleMode]);
 
   const handleHitRegionLeave = useCallback(() => {
-    if (modeRef.current === "compact") cancelHoverTransition();
-    else scheduleMode(false);
-  }, [cancelHoverTransition, scheduleMode]);
+    if (modeRef.current === "compact" || settingsOpen) {
+      cancelHoverTransition();
+      return;
+    }
+    scheduleMode(false);
+  }, [cancelHoverTransition, scheduleMode, settingsOpen]);
 
   usePointerPassthrough(handleHitRegionEnter, handleHitRegionLeave);
+
+  const submitConductorApiKey = useCallback(async (apiKey: string | undefined) => {
+    const result = await window.sidecar.setConductorApiKey(apiKey);
+    setSettings(result.settings);
+    return result.reason;
+  }, []);
 
   useEffect(() => {
     const bootstrapGeneration = modeGeneration.current;
     void window.sidecar.getBootstrap().then((value) => {
       setBootstrap(value);
       setSessions(value.sessions);
+      setSettings(value.settings);
       setDisplay(value.display);
       if (modeGeneration.current === bootstrapGeneration) applyAuthoritativeMode(value.mode);
       setMicrophoneStatus(value.microphoneStatus);
@@ -344,11 +463,18 @@ function App(): React.JSX.Element {
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && mode === "expanded") void changeMode(false);
+      if (event.key !== "Escape" || mode !== "expanded") return;
+      if (settingsOpen) showSettings(false);
+      else void changeMode(false);
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [changeMode, mode]);
+  }, [changeMode, mode, settingsOpen, showSettings]);
+
+  useEffect(() => {
+    // A collapsed panel always reopens on the session list.
+    if (mode === "compact") setSettingsOpen(false);
+  }, [mode]);
 
   if (!bootstrap || !display) return <div />;
 
@@ -414,7 +540,7 @@ function App(): React.JSX.Element {
         inert={mode !== "expanded"}
         data-hit-region
         onPointerEnter={cancelHoverTransition}
-        onPointerLeave={() => scheduleMode(false)}
+        onPointerLeave={handleHitRegionLeave}
       >
         <section className="expanded-panel">
           <header className="panel-header">
@@ -446,11 +572,13 @@ function App(): React.JSX.Element {
             <div className="summary-row">
               <div>
                 <p className="eyebrow">Notch sidecar</p>
-                <h1>Agent activity</h1>
+                <h1>{settingsOpen ? "Settings" : "Agent activity"}</h1>
                 <p className="subtle">
-                  {bootstrap.fixtureMode
-                    ? "Synthetic sessions · no credentials or live transcripts"
-                    : "Live sessions · no credentials or transcripts retained"}
+                  {settingsOpen
+                    ? "Cloud providers observe over the network and need a key"
+                    : bootstrap.fixtureMode
+                      ? "Synthetic sessions · no credentials or live transcripts"
+                      : "Live sessions · no transcripts retained"}
                 </p>
               </div>
               <span className="fixture-badge">
@@ -458,20 +586,24 @@ function App(): React.JSX.Element {
               </span>
             </div>
 
-            <div className="session-list">
-              {visibleSessions.map((item) => (
-                <article className="session-row" key={item.id}>
-                  <span className={`status-mark ${item.state}`} />
-                  <span className="session-copy">
-                    <strong>{item.title}</strong>
-                    <small>
-                      {item.provider} · {item.detail}
-                    </small>
-                  </span>
-                  <span className={`session-status ${item.state}`}>{item.label}</span>
-                </article>
-              ))}
-            </div>
+            {settingsOpen && settings ? (
+              <ConductorSettings settings={settings} onSubmit={submitConductorApiKey} />
+            ) : (
+              <div className="session-list">
+                {visibleSessions.map((item) => (
+                  <article className="session-row" key={item.id}>
+                    <span className={`status-mark ${item.state}`} />
+                    <span className="session-copy">
+                      <strong>{item.title}</strong>
+                      <small>
+                        {item.provider} · {item.detail}
+                      </small>
+                    </span>
+                    <span className={`session-status ${item.state}`}>{item.label}</span>
+                  </article>
+                ))}
+              </div>
+            )}
           </div>
 
           <footer className="panel-footer">
@@ -483,6 +615,14 @@ function App(): React.JSX.Element {
             </div>
             <div className="footer-actions">
               <span className={`permission ${microphoneStatus}`}>Mic: {microphoneStatus}</span>
+              <button
+                type="button"
+                className="quiet-button"
+                aria-pressed={settingsOpen}
+                onClick={() => showSettings(!settingsOpen)}
+              >
+                {settingsOpen ? "Back" : "Settings"}
+              </button>
               <button
                 type="button"
                 className="secondary-button"

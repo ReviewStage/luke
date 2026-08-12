@@ -63,8 +63,18 @@ camera housing. Macs and external displays without a notch use the same
 top-center attachment with no invented hardware geometry.
 
 The evidence mode uses synthetic fixture data. Live mode passively observes
-bounded coding-agent session metadata without requiring provider credentials,
-plugins, hooks, wrappers, live-session changes, or transcript retention.
+bounded coding-agent session metadata without requiring provider plugins, hooks,
+wrappers, live-session changes, or transcript retention.
+
+Claude Code and Codex sessions are observed from local provider state and need
+no configuration. Conductor cloud sessions have no local state to read, so that
+provider stays silent until you open the expanded panel, choose **Settings**,
+and paste a Conductor API key; Luke also accepts one from `CONDUCTOR_API_KEY` or
+`CONDUCTOR_API_TOKEN`. A key you enter is encrypted with `safeStorage`, whose
+key comes from the login Keychain, and it is never returned to the renderer.
+Luke reads only cloud workspaces you created, issues only read requests, and
+labels each session by its repository rather than by a Conductor workspace or
+session name, because those names are generated from the opening prompt.
 
 ## Attention intelligence
 
