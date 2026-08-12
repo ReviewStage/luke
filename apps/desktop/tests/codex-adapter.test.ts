@@ -19,6 +19,9 @@ const TEST_CODEX_MODEL_PROVIDER = {
 const TEST_SQLITE_ERROR = {
   UNKNOWN_BUILTIN_MODULE: "ERR_UNKNOWN_BUILTIN_MODULE",
 } as const;
+const TEST_CODEX_ENVIRONMENT = {
+  SQLITE_DIRECTORY: "CODEX_SQLITE_HOME",
+} as const;
 
 interface TestThread {
   id: string;
@@ -110,6 +113,11 @@ async function writeCodexState(codexHome: string, threads: readonly TestThread[]
   }
 }
 
+async function writeCodexConfig(codexHome: string, source: string): Promise<void> {
+  await fs.mkdir(codexHome, { recursive: true });
+  await fs.writeFile(path.join(codexHome, "config.toml"), source);
+}
+
 test("observes Codex sessions without exposing transcript-derived metadata", async (t) => {
   const codexHome = await temporaryCodexHome(t);
   await writeCodexState(codexHome, [
@@ -137,6 +145,112 @@ test("observes Codex sessions without exposing transcript-derived metadata", asy
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
   assert.equal(observations[0]?.controls, undefined);
   assert.equal(JSON.stringify(observations).includes(SECRET_TRANSCRIPT_TEXT), false);
+});
+
+test("observes Codex sessions from an explicit SQLite home", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const sqliteHome = path.join(codexHome, "sqlite-state");
+  await writeCodexState(sqliteHome, [
+    {
+      id: "codex-sqlite-home",
+      cwd: "/Users/test/sqlite-home",
+      observedAt: TEST_TIME - 1_000,
+    },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    sqliteHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const observations = await adapter.observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.providerSessionId, "codex-sqlite-home");
+  assert.equal(observations[0]?.title, "Codex: sqlite-home");
+});
+
+test("observes Codex sessions from configured sqlite_home", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const previousSqliteHome = process.env[TEST_CODEX_ENVIRONMENT.SQLITE_DIRECTORY];
+  delete process.env[TEST_CODEX_ENVIRONMENT.SQLITE_DIRECTORY];
+  t.after(() => {
+    if (previousSqliteHome === undefined)
+      delete process.env[TEST_CODEX_ENVIRONMENT.SQLITE_DIRECTORY];
+    else process.env[TEST_CODEX_ENVIRONMENT.SQLITE_DIRECTORY] = previousSqliteHome;
+  });
+  await writeCodexConfig(codexHome, "sqlite_home = 'configured-sqlite'\n");
+  await writeCodexState(path.join(codexHome, "configured-sqlite"), [
+    {
+      id: "codex-configured-home",
+      cwd: "/Users/test/configured-home",
+      observedAt: TEST_TIME - 1_000,
+    },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const observations = await adapter.observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.providerSessionId, "codex-configured-home");
+  assert.equal(observations[0]?.title, "Codex: configured-home");
+});
+
+test("observes Codex sessions from CODEX_SQLITE_HOME", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const sqliteHome = path.join(codexHome, "env-sqlite");
+  const previousSqliteHome = process.env[TEST_CODEX_ENVIRONMENT.SQLITE_DIRECTORY];
+  process.env[TEST_CODEX_ENVIRONMENT.SQLITE_DIRECTORY] = sqliteHome;
+  t.after(() => {
+    if (previousSqliteHome === undefined)
+      delete process.env[TEST_CODEX_ENVIRONMENT.SQLITE_DIRECTORY];
+    else process.env[TEST_CODEX_ENVIRONMENT.SQLITE_DIRECTORY] = previousSqliteHome;
+  });
+  await writeCodexState(sqliteHome, [
+    {
+      id: "codex-env-home",
+      cwd: "/Users/test/env-home",
+      observedAt: TEST_TIME - 1_000,
+    },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const observations = await adapter.observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.providerSessionId, "codex-env-home");
+  assert.equal(observations[0]?.title, "Codex: env-home");
+});
+
+test("observes Codex sessions from the default sqlite subdirectory", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  await writeCodexState(path.join(codexHome, "sqlite"), [
+    {
+      id: "codex-default-sqlite",
+      cwd: "/Users/test/default-sqlite",
+      observedAt: TEST_TIME - 1_000,
+    },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const observations = await adapter.observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.providerSessionId, "codex-default-sqlite");
+  assert.equal(observations[0]?.title, "Codex: default-sqlite");
 });
 
 test("keeps stale unarchived Codex sessions unknown instead of inventing activity", async (t) => {

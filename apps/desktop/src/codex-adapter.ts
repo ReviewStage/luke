@@ -15,10 +15,19 @@ const UNKNOWN_WORKSPACE_LABEL = "workspace";
 
 const CODEX_ENVIRONMENT = {
   CONFIG_DIRECTORY: "CODEX_HOME",
+  SQLITE_DIRECTORY: "CODEX_SQLITE_HOME",
 } as const;
 
 const CODEX_DATABASE_FILE = {
   STATE: "state_5.sqlite",
+} as const;
+
+const CODEX_CONFIG_FILE = {
+  USER: "config.toml",
+} as const;
+
+const CODEX_CONFIG_KEY = {
+  SQLITE_DIRECTORY: "sqlite_home",
 } as const;
 
 const CODEX_THREAD_COLUMN = {
@@ -89,6 +98,7 @@ export const CODEX_PROVIDER: SessionProvider = {
 
 export interface CodexAdapterOptions {
   codexHome?: string;
+  sqliteHome?: string;
   now?: () => number;
   maximumSessionRows?: number;
   maximumSessionAgeMs?: number;
@@ -131,6 +141,15 @@ function canIgnoreSqliteError(error: unknown): boolean {
 async function fileStats(filePath: string): Promise<Stats | undefined> {
   try {
     return await fs.stat(filePath);
+  } catch (error) {
+    if (canIgnoreFilesystemError(error)) return undefined;
+    throw error;
+  }
+}
+
+async function readTextFile(filePath: string): Promise<string | undefined> {
+  try {
+    return await fs.readFile(filePath, "utf8");
   } catch (error) {
     if (canIgnoreFilesystemError(error)) return undefined;
     throw error;
@@ -186,6 +205,84 @@ function workspaceLabel(cwd: string | undefined): string {
   return label || UNKNOWN_WORKSPACE_LABEL;
 }
 
+function normalizeDirectory(value: string | undefined, baseDirectory: string): string | undefined {
+  const normalized = value?.trim();
+  if (!normalized) return undefined;
+  if (normalized === "~") return os.homedir();
+  if (normalized.startsWith("~/")) return path.join(os.homedir(), normalized.slice(2));
+  if (path.isAbsolute(normalized)) return normalized;
+  return path.resolve(baseDirectory, normalized);
+}
+
+function unescapeBasicTomlString(value: string): string {
+  return value.replace(/\\(["\\bfnrt])/g, (_match, character: string) => {
+    if (character === "b") return "\b";
+    if (character === "f") return "\f";
+    if (character === "n") return "\n";
+    if (character === "r") return "\r";
+    if (character === "t") return "\t";
+    return character;
+  });
+}
+
+function tomlStringValue(value: string): string | undefined {
+  const normalized = value.trim();
+  if (!normalized) return undefined;
+  if (normalized.startsWith('"') && normalized.endsWith('"')) {
+    return unescapeBasicTomlString(normalized.slice(1, -1)).trim() || undefined;
+  }
+  if (normalized.startsWith("'") && normalized.endsWith("'")) {
+    return normalized.slice(1, -1).trim() || undefined;
+  }
+  return normalized.trim() || undefined;
+}
+
+function topLevelTomlString(source: string, key: string): string | undefined {
+  let inTopLevel = true;
+  for (const line of source.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+      inTopLevel = false;
+      continue;
+    }
+    if (!inTopLevel) continue;
+    const separatorIndex = trimmed.indexOf("=");
+    if (separatorIndex < 0) continue;
+    if (trimmed.slice(0, separatorIndex).trim() !== key) continue;
+    return tomlStringValue(trimmed.slice(separatorIndex + 1).replace(/\s+#.*$/, ""));
+  }
+  return undefined;
+}
+
+async function sqliteHomeFromConfig(codexHome: string): Promise<string | undefined> {
+  const config = await readTextFile(path.join(codexHome, CODEX_CONFIG_FILE.USER));
+  return config
+    ? normalizeDirectory(topLevelTomlString(config, CODEX_CONFIG_KEY.SQLITE_DIRECTORY), codexHome)
+    : undefined;
+}
+
+function uniquePaths(paths: readonly string[]): string[] {
+  return [...new Set(paths)];
+}
+
+async function stateDatabasePaths(
+  codexHome: string,
+  configuredSqliteHome: string | undefined,
+): Promise<string[]> {
+  const sqliteHome =
+    normalizeDirectory(configuredSqliteHome, codexHome) ??
+    normalizeDirectory(process.env[CODEX_ENVIRONMENT.SQLITE_DIRECTORY], codexHome) ??
+    (await sqliteHomeFromConfig(codexHome));
+  return uniquePaths(
+    [
+      sqliteHome && path.join(sqliteHome, CODEX_DATABASE_FILE.STATE),
+      path.join(codexHome, "sqlite", CODEX_DATABASE_FILE.STATE),
+      path.join(codexHome, CODEX_DATABASE_FILE.STATE),
+    ].filter((candidate): candidate is string => candidate !== undefined),
+  );
+}
+
 function titleFromRow(row: CodexThreadRow): string {
   return `${CODEX_PROVIDER_NAME}: ${workspaceLabel(textFromRow(row, CODEX_THREAD_COLUMN.CWD))}`;
 }
@@ -236,6 +333,7 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
   readonly provider = CODEX_PROVIDER;
 
   readonly #codexHome: string;
+  readonly #sqliteHome: string | undefined;
   readonly #now: () => number;
   readonly #maximumSessionRows: number;
   readonly #maximumSessionAgeMs: number;
@@ -244,6 +342,7 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
 
   constructor(options: CodexAdapterOptions = {}) {
     this.#codexHome = options.codexHome ?? defaultCodexHome();
+    this.#sqliteHome = options.sqliteHome;
     this.#now = options.now ?? Date.now;
     this.#maximumSessionRows = positiveInteger(
       options.maximumSessionRows,
@@ -261,10 +360,11 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
   }
 
   async observe(): Promise<readonly ProviderSessionObservation[]> {
-    const database = await openReadOnlyDatabase(
-      this.#sqlite,
-      path.join(this.#codexHome, CODEX_DATABASE_FILE.STATE),
-    );
+    let database: SqliteDatabase | undefined;
+    for (const databasePath of await stateDatabasePaths(this.#codexHome, this.#sqliteHome)) {
+      database = await openReadOnlyDatabase(this.#sqlite, databasePath);
+      if (database) break;
+    }
     if (!database) return [];
 
     try {
