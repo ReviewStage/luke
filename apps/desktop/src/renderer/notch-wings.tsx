@@ -27,6 +27,12 @@ export function NotchWings({
   providerLimit = DEFAULT_PROVIDER_LIMIT,
 }: NotchWingsProps): React.JSX.Element {
   const providers = tally.providers.slice(0, providerLimit);
+  // The marks are a summary, and a summary that hides its own remainder reads
+  // as a complete list. The caption carries the count the wing has no room for.
+  const unshown = tally.providers.length - providers.length;
+  const providerCaption =
+    providers.map((provider) => provider.provider).join(" · ") +
+    (unshown > 0 ? ` +${unshown}` : "");
 
   return (
     <>
@@ -36,11 +42,7 @@ export function NotchWings({
         <div className="wing-inner">
           <span className="wing-copy" aria-hidden="true">
             <strong>{hasAudioSignal ? "Listening" : "Monitoring"}</strong>
-            <small>
-              {providers.length === 0
-                ? "no providers"
-                : providers.map((provider) => provider.provider).join(" · ")}
-            </small>
+            <small>{providers.length === 0 ? "no providers" : providerCaption}</small>
           </span>
           {hasAudioSignal ? (
             <Waveform analyser={analyser} speaking={fixtureSpeaking} />

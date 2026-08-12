@@ -103,16 +103,23 @@ session arriving or finishing resizes the panel.
 
 Sessions are labelled with each provider's own mark, inlined as path data in
 `apps/desktop/src/renderer/provider-marks.tsx`: the Claude Code mark via
-[Simple Icons](https://simpleicons.org) (CC0-1.0, sourced from code.claude.com)
-and the Codex mark via [@lobehub/icons](https://github.com/lobehub/lobe-icons)
-(MIT). Each keeps its brand colour — Claude Code's `#D97757` coral and Codex's
-`#B1A7FF → #3941FF` gradient — declared as `--mark-*` custom properties in
+[Simple Icons](https://simpleicons.org) (CC0-1.0, sourced from code.claude.com),
+the Codex mark via [@lobehub/icons](https://github.com/lobehub/lobe-icons)
+(MIT), and Conductor's letter mark verbatim from its published
+[brand kit](https://www.conductor.build/brandkit). Each keeps its brand colour —
+Claude Code's `#D97757` coral, Codex's `#B1A7FF → #3941FF` gradient, and the
+`#EAE8E6` half of Conductor's two-colour palette, whose dark half is the surface
+the mark already sits on — declared as `--mark-*` custom properties in
 `styles/base.css`. Session state is carried by the count badge, the state chips,
 and the row tints instead, so brand colour and state colour never land on the
-same pixel. The marks are trademarks of Anthropic and OpenAI respectively and
-are used here only to identify which provider a session belongs to; Luke is not
-affiliated with or endorsed by either. A provider with no registered mark falls
-back to a neutral glyph.
+same pixel. The marks are trademarks of their respective owners and are used
+here only to identify which provider a session belongs to; Luke is not
+affiliated with or endorsed by any of them. A provider with no registered mark
+falls back to a neutral glyph rather than to another provider's.
+
+The marks are keyed by the provider ids in `PROVIDER_ID`, which adapters report
+and `CREDENTIAL_PROVIDER_ID` draws from, so a session row and a key field name
+the same provider with the same mark.
 
 For PR motion evidence, run `pnpm evidence:record` on a Mac with `ffmpeg`
 installed and Screen & System Audio Recording permission granted to Conductor.

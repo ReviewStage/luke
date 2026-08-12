@@ -94,7 +94,8 @@ test("the tally counts per state and per provider", () => {
   );
   assert.deepEqual(tally.providers, [
     { providerId: PROVIDER_ID.CLAUDE_CODE, provider: "Claude Code", total: 2, attention: 1 },
-    { providerId: PROVIDER_ID.CODEX, provider: "Codex", total: 2, attention: 0 },
+    { providerId: PROVIDER_ID.CODEX, provider: "Codex", total: 1, attention: 0 },
+    { providerId: PROVIDER_ID.CONDUCTOR, provider: "Conductor", total: 1, attention: 0 },
   ]);
 });
 

@@ -7,6 +7,7 @@ import type {
   MicrophoneStatus,
   WindowMode,
 } from "../shared/contracts";
+import type { CredentialProviderId } from "../shared/credential-providers";
 import { NotchWings } from "./notch-wings";
 import { PanelBody } from "./panel-body";
 import {
@@ -248,11 +249,14 @@ export function App(): React.JSX.Element {
     }, LEAVE_DELAY_MS);
   }, [applyPresentation, cancelHoverTransition, changeMode]);
 
-  const submitConductorApiKey = useCallback(async (apiKey: string | undefined) => {
-    const result = await window.sidecar.setConductorApiKey(apiKey);
-    setSettings(result.settings);
-    return result.reason;
-  }, []);
+  const submitProviderApiKey = useCallback(
+    async (providerId: CredentialProviderId, apiKey: string | undefined) => {
+      const result = await window.sidecar.setProviderApiKey(providerId, apiKey);
+      setSettings(result.settings);
+      return result.reason;
+    },
+    [],
+  );
 
   /** The capsule is a button: pressing it opens the panel, or closes it again. */
   const handleCapsulePress = useCallback(() => {
@@ -349,7 +353,7 @@ export function App(): React.JSX.Element {
               microphoneError,
               onToggleMicrophone: () => void (analyser ? stopMicrophone() : startMicrophone()),
               settings,
-              onSubmitConductorApiKey: submitConductorApiKey,
+              onSubmitProviderApiKey: submitProviderApiKey,
               onEditingChange: setCredentialEditing,
               onQuit: () => window.sidecar.quit(),
             }}

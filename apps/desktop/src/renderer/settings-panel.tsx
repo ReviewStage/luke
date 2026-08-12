@@ -1,7 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { AppSettings, CredentialSource, MicrophoneStatus } from "../shared/contracts";
 import { CREDENTIAL_SOURCE } from "../shared/contracts";
+import type { CredentialProvider, CredentialProviderId } from "../shared/credential-providers";
+import { CREDENTIAL_PROVIDER_LIST } from "../shared/credential-providers";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
+import { ProviderMark } from "./provider-marks";
 import { KeyIcon, MicrophoneIcon, PowerIcon } from "./settings-icons";
 
 export interface SettingsPanelProps {
@@ -10,8 +13,11 @@ export interface SettingsPanelProps {
   microphoneError?: string;
   onToggleMicrophone: () => void;
   settings?: AppSettings;
-  onSubmitConductorApiKey: (apiKey: string | undefined) => Promise<string | undefined>;
-  /** True while the key field holds focus or an unsaved draft. */
+  onSubmitProviderApiKey: (
+    providerId: CredentialProviderId,
+    apiKey: string | undefined,
+  ) => Promise<string | undefined>;
+  /** True while any key field holds focus or an unsaved draft. */
   onEditingChange: (editing: boolean) => void;
   onQuit: () => void;
 }
@@ -31,52 +37,60 @@ const CREDENTIAL_LABEL: Record<CredentialSource, string> = {
 };
 
 /**
- * The credential is write-only from here: this form can replace or clear the
- * stored key, and the main process never sends one back — only where it was
- * resolved from.
+ * One provider's key. The credential is write-only from here: this field can
+ * replace or clear the stored key, and the main process never sends one back —
+ * only where it was resolved from.
  */
-function ConductorSection({
-  settings,
+function ProviderKeyField({
+  provider,
+  source,
+  storageUnavailable,
   onSubmit,
   onEditingChange,
 }: {
-  settings: AppSettings;
-  onSubmit: (apiKey: string | undefined) => Promise<string | undefined>;
-  onEditingChange: (editing: boolean) => void;
+  provider: CredentialProvider;
+  source: CredentialSource;
+  storageUnavailable: boolean;
+  onSubmit: (
+    providerId: CredentialProviderId,
+    apiKey: string | undefined,
+  ) => Promise<string | undefined>;
+  onEditingChange: (providerId: CredentialProviderId, editing: boolean) => void;
 }): React.JSX.Element {
   const [draft, setDraft] = useState("");
   const [focused, setFocused] = useState(false);
   const [rejection, setRejection] = useState<string>();
   const [busy, setBusy] = useState(false);
-  const storageUnavailable = !settings.secretStorageAvailable;
-  const hasStoredKey = settings.conductorApiKeySource === CREDENTIAL_SOURCE.ENCRYPTED_FILE;
+  const fieldId = `${provider.id}-api-key`;
+  const hasStoredKey = source === CREDENTIAL_SOURCE.ENCRYPTED_FILE;
 
   // Opening the tab is not a request to type. What the panel does need to know
-  // is when the field is in use, because that is the only time the pointer
+  // is when a field is in use, because that is the only time the pointer
   // leaving should not be allowed to close it.
   useEffect(() => {
-    onEditingChange(focused || draft.length > 0);
-  }, [draft, focused, onEditingChange]);
-  useEffect(() => () => onEditingChange(false), [onEditingChange]);
+    onEditingChange(provider.id, focused || draft.length > 0);
+  }, [draft, focused, onEditingChange, provider.id]);
+  useEffect(() => () => onEditingChange(provider.id, false), [onEditingChange, provider.id]);
 
   const submit = async (apiKey: string | undefined) => {
     setBusy(true);
-    const failure = await onSubmit(apiKey);
+    const failure = await onSubmit(provider.id, apiKey);
     setBusy(false);
     setRejection(failure);
     if (!failure) setDraft("");
   };
 
   return (
-    <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
-      <h2>
-        <KeyIcon />
-        Conductor cloud
-      </h2>
-      <label className="settings-field" htmlFor="conductor-api-key">
-        <span className="settings-label">API key</span>
+    <div className="credential-field">
+      <label className="settings-field" htmlFor={fieldId}>
+        {/* The provider's own mark, so a column of identical fields is read by
+            brand rather than by a word every row would have to repeat. */}
+        <span className="settings-label">
+          <ProviderMark providerId={provider.id} className="credential-mark" />
+          {provider.displayName}
+        </span>
         <input
-          id="conductor-api-key"
+          id={fieldId}
           className="settings-input"
           type="password"
           autoComplete="off"
@@ -96,14 +110,8 @@ function ConductorSection({
       </label>
       <div className="settings-row">
         <span className="settings-copy">
-          <strong className={`credential ${settings.conductorApiKeySource}`}>
-            {CREDENTIAL_LABEL[settings.conductorApiKeySource]}
-          </strong>
-          <small>
-            {storageUnavailable
-              ? "This system offers no encrypted credential storage, so Luke will not store a key here."
-              : "Create one in Conductor under Settings · API keys. Luke reads only cloud workspaces you created, and never sends a prompt or any other change."}
-          </small>
+          <strong className={`credential ${source}`}>{CREDENTIAL_LABEL[source]}</strong>
+          <small>{provider.hint}</small>
         </span>
         <span className="settings-actions">
           {hasStoredKey ? (
@@ -127,6 +135,65 @@ function ConductorSection({
         </span>
       </div>
       {rejection ? <p className="error-message">{rejection}</p> : null}
+    </div>
+  );
+}
+
+/**
+ * Every provider that can hold a key, in one section. A provider is listed
+ * whether or not it has one, because an empty field is how you learn Luke can
+ * watch that service at all.
+ */
+function CredentialsSection({
+  settings,
+  onSubmit,
+  onEditingChange,
+}: {
+  settings: AppSettings;
+  onSubmit: (
+    providerId: CredentialProviderId,
+    apiKey: string | undefined,
+  ) => Promise<string | undefined>;
+  onEditingChange: (editing: boolean) => void;
+}): React.JSX.Element {
+  const [editingProviders, setEditingProviders] = useState<readonly CredentialProviderId[]>([]);
+
+  const reportEditing = useCallback((providerId: CredentialProviderId, editing: boolean) => {
+    setEditingProviders((current) => {
+      const held = current.includes(providerId);
+      if (held === editing) return current;
+      return editing ? [...current, providerId] : current.filter((id) => id !== providerId);
+    });
+  }, []);
+
+  // The panel asks one question — is a key mid-entry — so the fields' answers
+  // are collapsed into one before it is given.
+  useEffect(() => {
+    onEditingChange(editingProviders.length > 0);
+  }, [editingProviders, onEditingChange]);
+
+  return (
+    <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
+      <h2>
+        <KeyIcon />
+        Cloud API keys
+      </h2>
+      {CREDENTIAL_PROVIDER_LIST.map((provider) => (
+        <ProviderKeyField
+          key={provider.id}
+          provider={provider}
+          source={settings.credentialSources[provider.id]}
+          storageUnavailable={!settings.secretStorageAvailable}
+          onSubmit={onSubmit}
+          onEditingChange={reportEditing}
+        />
+      ))}
+      {/* True of every key here, so it is said once rather than per provider. */}
+      <p className="settings-note">
+        {settings.secretStorageAvailable
+          ? "Luke reads only cloud workspaces you created, and never sends a prompt or any other change."
+          : "This system offers no encrypted credential storage, so Luke will not store a key here."}
+      </p>
     </section>
   );
 }
@@ -137,7 +204,7 @@ export function SettingsPanel({
   microphoneError,
   onToggleMicrophone,
   settings,
-  onSubmitConductorApiKey,
+  onSubmitProviderApiKey,
   onEditingChange,
   onQuit,
 }: SettingsPanelProps): React.JSX.Element {
@@ -155,9 +222,9 @@ export function SettingsPanel({
       aria-labelledby={panelTabId(PANEL_TAB.SETTINGS)}
     >
       {settings ? (
-        <ConductorSection
+        <CredentialsSection
           settings={settings}
-          onSubmit={onSubmitConductorApiKey}
+          onSubmit={onSubmitProviderApiKey}
           onEditingChange={onEditingChange}
         />
       ) : null}

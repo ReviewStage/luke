@@ -10,13 +10,16 @@
   --state-idle: rgba(255, 255, 255, 0.44);
 
   /* Provider brand colours, used only by the marks: Claude Code's published
-     coral, and the vertical gradient Codex draws its mark with. Session state
-     is carried by the chips, row tints, and count badge instead, so the two
-     colour systems never compete for the same pixel. */
+     coral, the vertical gradient Codex draws its mark with, and the light half
+     of Conductor's two-colour palette — its dark half is the surface the mark
+     already sits on, so the pairing is the published one. Session state is
+     carried by the chips, row tints, and count badge instead, so the two colour
+     systems never compete for the same pixel. */
   --mark-claude-code: #d97757;
   --mark-codex-top: #b1a7ff;
   --mark-codex-middle: #7a9dff;
   --mark-codex-bottom: #3941ff;
+  --mark-conductor: #eae8e6;
 
   --text-primary: rgba(255, 255, 255, 0.95);
   --text-secondary: rgba(255, 255, 255, 0.56);
@@ -481,9 +484,10 @@ button:disabled {
   flex: 0 0 auto;
 }
 
-/* The two marks fill their 24-unit box very differently — the Claude Code glyph
-   is wide and short, the Codex mark is full-bleed — so each gets a uniform
-   scale to sit at the same optical weight. Proportions are untouched. */
+/* The marks fill their box very differently — the Claude Code glyph is wide and
+   short, the Codex mark is full-bleed, and Conductor's letter mark is taller
+   than it is wide — so each gets a uniform scale to sit at the same optical
+   weight. Proportions are untouched. */
 .provider-mark[data-mark="claude-code"] {
   color: var(--mark-claude-code);
   transform: scale(1.12);
@@ -491,6 +495,11 @@ button:disabled {
 
 .provider-mark[data-mark="codex"] {
   transform: scale(0.94);
+}
+
+.provider-mark[data-mark="conductor"] {
+  color: var(--mark-conductor);
+  transform: scale(0.93);
 }
 
 /* Nothing to blend into on a display without a housing, so the shape stops
@@ -910,13 +919,33 @@ button:disabled {
   font-weight: 620;
 }
 
-.settings-copy small {
+.settings-copy small,
+.settings-note {
   color: var(--text-tertiary);
   font-size: 10px;
   line-height: 1.4;
 }
 
-/* The one place the panel takes typed input. */
+/* Said once for the whole section rather than under each provider. */
+.settings-note {
+  margin: 0;
+}
+
+/* One provider's key: the field, then what Luke resolved for it. Providers are
+   separated by a rule rather than by nested cards, so the section stays one
+   object however many keys it holds. */
+.credential-field {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.credential-field + .credential-field {
+  padding-top: 11px;
+  border-top: 1px solid var(--hairline);
+}
+
+/* The place the panel takes typed input. */
 .settings-field {
   display: flex;
   flex-direction: column;
@@ -924,9 +953,18 @@ button:disabled {
 }
 
 .settings-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   color: var(--text-secondary);
   font-size: 10px;
   font-weight: 620;
+}
+
+/* Beside a name at label size, so the mark reads as part of the word. */
+.credential-mark {
+  width: 11px;
+  height: 11px;
 }
 
 .settings-input {

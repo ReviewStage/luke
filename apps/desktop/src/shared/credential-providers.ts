@@ -1,10 +1,14 @@
+import { PROVIDER_ID } from "@sidecar/core";
+
 /**
- * The providers Luke can hold a credential for. A provider belongs here only
- * when its sessions live in a cloud service with no local state to observe, and
- * it must observe nothing at all until the user supplies a key.
+ * The providers Luke can hold a credential for: the subset of the observed
+ * providers whose sessions live in a cloud service with no local state to read,
+ * and which must observe nothing at all until the user supplies a key. The ids
+ * are core's, so a credential row and a session row name the same provider —
+ * that is what lets one mark registry serve both.
  */
 export const CREDENTIAL_PROVIDER_ID = {
-  CONDUCTOR: "conductor",
+  CONDUCTOR: PROVIDER_ID.CONDUCTOR,
 } as const;
 
 export type CredentialProviderId =
