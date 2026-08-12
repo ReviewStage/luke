@@ -284,7 +284,7 @@ export class SessionAttentionReviewer {
   readonly #maximumUpdatesPerReview: number;
   readonly #ledger: AttentionSpeechLedger;
   #observed = new Map<string, Map<string, NormalizedSession>>();
-  #pending = new Map<string, Set<string>>();
+  readonly #pending = new Map<string, Set<string>>();
 
   constructor(options: SessionAttentionReviewerOptions) {
     this.#evaluator = options.evaluator;
