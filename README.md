@@ -47,8 +47,12 @@ panel instead of starting a new one.
 
 `verify.sh` packages the desktop app and writes deterministic visual evidence to
 `artifacts/evidence/app-smoke-expanded.png`,
+`artifacts/evidence/app-smoke-settings.png`,
 `artifacts/evidence/app-smoke-compact.png`, and
-`artifacts/evidence/app-smoke-speaking.png`.
+`artifacts/evidence/app-smoke-speaking.png`. `--view settings` is what opens the
+credential surface for its capture; renders are deterministic so that CI can
+compare each one against the same render on `main` and show a reviewer only what
+changed.
 
 For PR motion evidence, run `pnpm evidence:record` on a Mac with `ffmpeg`
 installed and Screen & System Audio Recording permission granted to Conductor.
@@ -109,9 +113,15 @@ double as the prompt's few-shot guidance and its regression coverage.
 ## Pull-request media
 
 Keep generated screenshots and recordings out of product branches. Inline PR
-media is stored on the shared `pr-assets` branch under `pr-<number>/` and linked
-with its `raw.githubusercontent.com` URL. Keep that one branch: deleting it
-breaks rendered images in open and historical PRs.
+media is stored on the shared `pr-assets` branch under `pr-<number>/<commit>/`
+and linked with its `raw.githubusercontent.com` URL. Publish it with
+`node scripts/publish-pr-media.mjs <pr> <file>...`, which prints the URLs to
+embed. CI publishes the macOS screenshots this way on every pull request, so a
+desktop change needs no manual capture.
+
+Keep that one branch: deleting it breaks rendered images in open and historical
+PRs. The per-commit path exists because GitHub caches image URLs, so a refreshed
+screenshot needs a new path to be visible.
 
 ## Repository map
 
@@ -122,4 +132,5 @@ breaks rendered images in open and historical PRs.
 - `.conductor/settings.toml` — shared Conductor command configuration
 
 See `WORKFLOW.md` for the issue-to-PR contract and `AGENTS.md` for agent-facing
-repository guidance.
+repository guidance. `CLAUDE.md` is a symlink to `AGENTS.md` so that every agent
+harness loads the same guide.

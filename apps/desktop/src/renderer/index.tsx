@@ -15,7 +15,7 @@ import type {
   MicrophoneStatus,
   WindowMode,
 } from "../shared/contracts";
-import { CREDENTIAL_SOURCE } from "../shared/contracts";
+import { CAPTURE_VIEW, CREDENTIAL_SOURCE } from "../shared/contracts";
 import type { CredentialProvider, CredentialProviderId } from "../shared/credential-providers";
 import { CREDENTIAL_PROVIDER_LIST } from "../shared/credential-providers";
 import { ProviderMark } from "./provider-mark";
@@ -490,6 +490,9 @@ function App(): React.JSX.Element {
       if (value.profile === "microphone") {
         window.setTimeout(() => void startMicrophone(), 500);
       }
+      // Opened before the ready signal so the capture that follows it renders
+      // the requested view rather than the session list behind it.
+      if (value.view === CAPTURE_VIEW.SETTINGS) setSettingsOpen(true);
       window.sidecar.notifyReady();
     });
     const removeLifecycle = window.sidecar.onLifecycle((eventName) => {

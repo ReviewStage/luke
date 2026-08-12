@@ -25,10 +25,12 @@ mkdir -p "$(dirname -- "$SIDECAR_EXPANDED_EVIDENCE_PATH")"
 rm -f -- \
     "$SIDECAR_EXPANDED_EVIDENCE_PATH" \
     "$SIDECAR_COMPACT_EVIDENCE_PATH" \
-    "$SIDECAR_SPEAKING_EVIDENCE_PATH"
+    "$SIDECAR_SPEAKING_EVIDENCE_PATH" \
+    "$SIDECAR_SETTINGS_EVIDENCE_PATH"
 EXPANDED_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-expanded.XXXXXX")
 COMPACT_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-compact.XXXXXX")
 SPEAKING_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-speaking.XXXXXX")
+SETTINGS_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-settings.XXXXXX")
 "$APP_EXECUTABLE" \
     --user-data-dir="$EXPANDED_PROFILE" \
     --fixture "$SIDECAR_FIXTURE_SCENARIO" \
@@ -45,6 +47,15 @@ SPEAKING_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-speaking.XXXXXX")
     --profile speaking \
     --compact \
     --capture-evidence "$SIDECAR_SPEAKING_EVIDENCE_PATH"
+# The settings view holds the credential surface, which the session-list
+# screenshots never show. Without it, a change to that surface produces evidence
+# that cannot contain the change.
+"$APP_EXECUTABLE" \
+    --user-data-dir="$SETTINGS_PROFILE" \
+    --fixture "$SIDECAR_FIXTURE_SCENARIO" \
+    --view settings \
+    --expanded \
+    --capture-evidence "$SIDECAR_SETTINGS_EVIDENCE_PATH"
 
 validate_evidence() {
     local evidence_path=$1
@@ -84,7 +95,9 @@ validate_evidence() {
 validate_evidence "$SIDECAR_EXPANDED_EVIDENCE_PATH" 620 520
 validate_evidence "$SIDECAR_COMPACT_EVIDENCE_PATH" 282 38
 validate_evidence "$SIDECAR_SPEAKING_EVIDENCE_PATH" 282 38
+validate_evidence "$SIDECAR_SETTINGS_EVIDENCE_PATH" 620 520
 
 printf 'Expanded visual evidence: %s\n' "$SIDECAR_EXPANDED_EVIDENCE_PATH"
 printf 'Compact visual evidence: %s\n' "$SIDECAR_COMPACT_EVIDENCE_PATH"
 printf 'Speaking visual evidence: %s\n' "$SIDECAR_SPEAKING_EVIDENCE_PATH"
+printf 'Settings visual evidence: %s\n' "$SIDECAR_SETTINGS_EVIDENCE_PATH"
