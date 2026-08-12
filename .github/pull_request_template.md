@@ -10,16 +10,10 @@
 <!-- automated-visual-evidence:start -->
 ### Automated visual evidence
 
-CI will replace this block with the deterministic macOS screenshots.
+CI will replace this block with a link to the deterministic macOS screenshots.
 <!-- automated-visual-evidence:end -->
 
-### Authored evidence
-
-<!--
-A web-interface change needs a screenshot here; CI does not capture one.
-Publish it with `node scripts/publish-pr-media.mjs <pr> <file>` and embed the
-URL it prints. The same applies to physical-device screenshots and recordings.
--->
+### Physical-device evidence
 
 - Screenshot or screen recording: `not attached`
 - Physical-notch check: `not performed`

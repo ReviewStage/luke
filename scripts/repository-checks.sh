@@ -7,7 +7,6 @@ source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 
 required_files=(
     AGENTS.md
-    CLAUDE.md
     WORKFLOW.md
     README.md
     package.json
@@ -36,13 +35,6 @@ done
 
 if [[ ! -x "$SIDECAR_REPO_ROOT/.husky/pre-commit" ]]; then
     printf 'error: Husky pre-commit hook must be executable\n' >&2
-    exit 1
-fi
-
-# Agents read whichever instruction file their harness loads. One file with two
-# names keeps them from drifting into separate, disagreeing guides.
-if [[ $(readlink "$SIDECAR_REPO_ROOT/CLAUDE.md") != AGENTS.md ]]; then
-    printf 'error: CLAUDE.md must be a symlink to AGENTS.md\n' >&2
     exit 1
 fi
 

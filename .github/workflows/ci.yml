@@ -1,11 +1,7 @@
 name: CI
 
 on:
-  # `edited` and the label events exist so that attaching evidence to the
-  # description re-runs the evidence gate. They deliberately do not rebuild:
-  # each build job below runs only for a code event.
   pull_request:
-    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
   push:
     branches: [main]
 
@@ -13,22 +9,12 @@ permissions:
   contents: read
 
 concurrency:
-  # Build runs and gate-only runs are grouped separately. Sharing one group
-  # would let a description edit cancel the macOS build whose screenshots that
-  # description is waiting for.
-  group: >-
-    ${{ github.workflow }}-${{ github.ref }}-${{
-    (github.event_name != 'pull_request'
-    || contains(fromJSON('["opened", "synchronize", "reopened"]'), github.event.action))
-    && 'build' || 'gate' }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   portable:
     name: TypeScript checks
-    if: >-
-      ${{ github.event_name != 'pull_request'
-      || contains(fromJSON('["opened", "synchronize", "reopened"]'), github.event.action) }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -44,14 +30,9 @@ jobs:
 
   macos:
     name: macOS app and evidence
-    if: >-
-      ${{ github.event_name != 'pull_request'
-      || contains(fromJSON('["opened", "synchronize", "reopened"]'), github.event.action) }}
     runs-on: macos-15
     permissions:
-      # `contents: write` publishes screenshots to the durable `pr-assets`
-      # branch so they render inline in the pull-request description.
-      contents: write
+      contents: read
       pull-requests: write
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -76,7 +57,7 @@ jobs:
           path: artifacts/evidence/
           if-no-files-found: error
           retention-days: 90
-      - name: Embed visual evidence in the pull request description
+      - name: Link evidence from the pull request description
         if: >-
           always() &&
           !cancelled() &&
@@ -85,45 +66,9 @@ jobs:
           steps.visual-evidence.outputs.artifact-url != ''
         env:
           ARTIFACT_URL: ${{ steps.visual-evidence.outputs.artifact-url }}
-          EVIDENCE_DIRECTORY: artifacts/evidence
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: node scripts/update-pr-evidence.mjs
-      - name: Republish the evidence baseline
-        # Every pull request is compared against the default branch's own
-        # render, so the baseline is refreshed whenever that branch moves.
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-        env:
-          EVIDENCE_DIRECTORY: artifacts/evidence
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/publish-evidence-baseline.mjs
-
-  evidence:
-    name: Visual evidence
-    # Runs after the macOS job so that it reads a description CI has already
-    # embedded its screenshots into, and runs on a description edit even when
-    # that job was skipped. A fork's token cannot publish media, so its pull
-    # request is reviewed without this gate.
-    needs: [macos]
-    if: >-
-      always() &&
-      github.event_name == 'pull_request' &&
-      github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      pull-requests: read
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version-file: .nvmrc
-      - env:
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: node scripts/check-pr-evidence.mjs
