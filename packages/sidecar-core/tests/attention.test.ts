@@ -479,6 +479,43 @@ test("a superseded answer ends the failure streak", async () => {
   );
 });
 
+test("reviews a session that round-trips back to the state it was reopened from", async () => {
+  // complete, then working, then complete again, with the middle transition
+  // failing. Restoring the pre-pass baseline would make the second completion
+  // compare equal to it and vanish.
+  const complete = session(codex, "build", { status: SESSION_STATUS.COMPLETE });
+  const working = session(codex, "build");
+  const finished: AttentionDecision = {
+    disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
+    decidedAt: DECIDED_AT,
+    summary: "Codex finished its turn in billing-api.",
+  };
+
+  const reviewer = new SessionAttentionReviewer({
+    evaluator: {
+      evaluate: async (update) => {
+        if (update.status !== SESSION_STATUS.COMPLETE) throw new Error("network blip");
+        return finished;
+      },
+    },
+    now: () => DECIDED_AT,
+  });
+
+  assert.equal((await reviewer.review([complete]))[0]?.outcome, ATTENTION_REVIEW_OUTCOME.DECIDED);
+  assert.equal(
+    (await reviewer.review([working]))[0]?.outcome,
+    ATTENTION_REVIEW_OUTCOME.UNAVAILABLE,
+  );
+
+  const [second] = await reviewer.review([complete]);
+  assert.ok(second, "a second completed turn must still be reviewed");
+  assert.notEqual(
+    second.decision.disposition,
+    ATTENTION_DISPOSITION.SILENT,
+    "the session finished again and must still read as needing attention",
+  );
+});
+
 test("bounds one review pass and re-derives the updates it deferred", async () => {
   const evaluator = evaluatorReturning({
     disposition: ATTENTION_DISPOSITION.SILENT,

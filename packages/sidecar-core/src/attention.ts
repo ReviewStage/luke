@@ -330,7 +330,6 @@ export class SessionAttentionReviewer {
       .sort((first, second) => second.session.observedAt - first.session.observedAt)
       .slice(0, this.#maximumUpdatesPerReview);
 
-    const baselines = selected.map((candidate) => this.#observedSession(candidate.session));
     // Sessions left out of this pass keep their previous baseline so the same
     // development is derived again once a slot frees up.
     this.#observed = this.#nextObserved(sessions, selected);
@@ -351,7 +350,7 @@ export class SessionAttentionReviewer {
         // A development is only consumed once a decision was actually reached
         // about it. Anything else must stay derivable, or the update is lost.
         if (candidate && this.#keepsDevelopmentPending(settled, candidate.session)) {
-          this.#rewind(candidate.session, baselines[index]);
+          this.#reopen(candidate.session);
         }
         return settled;
       });
@@ -402,13 +401,20 @@ export class SessionAttentionReviewer {
     if (providerAttempts.size === 0) this.#unavailableRetries.delete(session.providerId);
   }
 
-  #rewind(session: NormalizedSession, baseline: NormalizedSession | undefined): void {
+  /**
+   * Forgets what this session was last seen doing, so the next pass derives an
+   * update for whatever it is doing then.
+   *
+   * Restoring the state from before the update would be more informative, but
+   * it is not reliable: a session that round-trips back to that state during
+   * the evaluation — complete, working, complete again — would compare equal to
+   * the restored baseline and never be reviewed again. Forgetting guarantees a
+   * fresh review at the cost of a `previousStatus` the reviewer can no longer
+   * honestly report.
+   */
+  #reopen(session: NormalizedSession): void {
     const providerSessions = this.#observed.get(session.providerId);
     if (!providerSessions) return;
-    if (baseline) {
-      providerSessions.set(session.providerSessionId, baseline);
-      return;
-    }
     providerSessions.delete(session.providerSessionId);
     if (providerSessions.size === 0) this.#observed.delete(session.providerId);
   }
