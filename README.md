@@ -77,7 +77,7 @@ stays silent, and no other behavior changes:
 | Variable               | Default                     | Purpose                                    |
 | ---------------------- | --------------------------- | ------------------------------------------ |
 | `OPENAI_API_KEY`       | unset                       | Enables attention review when it is present |
-| `LUKE_ATTENTION_MODEL` | `gpt-5.1`                   | Model used for the decision                |
+| `LUKE_ATTENTION_MODEL` | `gpt-5.6-luna`              | Model used for the decision                |
 | `OPENAI_BASE_URL`      | `https://api.openai.com/v1` | Alternate OpenAI-compatible endpoint       |
 
 Requests set `store: false`, so the API is not asked to retain them. Tune how

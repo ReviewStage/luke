@@ -73,6 +73,15 @@ function silenceStderr(t: TestContext): void {
   t.mock.method(process.stderr, "write", () => true);
 }
 
+function recordStderr(t: TestContext): string[] {
+  const written: string[] = [];
+  t.mock.method(process.stderr, "write", (chunk: unknown) => {
+    written.push(String(chunk));
+    return true;
+  });
+  return written;
+}
+
 test("requests a strict structured decision and never asks the API to retain it", async (t) => {
   silenceStderr(t);
   const { evaluator, requests } = evaluatorWith(() =>
@@ -153,6 +162,26 @@ test("stays silent when the API is unavailable or answers outside the contract",
   }
 });
 
+test("reports a response that carried no decision instead of failing quietly", async (t) => {
+  const written = recordStderr(t);
+  const { evaluator } = evaluatorWith(() =>
+    Response.json({
+      status: "incomplete",
+      incomplete_details: { reason: "max_output_tokens" },
+      output: [],
+    }),
+  );
+
+  assert.equal(await evaluator.evaluate(update()), undefined);
+  const message = written.join("");
+  assert.match(message, /carried no decision/);
+  assert.match(
+    message,
+    /max_output_tokens/,
+    "a model that spends its output budget on reasoning must not look like a healthy silent pass",
+  );
+});
+
 test("reads a decision from a payload that carries aggregated output text", async (t) => {
   silenceStderr(t);
   const { evaluator } = evaluatorWith(() =>
@@ -190,7 +219,7 @@ test("builds an evaluator only when the environment supplies a key", (t) => {
   delete process.env.LUKE_ATTENTION_MODEL;
   const defaulted = openAiAttentionEvaluatorFromEnvironment();
   assert.ok(defaulted);
-  assert.equal(defaulted.model, "gpt-5.1");
+  assert.equal(defaulted.model, "gpt-5.6-luna");
 
   assert.throws(() => new OpenAiAttentionEvaluator({ apiKey: "   " }));
 });

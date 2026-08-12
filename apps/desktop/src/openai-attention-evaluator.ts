@@ -17,7 +17,10 @@ const OPENAI_ENVIRONMENT = {
 
 const OPENAI_DEFAULTS = {
   BASE_URL: "https://api.openai.com/v1",
-  MODEL: "gpt-5.1",
+  // A three-way classification with a fixed prompt, run in the background on a
+  // developer's own key. The cost-optimized tier fits it, and its lower latency
+  // means fewer decisions are discarded as superseded before they can be used.
+  MODEL: "gpt-5.6-luna",
   REQUEST_TIMEOUT_MS: 15_000,
   MAXIMUM_OUTPUT_TOKENS: 1024,
 } as const;
@@ -83,6 +86,21 @@ function outputText(payload: unknown): string | undefined {
   return trimmedText(text);
 }
 
+/**
+ * Describes why a payload carried no decision. A model that spends its output
+ * budget on reasoning returns `incomplete` with empty output, which would
+ * otherwise look identical to a healthy silent pass.
+ */
+function missingDecisionReason(payload: unknown): string {
+  if (!isRecord(payload)) return "";
+  const status = typeof payload.status === "string" ? payload.status : undefined;
+  const details = isRecord(payload.incomplete_details) ? payload.incomplete_details : undefined;
+  const reason = typeof details?.reason === "string" ? details.reason : undefined;
+  if (status && reason) return ` (${status}: ${reason})`;
+  if (status) return ` (${status})`;
+  return "";
+}
+
 function parsedJson(text: string): unknown {
   try {
     return JSON.parse(text) as unknown;
@@ -139,8 +157,16 @@ export class OpenAiAttentionEvaluator implements AttentionEvaluator {
       return undefined;
     }
 
-    const text = outputText(await this.#payload(response));
-    if (!text) return undefined;
+    const payload = await this.#payload(response);
+    if (payload === undefined) return undefined;
+
+    const text = outputText(payload);
+    if (!text) {
+      this.#report(
+        `OpenAI attention response carried no decision${missingDecisionReason(payload)}`,
+      );
+      return undefined;
+    }
 
     const decision = attentionDecisionFromModel(parsedJson(text), this.#now());
     if (!decision) this.#report("OpenAI attention response did not satisfy the decision contract");
