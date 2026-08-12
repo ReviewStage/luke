@@ -87,10 +87,10 @@ validate_evidence() {
 
 # The window is a stage, not the shape: a compact window holds the peek the
 # capsule grows into, and both carry room for a spring to overshoot.
-validate_evidence "$SIDECAR_EXPANDED_EVIDENCE_PATH" 680 550
-validate_evidence "$SIDECAR_COMPACT_EVIDENCE_PATH" 518 68
-validate_evidence "$SIDECAR_PEEK_EVIDENCE_PATH" 518 68
-validate_evidence "$SIDECAR_SPEAKING_EVIDENCE_PATH" 518 68
+validate_evidence "$SIDECAR_EXPANDED_EVIDENCE_PATH" 700 560
+validate_evidence "$SIDECAR_COMPACT_EVIDENCE_PATH" 538 78
+validate_evidence "$SIDECAR_PEEK_EVIDENCE_PATH" 538 78
+validate_evidence "$SIDECAR_SPEAKING_EVIDENCE_PATH" 538 78
 
 printf 'Expanded visual evidence: %s\n' "$SIDECAR_EXPANDED_EVIDENCE_PATH"
 printf 'Compact visual evidence: %s\n' "$SIDECAR_COMPACT_EVIDENCE_PATH"

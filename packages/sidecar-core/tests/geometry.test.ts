@@ -20,10 +20,10 @@ test("anchors the compact window to the physical top edge", () => {
   });
 
   assert.deepEqual(result, {
-    x: 497,
+    x: 487,
     y: 0,
-    width: 518,
-    height: 68,
+    width: 538,
+    height: 78,
     notch: {
       topInset: 38,
       housingWidth: 210,
@@ -58,7 +58,7 @@ test("uses a top-center fallback without inventing a notch", () => {
     "compact",
   );
 
-  assert.equal(result.x, -1114);
+  assert.equal(result.x, -1124);
   assert.equal(result.y, -200);
   assert.equal(result.width, peekWidth(0) + SURFACE_MARGIN * 2);
   assert.equal(result.height, 32 + SURFACE_MARGIN);
@@ -70,7 +70,7 @@ test("uses a top-center fallback without inventing a notch", () => {
 test("keeps the expanded panel attached to the same display edge", () => {
   const result = positionNotchWindow(notchedDisplay, "expanded");
 
-  assert.equal(result.x, 416);
+  assert.equal(result.x, 406);
   assert.equal(result.y, 0);
   assert.equal(result.width, 620 + SURFACE_MARGIN * 2);
   assert.equal(result.height, 520 + SURFACE_MARGIN);

@@ -40,10 +40,16 @@ export interface NotchWindowLayout extends Rectangle {
  * A clipped shadow is a hard edge, so the margin runs along the bottom too.
  * Everything the shape does not cover is transparent and passes the pointer
  * through.
+ *
+ * The margin is measured against what actually falls outside the shape rather
+ * than chosen: `--surface-shadow` still puts ink about 35px below the panel —
+ * a blur's tail reaches further than its radius — and the spring overshoots its
+ * target by 1.5%. At 30 the last few percent of that tail met the window edge
+ * as a faint line instead of fading out.
  */
 export const CAPSULE_SIDE_WIDTH = 36;
 export const PEEK_SIDE_GROWTH = 88;
-export const SURFACE_MARGIN = 30;
+export const SURFACE_MARGIN = 40;
 const peekSideWidth = CAPSULE_SIDE_WIDTH + PEEK_SIDE_GROWTH;
 const panelWidth = 620;
 const panelHeight = 520;
