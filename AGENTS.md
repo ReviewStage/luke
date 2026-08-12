@@ -81,8 +81,13 @@ every frame that resizes the element; the peek's is small enough to ride along.
 sample, so it would buy a render surface on the animating element and return
 nothing.
 
-One spring, one duration, for every resize. Reusing it across a 176px peek and
-a 482px panel is what makes them read as the same object.
+One spring for everything that moves. `--spring` drives the surface;
+`--spring-fast` is the same damping ratio at a higher frequency for small
+elements like the tab thumb, so the bounce profile is identical and only the
+scale differs. Panel content arrives as one stack: the tab bar is index 0 and
+each row below it starts further up, so the gaps spring open rather than the
+rows sliding in as a block. The fan and the stagger stop accumulating past
+`--row-fan-limit`, because only about five rows are ever on screen.
 
 In either direction the shape and its content must not cross, or content is
 left drawn on the desktop: growing, the surface leads and content follows;

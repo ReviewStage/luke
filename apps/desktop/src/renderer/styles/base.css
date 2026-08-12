@@ -76,6 +76,39 @@
     1.0098,
     1
   );
+  /* The same damping ratio as the shape spring, so the bounce profile is
+     identical; only the frequency changes, which is what a smaller and lighter
+     element wants. Everything that moves uses one of these two. */
+  --spring-fast: linear(
+    0,
+    0.0288,
+    0.1002,
+    0.1961,
+    0.3029,
+    0.4113,
+    0.5149,
+    0.6097,
+    0.6935,
+    0.7656,
+    0.826,
+    0.8755,
+    0.9149,
+    0.9457,
+    0.969,
+    0.9861,
+    0.9982,
+    1.0063,
+    1.0113,
+    1.014,
+    1.0151,
+    1.015,
+    1.0141,
+    1.0127,
+    1.0112,
+    1.0095,
+    1
+  );
+  --duration-fast: 280ms;
   --motion-morph: cubic-bezier(0.32, 0.86, 0.28, 1);
   --motion-exit: cubic-bezier(0.4, 0, 0.6, 1);
   --duration-shape: 460ms;
@@ -84,6 +117,12 @@
   --expand-delay: 200ms;
   --peek-delay: 60ms;
   --row-stagger: 32ms;
+  /* How far the stack is compressed before it springs apart. The gaps opening
+     is the motion; the rows arriving is just what makes it visible. */
+  --row-fan: 7px;
+  /* Only about five rows are ever on screen, so the fan and the stagger stop
+     accumulating past that rather than leaving late rows to drift in. */
+  --row-fan-limit: 5;
 
   /* Opaque in every state: the shape has to pass for part of a physical camera
      housing, and nothing behind the window should ever show through it. Depth
@@ -658,7 +697,7 @@ button {
   border-radius: 8px;
   background: var(--raised-strong);
   transform: translateX(calc(var(--tab-index) * 100%));
-  transition: transform var(--duration-quick) var(--spring);
+  transition: transform var(--duration-fast) var(--spring-fast);
 }
 
 .tab {
@@ -721,19 +760,34 @@ button {
   font-size: 10px;
 }
 
-/* Rows fade in behind the surface instead of arriving with it. */
-.session-row {
+/* Content arrives behind the surface, never in front of it, and it arrives on
+   the same spring the surface is riding. Each row starts further up than the
+   one above it, so the stack is compressed and the gaps spring open — the
+   space between sessions is the thing that moves. */
+.session-row,
+.settings-section,
+.empty-state,
+.tab-bar {
   opacity: 0;
-  transform: translateY(6px);
+  transform: translateY(
+    calc((min(var(--row-index, 0), var(--row-fan-limit)) + 1) * var(--row-fan) * -1)
+  );
   transition:
     opacity var(--duration-exit) var(--motion-exit),
     transform var(--duration-shape) var(--spring);
 }
 
-.app-stage[data-presentation="panel"] .session-row {
+.app-stage[data-presentation="panel"] .session-row,
+.app-stage[data-presentation="panel"] .settings-section,
+.app-stage[data-presentation="panel"] .empty-state,
+.app-stage[data-presentation="panel"] .tab-bar {
   opacity: 1;
   transform: none;
-  transition-delay: calc(var(--expand-delay) + var(--row-index, 0) * var(--row-stagger));
+  transition-delay: calc(
+    var(--expand-delay) +
+    min(var(--row-index, 0), var(--row-fan-limit)) *
+    var(--row-stagger)
+  );
 }
 
 /* Settings --------------------------------------------------------------- */

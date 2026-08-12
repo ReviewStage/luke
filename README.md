@@ -94,7 +94,9 @@ and the content follows it in; shrinking, the content leaves first and the
 surface closes behind it, so nothing is ever drawn outside the black. Every resize runs on one sampled damped
 spring at one duration — a real spring's motion is a property of the spring, not
 of how far it is asked to travel — and the window carries slack on every side
-for the overshoot to land in. The surface also ends where the content does, so a
+for the overshoot to land in. The same spring carries the content: the panel's
+rows arrive as one compressed stack whose gaps spring open, rather than as
+elements that fade in where they will end up. The surface also ends where the content does, so a
 session arriving or finishing resizes the panel.
 
 ## Provider marks

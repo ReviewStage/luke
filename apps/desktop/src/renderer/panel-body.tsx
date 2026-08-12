@@ -33,7 +33,7 @@ export function PanelBody({
                 className="session-row"
                 key={session.id}
                 data-state={session.state}
-                style={{ "--row-index": index } as React.CSSProperties}
+                style={{ "--row-index": index + 1 } as React.CSSProperties}
               >
                 <span className="row-avatar">
                   <ProviderMark providerId={session.providerId} />

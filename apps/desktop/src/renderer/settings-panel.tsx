@@ -65,7 +65,7 @@ function ConductorSection({
   };
 
   return (
-    <section className="settings-section">
+    <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
       <h2>Conductor cloud</h2>
       <label className="settings-field" htmlFor="conductor-api-key">
         <span className="settings-label">API key</span>
@@ -146,7 +146,7 @@ export function SettingsPanel({
         <ConductorSection settings={settings} onSubmit={onSubmitConductorApiKey} />
       ) : null}
 
-      <section className="settings-section">
+      <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
         <h2>Microphone</h2>
         <div className="settings-row">
           <span className="settings-copy">
@@ -160,7 +160,7 @@ export function SettingsPanel({
         {microphoneError ? <p className="error-message">{microphoneError}</p> : null}
       </section>
 
-      <section className="settings-section">
+      <section className="settings-section" style={{ "--row-index": 3 } as React.CSSProperties}>
         <div className="settings-row">
           <span className="settings-copy">
             <strong>Luke</strong>
