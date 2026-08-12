@@ -439,6 +439,46 @@ test("stops retrying an evaluator that keeps failing", async () => {
   assert.equal(attempts, 2);
 });
 
+test("a superseded answer ends the failure streak", async () => {
+  const waiting = session(claude, "review", { status: SESSION_STATUS.WAITING });
+  const working = session(claude, "review");
+  let current: NormalizedSession = waiting;
+  let pass = 0;
+
+  const reviewer = new SessionAttentionReviewer({
+    evaluator: {
+      evaluate: async () => {
+        pass += 1;
+        // Fail, then answer into a session that moved on, then fail again.
+        if (pass === 1 || pass === 3) throw new Error("network blip");
+        if (pass === 2) current = working;
+        return speakDecision();
+      },
+    },
+    currentSession: () => current,
+    maximumUnavailableRetries: 1,
+    now: () => DECIDED_AT,
+  });
+
+  assert.equal(
+    (await reviewer.review([waiting]))[0]?.outcome,
+    ATTENTION_REVIEW_OUTCOME.UNAVAILABLE,
+  );
+  assert.equal((await reviewer.review([waiting]))[0]?.outcome, ATTENTION_REVIEW_OUTCOME.SUPERSEDED);
+
+  current = waiting;
+  assert.equal(
+    (await reviewer.review([waiting]))[0]?.outcome,
+    ATTENTION_REVIEW_OUTCOME.UNAVAILABLE,
+  );
+  const [recovered] = await reviewer.review([waiting]);
+  assert.equal(
+    recovered?.outcome,
+    ATTENTION_REVIEW_OUTCOME.DECIDED,
+    "an answered call resets the budget, so sparse blips cannot accumulate into a dropped development",
+  );
+});
+
 test("bounds one review pass and re-derives the updates it deferred", async () => {
   const evaluator = evaluatorReturning({
     disposition: ATTENTION_DISPOSITION.SILENT,

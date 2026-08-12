@@ -371,10 +371,13 @@ export class SessionAttentionReviewer {
    * every poll. Retries are per session and reset as soon as one succeeds.
    */
   #keepsDevelopmentPending(review: AttentionReview, session: NormalizedSession): boolean {
-    if (review.outcome === ATTENTION_REVIEW_OUTCOME.SUPERSEDED) return true;
     if (review.outcome !== ATTENTION_REVIEW_OUTCOME.UNAVAILABLE) {
+      // Every other outcome means the evaluator answered, so the failure streak
+      // is over even when the answer itself could not be used. Counting a
+      // superseded answer as a failure would let sparse blips accumulate until
+      // one of them dropped a development.
       this.#clearUnavailableRetries(session);
-      return false;
+      return review.outcome === ATTENTION_REVIEW_OUTCOME.SUPERSEDED;
     }
 
     const previous =
