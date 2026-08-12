@@ -26,7 +26,10 @@ Trust constraints:
 - Never write provider transcripts or session-state files.
 - Never inject terminal input, simulate keystrokes, or request Accessibility.
 - Product behavior must not require provider MCP, plugins, hooks, wrappers,
-  credentials, or live sessions.
+  credentials, or live sessions. A provider whose sessions exist only in a cloud
+  service may read a user-supplied API key, but it must observe nothing until
+  the user supplies one, must never write through that credential, and must
+  leave every other provider working without it.
 - Keep unsupported capabilities explicit; do not invent fallback controls.
 - Keep Electron renderers sandboxed with context isolation and narrow IPC.
 - Commit only synthetic, redacted fixtures and repository-relative paths.

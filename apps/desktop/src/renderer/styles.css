@@ -387,6 +387,99 @@ h1 {
   color: rgba(255, 255, 255, 0.52);
 }
 
+/* Natural height inside the scrolling body, for the same reason session rows
+   take theirs: a stretched child would be shrunk below its content instead of
+   letting the body scroll. */
+.settings-view {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.045);
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.settings-label {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.settings-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.92);
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  user-select: text;
+}
+
+.settings-input:focus-visible {
+  border-color: rgba(89, 214, 255, 0.5);
+  outline: none;
+}
+
+.settings-input:disabled {
+  color: rgba(255, 255, 255, 0.32);
+}
+
+.settings-row,
+.settings-actions {
+  display: flex;
+  align-items: center;
+}
+
+.settings-row {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-actions {
+  gap: 8px;
+}
+
+.settings-state {
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.settings-state.encrypted-file,
+.settings-state.environment {
+  color: #68d39a;
+}
+
+.settings-hint,
+.settings-error {
+  margin: 0;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.settings-hint {
+  color: rgba(255, 255, 255, 0.34);
+}
+
+.settings-error {
+  color: #ff8c8c;
+}
+
+.secondary-button:disabled,
+.quiet-button:disabled {
+  opacity: 0.42;
+}
+
 .panel-footer {
   gap: 12px;
   min-height: 34px;

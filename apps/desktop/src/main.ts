@@ -18,6 +18,7 @@ import {
   Menu,
   nativeImage,
   powerMonitor,
+  safeStorage,
   screen,
   session,
   systemPreferences,
@@ -25,13 +26,16 @@ import {
 } from "electron";
 import { ClaudeCodeSessionAdapter } from "./claude-code-adapter";
 import { CodexSessionAdapter } from "./codex-adapter";
+import { ConductorSessionAdapter } from "./conductor-adapter";
 import { readMacScreenGeometry } from "./macos-screen-geometry";
 import { openAiAttentionEvaluatorFromEnvironment } from "./openai-attention-evaluator";
+import { SettingsStore } from "./settings-store";
 import {
   type AppBootstrap,
   channels,
   type DisplayDiagnostic,
   type MicrophoneStatus,
+  type SettingsUpdateResult,
   type WindowMode,
 } from "./shared/contracts";
 
@@ -45,7 +49,24 @@ const captureMode = captureOutput !== undefined;
 const fixtureMode = captureMode || fixtureName !== undefined;
 const SESSION_REFRESH_INTERVAL_MS = 5_000;
 const sessionRegistry = new InMemorySessionRegistry();
-const sessionAdapters = [new ClaudeCodeSessionAdapter(), new CodexSessionAdapter()] as const;
+// `directory` and the cipher are read lazily so the store can be declared before
+// the Electron app is ready.
+const settingsStore = new SettingsStore({
+  directory: () => app.getPath("userData"),
+  cipher: {
+    isAvailable: () => safeStorage.isEncryptionAvailable(),
+    encrypt: (plainText) => safeStorage.encryptString(plainText),
+    decrypt: (cipherText) => safeStorage.decryptString(cipherText),
+  },
+});
+const conductorAdapter = new ConductorSessionAdapter({
+  readApiKey: () => settingsStore.readConductorApiKey(),
+});
+const sessionAdapters = [
+  new ClaudeCodeSessionAdapter(),
+  new CodexSessionAdapter(),
+  conductorAdapter,
+] as const;
 // A fixture run must stay deterministic and credential-free, so it never builds
 // an evaluator — not just capture runs.
 const attentionEvaluator = fixtureMode ? undefined : openAiAttentionEvaluatorFromEnvironment();
@@ -139,6 +160,18 @@ function configurePanelBehavior(window: BrowserWindow): void {
   }
 }
 
+/**
+ * Brings the panel forward as the key window. An accessory app has no Dock
+ * presence, so the app itself has to come forward before one of its windows can
+ * take keyboard focus.
+ */
+function focusPanelWindow(): void {
+  if (!panelWindow || panelWindow.isDestroyed() || captureMode) return;
+  if (process.platform === "darwin") app.focus({ steal: true });
+  panelWindow.show();
+  panelWindow.focus();
+}
+
 function setWindowMode(mode: WindowMode, requestFocus: boolean): WindowMode {
   windowMode = mode;
   if (!panelWindow || panelWindow.isDestroyed()) return windowMode;
@@ -149,8 +182,7 @@ function setWindowMode(mode: WindowMode, requestFocus: boolean): WindowMode {
   panelWindow.webContents.send(channels.lifecycle, `mode:${mode}`);
 
   if (expanded && requestFocus && !captureMode) {
-    panelWindow.show();
-    panelWindow.focus();
+    focusPanelWindow();
   } else {
     panelWindow.showInactive();
   }
@@ -180,7 +212,7 @@ function trustedSender(event: IpcMainEvent | IpcMainInvokeEvent): boolean {
 }
 
 function registerIpc(): void {
-  ipcMain.handle(channels.bootstrap, (event): AppBootstrap => {
+  ipcMain.handle(channels.bootstrap, async (event): Promise<AppBootstrap> => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
     return {
       mode: windowMode,
@@ -196,6 +228,7 @@ function registerIpc(): void {
       microphoneStatus: microphoneStatus(),
       display: displayDiagnostic(),
       sessions: fixtureMode ? [] : sessionRegistry.snapshot().sessions,
+      settings: await settingsStore.snapshot(),
     };
   });
 
@@ -216,6 +249,39 @@ function registerIpc(): void {
   ipcMain.handle(channels.requestMicrophone, async (event) => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
     return requestMicrophone();
+  });
+
+  // The renderer can replace or clear the credential but never reads it back;
+  // the reply reports only where a key now comes from.
+  ipcMain.handle(
+    channels.setConductorApiKey,
+    async (event, apiKey: unknown): Promise<SettingsUpdateResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (apiKey !== undefined && typeof apiKey !== "string") {
+        throw new Error("Invalid API key request");
+      }
+      try {
+        const result = await settingsStore.setConductorApiKey(apiKey);
+        // Only the credentialed provider is affected, so the local observers are
+        // left alone rather than re-crawling the filesystem on every save.
+        if (!result.reason) void sessionRegistry.refresh(conductorAdapter);
+        return result;
+      } catch {
+        // A filesystem failure is not something the user can act on, so it is
+        // reported as one line rather than as a raw system error.
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "Could not save that API key on this system.",
+        };
+      }
+    },
+  );
+
+  // The panel is normally shown without stealing focus. A text field cannot be
+  // typed into that way, so the renderer asks for focus when it opens one.
+  ipcMain.on(channels.focusPanel, (event) => {
+    if (!trustedSender(event) || windowMode !== "expanded") return;
+    focusPanelWindow();
   });
 
   ipcMain.on(channels.quit, (event) => {
@@ -241,12 +307,20 @@ async function refreshProviderSessions(): Promise<void> {
   if (fixtureMode || sessionRefreshRunning) return;
   sessionRefreshRunning = true;
   try {
-    for (const adapter of sessionAdapters) {
-      await sessionRegistry.refresh(adapter);
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`Session observation failed: ${message}\n`);
+    // Providers are observed concurrently and reported independently: the
+    // registry commits each provider atomically, so one that is slow or failing
+    // can neither delay nor cancel the others. A network provider would
+    // otherwise hold up the local ones for as long as its requests take.
+    await Promise.all(
+      sessionAdapters.map(async (adapter) => {
+        try {
+          await sessionRegistry.refresh(adapter);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          process.stderr.write(`Session observation failed (${adapter.provider.id}): ${message}\n`);
+        }
+      }),
+    );
   } finally {
     sessionRefreshRunning = false;
   }
@@ -438,6 +512,10 @@ if (!app.requestSingleInstanceLock()) {
     Menu.setApplicationMenu(null);
     refreshNativeGeometry();
     registerIpc();
+    // Resolving settings touches the filesystem and the OS keychain. Starting it
+    // here keeps that work off the renderer's first paint, which blocks on the
+    // bootstrap reply.
+    void settingsStore.snapshot();
     createPanel();
     configurePermissions();
     createTray();

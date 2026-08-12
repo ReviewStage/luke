@@ -10,6 +10,31 @@ export type { WindowMode } from "@sidecar/core";
 
 export type MicrophoneStatus = "not-determined" | "granted" | "denied" | "restricted" | "unknown";
 
+/** Where a credential was resolved from, without ever exposing the credential. */
+export const CREDENTIAL_SOURCE = {
+  NONE: "none",
+  ENVIRONMENT: "environment",
+  ENCRYPTED_FILE: "encrypted-file",
+} as const;
+
+export type CredentialSource = (typeof CREDENTIAL_SOURCE)[keyof typeof CREDENTIAL_SOURCE];
+
+/** Renderer-safe settings. Credentials are never sent to a renderer. */
+export interface AppSettings {
+  conductorApiKeySource: CredentialSource;
+  /**
+   * Luke stores credentials only through OS-provided encryption. When that is
+   * unavailable the app says so rather than falling back to plaintext storage.
+   */
+  secretStorageAvailable: boolean;
+}
+
+/** A rejected update reports why without echoing the submitted value. */
+export interface SettingsUpdateResult {
+  settings: AppSettings;
+  reason?: string;
+}
+
 export interface DisplayDiagnostic {
   id: number;
   label: string;
@@ -34,6 +59,7 @@ export interface AppBootstrap {
   microphoneStatus: MicrophoneStatus;
   display: DisplayDiagnostic;
   sessions: readonly NormalizedSession[];
+  settings: AppSettings;
 }
 
 export interface AppBridge {
@@ -41,6 +67,9 @@ export interface AppBridge {
   setExpanded(expanded: boolean): Promise<WindowMode>;
   setPointerInterception(interceptsPointer: boolean): void;
   requestMicrophone(): Promise<MicrophoneStatus>;
+  setConductorApiKey(apiKey: string | undefined): Promise<SettingsUpdateResult>;
+  /** Brings the expanded panel forward so it can accept typed input. */
+  focusPanel(): void;
   notifyReady(): void;
   quit(): void;
   onLifecycle(callback: (eventName: string) => void): () => void;
@@ -54,6 +83,8 @@ export const channels = {
   setExpanded: "app:set-expanded",
   setPointerInterception: "app:set-pointer-interception",
   requestMicrophone: "app:request-microphone",
+  setConductorApiKey: "app:set-conductor-api-key",
+  focusPanel: "app:focus-panel",
   rendererReady: "app:renderer-ready",
   lifecycle: "app:lifecycle",
   startMicrophone: "app:start-microphone",
