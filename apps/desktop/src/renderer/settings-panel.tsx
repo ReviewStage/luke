@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { AppSettings, CredentialSource, MicrophoneStatus } from "../shared/contracts";
 import { CREDENTIAL_SOURCE } from "../shared/contracts";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
+import { KeyIcon, MicrophoneIcon, PowerIcon } from "./settings-icons";
 
 export interface SettingsPanelProps {
   microphoneStatus: MicrophoneStatus;
@@ -10,8 +11,9 @@ export interface SettingsPanelProps {
   onToggleMicrophone: () => void;
   settings?: AppSettings;
   onSubmitConductorApiKey: (apiKey: string | undefined) => Promise<string | undefined>;
+  /** True while the key field holds focus or an unsaved draft. */
+  onEditingChange: (editing: boolean) => void;
   onQuit: () => void;
-  displaySummary: string;
 }
 
 const MICROPHONE_STATUS_LABEL: Record<MicrophoneStatus, string> = {
@@ -36,25 +38,26 @@ const CREDENTIAL_LABEL: Record<CredentialSource, string> = {
 function ConductorSection({
   settings,
   onSubmit,
+  onEditingChange,
 }: {
   settings: AppSettings;
   onSubmit: (apiKey: string | undefined) => Promise<string | undefined>;
+  onEditingChange: (editing: boolean) => void;
 }): React.JSX.Element {
   const [draft, setDraft] = useState("");
+  const [focused, setFocused] = useState(false);
   const [rejection, setRejection] = useState<string>();
   const [busy, setBusy] = useState(false);
-  const field = useRef<HTMLInputElement | null>(null);
   const storageUnavailable = !settings.secretStorageAvailable;
   const hasStoredKey = settings.conductorApiKeySource === CREDENTIAL_SOURCE.ENCRYPTED_FILE;
 
+  // Opening the tab is not a request to type. What the panel does need to know
+  // is when the field is in use, because that is the only time the pointer
+  // leaving should not be allowed to close it.
   useEffect(() => {
-    // The panel can be opened without the window being key — from the tray, or
-    // by a press that macOS did not route as activation — and a field that
-    // cannot be typed into is worse than no field. `preventScroll` keeps
-    // focusing it from scrolling the one scroll container the layout allows.
-    window.sidecar.focusPanel();
-    if (!storageUnavailable) field.current?.focus({ preventScroll: true });
-  }, [storageUnavailable]);
+    onEditingChange(focused || draft.length > 0);
+  }, [draft, focused, onEditingChange]);
+  useEffect(() => () => onEditingChange(false), [onEditingChange]);
 
   const submit = async (apiKey: string | undefined) => {
     setBusy(true);
@@ -66,12 +69,14 @@ function ConductorSection({
 
   return (
     <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
-      <h2>Conductor cloud</h2>
+      <h2>
+        <KeyIcon />
+        Conductor cloud
+      </h2>
       <label className="settings-field" htmlFor="conductor-api-key">
         <span className="settings-label">API key</span>
         <input
           id="conductor-api-key"
-          ref={field}
           className="settings-input"
           type="password"
           autoComplete="off"
@@ -80,6 +85,13 @@ function ConductorSection({
           value={draft}
           disabled={busy || storageUnavailable}
           onChange={(event) => setDraft(event.target.value)}
+          onFocus={() => {
+            setFocused(true);
+            // The panel can be showing without its window being key, and a
+            // field that cannot be typed into is worse than no field.
+            window.sidecar.focusPanel();
+          }}
+          onBlur={() => setFocused(false)}
         />
       </label>
       <div className="settings-row">
@@ -126,8 +138,8 @@ export function SettingsPanel({
   onToggleMicrophone,
   settings,
   onSubmitConductorApiKey,
+  onEditingChange,
   onQuit,
-  displaySummary,
 }: SettingsPanelProps): React.JSX.Element {
   const microphoneAction = microphoneActive
     ? "Stop listening"
@@ -143,11 +155,18 @@ export function SettingsPanel({
       aria-labelledby={panelTabId(PANEL_TAB.SETTINGS)}
     >
       {settings ? (
-        <ConductorSection settings={settings} onSubmit={onSubmitConductorApiKey} />
+        <ConductorSection
+          settings={settings}
+          onSubmit={onSubmitConductorApiKey}
+          onEditingChange={onEditingChange}
+        />
       ) : null}
 
       <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
-        <h2>Microphone</h2>
+        <h2>
+          <MicrophoneIcon />
+          Microphone
+        </h2>
         <div className="settings-row">
           <span className="settings-copy">
             <strong>{MICROPHONE_STATUS_LABEL[microphoneStatus]}</strong>
@@ -160,17 +179,15 @@ export function SettingsPanel({
         {microphoneError ? <p className="error-message">{microphoneError}</p> : null}
       </section>
 
-      <section className="settings-section" style={{ "--row-index": 3 } as React.CSSProperties}>
-        <div className="settings-row">
-          <span className="settings-copy">
-            <strong>Luke</strong>
-            <small>{displaySummary}</small>
-          </span>
-          <button type="button" className="quiet-button" onClick={onQuit}>
-            Quit
-          </button>
-        </div>
-      </section>
+      <button
+        type="button"
+        className="quit-button"
+        style={{ "--row-index": 3 } as React.CSSProperties}
+        onClick={onQuit}
+      >
+        <PowerIcon />
+        Quit Luke
+      </button>
     </div>
   );
 }

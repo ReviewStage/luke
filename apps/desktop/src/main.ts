@@ -489,41 +489,13 @@ function createPanel(): void {
   void panelWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
 }
 
-function createTrayImage(): Electron.NativeImage {
-  const svg = [
-    '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18">',
-    '<path fill="white" d="M2 10h2V8H2v2Zm3 3h2V5H5v8Zm3 3h2V2H8v14Zm3-2h2V4h-2v10Zm3-4h2V8h-2v2Z"/>',
-    "</svg>",
-  ].join("");
-  const image = nativeImage.createFromDataURL(
-    `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`,
-  );
-  image.setTemplateImage(true);
-  return image;
-}
-
 function trayMenu(): Electron.Menu {
   return Menu.buildFromTemplate([
     {
-      label: "Show notch capsule",
-      click: () => setWindowMode("compact", false),
-    },
-    {
-      label: "Show expanded panel",
-      click: () => setWindowMode("expanded", true),
-    },
-    {
-      label: "Start microphone",
+      label: "Settings",
       click: () => {
         setWindowMode("expanded", true);
-        panelWindow?.webContents.send(channels.startMicrophone);
-      },
-    },
-    {
-      label: "Re-read display geometry",
-      click: () => {
-        refreshNativeGeometry();
-        positionPanel();
+        panelWindow?.webContents.send(channels.lifecycle, "tab:settings");
       },
     },
     { type: "separator" },
@@ -533,12 +505,15 @@ function trayMenu(): Electron.Menu {
 
 function createTray(): void {
   if (process.platform !== "darwin") return;
-  tray = new Tray(createTrayImage());
+  // Named rather than drawn. A menu bar item is read, and the system font at
+  // the system size is the one thing guaranteed to sit correctly beside every
+  // other item up there; an SVG template image only ever approximates it.
+  tray = new Tray(nativeImage.createEmpty());
+  tray.setTitle("Luke");
   tray.setToolTip("Luke");
+  // Clicking opens the menu and nothing else. The capsule is how the panel is
+  // opened; a menu bar item that also toggled it made one of them a surprise.
   tray.setContextMenu(trayMenu());
-  tray.on("click", () => {
-    setWindowMode(windowMode === "compact" ? "expanded" : "compact", true);
-  });
 }
 
 function handleDisplayChange(): void {

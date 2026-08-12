@@ -89,12 +89,6 @@ function usePanelHeight(): [(element: HTMLElement | null) => void, number | unde
   return [panelElement, panelHeight];
 }
 
-function displaySummary(bootstrap: AppBootstrap, display: DisplayDiagnostic): string {
-  const build = bootstrap.packaged ? "Packaged" : "Development";
-  const attachment = display.notch.hasNotch ? "hardware notch" : "top-center fallback";
-  return `${build} · ${attachment} · ${display.notch.source}`;
-}
-
 export function App(): React.JSX.Element {
   const [bootstrap, setBootstrap] = useState<AppBootstrap>();
   const [sessions, setSessions] = useState<readonly NormalizedSession[]>([]);
@@ -111,7 +105,12 @@ export function App(): React.JSX.Element {
   const hoverTimer = useRef<number | undefined>(undefined);
   const presentationRef = useRef<PanelPresentation>(PANEL_PRESENTATION.CAPSULE);
   const tabRef = useRef<PanelTab>(PANEL_TAB.SESSIONS);
+  const credentialEditing = useRef(false);
   const modeGeneration = useRef(0);
+
+  const setCredentialEditing = useCallback((editing: boolean) => {
+    credentialEditing.current = editing;
+  }, []);
 
   const changeTab = useCallback((next: PanelTab) => {
     tabRef.current = next;
@@ -235,9 +234,10 @@ export function App(): React.JSX.Element {
     cancelHoverTransition();
     const current = presentationRef.current;
     if (current === PANEL_PRESENTATION.CAPSULE) return;
-    // Settings hold a text field. Someone reaching for the keyboard has not
-    // asked for the panel to close, so pointer position stops deciding.
-    if (current === PANEL_PRESENTATION.PANEL && tabRef.current === PANEL_TAB.SETTINGS) return;
+    // A key half-typed is the one thing the pointer must not be allowed to
+    // discard. Everything else on the settings tab closes like the sessions
+    // tab does.
+    if (current === PANEL_PRESENTATION.PANEL && credentialEditing.current) return;
     hoverTimer.current = window.setTimeout(() => {
       hoverTimer.current = undefined;
       if (presentationRef.current === PANEL_PRESENTATION.PEEK) {
@@ -284,16 +284,13 @@ export function App(): React.JSX.Element {
     const removeLifecycle = window.sidecar.onLifecycle((eventName) => {
       if (eventName === "mode:compact") applyAuthoritativeMode("compact");
       if (eventName === "mode:expanded") applyAuthoritativeMode("expanded");
-    });
-    const removeMicrophone = window.sidecar.onStartMicrophone(() => {
-      void startMicrophone();
+      if (eventName === "tab:settings") changeTab(PANEL_TAB.SETTINGS);
     });
     const removeDisplay = window.sidecar.onDisplayChanged(setDisplay);
     const removeSessions = window.sidecar.onSessionsChanged(setSessions);
     return () => {
       cancelHoverTransition();
       removeLifecycle();
-      removeMicrophone();
       removeDisplay();
       removeSessions();
       void stopMicrophone();
@@ -302,6 +299,7 @@ export function App(): React.JSX.Element {
     applyAuthoritativeMode,
     applyPresentation,
     cancelHoverTransition,
+    changeTab,
     startMicrophone,
     stopMicrophone,
   ]);
@@ -352,8 +350,8 @@ export function App(): React.JSX.Element {
               onToggleMicrophone: () => void (analyser ? stopMicrophone() : startMicrophone()),
               settings,
               onSubmitConductorApiKey: submitConductorApiKey,
+              onEditingChange: setCredentialEditing,
               onQuit: () => window.sidecar.quit(),
-              displaySummary: displaySummary(bootstrap, display),
             }}
           />
         </section>

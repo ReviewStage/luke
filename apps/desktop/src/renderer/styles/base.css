@@ -114,6 +114,7 @@
   --duration-shape: 460ms;
   --duration-exit: 90ms;
   --duration-quick: 140ms;
+  --duration-hover: 70ms;
   --expand-delay: 200ms;
   --peek-delay: 60ms;
   --row-stagger: 32ms;
@@ -128,7 +129,9 @@
      housing, and nothing behind the window should ever show through it. Depth
      comes from the shadow and the hairline edge instead. */
   --surface-fill: #000;
-  --surface-edge: inset 0 0 0 0.5px rgba(255, 255, 255, 0.07);
+  /* Shadow only. A hairline edge drew a visible line along the top, where the
+     surface meets the menu bar and is meant to be indistinguishable from the
+     housing beside it. */
   --surface-shadow: 0 10px 26px rgba(0, 0, 0, 0.46), 0 2px 7px rgba(0, 0, 0, 0.3);
 
   --panel-radius: 30px;
@@ -180,8 +183,12 @@ body,
 button {
   border: 0;
   color: inherit;
-  cursor: default;
+  cursor: pointer;
   font: inherit;
+}
+
+button:disabled {
+  cursor: default;
 }
 
 /* Any element that carries a session state gets its accent from one place. */
@@ -268,7 +275,7 @@ button {
 
 .app-stage[data-presentation="peek"] .panel-surface,
 .app-stage[data-presentation="panel"] .panel-surface {
-  box-shadow: var(--surface-edge), var(--surface-shadow);
+  box-shadow: var(--surface-shadow);
 }
 
 /* Under the pointer: wide enough to say what the count means. */
@@ -306,7 +313,7 @@ button {
   padding: 0;
   border: 0;
   background: none;
-  cursor: default;
+  cursor: pointer;
   transform: translateX(-50%);
   /* Pressing the capsule is a gesture, not a focus change: a ring drawn around
      the notch strip is the one thing on screen that cannot look intentional.
@@ -340,18 +347,26 @@ button {
   pointer-events: none;
 }
 
-/* Bounded by the peek rather than the window. A compact window is wider than
-   the capsule so the peek needs no resize, so clipping to the window would let
-   captions spill onto the desktop; clipping to the widest shape they can
-   appear in keeps them inside the black in every state. */
+/* Bounded by the shape the wing's state draws, never by the window: a compact
+   window is wider than the capsule, so clipping to the window would let
+   captions spill onto the desktop, and clipping to the peek would cut the
+   panel's captions short of the room it actually has. */
+.app-stage {
+  --wing-bound: var(--peek-width);
+}
+
+.app-stage[data-presentation="panel"] {
+  --wing-bound: var(--panel-width);
+}
+
 .wing-left {
   right: calc(50% + var(--notch-housing-width) / 2);
-  left: calc(50% - var(--peek-width) / 2);
+  left: calc(50% - var(--wing-bound) / 2);
   justify-content: flex-end;
 }
 
 .wing-right {
-  right: calc(50% - var(--peek-width) / 2);
+  right: calc(50% - var(--wing-bound) / 2);
   left: calc(50% + var(--notch-housing-width) / 2);
   justify-content: flex-start;
 }
@@ -404,6 +419,15 @@ button {
   transition-delay: var(--expand-delay);
 }
 
+/* Whatever room the wing has, less the marks and the padding beside them. A
+   provider list longer than that ends in an ellipsis rather than mid-glyph. */
+.wing-copy strong,
+.wing-copy small {
+  max-width: calc((var(--wing-bound) - var(--notch-housing-width)) / 2 - 62px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .wing-copy strong {
   color: var(--text-primary);
   font-size: 11px;
@@ -412,10 +436,8 @@ button {
 }
 
 .wing-copy small {
-  overflow: hidden;
   color: var(--text-tertiary);
   font-size: 9px;
-  text-overflow: ellipsis;
 }
 
 /* Reversed so the first provider — the one that needs a person soonest — is the
@@ -708,7 +730,7 @@ button {
   color: var(--text-secondary);
   font-size: 10.5px;
   font-weight: 620;
-  transition: color var(--duration-quick) ease;
+  transition: color var(--duration-hover) ease;
 }
 
 .tab[data-active="true"] {
@@ -766,6 +788,7 @@ button {
    space between sessions is the thing that moves. */
 .session-row,
 .settings-section,
+.quit-button,
 .empty-state,
 .tab-bar {
   opacity: 0;
@@ -779,6 +802,7 @@ button {
 
 .app-stage[data-presentation="panel"] .session-row,
 .app-stage[data-presentation="panel"] .settings-section,
+.app-stage[data-presentation="panel"] .quit-button,
 .app-stage[data-presentation="panel"] .empty-state,
 .app-stage[data-presentation="panel"] .tab-bar {
   opacity: 1;
@@ -818,12 +842,52 @@ button {
 }
 
 .settings-section h2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin: 0;
   color: var(--text-tertiary);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 1px;
   text-transform: uppercase;
+}
+
+/* Sized to the heading it labels rather than to a grid: the glyph is a letter
+   in the line, not an element beside it. */
+.settings-icon {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  opacity: 0.85;
+}
+
+.quit-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 11px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.022);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 620;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.quit-button:hover {
+  background: color-mix(in srgb, #ff7e7e 12%, transparent);
+  color: #ff9b9b;
+}
+
+.quit-button .settings-icon {
+  width: 13px;
+  height: 13px;
+  opacity: 1;
 }
 
 .settings-row {
@@ -876,8 +940,8 @@ button {
   font-size: 11.5px;
   letter-spacing: 0.4px;
   transition:
-    border-color var(--duration-quick) ease,
-    background-color var(--duration-quick) ease;
+    border-color var(--duration-hover) ease,
+    background-color var(--duration-hover) ease;
 }
 
 .settings-input::placeholder {
@@ -930,8 +994,8 @@ button {
   font-size: 10px;
   font-weight: 640;
   transition:
-    background-color var(--duration-quick) ease,
-    color var(--duration-quick) ease;
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
   white-space: nowrap;
 }
 

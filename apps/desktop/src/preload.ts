@@ -34,11 +34,6 @@ const bridge: AppBridge = {
     ipcRenderer.on(channels.lifecycle, listener);
     return () => ipcRenderer.removeListener(channels.lifecycle, listener);
   },
-  onStartMicrophone: (callback: () => void) => {
-    const listener = () => callback();
-    ipcRenderer.on(channels.startMicrophone, listener);
-    return () => ipcRenderer.removeListener(channels.startMicrophone, listener);
-  },
   onDisplayChanged: (callback: (display: DisplayDiagnostic) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, display: DisplayDiagnostic) =>
       callback(display);

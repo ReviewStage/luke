@@ -80,7 +80,6 @@ export interface AppBridge {
   notifyReady(): void;
   quit(): void;
   onLifecycle(callback: (eventName: string) => void): () => void;
-  onStartMicrophone(callback: () => void): () => void;
   onDisplayChanged(callback: (display: DisplayDiagnostic) => void): () => void;
   onSessionsChanged(callback: (sessions: readonly NormalizedSession[]) => void): () => void;
 }
@@ -94,7 +93,6 @@ export const channels = {
   focusPanel: "app:focus-panel",
   rendererReady: "app:renderer-ready",
   lifecycle: "app:lifecycle",
-  startMicrophone: "app:start-microphone",
   displayChanged: "app:display-changed",
   sessionsChanged: "app:sessions-changed",
   quit: "app:quit",
