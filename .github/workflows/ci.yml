@@ -1,11 +1,13 @@
 name: CI
 
 on:
-  # `edited` and the label events exist so that attaching evidence to the
-  # description re-runs the evidence gate. They deliberately do not rebuild:
-  # each build job below runs only for a code event.
+  # Code events only. A description or label event must never start a run of
+  # this workflow: its build jobs would be skipped, GitHub counts a skipped job
+  # as successful, and the latest run for a commit is the one that decides
+  # mergeability — so editing a description would erase a failed build. The
+  # evidence recheck lives in its own workflow for exactly that reason.
   pull_request:
-    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+    types: [opened, synchronize, reopened]
   push:
     branches: [main]
 
@@ -13,22 +15,12 @@ permissions:
   contents: read
 
 concurrency:
-  # Build runs and gate-only runs are grouped separately. Sharing one group
-  # would let a description edit cancel the macOS build whose screenshots that
-  # description is waiting for.
-  group: >-
-    ${{ github.workflow }}-${{ github.ref }}-${{
-    (github.event_name != 'pull_request'
-    || contains(fromJSON('["opened", "synchronize", "reopened"]'), github.event.action))
-    && 'build' || 'gate' }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   portable:
     name: TypeScript checks
-    if: >-
-      ${{ github.event_name != 'pull_request'
-      || contains(fromJSON('["opened", "synchronize", "reopened"]'), github.event.action) }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -44,9 +36,6 @@ jobs:
 
   macos:
     name: macOS app and evidence
-    if: >-
-      ${{ github.event_name != 'pull_request'
-      || contains(fromJSON('["opened", "synchronize", "reopened"]'), github.event.action) }}
     runs-on: macos-15
     permissions:
       # `contents: write` publishes screenshots to the durable `pr-assets`
@@ -105,9 +94,9 @@ jobs:
   evidence:
     name: Visual evidence
     # Runs after the macOS job so that it reads a description CI has already
-    # embedded its screenshots into, and runs on a description edit even when
-    # that job was skipped. A fork's token cannot publish media, so its pull
-    # request is reviewed without this gate.
+    # embedded its screenshots into, and knows whether that job produced any. A
+    # fork's token cannot publish media, so its pull request is reviewed without
+    # this gate.
     needs: [macos]
     if: >-
       always() &&
@@ -123,6 +112,7 @@ jobs:
         with:
           node-version-file: .nvmrc
       - env:
+          EVIDENCE_RUN_RESULT: ${{ needs.macos.result }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}

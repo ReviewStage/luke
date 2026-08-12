@@ -11,7 +11,9 @@ import {
   splitEvidence,
   UI_PATHS,
 } from "./check-pr-evidence.mjs";
-import { changedMarker, evidenceEnd, evidenceStart } from "./update-pr-evidence.mjs";
+import { evidenceEnd, evidenceMarker, evidenceStart } from "./update-pr-evidence.mjs";
+
+const HEAD = "c8384e9221d38ea02414dd66e20aab4cf279bfea";
 
 /** The block as the pull-request template ships it, before CI has written. */
 function templateBlock() {
@@ -24,12 +26,12 @@ function templateBlock() {
   ].join("\n");
 }
 
-function automatedBlock(shown) {
+function automatedBlock(shown, headSha = HEAD) {
   return [
     evidenceStart,
     "### Automated visual evidence",
     "",
-    `<!-- ${changedMarker}: ${shown} -->`,
+    evidenceMarker(shown, headSha),
     "",
     shown > 0
       ? "| ![before](https://raw.example/before.png) | ![after](https://raw.example/after.png) |"
@@ -63,8 +65,18 @@ test("classifies desktop, web, and non-interface changes", () => {
 });
 
 test("reads how many scenarios CI reported as differing", () => {
-  assert.equal(scenariosShown(automatedBlock(2)), 2);
-  assert.equal(scenariosShown(automatedBlock(0)), 0);
+  assert.equal(scenariosShown(automatedBlock(2), HEAD), 2);
+  assert.equal(scenariosShown(automatedBlock(0), HEAD), 0);
+});
+
+test("ignores a marker outside CI's block, which an author controls", () => {
+  const forged = `${evidenceMarker(4, HEAD)}\n\n${automatedBlock(0)}`;
+
+  assert.equal(scenariosShown(forged, HEAD), 0);
+});
+
+test("ignores a marker left by an earlier push", () => {
+  assert.equal(scenariosShown(automatedBlock(4, "0000000000000000"), HEAD), undefined);
 });
 
 test("separates a description CI has not reported on from one reporting nothing", () => {
@@ -76,6 +88,7 @@ test("waits rather than failing before the macOS job has published", () => {
   const result = evaluateEvidence({
     body: `## Summary\n\n${templateBlock()}`,
     filenames: ["apps/desktop/src/renderer/index.tsx"],
+    headSha: HEAD,
   });
 
   assert.deepEqual(result.failures, []);
@@ -86,6 +99,7 @@ test("still fails a web change before CI reports, since CI never covers it", () 
   const result = evaluateEvidence({
     body: `## Summary\n\n${templateBlock()}`,
     filenames: ["apps/web/src/App.tsx"],
+    headSha: HEAD,
   });
 
   assert.equal(result.failures.length, 1);
@@ -103,6 +117,7 @@ test("passes a desktop change whose captured scenarios differ from main", () => 
   const result = evaluateEvidence({
     body: `## Summary\n\n${automatedBlock(1)}`,
     filenames: ["apps/desktop/src/renderer/styles.css"],
+    headSha: HEAD,
   });
 
   assert.deepEqual(result.failures, []);
@@ -112,6 +127,7 @@ test("fails a desktop change no captured scenario shows", () => {
   const result = evaluateEvidence({
     body: `## Summary\n\n${automatedBlock(0)}`,
     filenames: ["apps/desktop/src/renderer/index.tsx"],
+    headSha: HEAD,
   });
 
   assert.equal(result.failures.length, 1);
@@ -124,6 +140,7 @@ test("fails a desktop change whose only images are CI's unchanged renders", () =
   const result = evaluateEvidence({
     body: body.replace("![session list](https://raw.example/x.png)", ""),
     filenames: ["apps/desktop/src/renderer/index.tsx"],
+    headSha: HEAD,
   });
 
   assert.equal(result.failures.length, 1);
@@ -133,6 +150,7 @@ test("accepts an authored screenshot when no scenario differs", () => {
   const result = evaluateEvidence({
     body: `![Settings panel](https://raw.example/settings.png)\n\n${automatedBlock(0)}`,
     filenames: ["apps/desktop/src/renderer/index.tsx"],
+    headSha: HEAD,
   });
 
   assert.deepEqual(result.failures, []);
@@ -142,6 +160,7 @@ test("fails a web change carrying only CI's screenshots", () => {
   const result = evaluateEvidence({
     body: `## Summary\n\n${automatedBlock(1)}`,
     filenames: ["apps/web/src/App.tsx"],
+    headSha: HEAD,
   });
 
   assert.equal(result.failures.length, 1);
@@ -152,6 +171,7 @@ test("passes a web change with an authored screenshot", () => {
   const result = evaluateEvidence({
     body: `## Evidence\n\n![Landing page](https://raw.example/landing.png)\n\n${automatedBlock(1)}`,
     filenames: ["apps/web/src/App.tsx"],
+    headSha: HEAD,
   });
 
   assert.deepEqual(result.failures, []);
@@ -161,6 +181,7 @@ test("accepts an HTML image tag as authored evidence", () => {
   const result = evaluateEvidence({
     body: '<img src="https://raw.example/landing.png" width="600">',
     filenames: ["apps/web/src/App.tsx"],
+    headSha: HEAD,
   });
 
   assert.deepEqual(result.failures, []);
@@ -170,6 +191,7 @@ test("reports both surfaces when one change touches each", () => {
   const result = evaluateEvidence({
     body: `## Summary\n\n${automatedBlock(0)}`,
     filenames: ["apps/desktop/src/renderer/index.tsx", "apps/web/src/App.tsx"],
+    headSha: HEAD,
   });
 
   assert.equal(result.failures.length, 2);
@@ -180,6 +202,7 @@ test("honors the exemption label", () => {
     body: "## Summary",
     labels: [EXEMPTION_LABEL],
     filenames: ["apps/web/src/App.tsx"],
+    headSha: HEAD,
   });
 
   assert.equal(result.required, true);
@@ -200,4 +223,36 @@ test("treats a description with no automated block as entirely authored", () => 
 
   assert.equal(automated, "");
   assert.equal(authored, "just a summary");
+});
+
+test("does not accept an image hidden in an HTML comment", () => {
+  const result = evaluateEvidence({
+    body: `<!-- ![hidden](https://raw.example/x.png) -->\n\n${automatedBlock(0)}`,
+    filenames: ["apps/web/src/App.tsx"],
+    headSha: HEAD,
+  });
+
+  assert.equal(result.failures.length, 1);
+});
+
+test("does not accept an image shown only as code", () => {
+  const result = evaluateEvidence({
+    body: "```\n![sample](https://raw.example/x.png)\n```",
+    filenames: ["apps/web/src/App.tsx"],
+    headSha: HEAD,
+  });
+
+  assert.equal(result.failures.length, 1);
+});
+
+test("fails rather than waits when the macOS job produced no evidence", () => {
+  const result = evaluateEvidence({
+    body: `## Summary\n\n${templateBlock()}`,
+    filenames: ["apps/desktop/src/renderer/index.tsx"],
+    headSha: HEAD,
+    evidenceRunSucceeded: false,
+  });
+
+  assert.equal(result.failures.length, 1);
+  assert.match(result.failures[0], /did not produce evidence/);
 });

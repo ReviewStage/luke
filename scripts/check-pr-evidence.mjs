@@ -31,15 +31,29 @@ export function classifyChanges(filenames) {
 
 /**
  * How many captured scenarios CI reported as differing from the default branch,
- * or undefined when CI has not reported yet. Only CI writes this marker, and the
- * pull-request template ships without one, so its absence is a reliable "not
- * evaluated" rather than "nothing differs". The distinction matters: this check
- * also runs on a description edit, which can happen seconds after a pull request
- * is opened and long before the macOS job has produced anything.
+ * or undefined when CI has not reported on this commit.
+ *
+ * The marker is read only from CI's own block and only when it names the head
+ * commit. A description is author-controlled text: read from the whole body, a
+ * pasted marker would forge CI's verdict, and read without the commit, a block
+ * left by an earlier push would vouch for code it never rendered.
  */
-export function scenariosShown(body) {
-  const marker = new RegExp(`<!--\\s*${changedMarker}:\\s*(\\d+)\\s*-->`).exec(body);
-  return marker ? Number(marker[1]) : undefined;
+export function scenariosShown(body, headSha) {
+  const { automated } = splitEvidence(body);
+  const marker = new RegExp(
+    `<!--\\s*${changedMarker}:\\s*(\\d+)\\s+sha:\\s*([0-9a-f]+)\\s*-->`,
+  ).exec(automated);
+  if (!marker) return undefined;
+  return headSha === undefined || marker[2] === headSha ? Number(marker[1]) : undefined;
+}
+
+/**
+ * Markdown that a reader will actually see. An image inside an HTML comment or a
+ * fenced code block renders as nothing, so counting it as evidence would let a
+ * description satisfy the gate while showing the reviewer no picture at all.
+ */
+export function visibleText(markdown) {
+  return markdown.replace(/<!--[\s\S]*?-->/g, "").replace(/```[\s\S]*?```|`[^`\n]*`/g, "");
 }
 
 /** Separates CI's block from the description an author controls. */
@@ -53,7 +67,13 @@ export function splitEvidence(body) {
   };
 }
 
-export function evaluateEvidence({ body = "", labels = [], filenames = [] }) {
+export function evaluateEvidence({
+  body = "",
+  labels = [],
+  filenames = [],
+  headSha,
+  evidenceRunSucceeded = true,
+}) {
   const changed = classifyChanges(filenames);
   if (!changed.desktop && !changed.web) {
     return { required: false, failures: [], summary: "No user-interface paths changed." };
@@ -63,7 +83,8 @@ export function evaluateEvidence({ body = "", labels = [], filenames = [] }) {
   }
 
   const { authored } = splitEvidence(body);
-  const shown = scenariosShown(body);
+  const shown = scenariosShown(body, headSha);
+  const authoredImage = IMAGE_PATTERN.test(visibleText(authored));
   const failures = [];
   const notes = [];
   // A screenshot identical to the one on `main` shows nothing this pull request
@@ -73,8 +94,14 @@ export function evaluateEvidence({ body = "", labels = [], filenames = [] }) {
   // needs authored evidence: CI screenshots only the desktop app, and a pull
   // request touching both surfaces would otherwise pass on desktop evidence
   // alone while the page went uninspected.
-  if (changed.desktop && !IMAGE_PATTERN.test(authored)) {
-    if (shown === undefined) {
+  if (changed.desktop && !authoredImage) {
+    if (!evidenceRunSucceeded) {
+      // No screenshots exist for this commit, so there is nothing to wait for.
+      failures.push(
+        "The macOS job did not produce evidence for this commit, so this desktop change has " +
+          "no screenshots. Fix that job rather than merging an unevidenced change.",
+      );
+    } else if (shown === undefined) {
       notes.push(
         "The macOS job has not published evidence for this commit yet; the check that runs " +
           "after it is the one that decides.",
@@ -88,7 +115,7 @@ export function evaluateEvidence({ body = "", labels = [], filenames = [] }) {
       );
     }
   }
-  if (changed.web && !IMAGE_PATTERN.test(authored)) {
+  if (changed.web && !authoredImage) {
     failures.push(
       "This pull request changes the web interface, which CI does not screenshot. Capture " +
         "the page after `pnpm --filter @luke/web dev`, publish it with " +
@@ -123,10 +150,15 @@ async function main() {
   const pullRequest = Number(requiredEnvironment("PR_NUMBER"));
   const pull = await githubRequest(`/repos/${repository}/pulls/${pullRequest}`);
 
+  // `success` when the macOS job produced evidence for this commit, `skipped`
+  // when this run is a description recheck and that job belongs to another run.
+  const evidenceRun = process.env.EVIDENCE_RUN_RESULT?.trim() || "success";
   const result = evaluateEvidence({
     body: pull.data.body ?? "",
     labels: (pull.data.labels ?? []).map((label) => label.name),
     filenames: await changedFilenames(repository, pullRequest),
+    headSha: pull.data.head?.sha,
+    evidenceRunSucceeded: evidenceRun === "success" || evidenceRun === "skipped",
   });
 
   process.stdout.write(`${result.summary}\n`);
@@ -136,7 +168,7 @@ async function main() {
   process.stderr.write(
     `\nAdd the missing evidence to the pull-request description, or apply the ` +
       `${EXEMPTION_LABEL} label with a comment saying why none applies. ` +
-      `Editing the description re-runs this check.\n`,
+      `Editing the description re-runs the recheck.\n`,
   );
   process.exitCode = 1;
 }

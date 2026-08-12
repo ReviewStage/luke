@@ -14,8 +14,16 @@ import {
 export const evidenceStart = "<!-- automated-visual-evidence:start -->";
 export const evidenceEnd = "<!-- automated-visual-evidence:end -->";
 
-/** Read by the evidence gate, which cannot judge a screenshot by looking at it. */
+/**
+ * Read by the evidence gate, which cannot judge a screenshot by looking at it.
+ * It carries the commit it describes so that a block left over from an earlier
+ * push cannot vouch for the current one.
+ */
 export const changedMarker = "evidence-changed";
+
+export function evidenceMarker(shown, headSha) {
+  return `<!-- ${changedMarker}: ${shown} sha: ${headSha} -->`;
+}
 
 export const EVIDENCE_STATUS = {
   CHANGED: "changed",
@@ -108,7 +116,7 @@ export function buildEvidenceBlock(evidence) {
     evidenceStart,
     "### Automated visual evidence",
     "",
-    `<!-- ${changedMarker}: ${countShown(evidence.scenarios)} -->`,
+    evidenceMarker(countShown(evidence.scenarios), evidence.headSha),
     "",
     ...body,
     ...unchangedNote,

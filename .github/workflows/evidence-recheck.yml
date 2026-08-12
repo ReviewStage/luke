@@ -1,0 +1,39 @@
+name: Evidence recheck
+
+# Attaching a screenshot or applying the exemption label changes the answer to
+# the evidence question without changing the code, so it needs a check of its
+# own. It lives outside CI because a run of that workflow would skip its build
+# jobs, and a skipped job counts as a successful one — a description edit would
+# quietly replace a failed build with a passing check.
+on:
+  pull_request:
+    types: [edited, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  evidence:
+    name: Visual evidence (recheck)
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+      - env:
+          # The macOS job belongs to the run that built this commit, not to this
+          # one, so its evidence is judged by the marker alone.
+          EVIDENCE_RUN_RESULT: skipped
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: node scripts/check-pr-evidence.mjs
