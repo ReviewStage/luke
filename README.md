@@ -60,8 +60,8 @@ The surface has three sizes and they are all the same black shape:
   count means: what Luke is watching on the left, `2 need you` on the right.
   This is the affordance; nothing is committed by hovering.
 - **Panel** — on a press. Full-width rows, one session per line: provider mark,
-  title, what it is doing, a state chip. A **Settings** tab holds microphone
-  access and Quit. Press the capsule again, or Escape, to close it; moving the
+  title, what it is doing, a state chip. A **Settings** tab holds the Conductor
+  cloud API key, microphone access, and Quit. Press the capsule again, or Escape, to close it; moving the
   pointer well away closes it too, after long enough not to feel twitchy.
 
 Sessions are ordered by how much they need a person, so whatever is waiting on
@@ -129,16 +129,16 @@ wrappers, live-session changes, or transcript retention.
 
 Claude Code and Codex sessions are observed from local provider state and need
 no configuration. A cloud provider has no local state to read, so it stays
-silent until you open the expanded panel, choose **Settings**, and paste a key
-in that provider's row. Each provider holds its own credential and also reads
-its own `<PROVIDER>_API_KEY` from the environment; Conductor accepts
-`CONDUCTOR_API_KEY` or `CONDUCTOR_API_TOKEN`. A provider you give no key to
-reports nothing and issues no request. A key you enter is encrypted with
-`safeStorage`, whose key comes from the login Keychain, and it is never returned
-to the renderer. Luke reads only cloud workspaces you created, issues only read
-requests, and labels each session by its repository rather than by a provider
-workspace or session name, because those names are generated from the opening
-prompt.
+silent until you press the capsule to open the panel, choose the **Settings**
+tab, and paste a key in that provider's row. Each provider holds its own
+credential and also reads its own `<PROVIDER>_API_KEY` from the environment;
+Conductor accepts `CONDUCTOR_API_KEY` or `CONDUCTOR_API_TOKEN`. A provider you
+give no key to reports nothing and issues no request. A key you enter is
+encrypted with `safeStorage`, whose key comes from the login Keychain, and it is
+never returned to the renderer. Luke reads only cloud workspaces you created,
+issues only read requests, and labels each session by its repository rather than
+by a provider workspace or session name, because those names are generated from
+the opening prompt.
 
 ## Attention intelligence
 

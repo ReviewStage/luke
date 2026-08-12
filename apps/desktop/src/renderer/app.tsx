@@ -2,6 +2,7 @@ import type { NormalizedSession } from "@sidecar/core";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import type {
   AppBootstrap,
+  AppSettings,
   DisplayDiagnostic,
   MicrophoneStatus,
   WindowMode,
@@ -97,6 +98,7 @@ export function App(): React.JSX.Element {
   const [display, setDisplay] = useState<DisplayDiagnostic>();
   const [presentation, setPresentation] = useState<PanelPresentation>(PANEL_PRESENTATION.CAPSULE);
   const [tab, setTab] = useState<PanelTab>(PANEL_TAB.SESSIONS);
+  const [settings, setSettings] = useState<AppSettings>();
   const [microphoneStatus, setMicrophoneStatus] = useState<MicrophoneStatus>("not-determined");
   const [microphoneError, setMicrophoneError] = useState<string>();
   const [analyser, setAnalyser] = useState<AnalyserNode>();
@@ -105,12 +107,24 @@ export function App(): React.JSX.Element {
   const mediaStream = useRef<MediaStream | undefined>(undefined);
   const hoverTimer = useRef<number | undefined>(undefined);
   const presentationRef = useRef<PanelPresentation>(PANEL_PRESENTATION.CAPSULE);
+  const tabRef = useRef<PanelTab>(PANEL_TAB.SESSIONS);
   const modeGeneration = useRef(0);
 
-  const applyPresentation = useCallback((next: PanelPresentation) => {
-    presentationRef.current = next;
-    setPresentation(next);
+  const changeTab = useCallback((next: PanelTab) => {
+    tabRef.current = next;
+    setTab(next);
   }, []);
+
+  const applyPresentation = useCallback(
+    (next: PanelPresentation) => {
+      presentationRef.current = next;
+      setPresentation(next);
+      // A panel that has closed reopens on the session list: settings are
+      // somewhere you go, not a state the capsule remembers.
+      if (next === PANEL_PRESENTATION.CAPSULE) changeTab(PANEL_TAB.SESSIONS);
+    },
+    [changeTab],
+  );
 
   const applyAuthoritativeMode = useCallback(
     (nextMode: WindowMode) => {
@@ -218,6 +232,9 @@ export function App(): React.JSX.Element {
     cancelHoverTransition();
     const current = presentationRef.current;
     if (current === PANEL_PRESENTATION.CAPSULE) return;
+    // Settings hold a text field. Someone reaching for the keyboard has not
+    // asked for the panel to close, so pointer position stops deciding.
+    if (current === PANEL_PRESENTATION.PANEL && tabRef.current === PANEL_TAB.SETTINGS) return;
     hoverTimer.current = window.setTimeout(
       () => {
         hoverTimer.current = undefined;
@@ -230,6 +247,12 @@ export function App(): React.JSX.Element {
       current === PANEL_PRESENTATION.PEEK ? PEEK_LEAVE_DELAY_MS : PANEL_LEAVE_DELAY_MS,
     );
   }, [applyPresentation, cancelHoverTransition, changeMode]);
+
+  const submitConductorApiKey = useCallback(async (apiKey: string | undefined) => {
+    const result = await window.sidecar.setConductorApiKey(apiKey);
+    setSettings(result.settings);
+    return result.reason;
+  }, []);
 
   /** The capsule is a button: pressing it opens the panel, or closes it again. */
   const handleCapsulePress = useCallback(() => {
@@ -244,6 +267,7 @@ export function App(): React.JSX.Element {
     void window.sidecar.getBootstrap().then((value) => {
       setBootstrap(value);
       setSessions(value.sessions);
+      setSettings(value.settings);
       setDisplay(value.display);
       if (modeGeneration.current === bootstrapGeneration) {
         applyAuthoritativeMode(value.mode);
@@ -284,13 +308,13 @@ export function App(): React.JSX.Element {
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && presentation === PANEL_PRESENTATION.PANEL) {
-        void changeMode(false);
-      }
+      if (event.key !== "Escape" || presentation !== PANEL_PRESENTATION.PANEL) return;
+      if (tab === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.SESSIONS);
+      else void changeMode(false);
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [changeMode, presentation]);
+  }, [changeMode, changeTab, presentation, tab]);
 
   if (!bootstrap || !display) return <div />;
 
@@ -320,12 +344,14 @@ export function App(): React.JSX.Element {
           <PanelBody
             sessions={visibleSessions}
             tab={tab}
-            onTabChange={setTab}
+            onTabChange={changeTab}
             settings={{
               microphoneStatus,
               microphoneActive: analyser !== undefined,
               microphoneError,
               onToggleMicrophone: () => void (analyser ? stopMicrophone() : startMicrophone()),
+              settings,
+              onSubmitConductorApiKey: submitConductorApiKey,
               onQuit: () => window.sidecar.quit(),
               displaySummary: displaySummary(bootstrap, display),
             }}
