@@ -36,7 +36,15 @@ pnpm --filter @luke/web dev
 Use `./scripts/run.sh --profile speaking` to preview the deterministic waveform
 to the left of the notch without requesting microphone access.
 
-The run command directly owns the Electron process, so Control-C stops it.
+The run command directly owns the Electron process, so Control-C stops it. It
+also replaces an instance that is already running: Electron's single-instance
+lock belongs to the older process, so without this the newer launch would quit
+on startup and leave the previous build on screen. That lock is keyed on the app
+name, which every checkout shares, so the replaced instance can be one launched
+from a different worktree; it is named on stdout before it is stopped. Pass
+`--keep-running` to leave a running instance in place, which re-asserts its
+panel instead of starting a new one.
+
 `verify.sh` packages the desktop app and writes deterministic visual evidence to
 `artifacts/evidence/app-smoke-expanded.png`,
 `artifacts/evidence/app-smoke-compact.png`, and
