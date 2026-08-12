@@ -143,7 +143,7 @@ export class SettingsStore {
   readonly #providers: readonly CredentialProvider[];
   #loading: Promise<PersistedSettings> | undefined;
   #resolved = new Map<CredentialProviderId, ResolvedApiKey>();
-  #pendingWrite: Promise<void> = Promise.resolve();
+  #mutations: Promise<void> = Promise.resolve();
 
   constructor(options: SettingsStoreOptions) {
     this.#directory = options.directory;
@@ -195,9 +195,12 @@ export class SettingsStore {
       : undefined;
     if (rejection) return { settings: await this.snapshot(), reason: rejection };
 
-    const persisted = await this.#load();
-    const ciphertext = normalized ? this.#cipher.encrypt(normalized).toString("base64") : undefined;
-    if (persisted.apiKeys[providerId] !== ciphertext) {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      const ciphertext = normalized
+        ? this.#cipher.encrypt(normalized).toString("base64")
+        : undefined;
+      if (persisted.apiKeys[providerId] === ciphertext) return;
       // Every other provider's ciphertext is carried over, so saving one key
       // never disturbs another.
       const apiKeys = { ...persisted.apiKeys };
@@ -207,8 +210,25 @@ export class SettingsStore {
       await this.#write(next);
       this.#loading = Promise.resolve(next);
       this.#resolved.delete(providerId);
-    }
+    });
     return { settings: await this.snapshot() };
+  }
+
+  /**
+   * Runs one settings change at a time. Serializing only the file write is not
+   * enough: a user with more than one provider row can start a second save
+   * before the first lands, and both would read the same stored keys before
+   * either wrote, so the later write would drop the other provider's key.
+   */
+  async #serialize<Result>(operation: () => Promise<Result>): Promise<Result> {
+    const result = this.#mutations.then(operation);
+    // A failed change must not wedge the queue, so the chain forgets its
+    // outcome; the caller still receives the rejection.
+    this.#mutations = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
   }
 
   #secretStorageAvailable(): boolean {
@@ -278,22 +298,19 @@ export class SettingsStore {
     return persisted;
   }
 
+  /** Only ever called from inside `#serialize`, so writes cannot interleave. */
   async #write(persisted: PersistedSettings): Promise<void> {
-    const write = this.#pendingWrite.then(async () => {
-      const directory = this.#directory();
-      const settingsPath = path.join(directory, SETTINGS_FILE_NAME);
-      const temporaryPath = path.join(directory, SETTINGS_TEMPORARY_FILE_NAME);
-      await fs.mkdir(directory, { recursive: true });
-      await fs.writeFile(temporaryPath, `${JSON.stringify(persisted, undefined, 2)}\n`, {
-        encoding: "utf8",
-        mode: SETTINGS_FILE_MODE,
-      });
-      // `mode` only applies when the file is created, so a temporary file left
-      // behind by an interrupted write keeps whatever mode it already had.
-      await fs.chmod(temporaryPath, SETTINGS_FILE_MODE);
-      await fs.rename(temporaryPath, settingsPath);
+    const directory = this.#directory();
+    const settingsPath = path.join(directory, SETTINGS_FILE_NAME);
+    const temporaryPath = path.join(directory, SETTINGS_TEMPORARY_FILE_NAME);
+    await fs.mkdir(directory, { recursive: true });
+    await fs.writeFile(temporaryPath, `${JSON.stringify(persisted, undefined, 2)}\n`, {
+      encoding: "utf8",
+      mode: SETTINGS_FILE_MODE,
     });
-    this.#pendingWrite = write.catch(() => undefined);
-    await write;
+    // `mode` only applies when the file is created, so a temporary file left
+    // behind by an interrupted write keeps whatever mode it already had.
+    await fs.chmod(temporaryPath, SETTINGS_FILE_MODE);
+    await fs.rename(temporaryPath, settingsPath);
   }
 }

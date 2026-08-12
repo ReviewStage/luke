@@ -189,6 +189,31 @@ test("keeps each provider's key, environment fallback, and reported source separ
   );
 });
 
+test("keeps both keys when two providers are saved at once", async (t) => {
+  // Each settings row carries its own busy flag, so a user with more than one
+  // provider can start a second save before the first has landed.
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory, { providers: TEST_PROVIDERS });
+
+  await Promise.all([
+    store.setApiKey(FIRST_CLOUD, "first-cloud-key"),
+    store.setApiKey(SECOND_CLOUD, "second-cloud-key"),
+  ]);
+
+  assert.equal(await store.readApiKey(FIRST_CLOUD), "first-cloud-key");
+  assert.equal(await store.readApiKey(SECOND_CLOUD), "second-cloud-key");
+  assert.deepEqual(JSON.parse(await readSettingsFile(directory)), {
+    version: 2,
+    apiKeys: {
+      [FIRST_CLOUD]: sealed("first-cloud-key"),
+      [SECOND_CLOUD]: sealed("second-cloud-key"),
+    },
+  });
+  const reopened = storeIn(directory, { providers: TEST_PROVIDERS });
+  assert.equal(await reopened.readApiKey(FIRST_CLOUD), "first-cloud-key");
+  assert.equal(await reopened.readApiKey(SECOND_CLOUD), "second-cloud-key");
+});
+
 test("reports nothing for a provider this store does not know", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory, { providers: [FIRST_CLOUD_PROVIDER] });
