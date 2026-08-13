@@ -14,6 +14,7 @@ import {
   arrangeSessions,
   DEFAULT_SESSION_VIEW,
   displaySessions,
+  observedAgoLabel,
   SESSION_FILTER,
   SESSION_SORT,
   sessionTally,
@@ -116,6 +117,71 @@ test("a row is a control only where its provider gave an address", () => {
     FIXTURE_SESSIONS.every((session) => session.openable === false),
     true,
   );
+});
+
+// The sentence under the title is the one place the row states what is
+// happening — there is no chip at the other end — so a provider that reported
+// nothing must still leave the row reading as Working or Complete.
+test("the line under the title says the state when the provider said nothing", () => {
+  const [bare] = displaySessions(bootstrap(false), [
+    liveSession(CLAUDE_PROVIDER, "claude-quiet", SESSION_STATUS.WORKING),
+  ]);
+  assert.equal(bare?.detail, "Working");
+  assert.equal(bare?.detail, bare?.label);
+
+  const [spoken] = displaySessions(bootstrap(false), [
+    normalizeSession(CODEX_PROVIDER, {
+      providerSessionId: "codex-busy",
+      title: "Session codex-busy",
+      status: SESSION_STATUS.WORKING,
+      observedAt: 1_000,
+      detail: { activity: "Running tests" },
+    }),
+  ]);
+  assert.equal(spoken?.detail, "Running tests");
+
+  // The fixture's silent row proves the same fallback in the visual evidence.
+  const conductor = FIXTURE_SESSIONS.find((session) => session.id === "conductor-workspace");
+  assert.equal(conductor?.detail, "Complete");
+});
+
+test("a row carries the identifiers that tell it from its neighbours", () => {
+  const [live] = displaySessions(bootstrap(false), [
+    normalizeSession(CODEX_PROVIDER, {
+      providerSessionId: "codex-checkout",
+      title: "Session codex-checkout",
+      status: SESSION_STATUS.WORKING,
+      observedAt: 1_000,
+      detail: { repository: "luke", branch: "dean/session-rows", model: "gpt-5.6-luna" },
+    }),
+  ]);
+  assert.equal(live?.repository, "luke");
+  assert.equal(live?.branch, "dean/session-rows");
+  assert.equal(live?.model, "gpt-5.6-luna");
+
+  // The fixture keeps one row with a repository and no branch, so the surface's
+  // fallback line stays visible in the evidence.
+  const devin = FIXTURE_SESSIONS.find((session) => session.id === "devin-session");
+  assert.equal(devin?.branch, undefined);
+  assert.equal(devin?.repository, "sidecar-native");
+});
+
+// The label answers "is this thing alive", so it reports the coarsest unit
+// that has begun rather than telling time. A timestamp ahead of the clock is
+// clock skew, not the future, and reads as Now.
+test("how long ago a session was seen is worded by the unit that has begun", () => {
+  const minute = 60_000;
+  const now = 100 * 24 * 60 * minute;
+
+  assert.equal(observedAgoLabel(now, now), "Now");
+  assert.equal(observedAgoLabel(now - 59_000, now), "Now");
+  assert.equal(observedAgoLabel(now + minute, now), "Now");
+  assert.equal(observedAgoLabel(now - minute, now), "1 min");
+  assert.equal(observedAgoLabel(now - 59 * minute, now), "59 min");
+  assert.equal(observedAgoLabel(now - 60 * minute, now), "1 hr");
+  assert.equal(observedAgoLabel(now - 23 * 60 * minute, now), "23 hr");
+  assert.equal(observedAgoLabel(now - 24 * 60 * minute, now), "1 day");
+  assert.equal(observedAgoLabel(now - 3 * 24 * 60 * minute, now), "3 days");
 });
 
 test("a speaking disposition needs a person even while the session works", () => {

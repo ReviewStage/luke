@@ -19,8 +19,6 @@ export const STATE_LABEL: Record<SessionState, string> = {
   [SESSION_STATE.UNKNOWN]: "Idle",
 };
 
-const CONTEXT_SEPARATOR = " · ";
-
 /** The state order the surface reads top-down and the badge collapses to. */
 const STATE_PRIORITY: readonly SessionState[] = [
   SESSION_STATE.ATTENTION,
@@ -85,10 +83,17 @@ export interface DisplaySession {
   title: string;
   providerId: string;
   provider: string;
-  /** What the session is doing, or what stopped it. */
+  /** What the session is doing, or what stopped it, worded to carry the state. */
   detail: string;
-  /** Where it is doing it: provider, repository, branch, model. */
-  context: string;
+  /**
+   * Which checkout the work is in. Two fields rather than one line, because the
+   * row draws a branch under its own glyph and a repository plain, and only the
+   * fields can say which kind of identifier this is.
+   */
+  repository?: string;
+  branch?: string;
+  /** Read on the provider mark's hover, never spent on a line of the row. */
+  model?: string;
   state: SessionState;
   label: string;
   location: SessionLocation;
@@ -163,27 +168,13 @@ function sessionNeedsAttention(session: NormalizedSession): boolean {
  * The line under the title. What stopped a session outranks what it was doing,
  * and what it was doing outranks the recap of a turn that has already ended.
  *
- * It is empty when a provider reported none of them. Falling back to the status
- * would only restate the chip at the other end of the same row.
+ * When a provider reported none of them, the line says the state in so many
+ * words. This sentence is the one place the row states it — there is no chip at
+ * the other end any more — so a session whose provider said nothing still reads
+ * as Working or Complete rather than as a row with a line missing.
  */
-function sessionDetail(session: NormalizedSession): string {
-  return session.detail.error ?? session.detail.activity ?? session.summary ?? "";
-}
-
-/**
- * The line under that. It answers "which one is this?" for the rows that would
- * otherwise read alike — two checkouts of one repository, or one repository on
- * two branches.
- */
-function sessionContext(session: NormalizedSession): string {
-  return [
-    session.provider.displayName,
-    session.detail.repository,
-    session.detail.branch,
-    session.detail.model,
-  ]
-    .filter((part): part is string => part !== undefined && part.length > 0)
-    .join(CONTEXT_SEPARATOR);
+function sessionDetail(session: NormalizedSession, state: SessionState): string {
+  return session.detail.error ?? session.detail.activity ?? session.summary ?? STATE_LABEL[state];
 }
 
 function sessionState(session: NormalizedSession): SessionState {
@@ -213,6 +204,10 @@ export function displaySessions(
   const visible: readonly DisplaySession[] = bootstrap.fixtureMode
     ? bootstrap.fixture.sessions.map((session) => ({
         ...session,
+        // The same wording rule the live path applies: a fixture row whose
+        // provider said nothing states its own state, so the evidence shows
+        // the fallback rather than a gap.
+        detail: session.detail || STATE_LABEL[session.state],
         label: STATE_LABEL[session.state],
         // A fixture stands for sessions that are not on the machine drawing
         // them, so there is nothing for a press to open. Nothing is lost from
@@ -220,19 +215,24 @@ export function displaySessions(
         // cannot are drawn alike until a pointer is over one.
         openable: false,
       }))
-    : sessions.map((session) => ({
-        id: session.providerSessionId,
-        title: session.title,
-        providerId: session.providerId,
-        provider: session.provider.displayName,
-        detail: sessionDetail(session),
-        context: sessionContext(session),
-        state: sessionState(session),
-        label: STATE_LABEL[sessionState(session)],
-        location: session.location,
-        observedAt: session.observedAt,
-        openable: session.detail.link !== undefined,
-      }));
+    : sessions.map((session) => {
+        const state = sessionState(session);
+        return {
+          id: session.providerSessionId,
+          title: session.title,
+          providerId: session.providerId,
+          provider: session.provider.displayName,
+          detail: sessionDetail(session, state),
+          repository: session.detail.repository,
+          branch: session.detail.branch,
+          model: session.detail.model,
+          state,
+          label: STATE_LABEL[state],
+          location: session.location,
+          observedAt: session.observedAt,
+          openable: session.detail.link !== undefined,
+        };
+      });
 
   return [...visible].sort(byUrgency);
 }
@@ -380,6 +380,25 @@ export function tallySummary(tally: SessionTally): string {
   }
   if (tally.working > 0) return `${tally.total} ${sessionWord} tracked, ${tally.working} working`;
   return `${tally.total} ${sessionWord} tracked`;
+}
+
+/**
+ * How long ago a session was last seen, in the coarsest unit that has begun,
+ * because the label answers "is this thing alive" rather than telling time.
+ * Anything under a minute is "Now" — and so is a timestamp ahead of the clock,
+ * which a provider's clock skew can produce and a negative age would only
+ * dramatize. `now` is an argument rather than a clock read here: fixture rows
+ * are measured against the fixture's own epoch so the evidence stays
+ * reproducible, and live rows against whatever render tick asked.
+ */
+export function observedAgoLabel(observedAt: number, now: number): string {
+  const elapsedMinutes = Math.floor((now - observedAt) / 60_000);
+  if (elapsedMinutes < 1) return "Now";
+  if (elapsedMinutes < 60) return `${elapsedMinutes} min`;
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) return `${elapsedHours} hr`;
+  const elapsedDays = Math.floor(elapsedHours / 24);
+  return `${elapsedDays} ${elapsedDays === 1 ? "day" : "days"}`;
 }
 
 /**

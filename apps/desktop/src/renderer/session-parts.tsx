@@ -1,4 +1,3 @@
-import type { SessionState } from "@sidecar/core";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import { ProviderMark } from "./provider-marks";
 import {
@@ -12,18 +11,37 @@ import {
 } from "./session-model";
 import { CloudIcon, LaptopIcon, OptionsIcon } from "./settings-icons";
 
-export function StateChip({
-  state,
-  label,
-}: {
-  state: SessionState;
-  label: string;
-}): React.JSX.Element {
+/**
+ * Rides beside a branch name to say which kind of identifier it is: a branch
+ * name alone reads as any string of slashes. Ours rather than a brand, so it is
+ * drawn in whatever text colour the line already has.
+ */
+export function BranchGlyph(): React.JSX.Element {
   return (
-    <span className="state-chip" data-state={state}>
-      <span className="state-dot" aria-hidden="true" />
-      {label}
-    </span>
+    <svg className="row-branch-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <g fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+        <circle cx="4.2" cy="3.4" r="1.55" />
+        <circle cx="4.2" cy="12.6" r="1.55" />
+        <circle cx="11.8" cy="5.2" r="1.55" />
+        <path d="M4.2 5v6M11.8 6.9c0 2.5-2.6 3-5.4 3.4" />
+      </g>
+    </svg>
+  );
+}
+
+/** Leads a finished session's sentence, the way a spinner leads a working one. */
+export function CheckGlyph(): React.JSX.Element {
+  return (
+    <svg className="row-check" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
+      <path
+        d="M2.4 6.6l2.5 2.5 4.7-5.6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
