@@ -61,7 +61,13 @@ import {
   type CredentialProviderId,
   isCredentialProviderId,
 } from "./shared/credential-providers";
-import { DEFAULT_VOICE_HOTKEYS, voiceHotkeyLabel } from "./shared/voice-hotkey";
+import {
+  DEFAULT_VOICE_HOTKEYS,
+  VOICE_HOTKEY_ABSENCE,
+  type VoiceHotkeyAbsence,
+  voiceHotkeyLabel,
+  voiceHotkeyReport,
+} from "./shared/voice-hotkey";
 
 const captureOutput = argumentValue("--capture-evidence");
 const profile = argumentValue("--profile") ?? "idle";
@@ -147,6 +153,9 @@ const attentionReviewer = attentionEvaluator
 // does: evidence must be reproducible without a key and without a network.
 const realtimeCredentials = fixtureMode ? undefined : openAiRealtimeCredentialsFromEnvironment();
 let voiceHotkey: string | undefined;
+// Only read when no key was registered, so it starts at the case that needs no
+// explaining beyond itself: every candidate was refused.
+let voiceHotkeyAbsence: VoiceHotkeyAbsence = VOICE_HOTKEY_ABSENCE.ALREADY_OWNED;
 
 /**
  * Registers the talk key with the system so it answers from whatever app is
@@ -155,10 +164,16 @@ let voiceHotkey: string | undefined;
  * reply that is already playing.
  */
 function registerVoiceHotkey(): void {
-  if (captureMode) return;
+  if (captureMode) {
+    voiceHotkeyAbsence = VOICE_HOTKEY_ABSENCE.CAPTURE_RUN;
+    return;
+  }
   // Taking a system-wide key for a feature that cannot run would make every
   // press somewhere else in macOS do nothing, visibly.
-  if (!realtimeCredentials) return;
+  if (!realtimeCredentials) {
+    voiceHotkeyAbsence = VOICE_HOTKEY_ABSENCE.NO_CREDENTIAL;
+    return;
+  }
   for (const accelerator of DEFAULT_VOICE_HOTKEYS) {
     const registered = globalShortcut.register(accelerator, () => {
       panelWindow?.webContents.send(channels.voiceHotkey);
@@ -170,11 +185,7 @@ function registerVoiceHotkey(): void {
 }
 
 function reportVoiceHotkey(): void {
-  process.stderr.write(
-    voiceHotkey
-      ? `Luke talk key: ${voiceHotkeyLabel(voiceHotkey)}\n`
-      : "Luke talk key: unavailable — another app already owns it\n",
-  );
+  process.stderr.write(`${voiceHotkeyReport(voiceHotkey, voiceHotkeyAbsence)}\n`);
 }
 
 let windowMode: WindowMode = captureMode
