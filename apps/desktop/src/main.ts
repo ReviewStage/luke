@@ -38,6 +38,7 @@ import { DevinSessionAdapter } from "./devin-adapter";
 import { JulesSessionAdapter } from "./jules-adapter";
 import { readMacScreenGeometry } from "./macos-screen-geometry";
 import { openAiAttentionEvaluatorFromEnvironment } from "./openai-attention-evaluator";
+import { OpenCodeSessionAdapter } from "./opencode-adapter";
 import { SettingsStore } from "./settings-store";
 import {
   type AppBootstrap,
@@ -123,6 +124,7 @@ const sessionAdapters = [
   cursorAdapter,
   devinAdapter,
   julesAdapter,
+  new OpenCodeSessionAdapter(),
 ] as const;
 // A fixture run must stay deterministic and credential-free, so it never builds
 // an evaluator — not just capture runs.

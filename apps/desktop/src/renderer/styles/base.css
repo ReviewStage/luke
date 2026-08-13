@@ -12,9 +12,11 @@
   /* Provider brand colours, used only by the marks: Claude Code's published
      coral, the vertical gradient Codex draws its mark with, the light half of
      Conductor's two-colour palette — its dark half is the surface the mark
-     already sits on, so the pairing is the published one — and Cursor's mark,
-     and Devin's marks, each published as one silhouette and so drawn in the
-     light form its brand uses on a dark surface. Session state is carried by the chips, row
+     already sits on, so the pairing is the published one — Cursor's and
+     Devin's marks, each published as one silhouette and so drawn in the light
+     form its brand uses on a dark surface, and the two tones of OpenCode's
+     terminal mark: the frame, and the gray block its favicon keeps inside the
+     frame's opening on every surface. Session state is carried by the chips, row
      tints, and count badge instead, so the two colour systems never compete for
      the same pixel. */
   --mark-claude-code: #d97757;
@@ -26,6 +28,8 @@
   --mark-cursor: #ffffff;
   --mark-devin: #ffffff;
   --mark-jules: #715cd7;
+  --mark-opencode: #ffffff;
+  --mark-opencode-block: #5a5858;
 
   /* The one destructive colour, in the two weights a control that destroys
      something needs: a ground it can sit on and a text colour that reads on
@@ -659,6 +663,13 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    it takes the same scale they do. */
 .provider-mark[data-mark="jules"] {
   color: var(--mark-jules);
+  transform: scale(0.94);
+}
+
+/* OpenCode's frame fills its box top to bottom the way the Codex and Cursor
+   marks do, so it takes the same scale they do. */
+.provider-mark[data-mark="opencode"] {
+  color: var(--mark-opencode);
   transform: scale(0.94);
 }
 
