@@ -29,6 +29,7 @@ interface Harness {
   emit: (event: unknown) => void;
   lukeAudible: () => boolean;
   deliverRemoteTrack: () => void;
+  provideConnection: () => void;
   setConnectionState: (state: RTCPeerConnectionState) => void;
   closeChannel: () => void;
   requests: { url: string; init: RequestInit }[];
@@ -110,13 +111,14 @@ function harness(
     },
   };
 
+  let connection = "connection" in options ? options.connection : CONNECTION;
   const session = new RealtimeVoiceSession({
     requestConnection: async () => {
       if (options.connectionDelayMs) {
         await new Promise((resolve) => setTimeout(resolve, options.connectionDelayMs));
       }
       if (options.connectionError) throw options.connectionError;
-      return "connection" in options ? options.connection : CONNECTION;
+      return connection;
     },
     requestMicrophoneStream: async () => {
       if (options.microphoneError) throw options.microphoneError;
@@ -146,6 +148,9 @@ function harness(
     microphoneEnabled: () => enabled,
     microphoneStopped: () => stopped,
     lukeAudible: () => remoteTrack.enabled,
+    provideConnection: () => {
+      connection = CONNECTION;
+    },
     deliverRemoteTrack: () => {
       (peer.ontrack as ((e: unknown) => void) | undefined)?.({
         track: remoteTrack,
@@ -311,6 +316,21 @@ test("pressing twice during the handshake leaves no turn open", async () => {
     context.sent.filter((event) => event.type === REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_COMMIT),
     [],
   );
+});
+
+test("a press does not outlive the call it failed to open", async () => {
+  const context = harness({ connection: undefined });
+
+  context.session.toggleTurn();
+  assert.equal(await context.session.connect(), false);
+  assert.equal(context.session.status, REALTIME_STATUS.UNAVAILABLE);
+
+  // The key appears later and something opens a call. Nobody has pressed
+  // anything since, so nothing may be listening on the other side of it.
+  context.provideConnection();
+  assert.equal(await context.session.connect(), true);
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+  assert.equal(context.microphoneEnabled(), false);
 });
 
 test("a reply that runs out before the model says so still ends", async () => {

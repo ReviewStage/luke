@@ -137,9 +137,18 @@ export class RealtimeVoiceSession {
   /** Opens the call, reusing an in-flight attempt rather than racing a second one. */
   async connect(): Promise<boolean> {
     if (this.isConnected) return true;
-    this.#connecting ??= this.#connect().finally(() => {
-      this.#connecting = undefined;
-    });
+    this.#connecting ??= this.#connect()
+      .then((opened) => {
+        // A press does not outlive the attempt it started. Every way a connect
+        // ends without a call passes through here — no credential, a refused
+        // call, a timeout — so none of them can leave an intention behind for
+        // some later connection to open a turn nobody asked for.
+        if (!opened) this.#pendingTurn = false;
+        return opened;
+      })
+      .finally(() => {
+        this.#connecting = undefined;
+      });
     return this.#connecting;
   }
 
