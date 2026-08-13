@@ -5,6 +5,7 @@ import {
   fixtureSnapshot,
   normalizeSession,
   PROVIDER_ID,
+  PROVIDER_ID_LIST,
   SESSION_LOCATION,
   SESSION_STATE,
   SESSION_STATUS,
@@ -188,6 +189,42 @@ test("the filters offered run from everything to one agent, counted", () => {
     { filter: PROVIDER_ID.CURSOR, label: "Cursor", count: 1, providerId: PROVIDER_ID.CURSOR },
     { filter: PROVIDER_ID.DEVIN, label: "Devin", count: 1, providerId: PROVIDER_ID.DEVIN },
   ]);
+});
+
+// The fixture above covers the agents it happens to contain. Every agent the
+// registry knows has to be reachable, including whichever one was added last:
+// an agent with a session on screen and no chip of its own is a row nobody can
+// narrow to, and one whose chip does not match its sessions is worse — a filter
+// that empties a list the capsule is still counting.
+test("every agent this build knows can be narrowed down to", () => {
+  const sessions = displaySessions(
+    bootstrap(false),
+    PROVIDER_ID_LIST.map((providerId, index) =>
+      normalizeSession(
+        { id: providerId, displayName: providerId },
+        {
+          providerSessionId: providerId,
+          title: providerId,
+          status: SESSION_STATUS.WORKING,
+          observedAt: 1_000 + index,
+        },
+      ),
+    ),
+  );
+  const offered = arrangeSessions(sessions, DEFAULT_SESSION_VIEW).options;
+
+  assert.deepEqual(
+    offered.filter((option) => option.providerId !== undefined).map((option) => option.filter),
+    [...PROVIDER_ID_LIST],
+  );
+  for (const providerId of PROVIDER_ID_LIST) {
+    const narrowed = arrangeSessions(sessions, { ...DEFAULT_SESSION_VIEW, filter: providerId });
+    assert.equal(narrowed.filter, providerId);
+    assert.deepEqual(
+      narrowed.sessions.map((session) => session.id),
+      [providerId],
+    );
+  }
 });
 
 test("a level with one answer is not offered as a choice", () => {

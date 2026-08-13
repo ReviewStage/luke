@@ -109,16 +109,17 @@
   gap: 10px;
 }
 
-/* Named in the same voice as a settings heading, because it is doing the same
-   job: saying what the controls beside it decide. */
+/* Read as ordinary text, in the system face at the size the panel speaks in.
+   The uppercase, letter-spaced voice belongs to a settings heading, which stands
+   over a section and is read once; these two are labels inside a menu, read in
+   the same glance as the controls beside them, and shouting a word that small
+   only makes it harder to read. */
 .options-label {
-  width: 36px;
+  min-width: 38px;
   flex: 0 0 auto;
-  color: var(--text-tertiary);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
 }
 
 /* Both groups are `fieldset`s, so each says what it is to a reader without a
@@ -168,6 +169,7 @@
   font-weight: 620;
   transition:
     background-color var(--duration-hover) ease,
+    box-shadow var(--duration-hover) ease,
     color var(--duration-hover) ease;
   white-space: nowrap;
 }
@@ -177,8 +179,13 @@
   color: var(--text-primary);
 }
 
+/* The chosen chip is the one thing in the sheet that has to be legible from
+   across the panel, because it is the answer to what the list is showing. Ground
+   and edge together, so it still reads as chosen while the pointer is somewhere
+   else on the row and while a neighbour is lit by hover. */
 .filter-chip[data-active="true"] {
-  background: var(--raised-strong);
+  box-shadow: inset 0 0 0 1px var(--selected-edge);
+  background: var(--selected);
   color: var(--text-primary);
 }
 
@@ -202,6 +209,11 @@
   opacity: 0.62;
 }
 
+/* Quiet where the chip is a tally, plain where it is the answer. */
+.filter-chip[data-active="true"] .filter-count {
+  opacity: 0.85;
+}
+
 /* Enclosed rather than chipped: an order is one choice of two, and the box is
    what says the pair is exclusive where the chips beside it are a list. */
 .sort-group {
@@ -219,6 +231,7 @@
   font-weight: 620;
   transition:
     background-color var(--duration-hover) ease,
+    box-shadow var(--duration-hover) ease,
     color var(--duration-hover) ease;
   white-space: nowrap;
 }
@@ -227,8 +240,11 @@
   color: var(--text-primary);
 }
 
+/* Chosen on the same terms as a chip, so one glance across the sheet reads both
+   rows the same way. */
 .sort-option[data-active="true"] {
-  background: var(--raised-strong);
+  box-shadow: inset 0 0 0 1px var(--selected-edge);
+  background: var(--selected);
   color: var(--text-primary);
 }
 

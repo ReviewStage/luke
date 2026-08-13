@@ -31,6 +31,16 @@
   --text-tertiary: rgba(255, 255, 255, 0.34);
   --raised: rgba(255, 255, 255, 0.05);
   --raised-strong: rgba(255, 255, 255, 0.09);
+  /* A third step above the hover one, and an edge to go with it. Hover and
+     chosen cannot share a ground: the difference between "the pointer is here"
+     and "this is what you are looking at" is the whole content of a filter chip,
+     and one step of four percent white is not a difference anyone can see. It is
+     a ground and an edge rather than a fill light enough to invert the text
+     against, because a chip carries the agent's own mark and the marks published
+     as a single silhouette are drawn white — on a white ground they would go out
+     entirely. */
+  --selected: rgba(255, 255, 255, 0.2);
+  --selected-edge: rgba(255, 255, 255, 0.32);
   --hairline: rgba(255, 255, 255, 0.08);
 
   /* One motion vocabulary. The black surface is the only thing that changes

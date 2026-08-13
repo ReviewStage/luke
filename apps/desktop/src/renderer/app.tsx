@@ -33,6 +33,7 @@ import {
   sessionTally,
   tallySummary,
 } from "./session-model";
+import { SESSION_OPTIONS_BUTTON_ID, SESSION_OPTIONS_ID } from "./session-parts";
 
 function usePointerPassthrough(
   onHitRegionEnter: () => void,
@@ -185,10 +186,27 @@ export function App(): React.JSX.Element {
     setOptionsOpen(false);
   }, []);
 
+  // A choice made in the sheet puts the sheet away. It is drawn over the list
+  // and is taller than a row, so a list narrowed to one or two sessions ends up
+  // entirely behind it — the control would hide the very rows it was asked for,
+  // which reads as a filter that shows nothing at all. The fallback the render
+  // performs when a filter empties writes the view directly instead: that is the
+  // list correcting itself, not somebody choosing.
+  const changeSessionView = useCallback((next: SessionView) => {
+    setSessionView(next);
+    setOptionsOpen(false);
+  }, []);
+
   const applyPresentation = useCallback(
     (next: PanelPresentation) => {
       presentationRef.current = next;
       setPresentation(next);
+      // The sheet is only ever drawn inside the panel, so any other shape puts
+      // it away. Left set behind a shape that cannot draw it, it would be over
+      // the list again the next time the panel came forward with nothing having
+      // been pressed — and a key half-entered is the one thing that survives a
+      // close, which the sheet is not.
+      if (next !== PANEL_PRESENTATION.PANEL) setOptionsOpen(false);
       // A panel that has closed reopens on the session list, showing every
       // session with whatever needs a person first: settings are somewhere you
       // go, not a state the capsule remembers, and a filter left in place would
@@ -619,6 +637,28 @@ export function App(): React.JSX.Element {
     return () => window.removeEventListener("keydown", handleKey);
   }, [cancelEntry, changeMode, changeTab, optionsOpen, presentation, tab]);
 
+  // A press anywhere else is the same dismissal Escape is, and the one a sheet
+  // over a list has to answer: what is behind it can only be reached by asking
+  // it to move, so pressing there has to be what asks. The press is taken on the
+  // way down, before whatever it lands on can act on it, and the button that
+  // opened the sheet is left to its own toggle. Nothing outside the drawn shape
+  // reaches this renderer at all — those presses belong to whatever is behind
+  // Luke — so leaving the shape is what closes the panel, and closing the panel
+  // is what puts the sheet away.
+  useEffect(() => {
+    if (!optionsOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target instanceof Node ? event.target : undefined;
+      if (!target) return;
+      const sheet = document.getElementById(SESSION_OPTIONS_ID);
+      const button = document.getElementById(SESSION_OPTIONS_BUTTON_ID);
+      if (sheet?.contains(target) || button?.contains(target)) return;
+      setOptionsOpen(false);
+    };
+    window.addEventListener("pointerdown", handlePointerDown, { capture: true });
+    return () => window.removeEventListener("pointerdown", handlePointerDown, { capture: true });
+  }, [optionsOpen]);
+
   if (!bootstrap || !display) return <div />;
 
   const visibleSessions = displaySessions(bootstrap, sessions);
@@ -670,7 +710,7 @@ export function App(): React.JSX.Element {
           <PanelBody
             list={list}
             view={sessionView}
-            onViewChange={setSessionView}
+            onViewChange={changeSessionView}
             offerOptions={offerOptions}
             optionsOpen={optionsOpen}
             onOptionsToggle={() => setOptionsOpen((open) => !open)}
