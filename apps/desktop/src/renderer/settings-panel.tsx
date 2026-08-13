@@ -26,9 +26,9 @@ import {
   ExternalIcon,
   KeyboardIcon,
   KeyIcon,
-  MenuBarIcon,
   PencilIcon,
   PowerIcon,
+  PreferencesIcon,
   ShieldIcon,
   TrashIcon,
 } from "./settings-icons";
@@ -444,7 +444,7 @@ function CredentialsSection({
   // about storage nobody has tried to use yet would be a guess.
   const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
   return (
-    <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
+    <section className="settings-section" style={{ "--row-index": 3 } as React.CSSProperties}>
       <h2>
         <KeyIcon />
         Cloud API keys
@@ -470,18 +470,20 @@ function CredentialsSection({
 }
 
 /**
- * Whether Luke stands in the menu bar as well as at the notch. One line and one
- * control, because nothing rides on the answer: Settings and Quit live in this
- * panel, so the status item is a second door rather than the only one.
+ * The user's own choices about Luke, ahead of the sections about what Luke can
+ * reach. One so far: whether the status item stands in the menu bar as well as
+ * at the notch. A switch and nothing else, because nothing rides on the answer
+ * — Settings and Quit live in this panel, so the item is a second door rather
+ * than the only one.
  */
-function MenuBarSection({
+function PreferencesSection({
   shown,
   onChange,
 }: {
   shown: boolean;
   onChange: (show: boolean) => Promise<string | undefined>;
 }): React.JSX.Element {
-  // The change is a round trip through the settings file, so the control rests
+  // The change is a round trip through the settings file, so the switch rests
   // until the store has answered rather than claiming a state it may not get.
   const [busy, setBusy] = useState(false);
   const [rejection, setRejection] = useState<string>();
@@ -491,35 +493,26 @@ function MenuBarSection({
     setBusy(false);
   };
   return (
-    <section className="settings-section" style={{ "--row-index": 4 } as React.CSSProperties}>
+    <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
       <h2>
-        <MenuBarIcon />
-        Menu bar
+        <PreferencesIcon />
+        Preferences
       </h2>
-      {/* The check says shown, the way it says connected on a provider's line,
-          and the button offers only the state the row is not already in. */}
       <div className="settings-row">
         <span className="settings-copy">
-          <span className="settings-name">
-            <strong>Show Luke in the menu bar</strong>
-            {shown ? <CheckIcon /> : null}
-          </span>
-          <small>
-            {shown
-              ? "Luke's face at the right end of the bar, with Settings and Quit under it."
-              : "Hidden. Settings and Quit stay right here in the panel."}
-          </small>
+          <strong>Show Luke in the menu bar</strong>
         </span>
-        <span className="settings-actions">
-          <button
-            type="button"
-            className="quiet-button"
-            disabled={busy}
-            onClick={() => void toggle()}
-          >
-            {shown ? "Hide" : "Show"}
-          </button>
-        </span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={shown}
+          aria-label="Show Luke in the menu bar"
+          className="switch"
+          disabled={busy}
+          onClick={() => void toggle()}
+        >
+          <span className="switch-thumb" />
+        </button>
       </div>
       {rejection ? <p className="error-message">{rejection}</p> : null}
     </section>
@@ -548,10 +541,14 @@ export function SettingsPanel({
       id={panelPanelId(PANEL_TAB.SETTINGS)}
       aria-labelledby={panelTabId(PANEL_TAB.SETTINGS)}
     >
-      {/* First, because it is how Luke is reached rather than what he can see.
-          Shown rather than offered: the key is fixed for now, and a control
-          that cannot change anything is worse than a plain statement of it. */}
-      <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
+      {settings ? (
+        <PreferencesSection shown={settings.showInMenuBar} onChange={onShowInMenuBarChange} />
+      ) : null}
+
+      {/* How Luke is reached rather than what he can see. Shown rather than
+          offered: the key is fixed for now, and a control that cannot change
+          anything is worse than a plain statement of it. */}
+      <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
         <h2>
           <KeyboardIcon />
           Keyboard shortcuts
@@ -576,7 +573,7 @@ export function SettingsPanel({
         <CredentialsSection settings={settings} control={credentials} panelOpen={panelOpen} />
       ) : null}
 
-      <section className="settings-section" style={{ "--row-index": 3 } as React.CSSProperties}>
+      <section className="settings-section" style={{ "--row-index": 4 } as React.CSSProperties}>
         <h2>
           <ShieldIcon />
           Permissions
@@ -618,10 +615,6 @@ export function SettingsPanel({
         </div>
         {microphoneError ? <p className="error-message">{microphoneError}</p> : null}
       </section>
-
-      {settings ? (
-        <MenuBarSection shown={settings.showInMenuBar} onChange={onShowInMenuBarChange} />
-      ) : null}
 
       <button
         type="button"

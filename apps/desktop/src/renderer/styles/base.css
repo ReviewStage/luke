@@ -1339,6 +1339,41 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   margin: 0;
 }
 
+/* The one switch in the panel. On is the palette connected and complete
+   already use, so an item that is drawn reads the same way a provider that is
+   reachable does. Only the thumb moves, only by transform, and on
+   `--spring-fast` — the bounce every small element in the app rides. */
+.switch {
+  display: inline-flex;
+  width: 34px;
+  flex: 0 0 auto;
+  align-items: center;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--raised-strong);
+  transition: background-color var(--duration-hover) ease;
+}
+
+.switch[aria-checked="true"] {
+  background: color-mix(in srgb, var(--state-complete) 62%, transparent);
+}
+
+.switch:disabled {
+  opacity: 0.4;
+}
+
+.switch-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text-primary);
+  transition: transform var(--duration-fast) var(--spring-fast);
+}
+
+.switch[aria-checked="true"] .switch-thumb {
+  transform: translateX(14px);
+}
+
 /* One provider per line: mark, name, whether it is connected, and what you can
    do about that. Providers are separated by a rule rather than by nested cards,
    so the section stays one object however many keys it holds. */

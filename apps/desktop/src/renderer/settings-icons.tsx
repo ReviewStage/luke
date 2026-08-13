@@ -111,26 +111,26 @@ export function ExternalIcon(): React.JSX.Element {
   );
 }
 
-/**
- * A screen with the bar across its top and the status item's dot at the bar's
- * right end, which is where this group's subject lives.
- */
-export function MenuBarIcon(): React.JSX.Element {
-  return (
-    <Glyph>
-      <rect x="2.4" y="4.2" width="19.2" height="15.6" rx="2.4" />
-      <path d="M2.4 8.6h19.2" />
-      <path d="M17.8 6.4h.01" />
-    </Glyph>
-  );
-}
-
 export function PowerIcon(): React.JSX.Element {
   return (
     <Glyph>
       <path d="M12 3v8.4" />
       <path d="M17.6 6.2a7.6 7.6 0 1 1-11.2 0" />
     </Glyph>
+  );
+}
+
+/** Two sliders, drawn once for both controls that mean "choices". */
+function SliderMarks(): React.JSX.Element {
+  return (
+    <>
+      <path d="M3.6 8.4h5.2" />
+      <path d="M13.2 8.4h7.2" />
+      <circle cx="11" cy="8.4" r="2.2" />
+      <path d="M3.6 15.6h2.6" />
+      <path d="M10.6 15.6h9.8" />
+      <circle cx="8.4" cy="15.6" r="2.2" />
+    </>
   );
 }
 
@@ -141,12 +141,16 @@ export function PowerIcon(): React.JSX.Element {
 export function OptionsIcon(): React.JSX.Element {
   return (
     <Glyph className="options-glyph">
-      <path d="M3.6 8.4h5.2" />
-      <path d="M13.2 8.4h7.2" />
-      <circle cx="11" cy="8.4" r="2.2" />
-      <path d="M3.6 15.6h2.6" />
-      <path d="M10.6 15.6h9.8" />
-      <circle cx="8.4" cy="15.6" r="2.2" />
+      <SliderMarks />
+    </Glyph>
+  );
+}
+
+/** The same two sliders at a heading's size: settings the user has chosen. */
+export function PreferencesIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <SliderMarks />
     </Glyph>
   );
 }
