@@ -9,7 +9,11 @@ import {
   SESSION_STATUS,
 } from "@sidecar/core";
 import {
+  arrangeSessions,
+  DEFAULT_SESSION_VIEW,
   displaySessions,
+  SESSION_FILTER,
+  SESSION_SORT,
   sessionTally,
   tallyCaption,
   tallySummary,
@@ -30,14 +34,17 @@ function liveSession(
   provider: typeof CLAUDE_PROVIDER,
   providerSessionId: string,
   status: (typeof SESSION_STATUS)[keyof typeof SESSION_STATUS],
+  observedAt = 1_000,
 ) {
   return normalizeSession(provider, {
     providerSessionId,
     title: `Session ${providerSessionId}`,
     status,
-    observedAt: 1_000,
+    observedAt,
   });
 }
+
+const FIXTURE_SESSIONS = displaySessions(bootstrap(true), []);
 
 test("the most urgent sessions are listed first in either data source", () => {
   const fixtureStates = displaySessions(bootstrap(true), []).map((session) => session.state);
@@ -128,4 +135,84 @@ test("the caption names its own number so the count is never misread", () => {
   assert.equal(tallyCaption({ ...tally, attention: 0, working: 0, complete: 0 }), "tracked");
   assert.equal(tallyCaption(sessionTally([])), "none tracked");
   assert.equal(tallySummary(sessionTally([])), "No sessions tracked");
+});
+
+test("the filters offered are the states that have a session, counted", () => {
+  const list = arrangeSessions(FIXTURE_SESSIONS, DEFAULT_SESSION_VIEW);
+
+  assert.deepEqual(list.options, [
+    { filter: SESSION_FILTER.ALL, label: "All", count: 5 },
+    { filter: SESSION_FILTER.ATTENTION, label: "Needs you", count: 1 },
+    { filter: SESSION_FILTER.WORKING, label: "Working", count: 2 },
+    { filter: SESSION_FILTER.COMPLETE, label: "Complete", count: 1 },
+    { filter: SESSION_FILTER.IDLE, label: "Idle", count: 1 },
+  ]);
+
+  const working = displaySessions(bootstrap(false), [
+    liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.WORKING),
+    liveSession(CLAUDE_PROVIDER, "claude-1", SESSION_STATUS.WORKING),
+  ]);
+  assert.deepEqual(
+    arrangeSessions(working, DEFAULT_SESSION_VIEW).options.map((option) => option.filter),
+    [SESSION_FILTER.ALL, SESSION_FILTER.WORKING],
+  );
+  assert.deepEqual(arrangeSessions([], DEFAULT_SESSION_VIEW).options, []);
+});
+
+test("a filter narrows the list without changing what is tracked", () => {
+  const list = arrangeSessions(FIXTURE_SESSIONS, {
+    ...DEFAULT_SESSION_VIEW,
+    filter: SESSION_FILTER.WORKING,
+  });
+
+  assert.deepEqual(
+    list.sessions.map((session) => session.id),
+    ["codex-bootstrap", "cursor-agent"],
+  );
+  assert.equal(list.filter, SESSION_FILTER.WORKING);
+  assert.equal(list.total, 5);
+});
+
+test("a filter whose last session has left falls back to showing everything", () => {
+  const noneWaiting = displaySessions(bootstrap(false), [
+    liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.WORKING),
+    liveSession(CLAUDE_PROVIDER, "claude-1", SESSION_STATUS.COMPLETE),
+  ]);
+
+  const list = arrangeSessions(noneWaiting, {
+    ...DEFAULT_SESSION_VIEW,
+    filter: SESSION_FILTER.ATTENTION,
+  });
+
+  assert.equal(list.filter, SESSION_FILTER.ALL);
+  assert.equal(list.sessions.length, 2);
+});
+
+test("the two orderings answer different questions about the same sessions", () => {
+  const urgent = arrangeSessions(FIXTURE_SESSIONS, DEFAULT_SESSION_VIEW);
+  const recent = arrangeSessions(FIXTURE_SESSIONS, {
+    ...DEFAULT_SESSION_VIEW,
+    sort: SESSION_SORT.RECENCY,
+  });
+
+  assert.deepEqual(
+    urgent.sessions.map((session) => session.id),
+    ["claude-review", "codex-bootstrap", "cursor-agent", "conductor-workspace", "claude-observe"],
+  );
+  assert.deepEqual(
+    recent.sessions.map((session) => session.id),
+    ["conductor-workspace", "codex-bootstrap", "claude-review", "cursor-agent", "claude-observe"],
+  );
+});
+
+test("sessions of one state are ordered by which moved most recently", () => {
+  const working = displaySessions(bootstrap(false), [
+    liveSession(CODEX_PROVIDER, "stale", SESSION_STATUS.WORKING, 1_000),
+    liveSession(CLAUDE_PROVIDER, "fresh", SESSION_STATUS.WORKING, 9_000),
+  ]);
+
+  assert.deepEqual(
+    arrangeSessions(working, DEFAULT_SESSION_VIEW).sessions.map((session) => session.id),
+    ["fresh", "stale"],
+  );
 });

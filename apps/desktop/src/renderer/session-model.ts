@@ -29,6 +29,45 @@ const STATE_PRIORITY: readonly SessionState[] = [
   SESSION_STATE.UNKNOWN,
 ];
 
+/**
+ * Which sessions the list draws. The states are the filter values themselves,
+ * so narrowing the list is a comparison against the state a row already
+ * carries rather than a second vocabulary mapped onto it.
+ */
+export const SESSION_FILTER = {
+  ALL: "all",
+  ATTENTION: SESSION_STATE.ATTENTION,
+  WORKING: SESSION_STATE.WORKING,
+  COMPLETE: SESSION_STATE.COMPLETE,
+  IDLE: SESSION_STATE.UNKNOWN,
+} as const;
+
+export type SessionFilter = (typeof SESSION_FILTER)[keyof typeof SESSION_FILTER];
+
+/** The two questions a list of agent sessions is read to answer. */
+export const SESSION_SORT = {
+  URGENCY: "urgency",
+  RECENCY: "recency",
+} as const;
+
+export type SessionSort = (typeof SESSION_SORT)[keyof typeof SESSION_SORT];
+
+export interface SessionView {
+  filter: SessionFilter;
+  sort: SessionSort;
+}
+
+/**
+ * What the panel opens on, every time. A filter is not remembered across a
+ * closing, because a remembered one could hide the very session the capsule is
+ * reporting; the order is not remembered with it, so the top row keeps matching
+ * the mark the capsule kept.
+ */
+export const DEFAULT_SESSION_VIEW: SessionView = {
+  filter: SESSION_FILTER.ALL,
+  sort: SESSION_SORT.URGENCY,
+};
+
 export interface DisplaySession {
   id: string;
   title: string;
@@ -37,6 +76,24 @@ export interface DisplaySession {
   detail: string;
   state: SessionState;
   label: string;
+  observedAt: number;
+}
+
+/** One filter someone can choose, and how many sessions it would leave. */
+export interface SessionFilterOption {
+  filter: SessionFilter;
+  label: string;
+  count: number;
+}
+
+export interface ArrangedSessions {
+  /** The rows the list draws, narrowed and ordered. */
+  sessions: readonly DisplaySession[];
+  /** Everything tracked, which is what the controls are offered against. */
+  total: number;
+  /** The filter actually in force, which is All whenever the chosen one emptied. */
+  filter: SessionFilter;
+  options: readonly SessionFilterOption[];
 }
 
 export interface ProviderTally {
@@ -71,6 +128,19 @@ function sessionState(session: NormalizedSession): SessionState {
   return SESSION_STATE.WORKING;
 }
 
+/** Most urgent first, and within one state the one that moved most recently. */
+function byUrgency(first: DisplaySession, second: DisplaySession): number {
+  return (
+    STATE_PRIORITY.indexOf(first.state) - STATE_PRIORITY.indexOf(second.state) ||
+    second.observedAt - first.observedAt
+  );
+}
+
+/** What moved last, with urgency deciding sessions observed in the same tick. */
+function byRecency(first: DisplaySession, second: DisplaySession): number {
+  return second.observedAt - first.observedAt || byUrgency(first, second);
+}
+
 export function displaySessions(
   bootstrap: AppBootstrap,
   sessions: readonly NormalizedSession[],
@@ -88,11 +158,61 @@ export function displaySessions(
         detail: session.summary ?? STATUS_LABEL[session.status],
         state: sessionState(session),
         label: STATE_LABEL[sessionState(session)],
+        observedAt: session.observedAt,
       }));
 
-  return [...visible].sort(
-    (first, second) => STATE_PRIORITY.indexOf(first.state) - STATE_PRIORITY.indexOf(second.state),
-  );
+  return [...visible].sort(byUrgency);
+}
+
+/**
+ * All, then one chip per state that has a session — a state with none is not
+ * something a list can be narrowed to, and offering it would be a control that
+ * does nothing. The counts make the row a breakdown of what is tracked before
+ * it is a control, which is what earns it the line it costs.
+ */
+function filterOptions(sessions: readonly DisplaySession[]): readonly SessionFilterOption[] {
+  if (sessions.length === 0) return [];
+
+  const counts = new Map<SessionState, number>();
+  for (const session of sessions) {
+    counts.set(session.state, (counts.get(session.state) ?? 0) + 1);
+  }
+
+  return [
+    { filter: SESSION_FILTER.ALL, label: "All", count: sessions.length },
+    ...STATE_PRIORITY.filter((state) => counts.has(state)).map((state) => ({
+      filter: state,
+      label: STATE_LABEL[state],
+      count: counts.get(state) ?? 0,
+    })),
+  ];
+}
+
+/**
+ * The list as it is drawn. A chosen filter whose last session has since left —
+ * the work it was waiting on finished, say — falls back to All rather than
+ * leaving an empty panel, because the one thing this list may never do is hide
+ * a session the capsule is still counting.
+ */
+export function arrangeSessions(
+  sessions: readonly DisplaySession[],
+  view: SessionView,
+): ArrangedSessions {
+  const options = filterOptions(sessions);
+  const filter = options.some((option) => option.filter === view.filter)
+    ? view.filter
+    : SESSION_FILTER.ALL;
+  const matching =
+    filter === SESSION_FILTER.ALL
+      ? sessions
+      : sessions.filter((session) => session.state === filter);
+
+  return {
+    sessions: [...matching].sort(view.sort === SESSION_SORT.RECENCY ? byRecency : byUrgency),
+    total: sessions.length,
+    filter,
+    options,
+  };
 }
 
 export function sessionTally(sessions: readonly DisplaySession[]): SessionTally {

@@ -84,7 +84,18 @@ browser. Luke opens it by provider id rather than by an address the panel
 supplies, so the pages it can ever open are the ones in its provider registry.
 
 Sessions are ordered by how much they need a person, so whatever is waiting on
-you is the top row and the mark the capsule keeps.
+you is the top row and the mark the capsule keeps. Above the list, a row of
+chips counts what is tracked by state — `All 5`, `Needs you 1`, `Working 2` —
+and pressing one narrows the list to that state; **Sort** beside them switches
+between most urgent and most recently observed. Only states that have a session
+are offered, and the whole row is left out below two sessions, where there is
+nothing left to choose between.
+
+Both controls reset when the panel closes, so it always reopens showing every
+session with whatever needs you first. The count beside the notch is of
+everything Luke is watching rather than of what the panel is currently showing,
+and a filter left in place across a closing could otherwise hide the very
+session that count is reporting.
 
 The header is anchored to the notch, not to a state: the count sits to the right
 of the housing and the provider marks and speech meter to its left, in the same

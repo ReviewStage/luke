@@ -1,5 +1,133 @@
 /* The session list: the capsule grows into full-width rows, one per line. */
 
+/* The sessions tab is its controls and its list. Only the list scrolls, so the
+   controls stay where they were put — the tab bar sits outside the same box for
+   the same reason. */
+.session-view {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* The chips take the left, where the list they narrow begins; the order takes
+   the right, where a row ends. */
+.session-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Both groups are `fieldset`s, so each says what it is to a reader without a
+   role on a bare element. The element arrives with a border, a margin, and a
+   `min-content` floor that would stop it shrinking in a flex row; all three are
+   cleared here rather than repeated per group. */
+.session-filters,
+.sort-group {
+  display: flex;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+}
+
+.session-filters {
+  align-items: center;
+  padding: 0;
+  gap: 6px;
+}
+
+/* Quiet until chosen, and then it takes the colour its own state already
+   carries in the rows below it, so a filter and what it selects are one colour
+   rather than two vocabularies. No dot: that belongs to the state chip on a
+   row, and repeating it here would make a control read as a session. */
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: var(--raised);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 620;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+  white-space: nowrap;
+}
+
+/* Every state at once, so there is no one state's colour for it to take. */
+.filter-chip[data-state="all"] {
+  --accent: var(--text-primary);
+}
+
+.filter-chip:hover {
+  background: var(--raised-strong);
+  color: var(--text-primary);
+}
+
+.filter-chip[data-active="true"] {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  color: var(--accent);
+}
+
+/* The number is what the row is worth reading before anything is pressed: the
+   chips are a breakdown of what is tracked first and a control second. */
+.filter-count {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.62;
+}
+
+.session-sort {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+}
+
+/* Two words that would otherwise read as two more states to filter by, so the
+   row says which question they answer. */
+.session-sort-label {
+  color: var(--text-tertiary);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* Enclosed rather than chipped: an order is one choice of two, and the box is
+   what says the pair is exclusive where the chips beside it are a list. */
+.sort-group {
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--raised);
+}
+
+.sort-option {
+  padding: 4px 9px;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 620;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+  white-space: nowrap;
+}
+
+.sort-option:hover {
+  color: var(--text-primary);
+}
+
+.sort-option[data-active="true"] {
+  background: var(--raised-strong);
+  color: var(--text-primary);
+}
+
 /* The one scroll container in the app. The root stays `overflow: clip` so a
    focus or scrollIntoView can never drag the notch capsule out of view, and
    `overscroll-behavior: contain` keeps that guarantee by stopping a scroll from

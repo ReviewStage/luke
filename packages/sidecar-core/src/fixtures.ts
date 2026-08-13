@@ -17,11 +17,24 @@ export interface SessionSnapshot {
   provider: string;
   detail: string;
   state: SessionState;
+  /** When the session was last seen, in the same units a live observation uses. */
+  observedAt: number;
 }
 
 export interface FixtureSnapshot {
   scenario: "smoke";
   sessions: readonly SessionSnapshot[];
+}
+
+/**
+ * A fixed instant the fixture's observation times are measured back from. A
+ * clock read at load would make the ordering depend on when the fixture was
+ * read, and the evidence screenshots are only reproducible while it does not.
+ */
+const FIXTURE_EPOCH_MS = 1_735_689_600_000;
+
+function minutesBeforeEpoch(minutes: number): number {
+  return FIXTURE_EPOCH_MS - minutes * 60_000;
 }
 
 const smokeFixture: FixtureSnapshot = {
@@ -34,6 +47,7 @@ const smokeFixture: FixtureSnapshot = {
       provider: "Codex",
       detail: "Testing Electron window semantics",
       state: SESSION_STATE.WORKING,
+      observedAt: minutesBeforeEpoch(4),
     },
     {
       id: "claude-review",
@@ -42,7 +56,10 @@ const smokeFixture: FixtureSnapshot = {
       provider: "Claude Code",
       detail: "One architecture decision is ready",
       state: SESSION_STATE.ATTENTION,
+      observedAt: minutesBeforeEpoch(9),
     },
+    // The most recently observed session is also the least urgent one, so the
+    // fixture tells the two orderings apart rather than agreeing with both.
     {
       id: "conductor-workspace",
       title: "Observe a cloud workspace",
@@ -50,6 +67,7 @@ const smokeFixture: FixtureSnapshot = {
       provider: "Conductor",
       detail: "Cloud session metadata only · no live credentials",
       state: SESSION_STATE.COMPLETE,
+      observedAt: minutesBeforeEpoch(1),
     },
     {
       id: "cursor-agent",
@@ -58,6 +76,7 @@ const smokeFixture: FixtureSnapshot = {
       provider: "Cursor",
       detail: "Cloud session metadata only · no live credentials",
       state: SESSION_STATE.WORKING,
+      observedAt: minutesBeforeEpoch(18),
     },
     // A fifth session keeps every state and every provider mark visible in the
     // one screenshot the visual evidence is reviewed from.
@@ -68,6 +87,7 @@ const smokeFixture: FixtureSnapshot = {
       provider: "Claude Code",
       detail: "Idle since the last display change",
       state: SESSION_STATE.UNKNOWN,
+      observedAt: minutesBeforeEpoch(41),
     },
   ],
 };

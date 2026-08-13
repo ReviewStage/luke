@@ -27,7 +27,14 @@ const HIT_REGION = {
   PANEL: "panel",
 } as const;
 
-import { displaySessions, sessionTally, tallySummary } from "./session-model";
+import {
+  arrangeSessions,
+  DEFAULT_SESSION_VIEW,
+  displaySessions,
+  type SessionView,
+  sessionTally,
+  tallySummary,
+} from "./session-model";
 
 function usePointerPassthrough(
   onHitRegionEnter: () => void,
@@ -147,6 +154,7 @@ export function App(): React.JSX.Element {
   const [display, setDisplay] = useState<DisplayDiagnostic>();
   const [presentation, setPresentation] = useState<PanelPresentation>(PANEL_PRESENTATION.CAPSULE);
   const [tab, setTab] = useState<PanelTab>(PANEL_TAB.SESSIONS);
+  const [sessionView, setSessionView] = useState<SessionView>(DEFAULT_SESSION_VIEW);
   const [settings, setSettings] = useState<AppSettings>();
   const [microphoneStatus, setMicrophoneStatus] = useState<MicrophoneStatus>("not-determined");
   const [microphoneError, setMicrophoneError] = useState<string>();
@@ -170,9 +178,14 @@ export function App(): React.JSX.Element {
     (next: PanelPresentation) => {
       presentationRef.current = next;
       setPresentation(next);
-      // A panel that has closed reopens on the session list: settings are
-      // somewhere you go, not a state the capsule remembers.
-      if (next === PANEL_PRESENTATION.CAPSULE) changeTab(PANEL_TAB.SESSIONS);
+      // A panel that has closed reopens on the session list, showing every
+      // session with whatever needs a person first: settings are somewhere you
+      // go, not a state the capsule remembers, and a filter left in place would
+      // let the panel hide a session the capsule is still counting.
+      if (next === PANEL_PRESENTATION.CAPSULE) {
+        changeTab(PANEL_TAB.SESSIONS);
+        setSessionView(DEFAULT_SESSION_VIEW);
+      }
     },
     [changeTab],
   );
@@ -431,7 +444,10 @@ export function App(): React.JSX.Element {
   if (!bootstrap || !display) return <div />;
 
   const visibleSessions = displaySessions(bootstrap, sessions);
+  // The tally is taken before the list is narrowed: the capsule reports what
+  // Luke is watching, not what the panel is currently showing.
   const tally = sessionTally(visibleSessions);
+  const list = arrangeSessions(visibleSessions, sessionView);
   const fixtureSpeaking = bootstrap.profile === "speaking";
   const hasAudioSignal = fixtureSpeaking || analyser !== undefined;
   const panelOpen = presentation === PANEL_PRESENTATION.PANEL;
@@ -454,7 +470,9 @@ export function App(): React.JSX.Element {
       <div className="expanded-stage" aria-hidden={!panelOpen} inert={!panelOpen}>
         <section className="expanded-panel" ref={panelElement} data-hit-region={HIT_REGION.PANEL}>
           <PanelBody
-            sessions={visibleSessions}
+            list={list}
+            view={sessionView}
+            onViewChange={setSessionView}
             tab={tab}
             onTabChange={changeTab}
             settings={{
