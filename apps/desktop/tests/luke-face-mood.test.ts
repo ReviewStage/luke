@@ -14,6 +14,8 @@ import {
   noticedMotion,
   playedMotion,
   restingMotion,
+  SPEECH_TURN,
+  speechFaceInputs,
 } from "../src/renderer/luke-face-mood";
 
 function context(overrides: Partial<FaceContext> = {}): FaceContext {
@@ -206,4 +208,55 @@ test("every motion the renderer can play is one the artwork describes", () => {
   // the renderer draws lids instead of eyes, so anything else would go blind.
   const withLids = Object.values(FACE_MOTION).filter((motion) => FACE_MOTION_PARTS[motion].lids);
   assert.deepEqual(withLids, [FACE_MOTION.SLEEPING]);
+});
+
+const NO_METER = { hasAudioSignal: false, fixtureSpeaking: false, voiceActive: false };
+
+test("the face follows whose turn it is, not the meter", () => {
+  const meter = { hasAudioSignal: true, fixtureSpeaking: false, voiceActive: true };
+
+  // The same bars draw both voices, so amplitude alone would have Luke talking
+  // back at someone mid-sentence.
+  assert.deepEqual(speechFaceInputs({ ...meter, turn: SPEECH_TURN.DEVELOPER }), {
+    speaking: false,
+    microphoneLive: true,
+  });
+  assert.deepEqual(speechFaceInputs({ ...meter, turn: SPEECH_TURN.LUKE }), {
+    speaking: true,
+    microphoneLive: false,
+  });
+});
+
+test("without a turn to read, the meter is what there is", () => {
+  // A microphone opened from Settings with no call behind it, and the fixture.
+  assert.deepEqual(
+    speechFaceInputs({ hasAudioSignal: true, fixtureSpeaking: false, voiceActive: true }),
+    { speaking: true, microphoneLive: true },
+  );
+  assert.deepEqual(
+    speechFaceInputs({ hasAudioSignal: true, fixtureSpeaking: true, voiceActive: false }),
+    { speaking: true, microphoneLive: true },
+  );
+  // A closed microphone cannot still be carrying speech.
+  assert.deepEqual(
+    speechFaceInputs({ hasAudioSignal: false, fixtureSpeaking: false, voiceActive: true }),
+    { speaking: false, microphoneLive: false },
+  );
+});
+
+test("a turn drives the resting motion the face plays", () => {
+  const sessions = { attention: 1, working: 2, complete: 0, total: 3 };
+
+  // Waiting sessions do not outrank a conversation in progress.
+  assert.equal(
+    restingMotion({ ...sessions, ...speechFaceInputs({ ...NO_METER, turn: SPEECH_TURN.LUKE }) }),
+    FACE_MOTION.TALKING,
+  );
+  assert.equal(
+    restingMotion({
+      ...sessions,
+      ...speechFaceInputs({ ...NO_METER, turn: SPEECH_TURN.DEVELOPER }),
+    }),
+    FACE_MOTION.LISTENING,
+  );
 });

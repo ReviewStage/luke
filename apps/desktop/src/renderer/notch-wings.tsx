@@ -1,11 +1,11 @@
 import { CAPSULE_SIDE_WIDTH, PANEL_WIDTH, PEEK_SIDE_GROWTH } from "@sidecar/core";
 import { useEffect, useState } from "react";
 import { LukeFace } from "./luke-face";
-import { useFaceMotion, usePrefersReducedMotion } from "./luke-face-mood";
+import { speechFaceInputs, useFaceMotion, usePrefersReducedMotion } from "./luke-face-mood";
 import { PANEL_PRESENTATION, type PanelPresentation } from "./panel-state";
 import { ProviderMark } from "./provider-marks";
 import { type SessionTally, tallyCaption, tallySummary } from "./session-model";
-import { WAVEFORM_VOICE, type WaveformVoice, Waveform } from "./waveform";
+import { Waveform, type WaveformVoice } from "./waveform";
 
 /**
  * The strips beside the camera housing. They are rendered once for both window
@@ -67,23 +67,14 @@ export function NotchWings({
   housingWidth,
 }: NotchWingsProps): React.JSX.Element {
   const [voiceActive, setVoiceActive] = useState(false);
-  // Who is talking is known outright once a call is up — the turn says so — and
-  // amplitude cannot tell one voice from the other, because the same meter draws
-  // Luke answering and the developer asking. It is only consulted when there is
-  // no turn to read: a microphone opened from Settings with no call behind it,
-  // and the fixture, which has no turn at all.
-  //
-  // Guarded rather than reset: a microphone that has been closed cannot still be
-  // carrying speech, whatever the last frame the meter read said.
-  const speaking =
-    voice === WAVEFORM_VOICE.LUKE ||
-    (voice === undefined && hasAudioSignal && (fixtureSpeaking || voiceActive));
   const face = useFaceMotion(
     {
-      speaking,
-      // Luke attends while the developer holds the turn, and while a microphone
-      // is open without one. It is not attending while it is the one talking.
-      microphoneLive: voice === WAVEFORM_VOICE.DEVELOPER || (voice === undefined && hasAudioSignal),
+      ...speechFaceInputs({
+        ...(voice ? { turn: voice } : {}),
+        hasAudioSignal,
+        fixtureSpeaking,
+        voiceActive,
+      }),
       attention: tally.attentionIds,
       working: tally.working,
       complete: tally.complete,
