@@ -3,13 +3,14 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
+  PROVIDER_ID,
   type ProviderSessionObservation,
   SESSION_STATUS,
   type SessionProvider,
   type SessionProviderAdapter,
 } from "@sidecar/core";
 
-const CODEX_PROVIDER_ID = "codex";
+const CODEX_PROVIDER_ID = PROVIDER_ID.CODEX;
 const CODEX_PROVIDER_NAME = "Codex";
 const UNKNOWN_WORKSPACE_LABEL = "workspace";
 

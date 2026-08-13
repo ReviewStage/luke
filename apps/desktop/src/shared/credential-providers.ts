@@ -1,10 +1,14 @@
+import { PROVIDER_ID } from "@sidecar/core";
+
 /**
- * The providers Luke can hold a credential for. A provider belongs here only
- * when its sessions live in a cloud service with no local state to observe, and
- * it must observe nothing at all until the user supplies a key.
+ * The providers Luke can hold a credential for: the subset of the observed
+ * providers whose sessions live in a cloud service with no local state to read,
+ * and which must observe nothing at all until the user supplies a key. The ids
+ * are core's, so a credential row and a session row name the same provider —
+ * that is what lets one mark registry serve both.
  */
 export const CREDENTIAL_PROVIDER_ID = {
-  CONDUCTOR: "conductor",
+  CONDUCTOR: PROVIDER_ID.CONDUCTOR,
 } as const;
 
 export type CredentialProviderId =
@@ -24,6 +28,12 @@ export interface CredentialProvider {
   displayName: string;
   /** Where the user creates a key, shown beside that provider's field. */
   hint: string;
+  /**
+   * The page that issues this provider's keys. It is opened by provider id
+   * rather than by a URL the renderer supplies, so the only addresses Luke can
+   * ever open are the ones in this file.
+   */
+  apiKeysUrl: string;
   /** Read in order when nothing is stored for this provider. */
   environmentVariables: readonly string[];
 }
@@ -34,6 +44,7 @@ export const CREDENTIAL_PROVIDERS: Readonly<Record<CredentialProviderId, Credent
     id: CREDENTIAL_PROVIDER_ID.CONDUCTOR,
     displayName: "Conductor",
     hint: "Create a key in Conductor under Settings · API keys.",
+    apiKeysUrl: "https://app.conductor.build/users/api-keys",
     environmentVariables: [CONDUCTOR_ENVIRONMENT.API_KEY, CONDUCTOR_ENVIRONMENT.API_TOKEN],
   },
 };

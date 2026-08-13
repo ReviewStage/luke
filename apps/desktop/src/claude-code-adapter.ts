@@ -3,13 +3,14 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
+  PROVIDER_ID,
   type ProviderSessionObservation,
   SESSION_STATUS,
   type SessionProvider,
   type SessionProviderAdapter,
 } from "@sidecar/core";
 
-const CLAUDE_CODE_PROVIDER_ID = "claude-code";
+const CLAUDE_CODE_PROVIDER_ID = PROVIDER_ID.CLAUDE_CODE;
 const CLAUDE_CODE_PROVIDER_NAME = "Claude Code";
 const CLAUDE_PROJECTS_DIRECTORY = "projects";
 const CLAUDE_SESSION_FILE_EXTENSION = ".jsonl";

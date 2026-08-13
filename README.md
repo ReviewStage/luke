@@ -50,6 +50,99 @@ panel instead of starting a new one.
 `artifacts/evidence/app-smoke-compact.png`, and
 `artifacts/evidence/app-smoke-speaking.png`.
 
+Luke's menu bar item is drawn by the system rather than by the renderer, so it
+cannot be captured through the app. With Luke running, `./scripts/menu-bar-evidence.sh`
+photographs the right end of the menu bar into
+`artifacts/evidence/menu-bar-item.png`; the terminal needs Screen Recording
+permission the first time. Open the item afterwards to check its menu, which
+offers **Settings…**, with Command-, shown against it, and Quit. The shortcut is claimed inside Luke's own window rather
+than registered with the system, because Command-, belongs to whichever app is
+frontmost; it switches the open panel to its Settings tab.
+
+## The capsule, the peek, and the panel
+
+The surface has three sizes and they are all the same black shape:
+
+- **Capsule** — at rest beside the camera housing: the mark of the provider that
+  needs you soonest, and the count of tracked sessions.
+- **Peek** — under the pointer. The capsule widens on a spring and shows the
+  rest of what it is watching: a mark for every provider with a session, up to
+  the five the room beside the housing holds, and what the count means —
+  `2 need you` — on the right. This is the affordance; nothing is committed by
+  hovering.
+- **Panel** — on a press. Full-width rows, one session per line: provider mark,
+  title, what it is doing, a state chip. A **Settings** tab holds the cloud API
+  keys, microphone access, and Quit. Press the capsule again, or press Escape,
+  to close it; moving the pointer off it closes it just as readily, except while
+  a key is being entered, which is the one thing the pointer must not discard.
+
+Settings lists one line per cloud provider — its mark, its name, and whether it
+is connected. A provider with no key offers **Connect**; one with a stored key
+offers **Edit** and **Delete**. The field appears only while a key is being
+entered, along with a link that opens that provider's own API-key page in your
+browser. Luke opens it by provider id rather than by an address the panel
+supplies, so the pages it can ever open are the ones in its provider registry.
+
+Sessions are ordered by how much they need a person, so whatever is waiting on
+you is the top row and the mark the capsule keeps.
+
+The header is anchored to the notch, not to a state: the count sits to the right
+of the housing and the provider marks and speech meter to its left, in the same
+place in all three. Growing unfolds what the capsule had no room for: the marks
+on one side and what the count means on the other travel the same distance, on
+the same spring, so the two wings read as one gesture rather than two. More
+providers than fit are counted at the end of the row rather than dropped from
+it.
+
+The surface is opaque black in every state and shaped like the housing it sits
+beside: the convex bottom corners and the concave flare where its sides meet
+the top edge are both derived from the reported notch inset, at the ratios
+measured off the hardware (0.348 and 0.094 of its height). The panel keeps that
+flare, so all three states meet the top edge the same way. Depth comes from a
+shadow and a hairline edge rather than from letting anything show through. A
+display with no housing to blend into gets a free-floating pill instead.
+
+The panel's shadow arrives once the shape has settled, so a blurred shadow is
+never repainted mid-spring; the peek's is small enough to ride along with it. A
+real blur of the desktop is not available here: a transparent Electron window
+gives `backdrop-filter` no backdrop to sample, and reaching the desktop would
+mean native vibrancy, which cannot be masked to a shape that animates.
+
+The window is a stage, never the shape. It snaps to the size a state needs and
+the renderer animates the surface inside it, so the motion stays on the
+compositor — and because a compact window is already wide enough to hold the
+peek, hovering never touches the main process at all. Growing, the surface leads
+and the content follows it in; shrinking, the content leaves first and the
+surface closes behind it, so nothing is ever drawn outside the black. Every resize runs on one sampled damped
+spring at one duration — a real spring's motion is a property of the spring, not
+of how far it is asked to travel — and the window carries slack on every side
+for the overshoot to land in. The same spring carries the content: the panel's
+rows arrive as one compressed stack whose gaps spring open, rather than as
+elements that fade in where they will end up. The surface also ends where the content does, so a
+session arriving or finishing resizes the panel.
+
+## Provider marks
+
+Sessions are labelled with each provider's own mark, inlined as path data in
+`apps/desktop/src/renderer/provider-marks.tsx`: the Claude Code mark via
+[Simple Icons](https://simpleicons.org) (CC0-1.0, sourced from code.claude.com),
+the Codex mark via [@lobehub/icons](https://github.com/lobehub/lobe-icons)
+(MIT), and Conductor's letter mark verbatim from its published
+[brand kit](https://www.conductor.build/brandkit). Each keeps its brand colour —
+Claude Code's `#D97757` coral, Codex's `#B1A7FF → #3941FF` gradient, and the
+`#EAE8E6` half of Conductor's two-colour palette, whose dark half is the surface
+the mark already sits on — declared as `--mark-*` custom properties in
+`styles/base.css`. Session state is carried by the count badge, the state chips,
+and the row tints instead, so brand colour and state colour never land on the
+same pixel. The marks are trademarks of their respective owners and are used
+here only to identify which provider a session belongs to; Luke is not
+affiliated with or endorsed by any of them. A provider with no registered mark
+falls back to a neutral glyph rather than to another provider's.
+
+The marks are keyed by the provider ids in `PROVIDER_ID`, which adapters report
+and `CREDENTIAL_PROVIDER_ID` draws from, so a session row and a key field name
+the same provider with the same mark.
+
 For PR motion evidence, run `pnpm evidence:record` on a Mac with `ffmpeg`
 installed and Screen & System Audio Recording permission granted to Conductor.
 It records the fixture-only compact/expanded transition against a synthetic
@@ -68,16 +161,17 @@ wrappers, live-session changes, or transcript retention.
 
 Claude Code and Codex sessions are observed from local provider state and need
 no configuration. A cloud provider has no local state to read, so it stays
-silent until you open the expanded panel, choose **Settings**, and paste a key
-in that provider's row. Each provider holds its own credential and also reads
-its own `<PROVIDER>_API_KEY` from the environment; Conductor accepts
-`CONDUCTOR_API_KEY` or `CONDUCTOR_API_TOKEN`. A provider you give no key to
-reports nothing and issues no request. A key you enter is encrypted with
-`safeStorage`, whose key comes from the login Keychain, and it is never returned
-to the renderer. Luke reads only cloud workspaces you created, issues only read
-requests, and labels each session by its repository rather than by a provider
-workspace or session name, because those names are generated from the opening
-prompt.
+silent until you press the capsule to open the panel, choose the **Settings**
+tab, and connect it with a key. Each provider holds its own credential and also
+reads its own `<PROVIDER>_API_KEY` from the environment; Conductor accepts
+`CONDUCTOR_API_KEY` or `CONDUCTOR_API_TOKEN`, and issues keys at
+<https://app.conductor.build/users/api-keys>. A provider you
+give no key to reports nothing and issues no request. A key you enter is
+encrypted with `safeStorage`, whose key comes from the login Keychain, and it is
+never returned to the renderer. Luke reads only cloud workspaces you created,
+issues only read requests, and labels each session by its repository rather than
+by a provider workspace or session name, because those names are generated from
+the opening prompt.
 
 ## Attention intelligence
 

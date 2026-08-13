@@ -56,6 +56,46 @@ convenience; `./scripts/check.sh` and CI remain authoritative.
 - For Linear work, use its suggested branch name when available and the ticket
   ID as the scope: `feat(LUKE-123): add Codex support`.
 
+## Panel motion
+
+The window is a stage; the drawn surface is the shape. A window therefore holds
+the largest shape its mode can draw — a compact window holds the peek, so
+hovering costs no IPC at all — plus `SURFACE_MARGIN` on every side, which is
+what the spring overshoots into and the shadow falls in. Anything the shape does not cover is
+transparent and must stay click-through, so hit regions track the shape rather
+than the window.
+
+The window never animates its own frame. An animated `setBounds` re-lays out
+the whole renderer on every frame, because the panel is anchored to the
+viewport's centre. Everything layered on the surface must move with `transform`
+and `opacity` only — animating width, height, padding, or font-size on the
+wings, the count badge, or the rows re-shapes text on every frame and is what
+makes the motion stutter.
+
+The surface is opaque in every state — it has to pass for part of a physical
+object, and nothing behind the window may show through it — and takes its
+shadow and hairline edge once it has grown past the housing. The panel's
+shadow is delayed until the shape settles, because a blurred shadow repaints on
+every frame that resizes the element; the peek's is small enough to ride along.
+`backdrop-filter` is not an option: a transparent window has no backdrop to
+sample, so it would buy a render surface on the animating element and return
+nothing.
+
+One spring for everything that moves. `--spring` drives the surface;
+`--spring-fast` is the same damping ratio at a higher frequency for small
+elements like the tab thumb, so the bounce profile is identical and only the
+scale differs. Panel content arrives as one stack: the tab bar is index 0 and
+each row below it starts further up, so the gaps spring open rather than the
+rows sliding in as a block. The fan and the stagger stop accumulating past
+`--row-fan-limit`, because only about five rows are ever on screen.
+
+In either direction the shape and its content must not cross, or content is
+left drawn on the desktop: growing, the surface leads and content follows;
+shrinking, content leaves over `--duration-exit` before the surface moves.
+`setWindowMode` owns the ordering for every caller — the panel, the tray, and
+the motion recorder alike. `COLLAPSE_ANIMATION_MS` is the sum of
+`--duration-exit` and `--duration-shape`; the three move together.
+
 ## TypeScript value sets and keys
 
 - Do not use stringly typed fixed value sets. Define `as const`

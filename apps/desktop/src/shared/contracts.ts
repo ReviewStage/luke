@@ -48,6 +48,8 @@ export interface DisplayDiagnostic {
 
 export interface AppBootstrap {
   mode: WindowMode;
+  /** Capture-only: start drawn as the peek, which normally needs a pointer. */
+  startPeeked: boolean;
   profile: string;
   fixture: FixtureSnapshot;
   captureMode: boolean;
@@ -66,19 +68,24 @@ export interface AppBootstrap {
 
 export interface AppBridge {
   getBootstrap(): Promise<AppBootstrap>;
-  setExpanded(expanded: boolean): Promise<WindowMode>;
+  setExpanded(expanded: boolean, focus?: boolean): Promise<WindowMode>;
   setPointerInterception(interceptsPointer: boolean): void;
   requestMicrophone(): Promise<MicrophoneStatus>;
   setProviderApiKey(
     providerId: CredentialProviderId,
     apiKey: string | undefined,
   ): Promise<SettingsUpdateResult>;
+  /**
+   * Opens a provider's own API-key page in the default browser. The renderer
+   * names the provider, not the address, so the set of pages Luke can open is
+   * fixed by this build.
+   */
+  openProviderApiKeys(providerId: CredentialProviderId): void;
   /** Brings the expanded panel forward so it can accept typed input. */
   focusPanel(): void;
   notifyReady(): void;
   quit(): void;
   onLifecycle(callback: (eventName: string) => void): () => void;
-  onStartMicrophone(callback: () => void): () => void;
   onDisplayChanged(callback: (display: DisplayDiagnostic) => void): () => void;
   onSessionsChanged(callback: (sessions: readonly NormalizedSession[]) => void): () => void;
 }
@@ -89,10 +96,10 @@ export const channels = {
   setPointerInterception: "app:set-pointer-interception",
   requestMicrophone: "app:request-microphone",
   setProviderApiKey: "app:set-provider-api-key",
+  openProviderApiKeys: "app:open-provider-api-keys",
   focusPanel: "app:focus-panel",
   rendererReady: "app:renderer-ready",
   lifecycle: "app:lifecycle",
-  startMicrophone: "app:start-microphone",
   displayChanged: "app:display-changed",
   sessionsChanged: "app:sessions-changed",
   quit: "app:quit",

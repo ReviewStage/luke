@@ -22,6 +22,7 @@ import {
   safeStorage,
   screen,
   session,
+  shell,
   systemPreferences,
   Tray,
 } from "electron";
@@ -41,6 +42,7 @@ import {
 } from "./shared/contracts";
 import {
   CREDENTIAL_PROVIDER_ID,
+  CREDENTIAL_PROVIDERS,
   type CredentialProviderId,
   isCredentialProviderId,
 } from "./shared/credential-providers";
@@ -48,6 +50,9 @@ import {
 const captureOutput = argumentValue("--capture-evidence");
 const profile = argumentValue("--profile") ?? "idle";
 const fixtureName = argumentValue("--fixture");
+// Evidence only: the peek answers a pointer, which a capture run has no way to
+// produce, so it can be asked for directly.
+const startPeeked = process.argv.includes("--peek");
 const fixture = fixtureSnapshot(fixtureName ?? "smoke");
 const captureMode = captureOutput !== undefined;
 // `--fixture` is enough on its own to make a run deterministic: the panel renders
@@ -98,6 +103,7 @@ let tray: Tray | undefined;
 let selectedDisplayId: number | undefined;
 let nativeScreens = new Map<number, NativeNotchGeometry>();
 let sessionRefreshTimer: NodeJS.Timeout | undefined;
+let collapseTimer: NodeJS.Timeout | undefined;
 let sessionRefreshRunning = false;
 let attentionReviewRunning = false;
 
@@ -141,20 +147,25 @@ function refreshNativeGeometry(): void {
   }
 }
 
-function positionPanel(animate = false): void {
+/**
+ * Resizes without AppKit's frame animation. An animated setBounds re-lays out
+ * the renderer at a new viewport width on every frame — and its duration scales
+ * with the distance moved, so a 482px growth ran far longer than the panel's
+ * own motion. The window now snaps to the size the mode needs and the renderer
+ * animates the capsule into the panel inside it, where the viewport is constant
+ * and the work stays on the compositor.
+ */
+function positionPanel(): void {
   if (!panelWindow || panelWindow.isDestroyed()) return;
   const display = selectedDisplay();
   selectedDisplayId = display.id;
   const layout = layoutFor(display);
-  panelWindow.setBounds(
-    {
-      x: layout.x,
-      y: layout.y,
-      width: layout.width,
-      height: layout.height,
-    },
-    animate && process.platform === "darwin" && !captureMode,
-  );
+  panelWindow.setBounds({
+    x: layout.x,
+    y: layout.y,
+    width: layout.width,
+    height: layout.height,
+  });
   panelWindow.webContents.send(channels.displayChanged, displayDiagnostic(display));
 }
 
@@ -182,14 +193,49 @@ function focusPanelWindow(): void {
   panelWindow.focus();
 }
 
+/**
+ * `--duration-exit` plus `--duration-shape` in
+ * apps/desktop/src/renderer/styles/base.css: the content leaves, then the
+ * surface closes on the spring, and only then may the window follow.
+ */
+const COLLAPSE_ANIMATION_MS = 550;
+
+function collapseDelay(): number {
+  if (captureMode) return 0;
+  return systemPreferences.getAnimationSettings().prefersReducedMotion ? 0 : COLLAPSE_ANIMATION_MS;
+}
+
+/**
+ * The two directions are sequenced differently, and the ordering lives here so
+ * every caller gets it — the panel, the tray, and the motion recorder alike.
+ * Growing needs the window first, or the panel has nowhere to unfold into.
+ * Shrinking needs the capsule drawn first, or the window clips the panel out
+ * from under its own collapse.
+ */
 function setWindowMode(mode: WindowMode, requestFocus: boolean): WindowMode {
   windowMode = mode;
   if (!panelWindow || panelWindow.isDestroyed()) return windowMode;
 
   const expanded = mode === "expanded";
   panelWindow.setFocusable(expanded && !captureMode);
-  positionPanel(true);
-  panelWindow.webContents.send(channels.lifecycle, `mode:${mode}`);
+  if (collapseTimer) {
+    clearTimeout(collapseTimer);
+    collapseTimer = undefined;
+  }
+  if (expanded) {
+    positionPanel();
+    panelWindow.webContents.send(channels.lifecycle, `mode:${mode}`);
+  } else {
+    panelWindow.webContents.send(channels.lifecycle, `mode:${mode}`);
+    const delay = collapseDelay();
+    if (delay === 0) positionPanel();
+    else {
+      collapseTimer = setTimeout(() => {
+        collapseTimer = undefined;
+        if (windowMode === "compact") positionPanel();
+      }, delay);
+    }
+  }
 
   if (expanded && requestFocus && !captureMode) {
     focusPanelWindow();
@@ -226,6 +272,7 @@ function registerIpc(): void {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
     return {
       mode: windowMode,
+      startPeeked,
       profile,
       fixture,
       captureMode,
@@ -242,11 +289,11 @@ function registerIpc(): void {
     };
   });
 
-  ipcMain.handle(channels.setExpanded, (event, expanded: unknown) => {
+  ipcMain.handle(channels.setExpanded, (event, expanded: unknown, focus: unknown) => {
     if (!trustedSender(event) || typeof expanded !== "boolean") {
       throw new Error("Invalid window mode request");
     }
-    return setWindowMode(expanded ? "expanded" : "compact", false);
+    return setWindowMode(expanded ? "expanded" : "compact", focus === true);
   });
 
   ipcMain.on(channels.setPointerInterception, (event, interceptsPointer: unknown) => {
@@ -291,6 +338,15 @@ function registerIpc(): void {
       }
     },
   );
+
+  // Where to get a key is a question the panel cannot answer itself, so it
+  // hands the question to the browser. The renderer names a provider rather
+  // than an address: the pages Luke can open are the ones in the provider
+  // registry, and no URL crosses this boundary.
+  ipcMain.on(channels.openProviderApiKeys, (event, providerId: unknown) => {
+    if (!trustedSender(event) || !isCredentialProviderId(providerId)) return;
+    void shell.openExternal(CREDENTIAL_PROVIDERS[providerId].apiKeysUrl);
+  });
 
   // The panel is normally shown without stealing focus. A text field cannot be
   // typed into that way, so the renderer asks for focus when it opens one.
@@ -425,7 +481,7 @@ function createPanel(): void {
       sandbox: true,
       webSecurity: true,
       devTools: !captureMode,
-      backgroundThrottling: true,
+      backgroundThrottling: false,
     },
   });
 
@@ -444,54 +500,42 @@ function createPanel(): void {
   void panelWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
 }
 
-function createTrayImage(): Electron.NativeImage {
-  const svg = [
-    '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18">',
-    '<path fill="white" d="M2 10h2V8H2v2Zm3 3h2V5H5v8Zm3 3h2V2H8v14Zm3-2h2V4h-2v10Zm3-4h2V8h-2v2Z"/>',
-    "</svg>",
-  ].join("");
-  const image = nativeImage.createFromDataURL(
-    `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`,
-  );
-  image.setTemplateImage(true);
-  return image;
+function trayMenu(): Electron.Menu {
+  return Menu.buildFromTemplate([
+    {
+      // The ellipsis is the macOS convention for an item that opens somewhere
+      // rather than acting, and the accelerator is shown rather than registered:
+      // Command-, belongs to whichever app is frontmost, so Luke claims it only
+      // inside its own window, where the renderer handles it.
+      //
+      // No icon: a menu item takes a NativeImage sized in points, and the
+      // system's named gear arrives at its natural size, which draws far too
+      // large beside the text. Apple's own menu bar menus label these items
+      // rather than picture them, so this follows them.
+      label: "Settings…",
+      accelerator: "CommandOrControl+,",
+      registerAccelerator: false,
+      click: () => {
+        setWindowMode("expanded", true);
+        panelWindow?.webContents.send(channels.lifecycle, "tab:settings");
+      },
+    },
+    { type: "separator" },
+    { label: "Quit Luke", role: "quit" },
+  ]);
 }
 
 function createTray(): void {
   if (process.platform !== "darwin") return;
-  tray = new Tray(createTrayImage());
+  // Named rather than drawn. A menu bar item is read, and the system font at
+  // the system size is the one thing guaranteed to sit correctly beside every
+  // other item up there; an SVG template image only ever approximates it.
+  tray = new Tray(nativeImage.createEmpty());
+  tray.setTitle("Luke");
   tray.setToolTip("Luke");
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      {
-        label: "Show notch capsule",
-        click: () => setWindowMode("compact", false),
-      },
-      {
-        label: "Show expanded panel",
-        click: () => setWindowMode("expanded", true),
-      },
-      {
-        label: "Start microphone",
-        click: () => {
-          setWindowMode("expanded", true);
-          panelWindow?.webContents.send(channels.startMicrophone);
-        },
-      },
-      {
-        label: "Re-read display geometry",
-        click: () => {
-          refreshNativeGeometry();
-          positionPanel();
-        },
-      },
-      { type: "separator" },
-      { label: "Quit Luke", role: "quit" },
-    ]),
-  );
-  tray.on("click", () => {
-    setWindowMode(windowMode === "compact" ? "expanded" : "compact", true);
-  });
+  // Clicking opens the menu and nothing else. The capsule is how the panel is
+  // opened; a menu bar item that also toggled it made one of them a surprise.
+  tray.setContextMenu(trayMenu());
 }
 
 function handleDisplayChange(): void {
@@ -557,6 +601,7 @@ if (!app.requestSingleInstanceLock()) {
 
 app.on("before-quit", () => {
   if (sessionRefreshTimer) clearInterval(sessionRefreshTimer);
+  if (collapseTimer) clearTimeout(collapseTimer);
 });
 
 app.on("window-all-closed", () => app.quit());
