@@ -355,6 +355,36 @@ test("names a folder its project directory can no longer spell", async (t) => {
   );
 });
 
+test("names a folder whose project directory kept a character Luke would rewrite", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeWorkspaceRecord(state, "4d5e", "/Users/test/my_project");
+  await writeWorkspaceRecord(state, "8f9a", "/Users/test/Notes (2026)");
+  // Cursor decides for itself which characters it will not put in a directory
+  // name, so these keep an underscore and a bracket that Luke's own reduction
+  // would have rewritten. Matching must not depend on agreeing with it.
+  await writeTranscript(
+    state,
+    "Users-test-my_project",
+    "session-underscored",
+    [turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
+    TEST_TIME - 1_000,
+  );
+  await writeTranscript(
+    state,
+    "Users-test-Notes (2026)",
+    "session-bracketed",
+    [turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
+    TEST_TIME - 2_000,
+  );
+
+  const observations = await adapterFor(state).observe();
+
+  assert.deepEqual(
+    observations.map((observation) => observation.title),
+    ["my_project", "Notes (2026)"],
+  );
+});
+
 test("labels a session neutrally rather than guessing at a folder", async (t) => {
   const state = await temporaryCursorState(t);
   // A window with no folder, and two folders that share one project directory

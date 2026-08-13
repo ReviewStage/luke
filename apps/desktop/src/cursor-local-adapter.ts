@@ -98,13 +98,20 @@ interface CursorTranscriptCandidate extends SessionFileCandidate {
 }
 
 /**
- * Cursor names a project directory after the folder it belongs to, with every
- * run of characters that cannot appear in a directory name replaced by a
- * hyphen. This reproduces that name rather than inventing one, because it is
- * the only key the two halves of Cursor's local state share.
+ * Reduces a name to what both halves of Cursor's local state can still agree
+ * on. Cursor files a project under a directory named after its folder, with the
+ * characters it will not put in one rewritten — but exactly which characters a
+ * given build rewrites is Cursor's business, not Luke's. Rather than reproduce
+ * that rule and be wrong whenever it differs, the directory Cursor wrote and
+ * the folder Luke is matching it to are reduced the same way, so any character
+ * either side may have rewritten stops being the difference between them.
+ *
+ * This deliberately loses information: two folders can reduce alike, and the
+ * caller names neither rather than guessing. That is the safe direction — the
+ * cost is a session labelled `workspace`, which is what it would have been.
  */
-function projectDirectoryNameFor(folderPath: string): string {
-  return folderPath.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+function canonicalProjectName(value: string): string {
+  return value.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
 function folderPathFromWorkspaceRecord(source: string): string | undefined {
@@ -130,12 +137,12 @@ function folderPathFromWorkspaceRecord(source: string): string | undefined {
  * nor its own path — only the project directory Cursor filed it under, whose
  * name has already lost the separators of the path it was made from. Cursor
  * keeps the folder itself in its workspace records, so the label is recovered
- * by naming those the same way and matching, and never by guessing at where
- * the hyphens in a directory name used to be.
+ * by reducing both to the name they still share, and never by guessing at
+ * where the hyphens in a directory name used to be.
  */
 class CursorWorkspaceLabels {
   readonly #directory: string;
-  readonly #labelsByProjectDirectoryName = new Map<string, string | undefined>();
+  readonly #labelsByProjectName = new Map<string, string | undefined>();
   readonly #readWorkspaceRecords = new Set<string>();
 
   constructor(directory: string) {
@@ -148,7 +155,13 @@ class CursorWorkspaceLabels {
    * again, because the folder it belongs to may be opened later.
    */
   async resolve(projectDirectoryNames: readonly string[]): Promise<void> {
-    if (projectDirectoryNames.every((name) => this.#labelsByProjectDirectoryName.has(name))) return;
+    if (
+      projectDirectoryNames.every((name) =>
+        this.#labelsByProjectName.has(canonicalProjectName(name)),
+      )
+    ) {
+      return;
+    }
     for (const entry of await readDirectory(this.#directory)) {
       if (this.#readWorkspaceRecords.has(entry.name)) continue;
       this.#readWorkspaceRecords.add(entry.name);
@@ -161,20 +174,23 @@ class CursorWorkspaceLabels {
   }
 
   label(projectDirectoryName: string): string {
-    return this.#labelsByProjectDirectoryName.get(projectDirectoryName) ?? UNKNOWN_WORKSPACE_LABEL;
+    return (
+      this.#labelsByProjectName.get(canonicalProjectName(projectDirectoryName)) ??
+      UNKNOWN_WORKSPACE_LABEL
+    );
   }
 
   #record(folderPath: string): void {
-    const projectDirectoryName = projectDirectoryNameFor(folderPath);
+    const projectName = canonicalProjectName(folderPath);
     const label = workspaceLabel(folderPath);
-    if (!this.#labelsByProjectDirectoryName.has(projectDirectoryName)) {
-      this.#labelsByProjectDirectoryName.set(projectDirectoryName, label);
+    if (!this.#labelsByProjectName.has(projectName)) {
+      this.#labelsByProjectName.set(projectName, label);
       return;
     }
-    // Two folders can carry one project directory name. When they disagree
-    // about what to call it, Luke names neither.
-    if (this.#labelsByProjectDirectoryName.get(projectDirectoryName) !== label) {
-      this.#labelsByProjectDirectoryName.set(projectDirectoryName, undefined);
+    // Two folders can reduce to one project name. When they disagree about
+    // what to call it, Luke names neither.
+    if (this.#labelsByProjectName.get(projectName) !== label) {
+      this.#labelsByProjectName.set(projectName, undefined);
     }
   }
 }
