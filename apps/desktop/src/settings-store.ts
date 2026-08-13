@@ -24,6 +24,7 @@ const SETTINGS_FILE_MODE = 0o600;
 
 const SETTINGS_FIELD = {
   API_KEYS: "apiKeys",
+  MICROPHONE_WITHHELD: "microphoneWithheld",
   LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
   VERSION: "version",
 } as const;
@@ -65,6 +66,14 @@ interface PersistedSettings {
    * through untouched so an older build cannot discard a newer one's key.
    */
   apiKeys: Readonly<Record<string, string>>;
+  /**
+   * Whether the user has taken the microphone back from Luke.
+   *
+   * Stored as the withholding rather than the allowing, so a settings file that
+   * has never heard of it — every one written before this existed — reads as
+   * allowed, which is what it was.
+   */
+  microphoneWithheld: boolean;
 }
 
 interface ResolvedApiKey {
@@ -140,6 +149,7 @@ function parsePersistedSettings(source: string): PersistedSettings {
   return {
     version: typeof version === "number" ? version : SETTINGS_FILE_VERSION,
     apiKeys: storedApiKeys(record),
+    microphoneWithheld: record[SETTINGS_FIELD.MICROPHONE_WITHHELD] === true,
   };
 }
 
@@ -180,7 +190,32 @@ export class SettingsStore {
       // its own: a snapshot is taken on every launch, and most of them are for
       // a user with no key to protect.
       secretStorage: this.#secretStorage,
+      microphoneAllowed: !(await this.#load()).microphoneWithheld,
     };
+  }
+
+  /**
+   * Records whether Luke may open the microphone at all.
+   *
+   * This is Luke's own answer, not the system's. macOS grants the microphone to
+   * the app and only the user can take that back, in System Settings; what is
+   * withheld here is Luke's use of a grant it still holds. Kept because a
+   * decision to stop being listened to that lasted only until the next launch
+   * would not be worth making.
+   */
+  async setMicrophoneAllowed(allowed: boolean): Promise<SettingsUpdateResult> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (persisted.microphoneWithheld === !allowed) return;
+      const next: PersistedSettings = {
+        ...persisted,
+        version: SETTINGS_FILE_VERSION,
+        microphoneWithheld: !allowed,
+      };
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+    });
+    return { settings: await this.snapshot() };
   }
 
   /**
@@ -322,7 +357,11 @@ export class SettingsStore {
       if (!canIgnoreFilesystemError(error)) throw error;
     }
 
-    let persisted: PersistedSettings = { version: SETTINGS_FILE_VERSION, apiKeys: {} };
+    let persisted: PersistedSettings = {
+      version: SETTINGS_FILE_VERSION,
+      apiKeys: {},
+      microphoneWithheld: false,
+    };
     if (source) {
       try {
         persisted = parsePersistedSettings(source);

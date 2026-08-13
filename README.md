@@ -94,9 +94,12 @@ one chord to watch for and can see no other key, which is why holding costs no
 Accessibility or Input Monitoring grant. Where that helper cannot run, the key
 falls back to a press-to-start, press-to-send toggle and Settings says so.
 
-Settings also says whether Luke is allowed the microphone — a green check once
-access is granted. Opening the microphone is the talk key's job, so there is
-nothing there to switch on.
+Settings lists the microphone under **Permissions**, with a green check once
+access is granted, and a **Revoke** beside it. Revoking is Luke's own answer,
+not the system's: it stops Luke opening the microphone at all, and survives a
+restart, but macOS still lists Luke as allowed until you change that in System
+Settings › Privacy & Security › Microphone. Allowing again puts the request back
+where it was before anything was granted.
 
 Luke's face is the interface: it plays its listening motion while you speak and
 its talking motion while it answers, so the capsule says whose turn it is. Colour

@@ -223,6 +223,8 @@ export function App(): React.JSX.Element {
   /** Whether a tap has left a turn open for a later press to end. */
   const talkLatched = useRef(false);
   const sessionsRef = useRef<readonly NormalizedSession[]>([]);
+  /** The current settings, for the callbacks the talk key reaches that do not re-bind. */
+  const settingsRef = useRef<AppSettings | undefined>(undefined);
 
   const changeTab = useCallback((next: PanelTab) => {
     tabRef.current = next;
@@ -299,6 +301,12 @@ export function App(): React.JSX.Element {
   const startMicrophone = useCallback(async () => {
     setMicrophoneError(undefined);
     const session = ensureVoiceSession();
+    // The talk key answers from any app, so this is the one place that can
+    // refuse for all of them.
+    if (settingsRef.current?.microphoneAllowed === false) {
+      session.dropPendingTurn();
+      return;
+    }
     const permission = await window.sidecar.requestMicrophone();
     setMicrophoneStatus(permission);
     if (permission !== "granted") {
@@ -310,6 +318,7 @@ export function App(): React.JSX.Element {
     if (await session.connect()) session.updateSessions(sessionsRef.current);
   }, [ensureVoiceSession]);
   startMicrophoneRef.current = startMicrophone;
+  settingsRef.current = settings;
 
   /**
    * What the talk key means, wherever it was pressed. A first press has to open
@@ -352,7 +361,26 @@ export function App(): React.JSX.Element {
    * pressed the talk key, which is not what the row offers.
    */
   const requestMicrophoneAccess = useCallback(async () => {
+    // Giving it back comes first: a system prompt raised while Luke is still
+    // withholding the device would ask for something it had decided not to use.
+    setSettings((await window.sidecar.setMicrophoneAllowed(true)).settings);
     setMicrophoneStatus(await window.sidecar.requestMicrophone());
+  }, []);
+
+  /**
+   * Takes the microphone back from Luke, or gives it back.
+   *
+   * Only Luke's own use of it: the system's grant is the user's to change in
+   * System Settings, and an app that could quietly revoke its own permissions
+   * could quietly restore them too.
+   */
+  const allowMicrophone = useCallback(async (allowed: boolean) => {
+    setSettings((await window.sidecar.setMicrophoneAllowed(allowed)).settings);
+    if (allowed) return;
+    // Whatever is open stops now rather than at the end of the turn: a
+    // microphone taken back that stays lit for another sentence is not taken
+    // back.
+    await voiceSession.current?.close();
   }, []);
 
   /**
@@ -960,6 +988,7 @@ export function App(): React.JSX.Element {
               microphoneStatus,
               microphoneError,
               onRequestMicrophone: () => void requestMicrophoneAccess(),
+              onAllowMicrophone: (allowed: boolean) => void allowMicrophone(allowed),
               voiceAvailable: bootstrap.realtimeAvailable,
               settings,
               credentials,

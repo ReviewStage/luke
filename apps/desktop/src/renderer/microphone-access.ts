@@ -1,6 +1,13 @@
 import type { MicrophoneStatus } from "../shared/contracts";
 
-/** What the state means for talking, which is the only thing it decides. */
+/**
+ * What the row says beneath its name, once the two answers above it are in.
+ *
+ * Two things have to agree before Luke can listen: macOS has to have granted
+ * the microphone, and Luke has to have been left holding it. They fail
+ * differently and are fixed in different places, so they are never collapsed
+ * into one sentence.
+ */
 const MICROPHONE_STATUS_DETAIL: Record<MicrophoneStatus, string> = {
   granted: "Speech is sent only while a turn is open, and never recorded.",
   "not-determined": "macOS will ask the first time you press the talk key.",
@@ -9,27 +16,20 @@ const MICROPHONE_STATUS_DETAIL: Record<MicrophoneStatus, string> = {
   unknown: "Luke could not read the microphone permission.",
 };
 
-const MICROPHONE_STATUS_LABEL: Record<MicrophoneStatus, string> = {
-  "not-determined": "Not requested yet",
-  granted: "Granted",
-  denied: "Denied in System Settings",
-  restricted: "Restricted by this Mac",
-  unknown: "Unknown",
-};
-
 /** What the Microphone row says, and what it offers. */
 export interface MicrophoneAccessRow {
-  label: string;
   detail: string;
-  /** Whether to offer the button that raises the system prompt. */
+  /** Whether to offer the button that gives Luke the microphone. */
   offerAccess: boolean;
+  /** Whether to offer the button that takes it back. */
+  offerRevoke: boolean;
   /** Whether Luke is both allowed the microphone and able to use it. */
   ready: boolean;
 }
 
 /**
- * Reads the row from the permission and from whether there is anything to talk
- * to.
+ * Reads the row from the system's answer, Luke's own, and whether there is
+ * anything to talk to.
  *
  * The microphone has exactly one use here, so without a voice to answer it the
  * row has nothing to ask for. Asking anyway would raise the macOS prompt — the
@@ -39,20 +39,35 @@ export interface MicrophoneAccessRow {
  */
 export function microphoneAccessRow(input: {
   voiceAvailable: boolean;
+  allowed: boolean;
   status: MicrophoneStatus;
 }): MicrophoneAccessRow {
   if (!input.voiceAvailable) {
     return {
-      label: "Not used",
       detail: "Luke opens the microphone only to talk, and talking needs OPENAI_API_KEY.",
       offerAccess: false,
+      offerRevoke: false,
+      ready: false,
+    };
+  }
+  if (!input.allowed) {
+    return {
+      // Said plainly, because it is the one state where Luke's answer and the
+      // system's disagree, and a row that claimed macOS had taken the
+      // microphone back would be describing something that did not happen.
+      detail:
+        "You have taken this back. macOS still lists Luke as allowed until you change it there.",
+      offerAccess: true,
+      offerRevoke: false,
       ready: false,
     };
   }
   return {
-    label: MICROPHONE_STATUS_LABEL[input.status],
     detail: MICROPHONE_STATUS_DETAIL[input.status],
     offerAccess: input.status === "not-determined",
+    // Nothing to take back until there is something to take: a permission never
+    // granted is not held, and one the system refuses is not Luke's to return.
+    offerRevoke: input.status === "granted",
     ready: input.status === "granted",
   };
 }

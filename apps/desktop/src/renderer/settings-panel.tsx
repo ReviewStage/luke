@@ -29,6 +29,7 @@ import {
   MicrophoneIcon,
   PencilIcon,
   PowerIcon,
+  ShieldIcon,
   TrashIcon,
 } from "./settings-icons";
 
@@ -37,6 +38,8 @@ export interface SettingsPanelProps {
   microphoneError?: string;
   /** Asks the system for access. Using the microphone is the talk key's job. */
   onRequestMicrophone: () => void;
+  /** Gives Luke the microphone, or takes it back, without touching the system's grant. */
+  onAllowMicrophone: (allowed: boolean) => void;
   /** Whether there is anything to talk to, which is the microphone's only use. */
   voiceAvailable: boolean;
   settings?: AppSettings;
@@ -465,6 +468,7 @@ export function SettingsPanel({
   microphoneStatus,
   microphoneError,
   onRequestMicrophone,
+  onAllowMicrophone,
   voiceAvailable,
   settings,
   credentials,
@@ -473,7 +477,11 @@ export function SettingsPanel({
   voiceHotkey,
   voiceHotkeyHeld,
 }: SettingsPanelProps): React.JSX.Element {
-  const microphone = microphoneAccessRow({ voiceAvailable, status: microphoneStatus });
+  const microphone = microphoneAccessRow({
+    voiceAvailable,
+    allowed: settings?.microphoneAllowed ?? true,
+    status: microphoneStatus,
+  });
   return (
     <div
       className="settings"
@@ -511,24 +519,42 @@ export function SettingsPanel({
 
       <section className="settings-section" style={{ "--row-index": 3 } as React.CSSProperties}>
         <h2>
-          <MicrophoneIcon />
-          Microphone
+          <ShieldIcon />
+          Permissions
         </h2>
         {/* Access, not use. The talk key is what opens the microphone, so a
             button here could only ever repeat what the key already does — the
             line answers the one question it can: whether Luke is allowed. */}
+        {/* Named and marked like a provider, because it is the same question in
+            the same words: what Luke has been let at, and whether it is on.
+            Access, not use — the talk key is what opens the microphone, so a
+            control here could only repeat what the key already does. */}
         <div className="settings-row">
           <span className="settings-copy">
-            <strong>{microphone.label}</strong>
+            <span className="settings-name">
+              <MicrophoneIcon />
+              <strong>Microphone</strong>
+              {microphone.ready ? <CheckIcon /> : null}
+            </span>
             <small>{microphone.detail}</small>
           </span>
-          {microphone.ready ? (
-            <CheckIcon />
-          ) : microphone.offerAccess ? (
-            <button type="button" className="action-button" onClick={onRequestMicrophone}>
-              Grant access
-            </button>
-          ) : null}
+          <span className="settings-actions">
+            {microphone.offerRevoke ? (
+              <button
+                type="button"
+                className="quiet-button"
+                aria-label="Take the microphone back from Luke"
+                onClick={() => onAllowMicrophone(false)}
+              >
+                Revoke
+              </button>
+            ) : null}
+            {microphone.offerAccess ? (
+              <button type="button" className="quiet-button" onClick={onRequestMicrophone}>
+                Allow
+              </button>
+            ) : null}
+          </span>
         </div>
         {microphoneError ? <p className="error-message">{microphoneError}</p> : null}
       </section>

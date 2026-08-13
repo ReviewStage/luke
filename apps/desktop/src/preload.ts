@@ -26,6 +26,8 @@ const bridge: AppBridge = {
   },
   requestMicrophone: () =>
     ipcRenderer.invoke(channels.requestMicrophone) as Promise<MicrophoneStatus>,
+  setMicrophoneAllowed: (allowed: boolean) =>
+    ipcRenderer.invoke(channels.setMicrophoneAllowed, allowed) as Promise<SettingsUpdateResult>,
   setProviderApiKey: (providerId: CredentialProviderId, apiKey: string | undefined) =>
     ipcRenderer.invoke(
       channels.setProviderApiKey,

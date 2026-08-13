@@ -49,6 +49,13 @@ export interface AppSettings {
    * plaintext storage; while it is unknown the app says nothing about it.
    */
   secretStorage: SecretStorage;
+  /**
+   * Whether Luke may open the microphone. This is Luke's own answer and not the
+   * system's: macOS grants the device to the app, and only the user can take
+   * that back in System Settings. Withholding it here stops Luke using a grant
+   * it still holds.
+   */
+  microphoneAllowed: boolean;
 }
 
 /** A rejected update reports why without echoing the submitted value. */
@@ -117,6 +124,8 @@ export interface AppBridge {
   setExpanded(expanded: boolean, focus?: boolean): Promise<WindowMode>;
   setPointerInterception(interceptsPointer: boolean): void;
   requestMicrophone(): Promise<MicrophoneStatus>;
+  /** Gives Luke the microphone, or takes it back. */
+  setMicrophoneAllowed(allowed: boolean): Promise<SettingsUpdateResult>;
   setProviderApiKey(
     providerId: CredentialProviderId,
     apiKey: string | undefined,
@@ -160,6 +169,7 @@ export const channels = {
   setExpanded: "app:set-expanded",
   setPointerInterception: "app:set-pointer-interception",
   requestMicrophone: "app:request-microphone",
+  setMicrophoneAllowed: "app:set-microphone-allowed",
   setProviderApiKey: "app:set-provider-api-key",
   openProviderApiKeys: "app:open-provider-api-keys",
   openSession: "app:open-session",
