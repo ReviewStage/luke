@@ -7,6 +7,18 @@ export const SWIFT_TARGET_TRIPLE = `${PACKAGED_ARCHITECTURE}-apple-macos${MACOS_
 export const LICENSE_RESOURCE_NAME = "LUKE-LICENSE.txt";
 export const MICROPHONE_USAGE_DESCRIPTION =
   "Luke uses microphone input to display live audio activity. Audio is processed locally and is not recorded or uploaded.";
+export const ICONSET_SOURCES = Object.freeze({
+  "icon_16x16.png": "luke-icon-16.png",
+  "icon_16x16@2x.png": "luke-icon-32.png",
+  "icon_32x32.png": "luke-icon-32.png",
+  "icon_32x32@2x.png": "luke-icon-64.png",
+  "icon_128x128.png": "luke-icon-128.png",
+  "icon_128x128@2x.png": "luke-icon-256.png",
+  "icon_256x256.png": "luke-icon-256.png",
+  "icon_256x256@2x.png": "luke-icon-512.png",
+  "icon_512x512.png": "luke-icon-512.png",
+  "icon_512x512@2x.png": "luke-icon-1024.png",
+});
 export const SIGNING_MODE = {
   AD_HOC: "ad-hoc",
   DEVELOPER_ID: "developer-id",
@@ -26,6 +38,10 @@ export function swiftCompilerArguments(source, output) {
   ];
 }
 
+export function iconutilArguments(iconsetPath, icnsPath) {
+  return ["-c", "icns", iconsetPath, "-o", icnsPath];
+}
+
 export function resolveSigningMode(env) {
   const identity =
     typeof env.LUKE_CODESIGN_IDENTITY === "string" ? env.LUKE_CODESIGN_IDENTITY.trim() : "";
@@ -36,6 +52,7 @@ export function createPackagerOptions({
   appRoot,
   outputRoot,
   helperPath,
+  iconPath,
   licensePath,
   entitlementsPath,
   signing,
@@ -54,6 +71,7 @@ export function createPackagerOptions({
     asar: true,
     overwrite: true,
     prune: false,
+    icon: iconPath,
     extraResource: [helperPath, licensePath],
     extendInfo: {
       CFBundleDisplayName: "Luke",
