@@ -722,8 +722,22 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .luke-face-brows,
 .luke-face-z {
   animation-play-state: var(--face-motion);
-  animation-iteration-count: infinite;
+  /* A gesture is something that happens rather than something that is: it plays
+     once and leaves the face at the pose it started from, which is the drawn
+     rest every motion the app plays begins and ends at. What is left between
+     gestures is stillness, and stillness is the face's usual condition. */
+  animation-iteration-count: 1;
   animation-timing-function: linear;
+}
+
+/* The exception, and the whole of it: a motion that says something continuously
+   true has to keep saying it. An open microphone and a sleeping face are states
+   rather than moments, so they repeat for as long as they hold. */
+.luke-face[data-repeat="true"] .luke-face-layer,
+.luke-face[data-repeat="true"] .luke-face-eye,
+.luke-face[data-repeat="true"] .luke-face-brows,
+.luke-face[data-repeat="true"] .luke-face-z {
+  animation-iteration-count: infinite;
 }
 
 .luke-face-layer {

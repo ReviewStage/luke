@@ -6,10 +6,10 @@ import {
   FACE_MOTION_PARTS,
 } from "../src/renderer/luke-face-art";
 import {
+  asidePool,
+  chooseAside,
   type FaceContext,
   type FaceObservation,
-  IDLE_ASIDES,
-  nextAside,
   noticedMotion,
   playedMotion,
   restingMotion,
@@ -42,16 +42,15 @@ test("the microphone outranks the session list", () => {
   assert.equal(restingMotion(context({ microphoneLive: true })), FACE_MOTION.LISTENING);
 });
 
-test("a session that needs a person does not hold the face for as long as it waits", () => {
-  // Anyone whose sessions are usually waiting on them would otherwise get a
-  // face that fidgets permanently, which is the count badge's sentence said
-  // twice and leaves nothing to notice when one more session starts asking.
-  assert.equal(
-    restingMotion(context({ attention: ["a"], working: 4, total: 5 })),
-    FACE_MOTION.MONITORING,
-  );
-  assert.equal(restingMotion(context({ attention: ["a"], total: 1 })), FACE_MOTION.IDLE);
-  assert.equal(restingMotion(context({ working: 4, total: 4 })), FACE_MOTION.MONITORING);
+test("nothing about the session list holds the face at all", () => {
+  // A rest repeats for as long as it is true, so anything the sessions could ask
+  // for would be a loop that never stops for anyone whose sessions usually need
+  // them. Sessions waiting, sessions working, sessions doing neither: the face
+  // is still, and what the sessions do is spent on gestures between stillnesses.
+  assert.equal(restingMotion(context({ attention: ["a"], working: 4, total: 5 })), undefined);
+  assert.equal(restingMotion(context({ attention: ["a"], total: 1 })), undefined);
+  assert.equal(restingMotion(context({ working: 4, total: 4 })), undefined);
+  assert.equal(restingMotion(context({ complete: 2, total: 2 })), undefined);
 });
 
 test("the fidget answers a session that has just started asking", () => {
@@ -79,64 +78,98 @@ test("sessions arriving and finishing are still counted rather than named", () =
   assert.equal(noticedMotion(two, observed([], { total: 1 })), undefined);
 });
 
-test("nothing tracked is a different rest from nothing happening", () => {
+test("only what stays true for as long as it holds may hold the face", () => {
+  // Nothing to watch at all, which is a different thing from nothing happening.
   assert.equal(restingMotion(context()), FACE_MOTION.SLEEPING);
-  // Tracked, but none of them working or waiting: awake with nothing to do.
-  assert.equal(restingMotion(context({ complete: 2, total: 2 })), FACE_MOTION.IDLE);
-});
-
-test("an aside never repeats the one before it", () => {
-  for (const previous of IDLE_ASIDES) {
-    for (let attempt = 0; attempt < 40; attempt += 1) {
-      assert.notEqual(nextAside(previous), previous);
+  // The three rests are the whole of what repeats, so they are the whole of what
+  // the artwork is allowed to loop.
+  const rests = [FACE_MOTION.TALKING, FACE_MOTION.LISTENING, FACE_MOTION.SLEEPING];
+  for (const pool of [asidePool(true), asidePool(false)]) {
+    for (const aside of pool) {
+      assert.ok(!rests.includes(aside.motion), `${aside.motion} is a rest and cannot be a gesture`);
     }
   }
 });
 
-test("asides say nothing a rest or a moment already says", () => {
-  // An aside interrupts a rest, so one that carried meaning would overwrite it:
-  // Luke must not look like a session just started asking because a timer fired.
-  for (const aside of IDLE_ASIDES) {
-    assert.ok(
-      ![
-        FACE_MOTION.TALKING,
-        FACE_MOTION.LISTENING,
-        FACE_MOTION.WAITING,
-        FACE_MOTION.MONITORING,
-        FACE_MOTION.SLEEPING,
-        FACE_MOTION.SUCCESS,
-        FACE_MOTION.NOTIFICATION,
-      ].includes(aside),
-      `${aside} carries meaning and cannot be an aside`,
-    );
-  }
-});
-
-test("a rest that needs the face takes it back from a gesture at once", () => {
-  // Scheduling gestures only while the rest is restful is not enough: the rest
-  // can change under one that is already playing.
-  for (const gesture of [
-    ...IDLE_ASIDES,
+test("a gesture says nothing a rest or a moment already says", () => {
+  // A gesture arrives because a timer fired, so one that carried meaning would
+  // be a lie: Luke must not look like a session just started asking, finished,
+  // or turned up, and he must not look like he is listening to a closed
+  // microphone. The sway is the exception that proves the rule — it means work
+  // is happening, so it is only offered while work is happening.
+  const spoken = [
+    FACE_MOTION.TALKING,
+    FACE_MOTION.LISTENING,
+    FACE_MOTION.SLEEPING,
+    FACE_MOTION.WAITING,
     FACE_MOTION.SUCCESS,
     FACE_MOTION.NOTIFICATION,
-    FACE_MOTION.WAITING,
-  ]) {
-    // The microphone is what matters most: the capsule reports an open
-    // microphone through the face's colour, and only these two motions carry
-    // it, so not even a session asking for you may hold the face over one.
+    FACE_MOTION.MONITORING,
+  ];
+  for (const aside of asidePool(false)) {
+    assert.ok(!spoken.includes(aside.motion), `${aside.motion} carries meaning and cannot be idle`);
+  }
+  const working = asidePool(true).map((aside) => aside.motion);
+  assert.ok(working.includes(FACE_MOTION.MONITORING));
+  assert.deepEqual(
+    working.filter((motion) => motion !== FACE_MOTION.MONITORING),
+    asidePool(false).map((aside) => aside.motion),
+  );
+});
+
+test("a rest takes the face back from a gesture at once, and keeps it", () => {
+  // The rest can change under a gesture that is already playing, and the
+  // microphone is what matters most: the capsule reports an open microphone
+  // through the face's colour, and only these two motions carry it, so not even
+  // a session asking for you may hold the face over one.
+  for (const gesture of [...asidePool(true).map((aside) => aside.motion), FACE_MOTION.WAITING]) {
     assert.equal(playedMotion(FACE_MOTION.LISTENING, gesture), FACE_MOTION.LISTENING);
     assert.equal(playedMotion(FACE_MOTION.TALKING, gesture), FACE_MOTION.TALKING);
-    // The calm rests can still spare it.
-    assert.equal(playedMotion(FACE_MOTION.IDLE, gesture), gesture);
-    assert.equal(playedMotion(FACE_MOTION.MONITORING, gesture), gesture);
-    assert.equal(playedMotion(FACE_MOTION.SLEEPING, gesture), gesture);
+    // Asleep is a rest like the others: a sleeping face does not wink.
+    assert.equal(playedMotion(FACE_MOTION.SLEEPING, gesture), FACE_MOTION.SLEEPING);
+    // With nothing resting, the gesture is what there is.
+    assert.equal(playedMotion(undefined, gesture), gesture);
   }
 });
 
-test("with no gesture the face plays the rest, whatever it is", () => {
+test("with neither a rest nor a gesture the face is still", () => {
+  assert.equal(playedMotion(undefined, undefined), undefined);
   for (const resting of Object.values(FACE_MOTION)) {
     assert.equal(playedMotion(resting, undefined), resting);
   }
+});
+
+test("a moment is sampled by weight, and the smallest gesture is most of the pool", () => {
+  const idle = asidePool(false);
+  const weight = idle.reduce((sum, aside) => sum + aside.weight, 0);
+  // A roll walks the pool in order, so each boundary is exactly a weight — read
+  // off the pool rather than written down, or the test only proves itself.
+  const blink = (idle[0]?.weight ?? 0) / weight;
+  assert.equal(chooseAside(idle, 0), FACE_MOTION.IDLE);
+  assert.equal(chooseAside(idle, blink - 0.001), FACE_MOTION.IDLE);
+  assert.equal(chooseAside(idle, blink + 0.001), FACE_MOTION.WINK);
+  assert.equal(chooseAside(idle, 0.999), FACE_MOTION.HIDING);
+  // The blink is half of every pool, and the duck is a rarity in both.
+  for (const pool of [idle, asidePool(true)]) {
+    const total = pool.reduce((sum, aside) => sum + aside.weight, 0);
+    const share = (motion: (typeof pool)[number]["motion"]) =>
+      (pool.find((aside) => aside.motion === motion)?.weight ?? 0) / total;
+    assert.ok(share(FACE_MOTION.IDLE) > 0.35, "the blink has to be the usual moment");
+    assert.ok(share(FACE_MOTION.HIDING) < 0.02, "ducking out of frame has to stay a surprise");
+    // Every weight is a real share, or the pool is lying about its own odds.
+    for (const aside of pool) assert.ok(aside.weight > 0, `${aside.motion} can never be chosen`);
+  }
+});
+
+test("the sway is offered only while there is work for it to mean", () => {
+  const working = asidePool(true);
+  const sway = working.filter((aside) => aside.motion === FACE_MOTION.MONITORING);
+  assert.equal(sway.length, 1);
+  assert.equal(chooseAside(working, 0.999), FACE_MOTION.MONITORING);
+  assert.equal(
+    asidePool(false).some((aside) => aside.motion === FACE_MOTION.MONITORING),
+    false,
+  );
 });
 
 test("every motion the renderer can play is one the artwork describes", () => {

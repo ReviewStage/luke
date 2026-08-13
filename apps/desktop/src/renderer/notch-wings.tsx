@@ -68,7 +68,7 @@ export function NotchWings({
   // Guarded rather than reset: a microphone that has been closed cannot still be
   // carrying speech, whatever the last frame the meter read said.
   const speaking = hasAudioSignal && (fixtureSpeaking || voiceActive);
-  const motion = useFaceMotion(
+  const face = useFaceMotion(
     {
       speaking,
       microphoneLive: hasAudioSignal,
@@ -132,8 +132,12 @@ export function NotchWings({
             </span>
           )}
           {/* Luke himself, and the only thing in either wing that is drawn in
-              every state. Everything else is what he is watching. */}
-          <LukeFace motion={motion} />
+              every state. Everything else is what he is watching.
+
+              Keyed on the play so that each one is a new drawing: a motion plays
+              once now, and an element already wearing an animation does not
+              replay it on being handed the same one. */}
+          <LukeFace key={face.play} motion={face.motion} repeat={face.repeat} />
         </div>
       </div>
 

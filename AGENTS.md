@@ -139,9 +139,21 @@ compares every output without writing and fails on any drift.
 
 The app draws the face rather than loading the SVGs because it needs
 `currentColor` and CSS animation: `--face-motion` is what holds every loop still
-for a capture run and for reduced motion, and SMIL answers to neither. Motion
-that carries meaning is chosen in `luke-face-mood.ts`; anything that carries none
-belongs in its aside list, never in a rest.
+for a capture run and for reduced motion, and SMIL answers to neither.
+
+The face is still unless something is happening to it, and what is happening is
+chosen in `luke-face-mood.ts`. A gesture plays once and a rest repeats, so only
+a motion that stays true for as long as it holds may be a rest: speech, an open
+microphone, and nothing whatever to watch. Everything else is a gesture — fired
+at a change, or drawn by weight from the pool between stillnesses — and a
+gesture that carries meaning may only be offered while its meaning is true.
+
+Two rules follow from playing a motion once, and both belong to the artwork
+table rather than the app. Every motion the app plays begins and ends at the
+resting pose, because one that starts elsewhere snaps there on the way in and
+back out of it on the way out. Every layer of one shares a period, because the
+app hands the face back after the longest of them and a layer on its own period
+would be cut wherever it had got to.
 
 ## TypeScript value sets and keys
 

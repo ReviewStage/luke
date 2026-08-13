@@ -9,17 +9,22 @@
 
 @keyframes luke-talking-1 {
   0% {
+    transform: rotate(0deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  25% {
     transform: rotate(-4deg);
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
 
-  50% {
+  75% {
     transform: rotate(4deg);
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
 
   100% {
-    transform: rotate(-4deg);
+    transform: rotate(0deg);
   }
 }
 
@@ -605,24 +610,34 @@
 
 @keyframes luke-monitoring-1 {
   0% {
-    transform: rotate(-3.5deg);
+    transform: rotate(0deg);
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
 
-  50% {
+  25% {
     transform: rotate(3.5deg);
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
 
-  100% {
+  50% {
+    transform: rotate(0deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  75% {
     transform: rotate(-3.5deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  100% {
+    transform: rotate(0deg);
   }
 }
 
 .luke-face[data-motion="monitoring"] .luke-face-layer-1 {
   transform-origin: 120px 196px;
   animation-name: luke-monitoring-1;
-  animation-duration: 3.2s;
+  animation-duration: 3.6s;
 }
 
 /* appear — attaching (peek-slide in) */
@@ -704,21 +719,26 @@
 
 @keyframes luke-attention-1 {
   0% {
+    transform: rotate(0deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  20% {
     transform: rotate(6deg);
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
 
-  35% {
+  42% {
     transform: rotate(6deg);
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
 
-  45% {
+  50% {
     transform: rotate(-2.5deg);
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
 
-  55% {
+  58% {
     transform: rotate(0.8deg);
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
@@ -729,27 +749,32 @@
   }
 
   100% {
-    transform: rotate(6deg);
+    transform: rotate(0deg);
   }
 }
 
 @keyframes luke-attention-2 {
   0% {
+    transform: translate(0px, 0px);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  20% {
     transform: translate(0px, 3px);
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
 
-  35% {
+  42% {
     transform: translate(0px, 3px);
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
 
-  45% {
+  50% {
     transform: translate(0px, -1.5px);
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
 
-  55% {
+  58% {
     transform: translate(0px, 0px);
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
@@ -760,7 +785,7 @@
   }
 
   100% {
-    transform: translate(0px, 3px);
+    transform: translate(0px, 0px);
   }
 }
 
@@ -779,17 +804,22 @@
 
 @keyframes luke-floating-1 {
   0% {
+    transform: rotate(0deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  25% {
     transform: rotate(-2deg);
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
 
-  50% {
+  75% {
     transform: rotate(2deg);
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
 
   100% {
-    transform: rotate(-2deg);
+    transform: rotate(0deg);
   }
 }
 
@@ -812,12 +842,12 @@
 .luke-face[data-motion="floating"] .luke-face-layer-1 {
   transform-origin: 120px 124px;
   animation-name: luke-floating-1;
-  animation-duration: 5.76s;
+  animation-duration: 4.8s;
 }
 
 .luke-face[data-motion="floating"] .luke-face-layer-2 {
   animation-name: luke-floating-2;
-  animation-duration: 4.4s;
+  animation-duration: 4.8s;
 }
 
 /* hiding — minimized (peekaboo duck) */
