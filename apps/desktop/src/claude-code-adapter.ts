@@ -364,6 +364,17 @@ function cwdFromRecord(record: Record<string, unknown>): string | undefined {
   return typeof cwd === "string" && cwd.trim().length > 0 ? cwd : undefined;
 }
 
+/**
+ * Whether the assistant record just read closed the turn. `stop_reason` answers
+ * it directly; the tool blocks in the message are the fallback for a build that
+ * stops reporting one.
+ */
+function turnEnded(parsed: ParsedClaudeSessionTail): boolean {
+  return parsed.stopReason
+    ? parsed.stopReason !== CLAUDE_STOP_REASON.TOOL_USE
+    : parsed.usedTool !== true;
+}
+
 /** Folds one record into the running picture of the session. */
 function readClaudeRecord(record: Record<string, unknown>, parsed: ParsedClaudeSessionTail): void {
   parsed.cwd = cwdFromRecord(record) ?? parsed.cwd;
@@ -398,6 +409,10 @@ function readClaudeRecord(record: Record<string, unknown>, parsed: ParsedClaudeS
   if (eventType !== CLAUDE_EVENT_TYPE.ASSISTANT) {
     parsed.stopReason = undefined;
     parsed.usedTool = false;
+    // A result ends the session's work, so what it last ran is no longer what it
+    // is doing. A tool result does not: it sits between one call and the next,
+    // and clearing there would blank the line every other record.
+    if (eventType === CLAUDE_EVENT_TYPE.RESULT) parsed.activity = undefined;
     return;
   }
   parsed.stopReason = stopReasonFromRecord(record);
@@ -405,7 +420,12 @@ function readClaudeRecord(record: Record<string, unknown>, parsed: ParsedClaudeS
     (block) => block.type === CLAUDE_CONTENT_TYPE.TOOL_USE,
   );
   parsed.model = modelFromRecord(record) ?? parsed.model;
-  parsed.activity = activityFromAssistant(record) ?? parsed.activity;
+  // A turn that ended is not running anything. Holding the last call would keep
+  // it ahead of the recap the surface should show instead, so the session would
+  // read as though it were still working.
+  parsed.activity = turnEnded(parsed)
+    ? undefined
+    : (activityFromAssistant(record) ?? parsed.activity);
   // A turn that ended replaces the recap only when Claude Code wrote none; its
   // own away summary is composed for this exact moment and reads better.
   parsed.awaySummary =
@@ -453,13 +473,7 @@ function statusFromTail(
   if (parsed.apiError) return isFresh ? SESSION_STATUS.ERROR : SESSION_STATUS.UNKNOWN;
   if (!isFresh) return SESSION_STATUS.UNKNOWN;
   if (parsed.eventType === CLAUDE_EVENT_TYPE.ASSISTANT) {
-    // A build that stops reporting `stop_reason` must not turn every working
-    // session into one that claims to need the developer, so the tool blocks in
-    // the message itself remain the fallback.
-    const working = parsed.stopReason
-      ? parsed.stopReason === CLAUDE_STOP_REASON.TOOL_USE
-      : parsed.usedTool === true;
-    return working ? SESSION_STATUS.WORKING : SESSION_STATUS.WAITING;
+    return turnEnded(parsed) ? SESSION_STATUS.WAITING : SESSION_STATUS.WORKING;
   }
   return SESSION_STATUS.WORKING;
 }

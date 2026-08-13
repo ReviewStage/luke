@@ -488,6 +488,104 @@ test("carries the away recap Claude Code writes for a developer who stepped out"
   );
 });
 
+test("stops reporting a tool once the turn that ran it has ended", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-ended",
+    "ended-session",
+    [
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:44:50.000Z",
+        message: {
+          stop_reason: "tool_use",
+          content: [
+            {
+              type: TEST_CLAUDE_CONTENT_TYPE.TOOL_USE,
+              name: "Bash",
+              input: { description: "Run the macOS packaging check" },
+            },
+          ],
+        },
+      },
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.USER,
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:44:52.000Z",
+        message: { content: [{ type: TEST_CLAUDE_CONTENT_TYPE.TOOL_RESULT }] },
+      },
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:44:55.000Z",
+        message: {
+          stop_reason: "end_turn",
+          content: [{ type: "text", text: "Packaging passed." }],
+        },
+      },
+    ],
+    TEST_TIME - 1_000,
+  );
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const [observation] = await adapter.observe();
+
+  // The row prefers activity over the recap, so a tool left behind here would
+  // hide what the session actually wants to say.
+  assert.equal(observation?.status, SESSION_STATUS.WAITING);
+  assert.equal(observation?.detail?.activity, undefined);
+  assert.equal(observation?.summary, "Packaging passed.");
+});
+
+test("keeps reporting a tool between one call and the next", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-between",
+    "between-session",
+    [
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:44:50.000Z",
+        message: {
+          stop_reason: "tool_use",
+          content: [
+            {
+              type: TEST_CLAUDE_CONTENT_TYPE.TOOL_USE,
+              name: "Bash",
+              input: { description: "Run the macOS packaging check" },
+            },
+          ],
+        },
+      },
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.USER,
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:44:52.000Z",
+        message: { content: [{ type: TEST_CLAUDE_CONTENT_TYPE.TOOL_RESULT }] },
+      },
+    ],
+    TEST_TIME - 1_000,
+  );
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WORKING);
+  assert.equal(observation?.detail?.activity, "Bash: Run the macOS packaging check");
+});
+
 test("returns an empty snapshot when Claude Code has no local project directory", async (t) => {
   const claudeHome = await temporaryClaudeHome(t);
   const adapter = new ClaudeCodeSessionAdapter({

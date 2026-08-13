@@ -273,6 +273,9 @@ function parseCodexRolloutTail(tail: string): ParsedCodexRollout {
       if (payload.type === CODEX_EVENT_PAYLOAD.TASK_STARTED) {
         parsed.turnComplete = false;
         parsed.lastAgentMessage = undefined;
+        // A new turn is not running the previous turn's last call, and holding
+        // it would keep a stale line on the row until some other tool runs.
+        parsed.activity = undefined;
       }
       if (payload.type === CODEX_EVENT_PAYLOAD.TASK_COMPLETE) {
         parsed.turnComplete = true;

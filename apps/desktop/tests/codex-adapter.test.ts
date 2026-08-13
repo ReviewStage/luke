@@ -246,6 +246,38 @@ test("reports a running Codex turn as working with the call it is making", async
   assert.equal(observation?.detail?.activity, "exec_command: pnpm test");
 });
 
+test("drops the previous turn's call when a new Codex turn starts", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const rolloutPath = path.join(codexHome, "rollout-new-turn.jsonl");
+  await writeCodexState(codexHome, [
+    { id: "codex-new-turn", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000, rolloutPath },
+  ]);
+  await writeRollout(rolloutPath, [
+    { type: "event_msg", payload: { type: "task_started" } },
+    {
+      type: "response_item",
+      payload: {
+        type: "function_call",
+        name: "exec_command",
+        arguments: '{"command":"pnpm test"}',
+      },
+    },
+    { type: "event_msg", payload: { type: "task_complete", last_agent_message: "Tests pass." } },
+    { type: "event_msg", payload: { type: "task_started" } },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WORKING);
+  assert.equal(observation?.detail?.activity, undefined);
+  assert.equal(observation?.summary, undefined);
+});
+
 test("holds a long Codex turn at working however stale its row is", async (t) => {
   const codexHome = await temporaryCodexHome(t);
   const rolloutPath = path.join(codexHome, "rollout-long.jsonl");
