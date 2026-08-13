@@ -44,6 +44,7 @@ test("the most urgent sessions are listed first in either data source", () => {
   assert.deepEqual(fixtureStates, [
     SESSION_STATE.ATTENTION,
     SESSION_STATE.WORKING,
+    SESSION_STATE.WORKING,
     SESSION_STATE.COMPLETE,
     SESSION_STATE.UNKNOWN,
   ]);
@@ -83,18 +84,21 @@ test("the tally counts per state and per provider", () => {
   assert.deepEqual(
     { ...tally, providers: undefined },
     {
-      total: 4,
+      total: 5,
       attention: 1,
-      working: 1,
+      working: 2,
       complete: 1,
       idle: 1,
       state: SESSION_STATE.ATTENTION,
       providers: undefined,
     },
   );
+  // Providers follow the order their most urgent session takes, so Cursor's
+  // working agent is listed ahead of Conductor's completed session.
   assert.deepEqual(tally.providers, [
     { providerId: PROVIDER_ID.CLAUDE_CODE, provider: "Claude Code", total: 2, attention: 1 },
     { providerId: PROVIDER_ID.CODEX, provider: "Codex", total: 1, attention: 0 },
+    { providerId: PROVIDER_ID.CURSOR, provider: "Cursor", total: 1, attention: 0 },
     { providerId: PROVIDER_ID.CONDUCTOR, provider: "Conductor", total: 1, attention: 0 },
   ]);
 });
@@ -117,7 +121,7 @@ test("the caption names its own number so the count is never misread", () => {
   const tally = sessionTally(displaySessions(bootstrap(true), []));
 
   assert.equal(tallyCaption(tally), "1 needs you");
-  assert.equal(tallySummary(tally), "4 sessions tracked, 1 needing you");
+  assert.equal(tallySummary(tally), "5 sessions tracked, 1 needing you");
   assert.equal(tallyCaption({ ...tally, attention: 2 }), "2 need you");
   assert.equal(tallyCaption({ ...tally, attention: 0, working: 3 }), "3 working");
   assert.equal(tallyCaption({ ...tally, attention: 0, working: 0 }), "1 complete");

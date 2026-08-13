@@ -51,7 +51,15 @@ const smokeFixture: FixtureSnapshot = {
       detail: "Cloud session metadata only · no live credentials",
       state: SESSION_STATE.COMPLETE,
     },
-    // A fourth session keeps every state and every provider mark visible in the
+    {
+      id: "cursor-agent",
+      title: "Follow a cloud agent",
+      providerId: PROVIDER_ID.CURSOR,
+      provider: "Cursor",
+      detail: "Cloud session metadata only · no live credentials",
+      state: SESSION_STATE.WORKING,
+    },
+    // A fifth session keeps every state and every provider mark visible in the
     // one screenshot the visual evidence is reviewed from.
     {
       id: "claude-observe",
