@@ -1,9 +1,8 @@
 #!/usr/bin/env node
-// Generates Luke's brand assets from the parameters chosen during the
-// interactive logo-lab exploration (the lab pages are local design tools and
-// are not checked in). The decisions are recorded in
-// design/motion-selections.md; this script bakes those numbers into
-// standalone SVGs.
+// Generates Luke's brand assets. All parameters were chosen during an
+// interactive logo-lab exploration (local design tools, not checked in) and
+// are baked in below; this script is the single source of truth for the
+// artwork.
 //
 // Usage: node design/generate-brand-assets.mjs
 // PNG derivatives (app icon, menu-bar template) are rasterized separately —

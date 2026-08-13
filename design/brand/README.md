@@ -77,5 +77,3 @@ read as unnatural).
 | `hiding` | minimized (peekaboo duck) |
 | `tease` | playful (brow waggle) |
 | `waiting` | needs approval (fidget) |
-
-Full parameter provenance: `design/motion-selections.md`.
