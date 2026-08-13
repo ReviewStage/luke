@@ -33,12 +33,28 @@ export function restingMotion(context: FaceContext): FaceMotion {
   return FACE_MOTION.IDLE;
 }
 
-/** The rests an aside may interrupt: the ones where nobody is being kept waiting. */
+/** The rests a gesture may interrupt: the ones where nobody is being kept waiting. */
 const RESTFUL: ReadonlySet<FaceMotion> = new Set([
   FACE_MOTION.IDLE,
   FACE_MOTION.MONITORING,
   FACE_MOTION.SLEEPING,
 ]);
+
+/**
+ * What the face actually plays. A gesture holds it only while the rest beneath
+ * can spare it: the moment something needs saying, the rest takes the face
+ * straight back rather than waiting the gesture out.
+ *
+ * Scheduling a gesture only while the rest is restful is not enough, because the
+ * rest can change under one that is already playing. A session that starts
+ * waiting on you would be announced by a wink, and — the reason this is decided
+ * here rather than in an effect that runs afterwards — a microphone opened mid
+ * gesture would not tint the face at all until the gesture ran out, leaving the
+ * capsule silent about an open microphone for as long as five seconds.
+ */
+export function playedMotion(resting: FaceMotion, gesture: FaceMotion | undefined): FaceMotion {
+  return gesture !== undefined && RESTFUL.has(resting) ? gesture : resting;
+}
 
 /**
  * Gestures Luke makes for no reason at all. They are what keeps a permanent
@@ -135,8 +151,15 @@ export function useFaceMotion(context: FaceContext, still: boolean): FaceMotion 
     return () => window.clearTimeout(timer);
   }, [gesture, restful, still]);
 
+  // A gesture the rest has taken the face back from is over, not paused: left
+  // set, it would resume partway through its cycle whenever the rest turned
+  // restful again, which reads as a glitch rather than a gesture.
+  useEffect(() => {
+    if (!restful) setGesture(undefined);
+  }, [restful]);
+
   // Held still, the face keeps one pose rather than a quieter set of them: the
   // stylesheet stops the loops, and this stops the poses changing underneath.
   if (still) return FACE_MOTION.IDLE;
-  return gesture ?? resting;
+  return playedMotion(resting, gesture);
 }

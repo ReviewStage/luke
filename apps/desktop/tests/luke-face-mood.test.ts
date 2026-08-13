@@ -9,6 +9,7 @@ import {
   type FaceContext,
   IDLE_ASIDES,
   nextAside,
+  playedMotion,
   restingMotion,
 } from "../src/renderer/luke-face-mood";
 
@@ -70,6 +71,29 @@ test("asides say nothing a rest is already saying", () => {
       ].includes(aside),
       `${aside} carries meaning and cannot be an aside`,
     );
+  }
+});
+
+test("a rest that needs the face takes it back from a gesture at once", () => {
+  // Scheduling asides only while the rest is restful is not enough: the rest can
+  // change under one that is already playing, and a gesture allowed to run out
+  // would announce a waiting session with a wink.
+  for (const gesture of [...IDLE_ASIDES, FACE_MOTION.SUCCESS, FACE_MOTION.NOTIFICATION]) {
+    assert.equal(playedMotion(FACE_MOTION.WAITING, gesture), FACE_MOTION.WAITING);
+    // The microphone is the one that matters most: the capsule reports an open
+    // microphone through the face's colour, and only these two motions carry it.
+    assert.equal(playedMotion(FACE_MOTION.LISTENING, gesture), FACE_MOTION.LISTENING);
+    assert.equal(playedMotion(FACE_MOTION.TALKING, gesture), FACE_MOTION.TALKING);
+    // The calm rests can still spare it.
+    assert.equal(playedMotion(FACE_MOTION.IDLE, gesture), gesture);
+    assert.equal(playedMotion(FACE_MOTION.MONITORING, gesture), gesture);
+    assert.equal(playedMotion(FACE_MOTION.SLEEPING, gesture), gesture);
+  }
+});
+
+test("with no gesture the face plays the rest, whatever it is", () => {
+  for (const resting of Object.values(FACE_MOTION)) {
+    assert.equal(playedMotion(resting, undefined), resting);
   }
 });
 
