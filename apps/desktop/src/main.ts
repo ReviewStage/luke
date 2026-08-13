@@ -498,15 +498,6 @@ function registerIpc(): void {
     return requestMicrophone();
   });
 
-  ipcMain.handle(
-    channels.setMicrophoneAllowed,
-    async (event, allowed: unknown): Promise<SettingsUpdateResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      if (typeof allowed !== "boolean") throw new Error("Microphone permission must be a boolean");
-      return settingsStore.setMicrophoneAllowed(allowed);
-    },
-  );
-
   // The renderer can replace or clear a provider's credential but never reads
   // it back; the reply reports only where each key now comes from.
   ipcMain.handle(

@@ -251,7 +251,6 @@ test("keeps both keys when two providers are saved at once", async (t) => {
     version: 2,
     // Written even when false, so the file states what it is rather than
     // leaving it to be inferred from an absence.
-    microphoneWithheld: false,
     apiKeys: {
       [FIRST_CLOUD]: sealed("first-cloud-key"),
       [SECOND_CLOUD]: sealed("second-cloud-key"),
@@ -450,7 +449,6 @@ test("keeps a Conductor key stored by an earlier version working", async (t) => 
 
   assert.deepEqual(persisted, {
     version: 2,
-    microphoneWithheld: false,
     apiKeys: { [CONDUCTOR]: sealed("conductor-replacement-key") },
   });
   assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), "conductor-replacement-key");
@@ -469,7 +467,6 @@ test("carries a key belonging to a provider this build does not know", async (t)
 
   assert.deepEqual(persisted, {
     version: 2,
-    microphoneWithheld: false,
     apiKeys: { "later-cloud": sealed("later-cloud-key"), [CONDUCTOR]: sealed(TEST_API_KEY) },
   });
 });
@@ -483,38 +480,4 @@ test("recovers from a corrupt settings file", async (t) => {
 
   assert.equal(settings.credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.ENCRYPTED_FILE);
   assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
-});
-
-test("taking the microphone back outlives the launch it was taken in", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const store = storeIn(directory);
-
-  assert.equal((await store.snapshot()).microphoneAllowed, true, "allowed until refused");
-
-  const taken = await store.setMicrophoneAllowed(false);
-  assert.equal(taken.settings.microphoneAllowed, false);
-
-  // A decision to stop being listened to that lasted only until the next launch
-  // would not be worth making.
-  assert.equal((await storeIn(directory).snapshot()).microphoneAllowed, false);
-
-  await storeIn(directory).setMicrophoneAllowed(true);
-  assert.equal((await storeIn(directory).snapshot()).microphoneAllowed, true);
-});
-
-test("a settings file written before this existed reads as allowed", async (t) => {
-  const directory = await temporaryDirectory(t);
-  await storeIn(directory).setApiKey(CONDUCTOR, TEST_API_KEY);
-  const settingsPath = path.join(directory, SETTINGS_FILE_NAME);
-
-  // Stored as the withholding, so its absence is the state every file written
-  // before it existed was actually in.
-  const written = JSON.parse(await fs.readFile(settingsPath, "utf8")) as Record<string, unknown>;
-  delete written.microphoneWithheld;
-  await fs.writeFile(settingsPath, JSON.stringify(written));
-
-  const reopened = storeIn(directory);
-  assert.equal((await reopened.snapshot()).microphoneAllowed, true);
-  // And the key beside it is untouched by a field it has never heard of.
-  assert.equal(await reopened.readApiKey(CONDUCTOR), TEST_API_KEY);
 });

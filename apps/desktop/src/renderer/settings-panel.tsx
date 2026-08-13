@@ -37,8 +37,6 @@ export interface SettingsPanelProps {
   microphoneError?: string;
   /** Asks the system for access. Using the microphone is the talk key's job. */
   onRequestMicrophone: () => void;
-  /** Gives Luke the microphone, or takes it back, without touching the system's grant. */
-  onAllowMicrophone: (allowed: boolean) => void;
   /** Opens the one place the system's own grant can be changed. */
   onOpenMicrophoneSettings: () => void;
   /** Whether there is anything to talk to, which is the microphone's only use. */
@@ -469,7 +467,6 @@ export function SettingsPanel({
   microphoneStatus,
   microphoneError,
   onRequestMicrophone,
-  onAllowMicrophone,
   onOpenMicrophoneSettings,
   voiceAvailable,
   settings,
@@ -479,11 +476,7 @@ export function SettingsPanel({
   voiceHotkey,
   voiceHotkeyHeld,
 }: SettingsPanelProps): React.JSX.Element {
-  const microphone = microphoneAccessRow({
-    voiceAvailable,
-    allowed: settings?.microphoneAllowed ?? true,
-    status: microphoneStatus,
-  });
+  const microphone = microphoneAccessRow({ voiceAvailable, status: microphoneStatus });
   return (
     <div
       className="settings"
@@ -550,16 +543,6 @@ export function SettingsPanel({
                 onClick={onOpenMicrophoneSettings}
               >
                 <ExternalIcon />
-              </button>
-            ) : null}
-            {microphone.offerRevoke ? (
-              <button
-                type="button"
-                className="quiet-button permission-revoke"
-                aria-label="Stop Luke opening the microphone"
-                onClick={() => onAllowMicrophone(false)}
-              >
-                Revoke
               </button>
             ) : null}
             {microphone.offerAccess ? (

@@ -1452,15 +1452,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   gap: 7px;
 }
 
-/* Revoking is the other act in this panel that takes something away, so it
-   answers the pointer the way the trash does. It is not as final — the row goes
-   back to asking, and the button beside it gives the microphone back — so it is
-   a word rather than a trash, and it asks nothing first. */
-.permission-revoke:hover {
-  background: color-mix(in srgb, var(--danger) 12%, transparent);
-  color: var(--danger-text);
-}
-
 /* Deleting a key is the one act in this panel that cannot be undone from inside
    it: nothing here can hand a key back, so a trash pressed by mistake costs a
    trip to the provider's own site. The trash asks instead of acting, and the
