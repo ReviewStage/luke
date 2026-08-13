@@ -9,6 +9,7 @@ import { PROVIDER_ID } from "@sidecar/core";
  */
 export const CREDENTIAL_PROVIDER_ID = {
   CONDUCTOR: PROVIDER_ID.CONDUCTOR,
+  CURSOR: PROVIDER_ID.CURSOR,
 } as const;
 
 export type CredentialProviderId =
@@ -21,6 +22,10 @@ export type CredentialProviderId =
 const CONDUCTOR_ENVIRONMENT = {
   API_KEY: "CONDUCTOR_API_KEY",
   API_TOKEN: "CONDUCTOR_API_TOKEN",
+} as const;
+
+const CURSOR_ENVIRONMENT = {
+  API_KEY: "CURSOR_API_KEY",
 } as const;
 
 export interface CredentialProvider {
@@ -46,6 +51,13 @@ export const CREDENTIAL_PROVIDERS: Readonly<Record<CredentialProviderId, Credent
     hint: "Create a key in Conductor under Settings · API keys.",
     apiKeysUrl: "https://app.conductor.build/users/api-keys",
     environmentVariables: [CONDUCTOR_ENVIRONMENT.API_KEY, CONDUCTOR_ENVIRONMENT.API_TOKEN],
+  },
+  [CREDENTIAL_PROVIDER_ID.CURSOR]: {
+    id: CREDENTIAL_PROVIDER_ID.CURSOR,
+    displayName: "Cursor",
+    hint: "Create a key in the Cursor dashboard under Integrations · API keys.",
+    apiKeysUrl: "https://cursor.com/dashboard/api",
+    environmentVariables: [CURSOR_ENVIRONMENT.API_KEY],
   },
 };
 

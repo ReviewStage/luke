@@ -164,14 +164,15 @@ no configuration. A cloud provider has no local state to read, so it stays
 silent until you press the capsule to open the panel, choose the **Settings**
 tab, and connect it with a key. Each provider holds its own credential and also
 reads its own `<PROVIDER>_API_KEY` from the environment; Conductor accepts
-`CONDUCTOR_API_KEY` or `CONDUCTOR_API_TOKEN`, and issues keys at
-<https://app.conductor.build/users/api-keys>. A provider you
-give no key to reports nothing and issues no request. A key you enter is
-encrypted with `safeStorage`, whose key comes from the login Keychain, and it is
-never returned to the renderer. Luke reads only cloud workspaces you created,
-issues only read requests, and labels each session by its repository rather than
-by a provider workspace or session name, because those names are generated from
-the opening prompt.
+`CONDUCTOR_API_KEY` or `CONDUCTOR_API_TOKEN` and issues keys at
+<https://app.conductor.build/users/api-keys>, and Cursor accepts
+`CURSOR_API_KEY` and issues keys at <https://cursor.com/dashboard/api>. A
+provider you give no key to reports nothing and issues no request. A key you
+enter is encrypted with `safeStorage`, whose key comes from the login Keychain,
+and it is never returned to the renderer. Luke reads only cloud workspaces and
+agents you created, issues only read requests, and labels each session by its
+repository rather than by a provider workspace, agent, or session name, because
+those names are generated from the opening prompt.
 
 ## Attention intelligence
 

@@ -10,16 +10,19 @@
   --state-idle: rgba(255, 255, 255, 0.44);
 
   /* Provider brand colours, used only by the marks: Claude Code's published
-     coral, the vertical gradient Codex draws its mark with, and the light half
-     of Conductor's two-colour palette — its dark half is the surface the mark
-     already sits on, so the pairing is the published one. Session state is
-     carried by the chips, row tints, and count badge instead, so the two colour
-     systems never compete for the same pixel. */
+     coral, the vertical gradient Codex draws its mark with, the light half of
+     Conductor's two-colour palette — its dark half is the surface the mark
+     already sits on, so the pairing is the published one — and Cursor's mark,
+     which is published as one silhouette and so is drawn in the light form the
+     brand uses on a dark surface. Session state is carried by the chips, row
+     tints, and count badge instead, so the two colour systems never compete for
+     the same pixel. */
   --mark-claude-code: #d97757;
   --mark-codex-top: #b1a7ff;
   --mark-codex-middle: #7a9dff;
   --mark-codex-bottom: #3941ff;
   --mark-conductor: #eae8e6;
+  --mark-cursor: #ffffff;
 
   --text-primary: rgba(255, 255, 255, 0.95);
   --text-secondary: rgba(255, 255, 255, 0.56);
@@ -470,9 +473,9 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 }
 
 /* The marks fill their box very differently — the Claude Code glyph is wide and
-   short, the Codex mark is full-bleed, and Conductor's letter mark is taller
-   than it is wide — so each gets a uniform scale to sit at the same optical
-   weight. Proportions are untouched. */
+   short, the Codex and Cursor marks are full-bleed, and Conductor's letter mark
+   is taller than it is wide — so each gets a uniform scale to sit at the same
+   optical weight. Proportions are untouched. */
 .provider-mark[data-mark="claude-code"] {
   color: var(--mark-claude-code);
   transform: scale(1.12);
@@ -485,6 +488,11 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .provider-mark[data-mark="conductor"] {
   color: var(--mark-conductor);
   transform: scale(0.93);
+}
+
+.provider-mark[data-mark="cursor"] {
+  color: var(--mark-cursor);
+  transform: scale(0.94);
 }
 
 /* Nothing to blend into on a display without a housing, so the shape stops

@@ -9,6 +9,7 @@ import {
 
 test("accepts only a provider the build ships", () => {
   assert.equal(isCredentialProviderId(CREDENTIAL_PROVIDER_ID.CONDUCTOR), true);
+  assert.equal(isCredentialProviderId(CREDENTIAL_PROVIDER_ID.CURSOR), true);
   assert.equal(isCredentialProviderId("unknown-cloud"), false);
   // An inherited property name is not a provider, and neither is a value that
   // is not a string at all.
