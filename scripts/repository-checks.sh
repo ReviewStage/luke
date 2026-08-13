@@ -7,6 +7,7 @@ source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 
 required_files=(
     AGENTS.md
+    CLAUDE.md
     WORKFLOW.md
     README.md
     package.json
