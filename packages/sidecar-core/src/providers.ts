@@ -15,6 +15,20 @@ export const PROVIDER_ID = {
 
 export type ProviderId = (typeof PROVIDER_ID)[keyof typeof PROVIDER_ID];
 
+/**
+ * The order any list of providers reads in. It is the registry's own order
+ * rather than one derived from live sessions, so a list of agents does not
+ * reshuffle as their sessions come and go.
+ */
+export const PROVIDER_ID_LIST: readonly ProviderId[] = Object.values(PROVIDER_ID);
+
+const PROVIDER_IDS: ReadonlySet<string> = new Set(PROVIDER_ID_LIST);
+
+/** Whether this build knows the provider an observation names. */
+export function isProviderId(value: string): value is ProviderId {
+  return PROVIDER_IDS.has(value);
+}
+
 export const PROVIDER_CONTROL_RESULT_STATUS = {
   ACCEPTED: "accepted",
   REJECTED: "rejected",

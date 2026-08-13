@@ -1003,7 +1003,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .settings-section,
 .quit-button,
 .empty-state,
-.tab-bar {
+.panel-header {
   opacity: 0;
   transform: translateY(
     calc((min(var(--row-index, 0), var(--row-fan-limit)) + 1) * var(--row-fan) * -1)
@@ -1017,7 +1017,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .app-stage[data-presentation="panel"] .settings-section,
 .app-stage[data-presentation="panel"] .quit-button,
 .app-stage[data-presentation="panel"] .empty-state,
-.app-stage[data-presentation="panel"] .tab-bar {
+.app-stage[data-presentation="panel"] .panel-header {
   --row-delay: calc(
     var(--expand-delay) +
     min(var(--row-index, 0), var(--row-fan-limit)) *

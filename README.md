@@ -38,8 +38,14 @@ plugins, wrappers, or changes to how a session is launched.
   activity, error or turn recap, repository context, and whether the session is
   working, waiting, complete, failed, or merely observed.
 - Sessions that appear to need attention are placed first.
-- Entering a cloud provider's API key narrows the panel to a single field, so
-  the page you copy the key from stays readable while Luke waits for the paste.
+- An options button beside the tabs opens filtering and sorting: the list can be
+  narrowed to the sessions running locally, to those running in the cloud, or to
+  a single agent, and ordered by what needs you most or by what was observed
+  most recently. Each control is offered only where it is a real choice, a
+  narrowed list is named on the button itself, and both reset when the panel
+  closes, so it always reopens showing every session Luke is tracking.
+- Entering a cloud provider's credential narrows the panel to a single field, so
+  the page you copy it from stays readable while Luke waits for the paste.
 - An optional microphone visualization can react to local audio levels.
 - An optional OpenAI attention review can help decide which updates should be
   prioritized in the interface.

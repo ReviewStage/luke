@@ -1,7 +1,9 @@
 /**
- * Drawn here rather than pulled from an icon set: a few glyphs at one weight,
- * sized to the headings and labels they sit in. They are ours, not anyone's
- * brand mark, so they inherit `currentColor` like any other text.
+ * Every glyph the panel draws itself, in one place: drawn here rather than
+ * pulled from an icon set, so they share one weight and one box and are sized
+ * by the headings, labels, and controls they sit in. They are ours, not
+ * anyone's brand mark, so they inherit `currentColor` like any other text — a
+ * provider's own mark lives in `provider-marks.tsx` and keeps its brand colour.
  */
 function Glyph({
   children,
@@ -94,6 +96,47 @@ export function PowerIcon(): React.JSX.Element {
     <Glyph>
       <path d="M12 3v8.4" />
       <path d="M17.6 6.2a7.6 7.6 0 1 1-11.2 0" />
+    </Glyph>
+  );
+}
+
+/**
+ * Two sliders rather than a funnel: the control it opens holds an order as well
+ * as a filter, and a funnel would promise only the second.
+ */
+export function OptionsIcon(): React.JSX.Element {
+  return (
+    <Glyph className="options-glyph">
+      <path d="M3.6 8.4h5.2" />
+      <path d="M13.2 8.4h7.2" />
+      <circle cx="11" cy="8.4" r="2.2" />
+      <path d="M3.6 15.6h2.6" />
+      <path d="M10.6 15.6h9.8" />
+      <circle cx="8.4" cy="15.6" r="2.2" />
+    </Glyph>
+  );
+}
+
+/** Work happening on this Mac: the machine it is happening on. */
+export function LaptopIcon(): React.JSX.Element {
+  return (
+    <Glyph className="filter-icon">
+      <rect x="4.2" y="5.4" width="15.6" height="10.4" rx="1.7" />
+      <path d="M2.4 18.8h19.2" />
+    </Glyph>
+  );
+}
+
+/**
+ * Work happening somewhere else. The badge on a session's mark says the same
+ * thing in the same shape — two small puffs and one large over a flat base —
+ * drawn here as an outline rather than a fill, because at this size it sits
+ * beside the laptop and the pair has to read as one weight.
+ */
+export function CloudIcon(): React.JSX.Element {
+  return (
+    <Glyph className="filter-icon">
+      <path d="M7.3 18.4h9.5a4.3 4.3 0 0 0 .8-8.52 6.1 6.1 0 0 0-11.66-1.3A4.35 4.35 0 0 0 7.3 18.4Z" />
     </Glyph>
   );
 }

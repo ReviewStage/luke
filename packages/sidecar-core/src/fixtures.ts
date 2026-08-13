@@ -22,11 +22,24 @@ export interface SessionSnapshot {
   context: string;
   state: SessionState;
   location: SessionLocation;
+  /** When the session was last seen, in the same units a live observation uses. */
+  observedAt: number;
 }
 
 export interface FixtureSnapshot {
   scenario: "smoke";
   sessions: readonly SessionSnapshot[];
+}
+
+/**
+ * A fixed instant the fixture's observation times are measured back from. A
+ * clock read at load would make the ordering depend on when the fixture was
+ * read, and the evidence screenshots are only reproducible while it does not.
+ */
+const FIXTURE_EPOCH_MS = 1_735_689_600_000;
+
+function minutesBeforeEpoch(minutes: number): number {
+  return FIXTURE_EPOCH_MS - minutes * 60_000;
 }
 
 const smokeFixture: FixtureSnapshot = {
@@ -41,6 +54,7 @@ const smokeFixture: FixtureSnapshot = {
       context: "Codex · luke · dean/desktop-shell · gpt-5.6-luna · medium",
       state: SESSION_STATE.WORKING,
       location: SESSION_LOCATION.LOCAL,
+      observedAt: minutesBeforeEpoch(4),
     },
     {
       id: "claude-review",
@@ -51,7 +65,10 @@ const smokeFixture: FixtureSnapshot = {
       context: "Claude Code · luke · dean/trust-constraints · claude-opus-5",
       state: SESSION_STATE.ATTENTION,
       location: SESSION_LOCATION.LOCAL,
+      observedAt: minutesBeforeEpoch(9),
     },
+    // The most recently observed session is also the least urgent one, so the
+    // fixture tells the two orderings apart rather than agreeing with both.
     {
       id: "conductor-workspace",
       title: "Observe a cloud workspace",
@@ -63,6 +80,7 @@ const smokeFixture: FixtureSnapshot = {
       context: "Conductor · luke · lisbon-v2 · claude-opus-5",
       state: SESSION_STATE.COMPLETE,
       location: SESSION_LOCATION.CLOUD,
+      observedAt: minutesBeforeEpoch(1),
     },
     {
       id: "cursor-agent",
@@ -73,6 +91,7 @@ const smokeFixture: FixtureSnapshot = {
       context: "Cursor · sidecar · cursor/follow-agent-a1b2",
       state: SESSION_STATE.WORKING,
       location: SESSION_LOCATION.CLOUD,
+      observedAt: minutesBeforeEpoch(18),
     },
     // A fifth session keeps every state and every provider mark visible in the
     // one screenshot the visual evidence is reviewed from. It is also one more
@@ -88,6 +107,7 @@ const smokeFixture: FixtureSnapshot = {
       context: "Devin · sidecar-native",
       state: SESSION_STATE.UNKNOWN,
       location: SESSION_LOCATION.CLOUD,
+      observedAt: minutesBeforeEpoch(41),
     },
   ],
 };
