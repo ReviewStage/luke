@@ -23,6 +23,31 @@ rsvg-convert -w 18 -h 18 menubar/luke-menubar-template.svg -o menubar/lukeTempla
 rsvg-convert -w 36 -h 36 menubar/luke-menubar-template.svg -o menubar/lukeTemplate@2x.png
 ```
 
+## In the app
+
+`menubar/lukeTemplate{,@2x}.png` is copied into the desktop app's `dist/menubar/`
+by `apps/desktop/scripts/build.mjs` and handed to `Tray` — the one piece of
+artwork the app loads from a file, because macOS status items take a
+`NativeImage` rather than markup.
+
+The notch panel draws the face itself rather than loading these SVGs, because it
+needs two things a baked asset cannot give it: `currentColor`, so one drawing
+serves the menu bar and the notch and can take the microphone's colour, and CSS
+animation, so the renderer's `--face-motion` token can hold every loop still for
+a capture run or for reduced motion. SMIL answers to neither without JavaScript.
+
+So the generator emits its two inputs as well, from the same table these SVGs are
+cut from — they are generated files and are not to be hand-edited either:
+
+| File | What it carries |
+|---|---|
+| `apps/desktop/src/renderer/luke-face-art.ts` | The geometry, the motion names, their cycle lengths, and which parts each one needs drawn |
+| `apps/desktop/src/renderer/styles/face-motion.css` | One `@keyframes` per moving part, with each interval's easing |
+
+`scripts/repository-checks.sh` runs `generate-brand-assets.mjs --check`, which
+compares every committed output against what the script produces now and fails if
+any of them has drifted.
+
 ## Modes
 
 `-dark` assets are light ink (`#f5f5f7`) for dark UIs; `-light` assets are near-black
@@ -56,6 +81,9 @@ supported (browsers, most macOS contexts) and survive copy/paste. Motion is alwa
 whole-head or eyes-only; the mouth never morphs (chosen deliberately — mouth morphing
 read as unnatural).
 
+Where each one is used in the app is in the README at the repository root; the
+three the app has no moment for are noted there too.
+
 | State file | Product moment |
 |---|---|
 | `talking` | speaking / narrating (head bob) |
@@ -65,9 +93,9 @@ read as unnatural).
 | `success` | task done (squash-and-stretch hop) |
 | `listening` | curious tilt |
 | `idle` | double blink |
-| `notification` | brow flash |
+| `notification` | attention caught by something new (brow flash) |
 | `wink` | confirmation / easter egg |
-| `sleeping` | paused session (lids down, zzz) |
+| `sleeping` | nothing to watch (lids down, zzz) |
 | `refresh` | relaunch (one pirouette) |
 | `boop` | tap feedback (puff) |
 | `monitoring` | humming along (slow sway) |

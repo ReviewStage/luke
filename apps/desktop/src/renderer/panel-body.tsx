@@ -1,5 +1,6 @@
+import { SESSION_LOCATION } from "@sidecar/core";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
-import { ProviderMark } from "./provider-marks";
+import { CloudBadge, ProviderMark } from "./provider-marks";
 import type { ArrangedSessions, SessionView } from "./session-model";
 import { EmptyState, SessionsPanel, SessionToolbar, StateChip } from "./session-parts";
 import { SettingsPanel, type SettingsPanelProps } from "./settings-panel";
@@ -54,12 +55,12 @@ export function PanelBody({
                 >
                   <span className="row-avatar">
                     <ProviderMark providerId={session.providerId} />
+                    {session.location === SESSION_LOCATION.CLOUD ? <CloudBadge /> : null}
                   </span>
                   <span className="row-copy">
                     <strong>{session.title}</strong>
-                    <small>
-                      {session.provider} · {session.detail}
-                    </small>
+                    {session.detail ? <small>{session.detail}</small> : null}
+                    <small className="row-context">{session.context}</small>
                   </span>
                   <StateChip state={session.state} label={session.label} />
                 </article>

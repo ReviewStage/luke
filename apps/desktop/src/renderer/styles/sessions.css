@@ -212,6 +212,7 @@
 /* Neutral tile: the mark inside carries the provider's own colour, so tinting
    the tile by state would put two colour systems on top of each other. */
 .row-avatar {
+  position: relative;
   display: grid;
   width: 32px;
   height: 32px;
@@ -225,6 +226,19 @@
 .row-avatar .provider-mark {
   width: 17px;
   height: 17px;
+}
+
+/* Against a 32px tile the badge can be read at a glance, so it is sized to be
+   read rather than to be minimal. */
+.row-avatar .cloud-badge {
+  right: -4px;
+  bottom: -4px;
+  width: 14px;
+  height: 14px;
+}
+
+.row-avatar .cloud-badge svg {
+  width: 9px;
 }
 
 .row-copy {
@@ -247,8 +261,16 @@
 
 .row-copy small {
   overflow: hidden;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Where the session is, under what it is doing. It is the line a reader scans
+   only when two rows say the same thing, so it sits back a step. Qualified by
+   the parent because `.row-copy small` above is an element selector and would
+   otherwise out-rank a bare class, leaving both lines the same weight. */
+.row-copy .row-context {
+  color: var(--text-tertiary);
 }

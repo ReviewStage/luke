@@ -43,11 +43,15 @@ PEEK_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-peek.XXXXXX")
     --peek \
     --capture-evidence "$SIDECAR_PEEK_EVIDENCE_PATH"
 SPEAKING_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-speaking.XXXXXX")
+# Peeked rather than at rest: the capsule has no room for the meter beside the
+# face, so it reports a live microphone through the face's colour alone. The
+# peek is the narrowest state that shows both, which is what has to be checked.
 "$APP_EXECUTABLE" \
     --user-data-dir="$SPEAKING_PROFILE" \
     --fixture "$SIDECAR_FIXTURE_SCENARIO" \
     --profile speaking \
     --compact \
+    --peek \
     --capture-evidence "$SIDECAR_SPEAKING_EVIDENCE_PATH"
 
 validate_evidence() {

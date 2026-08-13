@@ -3,12 +3,11 @@ import {
   isProviderId,
   type NormalizedSession,
   PROVIDER_ID_LIST,
-  PROVIDER_ORIGIN,
   type ProviderId,
-  type ProviderOrigin,
-  providerOrigin,
+  SESSION_LOCATION,
   SESSION_STATE,
   SESSION_STATUS,
+  type SessionLocation,
   type SessionState,
 } from "@sidecar/core";
 import type { AppBootstrap } from "../shared/contracts";
@@ -20,12 +19,7 @@ export const STATE_LABEL: Record<SessionState, string> = {
   [SESSION_STATE.UNKNOWN]: "Idle",
 };
 
-const STATUS_LABEL: Record<NormalizedSession["status"], string> = {
-  [SESSION_STATUS.WORKING]: "Working",
-  [SESSION_STATUS.WAITING]: "Waiting",
-  [SESSION_STATUS.COMPLETE]: "Complete",
-  [SESSION_STATUS.UNKNOWN]: "Observed",
-};
+const CONTEXT_SEPARATOR = " · ";
 
 /** The state order the surface reads top-down and the badge collapses to. */
 const STATE_PRIORITY: readonly SessionState[] = [
@@ -36,16 +30,20 @@ const STATE_PRIORITY: readonly SessionState[] = [
 ];
 
 /**
- * Which sessions the list draws: everything, one kind of agent, or one agent.
- * The two coarse values are the origins themselves and the rest are provider
- * ids, so narrowing the list is a comparison against something a row already
- * carries rather than a second vocabulary mapped onto it. The two sets cannot
- * collide — no provider is called `local` or `cloud`.
+ * Which sessions the list draws: everything, everything running in one place,
+ * or everything belonging to one agent. The two coarse values are the session
+ * locations themselves and the rest are provider ids, so narrowing the list is
+ * a comparison against something a row already carries rather than a second
+ * vocabulary mapped onto it. The two sets cannot collide — no provider is
+ * called `local` or `cloud`.
+ *
+ * Location belongs to the session rather than to the agent, so an agent with
+ * work in both places is one chip that answers `Local` and `Cloud` both.
  */
 export const SESSION_FILTER = {
   ALL: "all",
-  LOCAL: PROVIDER_ORIGIN.LOCAL,
-  CLOUD: PROVIDER_ORIGIN.CLOUD,
+  LOCAL: SESSION_LOCATION.LOCAL,
+  CLOUD: SESSION_LOCATION.CLOUD,
 } as const;
 
 export type SessionFilter = (typeof SESSION_FILTER)[keyof typeof SESSION_FILTER] | ProviderId;
@@ -53,7 +51,7 @@ export type SessionFilter = (typeof SESSION_FILTER)[keyof typeof SESSION_FILTER]
 function matchesFilter(session: DisplaySession, filter: SessionFilter): boolean {
   if (filter === SESSION_FILTER.ALL) return true;
   if (filter === SESSION_FILTER.LOCAL || filter === SESSION_FILTER.CLOUD) {
-    return session.origin === filter;
+    return session.location === filter;
   }
   return session.providerId === filter;
 }
@@ -87,12 +85,14 @@ export interface DisplaySession {
   title: string;
   providerId: string;
   provider: string;
+  /** What the session is doing, or what stopped it. */
   detail: string;
+  /** Where it is doing it: provider, repository, branch, model. */
+  context: string;
   state: SessionState;
   label: string;
+  location: SessionLocation;
   observedAt: number;
-  /** Undefined for a provider this build has no registry entry for. */
-  origin?: ProviderOrigin;
 }
 
 /** One filter someone can choose, and how many sessions it would leave. */
@@ -138,8 +138,38 @@ export interface SessionTally {
 function sessionNeedsAttention(session: NormalizedSession): boolean {
   return (
     session.status === SESSION_STATUS.WAITING ||
+    // A session that stopped on a failure cannot get itself going again, so it
+    // wants a person at least as much as one that finished its turn.
+    session.status === SESSION_STATUS.ERROR ||
     session.attention.disposition !== ATTENTION_DISPOSITION.SILENT
   );
+}
+
+/**
+ * The line under the title. What stopped a session outranks what it was doing,
+ * and what it was doing outranks the recap of a turn that has already ended.
+ *
+ * It is empty when a provider reported none of them. Falling back to the status
+ * would only restate the chip at the other end of the same row.
+ */
+function sessionDetail(session: NormalizedSession): string {
+  return session.detail.error ?? session.detail.activity ?? session.summary ?? "";
+}
+
+/**
+ * The line under that. It answers "which one is this?" for the rows that would
+ * otherwise read alike — two checkouts of one repository, or one repository on
+ * two branches.
+ */
+function sessionContext(session: NormalizedSession): string {
+  return [
+    session.provider.displayName,
+    session.detail.repository,
+    session.detail.branch,
+    session.detail.model,
+  ]
+    .filter((part): part is string => part !== undefined && part.length > 0)
+    .join(CONTEXT_SEPARATOR);
 }
 
 function sessionState(session: NormalizedSession): SessionState {
@@ -170,38 +200,36 @@ export function displaySessions(
     ? bootstrap.fixture.sessions.map((session) => ({
         ...session,
         label: STATE_LABEL[session.state],
-        origin: providerOrigin(session.providerId),
       }))
     : sessions.map((session) => ({
         id: session.providerSessionId,
         title: session.title,
         providerId: session.providerId,
         provider: session.provider.displayName,
-        detail: session.summary ?? STATUS_LABEL[session.status],
+        detail: sessionDetail(session),
+        context: sessionContext(session),
         state: sessionState(session),
         label: STATE_LABEL[sessionState(session)],
+        location: session.location,
         observedAt: session.observedAt,
-        // Where a session runs is a fact about its provider, so it is read from
-        // the registry rather than reported per session by an adapter.
-        origin: providerOrigin(session.providerId),
       }));
 
   return [...visible].sort(byUrgency);
 }
 
-const ORIGIN_LABEL: Record<ProviderOrigin, string> = {
-  [PROVIDER_ORIGIN.LOCAL]: "Local",
-  [PROVIDER_ORIGIN.CLOUD]: "Cloud",
+const LOCATION_LABEL: Record<SessionLocation, string> = {
+  [SESSION_LOCATION.LOCAL]: "Local",
+  [SESSION_LOCATION.CLOUD]: "Cloud",
 };
 
-/** The order the origin chips read in: what runs here, then what runs away. */
-const ORIGIN_ORDER: readonly ProviderOrigin[] = [PROVIDER_ORIGIN.LOCAL, PROVIDER_ORIGIN.CLOUD];
+/** The order the location chips read in: what runs here, then what runs away. */
+const LOCATION_ORDER: readonly SessionLocation[] = [SESSION_LOCATION.LOCAL, SESSION_LOCATION.CLOUD];
 
 /**
  * All, then where a session runs, then which agent is running it — coarse to
  * fine, left to right. Each level is offered only where it is a real choice: a
- * single kind of origin says nothing All has not already said, and neither does
- * a single agent. The counts make the row a breakdown of what is tracked before
+ * single location says nothing All has not already said, and neither does a
+ * single agent. The counts make the row a breakdown of what is tracked before
  * it is a control, which is what earns it the line it costs.
  *
  * Agents are listed in the registry's own order rather than by how many
@@ -211,12 +239,12 @@ const ORIGIN_ORDER: readonly ProviderOrigin[] = [PROVIDER_ORIGIN.LOCAL, PROVIDER
 function filterOptions(sessions: readonly DisplaySession[]): readonly SessionFilterOption[] {
   if (sessions.length === 0) return [];
 
-  const origins = new Map<ProviderOrigin, number>();
+  const locations = new Map<SessionLocation, number>();
   const providers = new Map<ProviderId, { label: string; count: number }>();
   for (const session of sessions) {
-    if (session.origin) origins.set(session.origin, (origins.get(session.origin) ?? 0) + 1);
-    // A provider with no registry entry is counted under All and nowhere else,
-    // rather than being filed under a guess about where it runs.
+    locations.set(session.location, (locations.get(session.location) ?? 0) + 1);
+    // An agent this build has no registry entry for has no mark to draw a chip
+    // with, so it is counted under All and offered under nothing else.
     if (!isProviderId(session.providerId)) continue;
     const tally = providers.get(session.providerId);
     providers.set(session.providerId, {
@@ -225,12 +253,12 @@ function filterOptions(sessions: readonly DisplaySession[]): readonly SessionFil
     });
   }
 
-  const originOptions =
-    origins.size > 1
-      ? ORIGIN_ORDER.filter((origin) => origins.has(origin)).map((origin) => ({
-          filter: origin,
-          label: ORIGIN_LABEL[origin],
-          count: origins.get(origin) ?? 0,
+  const locationOptions =
+    locations.size > 1
+      ? LOCATION_ORDER.filter((location) => locations.has(location)).map((location) => ({
+          filter: location,
+          label: LOCATION_LABEL[location],
+          count: locations.get(location) ?? 0,
         }))
       : [];
   const providerOptions =
@@ -245,7 +273,7 @@ function filterOptions(sessions: readonly DisplaySession[]): readonly SessionFil
 
   return [
     { filter: SESSION_FILTER.ALL, label: "All", count: sessions.length },
-    ...originOptions,
+    ...locationOptions,
     ...providerOptions,
   ];
 }

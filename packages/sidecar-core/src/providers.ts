@@ -14,46 +14,18 @@ export const PROVIDER_ID = {
 
 export type ProviderId = (typeof PROVIDER_ID)[keyof typeof PROVIDER_ID];
 
-/** The order any list of providers reads in, so it never depends on live state. */
+/**
+ * The order any list of providers reads in. It is the registry's own order
+ * rather than one derived from live sessions, so a list of agents does not
+ * reshuffle as their sessions come and go.
+ */
 export const PROVIDER_ID_LIST: readonly ProviderId[] = Object.values(PROVIDER_ID);
 
-/**
- * Where a provider's sessions are read from. A local provider is observed from
- * state this Mac already holds; a cloud provider has no local state at all and
- * observes nothing until the user supplies a key. It is the difference between
- * what keeps working offline and what does not, which is why it is a property
- * of the provider rather than of any one session.
- */
-export const PROVIDER_ORIGIN = {
-  LOCAL: "local",
-  CLOUD: "cloud",
-} as const;
+const PROVIDER_IDS: ReadonlySet<string> = new Set(PROVIDER_ID_LIST);
 
-export type ProviderOrigin = (typeof PROVIDER_ORIGIN)[keyof typeof PROVIDER_ORIGIN];
-
-/** Keyed by provider id so no caller has to build a key from an identifier. */
-export const PROVIDER_ORIGINS: Readonly<Record<ProviderId, ProviderOrigin>> = {
-  [PROVIDER_ID.CLAUDE_CODE]: PROVIDER_ORIGIN.LOCAL,
-  [PROVIDER_ID.CODEX]: PROVIDER_ORIGIN.LOCAL,
-  [PROVIDER_ID.CONDUCTOR]: PROVIDER_ORIGIN.CLOUD,
-  [PROVIDER_ID.CURSOR]: PROVIDER_ORIGIN.CLOUD,
-};
-
-/**
- * `hasOwn` rather than `in`: an inherited name such as `toString` is not a
- * provider id.
- */
+/** Whether this build knows the provider an observation names. */
 export function isProviderId(value: string): value is ProviderId {
-  return Object.hasOwn(PROVIDER_ORIGINS, value);
-}
-
-/**
- * A provider this build does not know is not claimed to be either kind. It
- * still has a session and is still counted; it simply answers no question about
- * where it runs, rather than being filed under a guess.
- */
-export function providerOrigin(providerId: string): ProviderOrigin | undefined {
-  return isProviderId(providerId) ? PROVIDER_ORIGINS[providerId] : undefined;
+  return PROVIDER_IDS.has(value);
 }
 
 export const PROVIDER_CONTROL_RESULT_STATUS = {

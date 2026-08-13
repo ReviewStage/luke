@@ -8,7 +8,10 @@ const TEST_TIME = Date.parse("2026-08-12T02:45:00.000Z");
 const TEST_BASE_URL = "https://api.cursor.test";
 const TEST_API_KEY = "cursor-test-key";
 const TEST_REPOSITORY = "https://github.com/reviewstage/luke";
-const SECRET_PROMPT_TEXT = "SECRET_PROMPT_TEXT";
+const TEST_AGENT_NAME = "Add README with setup instructions";
+const TEST_RUN_BRANCH = "cursor/add-readme-a1b2";
+const TEST_RUN_RESULT = "Added the README and opened a pull request.";
+const TEST_PULL_REQUEST_URL = "https://github.com/reviewstage/luke/pull/31";
 
 /** An agent reports only whether the user filed it away. */
 const TEST_AGENT_STATUS = {
@@ -79,23 +82,17 @@ function lastActivityAt(agent: TestAgent): number {
   return agent.updatedAt ?? agent.createdAt;
 }
 
+/**
+ * `GET /v1/agents` returns only the durable identity fields. A list item that
+ * carried `repos` would hide the fact that an adapter reading it there finds
+ * nothing, so this fixture withholds them exactly as the API does.
+ */
 function agentPayload(agent: TestAgent): Record<string, unknown> {
   return {
     id: agent.id,
     name: agent.name,
-    summary: `${SECRET_PROMPT_TEXT} was requested`,
     status: agent.archived ? TEST_AGENT_STATUS.ARCHIVED : TEST_AGENT_STATUS.ACTIVE,
     env: { type: "cloud" },
-    ...(agent.omitRepos
-      ? {}
-      : {
-          repos: [
-            {
-              url: agent.repository ?? TEST_REPOSITORY,
-              ...(agent.startingRef ? { startingRef: agent.startingRef } : {}),
-            },
-          ],
-        }),
     url: `https://cursor.com/agents/${agent.id}`,
     createdAt: isoTimestamp(agent.createdAt),
     updatedAt: isoTimestamp(lastActivityAt(agent)),
@@ -111,17 +108,20 @@ function runPayload(agent: TestAgent, run: TestRun): Record<string, unknown> {
     createdAt: isoTimestamp(agent.createdAt),
     updatedAt: isoTimestamp(run.updatedAt ?? lastActivityAt(agent)),
     durationMs: 12_357,
-    // Cursor writes the result and names the branch it opens from the prompt,
-    // so both are transcript content that no observation may carry.
-    result: `${SECRET_PROMPT_TEXT} was completed`,
-    git: {
-      branches: [
-        {
-          repoUrl: agent.repository ?? TEST_REPOSITORY,
-          branch: `cursor/${SECRET_PROMPT_TEXT}-a1b2`,
-        },
-      ],
-    },
+    result: TEST_RUN_RESULT,
+    ...(agent.omitRepos
+      ? {}
+      : {
+          git: {
+            branches: [
+              {
+                repoUrl: agent.repository ?? TEST_REPOSITORY,
+                branch: TEST_RUN_BRANCH,
+                prUrl: TEST_PULL_REQUEST_URL,
+              },
+            ],
+          },
+        }),
   };
 }
 
@@ -193,18 +193,18 @@ function adapterFor(
 function runningAgent(id: string, updatedAt: number): TestAgent {
   return {
     id,
-    name: SECRET_PROMPT_TEXT,
+    name: TEST_AGENT_NAME,
     createdAt: updatedAt,
     updatedAt,
     run: { id: `run-${id}`, status: TEST_RUN_STATUS.RUNNING, updatedAt },
   };
 }
 
-test("observes a running agent without exposing prompt-derived names", async () => {
+test("observes a running agent under the name Cursor gave it", async () => {
   const api = fakeCursorApi([
     {
       id: "agent-running",
-      name: SECRET_PROMPT_TEXT,
+      name: TEST_AGENT_NAME,
       startingRef: "main",
       createdAt: TEST_TIME - 60_000,
       updatedAt: TEST_TIME - 30_000,
@@ -217,12 +217,19 @@ test("observes a running agent without exposing prompt-derived names", async () 
   assert.deepEqual(CURSOR_PROVIDER, { id: "cursor", displayName: "Cursor" });
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "agent-running");
-  assert.equal(observations[0]?.title, "Cursor: luke");
+  assert.equal(observations[0]?.title, TEST_AGENT_NAME);
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
   assert.equal(observations[0]?.observedAt, TEST_TIME - 30_000);
   assert.equal(observations[0]?.controls, undefined);
-  assert.match(observations[0]?.summary ?? "", /from main/);
-  assert.equal(JSON.stringify(observations).includes(SECRET_PROMPT_TEXT), false);
+  assert.equal(observations[0]?.summary, TEST_RUN_RESULT);
+  // The repository the run names, which is the only place the API reports one
+  // for an agent that came from a list page.
+  assert.deepEqual(observations[0]?.detail, {
+    repository: "luke",
+    branch: TEST_RUN_BRANCH,
+    link: "https://cursor.com/agents/agent-running",
+    change: TEST_PULL_REQUEST_URL,
+  });
   // One list call, then one read of the run that list named. Nothing else.
   assert.deepEqual(
     api.requests.map((request) => request.pathname),
@@ -250,7 +257,7 @@ test("maps every run state Cursor reports onto a state Luke can show", async () 
       ] as const
     ).map(([status, name], index) => ({
       id: `agent-${name}`,
-      name: SECRET_PROMPT_TEXT,
+      name: TEST_AGENT_NAME,
       createdAt: TEST_TIME - (index + 1) * 1_000,
       updatedAt: TEST_TIME - (index + 1) * 1_000,
       run: { id: `run-${name}`, status, updatedAt: TEST_TIME - (index + 1) * 1_000 },
@@ -267,7 +274,9 @@ test("maps every run state Cursor reports onto a state Luke can show", async () 
       ["agent-cancelled", SESSION_STATUS.COMPLETE],
       ["agent-expired", SESSION_STATUS.COMPLETE],
       ["agent-creating", SESSION_STATUS.UNKNOWN],
-      ["agent-errored", SESSION_STATUS.UNKNOWN],
+      // A run Cursor failed stopped on something the developer has to deal
+      // with, which is not the same as a state Luke could not read.
+      ["agent-errored", SESSION_STATUS.ERROR],
     ],
   );
 });
@@ -279,7 +288,7 @@ test("reports a turn that just ended as waiting however long the run took", asyn
   const api = fakeCursorApi([
     {
       id: "agent-long-turn",
-      name: SECRET_PROMPT_TEXT,
+      name: TEST_AGENT_NAME,
       createdAt: TEST_TIME - 4 * 60 * 60 * 1000,
       updatedAt: TEST_TIME - 3 * 60 * 60 * 1000,
       run: { id: "run-long-turn", status: TEST_RUN_STATUS.FINISHED, updatedAt: TEST_TIME - 60_000 },
@@ -297,7 +306,7 @@ test("stops calling a finished run waiting once it goes stale", async () => {
   const api = fakeCursorApi([
     {
       id: "agent-abandoned",
-      name: SECRET_PROMPT_TEXT,
+      name: TEST_AGENT_NAME,
       createdAt: TEST_TIME - 3 * 60 * 60 * 1000,
       updatedAt: TEST_TIME - 2 * 60 * 60 * 1000,
       run: {
@@ -331,7 +340,7 @@ test("reports an archived agent as complete without reading its run", async () =
   const api = fakeCursorApi([
     {
       id: "agent-archived",
-      name: SECRET_PROMPT_TEXT,
+      name: TEST_AGENT_NAME,
       archived: true,
       createdAt: TEST_TIME - 30_000,
       updatedAt: TEST_TIME - 20_000,
@@ -352,7 +361,7 @@ test("reports an archived agent as complete without reading its run", async () =
 
 test("leaves an agent that has never run unknown without reading a run", async () => {
   const api = fakeCursorApi([
-    { id: "agent-unrun", name: SECRET_PROMPT_TEXT, createdAt: TEST_TIME - 5_000 },
+    { id: "agent-unrun", name: TEST_AGENT_NAME, createdAt: TEST_TIME - 5_000 },
   ]);
 
   const observations = await adapterFor(api.fetch).observe();
@@ -369,7 +378,7 @@ test("leaves a run state this build does not know unknown", async () => {
   const api = fakeCursorApi([
     {
       id: "agent-unrecognized",
-      name: SECRET_PROMPT_TEXT,
+      name: TEST_AGENT_NAME,
       createdAt: TEST_TIME - 1_000,
       run: { id: "run-unrecognized", status: "SOME_LATER_STATE", updatedAt: TEST_TIME - 1_000 },
     },
@@ -385,7 +394,7 @@ test("keeps observing when one agent's run cannot be read", async () => {
   const api = fakeCursorApi([
     {
       id: "agent-unreadable",
-      name: SECRET_PROMPT_TEXT,
+      name: TEST_AGENT_NAME,
       createdAt: TEST_TIME - 1_000,
       updatedAt: TEST_TIME - 1_000,
       run: { id: "run-unreadable", httpStatus: HTTP_STATUS.SERVER_ERROR },
@@ -412,34 +421,52 @@ test("ignores agents untouched for longer than the maximum session age", async (
   );
 });
 
-test("labels an agent by its repository, and by neither its name nor nothing", async () => {
+test("takes an agent's repository from the run, because a list page carries none", async () => {
   const api = fakeCursorApi([
     {
       id: "agent-repository",
-      name: SECRET_PROMPT_TEXT,
+      name: TEST_AGENT_NAME,
       repository: "git@github.com:reviewstage/sidecar.git",
       createdAt: TEST_TIME - 1_000,
+      run: { id: "run-repository", status: TEST_RUN_STATUS.RUNNING, updatedAt: TEST_TIME - 1_000 },
     },
     {
       id: "agent-repositoryless",
-      name: SECRET_PROMPT_TEXT,
+      name: TEST_AGENT_NAME,
       omitRepos: true,
       createdAt: TEST_TIME - 2_000,
+      run: {
+        id: "run-repositoryless",
+        status: TEST_RUN_STATUS.RUNNING,
+        updatedAt: TEST_TIME - 2_000,
+      },
     },
   ]);
 
   const observations = await adapterFor(api.fetch).observe();
 
-  assert.equal(observations[0]?.title, "Cursor: sidecar");
-  assert.equal(observations[1]?.title, "Cursor: workspace");
-  assert.equal(JSON.stringify(observations).includes(SECRET_PROMPT_TEXT), false);
+  assert.equal(observations[0]?.detail?.repository, "sidecar");
+  // A run that has pushed nothing names no repository, and the agent is still
+  // worth showing under the name Cursor gave it.
+  assert.equal(observations[1]?.detail?.repository, undefined);
+  assert.equal(observations[1]?.title, TEST_AGENT_NAME);
+});
+
+test("falls back to a neutral label for an agent with no name at all", async () => {
+  const api = fakeCursorApi([
+    { id: "agent-nameless", name: "", omitRepos: true, createdAt: TEST_TIME - 1_000 },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.equal(observations[0]?.title, "Cloud agent");
 });
 
 test("bounds the agents a single pass observes, keeping the ones that can still change", async () => {
   const api = fakeCursorApi([
     {
       id: "agent-archived-moments-ago",
-      name: SECRET_PROMPT_TEXT,
+      name: TEST_AGENT_NAME,
       archived: true,
       createdAt: TEST_TIME - 1_000,
       updatedAt: TEST_TIME - 1_000,
@@ -460,11 +487,11 @@ test("drops an agent it cannot place in time without losing the rest of the pass
   const fetch: CloudFetch = async () =>
     jsonResponse({
       items: [
-        { name: SECRET_PROMPT_TEXT, status: TEST_AGENT_STATUS.ACTIVE },
-        { id: "agent-undated", name: SECRET_PROMPT_TEXT, status: TEST_AGENT_STATUS.ACTIVE },
+        { name: TEST_AGENT_NAME, status: TEST_AGENT_STATUS.ACTIVE },
+        { id: "agent-undated", name: TEST_AGENT_NAME, status: TEST_AGENT_STATUS.ACTIVE },
         {
           id: "agent-complete",
-          name: SECRET_PROMPT_TEXT,
+          name: TEST_AGENT_NAME,
           status: TEST_AGENT_STATUS.ACTIVE,
           repos: [{ url: TEST_REPOSITORY }],
           createdAt: isoTimestamp(TEST_TIME - 1_000),

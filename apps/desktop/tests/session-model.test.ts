@@ -5,6 +5,7 @@ import {
   fixtureSnapshot,
   normalizeSession,
   PROVIDER_ID,
+  SESSION_LOCATION,
   SESSION_STATE,
   SESSION_STATUS,
 } from "@sidecar/core";
@@ -67,6 +68,30 @@ test("the most urgent sessions are listed first in either data source", () => {
   );
   assert.equal(live[0]?.state, SESSION_STATE.ATTENTION);
   assert.equal(live[0]?.providerId, PROVIDER_ID.CODEX);
+});
+
+test("a row carries where its session runs, from either data source", () => {
+  const fixture = new Map(
+    displaySessions(bootstrap(true), []).map((session) => [session.id, session.location]),
+  );
+
+  assert.equal(fixture.get("cursor-agent"), SESSION_LOCATION.CLOUD);
+  assert.equal(fixture.get("conductor-workspace"), SESSION_LOCATION.CLOUD);
+  assert.equal(fixture.get("codex-bootstrap"), SESSION_LOCATION.LOCAL);
+
+  const live = displaySessions(bootstrap(false), [
+    normalizeSession(CODEX_PROVIDER, {
+      providerSessionId: "codex-cloud",
+      title: "Session codex-cloud",
+      status: SESSION_STATUS.WORKING,
+      observedAt: 1_000,
+      location: SESSION_LOCATION.CLOUD,
+    }),
+    liveSession(CLAUDE_PROVIDER, "claude-here", SESSION_STATUS.WORKING),
+  ]);
+
+  assert.equal(live[0]?.location, SESSION_LOCATION.CLOUD);
+  assert.equal(live[1]?.location, SESSION_LOCATION.LOCAL);
 });
 
 test("a speaking disposition needs a person even while the session works", () => {

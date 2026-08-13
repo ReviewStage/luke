@@ -5,6 +5,7 @@ import {
   type NormalizedSession,
   normalizeAttention,
   normalizeSessionIdentity,
+  type SessionDetail,
   type SessionIdentity,
   type SessionStatus,
   silentAttention,
@@ -14,6 +15,7 @@ export const ATTENTION_TRIGGER = {
   OBSERVED: "observed",
   STATUS_CHANGED: "status-changed",
   SUMMARY_CHANGED: "summary-changed",
+  ERROR_REPORTED: "error-reported",
 } as const;
 
 export type AttentionTrigger = (typeof ATTENTION_TRIGGER)[keyof typeof ATTENTION_TRIGGER];
@@ -55,9 +57,27 @@ export const ATTENTION_DECISION_SCHEMA = {
 };
 
 /**
- * A bounded, redacted description of what changed for one session. It is the
- * only session material an attention evaluator ever receives, and it carries no
- * provider transcript, file path, or command output.
+ * The part of a session's context an evaluator is given.
+ *
+ * An evaluator is the one place session material leaves the machine, so this is
+ * deliberately narrower than `SessionDetail`: it carries what the decision
+ * turns on and nothing that only the local surface needs. The session's own
+ * address and the change it published are identifiers, not evidence, so they
+ * stay behind.
+ */
+export interface AttentionContext {
+  repository?: string;
+  branch?: string;
+  activity?: string;
+  error?: string;
+}
+
+/**
+ * A bounded description of what changed for one session, and the only session
+ * material an attention evaluator ever receives. It carries what a provider
+ * wrote *about* a session — its title, its state, its own closing recap — and
+ * never the transcript that sits behind them: no message history, file
+ * contents, or command output.
  */
 export interface AttentionUpdate extends SessionIdentity {
   trigger: AttentionTrigger;
@@ -66,7 +86,19 @@ export interface AttentionUpdate extends SessionIdentity {
   status: SessionStatus;
   previousStatus?: SessionStatus;
   summary?: string;
+  context?: AttentionContext;
   observedAt: number;
+}
+
+/** Narrows a session's observed detail to the fields an evaluator may receive. */
+export function attentionContext(detail: SessionDetail): AttentionContext | undefined {
+  const context: AttentionContext = {
+    ...(detail.repository ? { repository: detail.repository } : {}),
+    ...(detail.branch ? { branch: detail.branch } : {}),
+    ...(detail.activity ? { activity: detail.activity } : {}),
+    ...(detail.error ? { error: detail.error } : {}),
+  };
+  return Object.keys(context).length > 0 ? context : undefined;
 }
 
 /** Reviews one bounded update and decides whether Luke should speak. */
@@ -146,12 +178,18 @@ function isAttentionDisposition(value: unknown): value is AttentionDisposition {
   );
 }
 
+/**
+ * What a session is running changes with every tool call, so it is deliberately
+ * not a development: reviewing it would put a model call behind each one. Only
+ * the state, a new failure, or a new recap is worth a decision.
+ */
 function attentionTrigger(
   session: NormalizedSession,
   previous: NormalizedSession | undefined,
 ): AttentionTrigger | undefined {
   if (!previous) return ATTENTION_TRIGGER.OBSERVED;
   if (previous.status !== session.status) return ATTENTION_TRIGGER.STATUS_CHANGED;
+  if (previous.detail.error !== session.detail.error) return ATTENTION_TRIGGER.ERROR_REPORTED;
   if (previous.summary !== session.summary) return ATTENTION_TRIGGER.SUMMARY_CHANGED;
   return undefined;
 }
@@ -168,6 +206,7 @@ export function attentionUpdate(
   const trigger = attentionTrigger(session, previous);
   if (!trigger) return undefined;
 
+  const context = attentionContext(session.detail);
   return {
     providerId: session.providerId,
     providerSessionId: session.providerSessionId,
@@ -177,6 +216,7 @@ export function attentionUpdate(
     status: session.status,
     ...(previous ? { previousStatus: previous.status } : {}),
     ...(session.summary ? { summary: session.summary } : {}),
+    ...(context ? { context } : {}),
     observedAt: session.observedAt,
   };
 }
@@ -456,12 +496,22 @@ export class SessionAttentionReviewer {
     return review;
   }
 
-  /** Reports whether the session moved past the state the evaluator reasoned about. */
+  /**
+   * Reports whether the session moved past the state the evaluator reasoned
+   * about. It compares every field a development can be derived from, so
+   * `attentionTrigger` and this must be changed together: a dimension that can
+   * open a review and cannot supersede one lets Luke speak about a failure the
+   * session has already replaced or recovered from.
+   */
   #isSuperseded(identity: SessionIdentity, update: AttentionUpdate): boolean {
     if (!this.#currentSession) return false;
     const current = this.#currentSession(identity);
     if (!current) return true;
-    return current.status !== update.status || current.summary !== update.summary;
+    return (
+      current.status !== update.status ||
+      current.summary !== update.summary ||
+      current.detail.error !== update.context?.error
+    );
   }
 
   #silentReview(

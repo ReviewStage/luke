@@ -2,6 +2,8 @@ import { PROVIDER_ID } from "@sidecar/core";
 import { useId } from "react";
 
 /**
+ * The provider marks, and the one badge that rides them.
+ *
  * Provider marks are inlined as path data rather than bundled image files, so
  * the renderer stays asset-free and the marks scale with the surface.
  *
@@ -154,4 +156,32 @@ export function ProviderMark({
 }: MarkProps & { providerId: string }): React.JSX.Element {
   const Mark = PROVIDER_MARKS.get(providerId) ?? UnknownProviderMark;
   return <Mark className={className ? `provider-mark ${className}` : "provider-mark"} />;
+}
+
+/**
+ * Two small puffs and one large one over a flat base, traced as a single
+ * outline: drawn as overlapping shapes instead, a fill this translucent doubles
+ * where they cross and every seam inside the cloud shows.
+ */
+const CLOUD_PATH = "M4.5 14a4.5 4.5 0 0 1-1.259-8.82 7 7 0 0 1 13.518 0A4.5 4.5 0 0 1 15.5 14z";
+
+/**
+ * Rides the bottom-right corner of a provider mark to say the work is not
+ * happening on this machine. It is ours rather than a brand mark, so it is
+ * drawn filled in the text palette: at this size a stroked outline closes up,
+ * and a second brand colour beside the provider's own would read as part of the
+ * mark. It takes the mark's corner in every place a mark is shown, and each of
+ * those places sizes it against the mark it annotates.
+ */
+export function CloudBadge(): React.JSX.Element {
+  return (
+    <span className="cloud-badge" role="img" aria-label="Runs in the cloud">
+      {/* The box is the cloud's own proportions rather than the square the
+          other glyphs use, so at this size the shape spends every pixel it has
+          on itself rather than on margin. */}
+      <svg viewBox="0 0 20 14" fill="currentColor" aria-hidden="true" focusable="false">
+        <path d={CLOUD_PATH} />
+      </svg>
+    </span>
+  );
 }
