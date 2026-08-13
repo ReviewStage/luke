@@ -97,10 +97,13 @@ it.
 The surface is opaque black in every state and shaped like the housing it sits
 beside: the convex bottom corners and the concave flare where its sides meet
 the top edge are both derived from the reported notch inset, at the ratios
-measured off the hardware (0.348 and 0.094 of its height). The panel keeps that
-flare, so all three states meet the top edge the same way. Depth comes from a
-shadow and a hairline edge rather than from letting anything show through. A
-display with no housing to blend into gets a free-floating pill instead.
+measured off photographs of the hardware (0.348 and 0.170 of its height). The
+panel's corners are its own rather than the housing's, so its flare keeps the
+proportion between the two rather than the size — 0.489 of whatever corner it
+turns — and all three states still meet the top edge the same way. Depth comes
+from a shadow and a hairline edge rather than from letting anything show
+through. A display with no housing to blend into gets a free-floating pill
+instead.
 
 The panel's shadow arrives once the shape has settled, so a blurred shadow is
 never repainted mid-spring; the peek's is small enough to ride along with it. A
