@@ -126,6 +126,12 @@ export interface AppBridge {
   requestMicrophone(): Promise<MicrophoneStatus>;
   /** Gives Luke the microphone, or takes it back. */
   setMicrophoneAllowed(allowed: boolean): Promise<SettingsUpdateResult>;
+  /**
+   * Opens Privacy & Security in System Settings, where the system's own grant
+   * lives. Luke can ask for the microphone and stop using it; only the user can
+   * withdraw it, and only there.
+   */
+  openMicrophoneSettings(): void;
   setProviderApiKey(
     providerId: CredentialProviderId,
     apiKey: string | undefined,
@@ -170,6 +176,7 @@ export const channels = {
   setPointerInterception: "app:set-pointer-interception",
   requestMicrophone: "app:request-microphone",
   setMicrophoneAllowed: "app:set-microphone-allowed",
+  openMicrophoneSettings: "app:open-microphone-settings",
   setProviderApiKey: "app:set-provider-api-key",
   openProviderApiKeys: "app:open-provider-api-keys",
   openSession: "app:open-session",

@@ -95,11 +95,15 @@ Accessibility or Input Monitoring grant. Where that helper cannot run, the key
 falls back to a press-to-start, press-to-send toggle and Settings says so.
 
 Settings lists the microphone under **Permissions**, with a green check once
-access is granted, and a **Revoke** beside it. Revoking is Luke's own answer,
-not the system's: it stops Luke opening the microphone at all, and survives a
-restart, but macOS still lists Luke as allowed until you change that in System
-Settings › Privacy & Security › Microphone. Allowing again puts the request back
-where it was before anything was granted.
+access is granted, a **Revoke** beside it, and a link to System Settings.
+
+The two are different things. macOS asks once, the first time Luke needs the
+microphone, and stores your answer; after that no app can raise that prompt
+again, and only you can withdraw the grant — in System Settings › Privacy &
+Security › Microphone, which the link opens. **Revoke** is Luke's own answer:
+it stops Luke opening the microphone at all and survives a restart, while macOS
+goes on listing Luke as allowed. Allowing again returns the row to asking, as it
+read before anything was granted.
 
 Luke's face is the interface: it plays its listening motion while you speak and
 its talking motion while it answers, so the capsule says whose turn it is. Colour

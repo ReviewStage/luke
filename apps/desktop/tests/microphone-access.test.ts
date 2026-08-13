@@ -79,3 +79,31 @@ test("what Luke withholds is said as its own doing, not the system's", () => {
   // did not happen, and leave a grant standing that the reader thought was gone.
   assert.match(taken.detail, /macOS still lists/i);
 });
+
+test("System Settings is offered only where macOS has an answer to change", () => {
+  // Granted or refused, the system holds a decision and that is the one place
+  // it can be changed — including while Luke is withholding a grant that,
+  // as far as macOS is concerned, it still has.
+  for (const status of ["granted", "denied"] as const) {
+    const row = microphoneAccessRow({ voiceAvailable: true, allowed: true, status });
+    assert.equal(row.offerSystemSettings, true, `${status} is worth a trip`);
+  }
+  assert.equal(
+    microphoneAccessRow({ voiceAvailable: true, allowed: false, status: "granted" })
+      .offerSystemSettings,
+    true,
+  );
+
+  // Never asked, so there is nothing there yet to look at.
+  assert.equal(
+    microphoneAccessRow({ voiceAvailable: true, allowed: true, status: "not-determined" })
+      .offerSystemSettings,
+    false,
+  );
+  // And nothing about a microphone Luke has no use for.
+  assert.equal(
+    microphoneAccessRow({ voiceAvailable: false, allowed: true, status: "granted" })
+      .offerSystemSettings,
+    false,
+  );
+});

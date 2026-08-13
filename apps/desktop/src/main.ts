@@ -542,6 +542,16 @@ function registerIpc(): void {
   // hands the question to the browser. The renderer names a provider rather
   // than an address: the pages Luke can open are the ones in the provider
   // registry, and no URL crosses this boundary.
+  // The system's own answer is the user's to change, and this is where macOS
+  // keeps it. The address is fixed here rather than passed in, so a renderer
+  // names the intent and never an address.
+  ipcMain.on(channels.openMicrophoneSettings, (event) => {
+    if (!trustedSender(event)) return;
+    void shell.openExternal(
+      "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
+    );
+  });
+
   ipcMain.on(channels.openProviderApiKeys, (event, providerId: unknown) => {
     if (!trustedSender(event) || !isCredentialProviderId(providerId)) return;
     void shell.openExternal(CREDENTIAL_PROVIDERS[providerId].apiKeysUrl);

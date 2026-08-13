@@ -26,7 +26,6 @@ import {
   ExternalIcon,
   KeyboardIcon,
   KeyIcon,
-  MicrophoneIcon,
   PencilIcon,
   PowerIcon,
   ShieldIcon,
@@ -40,6 +39,8 @@ export interface SettingsPanelProps {
   onRequestMicrophone: () => void;
   /** Gives Luke the microphone, or takes it back, without touching the system's grant. */
   onAllowMicrophone: (allowed: boolean) => void;
+  /** Opens the one place the system's own grant can be changed. */
+  onOpenMicrophoneSettings: () => void;
   /** Whether there is anything to talk to, which is the microphone's only use. */
   voiceAvailable: boolean;
   settings?: AppSettings;
@@ -469,6 +470,7 @@ export function SettingsPanel({
   microphoneError,
   onRequestMicrophone,
   onAllowMicrophone,
+  onOpenMicrophoneSettings,
   voiceAvailable,
   settings,
   credentials,
@@ -532,18 +534,29 @@ export function SettingsPanel({
         <div className="settings-row">
           <span className="settings-copy">
             <span className="settings-name">
-              <MicrophoneIcon />
               <strong>Microphone</strong>
               {microphone.ready ? <CheckIcon /> : null}
             </span>
             <small>{microphone.detail}</small>
           </span>
           <span className="settings-actions">
+            {microphone.offerSystemSettings ? (
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Open Privacy & Security in System Settings"
+                /* The ellipsis is the promise that it opens somewhere else. */
+                title="System Settings…"
+                onClick={onOpenMicrophoneSettings}
+              >
+                <ExternalIcon />
+              </button>
+            ) : null}
             {microphone.offerRevoke ? (
               <button
                 type="button"
-                className="quiet-button"
-                aria-label="Take the microphone back from Luke"
+                className="quiet-button permission-revoke"
+                aria-label="Stop Luke opening the microphone"
                 onClick={() => onAllowMicrophone(false)}
               >
                 Revoke

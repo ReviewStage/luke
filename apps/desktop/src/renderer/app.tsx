@@ -989,6 +989,7 @@ export function App(): React.JSX.Element {
               microphoneError,
               onRequestMicrophone: () => void requestMicrophoneAccess(),
               onAllowMicrophone: (allowed: boolean) => void allowMicrophone(allowed),
+              onOpenMicrophoneSettings: () => window.sidecar.openMicrophoneSettings(),
               voiceAvailable: bootstrap.realtimeAvailable,
               settings,
               credentials,

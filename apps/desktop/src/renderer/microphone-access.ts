@@ -23,6 +23,12 @@ export interface MicrophoneAccessRow {
   offerAccess: boolean;
   /** Whether to offer the button that takes it back. */
   offerRevoke: boolean;
+  /**
+   * Whether to offer the way to System Settings. Only where macOS has already
+   * been answered: that is the one place its answer can be changed, and the one
+   * state where sending someone there is not sending them to look at nothing.
+   */
+  offerSystemSettings: boolean;
   /** Whether Luke is both allowed the microphone and able to use it. */
   ready: boolean;
 }
@@ -47,6 +53,7 @@ export function microphoneAccessRow(input: {
       detail: "Luke opens the microphone only to talk, and talking needs OPENAI_API_KEY.",
       offerAccess: false,
       offerRevoke: false,
+      offerSystemSettings: false,
       ready: false,
     };
   }
@@ -59,6 +66,7 @@ export function microphoneAccessRow(input: {
         "You have taken this back. macOS still lists Luke as allowed until you change it there.",
       offerAccess: true,
       offerRevoke: false,
+      offerSystemSettings: true,
       ready: false,
     };
   }
@@ -68,6 +76,7 @@ export function microphoneAccessRow(input: {
     // Nothing to take back until there is something to take: a permission never
     // granted is not held, and one the system refuses is not Luke's to return.
     offerRevoke: input.status === "granted",
+    offerSystemSettings: input.status === "granted" || input.status === "denied",
     ready: input.status === "granted",
   };
 }
