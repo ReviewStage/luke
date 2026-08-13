@@ -117,7 +117,12 @@ export function KeySlot({
                 and the main process opens the page by provider rather than by an
                 address the panel supplies. This is what the slot is standing
                 aside for, so it does not move the shape again. */}
-            <button type="button" className="link-button" onClick={() => control.fetchKey()}>
+            <button
+              type="button"
+              className="link-button"
+              disabled={entry.busy}
+              onClick={() => control.fetchKey()}
+            >
               Where to get one
               <ExternalIcon />
             </button>

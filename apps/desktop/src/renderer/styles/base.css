@@ -1343,6 +1343,13 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   color: var(--text-primary);
 }
 
+/* Quiet while the key it sits beside is being written, like every other control
+   on that line: a link that still reads as live is an invitation to disturb an
+   entry that is already on its way. */
+.link-button:disabled {
+  color: var(--text-tertiary);
+}
+
 .link-icon {
   width: 9px;
   height: 9px;

@@ -382,7 +382,11 @@ export function App(): React.JSX.Element {
   const changeEntry = useCallback(
     (draft: string) => {
       const current = entryRef.current;
-      if (!current) return;
+      // A key being written is not a moment to change the entry: the reply on
+      // its way back is answering the entry that was sent, and it is recognised
+      // by being that same entry. Nothing may replace it underneath but ending
+      // it outright, which is a decision to stop listening for the reply.
+      if (!current || current.busy) return;
       // Typing again answers the refusal, so the refusal goes.
       applyEntry({ ...current, draft, rejection: undefined });
     },
@@ -398,7 +402,11 @@ export function App(): React.JSX.Element {
    */
   const fetchKey = useCallback(() => {
     const current = entryRef.current;
-    if (!current) return;
+    // Same rule as typing: the key on its way to the store is what the entry is
+    // for, and going to fetch another one is not a reason to disturb it. Both
+    // views disable the link while it is in flight, so this is the floor rather
+    // than the answer.
+    if (!current || current.busy) return;
     window.sidecar.openProviderApiKeys(current.providerId);
     applyEntry({ ...current, away: true });
     if (presentationRef.current === PANEL_PRESENTATION.SLOT) return;
