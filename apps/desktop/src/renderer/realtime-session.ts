@@ -12,6 +12,7 @@ import {
   type RealtimeStatus,
   sessionContextEvents,
   sessionContextText,
+  truncateResponseEvents,
 } from "@sidecar/core";
 
 const SDP_CONTENT_TYPE = "application/sdp";
@@ -44,6 +45,8 @@ export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbac
   requestMicrophoneStream?: () => Promise<MediaStream>;
   exchangeDescription?: (url: string, init: RequestInit) => Promise<Response>;
   connectTimeoutMs?: number;
+  /** Injectable so a test can hold the clock a truncate measures against. */
+  now?: () => number;
 }
 
 function errorMessage(error: unknown): string {
@@ -120,6 +123,13 @@ export class RealtimeVoiceSession {
    * an intention rather than a turn.
    */
   #pendingTurn = false;
+  /**
+   * The message Luke's current reply is being spoken into, and the moment it
+   * first became audible. Together they are what a truncate needs: which
+   * message to cut, and how much of it reached the room.
+   */
+  #responseItemId: string | undefined;
+  #audibleSince: number | undefined;
   #settleTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(options: RealtimeVoiceSessionOptions) {
@@ -399,6 +409,9 @@ export class RealtimeVoiceSession {
       // out, so the cut-off is immediate rather than eventual.
       this.#silenceLuke();
       this.#send(cancelResponseEvents());
+      // Then correct what Luke believes he said, or the next answer is free to
+      // refer back to a sentence that never reached the room.
+      this.#send(this.#truncateEvents());
       this.#generationDone = false;
       this.#remoteQuiet = false;
       this.#clearSettleTimer();
@@ -484,6 +497,8 @@ export class RealtimeVoiceSession {
     this.#generationDone = false;
     this.#remoteQuiet = false;
     this.#pendingTurn = false;
+    this.#responseItemId = undefined;
+    this.#audibleSince = undefined;
     this.#clearSettleTimer();
     this.#options.onLocalStream(undefined);
     this.#options.onRemoteStream(undefined);
@@ -499,6 +514,8 @@ export class RealtimeVoiceSession {
     // was handled before the request for this one.
     this.#generationDone = false;
     this.#remoteQuiet = false;
+    this.#responseItemId = undefined;
+    this.#audibleSince = undefined;
     this.#clearSettleTimer();
     this.#send(events);
     this.#setStatus(REALTIME_STATUS.RESPONDING);
@@ -528,6 +545,25 @@ export class RealtimeVoiceSession {
    */
   reportRemoteAudioActive(): void {
     this.#remoteQuiet = false;
+    // The first time this reply is heard is the clock a truncate measures
+    // against. Later edges are pauses within it, not new beginnings.
+    this.#audibleSince ??= this.#now();
+  }
+
+  /**
+   * What to trim the cut-off reply to, if there is anything to trim. Nothing
+   * heard means nothing to correct — a reply interrupted in the gap before its
+   * first word left no impression to undo.
+   */
+  #truncateEvents(): readonly Record<string, unknown>[] {
+    const itemId = this.#responseItemId;
+    const audibleSince = this.#audibleSince;
+    if (!itemId || audibleSince === undefined) return [];
+    return truncateResponseEvents({ itemId, audioEndMs: this.#now() - audibleSince });
+  }
+
+  #now(): number {
+    return this.#options.now?.() ?? performance.now();
   }
 
   #silenceLuke(): void {
@@ -583,6 +619,10 @@ export class RealtimeVoiceSession {
 
     if (event === null || typeof event !== "object") return;
     const type = (event as { type?: unknown }).type;
+    if (type === REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED) {
+      const item = (event as { item?: { id?: unknown } }).item;
+      if (typeof item?.id === "string") this.#responseItemId = item.id;
+    }
     if (type === REALTIME_SERVER_EVENT.RESPONSE_CREATED) {
       // The reply being asked for is under way, so anything arriving from here
       // belongs to it rather than to the one it replaced.

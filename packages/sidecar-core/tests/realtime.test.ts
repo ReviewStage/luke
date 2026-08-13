@@ -23,6 +23,7 @@ import {
   SESSION_STATUS,
   sessionContextEvents,
   sessionContextText,
+  truncateResponseEvents,
 } from "../src";
 
 const DECIDED_AT = 1_800_000_000_000;
@@ -129,6 +130,31 @@ test("a reply can be stopped by the developer taking the turn", () => {
     cancelResponseEvents().map((event) => event.type),
     [REALTIME_CLIENT_EVENT.RESPONSE_CANCEL, REALTIME_CLIENT_EVENT.OUTPUT_AUDIO_BUFFER_CLEAR],
   );
+});
+
+test("a cut-off reply is trimmed to what was heard of it", () => {
+  const events = truncateResponseEvents({ itemId: "item_abc", audioEndMs: 1240.7 });
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0]?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_TRUNCATE);
+  assert.equal(events[0]?.item_id, "item_abc");
+  assert.equal(events[0]?.content_index, 0);
+  assert.equal(events[0]?.audio_end_ms, 1240);
+});
+
+test("nothing heard is nothing to correct", () => {
+  // Cut off in the gap before the first word: the model has said nothing to the
+  // room, and asking to trim a reply to zero — or trimming a message that was
+  // never named — is a request the server refuses rather than a correction.
+  for (const input of [
+    { itemId: "item_abc", audioEndMs: 0 },
+    { itemId: "item_abc", audioEndMs: -50 },
+    { itemId: "item_abc", audioEndMs: Number.NaN },
+    { itemId: "", audioEndMs: 900 },
+    { itemId: "   ", audioEndMs: 900 },
+  ]) {
+    assert.deepEqual(truncateResponseEvents(input), []);
+  }
 });
 
 test("push-to-talk commits a turn and cancelling discards it", () => {

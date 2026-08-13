@@ -61,6 +61,7 @@ function harness(
     sdpDelayMs?: number;
     connectionDelayMs?: number;
     connectionError?: Error;
+    now?: () => number;
   } = {},
 ): Harness {
   const sent: Record<string, unknown>[] = [];
@@ -135,6 +136,7 @@ function harness(
     ...(options.connectTimeoutMs === undefined
       ? {}
       : { connectTimeoutMs: options.connectTimeoutMs }),
+    ...(options.now ? { now: options.now } : {}),
     onStatus: () => undefined,
     onLocalStream: () => undefined,
     onRemoteStream: () => undefined,
@@ -757,6 +759,96 @@ test("the tail of an interrupted reply is not heard as the answer to the next", 
 
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED });
   assert.equal(context.lukeAudible(), true);
+});
+
+test("an interrupted reply is trimmed to the part that was heard", async () => {
+  let clock = 1_000;
+  const context = harness({ now: () => clock });
+  await context.session.connect();
+  context.deliverRemoteTrack();
+  context.session.beginTurn();
+  context.session.endTurn(true);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
+    item: { id: "item_reply" },
+  });
+
+  // Half a second of silence before he starts, then two seconds of speech.
+  clock = 1_500;
+  context.session.reportRemoteAudioActive();
+  clock = 3_500;
+  const before = context.sent.length;
+
+  context.session.beginTurn();
+
+  const truncate = context.sent
+    .slice(before)
+    .find((event) => event.type === REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_TRUNCATE);
+  assert.ok(truncate, "the record is corrected, not just the sound stopped");
+  assert.equal(truncate?.item_id, "item_reply");
+  // Two seconds heard, not the two and a half since the reply was asked for:
+  // the gap before his first word was never in the room.
+  assert.equal(truncate?.audio_end_ms, 2_000);
+});
+
+test("a reply cut off before it was heard leaves nothing to correct", async () => {
+  let clock = 1_000;
+  const context = harness({ now: () => clock });
+  await context.session.connect();
+  context.deliverRemoteTrack();
+  context.session.beginTurn();
+  context.session.endTurn(true);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
+    item: { id: "item_reply" },
+  });
+  clock = 1_400;
+  const before = context.sent.length;
+
+  // Cut off during the gap before his first word. Nothing reached the room, so
+  // there is no impression to undo — and a truncate at zero is refused.
+  context.session.beginTurn();
+
+  assert.ok(
+    !context.sent
+      .slice(before)
+      .some((event) => event.type === REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_TRUNCATE),
+  );
+});
+
+test("each reply is measured from its own first word", async () => {
+  let clock = 1_000;
+  const context = harness({ now: () => clock });
+  await context.session.connect();
+  context.deliverRemoteTrack();
+
+  context.session.beginTurn();
+  context.session.endTurn(true);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED });
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED, item: { id: "first" } });
+  clock = 1_100;
+  context.session.reportRemoteAudioActive();
+  clock = 5_000;
+  context.session.beginTurn();
+
+  // A second reply, and the clock starts again with it.
+  context.session.endTurn(true);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED });
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED, item: { id: "second" } });
+  clock = 6_000;
+  context.session.reportRemoteAudioActive();
+  clock = 6_750;
+  const before = context.sent.length;
+
+  context.session.beginTurn();
+
+  const truncate = context.sent
+    .slice(before)
+    .find((event) => event.type === REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_TRUNCATE);
+  assert.equal(truncate?.item_id, "second");
+  assert.equal(truncate?.audio_end_ms, 750);
 });
 
 test("an interrupt asks the server to drop what it already sent", async () => {

@@ -50,12 +50,20 @@ export const REALTIME_CLIENT_EVENT = {
    * him producing more and does nothing about what is already on the way.
    */
   OUTPUT_AUDIO_BUFFER_CLEAR: "output_audio_buffer.clear",
+  /**
+   * Trims an assistant message to what was actually heard. Without it the model
+   * carries on believing it said the whole reply, so it can answer a follow-up
+   * by referring back to a sentence that was cut off before it was spoken.
+   */
+  CONVERSATION_ITEM_TRUNCATE: "conversation.item.truncate",
 } as const;
 
 export const REALTIME_SERVER_EVENT = {
   RESPONSE_CREATED: "response.created",
   /** The server confirming it dropped the audio it had queued for us. */
   OUTPUT_AUDIO_BUFFER_CLEARED: "output_audio_buffer.cleared",
+  /** Names the message a reply is being spoken into, which is what a truncate cuts. */
+  RESPONSE_OUTPUT_ITEM_ADDED: "response.output_item.added",
   RESPONSE_DONE: "response.done",
   ERROR: "error",
 } as const;
@@ -312,6 +320,36 @@ export function cancelResponseEvents(): readonly Record<string, unknown>[] {
   return [
     { type: REALTIME_CLIENT_EVENT.RESPONSE_CANCEL },
     { type: REALTIME_CLIENT_EVENT.OUTPUT_AUDIO_BUFFER_CLEAR },
+  ];
+}
+
+/**
+ * Builds the event that trims a cut-off reply to what was heard of it.
+ *
+ * Stopping the sound and correcting the record are two different things. The
+ * first is what the developer notices; without the second the model believes it
+ * said every word it generated, and will happily refer back to a sentence that
+ * never reached the room.
+ *
+ * `audioEndMs` is how long the reply was audible, which cannot exceed what was
+ * generated — the audio was heard because it had already been produced. That is
+ * what keeps this from being refused for trimming past the end.
+ */
+export function truncateResponseEvents(input: {
+  itemId: string;
+  audioEndMs: number;
+}): readonly Record<string, unknown>[] {
+  if (!trimmedText(input.itemId) || !Number.isFinite(input.audioEndMs) || input.audioEndMs <= 0) {
+    return [];
+  }
+  return [
+    {
+      type: REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_TRUNCATE,
+      item_id: input.itemId,
+      // One audio part per assistant message, so the first is the reply.
+      content_index: 0,
+      audio_end_ms: Math.floor(input.audioEndMs),
+    },
   ];
 }
 
