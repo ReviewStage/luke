@@ -13,6 +13,7 @@ import {
   notarySubmitArguments,
   releaseArtifactDirectory,
   releaseDmgFileName,
+  releaseSignatureMatchesIdentity,
   resolveReleaseSigning,
   stapleArguments,
 } from "../apps/desktop/scripts/release-config.mjs";
@@ -42,6 +43,40 @@ test("release signing requires a Developer ID identity", () => {
     {
       identity: "Developer ID Application: Example",
     },
+  );
+});
+
+test("release signing accepts readable identities and SHA-1 certificate hashes", () => {
+  assert.equal(
+    releaseSignatureMatchesIdentity({
+      identity: "Developer ID Application: Example (TEAMID)",
+      authority: "Developer ID Application: Example (TEAMID)",
+      certificateSha1: "unused",
+    }),
+    true,
+  );
+  assert.equal(
+    releaseSignatureMatchesIdentity({
+      identity: "3E4A41C54E100FFC57BC2C6AA19409467994D4B5",
+      authority: "Developer ID Application: Example (TEAMID)",
+      certificateSha1: "3e4a41c54e100ffc57bc2c6aa19409467994d4b5",
+    }),
+    true,
+  );
+  assert.equal(
+    releaseSignatureMatchesIdentity({
+      identity: "3E4A41C54E100FFC57BC2C6AA19409467994D4B5",
+      authority: "Developer ID Application: Example (TEAMID)",
+      certificateSha1: "0000000000000000000000000000000000000000",
+    }),
+    false,
+  );
+  assert.equal(
+    releaseSignatureMatchesIdentity({
+      identity: "3E4A41C54E100FFC57BC2C6AA19409467994D4B5",
+      authority: "Developer ID Application: Example (TEAMID)",
+    }),
+    false,
   );
 });
 

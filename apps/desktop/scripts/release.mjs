@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -13,6 +14,7 @@ import {
   notarySubmitArguments,
   releaseArtifactDirectory,
   releaseDmgFileName,
+  releaseSignatureMatchesIdentity,
   resolveReleaseSigning,
   stapleArguments,
 } from "./release-config.mjs";
@@ -45,22 +47,38 @@ execFileSync("codesign", ["--verify", "--deep", "--strict", appPath], { stdio: "
 
 const signatureCaptureDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "luke-signature-"));
 let signatureOutput;
+let certificateSha1;
 try {
   const signatureOutputPath = path.join(signatureCaptureDirectory, "codesign.txt");
+  const certificatePrefix = path.join(signatureCaptureDirectory, "certificate");
   const signatureOutputDescriptor = fs.openSync(signatureOutputPath, "w");
   try {
-    execFileSync("codesign", ["--display", "--verbose=2", appPath], {
-      stdio: ["ignore", "inherit", signatureOutputDescriptor],
-    });
+    execFileSync(
+      "codesign",
+      ["--display", "--verbose=2", "--extract-certificates", certificatePrefix, appPath],
+      {
+        stdio: ["ignore", "inherit", signatureOutputDescriptor],
+      },
+    );
   } finally {
     fs.closeSync(signatureOutputDescriptor);
   }
   signatureOutput = fs.readFileSync(signatureOutputPath, "utf8");
+  certificateSha1 = createHash("sha1")
+    .update(fs.readFileSync(`${certificatePrefix}0`))
+    .digest("hex");
 } finally {
   fs.rmSync(signatureCaptureDirectory, { recursive: true, force: true });
 }
 process.stdout.write(signatureOutput);
-if (!signatureOutput.includes(`Authority=${signing.identity}`)) {
+const authority = signatureOutput.match(/^Authority=(.+)$/m)?.[1];
+if (
+  !releaseSignatureMatchesIdentity({
+    identity: signing.identity,
+    authority,
+    certificateSha1,
+  })
+) {
   throw new Error(`Packaged app is not signed by ${signing.identity}. Run pnpm package first.`);
 }
 

@@ -24,6 +24,16 @@ export function resolveReleaseSigning(env) {
   return { identity: signing.identity };
 }
 
+export function releaseSignatureMatchesIdentity({ identity, authority, certificateSha1 }) {
+  if (/^[a-f\d]{40}$/i.test(identity)) {
+    return (
+      typeof certificateSha1 === "string" &&
+      certificateSha1.toLowerCase() === identity.toLowerCase()
+    );
+  }
+  return authority === identity;
+}
+
 export function hdiutilCreateArguments({ stagingDirectory, dmgPath }) {
   return [
     "create",
