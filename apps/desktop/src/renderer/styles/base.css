@@ -1016,29 +1016,45 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 /* Content arrives behind the surface, never in front of it, and it arrives on
    the same spring the surface is riding. Each row starts further up than the
    one above it, so the stack is compressed and the gaps spring open — the
-   space between sessions is the thing that moves. */
+   space between sessions is the thing that moves.
+ *
+ * The stagger is written into the shorthand beside the property it delays,
+ * rather than as a `transition-delay` list beside the rule that sets the state.
+ * Some of this stack also answers the pointer, and a single `transition-delay`
+ * applies to every property in the list: the row's turn to appear would become
+ * the wait before its hover, for as long as the panel stayed open. A list
+ * positioned against the property list can express that, but only by matching
+ * two rules by index — so inserting a property silently delays the wrong one.
+ * Here each delay travels with the property it belongs to, and an element that
+ * declares its own transition carries the arrival pair unchanged.
+ *
+ * `--row-delay` is what makes it directional: zero here, so leaving is
+ * immediate, and the stagger below, so arriving fans out. A transition reads
+ * its timing from the state being entered, which is what keeps the two apart. */
 .session-row,
 .settings-section,
 .quit-button,
 .empty-state,
 .panel-header {
+  --row-delay: 0s;
+
   opacity: 0;
   transform: translateY(
     calc((min(var(--row-index, 0), var(--row-fan-limit)) + 1) * var(--row-fan) * -1)
   );
   transition:
-    opacity var(--duration-exit) var(--motion-exit),
-    transform var(--duration-shape) var(--spring);
+    opacity var(--duration-exit) var(--motion-exit) var(--row-delay),
+    transform var(--duration-shape) var(--spring) var(--row-delay);
 }
 
-/* The row is the one member of that group that is also a control, so its
-   transition carries the pointer's answer as well as its arrival. A transition
-   list replaces rather than extends, so the whole of it is restated here rather
-   than in the session stylesheet, where the two would drift apart unseen. */
+/* The row is one of the two members of that stack that is also a control, so
+   its transition carries the pointer's answer as well as its arrival. The
+   answer takes no delay, which is the whole reason the stagger is declared per
+   property above. */
 .session-row {
   transition:
-    opacity var(--duration-exit) var(--motion-exit),
-    transform var(--duration-shape) var(--spring),
+    opacity var(--duration-exit) var(--motion-exit) var(--row-delay),
+    transform var(--duration-shape) var(--spring) var(--row-delay),
     border-color var(--duration-hover) ease,
     background-color var(--duration-hover) ease;
 }
@@ -1056,14 +1072,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 
   opacity: 1;
   transform: none;
-  transition-delay: var(--row-delay);
-}
-
-/* The one element in the stack that also answers the pointer. A delay list
-   matched to its property list keeps the stagger on the arrival, where it
-   belongs, instead of making the hover wait for the row's turn to appear. */
-.app-stage[data-presentation="panel"] .quit-button {
-  transition-delay: var(--row-delay), var(--row-delay), 0s, 0s;
 }
 
 /* Settings --------------------------------------------------------------- */
@@ -1126,11 +1134,11 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   color: var(--text-secondary);
   font-size: 11.5px;
   font-weight: 620;
-  /* Arrival first, then feedback: this order is what the panel's delay list
-     above is matched against, so the two are edited together. */
+  /* Arrival on the stack's stagger, feedback with none. The order no longer
+     matters to anything outside this declaration. */
   transition:
-    opacity var(--duration-exit) var(--motion-exit),
-    transform var(--duration-shape) var(--spring),
+    opacity var(--duration-exit) var(--motion-exit) var(--row-delay),
+    transform var(--duration-shape) var(--spring) var(--row-delay),
     background-color var(--duration-hover) ease,
     color var(--duration-hover) ease;
 }
