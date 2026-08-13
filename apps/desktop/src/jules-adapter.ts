@@ -25,6 +25,8 @@ import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "./shared/credentia
 // provider Luke observes with it can never name different things.
 const JULES_PROVIDER_ID = CREDENTIAL_PROVIDER_ID.JULES;
 const JULES_PROVIDER_NAME = CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.JULES].displayName;
+/** A session Jules failed reports no reason of its own, so the state is the message. */
+const JULES_SESSION_FAILED_MESSAGE = "The session failed";
 
 const JULES_ENVIRONMENT = {
   API_URL: "JULES_API_URL",
@@ -56,6 +58,7 @@ const JULES_FIELD = {
   STARTING_BRANCH: "startingBranch",
   STATE: "state",
   UPDATE_TIME: "updateTime",
+  URL: "url",
 } as const;
 
 const JULES_STATE = {
@@ -76,9 +79,9 @@ type JulesState = (typeof JULES_STATE)[keyof typeof JULES_STATE];
  * Jules reports one state per session, covering both what the agent is doing
  * and what it is holding for. Queueing and planning are work the user cannot
  * act on yet; the two awaiting states and a pause are the session holding for
- * the user. A failed session is left unknown rather than reported as finished
- * work, the way Cursor's `ERROR` and Devin's `error` are, and an unspecified
- * state says nothing at all.
+ * the user. A failed session stopped on something it cannot get past on its
+ * own, which is what Cursor's `ERROR` and Devin's `error` report too, and an
+ * unspecified state says nothing at all.
  */
 const SESSION_STATUS_BY_JULES_STATE: Readonly<Record<JulesState, SessionStatus>> = {
   [JULES_STATE.QUEUED]: SESSION_STATUS.WORKING,
@@ -88,7 +91,7 @@ const SESSION_STATUS_BY_JULES_STATE: Readonly<Record<JulesState, SessionStatus>>
   [JULES_STATE.AWAITING_USER_FEEDBACK]: SESSION_STATUS.WAITING,
   [JULES_STATE.PAUSED]: SESSION_STATUS.WAITING,
   [JULES_STATE.COMPLETED]: SESSION_STATUS.COMPLETE,
-  [JULES_STATE.FAILED]: SESSION_STATUS.UNKNOWN,
+  [JULES_STATE.FAILED]: SESSION_STATUS.ERROR,
   [JULES_STATE.STATE_UNSPECIFIED]: SESSION_STATUS.UNKNOWN,
 };
 
@@ -114,6 +117,7 @@ interface JulesSession {
   state: JulesState | undefined;
   observedAt: number;
   branch?: string;
+  link?: string;
 }
 
 function sessionFromRecord(record: Record<string, unknown>): JulesSession | undefined {
@@ -132,6 +136,7 @@ function sessionFromRecord(record: Record<string, unknown>): JulesSession | unde
         JULES_ADAPTER_DEFAULTS.MAXIMUM_BRANCH_LABEL_LENGTH,
       )
     : undefined;
+  const link = textFromRecord(record, JULES_FIELD.URL);
 
   return {
     id,
@@ -142,6 +147,7 @@ function sessionFromRecord(record: Record<string, unknown>): JulesSession | unde
     repositoryLabel: repositoryLabel(textFromRecord(context, JULES_FIELD.SOURCE), undefined),
     state: knownValue(JULES_STATE, textFromRecord(record, JULES_FIELD.STATE)),
     ...(branch ? { branch } : {}),
+    ...(link ? { link } : {}),
   };
 }
 
@@ -198,10 +204,19 @@ export class JulesSessionAdapter extends CloudSessionAdapter {
     const status = this.#statusFor(session, now);
     return {
       providerSessionId: session.id,
-      title: `${JULES_PROVIDER_NAME}: ${session.repositoryLabel}`,
+      // The provider is already on the row as its mark and in the context line,
+      // so the title carries only what tells one Jules session from another.
+      title: session.repositoryLabel,
       status,
       observedAt: session.observedAt,
-      summary: summaryFromStatus(status, session.branch),
+      detail: {
+        repository: session.repositoryLabel,
+        // The starting branch is chosen by whoever opened the session, unlike
+        // the branch Jules names for its own patch from the prompt.
+        ...(session.branch ? { branch: session.branch } : {}),
+        ...(status === SESSION_STATUS.ERROR ? { error: JULES_SESSION_FAILED_MESSAGE } : {}),
+        ...(session.link ? { link: session.link } : {}),
+      },
     };
   }
 
@@ -218,11 +233,4 @@ export class JulesSessionAdapter extends CloudSessionAdapter {
       ? this.statusWhileRecent(status, session.observedAt, now)
       : status;
   }
-}
-
-function summaryFromStatus(status: SessionStatus, branch: string | undefined): string {
-  // The starting branch is chosen by whoever opened the session, unlike the
-  // branch Jules generates for its own patch, which is named from the prompt.
-  const branchDetail = branch ? ` from ${branch}` : "";
-  return `${JULES_PROVIDER_NAME} ${status}${branchDetail}; cloud session metadata is observed read-only and transcript content is not retained.`;
 }

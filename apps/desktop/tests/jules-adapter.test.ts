@@ -168,11 +168,17 @@ test("observes a session in progress without exposing prompt-derived text", asyn
   assert.deepEqual(JULES_PROVIDER, { id: "jules", displayName: "Jules" });
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "session-in-progress");
-  assert.equal(observations[0]?.title, "Jules: luke");
+  assert.equal(observations[0]?.title, "luke");
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
   assert.equal(observations[0]?.observedAt, TEST_TIME - 30_000);
   assert.equal(observations[0]?.controls, undefined);
-  assert.match(observations[0]?.summary ?? "", /from main/);
+  // The row is worded by the surface from these fields, never by the adapter.
+  assert.equal(observations[0]?.summary, undefined);
+  assert.deepEqual(observations[0]?.detail, {
+    repository: "luke",
+    branch: "main",
+    link: "https://jules.google.com/task/session-in-progress",
+  });
   assert.equal(JSON.stringify(observations).includes(SECRET_PROMPT_TEXT), false);
 });
 
@@ -232,7 +238,7 @@ test("maps every state Jules reports onto a state Luke can show", async () => {
       ["session-awaiting-feedback", SESSION_STATUS.WAITING],
       ["session-paused", SESSION_STATUS.WAITING],
       ["session-completed", SESSION_STATUS.COMPLETE],
-      ["session-failed", SESSION_STATUS.UNKNOWN],
+      ["session-failed", SESSION_STATUS.ERROR],
       ["session-unspecified", SESSION_STATUS.UNKNOWN],
       ["session-later-state", SESSION_STATUS.UNKNOWN],
     ],
@@ -321,9 +327,26 @@ test("labels a session by its repository, and by neither its title nor nothing",
 
   const observations = await adapterFor(api.fetch).observe();
 
-  assert.equal(observations[0]?.title, "Jules: sidecar");
-  assert.equal(observations[1]?.title, "Jules: workspace");
+  assert.equal(observations[0]?.title, "sidecar");
+  assert.equal(observations[0]?.detail?.repository, "sidecar");
+  assert.equal(observations[1]?.title, "workspace");
   assert.equal(JSON.stringify(observations).includes(SECRET_PROMPT_TEXT), false);
+});
+
+test("reports why a failed session stopped rather than leaving it idle", async () => {
+  const api = fakeJulesApi([
+    {
+      id: "session-failed",
+      state: TEST_STATE.FAILED,
+      createTime: TEST_TIME - 1_000,
+      updateTime: TEST_TIME - 1_000,
+    },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.equal(observations[0]?.status, SESSION_STATUS.ERROR);
+  assert.equal(observations[0]?.detail?.error, "The session failed");
 });
 
 test("drops a session it cannot place in time without losing the rest of the pass", async () => {
