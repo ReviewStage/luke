@@ -26,6 +26,9 @@
   --accent-strong: #72dcff;
   --attention: #ff963f;
   --complete: #68d39a;
+  /* `unknown` is the product's idle accent: a session Luke can still see but
+     has no current activity for. Matches `--state-idle` in the renderer. */
+  --idle: rgba(255, 255, 255, 0.44);
 
   --text: rgba(255, 255, 255, 0.92);
   --text-secondary: rgba(255, 255, 255, 0.56);
@@ -49,11 +52,13 @@
 
   /* The mock renders at true product geometry and scales as a unit. Stepped
      rather than fluid so the interior never lands on a half pixel. The height
-     is the 520px expanded panel plus room for the display edge below it, and
+     is the 610px expanded panel plus room for the display edge below it, and
      both the mock and its wrapper derive from this one value so the painted
-     art and the space reserved for it cannot drift apart. */
+     art and the space reserved for it cannot drift apart. The panel is sized
+     to the five-session smoke fixture at the product's own row height; the
+     list does not shrink, so anything shorter clips the last row. */
   --mock-scale: 1;
-  --mock-height: 560px;
+  --mock-height: 630px;
 
   font-family: var(--font-sans);
   font-synthesis: none;
@@ -110,9 +115,20 @@ button {
 }
 
 .wordmark {
+  display: inline-flex;
+  align-items: center;
   font-size: 15px;
   font-weight: 700;
+  gap: 7px;
   letter-spacing: -0.01em;
+}
+
+/* Wider than tall, and the default `xMidYMid meet` letterboxes it inside the
+   box rather than stretching the face. */
+.luke-mark {
+  display: block;
+  width: 20px;
+  height: 18px;
 }
 
 /* Icon-only, so the padding buys a comfortable hit target and a focus ring
@@ -333,7 +349,7 @@ button {
   top: 0;
   left: 50%;
   width: 620px;
-  height: 520px;
+  height: 610px;
   padding: 0 10px 18px;
   opacity: 0;
   transform: translateX(-50%) translateY(-6px) scale(0.965);
@@ -493,6 +509,11 @@ button {
   box-shadow: 0 0 0 10px rgba(104, 211, 154, 0.07);
 }
 
+/* No halo: an idle session is the one state that should not draw the eye. */
+.mock-status-mark.unknown {
+  background: var(--idle);
+}
+
 .mock-session-copy {
   display: flex;
   min-width: 0;
@@ -533,6 +554,10 @@ button {
 
 .mock-session-status.complete {
   color: var(--complete);
+}
+
+.mock-session-status.unknown {
+  color: var(--idle);
 }
 
 .mock-footer {

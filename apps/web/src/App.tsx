@@ -23,12 +23,40 @@ function GitHubMark(): React.JSX.Element {
   );
 }
 
+/**
+ * Luke's face, traced from `design/brand/luke-mark-{dark,light}.svg`. Those two
+ * files differ only in a hard-coded stroke color, so drawing in `currentColor`
+ * collapses them into one inline mark and keeps the page free of fetched
+ * assets. Decorative: the wordmark beside it already says "Luke".
+ */
+function LukeMark(): React.JSX.Element {
+  return (
+    <svg className="luke-mark" viewBox="53.85 62.67 134.29 122.37" fill="none" aria-hidden="true">
+      <g transform="rotate(-8 120 124)">
+        <path
+          d="M 104 84 V 150 Q 104 164 118 164 Q 140 164 168 142"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="16"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <circle cx="78" cy="92" r="12" fill="currentColor" />
+        <circle cx="162" cy="92" r="12" fill="currentColor" />
+      </g>
+    </svg>
+  );
+}
+
 export function App(): React.JSX.Element {
   return (
     <>
       <header className="shell">
         <nav className="site-nav">
-          <span className="wordmark">Luke</span>
+          <span className="wordmark">
+            <LukeMark />
+            Luke
+          </span>
           <a className="nav-link" href={REPOSITORY_URL} aria-label="Luke on GitHub">
             <GitHubMark />
           </a>
@@ -39,8 +67,8 @@ export function App(): React.JSX.Element {
         <section className="hero">
           <h1>Your AI Engineering Manager.</h1>
           <p className="hero-subhead">
-            Luke watches your Claude Code, Codex, and Conductor sessions and notifies you when they
-            need your attention.
+            Luke watches your Claude Code, Codex, Conductor, Cursor, Devin, and Jules sessions and
+            notifies you when they need your attention.
           </p>
           <div className="cta-row">
             <a className="cta-primary" href={REPOSITORY_URL}>

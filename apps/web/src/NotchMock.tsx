@@ -12,9 +12,17 @@ const MOCK_SESSION_STATE = {
   WORKING: "working",
   ATTENTION: "attention",
   COMPLETE: "complete",
+  UNKNOWN: "unknown",
 } as const;
 
 type MockSessionState = (typeof MOCK_SESSION_STATE)[keyof typeof MOCK_SESSION_STATE];
+
+const MOCK_LOCATION = {
+  LOCAL: "local",
+  CLOUD: "cloud",
+} as const;
+
+type MockLocation = (typeof MOCK_LOCATION)[keyof typeof MOCK_LOCATION];
 
 const MOCK_MODE = {
   COMPACT: "compact",
@@ -29,6 +37,7 @@ interface MockSession {
   provider: string;
   detail: string;
   state: MockSessionState;
+  location: MockLocation;
   label: string;
 }
 
@@ -43,6 +52,7 @@ const MOCK_SESSIONS: readonly MockSession[] = [
     provider: "Codex",
     detail: "Testing Electron window semantics",
     state: MOCK_SESSION_STATE.WORKING,
+    location: MOCK_LOCATION.LOCAL,
     label: "Working",
   },
   {
@@ -51,6 +61,7 @@ const MOCK_SESSIONS: readonly MockSession[] = [
     provider: "Claude Code",
     detail: "One architecture decision is ready",
     state: MOCK_SESSION_STATE.ATTENTION,
+    location: MOCK_LOCATION.LOCAL,
     label: "Needs attention",
   },
   {
@@ -59,7 +70,26 @@ const MOCK_SESSIONS: readonly MockSession[] = [
     provider: "Conductor",
     detail: "Cloud session metadata only · no live credentials",
     state: MOCK_SESSION_STATE.COMPLETE,
+    location: MOCK_LOCATION.CLOUD,
     label: "Complete",
+  },
+  {
+    id: "cursor-agent",
+    title: "Follow a cloud agent",
+    provider: "Cursor",
+    detail: "Opened a pull request against sidecar",
+    state: MOCK_SESSION_STATE.WORKING,
+    location: MOCK_LOCATION.CLOUD,
+    label: "Working",
+  },
+  {
+    id: "devin-session",
+    title: "Watch a cloud session",
+    provider: "Devin",
+    detail: "Suspended before it opened a pull request",
+    state: MOCK_SESSION_STATE.UNKNOWN,
+    location: MOCK_LOCATION.CLOUD,
+    label: "Unknown",
   },
 ];
 
@@ -75,7 +105,7 @@ const MOCK_LABEL = `Luke's notch capsule expanding into its session panel, listi
   (session) => `${session.title} on ${session.provider}, ${session.label.toLowerCase()}`,
 ).join("; ")}.`;
 
-/* ── Reserved decision: how busy should the idle hero feel? ───────────────────
+/* ── How busy the idle hero feels ─────────────────────────────────────────────
  *
  * The mock drives itself until a pointer enters it. Two knobs decide whether
  * that reads as "alive" or as "a GIF that will not sit still":
@@ -84,12 +114,11 @@ const MOCK_LABEL = `Luke's notch capsule expanding into its session panel, listi
  *   SETTLE_AFTER  how many times the panel opens before the mock stops cycling
  *                 and simply stays open. `null` cycles forever.
  *
- * TODO(charles): pick these two values. The trade-off: cycling forever keeps
- * demonstrating the product's one gesture to a reader who arrives late or
- * scrolls back up, but it also moves in the corner of the eye for as long as
- * anyone is reading the copy below it. Settling shows the gesture a couple of
- * times, then leaves the most informative state — the full session list — on
- * screen and gets out of the way.
+ * Settling after a single open won: cycling forever keeps demonstrating the
+ * product's one gesture to a reader who arrives late, but it also moves in the
+ * corner of the eye for as long as anyone is reading the copy below it. One
+ * open shows the gesture, then leaves the most informative state — the full
+ * session list — on screen and gets out of the way.
  *
  * `SETTLE_AFTER` is typed rather than `as const` so that `null` stays a
  * reachable option; the AGENTS.md `as const` convention covers fixed value
@@ -171,6 +200,11 @@ export function NotchMock(): React.JSX.Element {
         aria-label={MOCK_LABEL}
         onPointerEnter={() => {
           setHovering(true);
+          // A hover opens the panel deliberately, so it counts toward settling
+          // exactly as an auto-open does. Without this, hovering inside the
+          // first phase leaves `opens` at zero and the mock collapses once more
+          // after the pointer leaves — the opposite of what SETTLE_AFTER is for.
+          if (mode !== MOCK_MODE.EXPANDED) setOpens((count) => count + 1);
           setMode(MOCK_MODE.EXPANDED);
         }}
         onPointerLeave={() => {
@@ -222,7 +256,9 @@ export function NotchMock(): React.JSX.Element {
                     <span className="mock-session-copy">
                       <strong>{session.title}</strong>
                       <small>
-                        {session.provider} · {session.detail}
+                        {session.provider}
+                        {session.location === MOCK_LOCATION.CLOUD ? " · Cloud" : ""} ·{" "}
+                        {session.detail}
                       </small>
                     </span>
                     <span className={`mock-session-status ${session.state}`}>{session.label}</span>
