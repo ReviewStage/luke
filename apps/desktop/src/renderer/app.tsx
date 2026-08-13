@@ -463,6 +463,13 @@ export function App(): React.JSX.Element {
   if (list.filter !== sessionView.filter) {
     setSessionView({ ...sessionView, filter: list.filter });
   }
+  // The sheet exists only while there is something for it to decide, and its
+  // being open has to go when its button does — by the same rule the emptied
+  // filter follows. Left set behind a button nobody can see, Escape would spend
+  // itself closing a sheet that is not drawn instead of closing the panel, and
+  // the next session to arrive would open it again with nothing pressed.
+  const offerOptions = tab === PANEL_TAB.SESSIONS && list.total > 1;
+  if (optionsOpen && !offerOptions) setOptionsOpen(false);
   const fixtureSpeaking = bootstrap.profile === "speaking";
   const hasAudioSignal = fixtureSpeaking || analyser !== undefined;
   const panelOpen = presentation === PANEL_PRESENTATION.PANEL;
@@ -488,6 +495,7 @@ export function App(): React.JSX.Element {
             list={list}
             view={sessionView}
             onViewChange={setSessionView}
+            offerOptions={offerOptions}
             optionsOpen={optionsOpen}
             onOptionsToggle={() => setOptionsOpen((open) => !open)}
             tab={tab}

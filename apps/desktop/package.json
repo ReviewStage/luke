@@ -1,6 +1,6 @@
 {
   "name": "@luke/desktop",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Luke desktop application",
   "main": "dist/main.js",

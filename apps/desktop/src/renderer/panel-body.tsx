@@ -15,6 +15,12 @@ export interface PanelBodyProps {
   list: ArrangedSessions;
   view: SessionView;
   onViewChange: (view: SessionView) => void;
+  /**
+   * Whether there is anything for the sheet to decide. Decided by the panel
+   * rather than here, because whoever offers the button also has to be the one
+   * that closes the sheet when it stops offering it.
+   */
+  offerOptions: boolean;
   optionsOpen: boolean;
   onOptionsToggle: () => void;
   tab: PanelTab;
@@ -27,16 +33,13 @@ export function PanelBody({
   list,
   view,
   onViewChange,
+  offerOptions,
   optionsOpen,
   onOptionsToggle,
   tab,
   onTabChange,
   settings,
 }: PanelBodyProps): React.JSX.Element {
-  // One session is already both the first and the last, so there is nothing a
-  // filter or an order could change about it.
-  const offerOptions = tab === PANEL_TAB.SESSIONS && list.total > 1;
-
   return (
     <div className="body">
       {/* The tab bar says what you are looking at; the options button says how

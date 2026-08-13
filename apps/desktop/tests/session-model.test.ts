@@ -126,12 +126,15 @@ test("the tally counts per state and per provider", () => {
     },
   );
   // Providers follow the order their most urgent session takes, so Cursor's
-  // working agent is listed ahead of Conductor's completed session.
+  // working agent is listed ahead of Conductor's completed session and Devin's
+  // suspended one. Five is one more than the wings hold, so the fixture also
+  // proves the remainder is counted rather than dropped.
   assert.deepEqual(tally.providers, [
-    { providerId: PROVIDER_ID.CLAUDE_CODE, provider: "Claude Code", total: 2, attention: 1 },
+    { providerId: PROVIDER_ID.CLAUDE_CODE, provider: "Claude Code", total: 1, attention: 1 },
     { providerId: PROVIDER_ID.CODEX, provider: "Codex", total: 1, attention: 0 },
     { providerId: PROVIDER_ID.CURSOR, provider: "Cursor", total: 1, attention: 0 },
     { providerId: PROVIDER_ID.CONDUCTOR, provider: "Conductor", total: 1, attention: 0 },
+    { providerId: PROVIDER_ID.DEVIN, provider: "Devin", total: 1, attention: 0 },
   ]);
 });
 
@@ -167,12 +170,12 @@ test("the filters offered run from everything to one agent, counted", () => {
 
   assert.deepEqual(list.options, [
     { filter: SESSION_FILTER.ALL, label: "All", count: 5 },
-    { filter: SESSION_FILTER.LOCAL, label: "Local", count: 3 },
-    { filter: SESSION_FILTER.CLOUD, label: "Cloud", count: 2 },
+    { filter: SESSION_FILTER.LOCAL, label: "Local", count: 2 },
+    { filter: SESSION_FILTER.CLOUD, label: "Cloud", count: 3 },
     {
       filter: PROVIDER_ID.CLAUDE_CODE,
       label: "Claude Code",
-      count: 2,
+      count: 1,
       providerId: PROVIDER_ID.CLAUDE_CODE,
     },
     { filter: PROVIDER_ID.CODEX, label: "Codex", count: 1, providerId: PROVIDER_ID.CODEX },
@@ -183,6 +186,7 @@ test("the filters offered run from everything to one agent, counted", () => {
       providerId: PROVIDER_ID.CONDUCTOR,
     },
     { filter: PROVIDER_ID.CURSOR, label: "Cursor", count: 1, providerId: PROVIDER_ID.CURSOR },
+    { filter: PROVIDER_ID.DEVIN, label: "Devin", count: 1, providerId: PROVIDER_ID.DEVIN },
   ]);
 });
 
@@ -222,11 +226,11 @@ test("a filter narrows the list without changing what is tracked", () => {
 
   assert.deepEqual(
     cloud.sessions.map((session) => session.id),
-    ["cursor-agent", "conductor-workspace"],
+    ["cursor-agent", "conductor-workspace", "devin-session"],
   );
   assert.deepEqual(
     agent.sessions.map((session) => session.id),
-    ["claude-review", "claude-observe"],
+    ["claude-review"],
   );
   assert.equal(cloud.filter, SESSION_FILTER.CLOUD);
   assert.equal(cloud.total, 5);
@@ -292,11 +296,11 @@ test("the two orderings answer different questions about the same sessions", () 
 
   assert.deepEqual(
     urgent.sessions.map((session) => session.id),
-    ["claude-review", "codex-bootstrap", "cursor-agent", "conductor-workspace", "claude-observe"],
+    ["claude-review", "codex-bootstrap", "cursor-agent", "conductor-workspace", "devin-session"],
   );
   assert.deepEqual(
     recent.sessions.map((session) => session.id),
-    ["conductor-workspace", "codex-bootstrap", "claude-review", "cursor-agent", "claude-observe"],
+    ["conductor-workspace", "codex-bootstrap", "claude-review", "cursor-agent", "devin-session"],
   );
 });
 
@@ -308,7 +312,7 @@ test("filtering leaves the chosen ordering in force", () => {
 
   assert.deepEqual(
     recentCloud.sessions.map((session) => session.id),
-    ["conductor-workspace", "cursor-agent"],
+    ["conductor-workspace", "cursor-agent", "devin-session"],
   );
 });
 

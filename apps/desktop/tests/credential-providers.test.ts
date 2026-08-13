@@ -10,6 +10,7 @@ import {
 test("accepts only a provider the build ships", () => {
   assert.equal(isCredentialProviderId(CREDENTIAL_PROVIDER_ID.CONDUCTOR), true);
   assert.equal(isCredentialProviderId(CREDENTIAL_PROVIDER_ID.CURSOR), true);
+  assert.equal(isCredentialProviderId(CREDENTIAL_PROVIDER_ID.DEVIN), true);
   assert.equal(isCredentialProviderId("unknown-cloud"), false);
   // An inherited property name is not a provider, and neither is a value that
   // is not a string at all.
@@ -27,5 +28,34 @@ test("describes every provider it lists", () => {
     assert.ok(provider.hint.length > 0);
     // The environment fallback every provider offers is `<PROVIDER>_API_KEY`.
     assert.ok(provider.environmentVariables[0]?.endsWith("_API_KEY"), provider.id);
+    // A declared format has to say what it wants as well as refuse, because
+    // the reason is the only thing the user has to act on.
+    if (!provider.keyFormat) continue;
+    assert.ok(provider.keyFormat.prefix.length > 0, provider.id);
+    assert.ok(provider.keyFormat.label.length > 0, provider.id);
+    assert.ok(provider.keyFormat.rejection.includes(provider.keyFormat.prefix), provider.id);
+  }
+});
+
+test("takes only the Devin credentials its API version issues", () => {
+  const devin = CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.DEVIN];
+
+  assert.equal(devin.displayName, "Devin");
+  assert.deepEqual(devin.environmentVariables, ["DEVIN_API_KEY"]);
+  // Luke reads Devin's v3 API, whose credentials all carry one prefix. The
+  // deprecated v1 and v2 keys carry another and would only ever be refused.
+  assert.equal(devin.keyFormat?.prefix, "cog_");
+  // Devin calls this a personal access token, and the settings field has to
+  // call it that too: its Settings · API keys page issues the `apk_` keys Luke
+  // refuses, so asking for an "API key" would send the user to the wrong one.
+  assert.equal(devin.keyFormat?.label, "Personal access token");
+  assert.match(devin.apiKeysUrl, /devin-api\?tab=pats$/);
+  for (const legacy of ["apk_service-key", "apk_user_personal-key"]) {
+    assert.equal(legacy.startsWith(devin.keyFormat?.prefix ?? ""), false, legacy);
+  }
+  // Conductor and Cursor each publish one kind of key, so neither has a format
+  // worth holding a credential to.
+  for (const providerId of [CREDENTIAL_PROVIDER_ID.CONDUCTOR, CREDENTIAL_PROVIDER_ID.CURSOR]) {
+    assert.equal(CREDENTIAL_PROVIDERS[providerId].keyFormat, undefined, providerId);
   }
 });
