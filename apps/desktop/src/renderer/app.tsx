@@ -30,7 +30,7 @@ import {
   SETTLE_DELAY_MS,
 } from "./panel-state";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
-import { RealtimeVoiceSession } from "./realtime-session";
+import { quietIsLukesOwn, RealtimeVoiceSession } from "./realtime-session";
 import {
   arrangeSessions,
   DEFAULT_SESSION_VIEW,
@@ -318,7 +318,9 @@ export function App(): React.JSX.Element {
     quietTimer.current = window.setTimeout(() => {
       quietTimer.current = undefined;
       // Only Luke's own silence ends Luke's turn.
-      if (voiceStatusRef.current !== REALTIME_STATUS.RESPONDING || !heardLuke.current) return;
+      if (!quietIsLukesOwn({ status: voiceStatusRef.current, heardLuke: heardLuke.current })) {
+        return;
+      }
       voiceSession.current?.reportRemoteAudioIdle();
     }, REMOTE_QUIET_MS);
   }, []);

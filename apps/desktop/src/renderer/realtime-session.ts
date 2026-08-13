@@ -56,6 +56,23 @@ function positiveInteger(value: number | undefined, fallback: number): number {
 }
 
 /**
+ * Whether a quiet stretch is Luke's to answer for.
+ *
+ * One meter draws both halves of the conversation, so it goes quiet twice for
+ * reasons that have nothing to do with Luke: while it lets go of the
+ * microphone as a turn is committed, and again in the gap before the first
+ * word comes back. Ending a reply on either takes his waveform down seconds
+ * after it appeared, while he is still speaking.
+ *
+ * So silence only counts once the reply is his and something has been heard of
+ * it. Nothing here decides when a reply is over — that is the generation being
+ * finished as well — only whose silence is being read.
+ */
+export function quietIsLukesOwn(input: { status: RealtimeStatus; heardLuke: boolean }): boolean {
+  return input.status === REALTIME_STATUS.RESPONDING && input.heardLuke;
+}
+
+/**
  * Drives one Realtime conversation over WebRTC.
  *
  * The microphone track is created once and kept disabled, so push-to-talk
@@ -401,6 +418,9 @@ export class RealtimeVoiceSession {
   /**
    * Reports that Luke's audio has gone quiet. Called from wherever the remote
    * stream is already being measured, so nothing has to analyse it twice.
+   *
+   * Whether a stretch of quiet is Luke's to answer for is decided by
+   * {@link quietIsLukesOwn} before this is called at all.
    */
   reportRemoteAudioIdle(): void {
     if (!this.#generationDone) return;

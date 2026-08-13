@@ -11,7 +11,7 @@ import {
   type RealtimeConnection,
   SESSION_STATUS,
 } from "@sidecar/core";
-import { RealtimeVoiceSession } from "../src/renderer/realtime-session";
+import { quietIsLukesOwn, RealtimeVoiceSession } from "../src/renderer/realtime-session";
 
 const CONNECTION: RealtimeConnection = {
   value: "ek_test_secret",
@@ -280,6 +280,23 @@ test("a proactive update is spoken once the call is open", async () => {
     context.sent.map((event) => event.type),
     [REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE, REALTIME_CLIENT_EVENT.RESPONSE_CREATE],
   );
+});
+
+test("the quiet before Luke starts is not Luke going quiet", () => {
+  // One meter draws both halves of the conversation. It reports quiet as it
+  // lets go of the microphone and again in the gap before the first word comes
+  // back, and neither of those silences is his to answer for — reading them as
+  // his takes his waveform down while he is still speaking.
+  assert.equal(
+    quietIsLukesOwn({ status: REALTIME_STATUS.RESPONDING, heardLuke: false }),
+    false,
+    "the gap before the reply starts",
+  );
+  assert.equal(quietIsLukesOwn({ status: REALTIME_STATUS.LISTENING, heardLuke: false }), false);
+  // The developer pausing mid-question is the developer's silence, whatever the
+  // meter last heard.
+  assert.equal(quietIsLukesOwn({ status: REALTIME_STATUS.LISTENING, heardLuke: true }), false);
+  assert.equal(quietIsLukesOwn({ status: REALTIME_STATUS.RESPONDING, heardLuke: true }), true);
 });
 
 test("a reply is not over when the model stops producing it", async () => {
