@@ -56,6 +56,26 @@ test("workspace package versions agree on v0.1.0", () => {
   );
 });
 
+/**
+ * The bundle carries the name macOS shows, and the manifest carries the name
+ * Electron works from: `productName` is what it derives the user-data directory
+ * and the Keychain entry from, falling back to the package name — which is
+ * scoped, and would put Luke's own state two directories down inside `@luke`.
+ * Nothing warns when the two disagree; the app just answers to one name in the
+ * Finder and another in the Keychain, so they are held together here.
+ */
+test("the app answers to one name in the bundle and in Electron", () => {
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(repoRoot, "apps", "desktop", "package.json"), "utf8"),
+  );
+  const options = packagerOptions();
+
+  assert.equal(manifest.productName, "Luke");
+  assert.equal(options.name, manifest.productName);
+  assert.equal(options.executableName, manifest.productName);
+  assert.equal(options.extendInfo.CFBundleDisplayName, manifest.productName);
+});
+
 test("packaging is pinned to Apple Silicon", () => {
   const options = packagerOptions();
 
