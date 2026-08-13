@@ -23,6 +23,7 @@ import { CloudBadge, ProviderMark } from "./provider-marks";
 import {
   CheckIcon,
   ExternalIcon,
+  KeyboardIcon,
   KeyIcon,
   MicrophoneIcon,
   PencilIcon,
@@ -32,9 +33,9 @@ import {
 
 export interface SettingsPanelProps {
   microphoneStatus: MicrophoneStatus;
-  microphoneActive: boolean;
   microphoneError?: string;
-  onToggleMicrophone: () => void;
+  /** Asks the system for access. Using the microphone is the talk key's job. */
+  onRequestMicrophone: () => void;
   settings?: AppSettings;
   /** The one credential being entered anywhere, and everything that can be done to it. */
   credentials: CredentialEntryControl;
@@ -45,7 +46,18 @@ export interface SettingsPanelProps {
    */
   panelOpen: boolean;
   onQuit: () => void;
+  /** The talk key, shown so it can be learned. It is not editable yet. */
+  voiceHotkey?: string;
 }
+
+/** What the state means for talking, which is the only thing it decides now. */
+const MICROPHONE_STATUS_DETAIL: Record<MicrophoneStatus, string> = {
+  granted: "Speech is sent only while a turn is open, and never recorded.",
+  "not-determined": "macOS will ask the first time you press the talk key.",
+  denied: "Allow Luke in System Settings › Privacy & Security › Microphone.",
+  restricted: "This Mac does not permit microphone access.",
+  unknown: "Luke could not read the microphone permission.",
+};
 
 const MICROPHONE_STATUS_LABEL: Record<MicrophoneStatus, string> = {
   "not-determined": "Not requested yet",
@@ -436,7 +448,7 @@ function CredentialsSection({
   // about storage nobody has tried to use yet would be a guess.
   const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
   return (
-    <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
+    <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
       <h2>
         <KeyIcon />
         Cloud API keys
@@ -463,20 +475,14 @@ function CredentialsSection({
 
 export function SettingsPanel({
   microphoneStatus,
-  microphoneActive,
   microphoneError,
-  onToggleMicrophone,
+  onRequestMicrophone,
   settings,
   credentials,
   panelOpen,
   onQuit,
+  voiceHotkey,
 }: SettingsPanelProps): React.JSX.Element {
-  const microphoneAction = microphoneActive
-    ? "Stop listening"
-    : microphoneStatus === "granted"
-      ? "Start listening"
-      : "Grant access";
-
   return (
     <div
       className="settings"
@@ -484,23 +490,47 @@ export function SettingsPanel({
       id={panelPanelId(PANEL_TAB.SETTINGS)}
       aria-labelledby={panelTabId(PANEL_TAB.SETTINGS)}
     >
+      {/* First, because it is how Luke is reached rather than what he can see.
+          Shown rather than offered: the key is fixed for now, and a control
+          that cannot change anything is worse than a plain statement of it. */}
+      <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
+        <h2>
+          <KeyboardIcon />
+          Keyboard shortcuts
+        </h2>
+        <div className="settings-row">
+          <span className="settings-copy">
+            <strong>Talk to Luke</strong>
+            <small>From any app: press to talk, again to send, again to interrupt.</small>
+          </span>
+          <span className="shortcut-key">{voiceHotkey ?? "Unavailable"}</span>
+        </div>
+      </section>
+
       {settings ? (
         <CredentialsSection settings={settings} control={credentials} panelOpen={panelOpen} />
       ) : null}
 
-      <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
+      <section className="settings-section" style={{ "--row-index": 3 } as React.CSSProperties}>
         <h2>
           <MicrophoneIcon />
           Microphone
         </h2>
+        {/* Access, not use. The talk key is what opens the microphone, so a
+            button here could only ever repeat what the key already does — the
+            line answers the one question it can: whether Luke is allowed. */}
         <div className="settings-row">
           <span className="settings-copy">
             <strong>{MICROPHONE_STATUS_LABEL[microphoneStatus]}</strong>
-            <small>Speech stays on this Mac and is never written to disk.</small>
+            <small>{MICROPHONE_STATUS_DETAIL[microphoneStatus]}</small>
           </span>
-          <button type="button" className="action-button" onClick={onToggleMicrophone}>
-            {microphoneAction}
-          </button>
+          {microphoneStatus === "granted" ? (
+            <CheckIcon />
+          ) : microphoneStatus === "not-determined" ? (
+            <button type="button" className="action-button" onClick={onRequestMicrophone}>
+              Grant access
+            </button>
+          ) : null}
         </div>
         {microphoneError ? <p className="error-message">{microphoneError}</p> : null}
       </section>
@@ -508,7 +538,7 @@ export function SettingsPanel({
       <button
         type="button"
         className="quit-button"
-        style={{ "--row-index": 3 } as React.CSSProperties}
+        style={{ "--row-index": 4 } as React.CSSProperties}
         onClick={onQuit}
       >
         <PowerIcon />

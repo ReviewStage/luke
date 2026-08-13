@@ -31,7 +31,6 @@ import {
 } from "./panel-state";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { RealtimeVoiceSession } from "./realtime-session";
-import { WAVEFORM_VOICE } from "./waveform";
 import {
   arrangeSessions,
   DEFAULT_SESSION_VIEW,
@@ -42,6 +41,7 @@ import {
   tallySummary,
 } from "./session-model";
 import { SESSION_OPTIONS_BUTTON_ID, SESSION_OPTIONS_ID } from "./session-parts";
+import { WAVEFORM_VOICE } from "./waveform";
 
 function usePointerPassthrough(
   onHitRegionEnter: () => void,
@@ -767,10 +767,6 @@ export function App(): React.JSX.Element {
 
   if (!bootstrap || !display) return <div />;
 
-  const voiceConnected =
-    voiceStatus === REALTIME_STATUS.READY ||
-    voiceStatus === REALTIME_STATUS.LISTENING ||
-    voiceStatus === REALTIME_STATUS.RESPONDING;
   const visibleSessions = displaySessions(bootstrap, sessions);
   // The tally is taken before the list is narrowed: the capsule reports what
   // Luke is watching, not what the panel is currently showing.
@@ -834,12 +830,12 @@ export function App(): React.JSX.Element {
             onTabChange={changeTab}
             settings={{
               microphoneStatus,
-              microphoneActive: voiceConnected,
               microphoneError,
-              onToggleMicrophone: () => void (analyser ? stopMicrophone() : startMicrophone()),
+              onRequestMicrophone: () => void startMicrophone(),
               settings,
               credentials,
               panelOpen,
+              ...(bootstrap.voiceHotkey ? { voiceHotkey: bootstrap.voiceHotkey } : {}),
               onQuit: () => window.sidecar.quit(),
             }}
           />

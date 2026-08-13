@@ -88,6 +88,12 @@ export interface AppBootstrap {
    * experience explicitly off rather than failing when the user first speaks.
    */
   realtimeAvailable: boolean;
+  /**
+   * The talk key as the user should read it, absent when the system refused to
+   * register one — a shortcut nothing can trigger must not be shown as though
+   * it works.
+   */
+  voiceHotkey?: string;
   /** Whether the panel should show the voice diagnostics block. */
   display: DisplayDiagnostic;
   sessions: readonly NormalizedSession[];

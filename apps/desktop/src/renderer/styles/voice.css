@@ -10,3 +10,16 @@
 .waveform[data-voice="luke"] .waveform-bar {
   background: var(--voice-luke, #68d39a);
 }
+
+/* Stated, not offered: the key cannot be changed yet, so it is set as text
+   rather than dressed up as a control that would do nothing. */
+.shortcut-key {
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.86);
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  white-space: nowrap;
+}

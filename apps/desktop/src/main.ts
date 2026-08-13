@@ -402,6 +402,7 @@ function registerIpc(): void {
       nodeVersion: process.versions.node,
       microphoneStatus: microphoneStatus(),
       realtimeAvailable: realtimeCredentials !== undefined,
+      ...(voiceHotkey ? { voiceHotkey: voiceHotkeyLabel(voiceHotkey) } : {}),
       display: displayDiagnostic(),
       sessions: fixtureMode ? [] : sessionRegistry.snapshot().sessions,
       settings: await settingsStore.snapshot(),

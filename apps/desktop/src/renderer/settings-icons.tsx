@@ -70,6 +70,16 @@ export function TrashIcon(): React.JSX.Element {
   );
 }
 
+export function KeyboardIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <rect x="2.4" y="6" width="19.2" height="12" rx="2.4" />
+      <path d="M6.4 10h.01M10 10h.01M13.6 10h.01M17.2 10h.01" />
+      <path d="M7.6 14h8.8" />
+    </Glyph>
+  );
+}
+
 export function MicrophoneIcon(): React.JSX.Element {
   return (
     <Glyph>
