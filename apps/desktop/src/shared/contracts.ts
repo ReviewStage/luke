@@ -50,6 +50,8 @@ export interface AppBootstrap {
   mode: WindowMode;
   /** Capture-only: start drawn as the peek, which normally needs a pointer. */
   startPeeked: boolean;
+  /** Capture-only: start drawn as the key slot, which normally needs a press. */
+  startInSlot: boolean;
   profile: string;
   fixture: FixtureSnapshot;
   captureMode: boolean;

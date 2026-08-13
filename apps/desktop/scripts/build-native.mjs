@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { swiftCompilerArguments } from "./package-config.mjs";
 
 if (process.platform !== "darwin") {
   process.stdout.write("Skipping the macOS screen-geometry helper on this platform.\n");
@@ -15,11 +16,7 @@ const outputDirectory = path.join(appRoot, ".build", "native");
 const output = path.join(outputDirectory, "mac-screen-geometry");
 
 fs.mkdirSync(outputDirectory, { recursive: true });
-const result = spawnSync(
-  "xcrun",
-  ["swiftc", "-parse-as-library", "-framework", "AppKit", source, "-o", output],
-  { stdio: "inherit" },
-);
+const result = spawnSync("xcrun", swiftCompilerArguments(source, output), { stdio: "inherit" });
 
 if (result.error) throw result.error;
 if (result.status !== 0) {

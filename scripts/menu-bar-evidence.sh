@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Captures Luke's own menu bar item. The tray title is drawn by the system, not
-# by the renderer, so it cannot be captured through the app the way the panel
-# is: the only way to see it is to photograph the menu bar of a running Mac.
+# Captures Luke's own menu bar item. The status item is drawn by the system, not
+# by the renderer — it hands macOS a template image and macOS decides the colour
+# — so it cannot be captured through the app the way the panel is: the only way
+# to see it is to photograph the menu bar of a running Mac.
 #
 # Run it with Luke already running (./scripts/run.sh in another terminal). The
 # terminal needs Screen Recording permission in System Settings › Privacy &
@@ -42,4 +43,5 @@ if [[ ! -s $SIDECAR_MENU_BAR_EVIDENCE_PATH ]]; then
 fi
 
 printf 'Menu bar evidence: %s\n' "$SIDECAR_MENU_BAR_EVIDENCE_PATH"
-printf 'Inspect it: the item reads "Luke" in the system font, and its menu offers Settings and Quit.\n'
+printf 'Inspect it: the item is the Luke face, drawn in the menu bar ink at the size of the\n'
+printf 'items beside it, and its menu offers Settings and Quit.\n'

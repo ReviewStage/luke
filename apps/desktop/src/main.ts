@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
+  CompositeSessionProviderAdapter,
   fixtureSnapshot,
   InMemorySessionRegistry,
   type NativeNotchGeometry,
@@ -29,7 +30,9 @@ import {
 import { ClaudeCodeSessionAdapter } from "./claude-code-adapter";
 import { CodexSessionAdapter } from "./codex-adapter";
 import { ConductorSessionAdapter } from "./conductor-adapter";
-import { CursorSessionAdapter } from "./cursor-adapter";
+import { CURSOR_PROVIDER, CursorSessionAdapter } from "./cursor-adapter";
+import { CursorLocalSessionAdapter } from "./cursor-local-adapter";
+import { DevinSessionAdapter } from "./devin-adapter";
 import { JulesSessionAdapter } from "./jules-adapter";
 import { readMacScreenGeometry } from "./macos-screen-geometry";
 import { openAiAttentionEvaluatorFromEnvironment } from "./openai-attention-evaluator";
@@ -52,9 +55,11 @@ import {
 const captureOutput = argumentValue("--capture-evidence");
 const profile = argumentValue("--profile") ?? "idle";
 const fixtureName = argumentValue("--fixture");
-// Evidence only: the peek answers a pointer, which a capture run has no way to
-// produce, so it can be asked for directly.
+// Evidence only: the peek answers a pointer and the slot answers a press on a
+// link, neither of which a capture run has any way to produce, so both can be
+// asked for directly.
 const startPeeked = process.argv.includes("--peek");
+const startInSlot = process.argv.includes("--slot");
 const fixture = fixtureSnapshot(fixtureName ?? "smoke");
 const captureMode = captureOutput !== undefined;
 // `--fixture` is enough on its own to make a run deterministic: the panel renders
@@ -75,8 +80,22 @@ const settingsStore = new SettingsStore({
 const conductorAdapter = new ConductorSessionAdapter({
   readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.CONDUCTOR),
 });
-const cursorAdapter = new CursorSessionAdapter({
-  readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.CURSOR),
+// Cursor runs sessions in two places: on this machine, which needs no
+// credential and is observed from the transcripts Cursor writes for itself, and
+// in its cloud, which needs a key. They are one provider wherever they ran, so
+// they are observed as one adapter — a provider's sessions are replaced in a
+// single commit, and two adapters sharing an id would retire each other's.
+const cursorAdapter = new CompositeSessionProviderAdapter({
+  provider: CURSOR_PROVIDER,
+  adapters: [
+    new CursorLocalSessionAdapter(),
+    new CursorSessionAdapter({
+      readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.CURSOR),
+    }),
+  ],
+});
+const devinAdapter = new DevinSessionAdapter({
+  readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.DEVIN),
 });
 const julesAdapter = new JulesSessionAdapter({
   readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.JULES),
@@ -87,6 +106,7 @@ const adapterByCredentialProvider: ReadonlyMap<CredentialProviderId, SessionProv
   new Map<CredentialProviderId, SessionProviderAdapter>([
     [CREDENTIAL_PROVIDER_ID.CONDUCTOR, conductorAdapter],
     [CREDENTIAL_PROVIDER_ID.CURSOR, cursorAdapter],
+    [CREDENTIAL_PROVIDER_ID.DEVIN, devinAdapter],
     [CREDENTIAL_PROVIDER_ID.JULES, julesAdapter],
   ]);
 const sessionAdapters = [
@@ -94,6 +114,7 @@ const sessionAdapters = [
   new CodexSessionAdapter(),
   conductorAdapter,
   cursorAdapter,
+  devinAdapter,
   julesAdapter,
 ] as const;
 // A fixture run must stay deterministic and credential-free, so it never builds
@@ -287,6 +308,7 @@ function registerIpc(): void {
     return {
       mode: windowMode,
       startPeeked,
+      startInSlot,
       profile,
       fixture,
       captureMode,
@@ -539,13 +561,27 @@ function trayMenu(): Electron.Menu {
   ]);
 }
 
+/**
+ * Luke's face, as macOS wants a status item drawn: a template image, which is
+ * pure black plus alpha and is recoloured by the system rather than by us, so it
+ * follows the menu bar through light, dark, and the inverted highlight a press
+ * draws. The `@2x` file beside it is picked up from the same call, which is what
+ * keeps the item sharp on a Retina display.
+ */
+function trayImage(): Electron.NativeImage {
+  const image = nativeImage.createFromPath(path.join(__dirname, "menubar", "lukeTemplate.png"));
+  image.setTemplateImage(true);
+  return image;
+}
+
 function createTray(): void {
   if (process.platform !== "darwin") return;
-  // Named rather than drawn. A menu bar item is read, and the system font at
-  // the system size is the one thing guaranteed to sit correctly beside every
-  // other item up there; an SVG template image only ever approximates it.
-  tray = new Tray(nativeImage.createEmpty());
-  tray.setTitle("Luke");
+  const image = trayImage();
+  tray = new Tray(image);
+  // A status item that draws nothing is a status item no one can find, and this
+  // one is the only way to reach Settings or to quit. If the artwork is ever
+  // missing from a build, the name it used to carry stands in for it.
+  if (image.isEmpty()) tray.setTitle("Luke");
   tray.setToolTip("Luke");
   // Clicking opens the menu and nothing else. The capsule is how the panel is
   // opened; a menu bar item that also toggled it made one of them a surprise.

@@ -1,5 +1,6 @@
 import {
   type ProviderSessionObservation,
+  SESSION_LOCATION,
   SESSION_STATUS,
   type SessionProvider,
   type SessionProviderAdapter,
@@ -241,7 +242,7 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
     const pass = ++this.#collectPass;
     try {
       const collected = await this.collect(this.#requestForPass(pass, apiKey), now);
-      if (pass === this.#collectPass) this.#observations = uniqueObservations(collected);
+      if (pass === this.#collectPass) this.#observations = cloudObservations(collected);
     } catch (error) {
       // A rejected credential clears observed state; a transient network or
       // server failure keeps the previous snapshot until the next attempt. A
@@ -391,13 +392,21 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
   }
 }
 
-function uniqueObservations(
+/**
+ * Drops a session a subclass reported twice, and stamps the location the base
+ * already knows: nothing reaches this point except over the network, so a
+ * subclass cannot forget to say its sessions run somewhere else.
+ */
+function cloudObservations(
   observations: readonly ProviderSessionObservation[],
 ): readonly ProviderSessionObservation[] {
   const unique = new Map<string, ProviderSessionObservation>();
   for (const observation of observations) {
     if (!unique.has(observation.providerSessionId)) {
-      unique.set(observation.providerSessionId, observation);
+      unique.set(observation.providerSessionId, {
+        ...observation,
+        location: SESSION_LOCATION.CLOUD,
+      });
     }
   }
   return [...unique.values()];
