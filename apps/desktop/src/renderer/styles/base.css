@@ -208,10 +208,17 @@
   --capsule-height: max(var(--notch-top-inset), 32px);
   --peek-width: calc(var(--notch-housing-width) + 248px);
   /* The capsule with room for the meter beside the face rather than instead of
-     it: 18px each, the 8px between them, and the wing's insets, on both sides.
-     It is Luke's reply that needs it — your own turn puts the meter where the
-     face was and needs no more room than the face did. */
-  --capsule-voice-width: calc(var(--notch-housing-width) + 124px);
+     it. Only the left wing needs it — that is where both are drawn — so only
+     that side grows: 18px for the meter and the 8px between them, added to the
+     36px the capsule already has there. The right side keeps its 36px, because
+     a count badge with 26px of new space around it is emptier than it was, not
+     better. It is Luke's reply that needs this at all; your own turn puts the
+     meter where the face was and needs no more room than the face did. */
+  --capsule-voice-growth: 26px;
+  --capsule-voice-width: calc(var(--capsule-width) + var(--capsule-voice-growth));
+  /* Growing one side moves the shape's centre half the growth away from it, so
+     the right edge stays exactly where it was and only the left one travels. */
+  --capsule-voice-shift: calc(var(--capsule-voice-growth) / 2);
   /* Wide enough for a key, a way out, and a way on, and no wider — the page the
      key was copied from is behind this and has to stay readable. The floor is
      what those three need on a display with no housing to grow from. */
@@ -412,9 +419,28 @@ button:disabled {
    already holds the peek, so there is room for it without asking the main
    process for any. Your own turn is not here: the meter takes the face's place
    then, and needs exactly the room the face had. */
-.app-stage[data-presentation="capsule"][data-voice="luke"] .panel-surface,
+.app-stage[data-presentation="capsule"][data-voice="luke"] .panel-surface {
+  width: var(--capsule-voice-width);
+  transform: translate(calc(-50% - var(--capsule-voice-shift)), var(--shape-top, 0px));
+  /* Growing leads, like every other state that grows. The base rule holds every
+     property back by `--duration-exit` so the shape never shrinks out from
+     under content still on screen; that delay is for leaving, and applying it
+     here is what let the meter arrive before the room for it did. Shrinking
+     keeps it, because this rule stops matching the moment the reply ends. */
+  transition-duration: var(--duration-shape);
+  transition-delay: 0s;
+}
+
 .app-stage[data-presentation="capsule"][data-voice="luke"] .compact-hover-target {
   width: var(--capsule-voice-width);
+  transform: translateX(calc(-50% - var(--capsule-voice-shift)));
+}
+
+/* The meter follows the room being made for it, on the same beat the wings use
+   when the peek unfolds. Only here: when it stands in the face's place nothing
+   grows, so there is nothing for it to wait behind. */
+.app-stage[data-presentation="capsule"][data-voice="luke"] .wing-meter[data-turn] {
+  transition-delay: var(--peek-delay);
 }
 
 /* Under the pointer: wide enough to say what the count means. */
