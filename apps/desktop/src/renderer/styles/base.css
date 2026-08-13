@@ -1092,10 +1092,18 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   color: var(--text-secondary);
 }
 
-/* The field exists only while a key is being entered. */
+/* The field exists only while a key is being entered. It is a fieldset because
+   the group is what names the provider for the controls inside it — every row's
+   editor otherwise offers the same Cancel, Save key, and link. None of the
+   user-agent frame is wanted, including the `min-inline-size` that would stop
+   it shrinking with the panel. */
 .credential-editor {
   display: flex;
+  min-inline-size: 0;
   flex-direction: column;
+  padding: 0;
+  border: 0;
+  margin: 0;
   gap: 8px;
 }
 

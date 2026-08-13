@@ -45,11 +45,20 @@ const CREDENTIAL_STATUS: Partial<Record<CredentialSource, string>> = {
   [CREDENTIAL_SOURCE.ENVIRONMENT]: "From environment",
 };
 
+/* One field, three jobs: what it is for depends on what is answering for the
+   provider now, and a key typed here always wins over one read elsewhere. */
+const CREDENTIAL_PLACEHOLDER: Record<CredentialSource, string> = {
+  [CREDENTIAL_SOURCE.NONE]: "Paste an API key",
+  [CREDENTIAL_SOURCE.ENVIRONMENT]: "Paste a key to use instead of the one from the environment",
+  [CREDENTIAL_SOURCE.ENCRYPTED_FILE]: "Replace the stored key",
+};
+
 /**
- * One provider, one line: its mark, its name, whether it is connected, and the
- * two things you can do about that. The field only exists while a key is being
- * entered, because a settings tab that is mostly empty input boxes reads as
- * work to do rather than as a state to check.
+ * One provider, one line: its mark, its name, whether it is connected, and what
+ * can be done about that — connect, supersede, or delete, whichever the state
+ * actually allows. The field only exists while a key is being entered, because
+ * a settings tab that is mostly empty input boxes reads as work to do rather
+ * than as a state to check.
  *
  * The credential is write-only from here: this can replace or clear the stored
  * key, and the main process never sends one back — only where it was resolved
@@ -77,11 +86,20 @@ function ProviderCredential({
   const field = useRef<HTMLInputElement | null>(null);
   const fieldId = `${provider.id}-api-key`;
   const editing = draft !== undefined;
-  // Stored here is what can be edited or deleted; connected includes a key Luke
-  // only reads from the environment, which it has no business changing.
+  // Deleting is only ever for a key kept here; one read from the environment is
+  // not Luke's to remove. Either can be superseded by a key typed in, so both
+  // connected states offer the same editor and only the unconnected one is
+  // asked to connect.
   const stored = source === CREDENTIAL_SOURCE.ENCRYPTED_FILE;
   const connected = source !== CREDENTIAL_SOURCE.NONE;
   const status = CREDENTIAL_STATUS[source];
+  // The pencil opens the same editor from either connected state, but it does
+  // not mean the same thing: one replaces the key Luke keeps, the other stands
+  // in front of one it only reads.
+  const editTitle = stored ? "Replace" : "Use a key stored here";
+  const editLabel = stored
+    ? `Replace the ${provider.displayName} API key`
+    : `Store a ${provider.displayName} API key instead of the one from the environment`;
 
   // Opening the tab is not a request to type, so the editor opens only on a
   // press — and then it takes the caret, because opening it is a request to
@@ -94,6 +112,13 @@ function ProviderCredential({
     onEditingChange(provider.id, editing);
   }, [editing, onEditingChange, provider.id]);
   useEffect(() => () => onEditingChange(provider.id, false), [onEditingChange, provider.id]);
+
+  // Every control that offers to write a key opens the one editor, and clears
+  // whatever the last attempt was rejected for on the way in.
+  const openEditor = () => {
+    setRejection(undefined);
+    setDraft("");
+  };
 
   const submit = async (apiKey: string | undefined) => {
     setBusy(true);
@@ -113,9 +138,9 @@ function ProviderCredential({
           <span className="credential-name">{provider.displayName}</span>
           {connected ? <CheckIcon /> : null}
         </span>
-        {/* The check says connected and Connect says the opposite, so the words
-            are kept for the one thing neither can say: connected from the
-            environment rather than from a key kept here. */}
+        {/* The check says connected and the controls say what can be done about
+            it, so the words are kept for the one thing neither can say:
+            connected from the environment rather than from a key kept here. */}
         {status ? <span className="credential-status">{status}</span> : null}
         <span className="settings-actions">
           {stored ? (
@@ -130,29 +155,26 @@ function ProviderCredential({
               <TrashIcon />
             </button>
           ) : null}
-          {stored ? (
+          {connected ? (
             <button
               type="button"
               className="icon-button"
-              disabled={busy || editing}
-              aria-label={`Replace the ${provider.displayName} API key`}
-              title="Edit"
-              onClick={() => {
-                setRejection(undefined);
-                setDraft("");
-              }}
+              disabled={busy || storageUnavailable || editing}
+              aria-label={editLabel}
+              title={editTitle}
+              onClick={openEditor}
             >
               <PencilIcon />
             </button>
           ) : (
+            /* Named for its provider like the icon buttons beside it: a list of
+               controls read on its own is otherwise two identical Connects. */
             <button
               type="button"
               className="quiet-button"
               disabled={busy || storageUnavailable || editing}
-              onClick={() => {
-                setRejection(undefined);
-                setDraft("");
-              }}
+              aria-label={`Connect ${provider.displayName}`}
+              onClick={openEditor}
             >
               Connect
             </button>
@@ -161,7 +183,10 @@ function ProviderCredential({
       </div>
 
       {editing ? (
-        <div className="credential-editor">
+        /* Named as a group, because Cancel, Save key, and the link to the
+           provider's own page are the same three words on every row and two
+           editors can be open at once. */
+        <fieldset className="credential-editor" aria-label={`${provider.displayName} API key`}>
           <label className="settings-field" htmlFor={fieldId}>
             {/* The provider is named on the line above, so the visible label
                 does not repeat it — but a reader hearing the field alone still
@@ -175,7 +200,7 @@ function ProviderCredential({
               type="password"
               autoComplete="off"
               spellCheck={false}
-              placeholder={stored ? "Replace the stored key" : "Paste an API key"}
+              placeholder={CREDENTIAL_PLACEHOLDER[source]}
               value={draft}
               disabled={busy}
               onChange={(event) => setDraft(event.target.value)}
@@ -228,7 +253,7 @@ function ProviderCredential({
               </button>
             </span>
           </div>
-        </div>
+        </fieldset>
       ) : null}
       {rejection ? <p className="error-message">{rejection}</p> : null}
     </div>
