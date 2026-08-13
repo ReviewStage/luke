@@ -859,11 +859,14 @@ if (!app.requestSingleInstanceLock()) {
     // Resolving settings touches the filesystem, and the OS keychain only for a
     // provider that already has a stored key to decrypt. Starting it here keeps
     // that work off the renderer's first paint, which blocks on the bootstrap
-    // reply. The status item waits for the answer because whether to draw it at
-    // all is part of it; a settings file that cannot be read leaves the item
-    // shown, the same answer a file that has never said gives.
-    void settingsStore.snapshot().then(
-      (settings) => applyMenuBarVisibility(settings.showInMenuBar),
+    // reply.
+    void settingsStore.snapshot();
+    // The status item waits only for the settings file, never for the keychain
+    // behind the stored keys: a locked or slow Keychain must not delay the one
+    // fixed point Luke has outside the notch. A file that cannot be read
+    // leaves the item shown, the same answer a file that has never said gives.
+    void settingsStore.showInMenuBar().then(
+      (show) => applyMenuBarVisibility(show),
       () => applyMenuBarVisibility(true),
     );
     reportVoiceAvailability();

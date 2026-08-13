@@ -194,6 +194,15 @@ export class SettingsStore {
   }
 
   /**
+   * Deliberately shallower than `snapshot()`: the answer comes from the
+   * settings file alone, so a caller deciding whether to draw the status item
+   * never waits on — or wakes — the OS keychain behind the stored keys.
+   */
+  async showInMenuBar(): Promise<boolean> {
+    return (await this.#load()).showInMenuBar;
+  }
+
+  /**
    * Main-process only: the resolved key used to authenticate that provider's
    * reads. A provider with no key resolves to nothing, so its adapter observes
    * nothing and issues no request.

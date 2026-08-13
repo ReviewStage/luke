@@ -522,6 +522,26 @@ test("keeps stored keys when the menu bar preference changes beside them", async
   assert.equal((await store.snapshot()).showInMenuBar, false);
 });
 
+test("decides the menu bar item from the file alone, never the keychain", async (t) => {
+  // The status item is drawn at launch from this answer, so a locked or slow
+  // Keychain — which decrypting a stored key can wait on — must not be able to
+  // delay it.
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({
+      version: 2,
+      apiKeys: { [CONDUCTOR]: sealed(TEST_API_KEY) },
+      showInMenuBar: false,
+    }),
+  );
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+
+  assert.equal(await store.showInMenuBar(), false);
+  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
+});
+
 test("shows the menu bar item when the file says something a boolean is not", async (t) => {
   const directory = await temporaryDirectory(t);
   await fs.writeFile(
