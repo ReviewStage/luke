@@ -2,6 +2,8 @@ import {
   type AttentionSpeech,
   cancelResponseEvents,
   clearInputAudioEvents,
+  functionCallFollowUpEvents,
+  functionCallOutputEvents,
   type NormalizedSession,
   proactiveSpeechEvents,
   pushToTalkCommitEvents,
@@ -9,9 +11,13 @@ import {
   REALTIME_SERVER_EVENT,
   REALTIME_STATUS,
   type RealtimeConnection,
+  type RealtimeFunctionCall,
   type RealtimeStatus,
+  realtimeFunctionCalls,
+  type SessionToolAction,
   sessionContextEvents,
   sessionContextText,
+  sessionToolAction,
   truncateResponseEvents,
 } from "@sidecar/core";
 
@@ -27,6 +33,16 @@ const CONNECT_TIMEOUT_MS = 15_000;
  */
 const REALTIME_SETTLE_TIMEOUT_MS = 20_000;
 
+/**
+ * Carries one validated action to the process that can perform it, answering
+ * with what became of it. The renderer validates a tool call against the
+ * observed roster before this is called, and the main process validates it
+ * again against its registry — the carrier is a courier, not a gate.
+ */
+export type SessionActionCarrier = (
+  action: Extract<SessionToolAction, { kind: "message" | "control" }>,
+) => Promise<Record<string, unknown>>;
+
 export interface RealtimeVoiceSessionCallbacks {
   onStatus(status: RealtimeStatus): void;
   onLocalStream(stream: MediaStream | undefined): void;
@@ -36,6 +52,8 @@ export interface RealtimeVoiceSessionCallbacks {
 
 export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbacks {
   requestConnection(): Promise<RealtimeConnection | undefined>;
+  /** Absent means Luke can only speak: every tool call is refused with a reason. */
+  carryAction?: SessionActionCarrier;
   /**
    * The browser pieces, injectable so the microphone state machine can be
    * exercised without a real device or peer connection. Push-to-talk decides
@@ -93,6 +111,12 @@ export class RealtimeVoiceSession {
   #connecting: Promise<boolean> | undefined;
   #closed = false;
   #sessionContext: string | undefined;
+  /**
+   * The roster as last reported, kept whole rather than as its rendered text:
+   * it is what a tool call is validated against, and a call may only name a
+   * session Luke was actually shown.
+   */
+  #sessions: readonly NormalizedSession[] = [];
   /**
    * Luke's own audio track. Cancelling stops the model producing more, but what
    * it already produced is on its way down the connection and keeps playing —
@@ -502,6 +526,7 @@ export class RealtimeVoiceSession {
     });
     this.#stream = undefined;
     this.#sessionContext = undefined;
+    this.#sessions = [];
     this.#generationDone = false;
     this.#remoteQuiet = false;
     this.#pendingTurn = false;
@@ -614,6 +639,7 @@ export class RealtimeVoiceSession {
    * data. Identical rosters are not resent.
    */
   updateSessions(sessions: readonly NormalizedSession[]): void {
+    this.#sessions = sessions;
     if (!this.isConnected) return;
     const context = sessionContextText(sessions);
     if (context === this.#sessionContext) return;
@@ -651,6 +677,14 @@ export class RealtimeVoiceSession {
       return;
     }
     if (type === REALTIME_SERVER_EVENT.RESPONSE_DONE) {
+      // A reply that asked for tools has not finished talking: the calls are
+      // answered and the reply resumes over their outcomes, so the turn stays
+      // open rather than ending on a reply that was only half made.
+      const calls = realtimeFunctionCalls(event);
+      if (calls.length > 0) {
+        void this.#answerToolCalls(calls);
+        return;
+      }
       // Generation is done; the reply is not. The turn ends when Luke stops
       // being audible, which the caller reports from the audio itself rather
       // than from an event — the one that would say so is undocumented.
@@ -678,6 +712,37 @@ export class RealtimeVoiceSession {
       // stuck in `responding` and unable to take another turn.
       this.#finishResponse();
     }
+  }
+
+  /**
+   * Answers the tool calls one reply made, then asks for the reply that voices
+   * their outcomes. Every call is validated against the roster Luke was shown
+   * before anything is carried, every outcome — including each refusal — is
+   * answered so the model never waits on a call that will not return, and the
+   * carrier's own failure is an outcome rather than an exception: the developer
+   * asked for something, and what became of it has to be said.
+   */
+  async #answerToolCalls(calls: readonly RealtimeFunctionCall[]): Promise<void> {
+    for (const call of calls) {
+      const action = sessionToolAction(call, this.#sessions);
+      let output: Record<string, unknown>;
+      if (action.kind === "refused") {
+        output = { status: "refused", reason: action.reason };
+      } else if (!this.#options.carryAction) {
+        output = { status: "refused", reason: "Acting on sessions is not available." };
+      } else {
+        try {
+          output = await this.#options.carryAction(action);
+        } catch {
+          output = { status: "refused", reason: "The action could not be carried out." };
+        }
+      }
+      this.#send(functionCallOutputEvents(call.callId, output));
+    }
+    // The call can have ended while an action was in flight; a reply asked for
+    // now would set a status no call stands behind.
+    if (!this.isConnected) return;
+    this.#startResponse(functionCallFollowUpEvents());
   }
 
   #send(events: readonly Record<string, unknown>[]): void {

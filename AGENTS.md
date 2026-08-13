@@ -32,14 +32,17 @@ Trust constraints:
   service may read a user-supplied API key, but it must observe nothing until
   the user supplies one and must leave every other provider working without it.
 - The one thing Luke may change about a session is what the user just asked to
-  send it: a message typed on its row, or a control its provider advertised for
-  it, each through the provider's own documented endpoint under the same
-  user-supplied credential. Observation passes stay read-only by construction.
-  Nothing that decides on the user's behalf — the attention evaluator above
-  all — may reach a write path. A session whose provider documents no way in,
-  or whose current state is documented for none, advertises nothing and is
-  offered nothing; local sessions have no such endpoint and stay entirely
-  read-only.
+  send it: a message typed on its row, a control its provider advertised for
+  it, or the same two acts asked for out loud in a conversation the user is
+  holding — each through the provider's own documented endpoint under the same
+  user-supplied credential, and each validated against the observed roster
+  before an adapter sees it. Observation passes stay read-only by construction.
+  Nothing that decides on the user's behalf may reach a write path: the
+  attention evaluator above all, and every proactive spoken turn, which is
+  opened with its tools withheld so a notice Luke reads out can never become an
+  act. A session whose provider documents no way in, or whose current state is
+  documented for none, advertises nothing and is offered nothing; local
+  sessions have no such endpoint and stay entirely read-only.
 - Keep unsupported capabilities explicit; do not invent fallback controls.
 - Keep Electron renderers sandboxed with context isolation and narrow IPC.
 - Commit only synthetic fixtures and repository-relative paths. This binds

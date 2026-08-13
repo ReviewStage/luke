@@ -284,6 +284,13 @@ export function App(): React.JSX.Element {
   const ensureVoiceSession = useCallback((): RealtimeVoiceSession => {
     voiceSession.current ??= new RealtimeVoiceSession({
       requestConnection: () => window.sidecar.requestRealtimeCredential(),
+      // The same two bridge calls the rows' composer and chips use: a spoken
+      // ask is a third way to ask for the same act, behind the same gauntlet
+      // in the main process.
+      carryAction: (action) =>
+        action.kind === "message"
+          ? window.sidecar.sendSessionMessage(action.identity, action.text)
+          : window.sidecar.executeSessionControl(action.identity, action.control.id),
       onStatus: setVoiceStatus,
       onLocalStream: setLocalStream,
       onRemoteStream: setRemoteStream,
