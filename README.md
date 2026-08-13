@@ -22,6 +22,7 @@ Download published builds from [GitHub Releases](https://github.com/ReviewStage/
 - Devin — reads cloud session metadata after you supply a Devin personal access
   token
 - Jules — reads cloud session metadata after you supply a Jules API key
+- OpenCode — reads local session state; no provider credential required
 
 Cursor is the one provider Luke watches in two places, and both halves arrive as
 Cursor sessions: the ones on this machine need no credential, and its cloud
@@ -138,7 +139,8 @@ Gatekeeper without an override. You can also assess the installed app with
 
 ## Optional attention review
 
-Session monitoring does not require `OPENAI_API_KEY`: Claude Code and Codex use
+Session monitoring does not require `OPENAI_API_KEY`: Claude Code, Codex, and
+OpenCode use
 local state, while Conductor, Cursor, and Devin use their separately configured
 provider credentials. If `OPENAI_API_KEY` is set, Luke can also send a bounded status update to
 the configured Responses endpoint for attention classification. That update can

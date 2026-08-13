@@ -9,6 +9,12 @@ the current implementation; it is not a promise about third-party services.
   read-only, and inspects them in memory.
 - For Codex, Luke opens the local SQLite state database in read-only mode and
   reads the recent rollout logs named by its thread records.
+- For OpenCode, Luke opens the local session database in read-only mode and
+  reads session records plus the bookkeeping of a session's newest message and
+  tool records — roles, timestamps, tool names and inputs, and recorded
+  errors — not the message text, which is never opened. Installs from before
+  OpenCode moved its sessions into that database are read from its session and
+  message JSON files with the same boundary.
 - For the Cursor agents running on this machine, Luke finds recent transcripts,
   opens bounded tails read-only, and reads only the markers around a turn — its
   end and how it ended. It does not read message content, and reports the fact
