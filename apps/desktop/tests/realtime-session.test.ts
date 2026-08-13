@@ -27,6 +27,8 @@ interface Harness {
   microphoneEnabled: () => boolean;
   microphoneStopped: () => boolean;
   emit: (event: unknown) => void;
+  lukeAudible: () => boolean;
+  deliverRemoteTrack: () => void;
   setConnectionState: (state: RTCPeerConnectionState) => void;
   closeChannel: () => void;
   requests: { url: string; init: RequestInit }[];
@@ -91,6 +93,7 @@ function harness(
     },
   };
 
+  const remoteTrack = { enabled: true };
   const peer: Record<string, unknown> = {
     localDescription: { type: "offer", sdp: "v=0 local" },
     connectionState: "connected",
@@ -142,6 +145,13 @@ function harness(
     errors,
     microphoneEnabled: () => enabled,
     microphoneStopped: () => stopped,
+    lukeAudible: () => remoteTrack.enabled,
+    deliverRemoteTrack: () => {
+      (peer.ontrack as ((e: unknown) => void) | undefined)?.({
+        track: remoteTrack,
+        streams: [{}],
+      });
+    },
     emit: (event) => {
       const onmessage = channel.onmessage as ((event: { data: string }) => void) | undefined;
       onmessage?.({ data: JSON.stringify(event) });
@@ -566,6 +576,27 @@ test("a turn opens from an empty buffer and the key ends it", async () => {
       REALTIME_CLIENT_EVENT.RESPONSE_CREATE,
     ],
   );
+});
+
+test("taking the turn silences Luke rather than only stopping generation", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.deliverRemoteTrack();
+  context.session.toggleTurn();
+  context.session.toggleTurn();
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+  assert.equal(context.lukeAudible(), true);
+
+  context.session.toggleTurn();
+
+  // Cancelling stops the model producing more; it does not stop what is already
+  // on its way down the connection. Only this end can.
+  assert.equal(context.lukeAudible(), false);
+  assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
+
+  // The next reply has to be audible again.
+  context.session.toggleTurn();
+  assert.equal(context.lukeAudible(), true);
 });
 
 test("taking the turn cuts Luke off mid-reply", async () => {

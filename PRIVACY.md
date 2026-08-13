@@ -80,11 +80,12 @@ attention-review request described below.
 
 The microphone is optional and is used two ways.
 
-Without `OPENAI_API_KEY`, Luke only calculates audio levels for a local
-visualization. Audio is not recorded, written to disk, or uploaded.
+Without `OPENAI_API_KEY` there is nothing to talk to, so Luke never asks for the
+microphone and never opens it.
 
-With `OPENAI_API_KEY`, the spoken conversation described below can send
-microphone audio to OpenAI. Nothing is captured until you open a turn: the
+With `OPENAI_API_KEY`, the spoken conversation described below sends microphone
+audio to OpenAI. That is the only thing Luke uses the microphone for; there is no
+local-only listening mode. Nothing is captured until you open a turn: the
 microphone track is created muted, server-side voice detection is disabled, and
 each turn begins by discarding whatever the buffer held. Luke never opens the
 microphone on its own.

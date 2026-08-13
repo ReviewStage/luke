@@ -197,6 +197,15 @@ export function App(): React.JSX.Element {
   const voiceSession = useRef<RealtimeVoiceSession | undefined>(undefined);
   const talking = useRef(false);
   const quietTimer = useRef<number | undefined>(undefined);
+  const voiceStatusRef = useRef<RealtimeStatus>(REALTIME_STATUS.IDLE);
+  /**
+   * Whether Luke has actually been heard during this reply. Committing a turn
+   * swaps the meter from the microphone to Luke, and the meter reports quiet as
+   * it lets go of the old stream — a silence that belongs to the developer, not
+   * to Luke, and one that would otherwise end his turn before he had said
+   * anything.
+   */
+  const heardLuke = useRef(false);
   const startMicrophoneRef = useRef<(() => Promise<void>) | undefined>(undefined);
   const sessionsRef = useRef<readonly NormalizedSession[]>([]);
 
@@ -293,6 +302,10 @@ export function App(): React.JSX.Element {
    * reports is what ends the turn.
    */
   const handleVoiceActivity = useCallback((active: boolean) => {
+    if (voiceStatusRef.current !== REALTIME_STATUS.RESPONDING) return;
+    if (active) {
+      heardLuke.current = true;
+    }
     if (quietTimer.current !== undefined) {
       window.clearTimeout(quietTimer.current);
       quietTimer.current = undefined;
@@ -304,8 +317,19 @@ export function App(): React.JSX.Element {
     // for a silence longer than speech leaves behind.
     quietTimer.current = window.setTimeout(() => {
       quietTimer.current = undefined;
+      // Only Luke's own silence ends Luke's turn.
+      if (voiceStatusRef.current !== REALTIME_STATUS.RESPONDING || !heardLuke.current) return;
       voiceSession.current?.reportRemoteAudioIdle();
     }, REMOTE_QUIET_MS);
+  }, []);
+
+  /**
+   * Asks the system for access and nothing else. Opening a call here would hold
+   * the capture device and light the microphone indicator without anyone having
+   * pressed the talk key, which is not what the row offers.
+   */
+  const requestMicrophoneAccess = useCallback(async () => {
+    setMicrophoneStatus(await window.sidecar.requestMicrophone());
   }, []);
 
   const toggleTurn = useCallback(async () => {
@@ -692,6 +716,12 @@ export function App(): React.JSX.Element {
   }, [activeStream]);
 
   useEffect(() => {
+    voiceStatusRef.current = voiceStatus;
+    // Each reply is heard from scratch, so the previous one cannot vouch for it.
+    if (voiceStatus !== REALTIME_STATUS.RESPONDING) heardLuke.current = false;
+  }, [voiceStatus]);
+
+  useEffect(() => {
     const element = remoteAudio.current;
     if (!element) return;
     element.srcObject = remoteStream ?? null;
@@ -856,7 +886,7 @@ export function App(): React.JSX.Element {
             settings={{
               microphoneStatus,
               microphoneError,
-              onRequestMicrophone: () => void startMicrophone(),
+              onRequestMicrophone: () => void requestMicrophoneAccess(),
               settings,
               credentials,
               panelOpen,

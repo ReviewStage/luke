@@ -156,6 +156,9 @@ let voiceHotkey: string | undefined;
  */
 function registerVoiceHotkey(): void {
   if (captureMode) return;
+  // Taking a system-wide key for a feature that cannot run would make every
+  // press somewhere else in macOS do nothing, visibly.
+  if (!realtimeCredentials) return;
   for (const accelerator of DEFAULT_VOICE_HOTKEYS) {
     const registered = globalShortcut.register(accelerator, () => {
       panelWindow?.webContents.send(channels.voiceHotkey);

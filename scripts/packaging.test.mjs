@@ -125,9 +125,12 @@ test("packaging includes the Luke license and approved microphone description", 
     options.extraResource.some((resourcePath) => resourcePath.endsWith(LICENSE_RESOURCE_NAME)),
     true,
   );
+  // Spelled out rather than compared to the constant alone: this is the sentence
+  // macOS shows when it asks for the microphone, so a change to it is a change
+  // to what the user consented to and should not pass unnoticed.
   assert.equal(
     options.extendInfo.NSMicrophoneUsageDescription,
-    "Luke uses microphone input to display live audio activity. Audio is processed locally and is not recorded or uploaded.",
+    "Luke uses the microphone for spoken conversation. Audio from a turn you start is sent to OpenAI to answer it, and is never recorded or written to disk.",
   );
   assert.equal(options.extendInfo.NSMicrophoneUsageDescription, MICROPHONE_USAGE_DESCRIPTION);
 });

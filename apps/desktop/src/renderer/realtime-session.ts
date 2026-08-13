@@ -74,6 +74,13 @@ export class RealtimeVoiceSession {
   #closed = false;
   #sessionContext: string | undefined;
   /**
+   * Luke's own audio track. Cancelling stops the model producing more, but what
+   * it already produced is on its way down the connection and keeps playing —
+   * so cutting him off means silencing this end too, which is the only half of
+   * it entirely under our control.
+   */
+  #remoteTrack: MediaStreamTrack | undefined;
+  /**
    * Whether the model has finished producing the reply. It is not the same as
    * the reply being over: `response.done` says generation is complete, and the
    * audio it produced is still on its way out. A turn that ended here would
@@ -147,6 +154,7 @@ export class RealtimeVoiceSession {
       this.#peer = peer;
       peer.addTrack(microphone, stream);
       peer.ontrack = (event) => {
+        this.#remoteTrack = event.track;
         this.#options.onRemoteStream(event.streams[0]);
       };
       peer.onconnectionstatechange = () => {
@@ -287,7 +295,15 @@ export class RealtimeVoiceSession {
     if (this.#status === REALTIME_STATUS.LISTENING) return false;
     // Talking over Luke stops it. The developer's turn always wins, which is
     // the whole point of a key that means "it is my turn now".
-    if (this.#status === REALTIME_STATUS.RESPONDING) this.#send(cancelResponseEvents());
+    if (this.#status === REALTIME_STATUS.RESPONDING) {
+      // Stop the words that are already on their way, then stop more being
+      // made. A disabled track drops what is buffered rather than playing it
+      // out, so the cut-off is immediate rather than eventual.
+      this.#silenceLuke();
+      this.#send(cancelResponseEvents());
+      this.#generationDone = false;
+      this.#clearSettleTimer();
+    }
     // Start from an empty buffer: a muted track still transmits, and with turn
     // detection off the server keeps everything since the last commit.
     this.#send(clearInputAudioEvents());
@@ -359,6 +375,7 @@ export class RealtimeVoiceSession {
       peer.close();
     }
     this.#peer = undefined;
+    this.#remoteTrack = undefined;
     this.#microphone = undefined;
     this.#stream?.getTracks().forEach((track) => {
       track.stop();
@@ -372,6 +389,9 @@ export class RealtimeVoiceSession {
   }
 
   #startResponse(events: readonly Record<string, unknown>[]): void {
+    // A reply that was cut off left the track disabled; the next one has to be
+    // audible.
+    if (this.#remoteTrack) this.#remoteTrack.enabled = true;
     this.#generationDone = false;
     this.#clearSettleTimer();
     this.#send(events);
@@ -385,6 +405,10 @@ export class RealtimeVoiceSession {
   reportRemoteAudioIdle(): void {
     if (!this.#generationDone) return;
     this.#finishResponse();
+  }
+
+  #silenceLuke(): void {
+    if (this.#remoteTrack) this.#remoteTrack.enabled = false;
   }
 
   #clearSettleTimer(): void {
