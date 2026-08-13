@@ -19,8 +19,10 @@ import {
 } from "./panel-state";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 
-/** The two things that take the pointer, named so the test can tell them apart. */
+/** What takes the pointer, named so the test can tell one from another. */
 const HIT_REGION = {
+  /** The black shape itself, whatever size it is drawn at. */
+  SURFACE: "surface",
   CAPSULE: "capsule",
   PANEL: "panel",
 } as const;
@@ -56,12 +58,16 @@ function usePointerPassthrough(
       // event closed it.
       const region = document.elementFromPoint(point.x, point.y)?.closest("[data-hit-region]");
       const kind = region?.getAttribute("data-hit-region");
-      // The capsule strip is live in every state — it is how the panel closes
-      // again — while the panel's body counts only while the panel is the shape
-      // being drawn. It is still in the tree for a moment after it closes, and
-      // clicks there belong to the desktop by then.
+      // The shape takes the pointer wherever it is drawn, which is the whole
+      // rule: the capsule strip and the panel's body are what sit on top of it
+      // and answer first. The surface is what answers in between — the panel's
+      // body is not a target for the first `--expand-delay` of an opening, and
+      // by then the strip has already narrowed from the peek's width back to
+      // the capsule's, so a press out where the marks unfold would otherwise
+      // land on nothing and read as the pointer leaving.
       update(
-        kind === HIT_REGION.CAPSULE ||
+        kind === HIT_REGION.SURFACE ||
+          kind === HIT_REGION.CAPSULE ||
           (kind === HIT_REGION.PANEL && drawn === PANEL_PRESENTATION.PANEL),
       );
     },
@@ -426,7 +432,7 @@ export function App(): React.JSX.Element {
     >
       {/* Capsule, peek and panel are all this one shape at different sizes, so
           the surface is never cross-faded — it is only ever resized. */}
-      <span className="panel-surface" aria-hidden="true" />
+      <span className="panel-surface" data-hit-region={HIT_REGION.SURFACE} aria-hidden="true" />
 
       {/* Inert while hidden: the panel keeps its full layout box behind
           `opacity: 0`, so its buttons stay focusable and the browser will scroll
