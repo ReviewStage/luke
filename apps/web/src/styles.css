@@ -115,16 +115,32 @@ button {
   letter-spacing: -0.01em;
 }
 
+/* Icon-only, so the padding buys a comfortable hit target and a focus ring
+   with room around the mark. The matching negative margin keeps the mark
+   optically aligned with the wordmark's edge rather than inset from it. */
 .nav-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px;
+  margin-right: -6px;
+  border-radius: 8px;
   color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 600;
-  text-decoration: none;
   transition: color 140ms ease;
 }
 
 .nav-link:hover {
   color: var(--text);
+}
+
+.github-mark {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.nav-link .github-mark {
+  width: 18px;
+  height: 18px;
 }
 
 /* Hero
