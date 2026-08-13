@@ -140,7 +140,9 @@ and the row tints instead, so brand colour and state colour never land on the
 same pixel. The marks are trademarks of their respective owners and are used
 here only to identify which provider a session belongs to; Luke is not
 affiliated with or endorsed by any of them. A provider with no registered mark
-falls back to a neutral glyph rather than to another provider's.
+falls back to a neutral glyph rather than to another provider's — Jules is one:
+it publishes its mark only as a raster favicon, and a mark is reproduced here or
+not at all, never traced by hand.
 
 The marks are keyed by the provider ids in `PROVIDER_ID`, which adapters report
 and `CREDENTIAL_PROVIDER_ID` draws from, so a session row and a key field name
