@@ -267,6 +267,34 @@ test("a proactive update is spoken once the call is open", async () => {
   assert.equal(context.sent[0]?.type, REALTIME_CLIENT_EVENT.RESPONSE_CREATE);
 });
 
+test("a reply is not over when the model stops producing it", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.session.toggleTurn();
+  context.session.toggleTurn();
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+
+  // `response.done` says generation finished. The audio it produced is still
+  // playing, so taking the turn down here strips the meter off a talking Luke.
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+
+  context.session.reportRemoteAudioIdle();
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+});
+
+test("quiet before the model has finished is a pause, not the end", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.session.toggleTurn();
+  context.session.toggleTurn();
+
+  // Luke draws breath mid-sentence; the reply is still coming.
+  context.session.reportRemoteAudioIdle();
+
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+});
+
 test("a finished response returns the session to ready", async () => {
   const context = harness();
   await context.session.connect();
@@ -274,6 +302,7 @@ test("a finished response returns the session to ready", async () => {
   context.session.toggleTurn();
 
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
+  context.session.reportRemoteAudioIdle();
 
   assert.equal(context.session.status, REALTIME_STATUS.READY);
 });
@@ -504,7 +533,12 @@ test("a turn is refused while another is already under way", async () => {
     1,
   );
 
+  // The turn is still Luke's until his audio stops, so it frees on the quiet
+  // rather than on generation finishing.
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
+  assert.equal(context.session.speak(speech), false);
+
+  context.session.reportRemoteAudioIdle();
   assert.equal(context.session.speak(speech), true);
 });
 

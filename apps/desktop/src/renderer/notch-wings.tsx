@@ -1,5 +1,5 @@
 import { CAPSULE_SIDE_WIDTH, PANEL_WIDTH, PEEK_SIDE_GROWTH } from "@sidecar/core";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { LukeFace } from "./luke-face";
 import { speechFaceInputs, useFaceMotion, usePrefersReducedMotion } from "./luke-face-mood";
 import { PANEL_PRESENTATION, type PanelPresentation } from "./panel-state";
@@ -17,6 +17,8 @@ interface NotchWingsProps {
   tally: SessionTally;
   analyser?: AnalyserNode;
   voice?: WaveformVoice;
+  /** Reported upward so the turn can end when Luke actually goes quiet. */
+  onVoiceActivity?: (active: boolean) => void;
   fixtureSpeaking: boolean;
   hasAudioSignal: boolean;
   presentation: PanelPresentation;
@@ -61,12 +63,20 @@ export function NotchWings({
   tally,
   analyser,
   voice,
+  onVoiceActivity,
   fixtureSpeaking,
   hasAudioSignal,
   presentation,
   housingWidth,
 }: NotchWingsProps): React.JSX.Element {
   const [voiceActive, setVoiceActive] = useState(false);
+  const reportVoiceActivity = useCallback(
+    (active: boolean) => {
+      setVoiceActive(active);
+      onVoiceActivity?.(active);
+    },
+    [onVoiceActivity],
+  );
   const face = useFaceMotion(
     {
       ...speechFaceInputs({
@@ -122,7 +132,7 @@ export function NotchWings({
                 speaking={fixtureSpeaking}
                 voice={voice}
                 voiceActive={voiceActive}
-                onVoiceActivity={setVoiceActive}
+                onVoiceActivity={reportVoiceActivity}
               />
             </span>
           ) : (

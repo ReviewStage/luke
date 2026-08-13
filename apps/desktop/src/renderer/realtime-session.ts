@@ -19,6 +19,13 @@ const SDP_CONTENT_TYPE = "application/sdp";
 /** Bounds the SDP exchange and the data channel opening, together. */
 const CONNECT_TIMEOUT_MS = 15_000;
 
+/**
+ * How long a finished generation may go on playing before the turn is ended
+ * anyway. It is a backstop for a reply that produced no audio at all, not the
+ * normal path: a spoken reply ends when it goes quiet.
+ */
+const REALTIME_SETTLE_TIMEOUT_MS = 20_000;
+
 export interface RealtimeVoiceSessionCallbacks {
   onStatus(status: RealtimeStatus): void;
   onLocalStream(stream: MediaStream | undefined): void;
@@ -66,6 +73,15 @@ export class RealtimeVoiceSession {
   #connecting: Promise<boolean> | undefined;
   #closed = false;
   #sessionContext: string | undefined;
+  /**
+   * Whether the model has finished producing the reply. It is not the same as
+   * the reply being over: `response.done` says generation is complete, and the
+   * audio it produced is still on its way out. A turn that ended here would
+   * take the meter and the face down while Luke was still audible, and would
+   * let the next press start a turn over the top of him.
+   */
+  #generationDone = false;
+  #settleTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(options: RealtimeVoiceSessionOptions) {
     this.#options = options;
@@ -349,17 +365,38 @@ export class RealtimeVoiceSession {
     });
     this.#stream = undefined;
     this.#sessionContext = undefined;
+    this.#generationDone = false;
+    this.#clearSettleTimer();
     this.#options.onLocalStream(undefined);
     this.#options.onRemoteStream(undefined);
   }
 
   #startResponse(events: readonly Record<string, unknown>[]): void {
+    this.#generationDone = false;
+    this.#clearSettleTimer();
     this.#send(events);
     this.#setStatus(REALTIME_STATUS.RESPONDING);
   }
 
+  /**
+   * Reports that Luke's audio has gone quiet. Called from wherever the remote
+   * stream is already being measured, so nothing has to analyse it twice.
+   */
+  reportRemoteAudioIdle(): void {
+    if (!this.#generationDone) return;
+    this.#finishResponse();
+  }
+
+  #clearSettleTimer(): void {
+    if (this.#settleTimer === undefined) return;
+    clearTimeout(this.#settleTimer);
+    this.#settleTimer = undefined;
+  }
+
   /** Ends the turn once the reply is done, so the next one can start. */
   #finishResponse(): void {
+    this.#generationDone = false;
+    this.#clearSettleTimer();
     if (this.#status === REALTIME_STATUS.RESPONDING) this.#setStatus(REALTIME_STATUS.READY);
   }
 
@@ -390,7 +427,16 @@ export class RealtimeVoiceSession {
 
     if (event === null || typeof event !== "object") return;
     const type = (event as { type?: unknown }).type;
-    if (type === REALTIME_SERVER_EVENT.RESPONSE_DONE) this.#finishResponse();
+    if (type === REALTIME_SERVER_EVENT.RESPONSE_DONE) {
+      // Generation is done; the reply is not. The turn ends when Luke stops
+      // being audible, which the caller reports from the audio itself rather
+      // than from an event — the one that would say so is undocumented.
+      this.#generationDone = true;
+      this.#settleTimer ??= setTimeout(() => {
+        this.#settleTimer = undefined;
+        this.#finishResponse();
+      }, REALTIME_SETTLE_TIMEOUT_MS);
+    }
     if (type === REALTIME_SERVER_EVENT.ERROR) {
       const message = (event as { error?: { message?: unknown } }).error?.message;
       this.#options.onError(

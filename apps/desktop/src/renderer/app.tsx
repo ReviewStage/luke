@@ -43,6 +43,9 @@ import {
 import { SESSION_OPTIONS_BUTTON_ID, SESSION_OPTIONS_ID } from "./session-parts";
 import { WAVEFORM_VOICE } from "./waveform";
 
+/** Silence longer than a speaker leaves between sentences. */
+const REMOTE_QUIET_MS = 700;
+
 function usePointerPassthrough(
   onHitRegionEnter: () => void,
   onHitRegionLeave: () => void,
@@ -193,6 +196,7 @@ export function App(): React.JSX.Element {
   const remoteAudio = useRef<HTMLAudioElement | null>(null);
   const voiceSession = useRef<RealtimeVoiceSession | undefined>(undefined);
   const talking = useRef(false);
+  const quietTimer = useRef<number | undefined>(undefined);
   const startMicrophoneRef = useRef<(() => Promise<void>) | undefined>(undefined);
   const sessionsRef = useRef<readonly NormalizedSession[]>([]);
 
@@ -283,6 +287,27 @@ export function App(): React.JSX.Element {
    * the call before it can open a turn, which is what lets the key work without
    * the panel ever being visited.
    */
+  /**
+   * Luke's reply is over when it stops being audible, not when the model stops
+   * producing it. The meter is already measuring the stream, so the quiet it
+   * reports is what ends the turn.
+   */
+  const handleVoiceActivity = useCallback((active: boolean) => {
+    if (quietTimer.current !== undefined) {
+      window.clearTimeout(quietTimer.current);
+      quietTimer.current = undefined;
+    }
+    if (active) return;
+    // The meter calls quiet after a fifth of a second, which is shorter than the
+    // pause between two sentences. Ending a turn on that would take the meter
+    // down mid-reply — the very thing this is here to stop — so the turn waits
+    // for a silence longer than speech leaves behind.
+    quietTimer.current = window.setTimeout(() => {
+      quietTimer.current = undefined;
+      voiceSession.current?.reportRemoteAudioIdle();
+    }, REMOTE_QUIET_MS);
+  }, []);
+
   const toggleTurn = useCallback(async () => {
     const session = voiceSession.current;
     if (session?.isConnected) {
@@ -854,6 +879,7 @@ export function App(): React.JSX.Element {
       <NotchWings
         tally={tally}
         analyser={analyser}
+        onVoiceActivity={handleVoiceActivity}
         voice={
           voiceStatus === REALTIME_STATUS.RESPONDING
             ? WAVEFORM_VOICE.LUKE
