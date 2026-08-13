@@ -19,8 +19,10 @@ required_files=(
     tsconfig.base.json
     apps/desktop/package.json
     apps/desktop/scripts/package.mjs
+    apps/desktop/scripts/release.mjs
     apps/desktop/native/macos/ScreenGeometry.swift
     packages/sidecar-core/package.json
+    scripts/release-macos.sh
     scripts/verify.sh
     .conductor/settings.toml
     .github/pull_request_template.md

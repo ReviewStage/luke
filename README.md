@@ -101,6 +101,35 @@ pnpm --filter @luke/web dev
 Use `./scripts/run.sh --profile speaking` to preview a deterministic fixture
 waveform without requesting microphone access.
 
+### Release a signed DMG
+
+The local release path requires Xcode Command Line Tools, a Developer ID
+Application identity in the login keychain, and a `luke-notary` keychain
+profile. Configure the profile once without placing credentials in the
+repository:
+
+```sh
+xcrun notarytool store-credentials luke-notary
+```
+
+Build, sign, notarize, staple, and verify the DMG with:
+
+```sh
+LUKE_CODESIGN_IDENTITY='Developer ID Application: Charles Pan (FZ47TN3469)' pnpm release:macos
+```
+
+The command writes `artifacts/release/Luke-<version>-arm64.dmg`. This path is
+gitignored, remains local, and is never uploaded. Publishing it to the website
+is a separate deliberate step.
+
+For a local rehearsal that creates a signed DMG without submitting it to Apple,
+run `pnpm release:macos --skip-notarization` with the same identity variable.
+
+Before distribution, copy the notarized DMG to a fresh Apple Silicon Mac or
+account, open it, drag Luke to Applications, and confirm the first launch passes
+Gatekeeper without an override. You can also assess the installed app with
+`spctl --assess --type execute -vv /Applications/Luke.app`.
+
 ## Optional attention review
 
 Session monitoring does not require `OPENAI_API_KEY`: Claude Code and Codex use

@@ -54,9 +54,14 @@ sidecar_wait_for_exit() {
 # the holder `<hostname>-<pid>`, so the process that blocks a launch identifies
 # itself. That is the process to replace even when it belongs to another
 # worktree: the lock is keyed on the app name, which every checkout shares.
+#
+# That name has to be derived the way Electron derives it, since Electron is what
+# chose the directory: `productName` when the manifest sets one, and the package
+# name only when it does not.
 sidecar_app_lock_holder_pid() {
     local app_name
-    if ! app_name=$(cd "$SIDECAR_DESKTOP_APP_ROOT" && node -p 'require("./package.json").name'); then
+    if ! app_name=$(cd "$SIDECAR_DESKTOP_APP_ROOT" &&
+        node -p 'const manifest = require("./package.json"); manifest.productName ?? manifest.name'); then
         printf 'error: could not read the desktop app name\n' >&2
         return 1
     fi
