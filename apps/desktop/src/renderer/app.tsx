@@ -291,6 +291,17 @@ export function App(): React.JSX.Element {
     }, PEEK_ENTER_DELAY_MS);
   }, [applyPresentation, cancelHoverTransition]);
 
+  /**
+   * True while a field someone could be part-way through is actually on screen.
+   * An entry outlives the tab it was started on now, so holding the panel open
+   * for one that is not drawn would leave the pointer unable to close a panel
+   * showing nothing but sessions.
+   */
+  const entryIsDrawn = useCallback(
+    () => entryRef.current !== undefined && tabRef.current === PANEL_TAB.SETTINGS,
+    [],
+  );
+
   const handleHitRegionLeave = useCallback(() => {
     cancelHoverTransition();
     pointerInside.current = false;
@@ -303,7 +314,7 @@ export function App(): React.JSX.Element {
     // A key half-typed is the one thing the pointer must not be allowed to
     // discard. Everything else on the settings tab closes like the sessions
     // tab does.
-    if (current === PANEL_PRESENTATION.PANEL && entryRef.current !== undefined) return;
+    if (current === PANEL_PRESENTATION.PANEL && entryIsDrawn()) return;
     hoverTimer.current = window.setTimeout(() => {
       hoverTimer.current = undefined;
       if (presentationRef.current === PANEL_PRESENTATION.PEEK) {
@@ -313,11 +324,11 @@ export function App(): React.JSX.Element {
         // scheduled: an entry can begin inside the delay — pressing Connect and
         // reaching for the keyboard does exactly that — and a close decided
         // before it began would discard it.
-        if (entryRef.current !== undefined) return;
+        if (entryIsDrawn()) return;
         void changeMode(false);
       }
     }, LEAVE_DELAY_MS);
-  }, [applyPresentation, cancelHoverTransition, changeMode]);
+  }, [applyPresentation, cancelHoverTransition, changeMode, entryIsDrawn]);
 
   /**
    * The single place an entry changes. A key being entered holds the panel open
