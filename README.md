@@ -79,7 +79,10 @@ One key runs it, and it answers from whatever app is frontmost:
   asks for the microphone.
 - **Press again** to send what you said.
 - **Press while Luke is talking** to cut him off and take the turn back.
-- **Escape** discards an open turn instead of sending it.
+- **Escape** discards an open turn instead of sending it, while the panel is the
+  frontmost window. The talk key is registered with the system and Escape is
+  not, so a turn started from another app is ended by pressing the talk key
+  again — sending it, then cutting the answer off if you did not want one.
 
 If another app already owns `⌥Space`, Luke falls back to `⌥S`. Settings shows
 which key you actually have, under **Keyboard shortcuts**. It is not
