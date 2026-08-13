@@ -1,6 +1,8 @@
 import type {
+  AttentionSpeech,
   FixtureSnapshot,
   NormalizedSession,
+  RealtimeConnection,
   Rectangle,
   ResolvedNotchGeometry,
   SessionIdentity,
@@ -81,6 +83,12 @@ export interface AppBootstrap {
   chromiumVersion: string;
   nodeVersion: string;
   microphoneStatus: MicrophoneStatus;
+  /**
+   * Whether a Realtime credential can be minted at all. False leaves the voice
+   * experience explicitly off rather than failing when the user first speaks.
+   */
+  realtimeAvailable: boolean;
+  /** Whether the panel should show the voice diagnostics block. */
   display: DisplayDiagnostic;
   sessions: readonly NormalizedSession[];
   settings: AppSettings;
@@ -110,11 +118,16 @@ export interface AppBridge {
   openSession(identity: SessionIdentity): void;
   /** Brings the expanded panel forward so it can accept typed input. */
   focusPanel(): void;
+  /** Mints a short-lived Realtime credential; the standing API key never crosses. */
+  requestRealtimeCredential(): Promise<RealtimeConnection | undefined>;
   notifyReady(): void;
   quit(): void;
   onLifecycle(callback: (eventName: string) => void): () => void;
   onDisplayChanged(callback: (display: DisplayDiagnostic) => void): () => void;
   onSessionsChanged(callback: (sessions: readonly NormalizedSession[]) => void): () => void;
+  onAttentionSpeech(callback: (speech: readonly AttentionSpeech[]) => void): () => void;
+  /** The talk key, pressed from whatever app happened to be frontmost. */
+  onVoiceHotkey(callback: () => void): () => void;
 }
 
 export const channels = {
@@ -126,6 +139,9 @@ export const channels = {
   openProviderApiKeys: "app:open-provider-api-keys",
   openSession: "app:open-session",
   focusPanel: "app:focus-panel",
+  requestRealtimeCredential: "app:request-realtime-credential",
+  attentionSpeech: "app:attention-speech",
+  voiceHotkey: "app:voice-hotkey",
   rendererReady: "app:renderer-ready",
   lifecycle: "app:lifecycle",
   displayChanged: "app:display-changed",

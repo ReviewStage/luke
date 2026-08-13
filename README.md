@@ -58,13 +58,40 @@ requires hooks, plugins, wrappers, or changes to how a session is launched.
   closes, so it always reopens showing every session Luke is tracking.
 - Entering a cloud provider's credential narrows the panel to a single field, so
   the page you copy it from stays readable while Luke waits for the paste.
-- An optional microphone visualization can react to local audio levels.
 - An optional OpenAI attention review can help decide which updates should be
   prioritized in the interface.
+- An optional spoken conversation, described below, lets you ask Luke about your
+  sessions and hear the answer.
 
-Luke does not speak, send commands to agents, inject terminal input, or expose
-agent controls. The microphone feature is an audio-level visualization, not
-speech recognition or a voice session.
+Luke does not send commands to agents, inject terminal input, or expose agent
+controls.
+
+## Talking to Luke
+
+Voice is off unless `OPENAI_API_KEY` is set. It is a real voice session: your
+microphone audio goes to OpenAI, and Luke answers out loud. Read
+[Privacy](PRIVACY.md) first — this is the one feature that sends audio off your
+Mac.
+
+One key runs it, and it answers from whatever app is frontmost:
+
+- **Press** `⌥Space` to talk. Luke connects the first time, which is when macOS
+  asks for the microphone.
+- **Press again** to send what you said.
+- **Press while Luke is talking** to cut him off and take the turn back.
+- **Escape** discards an open turn instead of sending it.
+
+If another app already owns `⌥Space`, Luke falls back to `⌥S`. Settings shows
+which key you actually have, under **Keyboard shortcuts**. It is not
+configurable yet.
+
+Settings also says whether Luke is allowed the microphone — a green check once
+access is granted. Opening the microphone is the talk key's job, so there is
+nothing there to switch on.
+
+Luke's face is the interface: it plays its listening motion while you speak and
+its talking motion while it answers, so the capsule says whose turn it is. The
+meter beside it draws whichever voice is live. There is no transcript.
 
 ## Privacy
 

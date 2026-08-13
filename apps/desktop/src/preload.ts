@@ -1,4 +1,9 @@
-import type { NormalizedSession, SessionIdentity } from "@sidecar/core";
+import type {
+  AttentionSpeech,
+  NormalizedSession,
+  RealtimeConnection,
+  SessionIdentity,
+} from "@sidecar/core";
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   AppBootstrap,
@@ -33,6 +38,10 @@ const bridge: AppBridge = {
     ipcRenderer.send(channels.openSession, identity);
   },
   focusPanel: () => ipcRenderer.send(channels.focusPanel),
+  requestRealtimeCredential: () =>
+    ipcRenderer.invoke(channels.requestRealtimeCredential) as Promise<
+      RealtimeConnection | undefined
+    >,
   notifyReady: () => ipcRenderer.send(channels.rendererReady),
   quit: () => ipcRenderer.send(channels.quit),
   onLifecycle: (callback: (eventName: string) => void) => {
@@ -51,6 +60,17 @@ const bridge: AppBridge = {
       callback(sessions);
     ipcRenderer.on(channels.sessionsChanged, listener);
     return () => ipcRenderer.removeListener(channels.sessionsChanged, listener);
+  },
+  onVoiceHotkey: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on(channels.voiceHotkey, listener);
+    return () => ipcRenderer.removeListener(channels.voiceHotkey, listener);
+  },
+  onAttentionSpeech: (callback: (speech: readonly AttentionSpeech[]) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, speech: readonly AttentionSpeech[]) =>
+      callback(speech);
+    ipcRenderer.on(channels.attentionSpeech, listener);
+    return () => ipcRenderer.removeListener(channels.attentionSpeech, listener);
   },
 };
 

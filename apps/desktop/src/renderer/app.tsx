@@ -1,4 +1,9 @@
-import { FIXTURE_EPOCH_MS, type NormalizedSession } from "@sidecar/core";
+import {
+  FIXTURE_EPOCH_MS,
+  type NormalizedSession,
+  REALTIME_STATUS,
+  type RealtimeStatus,
+} from "@sidecar/core";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import type {
   AppBootstrap,
@@ -25,6 +30,8 @@ import {
   SETTLE_DELAY_MS,
 } from "./panel-state";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
+import { RealtimeVoiceSession } from "./realtime-session";
+import { WAVEFORM_VOICE } from "./waveform";
 import {
   arrangeSessions,
   DEFAULT_SESSION_VIEW,
@@ -173,14 +180,21 @@ export function App(): React.JSX.Element {
   const [, setClock] = useState(0);
   const [panelElement, panelHeight] = useShapeHeight();
   const [slotElement, slotHeight] = useShapeHeight();
+  const [voiceStatus, setVoiceStatus] = useState<RealtimeStatus>(REALTIME_STATUS.IDLE);
+  const [localStream, setLocalStream] = useState<MediaStream>();
+  const [remoteStream, setRemoteStream] = useState<MediaStream>();
   const audioContext = useRef<AudioContext | undefined>(undefined);
-  const mediaStream = useRef<MediaStream | undefined>(undefined);
   const hoverTimer = useRef<number | undefined>(undefined);
   const presentationRef = useRef<PanelPresentation>(PANEL_PRESENTATION.CAPSULE);
   const tabRef = useRef<PanelTab>(PANEL_TAB.SESSIONS);
   const entryRef = useRef<CredentialEntry | undefined>(undefined);
   const pointerInside = useRef(false);
   const modeGeneration = useRef(0);
+  const remoteAudio = useRef<HTMLAudioElement | null>(null);
+  const voiceSession = useRef<RealtimeVoiceSession | undefined>(undefined);
+  const talking = useRef(false);
+  const startMicrophoneRef = useRef<(() => Promise<void>) | undefined>(undefined);
+  const sessionsRef = useRef<readonly NormalizedSession[]>([]);
 
   const changeTab = useCallback((next: PanelTab) => {
     tabRef.current = next;
@@ -238,14 +252,20 @@ export function App(): React.JSX.Element {
     [applyPresentation],
   );
 
-  const stopMicrophone = useCallback(async () => {
-    mediaStream.current?.getTracks().forEach((track) => {
-      track.stop();
+  const ensureVoiceSession = useCallback((): RealtimeVoiceSession => {
+    voiceSession.current ??= new RealtimeVoiceSession({
+      requestConnection: () => window.sidecar.requestRealtimeCredential(),
+      onStatus: setVoiceStatus,
+      onLocalStream: setLocalStream,
+      onRemoteStream: setRemoteStream,
+      onError: setMicrophoneError,
     });
-    mediaStream.current = undefined;
-    await audioContext.current?.close();
-    audioContext.current = undefined;
-    setAnalyser(undefined);
+    return voiceSession.current;
+  }, []);
+
+  const stopMicrophone = useCallback(async () => {
+    talking.current = false;
+    await voiceSession.current?.close();
   }, []);
 
   const startMicrophone = useCallback(async () => {
@@ -253,40 +273,25 @@ export function App(): React.JSX.Element {
     const permission = await window.sidecar.requestMicrophone();
     setMicrophoneStatus(permission);
     if (permission !== "granted") return;
+    const session = ensureVoiceSession();
+    if (await session.connect()) session.updateSessions(sessionsRef.current);
+  }, [ensureVoiceSession]);
+  startMicrophoneRef.current = startMicrophone;
 
-    let stream: MediaStream | undefined;
-    let context: AudioContext | undefined;
-    try {
-      await stopMicrophone();
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          autoGainControl: true,
-          echoCancellation: true,
-          noiseSuppression: true,
-        },
-        video: false,
-      });
-      context = new AudioContext({ latencyHint: "interactive" });
-      const source = context.createMediaStreamSource(stream);
-      const nextAnalyser = context.createAnalyser();
-      nextAnalyser.fftSize = 256;
-      nextAnalyser.smoothingTimeConstant = 0.82;
-      source.connect(nextAnalyser);
-      mediaStream.current = stream;
-      audioContext.current = context;
-      setAnalyser(nextAnalyser);
-    } catch (error) {
-      stream?.getTracks().forEach((track) => {
-        track.stop();
-      });
-      try {
-        await context?.close();
-      } catch {
-        // Preserve the original setup error if browser cleanup also fails.
-      }
-      setMicrophoneError(error instanceof Error ? error.message : String(error));
+  /**
+   * What the talk key means, wherever it was pressed. A first press has to open
+   * the call before it can open a turn, which is what lets the key work without
+   * the panel ever being visited.
+   */
+  const toggleTurn = useCallback(async () => {
+    const session = voiceSession.current;
+    if (session?.isConnected) {
+      session.toggleTurn();
+      return;
     }
-  }, [stopMicrophone]);
+    await startMicrophoneRef.current?.();
+    voiceSession.current?.startListening();
+  }, []);
 
   const cancelHoverTransition = useCallback(() => {
     if (hoverTimer.current === undefined) return;
@@ -299,6 +304,7 @@ export function App(): React.JSX.Element {
    * window, so hovering never leaves the renderer — which is what lets the peek
    * answer the pointer immediately.
    */
+
   const changeMode = useCallback(
     async (expanded: boolean) => {
       const previous = presentationRef.current;
@@ -602,6 +608,7 @@ export function App(): React.JSX.Element {
         }
       }
       setMicrophoneStatus(value.microphoneStatus);
+      if (!value.realtimeAvailable) setVoiceStatus(REALTIME_STATUS.UNAVAILABLE);
       if (value.profile === "microphone") {
         window.setTimeout(() => void startMicrophone(), 500);
       }
@@ -631,6 +638,57 @@ export function App(): React.JSX.Element {
     stopMicrophone,
   ]);
 
+  // The waveform follows whoever is actually talking: the developer while
+  // push-to-talk is held, Luke while it answers, nobody otherwise.
+  const activeStream =
+    voiceStatus === REALTIME_STATUS.RESPONDING
+      ? remoteStream
+      : voiceStatus === REALTIME_STATUS.LISTENING
+        ? localStream
+        : undefined;
+
+  useEffect(() => {
+    if (!activeStream) {
+      setAnalyser(undefined);
+      return;
+    }
+    const context = audioContext.current ?? new AudioContext({ latencyHint: "interactive" });
+    audioContext.current = context;
+    const source = context.createMediaStreamSource(activeStream);
+    const nextAnalyser = context.createAnalyser();
+    nextAnalyser.fftSize = 256;
+    nextAnalyser.smoothingTimeConstant = 0.82;
+    source.connect(nextAnalyser);
+    setAnalyser(nextAnalyser);
+    return () => {
+      source.disconnect();
+      setAnalyser(undefined);
+    };
+  }, [activeStream]);
+
+  useEffect(() => {
+    const element = remoteAudio.current;
+    if (!element) return;
+    element.srcObject = remoteStream ?? null;
+    if (remoteStream) void element.play().catch(() => undefined);
+  }, [remoteStream]);
+
+  // Keep the conversation's view of the sessions current, so a spoken question
+  // is answered from what Luke actually observes.
+  useEffect(() => {
+    sessionsRef.current = sessions;
+    voiceSession.current?.updateSessions(sessions);
+  }, [sessions]);
+
+  useEffect(() => {
+    // An update Luke cannot voice — no call open, or a turn already under way —
+    // is not lost: the session it belongs to still reads as needing attention
+    // in the panel and in the capsule count.
+    return window.sidecar.onAttentionSpeech((speech) => {
+      for (const item of speech) voiceSession.current?.speak(item);
+    });
+  }, []);
+
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       // The shortcut the tray menu advertises. It is claimed here rather than
@@ -643,6 +701,12 @@ export function App(): React.JSX.Element {
         return;
       }
       if (event.key !== "Escape") return;
+      // Discarding an open turn comes before any of it. Closing the panel
+      // or a sheet mid-sentence would strand the microphone open.
+      if (voiceStatus === REALTIME_STATUS.LISTENING) {
+        voiceSession.current?.stopListening(false);
+        return;
+      }
       // Escape out of the slot is the entry's own way out, wherever the caret
       // happens to be: the slot is the only thing on screen, so there is nothing
       // else it could mean.
@@ -659,7 +723,11 @@ export function App(): React.JSX.Element {
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [cancelEntry, changeMode, changeTab, optionsOpen, presentation, tab]);
+  }, [cancelEntry, changeMode, changeTab, optionsOpen, presentation, tab, voiceStatus]);
+
+  // The talk key is registered by the main process so it answers from any app,
+  // which is the whole point: no window to find, nothing to focus first.
+  useEffect(() => window.sidecar.onVoiceHotkey(() => void toggleTurn()), [toggleTurn]);
 
   // The rows say how long ago each session was seen, and a label left alone
   // goes stale the moment a minute passes with no session changing — the very
@@ -699,6 +767,10 @@ export function App(): React.JSX.Element {
 
   if (!bootstrap || !display) return <div />;
 
+  const voiceConnected =
+    voiceStatus === REALTIME_STATUS.READY ||
+    voiceStatus === REALTIME_STATUS.LISTENING ||
+    voiceStatus === REALTIME_STATUS.RESPONDING;
   const visibleSessions = displaySessions(bootstrap, sessions);
   // The tally is taken before the list is narrowed: the capsule reports what
   // Luke is watching, not what the panel is currently showing.
@@ -762,7 +834,7 @@ export function App(): React.JSX.Element {
             onTabChange={changeTab}
             settings={{
               microphoneStatus,
-              microphoneActive: analyser !== undefined,
+              microphoneActive: voiceConnected,
               microphoneError,
               onToggleMicrophone: () => void (analyser ? stopMicrophone() : startMicrophone()),
               settings,
@@ -777,10 +849,22 @@ export function App(): React.JSX.Element {
       {/* The panel stood down to its field. It shares the expanded window, so
           standing down to it costs no more than the peek does. */}
       <KeySlot control={credentials} source={slotSource} drawn={slotOpen} measure={slotElement} />
+      {/* Luke's own voice. Muted playback would defeat the point, so this is
+          the one element allowed to make sound. */}
+      <audio ref={remoteAudio} autoPlay hidden>
+        <track kind="captions" />
+      </audio>
 
       <NotchWings
         tally={tally}
         analyser={analyser}
+        voice={
+          voiceStatus === REALTIME_STATUS.RESPONDING
+            ? WAVEFORM_VOICE.LUKE
+            : voiceStatus === REALTIME_STATUS.LISTENING
+              ? WAVEFORM_VOICE.DEVELOPER
+              : undefined
+        }
         fixtureSpeaking={fixtureSpeaking}
         hasAudioSignal={hasAudioSignal}
         presentation={presentation}

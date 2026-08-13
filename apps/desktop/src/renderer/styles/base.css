@@ -5,6 +5,8 @@
   background: transparent;
 
   --state-working: #5cd5ff;
+  /* Luke's own voice, so a glance says who is talking. */
+  --voice-luke: #7fe0ac;
   --state-attention: #ffa049;
   --state-complete: #6fdca4;
   --state-idle: rgba(255, 255, 255, 0.44);

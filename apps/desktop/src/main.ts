@@ -2,11 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
+  attentionSpeechFromReviews,
   CompositeSessionProviderAdapter,
   fixtureSnapshot,
   InMemorySessionRegistry,
   type NativeNotchGeometry,
   positionNotchWindow,
+  realtimeMintExplanation,
   SessionAttentionReviewer,
   type SessionIdentity,
   type SessionProviderAdapter,
@@ -15,6 +17,7 @@ import {
   app,
   BrowserWindow,
   type Display,
+  globalShortcut,
   type IpcMainEvent,
   type IpcMainInvokeEvent,
   ipcMain,
@@ -39,6 +42,10 @@ import { JulesSessionAdapter } from "./jules-adapter";
 import { readMacScreenGeometry } from "./macos-screen-geometry";
 import { openAiAttentionEvaluatorFromEnvironment } from "./openai-attention-evaluator";
 import { OpenCodeSessionAdapter } from "./opencode-adapter";
+import {
+  openAiRealtimeCredentialsFromEnvironment,
+  unavailableRealtimeDiagnostics,
+} from "./openai-realtime-credentials";
 import { SettingsStore } from "./settings-store";
 import {
   type AppBootstrap,
@@ -54,6 +61,7 @@ import {
   type CredentialProviderId,
   isCredentialProviderId,
 } from "./shared/credential-providers";
+import { DEFAULT_VOICE_HOTKEYS, voiceHotkeyLabel } from "./shared/voice-hotkey";
 
 const captureOutput = argumentValue("--capture-evidence");
 const profile = argumentValue("--profile") ?? "idle";
@@ -135,6 +143,37 @@ const attentionReviewer = attentionEvaluator
       currentSession: (identity) => sessionRegistry.get(identity),
     })
   : undefined;
+// A fixture run stays credential-free for the same reason attention review
+// does: evidence must be reproducible without a key and without a network.
+const realtimeCredentials = fixtureMode ? undefined : openAiRealtimeCredentialsFromEnvironment();
+let voiceHotkey: string | undefined;
+
+/**
+ * Registers the talk key with the system so it answers from whatever app is
+ * frontmost. Electron reports only the press and never the release, so the key
+ * is a toggle rather than a hold — which is also what lets one key interrupt a
+ * reply that is already playing.
+ */
+function registerVoiceHotkey(): void {
+  if (captureMode) return;
+  for (const accelerator of DEFAULT_VOICE_HOTKEYS) {
+    const registered = globalShortcut.register(accelerator, () => {
+      panelWindow?.webContents.send(channels.voiceHotkey);
+    });
+    if (!registered) continue;
+    voiceHotkey = accelerator;
+    return;
+  }
+}
+
+function reportVoiceHotkey(): void {
+  process.stderr.write(
+    voiceHotkey
+      ? `Luke talk key: ${voiceHotkeyLabel(voiceHotkey)}\n`
+      : "Luke talk key: unavailable — another app already owns it\n",
+  );
+}
+
 let windowMode: WindowMode = captureMode
   ? process.argv.includes("--compact")
     ? "compact"
@@ -328,6 +367,23 @@ function isSessionIdentity(value: unknown): value is SessionIdentity {
   );
 }
 
+/**
+ * States on startup whether voice is on, and why not when it is off. A packaged
+ * app has no visible stderr, but the common case during local testing is a
+ * terminal launch — where this is the difference between a one-line answer and
+ * guessing at an empty panel.
+ */
+function reportVoiceAvailability(): void {
+  const report = realtimeCredentials?.diagnostics() ?? unavailableRealtimeDiagnostics(fixtureMode);
+  if (realtimeCredentials) {
+    process.stderr.write(`Luke voice: enabled (model ${report.model}, voice ${report.voice})\n`);
+    return;
+  }
+  process.stderr.write(
+    `Luke voice: unavailable — ${realtimeMintExplanation(report.lastOutcome)}\n`,
+  );
+}
+
 function registerIpc(): void {
   ipcMain.handle(channels.bootstrap, async (event): Promise<AppBootstrap> => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
@@ -345,6 +401,7 @@ function registerIpc(): void {
       chromiumVersion: process.versions.chrome,
       nodeVersion: process.versions.node,
       microphoneStatus: microphoneStatus(),
+      realtimeAvailable: realtimeCredentials !== undefined,
       display: displayDiagnostic(),
       sessions: fixtureMode ? [] : sessionRegistry.snapshot().sessions,
       settings: await settingsStore.snapshot(),
@@ -434,6 +491,13 @@ function registerIpc(): void {
     focusPanelWindow();
   });
 
+  ipcMain.handle(channels.requestRealtimeCredential, async (event) => {
+    if (!trustedSender(event)) throw new Error("Untrusted renderer");
+    // Returning nothing rather than throwing keeps "no credentials configured"
+    // and "the mint failed" on the same explicit, non-fatal path.
+    return realtimeCredentials?.mint();
+  });
+
   ipcMain.on(channels.quit, (event) => {
     if (trustedSender(event)) app.quit();
   });
@@ -483,8 +547,15 @@ async function reviewSessionAttention(): Promise<void> {
   if (!attentionReviewer || attentionReviewRunning) return;
   attentionReviewRunning = true;
   try {
-    for (const review of await attentionReviewer.review(sessionRegistry.list())) {
+    const reviews = await attentionReviewer.review(sessionRegistry.list());
+    for (const review of reviews) {
       sessionRegistry.setAttention(review, review.decision);
+    }
+    // `decision` says the session needs attention, which the panel shows;
+    // `outcome` says whether to voice it now, which only these reviews do.
+    const speech = attentionSpeechFromReviews(reviews);
+    if (speech.length > 0) {
+      panelWindow?.webContents.send(channels.attentionSpeech, speech);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -669,6 +740,9 @@ if (!app.requestSingleInstanceLock()) {
     // that work off the renderer's first paint, which blocks on the bootstrap
     // reply.
     void settingsStore.snapshot();
+    reportVoiceAvailability();
+    registerVoiceHotkey();
+    reportVoiceHotkey();
     createPanel();
     configurePermissions();
     createTray();
@@ -692,6 +766,10 @@ if (!app.requestSingleInstanceLock()) {
     }
   });
 }
+
+app.on("will-quit", () => {
+  globalShortcut.unregisterAll();
+});
 
 app.on("before-quit", () => {
   if (sessionRefreshTimer) clearInterval(sessionRefreshTimer);

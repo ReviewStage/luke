@@ -5,7 +5,7 @@ import { useFaceMotion, usePrefersReducedMotion } from "./luke-face-mood";
 import { PANEL_PRESENTATION, type PanelPresentation } from "./panel-state";
 import { ProviderMark } from "./provider-marks";
 import { type SessionTally, tallyCaption, tallySummary } from "./session-model";
-import { Waveform } from "./waveform";
+import { WAVEFORM_VOICE, type WaveformVoice, Waveform } from "./waveform";
 
 /**
  * The strips beside the camera housing. They are rendered once for both window
@@ -16,6 +16,7 @@ import { Waveform } from "./waveform";
 interface NotchWingsProps {
   tally: SessionTally;
   analyser?: AnalyserNode;
+  voice?: WaveformVoice;
   fixtureSpeaking: boolean;
   hasAudioSignal: boolean;
   presentation: PanelPresentation;
@@ -59,19 +60,30 @@ const MARK_EXIT_MS = 90;
 export function NotchWings({
   tally,
   analyser,
+  voice,
   fixtureSpeaking,
   hasAudioSignal,
   presentation,
   housingWidth,
 }: NotchWingsProps): React.JSX.Element {
   const [voiceActive, setVoiceActive] = useState(false);
+  // Who is talking is known outright once a call is up — the turn says so — and
+  // amplitude cannot tell one voice from the other, because the same meter draws
+  // Luke answering and the developer asking. It is only consulted when there is
+  // no turn to read: a microphone opened from Settings with no call behind it,
+  // and the fixture, which has no turn at all.
+  //
   // Guarded rather than reset: a microphone that has been closed cannot still be
   // carrying speech, whatever the last frame the meter read said.
-  const speaking = hasAudioSignal && (fixtureSpeaking || voiceActive);
+  const speaking =
+    voice === WAVEFORM_VOICE.LUKE ||
+    (voice === undefined && hasAudioSignal && (fixtureSpeaking || voiceActive));
   const face = useFaceMotion(
     {
       speaking,
-      microphoneLive: hasAudioSignal,
+      // Luke attends while the developer holds the turn, and while a microphone
+      // is open without one. It is not attending while it is the one talking.
+      microphoneLive: voice === WAVEFORM_VOICE.DEVELOPER || (voice === undefined && hasAudioSignal),
       attention: tally.attentionIds,
       working: tally.working,
       complete: tally.complete,
@@ -117,6 +129,7 @@ export function NotchWings({
               <Waveform
                 analyser={analyser}
                 speaking={fixtureSpeaking}
+                voice={voice}
                 voiceActive={voiceActive}
                 onVoiceActivity={setVoiceActive}
               />

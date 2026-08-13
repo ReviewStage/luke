@@ -225,7 +225,11 @@ export class SettingsStore {
       const apiKeys = { ...persisted.apiKeys };
       if (ciphertext) apiKeys[providerId] = ciphertext;
       else delete apiKeys[providerId];
-      const next: PersistedSettings = { version: SETTINGS_FILE_VERSION, apiKeys };
+      const next: PersistedSettings = {
+        ...persisted,
+        version: SETTINGS_FILE_VERSION,
+        apiKeys,
+      };
       await this.#write(next);
       this.#loading = Promise.resolve(next);
       this.#resolved.delete(providerId);
