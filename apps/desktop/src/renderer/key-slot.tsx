@@ -19,9 +19,10 @@ import { ExternalIcon } from "./settings-icons";
  * window — including the page the key has to be copied from. So the panel gets
  * out of the way of its own field: the slot is narrow enough to leave that page
  * readable and it stays put — nothing the pointer does dismisses it — because a
- * key on the clipboard is only worth as much as the place to put it. The
- * provider's mark comes along so the field is never anonymous, and the confirm
- * is quiet until there is something to confirm.
+ * credential on the clipboard is only worth as much as the place to put it. The
+ * provider's mark comes along so the field is never anonymous, the label says
+ * what to paste in the provider's own word for it, and the confirm is quiet
+ * until there is something to confirm.
  */
 export function KeySlot({
   control,
@@ -30,7 +31,11 @@ export function KeySlot({
   measure,
 }: {
   control: CredentialEntryControl;
-  /** Where the provider's key comes from now, which is what the field is for. */
+  /**
+   * Where the entered provider's credential comes from now, which is what the
+   * field is for. It is read while an entry is live and held with it after, so
+   * an exit finishes saying what it was saying.
+   */
   source: CredentialSource;
   /** True while the slot is the shape the surface is drawn as. */
   drawn: boolean;
