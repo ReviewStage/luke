@@ -8,6 +8,7 @@ import {
   VOICE_HOTKEY_ABSENCE,
   voiceHotkeyLabel,
   voiceHotkeyReport,
+  voiceHotkeyToShow,
 } from "../src/shared/voice-hotkey";
 
 test("the default is the chord a macOS voice assistant is reached for", () => {
@@ -60,4 +61,33 @@ test("a latched turn is ended by the next release, however brief", () => {
   // that never ends.
   assert.equal(talkKeyRelease({ heldMs: 10, latched: true }), TALK_KEY_RELEASE.SEND);
   assert.equal(talkKeyRelease({ heldMs: 4_000, latched: true }), TALK_KEY_RELEASE.SEND);
+});
+
+test("the key survives the message that announces it being lost", () => {
+  // The helper registers while the renderer is still loading, so the message
+  // saying which key it got is sent to a window with nothing listening yet.
+  // Bootstrap is the one the renderer asks for, so it is what answers.
+  assert.deepEqual(voiceHotkeyToShow({ voiceHotkey: "⌥Space", voiceHotkeyHeld: true }, undefined), {
+    hotkey: "⌥Space",
+    held: true,
+  });
+
+  // A change only arrives when the helper stopped answering and the toggle took
+  // over, which is news bootstrap cannot have.
+  assert.deepEqual(
+    voiceHotkeyToShow(
+      { voiceHotkey: "⌥Space", voiceHotkeyHeld: true },
+      { hotkey: "⌥S", held: false },
+    ),
+    { hotkey: "⌥S", held: false },
+  );
+
+  // No key anywhere is the only way the panel should read "Unavailable".
+  assert.deepEqual(voiceHotkeyToShow({ voiceHotkeyHeld: false }, undefined), { held: false });
+  assert.deepEqual(
+    voiceHotkeyToShow({ voiceHotkey: "⌥Space", voiceHotkeyHeld: true }, { held: true }),
+    {
+      held: true,
+    },
+  );
 });

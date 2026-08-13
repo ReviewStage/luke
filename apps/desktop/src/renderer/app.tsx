@@ -16,7 +16,7 @@ import type {
 import { CREDENTIAL_SOURCE } from "../shared/contracts";
 import type { CredentialProviderId } from "../shared/credential-providers";
 import { CREDENTIAL_PROVIDER_LIST } from "../shared/credential-providers";
-import { TALK_KEY_RELEASE, talkKeyRelease } from "../shared/voice-hotkey";
+import { TALK_KEY_RELEASE, talkKeyRelease, voiceHotkeyToShow } from "../shared/voice-hotkey";
 import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";
 import { isSubmittable, removalEndsEntry } from "./credential-entry";
 import { KeySlot } from "./key-slot";
@@ -899,6 +899,7 @@ export function App(): React.JSX.Element {
   // measured back from the fixture's own epoch precisely so that no capture
   // run reads them against the time it happened to run at.
   const now = bootstrap.fixtureMode ? FIXTURE_EPOCH_MS : Date.now();
+  const shownHotkey = voiceHotkeyToShow(bootstrap, voiceHotkey);
   const fixtureSpeaking = bootstrap.profile === "speaking";
   const hasAudioSignal = fixtureSpeaking || analyser !== undefined;
   const panelOpen = presentation === PANEL_PRESENTATION.PANEL;
@@ -944,8 +945,8 @@ export function App(): React.JSX.Element {
               settings,
               credentials,
               panelOpen,
-              ...(voiceHotkey?.hotkey ? { voiceHotkey: voiceHotkey.hotkey } : {}),
-              voiceHotkeyHeld: voiceHotkey?.held ?? true,
+              ...(shownHotkey.hotkey ? { voiceHotkey: shownHotkey.hotkey } : {}),
+              voiceHotkeyHeld: shownHotkey.held,
               onQuit: () => window.sidecar.quit(),
             }}
           />

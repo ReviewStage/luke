@@ -17,6 +17,30 @@
 export const DEFAULT_VOICE_HOTKEYS: readonly string[] = ["Alt+Space", "Alt+S"];
 
 /**
+ * The talk key a panel should show.
+ *
+ * Two things can say what the key is, and neither is reliably first. The helper
+ * that registers it answers over its own stdout, which happens while the
+ * renderer is still loading — so that message is sent to a window with nothing
+ * listening yet and is simply gone. Bootstrap is the one the renderer asks for,
+ * so it always arrives; a later change is what supersedes it, and that only
+ * happens if the helper stops answering and the toggle takes over.
+ *
+ * Reading them in this order rather than seeding state from bootstrap is what
+ * makes a lost message cost nothing.
+ */
+export function voiceHotkeyToShow(
+  bootstrap: { voiceHotkey?: string; voiceHotkeyHeld: boolean },
+  changed?: { hotkey?: string; held: boolean },
+): { hotkey?: string; held: boolean } {
+  if (changed) return changed;
+  return {
+    ...(bootstrap.voiceHotkey ? { hotkey: bootstrap.voiceHotkey } : {}),
+    held: bootstrap.voiceHotkeyHeld,
+  };
+}
+
+/**
  * Longer than a key is down when it was pressed rather than held.
  *
  * Under this, the press and the release are one gesture and mean one thing;
