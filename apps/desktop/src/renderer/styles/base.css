@@ -324,6 +324,9 @@ button:disabled {
   height: var(--capsule-height);
   padding: 0;
   border: 0;
+  /* The same corner the capsule is drawn with, for the same reason the panel
+     body carries the panel's: the press target is the shape, not its box. */
+  border-radius: 0 0 var(--notch-convex-radius) var(--notch-convex-radius);
   background: none;
   cursor: pointer;
   transform: translateX(-50%);
@@ -343,7 +346,6 @@ button:disabled {
    actually used. The ring is inset, because an outline outside this box would
    be drawn on the desktop above the shape. */
 html[data-keyboard="true"] .compact-hover-target:focus-visible {
-  border-radius: var(--notch-convex-radius);
   outline: 2px solid var(--state-working);
   outline-offset: -4px;
 }
@@ -515,6 +517,16 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   height: calc(var(--capsule-height) - var(--shape-top) * 2);
 }
 
+.app-stage[data-notch="false"] .compact-hover-target {
+  border-radius: 999px;
+}
+
+/* Inside an open panel the strip is surrounded by the shape rather than
+   bounding it, so it has no corner of its own to follow. */
+.app-stage[data-presentation="panel"] .compact-hover-target {
+  border-radius: 0;
+}
+
 .compact-stage {
   position: absolute;
   z-index: 4;
@@ -677,11 +689,15 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
     visibility 0s linear var(--expand-delay);
 }
 
+/* Rounded like the surface it sits on, because hit testing follows the corner:
+   the sliver a rectangle would cover past the shape's own corner is desktop,
+   and a click there belongs to whatever is behind Luke. */
 .expanded-panel {
   display: flex;
   max-height: 520px;
   flex-direction: column;
   padding: calc(max(var(--notch-top-inset), 32px) + 14px) 20px 18px;
+  border-radius: 0 0 var(--panel-radius) var(--panel-radius);
 }
 
 .app-stage[data-presentation="panel"] .expanded-panel {
