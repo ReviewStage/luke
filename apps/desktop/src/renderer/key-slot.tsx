@@ -2,9 +2,9 @@ import { useEffect, useRef } from "react";
 import type { CredentialSource } from "../shared/contracts";
 import { CREDENTIAL_PROVIDERS } from "../shared/credential-providers";
 import {
+  CREDENTIAL_PLACEHOLDER,
   type CredentialEntryControl,
   isSubmittable,
-  slotPlaceholder,
   useFieldCaret,
 } from "./credential-entry";
 import { HIT_REGION } from "./panel-state";
@@ -62,8 +62,10 @@ export function KeySlot({
   if (!entry) return null;
 
   const provider = CREDENTIAL_PROVIDERS[entry.providerId];
-  // Most providers issue an API key; one issues something it calls by another
-  // name, and the slot says which without a label to say it for them.
+  // Most providers issue an API key. One issues something it calls by another
+  // name, and a field asking for the wrong thing sends someone to the page that
+  // hands out the credential Luke refuses — so the slot names it, exactly as the
+  // line it opened from does.
   const credential = provider.keyFormat?.label ?? "API key";
   // Holding a key is what brings the confirm out; being able to send it is what
   // makes it pressable. They differ while one is being written, and the button
@@ -76,6 +78,10 @@ export function KeySlot({
       {/* No grouping role: the field names the provider itself, and everything
           beside it acts on that one field. */}
       <div className="key-slot" ref={measure} data-hit-region={HIT_REGION.SLOT}>
+        {/* What to paste, in the provider's own word for it. The line this
+            opened from labels its field the same way, and the placeholder
+            beneath is the one both share, so neither has to repeat the other. */}
+        <span className="settings-label key-slot-label">{credential}</span>
         <div className="key-slot-row">
           {/* Whose key this is, said the way the settings line says it — mark
               and cloud badge together, because a provider that needs a key is
@@ -92,7 +98,7 @@ export function KeySlot({
             aria-label={`${provider.displayName} ${credential}`}
             autoComplete="off"
             spellCheck={false}
-            placeholder={slotPlaceholder(source, credential)}
+            placeholder={CREDENTIAL_PLACEHOLDER[source]}
             value={entry.draft}
             disabled={entry.busy}
             onChange={(event) => control.change(event.target.value)}

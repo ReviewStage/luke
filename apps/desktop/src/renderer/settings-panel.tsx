@@ -4,6 +4,7 @@ import { CREDENTIAL_SOURCE } from "../shared/contracts";
 import type { CredentialProvider } from "../shared/credential-providers";
 import { CREDENTIAL_PROVIDER_LIST } from "../shared/credential-providers";
 import {
+  CREDENTIAL_PLACEHOLDER,
   type CredentialEntryControl,
   entryForProvider,
   isSubmittable,
@@ -55,16 +56,6 @@ const CREDENTIAL_STATUS: Partial<Record<CredentialSource, string>> = {
 
 /* Why a row that could otherwise be connected is not offering to be. */
 const HELD_TITLE = "Finish the one you are entering first";
-
-/* One field, three jobs: what it is for depends on what is answering for the
-   provider now, and a credential typed here always wins over one read
-   elsewhere. The label above names what to paste, so these do not repeat it —
-   and cannot, since not every provider calls it the same thing. */
-const CREDENTIAL_PLACEHOLDER: Record<CredentialSource, string> = {
-  [CREDENTIAL_SOURCE.NONE]: "Paste it here",
-  [CREDENTIAL_SOURCE.ENVIRONMENT]: "Paste one to use instead of the one from the environment",
-  [CREDENTIAL_SOURCE.ENCRYPTED_FILE]: "Replace what is stored",
-};
 
 /**
  * One provider, one line: its mark, its name, whether it is connected, and what

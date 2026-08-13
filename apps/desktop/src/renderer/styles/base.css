@@ -172,6 +172,10 @@
      key was copied from is behind this and has to stay readable. The floor is
      what those three need on a display with no housing to grow from. */
   --slot-width: max(460px, calc(var(--notch-housing-width) + 300px));
+  /* The mark sits outside the field's column, so everything else in the slot is
+     indented past it by the same amount. */
+  --slot-mark-size: 22px;
+  --slot-gutter-gap: 9px;
   /* Measured off photographs of the hardware rather than guessed: the housing's
      own corners are a convex 0.348 of its height, and where its sides meet the
      top edge it flares outward on a concave 0.170 — about half the bottom
@@ -1491,7 +1495,14 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .key-slot-row {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: var(--slot-gutter-gap);
+}
+
+/* The label and the line under the field both start where the field does, so
+   the mark is the only thing outside that column. */
+.key-slot-label,
+.key-slot-foot {
+  padding-left: calc(var(--slot-mark-size) + var(--slot-gutter-gap));
 }
 
 /* Larger than the mark on a settings line: here it is the only thing naming the
@@ -1499,8 +1510,8 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .key-slot-mark {
   position: relative;
   display: grid;
-  width: 22px;
-  height: 22px;
+  width: var(--slot-mark-size);
+  height: var(--slot-mark-size);
   flex: 0 0 auto;
   place-items: center;
 }
@@ -1552,12 +1563,8 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transform: scale(0.92);
 }
 
-/* Aligned with the field rather than the mark, because it is about the field.
-   It yields to the buttons opposite it the same way the panel's editor does. */
-.key-slot-foot {
-  padding-left: 26px;
-}
-
+/* The line under the field yields to the buttons opposite it the same way the
+   panel's editor does. */
 .key-slot-foot .settings-note {
   flex: 1;
   min-width: 0;
@@ -1565,7 +1572,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 
 /* Under the whole line, where the panel's editor puts it too. */
 .key-slot .error-message {
-  padding-left: 26px;
+  padding-left: calc(var(--slot-mark-size) + var(--slot-gutter-gap));
 }
 
 /* Evidence capture screenshots a fixed moment after the renderer reports ready.

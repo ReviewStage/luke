@@ -3,21 +3,16 @@ import type { CredentialSource } from "../shared/contracts";
 import { CREDENTIAL_SOURCE } from "../shared/contracts";
 import type { CredentialProviderId } from "../shared/credential-providers";
 
-/**
- * What the slot's field is for, in a sentence that names the credential.
- *
- * The settings row keys its placeholder to a visible label above the field, so
- * its wording does not repeat what that label already says. The slot has no
- * label — the field is the whole shape — so the sentence has to carry the name
- * itself, and not every provider calls it the same thing.
- */
-export function slotPlaceholder(source: CredentialSource, credential: string): string {
-  if (source === CREDENTIAL_SOURCE.ENCRYPTED_FILE) return `Replace the stored ${credential}`;
-  if (source === CREDENTIAL_SOURCE.ENVIRONMENT) {
-    return `Paste a ${credential} to use instead of the one from the environment`;
-  }
-  return `Paste your ${credential}`;
-}
+/* One field, three jobs: what it is for depends on what is answering for the
+   provider now, and a credential typed here always wins over one read
+   elsewhere. The label above names what to paste, so these do not repeat it —
+   and cannot, since not every provider calls it the same thing. Both places the
+   field is drawn carry that label, so both can use these. */
+export const CREDENTIAL_PLACEHOLDER: Record<CredentialSource, string> = {
+  [CREDENTIAL_SOURCE.NONE]: "Paste it here",
+  [CREDENTIAL_SOURCE.ENVIRONMENT]: "Paste one to use instead of the one from the environment",
+  [CREDENTIAL_SOURCE.ENCRYPTED_FILE]: "Replace what is stored",
+};
 
 /**
  * A key being entered, wherever it happens to be drawn. Entering one outlives
