@@ -895,6 +895,7 @@ export function App(): React.JSX.Element {
               microphoneStatus,
               microphoneError,
               onRequestMicrophone: () => void requestMicrophoneAccess(),
+              voiceAvailable: bootstrap.realtimeAvailable,
               settings,
               credentials,
               panelOpen,

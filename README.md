@@ -100,10 +100,12 @@ peek closed. There is no transcript.
 
 ## Privacy
 
-Luke observes provider state read-only. Without `OPENAI_API_KEY`, microphone
-processing stays local; with it set, an attention-review request is made, and
-the spoken conversation sends the audio of a turn you opened to OpenAI.
-See [PRIVACY.md](PRIVACY.md) for the exact data boundaries and retention wording.
+Luke observes provider state read-only. Without `OPENAI_API_KEY` it never opens
+the microphone and never asks for it: talking is the only thing it uses the
+microphone for, and there is nothing to talk to. With the key set, an
+attention-review request is made, and the spoken conversation sends the audio of
+a turn you opened to OpenAI. See [PRIVACY.md](PRIVACY.md) for the exact data
+boundaries and retention wording.
 
 ## Build from source
 

@@ -18,6 +18,7 @@ import {
   removalStage,
   removalWithdrawable,
 } from "./credential-removal";
+import { microphoneAccessRow } from "./microphone-access";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import { CloudBadge, ProviderMark } from "./provider-marks";
 import {
@@ -36,6 +37,8 @@ export interface SettingsPanelProps {
   microphoneError?: string;
   /** Asks the system for access. Using the microphone is the talk key's job. */
   onRequestMicrophone: () => void;
+  /** Whether there is anything to talk to, which is the microphone's only use. */
+  voiceAvailable: boolean;
   settings?: AppSettings;
   /** The one credential being entered anywhere, and everything that can be done to it. */
   credentials: CredentialEntryControl;
@@ -49,23 +52,6 @@ export interface SettingsPanelProps {
   /** The talk key, shown so it can be learned. It is not editable yet. */
   voiceHotkey?: string;
 }
-
-/** What the state means for talking, which is the only thing it decides now. */
-const MICROPHONE_STATUS_DETAIL: Record<MicrophoneStatus, string> = {
-  granted: "Speech is sent only while a turn is open, and never recorded.",
-  "not-determined": "macOS will ask the first time you press the talk key.",
-  denied: "Allow Luke in System Settings › Privacy & Security › Microphone.",
-  restricted: "This Mac does not permit microphone access.",
-  unknown: "Luke could not read the microphone permission.",
-};
-
-const MICROPHONE_STATUS_LABEL: Record<MicrophoneStatus, string> = {
-  "not-determined": "Not requested yet",
-  granted: "Granted",
-  denied: "Denied in System Settings",
-  restricted: "Restricted by this Mac",
-  unknown: "Unknown",
-};
 
 /* What nothing else on the line can say on its own. A key kept here needs no
    words at all — the check is the whole message — and no key at all is already
@@ -477,12 +463,14 @@ export function SettingsPanel({
   microphoneStatus,
   microphoneError,
   onRequestMicrophone,
+  voiceAvailable,
   settings,
   credentials,
   panelOpen,
   onQuit,
   voiceHotkey,
 }: SettingsPanelProps): React.JSX.Element {
+  const microphone = microphoneAccessRow({ voiceAvailable, status: microphoneStatus });
   return (
     <div
       className="settings"
@@ -521,12 +509,12 @@ export function SettingsPanel({
             line answers the one question it can: whether Luke is allowed. */}
         <div className="settings-row">
           <span className="settings-copy">
-            <strong>{MICROPHONE_STATUS_LABEL[microphoneStatus]}</strong>
-            <small>{MICROPHONE_STATUS_DETAIL[microphoneStatus]}</small>
+            <strong>{microphone.label}</strong>
+            <small>{microphone.detail}</small>
           </span>
-          {microphoneStatus === "granted" ? (
+          {microphone.ready ? (
             <CheckIcon />
-          ) : microphoneStatus === "not-determined" ? (
+          ) : microphone.offerAccess ? (
             <button type="button" className="action-button" onClick={onRequestMicrophone}>
               Grant access
             </button>
