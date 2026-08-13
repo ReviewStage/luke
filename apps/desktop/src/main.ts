@@ -41,11 +41,11 @@ import { DevinSessionAdapter } from "./devin-adapter";
 import { JulesSessionAdapter } from "./jules-adapter";
 import { readMacScreenGeometry } from "./macos-screen-geometry";
 import { openAiAttentionEvaluatorFromEnvironment } from "./openai-attention-evaluator";
-import { OpenCodeSessionAdapter } from "./opencode-adapter";
 import {
   openAiRealtimeCredentialsFromEnvironment,
   unavailableRealtimeDiagnostics,
 } from "./openai-realtime-credentials";
+import { OpenCodeSessionAdapter } from "./opencode-adapter";
 import { SettingsStore } from "./settings-store";
 import {
   type AppBootstrap,
