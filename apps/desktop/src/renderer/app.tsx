@@ -411,6 +411,15 @@ export function App(): React.JSX.Element {
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
+      // The shortcut the tray menu advertises. It is claimed here rather than
+      // globally, because Command-, belongs to whichever app is frontmost and
+      // Luke is only that while its panel has the keyboard.
+      if (event.key === "," && (event.metaKey || event.ctrlKey)) {
+        if (presentation !== PANEL_PRESENTATION.PANEL) return;
+        event.preventDefault();
+        changeTab(PANEL_TAB.SETTINGS);
+        return;
+      }
       if (event.key !== "Escape" || presentation !== PANEL_PRESENTATION.PANEL) return;
       if (tab === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.SESSIONS);
       else void changeMode(false);

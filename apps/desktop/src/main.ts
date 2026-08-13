@@ -500,10 +500,28 @@ function createPanel(): void {
   void panelWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
 }
 
+/**
+ * The system's own gear rather than one of ours. AppKit publishes it as a
+ * template image, so the menu draws it at its own scale and appearance and it
+ * changes when macOS does. It exists only there; anywhere else the item simply
+ * carries no icon.
+ */
+function settingsIcon(): Electron.NativeImage | undefined {
+  const icon = nativeImage.createFromNamedImage("NSActionTemplate");
+  return icon.isEmpty() ? undefined : icon;
+}
+
 function trayMenu(): Electron.Menu {
   return Menu.buildFromTemplate([
     {
-      label: "Settings",
+      // The ellipsis is the macOS convention for an item that opens somewhere
+      // rather than acting, and the accelerator is shown rather than registered:
+      // Command-, belongs to whichever app is frontmost, so Luke claims it only
+      // inside its own window, where the renderer handles it.
+      label: "Settings…",
+      accelerator: "CommandOrControl+,",
+      registerAccelerator: false,
+      icon: settingsIcon(),
       click: () => {
         setWindowMode("expanded", true);
         panelWindow?.webContents.send(channels.lifecycle, "tab:settings");
