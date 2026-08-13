@@ -81,3 +81,10 @@ spctl -a -t exec -vv Luke.app
 ```
 
 A successful assessment identifies the source as `Notarized Developer ID`.
+
+## Local DMG release
+
+The GitHub Actions flow above produces a zip and uses App Store Connect API-key
+secrets. The separate local `pnpm release:macos` flow produces a DMG under
+`artifacts/release/` and uses the `luke-notary` keychain profile. It does not
+upload or publish the DMG; distribution remains a separate deliberate step.
