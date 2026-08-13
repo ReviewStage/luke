@@ -500,17 +500,6 @@ function createPanel(): void {
   void panelWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
 }
 
-/**
- * The system's own gear rather than one of ours. AppKit publishes it as a
- * template image, so the menu draws it at its own scale and appearance and it
- * changes when macOS does. It exists only there; anywhere else the item simply
- * carries no icon.
- */
-function settingsIcon(): Electron.NativeImage | undefined {
-  const icon = nativeImage.createFromNamedImage("NSActionTemplate");
-  return icon.isEmpty() ? undefined : icon;
-}
-
 function trayMenu(): Electron.Menu {
   return Menu.buildFromTemplate([
     {
@@ -518,10 +507,14 @@ function trayMenu(): Electron.Menu {
       // rather than acting, and the accelerator is shown rather than registered:
       // Command-, belongs to whichever app is frontmost, so Luke claims it only
       // inside its own window, where the renderer handles it.
+      //
+      // No icon: a menu item takes a NativeImage sized in points, and the
+      // system's named gear arrives at its natural size, which draws far too
+      // large beside the text. Apple's own menu bar menus label these items
+      // rather than picture them, so this follows them.
       label: "Settings…",
       accelerator: "CommandOrControl+,",
       registerAccelerator: false,
-      icon: settingsIcon(),
       click: () => {
         setWindowMode("expanded", true);
         panelWindow?.webContents.send(channels.lifecycle, "tab:settings");

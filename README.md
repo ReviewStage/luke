@@ -55,8 +55,7 @@ cannot be captured through the app. With Luke running, `./scripts/menu-bar-evide
 photographs the right end of the menu bar into
 `artifacts/evidence/menu-bar-item.png`; the terminal needs Screen Recording
 permission the first time. Open the item afterwards to check its menu, which
-offers **Settings…** — with the system's gear beside it and Command-, shown
-against it — and Quit. The shortcut is claimed inside Luke's own window rather
+offers **Settings…**, with Command-, shown against it, and Quit. The shortcut is claimed inside Luke's own window rather
 than registered with the system, because Command-, belongs to whichever app is
 frontmost; it switches the open panel to its Settings tab.
 
