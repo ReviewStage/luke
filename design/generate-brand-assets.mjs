@@ -351,10 +351,10 @@ emitModes("luke-mark", tightMarkSvg(faceCore()), "Luke");
 emitModes("luke-wordmark", wordSvg(faceFirstWordmark()), "LUKE");
 
 // App icon: space-black tile with the white face; works on both modes.
-// Standard macOS glyph-in-tile sizing: the glyph spans ~70% of the tile
-// width, centered on the tile — measured from the artwork's bounding box.
+// The glyph spans ~58% of the tile width, centered — measured from the
+// artwork's bounding box, in line with typical macOS glyph-in-tile icons.
 const bbox = faceBBox();
-const glyphScale = (240 * 0.7) / bbox.w;
+const glyphScale = (224 * 0.58) / bbox.w;
 const gx = 120 - bbox.cx * glyphScale;
 const gy = 120 - bbox.cy * glyphScale;
 const icon =

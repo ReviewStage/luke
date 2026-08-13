@@ -35,7 +35,7 @@ mode.
 
 Asset viewBoxes are computed from the artwork's bounding box, not the drawing canvas:
 static marks and wordmarks are trimmed tight (+6 units padding), the app-icon glyph
-spans ~70% of the tile width (standard macOS glyph-in-tile proportion), and the
+spans ~58% of the tile width (typical macOS glyph-in-tile proportion), and the
 menu-bar template fills ~90% of its square canvas. Only the animated `motion/` marks
 keep the full 240×240 canvas — they need headroom to move.
 
