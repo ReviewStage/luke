@@ -70,8 +70,20 @@ const CODEX_RESPONSE_PAYLOAD = {
   FUNCTION_CALL: "function_call",
 } as const;
 
-/** Function-call arguments whose value names the work, in the order they read best. */
-const CODEX_CALL_ARGUMENT_KEY = ["command", "path", "file_path", "query", "pattern"] as const;
+/**
+ * Function-call arguments whose value names the work, in the order they read
+ * best. `cmd` leads because `exec_command` is by far the most common call Codex
+ * makes and that is what it calls its command line.
+ */
+const CODEX_CALL_ARGUMENT_KEY = [
+  "cmd",
+  "command",
+  "path",
+  "file_path",
+  "query",
+  "search_query",
+  "pattern",
+] as const;
 
 const CODEX_ADAPTER_DEFAULTS = {
   MAXIMUM_SESSION_ROWS: 40,
@@ -232,6 +244,22 @@ function recordFromJsonLine(line: string): Record<string, unknown> | undefined {
   }
 }
 
+/**
+ * Reads one argument as the phrase that names the work. Codex passes some of
+ * them as a list rather than a string — a search's terms, a command's argv —
+ * so a list of plain values is joined instead of dropped. A list of anything
+ * else, such as a plan's steps, is not a phrase and is left alone.
+ */
+function argumentPhrase(value: unknown): string | undefined {
+  if (typeof value === "string") return text(value);
+  if (typeof value === "number") return String(value);
+  if (!Array.isArray(value) || value.length === 0) return undefined;
+  const tokens = value.map((entry) =>
+    typeof entry === "string" || typeof entry === "number" ? String(entry) : undefined,
+  );
+  return tokens.every((token) => token !== undefined) ? text(tokens.join(" ")) : undefined;
+}
+
 /** Names the tool Codex called, preferring whichever argument says what it is for. */
 function activityFromCall(payload: Record<string, unknown>): string | undefined {
   const name = text(payload.name);
@@ -241,7 +269,7 @@ function activityFromCall(payload: Record<string, unknown>): string | undefined 
     : undefined;
   for (const key of CODEX_CALL_ARGUMENT_KEY) {
     const detail = oneLine(
-      text(parsedArguments?.[key]),
+      argumentPhrase(parsedArguments?.[key]),
       CODEX_ADAPTER_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH,
     );
     if (detail) return `${name}: ${detail}`;

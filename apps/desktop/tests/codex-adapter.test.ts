@@ -194,7 +194,7 @@ test("reports a finished Codex turn as waiting for its developer", async (t) => 
       payload: {
         type: "function_call",
         name: "exec_command",
-        arguments: '{"command":"pnpm test"}',
+        arguments: '{"cmd":"pnpm test","workdir":"/Users/test/luke"}',
       },
     },
     {
@@ -229,7 +229,7 @@ test("reports a running Codex turn as working with the call it is making", async
       payload: {
         type: "function_call",
         name: "exec_command",
-        arguments: '{"command":"pnpm test"}',
+        arguments: '{"cmd":"pnpm test","workdir":"/Users/test/luke"}',
       },
     },
   ]);
@@ -246,6 +246,64 @@ test("reports a running Codex turn as working with the call it is making", async
   assert.equal(observation?.detail?.activity, "exec_command: pnpm test");
 });
 
+test("names a call whose argument Codex passes as a list of tokens", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const rolloutPath = path.join(codexHome, "rollout-list-argument.jsonl");
+  await writeCodexState(codexHome, [
+    { id: "codex-list-arg", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000, rolloutPath },
+  ]);
+  await writeRollout(rolloutPath, [
+    { type: "event_msg", payload: { type: "task_started" } },
+    {
+      type: "response_item",
+      payload: {
+        type: "function_call",
+        name: "run",
+        // Codex passes a search's terms as a list rather than a string.
+        arguments: '{"search_query":["notch","geometry","inset"]}',
+      },
+    },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.detail?.activity, "run: notch geometry inset");
+});
+
+test("names a call by its tool alone when no argument reads as a phrase", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const rolloutPath = path.join(codexHome, "rollout-structured-argument.jsonl");
+  await writeCodexState(codexHome, [
+    { id: "codex-structured", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000, rolloutPath },
+  ]);
+  await writeRollout(rolloutPath, [
+    { type: "event_msg", payload: { type: "task_started" } },
+    {
+      type: "response_item",
+      payload: {
+        type: "function_call",
+        name: "update_plan",
+        // A plan's steps are objects, and flattening them would be noise.
+        arguments: '{"plan":[{"step":"Read the adapter","status":"done"}]}',
+      },
+    },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.detail?.activity, "update_plan");
+});
+
 test("drops the previous turn's call when a new Codex turn starts", async (t) => {
   const codexHome = await temporaryCodexHome(t);
   const rolloutPath = path.join(codexHome, "rollout-new-turn.jsonl");
@@ -259,7 +317,7 @@ test("drops the previous turn's call when a new Codex turn starts", async (t) =>
       payload: {
         type: "function_call",
         name: "exec_command",
-        arguments: '{"command":"pnpm test"}',
+        arguments: '{"cmd":"pnpm test","workdir":"/Users/test/luke"}',
       },
     },
     { type: "event_msg", payload: { type: "task_complete", last_agent_message: "Tests pass." } },
