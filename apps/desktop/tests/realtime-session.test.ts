@@ -282,6 +282,73 @@ test("a proactive update is spoken once the call is open", async () => {
   );
 });
 
+test("a press during the handshake opens the turn it was asking for", async () => {
+  const context = harness({ connectionDelayMs: 5 });
+
+  // The order a talk key produces: the press comes first, and the call is what
+  // it starts. Nothing is captured until the microphone opens at the far end.
+  context.session.toggleTurn();
+  await context.session.connect();
+
+  assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
+  assert.equal(context.microphoneEnabled(), true);
+});
+
+test("pressing twice during the handshake leaves no turn open", async () => {
+  const context = harness({ connectionDelayMs: 5 });
+
+  context.session.toggleTurn();
+  const opening = context.session.connect();
+  // Pressing again before the call is up cannot send anything — the microphone
+  // has not opened yet — so it takes back the press rather than queueing a turn
+  // that would commit an empty buffer.
+  context.session.toggleTurn();
+  await opening;
+
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+  assert.equal(context.microphoneEnabled(), false);
+  assert.deepEqual(
+    context.sent.filter((event) => event.type === REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_COMMIT),
+    [],
+  );
+});
+
+test("a reply that runs out before the model says so still ends", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.session.toggleTurn();
+  context.session.toggleTurn();
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+
+  // Playback finishing and generation finishing have no fixed order. The meter
+  // reports an edge, so this quiet is the only one there will be — waiting for
+  // a second would hold the turn open until the settle timeout.
+  context.session.reportRemoteAudioIdle();
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
+
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+});
+
+test("a pause mid-reply is not the reply running out", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.session.toggleTurn();
+  context.session.toggleTurn();
+
+  // Long enough between two sentences for the meter to call it quiet, and then
+  // he carries on. Ending here would take the meter and the face down with Luke
+  // still speaking, which is the whole reason the turn does not end on quiet
+  // alone.
+  context.session.reportRemoteAudioIdle();
+  context.session.reportRemoteAudioActive();
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+
+  context.session.reportRemoteAudioIdle();
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+});
+
 test("the quiet before Luke starts is not Luke going quiet", () => {
   // One meter draws both halves of the conversation. It reports quiet as it
   // lets go of the microphone and again in the gap before the first word comes

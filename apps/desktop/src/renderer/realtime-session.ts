@@ -105,6 +105,21 @@ export class RealtimeVoiceSession {
    * let the next press start a turn over the top of him.
    */
   #generationDone = false;
+  /**
+   * Whether Luke has been quiet since he was last heard. Generation finishing
+   * and playback finishing are two events with no fixed order, and only one of
+   * them arrives twice: the meter reports an edge, so a quiet that lands before
+   * `response.done` is the only quiet there will be. Remembering it is what
+   * lets the second of the two end the turn, whichever one that turns out to
+   * be.
+   */
+  #remoteQuiet = false;
+  /**
+   * A press of the talk key that arrived before there was a call to press
+   * against. The microphone opens only once the call is up, so such a press is
+   * an intention rather than a turn.
+   */
+  #pendingTurn = false;
   #settleTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(options: RealtimeVoiceSessionOptions) {
@@ -212,6 +227,12 @@ export class RealtimeVoiceSession {
       await this.#waitForChannel(channel, deadline);
       if (this.#closed) return this.#abandonConnect();
       this.#setStatus(REALTIME_STATUS.READY);
+      // Whoever pressed the talk key to get here has been waiting through the
+      // handshake for their turn to open.
+      if (this.#pendingTurn) {
+        this.#pendingTurn = false;
+        this.startListening();
+      }
       return true;
     } catch (error) {
       if (this.#closed) return this.#abandonConnect();
@@ -281,11 +302,35 @@ export class RealtimeVoiceSession {
    * means lives in one place rather than at every call site.
    */
   toggleTurn(): void {
+    // Before the call is up there is no turn to take: the microphone is enabled
+    // only once the connection exists, so a press here cannot have captured
+    // anything. It is remembered and applied when the call opens — and a second
+    // press cancels the first rather than queueing another, because two presses
+    // have always meant a turn opened and closed, and one that held nothing is
+    // one with nothing to send.
+    if (!this.isConnected) {
+      this.#pendingTurn = !this.#pendingTurn;
+      return;
+    }
     if (this.#status === REALTIME_STATUS.LISTENING) {
       this.stopListening(true);
       return;
     }
     this.startListening();
+  }
+
+  /** Whether a call is being opened, so a press has something to wait for. */
+  get isConnecting(): boolean {
+    return this.#connecting !== undefined;
+  }
+
+  /**
+   * Forgets a press that was waiting for a call that is not coming — a refused
+   * microphone, say. Without this the intention would outlive the attempt and
+   * open a turn out of the next connection, which nobody asked for.
+   */
+  dropPendingTurn(): void {
+    this.#pendingTurn = false;
   }
 
   /**
@@ -319,6 +364,7 @@ export class RealtimeVoiceSession {
       this.#silenceLuke();
       this.#send(cancelResponseEvents());
       this.#generationDone = false;
+      this.#remoteQuiet = false;
       this.#clearSettleTimer();
     }
     // Start from an empty buffer: a muted track still transmits, and with turn
@@ -400,6 +446,8 @@ export class RealtimeVoiceSession {
     this.#stream = undefined;
     this.#sessionContext = undefined;
     this.#generationDone = false;
+    this.#remoteQuiet = false;
+    this.#pendingTurn = false;
     this.#clearSettleTimer();
     this.#options.onLocalStream(undefined);
     this.#options.onRemoteStream(undefined);
@@ -410,6 +458,7 @@ export class RealtimeVoiceSession {
     // audible.
     if (this.#remoteTrack) this.#remoteTrack.enabled = true;
     this.#generationDone = false;
+    this.#remoteQuiet = false;
     this.#clearSettleTimer();
     this.#send(events);
     this.#setStatus(REALTIME_STATUS.RESPONDING);
@@ -423,8 +472,22 @@ export class RealtimeVoiceSession {
    * {@link quietIsLukesOwn} before this is called at all.
    */
   reportRemoteAudioIdle(): void {
+    // Remembered rather than acted on and forgotten: if generation has not
+    // finished yet, this is still the only quiet edge the meter will report,
+    // and `response.done` is what will read it.
+    this.#remoteQuiet = true;
     if (!this.#generationDone) return;
     this.#finishResponse();
+  }
+
+  /**
+   * Reports that Luke is audible again. A pause between two sentences is longer
+   * than the meter's idea of quiet, so without this a reply that pauses and
+   * resumes would end on the pause the moment generation finished — with Luke
+   * still speaking.
+   */
+  reportRemoteAudioActive(): void {
+    this.#remoteQuiet = false;
   }
 
   #silenceLuke(): void {
@@ -476,6 +539,14 @@ export class RealtimeVoiceSession {
       // being audible, which the caller reports from the audio itself rather
       // than from an event — the one that would say so is undocumented.
       this.#generationDone = true;
+      // The audio can run out before the event that says generation is over.
+      // The meter has already reported its quiet and will not report it twice,
+      // so waiting for another would hold the turn open until the settle
+      // timeout — seconds of a meter and a face saying Luke is still talking.
+      if (this.#remoteQuiet) {
+        this.#finishResponse();
+        return;
+      }
       this.#settleTimer ??= setTimeout(() => {
         this.#settleTimer = undefined;
         this.#finishResponse();

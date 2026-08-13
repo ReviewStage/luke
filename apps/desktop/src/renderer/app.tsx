@@ -283,10 +283,15 @@ export function App(): React.JSX.Element {
 
   const startMicrophone = useCallback(async () => {
     setMicrophoneError(undefined);
+    const session = ensureVoiceSession();
     const permission = await window.sidecar.requestMicrophone();
     setMicrophoneStatus(permission);
-    if (permission !== "granted") return;
-    const session = ensureVoiceSession();
+    if (permission !== "granted") {
+      // The press that asked for this is still waiting for a call that is now
+      // not coming.
+      session.dropPendingTurn();
+      return;
+    }
     if (await session.connect()) session.updateSessions(sessionsRef.current);
   }, [ensureVoiceSession]);
   startMicrophoneRef.current = startMicrophone;
@@ -305,6 +310,7 @@ export function App(): React.JSX.Element {
     if (voiceStatusRef.current !== REALTIME_STATUS.RESPONDING) return;
     if (active) {
       heardLuke.current = true;
+      voiceSession.current?.reportRemoteAudioActive();
     }
     if (quietTimer.current !== undefined) {
       window.clearTimeout(quietTimer.current);
@@ -335,14 +341,14 @@ export function App(): React.JSX.Element {
   }, []);
 
   const toggleTurn = useCallback(async () => {
-    const session = voiceSession.current;
-    if (session?.isConnected) {
-      session.toggleTurn();
-      return;
-    }
+    // Every press goes to the session, including the one that has no call to
+    // press against yet: what a press means belongs in one place, and a press
+    // during the handshake is one of the meanings.
+    const session = ensureVoiceSession();
+    session.toggleTurn();
+    if (session.isConnected || session.isConnecting) return;
     await startMicrophoneRef.current?.();
-    voiceSession.current?.startListening();
-  }, []);
+  }, [ensureVoiceSession]);
 
   const cancelHoverTransition = useCallback(() => {
     if (hoverTimer.current === undefined) return;
