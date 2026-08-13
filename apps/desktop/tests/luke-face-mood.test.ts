@@ -10,6 +10,7 @@ import {
   chooseAside,
   type FaceContext,
   type FaceObservation,
+  facePlay,
   noticedMotion,
   playedMotion,
   restingMotion,
@@ -159,6 +160,30 @@ test("a moment is sampled by weight, and the smallest gesture is most of the poo
     // Every weight is a real share, or the pool is lying about its own odds.
     for (const aside of pool) assert.ok(aside.weight > 0, `${aside.motion} can never be chosen`);
   }
+});
+
+test("a gesture the rest is covering is not a play", () => {
+  const gesture = { motion: FACE_MOTION.WAITING, play: 7 };
+  // Nothing resting: the gesture is what is drawn, and it carries its own play
+  // so that being asked for one motion twice plays it twice.
+  assert.deepEqual(facePlay(undefined, gesture), {
+    motion: FACE_MOTION.WAITING,
+    repeat: false,
+    play: 7,
+  });
+  // A rest on the face: the gesture is not being played, and counting it would
+  // rebuild the drawing — restarting the rest's own loop — at a session the rest
+  // is meant to be ignoring, and again a frame later when the rest dropped it.
+  for (const resting of [FACE_MOTION.LISTENING, FACE_MOTION.TALKING, FACE_MOTION.SLEEPING]) {
+    assert.deepEqual(facePlay(resting, gesture), { motion: resting, repeat: true, play: 0 });
+    assert.deepEqual(facePlay(resting, undefined), { motion: resting, repeat: true, play: 0 });
+  }
+  // Still: nothing drawn, nothing repeating, and one play for all of stillness.
+  assert.deepEqual(facePlay(undefined, undefined), {
+    motion: undefined,
+    repeat: false,
+    play: 0,
+  });
 });
 
 test("the sway is offered only while there is work for it to mean", () => {

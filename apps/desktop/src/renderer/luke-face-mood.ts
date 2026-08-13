@@ -202,7 +202,7 @@ export function usePrefersReducedMotion(): boolean {
  * gesture twice is the likeliest thing to happen, and a second session starting
  * to ask while the first nudge is still playing has to bounce again.
  */
-interface PlayingGesture {
+export interface PlayingGesture {
   motion: FaceMotion;
   play: number;
 }
@@ -215,6 +215,27 @@ export interface FacePlay {
   repeat: boolean;
   /** Which play this is, so that asking twice for one motion plays it twice. */
   play: number;
+}
+
+/**
+ * Everything the drawing is told, from the two things the model holds.
+ *
+ * Each gesture gets its own play, so each one is drawn afresh and each one is
+ * therefore played. A rest keeps one play throughout, so its loop is never
+ * rebuilt underneath itself — and a gesture the rest is covering is not being
+ * played at all, so it does not get one either. Counting that one would restart
+ * the microphone's tilt at a session it is meant to ignore, and again a frame
+ * later when the rest dropped it.
+ */
+export function facePlay(
+  resting: FaceMotion | undefined,
+  gesture: PlayingGesture | undefined,
+): FacePlay {
+  return {
+    motion: playedMotion(resting, gesture?.motion),
+    repeat: resting !== undefined,
+    play: resting === undefined ? (gesture?.play ?? 0) : 0,
+  };
 }
 
 /**
@@ -299,12 +320,5 @@ export function useFaceMotion(context: FaceContext, still: boolean): FacePlay {
   // Held still, the face is simply the drawing: the stylesheet stops every loop,
   // and asking for no motion at all stops the poses changing underneath it.
   if (still) return { repeat: false, play: 0 };
-  const motion = playedMotion(resting, gesture?.motion);
-  return {
-    motion,
-    repeat: motion !== undefined && motion === resting,
-    // A rest keeps one play, so the drawing is never rebuilt under a loop that
-    // is still running; each gesture gets its own, so each one gets played.
-    play: gesture?.play ?? 0,
-  };
+  return facePlay(resting, gesture);
 }
