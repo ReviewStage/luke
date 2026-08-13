@@ -27,7 +27,14 @@ const HIT_REGION = {
   PANEL: "panel",
 } as const;
 
-import { displaySessions, sessionTally, tallySummary } from "./session-model";
+import {
+  arrangeSessions,
+  DEFAULT_SESSION_VIEW,
+  displaySessions,
+  type SessionView,
+  sessionTally,
+  tallySummary,
+} from "./session-model";
 
 function usePointerPassthrough(
   onHitRegionEnter: () => void,
@@ -147,6 +154,8 @@ export function App(): React.JSX.Element {
   const [display, setDisplay] = useState<DisplayDiagnostic>();
   const [presentation, setPresentation] = useState<PanelPresentation>(PANEL_PRESENTATION.CAPSULE);
   const [tab, setTab] = useState<PanelTab>(PANEL_TAB.SESSIONS);
+  const [sessionView, setSessionView] = useState<SessionView>(DEFAULT_SESSION_VIEW);
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const [settings, setSettings] = useState<AppSettings>();
   const [microphoneStatus, setMicrophoneStatus] = useState<MicrophoneStatus>("not-determined");
   const [microphoneError, setMicrophoneError] = useState<string>();
@@ -164,15 +173,23 @@ export function App(): React.JSX.Element {
   const changeTab = useCallback((next: PanelTab) => {
     tabRef.current = next;
     setTab(next);
+    // The sheet belongs to the session list, and it is drawn over the list it
+    // belongs to, so leaving for Settings has to take it along.
+    setOptionsOpen(false);
   }, []);
 
   const applyPresentation = useCallback(
     (next: PanelPresentation) => {
       presentationRef.current = next;
       setPresentation(next);
-      // A panel that has closed reopens on the session list: settings are
-      // somewhere you go, not a state the capsule remembers.
-      if (next === PANEL_PRESENTATION.CAPSULE) changeTab(PANEL_TAB.SESSIONS);
+      // A panel that has closed reopens on the session list, showing every
+      // session with whatever needs a person first: settings are somewhere you
+      // go, not a state the capsule remembers, and a filter left in place would
+      // let the panel hide a session the capsule is still counting.
+      if (next === PANEL_PRESENTATION.CAPSULE) {
+        changeTab(PANEL_TAB.SESSIONS);
+        setSessionView(DEFAULT_SESSION_VIEW);
+      }
     },
     [changeTab],
   );
@@ -421,17 +438,38 @@ export function App(): React.JSX.Element {
         return;
       }
       if (event.key !== "Escape" || presentation !== PANEL_PRESENTATION.PANEL) return;
-      if (tab === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.SESSIONS);
+      // Escape closes the nearest thing that is open, one layer at a time: the
+      // options sheet, then the settings tab, then the panel itself.
+      if (optionsOpen) setOptionsOpen(false);
+      else if (tab === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.SESSIONS);
       else void changeMode(false);
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [changeMode, changeTab, presentation, tab]);
+  }, [changeMode, changeTab, optionsOpen, presentation, tab]);
 
   if (!bootstrap || !display) return <div />;
 
   const visibleSessions = displaySessions(bootstrap, sessions);
+  // The tally is taken before the list is narrowed: the capsule reports what
+  // Luke is watching, not what the panel is currently showing.
   const tally = sessionTally(visibleSessions);
+  const list = arrangeSessions(visibleSessions, sessionView);
+  // Dropping an emptied filter is a change of view, not a way of drawing one.
+  // Left in state it would lie dormant behind an All that only looks chosen,
+  // and the next session to enter that state would narrow the list back down
+  // to it with nothing having been pressed. Setting state here rather than from
+  // an effect is what keeps that from being drawn first and corrected after.
+  if (list.filter !== sessionView.filter) {
+    setSessionView({ ...sessionView, filter: list.filter });
+  }
+  // The sheet exists only while there is something for it to decide, and its
+  // being open has to go when its button does — by the same rule the emptied
+  // filter follows. Left set behind a button nobody can see, Escape would spend
+  // itself closing a sheet that is not drawn instead of closing the panel, and
+  // the next session to arrive would open it again with nothing pressed.
+  const offerOptions = tab === PANEL_TAB.SESSIONS && list.total > 1;
+  if (optionsOpen && !offerOptions) setOptionsOpen(false);
   const fixtureSpeaking = bootstrap.profile === "speaking";
   const hasAudioSignal = fixtureSpeaking || analyser !== undefined;
   const panelOpen = presentation === PANEL_PRESENTATION.PANEL;
@@ -454,7 +492,12 @@ export function App(): React.JSX.Element {
       <div className="expanded-stage" aria-hidden={!panelOpen} inert={!panelOpen}>
         <section className="expanded-panel" ref={panelElement} data-hit-region={HIT_REGION.PANEL}>
           <PanelBody
-            sessions={visibleSessions}
+            list={list}
+            view={sessionView}
+            onViewChange={setSessionView}
+            offerOptions={offerOptions}
+            optionsOpen={optionsOpen}
+            onOptionsToggle={() => setOptionsOpen((open) => !open)}
             tab={tab}
             onTabChange={changeTab}
             settings={{
