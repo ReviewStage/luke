@@ -1227,6 +1227,12 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transform: none;
 }
 
+/* A departing session's fade is drawn by session-motion rather than here: the
+   row's opacity transition above carries the panel-arrival stagger, and a
+   session that returned mid-fade would wait out `--expand-delay` before
+   resuming. An animation leaves the property underneath untouched, so a
+   return only has to cancel it. */
+
 /* Settings --------------------------------------------------------------- */
 
 /* Scrolls on the same terms as the session list: contained, never chaining out
@@ -1903,6 +1909,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   --duration-shape: 0s;
   --duration-exit: 0s;
   --duration-quick: 0s;
+  --duration-fast: 0s;
   --expand-delay: 0s;
   --row-stagger: 0s;
   /* Luke blinks and sways on a loop with no end to wait for, so a capture would

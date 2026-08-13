@@ -8,6 +8,12 @@ import {
   type SessionView,
 } from "./session-model";
 import {
+  SESSION_ROW_ID_ATTRIBUTE,
+  SESSION_ROW_LEAVING_ATTRIBUTE,
+  useSessionReorderMotion,
+  useSessionRoster,
+} from "./session-motion";
+import {
   BranchGlyph,
   CheckGlyph,
   EmptyState,
@@ -41,16 +47,25 @@ function SessionRow({
   session,
   index,
   now,
+  leaving,
   onOpen,
 }: {
   session: DisplaySession;
   index: number;
   now: number;
+  leaving: boolean;
   onOpen: (session: DisplaySession) => void;
 }): React.JSX.Element {
   const shared = {
     className: "session-row",
     "data-state": session.state,
+    // How the reorder measurement finds this row again after a re-sort has
+    // moved it, whichever element it is rendered as.
+    [SESSION_ROW_ID_ATTRIBUTE]: session.id,
+    // A leaving row holds its slot while it fades, but its session is already
+    // gone from the model, so nothing may read, focus, or press it.
+    [SESSION_ROW_LEAVING_ATTRIBUTE]: String(leaving),
+    inert: leaving,
     style: { "--row-index": index + 1 } as React.CSSProperties,
   };
   // The identifier that tells this row from its neighbours: the branch, or the
@@ -147,6 +162,8 @@ export function PanelBody({
   onTabChange,
   settings,
 }: PanelBodyProps): React.JSX.Element {
+  const sessionListRef = useSessionReorderMotion();
+  const rows = useSessionRoster(list.sessions, sessionListRef);
   return (
     <div className="body">
       {/* The tab bar says what you are looking at; the options button says how
@@ -165,16 +182,17 @@ export function PanelBody({
           {offerOptions && optionsOpen ? (
             <SessionOptions list={list} view={view} onViewChange={onViewChange} />
           ) : null}
-          <div className="session-list">
-            {list.sessions.length === 0 ? (
+          <div className="session-list" ref={sessionListRef}>
+            {rows.length === 0 ? (
               <EmptyState />
             ) : (
-              list.sessions.map((session, index) => (
+              rows.map((row, index) => (
                 <SessionRow
-                  key={session.id}
-                  session={session}
+                  key={row.session.id}
+                  session={row.session}
                   index={index}
                   now={now}
+                  leaving={row.leaving}
                   onOpen={onOpenSession}
                 />
               ))
