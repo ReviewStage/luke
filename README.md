@@ -34,7 +34,9 @@ pnpm --filter @luke/web dev
 ```
 
 Use `./scripts/run.sh --profile speaking` to preview the deterministic waveform
-to the left of the notch without requesting microphone access.
+to the left of the notch without requesting microphone access. Hover the capsule
+to see it: at rest the face carries the live-microphone colour on its own, and
+the meter unfolds with the peek.
 
 The run command directly owns the Electron process, so Control-C stops it. It
 also replaces an instance that is already running: Electron's single-instance
@@ -47,15 +49,20 @@ panel instead of starting a new one.
 
 `verify.sh` packages the desktop app and writes deterministic visual evidence to
 `artifacts/evidence/app-smoke-expanded.png`,
-`artifacts/evidence/app-smoke-compact.png`, and
-`artifacts/evidence/app-smoke-speaking.png`.
+`artifacts/evidence/app-smoke-compact.png`,
+`artifacts/evidence/app-smoke-peek.png`, and
+`artifacts/evidence/app-smoke-speaking.png`. The face's idle motion is held on
+its first frame for a capture run, so the same shutter moment produces the same
+PNG.
 
-Luke's menu bar item is drawn by the system rather than by the renderer, so it
-cannot be captured through the app. With Luke running, `./scripts/menu-bar-evidence.sh`
-photographs the right end of the menu bar into
-`artifacts/evidence/menu-bar-item.png`; the terminal needs Screen Recording
-permission the first time. Open the item afterwards to check its menu, which
-offers **Settings…**, with Command-, shown against it, and Quit. The shortcut is claimed inside Luke's own window rather
+Luke's menu bar item is his face, shipped as a macOS template image — pure black
+plus alpha, which the system recolours for a light or dark menu bar and inverts
+under a press, rather than the app choosing a colour. It is drawn by the system
+rather than by the renderer, so it cannot be captured through the app. With Luke
+running, `./scripts/menu-bar-evidence.sh` photographs the right end of the menu
+bar into `artifacts/evidence/menu-bar-item.png`; the terminal needs Screen
+Recording permission the first time. Open the item afterwards to check its menu,
+which offers **Settings…**, with Command-, shown against it, and Quit. The shortcut is claimed inside Luke's own window rather
 than registered with the system, because Command-, belongs to whichever app is
 frontmost; it switches the open panel to its Settings tab.
 
@@ -63,13 +70,14 @@ frontmost; it switches the open panel to its Settings tab.
 
 The surface has three sizes and they are all the same black shape:
 
-- **Capsule** — at rest beside the camera housing: the mark of the provider that
-  needs you soonest, and the count of tracked sessions.
-- **Peek** — under the pointer. The capsule widens on a spring and shows the
-  rest of what it is watching: a mark for every provider with a session, up to
-  the five the room beside the housing holds, and what the count means —
-  `2 need you` — on the right. This is the affordance; nothing is committed by
-  hovering.
+- **Capsule** — at rest beside the camera housing: Luke's face on the left, the
+  count of tracked sessions on the right. The face is always there, so the strip
+  at rest is him rather than whichever provider happens to be first.
+- **Peek** — under the pointer. The capsule widens on a spring and shows what he
+  is watching: a mark for every provider with a session, up to the four the room
+  beside the housing holds, unfolding from behind the face, and what the count
+  means — `2 need you` — on the right. This is the affordance; nothing is
+  committed by hovering.
 - **Panel** — on a press. Full-width rows, one session per line: provider mark,
   title, what it is doing, a state chip. A **Settings** tab holds the cloud API
   keys, microphone access, and Quit. Press the capsule again, or press Escape,
@@ -84,15 +92,52 @@ browser. Luke opens it by provider id rather than by an address the panel
 supplies, so the pages it can ever open are the ones in its provider registry.
 
 Sessions are ordered by how much they need a person, so whatever is waiting on
-you is the top row and the mark the capsule keeps.
+you is the top row and the first mark out from behind the face.
 
 The header is anchored to the notch, not to a state: the count sits to the right
-of the housing and the provider marks and speech meter to its left, in the same
-place in all three. Growing unfolds what the capsule had no room for: the marks
-on one side and what the count means on the other travel the same distance, on
-the same spring, so the two wings read as one gesture rather than two. More
-providers than fit are counted at the end of the row rather than dropped from
-it.
+of the housing and Luke to its left, in the same place in all three. Growing
+unfolds what the capsule had no room for: the marks or the speech meter on one
+side and what the count means on the other travel the same distance, on the same
+spring, so the two wings read as one gesture rather than two. More providers than
+fit are counted at the end of the row rather than dropped from it.
+
+The meter is the one thing that cannot unfold and still be honest, because a live
+microphone has to be visible from the capsule too, and the capsule has no room
+for it beside the face. So the face takes the meter's own colour while the
+microphone is live, and the bars themselves stay with the peek.
+
+## What Luke is doing
+
+The face has a motion for every state it can be in, and they are the brand's own
+— the same nineteen the assets in `design/brand/motion/` are cut from, generated
+into `@keyframes` so the app can hold them still rather than reimplemented by
+hand. What Luke plays is never arbitrary:
+
+| He is | and he | because |
+|---|---|---|
+| hearing speech | talks (head bob) | tinted with the meter's colour, so the capsule says the microphone is open |
+| listening, but no speech | tilts, curious | same colour, same reason |
+| watching a session that needs you | fidgets | the one rest that reads as impatience |
+| watching sessions working | sways, slowly | quiet work, made visible |
+| watching nothing at all | sleeps, with z's | nothing to watch is not the same as nothing happening |
+| watching, with nothing to report | blinks | the smallest sign of life |
+
+Two things interrupt him for a single cycle and then give the face back: a
+session finishing (the hop) and a session arriving (the brow flash). Between
+those, when nobody is being kept waiting, he makes a gesture that means nothing
+at all every ten to twenty-five seconds — a wink, a nod, a waggle, a duck behind
+the housing. A permanent fixture that only ever blinks reads as a static one, and
+the asides are what keep it from becoming furniture. Nothing playful is allowed
+to interrupt the fidget: a face that winked while a session was waiting on you
+would be saying two things at once.
+
+`error`, `refresh`, and `appear` are drawn and available but unused — Luke has no
+failure state to report, no relaunch to announce, and nothing to attach to.
+
+Reduced motion stops all of it: the stylesheet holds every loop on its first
+frame, and the renderer stops changing which one is playing, because switching
+between held poses is itself the motion someone asked not to see. A capture run
+holds them the same way, which is what keeps the evidence PNGs reproducible.
 
 The surface is opaque black in every state and shaped like the housing it sits
 beside: the convex bottom corners and the concave flare where its sides meet

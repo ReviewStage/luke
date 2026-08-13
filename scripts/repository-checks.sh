@@ -44,4 +44,11 @@ find "$SIDECAR_REPO_ROOT/scripts" -type f -name '*.sh' -print0 |
     done
 
 git -C "$SIDECAR_REPO_ROOT" diff --check
+
+# The brand artwork has one source and three sets of committed outputs cut from
+# it: the SVGs, the face the renderer draws, and the motions it plays. If the
+# copies no longer match the source, one of them is telling a story the artwork
+# does not.
+node "$SIDECAR_REPO_ROOT/design/generate-brand-assets.mjs" --check
+
 printf 'Repository contract checks passed.\n'
