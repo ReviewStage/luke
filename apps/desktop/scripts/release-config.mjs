@@ -34,6 +34,10 @@ export function releaseSignatureMatchesIdentity({ identity, authority, certifica
   return authority === identity;
 }
 
+export function codesignDisplayArguments(certificatePrefix, appPath) {
+  return ["--display", "--verbose=2", `--extract-certificates=${certificatePrefix}`, appPath];
+}
+
 export function hdiutilCreateArguments({ stagingDirectory, dmgPath }) {
   return [
     "create",

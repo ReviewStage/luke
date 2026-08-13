@@ -5,6 +5,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { PACKAGED_ARCHITECTURE } from "../apps/desktop/scripts/package-layout.mjs";
 import {
+  codesignDisplayArguments,
   DMG_STAGING_ENTRIES,
   dmgCodesignArguments,
   dmgVerificationCommands,
@@ -78,6 +79,15 @@ test("release signing accepts readable identities and SHA-1 certificate hashes",
     }),
     false,
   );
+});
+
+test("release certificate extraction attaches the output prefix to the codesign flag", () => {
+  assert.deepEqual(codesignDisplayArguments("/tmp/certificate", "/tmp/Luke.app"), [
+    "--display",
+    "--verbose=2",
+    "--extract-certificates=/tmp/certificate",
+    "/tmp/Luke.app",
+  ]);
 });
 
 test("release DMG layout and hdiutil arguments are deterministic", () => {

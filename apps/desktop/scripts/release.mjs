@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { packagedAppExecutable } from "./package-layout.mjs";
 import {
+  codesignDisplayArguments,
   DMG_STAGING_ENTRIES,
   dmgCodesignArguments,
   dmgVerificationCommands,
@@ -53,13 +54,9 @@ try {
   const certificatePrefix = path.join(signatureCaptureDirectory, "certificate");
   const signatureOutputDescriptor = fs.openSync(signatureOutputPath, "w");
   try {
-    execFileSync(
-      "codesign",
-      ["--display", "--verbose=2", "--extract-certificates", certificatePrefix, appPath],
-      {
-        stdio: ["ignore", "inherit", signatureOutputDescriptor],
-      },
-    );
+    execFileSync("codesign", codesignDisplayArguments(certificatePrefix, appPath), {
+      stdio: ["ignore", "inherit", signatureOutputDescriptor],
+    });
   } finally {
     fs.closeSync(signatureOutputDescriptor);
   }
