@@ -9,6 +9,7 @@ import {
 import {
   CREDENTIAL_PROVIDER_ID,
   CREDENTIAL_PROVIDER_LIST,
+  type CredentialFormat,
   type CredentialProvider,
   type CredentialProviderId,
 } from "./shared/credential-providers";
@@ -80,13 +81,17 @@ function canIgnoreFilesystemError(error: unknown): boolean {
 
 /**
  * A rejected key never reaches disk, and the reason never echoes the submitted
- * value. No provider Luke reads publishes a key format, so this only rules out
- * values that cannot be sent as an HTTP authorization header.
+ * value. Most of what this rules out is a value that cannot be sent as an HTTP
+ * authorization header at all. A provider that publishes more than one kind of
+ * key also has the kind Luke cannot use ruled out here, so a credential that
+ * would only ever be refused is refused at the door rather than stored and
+ * quietly unused.
  */
-export function apiKeyRejection(apiKey: string): string | undefined {
+export function apiKeyRejection(apiKey: string, format?: CredentialFormat): string | undefined {
   if (apiKey.length < API_KEY_LENGTH.MINIMUM) return "That API key is too short.";
   if (apiKey.length > API_KEY_LENGTH.MAXIMUM) return "That API key is too long.";
   if (!PRINTABLE_ASCII.test(apiKey)) return "That API key contains unsupported characters.";
+  if (format && !apiKey.startsWith(format.prefix)) return format.rejection;
   return undefined;
 }
 
@@ -96,7 +101,7 @@ function environmentApiKey(
 ): string | undefined {
   for (const variable of provider.environmentVariables) {
     const value = environment[variable]?.trim();
-    if (value && !apiKeyRejection(value)) return value;
+    if (value && !apiKeyRejection(value, provider.keyFormat)) return value;
   }
   return undefined;
 }
@@ -187,11 +192,12 @@ export class SettingsStore {
     providerId: CredentialProviderId,
     apiKey: string | undefined,
   ): Promise<SettingsUpdateResult> {
+    const keyFormat = this.#providers.find((candidate) => candidate.id === providerId)?.keyFormat;
     const normalized = apiKey?.trim();
     const rejection = normalized
       ? !this.#secretStorageAvailable()
         ? "Encrypted credential storage is unavailable on this system."
-        : apiKeyRejection(normalized)
+        : apiKeyRejection(normalized, keyFormat)
       : undefined;
     if (rejection) return { settings: await this.snapshot(), reason: rejection };
 
@@ -263,7 +269,9 @@ export class SettingsStore {
     if (!ciphertext) return undefined;
     try {
       const apiKey = this.#cipher.decrypt(Buffer.from(ciphertext, "base64")).trim();
-      return apiKey && !apiKeyRejection(apiKey) ? apiKey : undefined;
+      // A key stored before this build learned which kind the provider issues
+      // is held to the same rule, so a rule added later takes effect at once.
+      return apiKey && !apiKeyRejection(apiKey, provider.keyFormat) ? apiKey : undefined;
     } catch {
       // A key encrypted under a different account, or against a rotated
       // Keychain entry, cannot be recovered; the user re-enters it instead.

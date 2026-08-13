@@ -1,5 +1,6 @@
 import {
   type ProviderSessionObservation,
+  SESSION_LOCATION,
   SESSION_STATUS,
   type SessionProvider,
   type SessionProviderAdapter,
@@ -17,6 +18,28 @@ const HTTP_STATUS = {
   UNAUTHORIZED: 401,
   FORBIDDEN: 403,
 } as const;
+
+/**
+ * How a provider expects its credential to be presented. Every provider so far
+ * takes a bearer token; Google's alpha APIs take the key in their own header
+ * instead, and a provider that authenticates some third way is not supported
+ * rather than approximated.
+ */
+export const CLOUD_AUTH_SCHEME = {
+  BEARER: "bearer",
+  GOOGLE_API_KEY_HEADER: "google-api-key-header",
+} as const;
+
+export type CloudAuthScheme = (typeof CLOUD_AUTH_SCHEME)[keyof typeof CLOUD_AUTH_SCHEME];
+
+const GOOGLE_API_KEY_HEADER = "X-Goog-Api-Key";
+
+const AUTHORIZATION_HEADERS: Readonly<
+  Record<CloudAuthScheme, (apiKey: string) => Readonly<Record<string, string>>>
+> = {
+  [CLOUD_AUTH_SCHEME.BEARER]: (apiKey) => ({ Authorization: `Bearer ${apiKey}` }),
+  [CLOUD_AUTH_SCHEME.GOOGLE_API_KEY_HEADER]: (apiKey) => ({ [GOOGLE_API_KEY_HEADER]: apiKey }),
+};
 
 export const CLOUD_FAILURE = {
   UNAUTHORIZED: "unauthorized",
@@ -62,6 +85,8 @@ export interface CloudAdapterProfile {
   provider: SessionProvider;
   defaultBaseUrl: string;
   baseUrlEnvironmentVariable?: string;
+  /** Defaults to a bearer token, which is what every other provider takes. */
+  authScheme?: CloudAuthScheme;
 }
 
 /**
@@ -106,6 +131,17 @@ export function timestampFromRecord(
   if (!value) return undefined;
   const timestampMs = Date.parse(value);
   return Number.isFinite(timestampMs) ? timestampMs : undefined;
+}
+
+/**
+ * Reads a value a provider reported only when this build knows it, so a state
+ * added after this build shipped is left undefined rather than guessed at.
+ */
+export function knownValue<Value extends string>(
+  values: Readonly<Record<string, Value>>,
+  reported: string | undefined,
+): Value | undefined {
+  return Object.values(values).find((candidate) => candidate === reported);
 }
 
 /** Reads a list page without assuming which key a given provider wraps it in. */
@@ -155,6 +191,7 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
   readonly #readApiKey: () => Promise<string | undefined>;
   readonly #baseUrl: string;
   readonly #fetch: CloudFetch;
+  readonly #authorizationHeaders: (apiKey: string) => Readonly<Record<string, string>>;
   readonly #now: () => number;
   readonly #minimumRefreshIntervalMs: number;
 
@@ -168,6 +205,8 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
     this.#readApiKey = options.readApiKey;
     this.#baseUrl = resolveBaseUrl(profile, options.baseUrl);
     this.#fetch = options.fetch ?? defaultFetch;
+    this.#authorizationHeaders =
+      AUTHORIZATION_HEADERS[profile.authScheme ?? CLOUD_AUTH_SCHEME.BEARER];
     this.#now = options.now ?? Date.now;
     this.#minimumRefreshIntervalMs = nonNegativeNumber(
       options.minimumRefreshIntervalMs,
@@ -203,7 +242,7 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
     const pass = ++this.#collectPass;
     try {
       const collected = await this.collect(this.#requestForPass(pass, apiKey), now);
-      if (pass === this.#collectPass) this.#observations = uniqueObservations(collected);
+      if (pass === this.#collectPass) this.#observations = cloudObservations(collected);
     } catch (error) {
       // A rejected credential clears observed state; a transient network or
       // server failure keeps the previous snapshot until the next attempt. A
@@ -312,7 +351,7 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
       response = await this.#fetch(this.#url(segments, query), {
         method: HTTP_METHOD.GET,
         headers: {
-          Authorization: `Bearer ${apiKey}`,
+          ...this.#authorizationHeaders(apiKey),
           Accept: "application/json",
         },
         signal: AbortSignal.timeout(CLOUD_ADAPTER_DEFAULTS.REQUEST_TIMEOUT_MS),
@@ -353,13 +392,21 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
   }
 }
 
-function uniqueObservations(
+/**
+ * Drops a session a subclass reported twice, and stamps the location the base
+ * already knows: nothing reaches this point except over the network, so a
+ * subclass cannot forget to say its sessions run somewhere else.
+ */
+function cloudObservations(
   observations: readonly ProviderSessionObservation[],
 ): readonly ProviderSessionObservation[] {
   const unique = new Map<string, ProviderSessionObservation>();
   for (const observation of observations) {
     if (!unique.has(observation.providerSessionId)) {
-      unique.set(observation.providerSessionId, observation);
+      unique.set(observation.providerSessionId, {
+        ...observation,
+        location: SESSION_LOCATION.CLOUD,
+      });
     }
   }
   return [...unique.values()];

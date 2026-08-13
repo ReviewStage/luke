@@ -21,14 +21,10 @@ if [[ ! -x "$APP_EXECUTABLE" ]]; then
     exit 1
 fi
 
-mkdir -p "$(dirname -- "$SIDECAR_EXPANDED_EVIDENCE_PATH")"
-rm -f -- \
-    "$SIDECAR_EXPANDED_EVIDENCE_PATH" \
-    "$SIDECAR_COMPACT_EVIDENCE_PATH" \
-    "$SIDECAR_SPEAKING_EVIDENCE_PATH"
+mkdir -p "$SIDECAR_EVIDENCE_ROOT"
+rm -f -- "$SIDECAR_EVIDENCE_ROOT"/app-smoke-*.png
 EXPANDED_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-expanded.XXXXXX")
 COMPACT_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-compact.XXXXXX")
-SPEAKING_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-speaking.XXXXXX")
 "$APP_EXECUTABLE" \
     --user-data-dir="$EXPANDED_PROFILE" \
     --fixture "$SIDECAR_FIXTURE_SCENARIO" \
@@ -39,11 +35,30 @@ SPEAKING_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-speaking.XXXXXX")
     --fixture "$SIDECAR_FIXTURE_SCENARIO" \
     --compact \
     --capture-evidence "$SIDECAR_COMPACT_EVIDENCE_PATH"
+PEEK_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-peek.XXXXXX")
+"$APP_EXECUTABLE" \
+    --user-data-dir="$PEEK_PROFILE" \
+    --fixture "$SIDECAR_FIXTURE_SCENARIO" \
+    --compact \
+    --peek \
+    --capture-evidence "$SIDECAR_PEEK_EVIDENCE_PATH"
+SLOT_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-slot.XXXXXX")
+"$APP_EXECUTABLE" \
+    --user-data-dir="$SLOT_PROFILE" \
+    --fixture "$SIDECAR_FIXTURE_SCENARIO" \
+    --expanded \
+    --slot \
+    --capture-evidence "$SIDECAR_SLOT_EVIDENCE_PATH"
+SPEAKING_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-speaking.XXXXXX")
+# Peeked rather than at rest: the capsule has no room for the meter beside the
+# face, so it reports a live microphone through the face's colour alone. The
+# peek is the narrowest state that shows both, which is what has to be checked.
 "$APP_EXECUTABLE" \
     --user-data-dir="$SPEAKING_PROFILE" \
     --fixture "$SIDECAR_FIXTURE_SCENARIO" \
     --profile speaking \
     --compact \
+    --peek \
     --capture-evidence "$SIDECAR_SPEAKING_EVIDENCE_PATH"
 
 validate_evidence() {
@@ -81,10 +96,18 @@ validate_evidence() {
     fi
 }
 
-validate_evidence "$SIDECAR_EXPANDED_EVIDENCE_PATH" 620 520
-validate_evidence "$SIDECAR_COMPACT_EVIDENCE_PATH" 282 38
-validate_evidence "$SIDECAR_SPEAKING_EVIDENCE_PATH" 282 38
+# The window is a stage, not the shape: a compact window holds the peek the
+# capsule grows into, and both carry room for a spring to overshoot.
+validate_evidence "$SIDECAR_EXPANDED_EVIDENCE_PATH" 700 560
+validate_evidence "$SIDECAR_COMPACT_EVIDENCE_PATH" 538 78
+validate_evidence "$SIDECAR_PEEK_EVIDENCE_PATH" 538 78
+# The slot is drawn in the expanded window, which is why stepping aside for a
+# browser costs no resize at all.
+validate_evidence "$SIDECAR_SLOT_EVIDENCE_PATH" 700 560
+validate_evidence "$SIDECAR_SPEAKING_EVIDENCE_PATH" 538 78
 
 printf 'Expanded visual evidence: %s\n' "$SIDECAR_EXPANDED_EVIDENCE_PATH"
 printf 'Compact visual evidence: %s\n' "$SIDECAR_COMPACT_EVIDENCE_PATH"
+printf 'Peek visual evidence: %s\n' "$SIDECAR_PEEK_EVIDENCE_PATH"
+printf 'Key slot visual evidence: %s\n' "$SIDECAR_SLOT_EVIDENCE_PATH"
 printf 'Speaking visual evidence: %s\n' "$SIDECAR_SPEAKING_EVIDENCE_PATH"

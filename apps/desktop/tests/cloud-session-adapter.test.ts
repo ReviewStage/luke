@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { type ProviderSessionObservation, SESSION_STATUS } from "@sidecar/core";
+import { type ProviderSessionObservation, SESSION_LOCATION, SESSION_STATUS } from "@sidecar/core";
 import {
   type CloudAdapterOptions,
   type CloudFetch,
   type CloudRequest,
   CloudSessionAdapter,
   isDefined,
+  knownValue,
 } from "../src/cloud-session-adapter";
 
 const TEST_TIME = Date.parse("2026-08-12T02:45:00.000Z");
@@ -108,6 +109,17 @@ function adapterFor(
   });
 }
 
+test("accepts only a state this build knows", () => {
+  const REPORTED_STATE = { IDLE: "idle", WORKING: "working" } as const;
+
+  assert.equal(knownValue(REPORTED_STATE, "working"), REPORTED_STATE.WORKING);
+  // A state a provider adds later is left undefined rather than guessed at, and
+  // an inherited property name is not a state at all.
+  assert.equal(knownValue(REPORTED_STATE, "reviewing"), undefined);
+  assert.equal(knownValue(REPORTED_STATE, "toString"), undefined);
+  assert.equal(knownValue(REPORTED_STATE, undefined), undefined);
+});
+
 test("authenticates a bounded read and encodes the route a subclass asked for", async () => {
   const stub = stubFetch();
   const adapter = adapterFor(stub.fetch);
@@ -125,6 +137,21 @@ test("authenticates a bounded read and encodes the route a subclass asked for", 
       accept: "application/json",
     },
   ]);
+});
+
+test("reports every session it serves as running in the cloud", async () => {
+  const stub = stubFetch();
+  const adapter = adapterFor(stub.fetch);
+  // Neither observation says where it runs: the base knows, because nothing
+  // reaches it except over the network.
+  adapter.collected = [observation("session-one"), observation("session-two")];
+
+  const observations = await adapter.observe();
+
+  assert.deepEqual(
+    observations.map((candidate) => candidate.location),
+    [SESSION_LOCATION.CLOUD, SESSION_LOCATION.CLOUD],
+  );
 });
 
 test("drops a session a subclass reported twice in one pass", async () => {

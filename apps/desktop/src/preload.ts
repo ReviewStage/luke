@@ -13,8 +13,8 @@ import type { CredentialProviderId } from "./shared/credential-providers";
 
 const bridge: AppBridge = {
   getBootstrap: () => ipcRenderer.invoke(channels.bootstrap) as Promise<AppBootstrap>,
-  setExpanded: (expanded: boolean) =>
-    ipcRenderer.invoke(channels.setExpanded, expanded) as Promise<WindowMode>,
+  setExpanded: (expanded: boolean, focus = false) =>
+    ipcRenderer.invoke(channels.setExpanded, expanded, focus) as Promise<WindowMode>,
   setPointerInterception: (interceptsPointer: boolean) => {
     ipcRenderer.send(channels.setPointerInterception, interceptsPointer);
   },
@@ -26,6 +26,9 @@ const bridge: AppBridge = {
       providerId,
       apiKey,
     ) as Promise<SettingsUpdateResult>,
+  openProviderApiKeys: (providerId: CredentialProviderId) => {
+    ipcRenderer.send(channels.openProviderApiKeys, providerId);
+  },
   focusPanel: () => ipcRenderer.send(channels.focusPanel),
   notifyReady: () => ipcRenderer.send(channels.rendererReady),
   quit: () => ipcRenderer.send(channels.quit),
@@ -33,11 +36,6 @@ const bridge: AppBridge = {
     const listener = (_event: Electron.IpcRendererEvent, eventName: string) => callback(eventName);
     ipcRenderer.on(channels.lifecycle, listener);
     return () => ipcRenderer.removeListener(channels.lifecycle, listener);
-  },
-  onStartMicrophone: (callback: () => void) => {
-    const listener = () => callback();
-    ipcRenderer.on(channels.startMicrophone, listener);
-    return () => ipcRenderer.removeListener(channels.startMicrophone, listener);
   },
   onDisplayChanged: (callback: (display: DisplayDiagnostic) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, display: DisplayDiagnostic) =>

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
+  CompositeSessionProviderAdapter,
   fixtureSnapshot,
   InMemorySessionRegistry,
   type NativeNotchGeometry,
@@ -22,12 +23,17 @@ import {
   safeStorage,
   screen,
   session,
+  shell,
   systemPreferences,
   Tray,
 } from "electron";
 import { ClaudeCodeSessionAdapter } from "./claude-code-adapter";
 import { CodexSessionAdapter } from "./codex-adapter";
 import { ConductorSessionAdapter } from "./conductor-adapter";
+import { CURSOR_PROVIDER, CursorSessionAdapter } from "./cursor-adapter";
+import { CursorLocalSessionAdapter } from "./cursor-local-adapter";
+import { DevinSessionAdapter } from "./devin-adapter";
+import { JulesSessionAdapter } from "./jules-adapter";
 import { readMacScreenGeometry } from "./macos-screen-geometry";
 import { openAiAttentionEvaluatorFromEnvironment } from "./openai-attention-evaluator";
 import { SettingsStore } from "./settings-store";
@@ -41,6 +47,7 @@ import {
 } from "./shared/contracts";
 import {
   CREDENTIAL_PROVIDER_ID,
+  CREDENTIAL_PROVIDERS,
   type CredentialProviderId,
   isCredentialProviderId,
 } from "./shared/credential-providers";
@@ -48,6 +55,11 @@ import {
 const captureOutput = argumentValue("--capture-evidence");
 const profile = argumentValue("--profile") ?? "idle";
 const fixtureName = argumentValue("--fixture");
+// Evidence only: the peek answers a pointer and the slot answers a press on a
+// link, neither of which a capture run has any way to produce, so both can be
+// asked for directly.
+const startPeeked = process.argv.includes("--peek");
+const startInSlot = process.argv.includes("--slot");
 const fixture = fixtureSnapshot(fixtureName ?? "smoke");
 const captureMode = captureOutput !== undefined;
 // `--fixture` is enough on its own to make a run deterministic: the panel renders
@@ -68,14 +80,42 @@ const settingsStore = new SettingsStore({
 const conductorAdapter = new ConductorSessionAdapter({
   readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.CONDUCTOR),
 });
+// Cursor runs sessions in two places: on this machine, which needs no
+// credential and is observed from the transcripts Cursor writes for itself, and
+// in its cloud, which needs a key. They are one provider wherever they ran, so
+// they are observed as one adapter — a provider's sessions are replaced in a
+// single commit, and two adapters sharing an id would retire each other's.
+const cursorAdapter = new CompositeSessionProviderAdapter({
+  provider: CURSOR_PROVIDER,
+  adapters: [
+    new CursorLocalSessionAdapter(),
+    new CursorSessionAdapter({
+      readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.CURSOR),
+    }),
+  ],
+});
+const devinAdapter = new DevinSessionAdapter({
+  readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.DEVIN),
+});
+const julesAdapter = new JulesSessionAdapter({
+  readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.JULES),
+});
 // Saving a key affects only the provider it belongs to, so this maps each
 // credential to the one observer that reads it.
 const adapterByCredentialProvider: ReadonlyMap<CredentialProviderId, SessionProviderAdapter> =
-  new Map([[CREDENTIAL_PROVIDER_ID.CONDUCTOR, conductorAdapter]]);
+  new Map<CredentialProviderId, SessionProviderAdapter>([
+    [CREDENTIAL_PROVIDER_ID.CONDUCTOR, conductorAdapter],
+    [CREDENTIAL_PROVIDER_ID.CURSOR, cursorAdapter],
+    [CREDENTIAL_PROVIDER_ID.DEVIN, devinAdapter],
+    [CREDENTIAL_PROVIDER_ID.JULES, julesAdapter],
+  ]);
 const sessionAdapters = [
   new ClaudeCodeSessionAdapter(),
   new CodexSessionAdapter(),
   conductorAdapter,
+  cursorAdapter,
+  devinAdapter,
+  julesAdapter,
 ] as const;
 // A fixture run must stay deterministic and credential-free, so it never builds
 // an evaluator — not just capture runs.
@@ -98,6 +138,7 @@ let tray: Tray | undefined;
 let selectedDisplayId: number | undefined;
 let nativeScreens = new Map<number, NativeNotchGeometry>();
 let sessionRefreshTimer: NodeJS.Timeout | undefined;
+let collapseTimer: NodeJS.Timeout | undefined;
 let sessionRefreshRunning = false;
 let attentionReviewRunning = false;
 
@@ -141,20 +182,25 @@ function refreshNativeGeometry(): void {
   }
 }
 
-function positionPanel(animate = false): void {
+/**
+ * Resizes without AppKit's frame animation. An animated setBounds re-lays out
+ * the renderer at a new viewport width on every frame — and its duration scales
+ * with the distance moved, so a 482px growth ran far longer than the panel's
+ * own motion. The window now snaps to the size the mode needs and the renderer
+ * animates the capsule into the panel inside it, where the viewport is constant
+ * and the work stays on the compositor.
+ */
+function positionPanel(): void {
   if (!panelWindow || panelWindow.isDestroyed()) return;
   const display = selectedDisplay();
   selectedDisplayId = display.id;
   const layout = layoutFor(display);
-  panelWindow.setBounds(
-    {
-      x: layout.x,
-      y: layout.y,
-      width: layout.width,
-      height: layout.height,
-    },
-    animate && process.platform === "darwin" && !captureMode,
-  );
+  panelWindow.setBounds({
+    x: layout.x,
+    y: layout.y,
+    width: layout.width,
+    height: layout.height,
+  });
   panelWindow.webContents.send(channels.displayChanged, displayDiagnostic(display));
 }
 
@@ -182,14 +228,49 @@ function focusPanelWindow(): void {
   panelWindow.focus();
 }
 
+/**
+ * `--duration-exit` plus `--duration-shape` in
+ * apps/desktop/src/renderer/styles/base.css: the content leaves, then the
+ * surface closes on the spring, and only then may the window follow.
+ */
+const COLLAPSE_ANIMATION_MS = 550;
+
+function collapseDelay(): number {
+  if (captureMode) return 0;
+  return systemPreferences.getAnimationSettings().prefersReducedMotion ? 0 : COLLAPSE_ANIMATION_MS;
+}
+
+/**
+ * The two directions are sequenced differently, and the ordering lives here so
+ * every caller gets it — the panel, the tray, and the motion recorder alike.
+ * Growing needs the window first, or the panel has nowhere to unfold into.
+ * Shrinking needs the capsule drawn first, or the window clips the panel out
+ * from under its own collapse.
+ */
 function setWindowMode(mode: WindowMode, requestFocus: boolean): WindowMode {
   windowMode = mode;
   if (!panelWindow || panelWindow.isDestroyed()) return windowMode;
 
   const expanded = mode === "expanded";
   panelWindow.setFocusable(expanded && !captureMode);
-  positionPanel(true);
-  panelWindow.webContents.send(channels.lifecycle, `mode:${mode}`);
+  if (collapseTimer) {
+    clearTimeout(collapseTimer);
+    collapseTimer = undefined;
+  }
+  if (expanded) {
+    positionPanel();
+    panelWindow.webContents.send(channels.lifecycle, `mode:${mode}`);
+  } else {
+    panelWindow.webContents.send(channels.lifecycle, `mode:${mode}`);
+    const delay = collapseDelay();
+    if (delay === 0) positionPanel();
+    else {
+      collapseTimer = setTimeout(() => {
+        collapseTimer = undefined;
+        if (windowMode === "compact") positionPanel();
+      }, delay);
+    }
+  }
 
   if (expanded && requestFocus && !captureMode) {
     focusPanelWindow();
@@ -226,6 +307,8 @@ function registerIpc(): void {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
     return {
       mode: windowMode,
+      startPeeked,
+      startInSlot,
       profile,
       fixture,
       captureMode,
@@ -242,11 +325,11 @@ function registerIpc(): void {
     };
   });
 
-  ipcMain.handle(channels.setExpanded, (event, expanded: unknown) => {
+  ipcMain.handle(channels.setExpanded, (event, expanded: unknown, focus: unknown) => {
     if (!trustedSender(event) || typeof expanded !== "boolean") {
       throw new Error("Invalid window mode request");
     }
-    return setWindowMode(expanded ? "expanded" : "compact", false);
+    return setWindowMode(expanded ? "expanded" : "compact", focus === true);
   });
 
   ipcMain.on(channels.setPointerInterception, (event, interceptsPointer: unknown) => {
@@ -291,6 +374,15 @@ function registerIpc(): void {
       }
     },
   );
+
+  // Where to get a key is a question the panel cannot answer itself, so it
+  // hands the question to the browser. The renderer names a provider rather
+  // than an address: the pages Luke can open are the ones in the provider
+  // registry, and no URL crosses this boundary.
+  ipcMain.on(channels.openProviderApiKeys, (event, providerId: unknown) => {
+    if (!trustedSender(event) || !isCredentialProviderId(providerId)) return;
+    void shell.openExternal(CREDENTIAL_PROVIDERS[providerId].apiKeysUrl);
+  });
 
   // The panel is normally shown without stealing focus. A text field cannot be
   // typed into that way, so the renderer asks for focus when it opens one.
@@ -425,7 +517,7 @@ function createPanel(): void {
       sandbox: true,
       webSecurity: true,
       devTools: !captureMode,
-      backgroundThrottling: true,
+      backgroundThrottling: false,
     },
   });
 
@@ -444,54 +536,56 @@ function createPanel(): void {
   void panelWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
 }
 
-function createTrayImage(): Electron.NativeImage {
-  const svg = [
-    '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18">',
-    '<path fill="white" d="M2 10h2V8H2v2Zm3 3h2V5H5v8Zm3 3h2V2H8v14Zm3-2h2V4h-2v10Zm3-4h2V8h-2v2Z"/>',
-    "</svg>",
-  ].join("");
-  const image = nativeImage.createFromDataURL(
-    `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`,
-  );
+function trayMenu(): Electron.Menu {
+  return Menu.buildFromTemplate([
+    {
+      // The ellipsis is the macOS convention for an item that opens somewhere
+      // rather than acting, and the accelerator is shown rather than registered:
+      // Command-, belongs to whichever app is frontmost, so Luke claims it only
+      // inside its own window, where the renderer handles it.
+      //
+      // No icon: a menu item takes a NativeImage sized in points, and the
+      // system's named gear arrives at its natural size, which draws far too
+      // large beside the text. Apple's own menu bar menus label these items
+      // rather than picture them, so this follows them.
+      label: "Settings…",
+      accelerator: "CommandOrControl+,",
+      registerAccelerator: false,
+      click: () => {
+        setWindowMode("expanded", true);
+        panelWindow?.webContents.send(channels.lifecycle, "tab:settings");
+      },
+    },
+    { type: "separator" },
+    { label: "Quit Luke", role: "quit" },
+  ]);
+}
+
+/**
+ * Luke's face, as macOS wants a status item drawn: a template image, which is
+ * pure black plus alpha and is recoloured by the system rather than by us, so it
+ * follows the menu bar through light, dark, and the inverted highlight a press
+ * draws. The `@2x` file beside it is picked up from the same call, which is what
+ * keeps the item sharp on a Retina display.
+ */
+function trayImage(): Electron.NativeImage {
+  const image = nativeImage.createFromPath(path.join(__dirname, "menubar", "lukeTemplate.png"));
   image.setTemplateImage(true);
   return image;
 }
 
 function createTray(): void {
   if (process.platform !== "darwin") return;
-  tray = new Tray(createTrayImage());
+  const image = trayImage();
+  tray = new Tray(image);
+  // A status item that draws nothing is a status item no one can find, and this
+  // one is the only way to reach Settings or to quit. If the artwork is ever
+  // missing from a build, the name it used to carry stands in for it.
+  if (image.isEmpty()) tray.setTitle("Luke");
   tray.setToolTip("Luke");
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      {
-        label: "Show notch capsule",
-        click: () => setWindowMode("compact", false),
-      },
-      {
-        label: "Show expanded panel",
-        click: () => setWindowMode("expanded", true),
-      },
-      {
-        label: "Start microphone",
-        click: () => {
-          setWindowMode("expanded", true);
-          panelWindow?.webContents.send(channels.startMicrophone);
-        },
-      },
-      {
-        label: "Re-read display geometry",
-        click: () => {
-          refreshNativeGeometry();
-          positionPanel();
-        },
-      },
-      { type: "separator" },
-      { label: "Quit Luke", role: "quit" },
-    ]),
-  );
-  tray.on("click", () => {
-    setWindowMode(windowMode === "compact" ? "expanded" : "compact", true);
-  });
+  // Clicking opens the menu and nothing else. The capsule is how the panel is
+  // opened; a menu bar item that also toggled it made one of them a surprise.
+  tray.setContextMenu(trayMenu());
 }
 
 function handleDisplayChange(): void {
@@ -557,6 +651,7 @@ if (!app.requestSingleInstanceLock()) {
 
 app.on("before-quit", () => {
   if (sessionRefreshTimer) clearInterval(sessionRefreshTimer);
+  if (collapseTimer) clearTimeout(collapseTimer);
 });
 
 app.on("window-all-closed", () => app.quit());

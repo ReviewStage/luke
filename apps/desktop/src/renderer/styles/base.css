@@ -1,0 +1,1652 @@
+:root {
+  color-scheme: dark;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+  font-synthesis: none;
+  background: transparent;
+
+  --state-working: #5cd5ff;
+  --state-attention: #ffa049;
+  --state-complete: #6fdca4;
+  --state-idle: rgba(255, 255, 255, 0.44);
+
+  /* Provider brand colours, used only by the marks: Claude Code's published
+     coral, the vertical gradient Codex draws its mark with, the light half of
+     Conductor's two-colour palette — its dark half is the surface the mark
+     already sits on, so the pairing is the published one — and Cursor's mark,
+     and Devin's marks, each published as one silhouette and so drawn in the
+     light form its brand uses on a dark surface. Session state is carried by the chips, row
+     tints, and count badge instead, so the two colour systems never compete for
+     the same pixel. */
+  --mark-claude-code: #d97757;
+  --mark-codex-top: #b1a7ff;
+  --mark-codex-middle: #7a9dff;
+  --mark-codex-bottom: #3941ff;
+  --mark-conductor: #eae8e6;
+  --mark-cursor: #ffffff;
+  --mark-devin: #ffffff;
+  --mark-jules: #715cd7;
+
+  --text-primary: rgba(255, 255, 255, 0.95);
+  --text-secondary: rgba(255, 255, 255, 0.56);
+  --text-tertiary: rgba(255, 255, 255, 0.34);
+  --raised: rgba(255, 255, 255, 0.05);
+  --raised-strong: rgba(255, 255, 255, 0.09);
+  /* A third step above the hover one, and an edge to go with it. Hover and
+     chosen cannot share a ground: the difference between "the pointer is here"
+     and "this is what you are looking at" is the whole content of a filter chip,
+     and one step of four percent white is not a difference anyone can see. It is
+     a ground and an edge rather than a fill light enough to invert the text
+     against, because a chip carries the agent's own mark and the marks published
+     as a single silhouette are drawn white — on a white ground they would go out
+     entirely. */
+  --selected: rgba(255, 255, 255, 0.2);
+  --selected-edge: rgba(255, 255, 255, 0.32);
+  --hairline: rgba(255, 255, 255, 0.08);
+
+  /* One motion vocabulary. The black surface is the only thing that changes
+     size; everything layered on it moves with `transform` and `opacity` alone,
+     so a frame costs a composite rather than a relayout and a text re-shape.
+
+     `--expand-delay` is measured, not chosen: the surface only reaches far
+     enough left to enclose the tab bar partway through the spring, and content
+     revealed before that is drawn on the desktop.
+
+     Whichever direction it runs, the shape and its content must never cross:
+     content sits outside the shape it belongs to, so any overlap leaves it
+     drawn on the desktop. Growing, the surface leads and the content follows.
+     Shrinking, the content leaves first over `--duration-exit` and the surface
+     only starts closing once it has gone. COLLAPSE_ANIMATION_MS in main.ts is
+     the sum of those two steps: the window may not shrink back until the
+     capsule is all that is left.
+
+     One sampled damped spring drives every resize, at one duration. A real
+     spring's motion is a property of the spring, not of how far it is asked to
+     travel, which is why using the same one for a 176px peek and a 482px panel
+     is what makes the two read as the same object rather than two effects. The
+     window carries SURFACE_MARGIN on every side so neither the overshoot nor
+     the shadow can clip. */
+  --spring: linear(
+    0,
+    0.0285,
+    0.0993,
+    0.1943,
+    0.3005,
+    0.4083,
+    0.5115,
+    0.6061,
+    0.69,
+    0.7623,
+    0.8229,
+    0.8727,
+    0.9125,
+    0.9437,
+    0.9674,
+    0.9848,
+    0.9972,
+    1.0056,
+    1.0109,
+    1.0138,
+    1.015,
+    1.015,
+    1.0142,
+    1.0129,
+    1.0114,
+    1.0098,
+    1
+  );
+  /* The same damping ratio as the shape spring, so the bounce profile is
+     identical; only the frequency changes, which is what a smaller and lighter
+     element wants. Everything that moves uses one of these two. */
+  --spring-fast: linear(
+    0,
+    0.0288,
+    0.1002,
+    0.1961,
+    0.3029,
+    0.4113,
+    0.5149,
+    0.6097,
+    0.6935,
+    0.7656,
+    0.826,
+    0.8755,
+    0.9149,
+    0.9457,
+    0.969,
+    0.9861,
+    0.9982,
+    1.0063,
+    1.0113,
+    1.014,
+    1.0151,
+    1.015,
+    1.0141,
+    1.0127,
+    1.0112,
+    1.0095,
+    1
+  );
+  --duration-fast: 280ms;
+  --motion-morph: cubic-bezier(0.32, 0.86, 0.28, 1);
+  --motion-exit: cubic-bezier(0.4, 0, 0.6, 1);
+  --duration-shape: 460ms;
+  --duration-exit: 90ms;
+  --duration-quick: 140ms;
+  --duration-hover: 70ms;
+  --expand-delay: 200ms;
+  --peek-delay: 60ms;
+  --row-stagger: 32ms;
+  /* How far the stack is compressed before it springs apart. The gaps opening
+     is the motion; the rows arriving is just what makes it visible. */
+  --row-fan: 7px;
+  /* Only about five rows are ever on screen, so the fan and the stagger stop
+     accumulating past that rather than leaving late rows to drift in. */
+  --row-fan-limit: 5;
+  /* Luke's face is the one thing in the wing that is always drawn, so its idle
+     motion is the only loop here that never ends. Stopping it is a token rather
+     than a selector, for the same reason the durations are: a capture run and
+     reduced motion both need it still, and both already reach the tokens.
+     Paused, every loop holds its first frame — head upright, eyes open. */
+  --face-motion: running;
+
+  /* Opaque in every state: the shape has to pass for part of a physical camera
+     housing, and nothing behind the window should ever show through it. Depth
+     comes from the shadow and the hairline edge instead. */
+  --surface-fill: #000;
+  /* Shadow only. A hairline edge drew a visible line along the top, where the
+     surface meets the menu bar and is meant to be indistinguishable from the
+     housing beside it. */
+  --surface-shadow: 0 10px 26px rgba(0, 0, 0, 0.46), 0 2px 7px rgba(0, 0, 0, 0.3);
+
+  --panel-radius: 30px;
+  /* Rounder than the panel at half its size, and the same family: the slot is
+     the panel stood down to one field, not a different object. */
+  --slot-radius: 28px;
+  --wing-inset: 9px;
+  --scroll-fade: 26px;
+  --panel-width: 620px;
+  /* How long the slot's contents wait before arriving. The slot is only ever
+     reached from the panel, so the panel's own content has to have left first:
+     that is `--duration-exit`, and the rest is the pause that keeps the two from
+     reading as one crossfade. */
+  --slot-delay: calc(var(--duration-exit) + var(--peek-delay));
+}
+
+.app-stage {
+  /* Mirrors CAPSULE_SIDE_WIDTH and PEEK_SIDE_GROWTH in
+     packages/sidecar-core/src/geometry.ts, so the drawn shapes match the window
+     the main process gives them. */
+  --capsule-width: calc(var(--notch-housing-width) + 72px);
+  --capsule-height: max(var(--notch-top-inset), 32px);
+  --peek-width: calc(var(--notch-housing-width) + 248px);
+  /* Wide enough for a key, a way out, and a way on, and no wider — the page the
+     key was copied from is behind this and has to stay readable. The floor is
+     what those three need on a display with no housing to grow from. */
+  --slot-width: max(460px, calc(var(--notch-housing-width) + 300px));
+  /* The mark sits outside the field's column, so everything else in the slot is
+     indented past it by the same amount. */
+  --slot-mark-size: 22px;
+  --slot-gutter-gap: 9px;
+  /* Measured off photographs of the hardware rather than guessed: the housing's
+     own corners are a convex 0.348 of its height, and where its sides meet the
+     top edge it flares outward on a concave 0.170 — about half the bottom
+     corner, not the sixth of it this was drawn at, which was small enough to
+     read as a straight edge with a chamfer. Deriving both from the reported
+     inset keeps the capsule matching whatever notch it is sitting beside. */
+  --notch-convex-radius: calc(var(--capsule-height) * 0.348);
+  --notch-concave-radius: calc(var(--capsule-height) * 0.17);
+}
+
+/* The panel's corners are `--panel-radius`, not the housing's, and a flare
+   belongs to the corner it turns into rather than to the notch: beside the
+   housing it has to disappear into one, and at the panel's size it has to turn
+   a corner more than twice as round. So it keeps the proportion the hardware
+   holds between the two — 0.170 against 0.348 — and grows with the corner
+   instead of staying the size the housing wanted. */
+.app-stage[data-presentation="panel"] {
+  --notch-concave-radius: calc(var(--panel-radius) * 0.489);
+}
+
+.app-stage[data-presentation="slot"] {
+  --notch-concave-radius: calc(var(--slot-radius) * 0.489);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  /* `clip` rather than `hidden`: the expanded content keeps its 620x520 layout
+     box while the compact window is only ~38px, so `hidden` leaves a scroll
+     container that focus or scrollIntoView can drag the capsule out of. */
+  overflow: clip;
+  background: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* The one place a selection is wanted. */
+.settings-input {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+button {
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+button:disabled {
+  cursor: default;
+}
+
+/* Any element that carries a session state gets its accent from one place. */
+[data-state="working"] {
+  --accent: var(--state-working);
+}
+[data-state="attention"] {
+  --accent: var(--state-attention);
+}
+[data-state="complete"] {
+  --accent: var(--state-complete);
+}
+[data-state="unknown"] {
+  --accent: var(--state-idle);
+}
+
+.app-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* The black surface is the whole animation: one leaf element with no children
+   and no text, so growing it costs a rounded-rect fill rather than a relayout
+   of the panel. It also ends where the content does, so a session arriving or
+   finishing stretches the panel instead of leaving a box the wrong size. */
+.panel-surface {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  left: 50%;
+  width: var(--capsule-width);
+  height: var(--capsule-height);
+  /* The spring undershoots on the way back, and the capsule is the floor: a
+     shape that dips inside the housing's footprint opens a gap where there is
+     a physical camera, not a screen. Clamping the used size lets the spring
+     keep its overshoot in the direction where there is room for it. */
+  min-width: var(--capsule-width);
+  min-height: var(--capsule-height);
+  border-radius: 0 0 var(--notch-convex-radius) var(--notch-convex-radius);
+  background: var(--surface-fill);
+  /* The lift off the top edge is carried here rather than by `top`, so that on a
+     display where it changes between states it travels on the spring with the
+     rest of the shape instead of jumping to its new place. It is 0 wherever the
+     shape meets the edge, which is every state beside a real housing. */
+  transform: translate(-50%, var(--shape-top, 0px));
+  /* Held back by `--duration-exit` so the shape never shrinks out from under
+     content that is still on screen. Five properties here, and the per-state
+     rules below override duration, timing, and delay by position — a sixth
+     entry has to be added to those lists too, not left to wrap around. */
+  transition:
+    width var(--duration-shape) var(--spring) var(--duration-exit),
+    height var(--duration-shape) var(--spring) var(--duration-exit),
+    border-radius var(--duration-shape) var(--spring) var(--duration-exit),
+    background-color var(--duration-shape) var(--motion-exit),
+    box-shadow var(--duration-quick) var(--motion-exit),
+    transform var(--duration-shape) var(--spring) var(--duration-exit);
+}
+
+/* Where the shape meets the top edge it flares outward on the same concave
+   curve the housing does, so a capsule beside the notch reads as one object
+   with it rather than as a black rectangle parked next to one. */
+.app-stage[data-notch="true"] .panel-surface::before,
+.app-stage[data-notch="true"] .panel-surface::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: var(--notch-concave-radius);
+  height: var(--notch-concave-radius);
+  opacity: 1;
+  /* The flare turns the surface's own corner, so it travels on the surface's
+     spring and waits out `--duration-exit` with it. Three properties here, and
+     the panel rule below overrides the delays by position. */
+  transition:
+    width var(--duration-shape) var(--spring) var(--duration-exit),
+    height var(--duration-shape) var(--spring) var(--duration-exit),
+    opacity var(--duration-quick) var(--motion-exit);
+}
+
+/* Sized in percentages of the element rather than in the radius the element is
+   already sized by, so a growing flare is a box resizing under a fixed gradient
+   instead of a gradient that has to be interpolated on every frame. The last
+   half-pixel is a feather: a hard stop inside a gradient is not antialiased, and
+   at the panel's radius the stair-steps on the arc would be plain. */
+.app-stage[data-notch="true"] .panel-surface::before {
+  right: 100%;
+  background: radial-gradient(
+    ellipse 100% 100% at 0 100%,
+    transparent calc(100% - 0.5px),
+    var(--surface-fill) 100%
+  );
+}
+
+.app-stage[data-notch="true"] .panel-surface::after {
+  left: 100%;
+  background: radial-gradient(
+    ellipse 100% 100% at 100% 100%,
+    transparent calc(100% - 0.5px),
+    var(--surface-fill) 100%
+  );
+}
+
+/* Growing, the flare leads with the surface rather than waiting for content to
+   leave; shrinking, the base rule's delay applies and the two close together. */
+.app-stage[data-notch="true"][data-presentation="panel"] .panel-surface::before,
+.app-stage[data-notch="true"][data-presentation="panel"] .panel-surface::after {
+  transition-delay: 0s, 0s, 0s;
+}
+
+.app-stage[data-presentation="peek"] .panel-surface,
+.app-stage[data-presentation="slot"] .panel-surface,
+.app-stage[data-presentation="panel"] .panel-surface {
+  box-shadow: var(--surface-shadow);
+}
+
+/* The panel narrowed to the width of one field. It is only ever arrived at from
+   the panel, which is a shrink, so the base rule's timing is already right:
+   content leaves over `--duration-exit` and the shape follows it in. */
+.app-stage[data-presentation="slot"] .panel-surface {
+  width: var(--slot-width);
+  height: var(--slot-height, 96px);
+  border-radius: 0 0 var(--slot-radius) var(--slot-radius);
+}
+
+/* Under the pointer: wide enough to say what the count means. */
+.app-stage[data-presentation="peek"] .panel-surface {
+  width: var(--peek-width);
+  transition-duration: var(--duration-shape);
+  transition-timing-function:
+    var(--spring), var(--spring), var(--spring), var(--motion-exit), var(--motion-exit),
+    var(--spring);
+  /* The peek's shadow rides with the shape. It is a small, short move over a
+     small surface, so the extra paint per frame is affordable here in a way it
+     is not across the panel's 620px. */
+  transition-delay: 0s;
+}
+
+.app-stage[data-presentation="panel"] .panel-surface {
+  width: var(--panel-width);
+  height: var(--panel-height, 520px);
+  border-radius: 0 0 var(--panel-radius) var(--panel-radius);
+  transition-duration: var(--duration-shape);
+  transition-timing-function:
+    var(--spring), var(--spring), var(--spring), var(--motion-exit), var(--motion-exit),
+    var(--spring);
+  transition-delay: 0s, 0s, 0s, 0s, var(--duration-shape), 0s;
+}
+
+/* Tracks the drawn shape rather than the window, which is always larger than
+   the capsule: everything the shape does not cover has to stay click-through.
+   It snaps rather than animating, so the wider peek is live from the first
+   frame and the pointer cannot fall out of a region that is still growing. */
+.compact-hover-target {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: var(--capsule-width);
+  height: var(--capsule-height);
+  padding: 0;
+  border: 0;
+  /* The same corner the capsule is drawn with, for the same reason the panel
+     body carries the panel's: the press target is the shape, not its box. */
+  border-radius: 0 0 var(--notch-convex-radius) var(--notch-convex-radius);
+  background: none;
+  cursor: pointer;
+  transform: translateX(-50%);
+  /* Pressing the capsule is a gesture, not a focus change: a ring drawn around
+     the notch strip by a mouse press is the one thing on screen that cannot
+     look intentional. */
+  outline: none;
+  -webkit-app-region: no-drag;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* A keyboard can reach this control, and focus it cannot see is worse than a
+   ring — but the ring belongs to the keyboard alone. `:focus-visible` is not
+   enough on its own: it is a guess about how focus arrived, and the panel takes
+   focus programmatically when it opens, which the engine reads as keyboard
+   modality and rings a plain press. The flag on the root says the keyboard was
+   actually used. The ring is inset, because an outline outside this box would
+   be drawn on the desktop above the shape. */
+html[data-keyboard="true"] .compact-hover-target:focus-visible {
+  outline: 2px solid var(--state-working);
+  outline-offset: -4px;
+}
+
+.app-stage[data-presentation="peek"] .compact-hover-target {
+  width: var(--peek-width);
+}
+
+/* The capsule strip keeps taking clicks over an open panel: pressing it is how
+   the panel closes again, and nothing interactive sits under it. */
+.app-stage[data-presentation="panel"] .compact-hover-target {
+  height: max(var(--notch-top-inset), 32px);
+  pointer-events: auto;
+}
+
+/* Notch wings ------------------------------------------------------------ */
+
+/* Bounded vertically by the shape rather than by the window, for the same reason
+   it is bounded horizontally by it below. The two agree beside a housing, where
+   the shape meets the top edge — but on a display with none the shape lifts off
+   that edge and closes into a pill shorter than the strip, and a wing the height
+   of the strip would let anything that leaves the face be drawn on the desktop.
+   The lift is symmetric, so this takes the same centre either way and only
+   tightens the clip: what a motion throws past the black is cut off at it. */
+.wing {
+  position: absolute;
+  z-index: 3;
+  top: var(--shape-top, 0px);
+  display: flex;
+  height: calc(var(--capsule-height) - var(--shape-top, 0px) * 2);
+  align-items: center;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Bounded by the shape the wing's state draws, never by the window: a compact
+   window is wider than the capsule, so clipping to the window would let
+   captions spill onto the desktop, and clipping to the peek would cut the
+   panel's captions short of the room it actually has. */
+.app-stage {
+  --wing-bound: var(--peek-width);
+}
+
+.app-stage[data-presentation="panel"] {
+  --wing-bound: var(--panel-width);
+}
+
+/* The wings keep the capsule's quiet form while the slot is drawn — one mark and
+   the count, nothing unfolded — because the slot is asking for a key, and a list
+   of sessions is not an answer to that. Only the bound changes, so nothing
+   spills past the narrower shape. */
+.app-stage[data-presentation="slot"] {
+  --wing-bound: var(--slot-width);
+}
+
+.wing-left {
+  right: calc(50% + var(--notch-housing-width) / 2);
+  left: calc(50% - var(--wing-bound) / 2);
+  justify-content: flex-end;
+}
+
+.wing-right {
+  right: calc(50% - var(--wing-bound) / 2);
+  left: calc(50% + var(--notch-housing-width) / 2);
+  justify-content: flex-start;
+}
+
+.wing-inner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 var(--wing-inset);
+}
+
+/* Reversed so the first provider — the one that needs a person soonest — is the
+   mark nearest the face, and therefore the first to come out from behind it.
+   Every mark holds its place and only fades, so none of them moves during the
+   morph. */
+.wing-marks {
+  display: flex;
+  height: 22px;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 7px;
+}
+
+.wing-mark {
+  display: flex;
+  align-items: center;
+  color: var(--text-secondary);
+}
+
+/* The capsule keeps the face and nothing else; what Luke is watching belongs to
+   the states with room for it, and unfolds outward from the notch on the same
+   spring, at the same distance, as the count's caption does on the other side.
+   The two wings are one gesture, so they move as one. */
+.wing-mark,
+.wing-more,
+.wing-meter {
+  opacity: 0;
+  transform: translateX(8px);
+  transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-shape) var(--spring);
+}
+
+.app-stage[data-presentation="peek"] .wing-mark,
+.app-stage[data-presentation="peek"] .wing-more,
+.app-stage[data-presentation="peek"] .wing-meter,
+.app-stage[data-presentation="panel"] .wing-mark,
+.app-stage[data-presentation="panel"] .wing-more,
+.app-stage[data-presentation="panel"] .wing-meter {
+  opacity: 1;
+  transform: none;
+  transition-duration: var(--duration-quick), var(--duration-shape);
+  transition-timing-function: var(--motion-exit), var(--spring);
+  transition-delay: var(--peek-delay);
+}
+
+/* More providers than the wing can hold. Counted rather than dropped, at the
+   far end of the row, where it reads as the remainder of a list. */
+.wing-more {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  font-size: 9.5px;
+  font-weight: 660;
+  letter-spacing: -0.2px;
+}
+
+/* The meter's slot, rather than the meter itself: unfolding is the wing's
+   gesture and belongs to the slot, while the opacity and scale inside it are the
+   meter's own answer to speech. One element cannot carry both. */
+.wing-meter {
+  display: flex;
+  align-items: center;
+}
+
+.provider-mark {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+/* The marks fill their box very differently — the Claude Code glyph is wide and
+   short, the Codex and Cursor marks are full-bleed, and Conductor's letter mark
+   is taller than it is wide — so each gets a uniform scale to sit at the same
+   optical weight. Proportions are untouched. */
+.provider-mark[data-mark="claude-code"] {
+  color: var(--mark-claude-code);
+  transform: scale(1.12);
+}
+
+.provider-mark[data-mark="codex"] {
+  transform: scale(0.94);
+}
+
+.provider-mark[data-mark="conductor"] {
+  color: var(--mark-conductor);
+  transform: scale(0.93);
+}
+
+.provider-mark[data-mark="cursor"] {
+  color: var(--mark-cursor);
+  transform: scale(0.94);
+}
+
+/* Devin's published mark leaves roughly a fifth of its box empty on every side,
+   so it is scaled up to the height the full-bleed marks reach. */
+.provider-mark[data-mark="devin"] {
+  color: var(--mark-devin);
+  transform: scale(1.22);
+}
+
+/* Jules fills its box top to bottom the way the Codex and Cursor marks do, so
+   it takes the same scale they do. */
+.provider-mark[data-mark="jules"] {
+  color: var(--mark-jules);
+  transform: scale(0.94);
+}
+
+/* The work is happening somewhere the user cannot see. The badge overhangs the
+   mark's box rather than sitting inside it, so it reads as attached to the mark
+   instead of crowding it, and it is out of flow so the mark stays where it was
+   whether or not a badge is drawn. It fills against the surface rather than
+   against whatever it is laid on: a session row tinted for attention would
+   otherwise recolour the badge, and where the work runs is not a state. Each
+   place that shows a mark sets the size, because a 32px session tile and a
+   text-height settings line cannot carry the same one. */
+.cloud-badge {
+  position: absolute;
+  display: grid;
+  border-radius: 50%;
+  background: var(--surface-fill);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  color: var(--text-secondary);
+  place-items: center;
+}
+
+/* The viewBox already carries the cloud's proportions, so a place that shows a
+   badge sets a width and the height follows from the shape. */
+.cloud-badge svg {
+  height: auto;
+}
+
+/* Luke's face ------------------------------------------------------------ */
+
+/* The place nearest the housing is the one the capsule keeps, and Luke holds it
+   in every state: the marks, the meter, and the captions all unfold around a
+   fixed point, and the strip at rest is him rather than whichever provider
+   happens to be first. Drawn larger than a provider mark because the artwork is
+   mostly the space between its parts, and in the primary ink because it is the
+   app rather than one of the things the app is watching.
+
+   The loud motions leave the square the artwork is drawn in — a pirouette and a
+   duck both need more room than a face at rest — so nothing is clipped here. The
+   wing clips them instead, at the housing, which is the edge that matters. */
+.luke-face {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  overflow: visible;
+  color: var(--text-primary);
+  transition: color var(--duration-quick) var(--motion-exit);
+}
+
+/* The two motions the microphone owns. The capsule has no room for the meter
+   beside the face, so Luke takes the meter's own colour while it is open: the
+   state reads at every size, and the bars stay with the peek. */
+.luke-face[data-motion="talking"],
+.luke-face[data-motion="listening"] {
+  color: var(--state-working);
+}
+
+/* Everything the artwork moves. Which keyframes each part plays, at what
+   duration and about which pivot, is generated into face-motion.css from the
+   same table the SVGs in design/brand/ are cut from; this is only the wiring
+   those rules assume — how long they run, and what can stop them.
+
+   Pivots arrive as points on the artwork's canvas, so the layers measure against
+   the viewBox. The eyes squeeze about their own centres instead, which is what
+   `fill-box` means here. Easing is carried per keyframe, because a keySplines
+   list is a curve per interval and `animation-timing-function` is only one. */
+.luke-face-layer,
+.luke-face-eye,
+.luke-face-brows,
+.luke-face-z {
+  animation-play-state: var(--face-motion);
+  animation-iteration-count: infinite;
+  animation-timing-function: linear;
+}
+
+.luke-face-layer {
+  transform-box: view-box;
+}
+
+.luke-face-eye {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* Nothing to blend into on a display without a housing, so the shape stops
+   pretending: it lifts off the edge and closes into a free-floating pill. */
+.app-stage[data-notch="false"] {
+  --shape-top: 6px;
+}
+
+.app-stage[data-notch="false"] .panel-surface {
+  height: calc(var(--capsule-height) - var(--shape-top) * 2);
+  min-height: calc(var(--capsule-height) - var(--shape-top) * 2);
+  border-radius: 999px;
+}
+
+/* The panel is too large to float, so it meets the top edge like any other
+   display's does. Lowering the lift to zero moves the surface, the wings, and
+   the press target together, because all three are anchored to it. The slot
+   holds a field, which is the same argument at a smaller size. */
+.app-stage[data-notch="false"][data-presentation="panel"],
+.app-stage[data-notch="false"][data-presentation="slot"] {
+  --shape-top: 0px;
+}
+
+.app-stage[data-notch="false"][data-presentation="panel"] .panel-surface {
+  height: var(--panel-height, 520px);
+  border-radius: 0 0 var(--panel-radius) var(--panel-radius);
+}
+
+.app-stage[data-notch="false"][data-presentation="slot"] .panel-surface {
+  height: var(--slot-height, 96px);
+  border-radius: 0 0 var(--slot-radius) var(--slot-radius);
+}
+
+.app-stage[data-notch="false"] .wing,
+.app-stage[data-notch="false"] .compact-hover-target {
+  top: var(--shape-top);
+  height: calc(var(--capsule-height) - var(--shape-top) * 2);
+}
+
+.app-stage[data-notch="false"] .compact-hover-target {
+  border-radius: 999px;
+}
+
+/* Inside an open panel the strip is surrounded by the shape rather than
+   bounding it, so it has no corner of its own to follow. */
+.app-stage[data-presentation="panel"] .compact-hover-target {
+  border-radius: 0;
+}
+
+.compact-stage {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+}
+
+/* The strip sits above everything, so wherever the shape holds something else
+   to press, the stage around the strip has to stop taking the pointer. */
+.app-stage[data-presentation="panel"] .compact-stage,
+.app-stage[data-presentation="slot"] .compact-stage {
+  pointer-events: none;
+}
+
+/* Pressing the strip while the slot is drawn brings the whole panel back, with
+   the entry still in it. */
+.app-stage[data-presentation="slot"] .compact-hover-target {
+  pointer-events: auto;
+}
+
+/* Session count ---------------------------------------------------------- */
+
+/* A number, not a badge. Seventeen sessions overflowed a pill, and a pill was
+   never carrying meaning the colour and the caption were not already carrying.
+   The rounded system face is the one macOS uses for glanceable numerals. */
+.count-badge {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  font-family: ui-rounded, -apple-system, "SF Pro Rounded", BlinkMacSystemFont, sans-serif;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  transform: scale(0.88);
+  transform-origin: left center;
+  transition: transform var(--duration-shape) var(--spring);
+  will-change: transform;
+}
+
+.count-badge[data-state="attention"] {
+  text-shadow: 0 0 14px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.count-badge[data-empty="true"] {
+  color: var(--text-tertiary);
+}
+
+/* The panel has room for it to sit at full size; the capsule and the peek do
+   not, and growing it there read as a second movement competing with the
+   widening. */
+.app-stage[data-presentation="panel"] .count-badge {
+  transform: scale(1);
+}
+
+.count-caption {
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  margin-left: 9px;
+  color: var(--text-secondary);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  opacity: 0;
+  text-transform: uppercase;
+  transform: translate(-8px, -50%);
+  /* Two properties, and the state below overrides duration and timing by
+     position: a third entry would have to be added there too. */
+  transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-shape) var(--spring);
+  white-space: nowrap;
+}
+
+.app-stage[data-presentation="peek"] .count-caption,
+.app-stage[data-presentation="panel"] .count-caption {
+  opacity: 1;
+  transform: translate(0, -50%);
+  transition-duration: var(--duration-quick), var(--duration-shape);
+  transition-timing-function: var(--motion-exit), var(--spring);
+  transition-delay: var(--peek-delay);
+}
+
+/* Waveform --------------------------------------------------------------- */
+
+/* The meter replaces the marks while the microphone is live and stays drawn for
+   the whole of that — silence is a thing it reports, not a reason to disappear.
+   It unfolds with the peek the way the marks do, because the capsule has no room
+   for it beside the face; there, a live microphone is what the face's colour and
+   tempo say. Speech only raises the meter from idle to full. */
+.waveform {
+  display: flex;
+  width: 28px;
+  height: 22px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  opacity: 0.5;
+  transform: scale(0.86);
+  transition:
+    opacity 120ms ease,
+    transform 160ms ease;
+}
+
+.waveform[data-speaking="true"] {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.waveform-bar {
+  width: 2px;
+  height: var(--bar-height, 19px);
+  border-radius: 999px;
+  background: var(--state-working);
+  transform: scaleY(0.2);
+  transform-origin: center;
+  transition: transform 90ms linear;
+}
+
+.waveform-bar:nth-child(1),
+.waveform-bar:nth-child(7) {
+  --bar-height: 9px;
+}
+.waveform-bar:nth-child(2),
+.waveform-bar:nth-child(6) {
+  --bar-height: 13px;
+}
+.waveform-bar:nth-child(3),
+.waveform-bar:nth-child(5) {
+  --bar-height: 18px;
+}
+.waveform-bar:nth-child(4) {
+  --bar-height: 23px;
+}
+
+/* Expanded panel --------------------------------------------------------- */
+
+.expanded-stage {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: 50%;
+  width: 620px;
+  max-height: 520px;
+  opacity: 0;
+  /* Hidden outright the moment it finishes fading, so a collapsing panel cannot
+     be left as raster the compositor might re-present while the window resizes.
+     The stage spans the whole window; only the panel inside it is a target, so
+     the transparent area below a short panel stays click-through. */
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(-10px);
+  transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-shape) var(--spring),
+    visibility 0s linear var(--duration-exit);
+  will-change: opacity, transform;
+}
+
+.app-stage[data-presentation="panel"] .expanded-stage {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+  transition:
+    opacity var(--duration-quick) var(--motion-exit) var(--expand-delay),
+    transform var(--duration-shape) var(--spring) var(--expand-delay),
+    visibility 0s linear var(--expand-delay);
+}
+
+/* Rounded like the surface it sits on, because hit testing follows the corner:
+   the sliver a rectangle would cover past the shape's own corner is desktop,
+   and a click there belongs to whatever is behind Luke. */
+.expanded-panel {
+  display: flex;
+  max-height: 520px;
+  flex-direction: column;
+  padding: calc(max(var(--notch-top-inset), 32px) + 14px) 20px 18px;
+  border-radius: 0 0 var(--panel-radius) var(--panel-radius);
+}
+
+.app-stage[data-presentation="panel"] .expanded-panel {
+  pointer-events: auto;
+}
+
+.body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Tabs ------------------------------------------------------------------- */
+
+.tab-bar {
+  position: relative;
+  display: flex;
+  width: calc(var(--tab-count) * 92px);
+  flex: 0 0 auto;
+  padding: 3px;
+  border-radius: 11px;
+  background: var(--raised);
+}
+
+.tab-thumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc((100% - 6px) / var(--tab-count));
+  border-radius: 8px;
+  background: var(--raised-strong);
+  transform: translateX(calc(var(--tab-index) * 100%));
+  transition: transform var(--duration-fast) var(--spring-fast);
+}
+
+.tab {
+  position: relative;
+  flex: 1;
+  padding: 6px 0;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 620;
+  transition: color var(--duration-hover) ease;
+}
+
+.tab[data-active="true"] {
+  color: var(--text-primary);
+}
+
+/* Session primitives ----------------------------------------------------- */
+
+.state-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  color: var(--accent);
+  font-size: 9.5px;
+  font-weight: 660;
+  letter-spacing: 0.1px;
+  white-space: nowrap;
+}
+
+.state-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentcolor;
+}
+
+.empty-state {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 34px 0;
+  text-align: center;
+}
+
+.empty-state strong {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.empty-state small {
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+
+/* Content arrives behind the surface, never in front of it, and it arrives on
+   the same spring the surface is riding. Each row starts further up than the
+   one above it, so the stack is compressed and the gaps spring open — the
+   space between sessions is the thing that moves. */
+.session-row,
+.settings-section,
+.quit-button,
+.empty-state,
+.panel-header {
+  opacity: 0;
+  transform: translateY(
+    calc((min(var(--row-index, 0), var(--row-fan-limit)) + 1) * var(--row-fan) * -1)
+  );
+  transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-shape) var(--spring);
+}
+
+.app-stage[data-presentation="panel"] .session-row,
+.app-stage[data-presentation="panel"] .settings-section,
+.app-stage[data-presentation="panel"] .quit-button,
+.app-stage[data-presentation="panel"] .empty-state,
+.app-stage[data-presentation="panel"] .panel-header {
+  --row-delay: calc(
+    var(--expand-delay) +
+    min(var(--row-index, 0), var(--row-fan-limit)) *
+    var(--row-stagger)
+  );
+
+  opacity: 1;
+  transform: none;
+  transition-delay: var(--row-delay);
+}
+
+/* The one element in the stack that also answers the pointer. A delay list
+   matched to its property list keeps the stagger on the arrival, where it
+   belongs, instead of making the hover wait for the row's turn to appear. */
+.app-stage[data-presentation="panel"] .quit-button {
+  transition-delay: var(--row-delay), var(--row-delay), 0s, 0s;
+}
+
+/* Settings --------------------------------------------------------------- */
+
+/* Scrolls on the same terms as the session list: contained, never chaining out
+   to the root, with the tab bar left outside the scrolling box. */
+.settings {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  overflow-x: clip;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-width: thin;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 13px 15px;
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.022);
+}
+
+.settings-section h2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* Sized to the heading it labels rather than to a grid: the glyph is a letter
+   in the line, not an element beside it. */
+.settings-icon {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  opacity: 0.85;
+}
+
+.quit-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 11px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.022);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 620;
+  /* Arrival first, then feedback: this order is what the panel's delay list
+     above is matched against, so the two are edited together. */
+  transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-shape) var(--spring),
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.quit-button:hover {
+  background: color-mix(in srgb, #ff7e7e 12%, transparent);
+  color: #ff9b9b;
+}
+
+.quit-button .settings-icon {
+  width: 13px;
+  height: 13px;
+  opacity: 1;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.settings-copy strong {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.settings-copy small,
+.settings-note {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+/* Said once for the whole section rather than under each provider. */
+.settings-note {
+  margin: 0;
+}
+
+/* One provider per line: mark, name, whether it is connected, and what you can
+   do about that. Providers are separated by a rule rather than by nested cards,
+   so the section stays one object however many keys it holds. */
+.credential {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.credential + .credential {
+  padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+}
+
+.credential-row {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 9px;
+}
+
+/* Mark, name, and the check that answers the only question the line asks. */
+.credential-identity {
+  display: flex;
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.credential-name {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 620;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The one green thing on the line, in the same palette a finished session
+   uses, so connected reads the same way complete does. */
+.credential-check {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  color: var(--state-complete);
+  opacity: 1;
+}
+
+.credential-status {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 640;
+}
+
+/* Square, quiet, and captioned only for a reader: a trash can and a pencil say
+   what they do, and a label beside each would say it twice. */
+.icon-button {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: var(--raised);
+  color: var(--text-secondary);
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.icon-button:hover {
+  background: var(--raised-strong);
+  color: var(--text-primary);
+}
+
+.icon-button:disabled {
+  opacity: 0.4;
+}
+
+.icon-button:disabled:hover {
+  background: var(--raised);
+  color: var(--text-secondary);
+}
+
+.icon-button-glyph {
+  width: 13px;
+  height: 13px;
+}
+
+/* Deleting a key is the one destructive control here, so it says so on hover
+   rather than by sitting in red beside the others. */
+.credential-remove:hover {
+  background: color-mix(in srgb, #ff7e7e 12%, transparent);
+  color: #ff9b9b;
+}
+
+.credential-remove:disabled:hover {
+  background: var(--raised);
+  color: var(--text-secondary);
+}
+
+/* The field exists only while a key is being entered. It is a fieldset because
+   the group is what names the provider for the controls inside it — every row's
+   editor otherwise offers the same Cancel, Save key, and link. None of the
+   user-agent frame is wanted, including the `min-inline-size` that would stop
+   it shrinking with the panel. */
+.credential-editor {
+  display: flex;
+  min-inline-size: 0;
+  flex-direction: column;
+  padding: 0;
+  border: 0;
+  margin: 0;
+  gap: 8px;
+}
+
+/* The place the panel takes typed input. */
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.settings-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 620;
+}
+
+/* Beside the provider's name, sized to it: the mark reads as part of the word,
+   not as an icon in a column of its own. A bare mark at text height rather than
+   the session list's tile, so the badge comes down with it — any larger and the
+   annotation would outweigh the mark it annotates, and this is the smallest the
+   cloud still reads at.
+
+   The identity line clips what leaves it, so the badge cannot simply hang off a
+   13px mark: it would be sliced flat along the bottom. The box is instead large
+   enough to hold both, which is also what makes the line tall enough to show
+   them, and the negative side margins pull that extra width back so the mark
+   and the name sit exactly where a bare 13px mark would put them. */
+.credential-mark {
+  position: relative;
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  margin: 0 -3.5px;
+  place-items: center;
+}
+
+.credential-mark .provider-mark {
+  width: 13px;
+  height: 13px;
+}
+
+/* Held half a pixel off the corner rather than flush with it, so no edge of the
+   disc lands on the line's clip boundary. */
+.credential-mark .cloud-badge {
+  right: 0.5px;
+  bottom: 0.5px;
+  width: 10px;
+  height: 10px;
+}
+
+.credential-mark .cloud-badge svg {
+  width: 6.5px;
+}
+
+/* The hint sits opposite the editor's buttons and yields to them. */
+.credential-editor .settings-note {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Reads as a link because that is what it does, though it is a button: the
+   page is opened by the main process, not navigated to here. */
+.link-button {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--state-working);
+  font-size: inherit;
+  font-weight: 640;
+  white-space: nowrap;
+  transition: color var(--duration-hover) ease;
+}
+
+.link-button:hover {
+  color: var(--text-primary);
+}
+
+/* Quiet while the key it sits beside is being written, like every other control
+   on that line: a link that still reads as live is an invitation to disturb an
+   entry that is already on its way. */
+.link-button:disabled {
+  color: var(--text-tertiary);
+}
+
+.link-icon {
+  width: 9px;
+  height: 9px;
+  margin-left: 3px;
+  vertical-align: -1px;
+}
+
+.settings-input {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.4);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 11.5px;
+  letter-spacing: 0.4px;
+  transition:
+    border-color var(--duration-hover) ease,
+    background-color var(--duration-hover) ease;
+}
+
+.settings-input::placeholder {
+  color: var(--text-tertiary);
+  letter-spacing: 0;
+}
+
+.settings-input:focus {
+  border-color: color-mix(in srgb, var(--state-working) 45%, transparent);
+  background: rgba(0, 0, 0, 0.55);
+  outline: none;
+}
+
+.settings-input:disabled {
+  color: var(--text-tertiary);
+  cursor: not-allowed;
+}
+
+.settings-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+}
+
+.action-button:disabled,
+.quiet-button:disabled {
+  opacity: 0.4;
+}
+
+.action-button:disabled:hover,
+.quiet-button:disabled:hover {
+  background: var(--raised);
+}
+
+.action-button,
+.quiet-button {
+  padding: 8px 13px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 640;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+  white-space: nowrap;
+}
+
+.action-button {
+  background: color-mix(in srgb, var(--state-working) 15%, transparent);
+  color: var(--state-working);
+}
+
+.action-button:hover {
+  background: color-mix(in srgb, var(--state-working) 22%, transparent);
+}
+
+.quiet-button {
+  background: var(--raised);
+  color: var(--text-secondary);
+}
+
+.quiet-button:hover {
+  background: var(--raised-strong);
+  color: var(--text-primary);
+}
+
+.error-message {
+  margin: 0;
+  color: #ff8c8c;
+  font-size: 10px;
+}
+
+/* Key slot --------------------------------------------------------------- */
+
+/* Layered like the panel and animated like it, because it is the panel: the
+   stage carries the arrival and the shape underneath carries the size. */
+.slot-stage {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 50%;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(-6px);
+  transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-shape) var(--spring),
+    visibility 0s linear var(--duration-exit);
+  will-change: opacity, transform;
+}
+
+.app-stage[data-presentation="slot"] .slot-stage {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+  transition:
+    opacity var(--duration-quick) var(--motion-exit) var(--slot-delay),
+    transform var(--duration-shape) var(--spring) var(--slot-delay),
+    visibility 0s linear var(--slot-delay);
+}
+
+/* Rounded like the shape it sits on, for the same reason the panel body is:
+   past the corner is desktop, and a press there belongs to whatever is behind
+   Luke — which, here, is the page the key was copied from. */
+.key-slot {
+  display: flex;
+  width: var(--slot-width);
+  flex-direction: column;
+  gap: 7px;
+  padding: calc(max(var(--notch-top-inset), 32px) + 12px) 16px 15px;
+  border-radius: 0 0 var(--slot-radius) var(--slot-radius);
+}
+
+.app-stage[data-presentation="slot"] .key-slot {
+  pointer-events: auto;
+}
+
+.key-slot-row {
+  display: flex;
+  align-items: center;
+  gap: var(--slot-gutter-gap);
+}
+
+/* The label and the line under the field both start where the field does, so
+   the mark is the only thing outside that column. */
+.key-slot-label,
+.key-slot-foot {
+  padding-left: calc(var(--slot-mark-size) + var(--slot-gutter-gap));
+}
+
+/* Larger than the mark on a settings line: here it is the only thing naming the
+   provider, rather than a glyph beside its name. The badge grows with it. */
+.key-slot-mark {
+  position: relative;
+  display: grid;
+  width: var(--slot-mark-size);
+  height: var(--slot-mark-size);
+  flex: 0 0 auto;
+  place-items: center;
+}
+
+.key-slot-mark .provider-mark {
+  width: 16px;
+  height: 16px;
+}
+
+.key-slot-mark .cloud-badge {
+  right: -1px;
+  bottom: -1px;
+  width: 11px;
+  height: 11px;
+}
+
+.key-slot-mark .cloud-badge svg {
+  width: 7px;
+}
+
+.key-slot-input {
+  min-width: 0;
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: 11px;
+}
+
+/* Held to the width of its longest word, so saying "Saving…" does not narrow
+   the field beside it. */
+.key-slot-confirm {
+  min-width: 76px;
+  /* Coming alive first, then hover feedback. The base button rule declares only
+     the second pair, so this replaces it rather than adding to it. */
+  transition:
+    transform var(--duration-fast) var(--spring-fast),
+    background-color var(--duration-quick) var(--motion-exit),
+    color var(--duration-quick) var(--motion-exit);
+}
+
+/* Nothing to confirm yet, so it is not offering anything: quiet, and held a
+   little small. The key landing in the field is what brings it up to size and
+   into the accent — the confirm arriving is the answer to the paste, and it
+   arrives without moving anything else on the line, because its place on the
+   line was never given up. Written past `.action-button:disabled`, which would
+   otherwise keep its colour under the dimming. */
+.key-slot .action-button[data-ready="false"] {
+  background: var(--raised);
+  color: var(--text-secondary);
+  transform: scale(0.92);
+}
+
+/* The line under the field yields to the buttons opposite it the same way the
+   panel's editor does. */
+.key-slot-foot .settings-note {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Under the whole line, where the panel's editor puts it too. */
+.key-slot .error-message {
+  padding-left: calc(var(--slot-mark-size) + var(--slot-gutter-gap));
+}
+
+/* Evidence capture screenshots a fixed moment after the renderer reports ready.
+   The panel's height is only known once it has been measured, so without this a
+   capture could land mid-transition and the PNGs would stop being reproducible.
+   Zeroing the tokens every transition is written in terms of is enough — no
+   rule has to be overridden. */
+.app-stage[data-capture="true"] {
+  --duration-shape: 0s;
+  --duration-exit: 0s;
+  --duration-quick: 0s;
+  --expand-delay: 0s;
+  --row-stagger: 0s;
+  /* Luke blinks and sways on a loop with no end to wait for, so a capture would
+     otherwise land wherever in it the shutter happened to fall. Held on its
+     first frame, he is the same face in every PNG. */
+  --face-motion: paused;
+}
+
+/* COLLAPSE_ANIMATION_MS in app.tsx drops to zero under the same query, so the
+   window still waits for the capsule rather than shrinking under the panel. */
+/* Reduced motion is answered at the tokens rather than element by element. A
+   list of selectors misses whatever is added later, and it loses outright to the
+   staggered rules, which carry a `.app-stage[data-presentation]` prefix a media
+   query does not add specificity to. Zeroing the vocabulary reaches every rule
+   derived from it, including those. Hover feedback keeps its 70ms: a colour
+   settling is not motion. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-shape: 1ms;
+    --duration-exit: 1ms;
+    --duration-quick: 1ms;
+    --duration-fast: 1ms;
+    --expand-delay: 0ms;
+    --peek-delay: 0ms;
+    --row-stagger: 0ms;
+    /* Nothing travels, so the stack has no distance to spring across. */
+    --row-fan: 0px;
+    /* Idle motion is the one thing here that no one asked for, so it is the
+       first thing to stop: Luke sits still, upright, with his eyes open. */
+    --face-motion: paused;
+  }
+
+  .panel-surface,
+  .expanded-stage,
+  .slot-stage,
+  .key-slot-confirm,
+  .wing-mark,
+  .wing-more,
+  .wing-meter,
+  .count-badge,
+  .count-caption,
+  .tab-thumb,
+  .waveform,
+  .session-row {
+    transition-duration: 1ms;
+    transition-delay: 0ms;
+  }
+}

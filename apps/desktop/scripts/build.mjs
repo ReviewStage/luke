@@ -6,9 +6,15 @@ import { build } from "esbuild";
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(scriptDirectory, "..");
 const outputRoot = path.join(appRoot, "dist");
+const brandRoot = path.resolve(appRoot, "../../design/brand");
+// The menu bar item is the one piece of artwork the app cannot inline: macOS
+// takes a NativeImage read from a file, not markup. Both scales travel, because
+// `nativeImage` finds the `@2x` file by looking beside the one it was given.
+const MENU_BAR_IMAGES = ["lukeTemplate.png", "lukeTemplate@2x.png"];
 
 await fs.rm(outputRoot, { recursive: true, force: true });
 await fs.mkdir(path.join(outputRoot, "renderer"), { recursive: true });
+await fs.mkdir(path.join(outputRoot, "menubar"), { recursive: true });
 
 await Promise.all([
   build({
@@ -34,6 +40,17 @@ await Promise.all([
     logLevel: "info",
   }),
   build({
+    // The stylesheet entry `@import`s the renderer's stylesheets; esbuild
+    // inlines them into the single `styles.css` the renderer HTML links.
+    entryPoints: [path.join(appRoot, "src/renderer/styles/index.css")],
+    outfile: path.join(outputRoot, "renderer/styles.css"),
+    bundle: true,
+    target: "chrome140",
+    minify: true,
+    sourcemap: true,
+    logLevel: "info",
+  }),
+  build({
     entryPoints: [path.join(appRoot, "src/renderer/index.tsx")],
     outfile: path.join(outputRoot, "renderer/renderer.js"),
     bundle: true,
@@ -50,13 +67,13 @@ await Promise.all([
   }),
 ]);
 
-await Promise.all([
-  fs.copyFile(
-    path.join(appRoot, "src/renderer/index.html"),
-    path.join(outputRoot, "renderer/index.html"),
+await fs.copyFile(
+  path.join(appRoot, "src/renderer/index.html"),
+  path.join(outputRoot, "renderer/index.html"),
+);
+
+await Promise.all(
+  MENU_BAR_IMAGES.map((name) =>
+    fs.copyFile(path.join(brandRoot, "menubar", name), path.join(outputRoot, "menubar", name)),
   ),
-  fs.copyFile(
-    path.join(appRoot, "src/renderer/styles.css"),
-    path.join(outputRoot, "renderer/styles.css"),
-  ),
-]);
+);

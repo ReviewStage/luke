@@ -1,0 +1,368 @@
+/* The session list: the capsule grows into full-width rows, one per line. */
+
+/* The sessions tab is its list and, over the top of it, the sheet that says
+   which part of it is being shown. Only the list scrolls. */
+.session-view {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+/* The button rides the tab bar's line rather than taking one of its own: the
+   panel is short, and how the list is shown is a qualifier on what you are
+   looking at rather than a second thing to look at. */
+.panel-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.options-button {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  border-radius: 10px;
+  background: var(--raised);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 620;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+  white-space: nowrap;
+}
+
+.options-button:hover,
+.options-button[data-active="true"] {
+  background: var(--raised-strong);
+  color: var(--text-primary);
+}
+
+.options-glyph {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+/* What the button says when the list is narrowed. It is the one place the panel
+   admits to showing less than the capsule is counting, so it takes the primary
+   text weight even while the button is at rest. */
+.options-current {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-primary);
+}
+
+.options-button[data-narrowed="true"] {
+  color: var(--text-primary);
+}
+
+/* Floating rather than in the flow. In the flow it would push the last row down
+   before the surface behind it had grown, and the surface only grows on the
+   spring, so the row would be left drawn on the desktop for the length of it.
+   Opaque for the same reason the surface is: the rows it covers must not show
+   through. */
+.session-options {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  background: #111214;
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.55);
+  /* Arrives from the button that opened it rather than fading in place. It is
+     the one thing here that is not part of the panel's own arrival, so it moves
+     on its own short curve — and on the shared tokens, which a capture run and
+     reduced motion have already zeroed. */
+  animation: options-enter var(--duration-quick) var(--motion-exit) both;
+  transform-origin: top right;
+}
+
+@keyframes options-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.options-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Read as ordinary text, in the system face at the size the panel speaks in.
+   The uppercase, letter-spaced voice belongs to a settings heading, which stands
+   over a section and is read once; these two are labels inside a menu, read in
+   the same glance as the controls beside them, and shouting a word that small
+   only makes it harder to read. */
+.options-label {
+  min-width: 38px;
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* Both groups are `fieldset`s, so each says what it is to a reader without a
+   role on a bare element. The element arrives with a border, a margin, and a
+   `min-content` floor that would stop it shrinking in a flex row; all three are
+   cleared here rather than repeated per group. */
+.session-filters,
+.sort-group {
+  display: flex;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+}
+
+/* Wraps rather than overflowing: the sheet is as tall as its choices need,
+   and an agent that could not be reached would defeat the control. */
+.session-filters {
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 0;
+  gap: 6px;
+}
+
+/* The place glyph sits where an agent's mark does, at the same size, so Local
+   and Cloud read as members of the same list rather than as words beside it. */
+.filter-icon {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  opacity: 0.9;
+}
+
+/* Quiet until chosen. State colour is deliberately absent: these chips select
+   by agent and by where it runs, neither of which is a state, and tinting them
+   would put a second reading of the same colours beside the rows. */
+.filter-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: var(--raised);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 620;
+  transition:
+    background-color var(--duration-hover) ease,
+    box-shadow var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+  white-space: nowrap;
+}
+
+.filter-chip:hover {
+  background: var(--raised-strong);
+  color: var(--text-primary);
+}
+
+/* The chosen chip is the one thing in the sheet that has to be legible from
+   across the panel, because it is the answer to what the list is showing. Ground
+   and edge together, so it still reads as chosen while the pointer is somewhere
+   else on the row and while a neighbour is lit by hover. */
+.filter-chip[data-active="true"] {
+  box-shadow: inset 0 0 0 1px var(--selected-edge);
+  background: var(--selected);
+  color: var(--text-primary);
+}
+
+/* An agent chip is its mark and its count. The mark keeps its own brand colour
+   whether or not the chip is chosen — it is how the agent is identified, not a
+   way of saying the chip is selected — so the chip says that with its ground
+   the way every other control in the panel does. */
+.filter-chip[data-agent="true"] {
+  padding-left: 7px;
+}
+
+.filter-mark {
+  width: 13px;
+  height: 13px;
+}
+
+/* The number is what the row is worth reading before anything is pressed: the
+   chips are a breakdown of what is tracked first and a control second. */
+.filter-count {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.62;
+}
+
+/* Quiet where the chip is a tally, plain where it is the answer. */
+.filter-chip[data-active="true"] .filter-count {
+  opacity: 0.85;
+}
+
+/* Enclosed rather than chipped: an order is one choice of two, and the box is
+   what says the pair is exclusive where the chips beside it are a list. */
+.sort-group {
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--raised);
+}
+
+.sort-option {
+  padding: 4px 9px;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 620;
+  transition:
+    background-color var(--duration-hover) ease,
+    box-shadow var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+  white-space: nowrap;
+}
+
+.sort-option:hover {
+  color: var(--text-primary);
+}
+
+/* Chosen on the same terms as a chip, so one glance across the sheet reads both
+   rows the same way. */
+.sort-option[data-active="true"] {
+  box-shadow: inset 0 0 0 1px var(--selected-edge);
+  background: var(--selected);
+  color: var(--text-primary);
+}
+
+/* The one scroll container in the app. The root stays `overflow: clip` so a
+   focus or scrollIntoView can never drag the notch capsule out of view, and
+   `overscroll-behavior: contain` keeps that guarantee by stopping a scroll from
+   chaining out to it. `min-height: 0` is what actually permits the scroll: a
+   flex child defaults to its content size, which would push the list past the
+   panel instead of scrolling inside it. The tab bar is outside this box, so it
+   stays reachable however many sessions are observed. */
+.session-list {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 9px;
+  overflow-x: clip;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-width: thin;
+  /* Rows dissolve into the panel rather than being cut off at its edge, and the
+     fade lifts as the last row arrives. A scroll timeline is exactly the right
+     tool: with nothing to scroll it never becomes active, so a list that fits
+     is left alone without asking JavaScript whether it overflows. */
+  animation: session-scroll-fade linear both;
+  animation-timeline: scroll(self block);
+}
+
+@keyframes session-scroll-fade {
+  from {
+    mask-image: linear-gradient(to bottom, #000 calc(100% - var(--scroll-fade)), transparent 100%);
+  }
+
+  to {
+    mask-image: linear-gradient(to bottom, #000 100%, transparent 100%);
+  }
+}
+
+.session-row {
+  display: flex;
+  min-height: 66px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 13px;
+  padding: 0 15px;
+  border: 1px solid var(--hairline);
+  border-radius: 17px;
+  background: rgba(255, 255, 255, 0.028);
+}
+
+.session-row[data-state="attention"] {
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+/* Neutral tile: the mark inside carries the provider's own colour, so tinting
+   the tile by state would put two colour systems on top of each other. */
+.row-avatar {
+  position: relative;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border-radius: 11px;
+  background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  place-items: center;
+}
+
+.row-avatar .provider-mark {
+  width: 17px;
+  height: 17px;
+}
+
+/* Against a 32px tile the badge can be read at a glance, so it is sized to be
+   read rather than to be minimal. */
+.row-avatar .cloud-badge {
+  right: -4px;
+  bottom: -4px;
+  width: 14px;
+  height: 14px;
+}
+
+.row-avatar .cloud-badge svg {
+  width: 9px;
+}
+
+.row-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.row-copy strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 640;
+  letter-spacing: -0.1px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-copy small {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Where the session is, under what it is doing. It is the line a reader scans
+   only when two rows say the same thing, so it sits back a step. Qualified by
+   the parent because `.row-copy small` above is an element selector and would
+   otherwise out-rank a bare class, leaving both lines the same weight. */
+.row-copy .row-context {
+  color: var(--text-tertiary);
+}

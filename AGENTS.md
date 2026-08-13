@@ -23,7 +23,8 @@ Canonical commands:
 
 Trust constraints:
 
-- Never write provider transcripts or session-state files.
+- Never write provider transcripts or session-state files. Reading them is what
+  Luke is for; writing to them is never.
 - Never inject terminal input, simulate keystrokes, or request Accessibility.
 - Product behavior must not require provider MCP, plugins, hooks, wrappers,
   credentials, or live sessions. A provider whose sessions exist only in a cloud
@@ -32,7 +33,25 @@ Trust constraints:
   leave every other provider working without it.
 - Keep unsupported capabilities explicit; do not invent fallback controls.
 - Keep Electron renderers sandboxed with context isolation and narrow IPC.
-- Commit only synthetic, redacted fixtures and repository-relative paths.
+- Commit only synthetic fixtures and repository-relative paths. This binds
+  harder as Luke observes more: a fixture copied from a real session now carries
+  a real title, branch, and recap.
+
+What Luke may show:
+
+- Show whatever the local surface can read. A session's own title, branch,
+  model, current tool, failure, and the recap a provider wrote about it all
+  belong on the row: a sidecar that cannot tell two sessions apart is not worth
+  the space beside the housing. This is the user's own data, on the user's own
+  screen, and it is read-only.
+- Label a session by what its provider named it, falling back to the workspace
+  or repository only when there is no name yet. Do not compose a sentence in an
+  adapter; report the fields and let the surface word them.
+- An evaluator is the one place session material leaves the machine, so it is
+  the one place with a narrower rule. It receives `AttentionContext` — what a
+  provider wrote *about* a session — and never the transcript behind it: no
+  message history, file contents, or command output. Widening that set is a
+  product decision, not an implementation detail; make it deliberately.
 
 Before handoff, run `./scripts/check.sh` for portable-only changes. For any
 macOS or UI change, `./scripts/verify.sh` is the completion invariant. Report
@@ -55,6 +74,73 @@ convenience; `./scripts/check.sh` and CI remain authoritative.
   (`feat`, `fix`, `docs`, `chore`, etc.).
 - For Linear work, use its suggested branch name when available and the ticket
   ID as the scope: `feat(LUKE-123): add Codex support`.
+
+## Panel motion
+
+The window is a stage; the drawn surface is the shape. A window therefore holds
+the largest shape its mode can draw — a compact window holds the peek and an
+expanded one holds the slot as well as the panel, so neither hovering nor
+stepping aside for a browser costs any IPC — plus `SURFACE_MARGIN` on every
+side, which is what the spring overshoots into and the shadow falls in. Anything the shape does not cover is
+transparent and must stay click-through, so hit regions track the shape rather
+than the window.
+
+The window never animates its own frame. An animated `setBounds` re-lays out
+the whole renderer on every frame, because the panel is anchored to the
+viewport's centre. Everything layered on the surface must move with `transform`
+and `opacity` only — animating width, height, padding, or font-size on the
+wings, the count badge, or the rows re-shapes text on every frame and is what
+makes the motion stutter.
+
+The surface is opaque in every state — it has to pass for part of a physical
+object, and nothing behind the window may show through it — and takes its
+shadow and hairline edge once it has grown past the housing. The panel's
+shadow is delayed until the shape settles, because a blurred shadow repaints on
+every frame that resizes the element; the peek's is small enough to ride along.
+`backdrop-filter` is not an option: a transparent window has no backdrop to
+sample, so it would buy a render surface on the animating element and return
+nothing.
+
+One spring for everything that moves. `--spring` drives the surface;
+`--spring-fast` is the same damping ratio at a higher frequency for small
+elements like the tab thumb, so the bounce profile is identical and only the
+scale differs. Panel content arrives as one stack: the tab bar is index 0 and
+each row below it starts further up, so the gaps spring open rather than the
+rows sliding in as a block. The fan and the stagger stop accumulating past
+`--row-fan-limit`, because only about five rows are ever on screen.
+
+In either direction the shape and its content must not cross, or content is
+left drawn on the desktop: growing, the surface leads and content follows;
+shrinking, content leaves over `--duration-exit` before the surface moves.
+`setWindowMode` owns the ordering for every caller — the panel, the tray, and
+the motion recorder alike. `COLLAPSE_ANIMATION_MS` is the sum of
+`--duration-exit` and `--duration-shape`; the three move together.
+
+A key being entered is app state, not field state, because it outlives the panel
+it was started in: asking to write one stands the panel down to the slot, where
+the same entry is drawn instead of in the settings row, and the entry remembers
+whether the provider's key page was opened — that is what decides whether giving
+up returns you to the panel or leaves the browser alone. Nothing that closes the
+panel may discard the entry: the pointer leaving is already refused, and a slot
+left alone is the normal case rather than a dismissal, so the settings tab and
+the entry both survive a close and the field takes the caret back whenever the
+shape it is drawn in comes forward again.
+
+## Brand artwork
+
+`design/generate-brand-assets.mjs` is the only place the artwork is described.
+It writes three sets of committed outputs from that one description: the SVGs in
+`design/brand/`, `apps/desktop/src/renderer/luke-face-art.ts`, and
+`apps/desktop/src/renderer/styles/face-motion.css`. None of the three may be
+hand-edited — change the parameters or the motion table in the script, re-run it,
+and commit what it writes. `repository-checks.sh` runs it with `--check`, which
+compares every output without writing and fails on any drift.
+
+The app draws the face rather than loading the SVGs because it needs
+`currentColor` and CSS animation: `--face-motion` is what holds every loop still
+for a capture run and for reduced motion, and SMIL answers to neither. Motion
+that carries meaning is chosen in `luke-face-mood.ts`; anything that carries none
+belongs in its aside list, never in a rest.
 
 ## TypeScript value sets and keys
 
