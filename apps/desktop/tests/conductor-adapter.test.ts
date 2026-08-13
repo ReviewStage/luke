@@ -934,35 +934,42 @@ test("keeps observing when one session's status cannot be read", async () => {
 });
 
 test("advertises a message for any open chat and a stop only while one works", async () => {
+  // One workspace per chat: a workspace is one row, reported through its
+  // neediest chat, so each state under test needs a workspace of its own.
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
     projects: [LUKE_PROJECT],
-    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 30_000)],
+    workspaces: [
+      ownedWorkspace("workspace-idle", TEST_TIME - 30_000),
+      ownedWorkspace("workspace-working", TEST_TIME - 31_000),
+      ownedWorkspace("workspace-failed", TEST_TIME - 32_000),
+      ownedWorkspace("workspace-closed", TEST_TIME - 33_000),
+    ],
     sessions: [
       {
         id: "session-idle",
-        workspaceId: "workspace-active",
+        workspaceId: "workspace-idle",
         name: TEST_SESSION_NAME,
         status: TEST_CONDUCTOR_STATUS.IDLE,
         statusUpdatedAt: TEST_TIME - 5_000,
       },
       {
         id: "session-working",
-        workspaceId: "workspace-active",
+        workspaceId: "workspace-working",
         name: TEST_SESSION_NAME,
         status: TEST_CONDUCTOR_STATUS.WORKING,
         statusUpdatedAt: TEST_TIME - 6_000,
       },
       {
         id: "session-failed",
-        workspaceId: "workspace-active",
+        workspaceId: "workspace-failed",
         name: TEST_SESSION_NAME,
         status: TEST_CONDUCTOR_STATUS.ERROR,
         statusUpdatedAt: TEST_TIME - 7_000,
       },
       {
         id: "session-closed",
-        workspaceId: "workspace-active",
+        workspaceId: "workspace-closed",
         name: TEST_SESSION_NAME,
         archivedAt: new Date(TEST_TIME - 8_000).toISOString(),
       },
