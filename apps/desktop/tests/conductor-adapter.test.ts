@@ -400,6 +400,40 @@ test("separates sessions that share one project by their workspaces' names", asy
   );
 });
 
+// The inverse trap of the one above: an open chat idle past the staleness
+// window decays to unknown, and an archived sibling reads as complete. The
+// open chat is still the one the user would return to, so it keeps the row —
+// a closed chat must not make the workspace read as finished, or take the
+// press that would have landed in the open one.
+test("a closed chat does not speak for a workspace whose open chat went quiet", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [ownedWorkspace("workspace-quieted", TEST_TIME - 1_000)],
+    sessions: [
+      {
+        id: "session-open-stale",
+        workspaceId: "workspace-quieted",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 2 * 60 * 60 * 1000,
+      },
+      {
+        id: "session-archived",
+        workspaceId: "workspace-quieted",
+        name: TEST_SESSION_NAME,
+        archivedAt: isoTimestamp(TEST_TIME - 10_000),
+      },
+    ],
+  });
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.providerSessionId, "session-open-stale");
+  assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
+});
+
 test("reports an archived session as complete without requesting its status", async () => {
   const api = fakeConductorApi({
     userId: TEST_USER_ID,

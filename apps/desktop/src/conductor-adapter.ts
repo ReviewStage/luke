@@ -78,15 +78,21 @@ const CONDUCTOR_SESSION_STATUS = {
 /**
  * Which chat gets to speak for its workspace, most urgent first. A failure
  * outranks a question — both want a person, but only one of them is stuck —
- * a question outranks work still running, and anything known outranks a chat
- * whose status could not be read.
+ * and a question outranks work still running.
+ *
+ * Unknown outranks complete, which reads backwards until the provider's shapes
+ * are laid over it: complete only ever comes from an archived chat, and unknown
+ * is an open one — idle long enough to decay, or with a status that could not
+ * be read. However quiet, the open chat is where the user would return, so a
+ * closed sibling must not make the workspace read as finished or take the
+ * press that would have landed there.
  */
 const STATUS_URGENCY: readonly SessionStatus[] = [
   SESSION_STATUS.ERROR,
   SESSION_STATUS.WAITING,
   SESSION_STATUS.WORKING,
-  SESSION_STATUS.COMPLETE,
   SESSION_STATUS.UNKNOWN,
+  SESSION_STATUS.COMPLETE,
 ];
 
 type ConductorSessionStatus =
