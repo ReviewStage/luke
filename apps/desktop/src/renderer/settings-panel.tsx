@@ -46,11 +46,13 @@ const CREDENTIAL_STATUS: Partial<Record<CredentialSource, string>> = {
 };
 
 /* One field, three jobs: what it is for depends on what is answering for the
-   provider now, and a key typed here always wins over one read elsewhere. */
+   provider now, and a credential typed here always wins over one read
+   elsewhere. The label above names what to paste, so these do not repeat it —
+   and cannot, since not every provider calls it the same thing. */
 const CREDENTIAL_PLACEHOLDER: Record<CredentialSource, string> = {
-  [CREDENTIAL_SOURCE.NONE]: "Paste an API key",
-  [CREDENTIAL_SOURCE.ENVIRONMENT]: "Paste a key to use instead of the one from the environment",
-  [CREDENTIAL_SOURCE.ENCRYPTED_FILE]: "Replace the stored key",
+  [CREDENTIAL_SOURCE.NONE]: "Paste it here",
+  [CREDENTIAL_SOURCE.ENVIRONMENT]: "Paste one to use instead of the one from the environment",
+  [CREDENTIAL_SOURCE.ENCRYPTED_FILE]: "Replace what is stored",
 };
 
 /**
@@ -96,10 +98,14 @@ function ProviderCredential({
   // The pencil opens the same editor from either connected state, but it does
   // not mean the same thing: one replaces the key Luke keeps, the other stands
   // in front of one it only reads.
-  const editTitle = stored ? "Replace" : "Use a key stored here";
+  const editTitle = stored ? "Replace" : "Use a credential stored here";
+  // Most providers issue an API key. One issues something it calls by another
+  // name, and a field asking for the wrong thing sends the user to the page
+  // that hands out the credential Luke refuses.
+  const credential = provider.keyFormat?.label ?? "API key";
   const editLabel = stored
-    ? `Replace the ${provider.displayName} API key`
-    : `Store a ${provider.displayName} API key instead of the one from the environment`;
+    ? `Replace the ${provider.displayName} ${credential}`
+    : `Store a ${provider.displayName} ${credential} instead of the one from the environment`;
 
   // Opening the tab is not a request to type, so the editor opens only on a
   // press — and then it takes the caret, because opening it is a request to
@@ -155,7 +161,7 @@ function ProviderCredential({
               type="button"
               className="icon-button credential-remove"
               disabled={busy}
-              aria-label={`Delete the ${provider.displayName} API key`}
+              aria-label={`Delete the ${provider.displayName} ${credential}`}
               title="Delete"
               onClick={() => void submit(undefined)}
             >
@@ -190,19 +196,22 @@ function ProviderCredential({
       </div>
 
       {editing ? (
-        /* Named as a group, because Cancel, Save key, and the link to the
+        /* Named as a group, because Cancel, Save, and the link to the
            provider's own page are the same three words on every row and two
            editors can be open at once. */
-        <fieldset className="credential-editor" aria-label={`${provider.displayName} API key`}>
+        <fieldset
+          className="credential-editor"
+          aria-label={`${provider.displayName} ${credential}`}
+        >
           <label className="settings-field" htmlFor={fieldId}>
             {/* The provider is named on the line above, so the visible label
                 does not repeat it — but a reader hearing the field alone still
                 needs to know whose key it is. */}
-            <span className="settings-label">API key</span>
+            <span className="settings-label">{credential}</span>
             <input
               id={fieldId}
               ref={field}
-              aria-label={`${provider.displayName} API key`}
+              aria-label={`${provider.displayName} ${credential}`}
               className="settings-input"
               type="password"
               autoComplete="off"
@@ -237,7 +246,7 @@ function ProviderCredential({
                 className="link-button"
                 onClick={() => window.sidecar.openProviderApiKeys(provider.id)}
               >
-                Get an API key
+                Where to get one
                 <ExternalIcon />
               </button>
             </small>
@@ -256,7 +265,7 @@ function ProviderCredential({
                 disabled={busy || draft.trim().length === 0}
                 onClick={() => void submit(draft)}
               >
-                {busy ? "Saving…" : "Save key"}
+                {busy ? "Saving…" : "Save"}
               </button>
             </span>
           </div>

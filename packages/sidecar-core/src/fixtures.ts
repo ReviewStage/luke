@@ -75,16 +75,19 @@ const smokeFixture: FixtureSnapshot = {
       location: SESSION_LOCATION.CLOUD,
     },
     // A fifth session keeps every state and every provider mark visible in the
-    // one screenshot the visual evidence is reviewed from.
+    // one screenshot the visual evidence is reviewed from. It is also one more
+    // provider than the wings hold now that the face has the place nearest the
+    // housing, so the same screenshot proves the remainder is counted rather
+    // than dropped.
     {
-      id: "claude-observe",
-      title: "Watch the notch geometry adapter",
-      providerId: PROVIDER_ID.CLAUDE_CODE,
-      provider: "Claude Code",
-      detail: "Idle since the last display change",
-      context: "Claude Code · luke · main · claude-sonnet-5",
+      id: "devin-session",
+      title: "Watch a cloud session",
+      providerId: PROVIDER_ID.DEVIN,
+      provider: "Devin",
+      detail: "Suspended before it opened a pull request.",
+      context: "Devin · sidecar-native",
       state: SESSION_STATE.UNKNOWN,
-      location: SESSION_LOCATION.LOCAL,
+      location: SESSION_LOCATION.CLOUD,
     },
   ],
 };

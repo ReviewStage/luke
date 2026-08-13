@@ -21,6 +21,7 @@ const TEST_ENVIRONMENT_VARIABLE = {
   API_TOKEN: "CONDUCTOR_API_TOKEN",
   FIRST_CLOUD_API_KEY: "FIRST_CLOUD_API_KEY",
   SECOND_CLOUD_API_KEY: "SECOND_CLOUD_API_KEY",
+  THIRD_CLOUD_API_KEY: "THIRD_CLOUD_API_KEY",
 } as const;
 
 /**
@@ -41,9 +42,22 @@ const SECOND_CLOUD_PROVIDER: CredentialProvider = {
   environmentVariables: [TEST_ENVIRONMENT_VARIABLE.SECOND_CLOUD_API_KEY],
 };
 
-const TEST_PROVIDERS = [FIRST_CLOUD_PROVIDER, SECOND_CLOUD_PROVIDER];
+/** Publishes a key format, which only some providers do. */
+const THIRD_CLOUD_PROVIDER: CredentialProvider = {
+  id: "third-cloud" as CredentialProviderId,
+  displayName: "Third Cloud",
+  hint: "Create a key in Third Cloud.",
+  environmentVariables: [TEST_ENVIRONMENT_VARIABLE.THIRD_CLOUD_API_KEY],
+  keyFormat: {
+    prefix: "current_",
+    rejection: "Third Cloud's current keys start with current_.",
+  },
+};
+
+const TEST_PROVIDERS = [FIRST_CLOUD_PROVIDER, SECOND_CLOUD_PROVIDER, THIRD_CLOUD_PROVIDER];
 const FIRST_CLOUD = FIRST_CLOUD_PROVIDER.id;
 const SECOND_CLOUD = SECOND_CLOUD_PROVIDER.id;
+const THIRD_CLOUD = THIRD_CLOUD_PROVIDER.id;
 
 /** Stands in for Electron's Keychain-backed `safeStorage`. */
 function testCipher(available = true): SecretCipher {
@@ -253,6 +267,50 @@ test("rejects a key that cannot be sent as an authorization header", async (t) =
   assert.match((await store.setApiKey(CONDUCTOR, "k".repeat(513))).reason ?? "", /too long/);
   assert.equal(await store.readApiKey(CONDUCTOR), undefined);
   await assert.rejects(() => readSettingsFile(directory), /ENOENT/);
+});
+
+test("holds a key only in the form its provider says it issues", async (t) => {
+  // A credential in a form the provider no longer accepts would be refused on
+  // the first request, and a key Luke cannot use is worth saying so about
+  // rather than storing and then going quiet.
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory, {
+    providers: TEST_PROVIDERS,
+    environment: { [TEST_ENVIRONMENT_VARIABLE.THIRD_CLOUD_API_KEY]: "legacy-third-cloud-key" },
+  });
+
+  const refused = await store.setApiKey(THIRD_CLOUD, "legacy-third-cloud-key");
+
+  assert.match(refused.reason ?? "", /start with current_/);
+  assert.equal(await store.readApiKey(THIRD_CLOUD), undefined);
+  // The same rule holds a key read from the environment, so a shell profile is
+  // not a way around it.
+  assert.equal(refused.settings.credentialSources[THIRD_CLOUD], CREDENTIAL_SOURCE.NONE);
+
+  const accepted = await store.setApiKey(THIRD_CLOUD, "current_third-cloud-key");
+  assert.equal(accepted.reason, undefined);
+  assert.equal(await store.readApiKey(THIRD_CLOUD), "current_third-cloud-key");
+  // A provider that publishes no format still takes whatever it issues.
+  assert.equal((await store.setApiKey(FIRST_CLOUD, "legacy-third-cloud-key")).reason, undefined);
+});
+
+test("stops honouring a stored key the moment its provider names a form it is not", async (t) => {
+  // The rule arrived after the key did, so the key was stored under an older
+  // build that had no format to hold it to.
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({ version: 2, apiKeys: { [THIRD_CLOUD]: sealed("legacy-third-cloud-key") } }),
+  );
+
+  const store = storeIn(directory, { providers: TEST_PROVIDERS });
+
+  assert.equal(await store.readApiKey(THIRD_CLOUD), undefined);
+  assert.equal(
+    (await store.snapshot()).credentialSources[THIRD_CLOUD],
+    CREDENTIAL_SOURCE.NONE,
+    "a key the provider no longer accepts must not read as connected",
+  );
 });
 
 test("refuses to store a key when encrypted storage is unavailable", async (t) => {
