@@ -137,55 +137,88 @@ test("the caption names its own number so the count is never misread", () => {
   assert.equal(tallySummary(sessionTally([])), "No sessions tracked");
 });
 
-test("the filters offered are the states that have a session, counted", () => {
+test("the filters offered run from everything to one agent, counted", () => {
   const list = arrangeSessions(FIXTURE_SESSIONS, DEFAULT_SESSION_VIEW);
 
   assert.deepEqual(list.options, [
     { filter: SESSION_FILTER.ALL, label: "All", count: 5 },
-    { filter: SESSION_FILTER.ATTENTION, label: "Needs you", count: 1 },
-    { filter: SESSION_FILTER.WORKING, label: "Working", count: 2 },
-    { filter: SESSION_FILTER.COMPLETE, label: "Complete", count: 1 },
-    { filter: SESSION_FILTER.IDLE, label: "Idle", count: 1 },
+    { filter: SESSION_FILTER.LOCAL, label: "Local", count: 3 },
+    { filter: SESSION_FILTER.CLOUD, label: "Cloud", count: 2 },
+    {
+      filter: PROVIDER_ID.CLAUDE_CODE,
+      label: "Claude Code",
+      count: 2,
+      providerId: PROVIDER_ID.CLAUDE_CODE,
+    },
+    { filter: PROVIDER_ID.CODEX, label: "Codex", count: 1, providerId: PROVIDER_ID.CODEX },
+    {
+      filter: PROVIDER_ID.CONDUCTOR,
+      label: "Conductor",
+      count: 1,
+      providerId: PROVIDER_ID.CONDUCTOR,
+    },
+    { filter: PROVIDER_ID.CURSOR, label: "Cursor", count: 1, providerId: PROVIDER_ID.CURSOR },
   ]);
+});
 
-  const working = displaySessions(bootstrap(false), [
+test("a level with one answer is not offered as a choice", () => {
+  // Two agents, both local: which agent is a real question, where it runs is not.
+  const local = displaySessions(bootstrap(false), [
     liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.WORKING),
     liveSession(CLAUDE_PROVIDER, "claude-1", SESSION_STATUS.WORKING),
   ]);
   assert.deepEqual(
-    arrangeSessions(working, DEFAULT_SESSION_VIEW).options.map((option) => option.filter),
-    [SESSION_FILTER.ALL, SESSION_FILTER.WORKING],
+    arrangeSessions(local, DEFAULT_SESSION_VIEW).options.map((option) => option.filter),
+    [SESSION_FILTER.ALL, PROVIDER_ID.CLAUDE_CODE, PROVIDER_ID.CODEX],
   );
+
+  // One agent, several sessions: nothing below All is a question at all.
+  const alone = displaySessions(bootstrap(false), [
+    liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.WORKING),
+    liveSession(CODEX_PROVIDER, "codex-2", SESSION_STATUS.COMPLETE),
+  ]);
+  assert.deepEqual(
+    arrangeSessions(alone, DEFAULT_SESSION_VIEW).options.map((option) => option.filter),
+    [SESSION_FILTER.ALL],
+  );
+
   assert.deepEqual(arrangeSessions([], DEFAULT_SESSION_VIEW).options, []);
 });
 
 test("a filter narrows the list without changing what is tracked", () => {
-  const list = arrangeSessions(FIXTURE_SESSIONS, {
+  const cloud = arrangeSessions(FIXTURE_SESSIONS, {
     ...DEFAULT_SESSION_VIEW,
-    filter: SESSION_FILTER.WORKING,
+    filter: SESSION_FILTER.CLOUD,
+  });
+  const agent = arrangeSessions(FIXTURE_SESSIONS, {
+    ...DEFAULT_SESSION_VIEW,
+    filter: PROVIDER_ID.CLAUDE_CODE,
   });
 
   assert.deepEqual(
-    list.sessions.map((session) => session.id),
-    ["codex-bootstrap", "cursor-agent"],
+    cloud.sessions.map((session) => session.id),
+    ["cursor-agent", "conductor-workspace"],
   );
-  assert.equal(list.filter, SESSION_FILTER.WORKING);
-  assert.equal(list.total, 5);
+  assert.deepEqual(
+    agent.sessions.map((session) => session.id),
+    ["claude-review", "claude-observe"],
+  );
+  assert.equal(cloud.filter, SESSION_FILTER.CLOUD);
+  assert.equal(cloud.total, 5);
+  assert.equal(agent.total, 5);
 });
 
 test("a filter whose last session has left falls back to showing everything", () => {
-  const noneWaiting = displaySessions(bootstrap(false), [
+  const noCloud = displaySessions(bootstrap(false), [
     liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.WORKING),
     liveSession(CLAUDE_PROVIDER, "claude-1", SESSION_STATUS.COMPLETE),
   ]);
 
-  const list = arrangeSessions(noneWaiting, {
-    ...DEFAULT_SESSION_VIEW,
-    filter: SESSION_FILTER.ATTENTION,
-  });
-
-  assert.equal(list.filter, SESSION_FILTER.ALL);
-  assert.equal(list.sessions.length, 2);
+  for (const filter of [SESSION_FILTER.CLOUD, PROVIDER_ID.CURSOR]) {
+    const list = arrangeSessions(noCloud, { ...DEFAULT_SESSION_VIEW, filter });
+    assert.equal(list.filter, SESSION_FILTER.ALL);
+    assert.equal(list.sessions.length, 2);
+  }
 });
 
 // The panel stores the filter this returns rather than only drawing it, so a
@@ -193,20 +226,36 @@ test("a filter whose last session has left falls back to showing everything", ()
 // only looks chosen. That write is safe exactly while arranging the result
 // again changes nothing.
 test("the filter the list settles on is one it would settle on again", () => {
-  const noneWaiting = displaySessions(bootstrap(false), [
+  const oneAgent = displaySessions(bootstrap(false), [
     liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.WORKING),
   ]);
 
-  for (const sessions of [noneWaiting, []]) {
+  for (const sessions of [oneAgent, []]) {
     const first = arrangeSessions(sessions, {
       ...DEFAULT_SESSION_VIEW,
-      filter: SESSION_FILTER.ATTENTION,
+      filter: PROVIDER_ID.CURSOR,
     });
     const second = arrangeSessions(sessions, { ...DEFAULT_SESSION_VIEW, filter: first.filter });
 
     assert.equal(first.filter, SESSION_FILTER.ALL);
     assert.equal(second.filter, first.filter);
   }
+});
+
+test("a session from an unknown agent is counted but never filed under a guess", () => {
+  const unknown = displaySessions(bootstrap(false), [
+    liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.WORKING),
+    liveSession(
+      { id: "someone-else", displayName: "Someone Else" },
+      "other-1",
+      SESSION_STATUS.WORKING,
+    ),
+  ]);
+  const list = arrangeSessions(unknown, DEFAULT_SESSION_VIEW);
+
+  assert.equal(list.options.length, 1);
+  assert.deepEqual(list.options[0], { filter: SESSION_FILTER.ALL, label: "All", count: 2 });
+  assert.equal(list.sessions.length, 2);
 });
 
 test("the two orderings answer different questions about the same sessions", () => {
@@ -223,6 +272,18 @@ test("the two orderings answer different questions about the same sessions", () 
   assert.deepEqual(
     recent.sessions.map((session) => session.id),
     ["conductor-workspace", "codex-bootstrap", "claude-review", "cursor-agent", "claude-observe"],
+  );
+});
+
+test("filtering leaves the chosen ordering in force", () => {
+  const recentCloud = arrangeSessions(FIXTURE_SESSIONS, {
+    filter: SESSION_FILTER.CLOUD,
+    sort: SESSION_SORT.RECENCY,
+  });
+
+  assert.deepEqual(
+    recentCloud.sessions.map((session) => session.id),
+    ["conductor-workspace", "cursor-agent"],
   );
 });
 

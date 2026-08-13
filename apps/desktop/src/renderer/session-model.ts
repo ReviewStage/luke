@@ -1,6 +1,12 @@
 import {
   ATTENTION_DISPOSITION,
+  isProviderId,
   type NormalizedSession,
+  PROVIDER_ID_LIST,
+  PROVIDER_ORIGIN,
+  type ProviderId,
+  type ProviderOrigin,
+  providerOrigin,
   SESSION_STATE,
   SESSION_STATUS,
   type SessionState,
@@ -30,19 +36,27 @@ const STATE_PRIORITY: readonly SessionState[] = [
 ];
 
 /**
- * Which sessions the list draws. The states are the filter values themselves,
- * so narrowing the list is a comparison against the state a row already
- * carries rather than a second vocabulary mapped onto it.
+ * Which sessions the list draws: everything, one kind of agent, or one agent.
+ * The two coarse values are the origins themselves and the rest are provider
+ * ids, so narrowing the list is a comparison against something a row already
+ * carries rather than a second vocabulary mapped onto it. The two sets cannot
+ * collide — no provider is called `local` or `cloud`.
  */
 export const SESSION_FILTER = {
   ALL: "all",
-  ATTENTION: SESSION_STATE.ATTENTION,
-  WORKING: SESSION_STATE.WORKING,
-  COMPLETE: SESSION_STATE.COMPLETE,
-  IDLE: SESSION_STATE.UNKNOWN,
+  LOCAL: PROVIDER_ORIGIN.LOCAL,
+  CLOUD: PROVIDER_ORIGIN.CLOUD,
 } as const;
 
-export type SessionFilter = (typeof SESSION_FILTER)[keyof typeof SESSION_FILTER];
+export type SessionFilter = (typeof SESSION_FILTER)[keyof typeof SESSION_FILTER] | ProviderId;
+
+function matchesFilter(session: DisplaySession, filter: SessionFilter): boolean {
+  if (filter === SESSION_FILTER.ALL) return true;
+  if (filter === SESSION_FILTER.LOCAL || filter === SESSION_FILTER.CLOUD) {
+    return session.origin === filter;
+  }
+  return session.providerId === filter;
+}
 
 /** The two questions a list of agent sessions is read to answer. */
 export const SESSION_SORT = {
@@ -77,6 +91,8 @@ export interface DisplaySession {
   state: SessionState;
   label: string;
   observedAt: number;
+  /** Undefined for a provider this build has no registry entry for. */
+  origin?: ProviderOrigin;
 }
 
 /** One filter someone can choose, and how many sessions it would leave. */
@@ -84,6 +100,11 @@ export interface SessionFilterOption {
   filter: SessionFilter;
   label: string;
   count: number;
+  /**
+   * Set when the chip stands for one agent, so the row can draw that agent's
+   * own mark where the coarser chips carry a word.
+   */
+  providerId?: string;
 }
 
 export interface ArrangedSessions {
@@ -149,6 +170,7 @@ export function displaySessions(
     ? bootstrap.fixture.sessions.map((session) => ({
         ...session,
         label: STATE_LABEL[session.state],
+        origin: providerOrigin(session.providerId),
       }))
     : sessions.map((session) => ({
         id: session.providerSessionId,
@@ -159,40 +181,80 @@ export function displaySessions(
         state: sessionState(session),
         label: STATE_LABEL[sessionState(session)],
         observedAt: session.observedAt,
+        // Where a session runs is a fact about its provider, so it is read from
+        // the registry rather than reported per session by an adapter.
+        origin: providerOrigin(session.providerId),
       }));
 
   return [...visible].sort(byUrgency);
 }
 
+const ORIGIN_LABEL: Record<ProviderOrigin, string> = {
+  [PROVIDER_ORIGIN.LOCAL]: "Local",
+  [PROVIDER_ORIGIN.CLOUD]: "Cloud",
+};
+
+/** The order the origin chips read in: what runs here, then what runs away. */
+const ORIGIN_ORDER: readonly ProviderOrigin[] = [PROVIDER_ORIGIN.LOCAL, PROVIDER_ORIGIN.CLOUD];
+
 /**
- * All, then one chip per state that has a session — a state with none is not
- * something a list can be narrowed to, and offering it would be a control that
- * does nothing. The counts make the row a breakdown of what is tracked before
+ * All, then where a session runs, then which agent is running it — coarse to
+ * fine, left to right. Each level is offered only where it is a real choice: a
+ * single kind of origin says nothing All has not already said, and neither does
+ * a single agent. The counts make the row a breakdown of what is tracked before
  * it is a control, which is what earns it the line it costs.
+ *
+ * Agents are listed in the registry's own order rather than by how many
+ * sessions they have, so a chip never moves out from under the pointer as
+ * sessions come and go.
  */
 function filterOptions(sessions: readonly DisplaySession[]): readonly SessionFilterOption[] {
   if (sessions.length === 0) return [];
 
-  const counts = new Map<SessionState, number>();
+  const origins = new Map<ProviderOrigin, number>();
+  const providers = new Map<ProviderId, { label: string; count: number }>();
   for (const session of sessions) {
-    counts.set(session.state, (counts.get(session.state) ?? 0) + 1);
+    if (session.origin) origins.set(session.origin, (origins.get(session.origin) ?? 0) + 1);
+    // A provider with no registry entry is counted under All and nowhere else,
+    // rather than being filed under a guess about where it runs.
+    if (!isProviderId(session.providerId)) continue;
+    const tally = providers.get(session.providerId);
+    providers.set(session.providerId, {
+      label: session.provider,
+      count: (tally?.count ?? 0) + 1,
+    });
   }
+
+  const originOptions =
+    origins.size > 1
+      ? ORIGIN_ORDER.filter((origin) => origins.has(origin)).map((origin) => ({
+          filter: origin,
+          label: ORIGIN_LABEL[origin],
+          count: origins.get(origin) ?? 0,
+        }))
+      : [];
+  const providerOptions =
+    providers.size > 1
+      ? PROVIDER_ID_LIST.filter((providerId) => providers.has(providerId)).map((providerId) => ({
+          filter: providerId,
+          label: providers.get(providerId)?.label ?? providerId,
+          count: providers.get(providerId)?.count ?? 0,
+          providerId,
+        }))
+      : [];
 
   return [
     { filter: SESSION_FILTER.ALL, label: "All", count: sessions.length },
-    ...STATE_PRIORITY.filter((state) => counts.has(state)).map((state) => ({
-      filter: state,
-      label: STATE_LABEL[state],
-      count: counts.get(state) ?? 0,
-    })),
+    ...originOptions,
+    ...providerOptions,
   ];
 }
 
 /**
  * The list as it is drawn. A chosen filter whose last session has since left —
- * the work it was waiting on finished, say — falls back to All rather than
- * leaving an empty panel, because the one thing this list may never do is hide
- * a session the capsule is still counting.
+ * an agent's only session finished, say — falls back to All rather than leaving
+ * an empty panel, because the one thing this list may never do is hide a
+ * session the capsule is still counting.
  */
 export function arrangeSessions(
   sessions: readonly DisplaySession[],
@@ -205,7 +267,7 @@ export function arrangeSessions(
   const matching =
     filter === SESSION_FILTER.ALL
       ? sessions
-      : sessions.filter((session) => session.state === filter);
+      : sessions.filter((session) => matchesFilter(session, filter));
 
   return {
     sessions: [...matching].sort(view.sort === SESSION_SORT.RECENCY ? byRecency : byUrgency),

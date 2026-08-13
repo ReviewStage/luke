@@ -1,5 +1,6 @@
 import type { SessionState } from "@sidecar/core";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
+import { ProviderMark } from "./provider-marks";
 import {
   type ArrangedSessions,
   SESSION_SORT,
@@ -95,21 +96,32 @@ export function SessionToolbar({
 }): React.JSX.Element {
   return (
     <div className="session-toolbar" style={{ "--row-index": 1 } as React.CSSProperties}>
-      {/* Below two states there is nothing to choose between, so the chips are
-          left out rather than offered as a row of one real answer. */}
-      {list.options.length > 2 ? (
+      {/* With only All to choose there is nothing to choose between, so the
+          chips are left out rather than offered as a row of one answer. */}
+      {list.options.length > 1 ? (
         <fieldset className="session-filters" aria-label="Show sessions">
           {list.options.map((option) => (
             <button
               type="button"
               key={option.filter}
               className="filter-chip"
-              data-state={option.filter}
+              data-agent={String(option.providerId !== undefined)}
               data-active={String(option.filter === list.filter)}
               aria-pressed={option.filter === list.filter}
+              // An agent is named by its own mark rather than by a word, which
+              // is how every row below already names it — and four names would
+              // not fit the line beside the coarser chips in any case. The
+              // label is still the accessible name, so it is what is announced
+              // and what a voice control is told to press.
+              aria-label={option.providerId ? `${option.label} ${option.count}` : undefined}
+              title={option.providerId ? option.label : undefined}
               onClick={() => onViewChange({ ...view, filter: option.filter })}
             >
-              {option.label}
+              {option.providerId ? (
+                <ProviderMark providerId={option.providerId} className="filter-mark" />
+              ) : (
+                option.label
+              )}
               <span className="filter-count">{option.count}</span>
             </button>
           ))}

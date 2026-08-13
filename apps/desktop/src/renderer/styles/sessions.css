@@ -39,11 +39,11 @@
   gap: 6px;
 }
 
-/* Quiet until chosen, and then it takes the colour its own state already
-   carries in the rows below it, so a filter and what it selects are one colour
-   rather than two vocabularies. No dot: that belongs to the state chip on a
-   row, and repeating it here would make a control read as a session. */
+/* Quiet until chosen. State colour is deliberately absent: these chips select
+   by agent and by where it runs, neither of which is a state, and tinting them
+   would put a second reading of the same colours beside the rows. */
 .filter-chip {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -59,19 +59,47 @@
   white-space: nowrap;
 }
 
-/* Every state at once, so there is no one state's colour for it to take. */
-.filter-chip[data-state="all"] {
-  --accent: var(--text-primary);
-}
-
 .filter-chip:hover {
   background: var(--raised-strong);
   color: var(--text-primary);
 }
 
 .filter-chip[data-active="true"] {
-  background: color-mix(in srgb, var(--accent) 13%, transparent);
-  color: var(--accent);
+  background: var(--raised-strong);
+  color: var(--text-primary);
+}
+
+/* An agent chip is its mark and its count. The mark keeps its own brand colour
+   whether or not the chip is chosen — it is how the agent is identified, not a
+   way of saying the chip is selected — so the chip says that with its ground
+   the way every other control in the panel does. */
+.filter-chip[data-agent="true"] {
+  padding-left: 7px;
+}
+
+.filter-mark {
+  width: 13px;
+  height: 13px;
+}
+
+/* Where the row turns from where a session runs to which agent is running it.
+   A hairline rather than a wider gap: the levels are one choice of one, and a
+   gap alone read as a break between two controls. Selected by the turn itself —
+   the first agent chip after a word chip — because `:first-of-type` counts
+   buttons and would land on All. */
+.filter-chip[data-agent="false"] + .filter-chip[data-agent="true"] {
+  margin-left: 11px;
+}
+
+.filter-chip[data-agent="false"] + .filter-chip[data-agent="true"]::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -8px;
+  width: 1px;
+  height: 15px;
+  background: var(--hairline);
+  transform: translateY(-50%);
 }
 
 /* The number is what the row is worth reading before anything is pressed: the

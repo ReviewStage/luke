@@ -85,17 +85,26 @@ supplies, so the pages it can ever open are the ones in its provider registry.
 
 Sessions are ordered by how much they need a person, so whatever is waiting on
 you is the top row and the mark the capsule keeps. Above the list, a row of
-chips counts what is tracked by state — `All 5`, `Needs you 1`, `Working 2` —
-and pressing one narrows the list to that state; **Sort** beside them switches
-between most urgent and most recently observed. Only states that have a session
-are offered, and the whole row is left out below two sessions, where there is
-nothing left to choose between.
+chips narrows it from everything to one kind of agent to one agent — `All 5`,
+`Local 3`, `Cloud 2`, then a chip per agent carrying its own mark and its own
+count. Local is what Luke reads from state this Mac already holds; cloud is what
+it reads through an API key and what stops answering offline. **Sort** beside
+them switches between most urgent and most recently observed.
+
+Each level is offered only where it is a real choice: sessions that are all
+local say nothing a `Local` chip could add, one agent is not a choice of agent,
+and with neither level to offer the row is left out. An agent this build has no
+registry entry for is counted under `All` and filed under nothing else, rather
+than under a guess about where it runs.
 
 Both controls reset when the panel closes, so it always reopens showing every
 session with whatever needs you first. The count beside the notch is of
 everything Luke is watching rather than of what the panel is currently showing,
 and a filter left in place across a closing could otherwise hide the very
-session that count is reporting.
+session that count is reporting. A filter whose last session leaves while the
+panel is open is dropped for the same reason — from the panel's own state, not
+just from what it draws, so that a session arriving later cannot silently
+narrow the list back down to it.
 
 The header is anchored to the notch, not to a state: the count sits to the right
 of the housing and the provider marks and speech meter to its left, in the same
