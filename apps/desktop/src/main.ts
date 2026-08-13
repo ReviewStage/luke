@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
+  CompositeSessionProviderAdapter,
   fixtureSnapshot,
   InMemorySessionRegistry,
   type NativeNotchGeometry,
@@ -29,7 +30,8 @@ import {
 import { ClaudeCodeSessionAdapter } from "./claude-code-adapter";
 import { CodexSessionAdapter } from "./codex-adapter";
 import { ConductorSessionAdapter } from "./conductor-adapter";
-import { CursorSessionAdapter } from "./cursor-adapter";
+import { CURSOR_PROVIDER, CursorSessionAdapter } from "./cursor-adapter";
+import { CursorLocalSessionAdapter } from "./cursor-local-adapter";
 import { DevinSessionAdapter } from "./devin-adapter";
 import { readMacScreenGeometry } from "./macos-screen-geometry";
 import { openAiAttentionEvaluatorFromEnvironment } from "./openai-attention-evaluator";
@@ -75,8 +77,19 @@ const settingsStore = new SettingsStore({
 const conductorAdapter = new ConductorSessionAdapter({
   readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.CONDUCTOR),
 });
-const cursorAdapter = new CursorSessionAdapter({
-  readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.CURSOR),
+// Cursor runs sessions in two places: on this machine, which needs no
+// credential and is observed from the transcripts Cursor writes for itself, and
+// in its cloud, which needs a key. They are one provider wherever they ran, so
+// they are observed as one adapter — a provider's sessions are replaced in a
+// single commit, and two adapters sharing an id would retire each other's.
+const cursorAdapter = new CompositeSessionProviderAdapter({
+  provider: CURSOR_PROVIDER,
+  adapters: [
+    new CursorLocalSessionAdapter(),
+    new CursorSessionAdapter({
+      readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.CURSOR),
+    }),
+  ],
 });
 const devinAdapter = new DevinSessionAdapter({
   readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.DEVIN),

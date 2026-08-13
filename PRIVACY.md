@@ -9,6 +9,12 @@ the current implementation; it is not a promise about third-party services.
   read-only, and inspects them in memory.
 - For Codex, Luke opens the local SQLite state database in read-only mode and
   reads the recent rollout logs named by its thread records.
+- For the Cursor agents running on this machine, Luke finds recent transcripts,
+  opens bounded tails read-only, and reads only the markers around a turn — its
+  end and how it ended. It does not read message content, and reports the fact
+  of a failed turn rather than the reason Cursor recorded for it. A session is
+  labelled by the folder it runs in, which Luke reads from Cursor's own record
+  of that folder, not from the chat's generated name.
 
 Luke processes bounded fields needed to identify and display a session:
 provider and session identifiers, provider-generated titles, the workspace
@@ -23,9 +29,11 @@ memory for the local display. Luke does not control provider sessions.
 
 ## Optional cloud-provider reads
 
-Conductor and Cursor have no local session state for Luke to observe. Without a
-key for one of those providers, Luke sends that provider no request and reports
-none of its sessions.
+Conductor has no local session state for Luke to observe, and neither do
+Cursor's cloud agents. Without a key for one of those providers, Luke sends that
+provider no request and reports none of its sessions; the Cursor sessions
+running on this machine are read from disk and are unaffected by whether a
+Cursor key exists.
 
 When a key is supplied, Luke sends it as a bearer credential to that provider
 and issues authenticated `GET` requests only:
