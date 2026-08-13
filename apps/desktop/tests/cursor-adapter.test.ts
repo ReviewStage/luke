@@ -246,7 +246,7 @@ test("observes a running agent under the name Cursor gave it", async () => {
   // A running agent can be stopped and nothing else; the follow-up belongs to
   // a finished run.
   assert.deepEqual(observations[0]?.controls, [
-    { id: "cancel-run", label: "Stop this run", kind: "stop" },
+    { id: "cancel-run", label: "Stop this run", kind: "stop", target: "run-running" },
   ]);
   assert.equal(observations[0]?.canReceiveMessage, false);
   assert.equal(observations[0]?.summary, TEST_RUN_RESULT);
@@ -674,7 +674,7 @@ test("advertises a follow-up only for an agent whose run has finished", async ()
   assert.equal(byId.get("agent-filed")?.canReceiveMessage, false);
   // The stoppable one is the one still running.
   assert.deepEqual(byId.get("agent-running")?.controls, [
-    { id: "cancel-run", label: "Stop this run", kind: "stop" },
+    { id: "cancel-run", label: "Stop this run", kind: "stop", target: "run-agent-running" },
   ]);
   assert.equal(byId.get("agent-finished")?.controls, undefined);
 });
@@ -703,6 +703,8 @@ test("stops the run the user saw through Cursor's cancel endpoint, sending no bo
   const api = fakeCursorApi([runningAgent("agent-running", TEST_TIME - 1_000)]);
   const adapter = adapterFor(api.fetch);
   await adapter.observe();
+  // Deliberately without a target: the route must be built from the control
+  // the adapter itself advertised, never from the caller's copy of it.
   const cancelControl = { id: "cancel-run", label: "Stop this run", kind: "stop" };
 
   const result = await adapter.executeControl({

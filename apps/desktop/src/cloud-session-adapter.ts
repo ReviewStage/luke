@@ -9,6 +9,7 @@ import {
   type ProviderSessionObservation,
   SESSION_LOCATION,
   SESSION_STATUS,
+  type SessionControl,
   type SessionProvider,
   type SessionStatus,
   sessionMessageText,
@@ -342,13 +343,16 @@ export abstract class CloudSessionAdapter
     const observation = this.#observations.find(
       (candidate) => candidate.providerSessionId === request.providerSessionId,
     );
-    const advertised = observation?.controls?.some((control) => control.id === request.control.id);
+    // The advertised control — not the caller's copy of it — is what the route
+    // is built from, so whatever it targets is the thing the last pass actually
+    // saw, and nothing a caller sends can redirect it.
+    const advertised = observation?.controls?.find((control) => control.id === request.control.id);
     if (!advertised) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
 
     const apiKey = await this.#readApiKey().catch(() => undefined);
     if (!apiKey) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
 
-    const route = this.controlRoute(request.providerSessionId, request.control.id);
+    const route = this.controlRoute(request.providerSessionId, advertised);
     if (!route) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
     return this.#postWrite(apiKey, route);
   }
@@ -365,13 +369,15 @@ export abstract class CloudSessionAdapter
   }
 
   /**
-   * Where a documented control's endpoint lives. The default is that a
-   * provider advertises no controls, so only an adapter that advertised one
-   * has anything to answer here.
+   * Where a documented control's endpoint lives. The control handed in is the
+   * one the latest observation advertised, so a route built from its `target`
+   * acts on what the user was shown. The default is that a provider advertises
+   * no controls, so only an adapter that advertised one has anything to answer
+   * here.
    */
   protected controlRoute(
     _providerSessionId: string,
-    _controlId: string,
+    _control: SessionControl,
   ): CloudWriteRoute | undefined {
     return undefined;
   }
@@ -506,7 +512,14 @@ export abstract class CloudSessionAdapter
       };
     }
 
-    if (response.ok) return { status: PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED };
+    if (response.ok) {
+      // A write that landed changes what the session is doing, so the refresh
+      // that follows must actually ask: served from the cache inside the
+      // minimum interval, the row would keep offering what the provider has
+      // already taken.
+      this.#lastAttemptAt = Number.NEGATIVE_INFINITY;
+      return { status: PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED };
+    }
     if (response.status === HTTP_STATUS.UNAUTHORIZED || response.status === HTTP_STATUS.FORBIDDEN) {
       return {
         status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,

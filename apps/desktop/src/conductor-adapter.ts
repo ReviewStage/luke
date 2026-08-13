@@ -3,6 +3,7 @@ import {
   type ProviderSessionObservation,
   SESSION_CONTROL_KIND,
   SESSION_STATUS,
+  type SessionControl,
   type SessionProvider,
   type SessionStatus,
 } from "@sidecar/core";
@@ -421,9 +422,9 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
 
   protected override controlRoute(
     providerSessionId: string,
-    controlId: string,
+    control: SessionControl,
   ): CloudWriteRoute | undefined {
-    if (controlId !== CONDUCTOR_CANCEL_CONTROL.id) return undefined;
+    if (control.id !== CONDUCTOR_CANCEL_CONTROL.id) return undefined;
     return {
       segments: [
         CONDUCTOR_ROUTE_SEGMENT.V0,

@@ -1,6 +1,7 @@
 import {
   type ProviderSessionObservation,
   SESSION_STATUS,
+  type SessionControl,
   type SessionProvider,
   type SessionStatus,
 } from "@sidecar/core";
@@ -255,9 +256,9 @@ export class JulesSessionAdapter extends CloudSessionAdapter {
 
   protected override controlRoute(
     providerSessionId: string,
-    controlId: string,
+    control: SessionControl,
   ): CloudWriteRoute | undefined {
-    if (controlId !== JULES_APPROVE_PLAN_CONTROL.id) return undefined;
+    if (control.id !== JULES_APPROVE_PLAN_CONTROL.id) return undefined;
     return {
       segments: [...JULES_ROUTE.SESSIONS, providerSessionId],
       action: JULES_ACTION.APPROVE_PLAN,

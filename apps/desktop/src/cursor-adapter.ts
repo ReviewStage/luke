@@ -4,6 +4,7 @@ import {
   type ProviderSessionObservation,
   SESSION_CONTROL_KIND,
   SESSION_STATUS,
+  type SessionControl,
   type SessionProvider,
   type SessionStatus,
 } from "@sidecar/core";
@@ -61,15 +62,23 @@ const CURSOR_MESSAGE_FIELD = {
   TEXT: "text",
 } as const;
 
+const CURSOR_CANCEL_RUN_CONTROL_ID = "cancel-run";
+
 /**
  * The one control this adapter can honour, advertised per session and only in
- * the state Cursor documents it for.
+ * the state Cursor documents it for. The run it would cancel rides the
+ * advertisement as the control's target, so a press stops the run the user
+ * was shown — state an adapter kept on the side could outlive the snapshot
+ * that promised it, but a control cannot.
  */
-const CURSOR_CANCEL_RUN_CONTROL = {
-  id: "cancel-run",
-  label: "Stop this run",
-  kind: SESSION_CONTROL_KIND.STOP,
-} as const;
+function cursorCancelRunControl(runId: string): SessionControl {
+  return {
+    id: CURSOR_CANCEL_RUN_CONTROL_ID,
+    label: "Stop this run",
+    kind: SESSION_CONTROL_KIND.STOP,
+    target: runId,
+  };
+}
 
 const CURSOR_QUERY = {
   LIMIT: "limit",
@@ -225,14 +234,6 @@ function agentFromRecord(record: Record<string, unknown>): CursorAgent | undefin
 export class CursorSessionAdapter extends CloudSessionAdapter {
   readonly #maximumObservedSessions: number;
 
-  /**
-   * The run each observed agent was last seen running, kept so a cancel names
-   * the run the user saw rather than whichever is newest by the time the press
-   * lands. Cleared with the rest of the observed state when the credential
-   * changes.
-   */
-  #latestRunIds = new Map<string, string>();
-
   constructor(options: CursorAdapterOptions) {
     super(
       {
@@ -281,18 +282,7 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
     const observations = await Promise.all(
       agents.map((agent) => this.#observationFor(request, agent, now)),
     );
-    const observed = observations.filter(isDefined);
-    // Run ids are kept only for the agents still being reported, so the map
-    // can never outgrow the session cap.
-    const observedIds = new Set(observed.map((observation) => observation.providerSessionId));
-    for (const agentId of this.#latestRunIds.keys()) {
-      if (!observedIds.has(agentId)) this.#latestRunIds.delete(agentId);
-    }
-    return observed;
-  }
-
-  protected override forgetCachedIdentity(): void {
-    this.#latestRunIds = new Map();
+    return observations.filter(isDefined);
   }
 
   /**
@@ -332,17 +322,18 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
 
   protected override controlRoute(
     providerSessionId: string,
-    controlId: string,
+    control: SessionControl,
   ): CloudWriteRoute | undefined {
-    if (controlId !== CURSOR_CANCEL_RUN_CONTROL.id) return undefined;
-    const runId = this.#latestRunIds.get(providerSessionId);
-    if (!runId) return undefined;
+    // The run to cancel is the advertised control's own target, so it is the
+    // run of the observation the user pressed, under the credential that
+    // observed it.
+    if (control.id !== CURSOR_CANCEL_RUN_CONTROL_ID || !control.target) return undefined;
     return {
       segments: [
         ...CURSOR_ROUTE.AGENTS,
         providerSessionId,
         CURSOR_ROUTE_SEGMENT.RUNS,
-        runId,
+        control.target,
         CURSOR_ROUTE_SEGMENT.CANCEL,
       ],
       // Cursor documents no body for a cancel, so none is sent.
@@ -365,7 +356,6 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
     const observedAt = run?.updatedAt ?? agent.lastActivityAt;
     if (now - observedAt > CLOUD_ADAPTER_DEFAULTS.MAXIMUM_SESSION_AGE_MS) return undefined;
 
-    if (latestRunId) this.#latestRunIds.set(agent.id, latestRunId);
     const status = this.#statusFor(agent, run, observedAt, now);
     // A run names the repository it pushed to, so a list item that carries no
     // `repos` still resolves to something better than "workspace".
@@ -376,7 +366,9 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
       status,
       observedAt,
       canReceiveMessage: this.#agentTakesMessages(agent, run),
-      ...(this.#agentTakesCancel(agent, run) ? { controls: [CURSOR_CANCEL_RUN_CONTROL] } : {}),
+      ...(latestRunId && this.#agentTakesCancel(agent, run)
+        ? { controls: [cursorCancelRunControl(latestRunId)] }
+        : {}),
       ...(run?.result ? { summary: run.result } : {}),
       detail: {
         ...(repository ? { repository } : {}),

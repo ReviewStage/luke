@@ -59,7 +59,8 @@ function sameControls(
       (control, index) =>
         control.id === second[index]?.id &&
         control.label === second[index]?.label &&
-        control.kind === second[index]?.kind,
+        control.kind === second[index]?.kind &&
+        control.target === second[index]?.target,
     )
   );
 }

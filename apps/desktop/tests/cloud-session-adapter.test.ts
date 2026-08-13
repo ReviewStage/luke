@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { type ProviderSessionObservation, SESSION_LOCATION, SESSION_STATUS } from "@sidecar/core";
+import {
+  type ProviderSessionObservation,
+  SESSION_LOCATION,
+  SESSION_STATUS,
+  type SessionControl,
+} from "@sidecar/core";
 import {
   type CloudAdapterOptions,
   type CloudFetch,
@@ -92,8 +97,8 @@ class StubCloudAdapter extends CloudSessionAdapter {
     };
   }
 
-  protected override controlRoute(providerSessionId: string, controlId: string) {
-    if (controlId !== STUB_APPROVE_CONTROL.id) return undefined;
+  protected override controlRoute(providerSessionId: string, control: SessionControl) {
+    if (control.id !== STUB_APPROVE_CONTROL.id) return undefined;
     return { segments: ["v0", "sessions", providerSessionId, "approve"] };
   }
 

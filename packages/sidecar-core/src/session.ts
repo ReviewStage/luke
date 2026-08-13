@@ -67,6 +67,14 @@ export interface SessionControl {
   label: string;
   /** Absent means a plain action, drawn by its label. */
   kind?: SessionControlKind;
+  /**
+   * The provider-owned identifier of the thing this control acts on, when that
+   * is narrower than the session — the run a stop stops, say. It rides the
+   * advertisement so it is replaced with every observation and can never
+   * outlive the snapshot that promised it, the way state an adapter kept on
+   * the side could.
+   */
+  target?: string;
 }
 
 /** A stable provider identity and the label that can be shown in the UI. */
@@ -261,10 +269,12 @@ function normalizeControls(
     const kind = Object.values(SESSION_CONTROL_KIND).find(
       (candidate) => candidate === control.kind,
     );
+    const target = boundedText(control.target, maximumSessionDetailLength);
     return {
       id,
       label: boundedText(control.label, maximumSessionTitleLength) ?? id,
       ...(kind ? { kind } : {}),
+      ...(target ? { target } : {}),
     };
   });
 }
