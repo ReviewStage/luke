@@ -153,12 +153,24 @@
   --capsule-width: calc(var(--notch-housing-width) + 72px);
   --capsule-height: max(var(--notch-top-inset), 32px);
   --peek-width: calc(var(--notch-housing-width) + 248px);
-  /* Measured off the hardware rather than guessed: the housing's own corners are
-     a convex 0.348 of its height, and where its sides meet the top edge it
-     flares outward on a concave 0.094. Deriving both from the reported inset
-     keeps the capsule matching whatever notch it is sitting beside. */
+  /* Measured off photographs of the hardware rather than guessed: the housing's
+     own corners are a convex 0.348 of its height, and where its sides meet the
+     top edge it flares outward on a concave 0.170 — about half the bottom
+     corner, not the sixth of it this was drawn at, which was small enough to
+     read as a straight edge with a chamfer. Deriving both from the reported
+     inset keeps the capsule matching whatever notch it is sitting beside. */
   --notch-convex-radius: calc(var(--capsule-height) * 0.348);
-  --notch-concave-radius: calc(var(--capsule-height) * 0.094);
+  --notch-concave-radius: calc(var(--capsule-height) * 0.17);
+}
+
+/* The panel's corners are `--panel-radius`, not the housing's, and a flare
+   belongs to the corner it turns into rather than to the notch: beside the
+   housing it has to disappear into one, and at the panel's size it has to turn
+   a corner more than twice as round. So it keeps the proportion the hardware
+   holds between the two — 0.170 against 0.348 — and grows with the corner
+   instead of staying the size the housing wanted. */
+.app-stage[data-presentation="panel"] {
+  --notch-concave-radius: calc(var(--panel-radius) * 0.489);
 }
 
 * {
@@ -265,25 +277,43 @@ button:disabled {
   width: var(--notch-concave-radius);
   height: var(--notch-concave-radius);
   opacity: 1;
-  transition: opacity var(--duration-quick) var(--motion-exit);
+  /* The flare turns the surface's own corner, so it travels on the surface's
+     spring and waits out `--duration-exit` with it. Three properties here, and
+     the panel rule below overrides the delays by position. */
+  transition:
+    width var(--duration-shape) var(--spring) var(--duration-exit),
+    height var(--duration-shape) var(--spring) var(--duration-exit),
+    opacity var(--duration-quick) var(--motion-exit);
 }
 
+/* Sized in percentages of the element rather than in the radius the element is
+   already sized by, so a growing flare is a box resizing under a fixed gradient
+   instead of a gradient that has to be interpolated on every frame. The last
+   half-pixel is a feather: a hard stop inside a gradient is not antialiased, and
+   at the panel's radius the stair-steps on the arc would be plain. */
 .app-stage[data-notch="true"] .panel-surface::before {
   right: 100%;
   background: radial-gradient(
-    circle at 0 100%,
-    transparent var(--notch-concave-radius),
-    var(--surface-fill) var(--notch-concave-radius)
+    ellipse 100% 100% at 0 100%,
+    transparent calc(100% - 0.5px),
+    var(--surface-fill) 100%
   );
 }
 
 .app-stage[data-notch="true"] .panel-surface::after {
   left: 100%;
   background: radial-gradient(
-    circle at 100% 100%,
-    transparent var(--notch-concave-radius),
-    var(--surface-fill) var(--notch-concave-radius)
+    ellipse 100% 100% at 100% 100%,
+    transparent calc(100% - 0.5px),
+    var(--surface-fill) 100%
   );
+}
+
+/* Growing, the flare leads with the surface rather than waiting for content to
+   leave; shrinking, the base rule's delay applies and the two close together. */
+.app-stage[data-notch="true"][data-presentation="panel"] .panel-surface::before,
+.app-stage[data-notch="true"][data-presentation="panel"] .panel-surface::after {
+  transition-delay: 0s, 0s, 0s;
 }
 
 .app-stage[data-presentation="peek"] .panel-surface,
