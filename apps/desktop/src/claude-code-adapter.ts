@@ -492,7 +492,11 @@ function statusFromTail(
 ): ProviderSessionObservation["status"] {
   const isFresh = now - observedAt <= activeSessionFreshnessMs;
   if (parsed.eventType === CLAUDE_EVENT_TYPE.RESULT) return SESSION_STATUS.COMPLETE;
-  if (parsed.apiError) return isFresh ? SESSION_STATUS.ERROR : SESSION_STATUS.UNKNOWN;
+  // A failure does not heal by going stale, which is how the cloud adapters
+  // treat one too. Only a turn that ended decays, because Luke cannot tell one
+  // that just finished from a session the developer walked away from — and a
+  // session out of the observation window altogether is dropped, not aged.
+  if (parsed.apiError) return SESSION_STATUS.ERROR;
   if (!isFresh) return SESSION_STATUS.UNKNOWN;
   if (parsed.eventType === CLAUDE_EVENT_TYPE.ASSISTANT) {
     return turnEnded(parsed) ? SESSION_STATUS.WAITING : SESSION_STATUS.WORKING;

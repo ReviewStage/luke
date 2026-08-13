@@ -421,6 +421,40 @@ test("stays working through a retry the session is still backing off from", asyn
   assert.equal(observation?.detail?.error, undefined);
 });
 
+test("keeps a spent failure at error after it goes stale", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-stale-error",
+    "stale-errored-session",
+    [
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.SYSTEM,
+        subtype: "api_error",
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:25:00.000Z",
+        error: { formatted: "429 rate limit exceeded", status: 429 },
+        retryAttempt: 10,
+        maxRetries: 10,
+      },
+    ],
+    TEST_TIME - 20 * 60 * 1000,
+  );
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    activeSessionFreshnessMs: 15 * 60 * 1000,
+    claudeHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60 * 60 * 1000,
+  });
+  const [observation] = await adapter.observe();
+
+  // The row would otherwise show the failure text under an "Idle" chip, and
+  // stop sorting as a session that needs someone.
+  assert.equal(observation?.status, SESSION_STATUS.ERROR);
+  assert.equal(observation?.detail?.error, "429 rate limit exceeded");
+});
+
 test("clears a recorded error once the session gets past it", async (t) => {
   const claudeHome = await temporaryClaudeHome(t);
   await writeSessionFile(
