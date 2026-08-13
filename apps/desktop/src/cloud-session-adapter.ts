@@ -1,10 +1,17 @@
 import {
+  type ControllableSessionProviderAdapter,
+  type MessageCapableSessionProviderAdapter,
+  PROVIDER_MESSAGE_RESULT_STATUS,
+  type ProviderControlRequest,
+  type ProviderControlResult,
+  type ProviderMessageResult,
+  type ProviderSessionMessage,
   type ProviderSessionObservation,
   SESSION_LOCATION,
   SESSION_STATUS,
   type SessionProvider,
-  type SessionProviderAdapter,
   type SessionStatus,
+  sessionMessageText,
 } from "@sidecar/core";
 
 const UNKNOWN_REPOSITORY_LABEL = "workspace";
@@ -12,11 +19,14 @@ const GIT_SUFFIX = ".git";
 
 const HTTP_METHOD = {
   GET: "GET",
+  POST: "POST",
 } as const;
 
 const HTTP_STATUS = {
   UNAUTHORIZED: 401,
   FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  CONFLICT: 409,
 } as const;
 
 /**
@@ -94,14 +104,31 @@ export interface CloudAdapterProfile {
 }
 
 /**
- * The only way a subclass reaches its provider. It authenticates, bounds, and
- * parses the request, and it can express nothing but a read, so no adapter
- * built on it can change provider state.
+ * The only way a subclass reaches its provider while observing. It
+ * authenticates, bounds, and parses the request, and it can express nothing
+ * but a read, so no observation pass built on it can change provider state.
  */
 export type CloudRequest = (
   segments: readonly string[],
   query?: Readonly<Record<string, string>>,
 ) => Promise<Record<string, unknown>>;
+
+/**
+ * One documented write a provider takes for one of its sessions: the route and
+ * the exact body its endpoint asks for. A subclass describes the request; the
+ * base is the only thing that issues one.
+ */
+export interface CloudWriteRoute {
+  segments: readonly string[];
+  /**
+   * A Google-style custom method, appended to the path as `:action` rather
+   * than as a segment: it names what the request does to the resource the
+   * segments already name.
+   */
+  action?: string;
+  /** Left off entirely for an endpoint that documents an empty request. */
+  body?: Readonly<Record<string, unknown>>;
+}
 
 export function positiveInteger(value: number | undefined, fallback: number): number {
   if (value === undefined || !Number.isFinite(value) || value <= 0) return fallback;
@@ -188,8 +215,15 @@ function resolveBaseUrl(profile: CloudAdapterProfile, configured: string | undef
  * refresh cadence, the failure rules that decide whether a snapshot survives,
  * and bounded read-only requests. A subclass supplies only the provider's
  * routes and how its reported state maps onto Luke's.
+ *
+ * The only writes any of this can make are `sendMessage` and `executeControl`,
+ * and both act on nothing but what a user asked for against one session the
+ * last pass observed and that advertised the capability being used.
+ * Observation itself stays read-only.
  */
-export abstract class CloudSessionAdapter implements SessionProviderAdapter {
+export abstract class CloudSessionAdapter
+  implements MessageCapableSessionProviderAdapter, ControllableSessionProviderAdapter
+{
   readonly provider: SessionProvider;
 
   readonly #readApiKey: () => Promise<string | undefined>;
@@ -261,6 +295,85 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
       }
     }
     return this.#observations;
+  }
+
+  /**
+   * Sends one user-typed message to one observed session, through the
+   * provider's documented message endpoint. Everything that could make this a
+   * different kind of write is refused before a request exists: a session the
+   * last pass did not observe, one that did not advertise `canReceiveMessage`,
+   * text outside the message bound, and a missing credential all answer
+   * without touching the network.
+   */
+  async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
+    const observation = this.#observations.find(
+      (candidate) => candidate.providerSessionId === message.providerSessionId,
+    );
+    if (!observation?.canReceiveMessage) {
+      return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+    }
+
+    const text = sessionMessageText(message.text);
+    if (!text) {
+      return {
+        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        reason: "A message has to be shorter than a document and longer than nothing.",
+      };
+    }
+
+    // The credential is read at send time, not held from the observation pass,
+    // so a key the user just replaced or removed is honoured immediately.
+    const apiKey = await this.#readApiKey().catch(() => undefined);
+    if (!apiKey) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+
+    const route = this.messageRoute(message.providerSessionId, text);
+    if (!route) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+    return this.#postWrite(apiKey, route);
+  }
+
+  /**
+   * Runs one provider-defined control against one observed session, through
+   * the endpoint the provider documents for it. The same refusals guard it
+   * that guard a message: no request exists for a session the last pass did
+   * not observe, for a control that session did not advertise, or without a
+   * credential.
+   */
+  async executeControl(request: ProviderControlRequest): Promise<ProviderControlResult> {
+    const observation = this.#observations.find(
+      (candidate) => candidate.providerSessionId === request.providerSessionId,
+    );
+    const advertised = observation?.controls?.some((control) => control.id === request.control.id);
+    if (!advertised) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+
+    const apiKey = await this.#readApiKey().catch(() => undefined);
+    if (!apiKey) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+
+    const route = this.controlRoute(request.providerSessionId, request.control.id);
+    if (!route) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+    return this.#postWrite(apiKey, route);
+  }
+
+  /**
+   * Where this provider's documented message endpoint lives and what it takes.
+   * Returning nothing says this adapter cannot form the request — a provider
+   * that documents no message endpoint at all, or an identity it has not
+   * learned — never that the send failed. The default is that a provider takes
+   * no messages, so a read-only adapter stays read-only by writing nothing.
+   */
+  protected messageRoute(_providerSessionId: string, _text: string): CloudWriteRoute | undefined {
+    return undefined;
+  }
+
+  /**
+   * Where a documented control's endpoint lives. The default is that a
+   * provider advertises no controls, so only an adapter that advertised one
+   * has anything to answer here.
+   */
+  protected controlRoute(
+    _providerSessionId: string,
+    _controlId: string,
+  ): CloudWriteRoute | undefined {
+    return undefined;
   }
 
   /** Runs one authenticated pass. Duplicate session ids are dropped by the base. */
@@ -347,11 +460,75 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
     }
   }
 
-  #url(segments: readonly string[], query: Readonly<Record<string, string>>): string {
+  #url(
+    segments: readonly string[],
+    query: Readonly<Record<string, string>>,
+    action?: string,
+  ): string {
     const url = new URL(this.#baseUrl);
-    url.pathname = `/${segments.map((segment) => encodeURIComponent(segment)).join("/")}`;
+    // The action rides after the segments unencoded: `:sendMessage` is part of
+    // the route, and encoding its colon would name a different route.
+    url.pathname = `/${segments.map((segment) => encodeURIComponent(segment)).join("/")}${
+      action ? `:${action}` : ""
+    }`;
     for (const [name, value] of Object.entries(query)) url.searchParams.set(name, value);
     return url.href;
+  }
+
+  /**
+   * The one authenticated write. It shares the read path's timeout and its
+   * refusal to echo anything the provider said into an error a user sees, and
+   * it answers with what became of the request rather than throwing: a write
+   * is a user's own act, so every outcome has to land back on the row it left.
+   */
+  async #postWrite(apiKey: string, route: CloudWriteRoute): Promise<ProviderMessageResult> {
+    const name = this.provider.displayName;
+    let response: Response;
+    try {
+      response = await this.#fetch(this.#url(route.segments, {}, route.action), {
+        method: HTTP_METHOD.POST,
+        // The same layering as a read: the provider's own headers first, the
+        // credential after them so no override can replace it.
+        headers: {
+          ...this.requestHeaders(),
+          ...this.#authorizationHeaders(apiKey),
+          // An endpoint that documents an empty request gets exactly that,
+          // not an empty JSON object it never asked for.
+          ...(route.body === undefined ? {} : { "Content-Type": "application/json" }),
+        },
+        ...(route.body === undefined ? {} : { body: JSON.stringify(route.body) }),
+        signal: AbortSignal.timeout(CLOUD_ADAPTER_DEFAULTS.REQUEST_TIMEOUT_MS),
+      });
+    } catch {
+      return {
+        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        reason: `${name} could not be reached, so nothing was sent.`,
+      };
+    }
+
+    if (response.ok) return { status: PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED };
+    if (response.status === HTTP_STATUS.UNAUTHORIZED || response.status === HTTP_STATUS.FORBIDDEN) {
+      return {
+        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        reason: `${name} rejected the configured API key.`,
+      };
+    }
+    if (response.status === HTTP_STATUS.NOT_FOUND) {
+      return {
+        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        reason: `${name} no longer has this session.`,
+      };
+    }
+    if (response.status === HTTP_STATUS.CONFLICT) {
+      return {
+        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        reason: `${name} says this session has moved on since Luke last looked.`,
+      };
+    }
+    return {
+      status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+      reason: `${name} answered with status ${response.status}, so the request may not have landed.`,
+    };
   }
 
   async #requestJson(

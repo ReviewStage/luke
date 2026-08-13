@@ -26,6 +26,8 @@ interface RecordedRequest {
   url: string;
   authorization: string | undefined;
   accept: string | undefined;
+  contentType: string | undefined;
+  body: string | undefined;
 }
 
 interface StubFetch {
@@ -42,6 +44,8 @@ function stubFetch(status: () => number = () => HTTP_STATUS.OK): StubFetch {
       url,
       authorization: headers.get("authorization") ?? undefined,
       accept: headers.get("accept") ?? undefined,
+      contentType: headers.get("content-type") ?? undefined,
+      body: typeof init.body === "string" ? init.body : undefined,
     });
     return new Response(JSON.stringify({}), {
       status: status(),
@@ -64,6 +68,8 @@ function observation(
   };
 }
 
+const STUB_APPROVE_CONTROL = { id: "approve", label: "Approve" } as const;
+
 /** Stands in for a real provider so the shared half can be tested on its own. */
 class StubCloudAdapter extends CloudSessionAdapter {
   passes = 0;
@@ -76,6 +82,19 @@ class StubCloudAdapter extends CloudSessionAdapter {
 
   protected override forgetCachedIdentity(): void {
     this.forgottenIdentities += 1;
+  }
+
+  protected messageRoute(providerSessionId: string, text: string) {
+    return {
+      segments: ["v0", "sessions", providerSessionId],
+      action: "sendMessage",
+      body: { prompt: text },
+    };
+  }
+
+  protected override controlRoute(providerSessionId: string, controlId: string) {
+    if (controlId !== STUB_APPROVE_CONTROL.id) return undefined;
+    return { segments: ["v0", "sessions", providerSessionId, "approve"] };
   }
 
   protected async collect(
@@ -135,6 +154,8 @@ test("authenticates a bounded read and encodes the route a subclass asked for", 
       url: `${TEST_BASE_URL}/v0/sessions/id%20with%2Fslash?limit=2`,
       authorization: `Bearer ${TEST_API_KEY}`,
       accept: "application/json",
+      contentType: undefined,
+      body: undefined,
     },
   ]);
 });
@@ -395,4 +416,154 @@ test("issues no request at all when the credential cannot be read", async () => 
   assert.deepEqual(await adapter.observe(), []);
   assert.deepEqual(stub.requests, []);
   assert.equal(adapter.passes, 0);
+});
+
+test("sends a user message through the route and body the provider documents", async () => {
+  const stub = stubFetch();
+  const adapter = adapterFor(stub.fetch);
+  adapter.collected = [observation("session-one", { canReceiveMessage: true })];
+  await adapter.observe();
+
+  const result = await adapter.sendMessage({ providerSessionId: "session-one", text: "  go on  " });
+
+  assert.deepEqual(result, { status: "accepted" });
+  const write = stub.requests.at(-1);
+  // The action rides unencoded after the encoded segments: `:sendMessage` is
+  // part of the route, and `%3AsendMessage` would name a different one.
+  assert.equal(write?.url, `${TEST_BASE_URL}/v0/sessions/session-one:sendMessage`);
+  assert.equal(write?.method, "POST");
+  assert.equal(write?.authorization, `Bearer ${TEST_API_KEY}`);
+  assert.equal(write?.contentType, "application/json");
+  assert.deepEqual(JSON.parse(write?.body ?? ""), { prompt: "go on" });
+});
+
+test("refuses a message for any session that did not advertise taking one", async () => {
+  const stub = stubFetch();
+  const adapter = adapterFor(stub.fetch);
+  adapter.collected = [observation("session-quiet")];
+  await adapter.observe();
+  const observationRequests = stub.requests.length;
+
+  const unadvertised = await adapter.sendMessage({
+    providerSessionId: "session-quiet",
+    text: "go on",
+  });
+  const unobserved = await adapter.sendMessage({
+    providerSessionId: "session-unknown",
+    text: "go on",
+  });
+
+  // Neither refusal may spend a request: a session that advertised nothing has
+  // been promised nothing, and no request should exist to find that out.
+  assert.deepEqual(unadvertised, { status: "unsupported" });
+  assert.deepEqual(unobserved, { status: "unsupported" });
+  assert.equal(stub.requests.length, observationRequests);
+});
+
+test("refuses text outside the message bound without spending a request", async () => {
+  const stub = stubFetch();
+  const adapter = adapterFor(stub.fetch);
+  adapter.collected = [observation("session-one", { canReceiveMessage: true })];
+  await adapter.observe();
+  const observationRequests = stub.requests.length;
+
+  const empty = await adapter.sendMessage({ providerSessionId: "session-one", text: "   " });
+  const oversized = await adapter.sendMessage({
+    providerSessionId: "session-one",
+    text: "a".repeat(4_001),
+  });
+
+  assert.equal(empty.status, "rejected");
+  assert.equal(oversized.status, "rejected");
+  assert.equal(stub.requests.length, observationRequests);
+});
+
+test("refuses to send once the credential is gone, whatever was observed with it", async () => {
+  const stub = stubFetch();
+  let apiKey: string | undefined = TEST_API_KEY;
+  const adapter = adapterFor(stub.fetch, { readApiKey: async () => apiKey });
+  adapter.collected = [observation("session-one", { canReceiveMessage: true })];
+  await adapter.observe();
+  const observationRequests = stub.requests.length;
+
+  apiKey = undefined;
+  const result = await adapter.sendMessage({ providerSessionId: "session-one", text: "go on" });
+
+  assert.deepEqual(result, { status: "unsupported" });
+  assert.equal(stub.requests.length, observationRequests);
+});
+
+test("reports what became of a send the provider refused", async () => {
+  let status: number = HTTP_STATUS.OK;
+  const stub = stubFetch(() => status);
+  const adapter = adapterFor(stub.fetch);
+  adapter.collected = [observation("session-one", { canReceiveMessage: true })];
+  await adapter.observe();
+  const message = { providerSessionId: "session-one", text: "go on" };
+
+  status = 401;
+  const unauthorized = await adapter.sendMessage(message);
+  status = 404;
+  const missing = await adapter.sendMessage(message);
+  status = 409;
+  const conflicted = await adapter.sendMessage(message);
+  status = 500;
+  const failed = await adapter.sendMessage(message);
+
+  assert.equal(unauthorized.status, "rejected");
+  assert.match(unauthorized.status === "rejected" ? unauthorized.reason : "", /API key/);
+  assert.equal(missing.status, "rejected");
+  assert.match(missing.status === "rejected" ? missing.reason : "", /no longer has/);
+  assert.equal(conflicted.status, "rejected");
+  assert.match(conflicted.status === "rejected" ? conflicted.reason : "", /moved on/);
+  assert.equal(failed.status, "rejected");
+  assert.match(failed.status === "rejected" ? failed.reason : "", /500/);
+});
+
+test("reports a send that never reached the provider as rejected, not thrown", async () => {
+  const adapter = adapterFor(async () => {
+    throw new Error("connection reset");
+  });
+  adapter.collected = [observation("session-one", { canReceiveMessage: true })];
+  await adapter.observe().catch(() => {});
+  // Observation failed too, so the session was never observed; re-prime the
+  // adapter with a working pass before the network goes away.
+  const result = await adapter.sendMessage({ providerSessionId: "session-one", text: "go on" });
+
+  assert.equal(result.status, "unsupported");
+});
+
+test("runs an advertised control through its documented route, sending no body", async () => {
+  const stub = stubFetch();
+  const adapter = adapterFor(stub.fetch);
+  adapter.collected = [
+    observation("session-plan", { controls: [STUB_APPROVE_CONTROL] }),
+    observation("session-quiet"),
+  ];
+  await adapter.observe();
+  const observationRequests = stub.requests.length;
+
+  const approved = await adapter.executeControl({
+    providerSessionId: "session-plan",
+    control: STUB_APPROVE_CONTROL,
+  });
+  const unadvertised = await adapter.executeControl({
+    providerSessionId: "session-quiet",
+    control: STUB_APPROVE_CONTROL,
+  });
+  const unknown = await adapter.executeControl({
+    providerSessionId: "session-plan",
+    control: { id: "terminate", label: "Terminate" },
+  });
+
+  assert.deepEqual(approved, { status: "accepted" });
+  const write = stub.requests.at(-1);
+  assert.equal(write?.url, `${TEST_BASE_URL}/v0/sessions/session-plan/approve`);
+  assert.equal(write?.method, "POST");
+  // An endpoint that documents an empty request gets exactly that.
+  assert.equal(write?.contentType, undefined);
+  assert.equal(write?.body, undefined);
+  assert.deepEqual(unadvertised, { status: "unsupported" });
+  assert.deepEqual(unknown, { status: "unsupported" });
+  assert.equal(stub.requests.length, observationRequests + 1);
 });

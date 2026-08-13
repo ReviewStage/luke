@@ -57,7 +57,9 @@ function sameControls(
     first.length === second.length &&
     first.every(
       (control, index) =>
-        control.id === second[index]?.id && control.label === second[index]?.label,
+        control.id === second[index]?.id &&
+        control.label === second[index]?.label &&
+        control.kind === second[index]?.kind,
     )
   );
 }
@@ -73,6 +75,7 @@ function sameSession(first: NormalizedSession, second: NormalizedSession): boole
     first.observedAt === second.observedAt &&
     first.location === second.location &&
     first.summary === second.summary &&
+    first.canReceiveMessage === second.canReceiveMessage &&
     sameDetail(first.detail, second.detail) &&
     first.attention.disposition === second.attention.disposition &&
     first.attention.decidedAt === second.attention.decidedAt &&

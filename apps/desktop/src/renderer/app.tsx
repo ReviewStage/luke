@@ -5,7 +5,7 @@ import {
   type RealtimeStatus,
   type RealtimeVoice,
 } from "@sidecar/core";
-import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AppBootstrap,
   AppSettings,
@@ -22,7 +22,7 @@ import type { CredentialEntry, CredentialEntryControl } from "./credential-entry
 import { isSubmittable, removalEndsEntry } from "./credential-entry";
 import { KeySlot } from "./key-slot";
 import { NotchWings } from "./notch-wings";
-import { PanelBody } from "./panel-body";
+import { PanelBody, type SessionWriteHandlers } from "./panel-body";
 import {
   HIT_REGION,
   LEAVE_DELAY_MS,
@@ -665,6 +665,27 @@ export function App(): React.JSX.Element {
     [cancelHoverTransition, changeMode],
   );
 
+  /**
+   * The two writes a row can ask for, handed to the main process by session
+   * identity. Unlike opening, neither closes the panel: the answer lands back
+   * on the row that asked, and the user is mid-conversation with it.
+   */
+  const sessionWrites: SessionWriteHandlers = useMemo(
+    () => ({
+      sendMessage: (session, text) =>
+        window.sidecar.sendSessionMessage(
+          { providerId: session.providerId, providerSessionId: session.id },
+          text,
+        ),
+      runAction: (session, actionId) =>
+        window.sidecar.executeSessionControl(
+          { providerId: session.providerId, providerSessionId: session.id },
+          actionId,
+        ),
+    }),
+    [],
+  );
+
   /** The capsule is a button: pressing it opens the panel, or closes it again. */
   const handleCapsulePress = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -969,6 +990,7 @@ export function App(): React.JSX.Element {
             onViewChange={changeSessionView}
             now={now}
             onOpenSession={openSession}
+            writes={sessionWrites}
             offerOptions={offerOptions}
             optionsOpen={optionsOpen}
             onOptionsToggle={() => setOptionsOpen((open) => !open)}

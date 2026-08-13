@@ -1,10 +1,18 @@
-import { SESSION_LOCATION, SESSION_STATE } from "@sidecar/core";
+import type { ProviderControlResult, ProviderMessageResult } from "@sidecar/core";
+import {
+  PROVIDER_MESSAGE_RESULT_STATUS,
+  SESSION_CONTROL_KIND,
+  SESSION_LOCATION,
+  SESSION_STATE,
+} from "@sidecar/core";
+import { useCallback, useState } from "react";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
 import { CloudBadge, ProviderMark } from "./provider-marks";
 import {
   type ArrangedSessions,
   type DisplaySession,
   observedAgoLabel,
+  type SessionAction,
   type SessionView,
 } from "./session-model";
 import {
@@ -21,7 +29,173 @@ import {
   SessionOptionsButton,
   SessionsPanel,
 } from "./session-parts";
+import { SendIcon, StopIcon } from "./settings-icons";
 import { SettingsPanel, type SettingsPanelProps } from "./settings-panel";
+
+/** Handed up rather than performed here: the row knows sessions, not IPC. */
+export interface SessionWriteHandlers {
+  sendMessage: (session: DisplaySession, text: string) => Promise<ProviderMessageResult>;
+  runAction: (session: DisplaySession, actionId: string) => Promise<ProviderControlResult>;
+}
+
+/** One outcome line under the actions, said once and replaced by the next. */
+function feedbackFor(result: ProviderMessageResult | ProviderControlResult): string | undefined {
+  if (result.status === PROVIDER_MESSAGE_RESULT_STATUS.REJECTED) return result.reason;
+  if (result.status === PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED) {
+    return "The session has moved on and no longer takes this.";
+  }
+  return undefined;
+}
+
+/**
+ * One advertised action. A stop is drawn as the square glyph every chat
+ * surface stops with — its label survives as what a reader hears and hover
+ * shows — and anything else is drawn as a chip in the provider's own words.
+ */
+function RowActionButton({
+  action,
+  pendingAction,
+  onRun,
+}: {
+  action: SessionAction;
+  pendingAction: string | undefined;
+  onRun: (actionId: string) => void;
+}): React.JSX.Element {
+  const held = pendingAction !== undefined;
+  if (action.kind === SESSION_CONTROL_KIND.STOP) {
+    return (
+      <button
+        type="button"
+        className="row-stop"
+        aria-label={action.label}
+        title={action.label}
+        disabled={held}
+        onClick={() => onRun(action.id)}
+      >
+        <StopIcon />
+      </button>
+    );
+  }
+  return (
+    <button type="button" className="row-action" disabled={held} onClick={() => onRun(action.id)}>
+      {pendingAction === action.id ? "Asking…" : action.label}
+    </button>
+  );
+}
+
+/**
+ * The second line a row earns only when its provider promised something: a
+ * message field that is simply there, the way every chat surface keeps its
+ * composer on screen, and each advertised action beside it — a stop as the
+ * square glyph, anything else as a chip in the provider's own words.
+ * Everything here answers back onto the same line — sending, sent, or the
+ * provider's refusal — because a write is the user's own act and its outcome
+ * may not vanish into a log.
+ */
+function SessionRowActions({
+  session,
+  writes,
+}: {
+  session: DisplaySession;
+  writes: SessionWriteHandlers;
+}): React.JSX.Element {
+  const [sending, setSending] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [feedback, setFeedback] = useState<string | undefined>(undefined);
+  /** The action in flight, which is the one drawn asking and the reason all are held. */
+  const [pendingAction, setPendingAction] = useState<string | undefined>(undefined);
+
+  const send = useCallback(async () => {
+    const text = draft.trim();
+    if (!text) return;
+    setSending(true);
+    setFeedback(undefined);
+    const result = await writes.sendMessage(session, text);
+    setSending(false);
+    if (result.status === PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED) {
+      // The draft has become the session's; the field empties for the next.
+      setDraft("");
+      setFeedback(`Sent to ${session.provider}`);
+    } else {
+      // The draft stays: a refused message is still the user's words.
+      setFeedback(feedbackFor(result));
+    }
+  }, [draft, session, writes]);
+
+  const runAction = useCallback(
+    async (actionId: string) => {
+      setPendingAction(actionId);
+      setFeedback(undefined);
+      const result = await writes.runAction(session, actionId);
+      setPendingAction(undefined);
+      // An accepted action answers too: the session will not look different
+      // until its provider is observed again, and a control that seems to have
+      // done nothing would be pressed a second time.
+      setFeedback(
+        result.status === PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED
+          ? `${session.provider} accepted`
+          : feedbackFor(result),
+      );
+    },
+    [session, writes],
+  );
+
+  return (
+    <div className="row-actions">
+      {session.canMessage ? (
+        <form
+          className="row-compose"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void send();
+          }}
+        >
+          <input
+            className="row-compose-input"
+            aria-label={`Message ${session.provider}`}
+            placeholder={`Message ${session.provider}…`}
+            autoComplete="off"
+            spellCheck={false}
+            value={draft}
+            disabled={sending}
+            onChange={(event) => setDraft(event.target.value)}
+            onFocus={() => {
+              // The panel can be showing without its window being key, and a
+              // field that cannot be typed into is worse than no field.
+              window.sidecar.focusPanel();
+            }}
+            onKeyDown={(event) => {
+              // Escape lets go of the field rather than closing the panel
+              // behind it. The draft survives: the field is not going anywhere.
+              if (event.key === "Escape") {
+                event.stopPropagation();
+                event.currentTarget.blur();
+              }
+            }}
+          />
+          <button
+            type="submit"
+            className="row-send"
+            aria-label={`Send to ${session.provider}`}
+            title={`Send to ${session.provider}`}
+            disabled={sending || !draft.trim()}
+          >
+            <SendIcon />
+          </button>
+        </form>
+      ) : null}
+      {session.actions.map((action) => (
+        <RowActionButton
+          key={action.id}
+          action={action}
+          pendingAction={pendingAction}
+          onRun={(actionId) => void runAction(actionId)}
+        />
+      ))}
+      {feedback ? <small className="row-feedback">{feedback}</small> : null}
+    </div>
+  );
+}
 
 /**
  * One session, drawn the same way whether or not it can be opened. A row whose
@@ -42,6 +216,11 @@ import { SettingsPanel, type SettingsPanelProps } from "./settings-panel";
  * subtitle saying what the row's left edge already says. The mark's hover
  * answers with the name — and the model, which identifies the session to nobody
  * and so earns a hover rather than a line.
+ *
+ * A row whose provider promised writes — a message it will take, an action it
+ * advertised — grows a second line for them. The press target for opening
+ * shrinks to the row's first line, so a mispress near the field cannot open a
+ * window, and the whole row stays one article for a reader.
  */
 function SessionRow({
   session,
@@ -49,13 +228,16 @@ function SessionRow({
   now,
   leaving,
   onOpen,
+  writes,
 }: {
   session: DisplaySession;
   index: number;
   now: number;
   leaving: boolean;
   onOpen: (session: DisplaySession) => void;
+  writes: SessionWriteHandlers;
 }): React.JSX.Element {
+  const withActions = session.canMessage || session.actions.length > 0;
   const shared = {
     className: "session-row",
     "data-state": session.state,
@@ -107,19 +289,39 @@ function SessionRow({
     </>
   );
 
-  if (!session.openable) return <article {...shared}>{content}</article>;
+  if (!withActions) {
+    if (!session.openable) return <article {...shared}>{content}</article>;
+    return (
+      <button
+        {...shared}
+        type="button"
+        // The row's own lines are its accessible name, which already reads as
+        // the session; the title says what pressing it does, and names the agent
+        // because that is the window you are about to be in.
+        title={`Open in ${session.provider}`}
+        onClick={() => onOpen(session)}
+      >
+        {content}
+      </button>
+    );
+  }
+
   return (
-    <button
-      {...shared}
-      type="button"
-      // The row's own lines are its accessible name, which already reads as
-      // the session; the title says what pressing it does, and names the agent
-      // because that is the window you are about to be in.
-      title={`Open in ${session.provider}`}
-      onClick={() => onOpen(session)}
-    >
-      {content}
-    </button>
+    <article {...shared} data-actions="true">
+      {session.openable ? (
+        <button
+          type="button"
+          className="row-main"
+          title={`Open in ${session.provider}`}
+          onClick={() => onOpen(session)}
+        >
+          {content}
+        </button>
+      ) : (
+        <div className="row-main">{content}</div>
+      )}
+      <SessionRowActions session={session} writes={writes} />
+    </article>
   );
 }
 
@@ -135,6 +337,8 @@ export interface PanelBodyProps {
   now: number;
   /** Sends the pressed session to its provider, wherever the provider keeps it. */
   onOpenSession: (session: DisplaySession) => void;
+  /** Carries a typed reply or an advertised action to the session's provider. */
+  writes: SessionWriteHandlers;
   /**
    * Whether there is anything for the sheet to decide. Decided by the panel
    * rather than here, because whoever offers the button also has to be the one
@@ -155,6 +359,7 @@ export function PanelBody({
   onViewChange,
   now,
   onOpenSession,
+  writes,
   offerOptions,
   optionsOpen,
   onOptionsToggle,
@@ -194,6 +399,7 @@ export function PanelBody({
                   now={now}
                   leaving={row.leaving}
                   onOpen={onOpenSession}
+                  writes={writes}
                 />
               ))
             )}

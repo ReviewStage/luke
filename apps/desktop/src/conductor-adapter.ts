@@ -1,6 +1,7 @@
 import {
   maximumSessionTitleLength,
   type ProviderSessionObservation,
+  SESSION_CONTROL_KIND,
   SESSION_STATUS,
   type SessionProvider,
   type SessionStatus,
@@ -10,6 +11,7 @@ import {
   type CloudAdapterOptions,
   type CloudRequest,
   CloudSessionAdapter,
+  type CloudWriteRoute,
   isDefined,
   knownValue,
   positiveInteger,
@@ -31,17 +33,40 @@ const CONDUCTOR_ENVIRONMENT = {
 
 const CONDUCTOR_DEFAULT_API_URL = "https://api.conductor.build";
 
-/** Read-only routes from the documented public API. Luke never calls a writer. */
+/**
+ * Documented public API routes. The reads walk projects, workspaces, and
+ * sessions; the writers are `POST …/sessions/{id}/messages`, which is
+ * Conductor's documented way to hand a prompt to an existing session — queued
+ * while it is idle, steered into the running turn while it works — and
+ * `POST …/sessions/{id}/cancel`, which stops the current turn.
+ */
 const CONDUCTOR_ROUTE = {
   IDENTITY: ["me"],
   PROJECTS: ["v0", "projects"],
 } as const;
 
 const CONDUCTOR_ROUTE_SEGMENT = {
+  CANCEL: "cancel",
+  MESSAGES: "messages",
   SESSIONS: "sessions",
   STATUS: "status",
   V0: "v0",
   WORKSPACES: "workspaces",
+} as const;
+
+/** The body `POST …/sessions/{id}/messages` documents. */
+const CONDUCTOR_MESSAGE_FIELD = {
+  MESSAGE: "message",
+} as const;
+
+/**
+ * The one control this adapter can honour, advertised only while a session is
+ * actually working a turn there is something to stop.
+ */
+const CONDUCTOR_CANCEL_CONTROL = {
+  id: "cancel-turn",
+  label: "Stop this turn",
+  kind: SESSION_CONTROL_KIND.STOP,
 } as const;
 
 const CONDUCTOR_QUERY = {
@@ -162,11 +187,14 @@ interface ConductorSession {
 
 /**
  * Observes Conductor cloud sessions through the documented public API. It reads
- * only workspaces the authenticated user created, issues no request that can
- * change provider state, and reports nothing at all without a credential.
- * Each workspace is reported as one session — the workspace is the unit
- * Conductor's own surface shows, and the one its name names — in the state of
- * whichever chat inside it most needs a person.
+ * only workspaces the authenticated user created, observation issues no request
+ * that can change provider state, and it reports nothing at all without a
+ * credential. Each workspace is reported as one session — the workspace is the
+ * unit Conductor's own surface shows, and the one its name names — in the state
+ * of whichever chat inside it most needs a person, and that chat is the one a
+ * write reaches: the writes it supports are a user-typed prompt and a stop for
+ * the running turn, each through Conductor's own endpoint on a chat that
+ * advertised it.
  */
 export class ConductorSessionAdapter extends CloudSessionAdapter {
   readonly #maximumObservedWorkspaces: number;
@@ -376,6 +404,37 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     );
   }
 
+  protected override messageRoute(
+    providerSessionId: string,
+    text: string,
+  ): CloudWriteRoute | undefined {
+    return {
+      segments: [
+        CONDUCTOR_ROUTE_SEGMENT.V0,
+        CONDUCTOR_ROUTE_SEGMENT.SESSIONS,
+        providerSessionId,
+        CONDUCTOR_ROUTE_SEGMENT.MESSAGES,
+      ],
+      body: { [CONDUCTOR_MESSAGE_FIELD.MESSAGE]: text },
+    };
+  }
+
+  protected override controlRoute(
+    providerSessionId: string,
+    controlId: string,
+  ): CloudWriteRoute | undefined {
+    if (controlId !== CONDUCTOR_CANCEL_CONTROL.id) return undefined;
+    return {
+      segments: [
+        CONDUCTOR_ROUTE_SEGMENT.V0,
+        CONDUCTOR_ROUTE_SEGMENT.SESSIONS,
+        providerSessionId,
+        CONDUCTOR_ROUTE_SEGMENT.CANCEL,
+      ],
+      // Conductor documents no body for a cancel, so none is sent.
+    };
+  }
+
   async #observationFor(
     request: CloudRequest,
     session: ConductorSession,
@@ -405,6 +464,17 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       title: session.workspace.name ?? session.workspace.repositoryLabel,
       status,
       observedAt,
+      // Conductor documents both halves of a send — queued while a session is
+      // idle, steered into the turn while it works — so any open chat takes a
+      // message. A closed one is settled, and an errored one is documented for
+      // no writer.
+      canReceiveMessage:
+        !session.archived &&
+        (reported?.status === CONDUCTOR_SESSION_STATUS.IDLE ||
+          reported?.status === CONDUCTOR_SESSION_STATUS.WORKING),
+      ...(reported?.status === CONDUCTOR_SESSION_STATUS.WORKING
+        ? { controls: [CONDUCTOR_CANCEL_CONTROL] }
+        : {}),
       detail: {
         repository: session.workspace.repositoryLabel,
         ...(session.model ? { model: session.model } : {}),

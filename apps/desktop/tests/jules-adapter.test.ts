@@ -46,6 +46,8 @@ interface RecordedRequest {
   search: string;
   apiKey: string | undefined;
   authorization: string | undefined;
+  contentType: string | undefined;
+  body: string | undefined;
 }
 
 interface FakeJulesApi {
@@ -94,7 +96,7 @@ function sessionPayload(session: TestSession): Record<string, unknown> {
   };
 }
 
-/** Serves the read-only subset of the alpha API the adapter is allowed to use. */
+/** Serves the subset of the alpha API the adapter is allowed to use. */
 function fakeJulesApi(sessions: readonly TestSession[]): FakeJulesApi {
   const requests: RecordedRequest[] = [];
   const fetch: CloudFetch = async (url, init) => {
@@ -106,9 +108,21 @@ function fakeJulesApi(sessions: readonly TestSession[]): FakeJulesApi {
       search,
       apiKey: headers.get(GOOGLE_API_KEY_HEADER) ?? undefined,
       authorization: headers.get("authorization") ?? undefined,
+      contentType: headers.get("content-type") ?? undefined,
+      body: typeof init.body === "string" ? init.body : undefined,
     });
 
     const segments = pathname.split("/").filter((segment) => segment.length > 0);
+    // The two documented writers are Google custom methods on one session:
+    // `POST /v1alpha/sessions/{id}:sendMessage` and `…:approvePlan`.
+    if (init.method === "POST" && segments[0] === "v1alpha" && segments.length === 3) {
+      const [id, action] = (segments[2] ?? "").split(":");
+      const known = sessions.some((session) => session.id === id);
+      if (!known || (action !== "sendMessage" && action !== "approvePlan")) {
+        return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
+      }
+      return jsonResponse({});
+    }
     if (segments.length !== 2 || segments[0] !== "v1alpha" || segments[1] !== "sessions") {
       return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
     }
@@ -459,4 +473,86 @@ test("keeps the previous snapshot when the list request fails transiently", asyn
 
   assert.equal(observed.length, 1);
   assert.deepEqual(duringOutage, observed);
+});
+
+test("advertises a message only for the states Jules documents as active", async () => {
+  const api = fakeJulesApi([
+    { id: "session-planning", state: TEST_STATE.PLANNING, createTime: TEST_TIME - 1_000 },
+    { id: "session-working", state: TEST_STATE.IN_PROGRESS, createTime: TEST_TIME - 2_000 },
+    { id: "session-plan", state: TEST_STATE.AWAITING_PLAN_APPROVAL, createTime: TEST_TIME - 3_000 },
+    { id: "session-ask", state: TEST_STATE.AWAITING_USER_FEEDBACK, createTime: TEST_TIME - 4_000 },
+    { id: "session-queued", state: TEST_STATE.QUEUED, createTime: TEST_TIME - 5_000 },
+    { id: "session-paused", state: TEST_STATE.PAUSED, createTime: TEST_TIME - 6_000 },
+    { id: "session-done", state: TEST_STATE.COMPLETED, createTime: TEST_TIME - 7_000 },
+    { id: "session-failed", state: TEST_STATE.FAILED, createTime: TEST_TIME - 8_000 },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+  const messageable = new Map(
+    observations.map((entry) => [entry.providerSessionId, entry.canReceiveMessage]),
+  );
+
+  assert.equal(messageable.get("session-planning"), true);
+  assert.equal(messageable.get("session-working"), true);
+  assert.equal(messageable.get("session-plan"), true);
+  assert.equal(messageable.get("session-ask"), true);
+  // Whether a queued, paused, or settled session takes a message is documented
+  // nowhere, so none of them is promised one.
+  assert.equal(messageable.get("session-queued"), false);
+  assert.equal(messageable.get("session-paused"), false);
+  assert.equal(messageable.get("session-done"), false);
+  assert.equal(messageable.get("session-failed"), false);
+});
+
+test("hands a user message to Jules through its documented custom method", async () => {
+  const api = fakeJulesApi([
+    { id: "session-ask", state: TEST_STATE.AWAITING_USER_FEEDBACK, createTime: TEST_TIME - 1_000 },
+  ]);
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+
+  const result = await adapter.sendMessage({
+    providerSessionId: "session-ask",
+    text: "Use the existing fixture instead",
+  });
+
+  assert.deepEqual(result, { status: "accepted" });
+  const write = api.requests.at(-1);
+  assert.equal(write?.method, "POST");
+  // The colon is part of the route: `%3AsendMessage` would name nothing.
+  assert.equal(write?.pathname, "/v1alpha/sessions/session-ask:sendMessage");
+  assert.equal(write?.apiKey, TEST_API_KEY);
+  assert.deepEqual(JSON.parse(write?.body ?? ""), { prompt: "Use the existing fixture instead" });
+});
+
+test("offers approving the plan only while Jules is holding one, and sends no body", async () => {
+  const api = fakeJulesApi([
+    { id: "session-plan", state: TEST_STATE.AWAITING_PLAN_APPROVAL, createTime: TEST_TIME - 1_000 },
+    { id: "session-working", state: TEST_STATE.IN_PROGRESS, createTime: TEST_TIME - 2_000 },
+  ]);
+  const adapter = adapterFor(api.fetch);
+  const observations = await adapter.observe();
+  const approveControl = { id: "approve-plan", label: "Approve the plan" };
+
+  const holding = observations.find((entry) => entry.providerSessionId === "session-plan");
+  const working = observations.find((entry) => entry.providerSessionId === "session-working");
+  assert.deepEqual(holding?.controls, [approveControl]);
+  assert.equal(working?.controls, undefined);
+
+  const approved = await adapter.executeControl({
+    providerSessionId: "session-plan",
+    control: approveControl,
+  });
+  const refused = await adapter.executeControl({
+    providerSessionId: "session-working",
+    control: approveControl,
+  });
+
+  assert.deepEqual(approved, { status: "accepted" });
+  const write = api.requests.at(-1);
+  assert.equal(write?.pathname, "/v1alpha/sessions/session-plan:approvePlan");
+  // Jules documents an empty request for an approval.
+  assert.equal(write?.contentType, undefined);
+  assert.equal(write?.body, undefined);
+  assert.deepEqual(refused, { status: "unsupported" });
 });

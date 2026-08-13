@@ -2,6 +2,7 @@ import {
   maximumSessionSummaryLength,
   maximumSessionTitleLength,
   type ProviderSessionObservation,
+  SESSION_CONTROL_KIND,
   SESSION_STATUS,
   type SessionProvider,
   type SessionStatus,
@@ -11,6 +12,7 @@ import {
   type CloudAdapterOptions,
   type CloudRequest,
   CloudSessionAdapter,
+  type CloudWriteRoute,
   isDefined,
   isRecord,
   knownValue,
@@ -38,13 +40,35 @@ const CURSOR_DEFAULT_API_URL = "https://api.cursor.com";
 
 const CURSOR_ROUTE_SEGMENT = {
   AGENTS: "agents",
+  CANCEL: "cancel",
   RUNS: "runs",
   V1: "v1",
 } as const;
 
-/** Read-only routes from the documented public API. Luke never calls a writer. */
+/**
+ * Documented public API routes. The reads list agents and their runs; the
+ * writers are `POST …/agents/{id}/runs`, which is Cursor's documented
+ * follow-up — a new run on the agent's existing conversation and workspace
+ * state — and `POST …/runs/{runId}/cancel`, which stops one that is active.
+ */
 const CURSOR_ROUTE = {
   AGENTS: [CURSOR_ROUTE_SEGMENT.V1, CURSOR_ROUTE_SEGMENT.AGENTS],
+} as const;
+
+/** The body `POST …/agents/{id}/runs` documents. */
+const CURSOR_MESSAGE_FIELD = {
+  PROMPT: "prompt",
+  TEXT: "text",
+} as const;
+
+/**
+ * The one control this adapter can honour, advertised per session and only in
+ * the state Cursor documents it for.
+ */
+const CURSOR_CANCEL_RUN_CONTROL = {
+  id: "cancel-run",
+  label: "Stop this run",
+  kind: SESSION_CONTROL_KIND.STOP,
 } as const;
 
 const CURSOR_QUERY = {
@@ -193,11 +217,21 @@ function agentFromRecord(record: Record<string, unknown>): CursorAgent | undefin
 
 /**
  * Observes Cursor cloud agents through the documented public API. It reads only
- * the agents the supplied key owns, issues no request that can change provider
- * state, and reports nothing at all without a credential.
+ * the agents the supplied key owns, observation issues no request that can
+ * change provider state, and it reports nothing at all without a credential.
+ * The one write it supports is a user-typed follow-up, through Cursor's own
+ * run endpoint, to an agent it advertised as taking one.
  */
 export class CursorSessionAdapter extends CloudSessionAdapter {
   readonly #maximumObservedSessions: number;
+
+  /**
+   * The run each observed agent was last seen running, kept so a cancel names
+   * the run the user saw rather than whichever is newest by the time the press
+   * lands. Cleared with the rest of the observed state when the credential
+   * changes.
+   */
+  #latestRunIds = new Map<string, string>();
 
   constructor(options: CursorAdapterOptions) {
     super(
@@ -247,7 +281,72 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
     const observations = await Promise.all(
       agents.map((agent) => this.#observationFor(request, agent, now)),
     );
-    return observations.filter(isDefined);
+    const observed = observations.filter(isDefined);
+    // Run ids are kept only for the agents still being reported, so the map
+    // can never outgrow the session cap.
+    const observedIds = new Set(observed.map((observation) => observation.providerSessionId));
+    for (const agentId of this.#latestRunIds.keys()) {
+      if (!observedIds.has(agentId)) this.#latestRunIds.delete(agentId);
+    }
+    return observed;
+  }
+
+  protected override forgetCachedIdentity(): void {
+    this.#latestRunIds = new Map();
+  }
+
+  /**
+   * Cursor documents a follow-up only against an agent whose latest run has
+   * finished: an archived agent cannot take new runs, a running one answers
+   * conflict until its run ends, and what a follow-up does to a failed or
+   * expired run is documented nowhere. Only the case Cursor has promised is
+   * advertised.
+   */
+  #agentTakesMessages(agent: CursorAgent, run: CursorRun | undefined): boolean {
+    return !agent.archived && run?.status === CURSOR_RUN_STATUS.FINISHED;
+  }
+
+  /**
+   * Cursor documents cancelling a run that is still active, and answers
+   * conflict for one that has already settled. An active run is the only state
+   * the control is advertised in.
+   */
+  #agentTakesCancel(agent: CursorAgent, run: CursorRun | undefined): boolean {
+    return (
+      !agent.archived &&
+      (run?.status === CURSOR_RUN_STATUS.RUNNING || run?.status === CURSOR_RUN_STATUS.CREATING)
+    );
+  }
+
+  protected override messageRoute(
+    providerSessionId: string,
+    text: string,
+  ): CloudWriteRoute | undefined {
+    return {
+      segments: [...CURSOR_ROUTE.AGENTS, providerSessionId, CURSOR_ROUTE_SEGMENT.RUNS],
+      body: {
+        [CURSOR_MESSAGE_FIELD.PROMPT]: { [CURSOR_MESSAGE_FIELD.TEXT]: text },
+      },
+    };
+  }
+
+  protected override controlRoute(
+    providerSessionId: string,
+    controlId: string,
+  ): CloudWriteRoute | undefined {
+    if (controlId !== CURSOR_CANCEL_RUN_CONTROL.id) return undefined;
+    const runId = this.#latestRunIds.get(providerSessionId);
+    if (!runId) return undefined;
+    return {
+      segments: [
+        ...CURSOR_ROUTE.AGENTS,
+        providerSessionId,
+        CURSOR_ROUTE_SEGMENT.RUNS,
+        runId,
+        CURSOR_ROUTE_SEGMENT.CANCEL,
+      ],
+      // Cursor documents no body for a cancel, so none is sent.
+    };
   }
 
   async #observationFor(
@@ -266,6 +365,7 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
     const observedAt = run?.updatedAt ?? agent.lastActivityAt;
     if (now - observedAt > CLOUD_ADAPTER_DEFAULTS.MAXIMUM_SESSION_AGE_MS) return undefined;
 
+    if (latestRunId) this.#latestRunIds.set(agent.id, latestRunId);
     const status = this.#statusFor(agent, run, observedAt, now);
     // A run names the repository it pushed to, so a list item that carries no
     // `repos` still resolves to something better than "workspace".
@@ -275,6 +375,8 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
       title: agent.name ?? repository ?? UNKNOWN_AGENT_LABEL,
       status,
       observedAt,
+      canReceiveMessage: this.#agentTakesMessages(agent, run),
+      ...(this.#agentTakesCancel(agent, run) ? { controls: [CURSOR_CANCEL_RUN_CONTROL] } : {}),
       ...(run?.result ? { summary: run.result } : {}),
       detail: {
         ...(repository ? { repository } : {}),

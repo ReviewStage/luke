@@ -456,3 +456,35 @@ test("sessions of one state are ordered by which moved most recently", () => {
     ["fresh", "stale"],
   );
 });
+
+test("a row offers writes only where its provider promised them", () => {
+  const quiet = liveSession(CLAUDE_PROVIDER, "local", SESSION_STATUS.WORKING);
+  const writable = normalizeSession(CODEX_PROVIDER, {
+    providerSessionId: "cloud",
+    title: "Session cloud",
+    status: SESSION_STATUS.WAITING,
+    observedAt: 1_000,
+    canReceiveMessage: true,
+    controls: [{ id: "approve-plan", label: "Approve the plan" }],
+  });
+
+  const rows = displaySessions(bootstrap(false), [quiet, writable]);
+  const byId = new Map(rows.map((row) => [row.id, row]));
+
+  assert.equal(byId.get("local")?.canMessage, false);
+  assert.deepEqual(byId.get("local")?.actions, []);
+  assert.equal(byId.get("cloud")?.canMessage, true);
+  assert.deepEqual(byId.get("cloud")?.actions, [{ id: "approve-plan", label: "Approve the plan" }]);
+  // The fixture draws the affordances so the evidence shows them, exactly
+  // where a live session would have them: the composer on the suspended Devin
+  // row, the stop on the working Cursor agent, and nothing anywhere else.
+  const fixtureById = new Map(FIXTURE_SESSIONS.map((row) => [row.id, row]));
+  assert.equal(fixtureById.get("devin-session")?.canMessage, true);
+  assert.deepEqual(fixtureById.get("cursor-agent")?.actions, [
+    { id: "cancel-run", label: "Stop this run", kind: "stop" },
+  ]);
+  for (const row of FIXTURE_SESSIONS) {
+    if (row.id === "devin-session") continue;
+    assert.equal(row.canMessage, false);
+  }
+});

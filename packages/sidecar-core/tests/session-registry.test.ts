@@ -64,6 +64,21 @@ test("normalizes provider observations without conflating provider-local identit
   assert.equal(registry.list().length, 2);
 });
 
+test("a session takes messages only when its adapter said so explicitly", () => {
+  const registry = new InMemorySessionRegistry();
+  const identity = { providerId: codex.id, providerSessionId: "run:message" };
+
+  registry.upsert(codex, observation("run:message", 100));
+  assert.equal(registry.get(identity)?.canReceiveMessage, false);
+
+  // The flag flipping is a change the registry must notice on its own: the
+  // reply affordance appears and disappears with it while nothing else moves.
+  const before = registry.revision;
+  registry.upsert(codex, observation("run:message", 100, { canReceiveMessage: true }));
+  assert.equal(registry.get(identity)?.canReceiveMessage, true);
+  assert.notEqual(registry.revision, before);
+});
+
 test("keeps only the addresses Luke would open, and never a shortened one", () => {
   const registry = new InMemorySessionRegistry();
   const linkFor = (link: string) =>

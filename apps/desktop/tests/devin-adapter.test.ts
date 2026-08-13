@@ -66,6 +66,7 @@ interface RecordedRequest {
   pathname: string;
   search: string;
   authorization: string | undefined;
+  body: string | undefined;
 }
 
 interface FakeDevinApi {
@@ -124,7 +125,17 @@ function fakeDevinApi(
       pathname,
       search,
       authorization: headers.get("authorization") ?? undefined,
+      body: typeof init.body === "string" ? init.body : undefined,
     });
+
+    // The one documented writer: a message for one existing session.
+    if (init.method === "POST") {
+      const match = pathname.match(
+        new RegExp(`^/v3/organizations/${TEST_ORG_ID}/sessions/([^/]+)/messages$`),
+      );
+      const known = match && sessions.some((session) => session.id === match[1]);
+      return known ? jsonResponse({}) : jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
+    }
 
     if (pathname === "/v3/self") {
       const principal = options.principal ?? TEST_PRINCIPAL.PAT_USER;
@@ -617,4 +628,67 @@ test("keeps the previous snapshot when the list request fails transiently", asyn
 
   assert.equal(observed.length, 1);
   assert.deepEqual(duringOutage, observed);
+});
+
+test("advertises a message only for sessions Devin will take one for", async () => {
+  const api = fakeDevinApi([
+    { id: "devin-working", status: TEST_STATUS.RUNNING, updatedAt: TEST_TIME - 1_000 },
+    { id: "devin-suspended", status: TEST_STATUS.SUSPENDED, updatedAt: TEST_TIME - 2_000 },
+    { id: "devin-exited", status: TEST_STATUS.EXIT, updatedAt: TEST_TIME - 3_000 },
+    { id: "devin-failed", status: TEST_STATUS.ERROR, updatedAt: TEST_TIME - 4_000 },
+    {
+      id: "devin-filed",
+      status: TEST_STATUS.RUNNING,
+      archived: true,
+      updatedAt: TEST_TIME - 5_000,
+    },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+  const messageable = new Map(
+    observations.map((entry) => [entry.providerSessionId, entry.canReceiveMessage]),
+  );
+
+  // A running session takes a message, and a suspended one is resumed by it —
+  // both documented. A session that exited or failed is promised nothing, and
+  // an archived one the user has already filed away.
+  assert.equal(messageable.get("devin-working"), true);
+  assert.equal(messageable.get("devin-suspended"), true);
+  assert.equal(messageable.get("devin-exited"), false);
+  assert.equal(messageable.get("devin-failed"), false);
+  assert.equal(messageable.get("devin-filed"), false);
+});
+
+test("hands a user message to Devin's documented message endpoint", async () => {
+  const api = fakeDevinApi([workingSession("devin-working", TEST_TIME - 30_000)]);
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+
+  const result = await adapter.sendMessage({
+    providerSessionId: "devin-working",
+    text: "Please also add unit tests",
+  });
+
+  assert.deepEqual(result, { status: "accepted" });
+  const write = api.requests.at(-1);
+  assert.equal(write?.method, "POST");
+  assert.equal(write?.pathname, `/v3/organizations/${TEST_ORG_ID}/sessions/devin-working/messages`);
+  assert.equal(write?.authorization, `Bearer ${TEST_API_KEY}`);
+  assert.deepEqual(JSON.parse(write?.body ?? ""), { message: "Please also add unit tests" });
+});
+
+test("refuses a message for a session Devin never promised to take one for", async () => {
+  const api = fakeDevinApi([
+    { id: "devin-exited", status: TEST_STATUS.EXIT, updatedAt: TEST_TIME - 1_000 },
+  ]);
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+  const observationRequests = api.requests.length;
+
+  const settled = await adapter.sendMessage({ providerSessionId: "devin-exited", text: "go on" });
+  const unknown = await adapter.sendMessage({ providerSessionId: "devin-unknown", text: "go on" });
+
+  assert.deepEqual(settled, { status: "unsupported" });
+  assert.deepEqual(unknown, { status: "unsupported" });
+  assert.equal(api.requests.length, observationRequests);
 });
