@@ -6,6 +6,7 @@ import {
   parsePixels,
   planReorder,
   rosterRows,
+  withoutDeparture,
 } from "../src/renderer/session-motion";
 
 const tops = (entries: Record<string, number>) => new Map(Object.entries(entries));
@@ -103,6 +104,34 @@ test("a session returning mid-fade is alive again rather than a departure", () =
   const departures = [{ session: { id: "b" }, index: 1 }];
   const drawn = rosterRows(sessions("a", "c"), departures);
   assert.deepEqual(nextDepartures(drawn, sessions("a", "b", "c"), departures), []);
+});
+
+test("a departure expiring steps the ones below it up a slot", () => {
+  // From [a, b, c, d, e], b and d left: b holds slot 1 and d slot 3. When b is
+  // let go, d must still sit between c and e rather than jump past the end.
+  const departures = [
+    { session: { id: "b" }, index: 1 },
+    { session: { id: "d" }, index: 3 },
+  ];
+  const remaining = withoutDeparture(departures, "b");
+  assert.deepEqual(remaining, [{ session: { id: "d" }, index: 2 }]);
+  assert.deepEqual(
+    rosterRows(sessions("a", "c", "e"), remaining).map((row) => row.session.id),
+    ["a", "c", "d", "e"],
+  );
+});
+
+test("a departure expiring leaves the ones above it in place", () => {
+  const departures = [
+    { session: { id: "b" }, index: 1 },
+    { session: { id: "d" }, index: 3 },
+  ];
+  assert.deepEqual(withoutDeparture(departures, "d"), [{ session: { id: "b" }, index: 1 }]);
+});
+
+test("letting go of a session that is not departing changes nothing", () => {
+  const departures = [{ session: { id: "b" }, index: 1 }];
+  assert.deepEqual(withoutDeparture(departures, "x"), departures);
 });
 
 test("a departure still fading is kept while another begins", () => {

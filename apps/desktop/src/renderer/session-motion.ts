@@ -345,6 +345,25 @@ export function nextDepartures<T extends { id: string }>(
 }
 
 /**
+ * The departures once one of them has been let go. Each index was taken while
+ * every other departure still held its slot, so the rows below the vanished
+ * one step up a place — without that, a session still fading would be spliced
+ * one slot too far into the shorter list and jump mid-fade.
+ */
+export function withoutDeparture<T extends { id: string }>(
+  departures: readonly Departure<T>[],
+  id: string,
+): readonly Departure<T>[] {
+  const gone = departures.find((departure) => departure.session.id === id);
+  if (gone === undefined) return departures;
+  return departures
+    .filter((departure) => departure.session.id !== id)
+    .map((departure) =>
+      departure.index > gone.index ? { ...departure, index: departure.index - 1 } : departure,
+    );
+}
+
+/**
  * Holds each departed session on screen for the exit beat, so a removal is a
  * fade and then a closing gap rather than a row vanishing between frames. The
  * beat is `--duration-exit`, read at the moment of departure from the same
@@ -398,7 +417,7 @@ export function useSessionRoster<T extends { id: string }>(
           pending.delete(id);
           setState((previous) => ({
             ...previous,
-            departures: previous.departures.filter((other) => other.session.id !== id),
+            departures: withoutDeparture(previous.departures, id),
           }));
         }, beat),
       );
