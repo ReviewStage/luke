@@ -28,8 +28,9 @@ and issues authenticated `GET` requests only:
 
 - For Conductor, Luke reads the authenticated identity, projects, workspaces the
   authenticated user created, sessions, and session statuses. It processes
-  identifiers, repository names derived from Git remotes, timestamps, model
-  labels, archive state, and status.
+  identifiers, repository names derived from Git remotes (or the Conductor
+  project name when no usable remote is available), timestamps, model labels,
+  archive state, and status.
 - For Cursor, Luke reads agents owned by the supplied key and their latest runs.
   It processes identifiers, repository URLs and starting refs, timestamps,
   archive state, and run status.
@@ -60,9 +61,10 @@ to an attention-review endpoint, or otherwise uploaded by Luke.
 Without `OPENAI_API_KEY`, Luke does not send an attention-review request.
 
 With `OPENAI_API_KEY`, Luke sends the configured Responses-compatible endpoint
-the provider name, workspace-derived title, previous and current status,
-review trigger, and a bounded status summary. The request also includes fixed
-review instructions and synthetic examples. The API key is sent to that
+the provider name, displayed session title, previous and current status, review
+trigger, and a bounded status summary. For a Conductor session, that title can
+contain the project-name fallback described above. The request also includes
+fixed review instructions and synthetic examples. The API key is sent to that
 endpoint as the request's bearer credential.
 
 Luke does not send provider transcripts, command output, file contents, full

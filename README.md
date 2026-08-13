@@ -26,7 +26,7 @@ plugins, wrappers, or changes to how a session is launched.
 
 - A compact, top-center capsule shows how many sessions Luke is tracking.
 - Hovering opens a quick peek; clicking opens a panel with one row per session.
-- Rows show the provider, a workspace-derived title, a bounded status summary,
+- Rows show the provider, a repository-derived title, a bounded status summary,
   and whether the session is working, waiting, complete, or merely observed.
 - Sessions that appear to need attention are placed first.
 - An optional microphone visualization can react to local audio levels.
