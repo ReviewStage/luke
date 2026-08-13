@@ -80,6 +80,21 @@ export function isSubmittable(entry: CredentialEntry | undefined): entry is Cred
   return entry !== undefined && !entry.busy && entry.draft.trim().length > 0;
 }
 
+/**
+ * Whether deleting a provider's key also ends the entry in progress. A key that
+ * has been removed cannot be replaced, so the entry that was going to replace it
+ * goes with it — otherwise a field is left open over nothing, holding the panel
+ * against the pointer for a replacement nobody is making. A delete that was
+ * refused changes nothing, so it ends nothing.
+ */
+export function removalEndsEntry(
+  entry: CredentialEntry | undefined,
+  providerId: CredentialProviderId,
+  rejection: string | undefined,
+): boolean {
+  return rejection === undefined && entry?.providerId === providerId;
+}
+
 /** Long enough for any stage to arrive, and short enough to be a backstop. */
 const CARET_FRAME_LIMIT = 60;
 

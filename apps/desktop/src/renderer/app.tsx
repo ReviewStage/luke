@@ -11,7 +11,7 @@ import { CREDENTIAL_SOURCE } from "../shared/contracts";
 import type { CredentialProviderId } from "../shared/credential-providers";
 import { CREDENTIAL_PROVIDER_LIST } from "../shared/credential-providers";
 import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";
-import { isSubmittable } from "./credential-entry";
+import { isSubmittable, removalEndsEntry } from "./credential-entry";
 import { KeySlot } from "./key-slot";
 import { NotchWings } from "./notch-wings";
 import { PanelBody } from "./panel-body";
@@ -431,11 +431,18 @@ export function App(): React.JSX.Element {
     });
   }, [applyEntry, restorePanel]);
 
-  const removeProviderApiKey = useCallback(async (providerId: CredentialProviderId) => {
-    const result = await window.sidecar.setProviderApiKey(providerId, undefined);
-    setSettings(result.settings);
-    return result.reason;
-  }, []);
+  const removeProviderApiKey = useCallback(
+    async (providerId: CredentialProviderId) => {
+      const result = await window.sidecar.setProviderApiKey(providerId, undefined);
+      setSettings(result.settings);
+      // Delete and the field are on the row together once the panel has been
+      // brought back around an entry, and a key that has been removed cannot be
+      // replaced.
+      if (removalEndsEntry(entryRef.current, providerId, result.reason)) applyEntry(undefined);
+      return result.reason;
+    },
+    [applyEntry],
+  );
 
   const credentials: CredentialEntryControl = {
     entry,
