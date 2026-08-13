@@ -7,8 +7,10 @@ import {
 } from "../src/renderer/luke-face-art";
 import {
   type FaceContext,
+  type FaceObservation,
   IDLE_ASIDES,
   nextAside,
+  noticedMotion,
   playedMotion,
   restingMotion,
 } from "../src/renderer/luke-face-mood";
@@ -17,7 +19,7 @@ function context(overrides: Partial<FaceContext> = {}): FaceContext {
   return {
     speaking: false,
     microphoneLive: false,
-    attention: 0,
+    attention: [],
     working: 0,
     complete: 0,
     total: 0,
@@ -25,8 +27,12 @@ function context(overrides: Partial<FaceContext> = {}): FaceContext {
   };
 }
 
+function observed(attention: readonly string[], counts: Partial<FaceObservation> = {}) {
+  return { attention: new Set(attention), complete: 0, total: attention.length, ...counts };
+}
+
 test("the microphone outranks the session list", () => {
-  const busy = { attention: 3, working: 2, total: 5 };
+  const busy = { attention: ["a", "b", "c"], working: 2, total: 5 };
   assert.equal(
     restingMotion(context({ ...busy, microphoneLive: true, speaking: true })),
     FACE_MOTION.TALKING,
@@ -36,9 +42,41 @@ test("the microphone outranks the session list", () => {
   assert.equal(restingMotion(context({ microphoneLive: true })), FACE_MOTION.LISTENING);
 });
 
-test("a session that needs a person outranks one that is working", () => {
-  assert.equal(restingMotion(context({ attention: 1, working: 4, total: 5 })), FACE_MOTION.WAITING);
+test("a session that needs a person does not hold the face for as long as it waits", () => {
+  // Anyone whose sessions are usually waiting on them would otherwise get a
+  // face that fidgets permanently, which is the count badge's sentence said
+  // twice and leaves nothing to notice when one more session starts asking.
+  assert.equal(
+    restingMotion(context({ attention: ["a"], working: 4, total: 5 })),
+    FACE_MOTION.MONITORING,
+  );
+  assert.equal(restingMotion(context({ attention: ["a"], total: 1 })), FACE_MOTION.IDLE);
   assert.equal(restingMotion(context({ working: 4, total: 4 })), FACE_MOTION.MONITORING);
+});
+
+test("the fidget answers a session that has just started asking", () => {
+  const asking = observed(["a"]);
+  assert.equal(noticedMotion(asking, observed(["a", "b"])), FACE_MOTION.WAITING);
+  // The same session still asking is not news, however long it goes on asking.
+  assert.equal(noticedMotion(asking, observed(["a"])), undefined);
+  // One answered as another starts leaves the count where it was, and is
+  // exactly the moment counting would have missed.
+  assert.equal(noticedMotion(asking, observed(["b"])), FACE_MOTION.WAITING);
+  // Answered and not replaced: the panel says so, and the face has no news.
+  assert.equal(noticedMotion(asking, observed([])), undefined);
+});
+
+test("a session that arrives already asking bounces rather than greeting itself", () => {
+  const empty = observed([], { total: 0 });
+  assert.equal(noticedMotion(empty, observed(["a"], { total: 1 })), FACE_MOTION.WAITING);
+});
+
+test("sessions arriving and finishing are still counted rather than named", () => {
+  const two = observed([], { total: 2 });
+  assert.equal(noticedMotion(two, observed([], { complete: 1, total: 2 })), FACE_MOTION.SUCCESS);
+  assert.equal(noticedMotion(two, observed([], { total: 3 })), FACE_MOTION.NOTIFICATION);
+  // Sessions leaving are not an event: nothing has asked for anyone.
+  assert.equal(noticedMotion(two, observed([], { total: 1 })), undefined);
 });
 
 test("nothing tracked is a different rest from nothing happening", () => {
@@ -55,9 +93,9 @@ test("an aside never repeats the one before it", () => {
   }
 });
 
-test("asides say nothing a rest is already saying", () => {
+test("asides say nothing a rest or a moment already says", () => {
   // An aside interrupts a rest, so one that carried meaning would overwrite it:
-  // Luke must not look like he is waiting on you because a timer fired.
+  // Luke must not look like a session just started asking because a timer fired.
   for (const aside of IDLE_ASIDES) {
     assert.ok(
       ![
@@ -75,13 +113,17 @@ test("asides say nothing a rest is already saying", () => {
 });
 
 test("a rest that needs the face takes it back from a gesture at once", () => {
-  // Scheduling asides only while the rest is restful is not enough: the rest can
-  // change under one that is already playing, and a gesture allowed to run out
-  // would announce a waiting session with a wink.
-  for (const gesture of [...IDLE_ASIDES, FACE_MOTION.SUCCESS, FACE_MOTION.NOTIFICATION]) {
-    assert.equal(playedMotion(FACE_MOTION.WAITING, gesture), FACE_MOTION.WAITING);
-    // The microphone is the one that matters most: the capsule reports an open
-    // microphone through the face's colour, and only these two motions carry it.
+  // Scheduling gestures only while the rest is restful is not enough: the rest
+  // can change under one that is already playing.
+  for (const gesture of [
+    ...IDLE_ASIDES,
+    FACE_MOTION.SUCCESS,
+    FACE_MOTION.NOTIFICATION,
+    FACE_MOTION.WAITING,
+  ]) {
+    // The microphone is what matters most: the capsule reports an open
+    // microphone through the face's colour, and only these two motions carry
+    // it, so not even a session asking for you may hold the face over one.
     assert.equal(playedMotion(FACE_MOTION.LISTENING, gesture), FACE_MOTION.LISTENING);
     assert.equal(playedMotion(FACE_MOTION.TALKING, gesture), FACE_MOTION.TALKING);
     // The calm rests can still spare it.

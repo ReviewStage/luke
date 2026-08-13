@@ -133,6 +133,14 @@ export interface ProviderTally {
 export interface SessionTally {
   total: number;
   attention: number;
+  /**
+   * The same sessions the count above counts, by id, because one of them
+   * starting to ask is a different event from three of them still asking and
+   * the count cannot tell those apart: answer one while another starts in the
+   * same poll and it never moves. Luke's face reacts to the event and the badge
+   * reports the count, so the tally has to carry both.
+   */
+  attentionIds: readonly string[];
   working: number;
   complete: number;
   idle: number;
@@ -320,10 +328,13 @@ export function arrangeSessions(
 export function sessionTally(sessions: readonly DisplaySession[]): SessionTally {
   const providers = new Map<string, ProviderTally>();
   const counts = { attention: 0, working: 0, complete: 0, idle: 0 };
+  const attentionIds: string[] = [];
 
   for (const session of sessions) {
-    if (session.state === SESSION_STATE.ATTENTION) counts.attention += 1;
-    else if (session.state === SESSION_STATE.WORKING) counts.working += 1;
+    if (session.state === SESSION_STATE.ATTENTION) {
+      counts.attention += 1;
+      attentionIds.push(session.id);
+    } else if (session.state === SESSION_STATE.WORKING) counts.working += 1;
     else if (session.state === SESSION_STATE.COMPLETE) counts.complete += 1;
     else counts.idle += 1;
 
@@ -342,6 +353,7 @@ export function sessionTally(sessions: readonly DisplaySession[]): SessionTally 
 
   return {
     ...counts,
+    attentionIds,
     total: sessions.length,
     state: dominantState(counts),
     providers: [...providers.values()],
