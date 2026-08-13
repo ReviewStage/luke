@@ -15,10 +15,12 @@ const ATTENTION_INSTRUCTION_LINES: readonly string[] = [
   "",
   "Rules:",
   "- Default to silence when the update is routine, ambiguous, or merely continues work already underway.",
-  `- A speaking summary is one short spoken sentence under ${maximumAttentionSummaryLength} characters that names the provider and the workspace.`,
+  `- A speaking summary is one short spoken sentence under ${maximumAttentionSummaryLength} characters. Say what the session needs, not merely that it changed.`,
+  "- Prefer the session's own recap and title over its status when deciding what to say; the status alone is rarely worth an interruption.",
+  "- An error means the session stopped and cannot restart itself. Say what stopped it.",
   "- Use null for the summary whenever the disposition is silent.",
-  "- Use only the fields in the update. You never receive transcripts, file contents, or command output, so never imply you read any.",
-  "- Never guess what the session is doing beyond the status it reports.",
+  "- Use only the fields in the update. You receive what a provider wrote about a session, never its transcript, file contents, or command output, so never imply you read any.",
+  "- Never guess what the session is doing beyond what the update reports.",
 ];
 
 function renderExample(example: AttentionTuningExample): string {
@@ -39,7 +41,11 @@ export function attentionUpdateInput(update: AttentionUpdate): string {
     `Trigger: ${update.trigger}`,
     `Previous status: ${update.previousStatus ?? NONE_LABEL}`,
     `Status: ${update.status}`,
-    `Observed summary: ${update.summary ?? NONE_LABEL}`,
+    `Repository: ${update.context?.repository ?? NONE_LABEL}`,
+    `Branch: ${update.context?.branch ?? NONE_LABEL}`,
+    `Running: ${update.context?.activity ?? NONE_LABEL}`,
+    `Error: ${update.context?.error ?? NONE_LABEL}`,
+    `Session recap: ${update.summary ?? NONE_LABEL}`,
   ].join("\n");
 }
 

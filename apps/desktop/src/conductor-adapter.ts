@@ -1,4 +1,5 @@
 import {
+  maximumSessionTitleLength,
   type ProviderSessionObservation,
   SESSION_STATUS,
   type SessionProvider,
@@ -52,9 +53,14 @@ const CONDUCTOR_FIELD = {
   CREATED_AT: "createdAt",
   CREATOR_ID: "creatorId",
   DATA: "data",
+  DEEP_LINK: "deepLink",
+  EFFORT: "effort",
+  ERROR_MESSAGE: "errorMessage",
+  FAST_MODE: "fastMode",
   GIT_REMOTE: "gitRemote",
   ID: "id",
   LAST_ACTIVITY_AT: "lastActivityAt",
+  LAST_ERROR: "lastError",
   MODEL: "model",
   NAME: "name",
   RESOLVED_MODEL: "resolvedModel",
@@ -75,13 +81,14 @@ type ConductorSessionStatus =
 /**
  * An idle Conductor session has finished its turn and is holding for the user,
  * which is what Luke reports as waiting. A session the provider reports as
- * errored is left unknown rather than promoted to a state Luke cannot verify.
+ * errored stopped on something the user has to deal with, and it carries the
+ * message that says what.
  */
 const SESSION_STATUS_BY_CONDUCTOR_STATUS: Readonly<Record<ConductorSessionStatus, SessionStatus>> =
   {
     [CONDUCTOR_SESSION_STATUS.IDLE]: SESSION_STATUS.WAITING,
     [CONDUCTOR_SESSION_STATUS.WORKING]: SESSION_STATUS.WORKING,
-    [CONDUCTOR_SESSION_STATUS.ERROR]: SESSION_STATUS.UNKNOWN,
+    [CONDUCTOR_SESSION_STATUS.ERROR]: SESSION_STATUS.ERROR,
   };
 
 const CONDUCTOR_ADAPTER_DEFAULTS = {
@@ -92,7 +99,14 @@ const CONDUCTOR_ADAPTER_DEFAULTS = {
   MAXIMUM_SESSIONS_PER_WORKSPACE: 4,
   MAXIMUM_OBSERVED_SESSIONS: 12,
   MAXIMUM_MODEL_LABEL_LENGTH: 60,
+  MAXIMUM_ERROR_LENGTH: 120,
 } as const;
+
+interface ConductorReportedStatus {
+  status: ConductorSessionStatus | undefined;
+  updatedAt: number | undefined;
+  errorMessage?: string;
+}
 
 export const CONDUCTOR_PROVIDER: SessionProvider = {
   id: CONDUCTOR_PROVIDER_ID,
@@ -111,6 +125,7 @@ interface ConductorProject {
 
 interface ConductorWorkspace {
   id: string;
+  name?: string;
   repositoryLabel: string;
   creatorId?: string;
   lastActivityAt: number;
@@ -118,10 +133,12 @@ interface ConductorWorkspace {
 
 interface ConductorSession {
   id: string;
+  name?: string;
   workspace: ConductorWorkspace;
   archived: boolean;
   archivedAt?: number;
   model?: string;
+  deepLink?: string;
 }
 
 /**
@@ -249,10 +266,15 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
           timestampFromRecord(record, CONDUCTOR_FIELD.CREATED_AT);
         if (!id || lastActivityAt === undefined) return undefined;
         const creatorId = textFromRecord(record, CONDUCTOR_FIELD.CREATOR_ID);
+        const name = textFromRecord(record, CONDUCTOR_FIELD.NAME)?.slice(
+          0,
+          maximumSessionTitleLength,
+        );
         return {
           id,
           repositoryLabel: project.repositoryLabel,
           lastActivityAt,
+          ...(name ? { name } : {}),
           ...(creatorId ? { creatorId } : {}),
         };
       })
@@ -279,16 +301,20 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
           const id = textFromRecord(record, CONDUCTOR_FIELD.ID);
           if (!id) return undefined;
           const archivedAt = timestampFromRecord(record, CONDUCTOR_FIELD.ARCHIVED_AT);
-          const model = (
-            textFromRecord(record, CONDUCTOR_FIELD.RESOLVED_MODEL) ??
-            textFromRecord(record, CONDUCTOR_FIELD.MODEL)
-          )?.slice(0, CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_MODEL_LABEL_LENGTH);
+          const model = modelLabel(record);
+          const name = textFromRecord(record, CONDUCTOR_FIELD.NAME)?.slice(
+            0,
+            maximumSessionTitleLength,
+          );
+          const deepLink = textFromRecord(record, CONDUCTOR_FIELD.DEEP_LINK);
           return {
             id,
             workspace,
             archived: textFromRecord(record, CONDUCTOR_FIELD.ARCHIVED_AT) !== undefined,
             ...(archivedAt === undefined ? {} : { archivedAt }),
+            ...(name ? { name } : {}),
             ...(model ? { model } : {}),
+            ...(deepLink ? { deepLink } : {}),
           };
         })
         .filter(isDefined)
@@ -333,10 +359,19 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     const status = this.#statusFor(session, reported?.status, observedAt, now);
     return {
       providerSessionId: session.id,
-      title: `${CONDUCTOR_PROVIDER_NAME}: ${session.workspace.repositoryLabel}`,
+      // A workspace holds several chats and a project holds several workspaces,
+      // so labelling by the project's repository gave every session in a repo
+      // the same row. The session's own name is what separates them.
+      title: session.name ?? session.workspace.name ?? session.workspace.repositoryLabel,
       status,
       observedAt,
-      summary: summaryFromStatus(status, session.model),
+      detail: {
+        repository: session.workspace.repositoryLabel,
+        ...(session.workspace.name ? { branch: session.workspace.name } : {}),
+        ...(session.model ? { model: session.model } : {}),
+        ...(reported?.errorMessage ? { error: reported.errorMessage } : {}),
+        ...(session.deepLink ? { link: session.deepLink } : {}),
+      },
     };
   }
 
@@ -351,6 +386,10 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     // Conductor reports live state, and its timestamp marks when that state was
     // entered rather than a heartbeat, so a long turn is still working.
     if (reportedStatus === CONDUCTOR_SESSION_STATUS.WORKING) return SESSION_STATUS.WORKING;
+    // A failure does not heal by going stale, so only an idle session decays:
+    // once it is stale Luke cannot tell a turn that just ended from a chat the
+    // user walked away from hours ago.
+    if (reportedStatus === CONDUCTOR_SESSION_STATUS.ERROR) return SESSION_STATUS.ERROR;
     return this.statusWhileRecent(
       SESSION_STATUS_BY_CONDUCTOR_STATUS[reportedStatus],
       observedAt,
@@ -358,24 +397,46 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     );
   }
 
-  async #sessionStatus(
-    request: CloudRequest,
-    sessionId: string,
-  ): Promise<{ status: ConductorSessionStatus | undefined; updatedAt: number | undefined }> {
+  async #sessionStatus(request: CloudRequest, sessionId: string): Promise<ConductorReportedStatus> {
     const body = await request([
       CONDUCTOR_ROUTE_SEGMENT.V0,
       CONDUCTOR_ROUTE_SEGMENT.SESSIONS,
       sessionId,
       CONDUCTOR_ROUTE_SEGMENT.STATUS,
     ]);
+    // A session that failed says why, and dropping that left the panel showing
+    // a failed chat as though nothing had happened to it. `lastError` is the
+    // last failure this session ever had rather than its current state, so both
+    // are read only while the session is actually reporting an error: otherwise
+    // a chat that recovered hours ago would keep showing the failure it
+    // recovered from, ahead of whatever it is really doing.
+    const status = knownValue(
+      CONDUCTOR_SESSION_STATUS,
+      textFromRecord(body, CONDUCTOR_FIELD.STATUS),
+    );
+    const errorMessage =
+      status === CONDUCTOR_SESSION_STATUS.ERROR
+        ? (
+            textFromRecord(body, CONDUCTOR_FIELD.ERROR_MESSAGE) ??
+            textFromRecord(body, CONDUCTOR_FIELD.LAST_ERROR)
+          )?.slice(0, CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_ERROR_LENGTH)
+        : undefined;
     return {
-      status: knownValue(CONDUCTOR_SESSION_STATUS, textFromRecord(body, CONDUCTOR_FIELD.STATUS)),
+      status,
       updatedAt: timestampFromRecord(body, CONDUCTOR_FIELD.UPDATED_AT),
+      ...(errorMessage ? { errorMessage } : {}),
     };
   }
 }
 
-function summaryFromStatus(status: SessionStatus, model: string | undefined): string {
-  const modelDetail = model ? ` on ${model}` : "";
-  return `${CONDUCTOR_PROVIDER_NAME} ${status}${modelDetail}; cloud session metadata is observed read-only and transcript content is not retained.`;
+/** Conductor reports the model it resolved as well as the one that was asked for. */
+function modelLabel(record: Record<string, unknown>): string | undefined {
+  const model = (
+    textFromRecord(record, CONDUCTOR_FIELD.RESOLVED_MODEL) ??
+    textFromRecord(record, CONDUCTOR_FIELD.MODEL)
+  )?.slice(0, CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_MODEL_LABEL_LENGTH);
+  if (!model) return undefined;
+  const effort = textFromRecord(record, CONDUCTOR_FIELD.EFFORT);
+  const fast = record[CONDUCTOR_FIELD.FAST_MODE] === true ? "fast" : undefined;
+  return [model, effort, fast].filter(isDefined).join(" · ");
 }
