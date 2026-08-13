@@ -274,7 +274,12 @@ test("a proactive update is spoken once the call is open", async () => {
 
   await context.session.connect();
   assert.equal(context.session.speak(speech), true);
-  assert.equal(context.sent[0]?.type, REALTIME_CLIENT_EVENT.RESPONSE_CREATE);
+  // The sentence is handed over as a message and the reply asked for after it,
+  // so the request cannot arrive before the words it is meant to read.
+  assert.deepEqual(
+    context.sent.map((event) => event.type),
+    [REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE, REALTIME_CLIENT_EVENT.RESPONSE_CREATE],
+  );
 });
 
 test("a reply is not over when the model stops producing it", async () => {
