@@ -526,9 +526,17 @@ html[data-keyboard="true"] button.session-row:focus-visible {
   background: color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
-html[data-keyboard="true"] button.row-main:focus-visible {
+/* The ring wraps the row, not the half of it the button covers: what pressing
+   opens is the session, and the ring has to trace the thing the press means.
+   The button still holds the focus — it is what the keyboard activates — and
+   the row draws for it, the same seam the hover lift answers through. */
+html[data-keyboard="true"] .session-row[data-actions]:has(> button.row-main:focus-visible) {
   outline: 2px solid var(--accent);
   outline-offset: -3px;
+}
+
+html[data-keyboard="true"] button.row-main:focus-visible {
+  outline: none;
 }
 
 /* What a provider promised for this session: a composer that is simply there,
