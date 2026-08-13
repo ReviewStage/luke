@@ -9,6 +9,7 @@ export const PROVIDER_ID = {
   CLAUDE_CODE: "claude-code",
   CODEX: "codex",
   CONDUCTOR: "conductor",
+  COPILOT: "copilot",
   CURSOR: "cursor",
   DEVIN: "devin",
   JULES: "jules",

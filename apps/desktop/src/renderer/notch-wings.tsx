@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { CAPSULE_SIDE_WIDTH, PANEL_WIDTH, PEEK_SIDE_GROWTH } from "@sidecar/core";
+import { useEffect, useState } from "react";
 import { LukeFace } from "./luke-face";
 import { useFaceMotion, usePrefersReducedMotion } from "./luke-face-mood";
+import { PANEL_PRESENTATION, type PanelPresentation } from "./panel-state";
 import { ProviderMark } from "./provider-marks";
 import { type SessionTally, tallyCaption, tallySummary } from "./session-model";
 import { Waveform } from "./waveform";
@@ -16,22 +18,51 @@ interface NotchWingsProps {
   analyser?: AnalyserNode;
   fixtureSpeaking: boolean;
   hasAudioSignal: boolean;
-  providerLimit?: number;
+  presentation: PanelPresentation;
+  housingWidth: number;
 }
 
 /**
- * Four marks are what the peek holds once the face has taken the place nearest
- * the housing: the face and its gap cost 26px of the 106px between the wing's
- * insets, and each mark past the first costs 21px of the 80px that remain.
+ * What one wing costs to fill, in the stylesheet's numbers: `--wing-inset` on
+ * both sides, then the face and its gap, then a first mark and a gap-and-mark
+ * for every mark after it.
  */
-const DEFAULT_PROVIDER_LIMIT = 4;
+const WING_INSETS = 18;
+const FACE_AND_GAP = 26;
+const MARK_WIDTH = 14;
+const MARK_AND_GAP = 21;
+
+/**
+ * How many marks fit beside the face in a wing of this width. The peek's side
+ * is fixed at 124px whatever the housing measures, which is where the old
+ * limit of four came from: the face and its gap cost 26px of the 106px between
+ * the wing's insets, and each mark past the first costs 21px of the 80px that
+ * remain. The panel's side is what is left of `--panel-width` after the
+ * housing, so it holds roughly twice as many.
+ */
+export function wingMarkCapacity(sideWidth: number): number {
+  const beyondFirst = Math.floor(
+    (sideWidth - WING_INSETS - FACE_AND_GAP - MARK_WIDTH) / MARK_AND_GAP,
+  );
+  return Math.max(1, 1 + beyondFirst);
+}
+
+const PEEK_SIDE_WIDTH = CAPSULE_SIDE_WIDTH + PEEK_SIDE_GROWTH;
+
+/**
+ * `--duration-exit`: the fade the marks leave on. A capacity that shrinks —
+ * the panel closing back past the peek — must not unmount marks that are
+ * mid-fade, so the smaller set is drawn only once the fade has finished.
+ */
+const MARK_EXIT_MS = 90;
 
 export function NotchWings({
   tally,
   analyser,
   fixtureSpeaking,
   hasAudioSignal,
-  providerLimit = DEFAULT_PROVIDER_LIMIT,
+  presentation,
+  housingWidth,
 }: NotchWingsProps): React.JSX.Element {
   const [voiceActive, setVoiceActive] = useState(false);
   // Guarded rather than reset: a microphone that has been closed cannot still be
@@ -49,12 +80,30 @@ export function NotchWings({
     usePrefersReducedMotion(),
   );
 
+  // The wing is bounded by the shape its state draws, so its capacity is too:
+  // the panel's side holds more marks than the peek's, and every other state
+  // keeps the peek's capacity because that is the set the next peek unfolds.
+  const capacity =
+    presentation === PANEL_PRESENTATION.PANEL
+      ? wingMarkCapacity((PANEL_WIDTH - housingWidth) / 2)
+      : wingMarkCapacity(PEEK_SIDE_WIDTH);
+  const [drawnCapacity, setDrawnCapacity] = useState(capacity);
+  // Growing applies in the same render, so the new marks are already mounted
+  // when the presentation flips and unfold with everything else. Shrinking
+  // waits out the exit fade below.
+  if (capacity > drawnCapacity) setDrawnCapacity(capacity);
+  useEffect(() => {
+    if (capacity >= drawnCapacity) return;
+    const timer = window.setTimeout(() => setDrawnCapacity(capacity), MARK_EXIT_MS);
+    return () => window.clearTimeout(timer);
+  }, [capacity, drawnCapacity]);
+
   // The marks are a summary, and a summary that hides its own remainder reads as
   // a complete list, so whatever does not fit is counted rather than dropped.
   // The count is a slot like any other, so it takes the last one rather than
   // being added past the edge of the peek.
-  const overflowing = tally.providers.length > providerLimit;
-  const providers = tally.providers.slice(0, overflowing ? providerLimit - 1 : providerLimit);
+  const overflowing = tally.providers.length > drawnCapacity;
+  const providers = tally.providers.slice(0, overflowing ? drawnCapacity - 1 : drawnCapacity);
   const unshown = tally.providers.length - providers.length;
 
   return (

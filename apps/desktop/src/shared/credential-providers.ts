@@ -9,6 +9,7 @@ import { PROVIDER_ID } from "@sidecar/core";
  */
 export const CREDENTIAL_PROVIDER_ID = {
   CONDUCTOR: PROVIDER_ID.CONDUCTOR,
+  COPILOT: PROVIDER_ID.COPILOT,
   CURSOR: PROVIDER_ID.CURSOR,
   DEVIN: PROVIDER_ID.DEVIN,
   JULES: PROVIDER_ID.JULES,
@@ -24,6 +25,10 @@ export type CredentialProviderId =
 const CONDUCTOR_ENVIRONMENT = {
   API_KEY: "CONDUCTOR_API_KEY",
   API_TOKEN: "CONDUCTOR_API_TOKEN",
+} as const;
+
+const COPILOT_ENVIRONMENT = {
+  API_KEY: "COPILOT_API_KEY",
 } as const;
 
 const CURSOR_ENVIRONMENT = {
@@ -81,6 +86,20 @@ export const CREDENTIAL_PROVIDERS: Readonly<Record<CredentialProviderId, Credent
     hint: "Create a key in Conductor under Settings · API keys.",
     apiKeysUrl: "https://app.conductor.build/users/api-keys",
     environmentVariables: [CONDUCTOR_ENVIRONMENT.API_KEY, CONDUCTOR_ENVIRONMENT.API_TOKEN],
+  },
+  [CREDENTIAL_PROVIDER_ID.COPILOT]: {
+    id: CREDENTIAL_PROVIDER_ID.COPILOT,
+    displayName: "Copilot",
+    // GitHub's agent-tasks endpoints answer only user tokens. The copy names
+    // the kind to create because the wrong kinds also come from GitHub: a
+    // classic PAT cannot carry the Agent tasks permission, and an installation
+    // token is refused by the endpoint itself.
+    hint: "Create a GitHub fine-grained personal access token with Agent tasks read access. Classic and installation tokens will not work.",
+    apiKeysUrl: "https://github.com/settings/personal-access-tokens/new",
+    environmentVariables: [COPILOT_ENVIRONMENT.API_KEY],
+    // No key format: Luke accepts two kinds GitHub issues — fine-grained
+    // personal access tokens (`github_pat_…`) and GitHub App user tokens
+    // (`ghu_…`) — so a single prefix would refuse a working credential.
   },
   [CREDENTIAL_PROVIDER_ID.CURSOR]: {
     id: CREDENTIAL_PROVIDER_ID.CURSOR,
