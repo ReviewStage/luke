@@ -4,25 +4,35 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { DMG_WINDOW } from "../../../design/dmg-window.mjs";
 import { packagedAppExecutable } from "./package-layout.mjs";
 import {
   codesignDisplayArguments,
+  DMG_MOUNT_POINT,
   DMG_STAGING_ENTRIES,
   dmgCodesignArguments,
+  dmgStoreLayout,
   dmgVerificationCommands,
+  hdiutilAttachArguments,
+  hdiutilConvertArguments,
   hdiutilCreateArguments,
+  hdiutilDetachArguments,
   notaryLogArguments,
   notarySubmitArguments,
+  parseHdiutilAttachPlist,
   releaseArtifactDirectory,
   releaseDmgFileName,
   releaseSignatureMatchesIdentity,
   resolveReleaseSigning,
   stapleArguments,
+  tiffutilHiDpiArguments,
 } from "./release-config.mjs";
 
 if (process.platform !== "darwin") {
   throw new Error("Releasing Luke requires macOS");
 }
+
+const { default: DSStore } = await import("ds-store");
 
 const unknownArguments = process.argv
   .slice(2)
@@ -82,11 +92,43 @@ if (
 const artifactDirectory = releaseArtifactDirectory(repoRoot);
 const dmgPath = path.join(artifactDirectory, releaseDmgFileName(desktopPackage.version));
 const stagingDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "luke-dmg-"));
+const dmgBackgroundDirectory = path.join(repoRoot, "design", "brand", "dmg");
 
 function runVerificationCommands(commands) {
   for (const { command, arguments: commandArguments } of commands) {
     execFileSync(command, commandArguments, { stdio: "inherit" });
   }
+}
+
+function sleep(milliseconds) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
+
+function detachMountedImage(mountPoint) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      execFileSync("hdiutil", hdiutilDetachArguments(mountPoint), { stdio: "inherit" });
+      return;
+    } catch {
+      sleep(1_000);
+    }
+  }
+  execFileSync("hdiutil", hdiutilDetachArguments(mountPoint, { force: true }), {
+    stdio: "inherit",
+  });
+}
+
+function writeDmgStore(storePath, layout) {
+  const store = new DSStore();
+  store.vSrn(layout.version);
+  store.setIconSize(layout.iconSize);
+  store.setBackgroundPath(layout.backgroundPath);
+  store.setWindowPos(layout.window.x, layout.window.y);
+  store.setWindowSize(layout.window.width, layout.window.height);
+  for (const icon of layout.icons) store.setIconPos(icon.name, icon.X, icon.Y);
+  return new Promise((resolve, reject) => {
+    store.write(storePath, (error) => (error ? reject(error) : resolve()));
+  });
 }
 
 try {
@@ -99,11 +141,56 @@ try {
     }
   }
 
+  const stagingBackgroundDirectory = path.join(stagingDirectory, DMG_WINDOW.BACKGROUND.DIRECTORY);
+  fs.mkdirSync(stagingBackgroundDirectory);
+  execFileSync(
+    "tiffutil",
+    tiffutilHiDpiArguments({
+      pngPath: path.join(dmgBackgroundDirectory, "luke-dmg-background.png"),
+      png2xPath: path.join(dmgBackgroundDirectory, "luke-dmg-background@2x.png"),
+      tiffPath: path.join(stagingBackgroundDirectory, DMG_WINDOW.BACKGROUND.FILE_NAME),
+    }),
+    { stdio: "inherit" },
+  );
+
   fs.mkdirSync(artifactDirectory, { recursive: true });
   fs.rmSync(dmgPath, { force: true });
-  execFileSync("hdiutil", hdiutilCreateArguments({ stagingDirectory, dmgPath }), {
-    stdio: "inherit",
-  });
+  const imageDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "luke-dmg-image-"));
+  try {
+    const imagePath = path.join(imageDirectory, "Luke-rw.dmg");
+    execFileSync("hdiutil", hdiutilCreateArguments({ stagingDirectory, imagePath }), {
+      stdio: "inherit",
+    });
+
+    if (fs.existsSync(DMG_MOUNT_POINT)) {
+      throw new Error(`${DMG_MOUNT_POINT} is already mounted. Eject it and re-run.`);
+    }
+
+    const attachOutput = execFileSync("hdiutil", hdiutilAttachArguments(imagePath), {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "inherit"],
+    });
+    const { mountPoint } = parseHdiutilAttachPlist(attachOutput);
+    try {
+      if (mountPoint !== DMG_MOUNT_POINT) {
+        throw new Error(
+          `Expected the DMG at ${DMG_MOUNT_POINT}, but hdiutil mounted ${mountPoint}`,
+        );
+      }
+      const storePath = path.join(mountPoint, ".DS_Store");
+      fs.rmSync(storePath, { force: true });
+      await writeDmgStore(storePath, dmgStoreLayout(mountPoint));
+      execFileSync("sync", [], { stdio: "inherit" });
+    } finally {
+      detachMountedImage(mountPoint);
+    }
+
+    execFileSync("hdiutil", hdiutilConvertArguments({ imagePath, dmgPath }), {
+      stdio: "inherit",
+    });
+  } finally {
+    fs.rmSync(imageDirectory, { recursive: true, force: true });
+  }
   execFileSync("codesign", dmgCodesignArguments(signing.identity, dmgPath), { stdio: "inherit" });
 
   const verificationCommands = dmgVerificationCommands(dmgPath);
