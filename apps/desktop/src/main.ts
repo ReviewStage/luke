@@ -48,6 +48,8 @@ import {
   isCredentialProviderId,
 } from "./shared/credential-providers";
 
+app.name = "Luke";
+
 const captureOutput = argumentValue("--capture-evidence");
 const profile = argumentValue("--profile") ?? "idle";
 const fixtureName = argumentValue("--fixture");
