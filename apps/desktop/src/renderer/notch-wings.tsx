@@ -1,7 +1,12 @@
 import { CAPSULE_SIDE_WIDTH, PANEL_WIDTH, PEEK_SIDE_GROWTH } from "@sidecar/core";
 import { useCallback, useEffect, useState } from "react";
 import { LukeFace } from "./luke-face";
-import { speechFaceInputs, useFaceMotion, usePrefersReducedMotion } from "./luke-face-mood";
+import {
+  faceYieldsToMeter,
+  speechFaceInputs,
+  useFaceMotion,
+  usePrefersReducedMotion,
+} from "./luke-face-mood";
 import { PANEL_PRESENTATION, type PanelPresentation } from "./panel-state";
 import { ProviderMark } from "./provider-marks";
 import { type SessionTally, tallyCaption, tallySummary } from "./session-model";
@@ -77,6 +82,9 @@ export function NotchWings({
     },
     [onVoiceActivity],
   );
+  // While the developer holds the turn the meter takes the face's place, which
+  // is the only place the capsule has.
+  const yieldToMeter = faceYieldsToMeter({ ...(voice ? { turn: voice } : {}), hasAudioSignal });
   const face = useFaceMotion(
     {
       ...speechFaceInputs({
@@ -126,7 +134,7 @@ export function NotchWings({
             keeps: the rest unfold outward and never displace it. */}
         <div className="wing-inner">
           {hasAudioSignal ? (
-            <span className="wing-meter">
+            <span className="wing-meter" data-standing-in={String(yieldToMeter)}>
               <Waveform
                 analyser={analyser}
                 speaking={fixtureSpeaking}
@@ -145,13 +153,16 @@ export function NotchWings({
               {unshown > 0 ? <span className="wing-more">+{unshown}</span> : null}
             </span>
           )}
-          {/* Luke himself, and the only thing in either wing that is drawn in
-              every state. Everything else is what he is watching.
+          {/* Luke himself. He is drawn in every state but one: he steps out of
+              the way of your own voice, which is the only thing that displaces
+              him. Everything else in the wing is what he is watching.
 
               Keyed on the play so that each one is a new drawing: a motion plays
               once now, and an element already wearing an animation does not
               replay it on being handed the same one. */}
-          <LukeFace key={face.play} motion={face.motion} repeat={face.repeat} />
+          {yieldToMeter ? null : (
+            <LukeFace key={face.play} motion={face.motion} repeat={face.repeat} />
+          )}
         </div>
       </div>
 

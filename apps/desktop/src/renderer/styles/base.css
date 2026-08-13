@@ -605,6 +605,15 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   }
 }
 
+/* A meter standing in for the face does not wait for the wing to unfold. It is
+   holding the face's place, and the face never waited: in the capsule it is the
+   one thing drawn, so a meter that faded in with the marks would leave the
+   capsule empty for the length of the turn's first word. */
+.wing-meter[data-standing-in="true"] {
+  opacity: 1;
+  transform: none;
+}
+
 /* More providers than the wing can hold. Counted rather than dropped, at the
    far end of the row, where it reads as the remainder of a list. */
 .wing-more {

@@ -54,6 +54,22 @@ export function speechFaceInputs(input: {
 }
 
 /**
+ * Whether Luke stands aside and lets the meter have his place.
+ *
+ * While you hold the turn, the one thing worth showing is that you are being
+ * heard. The capsule has room for exactly one of them, and a face listening is
+ * a weaker way of saying it than bars moving to your own voice — so for that
+ * stretch the meter is drawn where the face was, and the face returns the
+ * moment the turn does.
+ *
+ * Guarded on the meter existing: hiding one and drawing neither would leave the
+ * capsule saying nothing at all, which is worse than either.
+ */
+export function faceYieldsToMeter(input: { turn?: SpeechTurn; hasAudioSignal: boolean }): boolean {
+  return input.turn === SPEECH_TURN.DEVELOPER && input.hasAudioSignal;
+}
+
+/**
  * What Luke settles into, which is usually nothing whatever. A rest repeats for
  * as long as it is true, so the only motions allowed to be one are the three
  * that stay true while they hold: speech going into an open microphone, the

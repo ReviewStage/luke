@@ -11,6 +11,7 @@ import {
   type FaceContext,
   type FaceObservation,
   facePlay,
+  faceYieldsToMeter,
   noticedMotion,
   playedMotion,
   restingMotion,
@@ -259,4 +260,18 @@ test("a turn drives the resting motion the face plays", () => {
     }),
     FACE_MOTION.LISTENING,
   );
+});
+
+test("Luke steps aside only for your own voice, and only for a meter", () => {
+  assert.equal(
+    faceYieldsToMeter({ turn: SPEECH_TURN.DEVELOPER, hasAudioSignal: true }),
+    true,
+    "your turn is the one thing that displaces him",
+  );
+  // His own reply is his to show: the talking face is what says he is answering.
+  assert.equal(faceYieldsToMeter({ turn: SPEECH_TURN.LUKE, hasAudioSignal: true }), false);
+  assert.equal(faceYieldsToMeter({ hasAudioSignal: true }), false);
+  // Standing aside for nothing would leave the capsule blank for the length of
+  // a turn, which says less than either of them alone.
+  assert.equal(faceYieldsToMeter({ turn: SPEECH_TURN.DEVELOPER, hasAudioSignal: false }), false);
 });
