@@ -7,6 +7,19 @@ export const SESSION_STATUS = {
 
 export type SessionStatus = (typeof SESSION_STATUS)[keyof typeof SESSION_STATUS];
 
+/**
+ * Where a session's work is actually running. It is not the provider: the same
+ * provider can hold a session on this machine and one in a datacentre, and only
+ * the session knows which it is. Local is the default, so a session is only
+ * reported as remote by an adapter that observed it over the network.
+ */
+export const SESSION_LOCATION = {
+  LOCAL: "local",
+  CLOUD: "cloud",
+} as const;
+
+export type SessionLocation = (typeof SESSION_LOCATION)[keyof typeof SESSION_LOCATION];
+
 export const ATTENTION_DISPOSITION = {
   SILENT: "silent",
   SPEAK_DURING_TURN: "speak-during-turn",
@@ -54,6 +67,8 @@ export interface ProviderSessionObservation {
   title: string;
   status: SessionStatus;
   observedAt: number;
+  /** Omitted by an adapter that reads sessions off this machine. */
+  location?: SessionLocation;
   summary?: string;
   controls?: readonly SessionControl[];
 }
@@ -67,6 +82,7 @@ export interface NormalizedSession extends SessionIdentity {
   title: string;
   status: SessionStatus;
   observedAt: number;
+  location: SessionLocation;
   summary?: string;
   controls: readonly SessionControl[];
   attention: AttentionDecision;
@@ -99,6 +115,14 @@ function normalizeStatus(status: SessionStatus): SessionStatus {
     throw new Error(`Unknown session status: ${status}`);
   }
   return status;
+}
+
+function normalizeLocation(location: SessionLocation | undefined): SessionLocation {
+  if (location === undefined) return SESSION_LOCATION.LOCAL;
+  if (!Object.values(SESSION_LOCATION).includes(location)) {
+    throw new Error(`Unknown session location: ${location}`);
+  }
+  return location;
 }
 
 function normalizeControls(
@@ -174,6 +198,7 @@ export function normalizeSession(
     title: boundedText(observation.title, maximumSessionTitleLength) ?? "Untitled session",
     status: normalizeStatus(observation.status),
     observedAt,
+    location: normalizeLocation(observation.location),
     ...(summary ? { summary } : {}),
     controls: normalizeControls(observation.controls),
     attention: normalizeAttention(attention),

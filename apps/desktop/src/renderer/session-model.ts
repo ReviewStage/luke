@@ -3,6 +3,7 @@ import {
   type NormalizedSession,
   SESSION_STATE,
   SESSION_STATUS,
+  type SessionLocation,
   type SessionState,
 } from "@sidecar/core";
 import type { AppBootstrap } from "../shared/contracts";
@@ -37,6 +38,7 @@ export interface DisplaySession {
   detail: string;
   state: SessionState;
   label: string;
+  location: SessionLocation;
 }
 
 export interface ProviderTally {
@@ -88,6 +90,7 @@ export function displaySessions(
         detail: session.summary ?? STATUS_LABEL[session.status],
         state: sessionState(session),
         label: STATE_LABEL[sessionState(session)],
+        location: session.location,
       }));
 
   return [...visible].sort(

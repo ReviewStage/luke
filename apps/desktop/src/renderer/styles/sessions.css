@@ -56,6 +56,7 @@
 /* Neutral tile: the mark inside carries the provider's own colour, so tinting
    the tile by state would put two colour systems on top of each other. */
 .row-avatar {
+  position: relative;
   display: grid;
   width: 32px;
   height: 32px;
@@ -69,6 +70,31 @@
 .row-avatar .provider-mark {
   width: 17px;
   height: 17px;
+}
+
+/* The session runs somewhere the user cannot see. The badge overhangs the tile
+   rather than sitting inside it, so it reads as attached to the mark instead of
+   crowding it, and it is taken out of flow so the mark stays centred in the
+   tile whether or not a session carries one. It fills against the surface, not
+   the row: the attention row is tinted, and a badge that changed colour with
+   the row would read as state rather than as where the work runs. */
+.row-cloud {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  display: grid;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--surface-fill);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  color: var(--text-secondary);
+  place-items: center;
+}
+
+.row-cloud svg {
+  width: 9px;
+  height: 6.3px;
 }
 
 .row-copy {

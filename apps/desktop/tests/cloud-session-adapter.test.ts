@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { type ProviderSessionObservation, SESSION_STATUS } from "@sidecar/core";
+import { type ProviderSessionObservation, SESSION_LOCATION, SESSION_STATUS } from "@sidecar/core";
 import {
   type CloudAdapterOptions,
   type CloudFetch,
@@ -137,6 +137,21 @@ test("authenticates a bounded read and encodes the route a subclass asked for", 
       accept: "application/json",
     },
   ]);
+});
+
+test("reports every session it serves as running in the cloud", async () => {
+  const stub = stubFetch();
+  const adapter = adapterFor(stub.fetch);
+  // Neither observation says where it runs: the base knows, because nothing
+  // reaches it except over the network.
+  adapter.collected = [observation("session-one"), observation("session-two")];
+
+  const observations = await adapter.observe();
+
+  assert.deepEqual(
+    observations.map((candidate) => candidate.location),
+    [SESSION_LOCATION.CLOUD, SESSION_LOCATION.CLOUD],
+  );
 });
 
 test("drops a session a subclass reported twice in one pass", async () => {

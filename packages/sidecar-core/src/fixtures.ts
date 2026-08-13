@@ -1,4 +1,5 @@
 import { PROVIDER_ID, type ProviderId } from "./providers";
+import { SESSION_LOCATION, type SessionLocation } from "./session";
 
 export const SESSION_STATE = {
   WORKING: "working",
@@ -17,6 +18,7 @@ export interface SessionSnapshot {
   provider: string;
   detail: string;
   state: SessionState;
+  location: SessionLocation;
 }
 
 export interface FixtureSnapshot {
@@ -34,6 +36,7 @@ const smokeFixture: FixtureSnapshot = {
       provider: "Codex",
       detail: "Testing Electron window semantics",
       state: SESSION_STATE.WORKING,
+      location: SESSION_LOCATION.LOCAL,
     },
     {
       id: "claude-review",
@@ -42,6 +45,7 @@ const smokeFixture: FixtureSnapshot = {
       provider: "Claude Code",
       detail: "One architecture decision is ready",
       state: SESSION_STATE.ATTENTION,
+      location: SESSION_LOCATION.LOCAL,
     },
     {
       id: "conductor-workspace",
@@ -50,6 +54,7 @@ const smokeFixture: FixtureSnapshot = {
       provider: "Conductor",
       detail: "Cloud session metadata only · no live credentials",
       state: SESSION_STATE.COMPLETE,
+      location: SESSION_LOCATION.CLOUD,
     },
     {
       id: "cursor-agent",
@@ -58,6 +63,7 @@ const smokeFixture: FixtureSnapshot = {
       provider: "Cursor",
       detail: "Cloud session metadata only · no live credentials",
       state: SESSION_STATE.WORKING,
+      location: SESSION_LOCATION.CLOUD,
     },
     // A fifth session keeps every state and every provider mark visible in the
     // one screenshot the visual evidence is reviewed from.
@@ -68,6 +74,7 @@ const smokeFixture: FixtureSnapshot = {
       provider: "Claude Code",
       detail: "Idle since the last display change",
       state: SESSION_STATE.UNKNOWN,
+      location: SESSION_LOCATION.LOCAL,
     },
   ],
 };

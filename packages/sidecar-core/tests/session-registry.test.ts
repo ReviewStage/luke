@@ -5,7 +5,9 @@ import {
   InMemorySessionRegistry,
   maximumSessionSummaryLength,
   type ProviderSessionObservation,
+  SESSION_LOCATION,
   SESSION_STATUS,
+  type SessionLocation,
   type SessionProvider,
   supportsSessionControl,
 } from "../src";
@@ -58,6 +60,32 @@ test("normalizes provider observations without conflating provider-local identit
   assert.equal(supportsSessionControl(session, TEST_CONTROL.OPEN), true);
   assert.equal(supportsSessionControl(session, TEST_CONTROL.INTERRUPT), false);
   assert.equal(registry.list().length, 2);
+});
+
+test("a session runs on this machine unless its provider observed it elsewhere", () => {
+  const registry = new InMemorySessionRegistry();
+  const local = registry.upsert(codex, observation("local", 100));
+  const remote = registry.upsert(
+    codex,
+    observation("remote", 100, { location: SESSION_LOCATION.CLOUD }),
+  );
+
+  assert.equal(local.location, SESSION_LOCATION.LOCAL);
+  assert.equal(remote.location, SESSION_LOCATION.CLOUD);
+  // Where a session runs is the only thing that changed here, so a registry
+  // that did not compare it would leave the panel showing the old row.
+  const revision = registry.revision;
+  registry.upsert(codex, observation("local", 100, { location: SESSION_LOCATION.CLOUD }));
+  assert.equal(registry.revision, revision + 1);
+  // A location a later build adds is rejected rather than shown as local.
+  assert.throws(
+    () =>
+      registry.upsert(
+        codex,
+        observation("elsewhere", 100, { location: "orbit" as SessionLocation }),
+      ),
+    /Unknown session location: orbit/,
+  );
 });
 
 test("refresh atomically replaces one adapter's sessions and preserves attention decisions", async () => {
