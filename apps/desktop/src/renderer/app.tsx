@@ -366,19 +366,13 @@ export function App(): React.JSX.Element {
   );
 
   /**
-   * Brings the panel back around whatever has just happened, and lets it go
-   * again if nobody is holding it: the pointer is usually still on the control
-   * that was pressed, and where it is not, nothing else would ever ask this
-   * panel to close.
+   * Brings the panel back around the line the entry belongs to, and leaves it
+   * open the way every other way of opening it does — the pointer closes it by
+   * visiting and leaving.
    */
   const restorePanel = useCallback(() => {
     changeTab(PANEL_TAB.SETTINGS);
     void changeMode(true);
-    if (pointerInside.current) return;
-    hoverTimer.current = window.setTimeout(() => {
-      hoverTimer.current = undefined;
-      if (presentationRef.current === PANEL_PRESENTATION.PANEL) void changeMode(false);
-    }, SETTLE_DELAY_MS);
   }, [changeMode, changeTab]);
 
   /**
@@ -464,9 +458,21 @@ export function App(): React.JSX.Element {
       // Saved from the slot: the whole panel comes back around the provider
       // that is now connected, because the check appearing beside its name is
       // the answer to what was just done.
-      if (presentationRef.current === PANEL_PRESENTATION.SLOT) restorePanel();
+      if (presentationRef.current !== PANEL_PRESENTATION.SLOT) return;
+      restorePanel();
+      // An answer is worth reading and then done with. The pointer is usually
+      // still on the button that was pressed, and where it is not — the key was
+      // sent from the keyboard, or the shape shrank out from under it — nothing
+      // else would ever ask this panel to close, so it shows the answer and then
+      // takes its leave. Nothing else restores the panel this way: giving up has
+      // no answer to show.
+      if (pointerInside.current) return;
+      hoverTimer.current = window.setTimeout(() => {
+        hoverTimer.current = undefined;
+        if (presentationRef.current === PANEL_PRESENTATION.PANEL) void changeMode(false);
+      }, SETTLE_DELAY_MS);
     });
-  }, [applyEntry, restorePanel]);
+  }, [applyEntry, changeMode, restorePanel]);
 
   const removeProviderApiKey = useCallback(
     async (providerId: CredentialProviderId) => {
