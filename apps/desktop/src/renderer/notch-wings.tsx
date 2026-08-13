@@ -41,7 +41,7 @@ export function NotchWings({
     {
       speaking,
       microphoneLive: hasAudioSignal,
-      attention: tally.attention,
+      attention: tally.attentionIds,
       working: tally.working,
       complete: tally.complete,
       total: tally.total,

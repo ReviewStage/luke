@@ -119,6 +119,9 @@ test("the tally counts per state and per provider", () => {
     {
       total: 5,
       attention: 1,
+      // Named as well as counted: Luke's face reacts to a session that has just
+      // started asking, which the count alone cannot report.
+      attentionIds: ["claude-review"],
       working: 2,
       complete: 1,
       idle: 1,
