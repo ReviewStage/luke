@@ -26,8 +26,9 @@ plugins, wrappers, or changes to how a session is launched.
 
 - A compact, top-center capsule shows how many sessions Luke is tracking.
 - Hovering opens a quick peek; clicking opens a panel with one row per session.
-- Rows show the provider, a repository-derived title, a bounded status summary,
-  and whether the session is working, waiting, complete, or merely observed.
+- Rows show the provider-assigned title (with a workspace fallback), current
+  activity, error or turn recap, repository context, and whether the session is
+  working, waiting, complete, failed, or merely observed.
 - Sessions that appear to need attention are placed first.
 - An optional microphone visualization can react to local audio levels.
 - An optional OpenAI attention review can help decide which updates should be
@@ -84,8 +85,10 @@ waveform without requesting microphone access.
 Session monitoring does not require `OPENAI_API_KEY`: Claude Code and Codex use
 local state, while Conductor and Cursor use their separately configured provider
 keys. If `OPENAI_API_KEY` is set, Luke can also send a bounded status update to
-the configured Responses endpoint for attention classification. This does not
-enable speech or agent control.
+the configured Responses endpoint for attention classification. That update can
+include the session title, recap, repository, branch, current tool activity, and
+reported error; see [PRIVACY.md](PRIVACY.md) for the exact boundary. This does
+not enable speech or agent control.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |

@@ -7,15 +7,19 @@ the current implementation; it is not a promise about third-party services.
 
 - For Claude Code, Luke finds recent session files, opens bounded tails
   read-only, and inspects them in memory.
-- For Codex, Luke opens the local SQLite state database in read-only mode.
+- For Codex, Luke opens the local SQLite state database in read-only mode and
+  reads the recent rollout logs named by its thread records.
 
-Luke extracts only the data needed to identify and display a session:
-provider and session identifiers, the workspace folder basename, timestamps,
-status, event type, and tool-use presence where applicable. Event type and
-tool-use presence are used to derive status; transcript text is not retained.
+Luke processes bounded fields needed to identify and display a session:
+provider and session identifiers, provider-generated titles, the workspace
+folder basename, repository and branch, timestamps, status, model, current tool
+activity, reported errors, provider-designated turn recaps, and session or
+change links where available. It inspects event types, turn boundaries, tool
+calls, and stop reasons to derive those fields and the session status.
 
-Luke does not modify provider files, retain transcript text, inject input, or
-require provider hooks or plugins. It does not control provider sessions.
+Luke does not modify provider files, retain raw records or message history,
+inject input, or require provider hooks or plugins. Observed fields are held in
+memory for the local display. Luke does not control provider sessions.
 
 ## Optional cloud-provider reads
 
@@ -28,16 +32,19 @@ and issues authenticated `GET` requests only:
 
 - For Conductor, Luke reads the authenticated identity, projects, workspaces the
   authenticated user created, sessions, and session statuses. It processes
-  identifiers, repository names derived from Git remotes (or the Conductor
-  project name when no usable remote is available), timestamps, model labels,
-  archive state, and status.
+  identifiers; project, workspace, and session names; repository names derived
+  from Git remotes (or the project name when no usable remote is available);
+  timestamps; model configuration; archive state; status and reported errors;
+  and session deep links.
 - For Cursor, Luke reads agents owned by the supplied key and their latest runs.
-  It processes identifiers, repository URLs and starting refs, timestamps,
-  archive state, and run status.
+  It processes identifiers, agent names and links, repository URLs, starting
+  refs and run branches, timestamps, archive and run status, provider-designated
+  run results, and pull-request links.
 
-Luke does not call provider write routes, and it does not use cloud workspace,
-agent, or session names because providers may derive them from prompts. Returned
-metadata is held in memory for display; response bodies are not persisted.
+Luke does not call provider write routes. Provider-assigned names and results
+can reflect task or prompt content; Luke uses their bounded values to distinguish
+sessions and describe outcomes. Returned metadata is held in memory for display;
+response bodies are not persisted.
 
 Conductor keys may come from Luke's Settings, `CONDUCTOR_API_KEY`, or
 `CONDUCTOR_API_TOKEN`; Cursor keys may come from Settings or `CURSOR_API_KEY`.
@@ -50,7 +57,12 @@ By default, these requests go to the provider's own API. Changing
 to that configured endpoint, whose policies then govern the request and
 response data.
 
-## What stays local
+## Local display and microphone
+
+The local panel may show a session's provider-assigned title, status, current
+activity or error, provider-designated recap, repository, branch, model, and
+session or change links. The links and model label are kept out of the optional
+attention-review request described below.
 
 The microphone is optional. When enabled, Luke uses it only to calculate audio
 levels for a local visualization. Audio is not recorded, written to disk, sent
@@ -62,14 +74,16 @@ Without `OPENAI_API_KEY`, Luke does not send an attention-review request.
 
 With `OPENAI_API_KEY`, Luke sends the configured Responses-compatible endpoint
 the provider name, displayed session title, previous and current status, review
-trigger, and a bounded status summary. For a Conductor session, that title can
-contain the project-name fallback described above. The request also includes
-fixed review instructions and synthetic examples. The API key is sent to that
-endpoint as the request's bearer credential.
+trigger, repository, branch, current tool activity, reported error, and the
+provider-designated session recap. Titles and recaps can reflect task content;
+for a Conductor session, the title can contain the project-name fallback
+described above. The request also includes fixed review instructions and
+synthetic examples. The API key is sent to that endpoint as the request's bearer
+credential.
 
-Luke does not send provider transcripts, command output, file contents, full
-filesystem paths, provider session identifiers, or locally observed timestamps
-in that request.
+Luke does not send message history, command output, file contents, full
+filesystem paths, model labels, session or change links, provider session
+identifiers, or locally observed timestamps in that request.
 
 Requests use `store: false`, which disables Responses application-state
 storage. This does not mean zero retention: ordinary provider abuse-monitoring
