@@ -20,5 +20,17 @@ if [[ ! -x "$PACKAGED_APP/Contents/Resources/mac-screen-geometry" ]]; then
     printf 'error: packaged app is missing the AppKit screen-geometry helper\n' >&2
     exit 1
 fi
+INFO_PLIST="$PACKAGED_APP/Contents/Info.plist"
+BUNDLE_ICON_FILE=$(plutil -extract CFBundleIconFile raw -o - "$INFO_PLIST")
+PACKAGED_ICON="$PACKAGED_APP/Contents/Resources/$BUNDLE_ICON_FILE"
+GENERATED_ICON="$SIDECAR_DESKTOP_APP_ROOT/.build/Luke.icns"
+if [[ ! -f "$PACKAGED_ICON" ]]; then
+    printf 'error: packaged app is missing its declared icon: %s\n' "$PACKAGED_ICON" >&2
+    exit 1
+fi
+if ! cmp -s "$PACKAGED_ICON" "$GENERATED_ICON"; then
+    printf 'error: packaged app icon does not match the generated Luke icon\n' >&2
+    exit 1
+fi
 
 printf 'Packaged macOS app: %s\n' "$PACKAGED_APP"

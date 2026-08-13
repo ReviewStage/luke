@@ -419,7 +419,17 @@ button:disabled {
      body carries the panel's: the press target is the shape, not its box. */
   border-radius: 0 0 var(--notch-convex-radius) var(--notch-convex-radius);
   background: none;
-  cursor: pointer;
+  /* Each state below names the hand; the capsule is the one that does not, and
+     that is what makes the hand appear at all. A window passing the pointer
+     through is not the window the pointer is over, so a hand computed for a
+     capsule the pointer has only just landed on is drawn and then immediately
+     overridden by whatever is behind Luke — and a cursor is only reported when
+     it changes, so nothing asks for it again while the pointer stays where it
+     is. That is the arrow left over a peek for as long as anyone hovers it.
+     Every state that does name the hand is one this window has already begun
+     taking the pointer for, and each is reached by a resize, so the hand is
+     asked for afresh at a moment it can hold. */
+  cursor: default;
   transform: translateX(-50%);
   /* Pressing the capsule is a gesture, not a focus change: a ring drawn around
      the notch strip by a mouse press is the one thing on screen that cannot
@@ -443,12 +453,18 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 
 .app-stage[data-presentation="peek"] .compact-hover-target {
   width: var(--peek-width);
+  cursor: pointer;
 }
 
-/* The capsule strip keeps taking clicks over an open panel: pressing it is how
-   the panel closes again, and nothing interactive sits under it. */
+/* The strip keeps taking clicks over an open panel: pressing it is how the panel
+   closes again. It spans the shape rather than the capsule it grew from, because
+   the band the housing sits in is empty for the whole width of an open panel —
+   the wings are drawn in it but take no pointer, and the body starts below it —
+   so every part of that band means the same thing and answers the same way. */
 .app-stage[data-presentation="panel"] .compact-hover-target {
+  width: var(--panel-width);
   height: max(var(--notch-top-inset), 32px);
+  cursor: pointer;
   pointer-events: auto;
 }
 
@@ -554,6 +570,21 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transition-duration: var(--duration-quick), var(--duration-shape);
   transition-timing-function: var(--motion-exit), var(--spring);
   transition-delay: var(--peek-delay);
+}
+
+/* A mark can mount into a wing that is already unfolded — the panel's wing
+   holds more marks than the peek's, and opening the panel is what mounts the
+   extra ones — and a transition only runs from a style the element has held.
+   This is the pose every mark waits in above, so a mark that arrives late
+   unfolds on the same gesture as the rest instead of appearing in place. */
+@starting-style {
+  .app-stage[data-presentation="peek"] .wing-mark,
+  .app-stage[data-presentation="peek"] .wing-more,
+  .app-stage[data-presentation="panel"] .wing-mark,
+  .app-stage[data-presentation="panel"] .wing-more {
+    opacity: 0;
+    transform: translateX(8px);
+  }
 }
 
 /* More providers than the wing can hold. Counted rather than dropped, at the
@@ -767,6 +798,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 /* Pressing the strip while the slot is drawn brings the whole panel back, with
    the entry still in it. */
 .app-stage[data-presentation="slot"] .compact-hover-target {
+  cursor: pointer;
   pointer-events: auto;
 }
 

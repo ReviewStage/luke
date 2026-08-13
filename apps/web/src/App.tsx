@@ -82,15 +82,9 @@ export function App(): React.JSX.Element {
 
       <footer className="site-footer shell">
         <div className="footer-meta">
-          <span>
-            <a href={REPOSITORY_URL}>GitHub</a>
-          </span>
           <span>Apache-2.0</span>
           <span>macOS 14+</span>
         </div>
-        <p className="footnote">
-          Product names belong to their owners. Luke is independent and unaffiliated.
-        </p>
       </footer>
     </>
   );
