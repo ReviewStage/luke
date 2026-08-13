@@ -21,6 +21,8 @@ for s in 16 32 64 128 256 512 1024; do
 done
 rsvg-convert -w 18 -h 18 menubar/luke-menubar-template.svg -o menubar/lukeTemplate.png
 rsvg-convert -w 36 -h 36 menubar/luke-menubar-template.svg -o menubar/lukeTemplate@2x.png
+rsvg-convert -w 660 -h 400 dmg/luke-dmg-background.svg -o dmg/luke-dmg-background.png
+rsvg-convert -w 1320 -h 800 dmg/luke-dmg-background.svg -o dmg/luke-dmg-background@2x.png
 ```
 
 ## In the app
@@ -72,6 +74,7 @@ keep the full 240×240 canvas — they need headroom to move.
 | `luke-wordmark-talking-{light,dark}.svg` | Animated hero: the face talks mid-word |
 | `icon/luke-icon.svg` + `luke-icon-{16…1024}.png` | App icon (squircle tile) |
 | `menubar/luke-menubar-template.svg` + `lukeTemplate{,@2x}.png` | macOS menu-bar template image (pure black + alpha; macOS recolors it). Packaging builds `Luke.icns` from the icon PNGs automatically in `apps/desktop/scripts/package.mjs`; no `.icns` is committed |
+| `dmg/luke-dmg-background.svg` + `luke-dmg-background{,@2x}.png` | Neutral installer background with a branded drag-and-drop arrow |
 | `motion/luke-<state>-{light,dark}.svg` | Animated state marks (below) |
 
 ## Motion states

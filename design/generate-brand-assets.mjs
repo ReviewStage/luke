@@ -24,6 +24,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { DMG_WINDOW } from "./dmg-window.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = join(HERE, "brand");
@@ -914,6 +915,20 @@ emit("icon/luke-icon.svg", icon.replaceAll("currentColor", TILE_INK), "Luke app 
 const side = Math.max(bbox.w, bbox.h) * 1.1;
 const menubar = `${svgOpenAt(bbox.cx - side / 2, bbox.cy - side / 2, side, side)}${face()}</svg>`;
 emit("menubar/luke-menubar-template.svg", menubar.replaceAll("currentColor", "#000000"), "Luke");
+
+// DMG background: a quiet field with the same rounded monoline language as the
+// face. Shared window geometry keeps the arrow centered between the two icons.
+const dmgBackground = DMG_WINDOW.BACKGROUND.PNG;
+const arrowY = DMG_WINDOW.POSITIONS.APP.Y;
+const arrowStart = DMG_WINDOW.POSITIONS.APP.X + DMG_WINDOW.ICON_SIZE;
+const arrowEnd = DMG_WINDOW.POSITIONS.APPLICATIONS.X - DMG_WINDOW.ICON_SIZE;
+const arrowHead = 28;
+const dmg =
+  `${svgOpen(dmgBackground.WIDTH, dmgBackground.HEIGHT)}` +
+  `<rect width="${dmgBackground.WIDTH}" height="${dmgBackground.HEIGHT}" fill="#f5f5f7"/>` +
+  `<path d="M ${arrowStart} ${arrowY} H ${arrowEnd} M ${arrowEnd - arrowHead} ${arrowY - arrowHead} L ${arrowEnd} ${arrowY} L ${arrowEnd - arrowHead} ${arrowY + arrowHead}" ` +
+  `fill="none" stroke="#6e6e73" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+emit("dmg/luke-dmg-background.svg", dmg, "Drag Luke to Applications");
 
 // Animated state marks, per mode.
 for (const name of MOTION_NAMES) {
