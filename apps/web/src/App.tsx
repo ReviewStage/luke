@@ -67,8 +67,7 @@ export function App(): React.JSX.Element {
         <section className="hero">
           <h1>Your AI Engineering Manager.</h1>
           <p className="hero-subhead">
-            Luke watches your coding agent sessions and
-            notifies you when they need your attention.
+            Luke watches your coding agent sessions and notifies you when they need your attention.
           </p>
           <div className="cta-row">
             <a className="cta-primary" href={REPOSITORY_URL}>
