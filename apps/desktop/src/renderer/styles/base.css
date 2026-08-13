@@ -159,6 +159,12 @@
      every motion holds its first frame, which is the resting pose every one of
      them starts from — head upright, eyes open. */
   --face-motion: running;
+  /* The other loop with no end to wait for: the spinner on a working row. Its
+     own token rather than the face's, because the face's is about Luke and this
+     one is about the sessions, but it stops in the same two places for the same
+     two reasons — a capture must land on one frame, and reduced motion asked
+     for stillness. */
+  --loop-motion: running;
 
   /* Opaque in every state: the shape has to pass for part of a physical camera
      housing, and nothing behind the window should ever show through it. Depth
@@ -1034,25 +1040,18 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 
 /* Session primitives ----------------------------------------------------- */
 
-.state-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 9px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 13%, transparent);
-  color: var(--accent);
-  font-size: 9.5px;
-  font-weight: 660;
-  letter-spacing: 0.1px;
+/* Read by assistive tech and drawn nowhere: the rows carry state in colour and
+   glyphs, and this is how the words behind them stay spoken. */
+.visually-hidden {
+  position: absolute;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip-path: inset(50%);
   white-space: nowrap;
-}
-
-.state-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: currentcolor;
 }
 
 .empty-state {
@@ -1810,8 +1809,10 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   --row-stagger: 0s;
   /* Luke blinks and sways on a loop with no end to wait for, so a capture would
      otherwise land wherever in it the shutter happened to fall. Held on its
-     first frame, he is the same face in every PNG. */
+     first frame, he is the same face in every PNG. The working rows' spinners
+     hold still for exactly the same reason. */
   --face-motion: paused;
+  --loop-motion: paused;
 }
 
 /* COLLAPSE_ANIMATION_MS in app.tsx drops to zero under the same query, so the
@@ -1834,8 +1835,10 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
     /* Nothing travels, so the stack has no distance to spring across. */
     --row-fan: 0px;
     /* Idle motion is the one thing here that no one asked for, so it is the
-       first thing to stop: Luke sits still, upright, with his eyes open. */
+       first thing to stop: Luke sits still, upright, with his eyes open. The
+       spinner holds too — a working row still says Working in words. */
     --face-motion: paused;
+    --loop-motion: paused;
   }
 
   .panel-surface,

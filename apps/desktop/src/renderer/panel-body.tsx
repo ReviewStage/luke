@@ -1,13 +1,19 @@
-import { SESSION_LOCATION } from "@sidecar/core";
+import { SESSION_LOCATION, SESSION_STATE } from "@sidecar/core";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
 import { CloudBadge, ProviderMark } from "./provider-marks";
-import type { ArrangedSessions, DisplaySession, SessionView } from "./session-model";
 import {
+  type ArrangedSessions,
+  type DisplaySession,
+  observedAgoLabel,
+  type SessionView,
+} from "./session-model";
+import {
+  BranchGlyph,
+  CheckGlyph,
   EmptyState,
   SessionOptions,
   SessionOptionsButton,
   SessionsPanel,
-  StateChip,
 } from "./session-parts";
 import { SettingsPanel, type SettingsPanelProps } from "./settings-panel";
 
@@ -19,14 +25,27 @@ import { SettingsPanel, type SettingsPanelProps } from "./settings-panel";
  * separates them — a row that can be opened lifts and takes the hand cursor,
  * one that cannot stays flat under it, which is the honest answer to whether
  * pressing would do anything.
+ *
+ * The state rides the sentence under the title rather than a control-shaped
+ * chip beside it: a spinner leads a working row, a check a finished one, and a
+ * session that needs a person says so in the attention colour — the one colour
+ * on the row, spent only where someone is needed. The label is still spoken to
+ * a screen reader ahead of a sentence that would not otherwise carry it.
+ *
+ * The provider is its mark, and only its mark: naming it again in words was the
+ * subtitle saying what the row's left edge already says. The mark's hover
+ * answers with the name — and the model, which identifies the session to nobody
+ * and so earns a hover rather than a line.
  */
 function SessionRow({
   session,
   index,
+  now,
   onOpen,
 }: {
   session: DisplaySession;
   index: number;
+  now: number;
   onOpen: (session: DisplaySession) => void;
 }): React.JSX.Element {
   const shared = {
@@ -34,18 +53,42 @@ function SessionRow({
     "data-state": session.state,
     style: { "--row-index": index + 1 } as React.CSSProperties,
   };
+  // The identifier that tells this row from its neighbours: the branch, or the
+  // repository where a provider reported no branch. The glyph belongs to the
+  // branch alone — under a repository name it would say the wrong thing.
+  const place = session.branch ?? session.repository;
   const content = (
     <>
-      <span className="row-avatar">
+      <span
+        className="row-mark"
+        title={session.model ? `${session.provider} · ${session.model}` : session.provider}
+      >
+        <span className="visually-hidden">{session.provider}</span>
         <ProviderMark providerId={session.providerId} />
         {session.location === SESSION_LOCATION.CLOUD ? <CloudBadge /> : null}
       </span>
       <span className="row-copy">
         <strong>{session.title}</strong>
-        {session.detail ? <small>{session.detail}</small> : null}
-        <small className="row-context">{session.context}</small>
+        <small className="row-doing">
+          {session.state === SESSION_STATE.WORKING ? (
+            <span className="row-spinner" aria-hidden="true" />
+          ) : null}
+          {session.state === SESSION_STATE.COMPLETE ? <CheckGlyph /> : null}
+          <span className="row-doing-text">
+            {session.detail === session.label ? null : (
+              <span className="visually-hidden">{session.label}. </span>
+            )}
+            {session.detail}
+          </span>
+        </small>
+        {place ? (
+          <small className="row-place">
+            {session.branch ? <BranchGlyph /> : null}
+            <span>{place}</span>
+          </small>
+        ) : null}
       </span>
-      <StateChip state={session.state} label={session.label} />
+      <small className="row-when">{observedAgoLabel(session.observedAt, now)}</small>
     </>
   );
 
@@ -69,6 +112,12 @@ export interface PanelBodyProps {
   list: ArrangedSessions;
   view: SessionView;
   onViewChange: (view: SessionView) => void;
+  /**
+   * The instant the rows' ages are read against. Passed down rather than read
+   * here, because only the app knows which clock is honest: the wall clock for
+   * live sessions, the fixture's own epoch for fixture rows.
+   */
+  now: number;
   /** Sends the pressed session to its provider, wherever the provider keeps it. */
   onOpenSession: (session: DisplaySession) => void;
   /**
@@ -89,6 +138,7 @@ export function PanelBody({
   list,
   view,
   onViewChange,
+  now,
   onOpenSession,
   offerOptions,
   optionsOpen,
@@ -124,6 +174,7 @@ export function PanelBody({
                   key={session.id}
                   session={session}
                   index={index}
+                  now={now}
                   onOpen={onOpenSession}
                 />
               ))

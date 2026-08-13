@@ -75,6 +75,26 @@ const CONDUCTOR_SESSION_STATUS = {
   ERROR: "error",
 } as const;
 
+/**
+ * Which chat gets to speak for its workspace, most urgent first. A failure
+ * outranks a question — both want a person, but only one of them is stuck —
+ * and a question outranks work still running.
+ *
+ * Unknown outranks complete, which reads backwards until the provider's shapes
+ * are laid over it: complete only ever comes from an archived chat, and unknown
+ * is an open one — idle long enough to decay, or with a status that could not
+ * be read. However quiet, the open chat is where the user would return, so a
+ * closed sibling must not make the workspace read as finished or take the
+ * press that would have landed there.
+ */
+const STATUS_URGENCY: readonly SessionStatus[] = [
+  SESSION_STATUS.ERROR,
+  SESSION_STATUS.WAITING,
+  SESSION_STATUS.WORKING,
+  SESSION_STATUS.UNKNOWN,
+  SESSION_STATUS.COMPLETE,
+];
+
 type ConductorSessionStatus =
   (typeof CONDUCTOR_SESSION_STATUS)[keyof typeof CONDUCTOR_SESSION_STATUS];
 
@@ -133,7 +153,6 @@ interface ConductorWorkspace {
 
 interface ConductorSession {
   id: string;
-  name?: string;
   workspace: ConductorWorkspace;
   archived: boolean;
   archivedAt?: number;
@@ -145,6 +164,9 @@ interface ConductorSession {
  * Observes Conductor cloud sessions through the documented public API. It reads
  * only workspaces the authenticated user created, issues no request that can
  * change provider state, and reports nothing at all without a credential.
+ * Each workspace is reported as one session — the workspace is the unit
+ * Conductor's own surface shows, and the one its name names — in the state of
+ * whichever chat inside it most needs a person.
  */
 export class ConductorSessionAdapter extends CloudSessionAdapter {
   readonly #maximumObservedWorkspaces: number;
@@ -216,10 +238,28 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       .flat()
       .slice(0, this.#maximumObservedSessions);
 
-    const observations = await Promise.all(
-      sessions.map((session) => this.#observationFor(request, session, now)),
+    const observed = await Promise.all(
+      sessions.map((session) =>
+        this.#observationFor(request, session, now).then(
+          (observation) => observation && { workspaceId: session.workspace.id, observation },
+        ),
+      ),
     );
-    return observations.filter(isDefined);
+
+    // One row per workspace. The workspace is the session the user knows —
+    // it is what titles the row — so two chats inside it would draw as
+    // identical lines that open different places. Every chat's status is
+    // still read, because the workspace is in whatever state its neediest
+    // chat is in; that chat is the one the row reports and the one a press
+    // opens.
+    const byWorkspace = new Map<string, ProviderSessionObservation>();
+    for (const { workspaceId, observation } of observed.filter(isDefined)) {
+      const held = byWorkspace.get(workspaceId);
+      if (!held || urgencyOrder(observation, held) < 0) {
+        byWorkspace.set(workspaceId, observation);
+      }
+    }
+    return [...byWorkspace.values()];
   }
 
   async #identity(request: CloudRequest): Promise<string | undefined> {
@@ -302,17 +342,15 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
           if (!id) return undefined;
           const archivedAt = timestampFromRecord(record, CONDUCTOR_FIELD.ARCHIVED_AT);
           const model = modelLabel(record);
-          const name = textFromRecord(record, CONDUCTOR_FIELD.NAME)?.slice(
-            0,
-            maximumSessionTitleLength,
-          );
           const deepLink = textFromRecord(record, CONDUCTOR_FIELD.DEEP_LINK);
+          // The chat's own `name` is deliberately not read: Conductor generates
+          // it, nobody chose it, and the one thing it ever did here — titling
+          // the row — belongs to the workspace's name instead.
           return {
             id,
             workspace,
             archived: textFromRecord(record, CONDUCTOR_FIELD.ARCHIVED_AT) !== undefined,
             ...(archivedAt === undefined ? {} : { archivedAt }),
-            ...(name ? { name } : {}),
             ...(model ? { model } : {}),
             ...(deepLink ? { deepLink } : {}),
           };
@@ -359,15 +397,16 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     const status = this.#statusFor(session, reported?.status, observedAt, now);
     return {
       providerSessionId: session.id,
-      // A workspace holds several chats and a project holds several workspaces,
-      // so labelling by the project's repository gave every session in a repo
-      // the same row. The session's own name is what separates them.
-      title: session.name ?? session.workspace.name ?? session.workspace.repositoryLabel,
+      // The workspace's name is the name the user knows this work by — it is
+      // what Conductor itself shows them — where a chat's own name is generated
+      // and identifies nothing. So the workspace titles the row, and it is not
+      // reported as a branch: it never was one, and the surface now draws a
+      // branch under a glyph that says so.
+      title: session.workspace.name ?? session.workspace.repositoryLabel,
       status,
       observedAt,
       detail: {
         repository: session.workspace.repositoryLabel,
-        ...(session.workspace.name ? { branch: session.workspace.name } : {}),
         ...(session.model ? { model: session.model } : {}),
         ...(reported?.errorMessage ? { error: reported.errorMessage } : {}),
         ...(session.deepLink ? { link: session.deepLink } : {}),
@@ -427,6 +466,17 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       ...(errorMessage ? { errorMessage } : {}),
     };
   }
+}
+
+/** Most urgent first, and between two equally urgent chats, the one that moved last. */
+function urgencyOrder(
+  first: ProviderSessionObservation,
+  second: ProviderSessionObservation,
+): number {
+  return (
+    STATUS_URGENCY.indexOf(first.status) - STATUS_URGENCY.indexOf(second.status) ||
+    second.observedAt - first.observedAt
+  );
 }
 
 /** Conductor reports the model it resolved as well as the one that was asked for. */

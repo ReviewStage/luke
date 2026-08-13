@@ -1,4 +1,4 @@
-import type { NormalizedSession } from "@sidecar/core";
+import { FIXTURE_EPOCH_MS, type NormalizedSession } from "@sidecar/core";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import type {
   AppBootstrap,
@@ -168,6 +168,9 @@ export function App(): React.JSX.Element {
   const [microphoneError, setMicrophoneError] = useState<string>();
   const [analyser, setAnalyser] = useState<AnalyserNode>();
   const [entry, setEntry] = useState<CredentialEntry>();
+  // Counts for nothing except having changed: each tick re-renders the rows so
+  // their "how long ago" labels stay honest while they are on screen.
+  const [, setClock] = useState(0);
   const [panelElement, panelHeight] = useShapeHeight();
   const [slotElement, slotHeight] = useShapeHeight();
   const audioContext = useRef<AudioContext | undefined>(undefined);
@@ -658,6 +661,20 @@ export function App(): React.JSX.Element {
     return () => window.removeEventListener("keydown", handleKey);
   }, [cancelEntry, changeMode, changeTab, optionsOpen, presentation, tab]);
 
+  // The rows say how long ago each session was seen, and a label left alone
+  // goes stale the moment a minute passes with no session changing — the very
+  // sessions worth noticing are the ones nothing is updating. A slow tick keeps
+  // the labels honest, and only while they are on screen: the labels are
+  // minute-grained, so half a minute is as fine as the answer gets. Fixture
+  // rows are read against a fixed epoch, so for them a tick could only change
+  // nothing — and a capture run must not risk a re-render mid-shutter.
+  useEffect(() => {
+    if (presentation !== PANEL_PRESENTATION.PANEL) return;
+    if (bootstrap?.fixtureMode !== false) return;
+    const timer = window.setInterval(() => setClock((tick) => tick + 1), 30_000);
+    return () => window.clearInterval(timer);
+  }, [presentation, bootstrap?.fixtureMode]);
+
   // A press anywhere else is the same dismissal Escape is, and the one a sheet
   // over a list has to answer: what is behind it can only be reached by asking
   // it to move, so pressing there has to be what asks. The press is taken on the
@@ -702,6 +719,10 @@ export function App(): React.JSX.Element {
   // the next session to arrive would open it again with nothing pressed.
   const offerOptions = tab === PANEL_TAB.SESSIONS && list.total > 1;
   if (optionsOpen && !offerOptions) setOptionsOpen(false);
+  // Which clock the rows' ages are honest against. Fixture observations are
+  // measured back from the fixture's own epoch precisely so that no capture
+  // run reads them against the time it happened to run at.
+  const now = bootstrap.fixtureMode ? FIXTURE_EPOCH_MS : Date.now();
   const fixtureSpeaking = bootstrap.profile === "speaking";
   const hasAudioSignal = fixtureSpeaking || analyser !== undefined;
   const panelOpen = presentation === PANEL_PRESENTATION.PANEL;
@@ -732,6 +753,7 @@ export function App(): React.JSX.Element {
             list={list}
             view={sessionView}
             onViewChange={changeSessionView}
+            now={now}
             onOpenSession={openSession}
             offerOptions={offerOptions}
             optionsOpen={optionsOpen}

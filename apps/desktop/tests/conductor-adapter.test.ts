@@ -225,13 +225,15 @@ test("observes cloud sessions the signed-in user created, under their own names"
   assert.deepEqual(CONDUCTOR_PROVIDER, { id: "conductor", displayName: "Conductor" });
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "session-working");
-  assert.equal(observations[0]?.title, TEST_SESSION_NAME);
+  // Titled by the workspace, which carries the name the user knows the work
+  // by; the chat's generated name is not read, and the workspace name is not a
+  // branch, so no branch is reported at all.
+  assert.equal(observations[0]?.title, TEST_WORKSPACE_NAME);
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
   assert.equal(observations[0]?.observedAt, TEST_TIME - 5_000);
   assert.equal(observations[0]?.controls, undefined);
   assert.deepEqual(observations[0]?.detail, {
     repository: "luke",
-    branch: TEST_WORKSPACE_NAME,
     model: "claude-opus-5",
     link: "conductor://workspace?session=session-working",
   });
@@ -249,18 +251,21 @@ test("reports an idle session as waiting and an errored session with its reason"
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
     projects: [LUKE_PROJECT],
-    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 30_000)],
+    workspaces: [
+      ownedWorkspace("workspace-idle", TEST_TIME - 30_000),
+      ownedWorkspace("workspace-errored", TEST_TIME - 40_000),
+    ],
     sessions: [
       {
         id: "session-idle",
-        workspaceId: "workspace-active",
+        workspaceId: "workspace-idle",
         name: TEST_SESSION_NAME,
         status: TEST_CONDUCTOR_STATUS.IDLE,
         statusUpdatedAt: TEST_TIME - 1_000,
       },
       {
         id: "session-errored",
-        workspaceId: "workspace-active",
+        workspaceId: "workspace-errored",
         name: TEST_SESSION_NAME,
         status: TEST_CONDUCTOR_STATUS.ERROR,
         statusUpdatedAt: TEST_TIME - 1_000,
@@ -274,6 +279,44 @@ test("reports an idle session as waiting and an errored session with its reason"
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
   assert.equal(observations[1]?.status, SESSION_STATUS.ERROR);
   assert.equal(observations[1]?.detail?.error, TEST_ERROR_MESSAGE);
+});
+
+// Rows are titled by their workspace, so two chats in one workspace would draw
+// as identical lines that open different places. The workspace reports once,
+// in the state of whichever chat most needs a person — a failure over a
+// question, a question over work still running.
+test("reports one row per workspace, carried by the chat that most needs a person", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [ownedWorkspace("workspace-shared", TEST_TIME - 30_000)],
+    sessions: [
+      {
+        id: "session-working",
+        workspaceId: "workspace-shared",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.WORKING,
+        statusUpdatedAt: TEST_TIME - 1_000,
+      },
+      {
+        id: "session-errored",
+        workspaceId: "workspace-shared",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.ERROR,
+        statusUpdatedAt: TEST_TIME - 5_000,
+      },
+    ],
+  });
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.providerSessionId, "session-errored");
+  assert.equal(observations[0]?.status, SESSION_STATUS.ERROR);
+  assert.equal(observations[0]?.title, TEST_WORKSPACE_NAME);
+  // The row opens the chat it reports, not whichever chat happened to be
+  // listed first.
+  assert.equal(observations[0]?.detail?.link, "conductor://workspace?session=session-errored");
 });
 
 test("does not carry a past failure into a session that recovered", async () => {
@@ -323,15 +366,17 @@ test("keeps an errored session errored after it goes stale", async () => {
   assert.equal(observations[0]?.status, SESSION_STATUS.ERROR);
 });
 
-test("separates sessions that share one project by their own names", async () => {
+test("separates sessions that share one project by their workspaces' names", async () => {
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
     projects: [LUKE_PROJECT],
     workspaces: [
-      ownedWorkspace("workspace-one", TEST_TIME - 30_000),
-      ownedWorkspace("workspace-two", TEST_TIME - 40_000),
+      { ...ownedWorkspace("workspace-one", TEST_TIME - 30_000), name: "lisbon-v2" },
+      { ...ownedWorkspace("workspace-two", TEST_TIME - 40_000), name: "porto-v1" },
     ],
     sessions: [
+      // Each chat carries a generated name, which must not become the title:
+      // the workspace's name is the one the user chose or accepted.
       {
         id: "session-one",
         workspaceId: "workspace-one",
@@ -351,8 +396,42 @@ test("separates sessions that share one project by their own names", async () =>
 
   assert.deepEqual(
     observations.map((observation) => observation.title),
-    ["Revamp the notch panel", "Observe Cursor cloud agents"],
+    ["lisbon-v2", "porto-v1"],
   );
+});
+
+// The inverse trap of the one above: an open chat idle past the staleness
+// window decays to unknown, and an archived sibling reads as complete. The
+// open chat is still the one the user would return to, so it keeps the row —
+// a closed chat must not make the workspace read as finished, or take the
+// press that would have landed in the open one.
+test("a closed chat does not speak for a workspace whose open chat went quiet", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [ownedWorkspace("workspace-quieted", TEST_TIME - 1_000)],
+    sessions: [
+      {
+        id: "session-open-stale",
+        workspaceId: "workspace-quieted",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 2 * 60 * 60 * 1000,
+      },
+      {
+        id: "session-archived",
+        workspaceId: "workspace-quieted",
+        name: TEST_SESSION_NAME,
+        archivedAt: isoTimestamp(TEST_TIME - 10_000),
+      },
+    ],
+  });
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.providerSessionId, "session-open-stale");
+  assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
 });
 
 test("reports an archived session as complete without requesting its status", async () => {
@@ -451,9 +530,13 @@ test("does not treat a long-idle chat as waiting because its workspace is busy",
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
     projects: [LUKE_PROJECT],
-    // One workspace holds several chats, so its activity timestamp moves
-    // whenever any one of them runs.
-    workspaces: [ownedWorkspace("workspace-busy", TEST_TIME - 1_000)],
+    // A workspace's activity timestamp moves whenever anything in it runs, so
+    // it can read as fresh while the chat inside was walked away from hours
+    // ago. Staleness has to be judged on the chat's own status timestamp.
+    workspaces: [
+      ownedWorkspace("workspace-busy", TEST_TIME - 1_000),
+      ownedWorkspace("workspace-fresh", TEST_TIME - 2_000),
+    ],
     sessions: [
       {
         id: "session-abandoned",
@@ -464,7 +547,7 @@ test("does not treat a long-idle chat as waiting because its workspace is busy",
       },
       {
         id: "session-just-finished",
-        workspaceId: "workspace-busy",
+        workspaceId: "workspace-fresh",
         name: TEST_SESSION_NAME,
         status: TEST_CONDUCTOR_STATUS.IDLE,
         statusUpdatedAt: TEST_TIME - 20_000,
@@ -592,8 +675,12 @@ test("spreads a bounded session budget across workspaces", async () => {
   const observations = await adapterFor(api.fetch).observe();
   const observedIds = observations.map((observation) => observation.providerSessionId);
 
-  assert.equal(observedIds.filter((id) => id.startsWith("crowded-")).length, 4);
+  // The crowded workspace spent four of the session budget's slots on its
+  // chats — the cap is what kept it from spending all of them — but it still
+  // reports as one row beside its quiet neighbour.
+  assert.equal(observedIds.filter((id) => id.startsWith("crowded-")).length, 1);
   assert.equal(observedIds.includes("quiet-session"), true);
+  assert.equal(observations.length, 2);
 });
 
 test("prefers open chats over closed ones inside one workspace", async () => {
@@ -620,8 +707,11 @@ test("prefers open chats over closed ones inside one workspace", async () => {
 
   const observations = await adapterFor(api.fetch).observe();
 
+  // The open chat takes the budget ahead of the closed ones, and it is the one
+  // that speaks for the workspace: work still running outranks work settled.
+  assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "open-session");
-  assert.equal(observations.length, 4);
+  assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
 });
 
 test("reports nothing and issues no request without an API key", async () => {
@@ -812,7 +902,9 @@ test("keeps observing when one session's status cannot be read", async () => {
 
   const observations = await adapterFor(api.fetch).observe();
 
-  assert.equal(observations.length, 2);
-  assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
-  assert.equal(observations[1]?.status, SESSION_STATUS.WORKING);
+  // One chat's unreadable status does not cost the workspace its row, and the
+  // chat whose state is known is the one that speaks for it.
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.providerSessionId, "session-readable");
+  assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
 });
