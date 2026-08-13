@@ -51,7 +51,7 @@
   --text-sm: 0.875rem;
   --text-base: 1rem;
   --text-lg: 1.125rem;
-  --text-hero: clamp(1.5rem, 5.5vw, 3.5rem);
+  --text-hero: clamp(1rem, 5.5vw, 3.5rem);
 
   /* Space scale, 4px grid. */
   --space-1: 4px;
