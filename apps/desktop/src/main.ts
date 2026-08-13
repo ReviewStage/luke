@@ -29,6 +29,7 @@ import {
 import { ClaudeCodeSessionAdapter } from "./claude-code-adapter";
 import { CodexSessionAdapter } from "./codex-adapter";
 import { ConductorSessionAdapter } from "./conductor-adapter";
+import { CursorSessionAdapter } from "./cursor-adapter";
 import { readMacScreenGeometry } from "./macos-screen-geometry";
 import { openAiAttentionEvaluatorFromEnvironment } from "./openai-attention-evaluator";
 import { SettingsStore } from "./settings-store";
@@ -73,14 +74,21 @@ const settingsStore = new SettingsStore({
 const conductorAdapter = new ConductorSessionAdapter({
   readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.CONDUCTOR),
 });
+const cursorAdapter = new CursorSessionAdapter({
+  readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.CURSOR),
+});
 // Saving a key affects only the provider it belongs to, so this maps each
 // credential to the one observer that reads it.
 const adapterByCredentialProvider: ReadonlyMap<CredentialProviderId, SessionProviderAdapter> =
-  new Map([[CREDENTIAL_PROVIDER_ID.CONDUCTOR, conductorAdapter]]);
+  new Map<CredentialProviderId, SessionProviderAdapter>([
+    [CREDENTIAL_PROVIDER_ID.CONDUCTOR, conductorAdapter],
+    [CREDENTIAL_PROVIDER_ID.CURSOR, cursorAdapter],
+  ]);
 const sessionAdapters = [
   new ClaudeCodeSessionAdapter(),
   new CodexSessionAdapter(),
   conductorAdapter,
+  cursorAdapter,
 ] as const;
 // A fixture run must stay deterministic and credential-free, so it never builds
 // an evaluator — not just capture runs.

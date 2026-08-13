@@ -108,6 +108,17 @@ export function timestampFromRecord(
   return Number.isFinite(timestampMs) ? timestampMs : undefined;
 }
 
+/**
+ * Reads a value a provider reported only when this build knows it, so a state
+ * added after this build shipped is left undefined rather than guessed at.
+ */
+export function knownValue<Value extends string>(
+  values: Readonly<Record<string, Value>>,
+  reported: string | undefined,
+): Value | undefined {
+  return Object.values(values).find((candidate) => candidate === reported);
+}
+
 /** Reads a list page without assuming which key a given provider wraps it in. */
 export function recordsFromPage(
   body: Record<string, unknown>,

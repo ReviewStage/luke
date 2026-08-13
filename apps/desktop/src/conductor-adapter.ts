@@ -10,6 +10,7 @@ import {
   type CloudRequest,
   CloudSessionAdapter,
   isDefined,
+  knownValue,
   positiveInteger,
   recordsFromPage,
   repositoryLabel,
@@ -121,13 +122,6 @@ interface ConductorSession {
   archived: boolean;
   archivedAt?: number;
   model?: string;
-}
-
-function conductorSessionStatus(value: string | undefined): ConductorSessionStatus | undefined {
-  return value !== undefined &&
-    Object.values(CONDUCTOR_SESSION_STATUS).includes(value as ConductorSessionStatus)
-    ? (value as ConductorSessionStatus)
-    : undefined;
 }
 
 /**
@@ -375,7 +369,7 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       CONDUCTOR_ROUTE_SEGMENT.STATUS,
     ]);
     return {
-      status: conductorSessionStatus(textFromRecord(body, CONDUCTOR_FIELD.STATUS)),
+      status: knownValue(CONDUCTOR_SESSION_STATUS, textFromRecord(body, CONDUCTOR_FIELD.STATUS)),
       updatedAt: timestampFromRecord(body, CONDUCTOR_FIELD.UPDATED_AT),
     };
   }

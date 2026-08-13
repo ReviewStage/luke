@@ -9,6 +9,7 @@ export const PROVIDER_ID = {
   CLAUDE_CODE: "claude-code",
   CODEX: "codex",
   CONDUCTOR: "conductor",
+  CURSOR: "cursor",
 } as const;
 
 export type ProviderId = (typeof PROVIDER_ID)[keyof typeof PROVIDER_ID];

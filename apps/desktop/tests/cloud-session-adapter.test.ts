@@ -7,6 +7,7 @@ import {
   type CloudRequest,
   CloudSessionAdapter,
   isDefined,
+  knownValue,
 } from "../src/cloud-session-adapter";
 
 const TEST_TIME = Date.parse("2026-08-12T02:45:00.000Z");
@@ -107,6 +108,17 @@ function adapterFor(
     minimumRefreshIntervalMs: 0,
   });
 }
+
+test("accepts only a state this build knows", () => {
+  const REPORTED_STATE = { IDLE: "idle", WORKING: "working" } as const;
+
+  assert.equal(knownValue(REPORTED_STATE, "working"), REPORTED_STATE.WORKING);
+  // A state a provider adds later is left undefined rather than guessed at, and
+  // an inherited property name is not a state at all.
+  assert.equal(knownValue(REPORTED_STATE, "reviewing"), undefined);
+  assert.equal(knownValue(REPORTED_STATE, "toString"), undefined);
+  assert.equal(knownValue(REPORTED_STATE, undefined), undefined);
+});
 
 test("authenticates a bounded read and encodes the route a subclass asked for", async () => {
   const stub = stubFetch();
