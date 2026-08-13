@@ -27,9 +27,17 @@ rsvg-convert -w 36 -h 36 menubar/luke-menubar-template.svg -o menubar/lukeTempla
 ## Modes
 
 `-dark` assets are light ink (`#f5f5f7`) for dark UIs; `-light` assets are near-black
-(`#1d1d1f`) for light UIs. The accent (camera dot in the plain word) is Apple system
-blue `#0A84FF` in both. The app icon uses a space-black tile with a white face and
-works on either mode.
+(`#1d1d1f`) for light UIs. The brand accent, when one is needed, is Apple system blue
+`#0A84FF`. The app icon uses a space-black tile with a white face and works on either
+mode.
+
+## Sizing
+
+Asset viewBoxes are computed from the artwork's bounding box, not the drawing canvas:
+static marks and wordmarks are trimmed tight (+6 units padding), the app-icon glyph
+spans ~70% of the tile width (standard macOS glyph-in-tile proportion), and the
+menu-bar template fills ~90% of its square canvas. Only the animated `motion/` marks
+keep the full 240×240 canvas — they need headroom to move.
 
 ## Files
 
@@ -38,7 +46,6 @@ works on either mode.
 | `luke-mark-{light,dark}.svg` | The static face mark |
 | `luke-wordmark-{light,dark}.svg` | Face-first caps LUKE wordmark |
 | `luke-wordmark-talking-{light,dark}.svg` | Animated hero: the face talks mid-word |
-| `luke-word-plain-{light,dark}.svg` | Lowercase monoline "luke" with camera dot, for quiet contexts (docs, footers) |
 | `icon/luke-icon.svg` + `luke-icon-{16…1024}.png` | App icon (squircle tile) |
 | `menubar/luke-menubar-template.svg` + `lukeTemplate{,@2x}.png` | macOS menu-bar template image (pure black + alpha; macOS recolors it). To build an `.icns`: put the icon PNGs in a `.iconset` folder and run `iconutil -c icns` on macOS |
 | `motion/luke-<state>-{light,dark}.svg` | Animated state marks (below) |

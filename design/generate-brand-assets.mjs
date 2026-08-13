@@ -16,7 +16,6 @@ const OUT = join(dirname(fileURLToPath(import.meta.url)), "brand");
 
 // Inks are named for the UI mode they serve: the dark-mode asset is light.
 const INKS = { light: "#1d1d1f", dark: "#f5f5f7" };
-const ACCENT = "#0A84FF";
 const TILE = ["#48484a", "#1c1c1e"]; // space-black gradient, mode-independent
 const TILE_INK = "#f8fafc";
 
@@ -278,38 +277,59 @@ function faceFirstWordmark(faceHtml = faceCore()) {
   return { body: face + letters.body, width: letters.end + 40 - x0 };
 }
 
-// Plain lowercase monoline word with the camera dot, for quiet contexts.
-function plainWord() {
-  const w = 18;
-  const r = 30;
-  const sp = 8;
-  const B = 170;
-  const T = 80;
-  const A = 44;
-  const x0 = 30;
-  const S = stroke(w);
-  const u0 = x0 + 40 + sp;
-  const uW = 86;
-  const xk = u0 + uW + 44 + sp;
-  const kArm = 56;
-  const ec = xk + kArm + 62 + sp;
-  const er = 46;
-  const ex = ec + er * Math.cos(0.7);
-  const ey = 125 + er * Math.sin(0.7);
-  const body =
-    `<path d="M ${x0} ${A} V ${B}" ${S}/>` +
-    `<path d="M ${u0} ${T} V ${B - r} Q ${u0} ${B} ${u0 + r} ${B} H ${u0 + uW - r} Q ${u0 + uW} ${B} ${u0 + uW} ${B - r} V ${T}" ${S}/>` +
-    `<path d="M ${xk} ${A} V ${B} M ${xk} 126 L ${xk + kArm} ${T} M ${xk} 126 L ${xk + kArm + 2} ${B}" ${S}/>` +
-    `<path d="M ${ec - er} 125 H ${ec + er} A ${er} ${er} 0 1 0 ${fmt(ex)} ${fmt(ey)}" ${S}/>` +
-    `<circle cx="${u0 + uW / 2}" cy="${fmt(B - w / 2 - 8 - 7)}" r="8" fill="${ACCENT}"/>`;
-  return { body, width: ec + er + 40 - x0 + x0 };
+// ---------- Sizing ----------
+// The face is drawn on a 240x240 canvas with generous margins so animations
+// have room to move. Standalone assets must not inherit that padding, so we
+// compute the artwork's true bounding box (stroke caps included, then the
+// base tilt applied) and size everything from it.
+function faceBBox() {
+  const sw2 = FACE.sw / 2;
+  const [c1, c2] = eyeXs();
+  const x0 = Math.min(104 - sw2, c1 - FACE.eyeR);
+  const x1 = Math.max(168 + sw2, c2 + FACE.eyeR);
+  const y0 = Math.min(84 - sw2, FACE.eyeY - FACE.eyeR);
+  const y1 = Math.max(164 + sw2, FACE.eyeY + FACE.eyeR);
+  const th = (FACE.tilt * Math.PI) / 180;
+  const cos = Math.cos(th);
+  const sin = Math.sin(th);
+  const pts = [
+    [x0, y0],
+    [x1, y0],
+    [x1, y1],
+    [x0, y1],
+  ].map(([x, y]) => [
+    120 + (x - 120) * cos - (y - 124) * sin,
+    124 + (x - 120) * sin + (y - 124) * cos,
+  ]);
+  const xs = pts.map((p) => p[0]);
+  const ys = pts.map((p) => p[1]);
+  const bx0 = Math.min(...xs);
+  const by0 = Math.min(...ys);
+  const bx1 = Math.max(...xs);
+  const by1 = Math.max(...ys);
+  return { x: bx0, y: by0, w: bx1 - bx0, h: by1 - by0, cx: (bx0 + bx1) / 2, cy: (by0 + by1) / 2 };
 }
 
 // ---------- File emission ----------
-const svgOpen = (w, h) =>
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${fmt(w)} ${fmt(h)}" fill="none">`;
+const svgOpenAt = (x, y, w, h) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(x)} ${fmt(y)} ${fmt(w)} ${fmt(h)}" fill="none">`;
+const svgOpen = (w, h) => svgOpenAt(0, 0, w, h);
+// Full animation canvas for motion marks; tight crop for static artwork.
 const markSvg = (body) => `${svgOpen(240, 240)}${body}</svg>`;
-const wordSvg = ({ body, width }) => `${svgOpen(width + 30, 214)}${body}</svg>`;
+function tightMarkSvg(body, pad = 6) {
+  const b = faceBBox();
+  return `${svgOpenAt(b.x - pad, b.y - pad, b.w + 2 * pad, b.h + 2 * pad)}${body}</svg>`;
+}
+// Words are trimmed vertically to the taller of the face and the letters.
+function wordSvg({ body, width }, pad = 6) {
+  const b = faceBBox();
+  const s = WORDMARK.scale;
+  const ty = 170 - 164 * s;
+  const lw2 = (FACE.sw * s) / 2;
+  const yTop = Math.min(b.y * s + ty, 44 - lw2) - pad;
+  const yBot = Math.max((b.y + b.h) * s + ty, 170 + lw2) + pad;
+  return `${svgOpenAt(0, yTop, width + 30, yBot - yTop)}${body}</svg>`;
+}
 
 const written = [];
 function emit(relPath, svg, title) {
@@ -327,24 +347,28 @@ function emitModes(baseName, svgWithCurrentColor, title) {
 }
 
 // Static marks and wordmarks, per mode.
-emitModes("luke-mark", markSvg(faceCore()), "Luke");
+emitModes("luke-mark", tightMarkSvg(faceCore()), "Luke");
 emitModes("luke-wordmark", wordSvg(faceFirstWordmark()), "LUKE");
-emitModes("luke-word-plain", wordSvg(plainWord()), "luke");
 
 // App icon: space-black tile with the white face; works on both modes.
+// Standard macOS glyph-in-tile sizing: the glyph spans ~70% of the tile
+// width, centered on the tile — measured from the artwork's bounding box.
+const bbox = faceBBox();
+const glyphScale = (240 * 0.7) / bbox.w;
+const gx = 120 - bbox.cx * glyphScale;
+const gy = 120 - bbox.cy * glyphScale;
 const icon =
   `${svgOpen(240, 240)}<defs><linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">` +
   `<stop offset="0" stop-color="${TILE[0]}"/><stop offset="1" stop-color="${TILE[1]}"/></linearGradient></defs>` +
   `<rect x="8" y="8" width="224" height="224" rx="52" fill="url(#tile)"/>` +
-  `<g color="${TILE_INK}" transform="translate(33.6 33.6) scale(0.72)">${faceCore()}</g></svg>`;
+  `<g color="${TILE_INK}" transform="translate(${fmt(gx)} ${fmt(gy)}) scale(${fmt(glyphScale)})">${faceCore()}</g></svg>`;
 emit("icon/luke-icon.svg", icon.replaceAll("currentColor", TILE_INK), "Luke app icon");
 
 // Menu-bar template source: pure black, macOS recolors it (see README).
-emit(
-  "menubar/luke-menubar-template.svg",
-  markSvg(faceCore()).replaceAll("currentColor", "#000000"),
-  "Luke",
-);
+// Square canvas, artwork filling ~90% of it, per status-item conventions.
+const side = Math.max(bbox.w, bbox.h) * 1.1;
+const menubar = `${svgOpenAt(bbox.cx - side / 2, bbox.cy - side / 2, side, side)}${faceCore()}</svg>`;
+emit("menubar/luke-menubar-template.svg", menubar.replaceAll("currentColor", "#000000"), "Luke");
 
 // Animated state marks, per mode.
 for (const [state, render] of Object.entries(MOTIONS)) {
