@@ -39,17 +39,29 @@ export function KeySlot({
 }): React.JSX.Element | null {
   const field = useRef<HTMLInputElement | null>(null);
   const held = useRef(control.entry);
+  const heldSource = useRef(source);
   // The slot has to outlive the entry that filled it: emptying the field on the
-  // frame the key is saved would leave a blank pill on screen for as long as the
-  // shape takes to grow back into the panel. It keeps drawing what it last held
-  // until the shape has left it behind.
-  if (control.entry) held.current = control.entry;
+  // frame the credential is saved would leave a blank pill on screen for as long
+  // as the shape takes to grow back into the panel. It keeps drawing what it
+  // last held until the shape has left it behind — and that is everything it
+  // draws, not only the entry. Where the credential came from decides what the
+  // field says it is for, and it stops answering for a provider the moment the
+  // entry does, so it is held with it rather than read live.
+  if (control.entry) {
+    held.current = control.entry;
+    heldSource.current = source;
+  }
   const entry = held.current;
+  // Drawn and live are not the same thing for the length of an exit: what is on
+  // screen is what it last held, but there is nothing behind it to act on any
+  // more, so it stops taking the caret and stops answering at the same moment
+  // the entry ends rather than when the shape finally goes.
+  const live = drawn && control.entry !== undefined;
 
-  useFieldCaret(field, drawn && !control.entry?.busy);
+  useFieldCaret(field, live && !control.entry?.busy);
 
   useEffect(() => {
-    if (!drawn) return;
+    if (!live) return;
     // Coming back from the browser with a key on the clipboard should cost one
     // gesture, not two: however the window is raised, the caret is already where
     // the key goes. The slot is long since drawn by then, so this can ask
@@ -57,7 +69,7 @@ export function KeySlot({
     const takeCaret = () => field.current?.focus({ preventScroll: true });
     window.addEventListener("focus", takeCaret);
     return () => window.removeEventListener("focus", takeCaret);
-  }, [drawn]);
+  }, [live]);
 
   if (!entry) return null;
 
@@ -74,7 +86,7 @@ export function KeySlot({
   const ready = isSubmittable(entry);
 
   return (
-    <div className="slot-stage" aria-hidden={!drawn} inert={!drawn}>
+    <div className="slot-stage" aria-hidden={!live} inert={!live}>
       {/* No grouping role: the field names the provider itself, and everything
           beside it acts on that one field. */}
       <div className="key-slot" ref={measure} data-hit-region={HIT_REGION.SLOT}>
@@ -98,7 +110,7 @@ export function KeySlot({
             aria-label={`${provider.displayName} ${credential}`}
             autoComplete="off"
             spellCheck={false}
-            placeholder={CREDENTIAL_PLACEHOLDER[source]}
+            placeholder={CREDENTIAL_PLACEHOLDER[heldSource.current]}
             value={entry.draft}
             disabled={entry.busy}
             onChange={(event) => control.change(event.target.value)}
