@@ -10,6 +10,7 @@ import { PROVIDER_ID } from "@sidecar/core";
 export const CREDENTIAL_PROVIDER_ID = {
   CONDUCTOR: PROVIDER_ID.CONDUCTOR,
   CURSOR: PROVIDER_ID.CURSOR,
+  JULES: PROVIDER_ID.JULES,
 } as const;
 
 export type CredentialProviderId =
@@ -26,6 +27,10 @@ const CONDUCTOR_ENVIRONMENT = {
 
 const CURSOR_ENVIRONMENT = {
   API_KEY: "CURSOR_API_KEY",
+} as const;
+
+const JULES_ENVIRONMENT = {
+  API_KEY: "JULES_API_KEY",
 } as const;
 
 export interface CredentialProvider {
@@ -58,6 +63,14 @@ export const CREDENTIAL_PROVIDERS: Readonly<Record<CredentialProviderId, Credent
     hint: "Create a key in the Cursor dashboard under Integrations · API keys.",
     apiKeysUrl: "https://cursor.com/dashboard/api",
     environmentVariables: [CURSOR_ENVIRONMENT.API_KEY],
+  },
+  [CREDENTIAL_PROVIDER_ID.JULES]: {
+    id: CREDENTIAL_PROVIDER_ID.JULES,
+    displayName: "Jules",
+    // Jules shows a key once, on creation, and allows at most three at a time.
+    hint: "Create a key in Jules under Settings · API key. It is shown only once.",
+    apiKeysUrl: "https://jules.google.com/settings",
+    environmentVariables: [JULES_ENVIRONMENT.API_KEY],
   },
 };
 

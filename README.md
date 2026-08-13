@@ -168,9 +168,11 @@ silent until you press the capsule to open the panel, choose the **Settings**
 tab, and connect it with a key. Each provider holds its own credential and also
 reads its own `<PROVIDER>_API_KEY` from the environment; Conductor accepts
 `CONDUCTOR_API_KEY` or `CONDUCTOR_API_TOKEN` and issues keys at
-<https://app.conductor.build/users/api-keys>, and Cursor accepts
-`CURSOR_API_KEY` and issues keys at <https://cursor.com/dashboard/api>. A
-provider you give no key to reports nothing and issues no request. A key you
+<https://app.conductor.build/users/api-keys>, Cursor accepts `CURSOR_API_KEY`
+and issues keys at <https://cursor.com/dashboard/api>, and Jules accepts
+`JULES_API_KEY` and issues keys—at most three at a time, each shown only
+once—at <https://jules.google.com/settings>. A provider you give no key to
+reports nothing and issues no request. A key you
 enter is encrypted with `safeStorage`, whose key comes from the login Keychain,
 and it is never returned to the renderer. Luke reads only cloud workspaces and
 agents you created, issues only read requests, and labels each session by its

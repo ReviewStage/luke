@@ -1,0 +1,439 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { SESSION_STATUS } from "@sidecar/core";
+import type { CloudFetch } from "../src/cloud-session-adapter";
+import { JULES_PROVIDER, JulesSessionAdapter } from "../src/jules-adapter";
+
+const TEST_TIME = Date.parse("2026-08-13T02:45:00.000Z");
+const TEST_BASE_URL = "https://jules.test";
+const TEST_API_KEY = "jules-test-key";
+const TEST_SOURCE = "sources/github/reviewstage/luke";
+const SECRET_PROMPT_TEXT = "SECRET_PROMPT_TEXT";
+const GOOGLE_API_KEY_HEADER = "x-goog-api-key";
+
+/** The documented `State` enum, verified against a live account. */
+const TEST_STATE = {
+  STATE_UNSPECIFIED: "STATE_UNSPECIFIED",
+  QUEUED: "QUEUED",
+  PLANNING: "PLANNING",
+  AWAITING_PLAN_APPROVAL: "AWAITING_PLAN_APPROVAL",
+  AWAITING_USER_FEEDBACK: "AWAITING_USER_FEEDBACK",
+  IN_PROGRESS: "IN_PROGRESS",
+  PAUSED: "PAUSED",
+  FAILED: "FAILED",
+  COMPLETED: "COMPLETED",
+} as const;
+
+const HTTP_STATUS = {
+  OK: 200,
+  UNAUTHORIZED: 401,
+  SERVER_ERROR: 500,
+} as const;
+
+interface TestSession {
+  id: string;
+  state?: string;
+  source?: string;
+  omitSourceContext?: boolean;
+  startingBranch?: string;
+  createTime: number;
+  updateTime?: number;
+}
+
+interface RecordedRequest {
+  method: string;
+  pathname: string;
+  search: string;
+  apiKey: string | undefined;
+  authorization: string | undefined;
+}
+
+interface FakeJulesApi {
+  fetch: CloudFetch;
+  requests: RecordedRequest[];
+}
+
+function isoTimestamp(timestampMs: number): string {
+  return new Date(timestampMs).toISOString();
+}
+
+function jsonResponse(body: unknown, status = HTTP_STATUS.OK): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+function lastActivityAt(session: TestSession): number {
+  return session.updateTime ?? session.createTime;
+}
+
+function sessionPayload(session: TestSession): Record<string, unknown> {
+  return {
+    name: `sessions/${session.id}`,
+    id: session.id,
+    // Jules returns the task the user typed and a title generated from it, so
+    // both are transcript content that no observation may carry.
+    prompt: `${SECRET_PROMPT_TEXT} please`,
+    title: `${SECRET_PROMPT_TEXT} title`,
+    ...(session.omitSourceContext
+      ? {}
+      : {
+          sourceContext: {
+            source: session.source ?? TEST_SOURCE,
+            environmentVariablesEnabled: false,
+            githubRepoContext: {
+              startingBranch: session.startingBranch ?? "main",
+            },
+          },
+        }),
+    state: session.state ?? TEST_STATE.IN_PROGRESS,
+    url: `https://jules.google.com/task/${session.id}`,
+    createTime: isoTimestamp(session.createTime),
+    updateTime: isoTimestamp(lastActivityAt(session)),
+  };
+}
+
+/** Serves the read-only subset of the alpha API the adapter is allowed to use. */
+function fakeJulesApi(sessions: readonly TestSession[]): FakeJulesApi {
+  const requests: RecordedRequest[] = [];
+  const fetch: CloudFetch = async (url, init) => {
+    const { pathname, searchParams, search } = new URL(url);
+    const headers = new Headers(init.headers);
+    requests.push({
+      method: init.method ?? "",
+      pathname,
+      search,
+      apiKey: headers.get(GOOGLE_API_KEY_HEADER) ?? undefined,
+      authorization: headers.get("authorization") ?? undefined,
+    });
+
+    const segments = pathname.split("/").filter((segment) => segment.length > 0);
+    if (segments.length !== 2 || segments[0] !== "v1alpha" || segments[1] !== "sessions") {
+      return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
+    }
+
+    // Jules documents no ordering, so the fake deliberately answers in the
+    // order it was given rather than newest-first.
+    const pageSize = Number(searchParams.get("pageSize") ?? "30");
+    const page = sessions.slice(0, pageSize);
+    return jsonResponse({
+      sessions: page.map(sessionPayload),
+      ...(page.length < sessions.length ? { nextPageToken: "next-page" } : {}),
+    });
+  };
+  return { fetch, requests };
+}
+
+function adapterFor(
+  fetch: CloudFetch,
+  overrides: {
+    apiKey?: string | undefined;
+    readApiKey?: () => Promise<string | undefined>;
+    now?: () => number;
+    minimumRefreshIntervalMs?: number;
+    maximumObservedSessions?: number;
+  } = {},
+): JulesSessionAdapter {
+  const apiKey = "apiKey" in overrides ? overrides.apiKey : TEST_API_KEY;
+  return new JulesSessionAdapter({
+    readApiKey: overrides.readApiKey ?? (async () => apiKey),
+    baseUrl: TEST_BASE_URL,
+    fetch,
+    now: overrides.now ?? (() => TEST_TIME),
+    minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,
+    ...(overrides.maximumObservedSessions === undefined
+      ? {}
+      : { maximumObservedSessions: overrides.maximumObservedSessions }),
+  });
+}
+
+function workingSession(id: string, updateTime: number): TestSession {
+  return { id, state: TEST_STATE.IN_PROGRESS, createTime: updateTime, updateTime };
+}
+
+test("observes a session in progress without exposing prompt-derived text", async () => {
+  const api = fakeJulesApi([
+    {
+      id: "session-in-progress",
+      state: TEST_STATE.IN_PROGRESS,
+      startingBranch: "main",
+      createTime: TEST_TIME - 60_000,
+      updateTime: TEST_TIME - 30_000,
+    },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.deepEqual(JULES_PROVIDER, { id: "jules", displayName: "Jules" });
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.providerSessionId, "session-in-progress");
+  assert.equal(observations[0]?.title, "Jules: luke");
+  assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
+  assert.equal(observations[0]?.observedAt, TEST_TIME - 30_000);
+  assert.equal(observations[0]?.controls, undefined);
+  assert.match(observations[0]?.summary ?? "", /from main/);
+  assert.equal(JSON.stringify(observations).includes(SECRET_PROMPT_TEXT), false);
+});
+
+test("reads the whole pass with one list call authenticated by Google's key header", async () => {
+  const api = fakeJulesApi([
+    workingSession("session-one", TEST_TIME - 1_000),
+    workingSession("session-two", TEST_TIME - 2_000),
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.equal(observations.length, 2);
+  assert.deepEqual(
+    api.requests.map((request) => request.pathname),
+    ["/v1alpha/sessions"],
+  );
+  assert.equal(api.requests[0]?.search, "?pageSize=100");
+  assert.equal(api.requests[0]?.method, "GET");
+  // Jules rejects a bearer token, so the key must travel in its own header and
+  // nowhere else.
+  assert.equal(api.requests[0]?.apiKey, TEST_API_KEY);
+  assert.equal(api.requests[0]?.authorization, undefined);
+});
+
+test("maps every state Jules reports onto a state Luke can show", async () => {
+  const api = fakeJulesApi(
+    (
+      [
+        [TEST_STATE.QUEUED, "queued"],
+        [TEST_STATE.PLANNING, "planning"],
+        [TEST_STATE.IN_PROGRESS, "in-progress"],
+        [TEST_STATE.AWAITING_PLAN_APPROVAL, "awaiting-plan"],
+        [TEST_STATE.AWAITING_USER_FEEDBACK, "awaiting-feedback"],
+        [TEST_STATE.PAUSED, "paused"],
+        [TEST_STATE.COMPLETED, "completed"],
+        [TEST_STATE.FAILED, "failed"],
+        [TEST_STATE.STATE_UNSPECIFIED, "unspecified"],
+        ["SOME_LATER_STATE", "later-state"],
+      ] as const
+    ).map(([state, name], index) => ({
+      id: `session-${name}`,
+      state,
+      createTime: TEST_TIME - (index + 1) * 1_000,
+      updateTime: TEST_TIME - (index + 1) * 1_000,
+    })),
+  );
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.deepEqual(
+    observations.map((observation) => [observation.providerSessionId, observation.status]),
+    [
+      ["session-queued", SESSION_STATUS.WORKING],
+      ["session-planning", SESSION_STATUS.WORKING],
+      ["session-in-progress", SESSION_STATUS.WORKING],
+      ["session-awaiting-plan", SESSION_STATUS.WAITING],
+      ["session-awaiting-feedback", SESSION_STATUS.WAITING],
+      ["session-paused", SESSION_STATUS.WAITING],
+      ["session-completed", SESSION_STATUS.COMPLETE],
+      ["session-failed", SESSION_STATUS.UNKNOWN],
+      ["session-unspecified", SESSION_STATUS.UNKNOWN],
+      ["session-later-state", SESSION_STATUS.UNKNOWN],
+    ],
+  );
+});
+
+test("keeps reporting a long turn as working", async () => {
+  // `updateTime` marks when the session entered its state rather than a
+  // heartbeat, so a turn that started an hour ago and is still going must not
+  // read as stale.
+  const startedAt = TEST_TIME - 60 * 60 * 1000;
+  const api = fakeJulesApi([workingSession("session-long-turn", startedAt)]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
+  assert.equal(observations[0]?.observedAt, startedAt);
+});
+
+test("stops calling a session that asked for feedback waiting once it goes stale", async () => {
+  const askedAt = TEST_TIME - 2 * 60 * 60 * 1000;
+  const api = fakeJulesApi([
+    {
+      id: "session-abandoned",
+      state: TEST_STATE.AWAITING_USER_FEEDBACK,
+      createTime: askedAt,
+      updateTime: askedAt,
+    },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
+});
+
+test("keeps a completed session complete however long ago it finished", async () => {
+  const finishedAt = TEST_TIME - 8 * 60 * 60 * 1000;
+  const api = fakeJulesApi([
+    {
+      id: "session-finished",
+      state: TEST_STATE.COMPLETED,
+      createTime: finishedAt,
+      updateTime: finishedAt,
+    },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.equal(observations[0]?.status, SESSION_STATUS.COMPLETE);
+});
+
+test("ignores sessions untouched for longer than the maximum session age", async () => {
+  const api = fakeJulesApi([workingSession("session-last-week", TEST_TIME - 48 * 60 * 60 * 1000)]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.deepEqual(observations, []);
+});
+
+test("orders the pass itself rather than trusting the order Jules answers in", async () => {
+  // Jules documents no ordering for `sessions.list`, so the newest sessions
+  // have to survive the cap however the page happens to arrive.
+  const api = fakeJulesApi([
+    workingSession("session-oldest", TEST_TIME - 3_000),
+    workingSession("session-newest", TEST_TIME - 1_000),
+    workingSession("session-middle", TEST_TIME - 2_000),
+  ]);
+
+  const observations = await adapterFor(api.fetch, { maximumObservedSessions: 2 }).observe();
+
+  assert.deepEqual(
+    observations.map((observation) => observation.providerSessionId),
+    ["session-newest", "session-middle"],
+  );
+});
+
+test("labels a session by its repository, and by neither its title nor nothing", async () => {
+  const api = fakeJulesApi([
+    {
+      id: "session-repository",
+      source: "sources/github/reviewstage/sidecar",
+      createTime: TEST_TIME - 1_000,
+    },
+    { id: "session-sourceless", omitSourceContext: true, createTime: TEST_TIME - 2_000 },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.equal(observations[0]?.title, "Jules: sidecar");
+  assert.equal(observations[1]?.title, "Jules: workspace");
+  assert.equal(JSON.stringify(observations).includes(SECRET_PROMPT_TEXT), false);
+});
+
+test("drops a session it cannot place in time without losing the rest of the pass", async () => {
+  const fetch: CloudFetch = async () =>
+    jsonResponse({
+      sessions: [
+        { name: "sessions/anonymous", state: TEST_STATE.IN_PROGRESS },
+        { id: "session-undated", state: TEST_STATE.IN_PROGRESS },
+        sessionPayload({ id: "session-complete", createTime: TEST_TIME - 1_000 }),
+      ],
+    });
+
+  const observations = await adapterFor(fetch).observe();
+
+  assert.deepEqual(
+    observations.map((observation) => observation.providerSessionId),
+    ["session-complete"],
+  );
+});
+
+test("reports nothing and issues no request without an API key", async () => {
+  const api = fakeJulesApi([workingSession("session-in-progress", TEST_TIME - 1_000)]);
+
+  const observations = await adapterFor(api.fetch, { apiKey: undefined }).observe();
+
+  assert.deepEqual(observations, []);
+  assert.deepEqual(api.requests, []);
+});
+
+test("reports nothing when the credential cannot be read", async () => {
+  const api = fakeJulesApi([workingSession("session-in-progress", TEST_TIME - 1_000)]);
+  const adapter = adapterFor(api.fetch, {
+    readApiKey: async () => {
+      throw new Error("settings are unreadable");
+    },
+  });
+
+  assert.deepEqual(await adapter.observe(), []);
+  assert.deepEqual(api.requests, []);
+});
+
+test("reuses the previous snapshot inside the minimum refresh interval", async () => {
+  const api = fakeJulesApi([workingSession("session-in-progress", TEST_TIME - 1_000)]);
+  let now = TEST_TIME;
+  const adapter = adapterFor(api.fetch, { now: () => now, minimumRefreshIntervalMs: 15_000 });
+
+  const first = await adapter.observe();
+  now = TEST_TIME + 5_000;
+  const throttled = await adapter.observe();
+  const requestsAfterThrottledPass = api.requests.length;
+  now = TEST_TIME + 20_000;
+  const refreshed = await adapter.observe();
+
+  assert.equal(first.length, 1);
+  assert.deepEqual(throttled, first);
+  assert.equal(requestsAfterThrottledPass, 1, "throttled pass issued a request");
+  assert.equal(api.requests.length, 2, "refreshed pass issued no request");
+  assert.equal(refreshed.length, 1);
+});
+
+test("observes again immediately after the API key changes", async () => {
+  const api = fakeJulesApi([workingSession("session-in-progress", TEST_TIME - 1_000)]);
+  let apiKey = TEST_API_KEY;
+  const adapter = adapterFor(api.fetch, {
+    readApiKey: async () => apiKey,
+    minimumRefreshIntervalMs: 60_000,
+  });
+
+  await adapter.observe();
+  const requestsAfterFirstPass = api.requests.length;
+  apiKey = "jules-replacement-key";
+  const observations = await adapter.observe();
+
+  assert.ok(api.requests.length > requestsAfterFirstPass);
+  assert.equal(observations.length, 1);
+  assert.equal(
+    api.requests.at(-1)?.apiKey,
+    "jules-replacement-key",
+    "the replacement key was not used",
+  );
+});
+
+test("clears observations when Jules rejects the API key", async () => {
+  const api = fakeJulesApi([workingSession("session-in-progress", TEST_TIME - 1_000)]);
+  let rejectRequests = false;
+  const gatedFetch: CloudFetch = async (url, init) =>
+    rejectRequests ? jsonResponse({}, HTTP_STATUS.UNAUTHORIZED) : api.fetch(url, init);
+  const adapter = adapterFor(gatedFetch);
+
+  const authorized = await adapter.observe();
+  rejectRequests = true;
+  const rejected = await adapter.observe();
+
+  assert.equal(authorized.length, 1);
+  assert.deepEqual(rejected, []);
+});
+
+test("keeps the previous snapshot when the list request fails transiently", async () => {
+  const api = fakeJulesApi([workingSession("session-in-progress", TEST_TIME - 1_000)]);
+  let failRequests = false;
+  const gatedFetch: CloudFetch = async (url, init) => {
+    if (failRequests) throw new Error("network unreachable");
+    return api.fetch(url, init);
+  };
+  const adapter = adapterFor(gatedFetch);
+
+  const observed = await adapter.observe();
+  failRequests = true;
+  const duringOutage = await adapter.observe();
+
+  assert.equal(observed.length, 1);
+  assert.deepEqual(duringOutage, observed);
+});
