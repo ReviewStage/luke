@@ -38,10 +38,10 @@ const MICROPHONE_STATUS_LABEL: Record<MicrophoneStatus, string> = {
   unknown: "Unknown",
 };
 
-/* What the check beside the name cannot say on its own. A key kept here needs
-   no words at all: the check is the whole message. */
+/* What nothing else on the line can say on its own. A key kept here needs no
+   words at all — the check is the whole message — and no key at all is already
+   said by the Connect button standing where the check would be. */
 const CREDENTIAL_STATUS: Partial<Record<CredentialSource, string>> = {
-  [CREDENTIAL_SOURCE.NONE]: "Not connected",
   [CREDENTIAL_SOURCE.ENVIRONMENT]: "From environment",
 };
 
@@ -113,9 +113,9 @@ function ProviderCredential({
           <span className="credential-name">{provider.displayName}</span>
           {connected ? <CheckIcon /> : null}
         </span>
-        {/* The check already says connected, so the words are kept for what it
-            cannot say: not connected at all, or connected from the environment
-            rather than from a key kept here. */}
+        {/* The check says connected and Connect says the opposite, so the words
+            are kept for the one thing neither can say: connected from the
+            environment rather than from a key kept here. */}
         {status ? <span className="credential-status">{status}</span> : null}
         <span className="settings-actions">
           {stored ? (
