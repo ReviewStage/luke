@@ -50,8 +50,9 @@ export interface NotchWindowLayout extends Rectangle {
 export const CAPSULE_SIDE_WIDTH = 36;
 export const PEEK_SIDE_GROWTH = 88;
 export const SURFACE_MARGIN = 40;
+/** `--panel-width` in the renderer's stylesheet; the two must agree. */
+export const PANEL_WIDTH = 620;
 const peekSideWidth = CAPSULE_SIDE_WIDTH + PEEK_SIDE_GROWTH;
-const panelWidth = 620;
 const panelHeight = 520;
 
 export function resolveNotchGeometry(
@@ -84,7 +85,7 @@ export function positionNotchWindow(
   const housingWidth = notch.hasNotch ? notch.housingWidth : 0;
   const width =
     mode === "expanded"
-      ? Math.min(panelWidth + SURFACE_MARGIN * 2, display.bounds.width)
+      ? Math.min(PANEL_WIDTH + SURFACE_MARGIN * 2, display.bounds.width)
       : Math.min(housingWidth + peekSideWidth * 2 + SURFACE_MARGIN * 2, display.bounds.width);
   const height =
     mode === "expanded"

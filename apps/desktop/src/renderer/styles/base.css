@@ -571,6 +571,21 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transition-delay: var(--peek-delay);
 }
 
+/* A mark can mount into a wing that is already unfolded — the panel's wing
+   holds more marks than the peek's, and opening the panel is what mounts the
+   extra ones — and a transition only runs from a style the element has held.
+   This is the pose every mark waits in above, so a mark that arrives late
+   unfolds on the same gesture as the rest instead of appearing in place. */
+@starting-style {
+  .app-stage[data-presentation="peek"] .wing-mark,
+  .app-stage[data-presentation="peek"] .wing-more,
+  .app-stage[data-presentation="panel"] .wing-mark,
+  .app-stage[data-presentation="panel"] .wing-more {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+}
+
 /* More providers than the wing can hold. Counted rather than dropped, at the
    far end of the row, where it reads as the remainder of a list. */
 .wing-more {
