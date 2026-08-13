@@ -64,3 +64,18 @@ export function removalStage(
 export function removalAsked(stage: RemovalStage): boolean {
   return stage !== REMOVAL_STAGE.RESTING;
 }
+
+/**
+ * Whether the question can still be taken back. Only one that is still a
+ * question can be: an answer already given is nobody's to withdraw, and a line
+ * that forgot a delete it had sent would draw the trash back over a key still
+ * on its way out — and take a second ask over the top of the first.
+ *
+ * This is the same rule `removalStage` keeps against the panel closing, said
+ * for the controls: `Cancel` goes disabled while a delete is in flight, so
+ * today nothing focused inside the group can reach Escape, but the invariant
+ * must not rest on which element happens to hold the caret.
+ */
+export function removalWithdrawable(stage: RemovalStage): boolean {
+  return stage === REMOVAL_STAGE.ASKING;
+}

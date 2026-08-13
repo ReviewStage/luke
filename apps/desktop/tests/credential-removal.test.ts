@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { REMOVAL_STAGE, removalAsked, removalStage } from "../src/renderer/credential-removal";
+import {
+  REMOVAL_STAGE,
+  removalAsked,
+  removalStage,
+  removalWithdrawable,
+} from "../src/renderer/credential-removal";
 
 const A_KEY_ON_AN_OPEN_PANEL = { stored: true, panelOpen: true };
 const A_KEY_THAT_IS_GONE = { stored: false, panelOpen: true };
@@ -49,6 +54,20 @@ test("a delete already sent finishes wherever it is", () => {
 test("a line at rest is left at rest", () => {
   assert.equal(removalStage(REMOVAL_STAGE.RESTING, A_KEY_ON_AN_OPEN_PANEL), REMOVAL_STAGE.RESTING);
   assert.equal(removalStage(REMOVAL_STAGE.RESTING, A_KEY_THAT_IS_GONE), REMOVAL_STAGE.RESTING);
+});
+
+test("only a question can be taken back", () => {
+  assert.equal(removalWithdrawable(REMOVAL_STAGE.ASKING), true);
+  assert.equal(
+    removalWithdrawable(REMOVAL_STAGE.CLEARING),
+    false,
+    "Cancel and Escape must not forget a delete that is already on its way out",
+  );
+  assert.equal(
+    removalWithdrawable(REMOVAL_STAGE.RESTING),
+    false,
+    "there is no question to withdraw, so nothing withdraws one",
+  );
 });
 
 test("the confirm is drawn from the moment it is asked until the answer lands", () => {

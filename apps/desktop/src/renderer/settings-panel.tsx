@@ -11,7 +11,13 @@ import {
   isSubmittable,
   useStagedFocus,
 } from "./credential-entry";
-import { REMOVAL_STAGE, type RemovalStage, removalAsked, removalStage } from "./credential-removal";
+import {
+  REMOVAL_STAGE,
+  type RemovalStage,
+  removalAsked,
+  removalStage,
+  removalWithdrawable,
+} from "./credential-removal";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import { CloudBadge, ProviderMark } from "./provider-marks";
 import {
@@ -188,8 +194,10 @@ function ProviderCredential({
   };
 
   // Keeping it changes nothing, so it says nothing: the line goes back to the
-  // controls it was showing.
+  // controls it was showing. Only a question can be kept from — an answer
+  // already sent is not this control's to take back.
   const keepKey = () => {
+    if (!removalWithdrawable(removal)) return;
     returnFocus.current = true;
     setHeldRemoval(REMOVAL_STAGE.RESTING);
   };
@@ -295,8 +303,11 @@ function ProviderCredential({
               inert={!asking}
               onKeyDown={(event) => {
                 // Escape withdraws the question rather than closing the panel
-                // the question was asked on.
-                if (event.key !== "Escape") return;
+                // the question was asked on — but only while it is still a
+                // question. Once the delete has gone there is nothing here for
+                // Escape to take back, so it is left to mean what it means
+                // everywhere else in the panel.
+                if (event.key !== "Escape" || !removalWithdrawable(removal)) return;
                 event.stopPropagation();
                 keepKey();
               }}
