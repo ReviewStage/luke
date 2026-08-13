@@ -96,6 +96,22 @@ shrinking, content leaves over `--duration-exit` before the surface moves.
 the motion recorder alike. `COLLAPSE_ANIMATION_MS` is the sum of
 `--duration-exit` and `--duration-shape`; the three move together.
 
+## Brand artwork
+
+`design/generate-brand-assets.mjs` is the only place the artwork is described.
+It writes three sets of committed outputs from that one description: the SVGs in
+`design/brand/`, `apps/desktop/src/renderer/luke-face-art.ts`, and
+`apps/desktop/src/renderer/styles/face-motion.css`. None of the three may be
+hand-edited — change the parameters or the motion table in the script, re-run it,
+and commit what it writes. `repository-checks.sh` runs it with `--check`, which
+compares every output without writing and fails on any drift.
+
+The app draws the face rather than loading the SVGs because it needs
+`currentColor` and CSS animation: `--face-motion` is what holds every loop still
+for a capture run and for reduced motion, and SMIL answers to neither. Motion
+that carries meaning is chosen in `luke-face-mood.ts`; anything that carries none
+belongs in its aside list, never in a rest.
+
 ## TypeScript value sets and keys
 
 - Do not use stringly typed fixed value sets. Define `as const`

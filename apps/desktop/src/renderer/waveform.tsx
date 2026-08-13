@@ -1,17 +1,28 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 const BAR_INDEXES = [0, 1, 2, 3, 4, 5, 6];
 const FIXTURE_LEVELS = [0.42, 0.62, 0.82, 1, 0.78, 0.58, 0.38];
 
+/**
+ * The meter reports speech; it does not own the fact. Luke's face answers the
+ * same signal from the other side of the housing, and two components deciding
+ * separately whether someone is talking would eventually disagree — so the bars
+ * report what they hear and the wing holds the answer.
+ */
 export function Waveform({
   analyser,
   speaking = false,
+  voiceActive = false,
+  onVoiceActivity,
 }: {
   analyser?: AnalyserNode;
   speaking?: boolean;
+  voiceActive?: boolean;
+  onVoiceActivity?: (active: boolean) => void;
 }): React.JSX.Element {
   const bars = useRef<Array<HTMLSpanElement | null>>([]);
-  const [voiceActive, setVoiceActive] = useState(false);
+  const report = useRef(onVoiceActivity);
+  report.current = onVoiceActivity;
 
   useEffect(() => {
     // Fixture speech is intentionally static so screenshots and recordings are
@@ -37,7 +48,7 @@ export function Waveform({
       const nextSpeaking = now - lastVoiceAt < 220;
       if (nextSpeaking !== wasSpeaking) {
         wasSpeaking = nextSpeaking;
-        setVoiceActive(wasSpeaking);
+        report.current?.(wasSpeaking);
       }
       bars.current.forEach((bar, index) => {
         if (!bar) return;
@@ -50,7 +61,9 @@ export function Waveform({
     animationFrame = requestAnimationFrame(draw);
     return () => {
       cancelAnimationFrame(animationFrame);
-      setVoiceActive(false);
+      // A microphone that goes away takes its speech with it, and the face is
+      // still on screen to be told so.
+      report.current?.(false);
     };
   }, [analyser]);
 
