@@ -79,6 +79,12 @@ const SORT_DESCRIPTORS: readonly SortDescriptor[] = [
 const SORT_LABEL_ID = "session-sort-label";
 const SHOW_LABEL_ID = "session-show-label";
 export const SESSION_OPTIONS_ID = "session-options";
+/**
+ * Named so the panel can tell a press on the button from a press outside the
+ * sheet. The button keeps its own toggle: dismissed on the way down and toggled
+ * on the way up, a press here would close and reopen the sheet in one gesture.
+ */
+export const SESSION_OPTIONS_BUTTON_ID = "session-options-button";
 
 /** What each coarse chip is drawn with. An agent carries its own mark instead. */
 function FilterIcon({ filter }: { filter: SessionFilter }): React.JSX.Element | null {
@@ -120,6 +126,7 @@ export function SessionOptionsButton({
   return (
     <button
       type="button"
+      id={SESSION_OPTIONS_BUTTON_ID}
       className="options-button"
       data-active={String(open)}
       data-narrowed={String(narrowed !== undefined)}
@@ -149,6 +156,12 @@ export function SessionOptionsButton({
  * and the surface only grows on the spring — which would leave a row drawn on
  * the desktop for the length of it. Floating costs the top of the list while
  * the sheet is open, and costs the shape nothing.
+ *
+ * What it costs has to be paid back the moment a choice is made. The sheet is
+ * taller than a row, and a narrowed list can be a single row: left open over
+ * one, it hides the very sessions it was asked for, and the control reads as
+ * having done nothing. So `onViewChange` is also what puts the sheet away — it
+ * is a menu over the list, not a shelf beside it.
  *
  * Both groups are pressed buttons rather than radios: a radio owes its reader
  * arrow-key navigation, and the panel is a surface someone tabs through beside
