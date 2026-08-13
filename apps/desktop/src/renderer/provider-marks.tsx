@@ -11,8 +11,9 @@ import { useId } from "react";
  * via Simple Icons (CC0-1.0, sourced from code.claude.com), Codex via
  * @lobehub/icons (MIT), Conductor's letter mark verbatim from the published
  * brand kit at https://www.conductor.build/brandkit, Cursor via Simple Icons
- * (CC0-1.0, sourced from https://cursor.com/brand), and Devin's verbatim from
- * the mark https://devin.ai serves as its own favicon and site header. Each
+ * (CC0-1.0, sourced from https://cursor.com/brand), Devin's verbatim from
+ * the mark https://devin.ai serves as its own favicon and site header, and
+ * Jules via Simple Icons (CC0-1.0, sourced from https://jules.google). Each
  * keeps its own brand colour (see the `--mark-*` custom properties), so a mark
  * says which provider a session belongs to while the chips and row tints say
  * what state it is in. Cursor and Devin each publish one silhouette rather than
@@ -36,6 +37,9 @@ const CURSOR_PATH =
 
 const DEVIN_PATH =
   "M70 159.333V91.3471C70 88.3592 71.594 85.5983 74.1816 84.1044L133.043 50.1205C135.631 48.6265 138.819 48.6265 141.407 50.1205L200.269 84.1044C202.856 85.5983 204.45 88.3592 204.45 91.3471V126.068C204.708 137.606 210.806 148.734 221.531 154.926C232.256 161.117 244.942 160.834 255.063 155.289L285.132 137.929C287.719 136.435 290.907 136.435 293.495 137.929L352.357 171.913C354.944 173.406 356.538 176.167 356.538 179.155V247.123C356.538 250.111 354.944 252.872 352.357 254.366L293.495 288.35C290.907 289.844 287.719 289.844 285.132 288.35L255.306 271.13C245.146 265.456 232.344 265.117 221.534 271.358C210.809 277.55 204.711 288.678 204.453 300.215V334.926C204.453 337.914 202.859 340.675 200.271 342.169L141.41 376.153C138.822 377.647 135.634 377.647 133.046 376.153L74.1845 342.169C71.5969 340.675 70.0028 337.914 70.0028 334.926V266.959C70.0029 263.971 71.5969 261.21 74.1845 259.716L133.046 225.732C135.634 224.238 138.822 224.238 141.41 225.732L171.547 243.132C181.656 248.638 194.306 248.906 205.005 242.729C215.815 236.488 221.922 225.231 222.088 213.595C221.83 202.057 215.732 189.737 205.008 183.545C194.283 177.353 181.597 177.636 171.476 183.181L141.269 200.72C138.67 202.229 135.461 202.228 132.864 200.716L74.1576 166.562C71.5835 165.065 70 162.311 70 159.333Z";
+
+const JULES_PATH =
+  "M4.2 24q-1.26 0-2.13-.87T1.2 21v-.6q0-.51.345-.855T2.4 19.2t.855.345.345.855v.6q0 .24.18.42t.42.18.42-.18.18-.42V7.2q0-3 2.1-5.1T12 0t5.1 2.1 2.1 5.1V21q0 .24.18.42t.42.18.42-.18.18-.42v-.6q0-.51.345-.855t.855-.345.855.345.345.855v.6q0 1.26-.87 2.13T19.8 24t-2.13-.87T16.8 21v-5.4h-1.62v4.8q0 .51-.345.855t-.855.345-.855-.345-.345-.855v-4.8h-1.59v4.8q0 .51-.345.855t-.855.345-.855-.345-.345-.855v-4.8H7.2V21q0 1.26-.87 2.13T4.2 24m4.2-11.4q.54 0 .87-.45t.33-1.05-.33-1.05-.87-.45-.87.45-.33 1.05.33 1.05.87.45m7.2 0q.54 0 .87-.45t.33-1.05-.33-1.05-.87-.45-.87.45-.33 1.05.33 1.05.87.45";
 
 /* Conductor publishes a letter mark rather than a glyph, so it is taller than
    it is wide; the box below fits it by height like any other mark. */
@@ -152,6 +156,20 @@ function DevinMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
+function JulesMark({ className }: MarkProps): React.JSX.Element {
+  return (
+    <svg
+      className={className}
+      data-mark={PROVIDER_ID.JULES}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path fill="currentColor" d={JULES_PATH} />
+    </svg>
+  );
+}
+
 /** Drawn here, not a brand: a provider Luke has no mark for still needs a slot. */
 function UnknownProviderMark({ className }: MarkProps): React.JSX.Element {
   return (
@@ -168,6 +186,7 @@ const PROVIDER_MARKS = new Map<string, (props: MarkProps) => React.JSX.Element>(
   [PROVIDER_ID.CONDUCTOR, ConductorMark],
   [PROVIDER_ID.CURSOR, CursorMark],
   [PROVIDER_ID.DEVIN, DevinMark],
+  [PROVIDER_ID.JULES, JulesMark],
 ]);
 
 export function ProviderMark({

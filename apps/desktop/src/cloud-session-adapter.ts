@@ -19,6 +19,28 @@ const HTTP_STATUS = {
   FORBIDDEN: 403,
 } as const;
 
+/**
+ * How a provider expects its credential to be presented. Every provider so far
+ * takes a bearer token; Google's alpha APIs take the key in their own header
+ * instead, and a provider that authenticates some third way is not supported
+ * rather than approximated.
+ */
+export const CLOUD_AUTH_SCHEME = {
+  BEARER: "bearer",
+  GOOGLE_API_KEY_HEADER: "google-api-key-header",
+} as const;
+
+export type CloudAuthScheme = (typeof CLOUD_AUTH_SCHEME)[keyof typeof CLOUD_AUTH_SCHEME];
+
+const GOOGLE_API_KEY_HEADER = "X-Goog-Api-Key";
+
+const AUTHORIZATION_HEADERS: Readonly<
+  Record<CloudAuthScheme, (apiKey: string) => Readonly<Record<string, string>>>
+> = {
+  [CLOUD_AUTH_SCHEME.BEARER]: (apiKey) => ({ Authorization: `Bearer ${apiKey}` }),
+  [CLOUD_AUTH_SCHEME.GOOGLE_API_KEY_HEADER]: (apiKey) => ({ [GOOGLE_API_KEY_HEADER]: apiKey }),
+};
+
 export const CLOUD_FAILURE = {
   UNAUTHORIZED: "unauthorized",
   TRANSIENT: "transient",
@@ -63,6 +85,8 @@ export interface CloudAdapterProfile {
   provider: SessionProvider;
   defaultBaseUrl: string;
   baseUrlEnvironmentVariable?: string;
+  /** Defaults to a bearer token, which is what every other provider takes. */
+  authScheme?: CloudAuthScheme;
 }
 
 /**
@@ -167,6 +191,7 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
   readonly #readApiKey: () => Promise<string | undefined>;
   readonly #baseUrl: string;
   readonly #fetch: CloudFetch;
+  readonly #authorizationHeaders: (apiKey: string) => Readonly<Record<string, string>>;
   readonly #now: () => number;
   readonly #minimumRefreshIntervalMs: number;
 
@@ -180,6 +205,8 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
     this.#readApiKey = options.readApiKey;
     this.#baseUrl = resolveBaseUrl(profile, options.baseUrl);
     this.#fetch = options.fetch ?? defaultFetch;
+    this.#authorizationHeaders =
+      AUTHORIZATION_HEADERS[profile.authScheme ?? CLOUD_AUTH_SCHEME.BEARER];
     this.#now = options.now ?? Date.now;
     this.#minimumRefreshIntervalMs = nonNegativeNumber(
       options.minimumRefreshIntervalMs,
@@ -324,7 +351,7 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
       response = await this.#fetch(this.#url(segments, query), {
         method: HTTP_METHOD.GET,
         headers: {
-          Authorization: `Bearer ${apiKey}`,
+          ...this.#authorizationHeaders(apiKey),
           Accept: "application/json",
         },
         signal: AbortSignal.timeout(CLOUD_ADAPTER_DEFAULTS.REQUEST_TIMEOUT_MS),

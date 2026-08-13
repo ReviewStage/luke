@@ -24,6 +24,7 @@
   --mark-conductor: #eae8e6;
   --mark-cursor: #ffffff;
   --mark-devin: #ffffff;
+  --mark-jules: #715cd7;
 
   --text-primary: rgba(255, 255, 255, 0.95);
   --text-secondary: rgba(255, 255, 255, 0.56);
@@ -587,6 +588,13 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .provider-mark[data-mark="devin"] {
   color: var(--mark-devin);
   transform: scale(1.22);
+}
+
+/* Jules fills its box top to bottom the way the Codex and Cursor marks do, so
+   it takes the same scale they do. */
+.provider-mark[data-mark="jules"] {
+  color: var(--mark-jules);
+  transform: scale(0.94);
 }
 
 /* The work is happening somewhere the user cannot see. The badge overhangs the

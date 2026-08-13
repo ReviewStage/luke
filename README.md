@@ -19,12 +19,14 @@ Download published builds from [GitHub Releases](https://github.com/ReviewStage/
   and cloud agent metadata after you supply a Cursor API key
 - Devin — reads cloud session metadata after you supply a Devin personal access
   token
+- Jules — reads cloud session metadata after you supply a Jules API key
 
 Cursor is the one provider Luke watches in two places, and both halves arrive as
 Cursor sessions: the ones on this machine need no credential, and its cloud
-agents need a key. Conductor, Cursor's cloud half, and Devin remain silent until
-their own credential is saved in Luke's Settings or supplied through
-`CONDUCTOR_API_KEY`, `CONDUCTOR_API_TOKEN`, `CURSOR_API_KEY`, or `DEVIN_API_KEY`.
+agents need a key. Conductor, Cursor's cloud half, Devin, and Jules remain silent
+until their own credential is saved in Luke's Settings or supplied through
+`CONDUCTOR_API_KEY`, `CONDUCTOR_API_TOKEN`, `CURSOR_API_KEY`, `DEVIN_API_KEY`, or
+`JULES_API_KEY`.
 Devin is the one that asks for a particular credential: Luke reads its v3 API, so
 it takes a personal access token (`cog_…`, created under **Devin API · PATs**)
 and refuses the deprecated `apk_` keys of v1 and v2. A token that belongs to a

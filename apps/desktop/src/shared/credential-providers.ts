@@ -11,6 +11,7 @@ export const CREDENTIAL_PROVIDER_ID = {
   CONDUCTOR: PROVIDER_ID.CONDUCTOR,
   CURSOR: PROVIDER_ID.CURSOR,
   DEVIN: PROVIDER_ID.DEVIN,
+  JULES: PROVIDER_ID.JULES,
 } as const;
 
 export type CredentialProviderId =
@@ -31,6 +32,10 @@ const CURSOR_ENVIRONMENT = {
 
 const DEVIN_ENVIRONMENT = {
   API_KEY: "DEVIN_API_KEY",
+} as const;
+
+const JULES_ENVIRONMENT = {
+  API_KEY: "JULES_API_KEY",
 } as const;
 
 /**
@@ -106,6 +111,14 @@ export const CREDENTIAL_PROVIDERS: Readonly<Record<CredentialProviderId, Credent
       rejection:
         "Devin's personal access tokens start with cog_. The older apk_ keys are for an API version Luke does not read.",
     },
+  },
+  [CREDENTIAL_PROVIDER_ID.JULES]: {
+    id: CREDENTIAL_PROVIDER_ID.JULES,
+    displayName: "Jules",
+    // Jules shows a key once, on creation, and allows at most three at a time.
+    hint: "Create a key in Jules under Settings · API key. It is shown only once.",
+    apiKeysUrl: "https://jules.google.com/settings",
+    environmentVariables: [JULES_ENVIRONMENT.API_KEY],
   },
 };
 

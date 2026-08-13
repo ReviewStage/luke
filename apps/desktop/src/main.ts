@@ -33,6 +33,7 @@ import { ConductorSessionAdapter } from "./conductor-adapter";
 import { CURSOR_PROVIDER, CursorSessionAdapter } from "./cursor-adapter";
 import { CursorLocalSessionAdapter } from "./cursor-local-adapter";
 import { DevinSessionAdapter } from "./devin-adapter";
+import { JulesSessionAdapter } from "./jules-adapter";
 import { readMacScreenGeometry } from "./macos-screen-geometry";
 import { openAiAttentionEvaluatorFromEnvironment } from "./openai-attention-evaluator";
 import { SettingsStore } from "./settings-store";
@@ -96,6 +97,9 @@ const cursorAdapter = new CompositeSessionProviderAdapter({
 const devinAdapter = new DevinSessionAdapter({
   readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.DEVIN),
 });
+const julesAdapter = new JulesSessionAdapter({
+  readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.JULES),
+});
 // Saving a key affects only the provider it belongs to, so this maps each
 // credential to the one observer that reads it.
 const adapterByCredentialProvider: ReadonlyMap<CredentialProviderId, SessionProviderAdapter> =
@@ -103,6 +107,7 @@ const adapterByCredentialProvider: ReadonlyMap<CredentialProviderId, SessionProv
     [CREDENTIAL_PROVIDER_ID.CONDUCTOR, conductorAdapter],
     [CREDENTIAL_PROVIDER_ID.CURSOR, cursorAdapter],
     [CREDENTIAL_PROVIDER_ID.DEVIN, devinAdapter],
+    [CREDENTIAL_PROVIDER_ID.JULES, julesAdapter],
   ]);
 const sessionAdapters = [
   new ClaudeCodeSessionAdapter(),
@@ -110,6 +115,7 @@ const sessionAdapters = [
   conductorAdapter,
   cursorAdapter,
   devinAdapter,
+  julesAdapter,
 ] as const;
 // A fixture run must stay deterministic and credential-free, so it never builds
 // an evaluator — not just capture runs.
