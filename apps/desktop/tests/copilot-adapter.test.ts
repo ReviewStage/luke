@@ -1,0 +1,478 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { SESSION_STATUS } from "@sidecar/core";
+import type { CloudFetch } from "../src/cloud-session-adapter";
+import { COPILOT_PROVIDER, CopilotSessionAdapter } from "../src/copilot-adapter";
+
+const TEST_TIME = Date.parse("2026-08-13T02:45:00.000Z");
+const TEST_BASE_URL = "https://github.test";
+const TEST_API_KEY = "github_pat_test-token";
+const TEST_OWNER = "reviewstage";
+const TEST_REPOSITORY = "luke";
+const SECRET_PROMPT_TEXT = "SECRET_PROMPT_TEXT";
+
+/** The documented `state` enum for the public-preview agent-tasks API. */
+const TEST_STATE = {
+  QUEUED: "queued",
+  IN_PROGRESS: "in_progress",
+  COMPLETED: "completed",
+  FAILED: "failed",
+  IDLE: "idle",
+  WAITING_FOR_USER: "waiting_for_user",
+  TIMED_OUT: "timed_out",
+  CANCELLED: "cancelled",
+} as const;
+
+const HTTP_STATUS = {
+  OK: 200,
+  UNAUTHORIZED: 401,
+  SERVER_ERROR: 500,
+} as const;
+
+interface TestTask {
+  id: string;
+  state?: string;
+  repository?: string;
+  omitUrl?: boolean;
+  omitArtifacts?: boolean;
+  baseRef?: string;
+  archivedAt?: number;
+  createdAt: number;
+  updatedAt?: number;
+}
+
+interface RecordedRequest {
+  method: string;
+  pathname: string;
+  search: string;
+  authorization: string | undefined;
+  accept: string | undefined;
+  apiVersion: string | undefined;
+}
+
+interface FakeAgentTasksApi {
+  fetch: CloudFetch;
+  requests: RecordedRequest[];
+}
+
+function isoTimestamp(timestampMs: number): string {
+  return new Date(timestampMs).toISOString();
+}
+
+function jsonResponse(body: unknown, status = HTTP_STATUS.OK): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+function lastActivityAt(task: TestTask): number {
+  return task.updatedAt ?? task.createdAt;
+}
+
+function taskPayload(task: TestTask): Record<string, unknown> {
+  const repository = task.repository ?? TEST_REPOSITORY;
+  return {
+    id: task.id,
+    ...(task.omitUrl
+      ? {}
+      : {
+          url: `https://api.github.com/agents/repos/${TEST_OWNER}/${repository}/tasks/${task.id}`,
+        }),
+    html_url: `https://github.com/${TEST_OWNER}/${repository}/copilot/tasks/${task.id}`,
+    // GitHub documents `name` as derived from the task prompt, and the branch
+    // Copilot opens is named from the same text, so neither may reach a row.
+    name: `${SECRET_PROMPT_TEXT} title`,
+    creator: { id: 1 },
+    creator_type: "user",
+    owner: { id: 1 },
+    repository: { id: 1296269 },
+    state: task.state ?? TEST_STATE.IN_PROGRESS,
+    session_count: 1,
+    ...(task.omitArtifacts
+      ? { artifacts: [] }
+      : {
+          artifacts: [
+            { provider: "github", type: "pull", data: { id: 42, global_id: "PR_global" } },
+            {
+              provider: "github",
+              type: "branch",
+              data: {
+                head_ref: `copilot/${SECRET_PROMPT_TEXT}`,
+                base_ref: task.baseRef ?? "main",
+              },
+            },
+          ],
+        }),
+    archived_at: task.archivedAt === undefined ? null : isoTimestamp(task.archivedAt),
+    created_at: isoTimestamp(task.createdAt),
+    updated_at: isoTimestamp(lastActivityAt(task)),
+  };
+}
+
+/** Serves the read-only subset of the agent-tasks API the adapter may use. */
+function fakeAgentTasksApi(tasks: readonly TestTask[]): FakeAgentTasksApi {
+  const requests: RecordedRequest[] = [];
+  const fetch: CloudFetch = async (url, init) => {
+    const { pathname, searchParams, search } = new URL(url);
+    const headers = new Headers(init.headers);
+    requests.push({
+      method: init.method ?? "",
+      pathname,
+      search,
+      authorization: headers.get("authorization") ?? undefined,
+      accept: headers.get("accept") ?? undefined,
+      apiVersion: headers.get("x-github-api-version") ?? undefined,
+    });
+
+    const segments = pathname.split("/").filter((segment) => segment.length > 0);
+    if (segments.length !== 2 || segments[0] !== "agents" || segments[1] !== "tasks") {
+      return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
+    }
+
+    // GitHub sorts by `updated_at` descending by default, but the fake answers
+    // in the order it was given: the adapter must order the pass itself.
+    const pageSize = Number(searchParams.get("per_page") ?? "30");
+    const page = tasks.slice(0, pageSize);
+    return jsonResponse({
+      tasks: page.map(taskPayload),
+      total_active_count: tasks.length,
+      total_archived_count: 0,
+    });
+  };
+  return { fetch, requests };
+}
+
+function adapterFor(
+  fetch: CloudFetch,
+  overrides: {
+    apiKey?: string | undefined;
+    readApiKey?: () => Promise<string | undefined>;
+    now?: () => number;
+    minimumRefreshIntervalMs?: number;
+    maximumObservedTasks?: number;
+  } = {},
+): CopilotSessionAdapter {
+  const apiKey = "apiKey" in overrides ? overrides.apiKey : TEST_API_KEY;
+  return new CopilotSessionAdapter({
+    readApiKey: overrides.readApiKey ?? (async () => apiKey),
+    baseUrl: TEST_BASE_URL,
+    fetch,
+    now: overrides.now ?? (() => TEST_TIME),
+    minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,
+    ...(overrides.maximumObservedTasks === undefined
+      ? {}
+      : { maximumObservedTasks: overrides.maximumObservedTasks }),
+  });
+}
+
+function workingTask(id: string, updatedAt: number): TestTask {
+  return { id, state: TEST_STATE.IN_PROGRESS, createdAt: updatedAt, updatedAt };
+}
+
+test("observes a task in progress without exposing prompt-derived text", async () => {
+  const api = fakeAgentTasksApi([
+    {
+      id: "task-in-progress",
+      state: TEST_STATE.IN_PROGRESS,
+      createdAt: TEST_TIME - 60_000,
+      updatedAt: TEST_TIME - 30_000,
+    },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.deepEqual(COPILOT_PROVIDER, { id: "copilot", displayName: "Copilot" });
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.providerSessionId, "task-in-progress");
+  assert.equal(observations[0]?.title, "luke");
+  assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
+  assert.equal(observations[0]?.observedAt, TEST_TIME - 30_000);
+  assert.equal(observations[0]?.controls, undefined);
+  // The row is worded by the surface from these fields, never by the adapter.
+  assert.equal(observations[0]?.summary, undefined);
+  assert.deepEqual(observations[0]?.detail, {
+    repository: "luke",
+    branch: "main",
+    link: `https://github.com/${TEST_OWNER}/luke/copilot/tasks/task-in-progress`,
+  });
+  // Neither the task's name nor the branch Copilot named from the prompt.
+  assert.equal(JSON.stringify(observations).includes(SECRET_PROMPT_TEXT), false);
+});
+
+test("reads the whole pass with one pinned, GitHub-typed list call", async () => {
+  const api = fakeAgentTasksApi([
+    workingTask("task-one", TEST_TIME - 1_000),
+    workingTask("task-two", TEST_TIME - 2_000),
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.equal(observations.length, 2);
+  assert.deepEqual(
+    api.requests.map((request) => request.pathname),
+    ["/agents/tasks"],
+  );
+  const since = isoTimestamp(TEST_TIME - 24 * 60 * 60 * 1000);
+  assert.equal(api.requests[0]?.search, `?per_page=100&since=${encodeURIComponent(since)}`);
+  assert.equal(api.requests[0]?.method, "GET");
+  assert.equal(api.requests[0]?.authorization, `Bearer ${TEST_API_KEY}`);
+  // GitHub's own media type rather than plain JSON, and the endpoint is in
+  // public preview, so the dated API version must ride every request.
+  assert.equal(api.requests[0]?.accept, "application/vnd.github+json");
+  assert.equal(api.requests[0]?.apiVersion, "2026-03-10");
+});
+
+test("maps every state GitHub reports onto a state Luke can show", async () => {
+  const api = fakeAgentTasksApi(
+    (
+      [
+        [TEST_STATE.QUEUED, "queued"],
+        [TEST_STATE.IN_PROGRESS, "in-progress"],
+        [TEST_STATE.WAITING_FOR_USER, "waiting"],
+        [TEST_STATE.COMPLETED, "completed"],
+        [TEST_STATE.CANCELLED, "cancelled"],
+        [TEST_STATE.FAILED, "failed"],
+        [TEST_STATE.TIMED_OUT, "timed-out"],
+        [TEST_STATE.IDLE, "idle"],
+        ["SOME_LATER_STATE", "later-state"],
+      ] as const
+    ).map(([state, name], index) => ({
+      id: `task-${name}`,
+      state,
+      createdAt: TEST_TIME - (index + 1) * 1_000,
+      updatedAt: TEST_TIME - (index + 1) * 1_000,
+    })),
+  );
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.deepEqual(
+    observations.map((observation) => [observation.providerSessionId, observation.status]),
+    [
+      ["task-queued", SESSION_STATUS.WORKING],
+      ["task-in-progress", SESSION_STATUS.WORKING],
+      ["task-waiting", SESSION_STATUS.WAITING],
+      ["task-completed", SESSION_STATUS.COMPLETE],
+      ["task-cancelled", SESSION_STATUS.COMPLETE],
+      // A failed or timed-out task can be sent back to work with a new
+      // session, so neither is promoted to an error Luke cannot describe.
+      ["task-failed", SESSION_STATUS.UNKNOWN],
+      ["task-timed-out", SESSION_STATUS.UNKNOWN],
+      ["task-idle", SESSION_STATUS.UNKNOWN],
+      ["task-later-state", SESSION_STATUS.UNKNOWN],
+    ],
+  );
+});
+
+test("keeps reporting a long turn as working", async () => {
+  // `updated_at` marks when the task last changed rather than a heartbeat, so
+  // a turn that started an hour ago and is still going must not read as stale.
+  const startedAt = TEST_TIME - 60 * 60 * 1000;
+  const api = fakeAgentTasksApi([workingTask("task-long-turn", startedAt)]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
+  assert.equal(observations[0]?.observedAt, startedAt);
+});
+
+test("stops calling a task that asked for the user waiting once it goes stale", async () => {
+  const askedAt = TEST_TIME - 2 * 60 * 60 * 1000;
+  const api = fakeAgentTasksApi([
+    {
+      id: "task-abandoned",
+      state: TEST_STATE.WAITING_FOR_USER,
+      createdAt: askedAt,
+      updatedAt: askedAt,
+    },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
+});
+
+test("keeps a completed task complete however long ago it finished", async () => {
+  const finishedAt = TEST_TIME - 8 * 60 * 60 * 1000;
+  const api = fakeAgentTasksApi([
+    {
+      id: "task-finished",
+      state: TEST_STATE.COMPLETED,
+      createdAt: finishedAt,
+      updatedAt: finishedAt,
+    },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.equal(observations[0]?.status, SESSION_STATUS.COMPLETE);
+});
+
+test("reports a task the user filed away as settled whatever it was doing", async () => {
+  const api = fakeAgentTasksApi([
+    {
+      id: "task-archived",
+      state: TEST_STATE.WAITING_FOR_USER,
+      archivedAt: TEST_TIME - 1_000,
+      createdAt: TEST_TIME - 2_000,
+      updatedAt: TEST_TIME - 1_000,
+    },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.equal(observations[0]?.status, SESSION_STATUS.COMPLETE);
+});
+
+test("ignores tasks untouched for longer than the maximum session age", async () => {
+  const api = fakeAgentTasksApi([workingTask("task-last-week", TEST_TIME - 48 * 60 * 60 * 1000)]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.deepEqual(observations, []);
+});
+
+test("orders the pass itself rather than trusting the order GitHub answers in", async () => {
+  const api = fakeAgentTasksApi([
+    workingTask("task-oldest", TEST_TIME - 3_000),
+    workingTask("task-newest", TEST_TIME - 1_000),
+    workingTask("task-middle", TEST_TIME - 2_000),
+  ]);
+
+  const observations = await adapterFor(api.fetch, { maximumObservedTasks: 2 }).observe();
+
+  assert.deepEqual(
+    observations.map((observation) => observation.providerSessionId),
+    ["task-newest", "task-middle"],
+  );
+});
+
+test("labels a task by its repository, and by neither its name nor nothing", async () => {
+  const api = fakeAgentTasksApi([
+    { id: "task-repository", repository: "sidecar", createdAt: TEST_TIME - 1_000 },
+    { id: "task-addressless", omitUrl: true, omitArtifacts: true, createdAt: TEST_TIME - 2_000 },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  // The repository is read from the task's own API address — the list
+  // projection names the repository only by a numeric id.
+  assert.equal(observations[0]?.title, "sidecar");
+  assert.equal(observations[0]?.detail?.repository, "sidecar");
+  assert.equal(observations[1]?.title, "workspace");
+  assert.equal(observations[1]?.detail?.branch, undefined);
+  assert.equal(JSON.stringify(observations).includes(SECRET_PROMPT_TEXT), false);
+});
+
+test("drops a task it cannot place in time without losing the rest of the pass", async () => {
+  const fetch: CloudFetch = async () =>
+    jsonResponse({
+      tasks: [
+        { state: TEST_STATE.IN_PROGRESS },
+        { id: "task-undated", state: TEST_STATE.IN_PROGRESS },
+        taskPayload({ id: "task-complete", createdAt: TEST_TIME - 1_000 }),
+      ],
+    });
+
+  const observations = await adapterFor(fetch).observe();
+
+  assert.deepEqual(
+    observations.map((observation) => observation.providerSessionId),
+    ["task-complete"],
+  );
+});
+
+test("reports nothing and issues no request without an API key", async () => {
+  const api = fakeAgentTasksApi([workingTask("task-in-progress", TEST_TIME - 1_000)]);
+
+  const observations = await adapterFor(api.fetch, { apiKey: undefined }).observe();
+
+  assert.deepEqual(observations, []);
+  assert.deepEqual(api.requests, []);
+});
+
+test("reports nothing when the credential cannot be read", async () => {
+  const api = fakeAgentTasksApi([workingTask("task-in-progress", TEST_TIME - 1_000)]);
+  const adapter = adapterFor(api.fetch, {
+    readApiKey: async () => {
+      throw new Error("settings are unreadable");
+    },
+  });
+
+  assert.deepEqual(await adapter.observe(), []);
+  assert.deepEqual(api.requests, []);
+});
+
+test("reuses the previous snapshot inside the minimum refresh interval", async () => {
+  const api = fakeAgentTasksApi([workingTask("task-in-progress", TEST_TIME - 1_000)]);
+  let now = TEST_TIME;
+  const adapter = adapterFor(api.fetch, { now: () => now, minimumRefreshIntervalMs: 15_000 });
+
+  const first = await adapter.observe();
+  now = TEST_TIME + 5_000;
+  const throttled = await adapter.observe();
+  const requestsAfterThrottledPass = api.requests.length;
+  now = TEST_TIME + 20_000;
+  const refreshed = await adapter.observe();
+
+  assert.equal(first.length, 1);
+  assert.deepEqual(throttled, first);
+  assert.equal(requestsAfterThrottledPass, 1, "throttled pass issued a request");
+  assert.equal(api.requests.length, 2, "refreshed pass issued no request");
+  assert.equal(refreshed.length, 1);
+});
+
+test("observes again immediately after the API key changes", async () => {
+  const api = fakeAgentTasksApi([workingTask("task-in-progress", TEST_TIME - 1_000)]);
+  let apiKey = TEST_API_KEY;
+  const adapter = adapterFor(api.fetch, {
+    readApiKey: async () => apiKey,
+    minimumRefreshIntervalMs: 60_000,
+  });
+
+  await adapter.observe();
+  const requestsAfterFirstPass = api.requests.length;
+  apiKey = "github_pat_replacement-token";
+  const observations = await adapter.observe();
+
+  assert.ok(api.requests.length > requestsAfterFirstPass);
+  assert.equal(observations.length, 1);
+  assert.equal(
+    api.requests.at(-1)?.authorization,
+    "Bearer github_pat_replacement-token",
+    "the replacement key was not used",
+  );
+});
+
+test("clears observations when GitHub rejects the token", async () => {
+  const api = fakeAgentTasksApi([workingTask("task-in-progress", TEST_TIME - 1_000)]);
+  let rejectRequests = false;
+  const gatedFetch: CloudFetch = async (url, init) =>
+    rejectRequests ? jsonResponse({}, HTTP_STATUS.UNAUTHORIZED) : api.fetch(url, init);
+  const adapter = adapterFor(gatedFetch);
+
+  const authorized = await adapter.observe();
+  rejectRequests = true;
+  const rejected = await adapter.observe();
+
+  assert.equal(authorized.length, 1);
+  assert.deepEqual(rejected, []);
+});
+
+test("keeps the previous snapshot when the list request fails transiently", async () => {
+  const api = fakeAgentTasksApi([workingTask("task-in-progress", TEST_TIME - 1_000)]);
+  let failRequests = false;
+  const gatedFetch: CloudFetch = async (url, init) => {
+    if (failRequests) throw new Error("network unreachable");
+    return api.fetch(url, init);
+  };
+  const adapter = adapterFor(gatedFetch);
+
+  const observed = await adapter.observe();
+  failRequests = true;
+  const duringOutage = await adapter.observe();
+
+  assert.equal(observed.length, 1);
+  assert.deepEqual(duringOutage, observed);
+});

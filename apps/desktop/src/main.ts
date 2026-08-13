@@ -31,6 +31,7 @@ import {
 import { ClaudeCodeSessionAdapter } from "./claude-code-adapter";
 import { CodexSessionAdapter } from "./codex-adapter";
 import { ConductorSessionAdapter } from "./conductor-adapter";
+import { CopilotSessionAdapter } from "./copilot-adapter";
 import { CURSOR_PROVIDER, CursorSessionAdapter } from "./cursor-adapter";
 import { CursorLocalSessionAdapter } from "./cursor-local-adapter";
 import { DevinSessionAdapter } from "./devin-adapter";
@@ -81,6 +82,9 @@ const settingsStore = new SettingsStore({
 const conductorAdapter = new ConductorSessionAdapter({
   readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.CONDUCTOR),
 });
+const copilotAdapter = new CopilotSessionAdapter({
+  readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.COPILOT),
+});
 // Cursor runs sessions in two places: on this machine, which needs no
 // credential and is observed from the transcripts Cursor writes for itself, and
 // in its cloud, which needs a key. They are one provider wherever they ran, so
@@ -106,6 +110,7 @@ const julesAdapter = new JulesSessionAdapter({
 const adapterByCredentialProvider: ReadonlyMap<CredentialProviderId, SessionProviderAdapter> =
   new Map<CredentialProviderId, SessionProviderAdapter>([
     [CREDENTIAL_PROVIDER_ID.CONDUCTOR, conductorAdapter],
+    [CREDENTIAL_PROVIDER_ID.COPILOT, copilotAdapter],
     [CREDENTIAL_PROVIDER_ID.CURSOR, cursorAdapter],
     [CREDENTIAL_PROVIDER_ID.DEVIN, devinAdapter],
     [CREDENTIAL_PROVIDER_ID.JULES, julesAdapter],
@@ -114,6 +119,7 @@ const sessionAdapters = [
   new ClaudeCodeSessionAdapter(),
   new CodexSessionAdapter(),
   conductorAdapter,
+  copilotAdapter,
   cursorAdapter,
   devinAdapter,
   julesAdapter,
