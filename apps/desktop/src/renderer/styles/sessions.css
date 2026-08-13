@@ -98,7 +98,9 @@
 }
 
 /* Where the session is, under what it is doing. It is the line a reader scans
-   only when two rows say the same thing, so it sits back a step. */
-.row-context {
+   only when two rows say the same thing, so it sits back a step. Qualified by
+   the parent because `.row-copy small` above is an element selector and would
+   otherwise out-rank a bare class, leaving both lines the same weight. */
+.row-copy .row-context {
   color: var(--text-tertiary);
 }
