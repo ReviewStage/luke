@@ -38,6 +38,14 @@ export interface SessionWriteHandlers {
   runAction: (session: DisplaySession, actionId: string) => Promise<ProviderControlResult>;
 }
 
+/**
+ * What the field is for, in the words every agent chat box uses: the message
+ * is a follow-up to work already under way, whoever the provider is. The
+ * provider's name still identifies the field to a screen reader, where "which
+ * session is this" is the question; sighted readers have the whole row.
+ */
+const COMPOSE_PLACEHOLDER = "Send a follow-up…";
+
 /** One outcome line under the actions, said once and replaced by the next. */
 function feedbackFor(result: ProviderMessageResult | ProviderControlResult): string | undefined {
   if (result.status === PROVIDER_MESSAGE_RESULT_STATUS.REJECTED) return result.reason;
@@ -170,7 +178,7 @@ function SessionRowActions({
           <input
             className="row-compose-input"
             aria-label={`Message ${session.provider}`}
-            placeholder={`Message ${session.provider}…`}
+            placeholder={COMPOSE_PLACEHOLDER}
             autoComplete="off"
             spellCheck={false}
             value={draft}
