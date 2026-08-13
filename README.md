@@ -44,6 +44,8 @@ plugins, wrappers, or changes to how a session is launched.
   most recently. Each control is offered only where it is a real choice, a
   narrowed list is named on the button itself, and both reset when the panel
   closes, so it always reopens showing every session Luke is tracking.
+- Entering a cloud provider's credential narrows the panel to a single field, so
+  the page you copy it from stays readable while Luke waits for the paste.
 - An optional microphone visualization can react to local audio levels.
 - An optional OpenAI attention review can help decide which updates should be
   prioritized in the interface.

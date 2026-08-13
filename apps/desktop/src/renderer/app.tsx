@@ -7,26 +7,24 @@ import type {
   MicrophoneStatus,
   WindowMode,
 } from "../shared/contracts";
+import { CREDENTIAL_SOURCE } from "../shared/contracts";
 import type { CredentialProviderId } from "../shared/credential-providers";
+import { CREDENTIAL_PROVIDER_LIST } from "../shared/credential-providers";
+import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";
+import { isSubmittable, removalEndsEntry } from "./credential-entry";
+import { KeySlot } from "./key-slot";
 import { NotchWings } from "./notch-wings";
 import { PanelBody } from "./panel-body";
 import {
+  HIT_REGION,
   LEAVE_DELAY_MS,
   PANEL_PRESENTATION,
   type PanelPresentation,
   PEEK_ENTER_DELAY_MS,
   presentationForMode,
+  SETTLE_DELAY_MS,
 } from "./panel-state";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
-
-/** What takes the pointer, named so the test can tell one from another. */
-const HIT_REGION = {
-  /** The black shape itself, whatever size it is drawn at. */
-  SURFACE: "surface",
-  CAPSULE: "capsule",
-  PANEL: "panel",
-} as const;
-
 import {
   arrangeSessions,
   DEFAULT_SESSION_VIEW,
@@ -75,7 +73,8 @@ function usePointerPassthrough(
       update(
         kind === HIT_REGION.SURFACE ||
           kind === HIT_REGION.CAPSULE ||
-          (kind === HIT_REGION.PANEL && drawn === PANEL_PRESENTATION.PANEL),
+          (kind === HIT_REGION.PANEL && drawn === PANEL_PRESENTATION.PANEL) ||
+          (kind === HIT_REGION.SLOT && drawn === PANEL_PRESENTATION.SLOT),
       );
     },
     [update],
@@ -114,29 +113,35 @@ function notchStyle(display: DisplayDiagnostic): CSSProperties {
   } as CSSProperties;
 }
 
-function panelHeightStyle(panelHeight: number | undefined): CSSProperties {
-  return panelHeight === undefined
-    ? {}
-    : ({ "--panel-height": `${panelHeight}px` } as CSSProperties);
+function shapeHeightStyle(
+  panelHeight: number | undefined,
+  slotHeight: number | undefined,
+): CSSProperties {
+  return {
+    ...(panelHeight === undefined ? {} : { "--panel-height": `${panelHeight}px` }),
+    ...(slotHeight === undefined ? {} : { "--slot-height": `${slotHeight}px` }),
+  } as CSSProperties;
 }
 
 /**
- * Reports the panel's own height so the black surface can end where the content
- * does. The window stays one size; only the shape inside it follows the number
- * of sessions, which is what makes adding or finishing one feel like a resize
+ * Reports a shape's own content height so the black surface can end where the
+ * content does. The window stays one size; only the shape inside it follows
+ * what it holds — the number of sessions in the panel, a refusal appearing
+ * under the slot's field — which is what makes either one feel like a resize
  * rather than a redraw.
  */
-function usePanelHeight(): [(element: HTMLElement | null) => void, number | undefined] {
+function useShapeHeight(): [(element: HTMLElement | null) => void, number | undefined] {
   const observer = useRef<ResizeObserver | undefined>(undefined);
-  const [panelHeight, setPanelHeight] = useState<number>();
+  const [height, setHeight] = useState<number>();
 
   // A callback ref rather than an effect: the panel mounts only once bootstrap
-  // has resolved, which is after the first render.
-  const panelElement = useCallback((element: HTMLElement | null) => {
+  // has resolved, and the slot only once a key is being entered — both after
+  // the first render.
+  const measured = useCallback((element: HTMLElement | null) => {
     observer.current?.disconnect();
     observer.current = undefined;
     if (!element) return;
-    const measure = () => setPanelHeight(Math.ceil(element.getBoundingClientRect().height));
+    const measure = () => setHeight(Math.ceil(element.getBoundingClientRect().height));
     const nextObserver = new ResizeObserver(measure);
     nextObserver.observe(element);
     observer.current = nextObserver;
@@ -145,7 +150,7 @@ function usePanelHeight(): [(element: HTMLElement | null) => void, number | unde
 
   useEffect(() => () => observer.current?.disconnect(), []);
 
-  return [panelElement, panelHeight];
+  return [measured, height];
 }
 
 export function App(): React.JSX.Element {
@@ -160,13 +165,15 @@ export function App(): React.JSX.Element {
   const [microphoneStatus, setMicrophoneStatus] = useState<MicrophoneStatus>("not-determined");
   const [microphoneError, setMicrophoneError] = useState<string>();
   const [analyser, setAnalyser] = useState<AnalyserNode>();
-  const [panelElement, panelHeight] = usePanelHeight();
+  const [entry, setEntry] = useState<CredentialEntry>();
+  const [panelElement, panelHeight] = useShapeHeight();
+  const [slotElement, slotHeight] = useShapeHeight();
   const audioContext = useRef<AudioContext | undefined>(undefined);
   const mediaStream = useRef<MediaStream | undefined>(undefined);
   const hoverTimer = useRef<number | undefined>(undefined);
   const presentationRef = useRef<PanelPresentation>(PANEL_PRESENTATION.CAPSULE);
   const tabRef = useRef<PanelTab>(PANEL_TAB.SESSIONS);
-  const credentialEditing = useRef(false);
+  const entryRef = useRef<CredentialEntry | undefined>(undefined);
   const pointerInside = useRef(false);
   const modeGeneration = useRef(0);
 
@@ -186,9 +193,14 @@ export function App(): React.JSX.Element {
       // session with whatever needs a person first: settings are somewhere you
       // go, not a state the capsule remembers, and a filter left in place would
       // let the panel hide a session the capsule is still counting.
+      //
+      // A key half-entered is the one exception, and only to the tab: it is
+      // what someone is in the middle of, so however the panel closed, it opens
+      // again where they left it. The list is not something anyone is in the
+      // middle of, so it resets either way.
       if (next === PANEL_PRESENTATION.CAPSULE) {
-        changeTab(PANEL_TAB.SESSIONS);
         setSessionView(DEFAULT_SESSION_VIEW);
+        if (entryRef.current === undefined) changeTab(PANEL_TAB.SESSIONS);
       }
     },
     [changeTab],
@@ -297,15 +309,30 @@ export function App(): React.JSX.Element {
     }, PEEK_ENTER_DELAY_MS);
   }, [applyPresentation, cancelHoverTransition]);
 
+  /**
+   * True while a field someone could be part-way through is actually on screen.
+   * An entry outlives the tab it was started on now, so holding the panel open
+   * for one that is not drawn would leave the pointer unable to close a panel
+   * showing nothing but sessions.
+   */
+  const entryIsDrawn = useCallback(
+    () => entryRef.current !== undefined && tabRef.current === PANEL_TAB.SETTINGS,
+    [],
+  );
+
   const handleHitRegionLeave = useCallback(() => {
     cancelHoverTransition();
     pointerInside.current = false;
     const current = presentationRef.current;
     if (current === PANEL_PRESENTATION.CAPSULE) return;
+    // The slot is drawn for someone who is somewhere else entirely — in a
+    // browser, fetching the key it is waiting for — so the pointer being away
+    // from it is the normal case rather than a dismissal.
+    if (current === PANEL_PRESENTATION.SLOT) return;
     // A key half-typed is the one thing the pointer must not be allowed to
     // discard. Everything else on the settings tab closes like the sessions
     // tab does.
-    if (current === PANEL_PRESENTATION.PANEL && credentialEditing.current) return;
+    if (current === PANEL_PRESENTATION.PANEL && entryIsDrawn()) return;
     hoverTimer.current = window.setTimeout(() => {
       hoverTimer.current = undefined;
       if (presentationRef.current === PANEL_PRESENTATION.PEEK) {
@@ -315,36 +342,160 @@ export function App(): React.JSX.Element {
         // scheduled: an entry can begin inside the delay — pressing Connect and
         // reaching for the keyboard does exactly that — and a close decided
         // before it began would discard it.
-        if (credentialEditing.current) return;
+        if (entryIsDrawn()) return;
         void changeMode(false);
       }
     }, LEAVE_DELAY_MS);
-  }, [applyPresentation, cancelHoverTransition, changeMode]);
+  }, [applyPresentation, cancelHoverTransition, changeMode, entryIsDrawn]);
 
-  // An entry that ends while the pointer is already away — Escape out of the
-  // key field, say — leaves the panel held open by nothing, because the pointer
-  // cannot leave a second time. Releasing the hold runs the leave itself.
-  const setCredentialEditing = useCallback(
-    (editing: boolean) => {
-      // Only a hold that existed can be released. The settings tab reports "not
-      // editing" as it mounts too, and that is not the pointer leaving: opening
-      // Settings from the tray does exactly that with the pointer on the menu
-      // bar, which would otherwise close the panel on arrival.
-      const released = credentialEditing.current && !editing;
-      credentialEditing.current = editing;
+  /**
+   * The single place an entry changes. A key being entered holds the panel open
+   * against the pointer, so ending one has to release that hold: an entry that
+   * ends while the pointer is already away — Escape out of the field, say —
+   * would otherwise leave the panel held open by nothing, because the pointer
+   * cannot leave a second time.
+   */
+  const applyEntry = useCallback(
+    (next: CredentialEntry | undefined) => {
+      const released = entryRef.current !== undefined && next === undefined;
+      entryRef.current = next;
+      setEntry(next);
       if (released && !pointerInside.current) handleHitRegionLeave();
     },
     [handleHitRegionLeave],
   );
 
-  const submitProviderApiKey = useCallback(
-    async (providerId: CredentialProviderId, apiKey: string | undefined) => {
-      const result = await window.sidecar.setProviderApiKey(providerId, apiKey);
+  /**
+   * Brings the panel back around the line the entry belongs to, and leaves it
+   * open the way every other way of opening it does — the pointer closes it by
+   * visiting and leaving.
+   */
+  const restorePanel = useCallback(() => {
+    changeTab(PANEL_TAB.SETTINGS);
+    void changeMode(true);
+  }, [changeMode, changeTab]);
+
+  /**
+   * Asking to write a key is asking for one thing, so the panel gets out of the
+   * way of it: the shape goes down to the slot, which is the field and nothing
+   * else. It is the same wherever the key is coming from — a first connection, a
+   * stored key being replaced, or one standing in front of the environment's —
+   * because they are all the same act.
+   */
+  const beginEntry = useCallback(
+    (providerId: CredentialProviderId) => {
+      applyEntry({ providerId, draft: "", busy: false, away: false });
+      cancelHoverTransition();
+      applyPresentation(PANEL_PRESENTATION.SLOT);
+    },
+    [applyEntry, applyPresentation, cancelHoverTransition],
+  );
+
+  const changeEntry = useCallback(
+    (draft: string) => {
+      const current = entryRef.current;
+      // A key being written is not a moment to change the entry: the reply on
+      // its way back is answering the entry that was sent, and it is recognised
+      // by being that same entry. Nothing may replace it underneath but ending
+      // it outright, which is a decision to stop listening for the reply.
+      if (!current || current.busy) return;
+      // Typing again answers the refusal, so the refusal goes.
+      applyEntry({ ...current, draft, rejection: undefined });
+    },
+    [applyEntry],
+  );
+
+  /**
+   * Sends the browser to the provider's key page. The entry remembers that it
+   * did: from here on, the person this slot is waiting for is reading a page
+   * that Luke — which floats above every window — would otherwise be sitting on
+   * top of. It is also what the slot is for, so the shape is already right; the
+   * panel is only stood down if the link was pressed from inside it.
+   */
+  const fetchKey = useCallback(() => {
+    const current = entryRef.current;
+    // Same rule as typing: the key on its way to the store is what the entry is
+    // for, and going to fetch another one is not a reason to disturb it. Both
+    // views disable the link while it is in flight, so this is the floor rather
+    // than the answer.
+    if (!current || current.busy) return;
+    window.sidecar.openProviderApiKeys(current.providerId);
+    applyEntry({ ...current, away: true });
+    if (presentationRef.current === PANEL_PRESENTATION.SLOT) return;
+    cancelHoverTransition();
+    applyPresentation(PANEL_PRESENTATION.SLOT);
+  }, [applyEntry, applyPresentation, cancelHoverTransition]);
+
+  const cancelEntry = useCallback(() => {
+    const away = entryRef.current?.away === true;
+    const aside = presentationRef.current === PANEL_PRESENTATION.SLOT;
+    applyEntry(undefined);
+    if (!aside) return;
+    // Giving up returns you where you were. If the key page was opened, that is
+    // the browser, and Luke leaves; if it was not, it is the panel this entry
+    // was started from.
+    if (away) void changeMode(false);
+    else restorePanel();
+  }, [applyEntry, changeMode, restorePanel]);
+
+  const commitEntry = useCallback(() => {
+    const current = entryRef.current;
+    if (!isSubmittable(current)) return;
+    const sending = { ...current, busy: true, rejection: undefined };
+    applyEntry(sending);
+    void window.sidecar.setProviderApiKey(current.providerId, current.draft).then((result) => {
+      // The store changed either way, so the sources are always taken.
       setSettings(result.settings);
+      // Whoever is entering a key now is not necessarily whoever sent this one:
+      // Escape reaches the slot while a save is in flight, and so does another
+      // provider's Connect. A reply that outlived its own entry is spent.
+      if (entryRef.current !== sending) return;
+      if (result.reason) {
+        applyEntry({ ...sending, busy: false, rejection: result.reason });
+        return;
+      }
+      applyEntry(undefined);
+      // Saved from the slot: the whole panel comes back around the provider
+      // that is now connected, because the check appearing beside its name is
+      // the answer to what was just done.
+      if (presentationRef.current !== PANEL_PRESENTATION.SLOT) return;
+      restorePanel();
+      // An answer is worth reading and then done with. The pointer is usually
+      // still on the button that was pressed, and where it is not — the key was
+      // sent from the keyboard, or the shape shrank out from under it — nothing
+      // else would ever ask this panel to close, so it shows the answer and then
+      // takes its leave. Nothing else restores the panel this way: giving up has
+      // no answer to show.
+      if (pointerInside.current) return;
+      hoverTimer.current = window.setTimeout(() => {
+        hoverTimer.current = undefined;
+        if (presentationRef.current === PANEL_PRESENTATION.PANEL) void changeMode(false);
+      }, SETTLE_DELAY_MS);
+    });
+  }, [applyEntry, changeMode, restorePanel]);
+
+  const removeProviderApiKey = useCallback(
+    async (providerId: CredentialProviderId) => {
+      const result = await window.sidecar.setProviderApiKey(providerId, undefined);
+      setSettings(result.settings);
+      // Delete and the field are on the row together once the panel has been
+      // brought back around an entry, and a key that has been removed cannot be
+      // replaced.
+      if (removalEndsEntry(entryRef.current, providerId, result.reason)) applyEntry(undefined);
       return result.reason;
     },
-    [],
+    [applyEntry],
   );
+
+  const credentials: CredentialEntryControl = {
+    entry,
+    begin: beginEntry,
+    change: changeEntry,
+    fetchKey,
+    cancel: cancelEntry,
+    commit: commitEntry,
+    remove: removeProviderApiKey,
+  };
 
   /** The capsule is a button: pressing it opens the panel, or closes it again. */
   const handleCapsulePress = useCallback(
@@ -396,6 +547,17 @@ export function App(): React.JSX.Element {
         if (value.startPeeked && value.mode === "compact") {
           applyPresentation(PANEL_PRESENTATION.PEEK);
         }
+        // Evidence only, and the same trick the peek uses: the slot is reached
+        // by pressing Connect, which a capture run has no way to do, so the
+        // entry the press would have begun is asked for directly. It carries
+        // the shape with it, as it does anywhere else.
+        const [firstProvider] = CREDENTIAL_PROVIDER_LIST;
+        if (value.startInSlot && value.mode === "expanded" && firstProvider) {
+          // The tab an entry begins on, so pressing the capsule from here lands
+          // where it would have in the flow this is standing in for.
+          changeTab(PANEL_TAB.SETTINGS);
+          beginEntry(firstProvider.id);
+        }
       }
       setMicrophoneStatus(value.microphoneStatus);
       if (value.profile === "microphone") {
@@ -420,6 +582,7 @@ export function App(): React.JSX.Element {
   }, [
     applyAuthoritativeMode,
     applyPresentation,
+    beginEntry,
     cancelHoverTransition,
     changeTab,
     startMicrophone,
@@ -437,16 +600,24 @@ export function App(): React.JSX.Element {
         changeTab(PANEL_TAB.SETTINGS);
         return;
       }
-      if (event.key !== "Escape" || presentation !== PANEL_PRESENTATION.PANEL) return;
-      // Escape closes the nearest thing that is open, one layer at a time: the
-      // options sheet, then the settings tab, then the panel itself.
+      if (event.key !== "Escape") return;
+      // Escape out of the slot is the entry's own way out, wherever the caret
+      // happens to be: the slot is the only thing on screen, so there is nothing
+      // else it could mean.
+      if (presentation === PANEL_PRESENTATION.SLOT) {
+        cancelEntry();
+        return;
+      }
+      if (presentation !== PANEL_PRESENTATION.PANEL) return;
+      // Otherwise it closes the nearest thing that is open, one layer at a
+      // time: the options sheet, then the settings tab, then the panel itself.
       if (optionsOpen) setOptionsOpen(false);
       else if (tab === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.SESSIONS);
       else void changeMode(false);
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [changeMode, changeTab, optionsOpen, presentation, tab]);
+  }, [cancelEntry, changeMode, changeTab, optionsOpen, presentation, tab]);
 
   if (!bootstrap || !display) return <div />;
 
@@ -473,6 +644,11 @@ export function App(): React.JSX.Element {
   const fixtureSpeaking = bootstrap.profile === "speaking";
   const hasAudioSignal = fixtureSpeaking || analyser !== undefined;
   const panelOpen = presentation === PANEL_PRESENTATION.PANEL;
+  const slotOpen = presentation === PANEL_PRESENTATION.SLOT;
+  // What the slot's field is for depends on what answers for that provider now,
+  // and settings resolve after the first render.
+  const slotSource =
+    entry && settings ? settings.credentialSources[entry.providerId] : CREDENTIAL_SOURCE.NONE;
 
   return (
     <div
@@ -480,10 +656,10 @@ export function App(): React.JSX.Element {
       data-presentation={presentation}
       data-notch={String(display.notch.hasNotch)}
       data-capture={String(bootstrap.captureMode)}
-      style={{ ...notchStyle(display), ...panelHeightStyle(panelHeight) }}
+      style={{ ...notchStyle(display), ...shapeHeightStyle(panelHeight, slotHeight) }}
     >
-      {/* Capsule, peek and panel are all this one shape at different sizes, so
-          the surface is never cross-faded — it is only ever resized. */}
+      {/* Capsule, peek, slot and panel are all this one shape at different
+          sizes, so the surface is never cross-faded — it is only ever resized. */}
       <span className="panel-surface" data-hit-region={HIT_REGION.SURFACE} aria-hidden="true" />
 
       {/* Inert while hidden: the panel keeps its full layout box behind
@@ -506,13 +682,17 @@ export function App(): React.JSX.Element {
               microphoneError,
               onToggleMicrophone: () => void (analyser ? stopMicrophone() : startMicrophone()),
               settings,
-              onSubmitProviderApiKey: submitProviderApiKey,
-              onEditingChange: setCredentialEditing,
+              credentials,
+              panelOpen,
               onQuit: () => window.sidecar.quit(),
             }}
           />
         </section>
       </div>
+
+      {/* The panel stood down to its field. It shares the expanded window, so
+          standing down to it costs no more than the peek does. */}
+      <KeySlot control={credentials} source={slotSource} drawn={slotOpen} measure={slotElement} />
 
       <NotchWings
         tally={tally}

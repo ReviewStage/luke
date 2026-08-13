@@ -1,8 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { AppSettings, CredentialSource, MicrophoneStatus } from "../shared/contracts";
 import { CREDENTIAL_SOURCE } from "../shared/contracts";
-import type { CredentialProvider, CredentialProviderId } from "../shared/credential-providers";
+import type { CredentialProvider } from "../shared/credential-providers";
 import { CREDENTIAL_PROVIDER_LIST } from "../shared/credential-providers";
+import {
+  CREDENTIAL_PLACEHOLDER,
+  type CredentialEntryControl,
+  entryForProvider,
+  isSubmittable,
+  useFieldCaret,
+} from "./credential-entry";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import { CloudBadge, ProviderMark } from "./provider-marks";
 import {
@@ -21,12 +28,14 @@ export interface SettingsPanelProps {
   microphoneError?: string;
   onToggleMicrophone: () => void;
   settings?: AppSettings;
-  onSubmitProviderApiKey: (
-    providerId: CredentialProviderId,
-    apiKey: string | undefined,
-  ) => Promise<string | undefined>;
-  /** True while any key field holds focus or an unsaved draft. */
-  onEditingChange: (editing: boolean) => void;
+  /** The one credential being entered anywhere, and everything that can be done to it. */
+  credentials: CredentialEntryControl;
+  /**
+   * True while the panel is the shape on screen. A field can only hold the
+   * caret then: everything here sits in an inert stage the rest of the time,
+   * and an entry can outlast the panel it was started in.
+   */
+  panelOpen: boolean;
   onQuit: () => void;
 }
 
@@ -45,15 +54,8 @@ const CREDENTIAL_STATUS: Partial<Record<CredentialSource, string>> = {
   [CREDENTIAL_SOURCE.ENVIRONMENT]: "From environment",
 };
 
-/* One field, three jobs: what it is for depends on what is answering for the
-   provider now, and a credential typed here always wins over one read
-   elsewhere. The label above names what to paste, so these do not repeat it —
-   and cannot, since not every provider calls it the same thing. */
-const CREDENTIAL_PLACEHOLDER: Record<CredentialSource, string> = {
-  [CREDENTIAL_SOURCE.NONE]: "Paste it here",
-  [CREDENTIAL_SOURCE.ENVIRONMENT]: "Paste one to use instead of the one from the environment",
-  [CREDENTIAL_SOURCE.ENCRYPTED_FILE]: "Replace what is stored",
-};
+/* Why a row that could otherwise be connected is not offering to be. */
+const HELD_TITLE = "Finish the one you are entering first";
 
 /**
  * One provider, one line: its mark, its name, whether it is connected, and what
@@ -61,6 +63,9 @@ const CREDENTIAL_PLACEHOLDER: Record<CredentialSource, string> = {
  * actually allows. The field only exists while a key is being entered, because
  * a settings tab that is mostly empty input boxes reads as work to do rather
  * than as a state to check.
+ *
+ * Asking to write one takes the panel down to the slot, so the field is drawn
+ * here only when the panel is brought back around an entry that is still open.
  *
  * The credential is write-only from here: this can replace or clear the stored
  * key, and the main process never sends one back — only where it was resolved
@@ -70,24 +75,26 @@ function ProviderCredential({
   provider,
   source,
   storageUnavailable,
-  onSubmit,
-  onEditingChange,
+  control,
+  panelOpen,
 }: {
   provider: CredentialProvider;
   source: CredentialSource;
   storageUnavailable: boolean;
-  onSubmit: (
-    providerId: CredentialProviderId,
-    apiKey: string | undefined,
-  ) => Promise<string | undefined>;
-  onEditingChange: (providerId: CredentialProviderId, editing: boolean) => void;
+  control: CredentialEntryControl;
+  panelOpen: boolean;
 }): React.JSX.Element {
-  const [draft, setDraft] = useState<string>();
-  const [rejection, setRejection] = useState<string>();
-  const [busy, setBusy] = useState(false);
+  // Deleting is the one act that begins and ends on this line. Entering a
+  // credential does not: it can leave for the slot and come back, so it is held
+  // above.
+  const [removing, setRemoving] = useState(false);
+  const [removalRejection, setRemovalRejection] = useState<string>();
   const field = useRef<HTMLInputElement | null>(null);
   const fieldId = `${provider.id}-api-key`;
-  const editing = draft !== undefined;
+  const entry = entryForProvider(control, provider.id);
+  const editing = entry !== undefined;
+  const busy = removing || (entry?.busy ?? false);
+  const rejection = removalRejection ?? entry?.rejection;
   // Deleting is only ever for a key kept here; one read from the environment is
   // not Luke's to remove. Either can be superseded by a key typed in, so both
   // connected states offer the same editor and only the unconnected one is
@@ -106,32 +113,32 @@ function ProviderCredential({
   const editLabel = stored
     ? `Replace the ${provider.displayName} ${credential}`
     : `Store a ${provider.displayName} ${credential} instead of the one from the environment`;
+  // One credential is entered at a time, because there is one slot to enter it
+  // in. A row cannot begin a second entry over the top of one already open —
+  // not even another provider's, whose draft is just as likely to be something
+  // already pasted — and it says why rather than going quiet for no visible
+  // reason.
+  const held = control.entry !== undefined && !editing;
+  const beginBlocked = busy || storageUnavailable || editing || held;
 
-  // Opening the tab is not a request to type, so the editor opens only on a
-  // press — and then it takes the caret, because opening it is a request to
-  // type. The panel is told an entry is in progress, because that is the only
-  // time the pointer leaving must not be allowed to discard it.
-  useEffect(() => {
-    if (editing) field.current?.focus({ preventScroll: true });
-  }, [editing]);
-  useEffect(() => {
-    onEditingChange(provider.id, editing);
-  }, [editing, onEditingChange, provider.id]);
-  useEffect(() => () => onEditingChange(provider.id, false), [onEditingChange, provider.id]);
+  // The field takes the caret whenever the panel is the shape around it: coming
+  // back to a panel mid-entry — pressing the capsule while the slot holds the
+  // credential — hands focus out of an inert stage on the way, and returns
+  // someone who was in the middle of typing.
+  useFieldCaret(field, editing && panelOpen && !busy);
 
-  // Every control that offers to write a key opens the one editor, and clears
-  // whatever the last attempt was rejected for on the way in.
-  const openEditor = () => {
-    setRejection(undefined);
-    setDraft("");
+  // Every control that offers to write one begins the one entry — which takes
+  // the panel down to the slot — and clears whatever the last attempt was
+  // rejected for on the way.
+  const beginEntry = () => {
+    setRemovalRejection(undefined);
+    control.begin(provider.id);
   };
 
-  const submit = async (apiKey: string | undefined) => {
-    setBusy(true);
-    const failure = await onSubmit(provider.id, apiKey);
-    setBusy(false);
-    setRejection(failure);
-    if (!failure) setDraft(undefined);
+  const remove = async () => {
+    setRemoving(true);
+    setRemovalRejection(await control.remove(provider.id));
+    setRemoving(false);
   };
 
   return (
@@ -163,7 +170,7 @@ function ProviderCredential({
               disabled={busy}
               aria-label={`Delete the ${provider.displayName} ${credential}`}
               title="Delete"
-              onClick={() => void submit(undefined)}
+              onClick={() => void remove()}
             >
               <TrashIcon />
             </button>
@@ -172,10 +179,10 @@ function ProviderCredential({
             <button
               type="button"
               className="icon-button"
-              disabled={busy || storageUnavailable || editing}
+              disabled={beginBlocked}
               aria-label={editLabel}
-              title={editTitle}
-              onClick={openEditor}
+              title={held ? HELD_TITLE : editTitle}
+              onClick={beginEntry}
             >
               <PencilIcon />
             </button>
@@ -185,9 +192,10 @@ function ProviderCredential({
             <button
               type="button"
               className="quiet-button"
-              disabled={busy || storageUnavailable || editing}
+              disabled={beginBlocked}
               aria-label={`Connect ${provider.displayName}`}
-              onClick={openEditor}
+              title={held ? HELD_TITLE : undefined}
+              onClick={beginEntry}
             >
               Connect
             </button>
@@ -195,10 +203,9 @@ function ProviderCredential({
         </span>
       </div>
 
-      {editing ? (
+      {entry ? (
         /* Named as a group, because Cancel, Save, and the link to the
-           provider's own page are the same three words on every row and two
-           editors can be open at once. */
+           provider's own page are the same three words on every row. */
         <fieldset
           className="credential-editor"
           aria-label={`${provider.displayName} ${credential}`}
@@ -217,20 +224,20 @@ function ProviderCredential({
               autoComplete="off"
               spellCheck={false}
               placeholder={CREDENTIAL_PLACEHOLDER[source]}
-              value={draft}
+              value={entry.draft}
               disabled={busy}
-              onChange={(event) => setDraft(event.target.value)}
+              onChange={(event) => control.change(event.target.value)}
               onFocus={() => {
                 // The panel can be showing without its window being key, and a
                 // field that cannot be typed into is worse than no field.
                 window.sidecar.focusPanel();
               }}
               onKeyDown={(event) => {
-                if (event.key === "Enter" && draft.trim().length > 0) void submit(draft);
+                if (event.key === "Enter" && isSubmittable(entry)) control.commit();
                 // Escape closes the editor rather than the panel behind it.
                 if (event.key === "Escape") {
                   event.stopPropagation();
-                  setDraft(undefined);
+                  control.cancel();
                 }
               }}
             />
@@ -244,7 +251,8 @@ function ProviderCredential({
               <button
                 type="button"
                 className="link-button"
-                onClick={() => window.sidecar.openProviderApiKeys(provider.id)}
+                disabled={busy}
+                onClick={() => control.fetchKey()}
               >
                 Where to get one
                 <ExternalIcon />
@@ -255,15 +263,15 @@ function ProviderCredential({
                 type="button"
                 className="quiet-button"
                 disabled={busy}
-                onClick={() => setDraft(undefined)}
+                onClick={() => control.cancel()}
               >
                 Cancel
               </button>
               <button
                 type="button"
                 className="action-button"
-                disabled={busy || draft.trim().length === 0}
-                onClick={() => void submit(draft)}
+                disabled={busy || !isSubmittable(entry)}
+                onClick={() => control.commit()}
               >
                 {busy ? "Saving…" : "Save"}
               </button>
@@ -283,38 +291,13 @@ function ProviderCredential({
  */
 function CredentialsSection({
   settings,
-  onSubmit,
-  onEditingChange,
+  control,
+  panelOpen,
 }: {
   settings: AppSettings;
-  onSubmit: (
-    providerId: CredentialProviderId,
-    apiKey: string | undefined,
-  ) => Promise<string | undefined>;
-  onEditingChange: (editing: boolean) => void;
+  control: CredentialEntryControl;
+  panelOpen: boolean;
 }): React.JSX.Element {
-  const [editingProviders, setEditingProviders] = useState<readonly CredentialProviderId[]>([]);
-
-  const reportEditing = useCallback((providerId: CredentialProviderId, editing: boolean) => {
-    setEditingProviders((current) => {
-      const held = current.includes(providerId);
-      if (held === editing) return current;
-      return editing ? [...current, providerId] : current.filter((id) => id !== providerId);
-    });
-  }, []);
-
-  // The panel asks one question — is a key mid-entry — so the fields' answers
-  // are collapsed into one before it is given.
-  useEffect(() => {
-    onEditingChange(editingProviders.length > 0);
-  }, [editingProviders, onEditingChange]);
-
-  // A hold has to be released by whatever still exists to release it. Switching
-  // tabs unmounts this section and its fields in one commit, so a field's own
-  // "no longer editing" is reported into a tree that is already going away, and
-  // the panel would stay held open by an entry that is gone.
-  useEffect(() => () => onEditingChange(false), [onEditingChange]);
-
   return (
     <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
       <h2>
@@ -327,8 +310,8 @@ function CredentialsSection({
           provider={provider}
           source={settings.credentialSources[provider.id]}
           storageUnavailable={!settings.secretStorageAvailable}
-          onSubmit={onSubmit}
-          onEditingChange={reportEditing}
+          control={control}
+          panelOpen={panelOpen}
         />
       ))}
       {/* True of every key here, so it is said once rather than per provider. */}
@@ -347,8 +330,8 @@ export function SettingsPanel({
   microphoneError,
   onToggleMicrophone,
   settings,
-  onSubmitProviderApiKey,
-  onEditingChange,
+  credentials,
+  panelOpen,
   onQuit,
 }: SettingsPanelProps): React.JSX.Element {
   const microphoneAction = microphoneActive
@@ -365,11 +348,7 @@ export function SettingsPanel({
       aria-labelledby={panelTabId(PANEL_TAB.SETTINGS)}
     >
       {settings ? (
-        <CredentialsSection
-          settings={settings}
-          onSubmit={onSubmitProviderApiKey}
-          onEditingChange={onEditingChange}
-        />
+        <CredentialsSection settings={settings} control={credentials} panelOpen={panelOpen} />
       ) : null}
 
       <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
