@@ -1495,11 +1495,30 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 }
 
 /* Larger than the mark on a settings line: here it is the only thing naming the
-   provider, rather than a glyph beside its name. */
+   provider, rather than a glyph beside its name. The badge grows with it. */
 .key-slot-mark {
-  width: 17px;
-  height: 17px;
+  position: relative;
+  display: grid;
+  width: 22px;
+  height: 22px;
   flex: 0 0 auto;
+  place-items: center;
+}
+
+.key-slot-mark .provider-mark {
+  width: 16px;
+  height: 16px;
+}
+
+.key-slot-mark .cloud-badge {
+  right: -1px;
+  bottom: -1px;
+  width: 11px;
+  height: 11px;
+}
+
+.key-slot-mark .cloud-badge svg {
+  width: 7px;
 }
 
 .key-slot-input {

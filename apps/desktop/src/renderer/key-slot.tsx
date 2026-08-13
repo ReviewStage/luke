@@ -8,7 +8,7 @@ import {
   useFieldCaret,
 } from "./credential-entry";
 import { HIT_REGION } from "./panel-state";
-import { ProviderMark } from "./provider-marks";
+import { CloudBadge, ProviderMark } from "./provider-marks";
 import { ExternalIcon } from "./settings-icons";
 
 /**
@@ -77,8 +77,14 @@ export function KeySlot({
           beside it acts on that one field. */}
       <div className="key-slot" ref={measure} data-hit-region={HIT_REGION.SLOT}>
         <div className="key-slot-row">
-          {/* Whose key this is, said the way the panel says it. */}
-          <ProviderMark providerId={provider.id} className="key-slot-mark" />
+          {/* Whose key this is, said the way the settings line says it — mark
+              and cloud badge together, because a provider that needs a key is
+              one whose sessions live in a cloud service, and the same mark
+              cannot differ between the line and the slot it opens. */}
+          <span className="key-slot-mark">
+            <ProviderMark providerId={provider.id} />
+            <CloudBadge />
+          </span>
           <input
             ref={field}
             className="settings-input key-slot-input"
