@@ -5,8 +5,7 @@ with two eyes above it. The wordmark is **face-first caps** — the face *is* th
 followed by custom U·K·E letterforms weight-matched to the face's stroke.
 
 Everything here is generated. Do not hand-edit the SVGs; instead tweak the parameters
-in `design/generate-brand-assets.mjs` (or explore live in `design/logo-lab-7.html`)
-and re-run:
+in `design/generate-brand-assets.mjs` and re-run:
 
 ```sh
 node design/generate-brand-assets.mjs

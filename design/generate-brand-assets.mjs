@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// Generates Luke's brand assets from the parameters chosen in the logo lab.
-// The interactive tuner lives at design/logo-lab-7.html and the decisions it
-// produced are recorded in design/motion-selections.md; this script bakes
-// those numbers into standalone SVGs so the lab is not needed at build time.
+// Generates Luke's brand assets from the parameters chosen during the
+// interactive logo-lab exploration (the lab pages are local design tools and
+// are not checked in). The decisions are recorded in
+// design/motion-selections.md; this script bakes those numbers into
+// standalone SVGs.
 //
 // Usage: node design/generate-brand-assets.mjs
 // PNG derivatives (app icon, menu-bar template) are rasterized separately —
