@@ -94,13 +94,19 @@ export function removalEndsEntry(
 const CARET_FRAME_LIMIT = 60;
 
 /**
- * Puts the caret in a field as soon as the field can hold it.
+ * Puts the caret in a field as soon as the field can hold it, for as long as
+ * holding it is what the field is for.
  *
  * Both places an entry is drawn sit in a staged surface that is `visibility:
  * hidden` until its arrival delay has passed, and a hidden element refuses
  * focus outright — so asking on the frame the shape changes silently does
  * nothing. This waits for the stage rather than guessing at its delay, which
  * keeps the timing in the stylesheet where the rest of the motion lives.
+ *
+ * A field that goes disabled hands the caret out and does not take it back, so
+ * `active` falls while a credential is being written and rises again with the
+ * refusal that re-opens the field — which is what puts someone straight back to
+ * correcting the credential rather than clicking to get there.
  */
 export function useFieldCaret(field: RefObject<HTMLInputElement | null>, active: boolean): void {
   useEffect(() => {

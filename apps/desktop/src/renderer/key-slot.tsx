@@ -46,7 +46,7 @@ export function KeySlot({
   if (control.entry) held.current = control.entry;
   const entry = held.current;
 
-  useFieldCaret(field, drawn);
+  useFieldCaret(field, drawn && !control.entry?.busy);
 
   useEffect(() => {
     if (!drawn) return;

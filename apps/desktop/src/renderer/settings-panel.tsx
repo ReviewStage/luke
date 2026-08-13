@@ -125,7 +125,7 @@ function ProviderCredential({
   // back to a panel mid-entry — pressing the capsule while the slot holds the
   // credential — hands focus out of an inert stage on the way, and returns
   // someone who was in the middle of typing.
-  useFieldCaret(field, editing && panelOpen);
+  useFieldCaret(field, editing && panelOpen && !busy);
 
   // Every control that offers to write one begins the one entry — which takes
   // the panel down to the slot — and clears whatever the last attempt was
