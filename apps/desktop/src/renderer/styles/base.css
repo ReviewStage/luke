@@ -1227,17 +1227,11 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transform: none;
 }
 
-/* A departing session leaves the way the panel itself closes: content first,
-   shape after. The roster in session-motion keeps the row rendered for exactly
-   `--duration-exit`, so this fade is what the reader sees of it, and only once
-   it is gone do the neighbours spring in over the gap. The stagger is cleared
-   because it belongs to arrivals — a leave that waited out `--row-delay` would
-   outlive the roster's beat and be cut mid-fade. */
-.app-stage[data-presentation="panel"] .session-row[data-leaving="true"] {
-  --row-delay: 0s;
-
-  opacity: 0;
-}
+/* A departing session's fade is drawn by session-motion rather than here: the
+   row's opacity transition above carries the panel-arrival stagger, and a
+   session that returned mid-fade would wait out `--expand-delay` before
+   resuming. An animation leaves the property underneath untouched, so a
+   return only has to cancel it. */
 
 /* Settings --------------------------------------------------------------- */
 

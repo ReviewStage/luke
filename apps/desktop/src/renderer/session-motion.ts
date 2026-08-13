@@ -40,6 +40,16 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
  */
 export const SESSION_ROW_ID_ATTRIBUTE = "data-session-id";
 
+/**
+ * How a row says it is on its way out. The fade it announces is drawn here
+ * rather than in the stylesheet, because the row's own opacity transition
+ * carries the panel-arrival stagger: a session that returned mid-fade would
+ * wait out `--expand-delay` before resuming. An animation never touches the
+ * property underneath, so cancelling it is all a return takes — the row is
+ * simply alive again, at once.
+ */
+export const SESSION_ROW_LEAVING_ATTRIBUTE = "data-leaving";
+
 const MOTION_TOKEN = {
   SPRING_FAST: "--spring-fast",
   FAST_DURATION: "--duration-fast",
@@ -130,6 +140,8 @@ function rowVisible(row: HTMLElement): boolean {
 export function useSessionReorderMotion(): RefObject<HTMLDivElement | null> {
   const listRef = useRef<HTMLDivElement | null>(null);
   const baseline = useRef<Map<string, number> | undefined>(undefined);
+  const wasLeaving = useRef<Set<string>>(new Set());
+  const exitFades = useRef<Map<string, Animation>>(new Map());
 
   // No dependency list: a reorder arrives as new props, but the measurement
   // has to follow every commit that could have moved a row, and a handful of
@@ -138,6 +150,8 @@ export function useSessionReorderMotion(): RefObject<HTMLDivElement | null> {
     const list = listRef.current;
     if (list === null) {
       baseline.current = undefined;
+      wasLeaving.current = new Set();
+      exitFades.current.clear();
       return;
     }
 
@@ -153,9 +167,33 @@ export function useSessionReorderMotion(): RefObject<HTMLDivElement | null> {
       tops.set(id, row.offsetTop);
     }
 
+    // Rows whose leaving mark changed this commit: the newly departed begin
+    // their fade, and the returned have theirs cancelled. A fade belonging to
+    // a row no longer drawn died with its node and is only forgotten here.
+    const departed: [string, HTMLElement][] = [];
+    const returned: [string, HTMLElement][] = [];
+    const leaving = new Set<string>();
+    for (const [id, row] of rows) {
+      if (row.getAttribute(SESSION_ROW_LEAVING_ATTRIBUTE) === "true") leaving.add(id);
+      const was = wasLeaving.current.has(id);
+      if (!was && leaving.has(id)) departed.push([id, row]);
+      else if (was && !leaving.has(id)) returned.push([id, row]);
+    }
+    wasLeaving.current = leaving;
+    for (const id of [...exitFades.current.keys()]) {
+      if (!rows.has(id)) exitFades.current.delete(id);
+    }
+
     const plan = planReorder(baseline.current, tops);
     baseline.current = tops;
-    if (plan.travels.size === 0 && plan.arrivals.length === 0) return;
+    if (
+      plan.travels.size === 0 &&
+      plan.arrivals.length === 0 &&
+      departed.length === 0 &&
+      returned.length === 0
+    ) {
+      return;
+    }
 
     const style = getComputedStyle(list);
     const token = (name: MotionToken) => style.getPropertyValue(name);
@@ -181,26 +219,59 @@ export function useSessionReorderMotion(): RefObject<HTMLDivElement | null> {
     // down with the layout effect; the rows arriving in place is the better
     // failure.
     try {
+      for (const [id, row] of departed) {
+        if (!rowVisible(row) || exitDuration < STILL_MS) continue;
+        exitFades.current.set(
+          id,
+          // From wherever the row's opacity is, held at nothing until the
+          // roster lets the node go: the fade must outlive its own end,
+          // because the property underneath still says the row is drawn.
+          row.animate([{ opacity: getComputedStyle(row).opacity }, { opacity: 0 }], {
+            duration: exitDuration,
+            easing: exitEasing,
+            fill: "forwards",
+          }),
+        );
+      }
+      for (const [id, row] of returned) {
+        const fade = exitFades.current.get(id);
+        if (fade === undefined) continue;
+        const held = getComputedStyle(row).opacity;
+        fade.cancel();
+        exitFades.current.delete(id);
+        if (rowVisible(row) && quickDuration >= STILL_MS) {
+          row.animate([{ opacity: held }, { opacity: 1 }], {
+            duration: quickDuration,
+            easing: exitEasing,
+          });
+        }
+      }
       for (const [id, from] of plan.travels) {
         const row = rows.get(id);
         if (row !== undefined && rowVisible(row)) travel(row, from, 0);
       }
+      // The entrance waits only when it has something to wait for. The beat
+      // exists so an arrival is never seen crossing a neighbour still leaving
+      // its slot; with nothing travelling there is no one to cross, and a
+      // first session held invisible would leave the panel blank for the
+      // length of the hold.
+      const beat = plan.travels.size > 0 ? exitDuration : 0;
       for (const id of plan.arrivals) {
         const row = rows.get(id);
         if (row === undefined || !rowVisible(row)) continue;
         // The gap is already opening — the neighbours started travelling the
         // moment this row took up space — so the row itself waits out the
-        // exit beat and then arrives the way the stack arrives: from one fan
-        // step above, on the same spring, becoming opaque as it drops.
+        // beat and then arrives the way the stack arrives: from one fan step
+        // above, on the same spring, becoming opaque as it drops.
         if (quickDuration >= STILL_MS) {
           row.animate([{ opacity: 0 }, { opacity: 1 }], {
             duration: quickDuration,
             easing: exitEasing,
-            delay: exitDuration,
+            delay: beat,
             fill: "backwards",
           });
         }
-        if (fan > 0) travel(row, -fan, exitDuration);
+        if (fan > 0) travel(row, -fan, beat);
       }
     } catch {
       // Nothing to unwind: additive travels decay to zero on their own.

@@ -9,6 +9,7 @@ import {
 } from "./session-model";
 import {
   SESSION_ROW_ID_ATTRIBUTE,
+  SESSION_ROW_LEAVING_ATTRIBUTE,
   useSessionReorderMotion,
   useSessionRoster,
 } from "./session-motion";
@@ -63,7 +64,7 @@ function SessionRow({
     [SESSION_ROW_ID_ATTRIBUTE]: session.id,
     // A leaving row holds its slot while it fades, but its session is already
     // gone from the model, so nothing may read, focus, or press it.
-    "data-leaving": String(leaving),
+    [SESSION_ROW_LEAVING_ATTRIBUTE]: String(leaving),
     inert: leaving,
     style: { "--row-index": index + 1 } as React.CSSProperties,
   };
