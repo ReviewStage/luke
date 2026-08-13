@@ -114,13 +114,16 @@ private struct TalkKeyCommand {
             exit(1)
         }
 
+        // One hot key is ever registered, so it is named once: 'LUKE', and the
+        // first and only id under it.
+        let identifier = EventHotKeyID(signature: OSType(0x4C55_4B45), id: 1)
+
         // Tried in order, exactly as the app lists them, so the fallback is the
         // app's choice rather than this helper's.
         var hotKey: EventHotKeyRef?
         var registered: String?
         for accelerator in candidates {
             guard let chord = TalkKey.parse(accelerator: accelerator) else { continue }
-            var identifier = EventHotKeyID(signature: OSType(0x4C55_4B45), id: 1)
             let status = RegisterEventHotKey(
                 chord.keyCode,
                 chord.modifiers,
@@ -133,7 +136,6 @@ private struct TalkKeyCommand {
                 registered = accelerator
                 break
             }
-            _ = identifier
         }
 
         guard let registered else {
