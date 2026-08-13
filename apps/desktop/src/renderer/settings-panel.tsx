@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import type { AppSettings, CredentialSource, MicrophoneStatus } from "../shared/contracts";
-import { CREDENTIAL_SOURCE } from "../shared/contracts";
+import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "../shared/contracts";
 import type { CredentialProvider } from "../shared/credential-providers";
 import { CREDENTIAL_PROVIDER_LIST } from "../shared/credential-providers";
 import {
@@ -298,6 +298,10 @@ function CredentialsSection({
   control: CredentialEntryControl;
   panelOpen: boolean;
 }): React.JSX.Element {
+  // Only a system Luke has actually asked, and been refused by, is reported as
+  // one that cannot hold a key. Until then the rows stand as usual: a warning
+  // about storage nobody has tried to use yet would be a guess.
+  const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
   return (
     <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
       <h2>
@@ -309,16 +313,16 @@ function CredentialsSection({
           key={provider.id}
           provider={provider}
           source={settings.credentialSources[provider.id]}
-          storageUnavailable={!settings.secretStorageAvailable}
+          storageUnavailable={storageUnavailable}
           control={control}
           panelOpen={panelOpen}
         />
       ))}
       {/* True of every key here, so it is said once rather than per provider. */}
       <p className="settings-note">
-        {settings.secretStorageAvailable
-          ? "Luke reads only cloud workspaces you created, and never sends a prompt or any other change."
-          : "This system offers no encrypted credential storage, so Luke will not store a key here."}
+        {storageUnavailable
+          ? "This system offers no encrypted credential storage, so Luke will not store a key here."
+          : "Luke reads only cloud workspaces you created, and never sends a prompt or any other change."}
       </p>
     </section>
   );

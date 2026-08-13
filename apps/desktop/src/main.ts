@@ -621,9 +621,10 @@ if (!app.requestSingleInstanceLock()) {
     Menu.setApplicationMenu(null);
     refreshNativeGeometry();
     registerIpc();
-    // Resolving settings touches the filesystem and the OS keychain. Starting it
-    // here keeps that work off the renderer's first paint, which blocks on the
-    // bootstrap reply.
+    // Resolving settings touches the filesystem, and the OS keychain only for a
+    // provider that already has a stored key to decrypt. Starting it here keeps
+    // that work off the renderer's first paint, which blocks on the bootstrap
+    // reply.
     void settingsStore.snapshot();
     createPanel();
     configurePermissions();

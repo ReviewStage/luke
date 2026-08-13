@@ -4,6 +4,8 @@ import {
   type AppSettings,
   CREDENTIAL_SOURCE,
   type CredentialSource,
+  SECRET_STORAGE,
+  type SecretStorage,
   type SettingsUpdateResult,
 } from "./shared/contracts";
 import {
@@ -37,6 +39,11 @@ const PRINTABLE_ASCII = /^[\x21-\x7e]+$/;
 /**
  * A credential is only ever written through OS-provided encryption. Electron's
  * `safeStorage` satisfies this on macOS by deriving its key from the Keychain.
+ *
+ * Every member of this interface reaches the Keychain, `isAvailable` included:
+ * it answers by fetching the same key the other two use. So none of them may be
+ * called to fill in a display value — only to protect or recover a credential
+ * the user has.
  */
 export interface SecretCipher {
   isAvailable(): boolean;
@@ -149,6 +156,7 @@ export class SettingsStore {
   #loading: Promise<PersistedSettings> | undefined;
   #resolved = new Map<CredentialProviderId, ResolvedApiKey>();
   #mutations: Promise<void> = Promise.resolve();
+  #secretStorage: SecretStorage = SECRET_STORAGE.UNKNOWN;
 
   constructor(options: SettingsStoreOptions) {
     this.#directory = options.directory;
@@ -168,7 +176,10 @@ export class SettingsStore {
         CredentialProviderId,
         CredentialSource
       >,
-      secretStorageAvailable: this.#secretStorageAvailable(),
+      // Reports what storing a key has already established, and asks nothing on
+      // its own: a snapshot is taken on every launch, and most of them are for
+      // a user with no key to protect.
+      secretStorage: this.#secretStorage,
     };
   }
 
@@ -194,8 +205,10 @@ export class SettingsStore {
   ): Promise<SettingsUpdateResult> {
     const keyFormat = this.#providers.find((candidate) => candidate.id === providerId)?.keyFormat;
     const normalized = apiKey?.trim();
+    // Clearing a key needs no cipher, so only a key on its way in asks whether
+    // there is anywhere to put it.
     const rejection = normalized
-      ? !this.#secretStorageAvailable()
+      ? !this.#secretStorageUsable()
         ? "Encrypted credential storage is unavailable on this system."
         : apiKeyRejection(normalized, keyFormat)
       : undefined;
@@ -237,12 +250,23 @@ export class SettingsStore {
     return result;
   }
 
-  #secretStorageAvailable(): boolean {
-    try {
-      return this.#cipher.isAvailable();
-    } catch {
-      return false;
+  /**
+   * Asks the cipher whether it can protect a key, and remembers the answer. The
+   * question is asked at most once per run, and only from a path that has a
+   * credential in hand: on macOS asking is a Keychain read, which is the
+   * permission dialog this deliberately keeps out of an ordinary launch.
+   */
+  #secretStorageUsable(): boolean {
+    if (this.#secretStorage === SECRET_STORAGE.UNKNOWN) {
+      let available = false;
+      try {
+        available = this.#cipher.isAvailable();
+      } catch {
+        available = false;
+      }
+      this.#secretStorage = available ? SECRET_STORAGE.AVAILABLE : SECRET_STORAGE.UNAVAILABLE;
     }
+    return this.#secretStorage === SECRET_STORAGE.AVAILABLE;
   }
 
   /**

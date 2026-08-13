@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 import { type SecretCipher, SettingsStore } from "../src/settings-store";
-import { CREDENTIAL_SOURCE } from "../src/shared/contracts";
+import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "../src/shared/contracts";
 import {
   CREDENTIAL_PROVIDER_ID,
   type CredentialProvider,
@@ -72,6 +72,37 @@ function testCipher(available = true): SecretCipher {
   };
 }
 
+interface CipherCallCount {
+  isAvailable: number;
+  encrypt: number;
+  decrypt: number;
+}
+
+/**
+ * Counts what reaches the cipher. Every call is a Keychain read on macOS, so
+ * what a run does not ask for is as much a part of the behavior as what it
+ * returns.
+ */
+function countingCipher(available = true): SecretCipher & { readonly calls: CipherCallCount } {
+  const cipher = testCipher(available);
+  const calls: CipherCallCount = { isAvailable: 0, encrypt: 0, decrypt: 0 };
+  return {
+    calls,
+    isAvailable: () => {
+      calls.isAvailable += 1;
+      return cipher.isAvailable();
+    },
+    encrypt: (plainText) => {
+      calls.encrypt += 1;
+      return cipher.encrypt(plainText);
+    },
+    decrypt: (cipherText) => {
+      calls.decrypt += 1;
+      return cipher.decrypt(cipherText);
+    },
+  };
+}
+
 function sealed(plainText: string): string {
   return Buffer.from(`${CIPHER_PREFIX}${plainText}`, "utf8").toString("base64");
 }
@@ -114,7 +145,7 @@ test("stores an API key encrypted, private to the owner, and never in a snapshot
 
   assert.equal(reason, undefined);
   assert.equal(settings.credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.ENCRYPTED_FILE);
-  assert.equal(settings.secretStorageAvailable, true);
+  assert.equal(settings.secretStorage, SECRET_STORAGE.AVAILABLE);
   assert.equal(contents.includes(TEST_API_KEY), false, "the key was written in plaintext");
   assert.equal(stats.mode & 0o777, 0o600);
   assert.equal(JSON.stringify(settings).includes(TEST_API_KEY), false);
@@ -320,9 +351,62 @@ test("refuses to store a key when encrypted storage is unavailable", async (t) =
   const { settings, reason } = await store.setApiKey(CONDUCTOR, TEST_API_KEY);
 
   assert.match(reason ?? "", /unavailable/);
-  assert.equal(settings.secretStorageAvailable, false);
+  assert.equal(settings.secretStorage, SECRET_STORAGE.UNAVAILABLE);
   assert.equal(settings.credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.NONE);
   await assert.rejects(() => readSettingsFile(directory), /ENOENT/);
+});
+
+test("asks the cipher nothing on a launch with no key to protect", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+
+  const settings = await store.snapshot();
+
+  assert.equal(await store.readApiKey(CONDUCTOR), undefined);
+  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
+  // Nothing has asked, so nothing is claimed either way.
+  assert.equal(settings.secretStorage, SECRET_STORAGE.UNKNOWN);
+});
+
+test("asks the cipher nothing to clear a key", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+
+  const { settings, reason } = await store.setApiKey(CONDUCTOR, undefined);
+
+  assert.equal(reason, undefined);
+  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
+  assert.equal(settings.secretStorage, SECRET_STORAGE.UNKNOWN);
+});
+
+test("asks once when a key is stored and reports that answer from then on", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+
+  const { settings } = await store.setApiKey(CONDUCTOR, TEST_API_KEY);
+  const afterwards = await store.snapshot();
+  await store.setApiKey(CONDUCTOR, `${TEST_API_KEY}-rotated`);
+
+  assert.equal(settings.secretStorage, SECRET_STORAGE.AVAILABLE);
+  assert.equal(afterwards.secretStorage, SECRET_STORAGE.AVAILABLE);
+  // Once per run, however many keys pass through it.
+  assert.equal(cipher.calls.isAvailable, 1);
+});
+
+test("decrypts a stored key without asking whether storage is available", async (t) => {
+  const directory = await temporaryDirectory(t);
+  await storeIn(directory).setApiKey(CONDUCTOR, TEST_API_KEY);
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+
+  assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
+  // Recovering a key the user has is the one reason to reach the Keychain on a
+  // launch, and it is reason enough on its own.
+  assert.equal(cipher.calls.decrypt, 1);
+  assert.equal(cipher.calls.isAvailable, 0);
 });
 
 test("ignores a stored key that can no longer be decrypted", async (t) => {

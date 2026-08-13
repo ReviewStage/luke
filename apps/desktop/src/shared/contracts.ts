@@ -20,15 +20,32 @@ export const CREDENTIAL_SOURCE = {
 
 export type CredentialSource = (typeof CREDENTIAL_SOURCE)[keyof typeof CREDENTIAL_SOURCE];
 
+/**
+ * Whether Luke can store a credential through OS-provided encryption. Asking is
+ * not free: on macOS the answer comes from the Keychain, and reading it is what
+ * raises the permission dialog. Nobody who has never stored a key has any
+ * reason to see that dialog, so the question goes unasked until a key is
+ * actually being stored, and until then the answer is `UNKNOWN` rather than a
+ * guess in either direction.
+ */
+export const SECRET_STORAGE = {
+  UNKNOWN: "unknown",
+  AVAILABLE: "available",
+  UNAVAILABLE: "unavailable",
+} as const;
+
+export type SecretStorage = (typeof SECRET_STORAGE)[keyof typeof SECRET_STORAGE];
+
 /** Renderer-safe settings. Credentials are never sent to a renderer. */
 export interface AppSettings {
   /** Where each provider's key comes from, keyed by provider id. */
   credentialSources: Readonly<Record<CredentialProviderId, CredentialSource>>;
   /**
    * Luke stores credentials only through OS-provided encryption. When that is
-   * unavailable the app says so rather than falling back to plaintext storage.
+   * known to be unavailable the app says so rather than falling back to
+   * plaintext storage; while it is unknown the app says nothing about it.
    */
-  secretStorageAvailable: boolean;
+  secretStorage: SecretStorage;
 }
 
 /** A rejected update reports why without echoing the submitted value. */
