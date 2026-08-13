@@ -16,10 +16,18 @@ Download published builds from [GitHub Releases](https://github.com/ReviewStage/
 - Codex — reads local session state; no provider credential required
 - Conductor — reads cloud session metadata after you supply a Conductor API key
 - Cursor — reads cloud agent metadata after you supply a Cursor API key
+- Devin — reads cloud session metadata after you supply a Devin personal access
+  token
 
-Conductor and Cursor remain silent until their own key is saved in Luke's
-Settings or supplied through `CONDUCTOR_API_KEY`, `CONDUCTOR_API_TOKEN`, or
-`CURSOR_API_KEY`. Every provider integration is read-only. None requires hooks,
+Conductor, Cursor, and Devin remain silent until their own credential is saved
+in Luke's Settings or supplied through `CONDUCTOR_API_KEY`,
+`CONDUCTOR_API_TOKEN`, `CURSOR_API_KEY`, or `DEVIN_API_KEY`. Devin is the one
+that asks for a particular credential: Luke reads its v3 API, so it takes a
+personal access token (`cog_…`, created under **Devin API · PATs**) and refuses
+the deprecated `apk_` keys of v1 and v2. A token that belongs to a service user
+rather than to a person is refused too — Devin lists an organization's sessions,
+and Luke reports only the sessions belonging to whoever the token authenticates
+as. Every provider integration is read-only. None requires hooks,
 plugins, wrappers, or changes to how a session is launched.
 
 ## What works in v0.1
@@ -83,8 +91,8 @@ waveform without requesting microphone access.
 ## Optional attention review
 
 Session monitoring does not require `OPENAI_API_KEY`: Claude Code and Codex use
-local state, while Conductor and Cursor use their separately configured provider
-keys. If `OPENAI_API_KEY` is set, Luke can also send a bounded status update to
+local state, while Conductor, Cursor, and Devin use their separately configured
+provider credentials. If `OPENAI_API_KEY` is set, Luke can also send a bounded status update to
 the configured Responses endpoint for attention classification. That update can
 include the session title, recap, repository, branch, current tool activity, and
 reported error; see [PRIVACY.md](PRIVACY.md) for the exact boundary. This does

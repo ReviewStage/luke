@@ -119,12 +119,15 @@ test("the tally counts per state and per provider", () => {
     },
   );
   // Providers follow the order their most urgent session takes, so Cursor's
-  // working agent is listed ahead of Conductor's completed session.
+  // working agent is listed ahead of Conductor's completed session and Devin's
+  // suspended one. Five is one more than the wings hold, so the fixture also
+  // proves the remainder is counted rather than dropped.
   assert.deepEqual(tally.providers, [
-    { providerId: PROVIDER_ID.CLAUDE_CODE, provider: "Claude Code", total: 2, attention: 1 },
+    { providerId: PROVIDER_ID.CLAUDE_CODE, provider: "Claude Code", total: 1, attention: 1 },
     { providerId: PROVIDER_ID.CODEX, provider: "Codex", total: 1, attention: 0 },
     { providerId: PROVIDER_ID.CURSOR, provider: "Cursor", total: 1, attention: 0 },
     { providerId: PROVIDER_ID.CONDUCTOR, provider: "Conductor", total: 1, attention: 0 },
+    { providerId: PROVIDER_ID.DEVIN, provider: "Devin", total: 1, attention: 0 },
   ]);
 });
 
