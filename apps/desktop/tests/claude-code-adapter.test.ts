@@ -343,7 +343,7 @@ test("surfaces the generated title, branch, model, and the tool being run", asyn
   });
 });
 
-test("reports a failed request as an error a developer has to rescue", async (t) => {
+test("reports a failed request as an error once the retries are spent", async (t) => {
   const claudeHome = await temporaryClaudeHome(t);
   await writeSessionFile(
     claudeHome,
@@ -362,6 +362,9 @@ test("reports a failed request as an error a developer has to rescue", async (t)
         cwd: "/Users/test/luke",
         timestamp: "2026-08-11T23:44:55.000Z",
         error: { formatted: "429 rate limit exceeded", status: 429 },
+        retryInMs: 1056.6,
+        retryAttempt: 10,
+        maxRetries: 10,
       },
     ],
     TEST_TIME - 1_000,
@@ -376,6 +379,46 @@ test("reports a failed request as an error a developer has to rescue", async (t)
 
   assert.equal(observation?.status, SESSION_STATUS.ERROR);
   assert.equal(observation?.detail?.error, "429 rate limit exceeded");
+});
+
+test("stays working through a retry the session is still backing off from", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-retrying",
+    "retrying-session",
+    [
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:44:50.000Z",
+        message: { stop_reason: "tool_use", content: [] },
+      },
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.SYSTEM,
+        subtype: "api_error",
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:44:55.000Z",
+        error: { formatted: "529 Overloaded", status: 529 },
+        retryInMs: 575.1,
+        retryAttempt: 1,
+        maxRetries: 10,
+      },
+    ],
+    TEST_TIME - 1_000,
+  );
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const [observation] = await adapter.observe();
+
+  // Claude Code records every backoff, not only the attempt that gives up.
+  // Interrupting on the first would be an interruption about nothing.
+  assert.equal(observation?.status, SESSION_STATUS.WORKING);
+  assert.equal(observation?.detail?.error, undefined);
 });
 
 test("clears a recorded error once the session gets past it", async (t) => {
@@ -486,6 +529,53 @@ test("carries the away recap Claude Code writes for a developer who stepped out"
     observation?.summary,
     "You asked for the notch geometry; next, say whether to ship it.",
   );
+});
+
+test("drops the previous turn's recap when a new prompt opens a turn", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-recap",
+    "recap-session",
+    [
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:44:40.000Z",
+        message: { stop_reason: "end_turn", content: [{ type: "text", text: "First turn." }] },
+      },
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.SYSTEM,
+        subtype: "away_summary",
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:44:42.000Z",
+        content: "The first turn's recap.",
+      },
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.USER,
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:44:50.000Z",
+        message: { content: [{ type: "text", text: "Now do the other thing." }] },
+      },
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:44:55.000Z",
+        message: { stop_reason: "end_turn", content: [{ type: "text", text: "Second turn." }] },
+      },
+    ],
+    TEST_TIME - 1_000,
+  );
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WAITING);
+  assert.equal(observation?.summary, "Second turn.");
 });
 
 test("stops reporting a tool once the turn that ran it has ended", async (t) => {

@@ -55,6 +55,7 @@ const CLAUDE_STOP_REASON = {
 
 const CLAUDE_CONTENT_TYPE = {
   TEXT: "text",
+  TOOL_RESULT: "tool_result",
   TOOL_USE: "tool_use",
 } as const;
 
@@ -338,14 +339,29 @@ function modelFromRecord(record: Record<string, unknown>): string | undefined {
   return isRecord(message) ? text(message.model) : undefined;
 }
 
+function wholeNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
 /**
- * Reads the formatted failure Claude Code records when a request could not be
- * completed. A rate limit or an overloaded upstream stops the session dead, and
- * it is the one thing a developer must be told about immediately.
+ * Reads the failure Claude Code recorded, but only once it has stopped trying.
+ *
+ * Claude Code writes `api_error` for every retry as it backs off, not only for
+ * the one that gives up: a rate limit or a dropped connection produces a run of
+ * them counting `retryAttempt` up to `maxRetries`. Reporting the first would
+ * interrupt a developer about a blip the session is already recovering from,
+ * which is the one thing a background companion must not do. A record with no
+ * retry bookkeeping at all is not a retry, so it stands on its own.
  */
 function apiErrorFromRecord(record: Record<string, unknown>): string | undefined {
   const error = record.error;
   if (!isRecord(error)) return undefined;
+
+  const attempt = wholeNumber(record.retryAttempt);
+  const maximumAttempts = wholeNumber(record.maxRetries);
+  if (attempt !== undefined && maximumAttempts !== undefined && attempt < maximumAttempts) {
+    return undefined;
+  }
   return oneLine(
     text(error.formatted) ?? text(error.message),
     CLAUDE_ADAPTER_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH,
@@ -362,6 +378,16 @@ function timestampFromRecord(record: Record<string, unknown>): number | undefine
 function cwdFromRecord(record: Record<string, unknown>): string | undefined {
   const cwd = record.cwd;
   return typeof cwd === "string" && cwd.trim().length > 0 ? cwd : undefined;
+}
+
+/**
+ * Whether a user record carries a tool's output rather than a person's prompt.
+ * The two look alike at the top level and mean opposite things: one continues
+ * the turn under way, the other opens a new one.
+ */
+function isToolResult(record: Record<string, unknown>): boolean {
+  if (record.toolUseResult !== undefined) return true;
+  return contentBlocks(record).some((block) => block.type === CLAUDE_CONTENT_TYPE.TOOL_RESULT);
 }
 
 /**
@@ -413,6 +439,13 @@ function readClaudeRecord(record: Record<string, unknown>, parsed: ParsedClaudeS
     // is doing. A tool result does not: it sits between one call and the next,
     // and clearing there would blank the line every other record.
     if (eventType === CLAUDE_EVENT_TYPE.RESULT) parsed.activity = undefined;
+    // A new prompt opens a new turn, so the previous turn's recap has stopped
+    // describing this session. Keeping it would let a stale recap outrank the
+    // closing words of the turn that actually just ended.
+    if (eventType === CLAUDE_EVENT_TYPE.USER && !isToolResult(record)) {
+      parsed.activity = undefined;
+      parsed.awaySummary = undefined;
+    }
     return;
   }
   parsed.stopReason = stopReasonFromRecord(record);
