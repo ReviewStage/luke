@@ -225,13 +225,15 @@ test("observes cloud sessions the signed-in user created, under their own names"
   assert.deepEqual(CONDUCTOR_PROVIDER, { id: "conductor", displayName: "Conductor" });
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "session-working");
-  assert.equal(observations[0]?.title, TEST_SESSION_NAME);
+  // Titled by the workspace, which carries the name the user knows the work
+  // by; the chat's generated name is not read, and the workspace name is not a
+  // branch, so no branch is reported at all.
+  assert.equal(observations[0]?.title, TEST_WORKSPACE_NAME);
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
   assert.equal(observations[0]?.observedAt, TEST_TIME - 5_000);
   assert.equal(observations[0]?.controls, undefined);
   assert.deepEqual(observations[0]?.detail, {
     repository: "luke",
-    branch: TEST_WORKSPACE_NAME,
     model: "claude-opus-5",
     link: "conductor://workspace?session=session-working",
   });
@@ -323,15 +325,17 @@ test("keeps an errored session errored after it goes stale", async () => {
   assert.equal(observations[0]?.status, SESSION_STATUS.ERROR);
 });
 
-test("separates sessions that share one project by their own names", async () => {
+test("separates sessions that share one project by their workspaces' names", async () => {
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
     projects: [LUKE_PROJECT],
     workspaces: [
-      ownedWorkspace("workspace-one", TEST_TIME - 30_000),
-      ownedWorkspace("workspace-two", TEST_TIME - 40_000),
+      { ...ownedWorkspace("workspace-one", TEST_TIME - 30_000), name: "lisbon-v2" },
+      { ...ownedWorkspace("workspace-two", TEST_TIME - 40_000), name: "porto-v1" },
     ],
     sessions: [
+      // Each chat carries a generated name, which must not become the title:
+      // the workspace's name is the one the user chose or accepted.
       {
         id: "session-one",
         workspaceId: "workspace-one",
@@ -351,7 +355,7 @@ test("separates sessions that share one project by their own names", async () =>
 
   assert.deepEqual(
     observations.map((observation) => observation.title),
-    ["Revamp the notch panel", "Observe Cursor cloud agents"],
+    ["lisbon-v2", "porto-v1"],
   );
 });
 

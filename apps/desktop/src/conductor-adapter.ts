@@ -133,7 +133,6 @@ interface ConductorWorkspace {
 
 interface ConductorSession {
   id: string;
-  name?: string;
   workspace: ConductorWorkspace;
   archived: boolean;
   archivedAt?: number;
@@ -302,17 +301,15 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
           if (!id) return undefined;
           const archivedAt = timestampFromRecord(record, CONDUCTOR_FIELD.ARCHIVED_AT);
           const model = modelLabel(record);
-          const name = textFromRecord(record, CONDUCTOR_FIELD.NAME)?.slice(
-            0,
-            maximumSessionTitleLength,
-          );
           const deepLink = textFromRecord(record, CONDUCTOR_FIELD.DEEP_LINK);
+          // The chat's own `name` is deliberately not read: Conductor generates
+          // it, nobody chose it, and the one thing it ever did here — titling
+          // the row — belongs to the workspace's name instead.
           return {
             id,
             workspace,
             archived: textFromRecord(record, CONDUCTOR_FIELD.ARCHIVED_AT) !== undefined,
             ...(archivedAt === undefined ? {} : { archivedAt }),
-            ...(name ? { name } : {}),
             ...(model ? { model } : {}),
             ...(deepLink ? { deepLink } : {}),
           };
@@ -359,15 +356,16 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     const status = this.#statusFor(session, reported?.status, observedAt, now);
     return {
       providerSessionId: session.id,
-      // A workspace holds several chats and a project holds several workspaces,
-      // so labelling by the project's repository gave every session in a repo
-      // the same row. The session's own name is what separates them.
-      title: session.name ?? session.workspace.name ?? session.workspace.repositoryLabel,
+      // The workspace's name is the name the user knows this work by — it is
+      // what Conductor itself shows them — where a chat's own name is generated
+      // and identifies nothing. So the workspace titles the row, and it is not
+      // reported as a branch: it never was one, and the surface now draws a
+      // branch under a glyph that says so.
+      title: session.workspace.name ?? session.workspace.repositoryLabel,
       status,
       observedAt,
       detail: {
         repository: session.workspace.repositoryLabel,
-        ...(session.workspace.name ? { branch: session.workspace.name } : {}),
         ...(session.model ? { model: session.model } : {}),
         ...(reported?.errorMessage ? { error: reported.errorMessage } : {}),
         ...(session.deepLink ? { link: session.deepLink } : {}),

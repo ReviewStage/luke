@@ -86,14 +86,16 @@ const smokeFixture: FixtureSnapshot = {
     // fixture tells the two orderings apart rather than agreeing with both.
     {
       id: "conductor-workspace",
-      title: "Observe a cloud workspace",
+      // Conductor sessions are titled by the workspace's own name — the name
+      // the user knows the work by — and carry no branch, because the
+      // workspace name never was one.
+      title: "lisbon-v2",
       providerId: PROVIDER_ID.CONDUCTOR,
       provider: "Conductor",
       // A provider that reported no activity, failure, or recap: the surface
       // words the state itself, and this row is what proves it does.
       detail: "",
       repository: "luke",
-      branch: "lisbon-v2",
       model: "claude-opus-5",
       state: SESSION_STATE.COMPLETE,
       location: SESSION_LOCATION.CLOUD,
