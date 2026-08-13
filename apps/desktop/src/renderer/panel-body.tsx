@@ -1,8 +1,8 @@
 import { SESSION_LOCATION } from "@sidecar/core";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
-import { ProviderMark } from "./provider-marks";
+import { CloudBadge, ProviderMark } from "./provider-marks";
 import type { DisplaySession } from "./session-model";
-import { CloudBadge, EmptyState, SessionsPanel, StateChip } from "./session-parts";
+import { EmptyState, SessionsPanel, StateChip } from "./session-parts";
 import { SettingsPanel, type SettingsPanelProps } from "./settings-panel";
 
 export interface PanelBodyProps {

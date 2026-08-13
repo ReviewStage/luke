@@ -4,7 +4,7 @@ import { CREDENTIAL_SOURCE } from "../shared/contracts";
 import type { CredentialProvider, CredentialProviderId } from "../shared/credential-providers";
 import { CREDENTIAL_PROVIDER_LIST } from "../shared/credential-providers";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
-import { ProviderMark } from "./provider-marks";
+import { CloudBadge, ProviderMark } from "./provider-marks";
 import {
   CheckIcon,
   ExternalIcon,
@@ -133,8 +133,15 @@ function ProviderCredential({
       <div className="credential-row">
         <span className="credential-identity">
           {/* The provider's own mark, so a list is read by brand rather than by
-              a word every line would have to repeat. */}
-          <ProviderMark providerId={provider.id} className="credential-mark" />
+              a word every line would have to repeat. Every provider that can
+              hold a key is one whose sessions live in a cloud service — that is
+              what makes the key necessary — so each mark carries the same badge
+              its session rows do, rather than one line's mark differing from
+              the same mark elsewhere. */}
+          <span className="credential-mark">
+            <ProviderMark providerId={provider.id} />
+            <CloudBadge />
+          </span>
           <span className="credential-name">{provider.displayName}</span>
           {connected ? <CheckIcon /> : null}
         </span>
