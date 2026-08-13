@@ -12,11 +12,15 @@ Download published builds from [GitHub Releases](https://github.com/ReviewStage/
 
 ## Current provider support
 
-- Claude Code
-- Codex
+- Claude Code — reads local session state; no provider credential required
+- Codex — reads local session state; no provider credential required
+- Conductor — reads cloud session metadata after you supply a Conductor API key
+- Cursor — reads cloud agent metadata after you supply a Cursor API key
 
-Both providers work from local session state. Luke does not require provider
-credentials, hooks, plugins, wrappers, or changes to how a session is launched.
+Conductor and Cursor remain silent until their own key is saved in Luke's
+Settings or supplied through `CONDUCTOR_API_KEY`, `CONDUCTOR_API_TOKEN`, or
+`CURSOR_API_KEY`. Every provider integration is read-only. None requires hooks,
+plugins, wrappers, or changes to how a session is launched.
 
 ## What works in v0.1
 
@@ -77,9 +81,11 @@ waveform without requesting microphone access.
 
 ## Optional attention review
 
-Luke monitors supported providers without an API key. If `OPENAI_API_KEY` is
-set, Luke can send a bounded status update to the configured Responses endpoint
-for attention classification. This does not enable speech or agent control.
+Session monitoring does not require `OPENAI_API_KEY`: Claude Code and Codex use
+local state, while Conductor and Cursor use their separately configured provider
+keys. If `OPENAI_API_KEY` is set, Luke can also send a bounded status update to
+the configured Responses endpoint for attention classification. This does not
+enable speech or agent control.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |

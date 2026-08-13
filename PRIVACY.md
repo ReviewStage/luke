@@ -17,6 +17,38 @@ tool-use presence are used to derive status; transcript text is not retained.
 Luke does not modify provider files, retain transcript text, inject input, or
 require provider hooks or plugins. It does not control provider sessions.
 
+## Optional cloud-provider reads
+
+Conductor and Cursor have no local session state for Luke to observe. Without a
+key for one of those providers, Luke sends that provider no request and reports
+none of its sessions.
+
+When a key is supplied, Luke sends it as a bearer credential to that provider
+and issues authenticated `GET` requests only:
+
+- For Conductor, Luke reads the authenticated identity, projects, workspaces the
+  authenticated user created, sessions, and session statuses. It processes
+  identifiers, repository names derived from Git remotes, timestamps, model
+  labels, archive state, and status.
+- For Cursor, Luke reads agents owned by the supplied key and their latest runs.
+  It processes identifiers, repository URLs and starting refs, timestamps,
+  archive state, and run status.
+
+Luke does not call provider write routes, and it does not use cloud workspace,
+agent, or session names because providers may derive them from prompts. Returned
+metadata is held in memory for display; response bodies are not persisted.
+
+Conductor keys may come from Luke's Settings, `CONDUCTOR_API_KEY`, or
+`CONDUCTOR_API_TOKEN`; Cursor keys may come from Settings or `CURSOR_API_KEY`.
+Keys saved in Settings are encrypted with Electron `safeStorage`, backed by the
+macOS login Keychain, and are never returned to the renderer. Environment keys
+are not copied into Luke's settings file.
+
+By default, these requests go to the provider's own API. Changing
+`CONDUCTOR_API_URL` or `CURSOR_API_URL` sends the corresponding bearer credential
+to that configured endpoint, whose policies then govern the request and
+response data.
+
 ## What stays local
 
 The microphone is optional. When enabled, Luke uses it only to calculate audio
