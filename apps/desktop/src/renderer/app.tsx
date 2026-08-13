@@ -448,6 +448,14 @@ export function App(): React.JSX.Element {
   // Luke is watching, not what the panel is currently showing.
   const tally = sessionTally(visibleSessions);
   const list = arrangeSessions(visibleSessions, sessionView);
+  // Dropping an emptied filter is a change of view, not a way of drawing one.
+  // Left in state it would lie dormant behind an All that only looks chosen,
+  // and the next session to enter that state would narrow the list back down
+  // to it with nothing having been pressed. Setting state here rather than from
+  // an effect is what keeps that from being drawn first and corrected after.
+  if (list.filter !== sessionView.filter) {
+    setSessionView({ ...sessionView, filter: list.filter });
+  }
   const fixtureSpeaking = bootstrap.profile === "speaking";
   const hasAudioSignal = fixtureSpeaking || analyser !== undefined;
   const panelOpen = presentation === PANEL_PRESENTATION.PANEL;

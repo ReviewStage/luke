@@ -188,6 +188,27 @@ test("a filter whose last session has left falls back to showing everything", ()
   assert.equal(list.sessions.length, 2);
 });
 
+// The panel stores the filter this returns rather than only drawing it, so a
+// filter that emptied is dropped instead of lying dormant behind an All that
+// only looks chosen. That write is safe exactly while arranging the result
+// again changes nothing.
+test("the filter the list settles on is one it would settle on again", () => {
+  const noneWaiting = displaySessions(bootstrap(false), [
+    liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.WORKING),
+  ]);
+
+  for (const sessions of [noneWaiting, []]) {
+    const first = arrangeSessions(sessions, {
+      ...DEFAULT_SESSION_VIEW,
+      filter: SESSION_FILTER.ATTENTION,
+    });
+    const second = arrangeSessions(sessions, { ...DEFAULT_SESSION_VIEW, filter: first.filter });
+
+    assert.equal(first.filter, SESSION_FILTER.ALL);
+    assert.equal(second.filter, first.filter);
+  }
+});
+
 test("the two orderings answer different questions about the same sessions", () => {
   const urgent = arrangeSessions(FIXTURE_SESSIONS, DEFAULT_SESSION_VIEW);
   const recent = arrangeSessions(FIXTURE_SESSIONS, {
