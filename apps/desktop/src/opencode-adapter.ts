@@ -307,10 +307,14 @@ function statusFromTurn(turn: OpenCodeTurn | undefined, isFresh: boolean): Sessi
 }
 
 /**
- * Names the tool the session is running, from the newest tool part's own
- * bookkeeping. Only a part still pending or running counts: the newest tool
- * having settled means nothing is running now, so nothing older is read. The
- * words of the conversation live in text parts, which are never opened.
+ * Names the tool the session is running, from the newest live tool part's own
+ * bookkeeping. Only a part still pending or running counts, and a settled one
+ * is passed over rather than ending the search: OpenCode runs tools
+ * concurrently, so the newest tool having finished says nothing about an older
+ * one still working. A stale part left running by a killed process cannot
+ * reach here, because activity is only read for a session already fresh enough
+ * to be working. The words of the conversation live in text parts, which are
+ * never opened.
  */
 function activityFromPartRows(rows: readonly OpenCodeRow[]): string | undefined {
   for (const row of rows) {
@@ -319,10 +323,10 @@ function activityFromPartRows(rows: readonly OpenCodeRow[]): string | undefined 
     const state = isRecord(record.state) ? record.state : undefined;
     const status = text(state?.status);
     if (status !== OPENCODE_TOOL_STATUS.PENDING && status !== OPENCODE_TOOL_STATUS.RUNNING) {
-      return undefined;
+      continue;
     }
     const name = text(record.tool);
-    if (!name) return undefined;
+    if (!name) continue;
     const input = isRecord(state?.input) ? state.input : {};
     for (const key of OPENCODE_TOOL_INPUT_KEY) {
       const detail = oneLine(text(input[key]), OPENCODE_ADAPTER_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH);

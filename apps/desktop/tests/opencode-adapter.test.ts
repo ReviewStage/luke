@@ -466,6 +466,60 @@ test("names the tool an OpenCode session is running", async (t) => {
   assert.equal(observation?.detail?.activity, "bash: pnpm test");
 });
 
+test("names the tool still running behind one that already settled", async (t) => {
+  const dataDirectory = await temporaryDataDirectory(t);
+  await writeOpenCodeState(
+    dataDirectory,
+    [{ id: "ses_parallel", directory: "/Users/test/luke", observedAt: TEST_TIME - 1_000 }],
+    {
+      messages: [
+        {
+          id: "msg_01",
+          sessionId: "ses_parallel",
+          time: TEST_TIME - 1_000,
+          data: { role: "assistant", time: { created: TEST_TIME - 3_000 } },
+        },
+      ],
+      parts: [
+        {
+          id: "prt_01",
+          messageId: "msg_01",
+          sessionId: "ses_parallel",
+          time: TEST_TIME - 3_000,
+          data: {
+            type: "tool",
+            tool: "bash",
+            state: { status: "running", input: { command: "pnpm test" } },
+          },
+        },
+        // OpenCode runs tools concurrently, so a newer call can settle while
+        // an older one is still the work the session is doing.
+        {
+          id: "prt_02",
+          messageId: "msg_01",
+          sessionId: "ses_parallel",
+          time: TEST_TIME - 1_000,
+          data: {
+            type: "tool",
+            tool: "read",
+            state: { status: "completed", input: { filePath: "README.md" } },
+          },
+        },
+      ],
+    },
+  );
+
+  const adapter = new OpenCodeSessionAdapter({
+    dataDirectory,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WORKING);
+  assert.equal(observation?.detail?.activity, "bash: pnpm test");
+});
+
 test("skips OpenCode subagent and archived sessions", async (t) => {
   const dataDirectory = await temporaryDataDirectory(t);
   await writeOpenCodeState(dataDirectory, [
