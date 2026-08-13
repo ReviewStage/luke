@@ -26,6 +26,15 @@
   --mark-devin: #ffffff;
   --mark-jules: #715cd7;
 
+  /* The one destructive colour, in the two weights a control that destroys
+     something needs: a ground it can sit on and a text colour that reads on
+     that ground. Quitting, the trash, and the confirm the trash opens are the
+     only three places in the app that draw it, and they have to be the same
+     red — a delete that announced itself in a colour nothing else uses would
+     read as a different kind of act. */
+  --danger: #ff7e7e;
+  --danger-text: #ff9b9b;
+
   --text-primary: rgba(255, 255, 255, 0.95);
   --text-secondary: rgba(255, 255, 255, 0.56);
   --text-tertiary: rgba(255, 255, 255, 0.34);
@@ -1144,8 +1153,8 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 }
 
 .quit-button:hover {
-  background: color-mix(in srgb, #ff7e7e 12%, transparent);
-  color: #ff9b9b;
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger-text);
 }
 
 .quit-button .settings-icon {
@@ -1282,13 +1291,110 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 /* Deleting a key is the one destructive control here, so it says so on hover
    rather than by sitting in red beside the others. */
 .credential-remove:hover {
-  background: color-mix(in srgb, #ff7e7e 12%, transparent);
-  color: #ff9b9b;
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger-text);
 }
 
 .credential-remove:disabled:hover {
   background: var(--raised);
   color: var(--text-secondary);
+}
+
+/* Deleting a key is the one act in this panel that cannot be undone from inside
+   it: nothing here can hand a key back, so a trash pressed by mistake costs a
+   trip to the provider's own site. The trash asks instead of acting, and the
+   answer is given in the few pixels the question was asked in.
+ *
+ * The line's controls and the confirm that replaces them are the same cell of
+ * one grid. That is what makes the swap free: the cell is as wide as the wider
+ * of the two whichever one is showing, so the name flexing beside it never
+ * re-shapes, and neither layer is mounted or unmounted by the press. Only
+ * `transform`, `opacity`, and `visibility` ever change hands. */
+.credential-actions {
+  display: grid;
+  flex: 0 0 auto;
+  justify-items: end;
+}
+
+.credential-actions > * {
+  grid-area: 1 / 1;
+}
+
+/* The layer that is leaving fades over `--duration-exit`, the way panel content
+   always leaves before the thing it belongs to moves. `visibility` waits out
+   that fade so it can be seen going, and switches immediately on the way in so
+   the arriving layer can take the focus the leaving one is about to lose. */
+.credential-actions > [data-drawn="false"] {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    visibility 0s linear var(--duration-exit);
+}
+
+.credential-actions > [data-drawn="true"] {
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity var(--duration-quick) var(--motion-exit),
+    visibility 0s linear;
+}
+
+/* The layer fades; what springs is what is inside it. Every control here rides
+   `--spring-fast` — the same bounce the tab thumb has, which is the profile
+   every small element in the app moves on, so a control trading places belongs
+   to the same object as everything around it. Each one collapses into, and
+   grows back out of, its own right edge: the group folds toward the corner the
+   trash sits in rather than shrinking about its middle.
+ *
+ * Matched through the layer rather than by class, because `.quiet-button` and
+ * `.danger-button` are written further down the sheet and would otherwise win
+ * this declaration back at equal specificity. Their transition declares only
+ * the hover pair, so this replaces it rather than adding to it and has to carry
+ * that pair along. */
+.credential-actions > [data-drawn] > * {
+  transform-origin: 100% 50%;
+  transition:
+    transform var(--duration-fast) var(--spring-fast) var(--answer-delay, 0s),
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+/* Standing down happens all at once: a group leaving in sequence reads as
+   hesitation, and the answer is already on its way in. */
+.credential-actions > [data-drawn="false"] > * {
+  transform: scale(0.82) translateX(10px);
+}
+
+/* Arriving does not. The answer that changes nothing lands first and the one
+   that cannot be taken back lands a beat later, on the same stagger the panel's
+   own rows fan open with — so the confirm unfolds rather than appearing, and
+   the eye reaches the safe answer first. */
+.credential-actions > [data-drawn="true"] > * {
+  --answer-delay: calc(var(--answer-index, 0) * var(--row-stagger));
+
+  transform: none;
+}
+
+/* The can tips as it goes. It is the only rotation in the panel, and it belongs
+   to the one control whose question has just been handed somewhere else. */
+.credential-controls[data-drawn="false"] .credential-remove .icon-button-glyph {
+  transform: rotate(-14deg);
+}
+
+.credential-remove .icon-button-glyph {
+  transition: transform var(--duration-fast) var(--spring-fast);
+}
+
+/* The group is what names the question for the two controls inside it, the same
+   way the editor's group names the provider for its own Cancel and Save. None
+   of the user-agent frame is wanted, including the `min-inline-size` that would
+   stop it shrinking with the panel. */
+.credential-confirm {
+  min-inline-size: 0;
+  padding: 0;
+  border: 0;
+  margin: 0;
 }
 
 /* The field exists only while a key is being entered. It is a fieldset because
@@ -1438,17 +1544,20 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 }
 
 .action-button:disabled,
-.quiet-button:disabled {
+.quiet-button:disabled,
+.danger-button:disabled {
   opacity: 0.4;
 }
 
 .action-button:disabled:hover,
-.quiet-button:disabled:hover {
+.quiet-button:disabled:hover,
+.danger-button:disabled:hover {
   background: var(--raised);
 }
 
 .action-button,
-.quiet-button {
+.quiet-button,
+.danger-button {
   padding: 8px 13px;
   border-radius: 10px;
   font-size: 10px;
@@ -1476,6 +1585,26 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .quiet-button:hover {
   background: var(--raised-strong);
   color: var(--text-primary);
+}
+
+/* Shaped like the editor's Save and coloured like the trash that opened it. It
+   is the one control in the app that sits in red before anything hovers it:
+   every other destructive control admits what it is on the way past, and by the
+   time this one is drawn the question has already been asked. */
+.danger-button {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger-text);
+}
+
+.danger-button:hover {
+  background: color-mix(in srgb, var(--danger) 26%, transparent);
+}
+
+/* Held to the width of its longest word, so saying "Deleting…" does not widen
+   the group and slide the answer beside it along — the same floor the slot's
+   confirm keeps, and by measurement the same number. */
+.credential-confirm .danger-button {
+  min-width: 76px;
 }
 
 .error-message {
