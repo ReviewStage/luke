@@ -68,6 +68,7 @@ import {
   voiceHotkeyLabel,
   voiceHotkeyReport,
 } from "./shared/voice-hotkey";
+import { TalkKeyWatcher } from "./talk-key";
 
 const captureOutput = argumentValue("--capture-evidence");
 const profile = argumentValue("--profile") ?? "idle";
@@ -153,6 +154,14 @@ const attentionReviewer = attentionEvaluator
 // does: evidence must be reproducible without a key and without a network.
 const realtimeCredentials = fixtureMode ? undefined : openAiRealtimeCredentialsFromEnvironment();
 let voiceHotkey: string | undefined;
+let talkKeyWatcher: TalkKeyWatcher | undefined;
+/**
+ * Whether the key reports being let go of. The helper does and the Electron
+ * fallback cannot, and that is the difference between holding a turn and
+ * toggling one — so the panel is told which key it actually has rather than
+ * describing the one it hoped for.
+ */
+let voiceHotkeyHeld = true;
 // Only read when no key was registered, so it starts at the case that needs no
 // explaining beyond itself: every candidate was refused.
 let voiceHotkeyAbsence: VoiceHotkeyAbsence = VOICE_HOTKEY_ABSENCE.ALREADY_OWNED;
@@ -166,22 +175,68 @@ let voiceHotkeyAbsence: VoiceHotkeyAbsence = VOICE_HOTKEY_ABSENCE.ALREADY_OWNED;
 function registerVoiceHotkey(): void {
   if (captureMode) {
     voiceHotkeyAbsence = VOICE_HOTKEY_ABSENCE.CAPTURE_RUN;
+    reportVoiceHotkey();
     return;
   }
   // Taking a system-wide key for a feature that cannot run would make every
   // press somewhere else in macOS do nothing, visibly.
   if (!realtimeCredentials) {
     voiceHotkeyAbsence = VOICE_HOTKEY_ABSENCE.NO_CREDENTIAL;
+    reportVoiceHotkey();
     return;
   }
+  // The helper first, because it is the only one of the two that reports the
+  // key being let go of, and a key you hold is the whole point.
+  talkKeyWatcher = new TalkKeyWatcher({
+    onPress: () => panelWindow?.webContents.send(channels.voiceHotkeyPress),
+    onRelease: () => panelWindow?.webContents.send(channels.voiceHotkeyRelease),
+    onRegistered: (accelerator) => {
+      voiceHotkey = accelerator;
+      reportVoiceHotkey();
+      sendVoiceHotkey();
+    },
+    onUnavailable: () => {
+      talkKeyWatcher = undefined;
+      registerToggleHotkey();
+      reportVoiceHotkey();
+      sendVoiceHotkey();
+    },
+  });
+  if (talkKeyWatcher.start(DEFAULT_VOICE_HOTKEYS)) return;
+  talkKeyWatcher = undefined;
+  registerToggleHotkey();
+  reportVoiceHotkey();
+}
+
+/**
+ * The talk key without a release: a press toggles the turn instead of holding
+ * it. This is what answers when the helper cannot — another platform, a build
+ * without it — and it is a lesser thing rather than a broken one, so it is
+ * worth standing up rather than leaving the user with no key at all.
+ */
+function registerToggleHotkey(): void {
   for (const accelerator of DEFAULT_VOICE_HOTKEYS) {
     const registered = globalShortcut.register(accelerator, () => {
-      panelWindow?.webContents.send(channels.voiceHotkey);
+      panelWindow?.webContents.send(channels.voiceHotkeyPress);
+      // A toggle has only the one edge, so it reports a release immediately and
+      // one short enough to read as a tap. Every press then latches or ends a
+      // turn, which is the old behaviour exactly.
+      panelWindow?.webContents.send(channels.voiceHotkeyRelease);
     });
     if (!registered) continue;
     voiceHotkey = accelerator;
+    voiceHotkeyHeld = false;
     return;
   }
+  voiceHotkeyAbsence = VOICE_HOTKEY_ABSENCE.ALREADY_OWNED;
+}
+
+/** Tells a renderer the key it should be showing, whenever that changes. */
+function sendVoiceHotkey(): void {
+  panelWindow?.webContents.send(channels.voiceHotkeyChanged, {
+    ...(voiceHotkey ? { hotkey: voiceHotkeyLabel(voiceHotkey) } : {}),
+    held: voiceHotkeyHeld,
+  });
 }
 
 function reportVoiceHotkey(): void {
@@ -417,6 +472,7 @@ function registerIpc(): void {
       microphoneStatus: microphoneStatus(),
       realtimeAvailable: realtimeCredentials !== undefined,
       ...(voiceHotkey ? { voiceHotkey: voiceHotkeyLabel(voiceHotkey) } : {}),
+      voiceHotkeyHeld,
       display: displayDiagnostic(),
       sessions: fixtureMode ? [] : sessionRegistry.snapshot().sessions,
       settings: await settingsStore.snapshot(),
@@ -756,8 +812,10 @@ if (!app.requestSingleInstanceLock()) {
     // reply.
     void settingsStore.snapshot();
     reportVoiceAvailability();
+    // The report is not made here: the helper answers over its own stdout a
+    // moment later, and a line printed now would state an absence that only
+    // exists because nobody has answered yet.
     registerVoiceHotkey();
-    reportVoiceHotkey();
     createPanel();
     configurePermissions();
     createTray();
@@ -784,6 +842,10 @@ if (!app.requestSingleInstanceLock()) {
 
 app.on("will-quit", () => {
   globalShortcut.unregisterAll();
+  // The helper is a process of Luke's own, so it does not outlive the app that
+  // spawned it and leave a key registered against nothing.
+  talkKeyWatcher?.stop();
+  talkKeyWatcher = undefined;
 });
 
 app.on("before-quit", () => {

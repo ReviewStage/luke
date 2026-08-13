@@ -51,6 +51,8 @@ export interface SettingsPanelProps {
   onQuit: () => void;
   /** The talk key, shown so it can be learned. It is not editable yet. */
   voiceHotkey?: string;
+  /** Whether that key can be held, which is what the row has to describe. */
+  voiceHotkeyHeld: boolean;
 }
 
 /* What nothing else on the line can say on its own. A key kept here needs no
@@ -469,6 +471,7 @@ export function SettingsPanel({
   panelOpen,
   onQuit,
   voiceHotkey,
+  voiceHotkeyHeld,
 }: SettingsPanelProps): React.JSX.Element {
   const microphone = microphoneAccessRow({ voiceAvailable, status: microphoneStatus });
   return (
@@ -489,7 +492,14 @@ export function SettingsPanel({
         <div className="settings-row">
           <span className="settings-copy">
             <strong>Talk to Luke</strong>
-            <small>From any app: press to talk, again to send, again to interrupt.</small>
+            {/* What the key actually does, which depends on whether it can
+                report being let go of. Describing a hold to someone whose key
+                can only toggle would leave them holding it and wondering. */}
+            <small>
+              {voiceHotkeyHeld
+                ? "From any app: hold to talk, let go to send. Tap instead to keep it open."
+                : "From any app: press to talk, again to send, again to interrupt."}
+            </small>
           </span>
           <span className="shortcut-key">{voiceHotkey ?? "Unavailable"}</span>
         </div>

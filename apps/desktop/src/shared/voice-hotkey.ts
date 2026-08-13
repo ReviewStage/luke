@@ -16,6 +16,43 @@
  */
 export const DEFAULT_VOICE_HOTKEYS: readonly string[] = ["Alt+Space", "Alt+S"];
 
+/**
+ * Longer than a key is down when it was pressed rather than held.
+ *
+ * Under this, the press and the release are one gesture and mean one thing;
+ * over it, the key was being held and the release is the end of what was said.
+ * Too low and a deliberate quick answer is cut off mid-word; too high and a tap
+ * feels like it did nothing for a quarter of a second. This is roughly where
+ * the tools that do both put it.
+ */
+export const TALK_KEY_TAP_MS = 250;
+
+/**
+ * What a release of the talk key does to the turn it opened.
+ *
+ * Holding is the plain case: the turn lasts exactly as long as the key is down,
+ * which is what makes it feel like a walkie-talkie and what stops a turn
+ * outliving the finger that started it. A tap is for the question too long to
+ * hold through — it leaves the turn open, and the next press ends it.
+ */
+export const TALK_KEY_RELEASE = {
+  SEND: "send",
+  LATCH: "latch",
+} as const;
+
+export type TalkKeyRelease = (typeof TALK_KEY_RELEASE)[keyof typeof TALK_KEY_RELEASE];
+
+/**
+ * Reads a release. `latched` is whether this key had already been tapped once
+ * and left a turn open: the release that ends a latched turn sends it however
+ * briefly it was held, because the gesture that opened the turn is over and
+ * this press is a second one.
+ */
+export function talkKeyRelease(input: { heldMs: number; latched: boolean }): TalkKeyRelease {
+  if (input.latched) return TALK_KEY_RELEASE.SEND;
+  return input.heldMs < TALK_KEY_TAP_MS ? TALK_KEY_RELEASE.LATCH : TALK_KEY_RELEASE.SEND;
+}
+
 const MODIFIER_SYMBOLS: Readonly<Record<string, string>> = {
   Command: "⌘",
   CommandOrControl: "⌘",

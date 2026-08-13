@@ -75,18 +75,24 @@ Mac.
 
 One key runs it, and it answers from whatever app is frontmost:
 
-- **Press** `⌥Space` to talk. Luke connects the first time, which is when macOS
-  asks for the microphone.
-- **Press again** to send what you said.
+- **Hold** `⌥Space` and talk. Let go to send. The turn lasts exactly as long as
+  the key is down, so it cannot be left open by forgetting to press again. Luke
+  connects on the first press, which is when macOS asks for the microphone.
+- **Tap** it instead — under a quarter of a second — to leave the turn open for
+  a question too long to hold through. Tap again to send.
 - **Press while Luke is talking** to cut him off and take the turn back.
 - **Escape** discards an open turn instead of sending it, while the panel is the
-  frontmost window. The talk key is registered with the system and Escape is
-  not, so a turn started from another app is ended by pressing the talk key
-  again — sending it, then cutting the answer off if you did not want one.
+  frontmost window.
 
 If another app already owns `⌥Space`, Luke falls back to `⌥S`. Settings shows
 which key you actually have, under **Keyboard shortcuts**. It is not
 configurable yet.
+
+Holding is read by a small helper Luke ships beside the app, because Electron
+reports a global key being pressed but never released. The helper is told the
+one chord to watch for and can see no other key, which is why holding costs no
+Accessibility or Input Monitoring grant. Where that helper cannot run, the key
+falls back to a press-to-start, press-to-send toggle and Settings says so.
 
 Settings also says whether Luke is allowed the microphone — a green check once
 access is granted. Opening the microphone is the talk key's job, so there is

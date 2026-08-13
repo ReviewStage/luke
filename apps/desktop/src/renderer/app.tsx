@@ -10,11 +10,13 @@ import type {
   AppSettings,
   DisplayDiagnostic,
   MicrophoneStatus,
+  VoiceHotkeyState,
   WindowMode,
 } from "../shared/contracts";
 import { CREDENTIAL_SOURCE } from "../shared/contracts";
 import type { CredentialProviderId } from "../shared/credential-providers";
 import { CREDENTIAL_PROVIDER_LIST } from "../shared/credential-providers";
+import { TALK_KEY_RELEASE, talkKeyRelease } from "../shared/voice-hotkey";
 import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";
 import { isSubmittable, removalEndsEntry } from "./credential-entry";
 import { KeySlot } from "./key-slot";
@@ -184,6 +186,7 @@ export function App(): React.JSX.Element {
   const [panelElement, panelHeight] = useShapeHeight();
   const [slotElement, slotHeight] = useShapeHeight();
   const [voiceStatus, setVoiceStatus] = useState<RealtimeStatus>(REALTIME_STATUS.IDLE);
+  const [voiceHotkey, setVoiceHotkey] = useState<VoiceHotkeyState>();
   const [localStream, setLocalStream] = useState<MediaStream>();
   const [remoteStream, setRemoteStream] = useState<MediaStream>();
   const audioContext = useRef<AudioContext | undefined>(undefined);
@@ -207,6 +210,10 @@ export function App(): React.JSX.Element {
    */
   const heardLuke = useRef(false);
   const startMicrophoneRef = useRef<(() => Promise<void>) | undefined>(undefined);
+  /** When the talk key went down, which is what tells a hold from a tap. */
+  const talkPressedAt = useRef<number | undefined>(undefined);
+  /** Whether a tap has left a turn open for a later press to end. */
+  const talkLatched = useRef(false);
   const sessionsRef = useRef<readonly NormalizedSession[]>([]);
 
   const changeTab = useCallback((next: PanelTab) => {
@@ -340,15 +347,45 @@ export function App(): React.JSX.Element {
     setMicrophoneStatus(await window.sidecar.requestMicrophone());
   }, []);
 
-  const toggleTurn = useCallback(async () => {
-    // Every press goes to the session, including the one that has no call to
-    // press against yet: what a press means belongs in one place, and a press
-    // during the handshake is one of the meanings.
+  /**
+   * The talk key going down. Every press goes to the session, including the one
+   * that has no call to press against yet: the microphone opens with the call,
+   * so a press before then is remembered and applied when it comes up.
+   */
+  const beginTalk = useCallback(async () => {
+    talkPressedAt.current = performance.now();
+    // A latched turn is already open. This press is someone saying they are
+    // done, which is the release's to answer.
+    if (talkLatched.current) return;
     const session = ensureVoiceSession();
-    session.toggleTurn();
+    session.beginTurn();
     if (session.isConnected || session.isConnecting) return;
     await startMicrophoneRef.current?.();
   }, [ensureVoiceSession]);
+
+  /**
+   * The talk key coming up. How long it was held is the whole of the decision:
+   * held, the turn was as long as the key was down and is sent; tapped, it
+   * stays open for the question too long to hold through, and the next release
+   * sends it.
+   */
+  const endTalk = useCallback(() => {
+    const pressedAt = talkPressedAt.current;
+    talkPressedAt.current = undefined;
+    // A release with nothing before it is not this key's to answer — a turn
+    // ended by Escape leaves the key still down.
+    if (pressedAt === undefined) return;
+    const release = talkKeyRelease({
+      heldMs: performance.now() - pressedAt,
+      latched: talkLatched.current,
+    });
+    if (release === TALK_KEY_RELEASE.LATCH) {
+      talkLatched.current = true;
+      return;
+    }
+    talkLatched.current = false;
+    voiceSession.current?.endTurn(true);
+  }, []);
 
   const cancelHoverTransition = useCallback(() => {
     if (hoverTimer.current === undefined) return;
@@ -767,6 +804,11 @@ export function App(): React.JSX.Element {
       // Discarding an open turn comes before any of it. Closing the panel
       // or a sheet mid-sentence would strand the microphone open.
       if (voiceStatus === REALTIME_STATUS.LISTENING) {
+        // The key may still be down. Forgetting the press as well as the latch
+        // means its release lands on a turn that is already gone rather than
+        // sending the one Escape just discarded.
+        talkLatched.current = false;
+        talkPressedAt.current = undefined;
         voiceSession.current?.stopListening(false);
         return;
       }
@@ -789,8 +831,11 @@ export function App(): React.JSX.Element {
   }, [cancelEntry, changeMode, changeTab, optionsOpen, presentation, tab, voiceStatus]);
 
   // The talk key is registered by the main process so it answers from any app,
-  // which is the whole point: no window to find, nothing to focus first.
-  useEffect(() => window.sidecar.onVoiceHotkey(() => void toggleTurn()), [toggleTurn]);
+  // which is the whole point: no window to find, nothing to focus first. Both
+  // edges arrive, because a turn you hold ends when the key does.
+  useEffect(() => window.sidecar.onVoiceHotkeyPress(() => void beginTalk()), [beginTalk]);
+  useEffect(() => window.sidecar.onVoiceHotkeyRelease(() => endTalk()), [endTalk]);
+  useEffect(() => window.sidecar.onVoiceHotkeyChanged(setVoiceHotkey), []);
 
   // The rows say how long ago each session was seen, and a label left alone
   // goes stale the moment a minute passes with no session changing — the very
@@ -899,7 +944,8 @@ export function App(): React.JSX.Element {
               settings,
               credentials,
               panelOpen,
-              ...(bootstrap.voiceHotkey ? { voiceHotkey: bootstrap.voiceHotkey } : {}),
+              ...(voiceHotkey?.hotkey ? { voiceHotkey: voiceHotkey.hotkey } : {}),
+              voiceHotkeyHeld: voiceHotkey?.held ?? true,
               onQuit: () => window.sidecar.quit(),
             }}
           />

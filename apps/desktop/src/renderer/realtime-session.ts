@@ -310,6 +310,33 @@ export class RealtimeVoiceSession {
    * state makes it. One key drives the whole conversation, so what a press
    * means lives in one place rather than at every call site.
    */
+  /**
+   * The talk key going down. Opening a turn and ending one are separate here
+   * rather than one toggle, because a key that reports being let go of can say
+   * which of the two it meant — and a turn that lasts exactly as long as the
+   * key is held cannot be left open by forgetting to press again.
+   */
+  beginTurn(): void {
+    if (!this.isConnected) {
+      this.#pendingTurn = true;
+      return;
+    }
+    this.startListening();
+  }
+
+  /**
+   * The talk key coming up on a held turn, or a second press ending a latched
+   * one. A turn that never opened is dropped rather than committed: the
+   * microphone opens with the call, so there is nothing behind it to send.
+   */
+  endTurn(commit: boolean): void {
+    if (!this.isConnected) {
+      this.#pendingTurn = false;
+      return;
+    }
+    this.stopListening(commit);
+  }
+
   toggleTurn(): void {
     // Before the call is up there is no turn to take: the microphone is enabled
     // only once the connection exists, so a press here cannot have captured

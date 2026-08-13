@@ -287,6 +287,55 @@ test("a proactive update is spoken once the call is open", async () => {
   );
 });
 
+test("a held turn lasts exactly as long as the key is down", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  context.session.beginTurn();
+  assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
+  assert.equal(context.microphoneEnabled(), true);
+
+  context.session.endTurn(true);
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+  assert.equal(context.microphoneEnabled(), false);
+  assert.ok(
+    context.sent.some((event) => event.type === REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_COMMIT),
+  );
+});
+
+test("a turn let go of before the call opened is dropped, not sent", async () => {
+  const context = harness({ connectionDelayMs: 5 });
+
+  context.session.beginTurn();
+  const opening = context.session.connect();
+  // The microphone opens with the call, so a key held and released during the
+  // handshake was held over nothing. Committing it would ask the server to
+  // answer an empty buffer, which comes back as an error rather than a reply.
+  context.session.endTurn(true);
+  await opening;
+
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+  assert.equal(context.microphoneEnabled(), false);
+  assert.deepEqual(
+    context.sent.filter((event) => event.type === REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_COMMIT),
+    [],
+  );
+});
+
+test("holding the key through a reply takes the turn back", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.deliverRemoteTrack();
+  context.session.beginTurn();
+  context.session.endTurn(true);
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+
+  context.session.beginTurn();
+
+  assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
+  assert.equal(context.lukeAudible(), false);
+});
+
 test("a press during the handshake opens the turn it was asking for", async () => {
   const context = harness({ connectionDelayMs: 5 });
 

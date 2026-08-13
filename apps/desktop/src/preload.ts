@@ -11,6 +11,7 @@ import type {
   DisplayDiagnostic,
   MicrophoneStatus,
   SettingsUpdateResult,
+  VoiceHotkeyState,
   WindowMode,
 } from "./shared/contracts";
 import { channels } from "./shared/contracts";
@@ -61,10 +62,21 @@ const bridge: AppBridge = {
     ipcRenderer.on(channels.sessionsChanged, listener);
     return () => ipcRenderer.removeListener(channels.sessionsChanged, listener);
   },
-  onVoiceHotkey: (callback: () => void) => {
+  onVoiceHotkeyPress: (callback: () => void) => {
     const listener = () => callback();
-    ipcRenderer.on(channels.voiceHotkey, listener);
-    return () => ipcRenderer.removeListener(channels.voiceHotkey, listener);
+    ipcRenderer.on(channels.voiceHotkeyPress, listener);
+    return () => ipcRenderer.removeListener(channels.voiceHotkeyPress, listener);
+  },
+  onVoiceHotkeyRelease: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on(channels.voiceHotkeyRelease, listener);
+    return () => ipcRenderer.removeListener(channels.voiceHotkeyRelease, listener);
+  },
+  onVoiceHotkeyChanged: (callback: (state: VoiceHotkeyState) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, state: VoiceHotkeyState) =>
+      callback(state);
+    ipcRenderer.on(channels.voiceHotkeyChanged, listener);
+    return () => ipcRenderer.removeListener(channels.voiceHotkeyChanged, listener);
   },
   onAttentionSpeech: (callback: (speech: readonly AttentionSpeech[]) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, speech: readonly AttentionSpeech[]) =>

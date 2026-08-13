@@ -26,14 +26,13 @@ export const SIGNING_MODE = {
   DEVELOPER_ID: "developer-id",
 };
 
-export function swiftCompilerArguments(source, output) {
+export function swiftCompilerArguments(source, output, frameworks = ["AppKit"]) {
   return [
     "swiftc",
     "-parse-as-library",
     "-target",
     SWIFT_TARGET_TRIPLE,
-    "-framework",
-    "AppKit",
+    ...frameworks.flatMap((framework) => ["-framework", framework]),
     source,
     "-o",
     output,
@@ -53,7 +52,7 @@ export function resolveSigningMode(env) {
 export function createPackagerOptions({
   appRoot,
   outputRoot,
-  helperPath,
+  helperPaths,
   iconPath,
   licensePath,
   entitlementsPath,
@@ -74,7 +73,7 @@ export function createPackagerOptions({
     overwrite: true,
     prune: false,
     icon: iconPath,
-    extraResource: [helperPath, licensePath],
+    extraResource: [...helperPaths, licensePath],
     extendInfo: {
       CFBundleDisplayName: "Luke",
       LSMinimumSystemVersion: MACOS_DEPLOYMENT_TARGET,
