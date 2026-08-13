@@ -1,24 +1,124 @@
 /* The session list: the capsule grows into full-width rows, one per line. */
 
-/* The sessions tab is its controls and its list. Only the list scrolls, so the
-   controls stay where they were put — the tab bar sits outside the same box for
-   the same reason. */
+/* The sessions tab is its list and, over the top of it, the sheet that says
+   which part of it is being shown. Only the list scrolls. */
 .session-view {
+  position: relative;
   display: flex;
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  gap: 12px;
 }
 
-/* The chips take the left, where the list they narrow begins; the order takes
-   the right, where a row ends. */
-.session-toolbar {
+/* The button rides the tab bar's line rather than taking one of its own: the
+   panel is short, and how the list is shown is a qualifier on what you are
+   looking at rather than a second thing to look at. */
+.panel-header {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.options-button {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  border-radius: 10px;
+  background: var(--raised);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 620;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+  white-space: nowrap;
+}
+
+.options-button:hover,
+.options-button[data-active="true"] {
+  background: var(--raised-strong);
+  color: var(--text-primary);
+}
+
+.options-glyph {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+/* What the button says when the list is narrowed. It is the one place the panel
+   admits to showing less than the capsule is counting, so it takes the primary
+   text weight even while the button is at rest. */
+.options-current {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-primary);
+}
+
+.options-button[data-narrowed="true"] {
+  color: var(--text-primary);
+}
+
+/* Floating rather than in the flow. In the flow it would push the last row down
+   before the surface behind it had grown, and the surface only grows on the
+   spring, so the row would be left drawn on the desktop for the length of it.
+   Opaque for the same reason the surface is: the rows it covers must not show
+   through. */
+.session-options {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  background: #111214;
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.55);
+  /* Arrives from the button that opened it rather than fading in place. It is
+     the one thing here that is not part of the panel's own arrival, so it moves
+     on its own short curve — and on the shared tokens, which a capture run and
+     reduced motion have already zeroed. */
+  animation: options-enter var(--duration-quick) var(--motion-exit) both;
+  transform-origin: top right;
+}
+
+@keyframes options-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.options-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Named in the same voice as a settings heading, because it is doing the same
+   job: saying what the controls beside it decide. */
+.options-label {
+  width: 36px;
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
 }
 
 /* Both groups are `fieldset`s, so each says what it is to a reader without a
@@ -33,10 +133,23 @@
   border: 0;
 }
 
+/* Wraps rather than overflowing: the sheet is as tall as its choices need,
+   and an agent that could not be reached would defeat the control. */
 .session-filters {
+  flex: 1;
+  flex-wrap: wrap;
   align-items: center;
   padding: 0;
   gap: 6px;
+}
+
+/* The place glyph sits where an agent's mark does, at the same size, so Local
+   and Cloud read as members of the same list rather than as words beside it. */
+.filter-icon {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  opacity: 0.9;
 }
 
 /* Quiet until chosen. State colour is deliberately absent: these chips select
@@ -82,48 +195,11 @@
   height: 13px;
 }
 
-/* Where the row turns from where a session runs to which agent is running it.
-   A hairline rather than a wider gap: the levels are one choice of one, and a
-   gap alone read as a break between two controls. Selected by the turn itself —
-   the first agent chip after a word chip — because `:first-of-type` counts
-   buttons and would land on All. */
-.filter-chip[data-agent="false"] + .filter-chip[data-agent="true"] {
-  margin-left: 11px;
-}
-
-.filter-chip[data-agent="false"] + .filter-chip[data-agent="true"]::before {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: -8px;
-  width: 1px;
-  height: 15px;
-  background: var(--hairline);
-  transform: translateY(-50%);
-}
-
 /* The number is what the row is worth reading before anything is pressed: the
    chips are a breakdown of what is tracked first and a control second. */
 .filter-count {
   font-variant-numeric: tabular-nums;
   opacity: 0.62;
-}
-
-.session-sort {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 7px;
-}
-
-/* Two words that would otherwise read as two more states to filter by, so the
-   row says which question they answer. */
-.session-sort-label {
-  color: var(--text-tertiary);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  text-transform: uppercase;
 }
 
 /* Enclosed rather than chipped: an order is one choice of two, and the box is

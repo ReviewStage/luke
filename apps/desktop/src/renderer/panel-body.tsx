@@ -2,13 +2,21 @@ import { SESSION_LOCATION } from "@sidecar/core";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
 import { CloudBadge, ProviderMark } from "./provider-marks";
 import type { ArrangedSessions, SessionView } from "./session-model";
-import { EmptyState, SessionsPanel, SessionToolbar, StateChip } from "./session-parts";
+import {
+  EmptyState,
+  SessionOptions,
+  SessionOptionsButton,
+  SessionsPanel,
+  StateChip,
+} from "./session-parts";
 import { SettingsPanel, type SettingsPanelProps } from "./settings-panel";
 
 export interface PanelBodyProps {
   list: ArrangedSessions;
   view: SessionView;
   onViewChange: (view: SessionView) => void;
+  optionsOpen: boolean;
+  onOptionsToggle: () => void;
   tab: PanelTab;
   onTabChange: (tab: PanelTab) => void;
   settings: SettingsPanelProps;
@@ -19,28 +27,33 @@ export function PanelBody({
   list,
   view,
   onViewChange,
+  optionsOpen,
+  onOptionsToggle,
   tab,
   onTabChange,
   settings,
 }: PanelBodyProps): React.JSX.Element {
   // One session is already both the first and the last, so there is nothing a
   // filter or an order could change about it.
-  const showToolbar = list.total > 1;
-  // The stack the arrival stagger counts through: the tab bar is 0 and the
-  // toolbar is 1, so the rows start at 1 when it is not drawn. Left at 2 they
-  // would fan from an empty slot, arriving a beat late from further up than
-  // any other row in the panel.
-  const firstRowIndex = showToolbar ? 2 : 1;
+  const offerOptions = tab === PANEL_TAB.SESSIONS && list.total > 1;
 
   return (
     <div className="body">
-      <TabBar tab={tab} onTabChange={onTabChange} />
+      {/* The tab bar says what you are looking at; the options button says how
+          it is being shown. One line, because the second is only ever a
+          qualifier on the first. */}
+      <div className="panel-header">
+        <TabBar tab={tab} onTabChange={onTabChange} />
+        {offerOptions ? (
+          <SessionOptionsButton list={list} open={optionsOpen} onToggle={onOptionsToggle} />
+        ) : null}
+      </div>
       {tab === PANEL_TAB.SETTINGS ? (
         <SettingsPanel {...settings} />
       ) : (
         <SessionsPanel className="session-view">
-          {showToolbar ? (
-            <SessionToolbar list={list} view={view} onViewChange={onViewChange} />
+          {offerOptions && optionsOpen ? (
+            <SessionOptions list={list} view={view} onViewChange={onViewChange} />
           ) : null}
           <div className="session-list">
             {list.sessions.length === 0 ? (
@@ -51,7 +64,7 @@ export function PanelBody({
                   className="session-row"
                   key={session.id}
                   data-state={session.state}
-                  style={{ "--row-index": index + firstRowIndex } as React.CSSProperties}
+                  style={{ "--row-index": index + 1 } as React.CSSProperties}
                 >
                   <span className="row-avatar">
                     <ProviderMark providerId={session.providerId} />

@@ -937,12 +937,11 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    the same spring the surface is riding. Each row starts further up than the
    one above it, so the stack is compressed and the gaps spring open — the
    space between sessions is the thing that moves. */
-.session-toolbar,
 .session-row,
 .settings-section,
 .quit-button,
 .empty-state,
-.tab-bar {
+.panel-header {
   opacity: 0;
   transform: translateY(
     calc((min(var(--row-index, 0), var(--row-fan-limit)) + 1) * var(--row-fan) * -1)
@@ -952,12 +951,11 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
     transform var(--duration-shape) var(--spring);
 }
 
-.app-stage[data-presentation="panel"] .session-toolbar,
 .app-stage[data-presentation="panel"] .session-row,
 .app-stage[data-presentation="panel"] .settings-section,
 .app-stage[data-presentation="panel"] .quit-button,
 .app-stage[data-presentation="panel"] .empty-state,
-.app-stage[data-presentation="panel"] .tab-bar {
+.app-stage[data-presentation="panel"] .panel-header {
   --row-delay: calc(
     var(--expand-delay) +
     min(var(--row-index, 0), var(--row-fan-limit)) *
@@ -1429,7 +1427,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   .count-caption,
   .tab-thumb,
   .waveform,
-  .session-toolbar,
   .session-row {
     transition-duration: 1ms;
     transition-delay: 0ms;

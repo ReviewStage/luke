@@ -155,6 +155,7 @@ export function App(): React.JSX.Element {
   const [presentation, setPresentation] = useState<PanelPresentation>(PANEL_PRESENTATION.CAPSULE);
   const [tab, setTab] = useState<PanelTab>(PANEL_TAB.SESSIONS);
   const [sessionView, setSessionView] = useState<SessionView>(DEFAULT_SESSION_VIEW);
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const [settings, setSettings] = useState<AppSettings>();
   const [microphoneStatus, setMicrophoneStatus] = useState<MicrophoneStatus>("not-determined");
   const [microphoneError, setMicrophoneError] = useState<string>();
@@ -172,6 +173,9 @@ export function App(): React.JSX.Element {
   const changeTab = useCallback((next: PanelTab) => {
     tabRef.current = next;
     setTab(next);
+    // The sheet belongs to the session list, and it is drawn over the list it
+    // belongs to, so leaving for Settings has to take it along.
+    setOptionsOpen(false);
   }, []);
 
   const applyPresentation = useCallback(
@@ -434,12 +438,15 @@ export function App(): React.JSX.Element {
         return;
       }
       if (event.key !== "Escape" || presentation !== PANEL_PRESENTATION.PANEL) return;
-      if (tab === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.SESSIONS);
+      // Escape closes the nearest thing that is open, one layer at a time: the
+      // options sheet, then the settings tab, then the panel itself.
+      if (optionsOpen) setOptionsOpen(false);
+      else if (tab === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.SESSIONS);
       else void changeMode(false);
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [changeMode, changeTab, presentation, tab]);
+  }, [changeMode, changeTab, optionsOpen, presentation, tab]);
 
   if (!bootstrap || !display) return <div />;
 
@@ -481,6 +488,8 @@ export function App(): React.JSX.Element {
             list={list}
             view={sessionView}
             onViewChange={setSessionView}
+            optionsOpen={optionsOpen}
+            onOptionsToggle={() => setOptionsOpen((open) => !open)}
             tab={tab}
             onTabChange={changeTab}
             settings={{
