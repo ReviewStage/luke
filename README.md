@@ -19,9 +19,7 @@ Download published builds from [GitHub Releases](https://github.com/ReviewStage/
   and cloud agent metadata after you supply a Cursor API key
 - Devin — reads cloud session metadata after you supply a Devin personal access
   token
-- Jules — reads cloud session metadata after you supply a Jules API key. Jules
-  publishes its mark only as a raster favicon, so its sessions carry the neutral
-  glyph: a mark is reproduced here or not at all, never traced by hand.
+- Jules — reads cloud session metadata after you supply a Jules API key
 
 Cursor is the one provider Luke watches in two places, and both halves arrive as
 Cursor sessions: the ones on this machine need no credential, and its cloud
