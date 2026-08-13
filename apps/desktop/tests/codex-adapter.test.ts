@@ -8,7 +8,6 @@ import { SESSION_STATUS } from "@sidecar/core";
 import { CODEX_PROVIDER, CodexSessionAdapter } from "../src/codex-adapter";
 
 const TEST_TIME = Date.parse("2026-08-11T23:45:00.000Z");
-const SECRET_TRANSCRIPT_TEXT = "SECRET_TRANSCRIPT_TEXT";
 const CODEX_STATE_DATABASE = "state_5.sqlite";
 const TEST_CODEX_SOURCE = {
   CLI: "cli",
@@ -31,6 +30,17 @@ interface TestThread {
   title?: string;
   preview?: string;
   firstUserMessage?: string;
+  rolloutPath?: string;
+  gitBranch?: string;
+  model?: string;
+  reasoningEffort?: string;
+}
+
+async function writeRollout(
+  filePath: string,
+  records: readonly Record<string, unknown>[],
+): Promise<void> {
+  await fs.writeFile(filePath, `${records.map((record) => JSON.stringify(record)).join("\n")}\n`);
 }
 
 async function temporaryCodexHome(t: TestContext): Promise<string> {
@@ -60,12 +70,15 @@ function writeThread(database: DatabaseSync, thread: TestThread): void {
         created_at_ms,
         updated_at_ms,
         preview,
-        recency_at_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        recency_at_ms,
+        git_branch,
+        model,
+        reasoning_effort
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     .run(
       thread.id,
-      "",
+      thread.rolloutPath ?? "",
       Math.floor(thread.observedAt / 1000),
       Math.floor(thread.observedAt / 1000),
       TEST_CODEX_SOURCE.CLI,
@@ -80,6 +93,9 @@ function writeThread(database: DatabaseSync, thread: TestThread): void {
       thread.observedAt,
       thread.preview ?? "",
       thread.observedAt,
+      thread.gitBranch ?? null,
+      thread.model ?? null,
+      thread.reasoningEffort ?? null,
     );
 }
 
@@ -104,7 +120,10 @@ async function writeCodexState(codexHome: string, threads: readonly TestThread[]
         created_at_ms INTEGER,
         updated_at_ms INTEGER,
         preview TEXT NOT NULL DEFAULT '',
-        recency_at_ms INTEGER NOT NULL DEFAULT 0
+        recency_at_ms INTEGER NOT NULL DEFAULT 0,
+        git_branch TEXT,
+        model TEXT,
+        reasoning_effort TEXT
       )
     `);
     for (const thread of threads) writeThread(database, thread);
@@ -128,16 +147,17 @@ async function writeMalformedCodexState(codexHome: string): Promise<void> {
   }
 }
 
-test("observes Codex sessions without exposing transcript-derived metadata", async (t) => {
+test("observes a Codex thread under the name Codex gave it", async (t) => {
   const codexHome = await temporaryCodexHome(t);
   await writeCodexState(codexHome, [
     {
       id: "codex-active",
       cwd: "/Users/test/luke",
       observedAt: TEST_TIME - 1_000,
-      title: SECRET_TRANSCRIPT_TEXT,
-      preview: SECRET_TRANSCRIPT_TEXT,
-      firstUserMessage: SECRET_TRANSCRIPT_TEXT,
+      title: "Release stage-cli to npm",
+      gitBranch: "codex/bump-version",
+      model: "gpt-5.6-luna",
+      reasoningEffort: "medium",
     },
   ]);
 
@@ -151,10 +171,103 @@ test("observes Codex sessions without exposing transcript-derived metadata", asy
   assert.deepEqual(adapter.provider, CODEX_PROVIDER);
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "codex-active");
-  assert.equal(observations[0]?.title, "Codex: luke");
+  assert.equal(observations[0]?.title, "Release stage-cli to npm");
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
   assert.equal(observations[0]?.controls, undefined);
-  assert.equal(JSON.stringify(observations).includes(SECRET_TRANSCRIPT_TEXT), false);
+  assert.deepEqual(observations[0]?.detail, {
+    repository: "luke",
+    branch: "codex/bump-version",
+    model: "gpt-5.6-luna · medium",
+  });
+});
+
+test("reports a finished Codex turn as waiting for its developer", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const rolloutPath = path.join(codexHome, "rollout-complete.jsonl");
+  await writeCodexState(codexHome, [
+    { id: "codex-done", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000, rolloutPath },
+  ]);
+  await writeRollout(rolloutPath, [
+    { type: "event_msg", payload: { type: "task_started" } },
+    {
+      type: "response_item",
+      payload: {
+        type: "function_call",
+        name: "exec_command",
+        arguments: '{"command":"pnpm test"}',
+      },
+    },
+    {
+      type: "event_msg",
+      payload: { type: "task_complete", last_agent_message: "Released 0.1.6 and merged the PR." },
+    },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WAITING);
+  assert.equal(observation?.summary, "Released 0.1.6 and merged the PR.");
+  assert.equal(observation?.detail?.activity, undefined);
+});
+
+test("reports a running Codex turn as working with the call it is making", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const rolloutPath = path.join(codexHome, "rollout-running.jsonl");
+  await writeCodexState(codexHome, [
+    { id: "codex-running", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000, rolloutPath },
+  ]);
+  await writeRollout(rolloutPath, [
+    { type: "event_msg", payload: { type: "task_complete", last_agent_message: "Earlier turn." } },
+    { type: "event_msg", payload: { type: "task_started" } },
+    {
+      type: "response_item",
+      payload: {
+        type: "function_call",
+        name: "exec_command",
+        arguments: '{"command":"pnpm test"}',
+      },
+    },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WORKING);
+  assert.equal(observation?.summary, undefined);
+  assert.equal(observation?.detail?.activity, "exec_command: pnpm test");
+});
+
+test("holds a long Codex turn at working however stale its row is", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const rolloutPath = path.join(codexHome, "rollout-long.jsonl");
+  await writeCodexState(codexHome, [
+    {
+      id: "codex-long-turn",
+      cwd: "/Users/test/luke",
+      observedAt: TEST_TIME - 30 * 60 * 1000,
+      rolloutPath,
+    },
+  ]);
+  await writeRollout(rolloutPath, [{ type: "event_msg", payload: { type: "task_started" } }]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    activeSessionFreshnessMs: 15 * 60 * 1000,
+    maximumSessionAgeMs: 60 * 60 * 1000,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WORKING);
 });
 
 test("observes Codex sessions from an explicit SQLite home", async (t) => {
@@ -178,7 +291,7 @@ test("observes Codex sessions from an explicit SQLite home", async (t) => {
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "codex-sqlite-home");
-  assert.equal(observations[0]?.title, "Codex: sqlite-home");
+  assert.equal(observations[0]?.title, "sqlite-home");
 });
 
 test("observes Codex sessions from configured sqlite_home", async (t) => {
@@ -208,7 +321,7 @@ test("observes Codex sessions from configured sqlite_home", async (t) => {
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "codex-configured-home");
-  assert.equal(observations[0]?.title, "Codex: configured-home");
+  assert.equal(observations[0]?.title, "configured-home");
 });
 
 test("observes Codex sessions from CODEX_SQLITE_HOME", async (t) => {
@@ -238,7 +351,7 @@ test("observes Codex sessions from CODEX_SQLITE_HOME", async (t) => {
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "codex-env-home");
-  assert.equal(observations[0]?.title, "Codex: env-home");
+  assert.equal(observations[0]?.title, "env-home");
 });
 
 test("prefers configured sqlite_home over CODEX_SQLITE_HOME", async (t) => {
@@ -276,7 +389,7 @@ test("prefers configured sqlite_home over CODEX_SQLITE_HOME", async (t) => {
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "codex-configured-home");
-  assert.equal(observations[0]?.title, "Codex: configured-home");
+  assert.equal(observations[0]?.title, "configured-home");
 });
 
 test("observes Codex sessions from the default sqlite subdirectory", async (t) => {
@@ -298,7 +411,7 @@ test("observes Codex sessions from the default sqlite subdirectory", async (t) =
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "codex-default-sqlite");
-  assert.equal(observations[0]?.title, "Codex: default-sqlite");
+  assert.equal(observations[0]?.title, "default-sqlite");
 });
 
 test("falls back when a higher-priority Codex database has an unusable schema", async (t) => {
@@ -321,7 +434,7 @@ test("falls back when a higher-priority Codex database has an unusable schema", 
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "codex-legacy-valid");
-  assert.equal(observations[0]?.title, "Codex: legacy-valid");
+  assert.equal(observations[0]?.title, "legacy-valid");
 });
 
 test("keeps stale unarchived Codex sessions unknown instead of inventing activity", async (t) => {
@@ -384,7 +497,7 @@ test("filters old and archived Codex threads while preserving newest sessions", 
       {
         providerSessionId: "new-session",
         status: SESSION_STATUS.WORKING,
-        title: "Codex: new",
+        title: "new",
       },
     ],
   );

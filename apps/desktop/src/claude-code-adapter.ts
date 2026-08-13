@@ -3,9 +3,12 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
+  maximumSessionSummaryLength,
+  maximumSessionTitleLength,
   PROVIDER_ID,
   type ProviderSessionObservation,
   SESSION_STATUS,
+  type SessionDetail,
   type SessionProvider,
   type SessionProviderAdapter,
 } from "@sidecar/core";
@@ -28,9 +31,35 @@ const CLAUDE_EVENT_TYPE = {
 
 type ClaudeEventType = (typeof CLAUDE_EVENT_TYPE)[keyof typeof CLAUDE_EVENT_TYPE];
 
-const CLAUDE_CONTENT_TYPE = {
+/** Records Claude Code writes alongside the conversation itself. */
+const CLAUDE_RECORD_TYPE = {
+  AI_TITLE: "ai-title",
+  PR_LINK: "pr-link",
+  SYSTEM: "system",
+} as const;
+
+const CLAUDE_SYSTEM_SUBTYPE = {
+  /** A recap Claude Code composes for a developer who stepped away. */
+  AWAY_SUMMARY: "away_summary",
+  API_ERROR: "api_error",
+} as const;
+
+/**
+ * Why the model stopped. This says what the tail alone cannot: a turn that ended
+ * is holding for the developer, and a turn that stopped to call a tool is not.
+ */
+const CLAUDE_STOP_REASON = {
+  END_TURN: "end_turn",
   TOOL_USE: "tool_use",
 } as const;
+
+const CLAUDE_CONTENT_TYPE = {
+  TEXT: "text",
+  TOOL_USE: "tool_use",
+} as const;
+
+/** Tool inputs whose value names the work, in the order they read best. */
+const CLAUDE_TOOL_INPUT_KEY = ["description", "file_path", "pattern", "command", "prompt"] as const;
 
 const CLAUDE_ADAPTER_DEFAULTS = {
   MAXIMUM_PROJECT_DIRECTORIES: 200,
@@ -38,6 +67,13 @@ const CLAUDE_ADAPTER_DEFAULTS = {
   MAXIMUM_SESSION_AGE_MS: 24 * 60 * 60 * 1000,
   ACTIVE_SESSION_FRESHNESS_MS: 15 * 60 * 1000,
   READ_TAIL_BYTES: 64 * 1024,
+  /**
+   * Claude Code writes its generated title early and then only when the subject
+   * changes, so a long session's title sits far behind the tail. Only a file
+   * whose tail carried no title pays for this second read.
+   */
+  READ_HEAD_BYTES: 64 * 1024,
+  MAXIMUM_ACTIVITY_LENGTH: 80,
 } as const;
 
 export const CLAUDE_CODE_PROVIDER: SessionProvider = {
@@ -53,6 +89,7 @@ export interface ClaudeCodeAdapterOptions {
   maximumSessionAgeMs?: number;
   activeSessionFreshnessMs?: number;
   readTailBytes?: number;
+  readHeadBytes?: number;
 }
 
 interface SessionFileCandidate {
@@ -62,10 +99,18 @@ interface SessionFileCandidate {
 }
 
 interface ParsedClaudeSessionTail {
-  assistantUsedTool?: boolean;
+  activity?: string;
+  aiTitle?: string;
+  apiError?: string;
+  awaySummary?: string;
+  branch?: string;
   cwd?: string;
   eventType?: ClaudeEventType;
+  model?: string;
+  pullRequestUrl?: string;
+  stopReason?: string;
   timestampMs?: number;
+  usedTool?: boolean;
 }
 
 interface DirectoryEntry {
@@ -186,6 +231,24 @@ async function readTail(filePath: string, maximumBytes: number): Promise<string>
   }
 }
 
+async function readHead(filePath: string, maximumBytes: number): Promise<string> {
+  let handle: fs.FileHandle | undefined;
+  try {
+    handle = await fs.open(filePath, "r");
+    const stats = await handle.stat();
+    if (!stats.isFile() || stats.size <= 0) return "";
+    const length = Math.min(stats.size, maximumBytes);
+    const buffer = Buffer.alloc(length);
+    await handle.read(buffer, 0, length, 0);
+    return buffer.toString("utf8");
+  } catch (error) {
+    if (canIgnoreFilesystemError(error)) return "";
+    throw error;
+  } finally {
+    await handle?.close();
+  }
+}
+
 function tailLines(tail: string): string[] {
   const lines = tail.split(/\r?\n/).filter((line) => line.trim().length > 0);
   if (!tail.startsWith("{")) lines.shift();
@@ -211,20 +274,82 @@ function eventTypeFromRecord(record: Record<string, unknown>): ClaudeEventType |
     : undefined;
 }
 
-function containsToolUseMarker(value: unknown, depth = 0): boolean {
-  if (depth > 4 || value === null || typeof value !== "object") return false;
-  if (
-    !Array.isArray(value) &&
-    "type" in value &&
-    (value as Record<string, unknown>).type === CLAUDE_CONTENT_TYPE.TOOL_USE
-  ) {
-    return true;
-  }
-  return Object.values(value).some((nestedValue) => containsToolUseMarker(nestedValue, depth + 1));
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function assistantUsedTool(record: Record<string, unknown>): boolean {
-  return containsToolUseMarker(record.message) || containsToolUseMarker(record.content);
+function text(value: unknown): string | undefined {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  return normalized || undefined;
+}
+
+/** Collapses the newlines and runs of spaces a one-line row cannot show. */
+function oneLine(value: string | undefined, maximumLength: number): string | undefined {
+  const normalized = value?.replace(/\s+/gu, " ").trim();
+  if (!normalized) return undefined;
+  return normalized.length > maximumLength
+    ? `${normalized.slice(0, maximumLength - 1).trimEnd()}…`
+    : normalized;
+}
+
+function contentBlocks(record: Record<string, unknown>): Record<string, unknown>[] {
+  const message = record.message;
+  const content = isRecord(message) ? message.content : record.content;
+  return Array.isArray(content) ? content.filter(isRecord) : [];
+}
+
+/**
+ * Names the tool the assistant reached for, preferring whichever input says
+ * what the call is for. `Bash: Run the macOS packaging check` is the line a
+ * developer can act on; `Bash` alone is not.
+ */
+function activityFromAssistant(record: Record<string, unknown>): string | undefined {
+  for (const block of contentBlocks(record).reverse()) {
+    if (block.type !== CLAUDE_CONTENT_TYPE.TOOL_USE) continue;
+    const name = text(block.name);
+    if (!name) continue;
+    const input = isRecord(block.input) ? block.input : {};
+    for (const key of CLAUDE_TOOL_INPUT_KEY) {
+      const detail = oneLine(text(input[key]), CLAUDE_ADAPTER_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH);
+      if (detail) return `${name}: ${detail}`;
+    }
+    return name;
+  }
+  return undefined;
+}
+
+/** The assistant's closing words, used when no away recap was written. */
+function assistantTextFromRecord(record: Record<string, unknown>): string | undefined {
+  const spoken = contentBlocks(record)
+    .filter((block) => block.type === CLAUDE_CONTENT_TYPE.TEXT)
+    .map((block) => text(block.text))
+    .filter((value): value is string => value !== undefined)
+    .join(" ");
+  return text(spoken);
+}
+
+function stopReasonFromRecord(record: Record<string, unknown>): string | undefined {
+  const message = record.message;
+  return isRecord(message) ? text(message.stop_reason) : undefined;
+}
+
+function modelFromRecord(record: Record<string, unknown>): string | undefined {
+  const message = record.message;
+  return isRecord(message) ? text(message.model) : undefined;
+}
+
+/**
+ * Reads the formatted failure Claude Code records when a request could not be
+ * completed. A rate limit or an overloaded upstream stops the session dead, and
+ * it is the one thing a developer must be told about immediately.
+ */
+function apiErrorFromRecord(record: Record<string, unknown>): string | undefined {
+  const error = record.error;
+  if (!isRecord(error)) return undefined;
+  return oneLine(
+    text(error.formatted) ?? text(error.message),
+    CLAUDE_ADAPTER_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH,
+  );
 }
 
 function timestampFromRecord(record: Record<string, unknown>): number | undefined {
@@ -239,22 +364,84 @@ function cwdFromRecord(record: Record<string, unknown>): string | undefined {
   return typeof cwd === "string" && cwd.trim().length > 0 ? cwd : undefined;
 }
 
+/** Folds one record into the running picture of the session. */
+function readClaudeRecord(record: Record<string, unknown>, parsed: ParsedClaudeSessionTail): void {
+  parsed.cwd = cwdFromRecord(record) ?? parsed.cwd;
+  parsed.branch = text(record.gitBranch) ?? parsed.branch;
+  parsed.timestampMs = timestampFromRecord(record) ?? parsed.timestampMs;
+
+  if (record.type === CLAUDE_RECORD_TYPE.AI_TITLE) {
+    parsed.aiTitle = oneLine(text(record.aiTitle), maximumSessionTitleLength) ?? parsed.aiTitle;
+    return;
+  }
+  if (record.type === CLAUDE_RECORD_TYPE.PR_LINK) {
+    parsed.pullRequestUrl = text(record.prUrl) ?? parsed.pullRequestUrl;
+    return;
+  }
+  if (record.type === CLAUDE_RECORD_TYPE.SYSTEM) {
+    if (record.subtype === CLAUDE_SYSTEM_SUBTYPE.AWAY_SUMMARY) {
+      parsed.awaySummary = oneLine(text(record.content), maximumSessionSummaryLength);
+    }
+    if (record.subtype === CLAUDE_SYSTEM_SUBTYPE.API_ERROR) {
+      parsed.apiError = apiErrorFromRecord(record);
+    }
+    return;
+  }
+
+  const eventType = eventTypeFromRecord(record);
+  if (!eventType) return;
+  parsed.eventType = eventType;
+  // Anything the session went on to do means it got past the failure it
+  // recorded earlier, so a stale error must not outlive it.
+  parsed.apiError = undefined;
+
+  if (eventType !== CLAUDE_EVENT_TYPE.ASSISTANT) {
+    parsed.stopReason = undefined;
+    parsed.usedTool = false;
+    return;
+  }
+  parsed.stopReason = stopReasonFromRecord(record);
+  parsed.usedTool = contentBlocks(record).some(
+    (block) => block.type === CLAUDE_CONTENT_TYPE.TOOL_USE,
+  );
+  parsed.model = modelFromRecord(record) ?? parsed.model;
+  parsed.activity = activityFromAssistant(record) ?? parsed.activity;
+  // A turn that ended replaces the recap only when Claude Code wrote none; its
+  // own away summary is composed for this exact moment and reads better.
+  parsed.awaySummary =
+    parsed.stopReason === CLAUDE_STOP_REASON.END_TURN
+      ? (parsed.awaySummary ??
+        oneLine(assistantTextFromRecord(record), maximumSessionSummaryLength))
+      : parsed.awaySummary;
+}
+
 function parseClaudeSessionTail(tail: string): ParsedClaudeSessionTail {
   const parsed: ParsedClaudeSessionTail = {};
   for (const line of tailLines(tail)) {
     const record = recordFromJsonLine(line);
-    if (!record) continue;
-    parsed.cwd = cwdFromRecord(record) ?? parsed.cwd;
-    parsed.timestampMs = timestampFromRecord(record) ?? parsed.timestampMs;
-    const eventType = eventTypeFromRecord(record);
-    if (!eventType) continue;
-    parsed.eventType = eventType;
-    parsed.assistantUsedTool =
-      eventType === CLAUDE_EVENT_TYPE.ASSISTANT ? assistantUsedTool(record) : false;
+    if (record) readClaudeRecord(record, parsed);
   }
   return parsed;
 }
 
+/** Recovers only the generated title from a session too long to hold one in its tail. */
+function titleFromHead(head: string): string | undefined {
+  let title: string | undefined;
+  for (const line of head.split(/\r?\n/)) {
+    const record = recordFromJsonLine(line);
+    if (record?.type === CLAUDE_RECORD_TYPE.AI_TITLE) {
+      title = oneLine(text(record.aiTitle), maximumSessionTitleLength) ?? title;
+    }
+  }
+  return title;
+}
+
+/**
+ * A session that stopped on a failed request is stuck until someone comes back
+ * to it, so the error outranks whatever the tail otherwise looked like. Past
+ * that, `stop_reason` answers the question the tail cannot: a turn Claude Code
+ * ended is holding for the developer, and one it ended to call a tool is not.
+ */
 function statusFromTail(
   parsed: ParsedClaudeSessionTail,
   observedAt: number,
@@ -263,14 +450,18 @@ function statusFromTail(
 ): ProviderSessionObservation["status"] {
   const isFresh = now - observedAt <= activeSessionFreshnessMs;
   if (parsed.eventType === CLAUDE_EVENT_TYPE.RESULT) return SESSION_STATUS.COMPLETE;
+  if (parsed.apiError) return isFresh ? SESSION_STATUS.ERROR : SESSION_STATUS.UNKNOWN;
+  if (!isFresh) return SESSION_STATUS.UNKNOWN;
   if (parsed.eventType === CLAUDE_EVENT_TYPE.ASSISTANT) {
-    if (parsed.assistantUsedTool) return isFresh ? SESSION_STATUS.WORKING : SESSION_STATUS.UNKNOWN;
-    return isFresh ? SESSION_STATUS.WAITING : SESSION_STATUS.UNKNOWN;
+    // A build that stops reporting `stop_reason` must not turn every working
+    // session into one that claims to need the developer, so the tool blocks in
+    // the message itself remain the fallback.
+    const working = parsed.stopReason
+      ? parsed.stopReason === CLAUDE_STOP_REASON.TOOL_USE
+      : parsed.usedTool === true;
+    return working ? SESSION_STATUS.WORKING : SESSION_STATUS.WAITING;
   }
-  if (parsed.eventType === CLAUDE_EVENT_TYPE.USER) {
-    return isFresh ? SESSION_STATUS.WORKING : SESSION_STATUS.UNKNOWN;
-  }
-  return isFresh ? SESSION_STATUS.WORKING : SESSION_STATUS.UNKNOWN;
+  return SESSION_STATUS.WORKING;
 }
 
 function workspaceLabel(cwd: string | undefined): string {
@@ -279,12 +470,24 @@ function workspaceLabel(cwd: string | undefined): string {
   return label || UNKNOWN_WORKSPACE_LABEL;
 }
 
+/**
+ * Claude Code names its own sessions, and that name is what a developer is
+ * looking for. The workspace is the fallback for a session too new to have been
+ * named, which is also the only case where two rows can still read alike.
+ */
 function titleFromTail(parsed: ParsedClaudeSessionTail): string {
-  return `${CLAUDE_CODE_PROVIDER_NAME}: ${workspaceLabel(parsed.cwd)}`;
+  return parsed.aiTitle ?? workspaceLabel(parsed.cwd);
 }
 
-function summaryFromStatus(status: ProviderSessionObservation["status"]): string {
-  return `${CLAUDE_CODE_PROVIDER_NAME} ${status}; transcript content is not retained.`;
+function detailFromTail(parsed: ParsedClaudeSessionTail): SessionDetail {
+  return {
+    ...(parsed.activity ? { activity: parsed.activity } : {}),
+    repository: workspaceLabel(parsed.cwd),
+    ...(parsed.branch ? { branch: parsed.branch } : {}),
+    ...(parsed.model ? { model: parsed.model } : {}),
+    ...(parsed.apiError ? { error: parsed.apiError } : {}),
+    ...(parsed.pullRequestUrl ? { change: parsed.pullRequestUrl } : {}),
+  };
 }
 
 function observationFromSessionFile(
@@ -300,7 +503,8 @@ function observationFromSessionFile(
     title: titleFromTail(parsed),
     status,
     observedAt,
-    summary: summaryFromStatus(status),
+    ...(parsed.awaySummary ? { summary: parsed.awaySummary } : {}),
+    detail: detailFromTail(parsed),
   };
 }
 
@@ -319,6 +523,7 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
   readonly #maximumSessionAgeMs: number;
   readonly #activeSessionFreshnessMs: number;
   readonly #readTailBytes: number;
+  readonly #readHeadBytes: number;
 
   constructor(options: ClaudeCodeAdapterOptions = {}) {
     this.#claudeHome = options.claudeHome ?? defaultClaudeHome();
@@ -343,6 +548,10 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
       options.readTailBytes,
       CLAUDE_ADAPTER_DEFAULTS.READ_TAIL_BYTES,
     );
+    this.#readHeadBytes = positiveInteger(
+      options.readHeadBytes,
+      CLAUDE_ADAPTER_DEFAULTS.READ_HEAD_BYTES,
+    );
   }
 
   async observe(): Promise<readonly ProviderSessionObservation[]> {
@@ -357,9 +566,13 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
     for (const candidate of candidates) {
       if (now - candidate.mtimeMs > this.#maximumSessionAgeMs) continue;
       const tail = await readTail(candidate.filePath, this.#readTailBytes);
+      const parsed = parseClaudeSessionTail(tail);
+      if (!parsed.aiTitle) {
+        parsed.aiTitle = titleFromHead(await readHead(candidate.filePath, this.#readHeadBytes));
+      }
       const observation = observationFromSessionFile(
         candidate,
-        parseClaudeSessionTail(tail),
+        parsed,
         now,
         this.#activeSessionFreshnessMs,
       );

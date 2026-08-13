@@ -91,8 +91,14 @@
 
 .row-copy small {
   overflow: hidden;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Where the session is, under what it is doing. It is the line a reader scans
+   only when two rows say the same thing, so it sits back a step. */
+.row-context {
+  color: var(--text-tertiary);
 }

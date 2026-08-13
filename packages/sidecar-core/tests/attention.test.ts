@@ -581,7 +581,7 @@ test("keeps one evaluation in flight per session", async () => {
   );
 });
 
-test("sends bounded, redacted material and never provider transcripts", async () => {
+test("sends bounded material and withholds what a decision does not turn on", async () => {
   const evaluator = evaluatorReturning({
     disposition: ATTENTION_DISPOSITION.SILENT,
     decidedAt: DECIDED_AT,
@@ -589,14 +589,24 @@ test("sends bounded, redacted material and never provider transcripts", async ()
   const reviewer = new SessionAttentionReviewer({ evaluator, now: () => DECIDED_AT });
   await reviewer.review([
     session(claude, "review", {
-      title: `Claude Code: checkout-service ${TRANSCRIPT_SECRET}`.padEnd(400, "x"),
-      summary: `Claude Code working. ${TRANSCRIPT_SECRET}`.padEnd(900, "y"),
+      title: `Split the checkout total ${TRANSCRIPT_SECRET}`.padEnd(400, "x"),
+      summary: `Waiting on the rounding rule. ${TRANSCRIPT_SECRET}`.padEnd(900, "y"),
+      detail: {
+        repository: "checkout-service",
+        branch: "dean/line-items",
+        activity: "Edit: src/totals.ts",
+        error: "429 rate limit exceeded",
+        model: "claude-opus-5",
+        link: `https://cursor.com/agents/${TRANSCRIPT_SECRET}`,
+        change: `https://github.com/reviewstage/luke/pull/${TRANSCRIPT_SECRET}`,
+      },
     }),
   ]);
 
   const [update] = evaluator.updates;
   assert.ok(update);
   assert.deepEqual(Object.keys(update).sort(), [
+    "context",
     "observedAt",
     "providerId",
     "providerName",
@@ -609,13 +619,27 @@ test("sends bounded, redacted material and never provider transcripts", async ()
   assert.equal(update.title.length, 160, "titles stay bounded by session normalization");
   assert.equal(update.summary?.length, 500, "summaries stay bounded by session normalization");
 
+  // An evaluator is the one place session material leaves the machine, so the
+  // session's own address and the change it published stay behind: they are
+  // identifiers a decision never turns on.
+  assert.deepEqual(Object.keys(update.context ?? {}).sort(), [
+    "activity",
+    "branch",
+    "error",
+    "repository",
+  ]);
+
   const input = attentionUpdateInput(update);
   assert.ok(input.includes("Provider: Claude Code"));
   assert.ok(input.includes(`Status: ${SESSION_STATUS.WORKING}`));
+  assert.ok(input.includes("Running: Edit: src/totals.ts"));
+  assert.ok(input.includes("Error: 429 rate limit exceeded"));
+  assert.ok(!input.includes("cursor.com"));
+  assert.ok(!input.includes("github.com"));
   assert.ok(!input.includes("providerSessionId"));
 });
 
-test("tuning examples are redacted, bounded, and cover every disposition", () => {
+test("tuning examples are synthetic, bounded, and cover every disposition", () => {
   assert.deepEqual(
     [...new Set(ATTENTION_TUNING_EXAMPLES.map((example) => example.expected.disposition))].sort(),
     [...Object.values(ATTENTION_DISPOSITION)].sort(),

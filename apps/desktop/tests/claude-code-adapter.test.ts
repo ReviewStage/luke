@@ -42,7 +42,7 @@ async function writeSessionFile(
   await fs.utimes(filePath, mtimeMs / 1000, mtimeMs / 1000);
 }
 
-test("observes Claude Code session files without exposing transcript text", async (t) => {
+test("observes a Claude Code session file and labels it by its workspace", async (t) => {
   const claudeHome = await temporaryClaudeHome(t);
   await writeSessionFile(
     claudeHome,
@@ -75,10 +75,10 @@ test("observes Claude Code session files without exposing transcript text", asyn
   assert.deepEqual(adapter.provider, CLAUDE_CODE_PROVIDER);
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "session-waiting");
-  assert.equal(observations[0]?.title, "Claude Code: luke");
+  assert.equal(observations[0]?.title, "luke");
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
   assert.equal(observations[0]?.controls, undefined);
-  assert.equal(JSON.stringify(observations).includes(SECRET_TRANSCRIPT_TEXT), false);
+  assert.equal(observations[0]?.detail?.repository, "luke");
 });
 
 test("keeps stale user-tail sessions unknown instead of inventing activity", async (t) => {
@@ -291,9 +291,200 @@ test("filters old sessions and preserves the newest duplicate provider id", asyn
       {
         providerSessionId: "duplicate-session",
         status: SESSION_STATUS.COMPLETE,
-        title: "Claude Code: duplicate-new",
+        title: "duplicate-new",
       },
     ],
+  );
+});
+
+test("surfaces the generated title, branch, model, and the tool being run", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-rich",
+    "rich-session",
+    [
+      { type: "ai-title", aiTitle: "Revamp the notch panel", sessionId: "rich-session" },
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
+        cwd: "/Users/test/luke",
+        gitBranch: "dean/notch-panel",
+        timestamp: "2026-08-11T23:44:55.000Z",
+        message: {
+          model: "claude-opus-5",
+          stop_reason: "tool_use",
+          content: [
+            {
+              type: TEST_CLAUDE_CONTENT_TYPE.TOOL_USE,
+              name: "Bash",
+              input: { description: "Package the macOS app" },
+            },
+          ],
+        },
+      },
+    ],
+    TEST_TIME - 1_000,
+  );
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.title, "Revamp the notch panel");
+  assert.equal(observation?.status, SESSION_STATUS.WORKING);
+  assert.deepEqual(observation?.detail, {
+    activity: "Bash: Package the macOS app",
+    repository: "luke",
+    branch: "dean/notch-panel",
+    model: "claude-opus-5",
+  });
+});
+
+test("reports a failed request as an error a developer has to rescue", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-error",
+    "errored-session",
+    [
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:44:50.000Z",
+        message: { stop_reason: "tool_use", content: [] },
+      },
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.SYSTEM,
+        subtype: "api_error",
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:44:55.000Z",
+        error: { formatted: "429 rate limit exceeded", status: 429 },
+      },
+    ],
+    TEST_TIME - 1_000,
+  );
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.ERROR);
+  assert.equal(observation?.detail?.error, "429 rate limit exceeded");
+});
+
+test("clears a recorded error once the session gets past it", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-recovered",
+    "recovered-session",
+    [
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.SYSTEM,
+        subtype: "api_error",
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:44:50.000Z",
+        error: { formatted: "529 overloaded" },
+      },
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:44:55.000Z",
+        message: { stop_reason: "tool_use", content: [] },
+      },
+    ],
+    TEST_TIME - 1_000,
+  );
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WORKING);
+  assert.equal(observation?.detail?.error, undefined);
+});
+
+test("recovers a title from a session too long to hold one in its tail", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-long",
+    "long-session",
+    [
+      { type: "ai-title", aiTitle: "Graduate the L-face identity", sessionId: "long-session" },
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.USER,
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:44:50.000Z",
+        toolUseResult: { content: "x".repeat(4_096) },
+      },
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:44:55.000Z",
+        message: { stop_reason: "end_turn", content: [] },
+      },
+    ],
+    TEST_TIME - 1_000,
+  );
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+    // Small enough that the title is far behind the tail the status comes from.
+    readTailBytes: 256,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.title, "Graduate the L-face identity");
+  assert.equal(observation?.status, SESSION_STATUS.WAITING);
+});
+
+test("carries the away recap Claude Code writes for a developer who stepped out", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-away",
+    "away-session",
+    [
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:44:55.000Z",
+        message: { stop_reason: "end_turn", content: [{ type: "text", text: "Closing words." }] },
+      },
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.SYSTEM,
+        subtype: "away_summary",
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:44:58.000Z",
+        content: "You asked for the notch geometry; next, say whether to ship it.",
+      },
+    ],
+    TEST_TIME - 1_000,
+  );
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WAITING);
+  assert.equal(
+    observation?.summary,
+    "You asked for the notch geometry; next, say whether to ship it.",
   );
 });
 

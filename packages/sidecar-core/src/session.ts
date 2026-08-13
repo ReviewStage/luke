@@ -1,6 +1,14 @@
 export const SESSION_STATUS = {
   WORKING: "working",
   WAITING: "waiting",
+  /**
+   * The session stopped on something it cannot get past on its own. Providers
+   * report this natively — a Conductor `error`, a Cursor `ERROR` run, a Claude
+   * Code `api_error` — and it is kept distinct from `waiting` because the two
+   * ask different things of the developer: one wants an answer, the other wants
+   * a rescue.
+   */
+  ERROR: "error",
   COMPLETE: "complete",
   UNKNOWN: "unknown",
 } as const;
@@ -45,9 +53,30 @@ export interface SessionIdentity {
 }
 
 /**
+ * The context that makes one session tellable from another. Every field is
+ * optional because no provider reports all of them, and every field is bounded
+ * so a row stays a row. Adapters fill in whatever their provider actually
+ * knows rather than composing a sentence, which leaves the wording to the
+ * surface that renders it and the reasoning to the attention evaluator.
+ */
+export interface SessionDetail {
+  /** What the session is doing right now, such as the tool it is running. */
+  activity?: string;
+  repository?: string;
+  branch?: string;
+  model?: string;
+  /** Why the session stopped, when it stopped on something it cannot pass. */
+  error?: string;
+  /** A provider-owned address that opens this session where it lives. */
+  link?: string;
+  /** The work the session has published, such as a pull request. */
+  change?: string;
+}
+
+/**
  * Provider-owned data observed for a session. Provider adapters are responsible
- * for observing without writing provider files and for supplying only bounded,
- * redacted summaries.
+ * for observing without writing provider files, and for bounding every field
+ * they report so one session cannot crowd out the rest of the panel.
  */
 export interface ProviderSessionObservation {
   providerSessionId: string;
@@ -55,6 +84,7 @@ export interface ProviderSessionObservation {
   status: SessionStatus;
   observedAt: number;
   summary?: string;
+  detail?: SessionDetail;
   controls?: readonly SessionControl[];
 }
 
@@ -68,12 +98,17 @@ export interface NormalizedSession extends SessionIdentity {
   status: SessionStatus;
   observedAt: number;
   summary?: string;
+  detail: SessionDetail;
   controls: readonly SessionControl[];
   attention: AttentionDecision;
 }
 
 export const maximumSessionTitleLength = 160;
 export const maximumSessionSummaryLength = 500;
+/** One line of context beside a title, not a paragraph. */
+export const maximumSessionDetailLength = 120;
+/** Long enough for any provider's session address without becoming a payload. */
+export const maximumSessionLinkLength = 300;
 
 function requiredText(value: string, field: string): string {
   const normalized = value.trim();
@@ -116,6 +151,32 @@ function normalizeControls(
       label: boundedText(control.label, maximumSessionTitleLength) ?? id,
     };
   });
+}
+
+/**
+ * Bounds every field a provider reported and drops the ones it left empty, so
+ * a renderer can treat any present field as worth drawing.
+ */
+export function normalizeSessionDetail(detail: SessionDetail | undefined): SessionDetail {
+  if (!detail) return {};
+
+  const activity = boundedText(detail.activity, maximumSessionDetailLength);
+  const repository = boundedText(detail.repository, maximumSessionDetailLength);
+  const branch = boundedText(detail.branch, maximumSessionDetailLength);
+  const model = boundedText(detail.model, maximumSessionDetailLength);
+  const error = boundedText(detail.error, maximumSessionDetailLength);
+  const link = boundedText(detail.link, maximumSessionLinkLength);
+  const change = boundedText(detail.change, maximumSessionLinkLength);
+
+  return {
+    ...(activity ? { activity } : {}),
+    ...(repository ? { repository } : {}),
+    ...(branch ? { branch } : {}),
+    ...(model ? { model } : {}),
+    ...(error ? { error } : {}),
+    ...(link ? { link } : {}),
+    ...(change ? { change } : {}),
+  };
 }
 
 /** Normalizes the two-part identity used to locate a session in the registry. */
@@ -175,6 +236,7 @@ export function normalizeSession(
     status: normalizeStatus(observation.status),
     observedAt,
     ...(summary ? { summary } : {}),
+    detail: normalizeSessionDetail(observation.detail),
     controls: normalizeControls(observation.controls),
     attention: normalizeAttention(attention),
   };

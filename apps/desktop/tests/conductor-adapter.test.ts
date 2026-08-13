@@ -9,7 +9,9 @@ const TEST_BASE_URL = "https://api.conductor.test";
 const TEST_API_KEY = "conductor-test-key";
 const TEST_USER_ID = "user-under-observation";
 const OTHER_USER_ID = "another-user";
-const SECRET_PROMPT_TEXT = "SECRET_PROMPT_TEXT";
+const TEST_SESSION_NAME = "Revamp the notch panel";
+const TEST_WORKSPACE_NAME = "bucharest-v1";
+const TEST_ERROR_MESSAGE = "The agent container ran out of memory";
 
 const TEST_CONDUCTOR_STATUS = {
   IDLE: "idle",
@@ -146,6 +148,9 @@ function fakeConductorApi(api: TestApi): FakeConductorApi {
         sessionId: session.id,
         status: session.status ?? TEST_CONDUCTOR_STATUS.IDLE,
         updatedAt: isoTimestamp(session.statusUpdatedAt ?? TEST_TIME),
+        ...(session.status === TEST_CONDUCTOR_STATUS.ERROR
+          ? { errorMessage: TEST_ERROR_MESSAGE }
+          : {}),
       });
     }
     return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
@@ -190,13 +195,13 @@ function ownedWorkspace(id: string, lastActivityAt: number): TestWorkspace {
   return {
     id,
     projectId: LUKE_PROJECT.id,
-    name: SECRET_PROMPT_TEXT,
+    name: TEST_WORKSPACE_NAME,
     creatorId: TEST_USER_ID,
     lastActivityAt,
   };
 }
 
-test("observes cloud sessions the signed-in user created without exposing prompt-derived names", async () => {
+test("observes cloud sessions the signed-in user created, under their own names", async () => {
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
     projects: [LUKE_PROJECT],
@@ -205,7 +210,7 @@ test("observes cloud sessions the signed-in user created without exposing prompt
       {
         id: "session-working",
         workspaceId: "workspace-active",
-        name: SECRET_PROMPT_TEXT,
+        name: TEST_SESSION_NAME,
         resolvedModel: "claude-opus-5",
         status: TEST_CONDUCTOR_STATUS.WORKING,
         statusUpdatedAt: TEST_TIME - 5_000,
@@ -218,12 +223,16 @@ test("observes cloud sessions the signed-in user created without exposing prompt
   assert.deepEqual(CONDUCTOR_PROVIDER, { id: "conductor", displayName: "Conductor" });
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "session-working");
-  assert.equal(observations[0]?.title, "Conductor: luke");
+  assert.equal(observations[0]?.title, TEST_SESSION_NAME);
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
   assert.equal(observations[0]?.observedAt, TEST_TIME - 5_000);
   assert.equal(observations[0]?.controls, undefined);
-  assert.match(observations[0]?.summary ?? "", /claude-opus-5/);
-  assert.equal(JSON.stringify(observations).includes(SECRET_PROMPT_TEXT), false);
+  assert.deepEqual(observations[0]?.detail, {
+    repository: "luke",
+    branch: TEST_WORKSPACE_NAME,
+    model: "claude-opus-5",
+    link: "conductor://workspace?session=session-working",
+  });
   assert.equal(
     api.requests.every((request) => request.method === "GET"),
     true,
@@ -234,7 +243,7 @@ test("observes cloud sessions the signed-in user created without exposing prompt
   );
 });
 
-test("reports an idle session as waiting and an errored session as unknown", async () => {
+test("reports an idle session as waiting and an errored session with its reason", async () => {
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
     projects: [LUKE_PROJECT],
@@ -243,14 +252,14 @@ test("reports an idle session as waiting and an errored session as unknown", asy
       {
         id: "session-idle",
         workspaceId: "workspace-active",
-        name: SECRET_PROMPT_TEXT,
+        name: TEST_SESSION_NAME,
         status: TEST_CONDUCTOR_STATUS.IDLE,
         statusUpdatedAt: TEST_TIME - 1_000,
       },
       {
         id: "session-errored",
         workspaceId: "workspace-active",
-        name: SECRET_PROMPT_TEXT,
+        name: TEST_SESSION_NAME,
         status: TEST_CONDUCTOR_STATUS.ERROR,
         statusUpdatedAt: TEST_TIME - 1_000,
       },
@@ -261,7 +270,62 @@ test("reports an idle session as waiting and an errored session as unknown", asy
 
   assert.equal(observations.length, 2);
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
-  assert.equal(observations[1]?.status, SESSION_STATUS.UNKNOWN);
+  assert.equal(observations[1]?.status, SESSION_STATUS.ERROR);
+  assert.equal(observations[1]?.detail?.error, TEST_ERROR_MESSAGE);
+});
+
+test("keeps an errored session errored after it goes stale", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 30 * 60 * 1000)],
+    sessions: [
+      {
+        id: "session-errored",
+        workspaceId: "workspace-active",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.ERROR,
+        statusUpdatedAt: TEST_TIME - 30 * 60 * 1000,
+      },
+    ],
+  });
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  // A failure does not heal by going stale, unlike an idle chat.
+  assert.equal(observations[0]?.status, SESSION_STATUS.ERROR);
+});
+
+test("separates sessions that share one project by their own names", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [
+      ownedWorkspace("workspace-one", TEST_TIME - 30_000),
+      ownedWorkspace("workspace-two", TEST_TIME - 40_000),
+    ],
+    sessions: [
+      {
+        id: "session-one",
+        workspaceId: "workspace-one",
+        name: "Revamp the notch panel",
+        statusUpdatedAt: TEST_TIME - 5_000,
+      },
+      {
+        id: "session-two",
+        workspaceId: "workspace-two",
+        name: "Observe Cursor cloud agents",
+        statusUpdatedAt: TEST_TIME - 6_000,
+      },
+    ],
+  });
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.deepEqual(
+    observations.map((observation) => observation.title),
+    ["Revamp the notch panel", "Observe Cursor cloud agents"],
+  );
 });
 
 test("reports an archived session as complete without requesting its status", async () => {
@@ -273,7 +337,7 @@ test("reports an archived session as complete without requesting its status", as
       {
         id: "session-archived",
         workspaceId: "workspace-active",
-        name: SECRET_PROMPT_TEXT,
+        name: TEST_SESSION_NAME,
         archivedAt: isoTimestamp(TEST_TIME - 20_000),
         status: TEST_CONDUCTOR_STATUS.WORKING,
       },
@@ -309,13 +373,13 @@ test("drops a long-closed chat instead of letting a busy workspace make it look 
       {
         id: "session-closed-days-ago",
         workspaceId: "workspace-busy",
-        name: SECRET_PROMPT_TEXT,
+        name: TEST_SESSION_NAME,
         archivedAt: isoTimestamp(TEST_TIME - 3 * 24 * 60 * 60 * 1000),
       },
       {
         id: "session-open",
         workspaceId: "workspace-quiet",
-        name: SECRET_PROMPT_TEXT,
+        name: TEST_SESSION_NAME,
         status: TEST_CONDUCTOR_STATUS.IDLE,
         statusUpdatedAt: TEST_TIME - 30_000,
       },
@@ -342,7 +406,7 @@ test("keeps reporting a long turn as working", async () => {
       {
         id: "session-long-turn",
         workspaceId: "workspace-long-turn",
-        name: SECRET_PROMPT_TEXT,
+        name: TEST_SESSION_NAME,
         status: TEST_CONDUCTOR_STATUS.WORKING,
         statusUpdatedAt: startedAt,
       },
@@ -367,14 +431,14 @@ test("does not treat a long-idle chat as waiting because its workspace is busy",
       {
         id: "session-abandoned",
         workspaceId: "workspace-busy",
-        name: SECRET_PROMPT_TEXT,
+        name: TEST_SESSION_NAME,
         status: TEST_CONDUCTOR_STATUS.IDLE,
         statusUpdatedAt: TEST_TIME - 2 * 60 * 60 * 1000,
       },
       {
         id: "session-just-finished",
         workspaceId: "workspace-busy",
-        name: SECRET_PROMPT_TEXT,
+        name: TEST_SESSION_NAME,
         status: TEST_CONDUCTOR_STATUS.IDLE,
         statusUpdatedAt: TEST_TIME - 20_000,
       },
@@ -397,23 +461,23 @@ test("ignores workspaces created by another user and workspaces without a creato
       {
         id: "workspace-teammate",
         projectId: LUKE_PROJECT.id,
-        name: SECRET_PROMPT_TEXT,
+        name: TEST_SESSION_NAME,
         creatorId: OTHER_USER_ID,
         lastActivityAt: TEST_TIME - 1_000,
       },
       {
         id: "workspace-unattributed",
         projectId: LUKE_PROJECT.id,
-        name: SECRET_PROMPT_TEXT,
+        name: TEST_SESSION_NAME,
         lastActivityAt: TEST_TIME - 1_000,
       },
     ],
     sessions: [
-      { id: "session-teammate", workspaceId: "workspace-teammate", name: SECRET_PROMPT_TEXT },
+      { id: "session-teammate", workspaceId: "workspace-teammate", name: TEST_SESSION_NAME },
       {
         id: "session-unattributed",
         workspaceId: "workspace-unattributed",
-        name: SECRET_PROMPT_TEXT,
+        name: TEST_SESSION_NAME,
       },
     ],
   });
@@ -433,7 +497,7 @@ test("ignores workspaces older than the maximum session age", async () => {
     projects: [LUKE_PROJECT],
     workspaces: [ownedWorkspace("workspace-yesterday", TEST_TIME - 48 * 60 * 60 * 1000)],
     sessions: [
-      { id: "session-yesterday", workspaceId: "workspace-yesterday", name: SECRET_PROMPT_TEXT },
+      { id: "session-yesterday", workspaceId: "workspace-yesterday", name: TEST_SESSION_NAME },
     ],
   });
 
@@ -453,7 +517,7 @@ test("bounds the workspaces and sessions a single pass observes", async () => {
     sessions: workspaces.map((workspace, index) => ({
       id: `session-${index}`,
       workspaceId: workspace.id,
-      name: SECRET_PROMPT_TEXT,
+      name: TEST_SESSION_NAME,
       status: TEST_CONDUCTOR_STATUS.WORKING,
       statusUpdatedAt: TEST_TIME - 1_000,
     })),
@@ -484,14 +548,14 @@ test("spreads a bounded session budget across workspaces", async () => {
       ...Array.from({ length: 8 }, (_value, index) => ({
         id: `crowded-${index}`,
         workspaceId: "workspace-crowded",
-        name: SECRET_PROMPT_TEXT,
+        name: TEST_SESSION_NAME,
         status: TEST_CONDUCTOR_STATUS.IDLE,
         statusUpdatedAt: TEST_TIME - 1_000,
       })),
       {
         id: "quiet-session",
         workspaceId: "workspace-quiet",
-        name: SECRET_PROMPT_TEXT,
+        name: TEST_SESSION_NAME,
         status: TEST_CONDUCTOR_STATUS.WORKING,
         statusUpdatedAt: TEST_TIME - 1_000,
       },
@@ -514,13 +578,13 @@ test("prefers open chats over closed ones inside one workspace", async () => {
       ...Array.from({ length: 4 }, (_value, index) => ({
         id: `closed-${index}`,
         workspaceId: "workspace-mixed",
-        name: SECRET_PROMPT_TEXT,
+        name: TEST_SESSION_NAME,
         archivedAt: isoTimestamp(TEST_TIME - 10_000),
       })),
       {
         id: "open-session",
         workspaceId: "workspace-mixed",
-        name: SECRET_PROMPT_TEXT,
+        name: TEST_SESSION_NAME,
         status: TEST_CONDUCTOR_STATUS.WORKING,
         statusUpdatedAt: TEST_TIME - 1_000,
       },
@@ -538,7 +602,7 @@ test("reports nothing and issues no request without an API key", async () => {
     userId: TEST_USER_ID,
     projects: [LUKE_PROJECT],
     workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 1_000)],
-    sessions: [{ id: "session-active", workspaceId: "workspace-active", name: SECRET_PROMPT_TEXT }],
+    sessions: [{ id: "session-active", workspaceId: "workspace-active", name: TEST_SESSION_NAME }],
   });
 
   const observations = await adapterFor(api.fetch, { apiKey: undefined }).observe();
@@ -552,7 +616,7 @@ test("reports nothing when the credential cannot be read", async () => {
     userId: TEST_USER_ID,
     projects: [LUKE_PROJECT],
     workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 1_000)],
-    sessions: [{ id: "session-active", workspaceId: "workspace-active", name: SECRET_PROMPT_TEXT }],
+    sessions: [{ id: "session-active", workspaceId: "workspace-active", name: TEST_SESSION_NAME }],
   });
   const adapter = adapterFor(api.fetch, {
     readApiKey: async () => {
@@ -573,7 +637,7 @@ test("reuses the previous snapshot inside the minimum refresh interval", async (
       {
         id: "session-active",
         workspaceId: "workspace-active",
-        name: SECRET_PROMPT_TEXT,
+        name: TEST_SESSION_NAME,
         status: TEST_CONDUCTOR_STATUS.WORKING,
         statusUpdatedAt: TEST_TIME - 1_000,
       },
@@ -613,7 +677,7 @@ test("observes again immediately after the API key changes", async () => {
       {
         id: "session-active",
         workspaceId: "workspace-active",
-        name: SECRET_PROMPT_TEXT,
+        name: TEST_SESSION_NAME,
         status: TEST_CONDUCTOR_STATUS.WORKING,
         statusUpdatedAt: TEST_TIME - 1_000,
       },
@@ -648,7 +712,7 @@ test("clears observations when Conductor rejects the API key", async () => {
       {
         id: "session-active",
         workspaceId: "workspace-active",
-        name: SECRET_PROMPT_TEXT,
+        name: TEST_SESSION_NAME,
         status: TEST_CONDUCTOR_STATUS.WORKING,
         statusUpdatedAt: TEST_TIME - 1_000,
       },
@@ -676,7 +740,7 @@ test("keeps the previous snapshot when a request fails transiently", async () =>
       {
         id: "session-active",
         workspaceId: "workspace-active",
-        name: SECRET_PROMPT_TEXT,
+        name: TEST_SESSION_NAME,
         status: TEST_CONDUCTOR_STATUS.WORKING,
         statusUpdatedAt: TEST_TIME - 1_000,
       },
@@ -706,13 +770,13 @@ test("keeps observing when one session's status cannot be read", async () => {
       {
         id: "session-unreadable",
         workspaceId: "workspace-active",
-        name: SECRET_PROMPT_TEXT,
+        name: TEST_SESSION_NAME,
         statusHttpStatus: HTTP_STATUS.SERVER_ERROR,
       },
       {
         id: "session-readable",
         workspaceId: "workspace-active",
-        name: SECRET_PROMPT_TEXT,
+        name: TEST_SESSION_NAME,
         status: TEST_CONDUCTOR_STATUS.WORKING,
         statusUpdatedAt: TEST_TIME - 1_000,
       },

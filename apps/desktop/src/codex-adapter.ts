@@ -3,9 +3,12 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
+  maximumSessionSummaryLength,
+  maximumSessionTitleLength,
   PROVIDER_ID,
   type ProviderSessionObservation,
   SESSION_STATUS,
+  type SessionDetail,
   type SessionProvider,
   type SessionProviderAdapter,
 } from "@sidecar/core";
@@ -40,24 +43,52 @@ const CODEX_THREAD_COLUMN = {
   CREATED_AT_MS: "created_at_ms",
   UPDATED_AT_MS: "updated_at_ms",
   RECENCY_AT_MS: "recency_at_ms",
+  TITLE: "title",
+  GIT_BRANCH: "git_branch",
+  MODEL: "model",
+  REASONING_EFFORT: "reasoning_effort",
+  ROLLOUT_PATH: "rollout_path",
 } as const;
+
+/** Records Codex appends to the rollout file named by a thread's `rollout_path`. */
+const CODEX_ROLLOUT_TYPE = {
+  EVENT_MSG: "event_msg",
+  RESPONSE_ITEM: "response_item",
+} as const;
+
+/**
+ * The turn boundary. `threads` carries no status column at all, so without the
+ * rollout a Codex session can only be guessed at from how recently its row was
+ * touched — and could never be reported as waiting for its developer.
+ */
+const CODEX_EVENT_PAYLOAD = {
+  TASK_STARTED: "task_started",
+  TASK_COMPLETE: "task_complete",
+} as const;
+
+const CODEX_RESPONSE_PAYLOAD = {
+  FUNCTION_CALL: "function_call",
+} as const;
+
+/** Function-call arguments whose value names the work, in the order they read best. */
+const CODEX_CALL_ARGUMENT_KEY = ["command", "path", "file_path", "query", "pattern"] as const;
 
 const CODEX_ADAPTER_DEFAULTS = {
   MAXIMUM_SESSION_ROWS: 40,
   MAXIMUM_SESSION_AGE_MS: 24 * 60 * 60 * 1000,
   ACTIVE_SESSION_FRESHNESS_MS: 15 * 60 * 1000,
+  /** Enough to reach past one turn's token accounting to its boundary event. */
+  READ_ROLLOUT_TAIL_BYTES: 64 * 1024,
+  /** Only the threads that can still change are worth a second file read. */
+  MAXIMUM_ROLLOUT_READS: 12,
+  MAXIMUM_ACTIVITY_LENGTH: 80,
 } as const;
 
+// Every column is read defensively from the row, so the projection stays `*`:
+// Codex adds columns by migration, and naming one this build expects but an
+// older install lacks would fail the whole query rather than one field.
 const CODEX_THREAD_QUERY = `
-  SELECT
-    id,
-    cwd,
-    archived,
-    created_at,
-    updated_at,
-    created_at_ms,
-    updated_at_ms,
-    recency_at_ms
+  SELECT *
   FROM threads
   WHERE archived = 0
     AND id <> ''
@@ -155,6 +186,112 @@ async function readTextFile(filePath: string): Promise<string | undefined> {
     if (canIgnoreFilesystemError(error)) return undefined;
     throw error;
   }
+}
+
+async function readTail(filePath: string, maximumBytes: number): Promise<string> {
+  let handle: fs.FileHandle | undefined;
+  try {
+    handle = await fs.open(filePath, "r");
+    const stats = await handle.stat();
+    if (!stats.isFile() || stats.size <= 0) return "";
+    const length = Math.min(stats.size, maximumBytes);
+    const buffer = Buffer.alloc(length);
+    await handle.read(buffer, 0, length, stats.size - length);
+    return buffer.toString("utf8");
+  } catch (error) {
+    if (canIgnoreFilesystemError(error)) return "";
+    throw error;
+  } finally {
+    await handle?.close();
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function text(value: unknown): string | undefined {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  return normalized || undefined;
+}
+
+function oneLine(value: string | undefined, maximumLength: number): string | undefined {
+  const normalized = value?.replace(/\s+/gu, " ").trim();
+  if (!normalized) return undefined;
+  return normalized.length > maximumLength
+    ? `${normalized.slice(0, maximumLength - 1).trimEnd()}…`
+    : normalized;
+}
+
+function recordFromJsonLine(line: string): Record<string, unknown> | undefined {
+  try {
+    const parsed = JSON.parse(line) as unknown;
+    return isRecord(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Names the tool Codex called, preferring whichever argument says what it is for. */
+function activityFromCall(payload: Record<string, unknown>): string | undefined {
+  const name = text(payload.name);
+  if (!name) return undefined;
+  const parsedArguments = text(payload.arguments)
+    ? recordFromJsonLine(payload.arguments as string)
+    : undefined;
+  for (const key of CODEX_CALL_ARGUMENT_KEY) {
+    const detail = oneLine(
+      text(parsedArguments?.[key]),
+      CODEX_ADAPTER_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH,
+    );
+    if (detail) return `${name}: ${detail}`;
+  }
+  return name;
+}
+
+interface ParsedCodexRollout {
+  activity?: string;
+  lastAgentMessage?: string;
+  turnComplete?: boolean;
+}
+
+/**
+ * Reads the turn boundary and the current call out of a rollout tail. A
+ * `task_complete` that nothing followed means the turn ended and the session is
+ * holding for its developer; a `task_started` means it is still running.
+ */
+function parseCodexRolloutTail(tail: string): ParsedCodexRollout {
+  const parsed: ParsedCodexRollout = {};
+  const lines = tail.split(/\r?\n/);
+  for (const line of lines) {
+    const record = recordFromJsonLine(line);
+    if (!record) continue;
+    const payload = isRecord(record.payload) ? record.payload : undefined;
+    if (!payload) continue;
+
+    if (record.type === CODEX_ROLLOUT_TYPE.EVENT_MSG) {
+      if (payload.type === CODEX_EVENT_PAYLOAD.TASK_STARTED) {
+        parsed.turnComplete = false;
+        parsed.lastAgentMessage = undefined;
+      }
+      if (payload.type === CODEX_EVENT_PAYLOAD.TASK_COMPLETE) {
+        parsed.turnComplete = true;
+        parsed.activity = undefined;
+        parsed.lastAgentMessage = oneLine(
+          text(payload.last_agent_message),
+          maximumSessionSummaryLength,
+        );
+      }
+      continue;
+    }
+    if (
+      record.type === CODEX_ROLLOUT_TYPE.RESPONSE_ITEM &&
+      payload.type === CODEX_RESPONSE_PAYLOAD.FUNCTION_CALL
+    ) {
+      parsed.activity = activityFromCall(payload) ?? parsed.activity;
+    }
+  }
+  return parsed;
 }
 
 async function defaultSqliteModule(): Promise<SqliteModule> {
@@ -284,12 +421,27 @@ async function stateDatabasePaths(
   );
 }
 
+/**
+ * Codex names its own threads, and that name is what a developer is looking
+ * for. The workspace is the fallback for a thread too new to have been named.
+ */
 function titleFromRow(row: CodexThreadRow): string {
-  return `${CODEX_PROVIDER_NAME}: ${workspaceLabel(textFromRow(row, CODEX_THREAD_COLUMN.CWD))}`;
+  return (
+    oneLine(textFromRow(row, CODEX_THREAD_COLUMN.TITLE), maximumSessionTitleLength) ??
+    workspaceLabel(textFromRow(row, CODEX_THREAD_COLUMN.CWD))
+  );
+}
+
+function modelFromRow(row: CodexThreadRow): string | undefined {
+  const model = textFromRow(row, CODEX_THREAD_COLUMN.MODEL);
+  if (!model) return undefined;
+  const effort = textFromRow(row, CODEX_THREAD_COLUMN.REASONING_EFFORT);
+  return effort ? `${model} · ${effort}` : model;
 }
 
 function statusFromRow(
   row: CodexThreadRow,
+  rollout: ParsedCodexRollout | undefined,
   observedAt: number,
   now: number,
   activeSessionFreshnessMs: number,
@@ -297,17 +449,35 @@ function statusFromRow(
   if ((numberFromRow(row, CODEX_THREAD_COLUMN.ARCHIVED) ?? 0) !== 0) {
     return SESSION_STATUS.COMPLETE;
   }
-  return now - observedAt <= activeSessionFreshnessMs
-    ? SESSION_STATUS.WORKING
-    : SESSION_STATUS.UNKNOWN;
+  const isFresh = now - observedAt <= activeSessionFreshnessMs;
+  // A turn that ended is holding for the developer however the row's timestamp
+  // reads, but once it is stale Luke cannot tell a turn that just finished from
+  // a thread abandoned hours ago.
+  if (rollout?.turnComplete === true) {
+    return isFresh ? SESSION_STATUS.WAITING : SESSION_STATUS.UNKNOWN;
+  }
+  if (rollout?.turnComplete === false) return SESSION_STATUS.WORKING;
+  return isFresh ? SESSION_STATUS.WORKING : SESSION_STATUS.UNKNOWN;
 }
 
-function summaryFromStatus(status: ProviderSessionObservation["status"]): string {
-  return `${CODEX_PROVIDER_NAME} ${status}; session metadata is observed read-only and transcript content is not retained.`;
+function detailFromRow(
+  row: CodexThreadRow,
+  rollout: ParsedCodexRollout | undefined,
+): SessionDetail {
+  const activity = rollout?.activity;
+  const branch = textFromRow(row, CODEX_THREAD_COLUMN.GIT_BRANCH);
+  const model = modelFromRow(row);
+  return {
+    ...(activity ? { activity } : {}),
+    repository: workspaceLabel(textFromRow(row, CODEX_THREAD_COLUMN.CWD)),
+    ...(branch ? { branch } : {}),
+    ...(model ? { model } : {}),
+  };
 }
 
 function observationFromThreadRow(
   row: CodexThreadRow,
+  rollout: ParsedCodexRollout | undefined,
   now: number,
   activeSessionFreshnessMs: number,
 ): ProviderSessionObservation | undefined {
@@ -315,13 +485,14 @@ function observationFromThreadRow(
   if (!providerSessionId) return undefined;
 
   const observedAt = timestampFromRow(row);
-  const status = statusFromRow(row, observedAt, now, activeSessionFreshnessMs);
+  const status = statusFromRow(row, rollout, observedAt, now, activeSessionFreshnessMs);
   return {
     providerSessionId,
     title: titleFromRow(row),
     status,
     observedAt,
-    summary: summaryFromStatus(status),
+    ...(rollout?.lastAgentMessage ? { summary: rollout.lastAgentMessage } : {}),
+    detail: detailFromRow(row, rollout),
   };
 }
 
@@ -364,22 +535,68 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
     for (const databasePath of await stateDatabasePaths(this.#codexHome, this.#sqliteHome)) {
       const database = await openReadOnlyDatabase(this.#sqlite, databasePath);
       if (!database) continue;
+      let rows: CodexThreadRow[];
+      let now: number;
       try {
-        const now = this.#now();
-        const rows = database.prepare(CODEX_THREAD_QUERY).all(this.#maximumSessionRows);
-        return rows
+        now = this.#now();
+        rows = database
+          .prepare(CODEX_THREAD_QUERY)
+          .all(this.#maximumSessionRows)
           .filter((row): row is CodexThreadRow => row !== null && typeof row === "object")
-          .map((row) => observationFromThreadRow(row, now, this.#activeSessionFreshnessMs))
-          .filter((observation): observation is ProviderSessionObservation => {
-            if (!observation) return false;
-            return now - observation.observedAt <= this.#maximumSessionAgeMs;
-          });
+          .filter((row) => now - timestampFromRow(row) <= this.#maximumSessionAgeMs);
       } catch (error) {
-        if (!canIgnoreSqliteError(error)) throw error;
+        if (canIgnoreSqliteError(error)) continue;
+        throw error;
       } finally {
         database.close();
       }
+
+      // The rollout read happens with the database already closed, so a slow
+      // disk never holds a read lock on state Codex itself is writing.
+      const rollouts = await this.#rollouts(rows);
+      return rows
+        .map((row) =>
+          observationFromThreadRow(
+            row,
+            rollouts.get(textFromRow(row, CODEX_THREAD_COLUMN.ID) ?? ""),
+            now,
+            this.#activeSessionFreshnessMs,
+          ),
+        )
+        .filter(
+          (observation): observation is ProviderSessionObservation => observation !== undefined,
+        );
     }
     return [];
+  }
+
+  /**
+   * Reads the turn boundary for the threads that can still change. An archived
+   * thread has already settled, and the cap keeps a crowded day from turning
+   * one observation pass into dozens of file reads.
+   */
+  async #rollouts(rows: readonly CodexThreadRow[]): Promise<Map<string, ParsedCodexRollout>> {
+    const candidates = rows
+      .filter((row) => (numberFromRow(row, CODEX_THREAD_COLUMN.ARCHIVED) ?? 0) === 0)
+      .slice(0, CODEX_ADAPTER_DEFAULTS.MAXIMUM_ROLLOUT_READS)
+      .map((row) => ({
+        id: textFromRow(row, CODEX_THREAD_COLUMN.ID),
+        rolloutPath: textFromRow(row, CODEX_THREAD_COLUMN.ROLLOUT_PATH),
+      }))
+      .filter(
+        (candidate): candidate is { id: string; rolloutPath: string } =>
+          candidate.id !== undefined && candidate.rolloutPath !== undefined,
+      );
+
+    const parsed = await Promise.all(
+      candidates.map(async (candidate) => {
+        const tail = await readTail(
+          candidate.rolloutPath,
+          CODEX_ADAPTER_DEFAULTS.READ_ROLLOUT_TAIL_BYTES,
+        );
+        return [candidate.id, parseCodexRolloutTail(tail)] as const;
+      }),
+    );
+    return new Map(parsed);
   }
 }

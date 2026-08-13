@@ -170,17 +170,52 @@ reads its own `<PROVIDER>_API_KEY` from the environment; Conductor accepts
 provider you give no key to reports nothing and issues no request. A key you
 enter is encrypted with `safeStorage`, whose key comes from the login Keychain,
 and it is never returned to the renderer. Luke reads only cloud workspaces and
-agents you created, issues only read requests, and labels each session by its
-repository rather than by a provider workspace, agent, or session name, because
-those names are generated from the opening prompt.
+agents you created, and issues only read requests.
+
+## What a row tells you
+
+Each session is labelled by the name its own provider gave it — Claude Code's
+generated title, a Codex thread's title, a Conductor session's name, a Cursor
+agent's name — and falls back to the workspace only for a session too new to
+have been named. Under it sits what the session is doing right now, or what
+stopped it: the tool it is running, the failure it hit, or the recap it wrote
+when its turn ended. Under that sits where it is: provider, repository, branch,
+and model.
+
+That is what makes the panel legible. Labelling by repository alone gave every
+session in one repository the same row, which is the common case when you run
+several agents against one project.
+
+Luke reads this out of state the providers already keep — Claude Code's session
+files, Codex's thread database and rollout log, and the documented read-only
+routes of the Conductor and Cursor APIs. It never writes to any of them, and it
+holds nothing on disk of its own.
+
+The one narrower rule is the attention model below, because it is the only place
+any of this leaves your machine.
 
 ## Attention intelligence
 
 When a session reports a development, Luke asks a background model whether that
-development is worth saying out loud. The model receives one bounded, redacted
-update—provider, session title, previous and current status, and the observed
-summary—and answers with a structured decision: stay silent, speak during the
-turn, or speak once the turn ends. Anything outside that contract, and any API
+development is worth saying out loud. The model receives one bounded update—
+provider, session title, previous and current status, the session's own recap,
+and the repository, branch, current tool, and failure it reported—and answers
+with a structured decision: stay silent, speak during the turn, or speak once
+the turn ends.
+
+This is the only place session material leaves your machine, so it carries less
+than the panel does. It gets what a provider wrote *about* a session, never the
+transcript behind it: no message history, no file contents, no command output.
+The session's own address and any pull request it opened stay behind too, since
+a decision never turns on them. What it does get is what tells "finished the
+release" apart from "stopped on a rate limit", which is the difference between a
+useful sentence and an interruption.
+
+A development is the state changing, a new failure, or a new recap. What a
+session is *running* changes with every tool call and is deliberately not a
+development, or every tool call would cost a model request.
+
+Anything outside the decision contract, and any API
 failure, leaves Luke silent. Repeated decisions about the same session are
 deduplicated so one development is never announced twice, and a decision is
 discarded when the session moves past the state it was made about—answering a
@@ -197,7 +232,7 @@ stays silent, and no other behavior changes:
 | `OPENAI_BASE_URL`      | `https://api.openai.com/v1` | Alternate OpenAI-compatible endpoint       |
 
 Requests set `store: false`, so the API is not asked to retain them. Tune how
-conservative Luke is by editing the redacted examples in
+conservative Luke is by editing the examples in
 `packages/sidecar-core/src/attention-examples.ts`; they are synthetic and
 double as the prompt's few-shot guidance and its regression coverage.
 
