@@ -139,6 +139,47 @@ test("authenticates a bounded read and encodes the route a subclass asked for", 
   ]);
 });
 
+/** Stands in for a provider that asks for its own media type and version pin. */
+class PinnedHeaderAdapter extends StubCloudAdapter {
+  protected override requestHeaders(): Readonly<Record<string, string>> {
+    return { Accept: "application/vnd.stub+json", "X-Stub-Api-Version": "2026-03-10" };
+  }
+}
+
+test("lets a subclass pin its own request headers without touching the credential", async () => {
+  const requests: {
+    accept: string | undefined;
+    version: string | undefined;
+    auth: string | undefined;
+  }[] = [];
+  const fetch: CloudFetch = async (_url, init) => {
+    const headers = new Headers(init.headers);
+    requests.push({
+      accept: headers.get("accept") ?? undefined,
+      version: headers.get("x-stub-api-version") ?? undefined,
+      auth: headers.get("authorization") ?? undefined,
+    });
+    return new Response(JSON.stringify({}), { status: HTTP_STATUS.OK });
+  };
+  const adapter = new PinnedHeaderAdapter({
+    readApiKey: async () => TEST_API_KEY,
+    baseUrl: TEST_BASE_URL,
+    fetch,
+    now: () => TEST_TIME,
+    minimumRefreshIntervalMs: 0,
+  });
+
+  await adapter.observe();
+
+  assert.deepEqual(requests, [
+    {
+      accept: "application/vnd.stub+json",
+      version: "2026-03-10",
+      auth: `Bearer ${TEST_API_KEY}`,
+    },
+  ]);
+});
+
 test("reports every session it serves as running in the cloud", async () => {
   const stub = stubFetch();
   const adapter = adapterFor(stub.fetch);

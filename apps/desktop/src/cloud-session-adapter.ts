@@ -41,6 +41,10 @@ const AUTHORIZATION_HEADERS: Readonly<
   [CLOUD_AUTH_SCHEME.GOOGLE_API_KEY_HEADER]: (apiKey) => ({ [GOOGLE_API_KEY_HEADER]: apiKey }),
 };
 
+const DEFAULT_REQUEST_HEADERS: Readonly<Record<string, string>> = {
+  Accept: "application/json",
+};
+
 export const CLOUD_FAILURE = {
   UNAUTHORIZED: "unauthorized",
   TRANSIENT: "transient",
@@ -287,6 +291,16 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
       : SESSION_STATUS.UNKNOWN;
   }
 
+  /**
+   * The headers every request carries besides the credential. A subclass
+   * overrides this only when its provider asks for its own media type or a
+   * version pin; the authorization header is layered on after these, so no
+   * override can replace the credential.
+   */
+  protected requestHeaders(): Readonly<Record<string, string>> {
+    return DEFAULT_REQUEST_HEADERS;
+  }
+
   /** Keeps one failed resource from discarding an otherwise complete pass. */
   protected async tolerateItemFailure<Result>(
     operation: () => Promise<Result>,
@@ -351,8 +365,8 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
       response = await this.#fetch(this.#url(segments, query), {
         method: HTTP_METHOD.GET,
         headers: {
+          ...this.requestHeaders(),
           ...this.#authorizationHeaders(apiKey),
-          Accept: "application/json",
         },
         signal: AbortSignal.timeout(CLOUD_ADAPTER_DEFAULTS.REQUEST_TIMEOUT_MS),
       });

@@ -22,6 +22,7 @@
   --mark-codex-middle: #7a9dff;
   --mark-codex-bottom: #3941ff;
   --mark-conductor: #eae8e6;
+  --mark-copilot: #ffffff;
   --mark-cursor: #ffffff;
   --mark-devin: #ffffff;
   --mark-jules: #715cd7;
@@ -626,6 +627,13 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .provider-mark[data-mark="conductor"] {
   color: var(--mark-conductor);
   transform: scale(0.93);
+}
+
+/* Copilot fills its box edge to edge the way the Codex and Cursor marks do, so
+   it takes the same scale they do. */
+.provider-mark[data-mark="copilot"] {
+  color: var(--mark-copilot);
+  transform: scale(0.94);
 }
 
 .provider-mark[data-mark="cursor"] {
