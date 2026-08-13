@@ -129,8 +129,6 @@ const OPENCODE_TOOL_INPUT_KEY = [
 const OPENCODE_ADAPTER_DEFAULTS = {
   MAXIMUM_SESSION_ROWS: 40,
   MAXIMUM_PROJECT_DIRECTORIES: 200,
-  /** Only the sessions that can still change are worth further reads. */
-  MAXIMUM_TURN_READS: 12,
   /** Enough parts to reach past a finished step's bookkeeping to its tool. */
   MAXIMUM_PART_ROWS: 8,
   MAXIMUM_ACTIVITY_LENGTH: 80,
@@ -539,7 +537,12 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
       .filter((snapshot): snapshot is OpenCodeSessionSnapshot => snapshot !== undefined)
       .filter((snapshot) => now - snapshot.observedAt <= this.#maximumSessionAgeMs);
 
-    for (const snapshot of snapshots.slice(0, OPENCODE_ADAPTER_DEFAULTS.MAXIMUM_TURN_READS)) {
+    // Every reported session gets its turn read, because a session without one
+    // would default to working on freshness alone — inventing live work for a
+    // row whose turn actually ended. The pass stays bounded the way the Claude
+    // Code adapter's is: each read is an indexed point query against the row
+    // cap above, not a scan.
+    for (const snapshot of snapshots) {
       snapshot.turn = this.#turnFor(database, snapshot.providerSessionId);
       const isFresh = now - snapshot.observedAt <= this.#activeSessionFreshnessMs;
       if (statusFromTurn(snapshot.turn, isFresh) === SESSION_STATUS.WORKING) {
@@ -593,7 +596,6 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
     ).filter((candidate) => now - candidate.mtimeMs <= this.#maximumSessionAgeMs);
 
     const observations = new Map<string, ProviderSessionObservation>();
-    let turnReads = 0;
     for (const candidate of candidates) {
       if (observations.has(candidate.providerSessionId)) continue;
       const info = recordFromJsonLine((await readTextFile(candidate.filePath)) ?? "");
@@ -613,10 +615,11 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
           wholeNumber(time?.created) ?? 0,
         ),
       };
-      if (turnReads < OPENCODE_ADAPTER_DEFAULTS.MAXIMUM_TURN_READS) {
-        turnReads += 1;
-        snapshot.turn = await this.#legacyTurn(storageDirectory, candidate.providerSessionId);
-      }
+      // Read for every reported session, not a capped few: a session without
+      // its turn would default to working on freshness alone. Each read is one
+      // directory listing and one small file, against the same session cap the
+      // Claude Code adapter pays a bounded tail read for.
+      snapshot.turn = await this.#legacyTurn(storageDirectory, candidate.providerSessionId);
       observations.set(
         candidate.providerSessionId,
         observationFromSnapshot(snapshot, now, this.#activeSessionFreshnessMs),

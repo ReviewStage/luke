@@ -556,6 +556,41 @@ test("skips OpenCode subagent and archived sessions", async (t) => {
   );
 });
 
+test("reads every session's turn rather than a capped few", async (t) => {
+  const dataDirectory = await temporaryDataDirectory(t);
+  // More sessions than any per-pass read cap could hide behind: every one of
+  // them has finished its turn, so a session left unread would show as
+  // working on freshness alone.
+  const sessions = Array.from({ length: 15 }, (_, index) => ({
+    id: `ses_many_${String(index).padStart(2, "0")}`,
+    directory: `/Users/test/project-${index}`,
+    observedAt: TEST_TIME - 1_000 - index,
+  }));
+  await writeOpenCodeState(dataDirectory, sessions, {
+    messages: sessions.map((session, index) => ({
+      id: `msg_${String(index).padStart(2, "0")}`,
+      sessionId: session.id,
+      time: session.observedAt,
+      data: {
+        role: "assistant",
+        time: { created: session.observedAt - 1_000, completed: session.observedAt },
+      },
+    })),
+  });
+
+  const adapter = new OpenCodeSessionAdapter({
+    dataDirectory,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const observations = await adapter.observe();
+
+  assert.equal(observations.length, 15);
+  for (const observation of observations) {
+    assert.equal(observation.status, SESSION_STATUS.WAITING, observation.providerSessionId);
+  }
+});
+
 test("filters old OpenCode sessions while preserving the newest", async (t) => {
   const dataDirectory = await temporaryDataDirectory(t);
   await writeOpenCodeState(dataDirectory, [
