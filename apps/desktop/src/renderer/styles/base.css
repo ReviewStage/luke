@@ -1223,17 +1223,23 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 }
 
 /* Beside the provider's name, sized to it: the mark reads as part of the word,
-   not as an icon in a column of its own. */
-/* A bare mark at text height rather than the session list's tile, so the badge
-   comes down with it: any larger and the annotation would outweigh the mark it
-   annotates, and this is the smallest the cloud still reads at. It clears the
-   name beside it because the line's gap is wider than the overhang. */
+   not as an icon in a column of its own. A bare mark at text height rather than
+   the session list's tile, so the badge comes down with it — any larger and the
+   annotation would outweigh the mark it annotates, and this is the smallest the
+   cloud still reads at.
+
+   The identity line clips what leaves it, so the badge cannot simply hang off a
+   13px mark: it would be sliced flat along the bottom. The box is instead large
+   enough to hold both, which is also what makes the line tall enough to show
+   them, and the negative side margins pull that extra width back so the mark
+   and the name sit exactly where a bare 13px mark would put them. */
 .credential-mark {
   position: relative;
   display: grid;
-  width: 13px;
-  height: 13px;
+  width: 20px;
+  height: 20px;
   flex: 0 0 auto;
+  margin: 0 -3.5px;
   place-items: center;
 }
 
@@ -1242,9 +1248,11 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   height: 13px;
 }
 
+/* Held half a pixel off the corner rather than flush with it, so no edge of the
+   disc lands on the line's clip boundary. */
 .credential-mark .cloud-badge {
-  right: -3px;
-  bottom: -3px;
+  right: 0.5px;
+  bottom: 0.5px;
   width: 10px;
   height: 10px;
 }
