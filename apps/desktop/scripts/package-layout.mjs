@@ -1,5 +1,6 @@
 import path from "node:path";
-import process from "node:process";
+
+export const PACKAGED_ARCHITECTURE = "arm64";
 
 export const packageIgnorePatterns = [
   /^\/(?:\.build|native|node_modules|out|scripts|src|tests)(?:$|\/)/,
@@ -7,7 +8,7 @@ export const packageIgnorePatterns = [
   /\.map$/,
 ];
 
-export function packagedAppExecutable(repoRoot, architecture = process.arch) {
+export function packagedAppExecutable(repoRoot, architecture = PACKAGED_ARCHITECTURE) {
   return path.join(
     repoRoot,
     "apps",
