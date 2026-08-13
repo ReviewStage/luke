@@ -176,12 +176,12 @@ test("how long ago a session was seen is worded by the unit that has begun", () 
   assert.equal(observedAgoLabel(now, now), "Now");
   assert.equal(observedAgoLabel(now - 59_000, now), "Now");
   assert.equal(observedAgoLabel(now + minute, now), "Now");
-  assert.equal(observedAgoLabel(now - minute, now), "1 min");
-  assert.equal(observedAgoLabel(now - 59 * minute, now), "59 min");
-  assert.equal(observedAgoLabel(now - 60 * minute, now), "1 hr");
-  assert.equal(observedAgoLabel(now - 23 * 60 * minute, now), "23 hr");
-  assert.equal(observedAgoLabel(now - 24 * 60 * minute, now), "1 day");
-  assert.equal(observedAgoLabel(now - 3 * 24 * 60 * minute, now), "3 days");
+  assert.equal(observedAgoLabel(now - minute, now), "1m");
+  assert.equal(observedAgoLabel(now - 59 * minute, now), "59m");
+  assert.equal(observedAgoLabel(now - 60 * minute, now), "1h");
+  assert.equal(observedAgoLabel(now - 23 * 60 * minute, now), "23h");
+  assert.equal(observedAgoLabel(now - 24 * 60 * minute, now), "1d");
+  assert.equal(observedAgoLabel(now - 3 * 24 * 60 * minute, now), "3d");
 });
 
 test("a speaking disposition needs a person even while the session works", () => {

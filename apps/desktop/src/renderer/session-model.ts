@@ -385,20 +385,21 @@ export function tallySummary(tally: SessionTally): string {
 /**
  * How long ago a session was last seen, in the coarsest unit that has begun,
  * because the label answers "is this thing alive" rather than telling time.
- * Anything under a minute is "Now" — and so is a timestamp ahead of the clock,
- * which a provider's clock skew can produce and a negative age would only
- * dramatize. `now` is an argument rather than a clock read here: fixture rows
- * are measured against the fixture's own epoch so the evidence stays
- * reproducible, and live rows against whatever render tick asked.
+ * Single-letter units, the way Mail and Messages abbreviate: the label is
+ * consulted, not read, and "23m" against the row's edge says everything
+ * "23 min" did. Anything under a minute is "Now" — and so is a timestamp ahead
+ * of the clock, which a provider's clock skew can produce and a negative age
+ * would only dramatize. `now` is an argument rather than a clock read here:
+ * fixture rows are measured against the fixture's own epoch so the evidence
+ * stays reproducible, and live rows against whatever render tick asked.
  */
 export function observedAgoLabel(observedAt: number, now: number): string {
   const elapsedMinutes = Math.floor((now - observedAt) / 60_000);
   if (elapsedMinutes < 1) return "Now";
-  if (elapsedMinutes < 60) return `${elapsedMinutes} min`;
+  if (elapsedMinutes < 60) return `${elapsedMinutes}m`;
   const elapsedHours = Math.floor(elapsedMinutes / 60);
-  if (elapsedHours < 24) return `${elapsedHours} hr`;
-  const elapsedDays = Math.floor(elapsedHours / 24);
-  return `${elapsedDays} ${elapsedDays === 1 ? "day" : "days"}`;
+  if (elapsedHours < 24) return `${elapsedHours}h`;
+  return `${Math.floor(elapsedHours / 24)}d`;
 }
 
 /**
