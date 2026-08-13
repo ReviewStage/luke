@@ -56,6 +56,7 @@
 /* Neutral tile: the mark inside carries the provider's own colour, so tinting
    the tile by state would put two colour systems on top of each other. */
 .row-avatar {
+  position: relative;
   display: grid;
   width: 32px;
   height: 32px;
@@ -69,6 +70,19 @@
 .row-avatar .provider-mark {
   width: 17px;
   height: 17px;
+}
+
+/* Against a 32px tile the badge can be read at a glance, so it is sized to be
+   read rather than to be minimal. */
+.row-avatar .cloud-badge {
+  right: -4px;
+  bottom: -4px;
+  width: 14px;
+  height: 14px;
+}
+
+.row-avatar .cloud-badge svg {
+  width: 9px;
 }
 
 .row-copy {

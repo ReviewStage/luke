@@ -543,6 +543,30 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transform: scale(0.94);
 }
 
+/* The work is happening somewhere the user cannot see. The badge overhangs the
+   mark's box rather than sitting inside it, so it reads as attached to the mark
+   instead of crowding it, and it is out of flow so the mark stays where it was
+   whether or not a badge is drawn. It fills against the surface rather than
+   against whatever it is laid on: a session row tinted for attention would
+   otherwise recolour the badge, and where the work runs is not a state. Each
+   place that shows a mark sets the size, because a 32px session tile and a
+   text-height settings line cannot carry the same one. */
+.cloud-badge {
+  position: absolute;
+  display: grid;
+  border-radius: 50%;
+  background: var(--surface-fill);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  color: var(--text-secondary);
+  place-items: center;
+}
+
+/* The viewBox already carries the cloud's proportions, so a place that shows a
+   badge sets a width and the height follows from the shape. */
+.cloud-badge svg {
+  height: auto;
+}
+
 /* Luke's face ------------------------------------------------------------ */
 
 /* The place nearest the housing is the one the capsule keeps, and Luke holds it
@@ -1199,11 +1223,42 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 }
 
 /* Beside the provider's name, sized to it: the mark reads as part of the word,
-   not as an icon in a column of its own. */
+   not as an icon in a column of its own. A bare mark at text height rather than
+   the session list's tile, so the badge comes down with it — any larger and the
+   annotation would outweigh the mark it annotates, and this is the smallest the
+   cloud still reads at.
+
+   The identity line clips what leaves it, so the badge cannot simply hang off a
+   13px mark: it would be sliced flat along the bottom. The box is instead large
+   enough to hold both, which is also what makes the line tall enough to show
+   them, and the negative side margins pull that extra width back so the mark
+   and the name sit exactly where a bare 13px mark would put them. */
 .credential-mark {
+  position: relative;
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  margin: 0 -3.5px;
+  place-items: center;
+}
+
+.credential-mark .provider-mark {
   width: 13px;
   height: 13px;
-  flex: 0 0 auto;
+}
+
+/* Held half a pixel off the corner rather than flush with it, so no edge of the
+   disc lands on the line's clip boundary. */
+.credential-mark .cloud-badge {
+  right: 0.5px;
+  bottom: 0.5px;
+  width: 10px;
+  height: 10px;
+}
+
+.credential-mark .cloud-badge svg {
+  width: 6.5px;
 }
 
 /* The hint sits opposite the editor's buttons and yields to them. */

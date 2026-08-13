@@ -1,4 +1,5 @@
 import { PROVIDER_ID, type ProviderId } from "./providers";
+import { SESSION_LOCATION, type SessionLocation } from "./session";
 
 export const SESSION_STATE = {
   WORKING: "working",
@@ -20,6 +21,7 @@ export interface SessionSnapshot {
   /** Where it is doing it: provider, repository, branch, model. */
   context: string;
   state: SessionState;
+  location: SessionLocation;
 }
 
 export interface FixtureSnapshot {
@@ -38,6 +40,7 @@ const smokeFixture: FixtureSnapshot = {
       detail: "exec_command: pnpm --filter @luke/desktop build",
       context: "Codex · luke · dean/desktop-shell · gpt-5.6-luna · medium",
       state: SESSION_STATE.WORKING,
+      location: SESSION_LOCATION.LOCAL,
     },
     {
       id: "claude-review",
@@ -47,6 +50,7 @@ const smokeFixture: FixtureSnapshot = {
       detail: "Both adapters observe read-only; next, say whether to ship it.",
       context: "Claude Code · luke · dean/trust-constraints · claude-opus-5",
       state: SESSION_STATE.ATTENTION,
+      location: SESSION_LOCATION.LOCAL,
     },
     {
       id: "conductor-workspace",
@@ -58,6 +62,7 @@ const smokeFixture: FixtureSnapshot = {
       detail: "",
       context: "Conductor · luke · lisbon-v2 · claude-opus-5",
       state: SESSION_STATE.COMPLETE,
+      location: SESSION_LOCATION.CLOUD,
     },
     {
       id: "cursor-agent",
@@ -67,6 +72,7 @@ const smokeFixture: FixtureSnapshot = {
       detail: "Opened a pull request against sidecar.",
       context: "Cursor · sidecar · cursor/follow-agent-a1b2",
       state: SESSION_STATE.WORKING,
+      location: SESSION_LOCATION.CLOUD,
     },
     // A fifth session keeps every state and every provider mark visible in the
     // one screenshot the visual evidence is reviewed from.
@@ -78,6 +84,7 @@ const smokeFixture: FixtureSnapshot = {
       detail: "Idle since the last display change",
       context: "Claude Code · luke · main · claude-sonnet-5",
       state: SESSION_STATE.UNKNOWN,
+      location: SESSION_LOCATION.LOCAL,
     },
   ],
 };

@@ -71,6 +71,7 @@ function sameSession(first: NormalizedSession, second: NormalizedSession): boole
     first.title === second.title &&
     first.status === second.status &&
     first.observedAt === second.observedAt &&
+    first.location === second.location &&
     first.summary === second.summary &&
     sameDetail(first.detail, second.detail) &&
     first.attention.disposition === second.attention.disposition &&
