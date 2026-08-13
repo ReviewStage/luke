@@ -533,13 +533,27 @@ function trayMenu(): Electron.Menu {
   ]);
 }
 
+/**
+ * Luke's face, as macOS wants a status item drawn: a template image, which is
+ * pure black plus alpha and is recoloured by the system rather than by us, so it
+ * follows the menu bar through light, dark, and the inverted highlight a press
+ * draws. The `@2x` file beside it is picked up from the same call, which is what
+ * keeps the item sharp on a Retina display.
+ */
+function trayImage(): Electron.NativeImage {
+  const image = nativeImage.createFromPath(path.join(__dirname, "menubar", "lukeTemplate.png"));
+  image.setTemplateImage(true);
+  return image;
+}
+
 function createTray(): void {
   if (process.platform !== "darwin") return;
-  // Named rather than drawn. A menu bar item is read, and the system font at
-  // the system size is the one thing guaranteed to sit correctly beside every
-  // other item up there; an SVG template image only ever approximates it.
-  tray = new Tray(nativeImage.createEmpty());
-  tray.setTitle("Luke");
+  const image = trayImage();
+  tray = new Tray(image);
+  // A status item that draws nothing is a status item no one can find, and this
+  // one is the only way to reach Settings or to quit. If the artwork is ever
+  // missing from a build, the name it used to carry stands in for it.
+  if (image.isEmpty()) tray.setTitle("Luke");
   tray.setToolTip("Luke");
   // Clicking opens the menu and nothing else. The capsule is how the panel is
   // opened; a menu bar item that also toggled it made one of them a surprise.

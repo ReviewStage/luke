@@ -1,19 +1,33 @@
 #!/usr/bin/env node
 // Luke brand-asset generator — the single source of truth for the artwork.
 // The identity is the L-face: a monoline capital-L nose curling into a smile,
-// two eyes above it. Every SVG in design/brand/ is produced by this script;
-// edit the constants below and re-run:
+// two eyes above it. Edit the constants below and re-run:
 //
 //   node design/generate-brand-assets.mjs
+//
+// It writes three kinds of output, all from the one description of the face and
+// its motions further down:
+//
+//   design/brand/**.svg                              standalone assets (SMIL)
+//   apps/desktop/src/renderer/luke-face-art.ts       the face, for the app
+//   apps/desktop/src/renderer/styles/face-motion.css the motions, as @keyframes
+//
+// The app draws the face itself rather than loading these SVGs, because it needs
+// what a baked asset cannot give it: `currentColor`, so one drawing serves the
+// menu bar and the notch, and CSS animation, so the renderer's own motion tokens
+// can hold every loop still for a capture run or for reduced motion. Emitting
+// its two inputs from here keeps that second copy from being a second source.
 //
 // PNG derivatives (app icon sizes, menu-bar template) are rasterized
 // separately — see design/brand/README.md.
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const OUT = join(dirname(fileURLToPath(import.meta.url)), "brand");
+const HERE = dirname(fileURLToPath(import.meta.url));
+const OUT = join(HERE, "brand");
+const APP_RENDERER = join(HERE, "..", "apps", "desktop", "src", "renderer");
 
 // ---------- Palette ----------
 // Inks are named for the UI mode they serve: the dark-mode asset is light.
@@ -29,10 +43,16 @@ const FACE = { sw: 16, r: 14, lift: 22, tilt: -8, eyeR: 12, spread: 84, eyeY: 92
 // U-K-E letterforms at cap height. Letter weight matches the face's
 // effective stroke (sw x scale) so the face-L does not read heavier.
 const WORDMARK = { scale: 1.55, gap: 14, uRadius: 46, sp: 8 };
+// The square window the app draws the face through, centred on the artwork's
+// optical centre. It is wider than the face so the quiet motions have room;
+// the loud ones are allowed to leave it, which is why the app does not clip it.
+const APP_VIEW = { size: 146, cx: 121, cy: 124 };
 
 // ---------- Helpers ----------
 const fmt = (v) => Math.round(v * 100) / 100;
-const easeAll = (n) => Array(n).fill("0.4 0 0.6 1").join(";");
+const EASE = "0.4 0 0.6 1";
+// A spline is written for SMIL; CSS wants the same four numbers as a function.
+const bezier = (spline) => `cubic-bezier(${spline.split(" ").join(", ")})`;
 
 function animT(type, values, dur, opts = {}) {
   const kt = opts.keyTimes ? ` keyTimes="${opts.keyTimes}"` : "";
@@ -59,204 +79,680 @@ const eye = (cx) =>
 const eyeRy = (cx, values, kt, dur) =>
   `<ellipse cx="${fmt(cx)}" cy="${FACE.eyeY}" rx="${FACE.eyeR}" ry="${FACE.eyeR}" fill="currentColor">` +
   `<animate attributeName="ry" values="${values}" keyTimes="${kt}" dur="${dur}s" repeatCount="indefinite"/></ellipse>`;
-const brow = (cx) => {
+// An eye whose whole radius animates — widening rather than closing.
+const eyeR = (cx, values, kt, dur) =>
+  `<circle cx="${fmt(cx)}" cy="${FACE.eyeY}" r="${FACE.eyeR}" fill="currentColor">` +
+  `<animate attributeName="r" values="${values}" keyTimes="${kt}" dur="${dur}s" repeatCount="indefinite"/></circle>`;
+const browD = (cx) => {
   const r = FACE.eyeR;
   const y = FACE.eyeY;
-  return `<path d="M ${fmt(cx - r * 0.85)} ${fmt(y - r - 9)} Q ${fmt(cx)} ${fmt(y - r - 15)} ${fmt(cx + r * 0.85)} ${fmt(y - r - 9)}" stroke="currentColor" stroke-width="5" stroke-linecap="round" fill="none"/>`;
+  return `M ${fmt(cx - r * 0.85)} ${fmt(y - r - 9)} Q ${fmt(cx)} ${fmt(y - r - 15)} ${fmt(cx + r * 0.85)} ${fmt(y - r - 9)}`;
 };
+const BROW_WIDTH = 5;
+const brow = (cx) =>
+  `<path d="${browD(cx)}" stroke="currentColor" stroke-width="${BROW_WIDTH}" stroke-linecap="round" fill="none"/>`;
+const lidD = (cx) => {
+  const r = FACE.eyeR;
+  const y = FACE.eyeY;
+  return `M ${fmt(cx - r)} ${fmt(y - r * 0.05)} Q ${fmt(cx)} ${fmt(y + r * 0.75)} ${fmt(cx + r)} ${fmt(y - r * 0.05)}`;
+};
+const LID_WIDTH = fmt(Math.max(4.5, FACE.eyeR * 0.5));
+const lid = (cx) =>
+  `<path d="${lidD(cx)}" stroke="currentColor" stroke-width="${LID_WIDTH}" stroke-linecap="round" fill="none"/>`;
 
-// Composes the face. opts: { smile, eyes, extra } override the defaults.
+// The z's that drift off a sleeping head: where each starts, how big, and how
+// far into the shared three-second loop it is when the loop begins.
+const SLEEP_Z = [
+  { x: 176, y: 62, size: 8, delay: 0 },
+  { x: 190, y: 46, size: 11, delay: -1 },
+  { x: 166, y: 44, size: 6, delay: -2 },
+];
+const SLEEP_Z_DURATION = 3;
+const SLEEP_Z_WIDTH = 3.5;
+const SLEEP_Z_DRIFT = [6, -16];
+const zGlyphD = (size) => `M 0 0 H ${size} L 0 ${size} H ${size}`;
+const zGlyph = ({ x, y, size, delay }) =>
+  `<g opacity="0" transform="translate(${x} ${y})">` +
+  `<animate attributeName="opacity" values="0;0.85;0" dur="${SLEEP_Z_DURATION}s" begin="${delay}s" repeatCount="indefinite"/>` +
+  `<animateTransform attributeName="transform" type="translate" values="${x} ${y};${x + SLEEP_Z_DRIFT[0]} ${y + SLEEP_Z_DRIFT[1]}" dur="${SLEEP_Z_DURATION}s" begin="${delay}s" repeatCount="indefinite"/>` +
+  `<path d="${zGlyphD(size)}" stroke="currentColor" stroke-width="${SLEEP_Z_WIDTH}" stroke-linecap="round" stroke-linejoin="round" fill="none"/></g>`;
+
+// Composes the face. opts: { eyes, extra } override the defaults.
 function face(opts = {}) {
   const [c1, c2] = eyeXs();
-  const smile =
-    opts.smile !== undefined ? opts.smile : `<path d="${smileD(FACE.lift)}" ${stroke(FACE.sw)}/>`;
+  const smile = `<path d="${smileD(FACE.lift)}" ${stroke(FACE.sw)}/>`;
   const eyes = opts.eyes !== undefined ? opts.eyes : eye(c1) + eye(c2);
   return `<g transform="rotate(${FACE.tilt} 120 124)">${smile}${eyes}${opts.extra || ""}</g>`;
 }
 
-// Both eyes squeezing to `factor` of their size and back, on wince timing.
-function squeezeEyes(kt, dur, factor) {
-  const r = FACE.eyeR;
-  const [c1, c2] = eyeXs();
-  const rv = [r, r, r * factor, r * factor, r, r].map(fmt).join(";");
-  return eyeRy(c1, rv, kt, dur) + eyeRy(c2, rv, kt, dur);
-}
-
 // ---------- Motion states ----------
 // Emotion is expressed by whole-head or eyes-only motion; the mouth never
-// morphs. All easing is spline-based so nothing reads mechanical.
+// morphs — mouth morphing read as unnatural. Each motion is a stack of
+// transform layers, innermost first, over a face that may need more parts drawn
+// than the resting one. Every easing is spline-based so nothing reads
+// mechanical; a layer that does not name its own splines eases every interval.
+//
+// Layers: { type: rotate | translate | scale, values, dur, keyTimes?, splines? }
+// and `pivot` for a rotation. Rotation values are degrees; translation values
+// are canvas units; scale values are factors. A layer with `hold` instead of
+// `values` is a fixed offset rather than an animation.
+//
+// Eyes: { kind, factors, keyTimes, dur } scales the eye radius through
+// `factors` — vertically for a blink or a squeeze, both ways for a widening.
 const MOTIONS = {
-  // Quick head rocking with a vertical bob on an offset period, like a
-  // person mid-sentence.
-  talking() {
-    const tempo = 0.65;
-    const rot = animT("rotate", "-4 120 150;4 120 150;-4 120 150", tempo, { spline: easeAll(2) });
-    const bob = animT("translate", "0 0;0 2.5;0 0", tempo * 0.61, { spline: easeAll(2) });
-    return wrapAnim(wrapAnim(face(), rot), bob);
+  // Quick head rocking with a vertical bob on an offset period, like a person
+  // mid-sentence.
+  talking: {
+    moment: "speaking / narrating (head bob)",
+    layers: [
+      { type: "rotate", pivot: [120, 150], values: [-4, 4, -4], dur: 0.65 },
+      {
+        type: "translate",
+        values: [
+          [0, 0],
+          [0, 2.5],
+          [0, 0],
+        ],
+        dur: 0.4,
+      },
+    ],
   },
   // An easy nod from a pivot near the chin.
-  yes() {
-    const v = [0, 0, 8, 0, 0].map((a) => `${a} 120 190`).join(";");
-    return wrapAnim(
-      face(),
-      animT("rotate", v, 2.2, { keyTimes: "0;0.15;0.45;0.75;1", spline: easeAll(4) }),
-    );
+  yes: {
+    moment: "acknowledged (nod)",
+    layers: [
+      {
+        type: "rotate",
+        pivot: [120, 190],
+        values: [0, 0, 8, 0, 0],
+        keyTimes: [0, 0.15, 0.45, 0.75, 1],
+        dur: 2.2,
+      },
+    ],
   },
   // An agitated wiggle that decays to stillness, then a long rest.
-  error() {
-    const e = 6;
-    const v = [0, e, -e, e * 0.7, -e * 0.7, e * 0.3, 0, 0]
-      .map((a) => `${fmt(a)} 120 124`)
-      .join(";");
-    return wrapAnim(
-      face(),
-      animT("rotate", v, 3, { keyTimes: "0;0.05;0.11;0.17;0.23;0.29;0.35;1", spline: easeAll(7) }),
-    );
+  error: {
+    moment: "something went wrong (shimmy)",
+    layers: [
+      {
+        type: "rotate",
+        pivot: [120, 124],
+        values: [0, 6, -6, 4.2, -4.2, 1.8, 0, 0],
+        keyTimes: [0, 0.05, 0.11, 0.17, 0.23, 0.29, 0.35, 1],
+        dur: 3,
+      },
+    ],
   },
   // Eyes squeeze nearly shut while the face leans in — peering at detail.
-  reviewing() {
-    const kt = "0;0.35;0.42;0.68;0.76;1";
-    const s = 1.03;
-    const sv = `1 1;1 1;${s} ${s};${s} ${s};1 1;1 1`;
-    return scaleAbout(face({ eyes: squeezeEyes(kt, 4.4, 0.18) }), sv, 4.4, {
-      keyTimes: kt,
-      spline: easeAll(5),
-    });
+  reviewing: {
+    moment: "inspecting a session (wince-like squint)",
+    layers: [
+      {
+        type: "scale",
+        values: [
+          [1, 1],
+          [1, 1],
+          [1.03, 1.03],
+          [1.03, 1.03],
+          [1, 1],
+          [1, 1],
+        ],
+        keyTimes: [0, 0.35, 0.42, 0.68, 0.76, 1],
+        dur: 4.4,
+      },
+    ],
+    eyes: {
+      kind: "squeeze",
+      factors: [1, 1, 0.18, 0.18, 1, 1],
+      keyTimes: [0, 0.35, 0.42, 0.68, 0.76, 1],
+      dur: 4.4,
+    },
   },
   // A happy hop with squash-and-stretch: crouch, spring, land.
-  success() {
-    const kt = "0;0.25;0.45;0.65;0.75;1";
-    const ty = "0 0;0 0;0 -14;0 0;0 0;0 0";
-    const sc = "1 1;1.05 0.93;0.96 1.06;1.07 0.9;1 1;1 1";
-    const inner = scaleAbout(face(), sc, 2, { keyTimes: kt, spline: easeAll(5) });
-    return wrapAnim(inner, animT("translate", ty, 2, { keyTimes: kt, spline: easeAll(5) }));
+  success: {
+    moment: "task done (squash-and-stretch hop)",
+    layers: [
+      {
+        type: "scale",
+        values: [
+          [1, 1],
+          [1.05, 0.93],
+          [0.96, 1.06],
+          [1.07, 0.9],
+          [1, 1],
+          [1, 1],
+        ],
+        keyTimes: [0, 0.25, 0.45, 0.65, 0.75, 1],
+        dur: 2,
+      },
+      {
+        type: "translate",
+        values: [
+          [0, 0],
+          [0, 0],
+          [0, -14],
+          [0, 0],
+          [0, 0],
+          [0, 0],
+        ],
+        keyTimes: [0, 0.25, 0.45, 0.65, 0.75, 1],
+        dur: 2,
+      },
+    ],
   },
   // Ease over to one side, hold, ease back — the curious tilt.
-  listening() {
-    const v = [0, 0, -12, -12, 0, 0].map((a) => `${a} 120 124`).join(";");
-    return wrapAnim(
-      face(),
-      animT("rotate", v, 3.6, { keyTimes: "0;0.18;0.32;0.68;0.82;1", spline: easeAll(5) }),
-    );
+  listening: {
+    moment: "curious tilt",
+    layers: [
+      {
+        type: "rotate",
+        pivot: [120, 124],
+        values: [0, 0, -12, -12, 0, 0],
+        keyTimes: [0, 0.18, 0.32, 0.68, 0.82, 1],
+        dur: 3.6,
+      },
+    ],
   },
   // An occasional quick double-blink — the smallest sign of life.
-  idle() {
-    const r = FACE.eyeR;
-    const vals = [r, r, r * 0.1, r, r * 0.1, r, r].map(fmt).join(";");
-    const kt = "0;0.55;0.585;0.62;0.655;0.69;1";
-    const [c1, c2] = eyeXs();
-    return face({ eyes: eyeRy(c1, vals, kt, 4.6) + eyeRy(c2, vals, kt, 4.6) });
+  idle: {
+    moment: "double blink",
+    layers: [],
+    eyes: {
+      kind: "blink",
+      factors: [1, 1, 0.1, 1, 0.1, 1, 1],
+      keyTimes: [0, 0.55, 0.585, 0.62, 0.655, 0.69, 1],
+      dur: 4.6,
+    },
   },
   // Brows pop up and the eyes widen for a beat — "oh!".
-  notification() {
-    const r = FACE.eyeR;
-    const [c1, c2] = eyeXs();
-    const kt = "0;0.5;0.55;0.72;0.77;1";
-    const rv = [r, r, r * 1.2, r * 1.2, r, r].map(fmt).join(";");
-    const wideEye = (cx) =>
-      `<circle cx="${fmt(cx)}" cy="${FACE.eyeY}" r="${r}" fill="currentColor">` +
-      `<animate attributeName="r" values="${rv}" keyTimes="${kt}" dur="4s" repeatCount="indefinite"/></circle>`;
-    const brows = wrapAnim(
-      brow(c1) + brow(c2),
-      animT("translate", "0 0;0 0;0 -6;0 -6;0 0;0 0", 4, { keyTimes: kt, spline: easeAll(5) }),
-    );
-    return face({ eyes: wideEye(c1) + wideEye(c2), extra: brows });
+  notification: {
+    moment: "attention caught by something new (brow flash)",
+    layers: [],
+    eyes: {
+      kind: "widen",
+      factors: [1, 1, 1.2, 1.2, 1, 1],
+      keyTimes: [0, 0.5, 0.55, 0.72, 0.77, 1],
+      dur: 4,
+    },
+    brows: {
+      values: [
+        [0, 0],
+        [0, 0],
+        [0, -6],
+        [0, -6],
+        [0, 0],
+        [0, 0],
+      ],
+      keyTimes: [0, 0.5, 0.55, 0.72, 0.77, 1],
+      dur: 4,
+    },
   },
   // One eye closes with a small head-tip toward it.
-  wink() {
-    const kt = "0;0.5;0.56;0.68;0.74;1";
-    const r = FACE.eyeR;
-    const [c1, c2] = eyeXs();
-    const rv = [r, r, r * 0.12, r * 0.12, r, r].map(fmt).join(";");
-    const rot = [0, 0, 2.5, 2.5, 0, 0].map((a) => `${a} 120 150`).join(";");
-    return wrapAnim(
-      face({ eyes: eyeRy(c2, rv, kt, 4) + eye(c1) }),
-      animT("rotate", rot, 4, { keyTimes: kt, spline: easeAll(5) }),
-    );
+  wink: {
+    moment: "confirmation / easter egg",
+    layers: [
+      {
+        type: "rotate",
+        pivot: [120, 150],
+        values: [0, 0, 2.5, 2.5, 0, 0],
+        keyTimes: [0, 0.5, 0.56, 0.68, 0.74, 1],
+        dur: 4,
+      },
+    ],
+    eyes: {
+      kind: "wink",
+      factors: [1, 1, 0.12, 0.12, 1, 1],
+      keyTimes: [0, 0.5, 0.56, 0.68, 0.74, 1],
+      dur: 4,
+    },
   },
   // Lids down, head drooped, slow deep breathing, z's drifting up.
-  sleeping() {
-    const r = FACE.eyeR;
-    const y = FACE.eyeY;
-    const [c1, c2] = eyeXs();
-    const lid = (cx) =>
-      `<path d="M ${fmt(cx - r)} ${fmt(y - r * 0.05)} Q ${fmt(cx)} ${fmt(y + r * 0.75)} ${fmt(cx + r)} ${fmt(y - r * 0.05)}" stroke="currentColor" stroke-width="${fmt(Math.max(4.5, r * 0.5))}" stroke-linecap="round" fill="none"/>`;
-    const z = (x, yy, s, begin) =>
-      `<g opacity="0" transform="translate(${x} ${yy})">` +
-      `<animate attributeName="opacity" values="0;0.85;0" dur="3s" begin="${begin}s" repeatCount="indefinite"/>` +
-      `<animateTransform attributeName="transform" type="translate" values="${x} ${yy};${x + 6} ${yy - 16}" dur="3s" begin="${begin}s" repeatCount="indefinite"/>` +
-      `<path d="M 0 0 H ${s} L 0 ${s} H ${s}" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></g>`;
-    const zzz = z(176, 62, 8, 0) + z(190, 46, 11, -1) + z(166, 44, 6, -2);
-    const drooped = `<g transform="rotate(7 120 150)">${face({ eyes: lid(c1) + lid(c2) })}</g>`;
-    return scaleAbout(drooped, "1 1;1.035 1.035;1 1", 4.8, { spline: easeAll(2) }) + zzz;
+  sleeping: {
+    moment: "nothing to watch (lids down, zzz)",
+    layers: [
+      { type: "rotate", pivot: [120, 150], hold: 7 },
+      {
+        type: "scale",
+        values: [
+          [1, 1],
+          [1.035, 1.035],
+          [1, 1],
+        ],
+        dur: 4.8,
+      },
+    ],
+    eyes: { kind: "lids" },
+    sleepZ: true,
   },
   // One full pirouette with an ease-out landing, then a long rest.
-  refresh() {
-    const v = ["0 120 124", "360 120 124", "360 120 124"].join(";");
-    return wrapAnim(
-      face(),
-      animT("rotate", v, 4.5, { keyTimes: "0;0.3;1", spline: "0.35 0 0.25 1;0.4 0 0.6 1" }),
-    );
+  refresh: {
+    moment: "relaunch (one pirouette)",
+    layers: [
+      {
+        type: "rotate",
+        pivot: [120, 124],
+        values: [0, 360, 360],
+        keyTimes: [0, 0.3, 1],
+        splines: ["0.35 0 0.25 1", EASE],
+        dur: 4.5,
+      },
+    ],
   },
   // A quick puff, as if tapped — feedback for clicks and hovers.
-  boop() {
-    const sv = "1 1;1 1;1.09 1.09;0.985 0.985;1 1";
-    return scaleAbout(face(), sv, 3.2, { keyTimes: "0;0.55;0.63;0.72;1", spline: easeAll(4) });
+  boop: {
+    moment: "tap feedback (puff)",
+    layers: [
+      {
+        type: "scale",
+        values: [
+          [1, 1],
+          [1, 1],
+          [1.09, 1.09],
+          [0.985, 0.985],
+          [1, 1],
+        ],
+        keyTimes: [0, 0.55, 0.63, 0.72, 1],
+        dur: 3.2,
+      },
+    ],
   },
   // A slow continuous rock from the base — quiet work, made visible.
-  monitoring() {
-    const v = "-3.5 120 196;3.5 120 196;-3.5 120 196";
-    return wrapAnim(face(), animT("rotate", v, 3.2, { spline: easeAll(2) }));
+  monitoring: {
+    moment: "humming along (slow sway)",
+    layers: [{ type: "rotate", pivot: [120, 196], values: [-3.5, 3.5, -3.5], dur: 3.2 }],
   },
   // Leans in from the side, settles, then eases back — an entrance.
-  appear() {
-    const kt = "0;0.15;0.3;0.75;0.9;1";
-    const tv = "-16 0;-16 0;0 0;0 0;-16 0;-16 0";
-    const rv = [8, 8, 0, 0, 8, 8].map((a) => `${a} 76 190`).join(";");
-    const inner = wrapAnim(face(), animT("rotate", rv, 4, { keyTimes: kt, spline: easeAll(5) }));
-    return wrapAnim(inner, animT("translate", tv, 4, { keyTimes: kt, spline: easeAll(5) }));
+  appear: {
+    moment: "attaching (peek-slide in)",
+    layers: [
+      {
+        type: "rotate",
+        pivot: [76, 190],
+        values: [8, 8, 0, 0, 8, 8],
+        keyTimes: [0, 0.15, 0.3, 0.75, 0.9, 1],
+        dur: 4,
+      },
+      {
+        type: "translate",
+        values: [
+          [-16, 0],
+          [-16, 0],
+          [0, 0],
+          [0, 0],
+          [-16, 0],
+          [-16, 0],
+        ],
+        keyTimes: [0, 0.15, 0.3, 0.75, 0.9, 1],
+        dur: 4,
+      },
+    ],
   },
   // From a slight slouch to bolt upright with a touch of overshoot.
-  attention() {
-    const kt = "0;0.35;0.45;0.55;0.75;1";
-    const rot = [6, 6, -2.5, 0.8, 0, 6].map((a) => `${a} 120 150`).join(";");
-    const ty = "0 3;0 3;0 -1.5;0 0;0 0;0 3";
-    const inner = wrapAnim(face(), animT("rotate", rot, 4.5, { keyTimes: kt, spline: easeAll(5) }));
-    return wrapAnim(inner, animT("translate", ty, 4.5, { keyTimes: kt, spline: easeAll(5) }));
+  attention: {
+    moment: "attention caught (perk up)",
+    layers: [
+      {
+        type: "rotate",
+        pivot: [120, 150],
+        values: [6, 6, -2.5, 0.8, 0, 6],
+        keyTimes: [0, 0.35, 0.45, 0.55, 0.75, 1],
+        dur: 4.5,
+      },
+      {
+        type: "translate",
+        values: [
+          [0, 3],
+          [0, 3],
+          [0, -1.5],
+          [0, 0],
+          [0, 0],
+          [0, 3],
+        ],
+        keyTimes: [0, 0.35, 0.45, 0.55, 0.75, 1],
+        dur: 4.5,
+      },
+    ],
   },
   // A slow vertical drift with a lazy rotation on a different period.
-  floating() {
-    const ty = animT("translate", "0 0;0 -8;0 0", 4.4, { spline: easeAll(2) });
-    const rot = animT("rotate", "-2 120 124;2 120 124;-2 120 124", 4.4 * 1.31, {
-      spline: easeAll(2),
-    });
-    return wrapAnim(wrapAnim(face(), rot), ty);
+  floating: {
+    moment: "hovering idle",
+    layers: [
+      { type: "rotate", pivot: [120, 124], values: [-2, 2, -2], dur: 5.76 },
+      {
+        type: "translate",
+        values: [
+          [0, 0],
+          [0, -8],
+          [0, 0],
+        ],
+        dur: 4.4,
+      },
+    ],
   },
   // Ducks down, waits, then pops back up with a little overshoot.
-  hiding() {
-    const kt = "0;0.35;0.45;0.65;0.78;1";
-    const ty = "0 0;0 0;0 55;0 55;0 -4;0 0";
-    return wrapAnim(face(), animT("translate", ty, 5, { keyTimes: kt, spline: easeAll(5) }));
+  hiding: {
+    moment: "minimized (peekaboo duck)",
+    layers: [
+      {
+        type: "translate",
+        values: [
+          [0, 0],
+          [0, 0],
+          [0, 55],
+          [0, 55],
+          [0, -4],
+          [0, 0],
+        ],
+        keyTimes: [0, 0.35, 0.45, 0.65, 0.78, 1],
+        dur: 5,
+      },
+    ],
   },
   // Two eyebrow waggles — pure mischief.
-  tease() {
-    const [c1, c2] = eyeXs();
-    const tv = "0 0;0 0;0 -6;0 0;0 -6;0 0;0 0";
-    const brows = wrapAnim(
-      brow(c1) + brow(c2),
-      animT("translate", tv, 4.2, { keyTimes: "0;0.45;0.52;0.59;0.66;0.73;1", spline: easeAll(6) }),
-    );
-    return face({ extra: brows });
+  tease: {
+    moment: "playful (brow waggle)",
+    layers: [],
+    brows: {
+      values: [
+        [0, 0],
+        [0, 0],
+        [0, -6],
+        [0, 0],
+        [0, -6],
+        [0, 0],
+        [0, 0],
+      ],
+      keyTimes: [0, 0.45, 0.52, 0.59, 0.66, 0.73, 1],
+      dur: 4.2,
+    },
   },
   // Two impatient little bounces, then waiting — a foot-tap.
-  waiting() {
-    const ty = "0 0;0 -5;0 0;0 -5;0 0;0 0";
-    return wrapAnim(
-      face(),
-      animT("translate", ty, 2.4, { keyTimes: "0;0.07;0.14;0.21;0.28;1", spline: easeAll(5) }),
-    );
+  waiting: {
+    moment: "needs approval (fidget)",
+    layers: [
+      {
+        type: "translate",
+        values: [
+          [0, 0],
+          [0, -5],
+          [0, 0],
+          [0, -5],
+          [0, 0],
+          [0, 0],
+        ],
+        keyTimes: [0, 0.07, 0.14, 0.21, 0.28, 1],
+        dur: 2.4,
+      },
+    ],
   },
 };
+
+const MOTION_NAMES = Object.keys(MOTIONS);
+const layerSplines = (layer) => layer.splines ?? Array(layer.values.length - 1).fill(EASE);
+const partSplines = (part) => Array(part.values.length - 1).fill(EASE);
+/** The longest loop in a motion: how long a caller must wait to see all of it. */
+function motionCycleMs(motion) {
+  const durations = [
+    ...motion.layers.filter((layer) => layer.values).map((layer) => layer.dur),
+    ...(motion.eyes?.dur ? [motion.eyes.dur] : []),
+    ...(motion.brows?.dur ? [motion.brows.dur] : []),
+    ...(motion.sleepZ ? [SLEEP_Z_DURATION] : []),
+  ];
+  return Math.round(Math.max(...durations, 0) * 1000);
+}
+
+// ---------- Motions as SMIL ----------
+function svgEyes(motion) {
+  const [c1, c2] = eyeXs();
+  const eyes = motion.eyes;
+  if (!eyes) return eye(c1) + eye(c2);
+  if (eyes.kind === "lids") return lid(c1) + lid(c2);
+  const kt = eyes.keyTimes.join(";");
+  const radii = eyes.factors.map((factor) => fmt(FACE.eyeR * factor)).join(";");
+  // The wink animates the eye it closes and draws the open one after it.
+  if (eyes.kind === "wink") return eyeRy(c2, radii, kt, eyes.dur) + eye(c1);
+  if (eyes.kind === "widen") return eyeR(c1, radii, kt, eyes.dur) + eyeR(c2, radii, kt, eyes.dur);
+  return eyeRy(c1, radii, kt, eyes.dur) + eyeRy(c2, radii, kt, eyes.dur);
+}
+
+function svgBrows(motion) {
+  const [c1, c2] = eyeXs();
+  if (!motion.brows) return "";
+  const { values, keyTimes, dur } = motion.brows;
+  return wrapAnim(
+    brow(c1) + brow(c2),
+    animT("translate", values.map((pair) => pair.join(" ")).join(";"), dur, {
+      keyTimes: keyTimes.join(";"),
+      spline: partSplines(motion.brows).join(";"),
+    }),
+  );
+}
+
+function motionSvg(motion) {
+  let body = face({ eyes: svgEyes(motion), extra: svgBrows(motion) });
+  for (const layer of motion.layers) {
+    if (layer.hold !== undefined) {
+      body = `<g transform="rotate(${layer.hold} ${layer.pivot.join(" ")})">${body}</g>`;
+      continue;
+    }
+    const opts = {
+      keyTimes: layer.keyTimes ? layer.keyTimes.join(";") : undefined,
+      spline: layerSplines(layer).join(";"),
+    };
+    if (layer.type === "scale") {
+      body = scaleAbout(
+        body,
+        layer.values.map((pair) => pair.join(" ")).join(";"),
+        layer.dur,
+        opts,
+      );
+      continue;
+    }
+    const values =
+      layer.type === "rotate"
+        ? layer.values.map((angle) => `${angle} ${layer.pivot.join(" ")}`).join(";")
+        : layer.values.map((pair) => pair.join(" ")).join(";");
+    body = wrapAnim(body, animT(layer.type, values, layer.dur, opts));
+  }
+  if (motion.sleepZ) body += SLEEP_Z.map(zGlyph).join("");
+  return body;
+}
+
+// ---------- Motions as CSS ----------
+// The app cannot use the SMIL above: it needs the renderer's `--face-motion`
+// token to be able to stop every loop at once, which only CSS animation offers.
+// Each layer, each eye, and each brow becomes one @keyframes, and the interval
+// easings become per-keyframe timing functions, which is the only way CSS can
+// express a keySplines list.
+const cssTime = (fraction) => `${+(fraction * 100).toFixed(4)}%`;
+
+function cssKeyframes(name, steps, splines) {
+  const blocks = steps.map(({ at, declaration }, index) => {
+    const easing =
+      index < steps.length - 1
+        ? `\n    animation-timing-function: ${splines[index] ? bezier(splines[index]) : "linear"};`
+        : "";
+    return `  ${cssTime(at)} {\n    ${declaration}${easing}\n  }`;
+  });
+  return `@keyframes ${name} {\n${blocks.join("\n\n")}\n}`;
+}
+
+const evenTimes = (count) => Array.from({ length: count }, (_, index) => index / (count - 1));
+
+function layerSteps(layer) {
+  const times = layer.keyTimes ?? evenTimes(layer.values.length);
+  return layer.values.map((value, index) => ({
+    at: times[index],
+    declaration:
+      layer.type === "rotate"
+        ? `transform: rotate(${value}deg);`
+        : layer.type === "scale"
+          ? `transform: scale(${value[0]}, ${value[1]});`
+          : `transform: translate(${value[0]}px, ${value[1]}px);`,
+  }));
+}
+
+function motionCss(name, motion) {
+  const selector = `.luke-face[data-motion="${name}"]`;
+  const blocks = [];
+  const rules = [];
+
+  motion.layers.forEach((layer, index) => {
+    const target = `${selector} .luke-face-layer-${index + 1}`;
+    const origin =
+      layer.type === "translate"
+        ? ""
+        : `\n  transform-origin: ${(layer.pivot ?? [120, 124]).map((n) => `${n}px`).join(" ")};`;
+    if (layer.hold !== undefined) {
+      rules.push(`${target} {${origin}\n  transform: rotate(${layer.hold}deg);\n}`);
+      return;
+    }
+    const animation = `luke-${name}-${index + 1}`;
+    blocks.push(cssKeyframes(animation, layerSteps(layer), layerSplines(layer)));
+    rules.push(
+      `${target} {${origin}\n  animation-name: ${animation};\n  animation-duration: ${layer.dur}s;\n}`,
+    );
+  });
+
+  const eyes = motion.eyes;
+  if (eyes && eyes.kind !== "lids") {
+    const animation = `luke-${name}-eyes`;
+    const steps = eyes.factors.map((factor, index) => ({
+      at: eyes.keyTimes[index],
+      declaration:
+        eyes.kind === "widen" ? `transform: scale(${factor});` : `transform: scaleY(${factor});`,
+    }));
+    // No keySplines on the SVG's eye animations, so every interval is linear.
+    blocks.push(cssKeyframes(animation, steps, []));
+    // The wink closes one eye; every other motion moves both.
+    const target = eyes.kind === "wink" ? ".luke-face-eye-right" : ".luke-face-eye";
+    rules.push(
+      `${selector} ${target} {\n  animation-name: ${animation};\n  animation-duration: ${eyes.dur}s;\n}`,
+    );
+  }
+
+  if (motion.brows) {
+    const animation = `luke-${name}-brows`;
+    const steps = motion.brows.values.map((pair, index) => ({
+      at: motion.brows.keyTimes[index],
+      declaration: `transform: translate(${pair[0]}px, ${pair[1]}px);`,
+    }));
+    blocks.push(cssKeyframes(animation, steps, partSplines(motion.brows)));
+    rules.push(
+      `${selector} .luke-face-brows {\n  animation-name: ${animation};\n  animation-duration: ${motion.brows.dur}s;\n}`,
+    );
+  }
+
+  return [`/* ${name} — ${motion.moment} */`, ...blocks, ...rules].join("\n\n");
+}
+
+function faceMotionCss() {
+  const drift = cssKeyframes(
+    "luke-sleep-z",
+    [
+      { at: 0, declaration: "opacity: 0;\n    transform: translate(0, 0);" },
+      { at: 0.5, declaration: "opacity: 0.85;" },
+      {
+        at: 1,
+        declaration: `opacity: 0;\n    transform: translate(${SLEEP_Z_DRIFT[0]}px, ${SLEEP_Z_DRIFT[1]}px);`,
+      },
+    ],
+    [],
+  );
+  const zRules = [
+    `.luke-face-z {\n  animation-name: luke-sleep-z;\n  animation-duration: ${SLEEP_Z_DURATION}s;\n}`,
+    ...SLEEP_Z.map((z, index) => `.luke-face-z-${index + 1} {\n  animation-delay: ${z.delay}s;\n}`),
+  ];
+  return [
+    "/* Generated by design/generate-brand-assets.mjs. Do not edit by hand: change",
+    "   the motion table in that script and re-run it.",
+    "",
+    "   One @keyframes per moving part, and one rule per part that names it. The",
+    "   wiring these depend on — the layer stack, the play state, and the ink —",
+    "   lives with the rest of the renderer's motion vocabulary in base.css. */",
+    "",
+    MOTION_NAMES.map((name) => motionCss(name, MOTIONS[name])).join("\n\n"),
+    "",
+    "/* The z's drift on their own loop, offset from each other so they never rise",
+    "   as a group. Held at its first frame the loop is invisible, which is what a",
+    "   capture run and reduced motion both want. */",
+    "",
+    [drift, ...zRules].join("\n\n"),
+    "",
+  ].join("\n");
+}
+
+// ---------- The face, as a renderer module ----------
+const tsList = (values) => values.join(", ");
+const tsRecord = (entries, indent = "  ") =>
+  entries.map(([key, value]) => `${indent}${key}: ${value},`).join("\n");
+
+function faceArtModule() {
+  const [c1, c2] = eyeXs();
+  const view = APP_VIEW;
+  const box = [view.cx - view.size / 2, view.cy - view.size / 2, view.size, view.size];
+  const parts = MOTION_NAMES.map((name) => {
+    const motion = MOTIONS[name];
+    const flags = [
+      `brows: ${Boolean(motion.brows)}`,
+      `lids: ${motion.eyes?.kind === "lids"}`,
+      `sleepZ: ${Boolean(motion.sleepZ)}`,
+    ];
+    return [name, `{ ${tsList(flags)} }`];
+  });
+
+  return `// Generated by design/generate-brand-assets.mjs. Do not edit by hand: change the
+// artwork parameters in that script and re-run it.
+//
+// The face the renderer draws, in the artwork's own canvas coordinates, and the
+// vocabulary of things it can be doing. The motions themselves are @keyframes in
+// styles/face-motion.css, generated from the same table.
+
+/** Luke's face, on the 240x240 canvas every asset in design/brand/ is cut from. */
+export const FACE_ART = {
+  /** A square window centred on the face. Loud motions leave it, and may. */
+  VIEW_BOX: "${box.map(fmt).join(" ")}",
+  /** The head's resting tilt, about the point the motions pivot on. */
+  TILT: "rotate(${FACE.tilt} 120 124)",
+  /** The capital-L nose, curling into the smile. */
+  SMILE: "${smileD(FACE.lift)}",
+  STROKE_WIDTH: ${FACE.sw},
+  EYE_Y: ${FACE.eyeY},
+  EYE_RADIUS: ${FACE.eyeR},
+  EYE_X: { LEFT: ${fmt(c1)}, RIGHT: ${fmt(c2)} },
+  /** Drawn only by the motions that raise them. */
+  BROW: { LEFT: "${browD(c1)}", RIGHT: "${browD(c2)}" },
+  BROW_WIDTH: ${BROW_WIDTH},
+  /** Closed eyes, for a face that is asleep rather than blinking. */
+  LID: { LEFT: "${lidD(c1)}", RIGHT: "${lidD(c2)}" },
+  LID_WIDTH: ${LID_WIDTH},
+  SLEEP_Z: [
+${SLEEP_Z.map((z) => `    { x: ${z.x}, y: ${z.y}, path: "${zGlyphD(z.size)}" },`).join("\n")}
+  ],
+  SLEEP_Z_WIDTH: ${SLEEP_Z_WIDTH},
+} as const;
+
+/** Every motion the artwork defines, whether or not the app has a moment for it. */
+export const FACE_MOTION = {
+${MOTION_NAMES.map((name) => `  ${name.toUpperCase()}: "${name}",`).join("\n")}
+} as const;
+
+export type FaceMotion = (typeof FACE_MOTION)[keyof typeof FACE_MOTION];
+
+/** One full cycle: how long a caller waits to see a motion out before moving on. */
+export const FACE_MOTION_CYCLE_MS: Record<FaceMotion, number> = {
+${tsRecord(MOTION_NAMES.map((name) => [name, motionCycleMs(MOTIONS[name])]))}
+};
+
+/** What a motion needs drawn beyond the resting smile and eyes. */
+export const FACE_MOTION_PARTS: Record<
+  FaceMotion,
+  { brows: boolean; lids: boolean; sleepZ: boolean }
+> = {
+${tsRecord(parts)}
+};
+`;
+}
 
 // ---------- Wordmark ----------
 // Custom monoline U-K-E letterforms at cap height (44..170), following the
@@ -345,13 +841,29 @@ function wordSvg({ body, width }, pad = 6) {
 }
 
 // ---------- Emission ----------
+// `--check` reports whether the committed outputs still match what this script
+// produces, without touching any of them. That is what the repository checks run:
+// three sets of outputs are committed alongside this one source, and a check that
+// depended on the state of the working tree could only tell you so while the tree
+// was clean.
+const CHECK_ONLY = process.argv.includes("--check");
 const written = [];
-function emit(relPath, svg, title) {
-  const path = join(OUT, relPath);
+const stale = [];
+
+function put(path, content) {
+  if (CHECK_ONLY) {
+    const current = existsSync(path) ? readFileSync(path, "utf8") : undefined;
+    if (current !== content) stale.push(path);
+    return;
+  }
   mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, content);
+}
+
+function emit(relPath, svg, title) {
   // Accessible name, first child of <svg> per SVG a11y guidance.
   const titled = svg.replace(/(<svg[^>]*>)/, `$1<title>${title}</title>`);
-  writeFileSync(path, `${titled}\n`);
+  put(join(OUT, relPath), `${titled}\n`);
   written.push(relPath);
 }
 function emitModes(baseName, svgWithCurrentColor, title) {
@@ -385,10 +897,25 @@ const menubar = `${svgOpenAt(bbox.cx - side / 2, bbox.cy - side / 2, side, side)
 emit("menubar/luke-menubar-template.svg", menubar.replaceAll("currentColor", "#000000"), "Luke");
 
 // Animated state marks, per mode.
-for (const [state, render] of Object.entries(MOTIONS)) {
-  emitModes(`motion/luke-${state}`, markSvg(render()), `Luke — ${state}`);
+for (const name of MOTION_NAMES) {
+  emitModes(`motion/luke-${name}`, markSvg(motionSvg(MOTIONS[name])), `Luke — ${name}`);
 }
 // Animated hero wordmark: the face talks inside the caps word.
-emitModes("luke-wordmark-talking", wordSvg(wordmark(MOTIONS.talking())), "LUKE — talking");
+emitModes("luke-wordmark-talking", wordSvg(wordmark(motionSvg(MOTIONS.talking))), "LUKE — talking");
 
-process.stdout.write(`${written.length} SVGs written to design/brand/\n`);
+// The desktop renderer's two inputs, from the same table the SVGs came from.
+put(join(APP_RENDERER, "luke-face-art.ts"), faceArtModule());
+put(join(APP_RENDERER, "styles", "face-motion.css"), faceMotionCss());
+
+if (!CHECK_ONLY) {
+  process.stdout.write(`${written.length} SVGs written to design/brand/\n`);
+  process.stdout.write("luke-face-art.ts and styles/face-motion.css written to the desktop app\n");
+} else if (stale.length > 0) {
+  process.stderr.write(
+    `${stale.length} generated file(s) no longer match this script:\n${stale.join("\n")}\n` +
+      "Run: node design/generate-brand-assets.mjs\n",
+  );
+  process.exit(1);
+} else {
+  process.stdout.write(`${written.length + 2} generated files are up to date\n`);
+}
