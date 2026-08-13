@@ -1,17 +1,57 @@
 # Luke
 
-Luke is a macOS-first Electron sidecar for monitoring coding-agent sessions
-without changing how those agents are launched or controlled. Its compact React
-surface attaches to the MacBook camera housing, and its reusable behavior stays
-in brand-neutral TypeScript packages.
+Luke v0.1 is an Apple Silicon developer preview for macOS 14+. It is a small
+Electron sidecar that shows the state of local coding-agent sessions beside the
+MacBook camera housing without changing how those agents run.
 
-## Requirements
+Luke is early software. Read [Privacy](PRIVACY.md) before using it.
 
+## Download
+
+Download published builds from [GitHub Releases](https://github.com/ReviewStage/luke/releases).
+
+## Current provider support
+
+- Claude Code — reads local session state; no provider credential required
+- Codex — reads local session state; no provider credential required
+- Conductor — reads cloud session metadata after you supply a Conductor API key
+- Cursor — reads cloud agent metadata after you supply a Cursor API key
+
+Conductor and Cursor remain silent until their own key is saved in Luke's
+Settings or supplied through `CONDUCTOR_API_KEY`, `CONDUCTOR_API_TOKEN`, or
+`CURSOR_API_KEY`. Every provider integration is read-only. None requires hooks,
+plugins, wrappers, or changes to how a session is launched.
+
+## What works in v0.1
+
+- A compact, top-center capsule shows how many sessions Luke is tracking.
+- Hovering opens a quick peek; clicking opens a panel with one row per session.
+- Rows show the provider-assigned title (with a workspace fallback), current
+  activity, error or turn recap, repository context, and whether the session is
+  working, waiting, complete, failed, or merely observed.
+- Sessions that appear to need attention are placed first.
+- An optional microphone visualization can react to local audio levels.
+- An optional OpenAI attention review can help decide which updates should be
+  prioritized in the interface.
+
+Luke does not speak, send commands to agents, inject terminal input, or expose
+agent controls. The microphone feature is an audio-level visualization, not
+speech recognition or a voice session.
+
+## Privacy
+
+Luke observes provider state read-only and keeps microphone processing local.
+An external attention-review request is made only when `OPENAI_API_KEY` is set.
+See [PRIVACY.md](PRIVACY.md) for the exact data boundaries and retention wording.
+
+## Build from source
+
+### Requirements
+
+- Apple Silicon Mac running macOS 14 or newer
 - Node.js 22.12 or newer
 - pnpm 9.15.0
-- macOS 14 or newer with Xcode Command Line Tools for the app workflow
-
-## Development
+- Xcode Command Line Tools
 
 From a fresh checkout:
 
@@ -20,12 +60,16 @@ From a fresh checkout:
 ./scripts/check.sh
 ```
 
-On macOS, launch the app or run complete validation:
+Launch the app or run complete macOS validation:
 
 ```sh
 ./scripts/run.sh
 ./scripts/verify.sh
 ```
+
+The run command owns the Electron process, so Control-C stops it. By default it
+replaces any running Luke instance. Pass `--keep-running` to leave an existing
+instance in place.
 
 Run the public landing page locally with:
 
@@ -33,271 +77,35 @@ Run the public landing page locally with:
 pnpm --filter @luke/web dev
 ```
 
-Use `./scripts/run.sh --profile speaking` to preview the deterministic waveform
-to the left of the notch without requesting microphone access. Hover the capsule
-to see it: at rest the face carries the live-microphone colour on its own, and
-the meter unfolds with the peek.
+Use `./scripts/run.sh --profile speaking` to preview a deterministic fixture
+waveform without requesting microphone access.
 
-The run command directly owns the Electron process, so Control-C stops it. It
-also replaces an instance that is already running: Electron's single-instance
-lock belongs to the older process, so without this the newer launch would quit
-on startup and leave the previous build on screen. That lock is keyed on the app
-name, which every checkout shares, so the replaced instance can be one launched
-from a different worktree; it is named on stdout before it is stopped. Pass
-`--keep-running` to leave a running instance in place, which re-asserts its
-panel instead of starting a new one.
+## Optional attention review
 
-`verify.sh` packages the desktop app and writes deterministic visual evidence to
-`artifacts/evidence/app-smoke-expanded.png`,
-`artifacts/evidence/app-smoke-compact.png`,
-`artifacts/evidence/app-smoke-peek.png`, and
-`artifacts/evidence/app-smoke-speaking.png`. The face's idle motion is held on
-its first frame for a capture run, so the same shutter moment produces the same
-PNG.
+Session monitoring does not require `OPENAI_API_KEY`: Claude Code and Codex use
+local state, while Conductor and Cursor use their separately configured provider
+keys. If `OPENAI_API_KEY` is set, Luke can also send a bounded status update to
+the configured Responses endpoint for attention classification. That update can
+include the session title, recap, repository, branch, current tool activity, and
+reported error; see [PRIVACY.md](PRIVACY.md) for the exact boundary. This does
+not enable speech or agent control.
 
-Luke's menu bar item is his face, shipped as a macOS template image — pure black
-plus alpha, which the system recolours for a light or dark menu bar and inverts
-under a press, rather than the app choosing a colour. It is drawn by the system
-rather than by the renderer, so it cannot be captured through the app. With Luke
-running, `./scripts/menu-bar-evidence.sh` photographs the right end of the menu
-bar into `artifacts/evidence/menu-bar-item.png`; the terminal needs Screen
-Recording permission the first time. Open the item afterwards to check its menu,
-which offers **Settings…**, with Command-, shown against it, and Quit. The shortcut is claimed inside Luke's own window rather
-than registered with the system, because Command-, belongs to whichever app is
-frontmost; it switches the open panel to its Settings tab.
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `OPENAI_API_KEY` | unset | Enables external attention review |
+| `LUKE_ATTENTION_MODEL` | `gpt-5.6-luna` | Selects the review model |
+| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Selects the Responses-compatible endpoint |
 
-## The capsule, the peek, and the panel
-
-The surface has three sizes and they are all the same black shape:
-
-- **Capsule** — at rest beside the camera housing: Luke's face on the left, the
-  count of tracked sessions on the right. The face is always there, so the strip
-  at rest is him rather than whichever provider happens to be first.
-- **Peek** — under the pointer. The capsule widens on a spring and shows what he
-  is watching: a mark for every provider with a session, up to the four the room
-  beside the housing holds, unfolding from behind the face, and what the count
-  means — `2 need you` — on the right. This is the affordance; nothing is
-  committed by hovering.
-- **Panel** — on a press. Full-width rows, one session per line: provider mark,
-  title, what it is doing, a state chip. A **Settings** tab holds the cloud API
-  keys, microphone access, and Quit. Press the capsule again, or press Escape,
-  to close it; moving the pointer off it closes it just as readily, except while
-  a key is being entered, which is the one thing the pointer must not discard.
-
-Settings lists one line per cloud provider — its mark, its name, and whether it
-is connected. A provider with no key offers **Connect**; one with a stored key
-offers **Edit** and **Delete**. The field appears only while a key is being
-entered, along with a link that opens that provider's own API-key page in your
-browser. Luke opens it by provider id rather than by an address the panel
-supplies, so the pages it can ever open are the ones in its provider registry.
-
-Sessions are ordered by how much they need a person, so whatever is waiting on
-you is the top row and the first mark out from behind the face.
-
-The header is anchored to the notch, not to a state: the count sits to the right
-of the housing and Luke to its left, in the same place in all three. Growing
-unfolds what the capsule had no room for: the marks or the speech meter on one
-side and what the count means on the other travel the same distance, on the same
-spring, so the two wings read as one gesture rather than two. More providers than
-fit are counted at the end of the row rather than dropped from it.
-
-The meter is the one thing that cannot unfold and still be honest, because a live
-microphone has to be visible from the capsule too, and the capsule has no room
-for it beside the face. So the face takes the meter's own colour while the
-microphone is live, and the bars themselves stay with the peek.
-
-## What Luke is doing
-
-The face has a motion for every state it can be in, and they are the brand's own
-— the same nineteen the assets in `design/brand/motion/` are cut from, generated
-into `@keyframes` so the app can hold them still rather than reimplemented by
-hand. What Luke plays is never arbitrary:
-
-| He is | and he | because |
-|---|---|---|
-| hearing speech | talks (head bob) | tinted with the meter's colour, so the capsule says the microphone is open |
-| listening, but no speech | tilts, curious | same colour, same reason |
-| watching a session that needs you | fidgets | the one rest that reads as impatience |
-| watching sessions working | sways, slowly | quiet work, made visible |
-| watching nothing at all | sleeps, with z's | nothing to watch is not the same as nothing happening |
-| watching, with nothing to report | blinks | the smallest sign of life |
-
-Two things interrupt him for a single cycle and then give the face back: a
-session finishing (the hop) and a session arriving (the brow flash). Between
-those, when nobody is being kept waiting, he makes a gesture that means nothing
-at all every ten to twenty-five seconds — a wink, a nod, a waggle, a duck behind
-the housing. A permanent fixture that only ever blinks reads as a static one, and
-the asides are what keep it from becoming furniture. Nothing playful is allowed
-to interrupt the fidget: a face that winked while a session was waiting on you
-would be saying two things at once.
-
-`error`, `refresh`, and `appear` are drawn and available but unused — Luke has no
-failure state to report, no relaunch to announce, and nothing to attach to.
-
-Reduced motion stops all of it: the stylesheet holds every loop on its first
-frame, and the renderer stops changing which one is playing, because switching
-between held poses is itself the motion someone asked not to see. A capture run
-holds them the same way, which is what keeps the evidence PNGs reproducible.
-
-The surface is opaque black in every state and shaped like the housing it sits
-beside: the convex bottom corners and the concave flare where its sides meet
-the top edge are both derived from the reported notch inset, at the ratios
-measured off photographs of the hardware (0.348 and 0.170 of its height). The
-panel's corners are its own rather than the housing's, so its flare keeps the
-proportion between the two rather than the size — 0.489 of whatever corner it
-turns — and all three states still meet the top edge the same way. Depth comes
-from a shadow and a hairline edge rather than from letting anything show
-through. A display with no housing to blend into gets a free-floating pill
-instead.
-
-The panel's shadow arrives once the shape has settled, so a blurred shadow is
-never repainted mid-spring; the peek's is small enough to ride along with it. A
-real blur of the desktop is not available here: a transparent Electron window
-gives `backdrop-filter` no backdrop to sample, and reaching the desktop would
-mean native vibrancy, which cannot be masked to a shape that animates.
-
-The window is a stage, never the shape. It snaps to the size a state needs and
-the renderer animates the surface inside it, so the motion stays on the
-compositor — and because a compact window is already wide enough to hold the
-peek, hovering never touches the main process at all. Growing, the surface leads
-and the content follows it in; shrinking, the content leaves first and the
-surface closes behind it, so nothing is ever drawn outside the black. Every resize runs on one sampled damped
-spring at one duration — a real spring's motion is a property of the spring, not
-of how far it is asked to travel — and the window carries slack on every side
-for the overshoot to land in. The same spring carries the content: the panel's
-rows arrive as one compressed stack whose gaps spring open, rather than as
-elements that fade in where they will end up. The surface also ends where the content does, so a
-session arriving or finishing resizes the panel.
-
-## Provider marks
-
-Sessions are labelled with each provider's own mark, inlined as path data in
-`apps/desktop/src/renderer/provider-marks.tsx`: the Claude Code mark via
-[Simple Icons](https://simpleicons.org) (CC0-1.0, sourced from code.claude.com),
-the Codex mark via [@lobehub/icons](https://github.com/lobehub/lobe-icons)
-(MIT), and Conductor's letter mark verbatim from its published
-[brand kit](https://www.conductor.build/brandkit). Each keeps its brand colour —
-Claude Code's `#D97757` coral, Codex's `#B1A7FF → #3941FF` gradient, and the
-`#EAE8E6` half of Conductor's two-colour palette, whose dark half is the surface
-the mark already sits on — declared as `--mark-*` custom properties in
-`styles/base.css`. Session state is carried by the count badge, the state chips,
-and the row tints instead, so brand colour and state colour never land on the
-same pixel. The marks are trademarks of their respective owners and are used
-here only to identify which provider a session belongs to; Luke is not
-affiliated with or endorsed by any of them. A provider with no registered mark
-falls back to a neutral glyph rather than to another provider's.
-
-The marks are keyed by the provider ids in `PROVIDER_ID`, which adapters report
-and `CREDENTIAL_PROVIDER_ID` draws from, so a session row and a key field name
-the same provider with the same mark.
-
-For PR motion evidence, run `pnpm evidence:record` on a Mac with `ffmpeg`
-installed and Screen & System Audio Recording permission granted to Conductor.
-It records the fixture-only compact/expanded transition against a synthetic
-backdrop and writes MP4 and GIF versions under `artifacts/evidence/`. Generated
-evidence remains untracked.
-
-The compact window is anchored to the display's top edge—not centered within
-the desktop. A small packaged AppKit helper reads `NSScreen.safeAreaInsets` and
-the auxiliary top areas so the black Electron surface can join the physical
-camera housing. Macs and external displays without a notch use the same
-top-center attachment with no invented hardware geometry.
-
-The evidence mode uses synthetic fixture data. Live mode passively observes
-bounded coding-agent session metadata without requiring provider plugins, hooks,
-wrappers, live-session changes, or transcript retention.
-
-Claude Code and Codex sessions are observed from local provider state and need
-no configuration. A cloud provider has no local state to read, so it stays
-silent until you press the capsule to open the panel, choose the **Settings**
-tab, and connect it with a key. Each provider holds its own credential and also
-reads its own `<PROVIDER>_API_KEY` from the environment; Conductor accepts
-`CONDUCTOR_API_KEY` or `CONDUCTOR_API_TOKEN` and issues keys at
-<https://app.conductor.build/users/api-keys>, and Cursor accepts
-`CURSOR_API_KEY` and issues keys at <https://cursor.com/dashboard/api>. A
-provider you give no key to reports nothing and issues no request. A key you
-enter is encrypted with `safeStorage`, whose key comes from the login Keychain,
-and it is never returned to the renderer. Luke reads only cloud workspaces and
-agents you created, and issues only read requests.
-
-## What a row tells you
-
-Each session is labelled by the name its own provider gave it — Claude Code's
-generated title, a Codex thread's title, a Conductor session's name, a Cursor
-agent's name — and falls back to the workspace only for a session too new to
-have been named. Under it sits what the session is doing right now, or what
-stopped it: the tool it is running, the failure it hit, or the recap it wrote
-when its turn ended. Under that sits where it is: provider, repository, branch,
-and model.
-
-That is what makes the panel legible. Labelling by repository alone gave every
-session in one repository the same row, which is the common case when you run
-several agents against one project.
-
-Luke reads this out of state the providers already keep — Claude Code's session
-files, Codex's thread database and rollout log, and the documented read-only
-routes of the Conductor and Cursor APIs. It never writes to any of them, and it
-holds nothing on disk of its own.
-
-The one narrower rule is the attention model below, because it is the only place
-any of this leaves your machine.
-
-## Attention intelligence
-
-When a session reports a development, Luke asks a background model whether that
-development is worth saying out loud. The model receives one bounded update—
-provider, session title, previous and current status, the session's own recap,
-and the repository, branch, current tool, and failure it reported—and answers
-with a structured decision: stay silent, speak during the turn, or speak once
-the turn ends.
-
-This is the only place session material leaves your machine, so it carries less
-than the panel does. It gets what a provider wrote *about* a session, never the
-transcript behind it: no message history, no file contents, no command output.
-The session's own address and any pull request it opened stay behind too, since
-a decision never turns on them. What it does get is what tells "finished the
-release" apart from "stopped on a rate limit", which is the difference between a
-useful sentence and an interruption.
-
-A development is the state changing, a new failure, or a new recap. What a
-session is *running* changes with every tool call and is deliberately not a
-development, or every tool call would cost a model request.
-
-Anything outside the decision contract, and any API
-failure, leaves Luke silent. Repeated decisions about the same session are
-deduplicated so one development is never announced twice, and a decision is
-discarded when the session moves past the state it was made about—answering a
-waiting session while the model is still thinking should not produce a stale
-interruption.
-
-The layer is optional. Without `OPENAI_API_KEY`, Luke observes sessions and
-stays silent, and no other behavior changes:
-
-| Variable               | Default                     | Purpose                                    |
-| ---------------------- | --------------------------- | ------------------------------------------ |
-| `OPENAI_API_KEY`       | unset                       | Enables attention review when it is present |
-| `LUKE_ATTENTION_MODEL` | `gpt-5.6-luna`              | Model used for the decision                |
-| `OPENAI_BASE_URL`      | `https://api.openai.com/v1` | Alternate OpenAI-compatible endpoint       |
-
-Requests set `store: false`, so the API is not asked to retain them. Tune how
-conservative Luke is by editing the examples in
-`packages/sidecar-core/src/attention-examples.ts`; they are synthetic and
-double as the prompt's few-shot guidance and its regression coverage.
-
-## Pull-request media
-
-Keep generated screenshots and recordings out of product branches. Inline PR
-media is stored on the shared `pr-assets` branch under `pr-<number>/` and linked
-with its `raw.githubusercontent.com` URL. Keep that one branch: deleting it
-breaks rendered images in open and historical PRs.
+Changing `OPENAI_BASE_URL` sends attention-review data to that endpoint instead
+of OpenAI. See [PRIVACY.md](PRIVACY.md) before enabling the feature.
 
 ## Repository map
 
-- `apps/desktop/` — Electron main/preload processes, React renderer, macOS adapter, and app packaging
-- `apps/web/` — Vite React public landing page
-- `packages/sidecar-core/` — platform-independent models, fixtures, geometry, and tests
-- `scripts/` — canonical non-interactive development commands
-- `.conductor/settings.toml` — shared Conductor command configuration
+- `apps/desktop/` — Electron main and preload processes, React renderer, native
+  macOS helper, and packaging
+- `apps/web/` — public landing page
+- `packages/sidecar-core/` — platform-independent session and attention models
+- `scripts/` — canonical development and validation commands
 
-See `WORKFLOW.md` for the issue-to-PR contract and `AGENTS.md` for agent-facing
-repository guidance.
+See `WORKFLOW.md` for the issue-to-PR workflow and `AGENTS.md` for repository
+guidance.
