@@ -761,6 +761,8 @@ export function App(): React.JSX.Element {
         analyser={analyser}
         fixtureSpeaking={fixtureSpeaking}
         hasAudioSignal={hasAudioSignal}
+        presentation={presentation}
+        housingWidth={display.notch.housingWidth}
       />
 
       <div className="compact-stage">
