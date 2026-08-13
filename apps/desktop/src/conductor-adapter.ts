@@ -75,6 +75,20 @@ const CONDUCTOR_SESSION_STATUS = {
   ERROR: "error",
 } as const;
 
+/**
+ * Which chat gets to speak for its workspace, most urgent first. A failure
+ * outranks a question — both want a person, but only one of them is stuck —
+ * a question outranks work still running, and anything known outranks a chat
+ * whose status could not be read.
+ */
+const STATUS_URGENCY: readonly SessionStatus[] = [
+  SESSION_STATUS.ERROR,
+  SESSION_STATUS.WAITING,
+  SESSION_STATUS.WORKING,
+  SESSION_STATUS.COMPLETE,
+  SESSION_STATUS.UNKNOWN,
+];
+
 type ConductorSessionStatus =
   (typeof CONDUCTOR_SESSION_STATUS)[keyof typeof CONDUCTOR_SESSION_STATUS];
 
@@ -144,6 +158,9 @@ interface ConductorSession {
  * Observes Conductor cloud sessions through the documented public API. It reads
  * only workspaces the authenticated user created, issues no request that can
  * change provider state, and reports nothing at all without a credential.
+ * Each workspace is reported as one session — the workspace is the unit
+ * Conductor's own surface shows, and the one its name names — in the state of
+ * whichever chat inside it most needs a person.
  */
 export class ConductorSessionAdapter extends CloudSessionAdapter {
   readonly #maximumObservedWorkspaces: number;
@@ -215,10 +232,28 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       .flat()
       .slice(0, this.#maximumObservedSessions);
 
-    const observations = await Promise.all(
-      sessions.map((session) => this.#observationFor(request, session, now)),
+    const observed = await Promise.all(
+      sessions.map((session) =>
+        this.#observationFor(request, session, now).then(
+          (observation) => observation && { workspaceId: session.workspace.id, observation },
+        ),
+      ),
     );
-    return observations.filter(isDefined);
+
+    // One row per workspace. The workspace is the session the user knows —
+    // it is what titles the row — so two chats inside it would draw as
+    // identical lines that open different places. Every chat's status is
+    // still read, because the workspace is in whatever state its neediest
+    // chat is in; that chat is the one the row reports and the one a press
+    // opens.
+    const byWorkspace = new Map<string, ProviderSessionObservation>();
+    for (const { workspaceId, observation } of observed.filter(isDefined)) {
+      const held = byWorkspace.get(workspaceId);
+      if (!held || urgencyOrder(observation, held) < 0) {
+        byWorkspace.set(workspaceId, observation);
+      }
+    }
+    return [...byWorkspace.values()];
   }
 
   async #identity(request: CloudRequest): Promise<string | undefined> {
@@ -425,6 +460,17 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       ...(errorMessage ? { errorMessage } : {}),
     };
   }
+}
+
+/** Most urgent first, and between two equally urgent chats, the one that moved last. */
+function urgencyOrder(
+  first: ProviderSessionObservation,
+  second: ProviderSessionObservation,
+): number {
+  return (
+    STATUS_URGENCY.indexOf(first.status) - STATUS_URGENCY.indexOf(second.status) ||
+    second.observedAt - first.observedAt
+  );
 }
 
 /** Conductor reports the model it resolved as well as the one that was asked for. */

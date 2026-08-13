@@ -251,18 +251,21 @@ test("reports an idle session as waiting and an errored session with its reason"
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
     projects: [LUKE_PROJECT],
-    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 30_000)],
+    workspaces: [
+      ownedWorkspace("workspace-idle", TEST_TIME - 30_000),
+      ownedWorkspace("workspace-errored", TEST_TIME - 40_000),
+    ],
     sessions: [
       {
         id: "session-idle",
-        workspaceId: "workspace-active",
+        workspaceId: "workspace-idle",
         name: TEST_SESSION_NAME,
         status: TEST_CONDUCTOR_STATUS.IDLE,
         statusUpdatedAt: TEST_TIME - 1_000,
       },
       {
         id: "session-errored",
-        workspaceId: "workspace-active",
+        workspaceId: "workspace-errored",
         name: TEST_SESSION_NAME,
         status: TEST_CONDUCTOR_STATUS.ERROR,
         statusUpdatedAt: TEST_TIME - 1_000,
@@ -276,6 +279,44 @@ test("reports an idle session as waiting and an errored session with its reason"
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
   assert.equal(observations[1]?.status, SESSION_STATUS.ERROR);
   assert.equal(observations[1]?.detail?.error, TEST_ERROR_MESSAGE);
+});
+
+// Rows are titled by their workspace, so two chats in one workspace would draw
+// as identical lines that open different places. The workspace reports once,
+// in the state of whichever chat most needs a person — a failure over a
+// question, a question over work still running.
+test("reports one row per workspace, carried by the chat that most needs a person", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [ownedWorkspace("workspace-shared", TEST_TIME - 30_000)],
+    sessions: [
+      {
+        id: "session-working",
+        workspaceId: "workspace-shared",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.WORKING,
+        statusUpdatedAt: TEST_TIME - 1_000,
+      },
+      {
+        id: "session-errored",
+        workspaceId: "workspace-shared",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.ERROR,
+        statusUpdatedAt: TEST_TIME - 5_000,
+      },
+    ],
+  });
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.providerSessionId, "session-errored");
+  assert.equal(observations[0]?.status, SESSION_STATUS.ERROR);
+  assert.equal(observations[0]?.title, TEST_WORKSPACE_NAME);
+  // The row opens the chat it reports, not whichever chat happened to be
+  // listed first.
+  assert.equal(observations[0]?.detail?.link, "conductor://workspace?session=session-errored");
 });
 
 test("does not carry a past failure into a session that recovered", async () => {
@@ -455,9 +496,13 @@ test("does not treat a long-idle chat as waiting because its workspace is busy",
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
     projects: [LUKE_PROJECT],
-    // One workspace holds several chats, so its activity timestamp moves
-    // whenever any one of them runs.
-    workspaces: [ownedWorkspace("workspace-busy", TEST_TIME - 1_000)],
+    // A workspace's activity timestamp moves whenever anything in it runs, so
+    // it can read as fresh while the chat inside was walked away from hours
+    // ago. Staleness has to be judged on the chat's own status timestamp.
+    workspaces: [
+      ownedWorkspace("workspace-busy", TEST_TIME - 1_000),
+      ownedWorkspace("workspace-fresh", TEST_TIME - 2_000),
+    ],
     sessions: [
       {
         id: "session-abandoned",
@@ -468,7 +513,7 @@ test("does not treat a long-idle chat as waiting because its workspace is busy",
       },
       {
         id: "session-just-finished",
-        workspaceId: "workspace-busy",
+        workspaceId: "workspace-fresh",
         name: TEST_SESSION_NAME,
         status: TEST_CONDUCTOR_STATUS.IDLE,
         statusUpdatedAt: TEST_TIME - 20_000,
@@ -596,8 +641,12 @@ test("spreads a bounded session budget across workspaces", async () => {
   const observations = await adapterFor(api.fetch).observe();
   const observedIds = observations.map((observation) => observation.providerSessionId);
 
-  assert.equal(observedIds.filter((id) => id.startsWith("crowded-")).length, 4);
+  // The crowded workspace spent four of the session budget's slots on its
+  // chats — the cap is what kept it from spending all of them — but it still
+  // reports as one row beside its quiet neighbour.
+  assert.equal(observedIds.filter((id) => id.startsWith("crowded-")).length, 1);
   assert.equal(observedIds.includes("quiet-session"), true);
+  assert.equal(observations.length, 2);
 });
 
 test("prefers open chats over closed ones inside one workspace", async () => {
@@ -624,8 +673,11 @@ test("prefers open chats over closed ones inside one workspace", async () => {
 
   const observations = await adapterFor(api.fetch).observe();
 
+  // The open chat takes the budget ahead of the closed ones, and it is the one
+  // that speaks for the workspace: work still running outranks work settled.
+  assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "open-session");
-  assert.equal(observations.length, 4);
+  assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
 });
 
 test("reports nothing and issues no request without an API key", async () => {
@@ -816,7 +868,9 @@ test("keeps observing when one session's status cannot be read", async () => {
 
   const observations = await adapterFor(api.fetch).observe();
 
-  assert.equal(observations.length, 2);
-  assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
-  assert.equal(observations[1]?.status, SESSION_STATUS.WORKING);
+  // One chat's unreadable status does not cost the workspace its row, and the
+  // chat whose state is known is the one that speaks for it.
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.providerSessionId, "session-readable");
+  assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
 });
