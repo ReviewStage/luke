@@ -226,12 +226,15 @@ export function useFaceMotion(context: FaceContext, still: boolean): FaceMotion 
     return () => window.clearTimeout(timer);
   }, [gesture, restful, still]);
 
-  // A gesture the rest has taken the face back from is over, not paused: left
-  // set, it would resume partway through its cycle whenever the rest turned
-  // restful again, which reads as a glitch rather than a gesture.
+  // A gesture the rest will not spare the face for is over, not paused: left
+  // set, it would surface partway through its own timer whenever the rest
+  // turned restful again, which reads as a glitch rather than a gesture. Every
+  // such gesture, not only the ones a change of rest interrupted — a session
+  // that starts asking into an open microphone is a moment the face missed
+  // rather than one it owes you the instant the microphone closes.
   useEffect(() => {
-    if (!restful) setGesture(undefined);
-  }, [restful]);
+    if (!restful && gesture !== undefined) setGesture(undefined);
+  }, [restful, gesture]);
 
   // Held still, the face keeps one pose rather than a quieter set of them: the
   // stylesheet stops the loops, and this stops the poses changing underneath.
