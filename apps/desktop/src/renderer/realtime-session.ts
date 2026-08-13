@@ -490,9 +490,13 @@ export class RealtimeVoiceSession {
   }
 
   #startResponse(events: readonly Record<string, unknown>[]): void {
-    // A reply that was cut off left the track disabled; the next one has to be
-    // audible.
-    if (this.#remoteTrack) this.#remoteTrack.enabled = true;
+    // The track is deliberately left as it is. A reply that was cut off left it
+    // disabled, and re-opening it here would let the tail of that reply — still
+    // arriving, because the server sent it before it was told to stop — be
+    // heard as the answer to what was just said. It is opened again when the
+    // server confirms the new reply has started, by which point the old one is
+    // certainly over: the data channel is ordered, so the clear that ended it
+    // was handled before the request for this one.
     this.#generationDone = false;
     this.#remoteQuiet = false;
     this.#clearSettleTimer();
@@ -530,6 +534,10 @@ export class RealtimeVoiceSession {
     if (this.#remoteTrack) this.#remoteTrack.enabled = false;
   }
 
+  #unsilenceLuke(): void {
+    if (this.#remoteTrack) this.#remoteTrack.enabled = true;
+  }
+
   #clearSettleTimer(): void {
     if (this.#settleTimer === undefined) return;
     clearTimeout(this.#settleTimer);
@@ -539,6 +547,11 @@ export class RealtimeVoiceSession {
   /** Ends the turn once the reply is done, so the next one can start. */
   #finishResponse(): void {
     this.#generationDone = false;
+    // Whatever ended the reply — an error, the settle timer, Luke simply
+    // stopping — the next one has to be audible. Without this a reply that
+    // failed before it started would leave Luke silenced with nothing to
+    // un-silence him.
+    this.#unsilenceLuke();
     this.#clearSettleTimer();
     if (this.#status === REALTIME_STATUS.RESPONDING) this.#setStatus(REALTIME_STATUS.READY);
   }
@@ -570,6 +583,11 @@ export class RealtimeVoiceSession {
 
     if (event === null || typeof event !== "object") return;
     const type = (event as { type?: unknown }).type;
+    if (type === REALTIME_SERVER_EVENT.RESPONSE_CREATED) {
+      // The reply being asked for is under way, so anything arriving from here
+      // belongs to it rather than to the one it replaced.
+      this.#unsilenceLuke();
+    }
     if (type === REALTIME_SERVER_EVENT.RESPONSE_DONE) {
       // Generation is done; the reply is not. The turn ends when Luke stops
       // being audible, which the caller reports from the audio itself rather

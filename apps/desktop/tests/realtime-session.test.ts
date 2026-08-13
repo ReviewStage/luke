@@ -736,6 +736,69 @@ test("a turn opens from an empty buffer and the key ends it", async () => {
   );
 });
 
+test("the tail of an interrupted reply is not heard as the answer to the next", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.deliverRemoteTrack();
+  context.session.beginTurn();
+  context.session.endTurn(true);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED });
+  assert.equal(context.lukeAudible(), true);
+
+  // Cut him off, say something else, and send it.
+  context.session.beginTurn();
+  assert.equal(context.lukeAudible(), false);
+  context.session.endTurn(true);
+
+  // The rest of the old reply is still arriving — the server sent it before it
+  // was told to stop — so opening the track when the next turn is sent would
+  // play it out as though it were the answer.
+  assert.equal(context.lukeAudible(), false);
+
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED });
+  assert.equal(context.lukeAudible(), true);
+});
+
+test("an interrupt asks the server to drop what it already sent", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.deliverRemoteTrack();
+  context.session.beginTurn();
+  context.session.endTurn(true);
+  const before = context.sent.length;
+
+  context.session.beginTurn();
+
+  const events = context.sent.slice(before).map((event) => event.type);
+  // Cancelling alone stops the model producing more and leaves everything it
+  // already produced on its way down the connection.
+  assert.ok(events.includes(REALTIME_CLIENT_EVENT.RESPONSE_CANCEL));
+  assert.ok(events.includes(REALTIME_CLIENT_EVENT.OUTPUT_AUDIO_BUFFER_CLEAR));
+  assert.ok(
+    events.indexOf(REALTIME_CLIENT_EVENT.RESPONSE_CANCEL) <
+      events.indexOf(REALTIME_CLIENT_EVENT.OUTPUT_AUDIO_BUFFER_CLEAR),
+    "the buffer is emptied only once nothing is still filling it",
+  );
+});
+
+test("a reply that never starts does not leave Luke silenced", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.deliverRemoteTrack();
+  context.session.beginTurn();
+  context.session.endTurn(true);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED });
+  context.session.beginTurn();
+  context.session.endTurn(true);
+  assert.equal(context.lukeAudible(), false);
+
+  // An empty commit comes back as an error instead of a reply. Waiting for a
+  // `response.created` that is never coming would leave Luke mute for good.
+  context.emit({ type: REALTIME_SERVER_EVENT.ERROR, error: { message: "buffer too small" } });
+
+  assert.equal(context.lukeAudible(), true);
+});
+
 test("taking the turn silences Luke rather than only stopping generation", async () => {
   const context = harness();
   await context.session.connect();
@@ -743,6 +806,9 @@ test("taking the turn silences Luke rather than only stopping generation", async
   context.session.toggleTurn();
   context.session.toggleTurn();
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+  // Audible once the server says the reply is under way, rather than when it
+  // was asked for: until then anything arriving belongs to whatever came before.
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED });
   assert.equal(context.lukeAudible(), true);
 
   context.session.toggleTurn();
@@ -754,6 +820,7 @@ test("taking the turn silences Luke rather than only stopping generation", async
 
   // The next reply has to be audible again.
   context.session.toggleTurn();
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED });
   assert.equal(context.lukeAudible(), true);
 });
 
@@ -770,7 +837,13 @@ test("taking the turn cuts Luke off mid-reply", async () => {
   // The developer's turn always wins: the reply is stopped, not queued behind.
   assert.deepEqual(
     context.sent.map((event) => event.type),
-    [REALTIME_CLIENT_EVENT.RESPONSE_CANCEL, REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_CLEAR],
+    [
+      REALTIME_CLIENT_EVENT.RESPONSE_CANCEL,
+      // What the model already produced is dropped as well, or the rest of the
+      // sentence plays on over the turn that interrupted it.
+      REALTIME_CLIENT_EVENT.OUTPUT_AUDIO_BUFFER_CLEAR,
+      REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_CLEAR,
+    ],
   );
   assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
   assert.equal(context.microphoneEnabled(), true);

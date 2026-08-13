@@ -43,10 +43,19 @@ export const REALTIME_CLIENT_EVENT = {
   CONVERSATION_ITEM_CREATE: "conversation.item.create",
   RESPONSE_CREATE: "response.create",
   RESPONSE_CANCEL: "response.cancel",
+  /**
+   * WebRTC only, and the only event that actually stops a reply being heard.
+   * The model generates faster than it speaks, so by the time someone talks
+   * over Luke the rest of his sentence has already been sent — cancelling stops
+   * him producing more and does nothing about what is already on the way.
+   */
+  OUTPUT_AUDIO_BUFFER_CLEAR: "output_audio_buffer.clear",
 } as const;
 
 export const REALTIME_SERVER_EVENT = {
   RESPONSE_CREATED: "response.created",
+  /** The server confirming it dropped the audio it had queued for us. */
+  OUTPUT_AUDIO_BUFFER_CLEARED: "output_audio_buffer.cleared",
   RESPONSE_DONE: "response.done",
   ERROR: "error",
 } as const;
@@ -290,9 +299,20 @@ export function sessionContextEvents(
   ];
 }
 
-/** Builds the event that stops a reply the developer is talking over. */
+/**
+ * Builds the events that stop a reply the developer is talking over.
+ *
+ * Both are needed and in this order. Cancelling stops the model producing more
+ * of the reply; it says nothing about the audio it already produced, which the
+ * server has sent ahead because it generates faster than speech. Clearing the
+ * output buffer is what drops that, and doing it second means the server is not
+ * still filling the buffer as it empties it.
+ */
 export function cancelResponseEvents(): readonly Record<string, unknown>[] {
-  return [{ type: REALTIME_CLIENT_EVENT.RESPONSE_CANCEL }];
+  return [
+    { type: REALTIME_CLIENT_EVENT.RESPONSE_CANCEL },
+    { type: REALTIME_CLIENT_EVENT.OUTPUT_AUDIO_BUFFER_CLEAR },
+  ];
 }
 
 /** Builds the events that close a push-to-talk turn and ask for a reply. */

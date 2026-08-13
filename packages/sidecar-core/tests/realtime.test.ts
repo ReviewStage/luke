@@ -122,9 +122,12 @@ test("nothing asks the API for a transcript it will not show", () => {
 });
 
 test("a reply can be stopped by the developer taking the turn", () => {
+  // Cancelling is only half of it. The model generates faster than it speaks,
+  // so the rest of the sentence has already been sent by the time anyone talks
+  // over it, and only emptying the output buffer stops that being heard.
   assert.deepEqual(
     cancelResponseEvents().map((event) => event.type),
-    [REALTIME_CLIENT_EVENT.RESPONSE_CANCEL],
+    [REALTIME_CLIENT_EVENT.RESPONSE_CANCEL, REALTIME_CLIENT_EVENT.OUTPUT_AUDIO_BUFFER_CLEAR],
   );
 });
 
