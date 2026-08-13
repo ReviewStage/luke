@@ -111,6 +111,20 @@ export function ExternalIcon(): React.JSX.Element {
   );
 }
 
+/**
+ * A screen with the bar across its top and the status item's dot at the bar's
+ * right end, which is where this group's subject lives.
+ */
+export function MenuBarIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <rect x="2.4" y="4.2" width="19.2" height="15.6" rx="2.4" />
+      <path d="M2.4 8.6h19.2" />
+      <path d="M17.8 6.4h.01" />
+    </Glyph>
+  );
+}
+
 export function PowerIcon(): React.JSX.Element {
   return (
     <Glyph>

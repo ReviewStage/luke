@@ -529,6 +529,28 @@ function registerIpc(): void {
     },
   );
 
+  // The status item follows the stored answer at once: a setting that only
+  // took effect on the next launch would read as a toggle that does nothing.
+  ipcMain.handle(
+    channels.setShowInMenuBar,
+    async (event, show: unknown): Promise<SettingsUpdateResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (typeof show !== "boolean") throw new Error("Invalid menu bar request");
+      try {
+        const result = await settingsStore.setShowInMenuBar(show);
+        applyMenuBarVisibility(result.settings.showInMenuBar);
+        return result;
+      } catch {
+        // A filesystem failure is not something the user can act on, so it is
+        // reported as one line rather than as a raw system error.
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "Could not save that setting on this system.",
+        };
+      }
+    },
+  );
+
   // Where to get a key is a question the panel cannot answer itself, so it
   // hands the question to the browser. The renderer names a provider rather
   // than an address: the pages Luke can open are the ones in the provider
@@ -774,13 +796,31 @@ function createTray(): void {
   const image = trayImage();
   tray = new Tray(image);
   // A status item that draws nothing is a status item no one can find, and this
-  // one is the only way to reach Settings or to quit. If the artwork is ever
-  // missing from a build, the name it used to carry stands in for it.
+  // one is the quickest way to reach Settings or to quit. If the artwork is
+  // ever missing from a build, the name it used to carry stands in for it.
   if (image.isEmpty()) tray.setTitle("Luke");
   tray.setToolTip("Luke");
   // Clicking opens the menu and nothing else. The capsule is how the panel is
   // opened; a menu bar item that also toggled it made one of them a surprise.
   tray.setContextMenu(trayMenu());
+}
+
+function destroyTray(): void {
+  tray?.destroy();
+  tray = undefined;
+}
+
+/**
+ * Draws or removes the status item to match the setting. Hiding it loses no
+ * capability — Settings and Quit are both in the panel — which is what makes
+ * this the user's choice rather than Luke's.
+ */
+function applyMenuBarVisibility(show: boolean): void {
+  if (show) {
+    if (!tray) createTray();
+    return;
+  }
+  destroyTray();
 }
 
 function handleDisplayChange(): void {
@@ -819,8 +859,13 @@ if (!app.requestSingleInstanceLock()) {
     // Resolving settings touches the filesystem, and the OS keychain only for a
     // provider that already has a stored key to decrypt. Starting it here keeps
     // that work off the renderer's first paint, which blocks on the bootstrap
-    // reply.
-    void settingsStore.snapshot();
+    // reply. The status item waits for the answer because whether to draw it at
+    // all is part of it; a settings file that cannot be read leaves the item
+    // shown, the same answer a file that has never said gives.
+    void settingsStore.snapshot().then(
+      (settings) => applyMenuBarVisibility(settings.showInMenuBar),
+      () => applyMenuBarVisibility(true),
+    );
     reportVoiceAvailability();
     // The report is not made here: the helper answers over its own stdout a
     // moment later, and a line printed now would state an absence that only
@@ -828,7 +873,6 @@ if (!app.requestSingleInstanceLock()) {
     registerVoiceHotkey();
     createPanel();
     configurePermissions();
-    createTray();
     startSessionObservation();
 
     screen.on("display-added", handleDisplayChange);

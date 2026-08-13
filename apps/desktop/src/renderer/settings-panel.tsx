@@ -26,6 +26,7 @@ import {
   ExternalIcon,
   KeyboardIcon,
   KeyIcon,
+  MenuBarIcon,
   PencilIcon,
   PowerIcon,
   ShieldIcon,
@@ -50,6 +51,11 @@ export interface SettingsPanelProps {
    * and an entry can outlast the panel it was started in.
    */
   panelOpen: boolean;
+  /**
+   * Shows or hides the menu bar status item. The store answers with why when it
+   * refuses, and the row is where that answer belongs.
+   */
+  onShowInMenuBarChange: (show: boolean) => Promise<string | undefined>;
   onQuit: () => void;
   /** The talk key, shown so it can be learned. It is not editable yet. */
   voiceHotkey?: string;
@@ -463,6 +469,63 @@ function CredentialsSection({
   );
 }
 
+/**
+ * Whether Luke stands in the menu bar as well as at the notch. One line and one
+ * control, because nothing rides on the answer: Settings and Quit live in this
+ * panel, so the status item is a second door rather than the only one.
+ */
+function MenuBarSection({
+  shown,
+  onChange,
+}: {
+  shown: boolean;
+  onChange: (show: boolean) => Promise<string | undefined>;
+}): React.JSX.Element {
+  // The change is a round trip through the settings file, so the control rests
+  // until the store has answered rather than claiming a state it may not get.
+  const [busy, setBusy] = useState(false);
+  const [rejection, setRejection] = useState<string>();
+  const toggle = async () => {
+    setBusy(true);
+    setRejection(await onChange(!shown));
+    setBusy(false);
+  };
+  return (
+    <section className="settings-section" style={{ "--row-index": 4 } as React.CSSProperties}>
+      <h2>
+        <MenuBarIcon />
+        Menu bar
+      </h2>
+      {/* The check says shown, the way it says connected on a provider's line,
+          and the button offers only the state the row is not already in. */}
+      <div className="settings-row">
+        <span className="settings-copy">
+          <span className="settings-name">
+            <strong>Show Luke in the menu bar</strong>
+            {shown ? <CheckIcon /> : null}
+          </span>
+          <small>
+            {shown
+              ? "Luke's face at the right end of the bar, with Settings and Quit under it."
+              : "Hidden. Settings and Quit stay right here in the panel."}
+          </small>
+        </span>
+        <span className="settings-actions">
+          <button
+            type="button"
+            className="quiet-button"
+            disabled={busy}
+            onClick={() => void toggle()}
+          >
+            {shown ? "Hide" : "Show"}
+          </button>
+        </span>
+      </div>
+      {rejection ? <p className="error-message">{rejection}</p> : null}
+    </section>
+  );
+}
+
 export function SettingsPanel({
   microphoneStatus,
   microphoneError,
@@ -472,6 +535,7 @@ export function SettingsPanel({
   settings,
   credentials,
   panelOpen,
+  onShowInMenuBarChange,
   onQuit,
   voiceHotkey,
   voiceHotkeyHeld,
@@ -555,10 +619,14 @@ export function SettingsPanel({
         {microphoneError ? <p className="error-message">{microphoneError}</p> : null}
       </section>
 
+      {settings ? (
+        <MenuBarSection shown={settings.showInMenuBar} onChange={onShowInMenuBarChange} />
+      ) : null}
+
       <button
         type="button"
         className="quit-button"
-        style={{ "--row-index": 4 } as React.CSSProperties}
+        style={{ "--row-index": 5 } as React.CSSProperties}
         onClick={onQuit}
       >
         <PowerIcon />

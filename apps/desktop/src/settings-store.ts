@@ -25,6 +25,7 @@ const SETTINGS_FILE_MODE = 0o600;
 const SETTINGS_FIELD = {
   API_KEYS: "apiKeys",
   LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
+  SHOW_IN_MENU_BAR: "showInMenuBar",
   VERSION: "version",
 } as const;
 
@@ -65,6 +66,12 @@ interface PersistedSettings {
    * through untouched so an older build cannot discard a newer one's key.
    */
   apiKeys: Readonly<Record<string, string>>;
+  /**
+   * Whether the menu bar status item is drawn. A file that has never said —
+   * written before the choice existed, or hand-edited into nonsense — means the
+   * item is shown, because until the user hides it that is what Luke does.
+   */
+  showInMenuBar: boolean;
 }
 
 interface ResolvedApiKey {
@@ -137,9 +144,11 @@ function parsePersistedSettings(source: string): PersistedSettings {
   }
   const record = parsed as Record<string, unknown>;
   const version = record[SETTINGS_FIELD.VERSION];
+  const showInMenuBar = record[SETTINGS_FIELD.SHOW_IN_MENU_BAR];
   return {
     version: typeof version === "number" ? version : SETTINGS_FILE_VERSION,
     apiKeys: storedApiKeys(record),
+    showInMenuBar: typeof showInMenuBar === "boolean" ? showInMenuBar : true,
   };
 }
 
@@ -180,6 +189,7 @@ export class SettingsStore {
       // its own: a snapshot is taken on every launch, and most of them are for
       // a user with no key to protect.
       secretStorage: this.#secretStorage,
+      showInMenuBar: (await this.#load()).showInMenuBar,
     };
   }
 
@@ -233,6 +243,26 @@ export class SettingsStore {
       await this.#write(next);
       this.#loading = Promise.resolve(next);
       this.#resolved.delete(providerId);
+    });
+    return { settings: await this.snapshot() };
+  }
+
+  /**
+   * Remembers whether the menu bar status item is drawn. A preference is not a
+   * credential, so nothing here touches the cipher: storing this choice must
+   * never be the reason the Keychain dialog appears.
+   */
+  async setShowInMenuBar(show: boolean): Promise<SettingsUpdateResult> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (persisted.showInMenuBar === show) return;
+      const next: PersistedSettings = {
+        ...persisted,
+        version: SETTINGS_FILE_VERSION,
+        showInMenuBar: show,
+      };
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
     });
     return { settings: await this.snapshot() };
   }
@@ -322,7 +352,11 @@ export class SettingsStore {
       if (!canIgnoreFilesystemError(error)) throw error;
     }
 
-    let persisted: PersistedSettings = { version: SETTINGS_FILE_VERSION, apiKeys: {} };
+    let persisted: PersistedSettings = {
+      version: SETTINGS_FILE_VERSION,
+      apiKeys: {},
+      showInMenuBar: true,
+    };
     if (source) {
       try {
         persisted = parsePersistedSettings(source);
