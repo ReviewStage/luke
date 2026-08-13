@@ -1,6 +1,7 @@
 /* The renderer ships one stylesheet; esbuild inlines these imports. */
 @import "./base.css";
 @import "./sessions.css";
+@import "./voice.css";
 /* Generated from design/generate-brand-assets.mjs; base.css holds the wiring it
    assumes. Last, so a hand-written rule can still win. */
 @import "./face-motion.css";

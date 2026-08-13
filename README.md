@@ -58,19 +58,65 @@ requires hooks, plugins, wrappers, or changes to how a session is launched.
   closes, so it always reopens showing every session Luke is tracking.
 - Entering a cloud provider's credential narrows the panel to a single field, so
   the page you copy it from stays readable while Luke waits for the paste.
-- An optional microphone visualization can react to local audio levels.
 - An optional OpenAI attention review can help decide which updates should be
   prioritized in the interface.
+- An optional spoken conversation, described below, lets you ask Luke about your
+  sessions and hear the answer.
 
-Luke does not speak, send commands to agents, inject terminal input, or expose
-agent controls. The microphone feature is an audio-level visualization, not
-speech recognition or a voice session.
+Luke does not send commands to agents, inject terminal input, or expose agent
+controls.
+
+## Talking to Luke
+
+Voice is off unless `OPENAI_API_KEY` is set. It is a real voice session: your
+microphone audio goes to OpenAI, and Luke answers out loud. Read
+[Privacy](PRIVACY.md) first — this is the one feature that sends audio off your
+Mac.
+
+One key runs it, and it answers from whatever app is frontmost:
+
+- **Hold** `⌥Space` and talk. Let go to send. The turn lasts exactly as long as
+  the key is down, so it cannot be left open by forgetting to press again. Luke
+  connects on the first press, which is when macOS asks for the microphone.
+- **Tap** it instead — under a quarter of a second — to leave the turn open for
+  a question too long to hold through. Tap again to send.
+- **Press while Luke is talking** to cut him off and take the turn back.
+- **Escape** discards an open turn instead of sending it, while the panel is the
+  frontmost window.
+
+If another app already owns `⌥Space`, Luke falls back to `⌥S`. Settings shows
+which key you actually have, under **Keyboard shortcuts**. It is not
+configurable yet.
+
+Holding is read by a small helper Luke ships beside the app, because Electron
+reports a global key being pressed but never released. The helper is told the
+one chord to watch for and can see no other key, which is why holding costs no
+Accessibility or Input Monitoring grant. Where that helper cannot run, the key
+falls back to a press-to-start, press-to-send toggle and Settings says so.
+
+Settings lists the microphone under **Permissions**, with a green check once
+access is granted and a link to System Settings beside it.
+
+macOS asks once, the first time Luke needs the microphone, and keeps your
+answer. No app can raise that prompt again, and only you can withdraw the
+grant — in System Settings › Privacy & Security › Microphone, which the link
+opens. That is the only revoking there is, so Luke offers the way there rather
+than a control of its own that would look like the same thing and not be.
+
+Luke's face is the interface: it plays its listening motion while you speak and
+its talking motion while it answers, so the capsule says whose turn it is. Colour
+says the same thing again — the face and the meter beside it are green while you
+have the turn and blue while Luke has it — so a glance is enough even with the
+peek closed. There is no transcript.
 
 ## Privacy
 
-Luke observes provider state read-only and keeps microphone processing local.
-An external attention-review request is made only when `OPENAI_API_KEY` is set.
-See [PRIVACY.md](PRIVACY.md) for the exact data boundaries and retention wording.
+Luke observes provider state read-only. Without `OPENAI_API_KEY` it never opens
+the microphone and never asks for it: talking is the only thing it uses the
+microphone for, and there is nothing to talk to. With the key set, an
+attention-review request is made, and the spoken conversation sends the audio of
+a turn you opened to OpenAI. See [PRIVACY.md](PRIVACY.md) for the exact data
+boundaries and retention wording.
 
 ## Build from source
 
@@ -145,17 +191,21 @@ local state, while Conductor, Cursor, and Devin use their separately configured
 provider credentials. If `OPENAI_API_KEY` is set, Luke can also send a bounded status update to
 the configured Responses endpoint for attention classification. That update can
 include the session title, recap, repository, branch, current tool activity, and
-reported error; see [PRIVACY.md](PRIVACY.md) for the exact boundary. This does
-not enable speech or agent control.
+reported error; see [PRIVACY.md](PRIVACY.md) for the exact boundary. The same
+key enables the spoken conversation described above. Neither enables agent
+control.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `OPENAI_API_KEY` | unset | Enables external attention review |
+| `OPENAI_API_KEY` | unset | Enables external attention review and the spoken conversation |
 | `LUKE_ATTENTION_MODEL` | `gpt-5.6-luna` | Selects the review model |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Selects the Responses-compatible endpoint |
+| `LUKE_REALTIME_MODEL` | `gpt-realtime-2.1` | Selects the conversation model |
+| `LUKE_REALTIME_VOICE` | `cedar` | Selects the spoken voice |
 
 Changing `OPENAI_BASE_URL` sends attention-review data to that endpoint instead
-of OpenAI. See [PRIVACY.md](PRIVACY.md) before enabling the feature.
+of OpenAI. It does not redirect the conversation, which always uses OpenAI's own
+host. See [PRIVACY.md](PRIVACY.md) before enabling either feature.
 
 ## Repository map
 

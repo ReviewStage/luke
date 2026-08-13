@@ -5,8 +5,10 @@ export { PACKAGED_ARCHITECTURE };
 export const MACOS_DEPLOYMENT_TARGET = "14.0";
 export const SWIFT_TARGET_TRIPLE = `${PACKAGED_ARCHITECTURE}-apple-macos${MACOS_DEPLOYMENT_TARGET}`;
 export const LICENSE_RESOURCE_NAME = "LUKE-LICENSE.txt";
+// This is the sentence macOS shows when it asks for the microphone, so it is
+// what consent is given against. It has to say where the audio goes.
 export const MICROPHONE_USAGE_DESCRIPTION =
-  "Luke uses microphone input to display live audio activity. Audio is processed locally and is not recorded or uploaded.";
+  "Luke uses the microphone for spoken conversation. Audio from a turn you start is sent to OpenAI to answer it, and is never recorded or written to disk.";
 export const ICONSET_SOURCES = Object.freeze({
   "icon_16x16.png": "luke-icon-16.png",
   "icon_16x16@2x.png": "luke-icon-32.png",
@@ -24,14 +26,13 @@ export const SIGNING_MODE = {
   DEVELOPER_ID: "developer-id",
 };
 
-export function swiftCompilerArguments(source, output) {
+export function swiftCompilerArguments(source, output, frameworks = ["AppKit"]) {
   return [
     "swiftc",
     "-parse-as-library",
     "-target",
     SWIFT_TARGET_TRIPLE,
-    "-framework",
-    "AppKit",
+    ...frameworks.flatMap((framework) => ["-framework", framework]),
     source,
     "-o",
     output,
@@ -51,7 +52,7 @@ export function resolveSigningMode(env) {
 export function createPackagerOptions({
   appRoot,
   outputRoot,
-  helperPath,
+  helperPaths,
   iconPath,
   licensePath,
   entitlementsPath,
@@ -72,7 +73,7 @@ export function createPackagerOptions({
     overwrite: true,
     prune: false,
     icon: iconPath,
-    extraResource: [helperPath, licensePath],
+    extraResource: [...helperPaths, licensePath],
     extendInfo: {
       CFBundleDisplayName: "Luke",
       LSMinimumSystemVersion: MACOS_DEPLOYMENT_TARGET,

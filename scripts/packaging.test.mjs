@@ -16,7 +16,7 @@ import {
   SWIFT_TARGET_TRIPLE,
   swiftCompilerArguments,
 } from "../apps/desktop/scripts/package-config.mjs";
-import { packagedAppExecutable } from "../apps/desktop/scripts/package-layout.mjs";
+import { NATIVE_HELPERS, packagedAppExecutable } from "../apps/desktop/scripts/package-layout.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDirectory, "..");
@@ -34,7 +34,10 @@ function packagerOptions(signing = resolveSigningMode({})) {
   return createPackagerOptions({
     appRoot: "/repo/apps/desktop",
     outputRoot: "/repo/apps/desktop/out",
-    helperPath: "/repo/apps/desktop/.build/native/mac-screen-geometry",
+    helperPaths: [
+      "/repo/apps/desktop/.build/native/mac-screen-geometry",
+      "/repo/apps/desktop/.build/native/mac-talk-key",
+    ],
     iconPath,
     licensePath: `/repo/apps/desktop/.build/${LICENSE_RESOURCE_NAME}`,
     entitlementsPath,
@@ -117,6 +120,30 @@ test("packaging declares the macOS deployment target", () => {
   ]);
 });
 
+test("every native helper is built and shipped, or neither happens", () => {
+  const shipped = packagerOptions().extraResource;
+
+  for (const helper of NATIVE_HELPERS) {
+    assert.ok(
+      shipped.some((resourcePath) => resourcePath.endsWith(helper.binary)),
+      // A helper built but not bundled is a feature that works in development
+      // and is simply absent from the app someone downloads.
+      `${helper.binary} reaches the bundle`,
+    );
+    assert.ok(helper.source.endsWith(".swift"));
+    assert.ok(helper.frameworks.length > 0);
+  }
+});
+
+test("the talk key is compiled against the framework that reads it", () => {
+  const talkKey = NATIVE_HELPERS.find((helper) => helper.binary === "mac-talk-key");
+
+  assert.ok(talkKey, "the talk key helper is declared");
+  // Carbon is what `RegisterEventHotKey` lives in, and it is the whole reason
+  // the helper exists: it reports a key being released without Accessibility.
+  assert.ok(swiftCompilerArguments("s", "o", talkKey.frameworks).includes("Carbon"));
+});
+
 test("packaging includes the Luke license and approved microphone description", () => {
   const options = packagerOptions();
 
@@ -125,9 +152,12 @@ test("packaging includes the Luke license and approved microphone description", 
     options.extraResource.some((resourcePath) => resourcePath.endsWith(LICENSE_RESOURCE_NAME)),
     true,
   );
+  // Spelled out rather than compared to the constant alone: this is the sentence
+  // macOS shows when it asks for the microphone, so a change to it is a change
+  // to what the user consented to and should not pass unnoticed.
   assert.equal(
     options.extendInfo.NSMicrophoneUsageDescription,
-    "Luke uses microphone input to display live audio activity. Audio is processed locally and is not recorded or uploaded.",
+    "Luke uses the microphone for spoken conversation. Audio from a turn you start is sent to OpenAI to answer it, and is never recorded or written to disk.",
   );
   assert.equal(options.extendInfo.NSMicrophoneUsageDescription, MICROPHONE_USAGE_DESCRIPTION);
 });

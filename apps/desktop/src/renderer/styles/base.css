@@ -5,6 +5,13 @@
   background: transparent;
 
   --state-working: #5cd5ff;
+  /* Whose voice is live, so a glance says who is talking. Your turn is green,
+     which is nowhere else on the surface and so belongs to you alone; Luke
+     answers in the blue the rest of the surface already uses for something
+     live and in progress, which is what a reply is. Both the meter and the face
+     read from here, so the two can never disagree about who has the turn. */
+  --voice-developer: #7fe0ac;
+  --voice-luke: var(--state-working);
   --state-attention: #ffa049;
   --state-complete: #6fdca4;
   --state-idle: rgba(255, 255, 255, 0.44);
@@ -200,6 +207,18 @@
   --capsule-width: calc(var(--notch-housing-width) + 72px);
   --capsule-height: max(var(--notch-top-inset), 32px);
   --peek-width: calc(var(--notch-housing-width) + 248px);
+  /* The capsule with room for the meter beside the face rather than instead of
+     it. Only the left wing needs it — that is where both are drawn — so only
+     that side grows: 18px for the meter and the 8px between them, added to the
+     36px the capsule already has there. The right side keeps its 36px, because
+     a count badge with 26px of new space around it is emptier than it was, not
+     better. It is Luke's reply that needs this at all; your own turn puts the
+     meter where the face was and needs no more room than the face did. */
+  --capsule-voice-growth: 26px;
+  --capsule-voice-width: calc(var(--capsule-width) + var(--capsule-voice-growth));
+  /* Growing one side moves the shape's centre half the growth away from it, so
+     the right edge stays exactly where it was and only the left one travels. */
+  --capsule-voice-shift: calc(var(--capsule-voice-growth) / 2);
   /* Wide enough for a key, a way out, and a way on, and no wider — the page the
      key was copied from is behind this and has to stay readable. The floor is
      what those three need on a display with no housing to grow from. */
@@ -388,6 +407,49 @@ button:disabled {
   width: var(--slot-width);
   height: var(--slot-height, 96px);
   border-radius: 0 0 var(--slot-radius) var(--slot-radius);
+}
+
+/* Luke answering, with nothing else open. The capsule holds one thing a side,
+   and his reply needs two: the face saying it is him, and the meter saying he
+   is still going. The shape grows to cover both rather than letting the meter
+   be drawn past the black onto the desktop.
+
+   This is the surface's own width, which is the one thing here that may be
+   animated — it is a leaf with no text to re-shape — and the compact window
+   already holds the peek, so there is room for it without asking the main
+   process for any. Your own turn is not here: the meter takes the face's place
+   then, and needs exactly the room the face had. */
+.app-stage[data-presentation="capsule"][data-voice="luke"] .panel-surface {
+  width: var(--capsule-voice-width);
+  transform: translate(calc(-50% - var(--capsule-voice-shift)), var(--shape-top, 0px));
+  /* Growing leads, like every other state that grows. The base rule holds every
+     property back by `--duration-exit` so the shape never shrinks out from
+     under content still on screen; that delay is for leaving, and applying it
+     here is what let the meter arrive before the room for it did. Shrinking
+     keeps it, because this rule stops matching the moment the reply ends. */
+  transition-duration: var(--duration-shape);
+  transition-delay: 0s;
+}
+
+.app-stage[data-presentation="capsule"][data-voice="luke"] .compact-hover-target {
+  width: var(--capsule-voice-width);
+  transform: translateX(calc(-50% - var(--capsule-voice-shift)));
+}
+
+/* The meter follows the room being made for it, the way the marks follow the
+   peek — but not on the marks' beat, because the two are not the same distance.
+   A mark fades in early and slides 8px, which the peek's edge has long since
+   passed; the capsule grows 26px, and a meter drawn 60ms in is drawn past an
+   edge that is still 300ms away from it. So it crosses over the last of the
+   shape's travel and finishes as the shape settles, which is the same thing the
+   marks are doing — arriving inside the black rather than ahead of it.
+
+   Only here: when the meter stands in the face's place nothing grows, so there
+   is nothing for it to wait behind and it appears at once. */
+.app-stage[data-presentation="capsule"][data-voice="luke"] .wing-meter[data-turn] {
+  transition-duration: var(--duration-quick), var(--duration-shape);
+  transition-timing-function: var(--motion-exit), var(--spring);
+  transition-delay: calc(var(--duration-shape) - var(--duration-quick));
 }
 
 /* Under the pointer: wide enough to say what the count means. */
@@ -598,6 +660,16 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   }
 }
 
+/* A meter drawn for a live turn does not wait for the wing to unfold. It is
+   either standing in the face's place or beside it, and the face never waited:
+   in the capsule it is what the shape has grown to show, so a meter that faded
+   in with the marks would leave that room empty for the length of the turn's
+   first word. */
+.wing-meter[data-turn] {
+  opacity: 1;
+  transform: none;
+}
+
 /* More providers than the wing can hold. Counted rather than dropped, at the
    far end of the row, where it reads as the remainder of a list. */
 .wing-more {
@@ -720,10 +792,16 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 
 /* The two motions the microphone owns. The capsule has no room for the meter
    beside the face, so Luke takes the meter's own colour while it is open: the
-   state reads at every size, and the bars stay with the peek. */
-.luke-face[data-motion="talking"],
+   state reads at every size, and the bars stay with the peek. Which colour is
+   which is the same answer in both places — the face is green while it attends
+   to you and blue while it is the one talking, so the capsule alone says whose
+   turn it is even with the peek closed. */
 .luke-face[data-motion="listening"] {
-  color: var(--state-working);
+  color: var(--voice-developer);
+}
+
+.luke-face[data-motion="talking"] {
+  color: var(--voice-luke);
 }
 
 /* Everything the artwork moves. Which keyframes each part plays, at what
@@ -907,9 +985,14 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    It unfolds with the peek the way the marks do, because the capsule has no room
    for it beside the face; there, a live microphone is what the face's colour and
    tempo say. Speech only raises the meter from idle to full. */
+/* Exactly the face's 18px, because it stands where the face stands and the
+   capsule has room for one of them: five bars at 2px with 2px between them. A
+   wider meter is drawn past the black and onto the desktop, since the wings are
+   bounded by the peek the capsule can grow into rather than by the capsule. It
+   is also what keeps `FACE_AND_GAP` in notch-wings.tsx true of either one. */
 .waveform {
   display: flex;
-  width: 28px;
+  width: 18px;
   height: 22px;
   flex: 0 0 auto;
   align-items: center;
@@ -938,18 +1021,14 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 }
 
 .waveform-bar:nth-child(1),
-.waveform-bar:nth-child(7) {
+.waveform-bar:nth-child(5) {
   --bar-height: 9px;
 }
 .waveform-bar:nth-child(2),
-.waveform-bar:nth-child(6) {
-  --bar-height: 13px;
-}
-.waveform-bar:nth-child(3),
-.waveform-bar:nth-child(5) {
-  --bar-height: 18px;
-}
 .waveform-bar:nth-child(4) {
+  --bar-height: 15px;
+}
+.waveform-bar:nth-child(3) {
   --bar-height: 23px;
 }
 
@@ -1363,6 +1442,14 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .credential-remove:disabled:hover {
   background: var(--raised);
   color: var(--text-secondary);
+}
+
+/* A name and what is true of it, on one line: the same 7px the credential rows
+   put between a provider's mark, its name, and its check. */
+.settings-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
 }
 
 /* Deleting a key is the one act in this panel that cannot be undone from inside

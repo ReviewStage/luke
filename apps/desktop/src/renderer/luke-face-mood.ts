@@ -20,6 +20,55 @@ export interface FaceContext {
   total: number;
 }
 
+/** Whose turn the meter is drawing, when there is a turn to read. */
+export const SPEECH_TURN = {
+  DEVELOPER: "developer",
+  LUKE: "luke",
+} as const;
+
+export type SpeechTurn = (typeof SPEECH_TURN)[keyof typeof SPEECH_TURN];
+
+/**
+ * What the face should read from a conversation.
+ *
+ * Once a call is up the turn says outright who is talking, and amplitude cannot:
+ * the same meter draws Luke answering and the developer asking, so a face
+ * following the bars would talk back at someone mid-sentence. Amplitude is only
+ * consulted when there is no turn to read — a microphone opened from Settings
+ * with no call behind it, and the fixture, which has no turn at all.
+ */
+export function speechFaceInputs(input: {
+  turn?: SpeechTurn;
+  hasAudioSignal: boolean;
+  fixtureSpeaking: boolean;
+  voiceActive: boolean;
+}): Pick<FaceContext, "speaking" | "microphoneLive"> {
+  if (input.turn === SPEECH_TURN.LUKE) return { speaking: true, microphoneLive: false };
+  if (input.turn === SPEECH_TURN.DEVELOPER) return { speaking: false, microphoneLive: true };
+  return {
+    // Guarded rather than reset: a microphone that has been closed cannot still
+    // be carrying speech, whatever the last frame the meter read said.
+    speaking: input.hasAudioSignal && (input.fixtureSpeaking || input.voiceActive),
+    microphoneLive: input.hasAudioSignal,
+  };
+}
+
+/**
+ * Whether Luke stands aside and lets the meter have his place.
+ *
+ * While you hold the turn, the one thing worth showing is that you are being
+ * heard. The capsule has room for exactly one of them, and a face listening is
+ * a weaker way of saying it than bars moving to your own voice — so for that
+ * stretch the meter is drawn where the face was, and the face returns the
+ * moment the turn does.
+ *
+ * Guarded on the meter existing: hiding one and drawing neither would leave the
+ * capsule saying nothing at all, which is worse than either.
+ */
+export function faceYieldsToMeter(input: { turn?: SpeechTurn; hasAudioSignal: boolean }): boolean {
+  return input.turn === SPEECH_TURN.DEVELOPER && input.hasAudioSignal;
+}
+
 /**
  * What Luke settles into, which is usually nothing whatever. A rest repeats for
  * as long as it is true, so the only motions allowed to be one are the three

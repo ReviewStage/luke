@@ -78,9 +78,37 @@ activity or error, provider-designated recap, repository, branch, model, and
 session or change links. The links and model label are kept out of the optional
 attention-review request described below.
 
-The microphone is optional. When enabled, Luke uses it only to calculate audio
-levels for a local visualization. Audio is not recorded, written to disk, sent
-to an attention-review endpoint, or otherwise uploaded by Luke.
+The microphone is optional and is used two ways.
+
+Without `OPENAI_API_KEY` there is nothing to talk to, so Luke never asks for the
+microphone and never opens it.
+
+With `OPENAI_API_KEY`, the spoken conversation described below sends microphone
+audio to OpenAI. That is the only thing Luke uses the microphone for; there is no
+local-only listening mode. Nothing is captured until you open a turn: the
+microphone track is created muted, server-side voice detection is disabled, and
+each turn begins by discarding whatever the buffer held. Luke never opens the
+microphone on its own.
+
+## Optional spoken conversation
+
+Voice is off unless `OPENAI_API_KEY` is set, and no audio leaves your Mac
+without it.
+
+When you open a turn, Luke sends that turn's microphone audio to the OpenAI
+Realtime API over a direct WebRTC connection from your Mac, and plays back the
+spoken reply. OpenAI's policies govern that audio and the reply.
+
+Alongside the audio, Luke sends the same bounded session fields the attention
+review uses — provider name, session title, status, and the provider's own
+summary — so a spoken question about your sessions can be answered. No
+transcript, file content, or command output is ever included.
+
+Luke does not record the conversation, write audio to disk, or keep a
+transcript. Audio is not retained by Luke in any form.
+
+The standing API key stays in Luke's main process. The renderer receives only a
+short-lived client secret minted for one call, which expires on its own.
 
 ## Optional external attention review
 

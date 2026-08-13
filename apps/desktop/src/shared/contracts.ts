@@ -1,6 +1,8 @@
 import type {
+  AttentionSpeech,
   FixtureSnapshot,
   NormalizedSession,
+  RealtimeConnection,
   Rectangle,
   ResolvedNotchGeometry,
   SessionIdentity,
@@ -81,9 +83,33 @@ export interface AppBootstrap {
   chromiumVersion: string;
   nodeVersion: string;
   microphoneStatus: MicrophoneStatus;
+  /**
+   * Whether a Realtime credential can be minted at all. False leaves the voice
+   * experience explicitly off rather than failing when the user first speaks.
+   */
+  realtimeAvailable: boolean;
+  /**
+   * The talk key as the user should read it, absent when the system refused to
+   * register one — a shortcut nothing can trigger must not be shown as though
+   * it works.
+   */
+  voiceHotkey?: string;
+  /**
+   * Whether that key reports being let go of. Only a key that does can hold a
+   * turn open for as long as it is down; the fallback can only toggle one, and
+   * the panel says which of the two the user actually has.
+   */
+  voiceHotkeyHeld: boolean;
+  /** Whether the panel should show the voice diagnostics block. */
   display: DisplayDiagnostic;
   sessions: readonly NormalizedSession[];
   settings: AppSettings;
+}
+
+/** The talk key as the panel should describe it. */
+export interface VoiceHotkeyState {
+  hotkey?: string;
+  held: boolean;
 }
 
 export interface AppBridge {
@@ -91,6 +117,12 @@ export interface AppBridge {
   setExpanded(expanded: boolean, focus?: boolean): Promise<WindowMode>;
   setPointerInterception(interceptsPointer: boolean): void;
   requestMicrophone(): Promise<MicrophoneStatus>;
+  /**
+   * Opens Privacy & Security in System Settings, where the system's own grant
+   * lives. Luke can ask for the microphone and stop using it; only the user can
+   * withdraw it, and only there.
+   */
+  openMicrophoneSettings(): void;
   setProviderApiKey(
     providerId: CredentialProviderId,
     apiKey: string | undefined,
@@ -110,11 +142,23 @@ export interface AppBridge {
   openSession(identity: SessionIdentity): void;
   /** Brings the expanded panel forward so it can accept typed input. */
   focusPanel(): void;
+  /** Mints a short-lived Realtime credential; the standing API key never crosses. */
+  requestRealtimeCredential(): Promise<RealtimeConnection | undefined>;
   notifyReady(): void;
   quit(): void;
   onLifecycle(callback: (eventName: string) => void): () => void;
   onDisplayChanged(callback: (display: DisplayDiagnostic) => void): () => void;
   onSessionsChanged(callback: (sessions: readonly NormalizedSession[]) => void): () => void;
+  onAttentionSpeech(callback: (speech: readonly AttentionSpeech[]) => void): () => void;
+  /** The talk key going down, from whatever app happened to be frontmost. */
+  onVoiceHotkeyPress(callback: () => void): () => void;
+  /** The same key being let go of, which is what ends a held turn. */
+  onVoiceHotkeyRelease(callback: () => void): () => void;
+  /**
+   * The key, once it is known. It arrives after bootstrap because registering
+   * it means asking a helper, and it can change if that helper stops answering.
+   */
+  onVoiceHotkeyChanged(callback: (state: VoiceHotkeyState) => void): () => void;
 }
 
 export const channels = {
@@ -122,10 +166,16 @@ export const channels = {
   setExpanded: "app:set-expanded",
   setPointerInterception: "app:set-pointer-interception",
   requestMicrophone: "app:request-microphone",
+  openMicrophoneSettings: "app:open-microphone-settings",
   setProviderApiKey: "app:set-provider-api-key",
   openProviderApiKeys: "app:open-provider-api-keys",
   openSession: "app:open-session",
   focusPanel: "app:focus-panel",
+  requestRealtimeCredential: "app:request-realtime-credential",
+  attentionSpeech: "app:attention-speech",
+  voiceHotkeyPress: "app:voice-hotkey-press",
+  voiceHotkeyRelease: "app:voice-hotkey-release",
+  voiceHotkeyChanged: "app:voice-hotkey-changed",
   rendererReady: "app:renderer-ready",
   lifecycle: "app:lifecycle",
   displayChanged: "app:display-changed",

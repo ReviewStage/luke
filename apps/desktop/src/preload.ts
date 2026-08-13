@@ -1,4 +1,9 @@
-import type { NormalizedSession, SessionIdentity } from "@sidecar/core";
+import type {
+  AttentionSpeech,
+  NormalizedSession,
+  RealtimeConnection,
+  SessionIdentity,
+} from "@sidecar/core";
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   AppBootstrap,
@@ -6,6 +11,7 @@ import type {
   DisplayDiagnostic,
   MicrophoneStatus,
   SettingsUpdateResult,
+  VoiceHotkeyState,
   WindowMode,
 } from "./shared/contracts";
 import { channels } from "./shared/contracts";
@@ -20,6 +26,7 @@ const bridge: AppBridge = {
   },
   requestMicrophone: () =>
     ipcRenderer.invoke(channels.requestMicrophone) as Promise<MicrophoneStatus>,
+  openMicrophoneSettings: () => ipcRenderer.send(channels.openMicrophoneSettings),
   setProviderApiKey: (providerId: CredentialProviderId, apiKey: string | undefined) =>
     ipcRenderer.invoke(
       channels.setProviderApiKey,
@@ -33,6 +40,10 @@ const bridge: AppBridge = {
     ipcRenderer.send(channels.openSession, identity);
   },
   focusPanel: () => ipcRenderer.send(channels.focusPanel),
+  requestRealtimeCredential: () =>
+    ipcRenderer.invoke(channels.requestRealtimeCredential) as Promise<
+      RealtimeConnection | undefined
+    >,
   notifyReady: () => ipcRenderer.send(channels.rendererReady),
   quit: () => ipcRenderer.send(channels.quit),
   onLifecycle: (callback: (eventName: string) => void) => {
@@ -51,6 +62,28 @@ const bridge: AppBridge = {
       callback(sessions);
     ipcRenderer.on(channels.sessionsChanged, listener);
     return () => ipcRenderer.removeListener(channels.sessionsChanged, listener);
+  },
+  onVoiceHotkeyPress: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on(channels.voiceHotkeyPress, listener);
+    return () => ipcRenderer.removeListener(channels.voiceHotkeyPress, listener);
+  },
+  onVoiceHotkeyRelease: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on(channels.voiceHotkeyRelease, listener);
+    return () => ipcRenderer.removeListener(channels.voiceHotkeyRelease, listener);
+  },
+  onVoiceHotkeyChanged: (callback: (state: VoiceHotkeyState) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, state: VoiceHotkeyState) =>
+      callback(state);
+    ipcRenderer.on(channels.voiceHotkeyChanged, listener);
+    return () => ipcRenderer.removeListener(channels.voiceHotkeyChanged, listener);
+  },
+  onAttentionSpeech: (callback: (speech: readonly AttentionSpeech[]) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, speech: readonly AttentionSpeech[]) =>
+      callback(speech);
+    ipcRenderer.on(channels.attentionSpeech, listener);
+    return () => ipcRenderer.removeListener(channels.attentionSpeech, listener);
   },
 };
 

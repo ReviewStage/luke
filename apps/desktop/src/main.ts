@@ -2,11 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
+  attentionSpeechFromReviews,
   CompositeSessionProviderAdapter,
   fixtureSnapshot,
   InMemorySessionRegistry,
   type NativeNotchGeometry,
   positionNotchWindow,
+  realtimeMintExplanation,
   SessionAttentionReviewer,
   type SessionIdentity,
   type SessionProviderAdapter,
@@ -15,6 +17,7 @@ import {
   app,
   BrowserWindow,
   type Display,
+  globalShortcut,
   type IpcMainEvent,
   type IpcMainInvokeEvent,
   ipcMain,
@@ -38,6 +41,10 @@ import { DevinSessionAdapter } from "./devin-adapter";
 import { JulesSessionAdapter } from "./jules-adapter";
 import { readMacScreenGeometry } from "./macos-screen-geometry";
 import { openAiAttentionEvaluatorFromEnvironment } from "./openai-attention-evaluator";
+import {
+  openAiRealtimeCredentialsFromEnvironment,
+  unavailableRealtimeDiagnostics,
+} from "./openai-realtime-credentials";
 import { OpenCodeSessionAdapter } from "./opencode-adapter";
 import { SettingsStore } from "./settings-store";
 import {
@@ -54,6 +61,14 @@ import {
   type CredentialProviderId,
   isCredentialProviderId,
 } from "./shared/credential-providers";
+import {
+  DEFAULT_VOICE_HOTKEYS,
+  VOICE_HOTKEY_ABSENCE,
+  type VoiceHotkeyAbsence,
+  voiceHotkeyLabel,
+  voiceHotkeyReport,
+} from "./shared/voice-hotkey";
+import { TalkKeyWatcher } from "./talk-key";
 
 const captureOutput = argumentValue("--capture-evidence");
 const profile = argumentValue("--profile") ?? "idle";
@@ -135,6 +150,99 @@ const attentionReviewer = attentionEvaluator
       currentSession: (identity) => sessionRegistry.get(identity),
     })
   : undefined;
+// A fixture run stays credential-free for the same reason attention review
+// does: evidence must be reproducible without a key and without a network.
+const realtimeCredentials = fixtureMode ? undefined : openAiRealtimeCredentialsFromEnvironment();
+let voiceHotkey: string | undefined;
+let talkKeyWatcher: TalkKeyWatcher | undefined;
+/**
+ * Whether the key reports being let go of. The helper does and the Electron
+ * fallback cannot, and that is the difference between holding a turn and
+ * toggling one — so the panel is told which key it actually has rather than
+ * describing the one it hoped for.
+ */
+let voiceHotkeyHeld = true;
+// Only read when no key was registered, so it starts at the case that needs no
+// explaining beyond itself: every candidate was refused.
+let voiceHotkeyAbsence: VoiceHotkeyAbsence = VOICE_HOTKEY_ABSENCE.ALREADY_OWNED;
+
+/**
+ * Registers the talk key with the system so it answers from whatever app is
+ * frontmost. Electron reports only the press and never the release, so the key
+ * is a toggle rather than a hold — which is also what lets one key interrupt a
+ * reply that is already playing.
+ */
+function registerVoiceHotkey(): void {
+  if (captureMode) {
+    voiceHotkeyAbsence = VOICE_HOTKEY_ABSENCE.CAPTURE_RUN;
+    reportVoiceHotkey();
+    return;
+  }
+  // Taking a system-wide key for a feature that cannot run would make every
+  // press somewhere else in macOS do nothing, visibly.
+  if (!realtimeCredentials) {
+    voiceHotkeyAbsence = VOICE_HOTKEY_ABSENCE.NO_CREDENTIAL;
+    reportVoiceHotkey();
+    return;
+  }
+  // The helper first, because it is the only one of the two that reports the
+  // key being let go of, and a key you hold is the whole point.
+  talkKeyWatcher = new TalkKeyWatcher({
+    onPress: () => panelWindow?.webContents.send(channels.voiceHotkeyPress),
+    onRelease: () => panelWindow?.webContents.send(channels.voiceHotkeyRelease),
+    onRegistered: (accelerator) => {
+      voiceHotkey = accelerator;
+      reportVoiceHotkey();
+      sendVoiceHotkey();
+    },
+    onUnavailable: () => {
+      talkKeyWatcher = undefined;
+      registerToggleHotkey();
+      reportVoiceHotkey();
+      sendVoiceHotkey();
+    },
+  });
+  if (talkKeyWatcher.start(DEFAULT_VOICE_HOTKEYS)) return;
+  talkKeyWatcher = undefined;
+  registerToggleHotkey();
+  reportVoiceHotkey();
+}
+
+/**
+ * The talk key without a release: a press toggles the turn instead of holding
+ * it. This is what answers when the helper cannot — another platform, a build
+ * without it — and it is a lesser thing rather than a broken one, so it is
+ * worth standing up rather than leaving the user with no key at all.
+ */
+function registerToggleHotkey(): void {
+  for (const accelerator of DEFAULT_VOICE_HOTKEYS) {
+    const registered = globalShortcut.register(accelerator, () => {
+      panelWindow?.webContents.send(channels.voiceHotkeyPress);
+      // A toggle has only the one edge, so it reports a release immediately and
+      // one short enough to read as a tap. Every press then latches or ends a
+      // turn, which is the old behaviour exactly.
+      panelWindow?.webContents.send(channels.voiceHotkeyRelease);
+    });
+    if (!registered) continue;
+    voiceHotkey = accelerator;
+    voiceHotkeyHeld = false;
+    return;
+  }
+  voiceHotkeyAbsence = VOICE_HOTKEY_ABSENCE.ALREADY_OWNED;
+}
+
+/** Tells a renderer the key it should be showing, whenever that changes. */
+function sendVoiceHotkey(): void {
+  panelWindow?.webContents.send(channels.voiceHotkeyChanged, {
+    ...(voiceHotkey ? { hotkey: voiceHotkeyLabel(voiceHotkey) } : {}),
+    held: voiceHotkeyHeld,
+  });
+}
+
+function reportVoiceHotkey(): void {
+  process.stderr.write(`${voiceHotkeyReport(voiceHotkey, voiceHotkeyAbsence)}\n`);
+}
+
 let windowMode: WindowMode = captureMode
   ? process.argv.includes("--compact")
     ? "compact"
@@ -328,6 +436,23 @@ function isSessionIdentity(value: unknown): value is SessionIdentity {
   );
 }
 
+/**
+ * States on startup whether voice is on, and why not when it is off. A packaged
+ * app has no visible stderr, but the common case during local testing is a
+ * terminal launch — where this is the difference between a one-line answer and
+ * guessing at an empty panel.
+ */
+function reportVoiceAvailability(): void {
+  const report = realtimeCredentials?.diagnostics() ?? unavailableRealtimeDiagnostics(fixtureMode);
+  if (realtimeCredentials) {
+    process.stderr.write(`Luke voice: enabled (model ${report.model}, voice ${report.voice})\n`);
+    return;
+  }
+  process.stderr.write(
+    `Luke voice: unavailable — ${realtimeMintExplanation(report.lastOutcome)}\n`,
+  );
+}
+
 function registerIpc(): void {
   ipcMain.handle(channels.bootstrap, async (event): Promise<AppBootstrap> => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
@@ -345,6 +470,9 @@ function registerIpc(): void {
       chromiumVersion: process.versions.chrome,
       nodeVersion: process.versions.node,
       microphoneStatus: microphoneStatus(),
+      realtimeAvailable: realtimeCredentials !== undefined,
+      ...(voiceHotkey ? { voiceHotkey: voiceHotkeyLabel(voiceHotkey) } : {}),
+      voiceHotkeyHeld,
       display: displayDiagnostic(),
       sessions: fixtureMode ? [] : sessionRegistry.snapshot().sessions,
       settings: await settingsStore.snapshot(),
@@ -405,6 +533,16 @@ function registerIpc(): void {
   // hands the question to the browser. The renderer names a provider rather
   // than an address: the pages Luke can open are the ones in the provider
   // registry, and no URL crosses this boundary.
+  // The system's own answer is the user's to change, and this is where macOS
+  // keeps it. The address is fixed here rather than passed in, so a renderer
+  // names the intent and never an address.
+  ipcMain.on(channels.openMicrophoneSettings, (event) => {
+    if (!trustedSender(event)) return;
+    void shell.openExternal(
+      "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
+    );
+  });
+
   ipcMain.on(channels.openProviderApiKeys, (event, providerId: unknown) => {
     if (!trustedSender(event) || !isCredentialProviderId(providerId)) return;
     void shell.openExternal(CREDENTIAL_PROVIDERS[providerId].apiKeysUrl);
@@ -432,6 +570,13 @@ function registerIpc(): void {
   ipcMain.on(channels.focusPanel, (event) => {
     if (!trustedSender(event) || windowMode !== "expanded") return;
     focusPanelWindow();
+  });
+
+  ipcMain.handle(channels.requestRealtimeCredential, async (event) => {
+    if (!trustedSender(event)) throw new Error("Untrusted renderer");
+    // Returning nothing rather than throwing keeps "no credentials configured"
+    // and "the mint failed" on the same explicit, non-fatal path.
+    return realtimeCredentials?.mint();
   });
 
   ipcMain.on(channels.quit, (event) => {
@@ -483,8 +628,15 @@ async function reviewSessionAttention(): Promise<void> {
   if (!attentionReviewer || attentionReviewRunning) return;
   attentionReviewRunning = true;
   try {
-    for (const review of await attentionReviewer.review(sessionRegistry.list())) {
+    const reviews = await attentionReviewer.review(sessionRegistry.list());
+    for (const review of reviews) {
       sessionRegistry.setAttention(review, review.decision);
+    }
+    // `decision` says the session needs attention, which the panel shows;
+    // `outcome` says whether to voice it now, which only these reviews do.
+    const speech = attentionSpeechFromReviews(reviews);
+    if (speech.length > 0) {
+      panelWindow?.webContents.send(channels.attentionSpeech, speech);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -669,6 +821,11 @@ if (!app.requestSingleInstanceLock()) {
     // that work off the renderer's first paint, which blocks on the bootstrap
     // reply.
     void settingsStore.snapshot();
+    reportVoiceAvailability();
+    // The report is not made here: the helper answers over its own stdout a
+    // moment later, and a line printed now would state an absence that only
+    // exists because nobody has answered yet.
+    registerVoiceHotkey();
     createPanel();
     configurePermissions();
     createTray();
@@ -692,6 +849,14 @@ if (!app.requestSingleInstanceLock()) {
     }
   });
 }
+
+app.on("will-quit", () => {
+  globalShortcut.unregisterAll();
+  // The helper is a process of Luke's own, so it does not outlive the app that
+  // spawned it and leave a key registered against nothing.
+  talkKeyWatcher?.stop();
+  talkKeyWatcher = undefined;
+});
 
 app.on("before-quit", () => {
   if (sessionRefreshTimer) clearInterval(sessionRefreshTimer);

@@ -1,7 +1,19 @@
 import { useEffect, useRef } from "react";
 
-const BAR_INDEXES = [0, 1, 2, 3, 4, 5, 6];
-const FIXTURE_LEVELS = [0.42, 0.62, 0.82, 1, 0.78, 0.58, 0.38];
+/**
+ * Five, because the meter is as wide as the face it is drawn beside or in place
+ * of, and five 2px bars with 2px between them is what 18px holds.
+ */
+const BAR_INDEXES = [0, 1, 2, 3, 4];
+const FIXTURE_LEVELS = [0.46, 0.74, 1, 0.7, 0.42];
+
+/** Whose voice the meter is drawing, which is what colours it. */
+export const WAVEFORM_VOICE = {
+  DEVELOPER: "developer",
+  LUKE: "luke",
+} as const;
+
+export type WaveformVoice = (typeof WAVEFORM_VOICE)[keyof typeof WAVEFORM_VOICE];
 
 /**
  * The meter reports speech; it does not own the fact. Luke's face answers the
@@ -12,11 +24,14 @@ const FIXTURE_LEVELS = [0.42, 0.62, 0.82, 1, 0.78, 0.58, 0.38];
 export function Waveform({
   analyser,
   speaking = false,
+  voice,
   voiceActive = false,
   onVoiceActivity,
 }: {
   analyser?: AnalyserNode;
   speaking?: boolean;
+  /** Whose turn the bars are drawing, which is what colours them. */
+  voice?: WaveformVoice;
   voiceActive?: boolean;
   onVoiceActivity?: (active: boolean) => void;
 }): React.JSX.Element {
@@ -73,9 +88,10 @@ export function Waveform({
     <span
       className="waveform"
       role="img"
-      aria-label="Live speech activity"
+      aria-label={voice === WAVEFORM_VOICE.LUKE ? "Luke is speaking" : "Live speech activity"}
       aria-hidden={!isSpeaking}
       data-speaking={String(isSpeaking)}
+      data-voice={voice}
     >
       {BAR_INDEXES.map((index) => (
         <span

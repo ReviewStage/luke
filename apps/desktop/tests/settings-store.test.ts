@@ -249,6 +249,8 @@ test("keeps both keys when two providers are saved at once", async (t) => {
   assert.equal(await store.readApiKey(SECOND_CLOUD), "second-cloud-key");
   assert.deepEqual(JSON.parse(await readSettingsFile(directory)), {
     version: 2,
+    // Written even when false, so the file states what it is rather than
+    // leaving it to be inferred from an absence.
     apiKeys: {
       [FIRST_CLOUD]: sealed("first-cloud-key"),
       [SECOND_CLOUD]: sealed("second-cloud-key"),

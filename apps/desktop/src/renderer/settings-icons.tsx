@@ -70,6 +70,26 @@ export function TrashIcon(): React.JSX.Element {
   );
 }
 
+export function KeyboardIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <rect x="2.4" y="6" width="19.2" height="12" rx="2.4" />
+      <path d="M6.4 10h.01M10 10h.01M13.6 10h.01M17.2 10h.01" />
+      <path d="M7.6 14h8.8" />
+    </Glyph>
+  );
+}
+
+/** What the app has been allowed to reach, which is what this group is about. */
+export function ShieldIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <path d="M12 2.6 4.8 5.6v5.5c0 4.4 3 8.4 7.2 9.9 4.2-1.5 7.2-5.5 7.2-9.9V5.6Z" />
+      <path d="m8.9 11.9 2.2 2.2 4-4.2" />
+    </Glyph>
+  );
+}
+
 export function MicrophoneIcon(): React.JSX.Element {
   return (
     <Glyph>

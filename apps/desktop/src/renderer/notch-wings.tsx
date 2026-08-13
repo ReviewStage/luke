@@ -1,11 +1,16 @@
 import { CAPSULE_SIDE_WIDTH, PANEL_WIDTH, PEEK_SIDE_GROWTH } from "@sidecar/core";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { LukeFace } from "./luke-face";
-import { useFaceMotion, usePrefersReducedMotion } from "./luke-face-mood";
+import {
+  faceYieldsToMeter,
+  speechFaceInputs,
+  useFaceMotion,
+  usePrefersReducedMotion,
+} from "./luke-face-mood";
 import { PANEL_PRESENTATION, type PanelPresentation } from "./panel-state";
 import { ProviderMark } from "./provider-marks";
 import { type SessionTally, tallyCaption, tallySummary } from "./session-model";
-import { Waveform } from "./waveform";
+import { Waveform, type WaveformVoice } from "./waveform";
 
 /**
  * The strips beside the camera housing. They are rendered once for both window
@@ -16,6 +21,9 @@ import { Waveform } from "./waveform";
 interface NotchWingsProps {
   tally: SessionTally;
   analyser?: AnalyserNode;
+  voice?: WaveformVoice;
+  /** Reported upward so the turn can end when Luke actually goes quiet. */
+  onVoiceActivity?: (active: boolean) => void;
   fixtureSpeaking: boolean;
   hasAudioSignal: boolean;
   presentation: PanelPresentation;
@@ -59,19 +67,32 @@ const MARK_EXIT_MS = 90;
 export function NotchWings({
   tally,
   analyser,
+  voice,
+  onVoiceActivity,
   fixtureSpeaking,
   hasAudioSignal,
   presentation,
   housingWidth,
 }: NotchWingsProps): React.JSX.Element {
   const [voiceActive, setVoiceActive] = useState(false);
-  // Guarded rather than reset: a microphone that has been closed cannot still be
-  // carrying speech, whatever the last frame the meter read said.
-  const speaking = hasAudioSignal && (fixtureSpeaking || voiceActive);
+  const reportVoiceActivity = useCallback(
+    (active: boolean) => {
+      setVoiceActive(active);
+      onVoiceActivity?.(active);
+    },
+    [onVoiceActivity],
+  );
+  // While the developer holds the turn the meter takes the face's place, which
+  // is the only place the capsule has.
+  const yieldToMeter = faceYieldsToMeter({ ...(voice ? { turn: voice } : {}), hasAudioSignal });
   const face = useFaceMotion(
     {
-      speaking,
-      microphoneLive: hasAudioSignal,
+      ...speechFaceInputs({
+        ...(voice ? { turn: voice } : {}),
+        hasAudioSignal,
+        fixtureSpeaking,
+        voiceActive,
+      }),
       attention: tally.attentionIds,
       working: tally.working,
       complete: tally.complete,
@@ -113,12 +134,13 @@ export function NotchWings({
             keeps: the rest unfold outward and never displace it. */}
         <div className="wing-inner">
           {hasAudioSignal ? (
-            <span className="wing-meter">
+            <span className="wing-meter" data-turn={voice}>
               <Waveform
                 analyser={analyser}
                 speaking={fixtureSpeaking}
+                voice={voice}
                 voiceActive={voiceActive}
-                onVoiceActivity={setVoiceActive}
+                onVoiceActivity={reportVoiceActivity}
               />
             </span>
           ) : (
@@ -131,13 +153,16 @@ export function NotchWings({
               {unshown > 0 ? <span className="wing-more">+{unshown}</span> : null}
             </span>
           )}
-          {/* Luke himself, and the only thing in either wing that is drawn in
-              every state. Everything else is what he is watching.
+          {/* Luke himself. He is drawn in every state but one: he steps out of
+              the way of your own voice, which is the only thing that displaces
+              him. Everything else in the wing is what he is watching.
 
               Keyed on the play so that each one is a new drawing: a motion plays
               once now, and an element already wearing an animation does not
               replay it on being handed the same one. */}
-          <LukeFace key={face.play} motion={face.motion} repeat={face.repeat} />
+          {yieldToMeter ? null : (
+            <LukeFace key={face.play} motion={face.motion} repeat={face.repeat} />
+          )}
         </div>
       </div>
 
