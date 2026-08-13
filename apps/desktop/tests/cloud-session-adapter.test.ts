@@ -494,7 +494,11 @@ test("refuses to send once the credential is gone, whatever was observed with it
   apiKey = undefined;
   const result = await adapter.sendMessage({ providerSessionId: "session-one", text: "go on" });
 
-  assert.deepEqual(result, { status: "unsupported" });
+  // A refusal with the actual reason, not "unsupported": the session
+  // advertised taking messages while a key stood behind it, and a key that has
+  // since gone must not be reported as the session having moved on.
+  assert.equal(result.status, "rejected");
+  assert.match(result.status === "rejected" ? result.reason : "", /API key/);
   assert.equal(stub.requests.length, observationRequests);
 });
 

@@ -5,7 +5,7 @@ import {
   SESSION_LOCATION,
   SESSION_STATE,
 } from "@sidecar/core";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
 import { CloudBadge, ProviderMark } from "./provider-marks";
 import {
@@ -104,38 +104,55 @@ function SessionRowActions({
   const [feedback, setFeedback] = useState<string | undefined>(undefined);
   /** The action in flight, which is the one drawn asking and the reason all are held. */
   const [pendingAction, setPendingAction] = useState<string | undefined>(undefined);
+  /**
+   * The row's one write at a time, as a ref rather than state: disabling the
+   * controls only lands with the next render, and a second Enter inside that
+   * window would send the same words twice. A ref answers in the same tick.
+   */
+  const writeInFlight = useRef(false);
 
   const send = useCallback(async () => {
     const text = draft.trim();
-    if (!text) return;
+    if (!text || writeInFlight.current) return;
+    writeInFlight.current = true;
     setSending(true);
     setFeedback(undefined);
-    const result = await writes.sendMessage(session, text);
-    setSending(false);
-    if (result.status === PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED) {
-      // The draft has become the session's; the field empties for the next.
-      setDraft("");
-      setFeedback(`Sent to ${session.provider}`);
-    } else {
-      // The draft stays: a refused message is still the user's words.
-      setFeedback(feedbackFor(result));
+    try {
+      const result = await writes.sendMessage(session, text);
+      if (result.status === PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED) {
+        // The draft has become the session's; the field empties for the next.
+        setDraft("");
+        setFeedback(`Sent to ${session.provider}`);
+      } else {
+        // The draft stays: a refused message is still the user's words.
+        setFeedback(feedbackFor(result));
+      }
+    } finally {
+      writeInFlight.current = false;
+      setSending(false);
     }
   }, [draft, session, writes]);
 
   const runAction = useCallback(
     async (actionId: string) => {
+      if (writeInFlight.current) return;
+      writeInFlight.current = true;
       setPendingAction(actionId);
       setFeedback(undefined);
-      const result = await writes.runAction(session, actionId);
-      setPendingAction(undefined);
-      // An accepted action answers too: the session will not look different
-      // until its provider is observed again, and a control that seems to have
-      // done nothing would be pressed a second time.
-      setFeedback(
-        result.status === PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED
-          ? `${session.provider} accepted`
-          : feedbackFor(result),
-      );
+      try {
+        const result = await writes.runAction(session, actionId);
+        // An accepted action answers too: the session will not look different
+        // until its provider is observed again, and a control that seems to have
+        // done nothing would be pressed a second time.
+        setFeedback(
+          result.status === PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED
+            ? `${session.provider} accepted`
+            : feedbackFor(result),
+        );
+      } finally {
+        writeInFlight.current = false;
+        setPendingAction(undefined);
+      }
     },
     [session, writes],
   );

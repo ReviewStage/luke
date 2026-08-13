@@ -323,13 +323,23 @@ export abstract class CloudSessionAdapter
     }
 
     // The credential is read at send time, not held from the observation pass,
-    // so a key the user just replaced or removed is honoured immediately.
+    // so a key the user just replaced or removed is honoured immediately. Its
+    // absence is a rejection with the actual reason, not "unsupported": the
+    // session advertised taking messages while a key stood behind it, and a
+    // key that has since gone is a different fact than a session that moved on.
     const apiKey = await this.#readApiKey().catch(() => undefined);
-    if (!apiKey) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+    if (!apiKey) return this.#missingKeyRejection();
 
     const route = this.messageRoute(message.providerSessionId, text);
     if (!route) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
     return this.#postWrite(apiKey, route);
+  }
+
+  #missingKeyRejection(): ProviderMessageResult {
+    return {
+      status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+      reason: `${this.provider.displayName}'s API key is no longer configured.`,
+    };
   }
 
   /**
@@ -350,7 +360,7 @@ export abstract class CloudSessionAdapter
     if (!advertised) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
 
     const apiKey = await this.#readApiKey().catch(() => undefined);
-    if (!apiKey) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+    if (!apiKey) return this.#missingKeyRejection();
 
     const route = this.controlRoute(request.providerSessionId, advertised);
     if (!route) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
