@@ -146,7 +146,13 @@ const MOTIONS = {
   talking: {
     moment: "speaking / narrating (head bob)",
     layers: [
-      { type: "rotate", pivot: [120, 150], values: [-4, 4, -4], dur: 0.65 },
+      {
+        type: "rotate",
+        pivot: [120, 150],
+        values: [0, -4, 4, 0],
+        keyTimes: [0, 0.25, 0.75, 1],
+        dur: 0.65,
+      },
       {
         type: "translate",
         values: [
@@ -357,10 +363,12 @@ const MOTIONS = {
       },
     ],
   },
-  // A slow continuous rock from the base — quiet work, made visible.
+  // One slow rock from the base, out to each side and back — quiet work, made
+  // visible. It begins and ends upright, so the app can spend it as a gesture
+  // between stretches of stillness rather than rocking for as long as work runs.
   monitoring: {
     moment: "humming along (slow sway)",
-    layers: [{ type: "rotate", pivot: [120, 196], values: [-3.5, 3.5, -3.5], dur: 3.2 }],
+    layers: [{ type: "rotate", pivot: [120, 196], values: [0, 3.5, 0, -3.5, 0], dur: 3.6 }],
   },
   // Leans in from the side, settles, then eases back — an entrance.
   appear: {
@@ -388,37 +396,48 @@ const MOTIONS = {
       },
     ],
   },
-  // From a slight slouch to bolt upright with a touch of overshoot.
+  // Settles into a slouch, bolts upright with a touch of overshoot, and comes
+  // back to rest. The slouch is inside the gesture rather than at either end of
+  // it: a motion that begins away from rest starts by snapping there.
   attention: {
     moment: "attention caught (perk up)",
     layers: [
       {
         type: "rotate",
         pivot: [120, 150],
-        values: [6, 6, -2.5, 0.8, 0, 6],
-        keyTimes: [0, 0.35, 0.45, 0.55, 0.75, 1],
+        values: [0, 6, 6, -2.5, 0.8, 0, 0],
+        keyTimes: [0, 0.2, 0.42, 0.5, 0.58, 0.75, 1],
         dur: 4.5,
       },
       {
         type: "translate",
         values: [
+          [0, 0],
           [0, 3],
           [0, 3],
           [0, -1.5],
           [0, 0],
           [0, 0],
-          [0, 3],
+          [0, 0],
         ],
-        keyTimes: [0, 0.35, 0.45, 0.55, 0.75, 1],
+        keyTimes: [0, 0.2, 0.42, 0.5, 0.58, 0.75, 1],
         dur: 4.5,
       },
     ],
   },
-  // A slow vertical drift with a lazy rotation on a different period.
+  // A slow vertical drift with a lazy rotation, out of rest and back into it.
+  // Both layers share a period: the app plays a motion once and returns the face
+  // to rest, so a layer on its own period would be cut wherever it had got to.
   floating: {
     moment: "hovering idle",
     layers: [
-      { type: "rotate", pivot: [120, 124], values: [-2, 2, -2], dur: 5.76 },
+      {
+        type: "rotate",
+        pivot: [120, 124],
+        values: [0, -2, 2, 0],
+        keyTimes: [0, 0.25, 0.75, 1],
+        dur: 4.8,
+      },
       {
         type: "translate",
         values: [
@@ -426,7 +445,7 @@ const MOTIONS = {
           [0, -8],
           [0, 0],
         ],
-        dur: 4.4,
+        dur: 4.8,
       },
     ],
   },

@@ -1,6 +1,21 @@
 import { FACE_ART, FACE_MOTION_PARTS, type FaceMotion } from "./luke-face-art";
 
 /**
+ * What Luke is doing, if anything. No motion is the resting face itself: no
+ * `data-motion` matches no generated rule, so nothing animates and the drawing
+ * simply sits there. Stillness is drawn by not asking for anything, which is
+ * why it costs neither an entry in the artwork table nor a paused animation.
+ */
+interface LukeFaceProps {
+  motion?: FaceMotion;
+  /** Set for the motions that say something for as long as it stays true. */
+  repeat?: boolean;
+}
+
+/** Nothing beyond the smile and the eyes, which is what a still face draws. */
+const RESTING_PARTS = { brows: false, lids: false, sleepZ: false } as const;
+
+/**
  * Luke's face. The artwork is drawn here rather than loaded, for the same reason
  * the provider marks are — the renderer stays asset-free and the face scales
  * with whatever holds it — and painted in `currentColor`, so one drawing serves
@@ -12,13 +27,14 @@ import { FACE_ART, FACE_MOTION_PARTS, type FaceMotion } from "./luke-face-art";
  * the face is decided in this file; it only says which parts a motion needs and
  * in what order they nest.
  */
-export function LukeFace({ motion }: { motion: FaceMotion }): React.JSX.Element {
-  const parts = FACE_MOTION_PARTS[motion];
+export function LukeFace({ motion, repeat = false }: LukeFaceProps): React.JSX.Element {
+  const parts = motion === undefined ? RESTING_PARTS : FACE_MOTION_PARTS[motion];
 
   return (
     <svg
       className="luke-face"
       data-motion={motion}
+      data-repeat={String(repeat)}
       viewBox={FACE_ART.VIEW_BOX}
       aria-hidden="true"
       focusable="false"
