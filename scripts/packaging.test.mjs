@@ -124,7 +124,12 @@ test("signing configuration separates ad-hoc and Developer ID modes", () => {
   });
 });
 
-test("release entitlements allow microphone input", () => {
+test("release entitlements allow required capabilities without unsigned executable memory", () => {
   const entitlements = fs.readFileSync(entitlementsPath, "utf8");
+  assert.doesNotMatch(
+    entitlements,
+    /<key>com\.apple\.security\.cs\.allow-unsigned-executable-memory<\/key>/,
+  );
+  assert.match(entitlements, /<key>com\.apple\.security\.cs\.allow-jit<\/key>/);
   assert.match(entitlements, /<key>com\.apple\.security\.device\.audio-input<\/key>/);
 });
