@@ -28,9 +28,14 @@ const DECIDED_AT = 1_800_000_000_000;
 const SPOKEN_SUMMARY = "Claude Code is waiting on you in checkout-service.";
 const OTHER_SUMMARY = "Claude Code finished its turn in checkout-service.";
 const TRANSCRIPT_SECRET = "SECRET_TRANSCRIPT_TEXT";
-/** A session's own address and the change it opened stay on the machine. */
-const WITHHELD_LINK = "https://cursor.example/agents/withheld-session-address";
-const WITHHELD_CHANGE = "https://forge.example/reviewstage/luke/pull/withheld-change";
+/**
+ * A session's own address and the change it opened stay on the machine, so the
+ * test looks for these markers rather than for a host: matching on a host would
+ * pass for any other address on it, and reads as URL sanitization when it is
+ * only an absence check.
+ */
+const WITHHELD_ADDRESS_MARKER = "withheld-session-address";
+const WITHHELD_CHANGE_MARKER = "withheld-change-reference";
 
 function session(
   provider: SessionProvider,
@@ -600,8 +605,8 @@ test("sends bounded material and withholds what a decision does not turn on", as
         activity: "Edit: src/totals.ts",
         error: "429 rate limit exceeded",
         model: "claude-opus-5",
-        link: WITHHELD_LINK,
-        change: WITHHELD_CHANGE,
+        link: `https://cursor.example/agents/${WITHHELD_ADDRESS_MARKER}`,
+        change: `https://forge.example/reviewstage/luke/pull/${WITHHELD_CHANGE_MARKER}`,
       },
     }),
   ]);
@@ -637,10 +642,8 @@ test("sends bounded material and withholds what a decision does not turn on", as
   assert.ok(input.includes(`Status: ${SESSION_STATUS.WORKING}`));
   assert.ok(input.includes("Running: Edit: src/totals.ts"));
   assert.ok(input.includes("Error: 429 rate limit exceeded"));
-  // Matched whole, not by host: the point is that these exact values never
-  // appear, and a substring check on a host would pass for a different one.
-  assert.ok(!input.includes(WITHHELD_LINK));
-  assert.ok(!input.includes(WITHHELD_CHANGE));
+  assert.ok(!input.includes(WITHHELD_ADDRESS_MARKER));
+  assert.ok(!input.includes(WITHHELD_CHANGE_MARKER));
   assert.ok(!input.includes("providerSessionId"));
 });
 
