@@ -52,9 +52,11 @@ import {
 const captureOutput = argumentValue("--capture-evidence");
 const profile = argumentValue("--profile") ?? "idle";
 const fixtureName = argumentValue("--fixture");
-// Evidence only: the peek answers a pointer, which a capture run has no way to
-// produce, so it can be asked for directly.
+// Evidence only: the peek answers a pointer and the slot answers a press on a
+// link, neither of which a capture run has any way to produce, so both can be
+// asked for directly.
 const startPeeked = process.argv.includes("--peek");
+const startInSlot = process.argv.includes("--slot");
 const fixture = fixtureSnapshot(fixtureName ?? "smoke");
 const captureMode = captureOutput !== undefined;
 // `--fixture` is enough on its own to make a run deterministic: the panel renders
@@ -287,6 +289,7 @@ function registerIpc(): void {
     return {
       mode: windowMode,
       startPeeked,
+      startInSlot,
       profile,
       fixture,
       captureMode,

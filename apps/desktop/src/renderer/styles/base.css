@@ -148,9 +148,17 @@
   --surface-shadow: 0 10px 26px rgba(0, 0, 0, 0.46), 0 2px 7px rgba(0, 0, 0, 0.3);
 
   --panel-radius: 30px;
+  /* Rounder than the panel at half its size, and the same family: the slot is
+     the panel stood down to one field, not a different object. */
+  --slot-radius: 28px;
   --wing-inset: 9px;
   --scroll-fade: 26px;
   --panel-width: 620px;
+  /* How long the slot's contents wait before arriving. The slot is only ever
+     reached from the panel, so the panel's own content has to have left first:
+     that is `--duration-exit`, and the rest is the pause that keeps the two from
+     reading as one crossfade. */
+  --slot-delay: calc(var(--duration-exit) + var(--peek-delay));
 }
 
 .app-stage {
@@ -160,6 +168,10 @@
   --capsule-width: calc(var(--notch-housing-width) + 72px);
   --capsule-height: max(var(--notch-top-inset), 32px);
   --peek-width: calc(var(--notch-housing-width) + 248px);
+  /* Wide enough for a key, a way out, and a way on, and no wider — the page the
+     key was copied from is behind this and has to stay readable. The floor is
+     what those three need on a display with no housing to grow from. */
+  --slot-width: max(460px, calc(var(--notch-housing-width) + 300px));
   /* Measured off photographs of the hardware rather than guessed: the housing's
      own corners are a convex 0.348 of its height, and where its sides meet the
      top edge it flares outward on a concave 0.170 — about half the bottom
@@ -178,6 +190,10 @@
    instead of staying the size the housing wanted. */
 .app-stage[data-presentation="panel"] {
   --notch-concave-radius: calc(var(--panel-radius) * 0.489);
+}
+
+.app-stage[data-presentation="slot"] {
+  --notch-concave-radius: calc(var(--slot-radius) * 0.489);
 }
 
 * {
@@ -324,8 +340,18 @@ button:disabled {
 }
 
 .app-stage[data-presentation="peek"] .panel-surface,
+.app-stage[data-presentation="slot"] .panel-surface,
 .app-stage[data-presentation="panel"] .panel-surface {
   box-shadow: var(--surface-shadow);
+}
+
+/* The panel narrowed to the width of one field. It is only ever arrived at from
+   the panel, which is a shrink, so the base rule's timing is already right:
+   content leaves over `--duration-exit` and the shape follows it in. */
+.app-stage[data-presentation="slot"] .panel-surface {
+  width: var(--slot-width);
+  height: var(--slot-height, 96px);
+  border-radius: 0 0 var(--slot-radius) var(--slot-radius);
 }
 
 /* Under the pointer: wide enough to say what the count means. */
@@ -431,6 +457,14 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 
 .app-stage[data-presentation="panel"] {
   --wing-bound: var(--panel-width);
+}
+
+/* The wings keep the capsule's quiet form while the slot is drawn — one mark and
+   the count, nothing unfolded — because the slot is asking for a key, and a list
+   of sessions is not an answer to that. Only the bound changes, so nothing
+   spills past the narrower shape. */
+.app-stage[data-presentation="slot"] {
+  --wing-bound: var(--slot-width);
 }
 
 .wing-left {
@@ -645,14 +679,21 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 
 /* The panel is too large to float, so it meets the top edge like any other
    display's does. Lowering the lift to zero moves the surface, the wings, and
-   the press target together, because all three are anchored to it. */
-.app-stage[data-notch="false"][data-presentation="panel"] {
+   the press target together, because all three are anchored to it. The slot
+   holds a field, which is the same argument at a smaller size. */
+.app-stage[data-notch="false"][data-presentation="panel"],
+.app-stage[data-notch="false"][data-presentation="slot"] {
   --shape-top: 0px;
 }
 
 .app-stage[data-notch="false"][data-presentation="panel"] .panel-surface {
   height: var(--panel-height, 520px);
   border-radius: 0 0 var(--panel-radius) var(--panel-radius);
+}
+
+.app-stage[data-notch="false"][data-presentation="slot"] .panel-surface {
+  height: var(--slot-height, 96px);
+  border-radius: 0 0 var(--slot-radius) var(--slot-radius);
 }
 
 .app-stage[data-notch="false"] .wing,
@@ -677,8 +718,17 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   inset: 0;
 }
 
-.app-stage[data-presentation="panel"] .compact-stage {
+/* The strip sits above everything, so wherever the shape holds something else
+   to press, the stage around the strip has to stop taking the pointer. */
+.app-stage[data-presentation="panel"] .compact-stage,
+.app-stage[data-presentation="slot"] .compact-stage {
   pointer-events: none;
+}
+
+/* Pressing the strip while the slot is drawn brings the whole panel back, with
+   the entry still in it. */
+.app-stage[data-presentation="slot"] .compact-hover-target {
+  pointer-events: auto;
 }
 
 /* Session count ---------------------------------------------------------- */
@@ -1385,6 +1435,113 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   font-size: 10px;
 }
 
+/* Key slot --------------------------------------------------------------- */
+
+/* Layered like the panel and animated like it, because it is the panel: the
+   stage carries the arrival and the shape underneath carries the size. */
+.slot-stage {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 50%;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(-6px);
+  transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-shape) var(--spring),
+    visibility 0s linear var(--duration-exit);
+  will-change: opacity, transform;
+}
+
+.app-stage[data-presentation="slot"] .slot-stage {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+  transition:
+    opacity var(--duration-quick) var(--motion-exit) var(--slot-delay),
+    transform var(--duration-shape) var(--spring) var(--slot-delay),
+    visibility 0s linear var(--slot-delay);
+}
+
+/* Rounded like the shape it sits on, for the same reason the panel body is:
+   past the corner is desktop, and a press there belongs to whatever is behind
+   Luke — which, here, is the page the key was copied from. */
+.key-slot {
+  display: flex;
+  width: var(--slot-width);
+  flex-direction: column;
+  gap: 7px;
+  padding: calc(max(var(--notch-top-inset), 32px) + 12px) 16px 15px;
+  border-radius: 0 0 var(--slot-radius) var(--slot-radius);
+}
+
+.app-stage[data-presentation="slot"] .key-slot {
+  pointer-events: auto;
+}
+
+.key-slot-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+/* Larger than the mark on a settings line: here it is the only thing naming the
+   provider, rather than a glyph beside its name. */
+.key-slot-mark {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+}
+
+.key-slot-input {
+  min-width: 0;
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: 11px;
+}
+
+/* Held to the width of its longest word, so saying "Saving…" does not narrow
+   the field beside it. */
+.key-slot-confirm {
+  min-width: 76px;
+  /* Coming alive first, then hover feedback. The base button rule declares only
+     the second pair, so this replaces it rather than adding to it. */
+  transition:
+    transform var(--duration-fast) var(--spring-fast),
+    background-color var(--duration-quick) var(--motion-exit),
+    color var(--duration-quick) var(--motion-exit);
+}
+
+/* Nothing to confirm yet, so it is not offering anything: quiet, and held a
+   little small. The key landing in the field is what brings it up to size and
+   into the accent — the confirm arriving is the answer to the paste, and it
+   arrives without moving anything else on the line, because its place on the
+   line was never given up. Written past `.action-button:disabled`, which would
+   otherwise keep its colour under the dimming. */
+.key-slot .action-button[data-ready="false"] {
+  background: var(--raised);
+  color: var(--text-secondary);
+  transform: scale(0.92);
+}
+
+/* Aligned with the field rather than the mark, because it is about the field.
+   It yields to the buttons opposite it the same way the panel's editor does. */
+.key-slot-foot {
+  padding-left: 26px;
+}
+
+.key-slot-foot .settings-note {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Under the whole line, where the panel's editor puts it too. */
+.key-slot .error-message {
+  padding-left: 26px;
+}
+
 /* Evidence capture screenshots a fixed moment after the renderer reports ready.
    The panel's height is only known once it has been measured, so without this a
    capture could land mid-transition and the PNGs would stop being reproducible.
@@ -1428,6 +1585,8 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 
   .panel-surface,
   .expanded-stage,
+  .slot-stage,
+  .key-slot-confirm,
   .wing-mark,
   .wing-more,
   .wing-meter,

@@ -78,9 +78,10 @@ convenience; `./scripts/check.sh` and CI remain authoritative.
 ## Panel motion
 
 The window is a stage; the drawn surface is the shape. A window therefore holds
-the largest shape its mode can draw — a compact window holds the peek, so
-hovering costs no IPC at all — plus `SURFACE_MARGIN` on every side, which is
-what the spring overshoots into and the shadow falls in. Anything the shape does not cover is
+the largest shape its mode can draw — a compact window holds the peek and an
+expanded one holds the slot as well as the panel, so neither hovering nor
+stepping aside for a browser costs any IPC — plus `SURFACE_MARGIN` on every
+side, which is what the spring overshoots into and the shadow falls in. Anything the shape does not cover is
 transparent and must stay click-through, so hit regions track the shape rather
 than the window.
 
@@ -114,6 +115,16 @@ shrinking, content leaves over `--duration-exit` before the surface moves.
 `setWindowMode` owns the ordering for every caller — the panel, the tray, and
 the motion recorder alike. `COLLAPSE_ANIMATION_MS` is the sum of
 `--duration-exit` and `--duration-shape`; the three move together.
+
+A key being entered is app state, not field state, because it outlives the panel
+it was started in: asking to write one stands the panel down to the slot, where
+the same entry is drawn instead of in the settings row, and the entry remembers
+whether the provider's key page was opened — that is what decides whether giving
+up returns you to the panel or leaves the browser alone. Nothing that closes the
+panel may discard the entry: the pointer leaving is already refused, and a slot
+left alone is the normal case rather than a dismissal, so the settings tab and
+the entry both survive a close and the field takes the caret back whenever the
+shape it is drawn in comes forward again.
 
 ## Brand artwork
 
