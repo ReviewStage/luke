@@ -95,8 +95,9 @@ meter beside it draws whichever voice is live. There is no transcript.
 
 ## Privacy
 
-Luke observes provider state read-only and keeps microphone processing local.
-An external attention-review request is made only when `OPENAI_API_KEY` is set.
+Luke observes provider state read-only. Without `OPENAI_API_KEY`, microphone
+processing stays local; with it set, an attention-review request is made, and
+the spoken conversation sends the audio of a turn you opened to OpenAI.
 See [PRIVACY.md](PRIVACY.md) for the exact data boundaries and retention wording.
 
 ## Build from source
@@ -172,17 +173,21 @@ local state, while Conductor, Cursor, and Devin use their separately configured
 provider credentials. If `OPENAI_API_KEY` is set, Luke can also send a bounded status update to
 the configured Responses endpoint for attention classification. That update can
 include the session title, recap, repository, branch, current tool activity, and
-reported error; see [PRIVACY.md](PRIVACY.md) for the exact boundary. This does
-not enable speech or agent control.
+reported error; see [PRIVACY.md](PRIVACY.md) for the exact boundary. The same
+key enables the spoken conversation described above. Neither enables agent
+control.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `OPENAI_API_KEY` | unset | Enables external attention review |
+| `OPENAI_API_KEY` | unset | Enables external attention review and the spoken conversation |
 | `LUKE_ATTENTION_MODEL` | `gpt-5.6-luna` | Selects the review model |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Selects the Responses-compatible endpoint |
+| `LUKE_REALTIME_MODEL` | `gpt-realtime-2.1` | Selects the conversation model |
+| `LUKE_REALTIME_VOICE` | `cedar` | Selects the spoken voice |
 
 Changing `OPENAI_BASE_URL` sends attention-review data to that endpoint instead
-of OpenAI. See [PRIVACY.md](PRIVACY.md) before enabling the feature.
+of OpenAI. It does not redirect the conversation, which always uses OpenAI's own
+host. See [PRIVACY.md](PRIVACY.md) before enabling either feature.
 
 ## Repository map
 
