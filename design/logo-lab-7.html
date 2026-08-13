@@ -800,17 +800,17 @@ function faceIconMarkup(p) {
     `<rect x="8" y="8" width="224" height="224" rx="52" fill="${g.fill}" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>` +
     `<g color="${tileInk(p.iconFill)}" transform="translate(${off} ${off}) scale(${s})">${faceCore()}</g></svg>`;
 }
-function iconMarkup(logo, p) {
-  const g = gradFill(`icg-${logo.id}`, p.iconFill || 'space');
+function iconMarkup(logo, p, inst = '') {
+  const g = gradFill(`icg-${logo.id}${inst}`, p.iconFill || 'space');
   const s = 0.72, off = fmt(240 * (1 - s) / 2);
   const tile = `<rect x="8" y="8" width="224" height="224" rx="52" fill="${g.fill}" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>`;
   const open = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" fill="none">`;
   if (p.iconStyle === 'knockout') {
     const inner = logo.render(p).split(BASE.accent).join('#000');
     return `${open}${g.defs}` +
-      `<mask id="km-${logo.id}"><rect x="0" y="0" width="240" height="240" fill="#fff"/>` +
+      `<mask id="km-${logo.id}${inst}"><rect x="0" y="0" width="240" height="240" fill="#fff"/>` +
       `<g color="#000" transform="translate(${off} ${off}) scale(${s})">${inner}</g></mask>` +
-      tile.replace('/>', ` mask="url(#km-${logo.id})"/>`) + `</svg>`;
+      tile.replace('/>', ` mask="url(#km-${logo.id}${inst})"/>`) + `</svg>`;
   }
   return `${open}${g.defs}${tile}` +
     `<g color="${tileInk(p.iconFill)}" transform="translate(${off} ${off}) scale(${s})">${logo.render(p)}</g></svg>`;
@@ -883,13 +883,13 @@ function paint(id) {
       `<span class="hint">word · inverse · small</span>`;
     return;
   }
-  const mark = markMarkup(logo, p), icon = iconMarkup(logo, p), lock = lockupMarkup(logo, p);
+  const mark = markMarkup(logo, p), icon = iconMarkup(logo, p, '-a'), lock = lockupMarkup(logo, p);
   document.getElementById(`prev-${id}`).innerHTML = mark;
   document.getElementById(`icon-${id}`).innerHTML = icon;
   document.getElementById(`sizes-${id}`).innerHTML =
     `<span class="chip" style="height:52px">${lock}</span>` +
     `<span class="chip inv" style="height:34px">${lock}</span>` +
-    `<span class="chip" style="height:32px">${icon}</span>` +
+    `<span class="chip" style="height:32px">${iconMarkup(logo, p, '-b')}</span>` +
     `<span class="chip" style="height:26px">${mark}</span>` +
     `<span class="hint">animated lockup · inverse · small</span>`;
 }
@@ -1007,11 +1007,13 @@ document.body.addEventListener('click', async e => {
     });
     document.getElementById('ctls-__base').innerHTML = BASE_CONTROLS.map(c => controlHtml('__base', c, BASE[c.k])).join('');
     paintAll();
+    saveLS();
   } else if (action === 'reset') {
     const logo = LOGOS.find(l => l.id === id);
     state[id] = defaults(logo);
     document.getElementById(`ctls-${id}`).innerHTML = logo.controls.map(c => controlHtml(id, c, state[id][c.k])).join('');
     if (id === 'wface') paintAll(); else paint(id);
+    saveLS();
   } else if (action === 'copy' || action === 'copy-word') {
     const svg = exportSvg(id, action === 'copy-word' ? 'word' : 'mark');
     try {
