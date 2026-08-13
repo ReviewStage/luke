@@ -152,11 +152,12 @@
   /* Only about five rows are ever on screen, so the fan and the stagger stop
      accumulating past that rather than leaving late rows to drift in. */
   --row-fan-limit: 5;
-  /* Luke's face is the one thing in the wing that is always drawn, so its idle
-     motion is the only loop here that never ends. Stopping it is a token rather
+  /* Luke's face is the one thing in the wing that is always drawn, and the only
+     thing here that moves without being asked to. Stopping it is a token rather
      than a selector, for the same reason the durations are: a capture run and
-     reduced motion both need it still, and both already reach the tokens.
-     Paused, every loop holds its first frame — head upright, eyes open. */
+     reduced motion both need it still, and both already reach the tokens. Paused,
+     every motion holds its first frame, which is the resting pose every one of
+     them starts from — head upright, eyes open. */
   --face-motion: running;
 
   /* Opaque in every state: the shape has to pass for part of a physical camera
@@ -722,8 +723,22 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .luke-face-brows,
 .luke-face-z {
   animation-play-state: var(--face-motion);
-  animation-iteration-count: infinite;
+  /* A gesture is something that happens rather than something that is: it plays
+     once and leaves the face at the pose it started from, which is the drawn
+     rest every motion the app plays begins and ends at. What is left between
+     gestures is stillness, and stillness is the face's usual condition. */
+  animation-iteration-count: 1;
   animation-timing-function: linear;
+}
+
+/* The exception, and the whole of it: a motion that says something continuously
+   true has to keep saying it. An open microphone and a sleeping face are states
+   rather than moments, so they repeat for as long as they hold. */
+.luke-face[data-repeat="true"] .luke-face-layer,
+.luke-face[data-repeat="true"] .luke-face-eye,
+.luke-face[data-repeat="true"] .luke-face-brows,
+.luke-face[data-repeat="true"] .luke-face-z {
+  animation-iteration-count: infinite;
 }
 
 .luke-face-layer {
