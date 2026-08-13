@@ -5,7 +5,7 @@ import {
   CREDENTIAL_PLACEHOLDER,
   type CredentialEntryControl,
   isSubmittable,
-  useFieldCaret,
+  useStagedFocus,
 } from "./credential-entry";
 import { HIT_REGION } from "./panel-state";
 import { CloudBadge, ProviderMark } from "./provider-marks";
@@ -63,7 +63,7 @@ export function KeySlot({
   // the entry ends rather than when the shape finally goes.
   const live = drawn && control.entry !== undefined;
 
-  useFieldCaret(field, live && !control.entry?.busy);
+  useStagedFocus(field, live && !control.entry?.busy);
 
   useEffect(() => {
     if (!live) return;

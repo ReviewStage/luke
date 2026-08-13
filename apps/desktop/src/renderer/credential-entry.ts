@@ -91,39 +91,50 @@ export function removalEndsEntry(
 }
 
 /** Long enough for any stage to arrive, and short enough to be a backstop. */
-const CARET_FRAME_LIMIT = 60;
+const FOCUS_FRAME_LIMIT = 60;
 
 /**
- * Puts the caret in a field as soon as the field can hold it, for as long as
- * holding it is what the field is for.
+ * Hands focus to an element as soon as it can take it, and answers with the way
+ * to stop waiting.
  *
- * Both places an entry is drawn sit in a staged surface that is `visibility:
- * hidden` until its arrival delay has passed, and a hidden element refuses
- * focus outright — so asking on the frame the shape changes silently does
- * nothing. This waits for the stage rather than guessing at its delay, which
- * keeps the timing in the stylesheet where the rest of the motion lives.
+ * Everything the panel draws around a credential sits in a staged surface that
+ * is `visibility: hidden` until its arrival delay has passed, and a hidden
+ * element refuses focus outright — so asking on the frame the shape changes
+ * silently does nothing. This waits for the stage rather than guessing at its
+ * delay, which keeps the timing in the stylesheet where the rest of the motion
+ * lives.
+ */
+export function focusWhenVisible(element: HTMLElement | null): () => void {
+  let frame = 0;
+  let frames = 0;
+  const takeFocus = () => {
+    if (!element) return;
+    if (getComputedStyle(element).visibility !== "visible") {
+      if (frames++ > FOCUS_FRAME_LIMIT) return;
+      frame = requestAnimationFrame(takeFocus);
+      return;
+    }
+    element.focus({ preventScroll: true });
+  };
+  takeFocus();
+  return () => cancelAnimationFrame(frame);
+}
+
+/**
+ * Keeps focus on an element for as long as holding it is what that element is
+ * for.
  *
- * A field that goes disabled hands the caret out and does not take it back, so
+ * A control that goes disabled hands focus out and does not take it back, so
  * `active` falls while a credential is being written and rises again with the
  * refusal that re-opens the field — which is what puts someone straight back to
  * correcting the credential rather than clicking to get there.
  */
-export function useFieldCaret(field: RefObject<HTMLInputElement | null>, active: boolean): void {
+export function useStagedFocus<Element extends HTMLElement>(
+  target: RefObject<Element | null>,
+  active: boolean,
+): void {
   useEffect(() => {
     if (!active) return;
-    let frame = 0;
-    let frames = 0;
-    const takeCaret = () => {
-      const element = field.current;
-      if (!element) return;
-      if (getComputedStyle(element).visibility !== "visible") {
-        if (frames++ > CARET_FRAME_LIMIT) return;
-        frame = requestAnimationFrame(takeCaret);
-        return;
-      }
-      element.focus({ preventScroll: true });
-    };
-    takeCaret();
-    return () => cancelAnimationFrame(frame);
-  }, [active, field]);
+    return focusWhenVisible(target.current);
+  }, [active, target]);
 }

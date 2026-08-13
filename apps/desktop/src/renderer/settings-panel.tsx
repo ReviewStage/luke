@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AppSettings, CredentialSource, MicrophoneStatus } from "../shared/contracts";
 import { CREDENTIAL_SOURCE } from "../shared/contracts";
 import type { CredentialProvider } from "../shared/credential-providers";
@@ -7,9 +7,17 @@ import {
   CREDENTIAL_PLACEHOLDER,
   type CredentialEntryControl,
   entryForProvider,
+  focusWhenVisible,
   isSubmittable,
-  useFieldCaret,
+  useStagedFocus,
 } from "./credential-entry";
+import {
+  REMOVAL_STAGE,
+  type RemovalStage,
+  removalAsked,
+  removalStage,
+  removalWithdrawable,
+} from "./credential-removal";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import { CloudBadge, ProviderMark } from "./provider-marks";
 import {
@@ -57,6 +65,19 @@ const CREDENTIAL_STATUS: Partial<Record<CredentialSource, string>> = {
 /* Why a row that could otherwise be connected is not offering to be. */
 const HELD_TITLE = "Finish the one you are entering first";
 
+/* The safe answer arrives first and the one that cannot be taken back lands a
+   beat behind it, on the same stagger the panel's rows fan open with. Their
+   order on the line is the order they arrive in, so this is their place in it
+   rather than a delay written per button. */
+const REMOVAL_ANSWER_INDEX = {
+  KEEP: 0,
+  DELETE: 1,
+} as const;
+
+function answerOrder(index: number): React.CSSProperties {
+  return { "--answer-index": index } as React.CSSProperties;
+}
+
 /**
  * One provider, one line: its mark, its name, whether it is connected, and what
  * can be done about that — connect, supersede, or delete, whichever the state
@@ -66,6 +87,8 @@ const HELD_TITLE = "Finish the one you are entering first";
  *
  * Asking to write one takes the panel down to the slot, so the field is drawn
  * here only when the panel is brought back around an entry that is still open.
+ * Asking to delete one goes nowhere at all: the question and its answer are the
+ * same few pixels the trash was drawn in.
  *
  * The credential is write-only from here: this can replace or clear the stored
  * key, and the main process never sends one back — only where it was resolved
@@ -84,23 +107,34 @@ function ProviderCredential({
   control: CredentialEntryControl;
   panelOpen: boolean;
 }): React.JSX.Element {
-  // Deleting is the one act that begins and ends on this line. Entering a
-  // credential does not: it can leave for the slot and come back, so it is held
-  // above.
-  const [removing, setRemoving] = useState(false);
+  // Deleting is the one act that begins and ends on this line, question and
+  // answer both. Entering a credential does not: it can leave for the slot and
+  // come back, so it is held above.
+  const [heldRemoval, setHeldRemoval] = useState<RemovalStage>(REMOVAL_STAGE.RESTING);
   const [removalRejection, setRemovalRejection] = useState<string>();
   const field = useRef<HTMLInputElement | null>(null);
+  const trash = useRef<HTMLButtonElement | null>(null);
+  const keep = useRef<HTMLButtonElement | null>(null);
+  const editControl = useRef<HTMLButtonElement | null>(null);
+  const returnFocus = useRef(false);
   const fieldId = `${provider.id}-api-key`;
   const entry = entryForProvider(control, provider.id);
   const editing = entry !== undefined;
-  const busy = removing || (entry?.busy ?? false);
-  const rejection = removalRejection ?? entry?.rejection;
   // Deleting is only ever for a key kept here; one read from the environment is
   // not Luke's to remove. Either can be superseded by a key typed in, so both
   // connected states offer the same editor and only the unconnected one is
   // asked to connect.
   const stored = source === CREDENTIAL_SOURCE.ENCRYPTED_FILE;
   const connected = source !== CREDENTIAL_SOURCE.NONE;
+  const removal = removalStage(heldRemoval, { stored, panelOpen });
+  // Corrected during the render that discovers it rather than from an effect,
+  // the way an emptied filter is: a question whose subject or whose surface has
+  // gone must never be drawn once and taken back on the next frame.
+  if (removal !== heldRemoval) setHeldRemoval(removal);
+  const asking = removalAsked(removal);
+  const clearing = removal === REMOVAL_STAGE.CLEARING;
+  const busy = clearing || (entry?.busy ?? false);
+  const rejection = removalRejection ?? entry?.rejection;
   const status = CREDENTIAL_STATUS[source];
   // The pencil opens the same editor from either connected state, but it does
   // not mean the same thing: one replaces the key Luke keeps, the other stands
@@ -125,7 +159,23 @@ function ProviderCredential({
   // back to a panel mid-entry — pressing the capsule while the slot holds the
   // credential — hands focus out of an inert stage on the way, and returns
   // someone who was in the middle of typing.
-  useFieldCaret(field, editing && panelOpen && !busy);
+  useStagedFocus(field, editing && panelOpen && !busy);
+
+  // The question takes the focus to the answer that changes nothing. The
+  // control that asked it is inert by the time the confirm is drawn, so focus
+  // has nowhere else to go — and of the two places it could land, only one is
+  // safe to arrive on with a key already pressed.
+  useStagedFocus(keep, asking && !clearing);
+
+  // Answering hands it back to the line: to the trash if the key survived, and
+  // to whatever now stands where the trash was if it did not. Only an answer
+  // moves focus — a question the panel closing withdrew was never answered, and
+  // reaching into a shape that is leaving would pull it back open.
+  useEffect(() => {
+    if (asking || !returnFocus.current) return;
+    returnFocus.current = false;
+    return focusWhenVisible(trash.current ?? editControl.current);
+  }, [asking]);
 
   // Every control that offers to write one begins the one entry — which takes
   // the panel down to the slot — and clears whatever the last attempt was
@@ -135,10 +185,32 @@ function ProviderCredential({
     control.begin(provider.id);
   };
 
-  const remove = async () => {
-    setRemoving(true);
-    setRemovalRejection(await control.remove(provider.id));
-    setRemoving(false);
+  // The trash asks; only the answer acts. Nothing here can hand a key back, so
+  // a delete taken on the first press would cost a trip to the provider's own
+  // site to undo.
+  const askToRemove = () => {
+    setRemovalRejection(undefined);
+    setHeldRemoval(REMOVAL_STAGE.ASKING);
+  };
+
+  // Keeping it changes nothing, so it says nothing: the line goes back to the
+  // controls it was showing. Only a question can be kept from — an answer
+  // already sent is not this control's to take back.
+  const keepKey = () => {
+    if (!removalWithdrawable(removal)) return;
+    returnFocus.current = true;
+    setHeldRemoval(REMOVAL_STAGE.RESTING);
+  };
+
+  const removeKey = async () => {
+    setHeldRemoval(REMOVAL_STAGE.CLEARING);
+    const reason = await control.remove(provider.id);
+    returnFocus.current = true;
+    setRemovalRejection(reason);
+    // Answered either way. A refusal is an answer too, and asking again is a
+    // fresh decision rather than a confirm left standing over a key that turned
+    // out to still be there.
+    setHeldRemoval(REMOVAL_STAGE.RESTING);
   };
 
   return (
@@ -162,44 +234,105 @@ function ProviderCredential({
             it, so the words are kept for the one thing neither can say:
             connected from the environment rather than from a key kept here. */}
         {status ? <span className="credential-status">{status}</span> : null}
-        <span className="settings-actions">
+        {/* The line's controls and the confirm that stands in for them are the
+            same cell of one grid, so the box is as wide as the wider of the two
+            whichever is showing and the provider's name beside it never
+            re-shapes as they trade places. Neither layer is mounted by the
+            press either: one arriving from nothing would have no size to spring
+            from. */}
+        <span className="credential-actions">
+          <span
+            className="settings-actions credential-controls"
+            data-drawn={String(!asking)}
+            aria-hidden={asking}
+            inert={asking}
+          >
+            {stored ? (
+              <button
+                type="button"
+                ref={trash}
+                className="icon-button credential-remove"
+                disabled={busy}
+                aria-label={`Delete the ${provider.displayName} ${credential}`}
+                /* The ellipsis is the promise that it asks first. */
+                title="Delete…"
+                onClick={askToRemove}
+              >
+                <TrashIcon />
+              </button>
+            ) : null}
+            {connected ? (
+              <button
+                type="button"
+                ref={editControl}
+                className="icon-button"
+                disabled={beginBlocked}
+                aria-label={editLabel}
+                title={held ? HELD_TITLE : editTitle}
+                onClick={beginEntry}
+              >
+                <PencilIcon />
+              </button>
+            ) : (
+              /* Named for its provider like the icon buttons beside it: a list
+                 of controls read on its own is otherwise two identical
+                 Connects. */
+              <button
+                type="button"
+                ref={editControl}
+                className="quiet-button"
+                disabled={beginBlocked}
+                aria-label={`Connect ${provider.displayName}`}
+                title={held ? HELD_TITLE : undefined}
+                onClick={beginEntry}
+              >
+                Connect
+              </button>
+            )}
+          </span>
+          {/* Only ever drawn for a key Luke keeps, because that is the only key
+              it has any business deleting. The group carries the question, so
+              the two answers are read as answers rather than as a Cancel and a
+              Delete that could belong to anything on the line. */}
           {stored ? (
-            <button
-              type="button"
-              className="icon-button credential-remove"
-              disabled={busy}
-              aria-label={`Delete the ${provider.displayName} ${credential}`}
-              title="Delete"
-              onClick={() => void remove()}
+            <fieldset
+              className="settings-actions credential-confirm"
+              aria-label={`Delete the ${provider.displayName} ${credential}?`}
+              data-drawn={String(asking)}
+              aria-hidden={!asking}
+              inert={!asking}
+              onKeyDown={(event) => {
+                // Escape withdraws the question rather than closing the panel
+                // the question was asked on — but only while it is still a
+                // question. Once the delete has gone there is nothing here for
+                // Escape to take back, so it is left to mean what it means
+                // everywhere else in the panel.
+                if (event.key !== "Escape" || !removalWithdrawable(removal)) return;
+                event.stopPropagation();
+                keepKey();
+              }}
             >
-              <TrashIcon />
-            </button>
+              <button
+                type="button"
+                ref={keep}
+                className="quiet-button"
+                style={answerOrder(REMOVAL_ANSWER_INDEX.KEEP)}
+                disabled={clearing}
+                onClick={keepKey}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="danger-button"
+                style={answerOrder(REMOVAL_ANSWER_INDEX.DELETE)}
+                disabled={clearing}
+                onClick={() => void removeKey()}
+              >
+                {clearing ? "Deleting…" : "Delete"}
+              </button>
+            </fieldset>
           ) : null}
-          {connected ? (
-            <button
-              type="button"
-              className="icon-button"
-              disabled={beginBlocked}
-              aria-label={editLabel}
-              title={held ? HELD_TITLE : editTitle}
-              onClick={beginEntry}
-            >
-              <PencilIcon />
-            </button>
-          ) : (
-            /* Named for its provider like the icon buttons beside it: a list of
-               controls read on its own is otherwise two identical Connects. */
-            <button
-              type="button"
-              className="quiet-button"
-              disabled={beginBlocked}
-              aria-label={`Connect ${provider.displayName}`}
-              title={held ? HELD_TITLE : undefined}
-              onClick={beginEntry}
-            >
-              Connect
-            </button>
-          )}
         </span>
       </div>
 
