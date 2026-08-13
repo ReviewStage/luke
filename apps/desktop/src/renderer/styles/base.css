@@ -372,12 +372,19 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 
 /* Notch wings ------------------------------------------------------------ */
 
+/* Bounded vertically by the shape rather than by the window, for the same reason
+   it is bounded horizontally by it below. The two agree beside a housing, where
+   the shape meets the top edge — but on a display with none the shape lifts off
+   that edge and closes into a pill shorter than the strip, and a wing the height
+   of the strip would let anything that leaves the face be drawn on the desktop.
+   The lift is symmetric, so this takes the same centre either way and only
+   tightens the clip: what a motion throws past the black is cut off at it. */
 .wing {
   position: absolute;
   z-index: 3;
-  top: 0;
+  top: var(--shape-top, 0px);
   display: flex;
-  height: max(var(--notch-top-inset), 32px);
+  height: calc(var(--capsule-height) - var(--shape-top, 0px) * 2);
   align-items: center;
   overflow: hidden;
   pointer-events: none;
