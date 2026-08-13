@@ -276,11 +276,16 @@ export function nextDepartures<T extends { id: string }>(
 /**
  * Holds each departed session on screen for the exit beat, so a removal is a
  * fade and then a closing gap rather than a row vanishing between frames. The
- * beat is `--duration-exit`, read from the tokens at the moment of departure,
- * so reduced motion (1ms) lets go almost at once.
+ * beat is `--duration-exit`, read at the moment of departure from the same
+ * element the leaving fade inherits it through — a capture run zeroes the
+ * token on the stage rather than at the root, and a roster that read the root
+ * would hold a gap open for 90ms after the fade had already finished — so the
+ * two always let go together. The root is only the fallback for a commit with
+ * no list to read, where no row is drawn and the beat times nothing visible.
  */
 export function useSessionRoster<T extends { id: string }>(
   sessions: readonly T[],
+  stage: RefObject<HTMLElement | null>,
 ): readonly RosterRow<T>[] {
   const [state, setState] = useState<RosterState<T>>({ sessions, departures: [] });
 
@@ -312,7 +317,9 @@ export function useSessionRoster<T extends { id: string }>(
       const id = departure.session.id;
       if (pending.has(id)) continue;
       const beat = parseMilliseconds(
-        getComputedStyle(document.documentElement).getPropertyValue(MOTION_TOKEN.EXIT_DURATION),
+        getComputedStyle(stage.current ?? document.documentElement).getPropertyValue(
+          MOTION_TOKEN.EXIT_DURATION,
+        ),
       );
       pending.set(
         id,
@@ -325,7 +332,7 @@ export function useSessionRoster<T extends { id: string }>(
         }, beat),
       );
     }
-  }, [state.departures]);
+  }, [state.departures, stage]);
   useEffect(() => {
     const pending = timers.current;
     return () => {

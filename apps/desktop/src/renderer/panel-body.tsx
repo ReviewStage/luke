@@ -162,7 +162,7 @@ export function PanelBody({
   settings,
 }: PanelBodyProps): React.JSX.Element {
   const sessionListRef = useSessionReorderMotion();
-  const rows = useSessionRoster(list.sessions);
+  const rows = useSessionRoster(list.sessions, sessionListRef);
   return (
     <div className="body">
       {/* The tab bar says what you are looking at; the options button says how
