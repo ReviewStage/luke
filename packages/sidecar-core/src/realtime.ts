@@ -64,6 +64,13 @@ export const REALTIME_SERVER_EVENT = {
   OUTPUT_AUDIO_BUFFER_CLEARED: "output_audio_buffer.cleared",
   /** Names the message a reply is being spoken into, which is what a truncate cuts. */
   RESPONSE_OUTPUT_ITEM_ADDED: "response.output_item.added",
+  /**
+   * Luke has stopped speaking — the server's own word for it, sent once the
+   * audio it queued has drained. WebRTC only, and absent from the API reference
+   * while being what every WebRTC client needs, so the silence heuristic stays
+   * behind it as a backstop rather than being replaced outright.
+   */
+  OUTPUT_AUDIO_BUFFER_STOPPED: "output_audio_buffer.stopped",
   RESPONSE_DONE: "response.done",
   ERROR: "error",
 } as const;

@@ -130,6 +130,14 @@ export class RealtimeVoiceSession {
    */
   #responseItemId: string | undefined;
   #audibleSince: number | undefined;
+  /**
+   * Whether this call has ever reported a reply's audio running out. Once it
+   * has, silence stops being evidence of anything: the server says when Luke is
+   * finished, and a stretch of quiet is just as likely to be the gap between
+   * two sentences. Calls that never report one keep the old guess, because a
+   * turn that never ends is worse than one that ends early.
+   */
+  #audioEndingsReported = false;
   #settleTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(options: RealtimeVoiceSessionOptions) {
@@ -499,6 +507,8 @@ export class RealtimeVoiceSession {
     this.#pendingTurn = false;
     this.#responseItemId = undefined;
     this.#audibleSince = undefined;
+    // Learned about this call, so it does not outlive it.
+    this.#audioEndingsReported = false;
     this.#clearSettleTimer();
     this.#options.onLocalStream(undefined);
     this.#options.onRemoteStream(undefined);
@@ -533,6 +543,9 @@ export class RealtimeVoiceSession {
     // finished yet, this is still the only quiet edge the meter will report,
     // and `response.done` is what will read it.
     this.#remoteQuiet = true;
+    // Nothing to infer on a call that reports its own endings. Inferring here
+    // is what ended a reply in the pause between its two sentences.
+    if (this.#audioEndingsReported) return;
     if (!this.#generationDone) return;
     this.#finishResponse();
   }
@@ -628,6 +641,15 @@ export class RealtimeVoiceSession {
       // belongs to it rather than to the one it replaced.
       this.#unsilenceLuke();
     }
+    if (type === REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED) {
+      this.#audioEndingsReported = true;
+      // The reply is over because the server says the audio ran out, not
+      // because this end guessed from a stretch of quiet. A pause between two
+      // sentences is quiet too, and guessing ended the turn in the middle of
+      // one — the meter and the face went with it while Luke talked on.
+      this.#finishResponse();
+      return;
+    }
     if (type === REALTIME_SERVER_EVENT.RESPONSE_DONE) {
       // Generation is done; the reply is not. The turn ends when Luke stops
       // being audible, which the caller reports from the audio itself rather
@@ -637,7 +659,7 @@ export class RealtimeVoiceSession {
       // The meter has already reported its quiet and will not report it twice,
       // so waiting for another would hold the turn open until the settle
       // timeout — seconds of a meter and a face saying Luke is still talking.
-      if (this.#remoteQuiet) {
+      if (this.#remoteQuiet && !this.#audioEndingsReported) {
         this.#finishResponse();
         return;
       }

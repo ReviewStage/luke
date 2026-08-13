@@ -436,11 +436,20 @@ button:disabled {
   transform: translateX(calc(-50% - var(--capsule-voice-shift)));
 }
 
-/* The meter follows the room being made for it, on the same beat the wings use
-   when the peek unfolds. Only here: when it stands in the face's place nothing
-   grows, so there is nothing for it to wait behind. */
+/* The meter follows the room being made for it, the way the marks follow the
+   peek — but not on the marks' beat, because the two are not the same distance.
+   A mark fades in early and slides 8px, which the peek's edge has long since
+   passed; the capsule grows 26px, and a meter drawn 60ms in is drawn past an
+   edge that is still 300ms away from it. So it crosses over the last of the
+   shape's travel and finishes as the shape settles, which is the same thing the
+   marks are doing — arriving inside the black rather than ahead of it.
+
+   Only here: when the meter stands in the face's place nothing grows, so there
+   is nothing for it to wait behind and it appears at once. */
 .app-stage[data-presentation="capsule"][data-voice="luke"] .wing-meter[data-turn] {
-  transition-delay: var(--peek-delay);
+  transition-duration: var(--duration-quick), var(--duration-shape);
+  transition-timing-function: var(--motion-exit), var(--spring);
+  transition-delay: calc(var(--duration-shape) - var(--duration-quick));
 }
 
 /* Under the pointer: wide enough to say what the count means. */

@@ -45,8 +45,16 @@ import {
 import { SESSION_OPTIONS_BUTTON_ID, SESSION_OPTIONS_ID } from "./session-parts";
 import { WAVEFORM_VOICE } from "./waveform";
 
-/** Silence longer than a speaker leaves between sentences. */
-const REMOTE_QUIET_MS = 700;
+/**
+ * The backstop for a reply whose ending never arrives.
+ *
+ * `output_audio_buffer.stopped` is what actually ends a reply now, so this only
+ * has to catch a call where that never came. It is long because the thing it
+ * must not mistake for an ending is a pause between two sentences: at 700ms it
+ * did exactly that, taking the meter and the face down while Luke talked on
+ * into the second one.
+ */
+const REMOTE_QUIET_MS = 2_500;
 
 function usePointerPassthrough(
   onHitRegionEnter: () => void,

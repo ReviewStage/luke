@@ -401,6 +401,68 @@ test("a reply that runs out before the model says so still ends", async () => {
   assert.equal(context.session.status, REALTIME_STATUS.READY);
 });
 
+test("the reply ends when the server says the audio ran out", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.session.beginTurn();
+  context.session.endTurn(true);
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
+  // Generation finishing is not speech finishing, so the turn holds.
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+
+  context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+});
+
+test("two sentences are one reply, whatever the pause between them", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.deliverRemoteTrack();
+
+  // One reply that ends properly, which is how this call shows it reports the
+  // end of its own audio.
+  context.session.beginTurn();
+  context.session.endTurn(true);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
+  context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+
+  // A longer one. Generation finishes while he is still on the first sentence.
+  context.session.beginTurn();
+  context.session.endTurn(true);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED });
+  context.session.reportRemoteAudioActive();
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
+
+  // The gap before the second sentence. Silence long enough to look like an
+  // ending, on a call that has already shown it reports real ones.
+  context.session.reportRemoteAudioIdle();
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING, "he is still talking");
+  context.session.reportRemoteAudioActive();
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+
+  context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+});
+
+test("a call that never reports an ending still ends its replies", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.deliverRemoteTrack();
+  context.session.beginTurn();
+  context.session.endTurn(true);
+  context.session.reportRemoteAudioActive();
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
+
+  // Nothing has ever said when audio runs out here, so the quiet is all there
+  // is to go on. A turn that never ends is worse than one that ends early.
+  context.session.reportRemoteAudioIdle();
+
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+});
+
 test("a pause mid-reply is not the reply running out", async () => {
   const context = harness();
   await context.session.connect();
