@@ -194,6 +194,17 @@ test("release DMG attach parsing selects the mounted system entity", () => {
   );
 });
 
+test("release DMG attach parsing decodes each XML entity once", () => {
+  const plist = `<plist><dict><key>system-entities</key><array>
+  <dict><key>dev-entry</key><string>/dev/disk&amp;lt;5</string><key>mount-point</key><string>/Volumes/Luke &amp; Test</string></dict>
+</array></dict></plist>`;
+
+  assert.deepEqual(parseHdiutilAttachPlist(plist), {
+    mountPoint: "/Volumes/Luke & Test",
+    device: "/dev/disk&lt;5",
+  });
+});
+
 test("release DMG store layout is branded and bounded", () => {
   assert.deepEqual(dmgStoreLayout("/Volumes/Luke"), {
     version: 1,

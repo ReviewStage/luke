@@ -63,11 +63,11 @@ export function hdiutilAttachArguments(imagePath) {
 function plistString(entity, key) {
   const match = entity.match(new RegExp(`<key>\\s*${key}\\s*</key>\\s*<string>([^<]*)</string>`));
   return match?.[1]
-    .replaceAll("&amp;", "&")
     .replaceAll("&lt;", "<")
     .replaceAll("&gt;", ">")
     .replaceAll("&quot;", '"')
-    .replaceAll("&apos;", "'");
+    .replaceAll("&apos;", "'")
+    .replaceAll("&amp;", "&");
 }
 
 export function parseHdiutilAttachPlist(xml) {
