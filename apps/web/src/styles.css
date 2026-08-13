@@ -2,8 +2,9 @@
  *
  * The product has no screenshots in this repository, so the hero is a CSS
  * recreation of the real surface rather than an image. Every value under
- * "Notch mock" is ported from `apps/desktop/src/renderer/styles.css`; keep them
- * in step when the product's look changes.
+ * "Notch mock" is ported from `apps/desktop/src/renderer/styles/base.css` and
+ * `apps/desktop/src/renderer/styles/sessions.css`; keep them in step when the
+ * product's look changes.
  *
  * Deliberately not ported from the renderer: `overflow: clip` on the root,
  * `user-select: none`, and the transparent body. Those exist so an Electron
@@ -21,11 +22,10 @@
   --frame-top: #14171c;
   --frame-bottom: #0a0b0e;
 
-  --accent: #59d6ff;
-  --accent-eyebrow: #58cefa;
+  --accent: #5cd5ff;
   --accent-strong: #72dcff;
-  --attention: #ff963f;
-  --complete: #68d39a;
+  --attention: #ffa049;
+  --complete: #6fdca4;
   /* `unknown` is the product's idle accent: a session Luke can still see but
      has no current activity for. Matches `--state-idle` in the renderer. */
   --idle: rgba(255, 255, 255, 0.44);
@@ -35,32 +35,53 @@
   --text-muted: rgba(255, 255, 255, 0.4);
   --text-faint: rgba(255, 255, 255, 0.32);
 
-  --hairline: rgba(255, 255, 255, 0.045);
+  --hairline: rgba(255, 255, 255, 0.08);
   --hairline-strong: rgba(255, 255, 255, 0.09);
+  --raised: rgba(255, 255, 255, 0.05);
+  --raised-strong: rgba(255, 255, 255, 0.09);
 
-  --radius-card: 16px;
+  --radius-card: 17px;
   --radius-control: 10px;
-  --radius-panel: 28px;
+  --radius-panel: 30px;
   --radius-pill: 999px;
+
+  /* Type scale. The hero is the only fluid step; everything below it is fixed
+     so the rhythm does not shift with the viewport. */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-hero: clamp(1rem, 5.5vw, 3.5rem);
+
+  /* Space scale, 4px grid. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --space-9: 96px;
 
   /* The renderer's expansion easing. Reused for every page transition so the
      page and the product feel like the same software. */
   --swift: cubic-bezier(0.2, 0.8, 0.2, 1);
 
-  --font-sans: -apple-system, blinkmacsystemfont, "SF Pro Display", "Segoe UI", sans-serif;
-  --font-mono: "SF Mono", menlo, monospace;
-
+  --font-brand: "Bricolage Grotesque Variable", "Arial Narrow", sans-serif;
+  --font-product: -apple-system, blinkmacsystemfont, "SF Pro Display", "Segoe UI", sans-serif;
   /* The mock renders at true product geometry and scales as a unit. Stepped
      rather than fluid so the interior never lands on a half pixel. The height
-     is the 610px expanded panel plus room for the display edge below it, and
+     is the 520px expanded panel plus room for the display edge below it, and
      both the mock and its wrapper derive from this one value so the painted
      art and the space reserved for it cannot drift apart. The panel is sized
      to the five-session smoke fixture at the product's own row height; the
      list does not shrink, so anything shorter clips the last row. */
   --mock-scale: 1;
-  --mock-height: 630px;
+  --mock-height: 540px;
 
-  font-family: var(--font-sans);
+  font-family: var(--font-brand);
+  font-optical-sizing: auto;
   font-synthesis: none;
 }
 
@@ -72,7 +93,7 @@ body {
   margin: 0;
   background: var(--page);
   color: var(--text);
-  font-size: 16px;
+  font-size: var(--text-base);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
 }
@@ -89,7 +110,6 @@ button {
 }
 
 :focus-visible {
-  border-radius: 4px;
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
@@ -101,7 +121,7 @@ button {
   width: 100%;
   max-width: 960px;
   margin: 0 auto;
-  padding: 0 24px;
+  padding: 0 var(--space-5);
 }
 
 /* Navigation
@@ -109,7 +129,7 @@ button {
 
 .site-nav {
   display: flex;
-  height: 68px;
+  height: var(--space-8);
   align-items: center;
   justify-content: space-between;
 }
@@ -117,9 +137,9 @@ button {
 .wordmark {
   display: inline-flex;
   align-items: center;
-  font-size: 15px;
+  font-size: var(--text-base);
   font-weight: 700;
-  gap: 7px;
+  gap: var(--space-2);
   letter-spacing: -0.01em;
 }
 
@@ -163,23 +183,27 @@ button {
    ------------------------------------------------------------------------- */
 
 .hero {
-  padding: 56px 0 72px;
+  /* A notch belongs at the horizontal center of a display, so the art and the
+     copy that introduces it intentionally share the same centered axis. */
+  padding: var(--space-7) 0 var(--space-8);
   text-align: center;
 }
 
 .hero h1 {
-  margin: 0 0 20px;
-  font-size: clamp(2.4rem, 6vw, 3.9rem);
+  margin: 0 auto var(--space-5);
+  font-size: var(--text-hero);
   font-weight: 650;
   letter-spacing: -0.02em;
   line-height: 1.05;
+  white-space: nowrap;
 }
 
 .hero-subhead {
   max-width: 620px;
   margin: 0 auto;
   color: var(--text-secondary);
-  font-size: 1rem;
+  font-size: var(--text-lg);
+  text-wrap: pretty;
 }
 
 .cta-row {
@@ -187,20 +211,20 @@ button {
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  margin-top: 32px;
-  gap: 12px;
+  margin-top: var(--space-6);
+  gap: var(--space-3);
 }
 
 .cta-primary {
   display: inline-flex;
   align-items: center;
-  padding: 12px 20px;
+  padding: var(--space-3) var(--space-5);
   border-radius: var(--radius-control);
   background: var(--accent);
   color: #04121a;
-  font-size: 14px;
+  font-size: var(--text-sm);
   font-weight: 650;
-  gap: 8px;
+  gap: var(--space-2);
   text-decoration: none;
   transition:
     background 140ms ease,
@@ -216,8 +240,9 @@ button {
 }
 
 /* Notch mock
-   Ported from apps/desktop/src/renderer/styles.css. The interior keeps true
-   product pixels; only the outer frame and the panel border are page-only.
+   Ported from apps/desktop/src/renderer/styles/base.css and styles/sessions.css.
+   The interior keeps true product pixels; only the outer frame and the panel
+   border are page-only.
    ------------------------------------------------------------------------- */
 
 .mock-wrapper {
@@ -228,7 +253,7 @@ button {
      290px-tall visual. `clip` keeps the untransformed 660px width from opening
      a horizontal scrollbar. */
   height: calc(var(--mock-height) * var(--mock-scale));
-  margin-top: 56px;
+  margin-top: var(--space-7);
   overflow: clip;
 }
 
@@ -244,6 +269,7 @@ button {
   flex: none;
   transform: scale(var(--mock-scale));
   transform-origin: top center;
+  font-family: var(--font-product);
   /* An illustration, not page copy: dragging across a recreated interface
      should not fill someone's clipboard with invented session titles. */
   user-select: none;
@@ -269,22 +295,6 @@ button {
   );
   -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 18%, transparent 62%);
   mask-image: linear-gradient(180deg, #000 0%, #000 18%, transparent 62%);
-}
-
-/* A black panel on a near-black page needs help separating from it. The glow
-   sits behind both stages so neither the capsule nor the panel picks it up. */
-.mock-glow {
-  position: absolute;
-  z-index: 0;
-  top: -40px;
-  left: 50%;
-  width: 560px;
-  height: 300px;
-  border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(89, 214, 255, 0.12), transparent);
-  filter: blur(24px);
-  pointer-events: none;
-  transform: translateX(-50%);
 }
 
 /* The mock's root element owns its one pointer interaction, so neither stage
@@ -349,7 +359,7 @@ button {
   top: 0;
   left: 50%;
   width: 620px;
-  height: 610px;
+  height: 520px;
   padding: 0 10px 18px;
   opacity: 0;
   transform: translateX(-50%) translateY(-6px) scale(0.965);
@@ -370,7 +380,7 @@ button {
   height: 100%;
   flex-direction: column;
   padding: max(calc(var(--notch-top-inset) + 10px), 20px) 20px 18px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--hairline);
   border-radius: 0 0 var(--radius-panel) var(--radius-panel);
   background: var(--surface);
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.65);
@@ -381,43 +391,6 @@ button {
   text-align: left;
 }
 
-.mock-header {
-  display: flex;
-  flex: none;
-  align-items: center;
-}
-
-.mock-header-status {
-  display: flex;
-  height: 38px;
-  align-items: center;
-  gap: 10px;
-}
-
-.mock-header-indicator {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--attention);
-}
-
-.mock-header-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.mock-header-copy strong {
-  color: var(--text);
-  font-size: 11px;
-  font-weight: 650;
-}
-
-.mock-header-copy small {
-  color: rgba(255, 255, 255, 0.38);
-  font-size: 9px;
-}
-
 .mock-body {
   display: flex;
   min-height: 0;
@@ -426,64 +399,56 @@ button {
   gap: 14px;
 }
 
-.mock-summary {
+.mock-tab-bar {
+  position: relative;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  width: 184px;
+  flex: 0 0 auto;
+  padding: 3px;
+  border-radius: 11px;
+  background: var(--raised);
 }
 
-.mock-eyebrow {
-  margin: 0 0 4px;
-  color: var(--accent-eyebrow);
-  font-size: 10px;
-  font-weight: 750;
-  letter-spacing: 1.1px;
-  text-transform: uppercase;
+.mock-tab-thumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc((100% - 6px) / 2);
+  border-radius: 8px;
+  background: var(--raised-strong);
 }
 
-.mock-title {
-  margin: 0;
-  font-size: 23px;
+.mock-tab {
+  position: relative;
+  flex: 1;
+  padding: 6px 0;
+  color: var(--text-secondary);
+  font-size: 10.5px;
   font-weight: 650;
-  letter-spacing: -0.4px;
-  line-height: 1.2;
+  text-align: center;
 }
 
-.mock-subtle {
-  margin: 4px 0 0;
-  color: rgba(255, 255, 255, 0.43);
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-.mock-badge {
-  padding: 7px 10px;
-  border: 1px solid rgba(89, 214, 255, 0.22);
-  border-radius: var(--radius-pill);
-  background: rgba(89, 214, 255, 0.07);
-  color: var(--accent);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.7px;
+.mock-tab[data-active="true"] {
+  color: var(--text);
 }
 
 .mock-session-list {
   display: flex;
   flex: none;
   flex-direction: column;
-  gap: 8px;
+  gap: 9px;
 }
 
 .mock-session-row {
   display: flex;
-  min-height: 62px;
+  min-height: 66px;
   flex: none;
   align-items: center;
   padding: 0 15px;
   border: 1px solid var(--hairline);
   border-radius: var(--radius-card);
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.028);
   gap: 13px;
 }
 
@@ -496,17 +461,17 @@ button {
 
 .mock-status-mark.working {
   background: var(--accent);
-  box-shadow: 0 0 0 10px rgba(89, 214, 255, 0.07);
+  box-shadow: 0 0 0 10px rgba(92, 213, 255, 0.07);
 }
 
 .mock-status-mark.attention {
   background: var(--attention);
-  box-shadow: 0 0 0 10px rgba(255, 150, 63, 0.08);
+  box-shadow: 0 0 0 10px rgba(255, 160, 73, 0.08);
 }
 
 .mock-status-mark.complete {
   background: var(--complete);
-  box-shadow: 0 0 0 10px rgba(104, 211, 154, 0.07);
+  box-shadow: 0 0 0 10px rgba(111, 220, 164, 0.07);
 }
 
 /* No halo: an idle session is the one state that should not draw the eye. */
@@ -560,45 +525,6 @@ button {
   color: var(--idle);
 }
 
-.mock-footer {
-  display: flex;
-  min-height: 34px;
-  flex: none;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.mock-diagnostics {
-  display: flex;
-  align-items: center;
-  color: var(--text-faint);
-  font-family: var(--font-mono);
-  font-size: 8px;
-  gap: 8px;
-}
-
-.mock-diagnostics span + span::before {
-  margin-right: 8px;
-  content: "·";
-}
-
-.mock-footer-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.mock-quiet-button {
-  padding: 8px 11px;
-  border-radius: var(--radius-control);
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text-secondary);
-  font-size: 9px;
-  font-weight: 650;
-}
-
 /* Footer
    ------------------------------------------------------------------------- */
 
@@ -606,38 +532,23 @@ button {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 40px 0 56px;
+  padding: var(--space-7) 0 var(--space-8);
   border-top: 1px solid var(--hairline-strong);
-  color: var(--text-faint);
-  font-size: 0.8125rem;
-  gap: 10px;
-  text-align: center;
-}
-
-.site-footer a {
   color: var(--text-secondary);
-  text-decoration: none;
-}
-
-.site-footer a:hover {
-  color: var(--text);
+  font-size: var(--text-xs);
+  text-align: center;
 }
 
 .footer-meta {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .footer-meta span + span::before {
-  margin-right: 8px;
+  margin-right: var(--space-2);
   content: "·";
-}
-
-.footnote {
-  margin: 0;
-  color: var(--text-faint);
 }
 
 /* Responsive
@@ -661,21 +572,21 @@ button {
   }
 
   .shell {
-    padding: 0 16px;
+    padding: 0 var(--space-4);
   }
 
   .hero {
-    padding: 32px 0 0;
+    padding: var(--space-6) 0 0;
   }
 
   .mock-wrapper {
-    margin-top: 40px;
+    margin-top: var(--space-7);
   }
 }
 
 /* Reduced motion
-   The mock is pinned open in JavaScript; this removes the transitions that
-   would otherwise still animate the initial paint.
+   Hover still changes the illustration's state, but it does so without an
+   animated transition.
    ------------------------------------------------------------------------- */
 
 @media (prefers-reduced-motion: reduce) {
