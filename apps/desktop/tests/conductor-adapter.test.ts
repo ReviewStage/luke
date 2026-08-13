@@ -48,6 +48,7 @@ interface TestSession {
   status?: string;
   statusUpdatedAt?: number;
   statusHttpStatus?: number;
+  lastError?: string;
 }
 
 interface TestApi {
@@ -151,6 +152,7 @@ function fakeConductorApi(api: TestApi): FakeConductorApi {
         ...(session.status === TEST_CONDUCTOR_STATUS.ERROR
           ? { errorMessage: TEST_ERROR_MESSAGE }
           : {}),
+        ...(session.lastError ? { lastError: session.lastError } : {}),
       });
     }
     return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
@@ -272,6 +274,31 @@ test("reports an idle session as waiting and an errored session with its reason"
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
   assert.equal(observations[1]?.status, SESSION_STATUS.ERROR);
   assert.equal(observations[1]?.detail?.error, TEST_ERROR_MESSAGE);
+});
+
+test("does not carry a past failure into a session that recovered", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 30_000)],
+    sessions: [
+      {
+        id: "session-recovered",
+        workspaceId: "workspace-active",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.WORKING,
+        statusUpdatedAt: TEST_TIME - 1_000,
+        lastError: "An earlier failure this session already got past",
+      },
+    ],
+  });
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  // `lastError` is the last failure a session ever had, not its current state,
+  // and the row puts an error ahead of everything else on it.
+  assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
+  assert.equal(observations[0]?.detail?.error, undefined);
 });
 
 test("keeps an errored session errored after it goes stale", async () => {

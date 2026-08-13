@@ -258,6 +258,39 @@ test("stays silent when an evaluator fails or answers outside the contract", asy
   assert.equal(emptyReview?.outcome, ATTENTION_REVIEW_OUTCOME.UNAVAILABLE);
 });
 
+test("drops a decision about a failure the session has already replaced", async () => {
+  const rateLimited = session(claude, "review", {
+    status: SESSION_STATUS.ERROR,
+    detail: { error: "429 rate limit exceeded" },
+  });
+  // Same status and no recap either side, so the failure itself is the only
+  // thing that moved. A trigger that can open a review has to be able to
+  // supersede one, or Luke speaks about a failure that is no longer true.
+  const disconnected = session(claude, "review", {
+    status: SESSION_STATUS.ERROR,
+    detail: { error: "Unable to connect to API (ConnectionRefused)" },
+  });
+  let current: NormalizedSession = rateLimited;
+
+  const reviewer = new SessionAttentionReviewer({
+    evaluator: {
+      evaluate: async () => {
+        current = disconnected;
+        return speakDecision();
+      },
+    },
+    currentSession: () => current,
+    now: () => DECIDED_AT,
+  });
+
+  const [review] = await reviewer.review([rateLimited]);
+  assert.equal(review?.outcome, ATTENTION_REVIEW_OUTCOME.SUPERSEDED);
+  assert.deepEqual(review?.decision, {
+    disposition: ATTENTION_DISPOSITION.SILENT,
+    decidedAt: DECIDED_AT,
+  });
+});
+
 test("drops a decision the session already moved past", async () => {
   const waiting = session(claude, "review", { status: SESSION_STATUS.WAITING });
   const working = session(claude, "review");

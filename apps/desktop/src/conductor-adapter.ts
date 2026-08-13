@@ -405,13 +405,24 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       CONDUCTOR_ROUTE_SEGMENT.STATUS,
     ]);
     // A session that failed says why, and dropping that left the panel showing
-    // a failed chat as though nothing had happened to it.
-    const errorMessage = (
-      textFromRecord(body, CONDUCTOR_FIELD.ERROR_MESSAGE) ??
-      textFromRecord(body, CONDUCTOR_FIELD.LAST_ERROR)
-    )?.slice(0, CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_ERROR_LENGTH);
+    // a failed chat as though nothing had happened to it. `lastError` is the
+    // last failure this session ever had rather than its current state, so both
+    // are read only while the session is actually reporting an error: otherwise
+    // a chat that recovered hours ago would keep showing the failure it
+    // recovered from, ahead of whatever it is really doing.
+    const status = knownValue(
+      CONDUCTOR_SESSION_STATUS,
+      textFromRecord(body, CONDUCTOR_FIELD.STATUS),
+    );
+    const errorMessage =
+      status === CONDUCTOR_SESSION_STATUS.ERROR
+        ? (
+            textFromRecord(body, CONDUCTOR_FIELD.ERROR_MESSAGE) ??
+            textFromRecord(body, CONDUCTOR_FIELD.LAST_ERROR)
+          )?.slice(0, CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_ERROR_LENGTH)
+        : undefined;
     return {
-      status: knownValue(CONDUCTOR_SESSION_STATUS, textFromRecord(body, CONDUCTOR_FIELD.STATUS)),
+      status,
       updatedAt: timestampFromRecord(body, CONDUCTOR_FIELD.UPDATED_AT),
       ...(errorMessage ? { errorMessage } : {}),
     };

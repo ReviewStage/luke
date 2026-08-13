@@ -496,12 +496,22 @@ export class SessionAttentionReviewer {
     return review;
   }
 
-  /** Reports whether the session moved past the state the evaluator reasoned about. */
+  /**
+   * Reports whether the session moved past the state the evaluator reasoned
+   * about. It compares every field a development can be derived from, so
+   * `attentionTrigger` and this must be changed together: a dimension that can
+   * open a review and cannot supersede one lets Luke speak about a failure the
+   * session has already replaced or recovered from.
+   */
   #isSuperseded(identity: SessionIdentity, update: AttentionUpdate): boolean {
     if (!this.#currentSession) return false;
     const current = this.#currentSession(identity);
     if (!current) return true;
-    return current.status !== update.status || current.summary !== update.summary;
+    return (
+      current.status !== update.status ||
+      current.summary !== update.summary ||
+      current.detail.error !== update.context?.error
+    );
   }
 
   #silentReview(

@@ -563,6 +563,13 @@ test("drops the previous turn's recap when a new prompt opens a turn", async (t)
         timestamp: "2026-08-11T23:44:55.000Z",
         message: { stop_reason: "end_turn", content: [{ type: "text", text: "Second turn." }] },
       },
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.SYSTEM,
+        subtype: "away_summary",
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:44:57.000Z",
+        content: "The second turn's recap.",
+      },
     ],
     TEST_TIME - 1_000,
   );
@@ -575,7 +582,40 @@ test("drops the previous turn's recap when a new prompt opens a turn", async (t)
   const [observation] = await adapter.observe();
 
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
-  assert.equal(observation?.summary, "Second turn.");
+  assert.equal(observation?.summary, "The second turn's recap.");
+});
+
+test("reports no recap for a turn whose closing words are all it wrote", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-closing",
+    "closing-session",
+    [
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:44:55.000Z",
+        message: {
+          stop_reason: "end_turn",
+          content: [{ type: "text", text: "Everything in src/totals.ts now rounds per line." }],
+        },
+      },
+    ],
+    TEST_TIME - 1_000,
+  );
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const [observation] = await adapter.observe();
+
+  // The closing message is the transcript itself, not a recap Claude Code wrote
+  // about the session, and a summary reaches the attention evaluator.
+  assert.equal(observation?.status, SESSION_STATUS.WAITING);
+  assert.equal(observation?.summary, undefined);
 });
 
 test("stops reporting a tool once the turn that ran it has ended", async (t) => {
@@ -615,6 +655,13 @@ test("stops reporting a tool once the turn that ran it has ended", async (t) => 
           content: [{ type: "text", text: "Packaging passed." }],
         },
       },
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.SYSTEM,
+        subtype: "away_summary",
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:44:57.000Z",
+        content: "Packaging passed; next, say whether to notarize.",
+      },
     ],
     TEST_TIME - 1_000,
   );
@@ -630,7 +677,7 @@ test("stops reporting a tool once the turn that ran it has ended", async (t) => 
   // hide what the session actually wants to say.
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
   assert.equal(observation?.detail?.activity, undefined);
-  assert.equal(observation?.summary, "Packaging passed.");
+  assert.equal(observation?.summary, "Packaging passed; next, say whether to notarize.");
 });
 
 test("keeps reporting a tool between one call and the next", async (t) => {

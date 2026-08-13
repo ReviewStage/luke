@@ -39,7 +39,13 @@ const CLAUDE_RECORD_TYPE = {
 } as const;
 
 const CLAUDE_SYSTEM_SUBTYPE = {
-  /** A recap Claude Code composes for a developer who stepped away. */
+  /**
+   * A recap Claude Code composes for a developer who stepped away. It is the
+   * only summary this adapter reports, because it is the only one Claude Code
+   * designates as being *about* the session. The closing text of the last
+   * assistant message would read similarly, but it is the message stream
+   * itself, and a summary reaches the attention evaluator off-machine.
+   */
   AWAY_SUMMARY: "away_summary",
   API_ERROR: "api_error",
 } as const;
@@ -319,16 +325,6 @@ function activityFromAssistant(record: Record<string, unknown>): string | undefi
   return undefined;
 }
 
-/** The assistant's closing words, used when no away recap was written. */
-function assistantTextFromRecord(record: Record<string, unknown>): string | undefined {
-  const spoken = contentBlocks(record)
-    .filter((block) => block.type === CLAUDE_CONTENT_TYPE.TEXT)
-    .map((block) => text(block.text))
-    .filter((value): value is string => value !== undefined)
-    .join(" ");
-  return text(spoken);
-}
-
 function stopReasonFromRecord(record: Record<string, unknown>): string | undefined {
   const message = record.message;
   return isRecord(message) ? text(message.stop_reason) : undefined;
@@ -459,13 +455,6 @@ function readClaudeRecord(record: Record<string, unknown>, parsed: ParsedClaudeS
   parsed.activity = turnEnded(parsed)
     ? undefined
     : (activityFromAssistant(record) ?? parsed.activity);
-  // A turn that ended replaces the recap only when Claude Code wrote none; its
-  // own away summary is composed for this exact moment and reads better.
-  parsed.awaySummary =
-    parsed.stopReason === CLAUDE_STOP_REASON.END_TURN
-      ? (parsed.awaySummary ??
-        oneLine(assistantTextFromRecord(record), maximumSessionSummaryLength))
-      : parsed.awaySummary;
 }
 
 function parseClaudeSessionTail(tail: string): ParsedClaudeSessionTail {
