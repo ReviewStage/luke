@@ -134,6 +134,8 @@ test("release DMG mount, conversion, and background arguments are deterministic"
     "-noverify",
     "-noautoopen",
     "-nobrowse",
+    "-mountpoint",
+    "/Volumes/Luke",
     "-plist",
   ]);
   // The layout writer does not need Finder, so keep Finder from creating a competing .DS_Store.
@@ -223,6 +225,26 @@ test("release DMG attach cleanup runs when plist parsing fails", async () => {
 
   assert.deepEqual(detachedMountPoints, [DMG_MOUNT_POINT]);
   assert.equal(usedMountPoint, false);
+});
+
+test("release DMG attach cleanup does not mask a plist parsing failure", async () => {
+  const detachError = new Error("detach failed");
+  let releaseError;
+
+  try {
+    await withMountedDmg({
+      attach: () => "<plist><dict></dict></plist>",
+      detach: () => {
+        throw detachError;
+      },
+      use: () => assert.fail("an invalid attach response must not be used"),
+    });
+  } catch (error) {
+    releaseError = error;
+  }
+
+  assert.match(releaseError.message, /hdiutil did not report a mounted volume/);
+  assert.equal(releaseError.cause, detachError);
 });
 
 test("release DMG store layout is branded and bounded", () => {

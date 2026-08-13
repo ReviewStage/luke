@@ -57,7 +57,17 @@ export function hdiutilCreateArguments({ stagingDirectory, imagePath }) {
 }
 
 export function hdiutilAttachArguments(imagePath) {
-  return ["attach", imagePath, "-readwrite", "-noverify", "-noautoopen", "-nobrowse", "-plist"];
+  return [
+    "attach",
+    imagePath,
+    "-readwrite",
+    "-noverify",
+    "-noautoopen",
+    "-nobrowse",
+    "-mountpoint",
+    DMG_MOUNT_POINT,
+    "-plist",
+  ];
 }
 
 function plistString(entity, key) {
@@ -88,12 +98,20 @@ export function parseHdiutilAttachPlist(xml) {
 export async function withMountedDmg({ attach, detach, use }) {
   const attachOutput = attach();
   let mountPoint = DMG_MOUNT_POINT;
+  let result;
   try {
     ({ mountPoint } = parseHdiutilAttachPlist(attachOutput));
-    return await use(mountPoint);
-  } finally {
-    detach(mountPoint);
+    result = await use(mountPoint);
+  } catch (error) {
+    try {
+      detach(mountPoint);
+    } catch (detachError) {
+      error.cause ??= detachError;
+    }
+    throw error;
   }
+  detach(mountPoint);
+  return result;
 }
 
 export function hdiutilDetachArguments(mountPoint, { force = false } = {}) {
