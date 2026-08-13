@@ -51,7 +51,7 @@
   --text-sm: 0.875rem;
   --text-base: 1rem;
   --text-lg: 1.125rem;
-  --text-hero: clamp(2.25rem, 5.5vw, 3.5rem);
+  --text-hero: clamp(1.5rem, 5.5vw, 3.5rem);
 
   /* Space scale, 4px grid. */
   --space-1: 4px;
@@ -190,13 +190,12 @@ button {
 }
 
 .hero h1 {
-  max-width: 18ch;
   margin: 0 auto var(--space-5);
   font-size: var(--text-hero);
   font-weight: 650;
   letter-spacing: -0.02em;
   line-height: 1.05;
-  text-wrap: balance;
+  white-space: nowrap;
 }
 
 .hero-subhead {
