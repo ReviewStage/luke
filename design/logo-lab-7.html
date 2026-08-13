@@ -47,7 +47,6 @@
     padding: 22px; display: flex; flex-direction: column; gap: 13px; box-shadow: var(--shadow);
   }
   .card.base { grid-column: 1 / -1; }
-  .card.base .controls { grid-template-columns: repeat(4, 1fr); }
   .card h2 { margin: 0; font-size: 16.5px; font-weight: 600; letter-spacing: -0.015em; }
   .card h2 em { font-style: normal; color: var(--muted); font-weight: 500; font-size: 13px; margin-left: 8px; }
   .card .blurb { margin: 4px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
@@ -74,6 +73,7 @@
   .sizes .hint { color: var(--muted); font-size: 11.5px; margin-left: auto; }
 
   .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 7px 18px; }
+  .card.base .controls { grid-template-columns: repeat(4, 1fr); }
   .ctl { display: grid; grid-template-columns: 96px 1fr 34px; align-items: center; gap: 8px; font-size: 12px; }
   .ctl span { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ctl output { color: var(--ink); font-variant-numeric: tabular-nums; text-align: right; font-size: 11.5px; }
@@ -125,19 +125,19 @@
 <header>
   <div>
     <h1>Luke <small>Logo Lab — Round 7 · The Motion Library &amp; LUKE Caps</small></h1>
-    <p>Wince is the error state. Every keeper motion is here plus eleven new ones — and the Face-first
+    <p>Shimmy is the error state. Every keeper motion is here plus the Round 7 additions — and the Face-first
        wordmark is now all-caps: the face is the capital L, followed by custom U·K·E letterforms.
        Use the ✓ / ✕ on each motion card to accept or reject it (decisions and slider tweaks are saved
        locally), then hit <strong>Copy selections</strong> in the corner and paste the result back into the chat.</p>
   </div>
   <div class="toolbar">
     <div class="swatches" id="swatches"><span>Accent</span></div>
-    <button id="themeBtn">Light preview</button>
+    <button type="button" id="themeBtn">Light preview</button>
   </div>
 </header>
 
 <main id="grid"></main>
-<div id="tally"><span id="tallyText"></span><button id="clearSel" title="Clear all decisions">Clear</button><button id="copySel">Copy selections</button></div>
+<div id="tally"><span id="tallyText"></span><button type="button" id="clearSel" title="Clear all decisions">Clear</button><button type="button" id="copySel">Copy selections</button></div>
 <footer>Exports resolve colors into the SVG; animations survive export.</footer>
 
 <script>
@@ -191,7 +191,6 @@ function faceCore(opts = {}) {
   return `<g transform="rotate(${b.tilt} 120 124)">${smile}${eyes}${opts.extra || ''}</g>`;
 }
 const eyeXs = () => [120 - BASE.spread/2, 120 + BASE.spread/2];
-const strokeAttrs = () => `fill="none" stroke="currentColor" stroke-width="${BASE.sw}" stroke-linecap="round" stroke-linejoin="round"`;
 
 // ---------- Animation helpers ----------
 const easeAll = n => Array(n).fill('0.4 0 0.6 1').join(';');
@@ -730,7 +729,9 @@ const WORDS = [
 const LOGOS = [...MOTIONS, ...WORDS];
 const state = {};
 const defaults = logo => Object.fromEntries(logo.controls.map(c => [c.k, c.def]));
-LOGOS.forEach(l => state[l.id] = defaults(l));
+LOGOS.forEach(l => {
+  state[l.id] = defaults(l);
+});
 
 // ---------- Decisions + persistence ----------
 const decisions = {};
@@ -753,7 +754,9 @@ function refreshDecisionUI(id) {
   if (!card) return;
   card.classList.toggle('accepted', decisions[id] === 'accept');
   card.classList.toggle('rejected', decisions[id] === 'reject');
-  card.querySelectorAll('.dbtn').forEach(b => b.classList.toggle('on', decisions[id] === b.dataset.decide));
+  card.querySelectorAll('.dbtn').forEach(b => {
+    b.classList.toggle('on', decisions[id] === b.dataset.decide);
+  });
 }
 function refreshTally() {
   const a = MOTIONS.filter(m => decisions[m.id] === 'accept').length;
@@ -765,7 +768,9 @@ function selectionsText() {
   const skip = new Set(['iconFill', 'iconStyle']);
   const fp = p => Object.entries(p).filter(([k]) => !skip.has(k)).map(([k, v]) => `${k}=${v}`).join(', ');
   const bucket = { accept: [], reject: [], undecided: [] };
-  MOTIONS.forEach(m => bucket[decisions[m.id] || 'undecided'].push(`- ${m.name} (${m.state}) — ${fp(state[m.id])}`));
+  MOTIONS.forEach(m => {
+    bucket[decisions[m.id] || 'undecided'].push(`- ${m.name} (${m.state}) — ${fp(state[m.id])}`);
+  });
   const sec = (t, arr) => `${t} (${arr.length}):\n${arr.length ? arr.join('\n') : '- (none)'}`;
   return [
     'Luke logo — Round 7 selections',
@@ -888,7 +893,11 @@ function paint(id) {
     `<span class="chip" style="height:26px">${mark}</span>` +
     `<span class="hint">animated lockup · inverse · small</span>`;
 }
-function paintAll() { LOGOS.forEach(l => paint(l.id)); }
+function paintAll() {
+  LOGOS.forEach(l => {
+    paint(l.id);
+  });
+}
 
 const baseCard = `<section class="card base" id="card-__base">
   <div><h2>Base face<em>shared by every card below</em></h2>
@@ -898,12 +907,14 @@ const baseCard = `<section class="card base" id="card-__base">
 </section>`;
 
 const wordHead = `<div class="sechead"><h3>Wordmark — Face-first</h3><p>The face as the capital L, with custom U·K·E letterforms. Motion-card lockups above already use it.</p></div>`;
-const motionHead = `<div class="sechead"><h3>Motion library</h3><p>Wince is the error state. Eleven new motions join the keepers — every lockup shows the animated face inside the caps wordmark.</p></div>`;
+const motionHead = `<div class="sechead"><h3>Motion library</h3><p>Shimmy is the error state; Squint carries inspecting/reviewing — every lockup shows the animated face inside the caps wordmark.</p></div>`;
 
 document.getElementById('grid').innerHTML =
   baseCard + motionHead + MOTIONS.map(cardHtml).join('') + wordHead + WORDS.map(cardHtml).join('');
 paintAll();
-MOTIONS.forEach(m => refreshDecisionUI(m.id));
+MOTIONS.forEach(m => {
+  refreshDecisionUI(m.id);
+});
 refreshTally();
 
 document.getElementById('swatches').insertAdjacentHTML('beforeend',
@@ -991,7 +1002,9 @@ document.body.addEventListener('click', async e => {
   if (!btn) return;
   const action = btn.dataset.action, id = btn.dataset.logo;
   if (action === 'reset-base') {
-    BASE_CONTROLS.forEach(c => BASE[c.k] = c.def);
+    BASE_CONTROLS.forEach(c => {
+      BASE[c.k] = c.def;
+    });
     document.getElementById('ctls-__base').innerHTML = BASE_CONTROLS.map(c => controlHtml('__base', c, BASE[c.k])).join('');
     paintAll();
   } else if (action === 'reset') {

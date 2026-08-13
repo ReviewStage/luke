@@ -312,22 +312,24 @@ const markSvg = (body) => `${svgOpen(240, 240)}${body}</svg>`;
 const wordSvg = ({ body, width }) => `${svgOpen(width + 30, 214)}${body}</svg>`;
 
 const written = [];
-function emit(relPath, svg) {
+function emit(relPath, svg, title) {
   const path = join(OUT, relPath);
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, `${svg}\n`);
+  // Accessible name, first child of <svg> per SVG a11y guidance.
+  const titled = svg.replace(/(<svg[^>]*>)/, `$1<title>${title}</title>`);
+  writeFileSync(path, `${titled}\n`);
   written.push(relPath);
 }
-function emitModes(baseName, svgWithCurrentColor) {
+function emitModes(baseName, svgWithCurrentColor, title) {
   for (const [mode, ink] of Object.entries(INKS)) {
-    emit(`${baseName}-${mode}.svg`, svgWithCurrentColor.replaceAll("currentColor", ink));
+    emit(`${baseName}-${mode}.svg`, svgWithCurrentColor.replaceAll("currentColor", ink), title);
   }
 }
 
 // Static marks and wordmarks, per mode.
-emitModes("luke-mark", markSvg(faceCore()));
-emitModes("luke-wordmark", wordSvg(faceFirstWordmark()));
-emitModes("luke-word-plain", wordSvg(plainWord()));
+emitModes("luke-mark", markSvg(faceCore()), "Luke");
+emitModes("luke-wordmark", wordSvg(faceFirstWordmark()), "LUKE");
+emitModes("luke-word-plain", wordSvg(plainWord()), "luke");
 
 // App icon: space-black tile with the white face; works on both modes.
 const icon =
@@ -335,19 +337,20 @@ const icon =
   `<stop offset="0" stop-color="${TILE[0]}"/><stop offset="1" stop-color="${TILE[1]}"/></linearGradient></defs>` +
   `<rect x="8" y="8" width="224" height="224" rx="52" fill="url(#tile)"/>` +
   `<g color="${TILE_INK}" transform="translate(33.6 33.6) scale(0.72)">${faceCore()}</g></svg>`;
-emit("icon/luke-icon.svg", icon.replaceAll("currentColor", TILE_INK));
+emit("icon/luke-icon.svg", icon.replaceAll("currentColor", TILE_INK), "Luke app icon");
 
 // Menu-bar template source: pure black, macOS recolors it (see README).
 emit(
   "menubar/luke-menubar-template.svg",
   markSvg(faceCore()).replaceAll("currentColor", "#000000"),
+  "Luke",
 );
 
 // Animated state marks, per mode.
 for (const [state, render] of Object.entries(MOTIONS)) {
-  emitModes(`motion/luke-${state}`, markSvg(render()));
+  emitModes(`motion/luke-${state}`, markSvg(render()), `Luke — ${state}`);
 }
 // Animated hero wordmark: the face talks inside the caps word.
-emitModes("luke-wordmark-talking", wordSvg(faceFirstWordmark(MOTIONS.talking())));
+emitModes("luke-wordmark-talking", wordSvg(faceFirstWordmark(MOTIONS.talking())), "LUKE — talking");
 
 process.stdout.write(`${written.length} SVGs written to design/brand/\n`);
