@@ -93,6 +93,12 @@ export interface DisplaySession {
   label: string;
   location: SessionLocation;
   observedAt: number;
+  /**
+   * Whether the provider gave an address that opens this session, which is what
+   * decides if the row is a control at all. The address itself stays in the
+   * main process: the row only has to know that pressing it would do something.
+   */
+  openable: boolean;
 }
 
 /** One filter someone can choose, and how many sessions it would leave. */
@@ -200,6 +206,11 @@ export function displaySessions(
     ? bootstrap.fixture.sessions.map((session) => ({
         ...session,
         label: STATE_LABEL[session.state],
+        // A fixture stands for sessions that are not on the machine drawing
+        // them, so there is nothing for a press to open. Nothing is lost from
+        // the visual evidence by that: a row that can be opened and one that
+        // cannot are drawn alike until a pointer is over one.
+        openable: false,
       }))
     : sessions.map((session) => ({
         id: session.providerSessionId,
@@ -212,6 +223,7 @@ export function displaySessions(
         label: STATE_LABEL[sessionState(session)],
         location: session.location,
         observedAt: session.observedAt,
+        openable: session.detail.link !== undefined,
       }));
 
   return [...visible].sort(byUrgency);

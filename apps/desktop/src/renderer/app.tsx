@@ -28,6 +28,7 @@ import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import {
   arrangeSessions,
   DEFAULT_SESSION_VIEW,
+  type DisplaySession,
   displaySessions,
   type SessionView,
   sessionTally,
@@ -515,6 +516,26 @@ export function App(): React.JSX.Element {
     remove: removeProviderApiKey,
   };
 
+  /**
+   * Sends a session to its provider and gets out of the way. Luke floats above
+   * every window, so a panel left open would be sitting on top of the very chat
+   * it was just asked to bring forward — the same reason fetching a key stands
+   * the panel down. The pointer is on the row that was pressed and cannot leave
+   * a shape that is no longer drawn, so the close is asked for here rather than
+   * waited for.
+   */
+  const openSession = useCallback(
+    (session: DisplaySession) => {
+      window.sidecar.openSession({
+        providerId: session.providerId,
+        providerSessionId: session.id,
+      });
+      cancelHoverTransition();
+      void changeMode(false);
+    },
+    [cancelHoverTransition, changeMode],
+  );
+
   /** The capsule is a button: pressing it opens the panel, or closes it again. */
   const handleCapsulePress = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -711,6 +732,7 @@ export function App(): React.JSX.Element {
             list={list}
             view={sessionView}
             onViewChange={changeSessionView}
+            onOpenSession={openSession}
             offerOptions={offerOptions}
             optionsOpen={optionsOpen}
             onOptionsToggle={() => setOptionsOpen((open) => !open)}

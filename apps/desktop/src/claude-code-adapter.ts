@@ -386,6 +386,15 @@ function titleFromTail(parsed: ParsedClaudeSessionTail): string {
   return parsed.aiTitle ?? workspaceLabel(parsed.cwd);
 }
 
+/**
+ * No address is reported, because Claude Code publishes none that opens *this*
+ * session. Its own `claude-cli://open` handler takes a directory and a prompt
+ * and starts a new terminal session; the one route that names a session at all,
+ * the VS Code extension's `session` parameter, resolves against whichever
+ * workspace that editor happens to have open and starts a fresh conversation
+ * when it does not match. A row that opened a new chat instead of the one it
+ * named would be worse than a row that opens nothing.
+ */
 function detailFromTail(parsed: ParsedClaudeSessionTail): SessionDetail {
   return {
     ...(parsed.activity ? { activity: parsed.activity } : {}),

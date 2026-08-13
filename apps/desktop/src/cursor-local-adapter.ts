@@ -270,6 +270,12 @@ function statusFromTurn(turn: { failed: boolean } | undefined, isFresh: boolean)
  * that a turn failed. Cursor records why it failed, but that reason is written
  * from the turn itself, so the fact of the failure is reported and its wording
  * is not — the same fixed line the cloud half reports for a failed run.
+ *
+ * No address, unlike the cloud half, which reports the agent's own page. Cursor
+ * registers `cursor://` for its windows but publishes no route to a chat: its
+ * handler answers a prompt, a command, a rule, and a background agent, and none
+ * of them is a chat that already exists. The folder the chat was held in is not
+ * the chat, so it is not offered as one.
  */
 function detailFor(label: string, status: SessionStatus): SessionDetail {
   return {

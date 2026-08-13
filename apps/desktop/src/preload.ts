@@ -1,4 +1,4 @@
-import type { NormalizedSession } from "@sidecar/core";
+import type { NormalizedSession, SessionIdentity } from "@sidecar/core";
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   AppBootstrap,
@@ -28,6 +28,9 @@ const bridge: AppBridge = {
     ) as Promise<SettingsUpdateResult>,
   openProviderApiKeys: (providerId: CredentialProviderId) => {
     ipcRenderer.send(channels.openProviderApiKeys, providerId);
+  },
+  openSession: (identity: SessionIdentity) => {
+    ipcRenderer.send(channels.openSession, identity);
   },
   focusPanel: () => ipcRenderer.send(channels.focusPanel),
   notifyReady: () => ipcRenderer.send(channels.rendererReady),

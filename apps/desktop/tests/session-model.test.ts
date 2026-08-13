@@ -95,6 +95,29 @@ test("a row carries where its session runs, from either data source", () => {
   assert.equal(live[1]?.location, SESSION_LOCATION.LOCAL);
 });
 
+test("a row is a control only where its provider gave an address", () => {
+  const live = displaySessions(bootstrap(false), [
+    normalizeSession(CODEX_PROVIDER, {
+      providerSessionId: "codex-addressed",
+      title: "Session codex-addressed",
+      status: SESSION_STATUS.WORKING,
+      observedAt: 1_000,
+      detail: { link: "codex://threads/codex-addressed" },
+    }),
+    liveSession(CLAUDE_PROVIDER, "claude-unaddressed", SESSION_STATUS.WORKING),
+  ]);
+
+  assert.equal(live.find((session) => session.id === "codex-addressed")?.openable, true);
+  assert.equal(live.find((session) => session.id === "claude-unaddressed")?.openable, false);
+
+  // A fixture stands for sessions that are not on the machine drawing them, so
+  // no fixture row is ever a control however the panel is being run.
+  assert.equal(
+    FIXTURE_SESSIONS.every((session) => session.openable === false),
+    true,
+  );
+});
+
 test("a speaking disposition needs a person even while the session works", () => {
   const speaking = normalizeSession(
     CLAUDE_PROVIDER,

@@ -178,7 +178,31 @@ test("observes a Codex thread under the name Codex gave it", async (t) => {
     repository: "luke",
     branch: "codex/bump-version",
     model: "gpt-5.6-luna · medium",
+    link: "codex://threads/codex-active",
   });
+});
+
+test("addresses a Codex thread by the id Codex files it under", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  await writeCodexState(codexHome, [
+    {
+      // A real thread id is a UUID, but the id is Codex's to choose and it is
+      // carried into an address, so one needing escaping proves it is escaped
+      // rather than pasted in.
+      id: "codex thread/one?two",
+      cwd: "/Users/test/luke",
+      observedAt: TEST_TIME - 1_000,
+    },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const observations = await adapter.observe();
+
+  assert.equal(observations[0]?.detail?.link, "codex://threads/codex%20thread%2Fone%3Ftwo");
 });
 
 test("reports a finished Codex turn as waiting for its developer", async (t) => {

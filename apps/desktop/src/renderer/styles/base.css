@@ -1031,6 +1031,18 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
     transform var(--duration-shape) var(--spring);
 }
 
+/* The row is the one member of that group that is also a control, so its
+   transition carries the pointer's answer as well as its arrival. A transition
+   list replaces rather than extends, so the whole of it is restated here rather
+   than in the session stylesheet, where the two would drift apart unseen. */
+.session-row {
+  transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-shape) var(--spring),
+    border-color var(--duration-hover) ease,
+    background-color var(--duration-hover) ease;
+}
+
 .app-stage[data-presentation="panel"] .session-row,
 .app-stage[data-presentation="panel"] .settings-section,
 .app-stage[data-presentation="panel"] .quit-button,

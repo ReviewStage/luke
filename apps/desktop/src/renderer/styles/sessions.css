@@ -284,8 +284,14 @@
   }
 }
 
+/* Both kinds of row: the ones a provider gave an address for are buttons and
+   the rest are articles, drawn identically at rest. `width` and `text-align`
+   are all a button needs to sit in the column the way an article does; the rest
+   of the button reset, and the row's transition, are in base.css beside the
+   arrival that transition also carries. */
 .session-row {
   display: flex;
+  width: 100%;
   min-height: 66px;
   flex: 0 0 auto;
   align-items: center;
@@ -294,11 +300,39 @@
   border: 1px solid var(--hairline);
   border-radius: 17px;
   background: rgba(255, 255, 255, 0.028);
+  text-align: left;
 }
 
 .session-row[data-state="attention"] {
   border-color: color-mix(in srgb, var(--accent) 30%, transparent);
   background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+/* Whether pressing a row would do anything is answered by the pointer and
+   nowhere else: a row that can be opened lifts under it, one that cannot stays
+   exactly as it was drawn. That is also why nothing is added at rest — every
+   mark and every chip on this row already means something, and one more on some
+   rows would be read as another state before it was read as an affordance.
+   Colour alone: the row's `transform` is spoken for by its arrival, and its box
+   is what the surface behind it is measured from, so neither may move. */
+button.session-row:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: var(--raised);
+}
+
+button.session-row[data-state="attention"]:hover {
+  border-color: color-mix(in srgb, var(--accent) 46%, transparent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+/* Inset, like every other ring in the panel: an outline outside this box would
+   be drawn on the desktop past the edge of the shape. It belongs to the
+   keyboard alone — the flag on the root is set only once the keyboard has
+   actually moved focus, because the panel takes focus programmatically when it
+   opens and the engine reads that as keyboard modality. */
+html[data-keyboard="true"] button.session-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
 }
 
 /* Neutral tile: the mark inside carries the provider's own colour, so tinting

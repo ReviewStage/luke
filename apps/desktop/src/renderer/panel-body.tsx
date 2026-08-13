@@ -1,7 +1,7 @@
 import { SESSION_LOCATION } from "@sidecar/core";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
 import { CloudBadge, ProviderMark } from "./provider-marks";
-import type { ArrangedSessions, SessionView } from "./session-model";
+import type { ArrangedSessions, DisplaySession, SessionView } from "./session-model";
 import {
   EmptyState,
   SessionOptions,
@@ -11,10 +11,66 @@ import {
 } from "./session-parts";
 import { SettingsPanel, type SettingsPanelProps } from "./settings-panel";
 
+/**
+ * One session, drawn the same way whether or not it can be opened. A row whose
+ * provider gave an address is a button and nothing else changes: the panel is
+ * five rows of dense text, and a second permanent mark on some of them would be
+ * read as a state before it was read as an affordance. The pointer is what
+ * separates them — a row that can be opened lifts and takes the hand cursor,
+ * one that cannot stays flat under it, which is the honest answer to whether
+ * pressing would do anything.
+ */
+function SessionRow({
+  session,
+  index,
+  onOpen,
+}: {
+  session: DisplaySession;
+  index: number;
+  onOpen: (session: DisplaySession) => void;
+}): React.JSX.Element {
+  const shared = {
+    className: "session-row",
+    "data-state": session.state,
+    style: { "--row-index": index + 1 } as React.CSSProperties,
+  };
+  const content = (
+    <>
+      <span className="row-avatar">
+        <ProviderMark providerId={session.providerId} />
+        {session.location === SESSION_LOCATION.CLOUD ? <CloudBadge /> : null}
+      </span>
+      <span className="row-copy">
+        <strong>{session.title}</strong>
+        {session.detail ? <small>{session.detail}</small> : null}
+        <small className="row-context">{session.context}</small>
+      </span>
+      <StateChip state={session.state} label={session.label} />
+    </>
+  );
+
+  if (!session.openable) return <article {...shared}>{content}</article>;
+  return (
+    <button
+      {...shared}
+      type="button"
+      // The row's own lines are its accessible name, which already reads as
+      // the session; the title says what pressing it does, and names the agent
+      // because that is the window you are about to be in.
+      title={`Open in ${session.provider}`}
+      onClick={() => onOpen(session)}
+    >
+      {content}
+    </button>
+  );
+}
+
 export interface PanelBodyProps {
   list: ArrangedSessions;
   view: SessionView;
   onViewChange: (view: SessionView) => void;
+  /** Sends the pressed session to its provider, wherever the provider keeps it. */
+  onOpenSession: (session: DisplaySession) => void;
   /**
    * Whether there is anything for the sheet to decide. Decided by the panel
    * rather than here, because whoever offers the button also has to be the one
@@ -33,6 +89,7 @@ export function PanelBody({
   list,
   view,
   onViewChange,
+  onOpenSession,
   offerOptions,
   optionsOpen,
   onOptionsToggle,
@@ -63,23 +120,12 @@ export function PanelBody({
               <EmptyState />
             ) : (
               list.sessions.map((session, index) => (
-                <article
-                  className="session-row"
+                <SessionRow
                   key={session.id}
-                  data-state={session.state}
-                  style={{ "--row-index": index + 1 } as React.CSSProperties}
-                >
-                  <span className="row-avatar">
-                    <ProviderMark providerId={session.providerId} />
-                    {session.location === SESSION_LOCATION.CLOUD ? <CloudBadge /> : null}
-                  </span>
-                  <span className="row-copy">
-                    <strong>{session.title}</strong>
-                    {session.detail ? <small>{session.detail}</small> : null}
-                    <small className="row-context">{session.context}</small>
-                  </span>
-                  <StateChip state={session.state} label={session.label} />
-                </article>
+                  session={session}
+                  index={index}
+                  onOpen={onOpenSession}
+                />
               ))
             )}
           </div>

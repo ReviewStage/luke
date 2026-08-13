@@ -34,6 +34,14 @@ const CODEX_CONFIG_KEY = {
   SQLITE_DIRECTORY: "sqlite_home",
 } as const;
 
+/**
+ * The Codex app's own address for a local thread. Codex registers the `codex`
+ * scheme for its windows and documents `threads/<thread-id>` as the route to an
+ * existing local chat, keyed by the same `threads.id` this adapter reads — so
+ * the row and the address it opens name one thread rather than two.
+ */
+const CODEX_THREAD_LINK_PREFIX = "codex://threads/";
+
 const CODEX_THREAD_COLUMN = {
   ID: "id",
   CWD: "cwd",
@@ -498,11 +506,13 @@ function detailFromRow(
   const activity = rollout?.activity;
   const branch = textFromRow(row, CODEX_THREAD_COLUMN.GIT_BRANCH);
   const model = modelFromRow(row);
+  const threadId = textFromRow(row, CODEX_THREAD_COLUMN.ID);
   return {
     ...(activity ? { activity } : {}),
     repository: workspaceLabel(textFromRow(row, CODEX_THREAD_COLUMN.CWD)),
     ...(branch ? { branch } : {}),
     ...(model ? { model } : {}),
+    ...(threadId ? { link: `${CODEX_THREAD_LINK_PREFIX}${encodeURIComponent(threadId)}` } : {}),
   };
 }
 
