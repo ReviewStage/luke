@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   ATTENTION_DISPOSITION,
   InMemorySessionRegistry,
+  maximumSessionLinkLength,
   maximumSessionSummaryLength,
   type ProviderSessionObservation,
   SESSION_LOCATION,
@@ -19,6 +20,7 @@ const TEST_CONTROL = {
   INTERRUPT: "interrupt",
 } as const;
 const TEST_CONTROL_WITH_WHITESPACE = " open ";
+const TEST_DEVIN_LINK = "https://app.devin.ai/sessions/devin-1";
 
 function observation(
   providerSessionId: string,
@@ -60,6 +62,38 @@ test("normalizes provider observations without conflating provider-local identit
   assert.equal(supportsSessionControl(session, TEST_CONTROL.OPEN), true);
   assert.equal(supportsSessionControl(session, TEST_CONTROL.INTERRUPT), false);
   assert.equal(registry.list().length, 2);
+});
+
+test("keeps only the addresses Luke would open, and never a shortened one", () => {
+  const registry = new InMemorySessionRegistry();
+  const linkFor = (link: string) =>
+    registry.upsert(codex, observation("run:link", 100, { detail: { link } })).detail.link;
+
+  for (const link of [
+    "https://cursor.com/agents?id=bc_1",
+    "codex://threads/019ff315-8735-7382-9fbe-16b0ea8ad990",
+    "conductor://workspace?session=session-working",
+  ]) {
+    assert.equal(linkFor(link), link, `${link} is a session's own address`);
+  }
+  assert.equal(linkFor("  https://app.devin.ai/sessions/devin-1  "), TEST_DEVIN_LINK);
+
+  // A scheme outside the set never becomes a session's address, so nothing
+  // downstream has to ask a second time whether an address is safe to open.
+  for (const link of [
+    "http://cursor.com/agents?id=bc_1",
+    "file:///Users/dean/.claude/projects/luke/session.jsonl",
+    "javascript:void 0",
+    "/Users/dean/luke",
+    "not a url",
+    "",
+  ]) {
+    assert.equal(linkFor(link), undefined, `${link} is not an address Luke may open`);
+  }
+
+  // A link past the bound is dropped rather than cut: every other field is
+  // shortened to fit a row, but a shortened address is a different address.
+  assert.equal(linkFor(`https://example.com/${"a".repeat(maximumSessionLinkLength)}`), undefined);
 });
 
 test("a session runs on this machine unless its provider observed it elsewhere", () => {

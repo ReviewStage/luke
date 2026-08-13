@@ -3,6 +3,7 @@ import type {
   NormalizedSession,
   Rectangle,
   ResolvedNotchGeometry,
+  SessionIdentity,
   WindowMode,
 } from "@sidecar/core";
 import type { CredentialProviderId } from "./credential-providers";
@@ -83,6 +84,13 @@ export interface AppBridge {
    * fixed by this build.
    */
   openProviderApiKeys(providerId: CredentialProviderId): void;
+  /**
+   * Opens an observed session where its provider keeps it. The renderer names
+   * the session rather than its address, for the same reason it names a
+   * provider above: the places Luke can send you are the sessions it is already
+   * watching, and no URL crosses this boundary.
+   */
+  openSession(identity: SessionIdentity): void;
   /** Brings the expanded panel forward so it can accept typed input. */
   focusPanel(): void;
   notifyReady(): void;
@@ -99,6 +107,7 @@ export const channels = {
   requestMicrophone: "app:request-microphone",
   setProviderApiKey: "app:set-provider-api-key",
   openProviderApiKeys: "app:open-provider-api-keys",
+  openSession: "app:open-session",
   focusPanel: "app:focus-panel",
   rendererReady: "app:renderer-ready",
   lifecycle: "app:lifecycle",

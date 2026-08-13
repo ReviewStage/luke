@@ -8,6 +8,7 @@ import {
   type NativeNotchGeometry,
   positionNotchWindow,
   SessionAttentionReviewer,
+  type SessionIdentity,
   type SessionProviderAdapter,
 } from "@sidecar/core";
 import {
@@ -302,6 +303,23 @@ function trustedSender(event: IpcMainEvent | IpcMainInvokeEvent): boolean {
   return url === rendererUrl();
 }
 
+/**
+ * Whether a renderer message names a session. Both halves are required to be
+ * present here because the registry rejects an empty one by throwing, and a
+ * malformed message is a broken request rather than something a user can act
+ * on.
+ */
+function isSessionIdentity(value: unknown): value is SessionIdentity {
+  if (value === null || typeof value !== "object") return false;
+  const { providerId, providerSessionId } = value as Partial<SessionIdentity>;
+  return (
+    typeof providerId === "string" &&
+    providerId.trim().length > 0 &&
+    typeof providerSessionId === "string" &&
+    providerSessionId.trim().length > 0
+  );
+}
+
 function registerIpc(): void {
   ipcMain.handle(channels.bootstrap, async (event): Promise<AppBootstrap> => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
@@ -382,6 +400,23 @@ function registerIpc(): void {
   ipcMain.on(channels.openProviderApiKeys, (event, providerId: unknown) => {
     if (!trustedSender(event) || !isCredentialProviderId(providerId)) return;
     void shell.openExternal(CREDENTIAL_PROVIDERS[providerId].apiKeysUrl);
+  });
+
+  // Pressing a session hands its provider's own address to the system. Luke
+  // does not draw the chat, navigate it, or write to it — the provider opens
+  // its own window and Luke has already stood down — so this stays inside what
+  // a read-only sidecar may do.
+  //
+  // The renderer names a session rather than an address, so the set of places
+  // Luke can send you is the set of sessions currently observed. The address is
+  // read back out of the registry, which holds only normalized sessions: an
+  // address a provider reported in a scheme outside `SESSION_LINK_SCHEME` never
+  // reached one. A fixture run has an empty registry and so opens nothing,
+  // which is what a deterministic capture needs.
+  ipcMain.on(channels.openSession, (event, identity: unknown) => {
+    if (!trustedSender(event) || !isSessionIdentity(identity)) return;
+    const link = sessionRegistry.get(identity)?.detail.link;
+    if (link) void shell.openExternal(link);
   });
 
   // The panel is normally shown without stealing focus. A text field cannot be

@@ -66,6 +66,36 @@ export interface SessionIdentity {
 }
 
 /**
+ * The schemes Luke will hand a session's address to the operating system with:
+ * `https` for a provider that keeps the session in its own cloud, and an app
+ * scheme for one that registered a handler for its own windows on this machine.
+ *
+ * A link is the one observed field the surface does not merely draw — it acts on
+ * it — and it arrives from provider-owned data like every other field. So the
+ * set is fixed by this build and applied where every other bound is applied:
+ * an address outside it never reaches a session at all, rather than being
+ * checked again wherever something is about to open one.
+ */
+export const SESSION_LINK_SCHEME = {
+  HTTPS: "https:",
+  CODEX: "codex:",
+  CONDUCTOR: "conductor:",
+} as const;
+
+export type SessionLinkScheme = (typeof SESSION_LINK_SCHEME)[keyof typeof SESSION_LINK_SCHEME];
+
+const SESSION_LINK_SCHEMES: ReadonlySet<string> = new Set(Object.values(SESSION_LINK_SCHEME));
+
+/** Whether an address is one Luke may ask the system to open. */
+export function isOpenableSessionLink(link: string): boolean {
+  try {
+    return SESSION_LINK_SCHEMES.has(new URL(link).protocol);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The context that makes one session tellable from another. Every field is
  * optional because no provider reports all of them, and every field is bounded
  * so a row stays a row. Adapters fill in whatever their provider actually
@@ -80,7 +110,13 @@ export interface SessionDetail {
   model?: string;
   /** Why the session stopped, when it stopped on something it cannot pass. */
   error?: string;
-  /** A provider-owned address that opens this session where it lives. */
+  /**
+   * A provider-owned address that opens this session where it lives. Only a
+   * provider that can address the session itself reports one: an address that
+   * lands near a session rather than on it — its folder, or a fresh chat in the
+   * same place — is worse than no address at all, because pressing a row would
+   * then do something other than what it said.
+   */
   link?: string;
   /** The work the session has published, such as a pull request. */
   change?: string;
@@ -138,6 +174,17 @@ function boundedText(value: string | undefined, maximumLength: number): string |
   return normalized.slice(0, maximumLength);
 }
 
+/**
+ * A session's address, or nothing. Unlike every other bounded field this one is
+ * dropped rather than cut when it runs long: a truncated address is a different
+ * address, and this is the field something is opened from.
+ */
+function sessionLink(value: string | undefined): string | undefined {
+  const normalized = value?.trim();
+  if (!normalized || normalized.length > maximumSessionLinkLength) return undefined;
+  return isOpenableSessionLink(normalized) ? normalized : undefined;
+}
+
 function timestamp(value: number, field: string): number {
   if (!Number.isFinite(value) || value < 0) {
     throw new Error(`${field} must be a non-negative finite timestamp`);
@@ -189,7 +236,7 @@ export function normalizeSessionDetail(detail: SessionDetail | undefined): Sessi
   const branch = boundedText(detail.branch, maximumSessionDetailLength);
   const model = boundedText(detail.model, maximumSessionDetailLength);
   const error = boundedText(detail.error, maximumSessionDetailLength);
-  const link = boundedText(detail.link, maximumSessionLinkLength);
+  const link = sessionLink(detail.link);
   const change = boundedText(detail.change, maximumSessionLinkLength);
 
   return {
