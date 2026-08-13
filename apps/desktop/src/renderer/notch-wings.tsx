@@ -134,7 +134,7 @@ export function NotchWings({
             keeps: the rest unfold outward and never displace it. */}
         <div className="wing-inner">
           {hasAudioSignal ? (
-            <span className="wing-meter" data-standing-in={String(yieldToMeter)}>
+            <span className="wing-meter" data-turn={voice}>
               <Waveform
                 analyser={analyser}
                 speaking={fixtureSpeaking}

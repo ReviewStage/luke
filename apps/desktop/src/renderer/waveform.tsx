@@ -1,7 +1,11 @@
 import { useEffect, useRef } from "react";
 
-const BAR_INDEXES = [0, 1, 2, 3, 4, 5, 6];
-const FIXTURE_LEVELS = [0.42, 0.62, 0.82, 1, 0.78, 0.58, 0.38];
+/**
+ * Five, because the meter is as wide as the face it is drawn beside or in place
+ * of, and five 2px bars with 2px between them is what 18px holds.
+ */
+const BAR_INDEXES = [0, 1, 2, 3, 4];
+const FIXTURE_LEVELS = [0.46, 0.74, 1, 0.7, 0.42];
 
 /** Whose voice the meter is drawing, which is what colours it. */
 export const WAVEFORM_VOICE = {

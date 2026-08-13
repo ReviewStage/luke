@@ -207,6 +207,11 @@
   --capsule-width: calc(var(--notch-housing-width) + 72px);
   --capsule-height: max(var(--notch-top-inset), 32px);
   --peek-width: calc(var(--notch-housing-width) + 248px);
+  /* The capsule with room for the meter beside the face rather than instead of
+     it: 18px each, the 8px between them, and the wing's insets, on both sides.
+     It is Luke's reply that needs it — your own turn puts the meter where the
+     face was and needs no more room than the face did. */
+  --capsule-voice-width: calc(var(--notch-housing-width) + 124px);
   /* Wide enough for a key, a way out, and a way on, and no wider — the page the
      key was copied from is behind this and has to stay readable. The floor is
      what those three need on a display with no housing to grow from. */
@@ -395,6 +400,21 @@ button:disabled {
   width: var(--slot-width);
   height: var(--slot-height, 96px);
   border-radius: 0 0 var(--slot-radius) var(--slot-radius);
+}
+
+/* Luke answering, with nothing else open. The capsule holds one thing a side,
+   and his reply needs two: the face saying it is him, and the meter saying he
+   is still going. The shape grows to cover both rather than letting the meter
+   be drawn past the black onto the desktop.
+
+   This is the surface's own width, which is the one thing here that may be
+   animated — it is a leaf with no text to re-shape — and the compact window
+   already holds the peek, so there is room for it without asking the main
+   process for any. Your own turn is not here: the meter takes the face's place
+   then, and needs exactly the room the face had. */
+.app-stage[data-presentation="capsule"][data-voice="luke"] .panel-surface,
+.app-stage[data-presentation="capsule"][data-voice="luke"] .compact-hover-target {
+  width: var(--capsule-voice-width);
 }
 
 /* Under the pointer: wide enough to say what the count means. */
@@ -605,11 +625,12 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   }
 }
 
-/* A meter standing in for the face does not wait for the wing to unfold. It is
-   holding the face's place, and the face never waited: in the capsule it is the
-   one thing drawn, so a meter that faded in with the marks would leave the
-   capsule empty for the length of the turn's first word. */
-.wing-meter[data-standing-in="true"] {
+/* A meter drawn for a live turn does not wait for the wing to unfold. It is
+   either standing in the face's place or beside it, and the face never waited:
+   in the capsule it is what the shape has grown to show, so a meter that faded
+   in with the marks would leave that room empty for the length of the turn's
+   first word. */
+.wing-meter[data-turn] {
   opacity: 1;
   transform: none;
 }
@@ -929,9 +950,14 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    It unfolds with the peek the way the marks do, because the capsule has no room
    for it beside the face; there, a live microphone is what the face's colour and
    tempo say. Speech only raises the meter from idle to full. */
+/* Exactly the face's 18px, because it stands where the face stands and the
+   capsule has room for one of them: five bars at 2px with 2px between them. A
+   wider meter is drawn past the black and onto the desktop, since the wings are
+   bounded by the peek the capsule can grow into rather than by the capsule. It
+   is also what keeps `FACE_AND_GAP` in notch-wings.tsx true of either one. */
 .waveform {
   display: flex;
-  width: 28px;
+  width: 18px;
   height: 22px;
   flex: 0 0 auto;
   align-items: center;
@@ -960,18 +986,14 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 }
 
 .waveform-bar:nth-child(1),
-.waveform-bar:nth-child(7) {
+.waveform-bar:nth-child(5) {
   --bar-height: 9px;
 }
 .waveform-bar:nth-child(2),
-.waveform-bar:nth-child(6) {
-  --bar-height: 13px;
-}
-.waveform-bar:nth-child(3),
-.waveform-bar:nth-child(5) {
-  --bar-height: 18px;
-}
 .waveform-bar:nth-child(4) {
+  --bar-height: 15px;
+}
+.waveform-bar:nth-child(3) {
   --bar-height: 23px;
 }
 

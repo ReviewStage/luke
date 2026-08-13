@@ -899,6 +899,14 @@ export function App(): React.JSX.Element {
   // measured back from the fixture's own epoch precisely so that no capture
   // run reads them against the time it happened to run at.
   const now = bootstrap.fixtureMode ? FIXTURE_EPOCH_MS : Date.now();
+  // Read once: the stage grows for it and the wings draw it, and two readings
+  // of the same status could disagree by a frame.
+  const voiceTurn =
+    voiceStatus === REALTIME_STATUS.RESPONDING
+      ? WAVEFORM_VOICE.LUKE
+      : voiceStatus === REALTIME_STATUS.LISTENING
+        ? WAVEFORM_VOICE.DEVELOPER
+        : undefined;
   const shownHotkey = voiceHotkeyToShow(bootstrap, voiceHotkey);
   const fixtureSpeaking = bootstrap.profile === "speaking";
   const hasAudioSignal = fixtureSpeaking || analyser !== undefined;
@@ -912,6 +920,9 @@ export function App(): React.JSX.Element {
   return (
     <div
       className="app-stage"
+      // Whose turn it is, so the capsule can make room for a meter it has to
+      // draw beside the face rather than in place of it.
+      data-voice={voiceTurn}
       data-presentation={presentation}
       data-notch={String(display.notch.hasNotch)}
       data-capture={String(bootstrap.captureMode)}
@@ -966,13 +977,7 @@ export function App(): React.JSX.Element {
         tally={tally}
         analyser={analyser}
         onVoiceActivity={handleVoiceActivity}
-        voice={
-          voiceStatus === REALTIME_STATUS.RESPONDING
-            ? WAVEFORM_VOICE.LUKE
-            : voiceStatus === REALTIME_STATUS.LISTENING
-              ? WAVEFORM_VOICE.DEVELOPER
-              : undefined
-        }
+        {...(voiceTurn ? { voice: voiceTurn } : {})}
         fixtureSpeaking={fixtureSpeaking}
         hasAudioSignal={hasAudioSignal}
         presentation={presentation}
