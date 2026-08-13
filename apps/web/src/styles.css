@@ -68,7 +68,8 @@
      page and the product feel like the same software. */
   --swift: cubic-bezier(0.2, 0.8, 0.2, 1);
 
-  --font-sans: -apple-system, blinkmacsystemfont, "SF Pro Display", "Segoe UI", sans-serif;
+  --font-brand: "Bricolage Grotesque Variable", "Arial Narrow", sans-serif;
+  --font-product: -apple-system, blinkmacsystemfont, "SF Pro Display", "Segoe UI", sans-serif;
   /* The mock renders at true product geometry and scales as a unit. Stepped
      rather than fluid so the interior never lands on a half pixel. The height
      is the 520px expanded panel plus room for the display edge below it, and
@@ -79,7 +80,8 @@
   --mock-scale: 1;
   --mock-height: 540px;
 
-  font-family: var(--font-sans);
+  font-family: var(--font-brand);
+  font-optical-sizing: auto;
   font-synthesis: none;
 }
 
@@ -268,6 +270,7 @@ button {
   flex: none;
   transform: scale(var(--mock-scale));
   transform-origin: top center;
+  font-family: var(--font-product);
   /* An illustration, not page copy: dragging across a recreated interface
      should not fill someone's clipboard with invented session titles. */
   user-select: none;
@@ -589,8 +592,8 @@ button {
 }
 
 /* Reduced motion
-   The mock is pinned open in JavaScript; this removes the transitions that
-   would otherwise still animate the initial paint.
+   Hover still changes the illustration's state, but it does so without an
+   animated transition.
    ------------------------------------------------------------------------- */
 
 @media (prefers-reduced-motion: reduce) {
