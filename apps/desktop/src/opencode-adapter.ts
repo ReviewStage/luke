@@ -111,14 +111,18 @@ const OPENCODE_ABORT_ERROR_NAME = "MessageAbortedError";
  */
 const OPENCODE_PLACEHOLDER_TITLE_PREFIX = "New session - ";
 
-/** Tool inputs whose value names the work, in the order they read best. */
+/**
+ * Tool inputs whose value names the work, in the order they read best. The set
+ * matches what the Claude Code and Codex adapters already report — a URL is
+ * deliberately not in it, because a signed URL is a credential and no other
+ * adapter sends one anywhere; a fetch is named by its tool alone.
+ */
 const OPENCODE_TOOL_INPUT_KEY = [
   "description",
   "command",
   "filePath",
   "file_path",
   "pattern",
-  "url",
   "query",
 ] as const;
 
