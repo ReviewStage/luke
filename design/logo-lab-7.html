@@ -1,0 +1,1025 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Luke · Logo Lab — Round 7: The Motion Library & LUKE Caps</title>
+<style>
+  :root { color-scheme: dark light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", Inter, system-ui, sans-serif;
+    background: var(--bg); color: var(--ink);
+    transition: background .25s ease, color .25s ease;
+    -webkit-font-smoothing: antialiased;
+  }
+  body[data-theme=dark]  { --bg:#000000; --panel:#1c1c1e; --border:#2c2c2e; --ink:#f5f5f7; --muted:#98989d; --prev:#141416; --inv-prev:#f5f5f7; --inv-ink:#1d1d1f; --btn:#2c2c2e; --btn-h:#3a3a3c; --shadow:none; }
+  body[data-theme=light] { --bg:#f5f5f7; --panel:#ffffff; --border:#e8e8ed; --ink:#1d1d1f; --muted:#6e6e73; --prev:#fafafc; --inv-prev:#141416; --inv-ink:#f5f5f7; --btn:#f0f0f2; --btn-h:#e4e4e9; --shadow:0 2px 14px rgba(0,0,0,.06); }
+
+  header {
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 24px;
+    padding: 44px 44px 8px; max-width: 1560px; margin: 0 auto;
+  }
+  h1 { font-size: 32px; font-weight: 600; letter-spacing: -0.022em; margin: 0 0 10px; }
+  h1 small { font-weight: 500; color: var(--muted); font-size: 19px; margin-left: 12px; letter-spacing: -0.01em; }
+  header p { color: var(--muted); max-width: 70ch; margin: 0; line-height: 1.55; font-size: 14.5px; }
+  .toolbar { display: flex; align-items: center; gap: 14px; }
+  .swatches { display: flex; gap: 8px; align-items: center; padding: 6px 10px; background: var(--panel); border-radius: 980px; box-shadow: var(--shadow); border: 1px solid var(--border); }
+  .swatches span { font-size: 11.5px; color: var(--muted); margin-right: 2px; }
+  .swatch { width: 20px; height: 20px; border-radius: 50%; border: 1px solid rgba(127,127,127,.35); cursor: pointer; padding: 0; }
+  .swatch:hover { transform: scale(1.15); }
+  .toolbar > button {
+    background: var(--btn); color: var(--ink); border: 1px solid var(--border);
+    border-radius: 980px; padding: 9px 18px; font-size: 13.5px; cursor: pointer; white-space: nowrap;
+  }
+  .toolbar > button:hover { background: var(--btn-h); }
+
+  main {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(440px, 1fr));
+    gap: 22px; padding: 28px 44px 60px; max-width: 1560px; margin: 0 auto;
+  }
+  .sechead { grid-column: 1 / -1; margin: 14px 2px -6px; }
+  .sechead h3 { margin: 0 0 4px; font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
+  .sechead p { margin: 0; color: var(--muted); font-size: 13.5px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 20px;
+    padding: 22px; display: flex; flex-direction: column; gap: 13px; box-shadow: var(--shadow);
+  }
+  .card.base { grid-column: 1 / -1; }
+  .card.base .controls { grid-template-columns: repeat(4, 1fr); }
+  .card h2 { margin: 0; font-size: 16.5px; font-weight: 600; letter-spacing: -0.015em; }
+  .card h2 em { font-style: normal; color: var(--muted); font-weight: 500; font-size: 13px; margin-left: 8px; }
+  .card .blurb { margin: 4px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+  .duo { display: grid; grid-template-columns: 1.5fr 1fr; gap: 10px; }
+  .duo.word { grid-template-columns: 1.5fr 1fr; }
+  .preview {
+    background: var(--prev); border-radius: 14px;
+    height: 188px; display: flex; align-items: center; justify-content: center;
+    color: var(--ink); overflow: hidden; position: relative;
+  }
+  .preview svg { max-width: 88%; max-height: 86%; }
+  .preview .tag {
+    position: absolute; top: 8px; left: 12px; font-size: 10.5px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .sizes { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .chip {
+    background: var(--prev); border-radius: 10px;
+    color: var(--ink); display: inline-flex; align-items: center; justify-content: center;
+    padding: 6px 12px;
+  }
+  .chip svg { height: 100%; width: auto; }
+  .chip.inv { background: var(--inv-prev); color: var(--inv-ink); }
+  .sizes .hint { color: var(--muted); font-size: 11.5px; margin-left: auto; }
+
+  .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 7px 18px; }
+  .ctl { display: grid; grid-template-columns: 96px 1fr 34px; align-items: center; gap: 8px; font-size: 12px; }
+  .ctl span { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ctl output { color: var(--ink); font-variant-numeric: tabular-nums; text-align: right; font-size: 11.5px; }
+  .ctl input[type=range] { width: 100%; accent-color: #0A84FF; height: 22px; }
+  .ctl input[type=checkbox] { justify-self: start; width: 15px; height: 15px; accent-color: #0A84FF; cursor: pointer; }
+  .ctl select {
+    width: 100%; background: var(--btn); color: var(--ink); border: 1px solid var(--border);
+    border-radius: 7px; padding: 3px 6px; font-size: 12px;
+  }
+  .actions { display: flex; gap: 8px; margin-top: 2px; flex-wrap: wrap; }
+  .actions button {
+    background: var(--btn); color: var(--ink); border: 1px solid var(--border);
+    border-radius: 980px; padding: 7px 14px; font-size: 12.5px; cursor: pointer;
+  }
+  .actions button:hover { background: var(--btn-h); }
+  .actions .spacer { flex: 1; }
+  footer { text-align: center; color: var(--muted); font-size: 12.5px; padding: 0 44px 44px; line-height: 1.6; }
+
+  .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .decide { display: flex; gap: 6px; flex-shrink: 0; }
+  .dbtn {
+    width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-size: 14px; line-height: 1;
+    background: var(--btn); color: var(--muted); border: 1px solid var(--border);
+  }
+  .dbtn:hover { background: var(--btn-h); color: var(--ink); }
+  .dbtn.acc.on { background: #30d158; border-color: #30d158; color: #04270f; }
+  .dbtn.rej.on { background: #ff453a; border-color: #ff453a; color: #3a0503; }
+  .card.accepted { border-color: rgba(48, 209, 88, 0.55); }
+  .card.rejected { border-color: rgba(255, 69, 58, 0.5); }
+  .card.rejected .preview, .card.rejected .sizes { opacity: 0.4; }
+  #tally {
+    position: fixed; right: 26px; bottom: 24px; z-index: 50;
+    display: flex; align-items: center; gap: 12px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 980px;
+    padding: 10px 12px 10px 20px; box-shadow: 0 6px 24px rgba(0,0,0,.35);
+  }
+  #tally span { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  #tally button {
+    border-radius: 980px; padding: 8px 16px; font-size: 12.5px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--btn); color: var(--ink);
+  }
+  #tally button:hover { background: var(--btn-h); }
+  #tally #copySel { background: #0A84FF; border-color: #0A84FF; color: #fff; }
+  #tally #copySel:hover { filter: brightness(1.1); }
+</style>
+</head>
+<body data-theme="dark">
+
+<header>
+  <div>
+    <h1>Luke <small>Logo Lab — Round 7 · The Motion Library &amp; LUKE Caps</small></h1>
+    <p>Wince is the error state. Every keeper motion is here plus eleven new ones — and the Face-first
+       wordmark is now all-caps: the face is the capital L, followed by custom U·K·E letterforms.
+       Use the ✓ / ✕ on each motion card to accept or reject it (decisions and slider tweaks are saved
+       locally), then hit <strong>Copy selections</strong> in the corner and paste the result back into the chat.</p>
+  </div>
+  <div class="toolbar">
+    <div class="swatches" id="swatches"><span>Accent</span></div>
+    <button id="themeBtn">Light preview</button>
+  </div>
+</header>
+
+<main id="grid"></main>
+<div id="tally"><span id="tallyText"></span><button id="clearSel" title="Clear all decisions">Clear</button><button id="copySel">Copy selections</button></div>
+<footer>Exports resolve colors into the SVG; animations survive export.</footer>
+
+<script>
+'use strict';
+const fmt = v => Math.round(v * 100) / 100;
+const BLUE = '#0A84FF';
+const SWATCHES = [['Blue','#0A84FF'],['Indigo','#5E5CE6'],['Graphite','#8E8E93'],['Silver','#C7C7CC'],['Titanium','#B8B0A4']];
+const FILLS = {
+  silver:   ['#e8e8ed', '#9c9ca1'],
+  space:    ['#48484a', '#1c1c1e'],
+  titanium: ['#d6cfc7', '#8f887e'],
+  blue:     ['#3b9bff', '#0048c4'],
+};
+function gradFill(id, preset) {
+  if (!FILLS[preset]) return { defs: '', fill: 'currentColor' };
+  const [a, b] = FILLS[preset];
+  return {
+    defs: `<defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs>`,
+    fill: `url(#${id})`,
+  };
+}
+
+// ---------- The shared base face ----------
+const BASE = { sw:16, r:14, lift:22, tilt:-8, eyeR:12, spread:84, eyeY:92, blink:true, accent:BLUE };
+const BASE_CONTROLS = [
+  { k:'sw',    label:'Stroke',      type:'range', min:12, max:24,  def:16 },
+  { k:'r',     label:'Nose corner', type:'range', min:6,  max:30,  def:14 },
+  { k:'lift',  label:'Smile lift',  type:'range', min:0,  max:44,  def:22 },
+  { k:'tilt',  label:'Base tilt°',  type:'range', min:-20,max:20,  def:-8 },
+  { k:'eyeR',  label:'Eye size',    type:'range', min:9,  max:18,  def:12 },
+  { k:'spread',label:'Eye spread',  type:'range', min:64, max:110, def:84 },
+  { k:'eyeY',  label:'Eye height',  type:'range', min:76, max:112, def:92 },
+  { k:'blink', label:'Blink (idle)',type:'checkbox', def:true },
+];
+
+function smileD(lift) {
+  return `M 104 84 V ${fmt(164 - BASE.r)} Q 104 164 ${fmt(104 + BASE.r)} 164 Q 140 164 168 ${fmt(164 - lift)}`;
+}
+function eyeStd(cx, cy, r, blink) {
+  if (!blink) return `<circle cx="${fmt(cx)}" cy="${fmt(cy)}" r="${fmt(r)}" fill="currentColor"/>`;
+  return `<ellipse cx="${fmt(cx)}" cy="${fmt(cy)}" rx="${fmt(r)}" ry="${fmt(r)}" fill="currentColor">` +
+    `<animate attributeName="ry" values="${fmt(r)};${fmt(r)};${fmt(r*0.12)};${fmt(r)}" keyTimes="0;0.9;0.945;1" dur="4.6s" repeatCount="indefinite"/></ellipse>`;
+}
+function faceCore(opts = {}) {
+  const b = BASE;
+  const S = `fill="none" stroke="currentColor" stroke-width="${b.sw}" stroke-linecap="round" stroke-linejoin="round"`;
+  const c1 = 120 - b.spread/2, c2 = 120 + b.spread/2;
+  const smile = opts.smile !== undefined ? opts.smile : `<path d="${smileD(b.lift)}" ${S}/>`;
+  const eyes = opts.eyes !== undefined ? opts.eyes :
+    eyeStd(c1, b.eyeY, b.eyeR, b.blink && !opts.noBlink) + eyeStd(c2, b.eyeY, b.eyeR, b.blink && !opts.noBlink);
+  return `<g transform="rotate(${b.tilt} 120 124)">${smile}${eyes}${opts.extra || ''}</g>`;
+}
+const eyeXs = () => [120 - BASE.spread/2, 120 + BASE.spread/2];
+const strokeAttrs = () => `fill="none" stroke="currentColor" stroke-width="${BASE.sw}" stroke-linecap="round" stroke-linejoin="round"`;
+
+// ---------- Animation helpers ----------
+const easeAll = n => Array(n).fill('0.4 0 0.6 1').join(';');
+function animT(type, values, dur, opts = {}) {
+  const kt = opts.keyTimes ? ` keyTimes="${opts.keyTimes}"` : '';
+  const ks = opts.spline ? ` calcMode="spline" keySplines="${opts.spline}"` : '';
+  return `<animateTransform attributeName="transform" type="${type}" values="${values}"${kt}${ks} dur="${fmt(dur)}s" repeatCount="indefinite"/>`;
+}
+const wrapAnim = (inner, anim) => `<g>${anim}${inner}</g>`;
+function scaleAbout(inner, values, dur, opts = {}) {
+  return `<g transform="translate(120 124)"><g>${animT('scale', values, dur, opts)}` +
+    `<g transform="translate(-120 -124)">${inner}</g></g></g>`;
+}
+
+const ICON_OPTS = ['space','blue','titanium','silver'];
+const COMMON = [
+  { k:'iconFill', label:'Icon tile', type:'select', opts:ICON_OPTS, def:'space' },
+  { k:'iconStyle', label:'Icon style', type:'select', opts:['glyph','knockout'], def:'glyph' },
+];
+
+// ---------- Motion cards ----------
+const MOTIONS = [
+
+{ id: 'talkbob', name: 'Talk bob', state: 'talking',
+  blurb: 'The mouth holds still and the whole head does the talking — quick rotations with an offset vertical bob.',
+  controls: [
+    { k:'tempo', label:'Tempo s', type:'range', min:0.3, max:1.2, step:0.05, def:0.65 },
+    { k:'swing', label:'Swing°',  type:'range', min:2,  max:8,  def:4 },
+    { k:'bob',   label:'Bob px',  type:'range', min:0,  max:5,  step:0.5, def:2.5 },
+    ...COMMON,
+  ],
+  render(p){
+    const rot = animT('rotate', `${-p.swing} 120 150;${p.swing} 120 150;${-p.swing} 120 150`, p.tempo, { spline: easeAll(2) });
+    const bob = animT('translate', `0 0;0 ${p.bob};0 0`, p.tempo * 0.61, { spline: easeAll(2) });
+    return wrapAnim(wrapAnim(faceCore(), rot), bob);
+  }
+},
+
+{ id: 'nod', name: 'Nod', state: 'yes · acknowledged',
+  blurb: 'A slow, easy nod from a pivot near the chin — “got it.”',
+  controls: [
+    { k:'period', label:'Period s', type:'range', min:1.2, max:4, step:0.1, def:2.2 },
+    { k:'depth',  label:'Depth°',   type:'range', min:4,  max:12, def:8 },
+    ...COMMON,
+  ],
+  render(p){
+    const v = [0, 0, p.depth, 0, 0].map(a => `${a} 120 190`).join(';');
+    return wrapAnim(faceCore(), animT('rotate', v, p.period, { keyTimes:'0;0.15;0.45;0.75;1', spline: easeAll(4) }));
+  }
+},
+
+{ id: 'bounce', name: 'Bounce', state: 'joy · success',
+  blurb: 'A happy hop with squash-and-stretch — crouch, spring, land.',
+  controls: [
+    { k:'period', label:'Period s', type:'range', min:1.4, max:4, step:0.1, def:2 },
+    { k:'height', label:'Height px',type:'range', min:8,  max:24, def:14 },
+    ...COMMON,
+  ],
+  render(p){
+    const kt = '0;0.25;0.45;0.65;0.75;1';
+    const ty = `0 0;0 0;0 ${-p.height};0 0;0 0;0 0`;
+    const sc = `1 1;1.05 0.93;0.96 1.06;1.07 0.9;1 1;1 1`;
+    const inner = scaleAbout(faceCore(), sc, p.period, { keyTimes: kt, spline: easeAll(5) });
+    return wrapAnim(inner, animT('translate', ty, p.period, { keyTimes: kt, spline: easeAll(5) }));
+  }
+},
+
+{ id: 'curious', name: 'Curious tilt', state: 'listening',
+  blurb: 'Ease over to one side, hold there while it listens, ease back.',
+  controls: [
+    { k:'period', label:'Period s', type:'range', min:2, max:6, step:0.1, def:3.6 },
+    { k:'angle',  label:'Angle°',   type:'range', min:6, max:18, def:12 },
+    ...COMMON,
+  ],
+  render(p){
+    const v = [0, 0, -p.angle, -p.angle, 0, 0].map(a => `${a} 120 124`).join(';');
+    return wrapAnim(faceCore(), animT('rotate', v, p.period, { keyTimes:'0;0.18;0.32;0.68;0.82;1', spline: easeAll(5) }));
+  }
+},
+
+{ id: 'gaze', name: 'Look around', state: 'attentive idle',
+  blurb: 'The head stays put; only the eyes wander — glance, hold, glance, return.',
+  controls: [
+    { k:'period', label:'Period s', type:'range', min:3, max:7, step:0.1, def:4.5 },
+    { k:'range',  label:'Range px', type:'range', min:4, max:12, def:8 },
+    ...COMMON,
+  ],
+  render(p){
+    const g = p.range;
+    const [c1, c2] = eyeXs();
+    const eyes = eyeStd(c1, BASE.eyeY, BASE.eyeR, BASE.blink) + eyeStd(c2, BASE.eyeY, BASE.eyeR, BASE.blink);
+    const v = `0 0;0 0;${g} 0;${g} 0;${-g} 1.5;${-g} 1.5;0 0`;
+    const moving = wrapAnim(eyes, animT('translate', v, p.period, { keyTimes:'0;0.1;0.18;0.4;0.5;0.76;1', spline: easeAll(6) }));
+    return faceCore({ eyes: moving });
+  }
+},
+
+{ id: 'dblblink', name: 'Double blink', state: 'alive idle',
+  blurb: 'A quick double-blink every few seconds — the smallest possible sign of life.',
+  controls: [
+    { k:'period', label:'Period s', type:'range', min:3, max:7, step:0.1, def:4.6 },
+    ...COMMON,
+  ],
+  render(p){
+    const r = BASE.eyeR;
+    const vals = [r, r, r*0.1, r, r*0.1, r, r].map(fmt).join(';');
+    const kt = '0;0.55;0.585;0.62;0.655;0.69;1';
+    const [c1, c2] = eyeXs();
+    const mk = cx => `<ellipse cx="${fmt(cx)}" cy="${BASE.eyeY}" rx="${r}" ry="${r}" fill="currentColor">` +
+      `<animate attributeName="ry" values="${vals}" keyTimes="${kt}" dur="${p.period}s" repeatCount="indefinite"/></ellipse>`;
+    return faceCore({ eyes: mk(c1) + mk(c2) });
+  }
+},
+
+{ id: 'surprise', name: 'Brow flash', state: 'surprise · notification',
+  blurb: 'Eyebrows pop up and the eyes widen for a beat — “oh!” — then settle.',
+  controls: [
+    { k:'period', label:'Period s', type:'range', min:2.5, max:6, step:0.1, def:4 },
+    { k:'pop',    label:'Brow pop px', type:'range', min:3, max:10, def:6 },
+    ...COMMON,
+  ],
+  render(p){
+    const r = BASE.eyeR, y = BASE.eyeY;
+    const [c1, c2] = eyeXs();
+    const kt = '0;0.5;0.55;0.72;0.77;1';
+    const rv = [r, r, r*1.2, r*1.2, r, r].map(fmt).join(';');
+    const mkEye = cx => `<circle cx="${fmt(cx)}" cy="${y}" r="${r}" fill="currentColor">` +
+      `<animate attributeName="r" values="${rv}" keyTimes="${kt}" dur="${p.period}s" repeatCount="indefinite"/></circle>`;
+    const brow = cx => `<path d="M ${fmt(cx - r*0.85)} ${fmt(y - r - 9)} Q ${fmt(cx)} ${fmt(y - r - 15)} ${fmt(cx + r*0.85)} ${fmt(y - r - 9)}" stroke="currentColor" stroke-width="5" stroke-linecap="round" fill="none"/>`;
+    const browsAnim = wrapAnim(brow(c1) + brow(c2),
+      animT('translate', `0 0;0 0;0 ${-p.pop};0 ${-p.pop};0 0;0 0`, p.period, { keyTimes: kt, spline: easeAll(5) }));
+    return faceCore({ eyes: mkEye(c1) + mkEye(c2), extra: browsAnim });
+  }
+},
+
+{ id: 'shimmy', name: 'Shimmy', state: 'error — chosen',
+  blurb: 'Re-assigned per your call: the fast agitated wiggle that decays to stillness reads as “something went wrong” better than a wince.',
+  controls: [
+    { k:'period', label:'Period s', type:'range', min:2, max:6, step:0.1, def:3 },
+    { k:'energy', label:'Energy°',  type:'range', min:3, max:10, def:6 },
+    ...COMMON,
+  ],
+  render(p){
+    const e = p.energy;
+    const v = [0, e, -e, e*0.7, -e*0.7, e*0.3, 0, 0].map(a => `${fmt(a)} 120 124`).join(';');
+    return wrapAnim(faceCore(), animT('rotate', v, p.period, { keyTimes:'0;0.05;0.11;0.17;0.23;0.29;0.35;1', spline: easeAll(7) }));
+  }
+},
+
+{ id: 'wink', name: 'Wink', state: 'confirmation · easter egg',
+  blurb: 'One eye closes with a tiny head-tip toward it.',
+  controls: [
+    { k:'period', label:'Period s', type:'range', min:2.5, max:6, step:0.1, def:4 },
+    { k:'side',   label:'Side',     type:'select', opts:['right','left'], def:'right' },
+    ...COMMON,
+  ],
+  render(p){
+    const kt = '0;0.5;0.56;0.68;0.74;1';
+    const r = BASE.eyeR, y = BASE.eyeY;
+    const [c1, c2] = eyeXs();
+    const winkC = p.side === 'left' ? c1 : c2, openC = p.side === 'left' ? c2 : c1;
+    const rv = [r, r, r*0.12, r*0.12, r, r].map(fmt).join(';');
+    const winkEye = `<ellipse cx="${fmt(winkC)}" cy="${y}" rx="${r}" ry="${r}" fill="currentColor">` +
+      `<animate attributeName="ry" values="${rv}" keyTimes="${kt}" dur="${p.period}s" repeatCount="indefinite"/></ellipse>`;
+    const openEye = `<circle cx="${fmt(openC)}" cy="${y}" r="${r}" fill="currentColor"/>`;
+    const tip = p.side === 'left' ? -2.5 : 2.5;
+    const rot = [0, 0, tip, tip, 0, 0].map(a => `${a} 120 150`).join(';');
+    return wrapAnim(faceCore({ eyes: winkEye + openEye, noBlink: true }),
+      animT('rotate', rot, p.period, { keyTimes: kt, spline: easeAll(5) }));
+  }
+},
+
+{ id: 'sleep', name: 'Sleep', state: 'paused · idle session',
+  blurb: 'Lids down, head drooped, deep slow breathing — with little z’s drifting up.',
+  controls: [
+    { k:'period', label:'Breath s', type:'range', min:3, max:7, step:0.1, def:4.8 },
+    { k:'zzz',    label:'Zzz',      type:'checkbox', def:true },
+    ...COMMON,
+  ],
+  render(p){
+    const b = BASE, r = b.eyeR, y = b.eyeY;
+    const [c1, c2] = eyeXs();
+    const lid = cx => `<path d="M ${fmt(cx-r)} ${fmt(y-r*0.05)} Q ${fmt(cx)} ${fmt(y+r*0.75)} ${fmt(cx+r)} ${fmt(y-r*0.05)}" stroke="currentColor" stroke-width="${fmt(Math.max(4.5, r*0.5))}" stroke-linecap="round" fill="none"/>`;
+    let zzz = '';
+    if (p.zzz) {
+      const z = (x, yy, s, begin) => `<g opacity="0" transform="translate(${x} ${yy})">` +
+        `<animate attributeName="opacity" values="0;0.85;0" dur="3s" begin="${begin}s" repeatCount="indefinite"/>` +
+        `<animateTransform attributeName="transform" type="translate" values="${x} ${yy};${x+6} ${yy-16}" dur="3s" begin="${begin}s" repeatCount="indefinite"/>` +
+        `<path d="M 0 0 H ${s} L 0 ${s} H ${s}" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></g>`;
+      zzz = z(176, 62, 8, 0) + z(190, 46, 11, -1) + z(166, 44, 6, -2);
+    }
+    const face = `<g transform="rotate(7 120 150)">${faceCore({ eyes: lid(c1) + lid(c2) })}</g>`;
+    return scaleAbout(face, `1 1;1.035 1.035;1 1`, p.period, { spline: easeAll(2) }) + zzz;
+  }
+},
+
+{ id: 'spin', name: 'Spin', state: 'refresh · relaunch',
+  blurb: 'One full pirouette with a satisfying ease-out landing, then a long rest.',
+  controls: [
+    { k:'period', label:'Period s', type:'range', min:2.5, max:7, step:0.1, def:4.5 },
+    ...COMMON,
+  ],
+  render(p){
+    const v = ['0 120 124','360 120 124','360 120 124'].join(';');
+    return wrapAnim(faceCore(), animT('rotate', v, p.period, { keyTimes:'0;0.3;1', spline:'0.35 0 0.25 1;0.4 0 0.6 1' }));
+  }
+},
+
+{ id: 'boop', name: 'Boop', state: 'tap feedback',
+  blurb: 'The face puffs up for a heartbeat when poked.',
+  controls: [
+    { k:'period', label:'Period s', type:'range', min:2, max:5, step:0.1, def:3.2 },
+    { k:'pop',    label:'Pop %',    type:'range', min:5, max:14, def:9 },
+    ...COMMON,
+  ],
+  render(p){
+    const s = 1 + p.pop / 100;
+    const sv = `1 1;1 1;${fmt(s)} ${fmt(s)};0.985 0.985;1 1`;
+    return scaleAbout(faceCore(), sv, p.period, { keyTimes:'0;0.55;0.63;0.72;1', spline: easeAll(4) });
+  }
+},
+
+{ id: 'sway', name: 'Sway', state: 'monitoring · humming along',
+  blurb: 'A slow continuous rock from the base — quiet work made visible.',
+  controls: [
+    { k:'period', label:'Period s', type:'range', min:2, max:5, step:0.1, def:3.2 },
+    { k:'swing',  label:'Swing°',   type:'range', min:2, max:6, step:0.5, def:3.5 },
+    ...COMMON,
+  ],
+  render(p){
+    const v = `${-p.swing} 120 196;${p.swing} 120 196;${-p.swing} 120 196`;
+    return wrapAnim(faceCore(), animT('rotate', v, p.period, { spline: easeAll(2) }));
+  }
+},
+
+{ id: 'breathe', name: 'Breathe', state: 'calm idle',
+  blurb: 'The whole face swells and settles, slowly — barely there, never frozen.',
+  controls: [
+    { k:'period', label:'Period s', type:'range', min:2.5, max:6, step:0.1, def:3.8 },
+    { k:'depth',  label:'Depth %',  type:'range', min:1.5, max:4, step:0.5, def:2.5 },
+    ...COMMON,
+  ],
+  render(p){
+    const s = 1 + p.depth / 100;
+    return scaleAbout(faceCore(), `1 1;${fmt(s)} ${fmt(s)};1 1`, p.period, { spline: easeAll(2) });
+  }
+},
+
+{ id: 'peek', name: 'Peek-slide', state: 'appearing · attach',
+  blurb: 'The face leans in from the side, settles, then eases back.',
+  controls: [
+    { k:'period', label:'Period s', type:'range', min:2.5, max:6, step:0.1, def:4 },
+    { k:'slide',  label:'Slide px', type:'range', min:8,  max:26, def:16 },
+    ...COMMON,
+  ],
+  render(p){
+    const d = p.slide, kt = '0;0.15;0.3;0.75;0.9;1';
+    const tv = `${-d} 0;${-d} 0;0 0;0 0;${-d} 0;${-d} 0`;
+    const rv = [8, 8, 0, 0, 8, 8].map(a => `${a} 76 190`).join(';');
+    const inner = wrapAnim(faceCore(), animT('rotate', rv, p.period, { keyTimes: kt, spline: easeAll(5) }));
+    return wrapAnim(inner, animT('translate', tv, p.period, { keyTimes: kt, spline: easeAll(5) }));
+  }
+},
+
+// ---------- New in Round 7 ----------
+
+{ id: 'perk', name: 'Perk up', state: 'attention caught',
+  blurb: 'From a slight slouch to bolt upright with a touch of overshoot — “wait, something happened.” The inverse of Slump.',
+  controls: [
+    { k:'period', label:'Period s', type:'range', min:3, max:7, step:0.1, def:4.5 },
+    ...COMMON,
+  ],
+  render(p){
+    const kt = '0;0.35;0.45;0.55;0.75;1';
+    const rot = [6, 6, -2.5, 0.8, 0, 6].map(a => `${a} 120 150`).join(';');
+    const ty = `0 3;0 3;0 -1.5;0 0;0 0;0 3`;
+    const inner = wrapAnim(faceCore(), animT('rotate', rot, p.period, { keyTimes: kt, spline: easeAll(5) }));
+    return wrapAnim(inner, animT('translate', ty, p.period, { keyTimes: kt, spline: easeAll(5) }));
+  }
+},
+
+{ id: 'dizzy', name: 'Dizzy', state: 'confused',
+  blurb: 'The head traces a small woozy circle with a counter-tilt — confusion without the eye-spin.',
+  controls: [
+    { k:'speed',  label:'Cycle s',  type:'range', min:0.8, max:2.2, step:0.1, def:1.3 },
+    { k:'radius', label:'Radius px',type:'range', min:3,  max:9,  def:6 },
+    ...COMMON,
+  ],
+  render(p){
+    const R = p.radius;
+    const inner = wrapAnim(faceCore(), animT('rotate', `4 120 124;-4 120 124;4 120 124`, p.speed * 1.7, { spline: easeAll(2) }));
+    return `<g><animateMotion path="M 0 0 m ${-R} 0 a ${R} ${R} 0 1 0 ${2*R} 0 a ${R} ${R} 0 1 0 ${-2*R} 0" dur="${fmt(p.speed)}s" repeatCount="indefinite"/>${inner}</g>`;
+  }
+},
+
+{ id: 'squint', name: 'Squint', state: 'inspecting · reviewing — kept',
+  blurb: 'Rebuilt to be wince-like, per your note: eyes squeeze nearly shut with the same held timing, plus a subtle lean-in — peering at the fine print.',
+  controls: [
+    { k:'period', label:'Period s', type:'range', min:3, max:7, step:0.1, def:4.4 },
+    { k:'squeeze',label:'Squeeze',  type:'range', min:0.1, max:0.5, step:0.05, def:0.18 },
+    { k:'lean',   label:'Lean %',   type:'range', min:0, max:6, step:0.5, def:3 },
+    ...COMMON,
+  ],
+  render(p){
+    const kt = '0;0.35;0.42;0.68;0.76;1';
+    const r = BASE.eyeR, y = BASE.eyeY;
+    const [c1, c2] = eyeXs();
+    const rv = [r, r, r*p.squeeze, r*p.squeeze, r, r].map(fmt).join(';');
+    const mk = cx => `<ellipse cx="${fmt(cx)}" cy="${y}" rx="${r}" ry="${r}" fill="currentColor">` +
+      `<animate attributeName="ry" values="${rv}" keyTimes="${kt}" dur="${p.period}s" repeatCount="indefinite"/></ellipse>`;
+    const s = 1 + p.lean / 100;
+    const sv = `1 1;1 1;${fmt(s)} ${fmt(s)};${fmt(s)} ${fmt(s)};1 1;1 1`;
+    return scaleAbout(faceCore({ eyes: mk(c1) + mk(c2) }), sv, p.period, { keyTimes: kt, spline: easeAll(5) });
+  }
+},
+
+{ id: 'dance', name: 'Groove', state: 'party mode',
+  blurb: 'A continuous little dance: rocking side to side with a double-time bounce. For when everything ships.',
+  controls: [
+    { k:'tempo',  label:'Tempo s',  type:'range', min:0.5, max:1.4, step:0.05, def:0.8 },
+    { k:'groove', label:'Groove°',  type:'range', min:2,  max:7,  step:0.5, def:4 },
+    ...COMMON,
+  ],
+  render(p){
+    const g = p.groove;
+    const rot = animT('rotate', `${-g} 120 150;${g} 120 150;${-g} 120 150`, p.tempo, { spline: easeAll(2) });
+    const tx = animT('translate', `-3 0;3 0;-3 0`, p.tempo, { spline: easeAll(2) });
+    const ty = animT('translate', `0 0;0 2.5;0 0`, p.tempo / 2, { spline: easeAll(2) });
+    return wrapAnim(wrapAnim(wrapAnim(faceCore(), rot), tx), ty);
+  }
+},
+
+{ id: 'pulse', name: 'Heartbeat', state: 'alert ping',
+  blurb: 'Ba-bump: two quick swells, then rest. An organic notification pulse.',
+  controls: [
+    { k:'period',  label:'Period s', type:'range', min:2, max:5, step:0.1, def:2.8 },
+    { k:'strength',label:'Strength %',type:'range', min:4, max:10, def:6 },
+    ...COMMON,
+  ],
+  render(p){
+    const k = 1 + p.strength / 100, k2 = 1 + p.strength * 0.8 / 100;
+    const sv = `1 1;${fmt(k)} ${fmt(k)};1 1;${fmt(k2)} ${fmt(k2)};1 1;1 1`;
+    return scaleAbout(faceCore(), sv, p.period, { keyTimes:'0;0.07;0.14;0.21;0.28;1', spline: easeAll(5) });
+  }
+},
+
+{ id: 'float', name: 'Float', state: 'hovering idle',
+  blurb: 'A slow vertical drift with a lazy rotation on a different period — weightless, dreamy.',
+  controls: [
+    { k:'period', label:'Period s', type:'range', min:3, max:7, step:0.1, def:4.4 },
+    { k:'lift',   label:'Lift px',  type:'range', min:4, max:14, def:8 },
+    ...COMMON,
+  ],
+  render(p){
+    const ty = animT('translate', `0 0;0 ${-p.lift};0 0`, p.period, { spline: easeAll(2) });
+    const rot = animT('rotate', `-2 120 124;2 120 124;-2 120 124`, p.period * 1.31, { spline: easeAll(2) });
+    return wrapAnim(wrapAnim(faceCore(), rot), ty);
+  }
+},
+
+{ id: 'tada', name: 'Ta-da', state: 'flourish · completion',
+  blurb: 'A hop back with happy-arc eyes for a beat — the bow at the end of the performance.',
+  controls: [
+    { k:'period', label:'Period s', type:'range', min:3, max:7, step:0.1, def:4.6 },
+    ...COMMON,
+  ],
+  render(p){
+    const kt = '0;0.4;0.48;0.72;0.8;1';
+    const r = BASE.eyeR, y = BASE.eyeY;
+    const [c1, c2] = eyeXs();
+    const dot = cx => `<circle cx="${fmt(cx)}" cy="${y}" r="${r}" fill="currentColor">` +
+      `<animate attributeName="opacity" values="1;1;0;0;1;1" keyTimes="${kt}" dur="${p.period}s" repeatCount="indefinite"/></circle>`;
+    const happy = cx => `<path d="M ${fmt(cx-r)} ${fmt(y+r*0.45)} Q ${fmt(cx)} ${fmt(y-r*0.95)} ${fmt(cx+r)} ${fmt(y+r*0.45)}" stroke="currentColor" stroke-width="${fmt(Math.max(4.5, r*0.5))}" stroke-linecap="round" fill="none" opacity="0">` +
+      `<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="${kt}" dur="${p.period}s" repeatCount="indefinite"/></path>`;
+    const eyes = dot(c1) + dot(c2) + happy(c1) + happy(c2);
+    const rot = [0, 0, -8, -8, 0, 0].map(a => `${a} 120 150`).join(';');
+    const ty = `0 0;0 0;0 -8;0 -8;0 0;0 0`;
+    const inner = wrapAnim(faceCore({ eyes, noBlink: true }), animT('rotate', rot, p.period, { keyTimes: kt, spline: easeAll(5) }));
+    return wrapAnim(inner, animT('translate', ty, p.period, { keyTimes: kt, spline: easeAll(5) }));
+  }
+},
+
+{ id: 'peekaboo', name: 'Peekaboo', state: 'hiding · minimized',
+  blurb: 'The face ducks down, waits, then pops back up with a little overshoot.',
+  controls: [
+    { k:'period', label:'Period s', type:'range', min:3, max:8, step:0.1, def:5 },
+    { k:'drop',   label:'Drop px',  type:'range', min:30, max:70, def:55 },
+    ...COMMON,
+  ],
+  render(p){
+    const kt = '0;0.35;0.45;0.65;0.78;1';
+    const ty = `0 0;0 0;0 ${p.drop};0 ${p.drop};0 -4;0 0`;
+    return wrapAnim(faceCore(), animT('translate', ty, p.period, { keyTimes: kt, spline: easeAll(5) }));
+  }
+},
+
+{ id: 'waggle', name: 'Brow waggle', state: 'playful tease',
+  blurb: 'Eyebrows on, waggling twice — “eh? eh?” Pure mischief.',
+  controls: [
+    { k:'period', label:'Period s', type:'range', min:2.5, max:6, step:0.1, def:4.2 },
+    { k:'waggle', label:'Waggle px',type:'range', min:4,  max:9,  def:6 },
+    ...COMMON,
+  ],
+  render(p){
+    const r = BASE.eyeR, y = BASE.eyeY, w = p.waggle;
+    const [c1, c2] = eyeXs();
+    const brow = cx => `<path d="M ${fmt(cx - r*0.85)} ${fmt(y - r - 9)} Q ${fmt(cx)} ${fmt(y - r - 15)} ${fmt(cx + r*0.85)} ${fmt(y - r - 9)}" stroke="currentColor" stroke-width="5" stroke-linecap="round" fill="none"/>`;
+    const tv = `0 0;0 0;0 ${-w};0 0;0 ${-w};0 0;0 0`;
+    const browsAnim = wrapAnim(brow(c1) + brow(c2),
+      animT('translate', tv, p.period, { keyTimes:'0;0.45;0.52;0.59;0.66;0.73;1', spline: easeAll(6) }));
+    return faceCore({ extra: browsAnim });
+  }
+},
+
+{ id: 'sneeze', name: 'Sneeze', state: 'ah… ah… choo',
+  blurb: 'The anticipation is the joke: tip back slowly, eyes squeezing… then the quick “choo” forward and recover.',
+  controls: [
+    { k:'period', label:'Period s', type:'range', min:3, max:8, step:0.1, def:5.2 },
+    { k:'force',  label:'Force°',   type:'range', min:8, max:18, def:12 },
+    ...COMMON,
+  ],
+  render(p){
+    const kt = '0;0.3;0.42;0.5;0.55;0.64;1';
+    const r = BASE.eyeR, y = BASE.eyeY;
+    const [c1, c2] = eyeXs();
+    const rv = [r, r, r*0.25, r*0.25, r*0.25, r, r].map(fmt).join(';');
+    const mk = cx => `<ellipse cx="${fmt(cx)}" cy="${y}" rx="${r}" ry="${r}" fill="currentColor">` +
+      `<animate attributeName="ry" values="${rv}" keyTimes="${kt}" dur="${p.period}s" repeatCount="indefinite"/></ellipse>`;
+    const rot = [0, 0, -7, -7, p.force, 0, 0].map(a => `${a} 120 150`).join(';');
+    const ty = `0 0;0 0;0 -3;0 -3;0 5;0 0;0 0`;
+    const inner = wrapAnim(faceCore({ eyes: mk(c1) + mk(c2) }), animT('rotate', rot, p.period, { keyTimes: kt, spline: easeAll(6) }));
+    return wrapAnim(inner, animT('translate', ty, p.period, { keyTimes: kt, spline: easeAll(6) }));
+  }
+},
+
+{ id: 'fidget', name: 'Fidget', state: 'waiting for approval',
+  blurb: 'Two impatient little bounces, then waiting… then again. The face equivalent of tapping a foot — for sessions that need you.',
+  controls: [
+    { k:'period',  label:'Period s', type:'range', min:1.5, max:5, step:0.1, def:2.4 },
+    { k:'restless',label:'Restless px', type:'range', min:3, max:8, def:5 },
+    ...COMMON,
+  ],
+  render(p){
+    const b = p.restless;
+    const ty = `0 0;0 ${-b};0 0;0 ${-b};0 0;0 0`;
+    return wrapAnim(faceCore(), animT('translate', ty, p.period, { keyTimes:'0;0.07;0.14;0.21;0.28;1', spline: easeAll(5) }));
+  }
+},
+];
+
+// ---------- Wordmark cards ----------
+function lowerUKE(u0, o) {
+  const w = o.w, r = Math.min(o.r, 42), sp = o.sp, B = 170, T = 80, A = 44;
+  const uW = 86;
+  const xk = u0 + uW + 44 + sp, kArm = 56;
+  const ec = xk + kArm + 62 + sp, er = 46;
+  const S = `fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"`;
+  const ex = ec + er * Math.cos(0.7), ey = 125 + er * Math.sin(0.7);
+  const body =
+    `<path d="M ${fmt(u0)} ${T} V ${B-r} Q ${fmt(u0)} ${B} ${fmt(u0+r)} ${B} H ${fmt(u0+uW-r)} Q ${fmt(u0+uW)} ${B} ${fmt(u0+uW)} ${B-r} V ${T}" ${S}/>` +
+    `<path d="M ${fmt(xk)} ${A} V ${B} M ${fmt(xk)} 126 L ${fmt(xk+kArm)} ${T} M ${fmt(xk)} 126 L ${fmt(xk+kArm+2)} ${B}" ${S}/>` +
+    `<path d="M ${fmt(ec-er)} 125 H ${fmt(ec+er)} A ${er} ${er} 0 1 0 ${fmt(ex)} ${fmt(ey)}" ${S}/>`;
+  return { body, end: ec + er };
+}
+function capsUKE(u0, o) {
+  const w = o.w, sp = o.sp, A = 44, B = 170;
+  const uW = 92, r = Math.min(o.r, uW / 2);
+  const S = `fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"`;
+  const U = `<path d="M ${fmt(u0)} ${A} V ${fmt(B-r)} Q ${fmt(u0)} ${B} ${fmt(u0+r)} ${B} H ${fmt(u0+uW-r)} Q ${fmt(u0+uW)} ${B} ${fmt(u0+uW)} ${fmt(B-r)} V ${A}" ${S}/>`;
+  const xk = u0 + uW + 46 + sp, kArm = 64;
+  const K = `<path d="M ${fmt(xk)} ${A} V ${B} M ${fmt(xk)} 112 L ${fmt(xk+kArm)} ${A} M ${fmt(xk)} 112 L ${fmt(xk+kArm+4)} ${B}" ${S}/>`;
+  const xe = xk + kArm + 46 + sp, eW = 70;
+  const E = `<path d="M ${fmt(xe+eW)} ${A} H ${fmt(xe)} V ${B} H ${fmt(xe+eW)} M ${fmt(xe)} 107 H ${fmt(xe+eW*0.72)}" ${S}/>`;
+  return { body: U + K + E, end: xe + eW };
+}
+// Face-first word. faceHtml lets motion cards inject their animated face.
+// The face's stroke renders at BASE.sw × scale, so the letters default to that
+// same effective weight — otherwise the L reads heavier than U·K·E.
+function faceFirstWord(p, x0, faceHtml) {
+  const s = p.scale;
+  const tx = x0 - 66 * s, ty = 170 - 164 * s;
+  const face = `<g transform="translate(${fmt(tx)} ${fmt(ty)}) scale(${fmt(s)})">${faceHtml !== undefined ? faceHtml : faceCore()}</g>`;
+  const faceRight = tx + 176 * s;
+  const u0 = faceRight + p.gap;
+  const lw = p.matchW !== false ? fmt(BASE.sw * s) : p.w;
+  const letters = (p.case === 'lower' ? lowerUKE : capsUKE)(u0, { ...p, w: lw });
+  return { body: face + letters.body, width: letters.end + 40 - x0 };
+}
+
+const WORDS = [
+
+{ id: 'wface', name: 'Face-first', state: 'the chosen wordmark',
+  kind: 'word', faceIcon: true,
+  blurb: 'The face is the capital L, followed by custom U·K·E letterforms at cap height. Lowercase still available for comparison.',
+  controls: [
+    { k:'case',  label:'Case',      type:'select', opts:['caps','lower'], def:'caps' },
+    { k:'scale', label:'Face size', type:'range', min:0.9, max:1.7, step:0.05, def:1.55 },
+    { k:'gap',   label:'Gap',       type:'range', min:-10, max:50,  def:14 },
+    { k:'matchW', label:'Match face weight', type:'checkbox', def:true },
+    { k:'w',     label:'Weight (manual)', type:'range', min:12,  max:28,  def:23 },
+    { k:'r',     label:'U radius',  type:'range', min:6,   max:46,  def:46 },
+    { k:'sp',    label:'Spacing',   type:'range', min:-10, max:36,  def:8 },
+    { k:'iconFill', label:'Icon tile', type:'select', opts:ICON_OPTS, def:'space' },
+  ],
+  word(p, x0 = 20, faceHtml){ return faceFirstWord(p, x0, faceHtml); }
+},
+
+{ id: 'wmono', name: 'Monoline (plain)', state: 'for quiet contexts',
+  kind: 'word',
+  blurb: 'The plain rounded monoline word, kept for places where a face mid-word is too loud — docs, footers, fine print.',
+  controls: [
+    { k:'w',   label:'Weight',   type:'range', min:12, max:26, def:18 },
+    { k:'r',   label:'u radius', type:'range', min:6,  max:42, def:30 },
+    { k:'sp',  label:'Spacing',  type:'range', min:-10,max:36, def:8 },
+    { k:'dotR',label:'Dot size', type:'range', min:5,  max:12, def:8 },
+    { k:'inU', label:'In the u', type:'select', opts:['camera','eyes','none'], def:'camera' },
+  ],
+  word(p, x0 = 30){
+    const w = p.w, r = Math.min(p.r, 42), sp = p.sp, B = 170, A = 44;
+    const S = `fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"`;
+    const l = `<path d="M ${x0} ${A} V ${B}" ${S}/>`;
+    const rest = lowerUKE(x0 + 40 + sp, p);
+    let body = l + rest.body;
+    const u0 = x0 + 40 + sp, uW = 86, ucx = u0 + uW/2, dcy = B - w/2 - p.dotR - 7;
+    if (p.inU === 'camera') body += `<circle cx="${fmt(ucx)}" cy="${fmt(dcy)}" r="${p.dotR}" fill="${BASE.accent}"/>`;
+    else if (p.inU === 'eyes') {
+      const spr = Math.max(p.dotR * 2 + 6, uW * 0.3);
+      body += `<circle cx="${fmt(ucx - spr/2)}" cy="${fmt(dcy - 14)}" r="${p.dotR}" fill="${BASE.accent}"/>` +
+              `<circle cx="${fmt(ucx + spr/2)}" cy="${fmt(dcy - 14)}" r="${p.dotR}" fill="${BASE.accent}"/>`;
+    }
+    return { body, width: rest.end + 40 - x0 };
+  }
+},
+];
+
+const LOGOS = [...MOTIONS, ...WORDS];
+const state = {};
+const defaults = logo => Object.fromEntries(logo.controls.map(c => [c.k, c.def]));
+LOGOS.forEach(l => state[l.id] = defaults(l));
+
+// ---------- Decisions + persistence ----------
+const decisions = {};
+const LS_KEY = 'luke-lab7';
+function saveLS() {
+  try { localStorage.setItem(LS_KEY, JSON.stringify({ decisions, state, base: BASE })); } catch {}
+}
+function loadLS() {
+  try {
+    const d = JSON.parse(localStorage.getItem(LS_KEY));
+    if (!d) return;
+    Object.assign(decisions, d.decisions || {});
+    for (const id in d.state || {}) if (state[id]) Object.assign(state[id], d.state[id]);
+    if (d.base) Object.assign(BASE, d.base);
+  } catch {}
+}
+loadLS();
+function refreshDecisionUI(id) {
+  const card = document.getElementById(`card-${id}`);
+  if (!card) return;
+  card.classList.toggle('accepted', decisions[id] === 'accept');
+  card.classList.toggle('rejected', decisions[id] === 'reject');
+  card.querySelectorAll('.dbtn').forEach(b => b.classList.toggle('on', decisions[id] === b.dataset.decide));
+}
+function refreshTally() {
+  const a = MOTIONS.filter(m => decisions[m.id] === 'accept').length;
+  const r = MOTIONS.filter(m => decisions[m.id] === 'reject').length;
+  const el = document.getElementById('tallyText');
+  if (el) el.textContent = `${a} accepted · ${r} rejected · ${MOTIONS.length - a - r} undecided`;
+}
+function selectionsText() {
+  const skip = new Set(['iconFill', 'iconStyle']);
+  const fp = p => Object.entries(p).filter(([k]) => !skip.has(k)).map(([k, v]) => `${k}=${v}`).join(', ');
+  const bucket = { accept: [], reject: [], undecided: [] };
+  MOTIONS.forEach(m => bucket[decisions[m.id] || 'undecided'].push(`- ${m.name} (${m.state}) — ${fp(state[m.id])}`));
+  const sec = (t, arr) => `${t} (${arr.length}):\n${arr.length ? arr.join('\n') : '- (none)'}`;
+  return [
+    'Luke logo — Round 7 selections',
+    '',
+    `Base face: ${fp(BASE)}`,
+    `Wordmark Face-first: ${fp(state.wface)}`,
+    '',
+    sec('ACCEPTED', bucket.accept), '',
+    sec('REJECTED', bucket.reject), '',
+    sec('UNDECIDED', bucket.undecided),
+  ].join('\n');
+}
+
+// ---------- Rendering scaffolding ----------
+function markMarkup(logo, p) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" fill="none">${logo.render(p)}</svg>`;
+}
+function wordMarkup(logo, p) {
+  const { body, width } = logo.word(p);
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${fmt(width + 30)} 214" fill="none">${body}</svg>`;
+}
+function tileInk(preset) { return (preset === 'silver' || preset === 'titanium') ? '#1d1d1f' : '#f8fafc'; }
+function faceIconMarkup(p) {
+  const g = gradFill(`icg-face`, p.iconFill || 'space');
+  const s = 0.72, off = fmt(240 * (1 - s) / 2);
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" fill="none">${g.defs}` +
+    `<rect x="8" y="8" width="224" height="224" rx="52" fill="${g.fill}" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>` +
+    `<g color="${tileInk(p.iconFill)}" transform="translate(${off} ${off}) scale(${s})">${faceCore()}</g></svg>`;
+}
+function iconMarkup(logo, p) {
+  const g = gradFill(`icg-${logo.id}`, p.iconFill || 'space');
+  const s = 0.72, off = fmt(240 * (1 - s) / 2);
+  const tile = `<rect x="8" y="8" width="224" height="224" rx="52" fill="${g.fill}" stroke="currentColor" stroke-opacity="0.15" stroke-width="1"/>`;
+  const open = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" fill="none">`;
+  if (p.iconStyle === 'knockout') {
+    const inner = logo.render(p).split(BASE.accent).join('#000');
+    return `${open}${g.defs}` +
+      `<mask id="km-${logo.id}"><rect x="0" y="0" width="240" height="240" fill="#fff"/>` +
+      `<g color="#000" transform="translate(${off} ${off}) scale(${s})">${inner}</g></mask>` +
+      tile.replace('/>', ` mask="url(#km-${logo.id})"/>`) + `</svg>`;
+  }
+  return `${open}${g.defs}${tile}` +
+    `<g color="${tileInk(p.iconFill)}" transform="translate(${off} ${off}) scale(${s})">${logo.render(p)}</g></svg>`;
+}
+// Motion lockup = the animated face living inside the Face-first caps wordmark
+function lockupMarkup(logo, p) {
+  if (logo.kind === 'word') {
+    if (logo.id === 'wface') return wordMarkup(logo, p);
+    const s = 0.62, faceW = 240 * s + 26;
+    const { body, width } = logo.word(p, 0);
+    const total = fmt(faceW + width + 20);
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${total} 214" fill="none">` +
+      `<g transform="translate(0 33) scale(${s})">${faceCore()}</g>` +
+      `<g transform="translate(${fmt(faceW)} 0)">${body}</g></svg>`;
+  }
+  const wp = state.wface || defaults(WORDS[0]);
+  const { body, width } = faceFirstWord(wp, 20, logo.render(p));
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${fmt(width + 30)} 214" fill="none">${body}</svg>`;
+}
+
+function controlHtml(ownerId, c, val) {
+  const base = `data-logo="${ownerId}" data-k="${c.k}"`;
+  let input;
+  if (c.type === 'range') input = `<input type="range" min="${c.min}" max="${c.max}" step="${c.step || 1}" value="${val}" ${base}><output id="out-${ownerId}-${c.k}">${val}</output>`;
+  else if (c.type === 'checkbox') input = `<input type="checkbox" ${val ? 'checked' : ''} ${base}><output></output>`;
+  else input = `<select ${base}>${c.opts.map(o => `<option ${o === val ? 'selected' : ''}>${o}</option>`).join('')}</select><output></output>`;
+  return `<label class="ctl"><span title="${c.label}">${c.label}</span>${input}</label>`;
+}
+
+function cardHtml(logo) {
+  const isWord = logo.kind === 'word';
+  const secondTag = isWord ? (logo.faceIcon ? 'icon' : 'lockup') : 'icon';
+  const duo = `<div class="duo${isWord ? ' word' : ''}">
+      <div class="preview"><span class="tag">${isWord ? 'wordmark' : 'mark'}</span><span id="prev-${logo.id}" style="display:contents"></span></div>
+      <div class="preview"><span class="tag">${secondTag}</span><span id="icon-${logo.id}" style="display:contents"></span></div>
+    </div>`;
+  const btns = isWord
+    ? `<button data-action="copy-word" data-logo="${logo.id}">Copy word</button>
+       <button data-action="dl-word" data-logo="${logo.id}">Word ↓</button>
+       <button data-action="dl-lockup" data-logo="${logo.id}">Lockup ↓</button>`
+    : `<button data-action="copy" data-logo="${logo.id}">Copy mark</button>
+       <button data-action="dl-mark" data-logo="${logo.id}">Mark ↓</button>
+       <button data-action="dl-icon" data-logo="${logo.id}">Icon ↓</button>
+       <button data-action="dl-lockup" data-logo="${logo.id}">Lockup ↓</button>`;
+  const decide = isWord ? '' :
+    `<div class="decide">
+      <button class="dbtn acc" data-decide="accept" data-logo="${logo.id}" title="Accept this motion">✓</button>
+      <button class="dbtn rej" data-decide="reject" data-logo="${logo.id}" title="Reject this motion">×</button>
+    </div>`;
+  return `<section class="card" id="card-${logo.id}">
+    <div class="head"><div><h2>${logo.name}<em>${logo.state}</em></h2><p class="blurb">${logo.blurb}</p></div>${decide}</div>
+    ${duo}
+    <div class="sizes" id="sizes-${logo.id}"></div>
+    <div class="controls" id="ctls-${logo.id}">${logo.controls.map(c => controlHtml(logo.id, c, state[logo.id][c.k])).join('')}</div>
+    <div class="actions">${btns}<span class="spacer"></span><button data-action="reset" data-logo="${logo.id}">Reset</button></div>
+  </section>`;
+}
+
+function paint(id) {
+  const logo = LOGOS.find(l => l.id === id), p = state[id];
+  if (logo.kind === 'word') {
+    const word = wordMarkup(logo, p);
+    const second = logo.faceIcon ? faceIconMarkup(p) : lockupMarkup(logo, p);
+    document.getElementById(`prev-${id}`).innerHTML = word;
+    document.getElementById(`icon-${id}`).innerHTML = second;
+    document.getElementById(`sizes-${id}`).innerHTML =
+      `<span class="chip" style="height:46px">${word}</span>` +
+      `<span class="chip inv" style="height:46px">${word}</span>` +
+      `<span class="chip" style="height:26px">${word}</span>` +
+      `<span class="hint">word · inverse · small</span>`;
+    return;
+  }
+  const mark = markMarkup(logo, p), icon = iconMarkup(logo, p), lock = lockupMarkup(logo, p);
+  document.getElementById(`prev-${id}`).innerHTML = mark;
+  document.getElementById(`icon-${id}`).innerHTML = icon;
+  document.getElementById(`sizes-${id}`).innerHTML =
+    `<span class="chip" style="height:52px">${lock}</span>` +
+    `<span class="chip inv" style="height:34px">${lock}</span>` +
+    `<span class="chip" style="height:32px">${icon}</span>` +
+    `<span class="chip" style="height:26px">${mark}</span>` +
+    `<span class="hint">animated lockup · inverse · small</span>`;
+}
+function paintAll() { LOGOS.forEach(l => paint(l.id)); }
+
+const baseCard = `<section class="card base" id="card-__base">
+  <div><h2>Base face<em>shared by every card below</em></h2>
+  <p class="blurb">Tune the L-face once — geometry, base tilt, idle blink. Motions, icons, and the Face-first wordmark all inherit it live.</p></div>
+  <div class="controls" id="ctls-__base">${BASE_CONTROLS.map(c => controlHtml('__base', c, BASE[c.k])).join('')}</div>
+  <div class="actions"><span class="spacer"></span><button data-action="reset-base">Reset base</button></div>
+</section>`;
+
+const wordHead = `<div class="sechead"><h3>Wordmark — Face-first</h3><p>The face as the capital L, with custom U·K·E letterforms. Motion-card lockups above already use it.</p></div>`;
+const motionHead = `<div class="sechead"><h3>Motion library</h3><p>Wince is the error state. Eleven new motions join the keepers — every lockup shows the animated face inside the caps wordmark.</p></div>`;
+
+document.getElementById('grid').innerHTML =
+  baseCard + motionHead + MOTIONS.map(cardHtml).join('') + wordHead + WORDS.map(cardHtml).join('');
+paintAll();
+MOTIONS.forEach(m => refreshDecisionUI(m.id));
+refreshTally();
+
+document.getElementById('swatches').insertAdjacentHTML('beforeend',
+  SWATCHES.map(([name, hex]) => `<button class="swatch" style="background:${hex}" data-accent="${hex}" title="${name}"></button>`).join(''));
+
+function onCtl(e) {
+  const t = e.target, id = t.dataset.logo, k = t.dataset.k;
+  if (!id || !k) return;
+  if (id === '__base') {
+    const c = BASE_CONTROLS.find(c => c.k === k);
+    BASE[k] = c.type === 'range' ? parseFloat(t.value) : c.type === 'checkbox' ? t.checked : t.value;
+    if (c.type === 'range') {
+      const o = document.getElementById(`out-__base-${k}`);
+      if (o) o.textContent = BASE[k];
+    }
+    paintAll();
+    saveLS();
+    return;
+  }
+  const logo = LOGOS.find(l => l.id === id);
+  const c = logo.controls.find(c => c.k === k);
+  state[id][k] = c.type === 'range' ? parseFloat(t.value) : c.type === 'checkbox' ? t.checked : t.value;
+  if (c.type === 'range') {
+    const o = document.getElementById(`out-${id}-${k}`);
+    if (o) o.textContent = state[id][k];
+  }
+  if (id === 'wface') paintAll();
+  else paint(id);
+  saveLS();
+}
+document.body.addEventListener('input', onCtl);
+
+function themeInk() { return document.body.dataset.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'; }
+function exportSvg(id, kind) {
+  const logo = LOGOS.find(l => l.id === id), p = state[id];
+  if (kind === 'icon') {
+    if (logo.kind === 'word') return faceIconMarkup(p).replace(/currentColor/g, tileInk(p.iconFill));
+    return iconMarkup(logo, p).replace(/currentColor/g, tileInk(p.iconFill));
+  }
+  const s = kind === 'lockup' ? lockupMarkup(logo, p) : kind === 'word' ? wordMarkup(logo, p) : markMarkup(logo, p);
+  return s.replace(/currentColor/g, themeInk());
+}
+function download(name, svg) {
+  const blob = new Blob([svg], { type: 'image/svg+xml' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+function flash(btn, text) {
+  const orig = btn.textContent;
+  btn.textContent = text;
+  setTimeout(() => { btn.textContent = orig; }, 1100);
+}
+
+document.body.addEventListener('click', async e => {
+  const sw = e.target.closest('.swatch');
+  if (sw) { BASE.accent = sw.dataset.accent; paintAll(); saveLS(); return; }
+  const db = e.target.closest('.dbtn');
+  if (db) {
+    const id = db.dataset.logo, d = db.dataset.decide;
+    decisions[id] = decisions[id] === d ? undefined : d;
+    refreshDecisionUI(id); refreshTally(); saveLS();
+    return;
+  }
+  if (e.target.id === 'copySel') {
+    const text = selectionsText();
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); ta.remove();
+    }
+    flash(e.target, 'Copied ✓');
+    return;
+  }
+  if (e.target.id === 'clearSel') {
+    MOTIONS.forEach(m => { delete decisions[m.id]; refreshDecisionUI(m.id); });
+    refreshTally(); saveLS();
+    return;
+  }
+  const btn = e.target.closest('button[data-action]');
+  if (!btn) return;
+  const action = btn.dataset.action, id = btn.dataset.logo;
+  if (action === 'reset-base') {
+    BASE_CONTROLS.forEach(c => BASE[c.k] = c.def);
+    document.getElementById('ctls-__base').innerHTML = BASE_CONTROLS.map(c => controlHtml('__base', c, BASE[c.k])).join('');
+    paintAll();
+  } else if (action === 'reset') {
+    const logo = LOGOS.find(l => l.id === id);
+    state[id] = defaults(logo);
+    document.getElementById(`ctls-${id}`).innerHTML = logo.controls.map(c => controlHtml(id, c, state[id][c.k])).join('');
+    if (id === 'wface') paintAll(); else paint(id);
+  } else if (action === 'copy' || action === 'copy-word') {
+    const svg = exportSvg(id, action === 'copy-word' ? 'word' : 'mark');
+    try {
+      await navigator.clipboard.writeText(svg);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = svg; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); ta.remove();
+    }
+    flash(btn, 'Copied ✓');
+  } else if (action.startsWith('dl-')) {
+    const kind = action.slice(3);
+    download(`luke-${id}-${kind}.svg`, exportSvg(id, kind));
+  }
+});
+
+document.getElementById('themeBtn').addEventListener('click', () => {
+  const next = document.body.dataset.theme === 'dark' ? 'light' : 'dark';
+  document.body.dataset.theme = next;
+  document.getElementById('themeBtn').textContent = next === 'dark' ? 'Light preview' : 'Dark preview';
+});
+</script>
+</body>
+</html>
