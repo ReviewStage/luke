@@ -67,9 +67,8 @@ than the window.
 
 The window never animates its own frame. An animated `setBounds` re-lays out
 the whole renderer on every frame, because the panel is anchored to the
-viewport's centre. Everything layered on the surface must move with `transform`,
-`opacity`, and `filter: blur()` only — the blur resolves as content springs into
-place, and like the other two it is a composite rather than a relayout — animating width, height, padding, or font-size on the
+viewport's centre. Everything layered on the surface must move with `transform`
+and `opacity` only — animating width, height, padding, or font-size on the
 wings, the count badge, or the rows re-shapes text on every frame and is what
 makes the motion stutter.
 

@@ -121,11 +121,6 @@
   --expand-delay: 200ms;
   --peek-delay: 60ms;
   --row-stagger: 32ms;
-  /* Content resolves out of a blur as it springs into place, the way a thing
-     moving fast is not sharp. Small on purpose: this is the tail of a movement,
-     not an effect of its own, and a blur is the one thing here that costs GPU
-     work per frame rather than a plain composite. */
-  --enter-blur: 3px;
   /* How far the stack is compressed before it springs apart. The gaps opening
      is the motion; the rows arriving is just what makes it visible. */
   --row-fan: 7px;
@@ -425,15 +420,17 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   color: var(--text-secondary);
 }
 
-/* The capsule keeps one mark; the rest belong to the states with room for them.
-   They hold their place and only fade, so no mark ever moves during the morph. */
+/* The capsule keeps one mark; the rest belong to the states with room for them,
+   and they unfold outward from the notch on the same spring, at the same
+   distance, as the count's caption does on the other side. The two wings are
+   one gesture, so they move as one. */
 .wing-mark + .wing-mark,
 .wing-more {
   opacity: 0;
-  filter: blur(var(--enter-blur));
+  transform: translateX(8px);
   transition:
     opacity var(--duration-exit) var(--motion-exit),
-    filter var(--duration-shape) var(--motion-morph);
+    transform var(--duration-shape) var(--spring);
 }
 
 .app-stage[data-presentation="peek"] .wing-mark + .wing-mark,
@@ -441,7 +438,9 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .app-stage[data-presentation="panel"] .wing-mark + .wing-mark,
 .app-stage[data-presentation="panel"] .wing-more {
   opacity: 1;
-  filter: blur(0);
+  transform: none;
+  transition-duration: var(--duration-quick), var(--duration-shape);
+  transition-timing-function: var(--motion-exit), var(--spring);
   transition-delay: var(--peek-delay);
 }
 
@@ -573,25 +572,22 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   font-weight: 600;
   letter-spacing: 0.2px;
   opacity: 0;
-  filter: blur(var(--enter-blur));
   text-transform: uppercase;
   transform: translate(-8px, -50%);
-  /* Three properties, and the state below overrides duration and timing by
-     position: a fourth entry has to be added there too. */
+  /* Two properties, and the state below overrides duration and timing by
+     position: a third entry would have to be added there too. */
   transition:
     opacity var(--duration-exit) var(--motion-exit),
-    transform var(--duration-shape) var(--spring),
-    filter var(--duration-shape) var(--motion-morph);
+    transform var(--duration-shape) var(--spring);
   white-space: nowrap;
 }
 
 .app-stage[data-presentation="peek"] .count-caption,
 .app-stage[data-presentation="panel"] .count-caption {
   opacity: 1;
-  filter: blur(0);
   transform: translate(0, -50%);
-  transition-duration: var(--duration-quick), var(--duration-shape), var(--duration-shape);
-  transition-timing-function: var(--motion-exit), var(--spring), var(--motion-morph);
+  transition-duration: var(--duration-quick), var(--duration-shape);
+  transition-timing-function: var(--motion-exit), var(--spring);
   transition-delay: var(--peek-delay);
 }
 
@@ -794,16 +790,12 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .empty-state,
 .tab-bar {
   opacity: 0;
-  /* Resolves with the spring rather than with the fade: the blur belongs to the
-     movement, so it clears as the row arrives rather than as it appears. */
-  filter: blur(var(--enter-blur));
   transform: translateY(
     calc((min(var(--row-index, 0), var(--row-fan-limit)) + 1) * var(--row-fan) * -1)
   );
   transition:
     opacity var(--duration-exit) var(--motion-exit),
-    transform var(--duration-shape) var(--spring),
-    filter var(--duration-shape) var(--motion-morph);
+    transform var(--duration-shape) var(--spring);
 }
 
 .app-stage[data-presentation="panel"] .session-row,
@@ -818,7 +810,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   );
 
   opacity: 1;
-  filter: blur(0);
   transform: none;
   transition-delay: var(--row-delay);
 }
@@ -827,7 +818,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    matched to its property list keeps the stagger on the arrival, where it
    belongs, instead of making the hover wait for the row's turn to appear. */
 .app-stage[data-presentation="panel"] .quit-button {
-  transition-delay: var(--row-delay), var(--row-delay), var(--row-delay), 0s, 0s;
+  transition-delay: var(--row-delay), var(--row-delay), 0s, 0s;
 }
 
 /* Settings --------------------------------------------------------------- */
@@ -895,7 +886,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transition:
     opacity var(--duration-exit) var(--motion-exit),
     transform var(--duration-shape) var(--spring),
-    filter var(--duration-shape) var(--motion-morph),
     background-color var(--duration-hover) ease,
     color var(--duration-hover) ease;
 }
@@ -1225,7 +1215,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
     --expand-delay: 0ms;
     --peek-delay: 0ms;
     --row-stagger: 0ms;
-    --enter-blur: 0px;
     /* Nothing travels, so the stack has no distance to spring across. */
     --row-fan: 0px;
   }

@@ -86,10 +86,11 @@ you is the top row and the mark the capsule keeps.
 
 The header is anchored to the notch, not to a state: the count sits to the right
 of the housing and the provider marks and speech meter to its left, in the same
-place in all three. Growing only reveals the marks the capsule had no room for,
-and each holds its place rather than shifting to make room, so nothing there
-moves during the morph. More providers than fit are counted at the end of the
-row rather than dropped from it.
+place in all three. Growing unfolds what the capsule had no room for: the marks
+on one side and what the count means on the other travel the same distance, on
+the same spring, so the two wings read as one gesture rather than two. More
+providers than fit are counted at the end of the row rather than dropped from
+it.
 
 The surface is opaque black in every state and shaped like the housing it sits
 beside: the convex bottom corners and the concave flare where its sides meet
@@ -115,8 +116,7 @@ spring at one duration — a real spring's motion is a property of the spring, n
 of how far it is asked to travel — and the window carries slack on every side
 for the overshoot to land in. The same spring carries the content: the panel's
 rows arrive as one compressed stack whose gaps spring open, rather than as
-elements that fade in where they will end up, and each resolves out of a small
-blur as it lands, the way a thing moving fast is not sharp. The surface also ends where the content does, so a
+elements that fade in where they will end up. The surface also ends where the content does, so a
 session arriving or finishing resizes the panel.
 
 ## Provider marks
