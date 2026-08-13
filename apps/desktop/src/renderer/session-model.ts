@@ -14,12 +14,7 @@ export const STATE_LABEL: Record<SessionState, string> = {
   [SESSION_STATE.UNKNOWN]: "Idle",
 };
 
-const STATUS_LABEL: Record<NormalizedSession["status"], string> = {
-  [SESSION_STATUS.WORKING]: "Working",
-  [SESSION_STATUS.WAITING]: "Waiting",
-  [SESSION_STATUS.COMPLETE]: "Complete",
-  [SESSION_STATUS.UNKNOWN]: "Observed",
-};
+const CONTEXT_SEPARATOR = " · ";
 
 /** The state order the surface reads top-down and the badge collapses to. */
 const STATE_PRIORITY: readonly SessionState[] = [
@@ -34,7 +29,10 @@ export interface DisplaySession {
   title: string;
   providerId: string;
   provider: string;
+  /** What the session is doing, or what stopped it. */
   detail: string;
+  /** Where it is doing it: provider, repository, branch, model. */
+  context: string;
   state: SessionState;
   label: string;
 }
@@ -60,8 +58,38 @@ export interface SessionTally {
 function sessionNeedsAttention(session: NormalizedSession): boolean {
   return (
     session.status === SESSION_STATUS.WAITING ||
+    // A session that stopped on a failure cannot get itself going again, so it
+    // wants a person at least as much as one that finished its turn.
+    session.status === SESSION_STATUS.ERROR ||
     session.attention.disposition !== ATTENTION_DISPOSITION.SILENT
   );
+}
+
+/**
+ * The line under the title. What stopped a session outranks what it was doing,
+ * and what it was doing outranks the recap of a turn that has already ended.
+ *
+ * It is empty when a provider reported none of them. Falling back to the status
+ * would only restate the chip at the other end of the same row.
+ */
+function sessionDetail(session: NormalizedSession): string {
+  return session.detail.error ?? session.detail.activity ?? session.summary ?? "";
+}
+
+/**
+ * The line under that. It answers "which one is this?" for the rows that would
+ * otherwise read alike — two checkouts of one repository, or one repository on
+ * two branches.
+ */
+function sessionContext(session: NormalizedSession): string {
+  return [
+    session.provider.displayName,
+    session.detail.repository,
+    session.detail.branch,
+    session.detail.model,
+  ]
+    .filter((part): part is string => part !== undefined && part.length > 0)
+    .join(CONTEXT_SEPARATOR);
 }
 
 function sessionState(session: NormalizedSession): SessionState {
@@ -85,7 +113,8 @@ export function displaySessions(
         title: session.title,
         providerId: session.providerId,
         provider: session.provider.displayName,
-        detail: session.summary ?? STATUS_LABEL[session.status],
+        detail: sessionDetail(session),
+        context: sessionContext(session),
         state: sessionState(session),
         label: STATE_LABEL[sessionState(session)],
       }));

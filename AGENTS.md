@@ -23,7 +23,8 @@ Canonical commands:
 
 Trust constraints:
 
-- Never write provider transcripts or session-state files.
+- Never write provider transcripts or session-state files. Reading them is what
+  Luke is for; writing to them is never.
 - Never inject terminal input, simulate keystrokes, or request Accessibility.
 - Product behavior must not require provider MCP, plugins, hooks, wrappers,
   credentials, or live sessions. A provider whose sessions exist only in a cloud
@@ -32,7 +33,25 @@ Trust constraints:
   leave every other provider working without it.
 - Keep unsupported capabilities explicit; do not invent fallback controls.
 - Keep Electron renderers sandboxed with context isolation and narrow IPC.
-- Commit only synthetic, redacted fixtures and repository-relative paths.
+- Commit only synthetic fixtures and repository-relative paths. This binds
+  harder as Luke observes more: a fixture copied from a real session now carries
+  a real title, branch, and recap.
+
+What Luke may show:
+
+- Show whatever the local surface can read. A session's own title, branch,
+  model, current tool, failure, and the recap a provider wrote about it all
+  belong on the row: a sidecar that cannot tell two sessions apart is not worth
+  the space beside the housing. This is the user's own data, on the user's own
+  screen, and it is read-only.
+- Label a session by what its provider named it, falling back to the workspace
+  or repository only when there is no name yet. Do not compose a sentence in an
+  adapter; report the fields and let the surface word them.
+- An evaluator is the one place session material leaves the machine, so it is
+  the one place with a narrower rule. It receives `AttentionContext` — what a
+  provider wrote *about* a session — and never the transcript behind it: no
+  message history, file contents, or command output. Widening that set is a
+  product decision, not an implementation detail; make it deliberately.
 
 Before handoff, run `./scripts/check.sh` for portable-only changes. For any
 macOS or UI change, `./scripts/verify.sh` is the completion invariant. Report

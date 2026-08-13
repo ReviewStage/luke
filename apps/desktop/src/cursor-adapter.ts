@@ -1,4 +1,6 @@
 import {
+  maximumSessionSummaryLength,
+  maximumSessionTitleLength,
   type ProviderSessionObservation,
   SESSION_STATUS,
   type SessionProvider,
@@ -24,6 +26,9 @@ import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "./shared/credentia
 // provider Luke observes with it can never name different things.
 const CURSOR_PROVIDER_ID = CREDENTIAL_PROVIDER_ID.CURSOR;
 const CURSOR_PROVIDER_NAME = CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.CURSOR].displayName;
+const UNKNOWN_AGENT_LABEL = "Cloud agent";
+/** A run Cursor failed reports no reason of its own, so the state is the message. */
+const CURSOR_RUN_FAILED_MESSAGE = "The run failed";
 
 const CURSOR_ENVIRONMENT = {
   API_URL: "CURSOR_API_URL",
@@ -47,11 +52,19 @@ const CURSOR_QUERY = {
 } as const;
 
 const CURSOR_FIELD = {
+  BRANCH: "branch",
+  BRANCHES: "branches",
   CREATED_AT: "createdAt",
+  DURATION_MS: "durationMs",
+  GIT: "git",
   ID: "id",
   ITEMS: "items",
   LATEST_RUN_ID: "latestRunId",
+  NAME: "name",
+  PR_URL: "prUrl",
   REPOS: "repos",
+  REPO_URL: "repoUrl",
+  RESULT: "result",
   STARTING_REF: "startingRef",
   STATUS: "status",
   UPDATED_AT: "updatedAt",
@@ -91,7 +104,7 @@ const SESSION_STATUS_BY_CURSOR_RUN_STATUS: Readonly<Record<CursorRunStatus, Sess
   [CURSOR_RUN_STATUS.CANCELLED]: SESSION_STATUS.COMPLETE,
   [CURSOR_RUN_STATUS.EXPIRED]: SESSION_STATUS.COMPLETE,
   [CURSOR_RUN_STATUS.CREATING]: SESSION_STATUS.UNKNOWN,
-  [CURSOR_RUN_STATUS.ERROR]: SESSION_STATUS.UNKNOWN,
+  [CURSOR_RUN_STATUS.ERROR]: SESSION_STATUS.ERROR,
 };
 
 const CURSOR_ADAPTER_DEFAULTS = {
@@ -112,22 +125,36 @@ export interface CursorAdapterOptions extends CloudAdapterOptions {
 
 interface CursorAgent {
   id: string;
-  repositoryLabel: string;
+  name?: string;
+  repositoryLabel?: string;
   archived: boolean;
   lastActivityAt: number;
   latestRunId?: string;
   ref?: string;
+  url?: string;
 }
 
 interface CursorRun {
   status: CursorRunStatus | undefined;
   updatedAt: number | undefined;
+  repositoryLabel?: string;
+  branch?: string;
+  pullRequestUrl?: string;
+  result?: string;
 }
 
 /** An agent can be attached to several repositories; the first is its subject. */
 function firstRepository(record: Record<string, unknown>): Record<string, unknown> {
   const repositories = record[CURSOR_FIELD.REPOS];
   const first = Array.isArray(repositories) ? repositories[0] : undefined;
+  return isRecord(first) ? first : {};
+}
+
+/** The branch a run pushed, which is also the only place a run names its repository. */
+function firstRunBranch(record: Record<string, unknown>): Record<string, unknown> {
+  const git = record[CURSOR_FIELD.GIT];
+  const branches = isRecord(git) ? git[CURSOR_FIELD.BRANCHES] : undefined;
+  const first = Array.isArray(branches) ? branches[0] : undefined;
   return isRecord(first) ? first : {};
 }
 
@@ -140,22 +167,27 @@ function agentFromRecord(record: Record<string, unknown>): CursorAgent | undefin
     timestampFromRecord(record, CURSOR_FIELD.CREATED_AT);
   if (!id || lastActivityAt === undefined) return undefined;
 
+  // `GET /v1/agents` returns only the durable identity fields, so `repos` is
+  // absent from a list item and its repository has to come from the run. It is
+  // still read here, because the detail route returns it under the same name.
   const repository = firstRepository(record);
+  const repositoryUrl = textFromRecord(repository, CURSOR_FIELD.URL);
   const ref = textFromRecord(repository, CURSOR_FIELD.STARTING_REF)?.slice(
     0,
     CURSOR_ADAPTER_DEFAULTS.MAXIMUM_REFERENCE_LABEL_LENGTH,
   );
   const latestRunId = textFromRecord(record, CURSOR_FIELD.LATEST_RUN_ID);
+  const name = textFromRecord(record, CURSOR_FIELD.NAME)?.slice(0, maximumSessionTitleLength);
+  const url = textFromRecord(record, CURSOR_FIELD.URL);
   return {
     id,
     lastActivityAt,
-    // An agent's name and summary are written from its opening prompt, so the
-    // repository is the only label available and there is deliberately no
-    // fallback to the name Cursor reports.
-    repositoryLabel: repositoryLabel(textFromRecord(repository, CURSOR_FIELD.URL), undefined),
+    ...(name ? { name } : {}),
+    ...(repositoryUrl ? { repositoryLabel: repositoryLabel(repositoryUrl, undefined) } : {}),
     archived: textFromRecord(record, CURSOR_FIELD.STATUS) === CURSOR_AGENT_STATUS.ARCHIVED,
     ...(latestRunId ? { latestRunId } : {}),
     ...(ref ? { ref } : {}),
+    ...(url ? { url } : {}),
   };
 }
 
@@ -235,12 +267,24 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
     if (now - observedAt > CLOUD_ADAPTER_DEFAULTS.MAXIMUM_SESSION_AGE_MS) return undefined;
 
     const status = this.#statusFor(agent, run, observedAt, now);
+    // A run names the repository it pushed to, so a list item that carries no
+    // `repos` still resolves to something better than "workspace".
+    const repository = agent.repositoryLabel ?? run?.repositoryLabel;
     return {
       providerSessionId: agent.id,
-      title: `${CURSOR_PROVIDER_NAME}: ${agent.repositoryLabel}`,
+      title: agent.name ?? repository ?? UNKNOWN_AGENT_LABEL,
       status,
       observedAt,
-      summary: summaryFromStatus(status, agent.ref),
+      ...(run?.result ? { summary: run.result } : {}),
+      detail: {
+        ...(repository ? { repository } : {}),
+        // The branch a run opened says more than the ref it started from, but
+        // a run that has pushed nothing still has a starting point worth naming.
+        ...(run?.branch ? { branch: run.branch } : agent.ref ? { branch: agent.ref } : {}),
+        ...(status === SESSION_STATUS.ERROR ? { error: CURSOR_RUN_FAILED_MESSAGE } : {}),
+        ...(agent.url ? { link: agent.url } : {}),
+        ...(run?.pullRequestUrl ? { change: run.pullRequestUrl } : {}),
+      },
     };
   }
 
@@ -268,18 +312,23 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
     // The agent names its own latest run, so this reads that run rather than
     // assuming how the run list happens to be ordered.
     const body = await request([...CURSOR_ROUTE.AGENTS, agentId, CURSOR_ROUTE_SEGMENT.RUNS, runId]);
+    const branch = firstRunBranch(body);
+    const repositoryUrl = textFromRecord(branch, CURSOR_FIELD.REPO_URL);
+    const branchName = textFromRecord(branch, CURSOR_FIELD.BRANCH)?.slice(
+      0,
+      CURSOR_ADAPTER_DEFAULTS.MAXIMUM_REFERENCE_LABEL_LENGTH,
+    );
+    const pullRequestUrl = textFromRecord(branch, CURSOR_FIELD.PR_URL);
+    const result = textFromRecord(body, CURSOR_FIELD.RESULT)?.slice(0, maximumSessionSummaryLength);
     return {
       status: knownValue(CURSOR_RUN_STATUS, textFromRecord(body, CURSOR_FIELD.STATUS)),
       updatedAt:
         timestampFromRecord(body, CURSOR_FIELD.UPDATED_AT) ??
         timestampFromRecord(body, CURSOR_FIELD.CREATED_AT),
+      ...(repositoryUrl ? { repositoryLabel: repositoryLabel(repositoryUrl, undefined) } : {}),
+      ...(branchName ? { branch: branchName } : {}),
+      ...(pullRequestUrl ? { pullRequestUrl } : {}),
+      ...(result ? { result } : {}),
     };
   }
-}
-
-function summaryFromStatus(status: SessionStatus, ref: string | undefined): string {
-  // The starting ref is chosen by whoever launched the agent, unlike the branch
-  // Cursor generates for the work, which is named from the prompt.
-  const refDetail = ref ? ` from ${ref}` : "";
-  return `${CURSOR_PROVIDER_NAME} ${status}${refDetail}; cloud session metadata is observed read-only and transcript content is not retained.`;
 }

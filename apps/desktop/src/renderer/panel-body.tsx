@@ -40,9 +40,8 @@ export function PanelBody({
                 </span>
                 <span className="row-copy">
                   <strong>{session.title}</strong>
-                  <small>
-                    {session.provider} · {session.detail}
-                  </small>
+                  {session.detail ? <small>{session.detail}</small> : null}
+                  <small className="row-context">{session.context}</small>
                 </span>
                 <StateChip state={session.state} label={session.label} />
               </article>

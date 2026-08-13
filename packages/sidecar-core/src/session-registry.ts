@@ -6,6 +6,7 @@ import {
   normalizeSession,
   normalizeSessionIdentity,
   type ProviderSessionObservation,
+  type SessionDetail,
   type SessionIdentity,
   type SessionProvider,
 } from "./session";
@@ -24,9 +25,28 @@ function copySession(session: NormalizedSession): NormalizedSession {
   return {
     ...session,
     provider: { ...session.provider },
+    detail: { ...session.detail },
     controls: session.controls.map((control) => ({ ...control })),
     attention: { ...session.attention },
   };
+}
+
+/**
+ * Compares the observed context field by field. A detail that changed without
+ * the status changing is exactly the case the registry exists to notice — a
+ * session that moved from one file to the next is still working, and the row
+ * has to follow it.
+ */
+function sameDetail(first: SessionDetail, second: SessionDetail): boolean {
+  return (
+    first.activity === second.activity &&
+    first.repository === second.repository &&
+    first.branch === second.branch &&
+    first.model === second.model &&
+    first.error === second.error &&
+    first.link === second.link &&
+    first.change === second.change
+  );
 }
 
 function sameControls(
@@ -52,6 +72,7 @@ function sameSession(first: NormalizedSession, second: NormalizedSession): boole
     first.status === second.status &&
     first.observedAt === second.observedAt &&
     first.summary === second.summary &&
+    sameDetail(first.detail, second.detail) &&
     first.attention.disposition === second.attention.disposition &&
     first.attention.decidedAt === second.attention.decidedAt &&
     first.attention.summary === second.attention.summary &&
