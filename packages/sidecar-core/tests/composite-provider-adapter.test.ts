@@ -1,0 +1,134 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  CompositeSessionProviderAdapter,
+  InMemorySessionRegistry,
+  type ProviderSessionObservation,
+  SESSION_LOCATION,
+  SESSION_STATUS,
+  type SessionProvider,
+  type SessionProviderAdapter,
+} from "../src";
+
+const cursor: SessionProvider = { id: "cursor", displayName: "Cursor" };
+const codex: SessionProvider = { id: "codex", displayName: "Codex" };
+
+function observation(
+  providerSessionId: string,
+  overrides: Partial<ProviderSessionObservation> = {},
+): ProviderSessionObservation {
+  return {
+    providerSessionId,
+    title: "Cursor: luke",
+    status: SESSION_STATUS.WORKING,
+    observedAt: 100,
+    ...overrides,
+  };
+}
+
+function observerOf(
+  provider: SessionProvider,
+  observations: readonly ProviderSessionObservation[],
+): SessionProviderAdapter {
+  return { provider, observe: async () => observations };
+}
+
+function failingObserver(provider: SessionProvider): SessionProviderAdapter {
+  return {
+    provider,
+    observe: async () => {
+      throw new Error("session state is unreadable");
+    },
+  };
+}
+
+test("reports every observer's sessions as one provider snapshot", async () => {
+  const adapter = new CompositeSessionProviderAdapter({
+    provider: cursor,
+    adapters: [
+      observerOf(cursor, [observation("local-session")]),
+      observerOf(cursor, [observation("cloud-agent", { status: SESSION_STATUS.WAITING })]),
+    ],
+  });
+
+  const observations = await adapter.observe();
+
+  assert.equal(adapter.provider, cursor);
+  assert.deepEqual(
+    observations.map((entry) => [entry.providerSessionId, entry.status]),
+    [
+      ["local-session", SESSION_STATUS.WORKING],
+      ["cloud-agent", SESSION_STATUS.WAITING],
+    ],
+  );
+});
+
+test("leaves each half of a provider saying where its own sessions run", async () => {
+  const adapter = new CompositeSessionProviderAdapter({
+    provider: cursor,
+    adapters: [
+      observerOf(cursor, [observation("local-session")]),
+      observerOf(cursor, [observation("cloud-agent", { location: SESSION_LOCATION.CLOUD })]),
+    ],
+  });
+
+  // One provider mark, two places. Merging under one id must not make the
+  // sessions on this machine read as though they ran in a datacentre.
+  const registry = new InMemorySessionRegistry();
+  await registry.refresh(adapter);
+  const locations = new Map(
+    registry.list().map((session) => [session.providerSessionId, session.location]),
+  );
+  assert.equal(locations.get("local-session"), SESSION_LOCATION.LOCAL);
+  assert.equal(locations.get("cloud-agent"), SESSION_LOCATION.CLOUD);
+});
+
+test("keeps a session two observers both reached from being reported twice", async () => {
+  const adapter = new CompositeSessionProviderAdapter({
+    provider: cursor,
+    adapters: [
+      observerOf(cursor, [observation("shared", { title: "Cursor: luke" })]),
+      observerOf(cursor, [observation("shared", { title: "Cursor: workspace" })]),
+    ],
+  });
+
+  const observations = await adapter.observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.title, "Cursor: luke");
+  // The registry rejects a snapshot that names one session twice, so this is
+  // what keeps a provider observed in two places from failing its own refresh.
+  const registry = new InMemorySessionRegistry();
+  assert.equal((await registry.refresh(adapter)).sessions.length, 1);
+});
+
+test("fails the pass when one observer fails, rather than retiring its sessions", async () => {
+  const registry = new InMemorySessionRegistry();
+  const healthy = observerOf(cursor, [observation("local-session")]);
+  await registry.refresh(
+    new CompositeSessionProviderAdapter({ provider: cursor, adapters: [healthy] }),
+  );
+
+  const adapter = new CompositeSessionProviderAdapter({
+    provider: cursor,
+    adapters: [healthy, failingObserver(cursor)],
+  });
+
+  await assert.rejects(() => adapter.observe(), /unreadable/);
+  await assert.rejects(() => registry.refresh(adapter), /unreadable/);
+  assert.deepEqual(
+    registry.list().map((session) => session.providerSessionId),
+    ["local-session"],
+  );
+});
+
+test("refuses to observe one provider's sessions under another's identity", () => {
+  assert.throws(
+    () =>
+      new CompositeSessionProviderAdapter({
+        provider: cursor,
+        adapters: [observerOf(codex, [])],
+      }),
+    /cursor cannot observe codex/,
+  );
+});

@@ -1,5 +1,3 @@
-import type { Dirent, Stats } from "node:fs";
-import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -12,12 +10,25 @@ import {
   type SessionProvider,
   type SessionProviderAdapter,
 } from "@sidecar/core";
+import {
+  discoverSessionFiles,
+  LOCAL_ADAPTER_DEFAULTS,
+  nonNegativeNumber,
+  positiveInteger,
+  readDirectory,
+  readHead,
+  readTail,
+  recordFromJsonLine,
+  type SessionFileCandidate,
+  statDirectoryEntry,
+  tailRecords,
+  workspaceLabel,
+} from "./local-session-adapter";
 
 const CLAUDE_CODE_PROVIDER_ID = PROVIDER_ID.CLAUDE_CODE;
 const CLAUDE_CODE_PROVIDER_NAME = "Claude Code";
 const CLAUDE_PROJECTS_DIRECTORY = "projects";
 const CLAUDE_SESSION_FILE_EXTENSION = ".jsonl";
-const UNKNOWN_WORKSPACE_LABEL = "workspace";
 
 const CLAUDE_ENVIRONMENT = {
   CONFIG_DIRECTORY: "CLAUDE_CONFIG_DIR",
@@ -71,9 +82,6 @@ const CLAUDE_TOOL_INPUT_KEY = ["description", "file_path", "pattern", "command",
 const CLAUDE_ADAPTER_DEFAULTS = {
   MAXIMUM_PROJECT_DIRECTORIES: 200,
   MAXIMUM_SESSION_FILES: 40,
-  MAXIMUM_SESSION_AGE_MS: 24 * 60 * 60 * 1000,
-  ACTIVE_SESSION_FRESHNESS_MS: 15 * 60 * 1000,
-  READ_TAIL_BYTES: 64 * 1024,
   /**
    * Claude Code writes its generated title early and then only when the subject
    * changes, so a long session's title sits far behind the tail. Only a file
@@ -99,12 +107,6 @@ export interface ClaudeCodeAdapterOptions {
   readHeadBytes?: number;
 }
 
-interface SessionFileCandidate {
-  filePath: string;
-  providerSessionId: string;
-  mtimeMs: number;
-}
-
 interface ParsedClaudeSessionTail {
   activity?: string;
   aiTitle?: string;
@@ -120,74 +122,20 @@ interface ParsedClaudeSessionTail {
   usedTool?: boolean;
 }
 
-interface DirectoryEntry {
-  directoryPath: string;
-  name: string;
-  stats: Stats;
-}
-
-function positiveInteger(value: number | undefined, fallback: number): number {
-  if (value === undefined || !Number.isFinite(value) || value <= 0) return fallback;
-  return Math.floor(value);
-}
-
-function nonNegativeNumber(value: number | undefined, fallback: number): number {
-  if (value === undefined || !Number.isFinite(value) || value < 0) return fallback;
-  return value;
-}
-
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error;
-}
-
-function canIgnoreFilesystemError(error: unknown): boolean {
-  return (
-    isNodeError(error) &&
-    (error.code === "ENOENT" ||
-      error.code === "ENOTDIR" ||
-      error.code === "EACCES" ||
-      error.code === "EPERM")
-  );
-}
-
-async function readDirectory(directoryPath: string): Promise<Dirent[]> {
-  try {
-    return await fs.readdir(directoryPath, { withFileTypes: true });
-  } catch (error) {
-    if (canIgnoreFilesystemError(error)) return [];
-    throw error;
-  }
-}
-
-async function statDirectoryEntry(
-  directoryPath: string,
-  entry: Dirent,
-): Promise<DirectoryEntry | undefined> {
-  const entryPath = path.join(directoryPath, entry.name);
-  try {
-    const stats = await fs.lstat(entryPath);
-    return { directoryPath: entryPath, name: entry.name, stats };
-  } catch (error) {
-    if (canIgnoreFilesystemError(error)) return undefined;
-    throw error;
-  }
-}
-
 function sessionIdFromFileName(fileName: string): string | undefined {
   if (!fileName.endsWith(CLAUDE_SESSION_FILE_EXTENSION)) return undefined;
   const providerSessionId = fileName.slice(0, -CLAUDE_SESSION_FILE_EXTENSION.length).trim();
   return providerSessionId || undefined;
 }
 
-async function sessionFilesInProject(
-  projectDirectory: DirectoryEntry,
-): Promise<SessionFileCandidate[]> {
-  const entries = await readDirectory(projectDirectory.directoryPath);
+/** Claude Code keeps a session's transcript directly in its project directory. */
+async function sessionFilesIn(projectDirectory: string): Promise<SessionFileCandidate[]> {
+  const entries = await readDirectory(projectDirectory);
   const candidates = await Promise.all(
     entries.map(async (entry) => {
       const providerSessionId = sessionIdFromFileName(entry.name);
       if (!providerSessionId) return undefined;
-      const candidate = await statDirectoryEntry(projectDirectory.directoryPath, entry);
+      const candidate = await statDirectoryEntry(projectDirectory, entry.name);
       if (!candidate?.stats.isFile()) return undefined;
       return {
         filePath: candidate.directoryPath,
@@ -199,78 +147,6 @@ async function sessionFilesInProject(
   return candidates.filter(
     (candidate): candidate is SessionFileCandidate => candidate !== undefined,
   );
-}
-
-async function discoverSessionFiles(
-  projectsDirectory: string,
-  maximumProjectDirectories: number,
-  maximumSessionFiles: number,
-): Promise<SessionFileCandidate[]> {
-  const entries = await readDirectory(projectsDirectory);
-  const projectDirectories = (
-    await Promise.all(entries.map((entry) => statDirectoryEntry(projectsDirectory, entry)))
-  )
-    .filter((entry): entry is DirectoryEntry => entry?.stats.isDirectory() === true)
-    .sort((first, second) => second.stats.mtimeMs - first.stats.mtimeMs)
-    .slice(0, maximumProjectDirectories);
-
-  const files = (await Promise.all(projectDirectories.map(sessionFilesInProject))).flat();
-  return files
-    .sort((first, second) => second.mtimeMs - first.mtimeMs)
-    .slice(0, maximumSessionFiles);
-}
-
-async function readTail(filePath: string, maximumBytes: number): Promise<string> {
-  let handle: fs.FileHandle | undefined;
-  try {
-    handle = await fs.open(filePath, "r");
-    const stats = await handle.stat();
-    if (!stats.isFile() || stats.size <= 0) return "";
-    const length = Math.min(stats.size, maximumBytes);
-    const buffer = Buffer.alloc(length);
-    await handle.read(buffer, 0, length, stats.size - length);
-    return buffer.toString("utf8");
-  } catch (error) {
-    if (canIgnoreFilesystemError(error)) return "";
-    throw error;
-  } finally {
-    await handle?.close();
-  }
-}
-
-async function readHead(filePath: string, maximumBytes: number): Promise<string> {
-  let handle: fs.FileHandle | undefined;
-  try {
-    handle = await fs.open(filePath, "r");
-    const stats = await handle.stat();
-    if (!stats.isFile() || stats.size <= 0) return "";
-    const length = Math.min(stats.size, maximumBytes);
-    const buffer = Buffer.alloc(length);
-    await handle.read(buffer, 0, length, 0);
-    return buffer.toString("utf8");
-  } catch (error) {
-    if (canIgnoreFilesystemError(error)) return "";
-    throw error;
-  } finally {
-    await handle?.close();
-  }
-}
-
-function tailLines(tail: string): string[] {
-  const lines = tail.split(/\r?\n/).filter((line) => line.trim().length > 0);
-  if (!tail.startsWith("{")) lines.shift();
-  return lines;
-}
-
-function recordFromJsonLine(line: string): Record<string, unknown> | undefined {
-  try {
-    const parsed = JSON.parse(line) as unknown;
-    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 function eventTypeFromRecord(record: Record<string, unknown>): ClaudeEventType | undefined {
@@ -459,10 +335,7 @@ function readClaudeRecord(record: Record<string, unknown>, parsed: ParsedClaudeS
 
 function parseClaudeSessionTail(tail: string): ParsedClaudeSessionTail {
   const parsed: ParsedClaudeSessionTail = {};
-  for (const line of tailLines(tail)) {
-    const record = recordFromJsonLine(line);
-    if (record) readClaudeRecord(record, parsed);
-  }
+  for (const record of tailRecords(tail)) readClaudeRecord(record, parsed);
   return parsed;
 }
 
@@ -502,12 +375,6 @@ function statusFromTail(
     return turnEnded(parsed) ? SESSION_STATUS.WAITING : SESSION_STATUS.WORKING;
   }
   return SESSION_STATUS.WORKING;
-}
-
-function workspaceLabel(cwd: string | undefined): string {
-  if (!cwd) return UNKNOWN_WORKSPACE_LABEL;
-  const label = path.basename(cwd.trim());
-  return label || UNKNOWN_WORKSPACE_LABEL;
 }
 
 /**
@@ -578,15 +445,15 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
     );
     this.#maximumSessionAgeMs = nonNegativeNumber(
       options.maximumSessionAgeMs,
-      CLAUDE_ADAPTER_DEFAULTS.MAXIMUM_SESSION_AGE_MS,
+      LOCAL_ADAPTER_DEFAULTS.MAXIMUM_SESSION_AGE_MS,
     );
     this.#activeSessionFreshnessMs = nonNegativeNumber(
       options.activeSessionFreshnessMs,
-      CLAUDE_ADAPTER_DEFAULTS.ACTIVE_SESSION_FRESHNESS_MS,
+      LOCAL_ADAPTER_DEFAULTS.ACTIVE_SESSION_FRESHNESS_MS,
     );
     this.#readTailBytes = positiveInteger(
       options.readTailBytes,
-      CLAUDE_ADAPTER_DEFAULTS.READ_TAIL_BYTES,
+      LOCAL_ADAPTER_DEFAULTS.READ_TAIL_BYTES,
     );
     this.#readHeadBytes = positiveInteger(
       options.readHeadBytes,
@@ -596,11 +463,12 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
 
   async observe(): Promise<readonly ProviderSessionObservation[]> {
     const now = this.#now();
-    const candidates = await discoverSessionFiles(
-      path.join(this.#claudeHome, CLAUDE_PROJECTS_DIRECTORY),
-      this.#maximumProjectDirectories,
-      this.#maximumSessionFiles,
-    );
+    const candidates = await discoverSessionFiles({
+      projectsDirectory: path.join(this.#claudeHome, CLAUDE_PROJECTS_DIRECTORY),
+      maximumProjectDirectories: this.#maximumProjectDirectories,
+      maximumSessionFiles: this.#maximumSessionFiles,
+      sessionFilesIn,
+    });
     const observations = new Map<string, ProviderSessionObservation>();
 
     for (const candidate of candidates) {

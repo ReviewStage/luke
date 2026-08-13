@@ -15,20 +15,23 @@ Download published builds from [GitHub Releases](https://github.com/ReviewStage/
 - Claude Code — reads local session state; no provider credential required
 - Codex — reads local session state; no provider credential required
 - Conductor — reads cloud session metadata after you supply a Conductor API key
-- Cursor — reads cloud agent metadata after you supply a Cursor API key
+- Cursor — reads local session state for the agents running on this machine,
+  and cloud agent metadata after you supply a Cursor API key
 - Devin — reads cloud session metadata after you supply a Devin personal access
   token
 
-Conductor, Cursor, and Devin remain silent until their own credential is saved
-in Luke's Settings or supplied through `CONDUCTOR_API_KEY`,
-`CONDUCTOR_API_TOKEN`, `CURSOR_API_KEY`, or `DEVIN_API_KEY`. Devin is the one
-that asks for a particular credential: Luke reads its v3 API, so it takes a
-personal access token (`cog_…`, created under **Devin API · PATs**) and refuses
-the deprecated `apk_` keys of v1 and v2. A token that belongs to a service user
-rather than to a person is refused too — Devin lists an organization's sessions,
-and Luke reports only the sessions belonging to whoever the token authenticates
-as. Every provider integration is read-only. None requires hooks,
-plugins, wrappers, or changes to how a session is launched.
+Cursor is the one provider Luke watches in two places, and both halves arrive as
+Cursor sessions: the ones on this machine need no credential, and its cloud
+agents need a key. Conductor, Cursor's cloud half, and Devin remain silent until
+their own credential is saved in Luke's Settings or supplied through
+`CONDUCTOR_API_KEY`, `CONDUCTOR_API_TOKEN`, `CURSOR_API_KEY`, or `DEVIN_API_KEY`.
+Devin is the one that asks for a particular credential: Luke reads its v3 API, so
+it takes a personal access token (`cog_…`, created under **Devin API · PATs**)
+and refuses the deprecated `apk_` keys of v1 and v2. A token that belongs to a
+service user rather than to a person is refused too — Devin lists an
+organization's sessions, and Luke reports only the sessions belonging to whoever
+the token authenticates as. Every provider integration is read-only. None
+requires hooks, plugins, wrappers, or changes to how a session is launched.
 
 ## What works in v0.1
 
