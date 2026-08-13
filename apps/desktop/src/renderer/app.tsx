@@ -294,6 +294,11 @@ export function App(): React.JSX.Element {
       if (presentationRef.current === PANEL_PRESENTATION.PEEK) {
         applyPresentation(PANEL_PRESENTATION.CAPSULE);
       } else if (presentationRef.current === PANEL_PRESENTATION.PANEL) {
+        // Read again rather than trusting the answer from when this was
+        // scheduled: an entry can begin inside the delay — pressing Connect and
+        // reaching for the keyboard does exactly that — and a close decided
+        // before it began would discard it.
+        if (credentialEditing.current) return;
         void changeMode(false);
       }
     }, LEAVE_DELAY_MS);
