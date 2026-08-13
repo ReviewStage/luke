@@ -93,8 +93,10 @@ access is granted. Opening the microphone is the talk key's job, so there is
 nothing there to switch on.
 
 Luke's face is the interface: it plays its listening motion while you speak and
-its talking motion while it answers, so the capsule says whose turn it is. The
-meter beside it draws whichever voice is live. There is no transcript.
+its talking motion while it answers, so the capsule says whose turn it is. Colour
+says the same thing again — the face and the meter beside it are green while you
+have the turn and blue while Luke has it — so a glance is enough even with the
+peek closed. There is no transcript.
 
 ## Privacy
 

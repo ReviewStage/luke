@@ -5,8 +5,13 @@
   background: transparent;
 
   --state-working: #5cd5ff;
-  /* Luke's own voice, so a glance says who is talking. */
-  --voice-luke: #7fe0ac;
+  /* Whose voice is live, so a glance says who is talking. Your turn is green,
+     which is nowhere else on the surface and so belongs to you alone; Luke
+     answers in the blue the rest of the surface already uses for something
+     live and in progress, which is what a reply is. Both the meter and the face
+     read from here, so the two can never disagree about who has the turn. */
+  --voice-developer: #7fe0ac;
+  --voice-luke: var(--state-working);
   --state-attention: #ffa049;
   --state-complete: #6fdca4;
   --state-idle: rgba(255, 255, 255, 0.44);
@@ -722,10 +727,16 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 
 /* The two motions the microphone owns. The capsule has no room for the meter
    beside the face, so Luke takes the meter's own colour while it is open: the
-   state reads at every size, and the bars stay with the peek. */
-.luke-face[data-motion="talking"],
+   state reads at every size, and the bars stay with the peek. Which colour is
+   which is the same answer in both places — the face is green while it attends
+   to you and blue while it is the one talking, so the capsule alone says whose
+   turn it is even with the peek closed. */
 .luke-face[data-motion="listening"] {
-  color: var(--state-working);
+  color: var(--voice-developer);
+}
+
+.luke-face[data-motion="talking"] {
+  color: var(--voice-luke);
 }
 
 /* Everything the artwork moves. Which keyframes each part plays, at what

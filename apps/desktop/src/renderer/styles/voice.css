@@ -1,14 +1,12 @@
 /* The speech meters, and the key that starts them. */
 
-/* Two voices, two colours. The developer keeps the working blue the rest of the
-   surface already uses for live activity; Luke answers in its own green, so a
-   glance at the capsule says who is talking without reading anything. */
+/* Two voices, two colours, both named where the face reads them from too. */
 .waveform[data-voice="developer"] .waveform-bar {
-  background: var(--state-working);
+  background: var(--voice-developer);
 }
 
 .waveform[data-voice="luke"] .waveform-bar {
-  background: var(--voice-luke, #68d39a);
+  background: var(--voice-luke);
 }
 
 /* Stated, not offered: the key cannot be changed yet, so it is set as text
