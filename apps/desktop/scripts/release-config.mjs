@@ -85,6 +85,17 @@ export function parseHdiutilAttachPlist(xml) {
   throw new Error(`hdiutil did not report a mounted volume:\n${xml}`);
 }
 
+export async function withMountedDmg({ attach, detach, use }) {
+  const attachOutput = attach();
+  let mountPoint = DMG_MOUNT_POINT;
+  try {
+    ({ mountPoint } = parseHdiutilAttachPlist(attachOutput));
+    return await use(mountPoint);
+  } finally {
+    detach(mountPoint);
+  }
+}
+
 export function hdiutilDetachArguments(mountPoint, { force = false } = {}) {
   return ["detach", mountPoint, ...(force ? ["-force"] : [])];
 }

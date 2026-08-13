@@ -19,13 +19,13 @@ import {
   hdiutilDetachArguments,
   notaryLogArguments,
   notarySubmitArguments,
-  parseHdiutilAttachPlist,
   releaseArtifactDirectory,
   releaseDmgFileName,
   releaseSignatureMatchesIdentity,
   resolveReleaseSigning,
   stapleArguments,
   tiffutilHiDpiArguments,
+  withMountedDmg,
 } from "./release-config.mjs";
 
 if (process.platform !== "darwin") {
@@ -166,24 +166,25 @@ try {
       throw new Error(`${DMG_MOUNT_POINT} is already mounted. Eject it and re-run.`);
     }
 
-    const attachOutput = execFileSync("hdiutil", hdiutilAttachArguments(imagePath), {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "inherit"],
+    await withMountedDmg({
+      attach: () =>
+        execFileSync("hdiutil", hdiutilAttachArguments(imagePath), {
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "inherit"],
+        }),
+      detach: detachMountedImage,
+      use: async (mountPoint) => {
+        if (mountPoint !== DMG_MOUNT_POINT) {
+          throw new Error(
+            `Expected the DMG at ${DMG_MOUNT_POINT}, but hdiutil mounted ${mountPoint}`,
+          );
+        }
+        const storePath = path.join(mountPoint, ".DS_Store");
+        fs.rmSync(storePath, { force: true });
+        await writeDmgStore(storePath, dmgStoreLayout(mountPoint));
+        execFileSync("sync", [], { stdio: "inherit" });
+      },
     });
-    const { mountPoint } = parseHdiutilAttachPlist(attachOutput);
-    try {
-      if (mountPoint !== DMG_MOUNT_POINT) {
-        throw new Error(
-          `Expected the DMG at ${DMG_MOUNT_POINT}, but hdiutil mounted ${mountPoint}`,
-        );
-      }
-      const storePath = path.join(mountPoint, ".DS_Store");
-      fs.rmSync(storePath, { force: true });
-      await writeDmgStore(storePath, dmgStoreLayout(mountPoint));
-      execFileSync("sync", [], { stdio: "inherit" });
-    } finally {
-      detachMountedImage(mountPoint);
-    }
 
     execFileSync("hdiutil", hdiutilConvertArguments({ imagePath, dmgPath }), {
       stdio: "inherit",

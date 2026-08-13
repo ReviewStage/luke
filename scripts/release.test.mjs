@@ -24,6 +24,7 @@ import {
   resolveReleaseSigning,
   stapleArguments,
   tiffutilHiDpiArguments,
+  withMountedDmg,
 } from "../apps/desktop/scripts/release-config.mjs";
 import { DMG_WINDOW } from "../design/dmg-window.mjs";
 
@@ -203,6 +204,25 @@ test("release DMG attach parsing decodes each XML entity once", () => {
     mountPoint: "/Volumes/Luke & Test",
     device: "/dev/disk&lt;5",
   });
+});
+
+test("release DMG attach cleanup runs when plist parsing fails", async () => {
+  const detachedMountPoints = [];
+  let usedMountPoint = false;
+
+  await assert.rejects(
+    withMountedDmg({
+      attach: () => "<plist><dict></dict></plist>",
+      detach: (mountPoint) => detachedMountPoints.push(mountPoint),
+      use: () => {
+        usedMountPoint = true;
+      },
+    }),
+    /hdiutil did not report a mounted volume/,
+  );
+
+  assert.deepEqual(detachedMountPoints, [DMG_MOUNT_POINT]);
+  assert.equal(usedMountPoint, false);
 });
 
 test("release DMG store layout is branded and bounded", () => {
