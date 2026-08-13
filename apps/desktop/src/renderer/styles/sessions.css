@@ -504,17 +504,24 @@ html[data-keyboard="true"] button.session-row:focus-visible {
   text-align: left;
 }
 
-/* The lift a plain row takes under the pointer, carried by the whole row here
-   too: the press target is only the first line, but a highlight that stopped
-   at the composer would read as the row being cut in half. The parent is what
-   holds the border and the background, so the parent is what answers — and
-   only for a pointer on the part that opens, which is what the lift means. */
-.session-row[data-actions]:has(> button.row-main:hover) {
+/* The whole openable row is the press target now, controls excepted, so the
+   whole row takes the hand and the lift. The one place neither belongs is a
+   pointer that is on a control: a press there is about the message or the
+   action, and a lift under it would promise a window it will not open. */
+.session-row[data-actions][data-openable] {
+  cursor: pointer;
+}
+
+.session-row[data-actions][data-openable]:hover:not(
+  :has(.row-compose:hover, .row-action:hover, .row-stop:hover)
+) {
   border-color: rgba(255, 255, 255, 0.16);
   background: var(--raised);
 }
 
-.session-row[data-actions][data-state="attention"]:has(> button.row-main:hover) {
+.session-row[data-actions][data-openable][data-state="attention"]:hover:not(
+  :has(.row-compose:hover, .row-action:hover, .row-stop:hover)
+) {
   border-color: color-mix(in srgb, var(--accent) 46%, transparent);
   background: color-mix(in srgb, var(--accent) 15%, transparent);
 }
@@ -606,6 +613,9 @@ html[data-keyboard="true"] button.row-main:focus-visible {
   border: 1px solid var(--hairline);
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.4);
+  /* The whole pill is the field — a press anywhere in it lands the caret —
+     so the whole pill says so, against the hand the row around it shows. */
+  cursor: text;
   transition:
     border-color var(--duration-hover) ease,
     background-color var(--duration-hover) ease;

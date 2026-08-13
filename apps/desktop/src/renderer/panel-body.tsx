@@ -70,6 +70,12 @@ function RowActionButton({
   onRun: (actionId: string) => void;
 }): React.JSX.Element {
   const held = pendingAction !== undefined;
+  // The whole row opens the session; a press on a control is a press on the
+  // control alone, so it must not travel up and open a window as well.
+  const run = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    onRun(action.id);
+  };
   if (action.kind === SESSION_CONTROL_KIND.STOP) {
     return (
       <button
@@ -78,14 +84,14 @@ function RowActionButton({
         aria-label={action.label}
         title={action.label}
         disabled={held}
-        onClick={() => onRun(action.id)}
+        onClick={run}
       >
         <StopIcon />
       </button>
     );
   }
   return (
-    <button type="button" className="row-action" disabled={held} onClick={() => onRun(action.id)}>
+    <button type="button" className="row-action" disabled={held} onClick={run}>
       {pendingAction === action.id ? "Asking…" : action.label}
     </button>
   );
@@ -110,6 +116,7 @@ function SessionRowActions({
   const [sending, setSending] = useState(false);
   const [draft, setDraft] = useState("");
   const [feedback, setFeedback] = useState<string | undefined>(undefined);
+  const composeField = useRef<HTMLInputElement | null>(null);
   /** The action in flight, which is the one drawn asking and the reason all are held. */
   const [pendingAction, setPendingAction] = useState<string | undefined>(undefined);
   /**
@@ -168,14 +175,25 @@ function SessionRowActions({
   return (
     <div className="row-actions">
       {session.canMessage ? (
+        // biome-ignore lint/a11y/noStaticElementInteractions: the click is swallowed, not handled — the pill is where the row's open-on-press must not reach.
+        // biome-ignore lint/a11y/useKeyWithClickEvents: pointer-only by design — the keyboard already lands in the field by tabbing, and the click handler only stops the row's open and places the caret.
         <form
           className="row-compose"
           onSubmit={(event) => {
             event.preventDefault();
             void send();
           }}
+          // A press anywhere on the pill — the field, its padding, the send
+          // button — is about the message, so none of it may travel up and
+          // open the session mid-thought. And a pill pressed anywhere is the
+          // field being asked for, so the caret lands rather than nothing.
+          onClick={(event) => {
+            event.stopPropagation();
+            composeField.current?.focus();
+          }}
         >
           <input
+            ref={composeField}
             className="row-compose-input"
             aria-label={`Message ${session.provider}`}
             placeholder={COMPOSE_PLACEHOLDER}
@@ -332,14 +350,21 @@ function SessionRow({
   }
 
   return (
-    <article {...shared} data-actions="true">
+    // The row is the press target, controls and all: the gaps beside the
+    // composer are still the session, and a press there must not be a press on
+    // nothing. The first line stays a real button — it is what the keyboard
+    // and a reader press, and its click bubbles here rather than opening twice
+    // — while every control below swallows its own click, so the only presses
+    // that open are the ones that meant the session itself.
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the row's keyboard path is the first line's real button, whose activation bubbles to this handler.
+    // biome-ignore lint/a11y/noStaticElementInteractions: same press target as the button it wraps, widened to the row's own surface.
+    <article
+      {...shared}
+      data-actions="true"
+      {...(session.openable ? { "data-openable": "true", onClick: () => onOpen(session) } : {})}
+    >
       {session.openable ? (
-        <button
-          type="button"
-          className="row-main"
-          title={`Open in ${session.provider}`}
-          onClick={() => onOpen(session)}
-        >
+        <button type="button" className="row-main" title={`Open in ${session.provider}`}>
           {content}
         </button>
       ) : (
