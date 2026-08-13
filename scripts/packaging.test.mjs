@@ -5,6 +5,8 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   createPackagerOptions,
+  ICONSET_SOURCES,
+  iconutilArguments,
   LICENSE_RESOURCE_NAME,
   MACOS_DEPLOYMENT_TARGET,
   MICROPHONE_USAGE_DESCRIPTION,
@@ -26,12 +28,14 @@ const entitlementsPath = path.join(
   "macos",
   "entitlements.plist",
 );
+const iconPath = "/repo/apps/desktop/.build/Luke.icns";
 
 function packagerOptions(signing = resolveSigningMode({})) {
   return createPackagerOptions({
     appRoot: "/repo/apps/desktop",
     outputRoot: "/repo/apps/desktop/out",
     helperPath: "/repo/apps/desktop/.build/native/mac-screen-geometry",
+    iconPath,
     licensePath: `/repo/apps/desktop/.build/${LICENSE_RESOURCE_NAME}`,
     entitlementsPath,
     signing,
@@ -126,6 +130,59 @@ test("packaging includes the Luke license and approved microphone description", 
     "Luke uses microphone input to display live audio activity. Audio is processed locally and is not recorded or uploaded.",
   );
   assert.equal(options.extendInfo.NSMicrophoneUsageDescription, MICROPHONE_USAGE_DESCRIPTION);
+});
+
+test("packaging uses the generated Luke application icon", () => {
+  assert.equal(packagerOptions().icon, iconPath);
+});
+
+test("the iconset maps every required macOS size to a consistent source PNG", () => {
+  assert.deepEqual(Object.keys(ICONSET_SOURCES), [
+    "icon_16x16.png",
+    "icon_16x16@2x.png",
+    "icon_32x32.png",
+    "icon_32x32@2x.png",
+    "icon_128x128.png",
+    "icon_128x128@2x.png",
+    "icon_256x256.png",
+    "icon_256x256@2x.png",
+    "icon_512x512.png",
+    "icon_512x512@2x.png",
+  ]);
+  assert.deepEqual(ICONSET_SOURCES, {
+    "icon_16x16.png": "luke-icon-16.png",
+    "icon_16x16@2x.png": "luke-icon-32.png",
+    "icon_32x32.png": "luke-icon-32.png",
+    "icon_32x32@2x.png": "luke-icon-64.png",
+    "icon_128x128.png": "luke-icon-128.png",
+    "icon_128x128@2x.png": "luke-icon-256.png",
+    "icon_256x256.png": "luke-icon-256.png",
+    "icon_256x256@2x.png": "luke-icon-512.png",
+    "icon_512x512.png": "luke-icon-512.png",
+    "icon_512x512@2x.png": "luke-icon-1024.png",
+  });
+});
+
+test("every iconset source PNG is committed", () => {
+  const brandIconDirectory = path.join(repoRoot, "design", "brand", "icon");
+
+  for (const sourceName of new Set(Object.values(ICONSET_SOURCES))) {
+    assert.equal(
+      fs.existsSync(path.join(brandIconDirectory, sourceName)),
+      true,
+      `${sourceName} is missing`,
+    );
+  }
+});
+
+test("iconutil receives explicit input and output paths", () => {
+  assert.deepEqual(iconutilArguments("/tmp/luke.iconset", "/tmp/Luke.icns"), [
+    "-c",
+    "icns",
+    "/tmp/luke.iconset",
+    "-o",
+    "/tmp/Luke.icns",
+  ]);
 });
 
 test("signing configuration separates ad-hoc and Developer ID modes", () => {

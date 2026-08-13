@@ -71,7 +71,7 @@ keep the full 240×240 canvas — they need headroom to move.
 | `luke-wordmark-{light,dark}.svg` | Face-first caps LUKE wordmark |
 | `luke-wordmark-talking-{light,dark}.svg` | Animated hero: the face talks mid-word |
 | `icon/luke-icon.svg` + `luke-icon-{16…1024}.png` | App icon (squircle tile) |
-| `menubar/luke-menubar-template.svg` + `lukeTemplate{,@2x}.png` | macOS menu-bar template image (pure black + alpha; macOS recolors it). To build an `.icns`: put the icon PNGs in a `.iconset` folder and run `iconutil -c icns` on macOS |
+| `menubar/luke-menubar-template.svg` + `lukeTemplate{,@2x}.png` | macOS menu-bar template image (pure black + alpha; macOS recolors it). Packaging builds `Luke.icns` from the icon PNGs automatically in `apps/desktop/scripts/package.mjs`; no `.icns` is committed |
 | `motion/luke-<state>-{light,dark}.svg` | Animated state marks (below) |
 
 ## Motion states
