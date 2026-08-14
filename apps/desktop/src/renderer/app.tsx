@@ -1103,6 +1103,10 @@ export function App(): React.JSX.Element {
       if (eventName === "ask:focus") summonAsk();
     });
     const removeDisplay = window.sidecar.onDisplayChanged(setDisplay);
+    // Another window's settings change: this window's rows and guide redraw
+    // from the same snapshot its reply carried, so no window describes a
+    // state the store no longer holds.
+    const removeSettings = window.sidecar.onSettingsChanged(setSettings);
     const removeSessions = window.sidecar.onSessionsChanged(setSessions);
     // Straight to the conversation rather than through state: no panel
     // surface draws the issue roster, so a re-render would be work for nobody.
@@ -1115,6 +1119,7 @@ export function App(): React.JSX.Element {
       cancelHoverTransition();
       removeLifecycle();
       removeDisplay();
+      removeSettings();
       removeSessions();
       removeIssues();
       void stopMicrophone();

@@ -71,6 +71,7 @@ import { OpenCodeSessionAdapter } from "./opencode-adapter";
 import { SettingsStore } from "./settings-store";
 import {
   type AppBootstrap,
+  type AppSettings,
   channels,
   type DisplayDiagnostic,
   type MicrophoneStatus,
@@ -530,6 +531,20 @@ function positionPanels(): void {
 }
 
 /**
+ * Hands a fresh settings snapshot to every window but the one that asked —
+ * that one already holds it in its reply, and must redraw from the reply
+ * rather than race a broadcast. One window's change would otherwise leave
+ * every other window's rows and guide describing a state the store no longer
+ * holds.
+ */
+function broadcastSettings(settings: AppSettings, except: Electron.WebContents): void {
+  for (const window of panelWindows.values()) {
+    if (window.isDestroyed() || window.webContents === except) continue;
+    window.webContents.send(channels.settingsChanged, settings);
+  }
+}
+
+/**
  * Makes the windows match the chosen displays: one raised on every chosen
  * display that is connected, none anywhere else. Raising before razing is
  * load-bearing — a swap from one display to another must never pass through
@@ -548,6 +563,10 @@ function reconcilePanels(): void {
     panelWindows.delete(displayId);
     windowModes.delete(displayId);
     clearCollapseTimer(displayId);
+    // A window taken down takes its exchange report with it, so a host that
+    // goes mid-conversation releases the duck rather than pinning it forever.
+    voiceExchanges.delete(displayId);
+    applyVoiceExchanges();
     window.destroy();
   }
   positionPanels();
@@ -584,13 +603,37 @@ function focusPanelWindow(window: BrowserWindow | undefined): void {
   window.focus();
 }
 
-/** The expanded panel most recently owed the keyboard, wherever it stands. */
-function focusExpandedPanel(): void {
+/**
+ * The expanded panel owed the keyboard: the one that asked, when the asker is
+ * known and still expanded, else whichever panel stands expanded. With two
+ * panels open, focus must return to the one the user was typing in rather
+ * than to whichever the map happens to list first.
+ */
+function focusExpandedPanel(preferredDisplayId?: number): void {
+  if (preferredDisplayId !== undefined && windowModeFor(preferredDisplayId) === "expanded") {
+    const preferred = panelWindows.get(preferredDisplayId);
+    if (preferred && !preferred.isDestroyed()) {
+      focusPanelWindow(preferred);
+      return;
+    }
+  }
   for (const [displayId, window] of panelWindows) {
     if (windowModeFor(displayId) !== "expanded") continue;
     focusPanelWindow(window);
     return;
   }
+}
+
+/**
+ * Which windows hold a live spoken exchange, and the single answer the media
+ * duck is given: live anywhere is live. Only the voice host ever actually
+ * opens one, but every window reports, so the union is what keeps a
+ * bystander's idle from ending the host's exchange.
+ */
+const voiceExchanges = new Map<number, boolean>();
+
+function applyVoiceExchanges(): void {
+  mediaDuck.setExchangeActive([...voiceExchanges.values()].some(Boolean));
 }
 
 /**
@@ -817,6 +860,7 @@ function registerIpc(): void {
         if (!result.reason && providerId === CREDENTIAL_PROVIDER_ID.LINEAR) {
           void refreshTrackedIssues();
         }
+        broadcastSettings(result.settings, event.sender);
         return result;
       } catch {
         // A filesystem failure is not something the user can act on, so it is
@@ -839,6 +883,7 @@ function registerIpc(): void {
       try {
         const result = await settingsStore.setShowInMenuBar(show);
         applyMenuBarVisibility(result.settings.showInMenuBar);
+        broadcastSettings(result.settings, event.sender);
         return result;
       } catch {
         // A filesystem failure is not something the user can act on, so it is
@@ -861,7 +906,8 @@ function registerIpc(): void {
       if (typeof show !== "boolean") throw new Error("Invalid Dock request");
       try {
         const result = await settingsStore.setShowInDock(show);
-        applyDockVisibility(result.settings.showInDock);
+        applyDockVisibility(result.settings.showInDock, displayIdFor(event.sender));
+        broadcastSettings(result.settings, event.sender);
         return result;
       } catch {
         // A filesystem failure is not something the user can act on, so it is
@@ -886,6 +932,7 @@ function registerIpc(): void {
         const result = await settingsStore.setShowOnAllDisplays(show);
         showOnAllDisplays = result.settings.showOnAllDisplays;
         reconcilePanels();
+        broadcastSettings(result.settings, event.sender);
         return result;
       } catch {
         // A filesystem failure is not something the user can act on, so it is
@@ -909,6 +956,7 @@ function registerIpc(): void {
         const result = await settingsStore.setFormFactor(formFactor);
         panelFormFactor = result.settings.formFactor;
         positionPanels();
+        broadcastSettings(result.settings, event.sender);
         return result;
       } catch {
         // A filesystem failure is not something the user can act on, so it is
@@ -934,6 +982,7 @@ function registerIpc(): void {
         // The next credential is minted for the new voice; a conversation
         // already open keeps the one it answered with.
         if (!result.reason) realtimeCredentials?.setVoice(voice);
+        broadcastSettings(result.settings, event.sender);
         return result;
       } catch {
         return {
@@ -955,6 +1004,7 @@ function registerIpc(): void {
         // The next credential is minted for the new pace; a conversation
         // already open keeps the one it answered at.
         if (!result.reason) realtimeCredentials?.setSpeed(speed);
+        broadcastSettings(result.settings, event.sender);
         return result;
       } catch {
         return {
@@ -973,7 +1023,9 @@ function registerIpc(): void {
       if (!trustedSender(event)) throw new Error("Untrusted renderer");
       if (typeof enabled !== "boolean") throw new Error("Invalid caption request");
       try {
-        return await settingsStore.setVoiceCaptions(enabled);
+        const result = await settingsStore.setVoiceCaptions(enabled);
+        broadcastSettings(result.settings, event.sender);
+        return result;
       } catch {
         // A filesystem failure is not something the user can act on, so it is
         // reported as one line rather than as a raw system error.
@@ -1013,6 +1065,7 @@ function registerIpc(): void {
           // finished and the helper's own registration line can say the truth.
           await applyVoiceHotkey();
         }
+        broadcastSettings(result.settings, event.sender);
         return result;
       } catch {
         // A filesystem failure is not something the user can act on, so it is
@@ -1035,6 +1088,7 @@ function registerIpc(): void {
       try {
         const result = await settingsStore.setDuckOtherMedia(enabled);
         mediaDuck.setEnabled(result.settings.duckOtherMedia);
+        broadcastSettings(result.settings, event.sender);
         return result;
       } catch {
         // A filesystem failure is not something the user can act on, so it is
@@ -1049,10 +1103,16 @@ function registerIpc(): void {
 
   // A statement of state, not a request: the renderer says whether a spoken
   // exchange is live, and the duck holds every other decision — the setting,
-  // the hangover after an exchange, which players are playing at all.
+  // the hangover after an exchange, which players are playing at all. Each
+  // window states only its own exchange: a bystander window reporting idle —
+  // one just raised on a plugged-in display, say — must never end the duck
+  // the speaking window opened, so the duck follows the union of them all.
   ipcMain.on(channels.setVoiceExchange, (event, active: unknown) => {
     if (!trustedSender(event) || typeof active !== "boolean") return;
-    mediaDuck.setExchangeActive(active);
+    const displayId = displayIdFor(event.sender);
+    if (displayId === undefined) return;
+    voiceExchanges.set(displayId, active);
+    applyVoiceExchanges();
   });
 
   // Where to get a key is a question the panel cannot answer itself, so it
@@ -1469,12 +1529,15 @@ function createPanel(displayId: number): void {
     if (!captureMode && !window.isDestroyed()) window.showInactive();
   });
   // The reconciler deletes before it destroys, so this answers only a window
-  // that went down some other way — and it must not leave a ghost in the map.
+  // that went down some other way — and it must not leave a ghost in the map,
+  // nor a phantom exchange holding the duck down.
   window.on("closed", () => {
     if (panelWindows.get(displayId) === window) {
       panelWindows.delete(displayId);
       windowModes.delete(displayId);
       clearCollapseTimer(displayId);
+      voiceExchanges.delete(displayId);
+      applyVoiceExchanges();
     }
   });
   void window.loadFile(path.join(__dirname, "renderer", "index.html"));
@@ -1591,15 +1654,20 @@ const DOCK_SETTLE_MS = 1100;
 /** The Dock state last asked for, and whether the applier is chasing it. */
 let dockDesired = false;
 let dockSettling = false;
+/** The display whose panel asked for the last Dock change, when one did. */
+let dockAskedFrom: number | undefined;
 
 /**
  * Puts Luke in the Dock or takes him back out, to match the setting. He ships
  * as an accessory app — the notch is his fixed point — so the icon is a second
- * door like the status item, losing nothing when it is hidden.
+ * door like the status item, losing nothing when it is hidden. `askedFrom` is
+ * the display whose panel held the switch, so the caret goes back where the
+ * press was made rather than to whichever panel stands first.
  */
-function applyDockVisibility(show: boolean): void {
+function applyDockVisibility(show: boolean, askedFrom?: number): void {
   if (process.platform !== "darwin") return;
   dockDesired = show;
+  dockAskedFrom = askedFrom;
   void settleDock();
 }
 
@@ -1619,7 +1687,7 @@ async function settleDock(): Promise<void> {
       // Either direction transforms the process type, which can deactivate
       // the app; the panel the switch was pressed in is brought back forward
       // rather than left to lose its caret.
-      focusExpandedPanel();
+      focusExpandedPanel(dockAskedFrom);
       await new Promise((resolve) => setTimeout(resolve, DOCK_SETTLE_MS));
     }
   } finally {

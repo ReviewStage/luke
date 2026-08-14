@@ -15,6 +15,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type {
   AppBootstrap,
   AppBridge,
+  AppSettings,
   DisplayDiagnostic,
   IssueActionAsk,
   MicrophoneStatus,
@@ -99,6 +100,12 @@ const bridge: AppBridge = {
       callback(display);
     ipcRenderer.on(channels.displayChanged, listener);
     return () => ipcRenderer.removeListener(channels.displayChanged, listener);
+  },
+  onSettingsChanged: (callback: (settings: AppSettings) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, settings: AppSettings) =>
+      callback(settings);
+    ipcRenderer.on(channels.settingsChanged, listener);
+    return () => ipcRenderer.removeListener(channels.settingsChanged, listener);
   },
   onSessionsChanged: (callback: (sessions: readonly NormalizedSession[]) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, sessions: readonly NormalizedSession[]) =>

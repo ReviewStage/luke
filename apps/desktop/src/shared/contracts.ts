@@ -310,6 +310,12 @@ export interface AppBridge {
   onLifecycle(callback: (eventName: string) => void): () => void;
   /** This window's own display, whenever its geometry or housing changes. */
   onDisplayChanged(callback: (display: DisplayDiagnostic) => void): () => void;
+  /**
+   * The settings as another window just changed them. A window's own change
+   * comes back in its reply; this is how every other window's rows and guide
+   * stop describing a state the store no longer holds.
+   */
+  onSettingsChanged(callback: (settings: AppSettings) => void): () => void;
   onSessionsChanged(callback: (sessions: readonly NormalizedSession[]) => void): () => void;
   /** The issue roster as last observed; `undefined` says no tracker is connected. */
   onIssuesChanged(callback: (issues: readonly TrackedIssue[] | undefined) => void): () => void;
@@ -363,6 +369,7 @@ export const channels = {
   rendererReady: "app:renderer-ready",
   lifecycle: "app:lifecycle",
   displayChanged: "app:display-changed",
+  settingsChanged: "app:settings-changed",
   sessionsChanged: "app:sessions-changed",
   issuesChanged: "app:issues-changed",
   quit: "app:quit",
