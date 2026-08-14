@@ -1,6 +1,7 @@
 import type { Dirent, Stats } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { maximumTranscriptEntries, type SessionTranscriptEntry } from "@sidecar/core";
 
 /**
  * The shared half of every adapter that observes sessions on this machine:
@@ -20,6 +21,27 @@ export const LOCAL_ADAPTER_DEFAULTS = {
   ACTIVE_SESSION_FRESHNESS_MS: 15 * 60 * 1000,
   READ_TAIL_BYTES: 64 * 1024,
 } as const;
+
+/**
+ * Whether the user has asked this machine's adapters to read what a session
+ * actually said. Transcript content is the one thing a provider's files hold
+ * that Luke does not read to describe a session, so it is read only when this
+ * answers yes, and it is asked once per observation pass rather than per file.
+ */
+export type TranscriptGate = () => boolean | Promise<boolean>;
+
+export async function transcriptsRequested(gate: TranscriptGate | undefined): Promise<boolean> {
+  return gate ? await gate() : false;
+}
+
+/** Keeps a transcript to its newest lines while it is still being collected. */
+export function appendTranscriptEntry(
+  entries: SessionTranscriptEntry[],
+  entry: SessionTranscriptEntry,
+): void {
+  entries.push(entry);
+  if (entries.length > maximumTranscriptEntries) entries.shift();
+}
 
 export interface DirectoryEntry {
   directoryPath: string;

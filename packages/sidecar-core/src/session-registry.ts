@@ -28,6 +28,7 @@ function copySession(session: NormalizedSession): NormalizedSession {
     detail: { ...session.detail },
     controls: session.controls.map((control) => ({ ...control })),
     attention: { ...session.attention },
+    transcript: session.transcript.map((entry) => ({ ...entry })),
   };
 }
 
@@ -46,6 +47,18 @@ function sameDetail(first: SessionDetail, second: SessionDetail): boolean {
     first.error === second.error &&
     first.link === second.link &&
     first.change === second.change
+  );
+}
+
+function sameTranscript(
+  first: NormalizedSession["transcript"],
+  second: NormalizedSession["transcript"],
+): boolean {
+  return (
+    first.length === second.length &&
+    first.every(
+      (entry, index) => entry.role === second[index]?.role && entry.text === second[index]?.text,
+    )
   );
 }
 
@@ -81,7 +94,8 @@ function sameSession(first: NormalizedSession, second: NormalizedSession): boole
     first.attention.disposition === second.attention.disposition &&
     first.attention.decidedAt === second.attention.decidedAt &&
     first.attention.summary === second.attention.summary &&
-    sameControls(first.controls, second.controls)
+    sameControls(first.controls, second.controls) &&
+    sameTranscript(first.transcript, second.transcript)
   );
 }
 

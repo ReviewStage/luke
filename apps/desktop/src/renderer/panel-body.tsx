@@ -331,6 +331,9 @@ function SessionRow({
             {session.detail}
           </span>
         </small>
+        {/* Only for a user who asked to see it, and only ever the last line:
+            the row is a place to recognise a session, not to read it. */}
+        {session.transcript ? <small className="row-transcript">{session.transcript}</small> : null}
         {place ? (
           <small className="row-place">
             {session.branch ? <BranchGlyph /> : null}

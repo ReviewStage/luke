@@ -61,6 +61,12 @@ export interface AppSettings {
    */
   secretStorage: SecretStorage;
   /**
+   * Whether the observers on this machine may read what a session actually
+   * said. Off until the user turns it on, and it never widens what an attention
+   * evaluator is sent: a transcript stays on this Mac.
+   */
+  localTranscripts: boolean;
+  /**
    * Whether Luke stands in the Dock as well as at the notch. Off by default:
    * an accessory app is what Luke ships as, so an icon among the user's apps
    * is opted into rather than discovered.
@@ -272,6 +278,8 @@ export interface AppBridge {
    * fixed by this build.
    */
   openProviderApiKeys(providerId: CredentialProviderId): void;
+  /** Turns local transcript reading on or off, and reports the settled state. */
+  setLocalTranscripts(enabled: boolean): Promise<SettingsUpdateResult>;
   /** Shows or hides the menu bar status item, and remembers the choice. */
   setShowInMenuBar(show: boolean): Promise<SettingsUpdateResult>;
   /** Shows or hides the Dock icon, and remembers the choice. */
@@ -431,6 +439,7 @@ export const channels = {
   requestMicrophone: "app:request-microphone",
   openMicrophoneSettings: "app:open-microphone-settings",
   setProviderApiKey: "app:set-provider-api-key",
+  setLocalTranscripts: "app:set-local-transcripts",
   setVoice: "app:set-voice",
   setVoiceSpeed: "app:set-voice-speed",
   setVoiceCaptions: "app:set-voice-captions",

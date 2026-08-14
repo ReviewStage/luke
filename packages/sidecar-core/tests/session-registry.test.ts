@@ -5,12 +5,15 @@ import {
   InMemorySessionRegistry,
   maximumSessionLinkLength,
   maximumSessionSummaryLength,
+  maximumTranscriptEntries,
+  maximumTranscriptEntryLength,
   type ProviderSessionObservation,
   SESSION_LOCATION,
   SESSION_STATUS,
   type SessionLocation,
   type SessionProvider,
   supportsSessionControl,
+  TRANSCRIPT_ROLE,
 } from "../src";
 
 const codex: SessionProvider = { id: "codex", displayName: "Codex" };
@@ -297,4 +300,62 @@ test("a malformed provider snapshot leaves the previous registry state intact", 
       registry.replaceProvider({ id: " ", displayName: "Invalid" }, [observation("ignored", 20)]),
     /provider id must not be empty/,
   );
+});
+
+test("holds a transcript an adapter read to a bounded, isolated tail", () => {
+  const registry = new InMemorySessionRegistry();
+  const spoken = Array.from({ length: maximumTranscriptEntries + 2 }, (_, index) => ({
+    role: TRANSCRIPT_ROLE.AGENT,
+    text: `line ${index}`,
+  }));
+
+  const session = registry.upsert(
+    codex,
+    observation("run:transcript", 100, {
+      transcript: [
+        { role: TRANSCRIPT_ROLE.USER, text: `  ${"a".repeat(maximumTranscriptEntryLength + 1)}  ` },
+        { role: TRANSCRIPT_ROLE.TOOL, text: "   " },
+        ...spoken,
+      ],
+    }),
+  );
+
+  // Only the tail survives, so a long-running session costs a fixed amount of
+  // memory however much was said in it.
+  assert.equal(session.transcript.length, maximumTranscriptEntries);
+  assert.deepEqual(session.transcript.at(-1), {
+    role: TRANSCRIPT_ROLE.AGENT,
+    text: `line ${spoken.length - 1}`,
+  });
+  assert.equal(
+    session.transcript.every((entry) => entry.text.trim() === entry.text),
+    true,
+  );
+  assert.equal(
+    session.transcript.every((entry) => entry.text.length <= maximumTranscriptEntryLength),
+    true,
+  );
+
+  // A session Luke read nothing for carries an empty transcript rather than a
+  // missing one, and the copy a caller holds cannot reach into the registry.
+  const silent = registry.upsert(claude, observation("run:silent", 100));
+  assert.deepEqual(silent.transcript, []);
+  assert.notEqual(
+    registry.get({ providerId: codex.id, providerSessionId: "run:transcript" })?.transcript,
+    session.transcript,
+  );
+});
+
+test("a new line in a session's transcript is a change worth telling listeners about", () => {
+  const registry = new InMemorySessionRegistry();
+  const said = (text: string): ProviderSessionObservation =>
+    observation("run:said", 100, { transcript: [{ role: TRANSCRIPT_ROLE.AGENT, text }] });
+  const revisions: number[] = [];
+  registry.subscribe((snapshot) => revisions.push(snapshot.revision));
+
+  registry.upsert(codex, said("Running the tests."));
+  registry.upsert(codex, said("Running the tests."));
+  registry.upsert(codex, said("The tests passed."));
+
+  assert.deepEqual(revisions, [1, 2]);
 });

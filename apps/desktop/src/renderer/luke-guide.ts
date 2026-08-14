@@ -54,6 +54,7 @@ export const APP_SETTING_ID = {
   SHOW_IN_DOCK: "show_in_dock",
   SHOW_ON_ALL_DISPLAYS: "show_on_all_displays",
   FORM_FACTOR: "form_factor",
+  LOCAL_TRANSCRIPTS: "local_transcripts",
 } as const;
 
 export type AppSettingId = (typeof APP_SETTING_ID)[keyof typeof APP_SETTING_ID];
@@ -170,6 +171,19 @@ const SETTING_GUIDE: Record<
     choices: PANEL_FORM_FACTOR_LIST,
     adjustable: true,
     manual: `${SETTINGS_TAB}, under Preferences`,
+  }),
+  // Described but never changed by an ask: consent to read what a session
+  // said is given by hand, and a spoken switch is exactly the way it must not
+  // be given.
+  localTranscripts: (settings) => ({
+    id: APP_SETTING_ID.LOCAL_TRANSCRIPTS,
+    label: "Local transcripts",
+    description:
+      "Whether the row shows the last thing said in a session on this Mac, read from the files the agent already writes. Nothing read this way leaves the Mac, and nothing is written back.",
+    kind: APP_SETTING_KIND.TOGGLE,
+    value: appToggleText(settings.localTranscripts),
+    adjustable: false,
+    manual: `${SETTINGS_TAB}, under Local transcripts`,
   }),
   // Described in the talk-key fact instead, which carries the key that
   // actually registered — this field is only the stored choice, absent on the

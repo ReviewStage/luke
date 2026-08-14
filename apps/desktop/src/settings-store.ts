@@ -40,6 +40,7 @@ const SETTINGS_FIELD = {
   DUCK_OTHER_MEDIA: "duckOtherMedia",
   FORM_FACTOR: "formFactor",
   LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
+  LOCAL_TRANSCRIPTS: "localTranscripts",
   SHOW_IN_DOCK: "showInDock",
   SHOW_IN_MENU_BAR: "showInMenuBar",
   SHOW_ON_ALL_DISPLAYS: "showOnAllDisplays",
@@ -87,6 +88,13 @@ interface PersistedSettings {
    * through untouched so an older build cannot discard a newer one's key.
    */
   apiKeys: Readonly<Record<string, string>>;
+  /**
+   * Whether the local observers may read what a session actually said. Stored
+   * as a plain flag because it is a preference rather than a secret, and false
+   * whenever the file does not say otherwise — an install that has never been
+   * asked has not consented.
+   */
+  localTranscripts: boolean;
   /**
    * Whether Luke stands in the Dock. Off unless the file says `true` outright,
    * so a missing field, an older file, and a corrupt value all land on the
@@ -234,6 +242,7 @@ function parsePersistedSettings(source: string): PersistedSettings {
   return {
     version: typeof version === "number" ? version : SETTINGS_FILE_VERSION,
     apiKeys: storedApiKeys(record),
+    localTranscripts: record[SETTINGS_FIELD.LOCAL_TRANSCRIPTS] === true,
     showInDock: record[SETTINGS_FIELD.SHOW_IN_DOCK] === true,
     showInMenuBar: typeof showInMenuBar === "boolean" ? showInMenuBar : true,
     // A voice this build does not offer is dropped rather than carried: unlike
@@ -289,6 +298,7 @@ export class SettingsStore {
       // its own: a snapshot is taken on every launch, and most of them are for
       // a user with no key to protect.
       secretStorage: this.#secretStorage,
+      localTranscripts: (await this.#load()).localTranscripts,
       showInDock: (await this.#load()).showInDock,
       showInMenuBar: (await this.#load()).showInMenuBar,
       // Resolved the way the minter resolves it, so the panel marks the voice
@@ -556,6 +566,31 @@ export class SettingsStore {
   }
 
   /**
+   * Main-process only: whether the local observers may read message content.
+   * Asked once per observation pass, so it answers from the settings already
+   * loaded rather than re-reading the file.
+   */
+  async readLocalTranscripts(): Promise<boolean> {
+    return (await this.#load()).localTranscripts;
+  }
+
+  /**
+   * Turns transcript reading on or off. Nothing already observed is rewritten:
+   * turning it off stops the next pass from reading message content, and the
+   * pass after that replaces every session with one that carries none.
+   */
+  async setLocalTranscripts(enabled: boolean): Promise<SettingsUpdateResult> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (persisted.localTranscripts === enabled) return;
+      const next: PersistedSettings = { ...persisted, localTranscripts: enabled };
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+    });
+    return { settings: await this.snapshot() };
+  }
+
+  /**
    * Stores one provider's key encrypted at rest, or clears it when omitted. A
    * key the user cannot use comes back as a `reason` rather than an exception,
    * so only an unexpected filesystem failure throws.
@@ -725,6 +760,7 @@ export class SettingsStore {
     let persisted: PersistedSettings = {
       version: SETTINGS_FILE_VERSION,
       apiKeys: {},
+      localTranscripts: false,
       showInDock: false,
       showInMenuBar: true,
       voiceCaptions: false,

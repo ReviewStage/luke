@@ -53,6 +53,7 @@ import {
   ExternalIcon,
   KeyboardIcon,
   KeyIcon,
+  LaptopIcon,
   PencilIcon,
   PlugIcon,
   PopUpIcon,
@@ -73,6 +74,8 @@ export interface SettingsPanelProps {
   /** Whether there is anything to talk to, which is the microphone's only use. */
   voiceAvailable: boolean;
   settings?: AppSettings;
+  /** Turns local transcript reading on or off; see `AppSettings`. */
+  onToggleLocalTranscripts: (enabled: boolean) => void;
   /**
    * Turns the on-screen caption of Luke's speech on or off. The store answers
    * with why when it refuses, and the row is where that answer belongs.
@@ -574,6 +577,42 @@ function CredentialsSection({
           ? STORAGE_UNAVAILABLE_NOTE
           : "Luke reads only cloud workspaces you created, and never sends a prompt or any other change."}
       </p>
+    </section>
+  );
+}
+
+/**
+ * What the observers on this machine may read. Everything else Luke shows is a
+ * provider describing its own session; this is the session itself, so it is off
+ * until it is asked for and it is said plainly what turning it on does — and,
+ * just as plainly, what it does not: a transcript is read on this Mac, drawn on
+ * this Mac, and sent nowhere.
+ */
+function LocalTranscriptsSection({
+  enabled,
+  onToggle,
+}: {
+  enabled: boolean;
+  onToggle: (enabled: boolean) => void;
+}): React.JSX.Element {
+  return (
+    <section className="settings-section" style={{ "--row-index": 5 } as React.CSSProperties}>
+      <h2>
+        <LaptopIcon />
+        Local transcripts
+      </h2>
+      <div className="settings-row">
+        <span className="settings-copy">
+          <strong>{enabled ? "Showing the latest line" : "Off"}</strong>
+          <small>
+            Reads what agents on this Mac said, from the files they already write. Nothing is sent
+            off this Mac, and nothing is ever written back.
+          </small>
+        </span>
+        <button type="button" className="action-button" onClick={() => onToggle(!enabled)}>
+          {enabled ? "Turn off" : "Turn on"}
+        </button>
+      </div>
     </section>
   );
 }
@@ -1140,6 +1179,7 @@ export function SettingsPanel({
   onOpenMicrophoneSettings,
   voiceAvailable,
   settings,
+  onToggleLocalTranscripts,
   onVoiceCaptionsChange,
   onDuckOtherMediaChange,
   credentials,
@@ -1205,6 +1245,13 @@ export function SettingsPanel({
 
       {settings ? (
         <IntegrationsSection settings={settings} control={credentials} panelOpen={panelOpen} />
+      ) : null}
+
+      {settings ? (
+        <LocalTranscriptsSection
+          enabled={settings.localTranscripts}
+          onToggle={onToggleLocalTranscripts}
+        />
       ) : null}
 
       <section className="settings-section" style={{ "--row-index": 5 } as React.CSSProperties}>

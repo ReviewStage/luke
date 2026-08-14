@@ -16,11 +16,11 @@ the current implementation; it is not a promise about third-party services.
   OpenCode moved its sessions into that database are read from its session and
   message JSON files with the same boundary.
 - For the Cursor agents running on this machine, Luke finds recent transcripts,
-  opens bounded tails read-only, and reads only the markers around a turn — its
-  end and how it ended. It does not read message content, and reports the fact
-  of a failed turn rather than the reason Cursor recorded for it. A session is
-  labelled by the folder it runs in, which Luke reads from Cursor's own record
-  of that folder, not from the chat's generated name.
+  opens bounded tails read-only, and reads the markers around a turn — its end
+  and how it ended. It reports the fact of a failed turn rather than the reason
+  Cursor recorded for it. A session is labelled by the folder it runs in, which
+  Luke reads from Cursor's own record of that folder, not from the chat's
+  generated name.
 
 Luke processes bounded fields needed to identify and display a session:
 provider and session identifiers, provider-generated titles, the workspace
@@ -29,9 +29,23 @@ activity, reported errors, provider-designated turn recaps, and session or
 change links where available. It inspects event types, turn boundaries, tool
 calls, and stop reasons to derive those fields and the session status.
 
-Luke does not modify provider files, retain raw records or message history,
-inject input, or require provider hooks or plugins. Observed fields are held in
-memory for the local display. Luke does not control provider sessions.
+Luke does not modify provider files, retain raw records, inject input, or
+require provider hooks or plugins. Observed fields are held in memory for the
+local display. Luke does not control provider sessions.
+
+## Optional local transcript reads
+
+Message content is off by default: unless "Local transcripts" is turned on in
+Settings, Luke reads none of what was said in a session, on any provider.
+
+With it on, Luke additionally keeps, for the local agents above, the last
+twelve lines of a session's conversation — user messages, agent messages, the
+tool calls it made, and what those calls returned — each trimmed to 400
+characters. The same read-only bounded tails are used; nothing is written back
+to a provider's files. Those lines are held in memory for the local display and
+are not persisted, and they are not added to the attention-review request
+described below, which carries the same fields with the setting on as with it
+off. Only the setting itself is written to Luke's settings file.
 
 ## Optional cloud-provider reads
 
@@ -108,7 +122,8 @@ whose policies then govern the request and response data.
 
 The local panel may show a session's provider-assigned title, status, current
 activity or error, provider-designated recap, repository, branch, model, and
-session or change links. The links and model label are kept out of the optional
+session or change links, and, with local transcripts on, the most recent line of
+its conversation. The links and model label are kept out of the optional
 attention-review request described below.
 
 The microphone is optional and is used two ways.

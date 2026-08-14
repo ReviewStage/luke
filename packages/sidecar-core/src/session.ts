@@ -147,6 +147,30 @@ export interface SessionDetail {
 }
 
 /**
+ * Who wrote one line of a session's conversation. `TOOL` covers both halves of
+ * a call — what the agent asked for and what came back — because the surface
+ * treats them the same way: neither is a person or the agent talking.
+ */
+export const TRANSCRIPT_ROLE = {
+  USER: "user",
+  AGENT: "agent",
+  TOOL: "tool",
+} as const;
+
+export type TranscriptRole = (typeof TRANSCRIPT_ROLE)[keyof typeof TRANSCRIPT_ROLE];
+
+/**
+ * One line of what a session actually said. This is transcript content — the
+ * material every other field on a session is deliberately *about* rather than
+ * made of — so it exists only for a user who asked for it, it never reaches an
+ * attention evaluator, and it is bounded like everything else here.
+ */
+export interface SessionTranscriptEntry {
+  role: TranscriptRole;
+  text: string;
+}
+
+/**
  * Provider-owned data observed for a session. Provider adapters are responsible
  * for observing without writing provider files, and for bounding every field
  * they report so one session cannot crowd out the rest of the panel.
@@ -161,6 +185,12 @@ export interface ProviderSessionObservation {
   summary?: string;
   detail?: SessionDetail;
   controls?: readonly SessionControl[];
+  /**
+   * The newest lines of the session's own conversation, oldest first. Only an
+   * adapter the user has turned transcripts on for reports any, so the usual
+   * value is nothing at all.
+   */
+  transcript?: readonly SessionTranscriptEntry[];
   /**
    * Set only by an adapter whose provider documents taking a message for this
    * session in its current state, through the provider's own API. Absent means
@@ -206,6 +236,8 @@ export interface NormalizedSession extends SessionIdentity {
   /** Where a started agent lands, when narrower than the session itself. */
   spawnTarget?: string;
   attention: AttentionDecision;
+  /** Empty unless the user turned transcripts on for the observing adapter. */
+  transcript: readonly SessionTranscriptEntry[];
 }
 
 export const maximumSessionTitleLength = 160;
@@ -218,6 +250,14 @@ export const maximumSessionSummaryLength = 500;
 export const maximumSessionDetailLength = 120;
 /** Long enough for any provider's session address without becoming a payload. */
 export const maximumSessionLinkLength = 300;
+/**
+ * How much of a conversation a session carries. A transcript is kept to the
+ * last few exchanges rather than the whole history: what a developer who
+ * stepped away needs is the end of it, and everything held here is held in
+ * memory for every session at once.
+ */
+export const maximumTranscriptEntries = 12;
+export const maximumTranscriptEntryLength = 400;
 /** A reply typed into a row, not a document pasted through one. */
 export const maximumSessionMessageLength = 4_000;
 
@@ -330,6 +370,24 @@ export function normalizeSessionDetail(detail: SessionDetail | undefined): Sessi
 }
 
 /**
+ * Bounds a transcript to its newest lines, drops anything empty or unattributed,
+ * and leaves the wording exactly as the provider wrote it — this is the one
+ * field whose value is the provider's own text rather than a fact about it.
+ */
+export function normalizeSessionTranscript(
+  transcript: readonly SessionTranscriptEntry[] | undefined,
+): readonly SessionTranscriptEntry[] {
+  if (!transcript) return [];
+  const entries: SessionTranscriptEntry[] = [];
+  for (const entry of transcript.slice(-maximumTranscriptEntries)) {
+    if (!Object.values(TRANSCRIPT_ROLE).includes(entry.role)) continue;
+    const text = boundedText(entry.text, maximumTranscriptEntryLength);
+    if (text) entries.push({ role: entry.role, text });
+  }
+  return entries;
+}
+
+/**
  * Bounds and deduplicates the agents a session offers to start beside it. An
  * entry outside its bound is dropped rather than cut: a truncated agent kind
  * names a different agent, and this list is what a creation ask is held to.
@@ -413,6 +471,7 @@ export function normalizeSession(
     spawnableAgents: normalizeSpawnableAgents(observation.spawnableAgents),
     ...(spawnTarget ? { spawnTarget } : {}),
     attention: normalizeAttention(attention),
+    transcript: normalizeSessionTranscript(observation.transcript),
   };
 }
 

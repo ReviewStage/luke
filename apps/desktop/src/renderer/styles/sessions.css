@@ -756,6 +756,19 @@ html[data-keyboard="true"] button.row-main:focus-visible {
   color: var(--text-tertiary);
 }
 
+/* The last thing said in the session, for a reader who turned transcripts on.
+   It is quoted material rather than something Luke observed about the session,
+   so it is set apart from both lines around it and never wraps: the row is the
+   same height whether or not anyone is reading along. */
+.row-copy .row-transcript {
+  display: block;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-style: italic;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* How the reach is learned: the keycaps surface while the pointer is over the
    pill and stand down again once the caret is in or a draft holds the field —
    whoever they could teach already knows. They keep their layout box in every

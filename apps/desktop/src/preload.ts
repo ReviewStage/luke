@@ -47,6 +47,8 @@ const bridge: AppBridge = {
       providerId,
       apiKey,
     ) as Promise<SettingsUpdateResult>,
+  setLocalTranscripts: (enabled: boolean) =>
+    ipcRenderer.invoke(channels.setLocalTranscripts, enabled) as Promise<SettingsUpdateResult>,
   setVoice: (voice: RealtimeVoice) =>
     ipcRenderer.invoke(channels.setVoice, voice) as Promise<SettingsUpdateResult>,
   setVoiceSpeed: (speed: RealtimeVoiceSpeed) =>

@@ -1935,6 +1935,11 @@ export function App(): React.JSX.Element {
               onOpenMicrophoneSettings: () => window.sidecar.openMicrophoneSettings(),
               voiceAvailable: bootstrap.realtimeAvailable,
               settings,
+              onToggleLocalTranscripts: (enabled: boolean) => {
+                void window.sidecar
+                  .setLocalTranscripts(enabled)
+                  .then((result) => setSettings(result.settings));
+              },
               onVoiceCaptionsChange: changeVoiceCaptions,
               onDuckOtherMediaChange: changeDuckOtherMedia,
               credentials,

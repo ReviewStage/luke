@@ -12,6 +12,7 @@ import {
   type SessionListSort,
   type SessionLocation,
   type SessionState,
+  TRANSCRIPT_ROLE,
 } from "@sidecar/core";
 import type { AppBootstrap } from "../shared/contracts";
 
@@ -115,6 +116,11 @@ export interface DisplaySession {
   /** What the session is doing, or what stopped it, worded to carry the state. */
   detail: string;
   /**
+   * The last thing said in the session, and who said it. Present only for a
+   * user who turned local transcripts on, and absent for every fixture row.
+   */
+  transcript?: string;
+  /**
    * Which checkout the work is in. Two fields rather than one line, because the
    * row draws a branch under its own glyph and a repository plain, and only the
    * fields can say which kind of identifier this is.
@@ -215,6 +221,23 @@ function sessionDetail(session: NormalizedSession, state: SessionState): string 
   return session.detail.error ?? session.detail.activity ?? session.summary ?? STATE_LABEL[state];
 }
 
+/**
+ * The newest line of the conversation, worded here rather than in the adapter
+ * that read it. A tool is named as a tool rather than by which tool, because
+ * the line it produced already says that and the row has one line to say it in.
+ */
+function sessionTranscript(session: NormalizedSession): string | undefined {
+  const latest = session.transcript.at(-1);
+  if (!latest) return undefined;
+  const speaker =
+    latest.role === TRANSCRIPT_ROLE.USER
+      ? "You"
+      : latest.role === TRANSCRIPT_ROLE.AGENT
+        ? session.provider.displayName
+        : "Tool";
+  return `${speaker}: ${latest.text}`;
+}
+
 function sessionState(session: NormalizedSession): SessionState {
   if (sessionNeedsAttention(session)) return SESSION_STATE.ATTENTION;
   if (session.status === SESSION_STATUS.COMPLETE) return SESSION_STATE.COMPLETE;
@@ -264,12 +287,14 @@ export function displaySessions(
       }))
     : sessions.map((session) => {
         const state = sessionState(session);
+        const transcript = sessionTranscript(session);
         return {
           id: session.providerSessionId,
           title: session.title,
           providerId: session.providerId,
           provider: session.provider.displayName,
           detail: sessionDetail(session, state),
+          ...(transcript ? { transcript } : {}),
           repository: session.detail.repository,
           branch: session.detail.branch,
           model: session.detail.model,
