@@ -202,9 +202,12 @@ gesture that carries meaning may only be offered while its meaning is true.
 Two rules follow from playing a motion once, and both belong to the artwork
 table rather than the app. Every motion the app plays begins and ends at the
 resting pose, because one that starts elsewhere snaps there on the way in and
-back out of it on the way out. Every layer of one shares a period, because the
-app hands the face back after the longest of them and a layer on its own period
-would be cut wherever it had got to.
+back out of it on the way out. Every layer of a gesture shares a period,
+because the app hands the face back after the longest of them and a layer on
+its own period would be cut wherever it had got to. A rest is under no such
+rule: it is cut whenever its meaning stops being true rather than at any
+boundary of its own, so its layers may run on offset periods — `talking` bobs
+against its rock deliberately, like a person mid-sentence.
 
 ## Luke's knowledge of himself
 

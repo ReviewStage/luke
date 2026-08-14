@@ -149,7 +149,6 @@
     1
   );
   --duration-fast: 280ms;
-  --motion-morph: cubic-bezier(0.32, 0.86, 0.28, 1);
   --motion-exit: cubic-bezier(0.4, 0, 0.6, 1);
   --duration-shape: 460ms;
   --duration-exit: 90ms;
@@ -1282,8 +1281,8 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   opacity: 0.5;
   transform: scale(0.86);
   transition:
-    opacity 120ms ease,
-    transform 160ms ease;
+    opacity var(--duration-quick) var(--motion-exit),
+    transform var(--duration-fast) var(--spring-fast);
 }
 
 .waveform[data-speaking="true"] {
@@ -1308,7 +1307,10 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   background: var(--state-working);
   transform: scaleY(0.2);
   transform-origin: center;
-  transition: transform 90ms linear;
+  /* Linear rather than a spring, because the bars are smoothing between
+     analyser samples rather than travelling anywhere: each frame's level is
+     data, and an overshoot would report a louder voice than was heard. */
+  transition: transform var(--duration-exit) linear;
 }
 
 .waveform-bar:nth-child(1),
@@ -2650,6 +2652,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   --duration-quick: 0s;
   --duration-fast: 0s;
   --expand-delay: 0s;
+  --peek-delay: 0s;
   --row-stagger: 0s;
   /* Luke blinks and sways on a loop with no end to wait for, so a capture would
      otherwise land wherever in it the shutter happened to fall. Held on its
@@ -2659,8 +2662,9 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   --loop-motion: paused;
 }
 
-/* COLLAPSE_ANIMATION_MS in app.tsx drops to zero under the same query, so the
-   window still waits for the capsule rather than shrinking under the panel. */
+/* COLLAPSE_ANIMATION_MS in main.ts drops to zero too — collapseDelay() checks
+   capture mode and the OS's reduced-motion setting itself — so the window
+   still waits for the capsule rather than shrinking under the panel. */
 /* Reduced motion is answered at the tokens rather than element by element. A
    list of selectors misses whatever is added later, and it loses outright to the
    staggered rules, which carry a `.app-stage[data-presentation]` prefix a media
@@ -2696,7 +2700,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   .count-badge,
   .count-caption,
   .tab-thumb,
-  .waveform,
   .session-row {
     transition-duration: 1ms;
     transition-delay: 0ms;

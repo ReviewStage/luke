@@ -105,22 +105,49 @@ const LID_WIDTH = fmt(Math.max(4.5, FACE.eyeR * 0.5));
 const lid = (cx) =>
   `<path d="${lidD(cx)}" stroke="currentColor" stroke-width="${LID_WIDTH}" stroke-linecap="round" fill="none"/>`;
 
-// The z's that drift off a sleeping head: where each starts, how big, and how
-// far into the shared three-second loop it is when the loop begins.
+// The z's that drift off a sleeping head: where each starts, how big, and where
+// in the shared three-second loop its rise begins. The stagger is a keyframe
+// phase rather than a negative delay: a paused animation with a negative delay
+// holds at its resolved current time, not its first frame, so a capture run or
+// reduced motion stopping the loop at time zero would freeze two z's mid-air.
+// With every glyph's own loop starting invisible, paused means unseen.
 const SLEEP_Z = [
-  { x: 176, y: 62, size: 8, delay: 0 },
-  { x: 190, y: 46, size: 11, delay: -1 },
-  { x: 166, y: 44, size: 6, delay: -2 },
+  { x: 176, y: 62, size: 8, start: 0 },
+  { x: 190, y: 46, size: 11, start: 0.4 },
+  { x: 166, y: 44, size: 6, start: 0.2 },
 ];
 const SLEEP_Z_DURATION = 3;
+// How much of the loop a z spends rising; the rest of it is spent unseen.
+const SLEEP_Z_RISE = 0.6;
 const SLEEP_Z_WIDTH = 3.5;
 const SLEEP_Z_DRIFT = [6, -16];
 const zGlyphD = (size) => `M 0 0 H ${size} L 0 ${size} H ${size}`;
-const zGlyph = ({ x, y, size, delay }) =>
-  `<g opacity="0" transform="translate(${x} ${y})">` +
-  `<animate attributeName="opacity" values="0;0.85;0" dur="${SLEEP_Z_DURATION}s" begin="${delay}s" repeatCount="indefinite"/>` +
-  `<animateTransform attributeName="transform" type="translate" values="${x} ${y};${x + SLEEP_Z_DRIFT[0]} ${y + SLEEP_Z_DRIFT[1]}" dur="${SLEEP_Z_DURATION}s" begin="${delay}s" repeatCount="indefinite"/>` +
-  `<path d="${zGlyphD(size)}" stroke="currentColor" stroke-width="${SLEEP_Z_WIDTH}" stroke-linecap="round" stroke-linejoin="round" fill="none"/></g>`;
+/** A z's rise as keyframe times, holding its resting value outside the window. */
+const zTrack = (start, times, values) => {
+  const shifted = times.map((time, index) => [+(start + time).toFixed(4), values[index]]);
+  const framed = [[0, values[0]], ...shifted, [1, values[values.length - 1]]];
+  // A window already touching either edge needs no frame drawn onto it.
+  const kept = framed.filter(([time], index) => index === 0 || time > framed[index - 1][0]);
+  return {
+    times: kept.map(([time]) => time),
+    values: kept.map(([, value]) => value),
+  };
+};
+const zGlyph = ({ x, y, size, start }) => {
+  const rise = SLEEP_Z_RISE;
+  const opacity = zTrack(start, [0, rise / 2, rise], ["0", "0.85", "0"]);
+  const travel = zTrack(
+    start,
+    [0, rise],
+    [`${x} ${y}`, `${x + SLEEP_Z_DRIFT[0]} ${y + SLEEP_Z_DRIFT[1]}`],
+  );
+  return (
+    `<g opacity="0" transform="translate(${x} ${y})">` +
+    `<animate attributeName="opacity" values="${opacity.values.join(";")}" keyTimes="${opacity.times.join(";")}" dur="${SLEEP_Z_DURATION}s" repeatCount="indefinite"/>` +
+    `<animateTransform attributeName="transform" type="translate" values="${travel.values.join(";")}" keyTimes="${travel.times.join(";")}" dur="${SLEEP_Z_DURATION}s" repeatCount="indefinite"/>` +
+    `<path d="${zGlyphD(size)}" stroke="currentColor" stroke-width="${SLEEP_Z_WIDTH}" stroke-linecap="round" stroke-linejoin="round" fill="none"/></g>`
+  );
+};
 
 // Composes the face. opts: { eyes, extra } override the defaults.
 function face(opts = {}) {
@@ -374,15 +401,19 @@ const MOTIONS = {
     moment: "humming along (slow sway)",
     layers: [{ type: "rotate", pivot: [120, 196], values: [0, 3.5, 0, -3.5, 0], dur: 3.6 }],
   },
-  // Leans in from the side, settles, then eases back — an entrance.
+  // Leans in from the side and settles — an entrance. It ends at the resting
+  // pose and stays there: a play that ended leaning back out would snap to the
+  // drawn rest the instant the animation dropped. It alone begins away from
+  // rest, because it is made for the moment the face is first drawn, where
+  // there is no earlier pose to snap from.
   appear: {
     moment: "attaching (peek-slide in)",
     layers: [
       {
         type: "rotate",
         pivot: [76, 190],
-        values: [8, 8, 0, 0, 8, 8],
-        keyTimes: [0, 0.15, 0.3, 0.75, 0.9, 1],
+        values: [8, 8, 0, 0],
+        keyTimes: [0, 0.15, 0.3, 1],
         dur: 4,
       },
       {
@@ -392,10 +423,8 @@ const MOTIONS = {
           [-16, 0],
           [0, 0],
           [0, 0],
-          [-16, 0],
-          [-16, 0],
         ],
-        keyTimes: [0, 0.15, 0.3, 0.75, 0.9, 1],
+        keyTimes: [0, 0.15, 0.3, 1],
         dur: 4,
       },
     ],
@@ -707,21 +736,24 @@ function motionCss(name, motion) {
 }
 
 function faceMotionCss() {
-  const drift = cssKeyframes(
-    "luke-sleep-z",
-    [
-      { at: 0, declaration: "opacity: 0;\n    transform: translate(0, 0);" },
-      { at: 0.5, declaration: "opacity: 0.85;" },
-      {
-        at: 1,
-        declaration: `opacity: 0;\n    transform: translate(${SLEEP_Z_DRIFT[0]}px, ${SLEEP_Z_DRIFT[1]}px);`,
-      },
-    ],
-    [],
-  );
+  const resting = "opacity: 0;\n    transform: translate(0, 0);";
+  const drifted = `opacity: 0;\n    transform: translate(${SLEEP_Z_DRIFT[0]}px, ${SLEEP_Z_DRIFT[1]}px);`;
+  const zBlocks = SLEEP_Z.map((z, index) => {
+    const end = +(z.start + SLEEP_Z_RISE).toFixed(4);
+    const steps = [
+      { at: 0, declaration: resting },
+      ...(z.start > 0 ? [{ at: z.start, declaration: resting }] : []),
+      { at: +(z.start + SLEEP_Z_RISE / 2).toFixed(4), declaration: "opacity: 0.85;" },
+      { at: end, declaration: drifted },
+      ...(end < 1 ? [{ at: 1, declaration: drifted }] : []),
+    ];
+    return cssKeyframes(`luke-sleep-z-${index + 1}`, steps, []);
+  });
   const zRules = [
-    `.luke-face-z {\n  animation-name: luke-sleep-z;\n  animation-duration: ${SLEEP_Z_DURATION}s;\n}`,
-    ...SLEEP_Z.map((z, index) => `.luke-face-z-${index + 1} {\n  animation-delay: ${z.delay}s;\n}`),
+    `.luke-face-z {\n  animation-duration: ${SLEEP_Z_DURATION}s;\n}`,
+    ...SLEEP_Z.map(
+      (z, index) => `.luke-face-z-${index + 1} {\n  animation-name: luke-sleep-z-${index + 1};\n}`,
+    ),
   ];
   return [
     "/* Generated by design/generate-brand-assets.mjs. Do not edit by hand: change",
@@ -733,11 +765,12 @@ function faceMotionCss() {
     "",
     MOTION_NAMES.map((name) => motionCss(name, MOTIONS[name])).join("\n\n"),
     "",
-    "/* The z's drift on their own loop, offset from each other so they never rise",
-    "   as a group. Held at its first frame the loop is invisible, which is what a",
-    "   capture run and reduced motion both want. */",
+    "/* The z's share one loop, each rising through its own window of it so they",
+    "   never rise as a group. The stagger is cut into the keyframes rather than",
+    "   carried as a delay: every glyph's first frame is invisible, so a paused",
+    "   loop — a capture run, reduced motion — shows no z at all. */",
     "",
-    [drift, ...zRules].join("\n\n"),
+    [...zBlocks, ...zRules].join("\n\n"),
     "",
   ].join("\n");
 }

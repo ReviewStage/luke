@@ -658,18 +658,8 @@
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
 
-  75% {
-    transform: rotate(0deg);
-    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
-  }
-
-  90% {
-    transform: rotate(8deg);
-    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
-  }
-
   100% {
-    transform: rotate(8deg);
+    transform: rotate(0deg);
   }
 }
 
@@ -689,18 +679,8 @@
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
 
-  75% {
-    transform: translate(0px, 0px);
-    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
-  }
-
-  90% {
-    transform: translate(-16px, 0px);
-    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
-  }
-
   100% {
-    transform: translate(-16px, 0px);
+    transform: translate(0px, 0px);
   }
 }
 
@@ -1074,18 +1054,49 @@
   animation-duration: 2.4s;
 }
 
-/* The z's drift on their own loop, offset from each other so they never rise
-   as a group. Held at its first frame the loop is invisible, which is what a
-   capture run and reduced motion both want. */
+/* The z's share one loop, each rising through its own window of it so they
+   never rise as a group. The stagger is cut into the keyframes rather than
+   carried as a delay: every glyph's first frame is invisible, so a paused
+   loop — a capture run, reduced motion — shows no z at all. */
 
-@keyframes luke-sleep-z {
+@keyframes luke-sleep-z-1 {
   0% {
     opacity: 0;
     transform: translate(0, 0);
     animation-timing-function: linear;
   }
 
-  50% {
+  30% {
+    opacity: 0.85;
+    animation-timing-function: linear;
+  }
+
+  60% {
+    opacity: 0;
+    transform: translate(6px, -16px);
+    animation-timing-function: linear;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(6px, -16px);
+  }
+}
+
+@keyframes luke-sleep-z-2 {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0);
+    animation-timing-function: linear;
+  }
+
+  40% {
+    opacity: 0;
+    transform: translate(0, 0);
+    animation-timing-function: linear;
+  }
+
+  70% {
     opacity: 0.85;
     animation-timing-function: linear;
   }
@@ -1096,19 +1107,48 @@
   }
 }
 
+@keyframes luke-sleep-z-3 {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0);
+    animation-timing-function: linear;
+  }
+
+  20% {
+    opacity: 0;
+    transform: translate(0, 0);
+    animation-timing-function: linear;
+  }
+
+  50% {
+    opacity: 0.85;
+    animation-timing-function: linear;
+  }
+
+  80% {
+    opacity: 0;
+    transform: translate(6px, -16px);
+    animation-timing-function: linear;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(6px, -16px);
+  }
+}
+
 .luke-face-z {
-  animation-name: luke-sleep-z;
   animation-duration: 3s;
 }
 
 .luke-face-z-1 {
-  animation-delay: 0s;
+  animation-name: luke-sleep-z-1;
 }
 
 .luke-face-z-2 {
-  animation-delay: -1s;
+  animation-name: luke-sleep-z-2;
 }
 
 .luke-face-z-3 {
-  animation-delay: -2s;
+  animation-name: luke-sleep-z-3;
 }
