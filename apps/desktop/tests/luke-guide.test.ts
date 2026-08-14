@@ -174,6 +174,22 @@ test("the facts follow the talk key, the microphone, and the storage the system 
   assert.match(JSON.stringify(unprotected.facts), /no encrypted credential storage/);
 });
 
+test("the feedback fact says what a spoken open may do, and that sending stays by hand", () => {
+  const fact = buildLukeGuide(guideInput()).facts.find(
+    (candidate) => candidate.label === "Feedback and prompts",
+  );
+
+  assert.ok(fact);
+  // The guide is what Luke says about himself, so it must promise exactly the
+  // capability the tool has: opening with the developer's own words, the
+  // refusal-then-offer, and never the send.
+  assert.match(fact.detail, /can open the composer/);
+  assert.match(fact.detail, /developer's own words/);
+  assert.match(fact.detail, /after refusing something he cannot do/);
+  assert.match(fact.detail, /never overwritten/);
+  assert.match(fact.detail, /no spoken ask can send one/);
+});
+
 test("every adjustable setting is carried to the bridge call its row uses", async () => {
   const calls: string[] = [];
   const answered: SettingsUpdateResult = { settings: settings() };

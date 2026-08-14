@@ -5,6 +5,7 @@ import {
   feedbackImageUrl,
   freshFeedbackEntry,
   isSendable,
+  openedFeedbackEntry,
 } from "../src/renderer/feedback-entry";
 import { IMAGE_INTAKE, imageIntake, recodedImageName } from "../src/renderer/feedback-images";
 import { FEEDBACK_KIND, FEEDBACK_LIMITS } from "../src/shared/feedback";
@@ -25,6 +26,64 @@ test("a note already in flight is not sent a second time", () => {
 
 test("nothing being written cannot be sent", () => {
   assert.equal(isSendable(undefined), false);
+});
+
+test("opening with nothing there starts a fresh note, drafted with what was given", () => {
+  const opened = openedFeedbackEntry(undefined, {
+    kind: FEEDBACK_KIND.PROMPT,
+    fromPanel: false,
+    draft: "let Luke restart a stuck run",
+  });
+
+  assert.equal(opened.drafted, true);
+  assert.deepEqual(opened.entry, {
+    ...freshFeedbackEntry(FEEDBACK_KIND.PROMPT, false),
+    message: "let Luke restart a stuck run",
+  });
+
+  const undrafted = openedFeedbackEntry(undefined, {
+    kind: FEEDBACK_KIND.FEEDBACK,
+    fromPanel: true,
+  });
+  assert.equal(undrafted.drafted, false);
+  assert.deepEqual(undrafted.entry, freshFeedbackEntry(FEEDBACK_KIND.FEEDBACK, true));
+});
+
+test("a half-written note is brought back, never overwritten by a draft", () => {
+  const current = entry({ message: "the capsule count is wrong", name: "Ada" });
+  const opened = openedFeedbackEntry(current, {
+    kind: FEEDBACK_KIND.PROMPT,
+    fromPanel: false,
+    draft: "let Luke restart a stuck run",
+  });
+
+  assert.equal(opened.drafted, false);
+  // The words, the signature, and even the kind stay: only where leaving
+  // returns you follows the latest ask.
+  assert.deepEqual(opened.entry, { ...current, fromPanel: false });
+});
+
+test("an empty note is relabelled to the asked kind and takes the draft", () => {
+  const opened = openedFeedbackEntry(entry({ message: "  " }), {
+    kind: FEEDBACK_KIND.PROMPT,
+    fromPanel: false,
+    draft: "let Luke restart a stuck run",
+  });
+
+  assert.equal(opened.drafted, true);
+  assert.equal(opened.entry?.kind, FEEDBACK_KIND.PROMPT);
+  assert.equal(opened.entry?.message, "let Luke restart a stuck run");
+});
+
+test("a note mid-send is not touched by an open", () => {
+  const opened = openedFeedbackEntry(entry({ message: "it broke", busy: true }), {
+    kind: FEEDBACK_KIND.PROMPT,
+    fromPanel: false,
+    draft: "something else",
+  });
+
+  assert.equal(opened.drafted, false);
+  assert.equal(opened.entry, undefined);
 });
 
 test("a small screenshot in a native format rides untouched", () => {

@@ -10,7 +10,9 @@ import {
   appToggleValue,
   appToolAction,
   EMPTY_APP_GUIDE,
+  FEEDBACK_COMPOSER_KIND,
   isAppToolCall,
+  maximumFeedbackDraftLength,
   normalizeSession,
   REALTIME_CLIENT_EVENT,
   REALTIME_TOOL,
@@ -113,6 +115,19 @@ test("the standing instructions promise the guide the context actually delivers"
   assert.match(instructions, /\[app guide\]/);
   assert.match(instructions, /change_app_setting/);
   assert.match(instructions, /show_panel/);
+  assert.match(instructions, /open_feedback_composer/);
+});
+
+test("the instructions bound the refusal offer: once, on a clear yes, never a send", () => {
+  const instructions = realtimeInstructions();
+  // The offer follows an honest refusal and is made exactly once.
+  assert.match(instructions, /refuse honestly in one sentence, then offer once/);
+  assert.match(instructions, /Only on a clear yes/);
+  assert.match(instructions, /do not repeat the offer/);
+  // Opening and drafting are all the tool does; the send stays the developer's.
+  assert.match(instructions, /never sends/);
+  assert.match(instructions, /presses Send themselves/);
+  assert.match(instructions, /never words they did not say/);
 });
 
 test("a spoken toggle accepts the unambiguous words and nothing else", () => {
@@ -130,6 +145,7 @@ test("a spoken toggle accepts the unambiguous words and nothing else", () => {
 test("only the app's own tools are routed to the guide", () => {
   assert.equal(isAppToolCall(call(REALTIME_TOOL.CHANGE_APP_SETTING, "{}")), true);
   assert.equal(isAppToolCall(call(REALTIME_TOOL.SHOW_PANEL, "{}")), true);
+  assert.equal(isAppToolCall(call(REALTIME_TOOL.OPEN_FEEDBACK_COMPOSER, "{}")), true);
   assert.equal(isAppToolCall(call(REALTIME_TOOL.SEND_SESSION_MESSAGE, "{}")), false);
 });
 
@@ -222,6 +238,47 @@ test("a spoken panel ask can reorder the list in the panel's own two words", () 
     sort: SESSION_LIST_SORT.URGENCY,
   });
   assert.equal(show('{"sort":"alphabetical"}').kind, "refused");
+});
+
+test("a spoken composer open takes only the two kinds, drafting only the developer's words", () => {
+  const open = (argumentsJson: string) =>
+    appToolAction(call(REALTIME_TOOL.OPEN_FEEDBACK_COMPOSER, argumentsJson), GUIDE, []);
+
+  assert.deepEqual(open('{"kind":"prompt","draft":"  let Luke restart a stuck run  "}'), {
+    kind: "feedback",
+    composer: FEEDBACK_COMPOSER_KIND.PROMPT,
+    draft: "let Luke restart a stuck run",
+  });
+  // No draft is a valid open: the composer simply comes up empty.
+  assert.deepEqual(open('{"kind":"feedback"}'), {
+    kind: "feedback",
+    composer: FEEDBACK_COMPOSER_KIND.FEEDBACK,
+  });
+  // A blank draft is no draft either.
+  assert.deepEqual(open('{"kind":"prompt","draft":"   "}'), {
+    kind: "feedback",
+    composer: FEEDBACK_COMPOSER_KIND.PROMPT,
+  });
+
+  // The vocabulary is fixed: a kind outside it names no composer the app has.
+  assert.equal(open('{"kind":"complaint"}').kind, "refused");
+  assert.equal(open('{"kind":""}').kind, "refused");
+  assert.equal(open("{}").kind, "refused");
+  assert.equal(open("not json").kind, "refused");
+});
+
+test("a spoken draft is bounded like a typed ask", () => {
+  const action = appToolAction(
+    call(
+      REALTIME_TOOL.OPEN_FEEDBACK_COMPOSER,
+      `{"kind":"prompt","draft":"${"a".repeat(maximumFeedbackDraftLength + 100)}"}`,
+    ),
+    GUIDE,
+    [],
+  );
+
+  assert.equal(action.kind, "feedback");
+  assert.equal((action as { draft?: string }).draft?.length, maximumFeedbackDraftLength);
 });
 
 test("an app tool call the build does not know is refused", () => {

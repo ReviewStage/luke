@@ -1811,6 +1811,63 @@ test("a spoken panel ask is validated against the roster and carried", async () 
   ]);
 });
 
+test("a spoken composer open is validated against the fixed kinds and carried, never sent", async () => {
+  const carried: unknown[] = [];
+  const context = harness({
+    carryAppAction: async (action) => {
+      carried.push(action);
+      return { status: "opened" };
+    },
+  });
+  await context.session.connect();
+  context.session.updateGuide(CAPTIONS_GUIDE);
+  armDeveloperTurn(context);
+  const sentBefore = context.sent.length;
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "open_feedback_composer",
+          call_id: "call-guide-4",
+          arguments: '{"kind":"prompt","draft":"let Luke restart a stuck run"}',
+        },
+        // A kind outside the composer's two is refused before the carrier.
+        {
+          type: "function_call",
+          name: "open_feedback_composer",
+          call_id: "call-guide-5",
+          arguments: '{"kind":"complaint"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  // The carrier only ever receives an open: there is no send for it to carry,
+  // so a note leaves the machine only by the composer's own button.
+  assert.deepEqual(carried, [
+    { kind: "feedback", composer: "prompt", draft: "let Luke restart a stuck run" },
+  ]);
+  const outputs = context.sent
+    .slice(sentBefore)
+    .filter(
+      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+    )
+    .map(
+      (event) =>
+        JSON.parse((event.item as { output?: string }).output ?? "{}") as {
+          status?: string;
+        },
+    );
+  assert.deepEqual(
+    outputs.map((outcome) => outcome.status),
+    ["opened", "refused"],
+  );
+});
+
 function trackedIssue(
   overrides: Partial<Parameters<typeof normalizeTrackedIssue>[1]> = {},
 ): TrackedIssue {

@@ -61,6 +61,49 @@ export function freshFeedbackEntry(kind: FeedbackKind, fromPanel: boolean): Feed
 }
 
 /**
+ * One request to open the composer, wherever it came from — the settings
+ * section's buttons, the tray, or a spoken ask carried through the same path.
+ * `draft` is starting text for the note, and it is only ever the user's own
+ * words: the section and the tray never send one, and the spoken tool's
+ * contract forbids anything the user did not say.
+ */
+export interface FeedbackOpenAsk {
+  kind: FeedbackKind;
+  fromPanel: boolean;
+  draft?: string;
+}
+
+/**
+ * What opening the composer does to the note already there. A draft in
+ * progress is never discarded by asking again: opening over a half-written
+ * note brings that note back, only a note with nothing in it yet is
+ * re-labelled to the kind that was just asked for, and starting text lands
+ * only in that same empty note — words someone typed are never overwritten by
+ * words someone said. A note mid-send belongs to the reply on its way back,
+ * so it is not touched at all. Where leaving returns you follows the latest
+ * ask, not the first. `drafted` reports whether the starting text was placed,
+ * so a spoken open can say honestly what it found.
+ */
+export function openedFeedbackEntry(
+  current: FeedbackEntry | undefined,
+  ask: FeedbackOpenAsk,
+): { entry?: FeedbackEntry; drafted: boolean } {
+  if (current?.busy) return { drafted: false };
+  const blank = (current?.message ?? "").trim().length === 0;
+  const drafted = ask.draft !== undefined && blank;
+  const base = current ?? freshFeedbackEntry(ask.kind, ask.fromPanel);
+  return {
+    entry: {
+      ...base,
+      ...(blank ? { kind: ask.kind } : {}),
+      ...(drafted && ask.draft !== undefined ? { message: ask.draft } : {}),
+      fromPanel: ask.fromPanel,
+    },
+    drafted,
+  };
+}
+
+/**
  * Each kind in its own words: the line that offers it in settings, and the
  * label, hint, and field the shape opens with. Two kinds rather than one form
  * with a switch, because they are read differently on arrival — feedback is

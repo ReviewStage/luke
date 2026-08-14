@@ -2,6 +2,8 @@ import {
   APP_PANEL_TAB,
   type AppGuideSnapshot,
   EMPTY_APP_GUIDE,
+  FEEDBACK_COMPOSER_KIND,
+  type FeedbackComposerKind,
   FIXTURE_EPOCH_MS,
   type NormalizedSession,
   type PanelFormFactor,
@@ -27,7 +29,7 @@ import { CREDENTIAL_SOURCE, SESSION_OPEN_RESULT_STATUS } from "../shared/contrac
 import type { CredentialProviderId } from "../shared/credential-providers";
 import { CREDENTIAL_PROVIDER_LIST } from "../shared/credential-providers";
 import type { FeedbackImage, FeedbackKind } from "../shared/feedback";
-import { FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from "../shared/feedback";
+import { FEEDBACK_KIND, FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from "../shared/feedback";
 import {
   TALK_KEY_RELEASE,
   talkKeyRelease,
@@ -40,9 +42,9 @@ import { isSubmittable, removalEndsEntry } from "./credential-entry";
 import {
   type FeedbackEntry,
   type FeedbackEntryControl,
-  freshFeedbackEntry,
   IMAGE_REFUSAL,
   isSendable,
+  openedFeedbackEntry,
 } from "./feedback-entry";
 import { encodeFeedbackImage } from "./feedback-images";
 import { FeedbackSlot } from "./feedback-slot";
@@ -102,6 +104,17 @@ const FIXTURE_SPEAKING_CAPTION =
  * the line is gone before anyone wonders whether it is stuck.
  */
 const FEEDBACK_NOTICE_MS = 6_000;
+
+/**
+ * The composer kind a spoken open names, matched to the composer's own. The
+ * two vocabularies are defined apart — the tool's in brand-neutral core, the
+ * composer's beside the endpoint that reads a submission — so the seam between
+ * them is written down once, here, rather than assumed at a call site.
+ */
+const FEEDBACK_KIND_FOR_COMPOSER: Record<FeedbackComposerKind, FeedbackKind> = {
+  [FEEDBACK_COMPOSER_KIND.FEEDBACK]: FEEDBACK_KIND.FEEDBACK,
+  [FEEDBACK_COMPOSER_KIND.PROMPT]: FEEDBACK_KIND.PROMPT,
+};
 
 /**
  * The caption block's vertical padding — 5px above the text and 9px keeping
@@ -917,26 +930,28 @@ export function App(): React.JSX.Element {
   useEffect(() => () => window.clearTimeout(feedbackNoticeTimer.current), []);
 
   /**
-   * Opens the composer for a kind — from the section's own buttons or from
-   * the tray — and stands the panel down to its shape, the way beginning a
-   * key entry stands it down to the slot: writing one note is one act. A
-   * draft is never discarded by asking again: opening over a half-written
-   * note brings that note back, and only an entry with nothing in it yet is
-   * re-labelled to the kind that was just asked for. Where leaving returns
-   * you follows the latest ask, not the first.
+   * Opens the composer for a kind — from the section's own buttons, from the
+   * tray, or asked of Luke out loud — and stands the panel down to its shape,
+   * the way beginning a key entry stands it down to the slot: writing one
+   * note is one act. What opening does to a note already there is
+   * {@link openedFeedbackEntry}'s to decide — a half-written note is brought
+   * back rather than discarded, and a starting draft lands only in an empty
+   * one. Reports whether the draft was placed, so the spoken path can say
+   * what it found; where leaving returns you follows the latest ask, not the
+   * first.
    */
   const beginFeedback = useCallback(
-    (kind: FeedbackKind, fromPanel: boolean) => {
+    (kind: FeedbackKind, fromPanel: boolean, draft?: string): boolean => {
       setFeedbackNotice(undefined);
-      const current = feedbackRef.current;
-      if (!current) {
-        applyFeedback(freshFeedbackEntry(kind, fromPanel));
-      } else if (!current.busy) {
-        const relabel = current.kind !== kind && current.message.trim().length === 0;
-        applyFeedback({ ...current, ...(relabel ? { kind } : {}), fromPanel });
-      }
+      const opened = openedFeedbackEntry(feedbackRef.current, {
+        kind,
+        fromPanel,
+        ...(draft !== undefined ? { draft } : {}),
+      });
+      if (opened.entry) applyFeedback(opened.entry);
       cancelHoverTransition();
       applyPresentation(PANEL_PRESENTATION.FEEDBACK);
+      return opened.drafted;
     },
     [applyFeedback, applyPresentation, cancelHoverTransition],
   );
@@ -1228,14 +1243,44 @@ export function App(): React.JSX.Element {
    * The spoken asks about Luke himself. A settings change goes through the
    * same bridge calls the settings rows use, and the snapshot that comes back
    * redraws the panel's switches; showing the panel is the capsule's press
-   * with a tab, and optionally a narrowing, chosen out loud. Both were
-   * validated against the guide before they arrive here, so this only
-   * performs and reports.
+   * with a tab, and optionally a narrowing, chosen out loud; opening the
+   * composer is the tray item's press, through the same beginFeedback the
+   * tray and the section's buttons call. All were validated against their
+   * fixed vocabularies before they arrive here, so this only performs and
+   * reports.
    */
   const carryAppAction = useCallback<AppActionCarrier>(
     async (action) => {
       if (action.kind === "setting") {
         return applySpokenSetting(window.sidecar, action, setSettings);
+      }
+      if (action.kind === "feedback") {
+        // The tray's gesture, asked for out loud: the window expands first so
+        // the composer has somewhere to unfold into, the tab moves to settings
+        // so the panel later comes back beside the section the shape belongs
+        // to, and beginFeedback does the rest. Like the tray, leaving returns
+        // to nothing rather than to a panel nobody was in — and nothing here
+        // sends: the note leaves only by the Send button's own press.
+        changeTab(PANEL_TAB.SETTINGS);
+        await changeMode(true);
+        const drafted = beginFeedback(
+          FEEDBACK_KIND_FOR_COMPOSER[action.composer],
+          false,
+          action.draft,
+        );
+        return {
+          status: "opened",
+          kind: action.composer,
+          ...(action.draft === undefined
+            ? {}
+            : drafted
+              ? {
+                  note: "The ask is drafted in the composer; the developer edits and sends it by hand.",
+                }
+              : {
+                  note: "A note was already being written, so it was kept and nothing was drafted over it.",
+                }),
+        };
       }
       changeTab(action.tab === APP_PANEL_TAB.SETTINGS ? PANEL_TAB.SETTINGS : PANEL_TAB.SESSIONS);
       const spoken = action.filter ? sessionFilterFromSpoken(action.filter) : undefined;
@@ -1262,7 +1307,7 @@ export function App(): React.JSX.Element {
         ...(action.sort ? { sort: action.sort } : {}),
       };
     },
-    [changeMode, changeTab],
+    [beginFeedback, changeMode, changeTab],
   );
   carryAppActionRef.current = carryAppAction;
 

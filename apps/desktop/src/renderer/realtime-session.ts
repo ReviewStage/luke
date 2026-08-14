@@ -60,13 +60,15 @@ export type SessionActionCarrier = (
 ) => Promise<Record<string, unknown>>;
 
 /**
- * Carries one validated app-level act — a settings change, or the panel being
- * shown — to the renderer that can perform it. The same posture as the session
- * carrier: validation happened against the guide before this is called, and
- * the carrier only performs and reports.
+ * Carries one validated app-level act — a settings change, the panel being
+ * shown, or the feedback composer brought up — to the renderer that can
+ * perform it. The same posture as the session carrier: validation happened
+ * against the guide before this is called, and the carrier only performs and
+ * reports. Nothing here sends a note: the feedback act opens the composer,
+ * and what it holds leaves only by its own Send button.
  */
 export type AppActionCarrier = (
-  action: Extract<AppToolAction, { kind: "setting" | "panel" }>,
+  action: Extract<AppToolAction, { kind: "setting" | "panel" | "feedback" }>,
 ) => Promise<Record<string, unknown>>;
 
 /** The issue half of the same courier: validated here, validated again in main. */

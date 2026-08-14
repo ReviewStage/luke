@@ -308,8 +308,11 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "Feedback… and Submit a Prompt… — opens a composer under the notch. Send feedback is for " +
         "bugs and ideas; Submit a prompt sends a prompt to a coding agent, and one the founders " +
         "like ships in the next release. Either goes by email to the founders with an optional " +
-        "name and email for credit and up to three screenshots. It is typed and sent by hand: a " +
-        "spoken ask can say where it lives, never write or send one.",
+        "name and email for credit and up to three screenshots. A spoken ask can open the " +
+        "composer and start it with the developer's own words — Luke offers exactly that, once, " +
+        "after refusing something he cannot do — but a note already being written is never " +
+        "overwritten, and sending is always the Send button's own press, by hand: no spoken ask " +
+        "can send one.",
     },
     talkKeyFact(input.hotkey),
     askKeyFact(input.askKey),
