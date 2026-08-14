@@ -1,5 +1,6 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef } from "react";
 import type { PanelPresentation } from "./panel-state";
+import { useStateWithRef } from "./use-state-with-ref";
 
 /**
  * What every composer this hook can drive has to say. Busy is the in-flight
@@ -154,17 +155,18 @@ export function usePanelEntry<T extends PanelEntryBase>(
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
-  const [entry, setEntry] = useState<T>();
-  const entryRef = useRef<T | undefined>(undefined);
+  const [entry, setEntry, latest] = useStateWithRef<T | undefined>(undefined);
 
-  const apply = useCallback((next: T | undefined) => {
-    const host = optionsRef.current;
-    const released = panelEntryReleased(entryRef.current, next);
-    entryRef.current = next;
-    host.heldRef.current = next !== undefined;
-    setEntry(next);
-    if (released && !host.pointerInside()) host.onReleasedWhileAway();
-  }, []);
+  const apply = useCallback(
+    (next: T | undefined) => {
+      const host = optionsRef.current;
+      const released = panelEntryReleased(latest(), next);
+      setEntry(next);
+      host.heldRef.current = next !== undefined;
+      if (released && !host.pointerInside()) host.onReleasedWhileAway();
+    },
+    [latest, setEntry],
+  );
 
   const standDown = useCallback(() => {
     const host = optionsRef.current;
@@ -182,16 +184,16 @@ export function usePanelEntry<T extends PanelEntryBase>(
 
   const patch = useCallback(
     (partial: Partial<T>) => {
-      const current = entryRef.current;
+      const current = latest();
       if (!panelEntryOpen(current)) return;
       apply({ ...current, ...partial, rejection: undefined });
     },
-    [apply],
+    [apply, latest],
   );
 
   const cancel = useCallback(() => {
     const host = optionsRef.current;
-    const current = entryRef.current;
+    const current = latest();
     const destination = panelEntryCancel({
       aside: host.presentation() === host.aside,
       restore: current !== undefined && host.restoresPanel(current),
@@ -199,17 +201,17 @@ export function usePanelEntry<T extends PanelEntryBase>(
     apply(undefined);
     if (destination === PANEL_ENTRY_CANCEL.RESTORE) host.restorePanel();
     else if (destination === PANEL_ENTRY_CANCEL.LEAVE) host.leave();
-  }, [apply]);
+  }, [apply, latest]);
 
   const commit = useCallback(() => {
     const host = optionsRef.current;
-    const current = entryRef.current;
+    const current = latest();
     if (!host.isSendable(current)) return;
     const sending = { ...current, busy: true, rejection: undefined };
     apply(sending);
     void host.send(sending).then((result) => {
       const reply = panelEntryReply({
-        stillHeld: entryRef.current === sending,
+        stillHeld: latest() === sending,
         ...(result.rejection ? { rejection: result.rejection } : {}),
       });
       if (reply === PANEL_ENTRY_REPLY.IGNORE) return;
@@ -225,9 +227,7 @@ export function usePanelEntry<T extends PanelEntryBase>(
       host.cancelHover();
       host.settle();
     });
-  }, [apply]);
-
-  const latest = useCallback(() => entryRef.current, []);
+  }, [apply, latest]);
 
   return {
     entry,

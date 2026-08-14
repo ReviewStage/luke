@@ -74,6 +74,7 @@ import { SESSION_OPTIONS_BUTTON_ID, SESSION_OPTIONS_ID } from "./session-parts";
 import { SETTING_PAGE, SETTINGS_VIEW, type SettingsView } from "./settings-views";
 import { panelEntryOpen, usePanelEntry } from "./use-panel-entry";
 import { usePanelPresentation } from "./use-panel-presentation";
+import { useStateWithRef } from "./use-state-with-ref";
 import { useVoiceConversation } from "./use-voice-conversation";
 import {
   outputSilent,
@@ -182,7 +183,7 @@ export function App(): React.JSX.Element {
     [],
   );
   const [display, setDisplay] = useState<DisplayDiagnostic>();
-  const [tab, setTab] = useState<PanelTab>(PANEL_TAB.SESSIONS);
+  const [tab, setTab, tabNow] = useStateWithRef<PanelTab>(PANEL_TAB.SESSIONS);
   const [settingsView, setSettingsView] = useState<SettingsView>(SETTINGS_VIEW.ROOT);
   const [sessionView, setSessionView] = useState<SessionView>(DEFAULT_SESSION_VIEW);
   const [optionsOpen, setOptionsOpen] = useState(false);
@@ -227,7 +228,6 @@ export function App(): React.JSX.Element {
   const [silenceStretch, setSilenceStretch] = useState(0);
   const wasSilent = useRef(false);
   const [hintDismissal, setHintDismissal] = useState<VolumeHintDismissal>();
-  const tabRef = useRef<PanelTab>(PANEL_TAB.SESSIONS);
   /**
    * Whether a composer is held, mirrored for the presentation cluster: a
    * capsule close keeps the settings tab for a half-written key or note, and
@@ -302,19 +302,21 @@ export function App(): React.JSX.Element {
    */
   const errandOpenedPanel = useRef(false);
 
-  const changeTab = useCallback((next: PanelTab) => {
-    tabRef.current = next;
-    setTab(next);
-    // The sheet belongs to the session list, and it is drawn over the list it
-    // belongs to, so leaving for Settings has to take it along.
-    setOptionsOpen(false);
-    // Arriving at the tab is arriving at its front page: a page left open
-    // behind a tab switch would greet the next visit with a corner of the
-    // settings rather than the settings. The flows that need a deeper page —
-    // a credential entry returning from the key slot, the evidence run that
-    // starts in it — set their page right after this reset.
-    setSettingsView(SETTINGS_VIEW.ROOT);
-  }, []);
+  const changeTab = useCallback(
+    (next: PanelTab) => {
+      setTab(next);
+      // The sheet belongs to the session list, and it is drawn over the list it
+      // belongs to, so leaving for Settings has to take it along.
+      setOptionsOpen(false);
+      // Arriving at the tab is arriving at its front page: a page left open
+      // behind a tab switch would greet the next visit with a corner of the
+      // settings rather than the settings. The flows that need a deeper page —
+      // a credential entry returning from the key slot, the evidence run that
+      // starts in it — set their page right after this reset.
+      setSettingsView(SETTINGS_VIEW.ROOT);
+    },
+    [setTab],
+  );
 
   // A choice made in the sheet puts the sheet away. It is drawn over the list
   // and is taller than a row, so a list narrowed to one or two sessions ends up
@@ -347,7 +349,7 @@ export function App(): React.JSX.Element {
     // screen. An entry outlives the tab it was started on now, so holding the
     // panel open for one that is not drawn would leave the pointer unable to
     // close a panel showing nothing but sessions.
-    entryDrawn: () => credentialHeld.current && tabRef.current === PANEL_TAB.SETTINGS,
+    entryDrawn: () => credentialHeld.current && tabNow() === PANEL_TAB.SETTINGS,
     composerHeld: () => credentialHeld.current || feedbackHeld.current,
     onNotPanel: () => setOptionsOpen(false),
     onCapsuleList: () => setSessionView(DEFAULT_SESSION_VIEW),
@@ -897,7 +899,7 @@ export function App(): React.JSX.Element {
         const wait =
           opening || page === undefined
             ? ERRAND_WAIT.CONTENT
-            : tabRef.current === PANEL_TAB.SETTINGS && settingsView === page
+            : tabNow() === PANEL_TAB.SETTINGS && settingsView === page
               ? ERRAND_WAIT.AT_ONCE
               : ERRAND_WAIT.PAGE;
         try {
@@ -1017,6 +1019,7 @@ export function App(): React.JSX.Element {
       runErrand,
       feedbackEntry.latest,
       presentationOf,
+      tabNow,
     ],
   );
 

@@ -18,6 +18,7 @@ import { TALK_KEY_RELEASE, talkKeyRelease } from "../shared/voice-hotkey";
 import { askRefusal } from "./ask-luke";
 import { type AppActionCarrier, quietIsLukesOwn, RealtimeVoiceSession } from "./realtime-session";
 import { SpokenNoticeAnnouncer } from "./spoken-notices";
+import { useStateWithRef } from "./use-state-with-ref";
 import { WAVEFORM_VOICE, type WaveformVoice } from "./waveform";
 
 /**
@@ -277,7 +278,9 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   const [analyser, setAnalyser] = useState<AnalyserNode>();
   const [microphoneStatus, setMicrophoneStatus] = useState<MicrophoneStatus>("not-determined");
   const [microphoneError, setMicrophoneError] = useState<string>();
-  const [voiceStatus, setVoiceStatus] = useState<RealtimeStatus>(REALTIME_STATUS.IDLE);
+  const [voiceStatus, setVoiceStatus, voiceStatusNow] = useStateWithRef<RealtimeStatus>(
+    REALTIME_STATUS.IDLE,
+  );
   /**
    * A pressed talk key still waiting for the call it asked to open. The meter
    * is drawn from this rather than from the connection, because the press is
@@ -304,7 +307,6 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   const voiceSession = useRef<RealtimeVoiceSession | undefined>(undefined);
   const announcer = useRef<SpokenNoticeAnnouncer | undefined>(undefined);
   const quietTimer = useRef<number | undefined>(undefined);
-  const voiceStatusRef = useRef<RealtimeStatus>(REALTIME_STATUS.IDLE);
   /**
    * Whether Luke has actually been heard during this reply. Committing a turn
    * swaps the meter from the microphone to Luke, and the meter reports quiet as
@@ -367,7 +369,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       onCaption: setVoiceCaption,
     });
     return voiceSession.current;
-  }, []);
+  }, [setVoiceStatus]);
 
   /**
    * The announcer that lets Luke speak into silence: it queues the notices the
@@ -421,30 +423,33 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    * producing it. The meter is already measuring the stream, so the quiet it
    * reports is what ends the turn.
    */
-  const handleVoiceActivity = useCallback((active: boolean) => {
-    if (voiceStatusRef.current !== REALTIME_STATUS.RESPONDING) return;
-    if (active) {
-      heardLuke.current = true;
-      voiceSession.current?.reportRemoteAudioActive();
-    }
-    if (quietTimer.current !== undefined) {
-      window.clearTimeout(quietTimer.current);
-      quietTimer.current = undefined;
-    }
-    if (active) return;
-    // The meter calls quiet after a fifth of a second, which is shorter than the
-    // pause between two sentences. Ending a turn on that would take the meter
-    // down mid-reply — the very thing this is here to stop — so the turn waits
-    // for a silence longer than speech leaves behind.
-    quietTimer.current = window.setTimeout(() => {
-      quietTimer.current = undefined;
-      // Only Luke's own silence ends Luke's turn.
-      if (!quietIsLukesOwn({ status: voiceStatusRef.current, heardLuke: heardLuke.current })) {
-        return;
+  const handleVoiceActivity = useCallback(
+    (active: boolean) => {
+      if (voiceStatusNow() !== REALTIME_STATUS.RESPONDING) return;
+      if (active) {
+        heardLuke.current = true;
+        voiceSession.current?.reportRemoteAudioActive();
       }
-      voiceSession.current?.reportRemoteAudioIdle();
-    }, REMOTE_QUIET_MS);
-  }, []);
+      if (quietTimer.current !== undefined) {
+        window.clearTimeout(quietTimer.current);
+        quietTimer.current = undefined;
+      }
+      if (active) return;
+      // The meter calls quiet after a fifth of a second, which is shorter than the
+      // pause between two sentences. Ending a turn on that would take the meter
+      // down mid-reply — the very thing this is here to stop — so the turn waits
+      // for a silence longer than speech leaves behind.
+      quietTimer.current = window.setTimeout(() => {
+        quietTimer.current = undefined;
+        // Only Luke's own silence ends Luke's turn.
+        if (!quietIsLukesOwn({ status: voiceStatusNow(), heardLuke: heardLuke.current })) {
+          return;
+        }
+        voiceSession.current?.reportRemoteAudioIdle();
+      }, REMOTE_QUIET_MS);
+    },
+    [voiceStatusNow],
+  );
 
   /**
    * Asks the system for access and nothing else. Opening a call here would hold
@@ -612,7 +617,6 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   }, [activeStream]);
 
   useEffect(() => {
-    voiceStatusRef.current = voiceStatus;
     // Each reply is heard from scratch, so the previous one cannot vouch for it.
     if (!typedAskHolds(voiceStatus)) {
       heardLuke.current = false;
