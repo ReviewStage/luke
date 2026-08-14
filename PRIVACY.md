@@ -50,18 +50,24 @@ and observation issues authenticated `GET` requests only:
   from Git remotes (or the project name when no usable remote is available);
   timestamps; model configuration; archive state; status and reported errors;
   and session deep links.
-- For Cursor, Luke reads agents owned by the supplied key and their latest runs.
-  It processes identifiers, agent names and links, repository URLs, starting
-  refs and run branches, timestamps, archive and run status, provider-designated
-  run results, and pull-request links.
+- For Cursor, Luke reads agents owned by the supplied key and their latest runs,
+  and — on a much slower cadence, within Cursor's documented limits — the list
+  of repositories the key may launch agents in. It processes identifiers, agent
+  names and links, repository URLs, starting refs and run branches, timestamps,
+  archive and run status, provider-designated run results, and pull-request
+  links.
 
 Observation never calls a provider write route. Luke calls one only when you
 ask for the act it performs — a message typed on a session's row or asked for
 out loud, a control a session's provider advertised (such as cancelling a
-Conductor turn), or a new Conductor workspace in one of the projects Conductor
-reports — each through the provider's own documented endpoint under the same
-key, and each validated against what the latest observation actually reported.
-Nothing automatic reaches a write route. Provider-assigned names and results
+Conductor turn), a new workspace: a Conductor workspace in one of the
+projects Conductor reports, or a Cursor agent in a repository Cursor lists —
+or another agent started in the workspace an observed Conductor session runs
+in — each through the provider's own documented endpoint under the same key,
+and each validated against what the latest observation actually reported. A new
+workspace can carry the opening task you gave its agent, in your words; that
+text goes to the provider the same way a message to an existing session does,
+and nowhere else. Nothing automatic reaches a write route. Provider-assigned names and results
 can reflect task or prompt content; Luke uses their bounded values to distinguish
 sessions and describe outcomes. Returned metadata is held in memory for display;
 response bodies are not persisted.

@@ -6,6 +6,7 @@ import {
   type SessionControl,
   type SessionProvider,
   type SessionStatus,
+  WORKSPACE_TASK_SUPPORT,
   type WorkspaceProject,
 } from "@sidecar/core";
 import {
@@ -73,7 +74,27 @@ const CONDUCTOR_MESSAGE_FIELD = {
 const CONDUCTOR_WORKSPACE_FIELD = {
   PROJECT_ID: "projectId",
   NAME: "name",
+  /** The first session, as `POST /v0/workspaces` names it in its response. */
+  SESSION_ID: "sessionId",
 } as const;
+
+/** The body `POST /v0/sessions` documents, of it the fields Luke ever sends. */
+const CONDUCTOR_SESSION_CREATE_FIELD = {
+  WORKSPACE_ID: "workspaceId",
+  AGENT: "agent",
+  NAME: "name",
+  MESSAGE: "message",
+} as const;
+
+/**
+ * The kinds of agent Conductor's session-creation endpoint documents, named
+ * exactly as it takes them. The endpoint also takes `acp`, which is a
+ * protocol shim with no defaults of its own rather than an agent someone asks
+ * for by name, so it is deliberately not offered. Model, effort, and fast
+ * mode are likewise never sent: Conductor's defaults are the user's own
+ * settings there.
+ */
+const CONDUCTOR_SPAWNABLE_AGENTS: readonly string[] = ["claude", "codex", "cursor"];
 
 /**
  * The one control this adapter can honour, advertised only while a session is
@@ -249,18 +270,28 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     this.#projects = [];
   }
 
-  /** Where Conductor will create a workspace: the projects the last pass listed. */
+  /**
+   * Where Conductor will create a workspace: the projects the last pass
+   * listed. An opening task is optional — Conductor makes an idle workspace
+   * happily — and is handed over after creation, through the documented
+   * message endpoint on the first session the creation response names.
+   */
   override workspaceProjects(): readonly WorkspaceProject[] {
     return this.#projects.map((project) => ({
       providerProjectId: project.id,
       repository: project.repositoryLabel,
+      taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
     }));
   }
 
   protected override workspaceCreationRoute(
     project: WorkspaceProject,
     name: string | undefined,
+    _task: string | undefined,
   ): CloudWriteRoute {
+    // The task deliberately does not ride here: Conductor's creation endpoint
+    // documents no prompt field, so the task goes through the documented
+    // message endpoint once the response says which session takes it.
     return {
       segments: [CONDUCTOR_ROUTE_SEGMENT.V0, CONDUCTOR_ROUTE_SEGMENT.WORKSPACES],
       body: {
@@ -268,6 +299,21 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
         ...(name ? { [CONDUCTOR_WORKSPACE_FIELD.NAME]: name } : {}),
       },
     };
+  }
+
+  protected override workspaceTaskRoute(
+    creationBody: Record<string, unknown>,
+    task: string,
+  ): CloudWriteRoute | { undeliverable: string } {
+    // The creation response documents the first session's id; the task is a
+    // message to exactly that session, under the same key, through the same
+    // documented endpoint a typed row uses.
+    const sessionId = textFromRecord(creationBody, CONDUCTOR_WORKSPACE_FIELD.SESSION_ID);
+    const route = sessionId ? this.messageRoute(sessionId, task) : undefined;
+    if (!route) {
+      return { undeliverable: "Conductor did not say which session takes the opening message." };
+    }
+    return route;
   }
 
   protected async collect(
@@ -450,6 +496,27 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     );
   }
 
+  protected override workspaceAgentRoute(
+    spawnTarget: string,
+    agent: string,
+    name: string | undefined,
+    task: string | undefined,
+  ): CloudWriteRoute {
+    // The target is the workspace id the observation itself advertised, so
+    // the route acts on what the user was shown — never on state kept aside.
+    return {
+      segments: [CONDUCTOR_ROUTE_SEGMENT.V0, CONDUCTOR_ROUTE_SEGMENT.SESSIONS],
+      body: {
+        [CONDUCTOR_SESSION_CREATE_FIELD.WORKSPACE_ID]: spawnTarget,
+        [CONDUCTOR_SESSION_CREATE_FIELD.AGENT]: agent,
+        ...(name ? { [CONDUCTOR_SESSION_CREATE_FIELD.NAME]: name } : {}),
+        // The opening task rides the creation itself: `POST /v0/sessions`
+        // documents taking the first message inline.
+        ...(task ? { [CONDUCTOR_SESSION_CREATE_FIELD.MESSAGE]: task } : {}),
+      },
+    };
+  }
+
   protected override messageRoute(
     providerSessionId: string,
     text: string,
@@ -518,6 +585,13 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
         !session.archived &&
         (reported?.status === CONDUCTOR_SESSION_STATUS.IDLE ||
           reported?.status === CONDUCTOR_SESSION_STATUS.WORKING),
+      // Another agent lands in the workspace around this row, whatever state
+      // the row's own chat is in: the workspace was observed this pass, and
+      // that is the thing the creation endpoint takes. Its id rides the
+      // advertisement — like a control's target — so it can never outlive the
+      // snapshot that promised it.
+      spawnableAgents: CONDUCTOR_SPAWNABLE_AGENTS,
+      spawnTarget: session.workspace.id,
       ...(reported?.status === CONDUCTOR_SESSION_STATUS.WORKING
         ? { controls: [CONDUCTOR_CANCEL_CONTROL] }
         : {}),

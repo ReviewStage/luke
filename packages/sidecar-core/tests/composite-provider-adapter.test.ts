@@ -14,6 +14,7 @@ import {
   SESSION_STATUS,
   type SessionProvider,
   type SessionProviderAdapter,
+  WORKSPACE_TASK_SUPPORT,
   type WorkspaceCapableSessionProviderAdapter,
   type WorkspaceProject,
 } from "../src";
@@ -228,12 +229,28 @@ test("offers every observer's projects and carries a creation ask to the one tha
     adapters: [
       // The local observer offers no projects at all, and must not stop an ask.
       observerOf(cursor, [observation("local-session")]),
-      workspaceCreator(cursor, [{ providerProjectId: "proj-1", repository: "luke" }], () => ({
-        status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED,
-      })),
       workspaceCreator(
         cursor,
-        [{ providerProjectId: "proj-2", repository: "sidecar" }],
+        [
+          {
+            providerProjectId: "proj-1",
+            repository: "luke",
+            taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
+          },
+        ],
+        () => ({
+          status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED,
+        }),
+      ),
+      workspaceCreator(
+        cursor,
+        [
+          {
+            providerProjectId: "proj-2",
+            repository: "sidecar",
+            taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
+          },
+        ],
         (request) => {
           created.push(request);
           return { status: PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED };
@@ -243,8 +260,16 @@ test("offers every observer's projects and carries a creation ask to the one tha
   });
 
   assert.deepEqual(adapter.workspaceProjects(), [
-    { providerProjectId: "proj-1", repository: "luke" },
-    { providerProjectId: "proj-2", repository: "sidecar" },
+    {
+      providerProjectId: "proj-1",
+      repository: "luke",
+      taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
+    },
+    {
+      providerProjectId: "proj-2",
+      repository: "sidecar",
+      taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
+    },
   ]);
 
   const result = await adapter.createWorkspace({ providerProjectId: "proj-2" });

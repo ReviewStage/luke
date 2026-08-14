@@ -86,12 +86,26 @@ const bridge: AppBridge = {
       identity,
       controlId,
     ) as Promise<ProviderControlResult>,
-  createSessionWorkspace: (providerId: string, providerProjectId: string, name?: string) =>
+  createSessionWorkspace: (
+    providerId: string,
+    providerProjectId: string,
+    name?: string,
+    task?: string,
+  ) =>
     ipcRenderer.invoke(
       channels.createSessionWorkspace,
       providerId,
       providerProjectId,
       name,
+      task,
+    ) as Promise<ProviderWorkspaceResult>,
+  addWorkspaceAgent: (identity: SessionIdentity, agent: string, name?: string, task?: string) =>
+    ipcRenderer.invoke(
+      channels.addWorkspaceAgent,
+      identity,
+      agent,
+      name,
+      task,
     ) as Promise<ProviderWorkspaceResult>,
   executeIssueAction: (action: IssueActionAsk) =>
     ipcRenderer.invoke(channels.executeIssueAction, action) as Promise<TrackerActionResult>,

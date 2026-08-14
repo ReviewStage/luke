@@ -127,6 +127,26 @@ export function isMessageCapableAdapter(
 }
 
 /**
+ * Whether a new workspace in a project carries an opening task — the
+ * developer's own words for what its agent should start on. A provider whose
+ * creation endpoint requires a prompt cannot make an idle workspace, and one
+ * that documents no way to hand a task at creation cannot take one; each
+ * project says which it is, so an ask can be validated before a request
+ * exists.
+ */
+export const WORKSPACE_TASK_SUPPORT = {
+  NONE: "none",
+  OPTIONAL: "optional",
+  REQUIRED: "required",
+} as const;
+
+export type WorkspaceTaskSupport =
+  (typeof WORKSPACE_TASK_SUPPORT)[keyof typeof WORKSPACE_TASK_SUPPORT];
+
+const WORKSPACE_TASK_SUPPORT_LIST: readonly WorkspaceTaskSupport[] =
+  Object.values(WORKSPACE_TASK_SUPPORT);
+
+/**
  * One place a provider will create a workspace: a project it reported on the
  * latest observation pass. A request can only name one of these, so the set of
  * places a workspace can be asked for is the set the provider itself listed —
@@ -137,6 +157,8 @@ export interface WorkspaceProject {
   providerProjectId: string;
   /** The repository label the project is named by out loud and on screen. */
   repository: string;
+  /** Whether a new workspace here takes — or needs — an opening task. */
+  taskSupport: WorkspaceTaskSupport;
 }
 
 /** A workspace project as the app reports it, stamped with who offered it. */
@@ -186,6 +208,11 @@ export function normalizeObservedWorkspaceProjects(
       providerName: project.providerName.trim() || providerId,
       providerProjectId,
       repository,
+      // A support level this build does not know is read as none, so an ask
+      // is refused rather than guessed at.
+      taskSupport: WORKSPACE_TASK_SUPPORT_LIST.includes(project.taskSupport)
+        ? project.taskSupport
+        : WORKSPACE_TASK_SUPPORT.NONE,
     });
     if (normalized.length >= maximumObservedWorkspaceProjects) break;
   }
@@ -197,6 +224,13 @@ export interface ProviderWorkspaceRequest {
   providerProjectId: string;
   /** The name the user chose, when they chose one; the provider names it otherwise. */
   name?: string;
+  /**
+   * The opening task for the workspace's agent, in the user's own words —
+   * present only when the user gave one, and only for a project whose
+   * `taskSupport` takes it. It is the same class of content as a message to
+   * an existing session, and it travels under the same rules.
+   */
+  task?: string;
 }
 
 /**
@@ -227,5 +261,42 @@ export function isWorkspaceCapableAdapter(
   return (
     typeof candidate.workspaceProjects === "function" &&
     typeof candidate.createWorkspace === "function"
+  );
+}
+
+/**
+ * A user-asked request for another agent in the workspace an observed session
+ * already runs in. The session names the workspace; the agent must be one that
+ * session's latest observation listed as spawnable.
+ */
+export interface ProviderWorkspaceAgentRequest {
+  providerSessionId: string;
+  /** The kind of agent, exactly as the observation listed it. */
+  agent: string;
+  /** The name the user chose, when they chose one. */
+  name?: string;
+  /** The new agent's opening task, in the user's own words, when they gave one. */
+  task?: string;
+}
+
+/**
+ * Optional extension for adapters whose provider documents starting another
+ * agent in an existing workspace. The same rules bind it that bind a message:
+ * it acts only on what a user just asked for, only against a session the
+ * latest observation reported with the agent it listed, through the provider's
+ * own documented endpoint — and nothing that decides on the user's behalf may
+ * reach it.
+ */
+export interface WorkspaceAgentCapableSessionProviderAdapter extends SessionProviderAdapter {
+  spawnWorkspaceAgent(request: ProviderWorkspaceAgentRequest): Promise<ProviderWorkspaceResult>;
+}
+
+/** Whether an adapter can start another agent at all, before asking it to. */
+export function isWorkspaceAgentCapableAdapter(
+  adapter: SessionProviderAdapter,
+): adapter is WorkspaceAgentCapableSessionProviderAdapter {
+  return (
+    typeof (adapter as Partial<WorkspaceAgentCapableSessionProviderAdapter>).spawnWorkspaceAgent ===
+    "function"
   );
 }

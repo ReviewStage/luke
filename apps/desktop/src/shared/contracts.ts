@@ -314,15 +314,29 @@ export interface AppBridge {
   ): Promise<ProviderControlResult>;
   /**
    * Creates one workspace the user just asked for, in a project its provider
-   * reported. The renderer names a project it was shown, never a repository
-   * URL or path, and the main process validates the ask again against what
-   * its adapters actually offered before the provider's documented creation
-   * endpoint is called.
+   * reported — carrying, where that project takes one, the opening task the
+   * user gave its agent in their own words. The renderer names a project it
+   * was shown, never a repository URL or path of its own, and the main
+   * process validates the ask again against what its adapters actually
+   * offered before the provider's documented creation endpoint is called.
    */
   createSessionWorkspace(
     providerId: string,
     providerProjectId: string,
     name?: string,
+    task?: string,
+  ): Promise<ProviderWorkspaceResult>;
+  /**
+   * Starts another agent in the workspace an observed session runs in. The
+   * renderer names a session it is already drawing and an agent kind that
+   * session's roster entry listed; the main process validates both again
+   * against its registry before the adapter sees anything.
+   */
+  addWorkspaceAgent(
+    identity: SessionIdentity,
+    agent: string,
+    name?: string,
+    task?: string,
   ): Promise<ProviderWorkspaceResult>;
   /**
    * Carries one spoken issue act to the tracker that can take it. The renderer
@@ -400,6 +414,7 @@ export const channels = {
   sendSessionMessage: "app:send-session-message",
   executeSessionControl: "app:execute-session-control",
   createSessionWorkspace: "app:create-session-workspace",
+  addWorkspaceAgent: "app:add-workspace-agent",
   executeIssueAction: "app:execute-issue-action",
   sendFeedback: "app:send-feedback",
   focusPanel: "app:focus-panel",

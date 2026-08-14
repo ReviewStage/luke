@@ -314,10 +314,20 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "Creating workspaces",
       detail:
-        "Where a connected provider documents a creation endpoint — Conductor today — an ask in " +
-        "conversation, spoken or typed, can create a new workspace in one of the projects that " +
-        "provider reports, optionally under a name the developer chose. Only reported projects " +
-        "can be named, and a provider that reports none takes no ask.",
+        "Where a connected provider documents a creation endpoint — Conductor and Cursor today — " +
+        "an ask in conversation, spoken or typed, can create a new workspace in one of the " +
+        "projects that provider reports, optionally under a name the developer chose, and can " +
+        "hand the new agent an opening task in the developer's own words where the project takes " +
+        "one. Only reported projects can be named, a project that needs a task cannot be created " +
+        "without one, and a provider that reports none takes no ask.",
+    },
+    {
+      label: "Adding agents to a workspace",
+      detail:
+        "Where a session's provider documents it — Conductor today — the same kind of ask can " +
+        "start another agent in the workspace an observed session runs in, as one of the agent " +
+        "kinds that session's roster entry lists, optionally named and optionally with an " +
+        "opening task. A session whose entry lists no new agents takes no such ask.",
     },
     talkKeyFact(input.hotkey),
     askKeyFact(input.askKey),

@@ -14,6 +14,7 @@ import {
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
   issueCommentText,
+  isWorkspaceAgentCapableAdapter,
   isWorkspaceCapableAdapter,
   type NativeNotchGeometry,
   normalizeObservedWorkspaceProjects,
@@ -1392,6 +1393,7 @@ function registerIpc(): void {
       providerId: unknown,
       providerProjectId: unknown,
       name: unknown,
+      task: unknown,
     ): Promise<ProviderWorkspaceResult> => {
       if (!trustedSender(event)) throw new Error("Untrusted renderer");
       if (
@@ -1399,7 +1401,8 @@ function registerIpc(): void {
         !providerId.trim() ||
         typeof providerProjectId !== "string" ||
         !providerProjectId.trim() ||
-        (name !== undefined && typeof name !== "string")
+        (name !== undefined && typeof name !== "string") ||
+        (task !== undefined && typeof task !== "string")
       ) {
         throw new Error("Invalid workspace creation request");
       }
@@ -1419,13 +1422,26 @@ function registerIpc(): void {
           reason: "A workspace name has to be short enough to say and longer than nothing.",
         };
       }
+      // The task's own bound, and its fit to the project, are answered by the
+      // adapter, which validates both against the projects it actually offers.
+      const openingTask = task === undefined ? undefined : sessionMessageText(task);
+      if (task !== undefined && openingTask === undefined) {
+        return {
+          status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+          reason: "A task has to be shorter than a document and longer than nothing.",
+        };
+      }
       const result = await adapter.createWorkspace({
         providerProjectId,
         ...(workspaceName ? { name: workspaceName } : {}),
+        ...(openingTask ? { task: openingTask } : {}),
       });
       // A workspace that landed is a session the panel should be showing, so
-      // the next look must actually ask rather than serve the cache.
-      if (result.status === PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED) {
+      // the next look must actually ask rather than serve the cache. A
+      // rejection refreshes too: a workspace can stand with its opening task
+      // undelivered, and the adapter answers a rejection that never reached
+      // the network from its cache anyway.
+      if (result.status !== PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED) {
         void sessionRegistry.refresh(adapter);
       }
       return result;
@@ -1484,6 +1500,70 @@ function registerIpc(): void {
       // as soon as Linear will say.
       if (result.status === TRACKER_ACTION_RESULT_STATUS.ACCEPTED) {
         void refreshTrackedIssues();
+      }
+      return result;
+    },
+  );
+
+  // Another agent in an observed workspace runs the gauntlet a control does,
+  // and one more: the agent kind the renderer names must be one the session's
+  // latest observation actually listed. The registry is what advertised it, so
+  // the registry is what answers whether it stands; the adapter then reads the
+  // workspace back from its own last pass.
+  ipcMain.handle(
+    channels.addWorkspaceAgent,
+    async (
+      event,
+      identity: unknown,
+      agent: unknown,
+      name: unknown,
+      task: unknown,
+    ): Promise<ProviderWorkspaceResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (
+        !isSessionIdentity(identity) ||
+        typeof agent !== "string" ||
+        !agent.trim() ||
+        (name !== undefined && typeof name !== "string") ||
+        (task !== undefined && typeof task !== "string")
+      ) {
+        throw new Error("Invalid workspace agent request");
+      }
+      // A fixture run has an empty registry, so it refuses every ask.
+      const session = sessionRegistry.get(identity);
+      const advertised = session?.spawnableAgents.find((candidate) => candidate === agent.trim());
+      if (!advertised) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+      const adapter = sessionAdapters.find(
+        (candidate) => candidate.provider.id === identity.providerId,
+      );
+      if (!adapter || !isWorkspaceAgentCapableAdapter(adapter)) {
+        return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+      }
+      const sessionName = name === undefined ? undefined : workspaceNameText(name);
+      if (name !== undefined && sessionName === undefined) {
+        return {
+          status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+          reason: "A session name has to be short enough to say and longer than nothing.",
+        };
+      }
+      const openingTask = task === undefined ? undefined : sessionMessageText(task);
+      if (task !== undefined && openingTask === undefined) {
+        return {
+          status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+          reason: "A task has to be shorter than a document and longer than nothing.",
+        };
+      }
+      const result = await adapter.spawnWorkspaceAgent({
+        providerSessionId: identity.providerSessionId,
+        agent: advertised,
+        ...(sessionName ? { name: sessionName } : {}),
+        ...(openingTask ? { task: openingTask } : {}),
+      });
+      // A new agent is a session the panel should be showing, so the next
+      // look must actually ask rather than serve the cache — on a rejection
+      // too, for the same reason a partial workspace creation refreshes.
+      if (result.status !== PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED) {
+        void sessionRegistry.refresh(adapter);
       }
       return result;
     },

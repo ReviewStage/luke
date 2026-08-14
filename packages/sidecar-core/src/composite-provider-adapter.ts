@@ -2,6 +2,7 @@ import {
   type ControllableSessionProviderAdapter,
   isControllableAdapter,
   isMessageCapableAdapter,
+  isWorkspaceAgentCapableAdapter,
   isWorkspaceCapableAdapter,
   type MessageCapableSessionProviderAdapter,
   PROVIDER_CONTROL_RESULT_STATUS,
@@ -10,9 +11,11 @@ import {
   type ProviderControlResult,
   type ProviderMessageResult,
   type ProviderSessionMessage,
+  type ProviderWorkspaceAgentRequest,
   type ProviderWorkspaceRequest,
   type ProviderWorkspaceResult,
   type SessionProviderAdapter,
+  type WorkspaceAgentCapableSessionProviderAdapter,
   type WorkspaceCapableSessionProviderAdapter,
   type WorkspaceProject,
 } from "./providers";
@@ -36,7 +39,8 @@ export class CompositeSessionProviderAdapter
     SessionProviderAdapter,
     MessageCapableSessionProviderAdapter,
     ControllableSessionProviderAdapter,
-    WorkspaceCapableSessionProviderAdapter
+    WorkspaceCapableSessionProviderAdapter,
+    WorkspaceAgentCapableSessionProviderAdapter
 {
   readonly provider: SessionProvider;
 
@@ -116,6 +120,18 @@ export class CompositeSessionProviderAdapter
     for (const adapter of this.#adapters) {
       if (!isWorkspaceCapableAdapter(adapter)) continue;
       const result = await adapter.createWorkspace(request);
+      if (result.status !== PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED) return result;
+    }
+    return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+  }
+
+  /** A new agent finds the observer holding its workspace the same way. */
+  async spawnWorkspaceAgent(
+    request: ProviderWorkspaceAgentRequest,
+  ): Promise<ProviderWorkspaceResult> {
+    for (const adapter of this.#adapters) {
+      if (!isWorkspaceAgentCapableAdapter(adapter)) continue;
+      const result = await adapter.spawnWorkspaceAgent(request);
       if (result.status !== PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED) return result;
     }
     return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
