@@ -26,6 +26,7 @@ import {
   issueCommentText,
   type TrackedIssue,
 } from "./issues";
+import { isRecord } from "./json";
 import {
   maximumWorkspaceNameLength,
   type ObservedWorkspaceProject,
@@ -267,10 +268,6 @@ const REALTIME_INSTRUCTION_LINES: readonly string[] = [
 function trimmedText(value: string | undefined): string | undefined {
   const normalized = value?.trim();
   return normalized || undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 /** The standing instructions that give Luke its spoken voice and its limits. */

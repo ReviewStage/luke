@@ -1,6 +1,7 @@
 import type { Dirent, Stats } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { recordFromJsonLine, UNKNOWN_WORKSPACE_LABEL } from "@sidecar/core";
 
 /**
  * The shared half of every adapter that observes sessions on this machine:
@@ -8,16 +9,8 @@ import path from "node:path";
  * itself. Nothing here opens a file for writing, and no caller may.
  */
 
-/** The label a session takes when Luke cannot name the folder it belongs to. */
-export const UNKNOWN_WORKSPACE_LABEL = "workspace";
-
-/**
- * Shared bounds for every local provider. They match the cloud adapters, so a
- * session reads the same whether Luke observed it on disk or over the network.
- */
+/** How much of a transcript one local observation pass may read. */
 export const LOCAL_ADAPTER_DEFAULTS = {
-  MAXIMUM_SESSION_AGE_MS: 24 * 60 * 60 * 1000,
-  ACTIVE_SESSION_FRESHNESS_MS: 15 * 60 * 1000,
   READ_TAIL_BYTES: 64 * 1024,
 } as const;
 
@@ -52,16 +45,6 @@ interface ProjectSessionsDirectory {
   project: DirectoryEntry;
   sessionsDirectory: string;
   mtimeMs: number;
-}
-
-export function positiveInteger(value: number | undefined, fallback: number): number {
-  if (value === undefined || !Number.isFinite(value) || value <= 0) return fallback;
-  return Math.floor(value);
-}
-
-export function nonNegativeNumber(value: number | undefined, fallback: number): number {
-  if (value === undefined || !Number.isFinite(value) || value < 0) return fallback;
-  return value;
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
@@ -160,17 +143,6 @@ export function readHead(filePath: string, maximumBytes: number): Promise<string
   return readRegion(filePath, maximumBytes, () => 0);
 }
 
-export function recordFromJsonLine(line: string): Record<string, unknown> | undefined {
-  try {
-    const parsed = JSON.parse(line) as unknown;
-    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 function tailLines(tail: string): string[] {
   const lines = tail.split(/\r?\n/).filter((line) => line.trim().length > 0);
   // A bounded read lands mid-record, and a provider appending right now can
@@ -191,6 +163,11 @@ export function workspaceLabel(directoryPath: string | undefined): string {
   if (!directoryPath) return UNKNOWN_WORKSPACE_LABEL;
   const label = path.basename(directoryPath.trim());
   return label || UNKNOWN_WORKSPACE_LABEL;
+}
+
+/** Drops duplicate paths while keeping first-seen order. */
+export function uniquePaths(paths: readonly string[]): string[] {
+  return [...new Set(paths)];
 }
 
 /**

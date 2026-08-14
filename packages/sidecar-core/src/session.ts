@@ -16,6 +16,37 @@ export const SESSION_STATUS = {
 export type SessionStatus = (typeof SESSION_STATUS)[keyof typeof SESSION_STATUS];
 
 /**
+ * Only waiting decays; a failure does not heal by going stale. Providers
+ * report live state, or a timestamp that marks when that state was entered,
+ * rather than a heartbeat — so a long turn is still working and a completed
+ * or failed session stays that way however long ago it finished. Once waiting
+ * is stale, Luke cannot tell a turn that just asked for the user from one
+ * they walked away from hours ago, and reporting the stale state would speak
+ * at the wrong moment.
+ */
+export function agedStatus(
+  status: SessionStatus,
+  observedAt: number,
+  now: number,
+  freshnessMs: number,
+): SessionStatus {
+  if (status !== SESSION_STATUS.WAITING) return status;
+  return now - observedAt <= freshnessMs ? status : SESSION_STATUS.UNKNOWN;
+}
+
+/**
+ * Shared bounds for every provider. A session reads the same whether Luke
+ * observed it on disk or over the network.
+ */
+export const OBSERVATION_WINDOW = {
+  MAXIMUM_SESSION_AGE_MS: 24 * 60 * 60 * 1000,
+  ACTIVE_SESSION_FRESHNESS_MS: 15 * 60 * 1000,
+} as const;
+
+/** The label a session takes when Luke cannot name the folder or repository it belongs to. */
+export const UNKNOWN_WORKSPACE_LABEL = "workspace";
+
+/**
  * Where a session's work is actually running. It is not the provider: the same
  * provider can hold a session on this machine and one in a datacentre, and only
  * the session knows which it is. Local is the default, so a session is only

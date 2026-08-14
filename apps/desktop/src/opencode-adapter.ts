@@ -1,25 +1,31 @@
 import os from "node:os";
 import path from "node:path";
 import {
+  agedStatus,
+  isRecord,
   maximumSessionTitleLength,
+  nonNegativeNumber,
+  OBSERVATION_WINDOW,
+  oneLine,
   PROVIDER_ID,
   type ProviderSessionObservation,
+  positiveInteger,
+  recordFromJsonLine,
   SESSION_STATUS,
   type SessionDetail,
   type SessionProvider,
   type SessionProviderAdapter,
   type SessionStatus,
+  text,
+  wholeNumber,
 } from "@sidecar/core";
 import {
   discoverSessionFiles,
-  LOCAL_ADAPTER_DEFAULTS,
-  nonNegativeNumber,
-  positiveInteger,
   readDirectory,
   readTextFile,
-  recordFromJsonLine,
   type SessionFileCandidate,
   statDirectoryEntry,
+  uniquePaths,
   workspaceLabel,
 } from "./local-session-adapter";
 import {
@@ -211,27 +217,6 @@ interface OpenCodeSessionSnapshot {
   activity?: string;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function text(value: unknown): string | undefined {
-  const normalized = typeof value === "string" ? value.trim() : "";
-  return normalized || undefined;
-}
-
-function wholeNumber(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function oneLine(value: string | undefined, maximumLength: number): string | undefined {
-  const normalized = value?.replace(/\s+/gu, " ").trim();
-  if (!normalized) return undefined;
-  return normalized.length > maximumLength
-    ? `${normalized.slice(0, maximumLength - 1).trimEnd()}…`
-    : normalized;
-}
-
 function numberFromRow(row: OpenCodeRow, key: string): number | undefined {
   return wholeNumber(row[key]);
 }
@@ -290,22 +275,27 @@ function turnFromMessage(record: Record<string, unknown>): OpenCodeTurn {
 }
 
 /**
- * A turn that failed is stuck until someone comes back to it, and a failure
- * does not heal by going stale — which is how every other adapter treats one.
- * Past that, the last message's bookkeeping answers what recency alone cannot:
- * an assistant message whose turn ended is holding for the developer, and one
- * still open is working. Once the session is stale neither reading survives,
- * because Luke cannot tell a turn that just ended from a session abandoned
- * hours ago — and a killed OpenCode process leaves an open turn on disk
- * forever, so an open turn decays the same way.
+ * A turn that failed is stuck until someone comes back to it. Past that, the
+ * last message's bookkeeping answers what recency alone cannot: an assistant
+ * message whose turn ended is holding for the developer, and one still open
+ * is working. A killed OpenCode process leaves an open turn on disk forever,
+ * so an open turn that has gone quiet is unknown rather than still working.
  */
-function statusFromTurn(turn: OpenCodeTurn | undefined, isFresh: boolean): SessionStatus {
+function statusFromTurn(
+  turn: OpenCodeTurn | undefined,
+  observedAt: number,
+  now: number,
+  freshnessMs: number,
+): SessionStatus {
   if (turn?.failure) return SESSION_STATUS.ERROR;
-  if (!isFresh) return SESSION_STATUS.UNKNOWN;
-  if (turn?.role === OPENCODE_ROLE.ASSISTANT) {
-    return turn.completed || turn.aborted ? SESSION_STATUS.WAITING : SESSION_STATUS.WORKING;
+  const status =
+    turn?.role === OPENCODE_ROLE.ASSISTANT && (turn.completed || turn.aborted)
+      ? SESSION_STATUS.WAITING
+      : SESSION_STATUS.WORKING;
+  if (status === SESSION_STATUS.WORKING && now - observedAt > freshnessMs) {
+    return SESSION_STATUS.UNKNOWN;
   }
-  return SESSION_STATUS.WORKING;
+  return agedStatus(status, observedAt, now, freshnessMs);
 }
 
 /**
@@ -358,11 +348,10 @@ function observationFromSnapshot(
   now: number,
   activeSessionFreshnessMs: number,
 ): ProviderSessionObservation {
-  const isFresh = now - snapshot.observedAt <= activeSessionFreshnessMs;
   return {
     providerSessionId: snapshot.providerSessionId,
     title: sessionTitle(snapshot.title, snapshot.directory),
-    status: statusFromTurn(snapshot.turn, isFresh),
+    status: statusFromTurn(snapshot.turn, snapshot.observedAt, now, activeSessionFreshnessMs),
     observedAt: snapshot.observedAt,
     detail: detailFromSnapshot(snapshot),
   };
@@ -430,10 +419,6 @@ function defaultDataDirectory(): string {
   return path.join(os.homedir(), ...OPENCODE_DATA_HOME_SEGMENTS, OPENCODE_DATA_DIRECTORY_NAME);
 }
 
-function uniquePaths(paths: readonly string[]): string[] {
-  return [...new Set(paths)];
-}
-
 /**
  * Observes the OpenCode sessions on this machine from the state OpenCode
  * already writes for itself: the SQLite database every install since v1.2.0
@@ -459,11 +444,11 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
     );
     this.#maximumSessionAgeMs = nonNegativeNumber(
       options.maximumSessionAgeMs,
-      LOCAL_ADAPTER_DEFAULTS.MAXIMUM_SESSION_AGE_MS,
+      OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS,
     );
     this.#activeSessionFreshnessMs = nonNegativeNumber(
       options.activeSessionFreshnessMs,
-      LOCAL_ADAPTER_DEFAULTS.ACTIVE_SESSION_FRESHNESS_MS,
+      OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
     );
     this.#sqlite = options.sqlite ?? defaultSqliteModule;
   }
@@ -544,8 +529,10 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
     // cap above, not a scan.
     for (const snapshot of snapshots) {
       snapshot.turn = this.#turnFor(database, snapshot.providerSessionId);
-      const isFresh = now - snapshot.observedAt <= this.#activeSessionFreshnessMs;
-      if (statusFromTurn(snapshot.turn, isFresh) === SESSION_STATUS.WORKING) {
+      if (
+        statusFromTurn(snapshot.turn, snapshot.observedAt, now, this.#activeSessionFreshnessMs) ===
+        SESSION_STATUS.WORKING
+      ) {
         snapshot.activity = this.#activityFor(database, snapshot.providerSessionId);
       }
     }

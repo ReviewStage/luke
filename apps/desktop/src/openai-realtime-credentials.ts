@@ -1,6 +1,8 @@
 import {
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
+  nonNegativeNumber,
+  positiveInteger,
   REALTIME_CALLS_PATH,
   REALTIME_CLIENT_SECRETS_PATH,
   REALTIME_DEFAULTS,
@@ -13,6 +15,7 @@ import {
   realtimeClientSecretRequest,
   realtimeCredentialFromResponse,
   realtimeCredentialIsUsable,
+  text,
 } from "@sidecar/core";
 
 export const OPENAI_ENVIRONMENT = {
@@ -48,21 +51,6 @@ export interface OpenAiRealtimeCredentialOptions {
 }
 
 export type OpenAiRealtimeEnvironmentOptions = Omit<OpenAiRealtimeCredentialOptions, "apiKey">;
-
-function positiveInteger(value: number | undefined, fallback: number): number {
-  if (value === undefined || !Number.isFinite(value) || value <= 0) return fallback;
-  return Math.floor(value);
-}
-
-function nonNegativeNumber(value: number | undefined, fallback: number): number {
-  if (value === undefined || !Number.isFinite(value) || value < 0) return fallback;
-  return value;
-}
-
-function trimmedText(value: string | undefined): string | undefined {
-  const normalized = value?.trim();
-  return normalized || undefined;
-}
 
 function withoutTrailingSlash(value: string): string {
   return value.endsWith("/") ? value.slice(0, -1) : value;
@@ -123,15 +111,15 @@ export class OpenAiRealtimeCredentialMinter {
   #lastAttemptAt: number | undefined;
 
   constructor(options: OpenAiRealtimeCredentialOptions) {
-    const apiKey = trimmedText(options.apiKey);
+    const apiKey = text(options.apiKey);
     if (!apiKey) throw new Error("OpenAI API key must not be empty");
     this.#apiKey = apiKey;
-    this.#model = trimmedText(options.model) ?? REALTIME_DEFAULTS.MODEL;
-    this.#configuredVoice = trimmedText(options.voice) ?? REALTIME_DEFAULTS.VOICE;
+    this.#model = text(options.model) ?? REALTIME_DEFAULTS.MODEL;
+    this.#configuredVoice = text(options.voice) ?? REALTIME_DEFAULTS.VOICE;
     this.#voice = this.#configuredVoice;
     this.#configuredSpeed = positiveSpeed(options.speed) ?? REALTIME_DEFAULTS.SPEED;
     this.#speed = this.#configuredSpeed;
-    this.#baseUrl = withoutTrailingSlash(trimmedText(options.baseUrl) ?? OPENAI_DEFAULTS.BASE_URL);
+    this.#baseUrl = withoutTrailingSlash(text(options.baseUrl) ?? OPENAI_DEFAULTS.BASE_URL);
     this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
     this.#now = options.now ?? Date.now;
     this.#requestTimeoutMs = positiveInteger(
@@ -155,7 +143,7 @@ export class OpenAiRealtimeCredentialMinter {
    * answered with, because a credential already handed out cannot be recalled.
    */
   setVoice(voice: string | undefined): void {
-    const next = trimmedText(voice) ?? this.#configuredVoice;
+    const next = text(voice) ?? this.#configuredVoice;
     if (next === this.#voice) return;
     this.#voice = next;
     this.#credential = undefined;
@@ -293,11 +281,11 @@ export class OpenAiRealtimeCredentialMinter {
  * look identical from the UI and have completely different fixes.
  */
 export function unavailableRealtimeDiagnostics(fixtureMode: boolean): RealtimeDiagnostics {
-  const apiKeyConfigured = trimmedText(process.env[OPENAI_ENVIRONMENT.API_KEY]) !== undefined;
+  const apiKeyConfigured = text(process.env[OPENAI_ENVIRONMENT.API_KEY]) !== undefined;
   return {
     apiKeyConfigured,
     fixtureMode,
-    model: trimmedText(process.env[OPENAI_ENVIRONMENT.MODEL]) ?? REALTIME_DEFAULTS.MODEL,
+    model: text(process.env[OPENAI_ENVIRONMENT.MODEL]) ?? REALTIME_DEFAULTS.MODEL,
     voice: environmentRealtimeVoice() ?? REALTIME_DEFAULTS.VOICE,
     speed: environmentRealtimeSpeed() ?? REALTIME_DEFAULTS.SPEED,
     endpoint: `${OPENAI_DEFAULTS.BASE_URL}${REALTIME_CLIENT_SECRETS_PATH}`,
@@ -310,11 +298,11 @@ export function unavailableRealtimeDiagnostics(fixtureMode: boolean): RealtimeDi
 export function openAiRealtimeCredentialsFromEnvironment(
   options: OpenAiRealtimeEnvironmentOptions = {},
 ): OpenAiRealtimeCredentialMinter | undefined {
-  const apiKey = trimmedText(process.env[OPENAI_ENVIRONMENT.API_KEY]);
+  const apiKey = text(process.env[OPENAI_ENVIRONMENT.API_KEY]);
   if (!apiKey) return undefined;
 
-  const model = trimmedText(options.model) ?? trimmedText(process.env[OPENAI_ENVIRONMENT.MODEL]);
-  const voice = trimmedText(options.voice) ?? environmentRealtimeVoice();
+  const model = text(options.model) ?? text(process.env[OPENAI_ENVIRONMENT.MODEL]);
+  const voice = text(options.voice) ?? environmentRealtimeVoice();
   const speed = positiveSpeed(options.speed) ?? environmentRealtimeSpeed();
 
   return new OpenAiRealtimeCredentialMinter({

@@ -1,24 +1,30 @@
 import os from "node:os";
 import path from "node:path";
 import {
+  agedStatus,
+  isRecord,
   maximumSessionSummaryLength,
   maximumSessionTitleLength,
+  nonNegativeNumber,
+  OBSERVATION_WINDOW,
+  oneLine,
   PROVIDER_ID,
   type ProviderSessionObservation,
+  positiveInteger,
+  recordFromJsonLine,
   SESSION_STATUS,
   type SessionDetail,
   type SessionProvider,
   type SessionProviderAdapter,
+  text,
+  wholeNumber,
 } from "@sidecar/core";
 import {
   discoverSessionFiles,
   LOCAL_ADAPTER_DEFAULTS,
-  nonNegativeNumber,
-  positiveInteger,
   readDirectory,
   readHead,
   readTail,
-  recordFromJsonLine,
   type SessionFileCandidate,
   statDirectoryEntry,
   tailRecords,
@@ -157,24 +163,6 @@ function eventTypeFromRecord(record: Record<string, unknown>): ClaudeEventType |
     : undefined;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function text(value: unknown): string | undefined {
-  const normalized = typeof value === "string" ? value.trim() : "";
-  return normalized || undefined;
-}
-
-/** Collapses the newlines and runs of spaces a one-line row cannot show. */
-function oneLine(value: string | undefined, maximumLength: number): string | undefined {
-  const normalized = value?.replace(/\s+/gu, " ").trim();
-  if (!normalized) return undefined;
-  return normalized.length > maximumLength
-    ? `${normalized.slice(0, maximumLength - 1).trimEnd()}…`
-    : normalized;
-}
-
 function contentBlocks(record: Record<string, unknown>): Record<string, unknown>[] {
   const message = record.message;
   const content = isRecord(message) ? message.content : record.content;
@@ -209,10 +197,6 @@ function stopReasonFromRecord(record: Record<string, unknown>): string | undefin
 function modelFromRecord(record: Record<string, unknown>): string | undefined {
   const message = record.message;
   return isRecord(message) ? text(message.model) : undefined;
-}
-
-function wholeNumber(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 /**
@@ -363,18 +347,18 @@ function statusFromTail(
   now: number,
   activeSessionFreshnessMs: number,
 ): ProviderSessionObservation["status"] {
-  const isFresh = now - observedAt <= activeSessionFreshnessMs;
   if (parsed.eventType === CLAUDE_EVENT_TYPE.RESULT) return SESSION_STATUS.COMPLETE;
-  // A failure does not heal by going stale, which is how the cloud adapters
-  // treat one too. Only a turn that ended decays, because Luke cannot tell one
-  // that just finished from a session the developer walked away from — and a
-  // session out of the observation window altogether is dropped, not aged.
   if (parsed.apiError) return SESSION_STATUS.ERROR;
-  if (!isFresh) return SESSION_STATUS.UNKNOWN;
-  if (parsed.eventType === CLAUDE_EVENT_TYPE.ASSISTANT) {
-    return turnEnded(parsed) ? SESSION_STATUS.WAITING : SESSION_STATUS.WORKING;
+  const status =
+    parsed.eventType === CLAUDE_EVENT_TYPE.ASSISTANT && turnEnded(parsed)
+      ? SESSION_STATUS.WAITING
+      : SESSION_STATUS.WORKING;
+  // A transcript has no heartbeat, so an open turn that has gone quiet is
+  // unknown rather than still working.
+  if (status === SESSION_STATUS.WORKING && now - observedAt > activeSessionFreshnessMs) {
+    return SESSION_STATUS.UNKNOWN;
   }
-  return SESSION_STATUS.WORKING;
+  return agedStatus(status, observedAt, now, activeSessionFreshnessMs);
 }
 
 /**
@@ -460,11 +444,11 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
     );
     this.#maximumSessionAgeMs = nonNegativeNumber(
       options.maximumSessionAgeMs,
-      LOCAL_ADAPTER_DEFAULTS.MAXIMUM_SESSION_AGE_MS,
+      OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS,
     );
     this.#activeSessionFreshnessMs = nonNegativeNumber(
       options.activeSessionFreshnessMs,
-      LOCAL_ADAPTER_DEFAULTS.ACTIVE_SESSION_FRESHNESS_MS,
+      OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
     );
     this.#readTailBytes = positiveInteger(
       options.readTailBytes,

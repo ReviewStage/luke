@@ -7,6 +7,9 @@ import {
   attentionDecisionFromModel,
   attentionInstructions,
   attentionUpdateInput,
+  isRecord,
+  positiveInteger,
+  text,
 } from "@sidecar/core";
 
 const OPENAI_ENVIRONMENT = {
@@ -47,22 +50,8 @@ export interface OpenAiAttentionEvaluatorOptions {
 
 export type OpenAiAttentionEnvironmentOptions = Omit<OpenAiAttentionEvaluatorOptions, "apiKey">;
 
-function positiveInteger(value: number | undefined, fallback: number): number {
-  if (value === undefined || !Number.isFinite(value) || value <= 0) return fallback;
-  return Math.floor(value);
-}
-
-function trimmedText(value: string | undefined): string | undefined {
-  const normalized = value?.trim();
-  return normalized || undefined;
-}
-
 function withoutTrailingSlash(value: string): string {
   return value.endsWith("/") ? value.slice(0, -1) : value;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function outputTextFromContent(content: unknown): string {
@@ -82,12 +71,13 @@ function outputTextFromContent(content: unknown): string {
  */
 function outputText(payload: unknown): string | undefined {
   if (!isRecord(payload)) return undefined;
-  if (typeof payload.output_text === "string") return trimmedText(payload.output_text);
+  if (typeof payload.output_text === "string") return text(payload.output_text);
   if (!Array.isArray(payload.output)) return undefined;
-  const text = payload.output
-    .map((item) => (isRecord(item) ? outputTextFromContent(item.content) : ""))
-    .join("");
-  return trimmedText(text);
+  return text(
+    payload.output
+      .map((item) => (isRecord(item) ? outputTextFromContent(item.content) : ""))
+      .join(""),
+  );
 }
 
 /**
@@ -129,11 +119,11 @@ export class OpenAiAttentionEvaluator implements AttentionEvaluator {
   readonly #maximumOutputTokens: number;
 
   constructor(options: OpenAiAttentionEvaluatorOptions) {
-    const apiKey = trimmedText(options.apiKey);
+    const apiKey = text(options.apiKey);
     if (!apiKey) throw new Error("OpenAI API key must not be empty");
     this.#apiKey = apiKey;
-    this.#model = trimmedText(options.model) ?? OPENAI_DEFAULTS.MODEL;
-    this.#baseUrl = withoutTrailingSlash(trimmedText(options.baseUrl) ?? OPENAI_DEFAULTS.BASE_URL);
+    this.#model = text(options.model) ?? OPENAI_DEFAULTS.MODEL;
+    this.#baseUrl = withoutTrailingSlash(text(options.baseUrl) ?? OPENAI_DEFAULTS.BASE_URL);
     this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
     this.#now = options.now ?? Date.now;
     this.#requestTimeoutMs = positiveInteger(
@@ -232,12 +222,11 @@ export class OpenAiAttentionEvaluator implements AttentionEvaluator {
 export function openAiAttentionEvaluatorFromEnvironment(
   options: OpenAiAttentionEnvironmentOptions = {},
 ): OpenAiAttentionEvaluator | undefined {
-  const apiKey = trimmedText(process.env[OPENAI_ENVIRONMENT.API_KEY]);
+  const apiKey = text(process.env[OPENAI_ENVIRONMENT.API_KEY]);
   if (!apiKey) return undefined;
 
-  const model = trimmedText(options.model) ?? trimmedText(process.env[OPENAI_ENVIRONMENT.MODEL]);
-  const baseUrl =
-    trimmedText(options.baseUrl) ?? trimmedText(process.env[OPENAI_ENVIRONMENT.BASE_URL]);
+  const model = text(options.model) ?? text(process.env[OPENAI_ENVIRONMENT.MODEL]);
+  const baseUrl = text(options.baseUrl) ?? text(process.env[OPENAI_ENVIRONMENT.BASE_URL]);
 
   return new OpenAiAttentionEvaluator({
     ...options,

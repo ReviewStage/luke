@@ -1,19 +1,20 @@
 import {
+  agedStatus,
+  isRecord,
+  OBSERVATION_WINDOW,
   type ProviderSessionObservation,
+  positiveInteger,
   SESSION_STATUS,
   type SessionProvider,
   type SessionStatus,
 } from "@sidecar/core";
 import {
-  CLOUD_ADAPTER_DEFAULTS,
   type CloudAdapterOptions,
   type CloudRequest,
   CloudSessionAdapter,
   type CloudWriteRoute,
   isDefined,
-  isRecord,
   knownValue,
-  positiveInteger,
   recordsFromPage,
   textFromRecord,
 } from "./cloud-session-adapter";
@@ -342,7 +343,7 @@ export class DevinSessionAdapter extends CloudSessionAdapter {
     identity: DevinIdentity,
     now: number,
   ): Promise<DevinSession[]> {
-    const openedAt = now - CLOUD_ADAPTER_DEFAULTS.MAXIMUM_SESSION_AGE_MS;
+    const openedAt = now - OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS;
     const body = await request(
       [
         DEVIN_ROUTE_SEGMENT.V3,
@@ -435,13 +436,11 @@ export class DevinSessionAdapter extends CloudSessionAdapter {
       (session.status === DEVIN_SESSION_STATUS.RUNNING && session.detail
         ? SESSION_STATUS_BY_RUNNING_DETAIL[session.detail]
         : undefined) ?? SESSION_STATUS_BY_DEVIN_STATUS[session.status];
-    // Devin reports live state, and its timestamp marks when that state was
-    // entered rather than a heartbeat, so a long turn is still working and a
-    // session that ended stays ended however long ago it did. Only a session
-    // holding for the user decays: once it is stale Luke cannot tell a question
-    // just asked from one the user walked away from hours ago.
-    return status === SESSION_STATUS.WAITING
-      ? this.statusWhileRecent(status, session.observedAt, now)
-      : status;
+    return agedStatus(
+      status,
+      session.observedAt,
+      now,
+      OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
+    );
   }
 }

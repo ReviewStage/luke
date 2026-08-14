@@ -3,11 +3,13 @@ import {
   type IssueTracker,
   type IssueTrackerAdapter,
   type IssueTransition,
+  isRecord,
   maximumIssueTransitions,
   TRACKER_ACTION_RESULT_STATUS,
   type TrackerActionResult,
   type TrackerIssueAction,
   type TrackerIssueObservation,
+  text,
 } from "@sidecar/core";
 import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "./shared/credential-providers";
 
@@ -79,16 +81,6 @@ export interface LinearTrackerOptions {
   now?: () => number;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function textField(record: Record<string, unknown>, field: string): string | undefined {
-  const value = record[field];
-  const normalized = typeof value === "string" ? value.trim() : "";
-  return normalized || undefined;
-}
-
 interface LinearState {
   id: string;
   name: string;
@@ -97,8 +89,8 @@ interface LinearState {
 
 function stateFrom(value: unknown): LinearState | undefined {
   if (!isRecord(value)) return undefined;
-  const id = textField(value, "id");
-  const name = textField(value, "name");
+  const id = text(value.id);
+  const name = text(value.name);
   if (!id || !name) return undefined;
   const position = typeof value.position === "number" ? value.position : 0;
   return { id, name, position };
@@ -164,12 +156,12 @@ export class LinearIssueTracker implements IssueTrackerAdapter {
     // should say what Linear could say, not go silent over one broken node.
     return nodes.flatMap((node): TrackerIssueObservation[] => {
       if (!isRecord(node)) return [];
-      const trackerIssueId = textField(node, "id");
-      const identifier = textField(node, "identifier");
-      const title = textField(node, "title");
+      const trackerIssueId = text(node.id);
+      const identifier = text(node.identifier);
+      const title = text(node.title);
       const state = stateFrom(node.state);
       if (!trackerIssueId || !identifier || !title || !state) return [];
-      const url = textField(node, "url");
+      const url = text(node.url);
       return [
         {
           trackerIssueId,

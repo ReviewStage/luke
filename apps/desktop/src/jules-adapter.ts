@@ -1,21 +1,22 @@
 import {
+  agedStatus,
+  isRecord,
+  OBSERVATION_WINDOW,
   type ProviderSessionObservation,
+  positiveInteger,
   SESSION_STATUS,
   type SessionControl,
   type SessionProvider,
   type SessionStatus,
 } from "@sidecar/core";
 import {
-  CLOUD_ADAPTER_DEFAULTS,
   CLOUD_AUTH_SCHEME,
   type CloudAdapterOptions,
   type CloudRequest,
   CloudSessionAdapter,
   type CloudWriteRoute,
   isDefined,
-  isRecord,
   knownValue,
-  positiveInteger,
   recordsFromPage,
   repositoryLabel,
   textFromRecord,
@@ -235,9 +236,7 @@ export class JulesSessionAdapter extends CloudSessionAdapter {
     return recordsFromPage(body, JULES_FIELD.SESSIONS)
       .map(sessionFromRecord)
       .filter(isDefined)
-      .filter(
-        (session) => now - session.observedAt <= CLOUD_ADAPTER_DEFAULTS.MAXIMUM_SESSION_AGE_MS,
-      )
+      .filter((session) => now - session.observedAt <= OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS)
       .sort((first, second) => second.observedAt - first.observedAt)
       .slice(0, this.#maximumObservedSessions)
       .map((session) => this.#observationFor(session, now));
@@ -293,14 +292,11 @@ export class JulesSessionAdapter extends CloudSessionAdapter {
   #statusFor(session: JulesSession, now: number): SessionStatus {
     // A state this build does not know is not guessed at.
     if (!session.state) return SESSION_STATUS.UNKNOWN;
-    const status = SESSION_STATUS_BY_JULES_STATE[session.state];
-    // `updateTime` marks when the session last changed rather than a
-    // heartbeat, so a long turn is still working and a completed session stays
-    // complete however long ago it finished. Only waiting decays: once it is
-    // stale Luke cannot tell a session that just asked for feedback from one
-    // the user walked away from hours ago.
-    return status === SESSION_STATUS.WAITING
-      ? this.statusWhileRecent(status, session.observedAt, now)
-      : status;
+    return agedStatus(
+      SESSION_STATUS_BY_JULES_STATE[session.state],
+      session.observedAt,
+      now,
+      OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
+    );
   }
 }

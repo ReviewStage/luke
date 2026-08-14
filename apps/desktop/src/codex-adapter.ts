@@ -1,16 +1,24 @@
-import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
+  isRecord,
   maximumSessionSummaryLength,
   maximumSessionTitleLength,
+  nonNegativeNumber,
+  OBSERVATION_WINDOW,
+  oneLine,
   PROVIDER_ID,
   type ProviderSessionObservation,
+  positiveInteger,
+  recordFromJsonLine,
   SESSION_STATUS,
   type SessionDetail,
   type SessionProvider,
   type SessionProviderAdapter,
+  text,
+  wholeNumber,
 } from "@sidecar/core";
+import { readTail, readTextFile, uniquePaths, workspaceLabel } from "./local-session-adapter";
 import {
   canIgnoreSqliteError,
   defaultSqliteModule,
@@ -20,7 +28,6 @@ import {
 
 const CODEX_PROVIDER_ID = PROVIDER_ID.CODEX;
 const CODEX_PROVIDER_NAME = "Codex";
-const UNKNOWN_WORKSPACE_LABEL = "workspace";
 
 const CODEX_ENVIRONMENT = {
   CONFIG_DIRECTORY: "CODEX_HOME",
@@ -100,8 +107,6 @@ const CODEX_CALL_ARGUMENT_KEY = [
 
 const CODEX_ADAPTER_DEFAULTS = {
   MAXIMUM_SESSION_ROWS: 40,
-  MAXIMUM_SESSION_AGE_MS: 24 * 60 * 60 * 1000,
-  ACTIVE_SESSION_FRESHNESS_MS: 15 * 60 * 1000,
   /** Enough to reach past one turn's token accounting to its boundary event. */
   READ_ROLLOUT_TAIL_BYTES: 64 * 1024,
   /** Only the threads that can still change are worth a second file read. */
@@ -145,83 +150,6 @@ export interface CodexAdapterOptions {
   maximumSessionAgeMs?: number;
   activeSessionFreshnessMs?: number;
   sqlite?: SqliteModuleLoader;
-}
-
-function positiveInteger(value: number | undefined, fallback: number): number {
-  if (value === undefined || !Number.isFinite(value) || value <= 0) return fallback;
-  return Math.floor(value);
-}
-
-function nonNegativeNumber(value: number | undefined, fallback: number): number {
-  if (value === undefined || !Number.isFinite(value) || value < 0) return fallback;
-  return value;
-}
-
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error;
-}
-
-function canIgnoreFilesystemError(error: unknown): boolean {
-  return (
-    isNodeError(error) &&
-    (error.code === "ENOENT" ||
-      error.code === "ENOTDIR" ||
-      error.code === "EACCES" ||
-      error.code === "EPERM")
-  );
-}
-
-async function readTextFile(filePath: string): Promise<string | undefined> {
-  try {
-    return await fs.readFile(filePath, "utf8");
-  } catch (error) {
-    if (canIgnoreFilesystemError(error)) return undefined;
-    throw error;
-  }
-}
-
-async function readTail(filePath: string, maximumBytes: number): Promise<string> {
-  let handle: fs.FileHandle | undefined;
-  try {
-    handle = await fs.open(filePath, "r");
-    const stats = await handle.stat();
-    if (!stats.isFile() || stats.size <= 0) return "";
-    const length = Math.min(stats.size, maximumBytes);
-    const buffer = Buffer.alloc(length);
-    await handle.read(buffer, 0, length, stats.size - length);
-    return buffer.toString("utf8");
-  } catch (error) {
-    if (canIgnoreFilesystemError(error)) return "";
-    throw error;
-  } finally {
-    await handle?.close();
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function text(value: unknown): string | undefined {
-  const normalized = typeof value === "string" ? value.trim() : "";
-  return normalized || undefined;
-}
-
-function oneLine(value: string | undefined, maximumLength: number): string | undefined {
-  const normalized = value?.replace(/\s+/gu, " ").trim();
-  if (!normalized) return undefined;
-  return normalized.length > maximumLength
-    ? `${normalized.slice(0, maximumLength - 1).trimEnd()}…`
-    : normalized;
-}
-
-function recordFromJsonLine(line: string): Record<string, unknown> | undefined {
-  try {
-    const parsed = JSON.parse(line) as unknown;
-    return isRecord(parsed) ? parsed : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 /**
@@ -306,14 +234,11 @@ function parseCodexRolloutTail(tail: string): ParsedCodexRollout {
 }
 
 function numberFromRow(row: CodexThreadRow, key: string): number | undefined {
-  const value = row[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  return wholeNumber(row[key]);
 }
 
 function textFromRow(row: CodexThreadRow, key: string): string | undefined {
-  const value = row[key];
-  const normalized = typeof value === "string" ? value.trim() : "";
-  return normalized || undefined;
+  return text(row[key]);
 }
 
 function timestampFromRow(row: CodexThreadRow): number {
@@ -324,12 +249,6 @@ function timestampFromRow(row: CodexThreadRow): number {
     (numberFromRow(row, CODEX_THREAD_COLUMN.UPDATED_AT) ?? 0) * 1000,
     (numberFromRow(row, CODEX_THREAD_COLUMN.CREATED_AT) ?? 0) * 1000,
   );
-}
-
-function workspaceLabel(cwd: string | undefined): string {
-  if (!cwd) return UNKNOWN_WORKSPACE_LABEL;
-  const label = path.basename(cwd.trim());
-  return label || UNKNOWN_WORKSPACE_LABEL;
 }
 
 function normalizeDirectory(value: string | undefined, baseDirectory: string): string | undefined {
@@ -387,10 +306,6 @@ async function sqliteHomeFromConfig(codexHome: string): Promise<string | undefin
   return config
     ? normalizeDirectory(topLevelTomlString(config, CODEX_CONFIG_KEY.SQLITE_DIRECTORY), codexHome)
     : undefined;
-}
-
-function uniquePaths(paths: readonly string[]): string[] {
-  return [...new Set(paths)];
 }
 
 async function stateDatabasePaths(
@@ -513,11 +428,11 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
     );
     this.#maximumSessionAgeMs = nonNegativeNumber(
       options.maximumSessionAgeMs,
-      CODEX_ADAPTER_DEFAULTS.MAXIMUM_SESSION_AGE_MS,
+      OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS,
     );
     this.#activeSessionFreshnessMs = nonNegativeNumber(
       options.activeSessionFreshnessMs,
-      CODEX_ADAPTER_DEFAULTS.ACTIVE_SESSION_FRESHNESS_MS,
+      OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
     );
     this.#sqlite = options.sqlite ?? defaultSqliteModule;
   }

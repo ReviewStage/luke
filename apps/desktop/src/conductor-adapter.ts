@@ -1,7 +1,10 @@
 import {
+  agedStatus,
   maximumSessionSummaryLength,
   maximumSessionTitleLength,
+  OBSERVATION_WINDOW,
   type ProviderSessionObservation,
+  positiveInteger,
   SESSION_CONTROL_KIND,
   SESSION_STATUS,
   type SessionControl,
@@ -12,14 +15,12 @@ import {
   type WorkspaceProject,
 } from "@sidecar/core";
 import {
-  CLOUD_ADAPTER_DEFAULTS,
   type CloudAdapterOptions,
   type CloudRequest,
   CloudSessionAdapter,
   type CloudWriteRoute,
   isDefined,
   knownValue,
-  positiveInteger,
   recordsFromPage,
   repositoryLabel,
   textFromRecord,
@@ -436,8 +437,7 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       // out of a personal sidecar.
       .filter((workspace) => workspace.creatorId === userId)
       .filter(
-        (workspace) =>
-          now - workspace.lastActivityAt <= CLOUD_ADAPTER_DEFAULTS.MAXIMUM_SESSION_AGE_MS,
+        (workspace) => now - workspace.lastActivityAt <= OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS,
       )
       .sort((first, second) => second.lastActivityAt - first.lastActivityAt)
       .slice(0, this.#maximumObservedWorkspaces);
@@ -589,7 +589,7 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
         .filter(
           (session) =>
             session.archivedAt === undefined ||
-            now - session.archivedAt <= CLOUD_ADAPTER_DEFAULTS.MAXIMUM_SESSION_AGE_MS,
+            now - session.archivedAt <= OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS,
         )
         // An open chat carries no timestamp until its status is read, so open
         // chats are preferred over closed ones, then closed ones by how
@@ -686,7 +686,7 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     // it settled; the workspace timestamp is only the last resort.
     const observedAt =
       reported?.updatedAt ?? session.archivedAt ?? session.workspace.lastActivityAt;
-    if (now - observedAt > CLOUD_ADAPTER_DEFAULTS.MAXIMUM_SESSION_AGE_MS) return undefined;
+    if (now - observedAt > OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS) return undefined;
 
     const status = this.#statusFor(session, reported?.status, observedAt, now);
     // The parting words are a recap only once the turn has actually parted:
@@ -751,17 +751,11 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
   ): SessionStatus {
     if (session.archived) return SESSION_STATUS.COMPLETE;
     if (!reportedStatus) return SESSION_STATUS.UNKNOWN;
-    // Conductor reports live state, and its timestamp marks when that state was
-    // entered rather than a heartbeat, so a long turn is still working.
-    if (reportedStatus === CONDUCTOR_SESSION_STATUS.WORKING) return SESSION_STATUS.WORKING;
-    // A failure does not heal by going stale, so only an idle session decays:
-    // once it is stale Luke cannot tell a turn that just ended from a chat the
-    // user walked away from hours ago.
-    if (reportedStatus === CONDUCTOR_SESSION_STATUS.ERROR) return SESSION_STATUS.ERROR;
-    return this.statusWhileRecent(
+    return agedStatus(
       SESSION_STATUS_BY_CONDUCTOR_STATUS[reportedStatus],
       observedAt,
       now,
+      OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
     );
   }
 
