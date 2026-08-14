@@ -10,17 +10,22 @@ import {
   isMessageCapableAdapter,
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
+  isWorkspaceCapableAdapter,
   type NativeNotchGeometry,
+  normalizeObservedWorkspaceProjects,
+  type ObservedWorkspaceProject,
   PROVIDER_CONTROL_RESULT_STATUS,
   PROVIDER_MESSAGE_RESULT_STATUS,
   type ProviderControlResult,
   type ProviderMessageResult,
+  type ProviderWorkspaceResult,
   positionNotchWindow,
   realtimeMintExplanation,
   SessionAttentionReviewer,
   type SessionIdentity,
   type SessionProviderAdapter,
   sessionMessageText,
+  workspaceNameText,
 } from "@sidecar/core";
 import {
   app,
@@ -520,6 +525,7 @@ function registerIpc(): void {
       voiceHotkeyHeld,
       display: displayDiagnostic(),
       sessions: fixtureMode ? [] : sessionRegistry.snapshot().sessions,
+      workspaceProjects: observedWorkspaceProjects(),
       settings: await settingsStore.snapshot(),
     };
   });
@@ -849,6 +855,59 @@ function registerIpc(): void {
     },
   );
 
+  // A new workspace runs the same gauntlet a message does, against the list
+  // that offered it: the renderer names a project rather than a repository, and
+  // only a project an adapter reported on its latest pass — read back here from
+  // the adapter itself, never from the request — reaches the provider's
+  // documented creation endpoint. A fixture run offers no projects at all, so
+  // it refuses every ask without touching a network.
+  ipcMain.handle(
+    channels.createSessionWorkspace,
+    async (
+      event,
+      providerId: unknown,
+      providerProjectId: unknown,
+      name: unknown,
+    ): Promise<ProviderWorkspaceResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (
+        typeof providerId !== "string" ||
+        !providerId.trim() ||
+        typeof providerProjectId !== "string" ||
+        !providerProjectId.trim() ||
+        (name !== undefined && typeof name !== "string")
+      ) {
+        throw new Error("Invalid workspace creation request");
+      }
+      if (fixtureMode) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+      const adapter = sessionAdapters.find((candidate) => candidate.provider.id === providerId);
+      if (!adapter || !isWorkspaceCapableAdapter(adapter)) {
+        return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+      }
+      const offered = adapter
+        .workspaceProjects()
+        .some((project) => project.providerProjectId === providerProjectId);
+      if (!offered) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+      const workspaceName = name === undefined ? undefined : workspaceNameText(name);
+      if (name !== undefined && workspaceName === undefined) {
+        return {
+          status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+          reason: "A workspace name has to be short enough to say and longer than nothing.",
+        };
+      }
+      const result = await adapter.createWorkspace({
+        providerProjectId,
+        ...(workspaceName ? { name: workspaceName } : {}),
+      });
+      // A workspace that landed is a session the panel should be showing, so
+      // the next look must actually ask rather than serve the cache.
+      if (result.status === PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED) {
+        void sessionRegistry.refresh(adapter);
+      }
+      return result;
+    },
+  );
+
   // The panel is normally shown without stealing focus. A text field cannot be
   // typed into that way, so the renderer asks for focus when it opens one.
   ipcMain.on(channels.focusPanel, (event) => {
@@ -880,6 +939,27 @@ function registerIpc(): void {
     process.stdout.write(`Electron evidence: ${destination}\n`);
     app.quit();
   });
+}
+
+/**
+ * Where a workspace can be created right now, as the adapters offer it: each
+ * capable adapter's latest project list, stamped with its provider and bounded
+ * once here so the panel and the conversation are handed the same list. A
+ * fixture run offers nothing, for the same reason it observes nothing.
+ */
+function observedWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
+  if (fixtureMode) return [];
+  return normalizeObservedWorkspaceProjects(
+    sessionAdapters.flatMap((adapter) =>
+      isWorkspaceCapableAdapter(adapter)
+        ? adapter.workspaceProjects().map((project) => ({
+            ...project,
+            providerId: adapter.provider.id,
+            providerName: adapter.provider.displayName,
+          }))
+        : [],
+    ),
+  );
 }
 
 async function refreshProviderSessions(): Promise<void> {
@@ -932,8 +1012,18 @@ async function reviewSessionAttention(): Promise<void> {
 
 function startSessionObservation(): void {
   if (fixtureMode) return;
+  // The projects ride the same beat as the sessions: adapters refresh their
+  // project lists while observing, so the moment the registry commits is the
+  // moment the offer can have changed. Identical lists are not resent.
+  let lastWorkspaceProjects = JSON.stringify(observedWorkspaceProjects());
   sessionRegistry.subscribe((snapshot) => {
     panelWindow?.webContents.send(channels.sessionsChanged, snapshot.sessions);
+    const projects = observedWorkspaceProjects();
+    const serialized = JSON.stringify(projects);
+    if (serialized !== lastWorkspaceProjects) {
+      lastWorkspaceProjects = serialized;
+      panelWindow?.webContents.send(channels.workspaceProjectsChanged, projects);
+    }
   });
   void refreshProviderSessions();
   sessionRefreshTimer = setInterval(() => {

@@ -1,8 +1,10 @@
 import type {
   AttentionSpeech,
   NormalizedSession,
+  ObservedWorkspaceProject,
   ProviderControlResult,
   ProviderMessageResult,
+  ProviderWorkspaceResult,
   RealtimeConnection,
   RealtimeVoice,
   RealtimeVoiceSpeed,
@@ -67,6 +69,13 @@ const bridge: AppBridge = {
       identity,
       controlId,
     ) as Promise<ProviderControlResult>,
+  createSessionWorkspace: (providerId: string, providerProjectId: string, name?: string) =>
+    ipcRenderer.invoke(
+      channels.createSessionWorkspace,
+      providerId,
+      providerProjectId,
+      name,
+    ) as Promise<ProviderWorkspaceResult>,
   focusPanel: () => ipcRenderer.send(channels.focusPanel),
   requestRealtimeCredential: () =>
     ipcRenderer.invoke(channels.requestRealtimeCredential) as Promise<
@@ -90,6 +99,16 @@ const bridge: AppBridge = {
       callback(sessions);
     ipcRenderer.on(channels.sessionsChanged, listener);
     return () => ipcRenderer.removeListener(channels.sessionsChanged, listener);
+  },
+  onWorkspaceProjectsChanged: (
+    callback: (projects: readonly ObservedWorkspaceProject[]) => void,
+  ) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      projects: readonly ObservedWorkspaceProject[],
+    ) => callback(projects);
+    ipcRenderer.on(channels.workspaceProjectsChanged, listener);
+    return () => ipcRenderer.removeListener(channels.workspaceProjectsChanged, listener);
   },
   onVoiceHotkeyPress: (callback: () => void) => {
     const listener = () => callback();

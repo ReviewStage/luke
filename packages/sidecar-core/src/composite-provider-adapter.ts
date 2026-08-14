@@ -2,6 +2,7 @@ import {
   type ControllableSessionProviderAdapter,
   isControllableAdapter,
   isMessageCapableAdapter,
+  isWorkspaceCapableAdapter,
   type MessageCapableSessionProviderAdapter,
   PROVIDER_CONTROL_RESULT_STATUS,
   PROVIDER_MESSAGE_RESULT_STATUS,
@@ -9,7 +10,11 @@ import {
   type ProviderControlResult,
   type ProviderMessageResult,
   type ProviderSessionMessage,
+  type ProviderWorkspaceRequest,
+  type ProviderWorkspaceResult,
   type SessionProviderAdapter,
+  type WorkspaceCapableSessionProviderAdapter,
+  type WorkspaceProject,
 } from "./providers";
 import type { ProviderSessionObservation, SessionProvider } from "./session";
 
@@ -30,7 +35,8 @@ export class CompositeSessionProviderAdapter
   implements
     SessionProviderAdapter,
     MessageCapableSessionProviderAdapter,
-    ControllableSessionProviderAdapter
+    ControllableSessionProviderAdapter,
+    WorkspaceCapableSessionProviderAdapter
 {
   readonly provider: SessionProvider;
 
@@ -92,5 +98,26 @@ export class CompositeSessionProviderAdapter
       if (result.status !== PROVIDER_CONTROL_RESULT_STATUS.UNSUPPORTED) return result;
     }
     return { status: PROVIDER_CONTROL_RESULT_STATUS.UNSUPPORTED };
+  }
+
+  /** Every project any observer offered, in the order the observers stand in. */
+  workspaceProjects(): readonly WorkspaceProject[] {
+    return this.#adapters.flatMap((adapter) =>
+      isWorkspaceCapableAdapter(adapter) ? adapter.workspaceProjects() : [],
+    );
+  }
+
+  /**
+   * A creation ask finds its observer the way a message does: an observer that
+   * answers unsupported never offered the project, so the question moves on,
+   * and any firm answer is the project's own and ends the search.
+   */
+  async createWorkspace(request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult> {
+    for (const adapter of this.#adapters) {
+      if (!isWorkspaceCapableAdapter(adapter)) continue;
+      const result = await adapter.createWorkspace(request);
+      if (result.status !== PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED) return result;
+    }
+    return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
   }
 }

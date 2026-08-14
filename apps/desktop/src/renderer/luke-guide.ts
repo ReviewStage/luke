@@ -216,6 +216,14 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "provider allows. Settings holds the preferences, the talk key, the cloud API keys, " +
         "permissions, and Quit.",
     },
+    {
+      label: "Creating workspaces",
+      detail:
+        "Where a connected provider documents a creation endpoint — Conductor today — a spoken ask " +
+        "can create a new workspace in one of the projects that provider reports, optionally under " +
+        "a name the developer chose. Only reported projects can be named, and a provider that " +
+        "reports none takes no ask.",
+    },
     talkKeyFact(input.hotkey),
     { label: "Microphone access", detail: MICROPHONE_DETAIL[input.microphoneStatus] },
     ...(input.voiceAvailable

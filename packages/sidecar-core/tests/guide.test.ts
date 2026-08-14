@@ -113,6 +113,8 @@ test("the standing instructions promise the guide the context actually delivers"
   assert.match(instructions, /\[app guide\]/);
   assert.match(instructions, /change_app_setting/);
   assert.match(instructions, /show_panel/);
+  assert.match(instructions, /create_workspace/);
+  assert.match(instructions, /\[workspace projects\]/);
 });
 
 test("a spoken toggle accepts the unambiguous words and nothing else", () => {

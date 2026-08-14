@@ -2,8 +2,10 @@ import type {
   AttentionSpeech,
   FixtureSnapshot,
   NormalizedSession,
+  ObservedWorkspaceProject,
   ProviderControlResult,
   ProviderMessageResult,
+  ProviderWorkspaceResult,
   RealtimeConnection,
   RealtimeVoice,
   RealtimeVoiceSpeed,
@@ -165,6 +167,8 @@ export interface AppBootstrap {
   /** Whether the panel should show the voice diagnostics block. */
   display: DisplayDiagnostic;
   sessions: readonly NormalizedSession[];
+  /** Where a new workspace can be created, as the adapters currently offer it. */
+  workspaceProjects: readonly ObservedWorkspaceProject[];
   settings: AppSettings;
 }
 
@@ -242,6 +246,18 @@ export interface AppBridge {
     identity: SessionIdentity,
     controlId: string,
   ): Promise<ProviderControlResult>;
+  /**
+   * Creates one workspace the user just asked for, in a project its provider
+   * reported. The renderer names a project it was shown, never a repository
+   * URL or path, and the main process validates the ask again against what
+   * its adapters actually offered before the provider's documented creation
+   * endpoint is called.
+   */
+  createSessionWorkspace(
+    providerId: string,
+    providerProjectId: string,
+    name?: string,
+  ): Promise<ProviderWorkspaceResult>;
   /** Brings the expanded panel forward so it can accept typed input. */
   focusPanel(): void;
   /** Mints a short-lived Realtime credential; the standing API key never crosses. */
@@ -251,6 +267,10 @@ export interface AppBridge {
   onLifecycle(callback: (eventName: string) => void): () => void;
   onDisplayChanged(callback: (display: DisplayDiagnostic) => void): () => void;
   onSessionsChanged(callback: (sessions: readonly NormalizedSession[]) => void): () => void;
+  /** The projects a workspace can be created in, whenever the set changes. */
+  onWorkspaceProjectsChanged(
+    callback: (projects: readonly ObservedWorkspaceProject[]) => void,
+  ): () => void;
   onAttentionSpeech(callback: (speech: readonly AttentionSpeech[]) => void): () => void;
   /** The talk key going down, from whatever app happened to be frontmost. */
   onVoiceHotkeyPress(callback: () => void): () => void;
@@ -280,6 +300,7 @@ export const channels = {
   openSession: "app:open-session",
   sendSessionMessage: "app:send-session-message",
   executeSessionControl: "app:execute-session-control",
+  createSessionWorkspace: "app:create-session-workspace",
   focusPanel: "app:focus-panel",
   requestRealtimeCredential: "app:request-realtime-credential",
   attentionSpeech: "app:attention-speech",
@@ -290,5 +311,6 @@ export const channels = {
   lifecycle: "app:lifecycle",
   displayChanged: "app:display-changed",
   sessionsChanged: "app:sessions-changed",
+  workspaceProjectsChanged: "app:workspace-projects-changed",
   quit: "app:quit",
 } as const;

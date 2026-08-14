@@ -125,3 +125,107 @@ export function isMessageCapableAdapter(
     typeof (adapter as Partial<MessageCapableSessionProviderAdapter>).sendMessage === "function"
   );
 }
+
+/**
+ * One place a provider will create a workspace: a project it reported on the
+ * latest observation pass. A request can only name one of these, so the set of
+ * places a workspace can be asked for is the set the provider itself listed —
+ * never a repository URL or path composed on this side.
+ */
+export interface WorkspaceProject {
+  /** The provider-owned identifier a creation request names the project by. */
+  providerProjectId: string;
+  /** The repository label the project is named by out loud and on screen. */
+  repository: string;
+}
+
+/** A workspace project as the app reports it, stamped with who offered it. */
+export interface ObservedWorkspaceProject extends WorkspaceProject {
+  providerId: string;
+  providerName: string;
+}
+
+/** A workspace name reads in one breath; anything longer is a different ask. */
+export const maximumWorkspaceNameLength = 80;
+
+/** How many projects the app will offer workspace creation in at once. */
+export const maximumObservedWorkspaceProjects = 20;
+
+/**
+ * The name a new workspace was asked for under, or nothing. Refused rather
+ * than cut when it runs long, the same posture as a message: a truncated name
+ * says something its author did not.
+ */
+export function workspaceNameText(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim();
+  if (!normalized || normalized.length > maximumWorkspaceNameLength) return undefined;
+  return normalized;
+}
+
+/**
+ * Bounds and deduplicates the projects adapters offered, so the surface and
+ * the conversation are handed the same capped, display-safe list.
+ */
+export function normalizeObservedWorkspaceProjects(
+  projects: readonly ObservedWorkspaceProject[],
+): readonly ObservedWorkspaceProject[] {
+  const seen = new Map<string, Set<string>>();
+  const normalized: ObservedWorkspaceProject[] = [];
+  for (const project of projects) {
+    const providerId = project.providerId.trim();
+    const providerProjectId = project.providerProjectId.trim();
+    const repository = project.repository.trim().slice(0, maximumWorkspaceNameLength);
+    if (!providerId || !providerProjectId || !repository) continue;
+    const byProvider = seen.get(providerId) ?? new Set<string>();
+    if (byProvider.has(providerProjectId)) continue;
+    byProvider.add(providerProjectId);
+    seen.set(providerId, byProvider);
+    normalized.push({
+      providerId,
+      providerName: project.providerName.trim() || providerId,
+      providerProjectId,
+      repository,
+    });
+    if (normalized.length >= maximumObservedWorkspaceProjects) break;
+  }
+  return normalized;
+}
+
+/** A user-asked request for a new workspace in one reported project. */
+export interface ProviderWorkspaceRequest {
+  providerProjectId: string;
+  /** The name the user chose, when they chose one; the provider names it otherwise. */
+  name?: string;
+}
+
+/**
+ * What became of a creation ask — the same three answers a message gets, for
+ * the same reasons: a rejection carries a reason the user can act on, and
+ * unsupported means the provider documents no way to create one here.
+ */
+export type ProviderWorkspaceResult = ProviderMessageResult;
+
+/**
+ * Optional extension for adapters whose provider documents an endpoint that
+ * creates a workspace. The same rules bind it that bind a message: it acts
+ * only on what a user just asked for, only in a project the latest observation
+ * pass reported, through the provider's own documented endpoint — and nothing
+ * that decides on the user's behalf may reach it.
+ */
+export interface WorkspaceCapableSessionProviderAdapter extends SessionProviderAdapter {
+  /** The projects the latest observation pass reported, or none. */
+  workspaceProjects(): readonly WorkspaceProject[];
+  createWorkspace(request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult>;
+}
+
+/** Whether an adapter can create a workspace at all, before asking it to. */
+export function isWorkspaceCapableAdapter(
+  adapter: SessionProviderAdapter,
+): adapter is WorkspaceCapableSessionProviderAdapter {
+  const candidate = adapter as Partial<WorkspaceCapableSessionProviderAdapter>;
+  return (
+    typeof candidate.workspaceProjects === "function" &&
+    typeof candidate.createWorkspace === "function"
+  );
+}

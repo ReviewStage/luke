@@ -4,6 +4,7 @@ import {
   EMPTY_APP_GUIDE,
   FIXTURE_EPOCH_MS,
   type NormalizedSession,
+  type ObservedWorkspaceProject,
   REALTIME_STATUS,
   type RealtimeStatus,
   type RealtimeVoice,
@@ -220,6 +221,9 @@ function useShapeHeight(): [(element: HTMLElement | null) => void, number | unde
 export function App(): React.JSX.Element {
   const [bootstrap, setBootstrap] = useState<AppBootstrap>();
   const [sessions, setSessions] = useState<readonly NormalizedSession[]>([]);
+  const [workspaceProjects, setWorkspaceProjects] = useState<readonly ObservedWorkspaceProject[]>(
+    [],
+  );
   const [display, setDisplay] = useState<DisplayDiagnostic>();
   const [presentation, setPresentation] = useState<PanelPresentation>(PANEL_PRESENTATION.CAPSULE);
   const [tab, setTab] = useState<PanelTab>(PANEL_TAB.SESSIONS);
@@ -297,6 +301,7 @@ export function App(): React.JSX.Element {
   /** Whether a tap has left a turn open for a later press to end. */
   const talkLatched = useRef(false);
   const sessionsRef = useRef<readonly NormalizedSession[]>([]);
+  const workspaceProjectsRef = useRef<readonly ObservedWorkspaceProject[]>([]);
 
   const changeTab = useCallback((next: PanelTab) => {
     tabRef.current = next;
@@ -365,7 +370,13 @@ export function App(): React.JSX.Element {
           ? window.sidecar.sendSessionMessage(action.identity, action.text)
           : action.kind === "control"
             ? window.sidecar.executeSessionControl(action.identity, action.control.id)
-            : openSessionAloudRef.current(action.identity),
+            : action.kind === "create-workspace"
+              ? window.sidecar.createSessionWorkspace(
+                  action.providerId,
+                  action.providerProjectId,
+                  action.name,
+                )
+              : openSessionAloudRef.current(action.identity),
       // The asks about Luke himself — a settings change, the panel shown —
       // behind the same gauntlet: validated against the guide before this is
       // called, and performed by the same handlers the panel's controls use.
@@ -399,6 +410,7 @@ export function App(): React.JSX.Element {
     }
     if (await session.connect()) {
       session.updateSessions(sessionsRef.current);
+      session.updateWorkspaceProjects(workspaceProjectsRef.current);
       session.updateGuide(guideRef.current);
     }
   }, [ensureVoiceSession]);
@@ -936,6 +948,7 @@ export function App(): React.JSX.Element {
     void window.sidecar.getBootstrap().then((value) => {
       setBootstrap(value);
       setSessions(value.sessions);
+      setWorkspaceProjects(value.workspaceProjects);
       setSettings(value.settings);
       setDisplay(value.display);
       if (modeGeneration.current === bootstrapGeneration) {
@@ -969,11 +982,13 @@ export function App(): React.JSX.Element {
     });
     const removeDisplay = window.sidecar.onDisplayChanged(setDisplay);
     const removeSessions = window.sidecar.onSessionsChanged(setSessions);
+    const removeWorkspaceProjects = window.sidecar.onWorkspaceProjectsChanged(setWorkspaceProjects);
     return () => {
       cancelHoverTransition();
       removeLifecycle();
       removeDisplay();
       removeSessions();
+      removeWorkspaceProjects();
       void stopMicrophone();
     };
   }, [
@@ -1041,6 +1056,14 @@ export function App(): React.JSX.Element {
     sessionsRef.current = sessions;
     voiceSession.current?.updateSessions(sessions);
   }, [sessions]);
+
+  // Keep the conversation's view of where a workspace can be created current,
+  // for the same reason the roster is: a spoken creation ask is validated
+  // against this list, so it has to be the list the adapters actually offer.
+  useEffect(() => {
+    workspaceProjectsRef.current = workspaceProjects;
+    voiceSession.current?.updateWorkspaceProjects(workspaceProjects);
+  }, [workspaceProjects]);
 
   // Keep the conversation's view of Luke himself current, so a spoken question
   // about a setting is answered from the value the store actually holds, and a

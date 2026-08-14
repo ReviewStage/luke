@@ -7,12 +7,17 @@ import {
   type ProviderMessageResult,
   type ProviderSessionMessage,
   type ProviderSessionObservation,
+  type ProviderWorkspaceRequest,
+  type ProviderWorkspaceResult,
   SESSION_LOCATION,
   SESSION_STATUS,
   type SessionControl,
   type SessionProvider,
   type SessionStatus,
   sessionMessageText,
+  type WorkspaceCapableSessionProviderAdapter,
+  type WorkspaceProject,
+  workspaceNameText,
 } from "@sidecar/core";
 
 const UNKNOWN_REPOSITORY_LABEL = "workspace";
@@ -60,6 +65,14 @@ export const CLOUD_FAILURE = {
   UNAUTHORIZED: "unauthorized",
   TRANSIENT: "transient",
 } as const;
+
+/** What a write acts on, as a refusal should name it. */
+const WRITE_SUBJECT = {
+  SESSION: "session",
+  PROJECT: "project",
+} as const;
+
+type WriteSubject = (typeof WRITE_SUBJECT)[keyof typeof WRITE_SUBJECT];
 
 export type CloudFailure = (typeof CLOUD_FAILURE)[keyof typeof CLOUD_FAILURE];
 
@@ -217,13 +230,17 @@ function resolveBaseUrl(profile: CloudAdapterProfile, configured: string | undef
  * and bounded read-only requests. A subclass supplies only the provider's
  * routes and how its reported state maps onto Luke's.
  *
- * The only writes any of this can make are `sendMessage` and `executeControl`,
- * and both act on nothing but what a user asked for against one session the
- * last pass observed and that advertised the capability being used.
+ * The only writes any of this can make are `sendMessage`, `executeControl`,
+ * and `createWorkspace`, and each acts on nothing but what a user asked for
+ * against something the last pass observed — a session that advertised the
+ * capability being used, or a project the provider itself listed.
  * Observation itself stays read-only.
  */
 export abstract class CloudSessionAdapter
-  implements MessageCapableSessionProviderAdapter, ControllableSessionProviderAdapter
+  implements
+    MessageCapableSessionProviderAdapter,
+    ControllableSessionProviderAdapter,
+    WorkspaceCapableSessionProviderAdapter
 {
   readonly provider: SessionProvider;
 
@@ -368,6 +385,58 @@ export abstract class CloudSessionAdapter
   }
 
   /**
+   * The projects the latest pass reported this provider will create a
+   * workspace in. Empty by default, so a provider that documents no creation
+   * endpoint offers nowhere — the same posture as the write routes below.
+   */
+  workspaceProjects(): readonly WorkspaceProject[] {
+    return [];
+  }
+
+  /**
+   * Creates one workspace the user just asked for, in one project the latest
+   * pass reported, through the provider's documented creation endpoint. The
+   * same refusals guard it that guard a message: a project the last pass did
+   * not report, a name outside its bound, and a missing credential all answer
+   * without touching the network.
+   */
+  async createWorkspace(request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult> {
+    const project = this.workspaceProjects().find(
+      (candidate) => candidate.providerProjectId === request.providerProjectId,
+    );
+    if (!project) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+
+    const name = request.name === undefined ? undefined : workspaceNameText(request.name);
+    if (request.name !== undefined && !name) {
+      return {
+        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        reason: "A workspace name has to be short enough to say and longer than nothing.",
+      };
+    }
+
+    const apiKey = await this.#readApiKey().catch(() => undefined);
+    if (!apiKey) return this.#missingKeyRejection();
+
+    const route = this.workspaceCreationRoute(project, name);
+    if (!route) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+    return this.#postWrite(apiKey, route, WRITE_SUBJECT.PROJECT);
+  }
+
+  /**
+   * Where this provider's documented workspace-creation endpoint lives and what
+   * it takes. The project handed in is one the latest pass reported, so the
+   * route is built from what the provider itself offered. The default is that
+   * a provider creates nothing, the same way a read-only adapter stays
+   * read-only by writing nothing.
+   */
+  protected workspaceCreationRoute(
+    _project: WorkspaceProject,
+    _name: string | undefined,
+  ): CloudWriteRoute | undefined {
+    return undefined;
+  }
+
+  /**
    * Where this provider's documented message endpoint lives and what it takes.
    * Returning nothing says this adapter cannot form the request — a provider
    * that documents no message endpoint at all, or an identity it has not
@@ -496,8 +565,14 @@ export abstract class CloudSessionAdapter
    * refusal to echo anything the provider said into an error a user sees, and
    * it answers with what became of the request rather than throwing: a write
    * is a user's own act, so every outcome has to land back on the row it left.
+   * The subject is what the route acts on, so a refusal names the thing that
+   * actually went missing.
    */
-  async #postWrite(apiKey: string, route: CloudWriteRoute): Promise<ProviderMessageResult> {
+  async #postWrite(
+    apiKey: string,
+    route: CloudWriteRoute,
+    subject: WriteSubject = WRITE_SUBJECT.SESSION,
+  ): Promise<ProviderMessageResult> {
     const name = this.provider.displayName;
     let response: Response;
     try {
@@ -539,13 +614,13 @@ export abstract class CloudSessionAdapter
     if (response.status === HTTP_STATUS.NOT_FOUND) {
       return {
         status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
-        reason: `${name} no longer has this session.`,
+        reason: `${name} no longer has this ${subject}.`,
       };
     }
     if (response.status === HTTP_STATUS.CONFLICT) {
       return {
         status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
-        reason: `${name} says this session has moved on since Luke last looked.`,
+        reason: `${name} says this ${subject} has moved on since Luke last looked.`,
       };
     }
     return {
