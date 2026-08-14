@@ -704,8 +704,14 @@ export function realtimeMintExplanation(outcome: RealtimeMintOutcome): string {
   return REALTIME_MINT_EXPLANATIONS[outcome];
 }
 
-/** How many sessions one context update may describe. */
-export const maximumVoiceContextSessions = 10;
+/**
+ * How many sessions one context update may describe. A session the roster
+ * omits is one Luke denies exists, and eight Conductor workspaces beside a
+ * few local agents overflowed the original ten, so the bound is set past any
+ * roster the adapters' own caps can produce; every line is already bounded,
+ * so the update stays a bounded read either way.
+ */
+export const maximumVoiceContextSessions = 25;
 
 /**
  * What one session can be asked to do, said in the roster so Luke offers only
@@ -742,6 +748,7 @@ function sessionCapabilityText(session: NormalizedSession): string {
 export function sessionContextText(sessions: readonly NormalizedSession[]): string {
   if (sessions.length === 0) return "No coding-agent sessions are currently observed.";
 
+  const overflow = sessions.length - maximumVoiceContextSessions;
   return [
     "Currently observed sessions:",
     ...sessions
@@ -755,6 +762,14 @@ export function sessionContextText(sessions: readonly NormalizedSession[]): stri
           `[${sessionCapabilityText(session)}]`,
         ].join(" — "),
       ),
+    // A session past the bound must read as unlisted, never as nonexistent:
+    // denying a session the panel plainly shows teaches the user that Luke
+    // cannot be asked about their work at all.
+    ...(overflow > 0
+      ? [
+          `(${overflow} more observed ${overflow === 1 ? "session is" : "sessions are"} not listed here; the panel shows them all.)`,
+        ]
+      : []),
   ].join("\n");
 }
 

@@ -421,9 +421,13 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
 
     // The transcripts read rides beside the status reads: one bounded query
     // for every observed session, so a failed or missing answer costs a recap
-    // and an agent kind, never the pass.
+    // and an agent kind, never the pass. That holds even for a credential
+    // refusal: a key an org scopes away from the query endpoint alone still
+    // reads the roster, and the roster reads above are what judge the
+    // credential — so this one read swallows everything rather than letting
+    // an enrichment 403 clear every observed row.
     const [transcripts, reportedStatuses] = await Promise.all([
-      this.tolerateItemFailure(() => this.#sessionTranscripts(request, sessions)),
+      this.#sessionTranscripts(request, sessions).catch(() => undefined),
       Promise.all(
         sessions.map((session) =>
           // An archived session is a closed chat, so its state is already

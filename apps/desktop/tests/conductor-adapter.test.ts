@@ -621,6 +621,32 @@ test("a refused transcripts read costs the recap and agent kind, never the pass"
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
   assert.equal(observations[0]?.summary, undefined);
   assert.equal(observations[0]?.detail?.model, "gpt-5.5");
+
+  // Even a credential refusal on this one endpoint costs only the recap: a
+  // key an org scopes away from the query endpoint still reads the roster,
+  // and only the roster reads may judge the credential.
+  const scopedKeyApi = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [ownedWorkspace("workspace-idle", TEST_TIME - 30_000)],
+    sessions: [
+      {
+        id: IDLE_SESSION_UUID,
+        workspaceId: "workspace-idle",
+        name: TEST_SESSION_NAME,
+        transcriptTail: TEST_TRANSCRIPT_TAIL,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 1_000,
+      },
+    ],
+    sqlHttpStatus: HTTP_STATUS.UNAUTHORIZED,
+  });
+
+  const scopedKeyObservations = await adapterFor(scopedKeyApi.fetch).observe();
+
+  assert.equal(scopedKeyObservations.length, 1);
+  assert.equal(scopedKeyObservations[0]?.status, SESSION_STATUS.WAITING);
+  assert.equal(scopedKeyObservations[0]?.summary, undefined);
 });
 
 // Rows are titled by their workspace, so two chats in one workspace would draw
