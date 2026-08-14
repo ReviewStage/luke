@@ -56,7 +56,15 @@ static napi_value MakeStationary(napi_env env, napi_callback_info info) {
     napi_throw_error(env, NULL, "The native window handle has no window behind it");
     return undefined;
   }
-  window.collectionBehavior |= NSWindowCollectionBehaviorStationary;
+  // Managed, transient, and stationary are a mutually exclusive group — AppKit
+  // honors at most one, and the window arrives here carrying managed (from its
+  // creation) and transient (from being hidden in Mission Control). Stationary
+  // only takes effect once it is the group's sole member; the panel is an
+  // NSPanel, which Mission Control never tiles, so transient is not missed.
+  window.collectionBehavior =
+      (window.collectionBehavior &
+       ~(NSWindowCollectionBehaviorManaged | NSWindowCollectionBehaviorTransient)) |
+      NSWindowCollectionBehaviorStationary;
 
   napi_value behavior = NULL;
   if (napi_create_double(env, (double)window.collectionBehavior, &behavior) != 0) {

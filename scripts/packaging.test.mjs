@@ -4,8 +4,8 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
-  addonCompilerArguments,
   APPLE_EVENTS_USAGE_DESCRIPTION,
+  addonCompilerArguments,
   createPackagerOptions,
   ICONSET_SOURCES,
   iconutilArguments,
