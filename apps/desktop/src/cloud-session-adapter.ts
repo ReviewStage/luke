@@ -444,14 +444,12 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
     // The route is built in the same synchronous step as the validation, from
     // the observation's own spawn target: a pass landing while the key is read
     // must not be able to swap the snapshot between the check and the route.
-    const route = this.workspaceAgentRoute(
-      observation.spawnTarget ?? request.providerSessionId,
+    const route = this.workspaceAgentRoute(observation.spawnTarget ?? request.providerSessionId, {
+      ...request,
       agent,
       name,
       task,
-      request.model,
-      request.effort,
-    );
+    });
     if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
 
     const apiKey = await this.#readApiKey().catch(() => undefined);
@@ -462,18 +460,14 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
   /**
    * Where this provider's documented start-another-agent endpoint lives and
    * what it takes. The target handed in is the observation's own `spawnTarget`
-   * — the session id itself when none was reported — and the agent is one the
-   * latest observation listed, so the route is built from what the provider
-   * itself promised. The default is that a provider starts nothing, the same
-   * way a read-only adapter stays read-only by writing nothing.
+   * — the session id itself when none was reported — and the request is the
+   * validated ask, so the route is built from what the provider itself
+   * promised. The default is that a provider starts nothing, the same way a
+   * read-only adapter stays read-only by writing nothing.
    */
   protected workspaceAgentRoute(
     _spawnTarget: string,
-    _agent: string,
-    _name: string | undefined,
-    _task: string | undefined,
-    _model: string | undefined,
-    _effort: string | undefined,
+    _request: ProviderWorkspaceAgentRequest,
   ): CloudWriteRoute | undefined {
     return undefined;
   }

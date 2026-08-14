@@ -642,11 +642,7 @@ export class ConductorSessionAdapter
 
   protected override workspaceAgentRoute(
     spawnTarget: string,
-    agent: string,
-    name: string | undefined,
-    task: string | undefined,
-    model: string | undefined,
-    effort: string | undefined,
+    request: ProviderWorkspaceAgentRequest,
   ): CloudWriteRoute {
     // The target is the workspace id the observation itself advertised, so
     // the route acts on what the user was shown — never on state kept aside.
@@ -656,25 +652,25 @@ export class ConductorSessionAdapter
     // here as the whole they were chosen as: the adapter answers for its own
     // writes, and an effort must not outlive the model it was chosen beside.
     const chosen =
-      model &&
+      request.model &&
       isListedWorkspaceAgentModel(CONDUCTOR_PROVIDER_ID, {
-        agent,
-        model,
-        ...(effort ? { effort } : {}),
+        agent: request.agent,
+        model: request.model,
+        ...(request.effort ? { effort: request.effort } : {}),
       })
-        ? { model, effort }
+        ? { model: request.model, effort: request.effort }
         : undefined;
     return {
       segments: [CONDUCTOR_ROUTE_SEGMENT.V0, CONDUCTOR_ROUTE_SEGMENT.SESSIONS],
       body: {
         [CONDUCTOR_SESSION_CREATE_FIELD.WORKSPACE_ID]: spawnTarget,
-        [CONDUCTOR_SESSION_CREATE_FIELD.AGENT]: agent,
+        [CONDUCTOR_SESSION_CREATE_FIELD.AGENT]: request.agent,
         ...(chosen ? { [CONDUCTOR_SESSION_CREATE_FIELD.MODEL]: chosen.model } : {}),
         ...(chosen?.effort ? { [CONDUCTOR_SESSION_CREATE_FIELD.EFFORT]: chosen.effort } : {}),
-        ...(name ? { [CONDUCTOR_SESSION_CREATE_FIELD.NAME]: name } : {}),
+        ...(request.name ? { [CONDUCTOR_SESSION_CREATE_FIELD.NAME]: request.name } : {}),
         // The opening task rides the creation itself: `POST /v0/sessions`
         // documents taking the first message inline.
-        ...(task ? { [CONDUCTOR_SESSION_CREATE_FIELD.MESSAGE]: task } : {}),
+        ...(request.task ? { [CONDUCTOR_SESSION_CREATE_FIELD.MESSAGE]: request.task } : {}),
       },
     };
   }
