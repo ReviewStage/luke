@@ -85,8 +85,13 @@ One key runs it, and it answers from whatever app is frontmost:
   frontmost window.
 
 If another app already owns `⌥Space`, Luke falls back to `⌥S`. Settings shows
-which key you actually have, under **Keyboard shortcuts**. It is not
-configurable yet.
+which key you actually have, under **Keyboard shortcuts** — and the pencil
+beside it records a chord of your own: hold `⌃`, `⌥` or `⌘` — `⇧` may join,
+but not carry a chord alone, since `⇧S` is how capitals are typed — and press
+a letter or Space, as the row itself explains while it listens. The change takes effect
+at once, the reset arrow beside it returns the defaults, and if something else
+owns your chord Luke falls back to the defaults and shows the key that
+actually answered.
 
 Holding is read by a small helper Luke ships beside the app, because Electron
 reports a global key being pressed but never released. The helper is told the

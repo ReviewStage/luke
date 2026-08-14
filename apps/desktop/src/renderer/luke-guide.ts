@@ -125,6 +125,12 @@ const SETTING_GUIDE: Record<
     adjustable: true,
     manual: `${SETTINGS_TAB}, under Preferences`,
   }),
+  // Described in the talk-key fact instead, which carries the key that
+  // actually registered — this field is only the stored choice, absent on the
+  // defaults and silently outbid when another app owns the chord. Not spoken-
+  // changeable either way: a chord is recorded by typing it, so the fact says
+  // where.
+  voiceHotkey: () => undefined,
   // Not a switch but a set of keys, so it is described in the facts instead:
   // which providers are connected, and that a key is only ever typed by hand.
   credentialSources: () => undefined,
@@ -150,11 +156,12 @@ function talkKeyFact(hotkey: LukeGuideInput["hotkey"]): AppGuideFact {
         "None is registered right now — another app may own the shortcut. The Settings tab shows its state.",
     };
   }
+  const use = hotkey.held
+    ? "hold to talk, let go to send; tap instead to keep the turn open"
+    : "press to talk, again to send, again to interrupt";
   return {
     label: "Talk key",
-    detail: hotkey.held
-      ? `${hotkey.hotkey}, from any app: hold to talk, let go to send; tap instead to keep the turn open.`
-      : `${hotkey.hotkey}, from any app: press to talk, again to send, again to interrupt.`,
+    detail: `${hotkey.hotkey}, from any app: ${use}. A different chord can be recorded, or the default restored, in ${SETTINGS_TAB}.`,
   };
 }
 

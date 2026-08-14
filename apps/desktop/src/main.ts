@@ -73,9 +73,10 @@ import {
   isCredentialProviderId,
 } from "./shared/credential-providers";
 import {
-  DEFAULT_VOICE_HOTKEYS,
+  parseVoiceHotkey,
   VOICE_HOTKEY_ABSENCE,
   type VoiceHotkeyAbsence,
+  voiceHotkeyCandidates,
   voiceHotkeyLabel,
   voiceHotkeyReport,
 } from "./shared/voice-hotkey";
@@ -165,6 +166,12 @@ const attentionReviewer = attentionEvaluator
 // does: evidence must be reproducible without a key and without a network.
 const realtimeCredentials = fixtureMode ? undefined : openAiRealtimeCredentialsFromEnvironment();
 let voiceHotkey: string | undefined;
+/**
+ * The chord the user chose over the defaults, if any. Read from the settings
+ * file before the key is first registered, and moved by the settings panel
+ * afterwards; the defaults stay behind it as fallbacks either way.
+ */
+let chosenVoiceHotkey: string | undefined;
 let talkKeyWatcher: TalkKeyWatcher | undefined;
 /**
  * Whether the key reports being let go of. The helper does and the Electron
@@ -213,7 +220,7 @@ function registerVoiceHotkey(): void {
       sendVoiceHotkey();
     },
   });
-  if (talkKeyWatcher.start(DEFAULT_VOICE_HOTKEYS)) return;
+  if (talkKeyWatcher.start(voiceHotkeyCandidates(chosenVoiceHotkey))) return;
   talkKeyWatcher = undefined;
   registerToggleHotkey();
   reportVoiceHotkey();
@@ -226,7 +233,7 @@ function registerVoiceHotkey(): void {
  * worth standing up rather than leaving the user with no key at all.
  */
 function registerToggleHotkey(): void {
-  for (const accelerator of DEFAULT_VOICE_HOTKEYS) {
+  for (const accelerator of voiceHotkeyCandidates(chosenVoiceHotkey)) {
     const registered = globalShortcut.register(accelerator, () => {
       panelWindow?.webContents.send(channels.voiceHotkeyPress);
       // A toggle has only the one edge, so it reports a release immediately and
@@ -252,6 +259,31 @@ function sendVoiceHotkey(): void {
 
 function reportVoiceHotkey(): void {
   process.stderr.write(`${voiceHotkeyReport(voiceHotkey, voiceHotkeyAbsence)}\n`);
+}
+
+/**
+ * Moves the talk key to whatever `chosenVoiceHotkey` now says, while the app
+ * is running. The old key is let go of in full before the new one is asked
+ * for, so the two can never race for the same chord — and letting everything
+ * go is exact rather than broad, because the talk key candidates are the only
+ * global accelerators Luke ever registers. Letting go means waiting: the
+ * system releases the old helper's chord when its process exits, not when the
+ * kill is asked for, and the defaults sit in both helpers' candidate lists —
+ * a successor that starts too early is refused the very fallback it was
+ * promised. The panel keeps showing the old key until the new one actually
+ * answers: the helper announces its own registration over stdout, and every
+ * path without a helper is decided by the time `registerVoiceHotkey` returns.
+ */
+async function applyVoiceHotkey(): Promise<void> {
+  const released = talkKeyWatcher?.stop();
+  talkKeyWatcher = undefined;
+  globalShortcut.unregisterAll();
+  await released;
+  voiceHotkey = undefined;
+  voiceHotkeyHeld = true;
+  voiceHotkeyAbsence = VOICE_HOTKEY_ABSENCE.ALREADY_OWNED;
+  registerVoiceHotkey();
+  if (!talkKeyWatcher) sendVoiceHotkey();
 }
 
 let windowMode: WindowMode = captureMode
@@ -646,6 +678,46 @@ function registerIpc(): void {
         return {
           settings: await settingsStore.snapshot(),
           reason: "Could not save that setting on this system.",
+        };
+      }
+    },
+  );
+
+  // The talk key is the user's to move — a chord another tool already holds,
+  // or a hand that does not reach ⌥Space. What arrives is read through the
+  // same gate the stored value passes, so only a chord the registrars can
+  // actually take is ever stored; omitting one returns the defaults, making
+  // reset the absence of a choice rather than a second stored value. The new
+  // chord is registered at once — a shortcut that only moved on the next
+  // launch would read as a control that does nothing.
+  ipcMain.handle(
+    channels.setVoiceHotkey,
+    async (event, accelerator: unknown): Promise<SettingsUpdateResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (accelerator !== undefined && typeof accelerator !== "string") {
+        throw new Error("Invalid shortcut request");
+      }
+      const chosen = accelerator === undefined ? undefined : parseVoiceHotkey(accelerator);
+      // The renderer records chords through the same reader, so one that does
+      // not parse is a malformed request rather than a choice to answer.
+      if (accelerator !== undefined && chosen === undefined) {
+        throw new Error("Invalid shortcut request");
+      }
+      try {
+        const result = await settingsStore.setVoiceHotkey(chosen);
+        if (!result.reason) {
+          chosenVoiceHotkey = chosen;
+          // Awaited so the renderer's controls stay at rest until the swap has
+          // finished and the helper's own registration line can say the truth.
+          await applyVoiceHotkey();
+        }
+        return result;
+      } catch {
+        // A filesystem failure is not something the user can act on, so it is
+        // reported as one line rather than as a raw system error.
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "Could not save that shortcut on this system.",
         };
       }
     },
@@ -1124,6 +1196,11 @@ if (!app.requestSingleInstanceLock()) {
     const storedSpeed = await settingsStore.readVoiceSpeed().catch(() => undefined);
     if (storedSpeed) realtimeCredentials?.setSpeed(storedSpeed);
     reportVoiceAvailability();
+    // Awaited for the same reason the voice is: the chosen chord has to be in
+    // hand before the key is registered, or the first registration would take
+    // the default away from the user who moved off it. A file that cannot be
+    // read means no choice was kept, and the defaults answer.
+    chosenVoiceHotkey = await settingsStore.readVoiceHotkey().catch(() => undefined);
     // The report is not made here: the helper answers over its own stdout a
     // moment later, and a line printed now would state an absence that only
     // exists because nobody has answered yet.
@@ -1154,8 +1231,9 @@ if (!app.requestSingleInstanceLock()) {
 app.on("will-quit", () => {
   globalShortcut.unregisterAll();
   // The helper is a process of Luke's own, so it does not outlive the app that
-  // spawned it and leave a key registered against nothing.
-  talkKeyWatcher?.stop();
+  // spawned it and leave a key registered against nothing. Nothing succeeds it
+  // during quit, so its exit is not waited on.
+  void talkKeyWatcher?.stop();
   talkKeyWatcher = undefined;
 });
 

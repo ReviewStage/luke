@@ -82,6 +82,13 @@ export interface AppSettings {
    * housing all day are something to opt into rather than discover.
    */
   voiceCaptions: boolean;
+  /**
+   * The talk-key chord the user chose, absent while the defaults stand. This
+   * is the stored choice rather than the registered key — the two differ when
+   * another app owns the chosen chord — so it says only whether there is a
+   * choice to reset, and the row keeps showing the key that actually answers.
+   */
+  voiceHotkey?: string;
 }
 
 /** A rejected update reports why without echoing the submitted value. */
@@ -206,6 +213,12 @@ export interface AppBridge {
   /** Turns the on-screen caption of Luke's speech on or off. */
   setVoiceCaptions(enabled: boolean): Promise<SettingsUpdateResult>;
   /**
+   * Moves the talk key to a chord of the user's own, or back to the defaults
+   * when omitted. The change is registered with the system at once, and the
+   * key the panel shows follows the same announcement it always has.
+   */
+  setVoiceHotkey(accelerator: string | undefined): Promise<SettingsUpdateResult>;
+  /**
    * Opens an observed session where its provider keeps it. The renderer names
    * the session rather than its address, for the same reason it names a
    * provider above: the places Luke can send you are the sessions it is already
@@ -260,6 +273,7 @@ export const channels = {
   setVoice: "app:set-voice",
   setVoiceSpeed: "app:set-voice-speed",
   setVoiceCaptions: "app:set-voice-captions",
+  setVoiceHotkey: "app:set-voice-hotkey",
   openProviderApiKeys: "app:open-provider-api-keys",
   setShowInMenuBar: "app:set-show-in-menu-bar",
   setShowInDock: "app:set-show-in-dock",
