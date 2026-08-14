@@ -361,6 +361,13 @@ export function App(): React.JSX.Element {
   const askEngaged = useRef(false);
   const feedbackRef = useRef<FeedbackEntry | undefined>(undefined);
   const feedbackNoticeTimer = useRef<number | undefined>(undefined);
+  /**
+   * The words a spoken open asked to start the note with, waiting for the
+   * composer's lifecycle event to consume them. A ref rather than an event
+   * payload because the lifecycle channel carries names alone — and only ever
+   * the developer's own words, under the spoken tool's contract.
+   */
+  const spokenFeedbackDraft = useRef<string | undefined>(undefined);
   const pointerInside = useRef(false);
   const modeGeneration = useRef(0);
   const remoteAudio = useRef<HTMLAudioElement | null>(null);
@@ -1304,10 +1311,9 @@ export function App(): React.JSX.Element {
    * same bridge calls the settings rows use, and the snapshot that comes back
    * redraws the panel's switches; showing the panel is the capsule's press
    * with a tab, and optionally a narrowing, chosen out loud; opening the
-   * composer is the tray item's press, through the same beginFeedback the
-   * tray and the section's buttons call. All were validated against their
-   * fixed vocabularies before they arrive here, so this only performs and
-   * reports.
+   * composer is the tray item's press, run through the tray's own path. All
+   * were validated against their fixed vocabularies before they arrive here,
+   * so this only performs and reports.
    */
   const carryAppAction = useCallback<AppActionCarrier>(
     async (action) => {
@@ -1315,19 +1321,34 @@ export function App(): React.JSX.Element {
         return applySpokenSetting(window.sidecar, action, setSettings);
       }
       if (action.kind === "feedback") {
-        // The tray's gesture, asked for out loud: the window expands first so
-        // the composer has somewhere to unfold into, the tab moves to settings
-        // so the panel later comes back beside the section the shape belongs
-        // to, and beginFeedback does the rest. Like the tray, leaving returns
-        // to nothing rather than to a panel nobody was in — and nothing here
-        // sends: the note leaves only by the Send button's own press.
-        changeTab(PANEL_TAB.SETTINGS);
-        await changeMode(true);
-        const drafted = beginFeedback(
-          FEEDBACK_KIND_FOR_COMPOSER[action.composer],
-          false,
-          action.draft,
-        );
+        // The main process expands the window and sends the composer's
+        // lifecycle event down the same ordered channel as the mode event —
+        // exactly the tray items' gesture — so the composer's shape can never
+        // lose a race to the panel apply the expansion causes. The draft
+        // rides this ref because the lifecycle channel carries event names,
+        // not payloads: set before the ask, consumed when the event lands.
+        // Whether it will be placed is decided here with the same pure
+        // decision the open itself makes, on the same entry — the open lands
+        // a beat later on the event, and nothing else writes the entry in
+        // between — so the spoken outcome says what actually happens. And
+        // nothing here sends: the note leaves only by the Send button's own
+        // press.
+        const kind = FEEDBACK_KIND_FOR_COMPOSER[action.composer];
+        const drafted = openedFeedbackEntry(feedbackRef.current, {
+          kind,
+          fromPanel: false,
+          ...(action.draft === undefined ? {} : { draft: action.draft }),
+        }).drafted;
+        spokenFeedbackDraft.current = action.draft;
+        try {
+          await window.sidecar.summonFeedback(kind);
+        } catch (error) {
+          // The composer is not coming, so the event that would consume the
+          // draft is not coming either; a stale one must not season some
+          // later tray press.
+          spokenFeedbackDraft.current = undefined;
+          throw error;
+        }
         return {
           status: "opened",
           kind: action.composer,
@@ -1367,7 +1388,7 @@ export function App(): React.JSX.Element {
         ...(action.sort ? { sort: action.sort } : {}),
       };
     },
-    [beginFeedback, changeMode, changeTab],
+    [changeMode, changeTab],
   );
   carryAppActionRef.current = carryAppAction;
 
@@ -1476,15 +1497,19 @@ export function App(): React.JSX.Element {
       // Held while a shortcut row is recording, for the same reason the talk
       // key's press is: the chord just typed is an entry, not an ask.
       if (eventName === "ask:focus" && !shortcutCapture.current) summonAsk();
-      // The tray's feedback items stand the surface straight down to the
-      // composer's shape, on the kind that was asked for. The tray has
-      // expanded the window itself; this is the renderer's half of the same
-      // gesture. The tab still moves to settings so that coming back to the
-      // panel later lands beside the section the shape belongs to.
+      // The tray's feedback items — and a spoken open, which rides the same
+      // gesture through the main process — stand the surface straight down to
+      // the composer's shape, on the kind that was asked for. The window was
+      // expanded before this event was sent; this is the renderer's half. The
+      // tab still moves to settings so that coming back to the panel later
+      // lands beside the section the shape belongs to, and a draft a spoken
+      // open left waiting is taken up here, then forgotten.
       const feedbackKind = feedbackKindForLifecycleEvent(eventName);
       if (feedbackKind) {
+        const draft = spokenFeedbackDraft.current;
+        spokenFeedbackDraft.current = undefined;
         changeTab(PANEL_TAB.SETTINGS);
-        beginFeedback(feedbackKind, false);
+        beginFeedback(feedbackKind, false, draft);
       }
     });
     const removeDisplay = window.sidecar.onDisplayChanged(setDisplay);

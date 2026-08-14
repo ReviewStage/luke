@@ -102,6 +102,7 @@ import {
   FEEDBACK_LIFECYCLE_EVENT,
   type FeedbackResult,
   feedbackSubmission,
+  isFeedbackKind,
 } from "./shared/feedback";
 import {
   askHotkeyCandidates,
@@ -949,6 +950,23 @@ function registerIpc(): void {
     const displayId = displayIdFor(event.sender);
     if (displayId === undefined) throw new Error("Invalid window mode request");
     return setWindowMode(displayId, expanded ? "expanded" : "compact", focus === true);
+  });
+
+  // The tray items' feedback gesture, asked for from a renderer — the spoken
+  // open rides this so the ordering stays owned here for every caller: the
+  // mode event setWindowMode sends and the composer event that follows travel
+  // the same lifecycle channel, so the shape that wins is always the
+  // composer, never a panel racing it in from another channel. Opening is all
+  // this does; a note still arrives only through channels.sendFeedback, from
+  // the composer's own Send button.
+  ipcMain.handle(channels.summonFeedback, (event, kind: unknown) => {
+    if (!trustedSender(event) || !isFeedbackKind(kind)) {
+      throw new Error("Invalid composer request");
+    }
+    const displayId = displayIdFor(event.sender);
+    if (displayId === undefined) throw new Error("Invalid composer request");
+    setWindowMode(displayId, "expanded", true);
+    event.sender.send(channels.lifecycle, FEEDBACK_LIFECYCLE_EVENT[kind]);
   });
 
   ipcMain.on(channels.setPointerInterception, (event, interceptsPointer: unknown) => {
