@@ -17,6 +17,7 @@ import type {
   WindowMode,
 } from "@sidecar/core";
 import type { CredentialProviderId } from "./credential-providers";
+import type { FeedbackResult, FeedbackSubmission } from "./feedback";
 
 export type { WindowMode } from "@sidecar/core";
 
@@ -314,6 +315,12 @@ export interface AppBridge {
    * anything, so nothing a model composed reaches Linear as-is.
    */
   executeIssueAction(action: IssueActionAsk): Promise<TrackerActionResult>;
+  /**
+   * Carries one user-typed note to the people who make Luke, as email. The
+   * renderer sends only what the user wrote and attached — the destination is
+   * fixed in the main process, and no session material rides along.
+   */
+  sendFeedback(submission: FeedbackSubmission): Promise<FeedbackResult>;
   /** Brings the expanded panel forward so it can accept typed input. */
   focusPanel(): void;
   /** Mints a short-lived Realtime credential; the standing API key never crosses. */
@@ -373,6 +380,7 @@ export const channels = {
   sendSessionMessage: "app:send-session-message",
   executeSessionControl: "app:execute-session-control",
   executeIssueAction: "app:execute-issue-action",
+  sendFeedback: "app:send-feedback",
   focusPanel: "app:focus-panel",
   requestRealtimeCredential: "app:request-realtime-credential",
   attentionSpeech: "app:attention-speech",

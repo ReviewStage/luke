@@ -299,7 +299,17 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "cloud, or one provider, and orderable by urgency (what needs the developer first) or " +
         "recency (what moved last first); a row can be opened, messaged, or controlled where its " +
         "provider allows. Settings holds the preferences, the talk and ask keys, the cloud " +
-        "agent API keys, the integrations, permissions, and Quit.",
+        "agent API keys, the integrations, permissions, the Feedback section, and Quit.",
+    },
+    {
+      label: "Feedback and prompts",
+      detail:
+        "The Feedback section at the foot of the Settings tab — or the menu bar item's Send " +
+        "Feedback… and Submit a Prompt… — opens a composer under the notch. Send feedback is for " +
+        "bugs and ideas; Submit a prompt sends a prompt to a coding agent, and one the founders " +
+        "like ships in the next release. Either goes by email to the founders with an optional " +
+        "name and email for credit and up to three screenshots. It is typed and sent by hand: a " +
+        "spoken ask can say where it lives, never write or send one.",
     },
     talkKeyFact(input.hotkey),
     askKeyFact(input.askKey),

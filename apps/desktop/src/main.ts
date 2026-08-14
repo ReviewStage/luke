@@ -58,6 +58,7 @@ import { CopilotSessionAdapter } from "./copilot-adapter";
 import { CURSOR_PROVIDER, CursorSessionAdapter } from "./cursor-adapter";
 import { CursorLocalSessionAdapter } from "./cursor-local-adapter";
 import { DevinSessionAdapter } from "./devin-adapter";
+import { feedbackDeliveryFromEnvironment } from "./feedback-delivery";
 import { JulesSessionAdapter } from "./jules-adapter";
 import { LinearIssueTracker } from "./linear-tracker";
 import { readMacScreenGeometry } from "./macos-screen-geometry";
@@ -87,6 +88,12 @@ import {
   type CredentialProviderId,
   isCredentialProviderId,
 } from "./shared/credential-providers";
+import {
+  FEEDBACK_KIND,
+  FEEDBACK_LIFECYCLE_EVENT,
+  type FeedbackResult,
+  feedbackSubmission,
+} from "./shared/feedback";
 import {
   askHotkeyCandidates,
   askHotkeyReport,
@@ -206,6 +213,7 @@ const realtimeCredentials = fixtureMode ? undefined : openAiRealtimeCredentialsF
 // rather than in the renderer because letting the players back up must survive
 // anything the renderer does — and only this process may run a helper.
 const mediaDuck = new MediaDuckController();
+const feedbackDelivery = feedbackDeliveryFromEnvironment();
 let voiceHotkey: string | undefined;
 /**
  * The chord the user chose over the defaults, if any. Read from the settings
@@ -1398,6 +1406,27 @@ function registerIpc(): void {
     },
   );
 
+  // A note to the founders travels one road: typed in the composer, validated
+  // here as a whole, and handed to the courier whose destination is fixed by
+  // this build. Only what the user wrote and attached crosses — no session
+  // material, no identifiers, nothing observed — and a refusal comes back as an
+  // answer for the composer rather than a throw, because sending is the user's
+  // own act and its outcome belongs beside the field it left.
+  ipcMain.handle(
+    channels.sendFeedback,
+    async (event, submission: unknown): Promise<FeedbackResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      const parsed = feedbackSubmission(submission);
+      if (!parsed) throw new Error("Invalid feedback submission");
+      // A fixture run must be reproducible without a network, so it refuses
+      // rather than sending — and says so, because the composer still draws.
+      if (fixtureMode) {
+        return { delivered: false, reason: "A fixture run sends nothing." };
+      }
+      return feedbackDelivery.deliver(parsed);
+    },
+  );
+
   // The panel is normally shown without stealing focus. A text field cannot be
   // typed into that way, so the renderer asks for focus when it opens one —
   // for its own window, which is the one holding the field.
@@ -1669,6 +1698,34 @@ function trayMenu(): Electron.Menu {
         if (displayId === undefined) return;
         setWindowMode(displayId, "expanded", true);
         host?.webContents.send(channels.lifecycle, "tab:settings");
+      },
+    },
+    { type: "separator" },
+    {
+      // The same door the bottom of the settings tab offers, for whoever lives
+      // in the menu bar instead: the panel comes up on the composer, already
+      // set to the kind that was asked for — on the voice host's window, the
+      // same one every other app-level ask lands in.
+      label: "Send Feedback…",
+      click: () => {
+        const host = voiceHostWindow();
+        const displayId = host ? displayIdFor(host.webContents) : undefined;
+        if (displayId === undefined) return;
+        setWindowMode(displayId, "expanded", true);
+        host?.webContents.send(
+          channels.lifecycle,
+          FEEDBACK_LIFECYCLE_EVENT[FEEDBACK_KIND.FEEDBACK],
+        );
+      },
+    },
+    {
+      label: "Submit a Prompt…",
+      click: () => {
+        const host = voiceHostWindow();
+        const displayId = host ? displayIdFor(host.webContents) : undefined;
+        if (displayId === undefined) return;
+        setWindowMode(displayId, "expanded", true);
+        host?.webContents.send(channels.lifecycle, FEEDBACK_LIFECYCLE_EVENT[FEEDBACK_KIND.PROMPT]);
       },
     },
     { type: "separator" },

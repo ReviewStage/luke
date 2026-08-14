@@ -119,6 +119,11 @@ convenience; `./scripts/check.sh` and CI remain authoritative.
 
 ## Panel motion
 
+DESIGN.md is the binding contract for how anything drawn on the surface may
+move — the spring vocabulary, how content joins and leaves a resizing shape,
+and how a motion change is proven. Read it before adding or altering any
+animation; this section covers only the window and the surface themselves.
+
 The window is a stage; the drawn surface is the shape. A window therefore holds
 the largest shape its mode can draw — a compact window holds the peek and an
 expanded one holds the slot as well as the panel, so neither hovering nor

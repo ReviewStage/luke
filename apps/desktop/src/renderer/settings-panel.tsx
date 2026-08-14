@@ -41,6 +41,8 @@ import {
   removalStage,
   removalWithdrawable,
 } from "./credential-removal";
+import type { FeedbackEntryControl } from "./feedback-entry";
+import { FeedbackSection } from "./feedback-panel";
 import { microphoneAccessRow } from "./microphone-access";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import { CloudBadge, ProviderMark } from "./provider-marks";
@@ -79,6 +81,8 @@ export interface SettingsPanelProps {
   onDuckOtherMediaChange: (enabled: boolean) => Promise<string | undefined>;
   /** The one credential being entered anywhere, and everything that can be done to it. */
   credentials: CredentialEntryControl;
+  /** The one note to the founders being written, and everything that can be done to it. */
+  feedback: FeedbackEntryControl;
   /** Chooses the voice Luke speaks with, from the set fixed by this build. */
   onVoiceChange: (voice: RealtimeVoice) => void;
   /** Chooses the pace Luke speaks at, from the set fixed by this build. */
@@ -1120,6 +1124,7 @@ export function SettingsPanel({
   onVoiceCaptionsChange,
   onDuckOtherMediaChange,
   credentials,
+  feedback,
   onVoiceChange,
   onVoiceSpeedChange,
   panelOpen,
@@ -1225,6 +1230,8 @@ export function SettingsPanel({
         </div>
         {microphoneError ? <p className="error-message">{microphoneError}</p> : null}
       </section>
+
+      <FeedbackSection control={feedback} />
 
       <button
         type="button"
