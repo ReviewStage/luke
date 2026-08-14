@@ -21,6 +21,7 @@ import {
   type NormalizedSession,
   type ObservedWorkspaceProject,
   outputSpeedUpdateEvents,
+  parseRealtimeServerEvent,
   positiveInteger,
   proactiveSpeechEvents,
   pushToTalkCommitEvents,
@@ -30,7 +31,6 @@ import {
   type RealtimeConnection,
   type RealtimeFunctionCall,
   type RealtimeStatus,
-  realtimeFunctionCalls,
   type SessionToolAction,
   sessionContextEvents,
   sessionContextText,
@@ -1066,113 +1066,97 @@ export class RealtimeVoiceSession {
   }
 
   #handleServerEvent(data: unknown): void {
-    if (typeof data !== "string") return;
-    let event: unknown;
-    try {
-      event = JSON.parse(data);
-    } catch (error) {
-      if (error instanceof SyntaxError) return;
-      throw error;
-    }
+    const event = parseRealtimeServerEvent(data);
+    if (!event) return;
 
-    if (event === null || typeof event !== "object") return;
-    const type = (event as { type?: unknown }).type;
-    if (type === REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED) {
-      const item = (event as { item?: { id?: unknown } }).item;
-      if (typeof item?.id === "string") this.#responseItemId = item.id;
-    }
-    if (type === REALTIME_SERVER_EVENT.RESPONSE_CREATED) {
-      // Only a reply the session is still waiting on may be adopted. A
-      // confirmation arriving after the developer stopped or took the turn is
-      // the cancelled reply's own, landing late — the stop raced the server's
-      // confirmation — and adopting it would re-open the track over the quiet
-      // just asked for, and let its finished form read as the current reply's.
-      if (this.#status !== REALTIME_STATUS.RESPONDING) return;
-      // The reply being asked for is under way, so anything arriving from here
-      // belongs to it rather than to the one it replaced. Its name is what a
-      // `response.done` must present to be read as this reply's: the channel
-      // is ordered, so a cancelled reply's `done` lands before this
-      // confirmation and finds nothing to match.
-      const response = (event as { response?: { id?: unknown } }).response;
-      if (typeof response?.id === "string") this.#activeResponseId = response.id;
-      this.#unsilenceLuke();
-    }
-    if (type === REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA) {
-      const { delta, item_id } = event as { delta?: unknown; item_id?: unknown };
-      // Only the reply being spoken may write the caption. A cancelled reply's
-      // transcript keeps arriving after the interrupt that cleared it — the
-      // server had already produced it — and without this check a late piece
-      // would draw the words Luke was just stopped from saying, or splice them
-      // onto the next reply's.
-      if (item_id === this.#responseItemId && typeof delta === "string" && delta) {
-        this.#setCaption((this.#caption ?? "") + delta);
-      }
-    }
-    if (type === REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE) {
-      // The server's own rendering of the whole reply, which the deltas only
-      // approximate: a delta lost to the channel would otherwise leave a hole
-      // in the sentence for as long as it stayed up. Held to the same item as
-      // the deltas, because the cancelled reply's `done` is the likeliest
-      // straggler of all.
-      const { transcript, item_id } = event as { transcript?: unknown; item_id?: unknown };
-      if (item_id === this.#responseItemId && typeof transcript === "string" && transcript) {
-        this.#setCaption(transcript);
-      }
-    }
-    if (type === REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED) {
-      this.#audioEndingsReported = true;
-      // The reply is over because the server says the audio ran out, not
-      // because this end guessed from a stretch of quiet. A pause between two
-      // sentences is quiet too, and guessing ended the turn in the middle of
-      // one — the meter and the face went with it while Luke talked on.
-      this.#finishResponse();
-      return;
-    }
-    if (type === REALTIME_SERVER_EVENT.RESPONSE_DONE) {
-      // Whether this is the reply now under way, or the finished form of one
-      // the developer already talked or typed over. The server had completed
-      // the old reply before the cancel landed — it generates ahead of the
-      // room — so its `done` still arrives, after the interrupt has already
-      // opened a new turn. Nothing of it may act with that turn's arming or
-      // end that turn early: its calls are answered refused so the model is
-      // not left waiting, and everything else about it is ignored.
-      const doneId = (event as { response?: { id?: unknown } }).response?.id;
-      const fresh = (typeof doneId === "string" ? doneId : undefined) === this.#activeResponseId;
-      // A reply that asked for tools has not finished talking: the calls are
-      // answered and the reply resumes over their outcomes, so the turn stays
-      // open rather than ending on a reply that was only half made.
-      const calls = realtimeFunctionCalls(event);
-      if (calls.length > 0) {
-        void this.#answerToolCalls(calls, fresh && this.#toolTurnArmed);
+    switch (event.type) {
+      case REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED:
+        if (event.itemId) this.#responseItemId = event.itemId;
         return;
-      }
-      if (!fresh) return;
-      // Generation is done; the reply is not. The turn ends when Luke stops
-      // being audible, which the caller reports from the audio itself rather
-      // than from an event — the one that would say so is undocumented.
-      this.#generationDone = true;
-      // The audio can run out before the event that says generation is over.
-      // The meter has already reported its quiet and will not report it twice,
-      // so waiting for another would hold the turn open until the settle
-      // timeout — seconds of a meter and a face saying Luke is still talking.
-      if (this.#remoteQuiet && !this.#audioEndingsReported) {
+      case REALTIME_SERVER_EVENT.RESPONSE_CREATED:
+        // Only a reply the session is still waiting on may be adopted. A
+        // confirmation arriving after the developer stopped or took the turn is
+        // the cancelled reply's own, landing late — the stop raced the server's
+        // confirmation — and adopting it would re-open the track over the quiet
+        // just asked for, and let its finished form read as the current reply's.
+        if (this.#status !== REALTIME_STATUS.RESPONDING) return;
+        // The reply being asked for is under way, so anything arriving from here
+        // belongs to it rather than to the one it replaced. Its name is what a
+        // `response.done` must present to be read as this reply's: the channel
+        // is ordered, so a cancelled reply's `done` lands before this
+        // confirmation and finds nothing to match.
+        if (event.responseId) this.#activeResponseId = event.responseId;
+        this.#unsilenceLuke();
+        return;
+      case REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA:
+        // Only the reply being spoken may write the caption. A cancelled reply's
+        // transcript keeps arriving after the interrupt that cleared it — the
+        // server had already produced it — and without this check a late piece
+        // would draw the words Luke was just stopped from saying, or splice them
+        // onto the next reply's.
+        if (event.itemId === this.#responseItemId && event.delta) {
+          this.#setCaption((this.#caption ?? "") + event.delta);
+        }
+        return;
+      case REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE:
+        // The server's own rendering of the whole reply, which the deltas only
+        // approximate: a delta lost to the channel would otherwise leave a hole
+        // in the sentence for as long as it stayed up. Held to the same item as
+        // the deltas, because the cancelled reply's `done` is the likeliest
+        // straggler of all.
+        if (event.itemId === this.#responseItemId && event.transcript) {
+          this.#setCaption(event.transcript);
+        }
+        return;
+      case REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED:
+        this.#audioEndingsReported = true;
+        // The reply is over because the server says the audio ran out, not
+        // because this end guessed from a stretch of quiet. A pause between two
+        // sentences is quiet too, and guessing ended the turn in the middle of
+        // one — the meter and the face went with it while Luke talked on.
         this.#finishResponse();
         return;
+      case REALTIME_SERVER_EVENT.RESPONSE_DONE: {
+        // Whether this is the reply now under way, or the finished form of one
+        // the developer already talked or typed over. The server had completed
+        // the old reply before the cancel landed — it generates ahead of the
+        // room — so its `done` still arrives, after the interrupt has already
+        // opened a new turn. Nothing of it may act with that turn's arming or
+        // end that turn early: its calls are answered refused so the model is
+        // not left waiting, and everything else about it is ignored.
+        const fresh = event.responseId === this.#activeResponseId;
+        // A reply that asked for tools has not finished talking: the calls are
+        // answered and the reply resumes over their outcomes, so the turn stays
+        // open rather than ending on a reply that was only half made.
+        if (event.calls.length > 0) {
+          void this.#answerToolCalls(event.calls, fresh && this.#toolTurnArmed);
+          return;
+        }
+        if (!fresh) return;
+        // Generation is done; the reply is not. The turn ends when Luke stops
+        // being audible, which the caller reports from the audio itself rather
+        // than from an event — the one that would say so is undocumented.
+        this.#generationDone = true;
+        // The audio can run out before the event that says generation is over.
+        // The meter has already reported its quiet and will not report it twice,
+        // so waiting for another would hold the turn open until the settle
+        // timeout — seconds of a meter and a face saying Luke is still talking.
+        if (this.#remoteQuiet && !this.#audioEndingsReported) {
+          this.#finishResponse();
+          return;
+        }
+        this.#settleTimer ??= setTimeout(() => {
+          this.#settleTimer = undefined;
+          this.#finishResponse();
+        }, REALTIME_SETTLE_TIMEOUT_MS);
+        return;
       }
-      this.#settleTimer ??= setTimeout(() => {
-        this.#settleTimer = undefined;
+      case REALTIME_SERVER_EVENT.ERROR:
+        this.#options.onError(event.message);
+        // An error can arrive *instead of* `response.done` — an empty push-to-talk
+        // commit is the common case — which would otherwise leave the session
+        // stuck in `responding` and unable to take another turn.
         this.#finishResponse();
-      }, REALTIME_SETTLE_TIMEOUT_MS);
-    }
-    if (type === REALTIME_SERVER_EVENT.ERROR) {
-      const message = (event as { error?: { message?: unknown } }).error?.message;
-      this.#options.onError(
-        typeof message === "string" ? message : "The voice service reported an error.",
-      );
-      // An error can arrive *instead of* `response.done` — an empty push-to-talk
-      // commit is the common case — which would otherwise leave the session
-      // stuck in `responding` and unable to take another turn.
-      this.#finishResponse();
     }
   }
 

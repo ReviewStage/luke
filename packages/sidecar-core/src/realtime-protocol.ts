@@ -13,7 +13,9 @@ import {
 
 /**
  * The Realtime protocol: how far a call has progressed, the events both sides
- * send, the standing instructions, and the outbound builders that speak them.
+ * send, the standing instructions, the outbound builders that speak them, and
+ * the parser that reads inbound events so a second file cannot re-encode the
+ * grammar.
  */
 
 /** The Realtime session shape a client secret is minted against. */
@@ -348,13 +350,49 @@ export interface RealtimeFunctionCall {
 }
 
 /**
+ * An inbound Realtime event the conversation acts on. The wire names stay the
+ * discriminant so a switch is a switch on the protocol, not a second vocabulary.
+ */
+export type ParsedRealtimeServerEvent =
+  | { type: typeof REALTIME_SERVER_EVENT.RESPONSE_CREATED; responseId?: string }
+  | { type: typeof REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED; itemId?: string }
+  | {
+      type: typeof REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA;
+      itemId?: string;
+      delta: string;
+    }
+  | {
+      type: typeof REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE;
+      itemId?: string;
+      transcript: string;
+    }
+  | { type: typeof REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED }
+  | {
+      type: typeof REALTIME_SERVER_EVENT.RESPONSE_DONE;
+      responseId?: string;
+      calls: readonly RealtimeFunctionCall[];
+    }
+  | { type: typeof REALTIME_SERVER_EVENT.ERROR; message: string };
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function recordField(
+  record: Record<string, unknown>,
+  key: string,
+): Record<string, unknown> | undefined {
+  const value = record[key];
+  return isRecord(value) ? value : undefined;
+}
+
+/**
  * The tool calls a `response.done` event carries, if any. Read from the
  * finished response rather than streamed deltas: a call is acted on whole or
  * not at all, and the finished response is the only place it is whole.
  */
-export function realtimeFunctionCalls(event: unknown): readonly RealtimeFunctionCall[] {
-  if (!isRecord(event) || event.type !== REALTIME_SERVER_EVENT.RESPONSE_DONE) return [];
-  const response = isRecord(event.response) ? event.response : undefined;
+function functionCallsFromDone(event: Record<string, unknown>): readonly RealtimeFunctionCall[] {
+  const response = recordField(event, "response");
   const output = Array.isArray(response?.output) ? response.output : [];
   return output.filter(isRecord).flatMap((item) => {
     if (item.type !== "function_call") return [];
@@ -363,6 +401,85 @@ export function realtimeFunctionCalls(event: unknown): readonly RealtimeFunction
     const argumentsJson = typeof item.arguments === "string" ? item.arguments : "";
     return name && callId ? [{ name, callId, argumentsJson }] : [];
   });
+}
+
+function decodeRealtimePayload(data: unknown): Record<string, unknown> | undefined {
+  let payload: unknown = data;
+  if (typeof data === "string") {
+    try {
+      payload = JSON.parse(data);
+    } catch (error) {
+      if (error instanceof SyntaxError) return undefined;
+      throw error;
+    }
+  }
+  return isRecord(payload) ? payload : undefined;
+}
+
+/**
+ * Reads one inbound Realtime event. The wire format is this module's: a JSON
+ * string from the data channel, or an already-decoded payload, is accepted so
+ * a second file cannot re-encode the grammar in a second style. Anything that
+ * is not one of the events the conversation acts on is discarded rather than
+ * repaired.
+ */
+export function parseRealtimeServerEvent(data: unknown): ParsedRealtimeServerEvent | undefined {
+  const event = decodeRealtimePayload(data);
+  if (!event) return undefined;
+
+  switch (event.type) {
+    case REALTIME_SERVER_EVENT.RESPONSE_CREATED: {
+      const responseId = optionalString(recordField(event, "response")?.id);
+      return {
+        type: REALTIME_SERVER_EVENT.RESPONSE_CREATED,
+        ...(responseId ? { responseId } : {}),
+      };
+    }
+    case REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED: {
+      const itemId = optionalString(recordField(event, "item")?.id);
+      return {
+        type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
+        ...(itemId ? { itemId } : {}),
+      };
+    }
+    case REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA: {
+      if (typeof event.delta !== "string") return undefined;
+      const itemId = optionalString(event.item_id);
+      return {
+        type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+        delta: event.delta,
+        ...(itemId ? { itemId } : {}),
+      };
+    }
+    case REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE: {
+      if (typeof event.transcript !== "string") return undefined;
+      const itemId = optionalString(event.item_id);
+      return {
+        type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE,
+        transcript: event.transcript,
+        ...(itemId ? { itemId } : {}),
+      };
+    }
+    case REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED:
+      return { type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED };
+    case REALTIME_SERVER_EVENT.RESPONSE_DONE: {
+      const responseId = optionalString(recordField(event, "response")?.id);
+      return {
+        type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+        calls: functionCallsFromDone(event),
+        ...(responseId ? { responseId } : {}),
+      };
+    }
+    case REALTIME_SERVER_EVENT.ERROR: {
+      const message = optionalString(recordField(event, "error")?.message);
+      return {
+        type: REALTIME_SERVER_EVENT.ERROR,
+        message: message ?? "The voice service reported an error.",
+      };
+    }
+    default:
+      return undefined;
+  }
 }
 
 /**
