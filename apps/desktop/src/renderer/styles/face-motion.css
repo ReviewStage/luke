@@ -888,6 +888,111 @@
   animation-duration: 5s;
 }
 
+/* flyoff — hover flourish (fly off and swoop back) */
+
+@keyframes luke-flyoff-1 {
+  0% {
+    transform: rotate(0deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  10% {
+    transform: rotate(-10deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  26% {
+    transform: rotate(22deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  34% {
+    transform: rotate(10deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  40% {
+    transform: rotate(-14deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  46% {
+    transform: rotate(-14deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  62% {
+    transform: rotate(5deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  72% {
+    transform: rotate(0deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes luke-flyoff-2 {
+  0% {
+    transform: translate(0px, 0px);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  10% {
+    transform: translate(-16px, 6px);
+    animation-timing-function: cubic-bezier(0.5, 0, 0.9, 0.5);
+  }
+
+  26% {
+    transform: translate(280px, -90px);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  34% {
+    transform: translate(280px, -240px);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  40% {
+    transform: translate(-340px, -240px);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  46% {
+    transform: translate(-340px, -110px);
+    animation-timing-function: cubic-bezier(0.1, 0.5, 0.3, 1);
+  }
+
+  62% {
+    transform: translate(16px, 8px);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  72% {
+    transform: translate(0px, 0px);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  100% {
+    transform: translate(0px, 0px);
+  }
+}
+
+.luke-face[data-motion="flyoff"] .luke-face-layer-1 {
+  transform-origin: 120px 124px;
+  animation-name: luke-flyoff-1;
+  animation-duration: 3s;
+}
+
+.luke-face[data-motion="flyoff"] .luke-face-layer-2 {
+  animation-name: luke-flyoff-2;
+  animation-duration: 3s;
+}
+
 /* tease — playful (brow waggle) */
 
 @keyframes luke-tease-brows {

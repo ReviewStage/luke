@@ -856,6 +856,16 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    The loud motions leave the square the artwork is drawn in — a pirouette and a
    duck both need more room than a face at rest — so nothing is clipped here. The
    wing clips them instead, at the housing, which is the edge that matters. */
+/* The box the hover is measured against. It wraps the face exactly and never
+   moves when a motion does — the motions transform layers inside the svg — so a
+   face mid-flyoff is still hovered where it took off from. Like the rest of the
+   wing it takes no pointer; the window's own pointer stream is what reads it,
+   which is how the strip's one button keeps every press. */
+.wing-face {
+  display: flex;
+  flex: 0 0 auto;
+}
+
 .luke-face {
   width: 18px;
   height: 18px;

@@ -205,7 +205,9 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       label: "What Luke is",
       detail:
         "A macOS sidecar living beside the notch. The capsule under the housing counts observed " +
-        "sessions; hovering it peeks, pressing it opens the panel, and Escape closes what is open.",
+        "sessions; hovering it peeks, pressing it opens the panel, and Escape closes what is open. " +
+        "Resting the pointer on the face itself earns one trick — usually flying off the strip and " +
+        "swooping back — and another only after the pointer leaves and returns.",
     },
     {
       label: "The panel",
