@@ -64,6 +64,12 @@ export interface AppSettings {
    * marks the voice that would actually be heard, not just a stored value.
    */
   voice: RealtimeVoice;
+  /**
+   * Whether Luke's words are captioned on screen while he speaks. Off by
+   * default: the voice experience ships as sound, and words drawn under the
+   * housing all day are something to opt into rather than discover.
+   */
+  voiceCaptions: boolean;
 }
 
 /** A rejected update reports why without echoing the submitted value. */
@@ -178,6 +184,8 @@ export interface AppBridge {
   openProviderApiKeys(providerId: CredentialProviderId): void;
   /** Shows or hides the menu bar status item, and remembers the choice. */
   setShowInMenuBar(show: boolean): Promise<SettingsUpdateResult>;
+  /** Turns the on-screen caption of Luke's speech on or off. */
+  setVoiceCaptions(enabled: boolean): Promise<SettingsUpdateResult>;
   /**
    * Opens an observed session where its provider keeps it. The renderer names
    * the session rather than its address, for the same reason it names a
@@ -231,6 +239,7 @@ export const channels = {
   openMicrophoneSettings: "app:open-microphone-settings",
   setProviderApiKey: "app:set-provider-api-key",
   setVoice: "app:set-voice",
+  setVoiceCaptions: "app:set-voice-captions",
   openProviderApiKeys: "app:open-provider-api-keys",
   setShowInMenuBar: "app:set-show-in-menu-bar",
   openSession: "app:open-session",

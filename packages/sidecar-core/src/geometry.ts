@@ -50,6 +50,14 @@ export interface NotchWindowLayout extends Rectangle {
 export const CAPSULE_SIDE_WIDTH = 36;
 export const PEEK_SIDE_GROWTH = 88;
 export const SURFACE_MARGIN = 40;
+/**
+ * `--caption-max` in the renderer's stylesheet; the two must agree. The
+ * tallest compact shape is the capsule or peek grown a caption block below
+ * the housing — Luke's words while he speaks, wrapping to as many as four
+ * lines as they stream in — and the window holds that whole block for the
+ * same reason it holds the peek's width: speech must never cost an IPC resize.
+ */
+export const VOICE_CAPTION_MAX_HEIGHT = 70;
 /** `--panel-width` in the renderer's stylesheet; the two must agree. */
 export const PANEL_WIDTH = 620;
 const peekSideWidth = CAPSULE_SIDE_WIDTH + PEEK_SIDE_GROWTH;
@@ -90,7 +98,10 @@ export function positionNotchWindow(
   const height =
     mode === "expanded"
       ? Math.min(panelHeight + SURFACE_MARGIN, display.bounds.height)
-      : Math.min(Math.max(32, notch.topInset) + SURFACE_MARGIN, display.bounds.height);
+      : Math.min(
+          Math.max(32, notch.topInset) + VOICE_CAPTION_MAX_HEIGHT + SURFACE_MARGIN,
+          display.bounds.height,
+        );
   const x = Math.round(display.bounds.x + (display.bounds.width - width) / 2);
 
   return {

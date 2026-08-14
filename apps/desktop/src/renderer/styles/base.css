@@ -219,6 +219,16 @@
   /* Growing one side moves the shape's centre half the growth away from it, so
      the right edge stays exactly where it was and only the left one travels. */
   --capsule-voice-shift: calc(var(--capsule-voice-growth) / 2);
+  /* Luke's words under the housing, wrapping to at most four lines as they
+     stream in. Mirrors VOICE_CAPTION_MAX_HEIGHT in
+     packages/sidecar-core/src/geometry.ts: the compact window already holds
+     this much room below the capsule, so growing into it costs no IPC.
+     `--caption-size` is the block's height right now — measured off the
+     wrapped text by the renderer, padding included, never past the max. */
+  --caption-max: 70px;
+  /* How much of that room the shape is currently using: the caption states
+     below raise it, and every other state leaves the capsule's own height. */
+  --caption-growth: 0px;
   /* Wide enough for a key, a way out, and a way on, and no wider — the page the
      key was copied from is behind this and has to stay readable. The floor is
      what those three need on a display with no housing to grow from. */
@@ -317,7 +327,7 @@ button:disabled {
   top: 0;
   left: 50%;
   width: var(--capsule-width);
-  height: var(--capsule-height);
+  height: calc(var(--capsule-height) + var(--caption-growth));
   /* The spring undershoots on the way back, and the capsule is the floor: a
      shape that dips inside the housing's footprint opens a gap where there is
      a physical camera, not a screen. Clamping the used size lets the spring
@@ -394,6 +404,10 @@ button:disabled {
   transition-delay: 0s, 0s, 0s;
 }
 
+/* The capsule joins the list only once the caption has grown it past the
+   housing: a shape that has left the housing's footprint needs the depth, and
+   one still inside it must stay indistinguishable from the hardware. */
+.app-stage[data-presentation="capsule"][data-caption="true"] .panel-surface,
 .app-stage[data-presentation="peek"] .panel-surface,
 .app-stage[data-presentation="slot"] .panel-surface,
 .app-stage[data-presentation="panel"] .panel-surface {
@@ -450,6 +464,55 @@ button:disabled {
   transition-duration: var(--duration-quick), var(--duration-shape);
   transition-timing-function: var(--motion-exit), var(--spring);
   transition-delay: calc(var(--duration-shape) - var(--duration-quick));
+}
+
+/* Luke's words follow him onto the shape: the compact states grow a caption
+   block below the housing while there are words to draw. Gated on the words
+   rather than on the turn, because the first of them arrives a beat after the
+   reply starts and a shape grown around nothing reads as a twitch. */
+.app-stage[data-presentation="capsule"][data-caption="true"],
+.app-stage[data-presentation="peek"][data-caption="true"] {
+  --caption-growth: var(--caption-size, 28px);
+}
+
+/* While there are words, the capsule holds the peek's width whatever the
+   pointer is doing. The caption wraps at one width in every state, so no
+   change of shape ever re-flows a line mid-morph — hovering a captioned
+   capsule unfolds the wings and moves the words not at all. Written after the
+   voice rules above so the wider shape wins their tie, and centred again: the
+   asymmetric growth was room for the meter, which the peek's width dwarfs.
+   Growing leads, exactly as the voice growth does — the base rule's delay is
+   for leaving — and stated against the caption rather than inherited from the
+   voice rule, because the speaking fixture draws words without a live turn. */
+.app-stage[data-presentation="capsule"][data-caption="true"] .panel-surface {
+  width: var(--peek-width);
+  transform: translate(-50%, var(--shape-top, 0px));
+  transition-duration: var(--duration-shape);
+  transition-delay: 0s;
+}
+
+.app-stage[data-presentation="capsule"][data-caption="true"] .compact-hover-target {
+  width: var(--peek-width);
+  transform: translateX(-50%);
+}
+
+/* The press target covers the caption block as well as the strip: the words
+   are drawn on the shape, and a shape the pointer is over must keep taking
+   the pointer. Without this the block belongs to the stage around the strip,
+   which carries no hit region, so resting on the words read as leaving the
+   shape — collapsing the peek under the cursor. Like every hover-target rule
+   it snaps rather than animating, and the pill's variant carries the lift the
+   way the pill's own height does, so the target ends where the shape ends. */
+.app-stage[data-presentation="capsule"][data-caption="true"] .compact-hover-target,
+.app-stage[data-presentation="peek"][data-caption="true"] .compact-hover-target {
+  height: calc(var(--capsule-height) + var(--caption-growth));
+}
+
+.app-stage[data-notch="false"][data-presentation="capsule"][data-caption="true"]
+  .compact-hover-target,
+.app-stage[data-notch="false"][data-presentation="peek"][data-caption="true"]
+  .compact-hover-target {
+  height: calc(var(--capsule-height) - var(--shape-top) * 2 + var(--caption-growth));
 }
 
 /* Under the pointer: wide enough to say what the count means. */
@@ -852,7 +915,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 }
 
 .app-stage[data-notch="false"] .panel-surface {
-  height: calc(var(--capsule-height) - var(--shape-top) * 2);
+  height: calc(var(--capsule-height) - var(--shape-top) * 2 + var(--caption-growth));
   min-height: calc(var(--capsule-height) - var(--shape-top) * 2);
   border-radius: 999px;
 }
@@ -976,6 +1039,114 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transition-duration: var(--duration-quick), var(--duration-shape);
   transition-timing-function: var(--motion-exit), var(--spring);
   transition-delay: var(--peek-delay);
+}
+
+/* Voice caption ----------------------------------------------------------- */
+
+/* Luke's words, wrapping as they stream so the whole reply can be read — the
+   text is not timed to the speech (the protocol carries no word timing, and
+   generation runs ahead of the voice), so showing everything is what lets
+   reading catch up.
+
+   One element for every state, and one wrap width for every state: the
+   peek's, inset by the capsule's corner. A caption that re-wrapped at each
+   shape's own width would re-set its lines at the instant of every morph,
+   which reads as a jump; at one width the words never re-flow, and every
+   change of shape moves them on `transform` alone — under the housing in the
+   compact states, riding down to the panel's foot when the shape opens.
+
+   The box is always the full block the window reserves; what tracks the text
+   is the clip. It springs to the same edge the surface's height does, from
+   the same `--caption-size`, so a line that wraps into existence is revealed
+   by the black arriving under it rather than being drawn on the desktop. The
+   lift off the top edge rides in the transform rather than in `top` for the
+   same reason the surface carries it there: it changes between states, and
+   only a transform travels on the spring. It takes no pointer — the surface
+   under it is what answers, so hovering the words holds the peek like
+   hovering the shape does. */
+.voice-caption {
+  position: absolute;
+  z-index: 3;
+  top: var(--capsule-height);
+  left: 50%;
+  overflow: hidden;
+  width: calc(var(--peek-width) - var(--notch-convex-radius) * 2);
+  height: var(--caption-max);
+  padding: 5px 0 9px;
+  clip-path: inset(0 0 calc(var(--caption-max) - var(--caption-size, 28px)) 0);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, calc(var(--caption-rest, 0px) - var(--shape-top, 0px)));
+  /* The transform and the clip wait out `--duration-exit` like the surface
+     does: leaving a state, the words travel with the shape rather than ahead
+     of it. */
+  transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-shape) var(--spring) var(--duration-exit),
+    clip-path var(--duration-shape) var(--spring) var(--duration-exit);
+}
+
+/* First words arrive the way the meter does — crossing the last of the
+   shape's travel, so they land inside the black rather than ahead of the edge
+   still springing toward them. The clip alone takes no delay while the
+   caption is up: it is the shape's twin, not content following it. */
+.app-stage[data-presentation="capsule"][data-caption="true"] .voice-caption,
+.app-stage[data-presentation="peek"][data-caption="true"] .voice-caption {
+  opacity: 1;
+  transition:
+    opacity var(--duration-quick) var(--motion-exit)
+    calc(var(--duration-shape) - var(--duration-quick)),
+    transform var(--duration-shape) var(--spring) var(--duration-exit),
+    clip-path var(--duration-shape) var(--spring);
+}
+
+/* The open panel keeps the same words at its foot: `--caption-rest` is the
+   travel from under the housing to the bottom edge the panel's measured
+   height puts there. Expanding, the words lead with the surface — no delay,
+   the panel's own timing — and collapsing, the compact rule above holds them
+   back by `--duration-exit` so they leave with the shape. */
+.app-stage[data-presentation="panel"][data-caption="true"] {
+  --caption-rest: calc(
+    var(--panel-height, 520px) -
+    var(--capsule-height) -
+    var(--caption-size, 28px)
+  );
+}
+
+.app-stage[data-presentation="panel"][data-caption="true"] .voice-caption {
+  opacity: 1;
+  transition:
+    opacity var(--duration-quick) var(--motion-exit)
+    calc(var(--duration-shape) - var(--duration-quick)),
+    transform var(--duration-shape) var(--spring),
+    clip-path var(--duration-shape) var(--spring);
+}
+
+/* The words are drawn on the shape, not in the panel's flow, so the body
+   reserves the block's height under its own padding and the rows never
+   collide with it. Reserved whenever there are words rather than only while
+   the panel is up, so the height the panel reports is already right when a
+   captioned expand begins. */
+.app-stage[data-caption="true"] .expanded-panel {
+  padding-bottom: calc(18px + var(--caption-size, 28px));
+}
+
+/* The translate is how a reply that outgrows the block rolls its oldest lines
+   up under the capsule band. The cut lands where black meets black, so lines
+   slide under the shape rather than being sliced in the open; the newest
+   words are always on screen, which is the half of the reply the voice has
+   not reached yet. */
+.voice-caption-text {
+  display: block;
+  width: 100%;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1px;
+  line-height: 14px;
+  text-align: center;
+  transform: translateY(calc(var(--caption-scroll, 0px) * -1));
+  transition: transform var(--duration-fast) var(--spring-fast);
 }
 
 /* Waveform --------------------------------------------------------------- */

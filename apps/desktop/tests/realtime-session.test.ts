@@ -28,6 +28,7 @@ interface Harness {
   session: RealtimeVoiceSession;
   sent: Record<string, unknown>[];
   errors: (string | undefined)[];
+  captions: (string | undefined)[];
   microphoneEnabled: () => boolean;
   microphoneStopped: () => boolean;
   emit: (event: unknown) => void;
@@ -71,6 +72,7 @@ function harness(
 ): Harness {
   const sent: Record<string, unknown>[] = [];
   const errors: (string | undefined)[] = [];
+  const captions: (string | undefined)[] = [];
   const requests: { url: string; init: RequestInit }[] = [];
   let enabled = false;
   let stopped = false;
@@ -147,12 +149,14 @@ function harness(
     onLocalStream: () => undefined,
     onRemoteStream: () => undefined,
     onError: (message) => errors.push(message),
+    onCaption: (text) => captions.push(text),
   });
 
   return {
     session,
     sent,
     errors,
+    captions,
     microphoneEnabled: () => enabled,
     microphoneStopped: () => stopped,
     lukeAudible: () => remoteTrack.enabled,
@@ -1018,7 +1022,6 @@ test("closing stops the microphone track", async () => {
   assert.equal(context.microphoneStopped(), true);
   assert.equal(context.session.status, REALTIME_STATUS.IDLE);
 });
-
 /** Opens and commits a developer turn, which is the only turn a tool may run in. */
 function armDeveloperTurn(context: Harness): void {
   context.session.startListening();
@@ -1282,4 +1285,120 @@ test("a tool outcome is not spoken over a turn the developer has taken", async (
   // ...but no reply was opened to voice it over the microphone now open.
   assert.ok(!events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE));
   assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
+});
+
+test("the caption grows with the deltas and the final text supersedes them", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.session.beginTurn();
+  context.session.endTurn(true);
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    delta: "Two sessions ",
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    delta: "need review.",
+  });
+  // The server's own rendering of the reply corrects whatever the deltas
+  // built, so a delta lost to the channel cannot leave a hole on screen.
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE,
+    transcript: "Two sessions need review, and one failed.",
+  });
+
+  assert.deepEqual(context.captions, [
+    "Two sessions ",
+    "Two sessions need review.",
+    "Two sessions need review, and one failed.",
+  ]);
+});
+
+test("the caption leaves when the reply does", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.session.beginTurn();
+  context.session.endTurn(true);
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    delta: "All quiet.",
+  });
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
+  // Generation finishing is not speech finishing: the words stay up while
+  // Luke is still saying them.
+  assert.deepEqual(context.captions, ["All quiet."]);
+
+  context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
+
+  assert.deepEqual(context.captions, ["All quiet.", undefined]);
+});
+
+test("taking the turn cuts the caption with the audio", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.deliverRemoteTrack();
+  context.session.beginTurn();
+  context.session.endTurn(true);
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    delta: "A sentence the developer is about to talk over",
+  });
+
+  // The caption already holds words the room has not heard — the text runs
+  // ahead of the speech — so an interrupt must take it down at once rather
+  // than leaving Luke finishing a sentence he was stopped from saying.
+  context.session.startListening();
+
+  assert.equal(context.captions.at(-1), undefined);
+  assert.equal(context.captions.length, 2);
+});
+
+test("a cancelled reply's late transcript cannot pollute the next caption", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.deliverRemoteTrack();
+  context.session.beginTurn();
+  context.session.endTurn(true);
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
+    item: { id: "item-first" },
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    item_id: "item-first",
+    delta: "The first reply",
+  });
+
+  // Talking over the reply cuts it, but the server had already produced the
+  // rest of its transcript, which keeps arriving — around the interrupt, and
+  // even after the next reply has been asked for.
+  context.session.startListening();
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    item_id: "item-first",
+    delta: ", still streaming in",
+  });
+  context.session.stopListening(true);
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE,
+    item_id: "item-first",
+    transcript: "The first reply, finished anyway.",
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
+    item: { id: "item-second" },
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    item_id: "item-second",
+    delta: "The second reply",
+  });
+
+  assert.equal(context.captions.at(-1), "The second reply");
+  assert.equal(context.captions.includes("The first reply, finished anyway."), false);
+  assert.equal(
+    context.captions.some((caption) => caption?.includes("still streaming in")),
+    false,
+  );
 });

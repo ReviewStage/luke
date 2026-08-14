@@ -206,6 +206,45 @@ test("clears a stored key", async (t) => {
   assert.equal((await readSettingsFile(directory)).includes(CONDUCTOR), false);
 });
 
+test("captions are off until switched on, and the choice survives a reopen", async (t) => {
+  const directory = await temporaryDirectory(t);
+  // A preference is not a credential, so choosing it must reach the Keychain
+  // not at all.
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+
+  assert.equal((await store.snapshot()).voiceCaptions, false);
+  const enabled = await store.setVoiceCaptions(true);
+
+  assert.equal(enabled.settings.voiceCaptions, true);
+  assert.equal((await storeIn(directory).snapshot()).voiceCaptions, true);
+  assert.equal(cipher.calls.isAvailable, 0);
+  assert.equal(cipher.calls.encrypt, 0);
+});
+
+test("switching captions never disturbs a stored key", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
+
+  await store.setVoiceCaptions(true);
+  const off = await store.setVoiceCaptions(false);
+
+  assert.equal(off.settings.voiceCaptions, false);
+  assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), TEST_API_KEY);
+});
+
+test("a corrupt captions value reads as off rather than switching them on", async (t) => {
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({ version: 2, apiKeys: {}, voiceCaptions: "yes" }),
+    "utf8",
+  );
+
+  assert.equal((await storeIn(directory).snapshot()).voiceCaptions, false);
+});
+
 test("keeps each provider's key, environment fallback, and reported source separate", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory, {
@@ -257,6 +296,7 @@ test("keeps both keys when two providers are saved at once", async (t) => {
     // Written even at its default, so the file states what it is rather than
     // leaving it to be inferred from an absence.
     showInMenuBar: true,
+    voiceCaptions: false,
   });
   const reopened = storeIn(directory, { providers: TEST_PROVIDERS });
   assert.equal(await reopened.readApiKey(FIRST_CLOUD), "first-cloud-key");
@@ -453,6 +493,7 @@ test("keeps a Conductor key stored by an earlier version working", async (t) => 
     version: 2,
     apiKeys: { [CONDUCTOR]: sealed("conductor-replacement-key") },
     showInMenuBar: true,
+    voiceCaptions: false,
   });
   assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), "conductor-replacement-key");
 });
@@ -472,6 +513,7 @@ test("carries a key belonging to a provider this build does not know", async (t)
     version: 2,
     apiKeys: { "later-cloud": sealed("later-cloud-key"), [CONDUCTOR]: sealed(TEST_API_KEY) },
     showInMenuBar: true,
+    voiceCaptions: false,
   });
 });
 
@@ -489,6 +531,7 @@ test("shows the menu bar item until asked otherwise, and remembers the answer", 
     version: 2,
     apiKeys: {},
     showInMenuBar: false,
+    voiceCaptions: false,
   });
   // The choice outlives the run that heard it.
   assert.equal((await storeIn(directory).snapshot()).showInMenuBar, false);

@@ -50,6 +50,11 @@ export interface SettingsPanelProps {
   /** Whether there is anything to talk to, which is the microphone's only use. */
   voiceAvailable: boolean;
   settings?: AppSettings;
+  /**
+   * Turns the on-screen caption of Luke's speech on or off. The store answers
+   * with why when it refuses, and the row is where that answer belongs.
+   */
+  onVoiceCaptionsChange: (enabled: boolean) => Promise<string | undefined>;
   /** The one credential being entered anywhere, and everything that can be done to it. */
   credentials: CredentialEntryControl;
   /** Chooses the voice Luke speaks with, from the set fixed by this build. */
@@ -500,11 +505,15 @@ function CredentialsSection({
 function PreferencesSection({
   voice,
   onVoiceChange,
+  captions,
+  onVoiceCaptionsChange,
   shown,
   onShowInMenuBarChange,
 }: {
   voice: RealtimeVoice;
   onVoiceChange: (voice: RealtimeVoice) => void;
+  captions: boolean;
+  onVoiceCaptionsChange: (enabled: boolean) => Promise<string | undefined>;
   shown: boolean;
   onShowInMenuBarChange: (show: boolean) => Promise<string | undefined>;
 }): React.JSX.Element {
@@ -516,6 +525,15 @@ function PreferencesSection({
     setBusy(true);
     setRejection(await onShowInMenuBarChange(!shown));
     setBusy(false);
+  };
+  // Its own rest, because it is its own round trip: one save in flight must
+  // not still the other switch. The rejection line is shared — it reports the
+  // last answer, whichever row asked.
+  const [captionsBusy, setCaptionsBusy] = useState(false);
+  const toggleCaptions = async () => {
+    setCaptionsBusy(true);
+    setRejection(await onVoiceCaptionsChange(!captions));
+    setCaptionsBusy(false);
   };
   return (
     <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
@@ -562,6 +580,26 @@ function PreferencesSection({
       </div>
       <div className="settings-row">
         <span className="settings-copy">
+          <strong>Captions</strong>
+          {/* Off by default: the voice experience ships as sound, so the words
+              are chosen rather than discovered. What is *not* kept is the one
+              thing worth a line — the caption is the reply being said. */}
+          <small>Luke&rsquo;s words on screen as he speaks. Nothing is kept.</small>
+        </span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={captions}
+          aria-label="Caption Luke's speech on screen"
+          className="switch"
+          disabled={captionsBusy}
+          onClick={() => void toggleCaptions()}
+        >
+          <span className="switch-thumb" />
+        </button>
+      </div>
+      <div className="settings-row">
+        <span className="settings-copy">
           <strong>Show Luke in the menu bar</strong>
         </span>
         <button
@@ -588,6 +626,7 @@ export function SettingsPanel({
   onOpenMicrophoneSettings,
   voiceAvailable,
   settings,
+  onVoiceCaptionsChange,
   credentials,
   onVoiceChange,
   panelOpen,
@@ -608,6 +647,8 @@ export function SettingsPanel({
         <PreferencesSection
           voice={settings.voice}
           onVoiceChange={onVoiceChange}
+          captions={settings.voiceCaptions}
+          onVoiceCaptionsChange={onVoiceCaptionsChange}
           shown={settings.showInMenuBar}
           onShowInMenuBarChange={onShowInMenuBarChange}
         />

@@ -48,6 +48,13 @@ export interface RealtimeVoiceSessionCallbacks {
   onLocalStream(stream: MediaStream | undefined): void;
   onRemoteStream(stream: MediaStream | undefined): void;
   onError(message: string | undefined): void;
+  /**
+   * The text of the reply Luke is currently speaking, growing as it is
+   * generated, or undefined once there is nothing being spoken. The session
+   * owns the whole lifecycle — the caption clears when the reply ends, is cut
+   * off, or the call closes — so the caller only ever draws what it is handed.
+   */
+  onCaption(text: string | undefined): void;
 }
 
 export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbacks {
@@ -154,6 +161,13 @@ export class RealtimeVoiceSession {
    */
   #responseItemId: string | undefined;
   #audibleSince: number | undefined;
+  /**
+   * The words of the reply being spoken, as far as they have arrived. Kept
+   * here rather than in the caller so every path that ends a reply — finishing,
+   * being talked over, the call dropping — clears the words with it, and a
+   * caption can never outlive the speech it captions.
+   */
+  #caption: string | undefined;
   /**
    * Whether this call has ever reported a reply's audio running out. Once it
    * has, silence stops being evidence of anything: the server says when Luke is
@@ -459,10 +473,18 @@ export class RealtimeVoiceSession {
       // made. A disabled track drops what is buffered rather than playing it
       // out, so the cut-off is immediate rather than eventual.
       this.#silenceLuke();
+      // The caption is cut with the audio. It already held words the room
+      // never heard — the text runs ahead of the speech — and leaving them up
+      // would show Luke finishing a sentence he was just stopped from saying.
+      this.#setCaption(undefined);
       this.#send(cancelResponseEvents());
       // Then correct what Luke believes he said, or the next answer is free to
       // refer back to a sentence that never reached the room.
       this.#send(this.#truncateEvents());
+      // The trim was this reply's last word: forgetting its item here is what
+      // stops the transcript still trailing in — the server had produced it
+      // before the cancel landed — from ever matching the caption again.
+      this.#responseItemId = undefined;
       this.#generationDone = false;
       this.#remoteQuiet = false;
       this.#clearSettleTimer();
@@ -557,6 +579,7 @@ export class RealtimeVoiceSession {
     this.#pendingTurn = false;
     this.#responseItemId = undefined;
     this.#audibleSince = undefined;
+    this.#setCaption(undefined);
     // Learned about this call, so it does not outlive it.
     this.#audioEndingsReported = false;
     this.#clearSettleTimer();
@@ -580,6 +603,7 @@ export class RealtimeVoiceSession {
     // follow-up still awaiting from the last turn will see this and stand down.
     this.#toolTurnArmed = toolsArmed;
     this.#turnEpoch += 1;
+    this.#setCaption(undefined);
     this.#clearSettleTimer();
     this.#send(events);
     this.#setStatus(REALTIME_STATUS.RESPONDING);
@@ -647,9 +671,19 @@ export class RealtimeVoiceSession {
     this.#settleTimer = undefined;
   }
 
+  #setCaption(text: string | undefined): void {
+    if (this.#caption === text) return;
+    this.#caption = text;
+    this.#options.onCaption(text);
+  }
+
   /** Ends the turn once the reply is done, so the next one can start. */
   #finishResponse(): void {
     this.#generationDone = false;
+    // The caption is of speech, and the speech is over. Whatever ended the
+    // reply — the audio draining, an error, the settle timer — the words leave
+    // with the meter and the face rather than lingering under a quiet capsule.
+    this.#setCaption(undefined);
     // Whatever ended the reply — an error, the settle timer, Luke simply
     // stopping — the next one has to be audible. Without this a reply that
     // failed before it started would leave Luke silenced with nothing to
@@ -695,6 +729,28 @@ export class RealtimeVoiceSession {
       // The reply being asked for is under way, so anything arriving from here
       // belongs to it rather than to the one it replaced.
       this.#unsilenceLuke();
+    }
+    if (type === REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA) {
+      const { delta, item_id } = event as { delta?: unknown; item_id?: unknown };
+      // Only the reply being spoken may write the caption. A cancelled reply's
+      // transcript keeps arriving after the interrupt that cleared it — the
+      // server had already produced it — and without this check a late piece
+      // would draw the words Luke was just stopped from saying, or splice them
+      // onto the next reply's.
+      if (item_id === this.#responseItemId && typeof delta === "string" && delta) {
+        this.#setCaption((this.#caption ?? "") + delta);
+      }
+    }
+    if (type === REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE) {
+      // The server's own rendering of the whole reply, which the deltas only
+      // approximate: a delta lost to the channel would otherwise leave a hole
+      // in the sentence for as long as it stayed up. Held to the same item as
+      // the deltas, because the cancelled reply's `done` is the likeliest
+      // straggler of all.
+      const { transcript, item_id } = event as { transcript?: unknown; item_id?: unknown };
+      if (item_id === this.#responseItemId && typeof transcript === "string" && transcript) {
+        this.#setCaption(transcript);
+      }
     }
     if (type === REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED) {
       this.#audioEndingsReported = true;

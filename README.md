@@ -110,7 +110,10 @@ Luke's face is the interface: it plays its listening motion while you speak and
 its talking motion while it answers, so the capsule says whose turn it is. Colour
 says the same thing again — the face and the meter beside it are green while you
 have the turn and blue while Luke has it — so a glance is enough even with the
-peek closed. There is no transcript.
+peek closed. Turn on captions under **Preferences** in Settings — they are off
+by default — and Luke's words wrap along the bottom of whatever shape is up as he
+says them — capsule, peek, or panel — and leave when the reply does. Nothing is
+kept: the caption is the reply being said, not a record of it.
 
 ## Privacy
 

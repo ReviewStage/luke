@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CAPSULE_SIDE_WIDTH, PEEK_SIDE_GROWTH, positionNotchWindow, SURFACE_MARGIN } from "../src";
+import {
+  CAPSULE_SIDE_WIDTH,
+  PEEK_SIDE_GROWTH,
+  positionNotchWindow,
+  SURFACE_MARGIN,
+  VOICE_CAPTION_MAX_HEIGHT,
+} from "../src";
 
 const notchedDisplay = {
   bounds: { x: 0, y: 0, width: 1512, height: 982 },
@@ -23,7 +29,9 @@ test("anchors the compact window to the physical top edge", () => {
     x: 487,
     y: 0,
     width: 538,
-    height: 78,
+    // The top inset, the caption block Luke's words wrap into below it, and
+    // the margin the overshoot and the shadow fall in.
+    height: 148,
     notch: {
       topInset: 38,
       housingWidth: 210,
@@ -61,7 +69,7 @@ test("uses a top-center fallback without inventing a notch", () => {
   assert.equal(result.x, -1124);
   assert.equal(result.y, -200);
   assert.equal(result.width, peekWidth(0) + SURFACE_MARGIN * 2);
-  assert.equal(result.height, 32 + SURFACE_MARGIN);
+  assert.equal(result.height, 32 + VOICE_CAPTION_MAX_HEIGHT + SURFACE_MARGIN);
   assert.equal(result.notch.hasNotch, false);
   assert.equal(result.notch.topInset, 25);
   assert.equal(result.notch.source, "work-area");

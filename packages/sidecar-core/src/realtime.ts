@@ -102,6 +102,14 @@ export const REALTIME_SERVER_EVENT = {
    * behind it as a backstop rather than being replaced outright.
    */
   OUTPUT_AUDIO_BUFFER_STOPPED: "output_audio_buffer.stopped",
+  /**
+   * The words of the reply, arriving as they are generated. They run ahead of
+   * the audio — the model produces text faster than it speaks it — so they
+   * caption the reply in progress rather than subtitling word by word.
+   */
+  RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA: "response.output_audio_transcript.delta",
+  /** The reply's complete text, which supersedes whatever the deltas built. */
+  RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE: "response.output_audio_transcript.done",
   RESPONSE_DONE: "response.done",
   ERROR: "error",
 } as const;
