@@ -375,6 +375,7 @@ export class SettingsStore {
   }
 
   async snapshot(): Promise<AppSettings> {
+    const persisted = await this.#load();
     const sources = await Promise.all(
       this.#providers.map(
         async (provider) => [provider.id, (await this.#resolveApiKey(provider)).source] as const,
@@ -389,33 +390,29 @@ export class SettingsStore {
       // its own: a snapshot is taken on every launch, and most of them are for
       // a user with no key to protect.
       secretStorage: this.#secretStorage,
-      showInDock: (await this.#load()).showInDock,
-      showInMenuBar: (await this.#load()).showInMenuBar,
+      showInDock: persisted.showInDock,
+      showInMenuBar: persisted.showInMenuBar,
       // Resolved the way the minter resolves it, so the panel marks the voice
       // that would actually be heard.
       voice:
-        (await this.#load()).voice ??
-        environmentRealtimeVoice(this.#environment) ??
-        REALTIME_DEFAULTS.VOICE,
+        persisted.voice ?? environmentRealtimeVoice(this.#environment) ?? REALTIME_DEFAULTS.VOICE,
       voiceSpeed:
-        (await this.#load()).voiceSpeed ??
+        persisted.voiceSpeed ??
         environmentRealtimeSpeed(this.#environment) ??
         REALTIME_DEFAULTS.SPEED,
-      voiceCaptions: (await this.#load()).voiceCaptions,
-      ...((await this.#load()).voiceHotkey
-        ? { voiceHotkey: (await this.#load()).voiceHotkey }
+      voiceCaptions: persisted.voiceCaptions,
+      ...(persisted.voiceHotkey ? { voiceHotkey: persisted.voiceHotkey } : {}),
+      ...(persisted.askHotkey ? { askHotkey: persisted.askHotkey } : {}),
+      ...(persisted.stopHotkey ? { stopHotkey: persisted.stopHotkey } : {}),
+      duckOtherMedia: persisted.duckOtherMedia,
+      sessionNotifications: persisted.sessionNotifications,
+      showOnAllDisplays: persisted.showOnAllDisplays,
+      formFactor: persisted.formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
+      ...(persisted.defaultWorkspaceProvider
+        ? { defaultWorkspaceProvider: persisted.defaultWorkspaceProvider }
         : {}),
-      ...((await this.#load()).askHotkey ? { askHotkey: (await this.#load()).askHotkey } : {}),
-      ...((await this.#load()).stopHotkey ? { stopHotkey: (await this.#load()).stopHotkey } : {}),
-      duckOtherMedia: (await this.#load()).duckOtherMedia,
-      sessionNotifications: (await this.#load()).sessionNotifications,
-      showOnAllDisplays: (await this.#load()).showOnAllDisplays,
-      formFactor: (await this.#load()).formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
-      ...((await this.#load()).defaultWorkspaceProvider
-        ? { defaultWorkspaceProvider: (await this.#load()).defaultWorkspaceProvider }
-        : {}),
-      ...((await this.#load()).workspaceAgentDefaults
-        ? { workspaceAgentDefaults: (await this.#load()).workspaceAgentDefaults }
+      ...(persisted.workspaceAgentDefaults
+        ? { workspaceAgentDefaults: persisted.workspaceAgentDefaults }
         : {}),
     };
   }
@@ -457,19 +454,13 @@ export class SettingsStore {
 
   /** Stores the chosen voice, or returns to the default when omitted. */
   async setVoice(voice: RealtimeVoice | undefined): Promise<SettingsUpdateResult> {
-    await this.#serialize(async () => {
-      const persisted = await this.#load();
+    return this.#setField((persisted) => {
       if (persisted.voice === voice) return;
-      const next: PersistedSettings = {
-        ...persisted,
-        version: SETTINGS_FILE_VERSION,
-      };
+      const next: PersistedSettings = { ...persisted };
       if (voice) next.voice = voice;
       else delete next.voice;
-      await this.#write(next);
-      this.#loading = Promise.resolve(next);
+      return next;
     });
-    return { settings: await this.snapshot() };
   }
 
   /**
@@ -483,19 +474,13 @@ export class SettingsStore {
 
   /** Stores the chosen pace, or returns to the default when omitted. */
   async setVoiceSpeed(speed: RealtimeVoiceSpeed | undefined): Promise<SettingsUpdateResult> {
-    await this.#serialize(async () => {
-      const persisted = await this.#load();
+    return this.#setField((persisted) => {
       if (persisted.voiceSpeed === speed) return;
-      const next: PersistedSettings = {
-        ...persisted,
-        version: SETTINGS_FILE_VERSION,
-      };
+      const next: PersistedSettings = { ...persisted };
       if (speed) next.voiceSpeed = speed;
       else delete next.voiceSpeed;
-      await this.#write(next);
-      this.#loading = Promise.resolve(next);
+      return next;
     });
-    return { settings: await this.snapshot() };
   }
 
   /**
@@ -505,18 +490,10 @@ export class SettingsStore {
    * lands or throws.
    */
   async setVoiceCaptions(enabled: boolean): Promise<SettingsUpdateResult> {
-    await this.#serialize(async () => {
-      const persisted = await this.#load();
+    return this.#setField((persisted) => {
       if (persisted.voiceCaptions === enabled) return;
-      const next: PersistedSettings = {
-        ...persisted,
-        version: SETTINGS_FILE_VERSION,
-        voiceCaptions: enabled,
-      };
-      await this.#write(next);
-      this.#loading = Promise.resolve(next);
+      return { ...persisted, voiceCaptions: enabled };
     });
-    return { settings: await this.snapshot() };
   }
 
   /**
@@ -535,19 +512,13 @@ export class SettingsStore {
    * absence of a choice rather than a second stored value.
    */
   async setVoiceHotkey(accelerator: string | undefined): Promise<SettingsUpdateResult> {
-    await this.#serialize(async () => {
-      const persisted = await this.#load();
+    return this.#setField((persisted) => {
       if (persisted.voiceHotkey === accelerator) return;
-      const next: PersistedSettings = {
-        ...persisted,
-        version: SETTINGS_FILE_VERSION,
-      };
+      const next: PersistedSettings = { ...persisted };
       if (accelerator) next.voiceHotkey = accelerator;
       else delete next.voiceHotkey;
-      await this.#write(next);
-      this.#loading = Promise.resolve(next);
+      return next;
     });
-    return { settings: await this.snapshot() };
   }
 
   /**
@@ -564,19 +535,13 @@ export class SettingsStore {
    * canonical spelling, and resetting is the absence of a choice.
    */
   async setAskHotkey(accelerator: string | undefined): Promise<SettingsUpdateResult> {
-    await this.#serialize(async () => {
-      const persisted = await this.#load();
+    return this.#setField((persisted) => {
       if (persisted.askHotkey === accelerator) return;
-      const next: PersistedSettings = {
-        ...persisted,
-        version: SETTINGS_FILE_VERSION,
-      };
+      const next: PersistedSettings = { ...persisted };
       if (accelerator) next.askHotkey = accelerator;
       else delete next.askHotkey;
-      await this.#write(next);
-      this.#loading = Promise.resolve(next);
+      return next;
     });
-    return { settings: await this.snapshot() };
   }
 
   /**
@@ -593,19 +558,13 @@ export class SettingsStore {
    * its one canonical spelling, and resetting is the absence of a choice.
    */
   async setStopHotkey(accelerator: string | undefined): Promise<SettingsUpdateResult> {
-    await this.#serialize(async () => {
-      const persisted = await this.#load();
+    return this.#setField((persisted) => {
       if (persisted.stopHotkey === accelerator) return;
-      const next: PersistedSettings = {
-        ...persisted,
-        version: SETTINGS_FILE_VERSION,
-      };
+      const next: PersistedSettings = { ...persisted };
       if (accelerator) next.stopHotkey = accelerator;
       else delete next.stopHotkey;
-      await this.#write(next);
-      this.#loading = Promise.resolve(next);
+      return next;
     });
-    return { settings: await this.snapshot() };
   }
 
   /**
@@ -614,18 +573,10 @@ export class SettingsStore {
    * so the write either lands or throws.
    */
   async setDuckOtherMedia(enabled: boolean): Promise<SettingsUpdateResult> {
-    await this.#serialize(async () => {
-      const persisted = await this.#load();
+    return this.#setField((persisted) => {
       if (persisted.duckOtherMedia === enabled) return;
-      const next: PersistedSettings = {
-        ...persisted,
-        version: SETTINGS_FILE_VERSION,
-        duckOtherMedia: enabled,
-      };
-      await this.#write(next);
-      this.#loading = Promise.resolve(next);
+      return { ...persisted, duckOtherMedia: enabled };
     });
-    return { settings: await this.snapshot() };
   }
 
   /**
@@ -642,18 +593,10 @@ export class SettingsStore {
    * value, so the write either lands or throws.
    */
   async setSessionNotifications(enabled: boolean): Promise<SettingsUpdateResult> {
-    await this.#serialize(async () => {
-      const persisted = await this.#load();
+    return this.#setField((persisted) => {
       if (persisted.sessionNotifications === enabled) return;
-      const next: PersistedSettings = {
-        ...persisted,
-        version: SETTINGS_FILE_VERSION,
-        sessionNotifications: enabled,
-      };
-      await this.#write(next);
-      this.#loading = Promise.resolve(next);
+      return { ...persisted, sessionNotifications: enabled };
     });
-    return { settings: await this.snapshot() };
   }
 
   /**
@@ -670,18 +613,10 @@ export class SettingsStore {
    * touches the cipher.
    */
   async setShowOnAllDisplays(show: boolean): Promise<SettingsUpdateResult> {
-    await this.#serialize(async () => {
-      const persisted = await this.#load();
+    return this.#setField((persisted) => {
       if (persisted.showOnAllDisplays === show) return;
-      const next: PersistedSettings = {
-        ...persisted,
-        version: SETTINGS_FILE_VERSION,
-        showOnAllDisplays: show,
-      };
-      await this.#write(next);
-      this.#loading = Promise.resolve(next);
+      return { ...persisted, showOnAllDisplays: show };
     });
-    return { settings: await this.snapshot() };
   }
 
   /**
@@ -694,19 +629,13 @@ export class SettingsStore {
 
   /** Stores the chosen form, or returns to the default when omitted. */
   async setFormFactor(formFactor: PanelFormFactor | undefined): Promise<SettingsUpdateResult> {
-    await this.#serialize(async () => {
-      const persisted = await this.#load();
+    return this.#setField((persisted) => {
       if (persisted.formFactor === formFactor) return;
-      const next: PersistedSettings = {
-        ...persisted,
-        version: SETTINGS_FILE_VERSION,
-      };
+      const next: PersistedSettings = { ...persisted };
       if (formFactor) next.formFactor = formFactor;
       else delete next.formFactor;
-      await this.#write(next);
-      this.#loading = Promise.resolve(next);
+      return next;
     });
-    return { settings: await this.snapshot() };
   }
 
   /**
@@ -726,19 +655,13 @@ export class SettingsStore {
   async setDefaultWorkspaceProvider(
     providerId: ProviderId | undefined,
   ): Promise<SettingsUpdateResult> {
-    await this.#serialize(async () => {
-      const persisted = await this.#load();
+    return this.#setField((persisted) => {
       if (persisted.defaultWorkspaceProvider === providerId) return;
-      const next: PersistedSettings = {
-        ...persisted,
-        version: SETTINGS_FILE_VERSION,
-      };
+      const next: PersistedSettings = { ...persisted };
       if (providerId) next.defaultWorkspaceProvider = providerId;
       else delete next.defaultWorkspaceProvider;
-      await this.#write(next);
-      this.#loading = Promise.resolve(next);
+      return next;
     });
-    return { settings: await this.snapshot() };
   }
 
   /**
@@ -761,8 +684,7 @@ export class SettingsStore {
     providerId: ProviderId,
     selection: WorkspaceAgentSelection | undefined,
   ): Promise<SettingsUpdateResult> {
-    await this.#serialize(async () => {
-      const persisted = await this.#load();
+    return this.#setField((persisted) => {
       const current = persisted.workspaceAgentDefaults?.[providerId];
       if (
         current?.agent === selection?.agent &&
@@ -774,16 +696,11 @@ export class SettingsStore {
       const defaults = { ...persisted.workspaceAgentDefaults };
       if (selection) defaults[providerId] = selection;
       else delete defaults[providerId];
-      const next: PersistedSettings = {
-        ...persisted,
-        version: SETTINGS_FILE_VERSION,
-      };
+      const next: PersistedSettings = { ...persisted };
       if (Object.keys(defaults).length > 0) next.workspaceAgentDefaults = defaults;
       else delete next.workspaceAgentDefaults;
-      await this.#write(next);
-      this.#loading = Promise.resolve(next);
+      return next;
     });
-    return { settings: await this.snapshot() };
   }
 
   /**
@@ -846,18 +763,10 @@ export class SettingsStore {
    * never be the reason the Keychain dialog appears.
    */
   async setShowInMenuBar(show: boolean): Promise<SettingsUpdateResult> {
-    await this.#serialize(async () => {
-      const persisted = await this.#load();
+    return this.#setField((persisted) => {
       if (persisted.showInMenuBar === show) return;
-      const next: PersistedSettings = {
-        ...persisted,
-        version: SETTINGS_FILE_VERSION,
-        showInMenuBar: show,
-      };
-      await this.#write(next);
-      this.#loading = Promise.resolve(next);
+      return { ...persisted, showInMenuBar: show };
     });
-    return { settings: await this.snapshot() };
   }
 
   /**
@@ -865,13 +774,28 @@ export class SettingsStore {
    * bar's, and held to the same rule: nothing here touches the cipher.
    */
   async setShowInDock(show: boolean): Promise<SettingsUpdateResult> {
+    return this.#setField((persisted) => {
+      if (persisted.showInDock === show) return;
+      return { ...persisted, showInDock: show };
+    });
+  }
+
+  /**
+   * One preference write: serialize, load, mutate, write, cache. Returning
+   * undefined means the stored value is already the one asked for, so nothing
+   * is written. Credentials stay on their own path — a preference must never
+   * be the reason the Keychain is asked.
+   */
+  async #setField(
+    mutate: (persisted: PersistedSettings) => PersistedSettings | undefined,
+  ): Promise<SettingsUpdateResult> {
     await this.#serialize(async () => {
       const persisted = await this.#load();
-      if (persisted.showInDock === show) return;
+      const mutated = mutate(persisted);
+      if (!mutated) return;
       const next: PersistedSettings = {
-        ...persisted,
+        ...mutated,
         version: SETTINGS_FILE_VERSION,
-        showInDock: show,
       };
       await this.#write(next);
       this.#loading = Promise.resolve(next);
