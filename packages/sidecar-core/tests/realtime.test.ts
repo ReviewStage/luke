@@ -2,10 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   ATTENTION_DISPOSITION,
-  ATTENTION_REVIEW_OUTCOME,
   ATTENTION_SPEECH_SOURCE,
   ATTENTION_TRIGGER,
-  type AttentionReview,
   attentionSpeechFromReviews,
   cancelResponseEvents,
   clearInputAudioEvents,
@@ -20,11 +18,6 @@ import {
   issueContextText,
   issueToolAction,
   issueTrackerDisconnectedEvents,
-  maximumSessionMessageLength,
-  maximumTypedAskLength,
-  maximumVoiceContextIssues,
-  maximumVoiceContextSessions,
-  maximumWorkspaceNameLength,
   normalizeSession,
   normalizeTrackedIssue,
   type ObservedWorkspaceProject,
@@ -35,15 +28,11 @@ import {
   REALTIME_CLIENT_EVENT,
   REALTIME_DEFAULTS,
   REALTIME_SERVER_EVENT,
-  REALTIME_SESSION_TYPE,
-  REALTIME_TOOL,
   REALTIME_VOICE_LIST,
   REALTIME_VOICE_SPEED_LIST,
   realtimeClientSecretRequest,
   realtimeCredentialFromResponse,
   realtimeCredentialIsUsable,
-  realtimeInstructions,
-  realtimeSessionConfig,
   SESSION_STATUS,
   sessionContextEvents,
   sessionContextText,
@@ -55,6 +44,17 @@ import {
   workspaceProjectContextEvents,
   workspaceProjectContextText,
 } from "../src";
+import { ATTENTION_REVIEW_OUTCOME, type AttentionReview } from "../src/attention";
+import { maximumWorkspaceNameLength } from "../src/providers";
+import { maximumVoiceContextIssues, maximumVoiceContextSessions } from "../src/realtime-context";
+import { realtimeSessionConfig } from "../src/realtime-credentials";
+import {
+  maximumTypedAskLength,
+  REALTIME_SESSION_TYPE,
+  realtimeInstructions,
+} from "../src/realtime-protocol";
+import { maximumSessionMessageLength } from "../src/session";
+import { REALTIME_TOOL } from "../src/realtime-tools";
 
 const DECIDED_AT = 1_800_000_000_000;
 const EXPIRES_AT_SECONDS = 1_800_000_060;

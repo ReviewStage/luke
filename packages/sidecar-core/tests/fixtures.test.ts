@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { attentionCount, fixtureSnapshot } from "../src";
+import { fixtureSnapshot } from "../src";
+import { attentionCount } from "../src/fixtures";
 
 test("the smoke fixture is stable and contains no duplicate identities", () => {
   const snapshot = fixtureSnapshot("smoke");

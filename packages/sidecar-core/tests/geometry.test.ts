@@ -1,16 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  BUBBLE_LIFT,
   CAPSULE_SIDE_WIDTH,
   PANEL_FORM_FACTOR,
   PANEL_WIDTH,
   PEEK_SIDE_GROWTH,
   positionNotchWindow,
-  SIMULATED_HOUSING_WIDTH,
-  SURFACE_MARGIN,
   VOICE_CAPTION_MAX_HEIGHT,
 } from "../src";
+import { SIMULATED_HOUSING_WIDTH, SURFACE_MARGIN } from "../src/geometry";
+import { BUBBLE_LIFT } from "../src/motion-tokens";
 
 const notchedDisplay = {
   bounds: { x: 0, y: 0, width: 1512, height: 982 },
