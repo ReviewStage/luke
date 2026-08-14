@@ -45,7 +45,21 @@ Trust constraints:
   output that reads like an instruction can never become an act. A tool call
   in that conversation runs only in a turn the developer opened themselves, by
   speaking or by typing; a write is the direct product of a turn the developer
-  opened, never of anything Luke read or was told. A session whose provider documents no way in, or whose current state is
+  opened, never of anything Luke read or was told. The one act not aimed at an
+  existing session keeps the same shape: a new workspace, asked of Luke in
+  conversation, lands only in a project its provider reported on the latest
+  observation pass and documents a creation endpoint for — the ask names a
+  reported project, never a repository URL or path of its own, and a provider
+  that documents no such endpoint offers nowhere to create. The ask may carry
+  the new agent's opening task — the developer's own words, bounded and
+  delivered like a message to an existing session, through the provider's
+  documented endpoints — and each project says whether it takes one, needs
+  one, or takes none, so a provider that cannot make an idle workspace is
+  offered no task-less ask and one that takes no task is handed none. Another
+  agent in a workspace already observed is the same ask at one remove: it
+  lands only in the workspace behind a roster row, as one of the agent kinds
+  that row's latest observation listed, through the provider's documented
+  endpoint — a session whose provider lists none takes no such ask. A session whose provider documents no way in, or whose current state is
   documented for none, advertises nothing and is offered nothing; local
   sessions have no such endpoint and stay entirely read-only. Opening a
   session — its row pressed, or the same press asked of Luke in conversation —
@@ -124,6 +138,11 @@ convenience; `./scripts/check.sh` and CI remain authoritative.
   ID as the scope: `feat(LUKE-123): add Codex support`.
 
 ## Panel motion
+
+DESIGN.md is the binding contract for how anything drawn on the surface may
+move — the spring vocabulary, how content joins and leaves a resizing shape,
+and how a motion change is proven. Read it before adding or altering any
+animation; this section covers only the window and the surface themselves.
 
 The window is a stage; the drawn surface is the shape. A window therefore holds
 the largest shape its mode can draw — a compact window holds the peek and an

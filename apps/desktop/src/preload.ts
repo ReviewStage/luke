@@ -1,8 +1,11 @@
 import type {
   AttentionSpeech,
   NormalizedSession,
+  ObservedWorkspaceProject,
+  PanelFormFactor,
   ProviderControlResult,
   ProviderMessageResult,
+  ProviderWorkspaceResult,
   RealtimeConnection,
   RealtimeVoice,
   RealtimeVoiceSpeed,
@@ -14,6 +17,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type {
   AppBootstrap,
   AppBridge,
+  AppSettings,
   DisplayDiagnostic,
   IssueActionAsk,
   MicrophoneStatus,
@@ -25,6 +29,7 @@ import type {
 } from "./shared/contracts";
 import { channels } from "./shared/contracts";
 import type { CredentialProviderId } from "./shared/credential-providers";
+import type { FeedbackResult, FeedbackSubmission } from "./shared/feedback";
 
 const bridge: AppBridge = {
   getBootstrap: () => ipcRenderer.invoke(channels.bootstrap) as Promise<AppBootstrap>,
@@ -53,10 +58,16 @@ const bridge: AppBridge = {
     ipcRenderer.invoke(channels.setShowInMenuBar, show) as Promise<SettingsUpdateResult>,
   setShowInDock: (show: boolean) =>
     ipcRenderer.invoke(channels.setShowInDock, show) as Promise<SettingsUpdateResult>,
+  setShowOnAllDisplays: (show: boolean) =>
+    ipcRenderer.invoke(channels.setShowOnAllDisplays, show) as Promise<SettingsUpdateResult>,
+  setFormFactor: (formFactor: PanelFormFactor) =>
+    ipcRenderer.invoke(channels.setFormFactor, formFactor) as Promise<SettingsUpdateResult>,
   setVoiceCaptions: (enabled: boolean) =>
     ipcRenderer.invoke(channels.setVoiceCaptions, enabled) as Promise<SettingsUpdateResult>,
   setVoiceHotkey: (accelerator: string | undefined) =>
     ipcRenderer.invoke(channels.setVoiceHotkey, accelerator) as Promise<SettingsUpdateResult>,
+  setAskHotkey: (accelerator: string | undefined) =>
+    ipcRenderer.invoke(channels.setAskHotkey, accelerator) as Promise<SettingsUpdateResult>,
   setDuckOtherMedia: (enabled: boolean) =>
     ipcRenderer.invoke(channels.setDuckOtherMedia, enabled) as Promise<SettingsUpdateResult>,
   setVoiceExchangeActive: (active: boolean) => {
@@ -76,8 +87,31 @@ const bridge: AppBridge = {
       identity,
       controlId,
     ) as Promise<ProviderControlResult>,
+  createSessionWorkspace: (
+    providerId: string,
+    providerProjectId: string,
+    name?: string,
+    task?: string,
+  ) =>
+    ipcRenderer.invoke(
+      channels.createSessionWorkspace,
+      providerId,
+      providerProjectId,
+      name,
+      task,
+    ) as Promise<ProviderWorkspaceResult>,
+  addWorkspaceAgent: (identity: SessionIdentity, agent: string, name?: string, task?: string) =>
+    ipcRenderer.invoke(
+      channels.addWorkspaceAgent,
+      identity,
+      agent,
+      name,
+      task,
+    ) as Promise<ProviderWorkspaceResult>,
   executeIssueAction: (action: IssueActionAsk) =>
     ipcRenderer.invoke(channels.executeIssueAction, action) as Promise<TrackerActionResult>,
+  sendFeedback: (submission: FeedbackSubmission) =>
+    ipcRenderer.invoke(channels.sendFeedback, submission) as Promise<FeedbackResult>,
   focusPanel: () => ipcRenderer.send(channels.focusPanel),
   requestRealtimeCredential: () =>
     ipcRenderer.invoke(channels.requestRealtimeCredential) as Promise<
@@ -96,11 +130,27 @@ const bridge: AppBridge = {
     ipcRenderer.on(channels.displayChanged, listener);
     return () => ipcRenderer.removeListener(channels.displayChanged, listener);
   },
+  onSettingsChanged: (callback: (settings: AppSettings) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, settings: AppSettings) =>
+      callback(settings);
+    ipcRenderer.on(channels.settingsChanged, listener);
+    return () => ipcRenderer.removeListener(channels.settingsChanged, listener);
+  },
   onSessionsChanged: (callback: (sessions: readonly NormalizedSession[]) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, sessions: readonly NormalizedSession[]) =>
       callback(sessions);
     ipcRenderer.on(channels.sessionsChanged, listener);
     return () => ipcRenderer.removeListener(channels.sessionsChanged, listener);
+  },
+  onWorkspaceProjectsChanged: (
+    callback: (projects: readonly ObservedWorkspaceProject[]) => void,
+  ) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      projects: readonly ObservedWorkspaceProject[],
+    ) => callback(projects);
+    ipcRenderer.on(channels.workspaceProjectsChanged, listener);
+    return () => ipcRenderer.removeListener(channels.workspaceProjectsChanged, listener);
   },
   onIssuesChanged: (callback: (issues: readonly TrackedIssue[] | undefined) => void) => {
     const listener = (

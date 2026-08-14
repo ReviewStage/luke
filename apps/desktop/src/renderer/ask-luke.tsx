@@ -1,8 +1,8 @@
 import { REALTIME_STATUS, type RealtimeStatus } from "@sidecar/core";
 import { useCallback, useRef, useState } from "react";
 import type { MicrophoneStatus } from "../shared/contracts";
-import { voiceHotkeyLabel } from "../shared/voice-hotkey";
 import { FOCUS_FRAME_LIMIT } from "./credential-entry";
+import { Keycaps } from "./keycaps";
 import { SendIcon } from "./settings-icons";
 
 /**
@@ -195,13 +195,13 @@ export function AskLuke({
             }
           }}
         />
-        {/* How the reach is learned: the keycap surfaces under a hovering
-            pointer and stands down once the caret is in or a draft holds the
-            field — whoever it could teach already knows. Drawn only for a key
-            the system actually granted, in the label macOS writes it with.
-            Left readable: a reader announcing the keycap agrees with
+        {/* How the reach is learned: the keycaps surface under a hovering
+            pointer and stand down once the caret is in or a draft holds the
+            field — whoever they could teach already knows. Drawn only for a key
+            the system actually granted, as the separate keys a hand presses.
+            Left readable: a reader announcing the caps agrees with
             aria-keyshortcuts. */}
-        {shortcut ? <kbd className="ask-luke-hint">{voiceHotkeyLabel(shortcut)}</kbd> : null}
+        {shortcut ? <Keycaps className="ask-luke-hint" accelerator={shortcut} /> : null}
         <button
           type="submit"
           className="ask-luke-send"

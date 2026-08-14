@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   APP_SETTING_KIND,
   type AppGuideSetting,
+  PANEL_FORM_FACTOR,
   REALTIME_VOICE,
   REALTIME_VOICE_LIST,
   REALTIME_VOICE_SPEED,
@@ -25,6 +26,7 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
       [CREDENTIAL_PROVIDER_ID.CURSOR]: CREDENTIAL_SOURCE.NONE,
       [CREDENTIAL_PROVIDER_ID.DEVIN]: CREDENTIAL_SOURCE.ENVIRONMENT,
       [CREDENTIAL_PROVIDER_ID.JULES]: CREDENTIAL_SOURCE.NONE,
+      [CREDENTIAL_PROVIDER_ID.LINEAR]: CREDENTIAL_SOURCE.NONE,
     },
     secretStorage: SECRET_STORAGE.UNKNOWN,
     showInMenuBar: true,
@@ -32,6 +34,9 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
     voice: REALTIME_VOICE.CEDAR,
     voiceSpeed: REALTIME_VOICE_SPEED.NORMAL,
     voiceCaptions: false,
+    duckOtherMedia: true,
+    showOnAllDisplays: false,
+    formFactor: PANEL_FORM_FACTOR.BUBBLE,
     ...overrides,
   };
 }
@@ -42,6 +47,7 @@ function guideInput(overrides: Partial<LukeGuideInput> = {}): LukeGuideInput {
     voiceAvailable: true,
     microphoneStatus: "granted",
     hotkey: { hotkey: "⌥Space", held: true },
+    askKey: "⌥L",
     ...overrides,
   };
 }
@@ -88,6 +94,30 @@ test("the guide describes every spoken-adjustable setting with its current value
     "fast",
   );
 
+  // One switch covers every display: off keeps Luke to the main one alone.
+  const allDisplays = guideSetting(APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS);
+  assert.equal(allDisplays.kind, APP_SETTING_KIND.TOGGLE);
+  assert.equal(allDisplays.value, "off");
+  assert.equal(
+    guideSetting(
+      APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS,
+      guideInput({ settings: settings({ showOnAllDisplays: true }) }),
+    ).value,
+    "on",
+  );
+
+  const formFactor = guideSetting(APP_SETTING_ID.FORM_FACTOR);
+  assert.equal(formFactor.kind, APP_SETTING_KIND.CHOICE);
+  assert.equal(formFactor.value, PANEL_FORM_FACTOR.BUBBLE);
+  assert.deepEqual(formFactor.choices, [PANEL_FORM_FACTOR.NOTCH, PANEL_FORM_FACTOR.BUBBLE]);
+  assert.equal(
+    guideSetting(
+      APP_SETTING_ID.FORM_FACTOR,
+      guideInput({ settings: settings({ formFactor: PANEL_FORM_FACTOR.NOTCH }) }),
+    ).value,
+    PANEL_FORM_FACTOR.NOTCH,
+  );
+
   // Every entry says where the same change is made by hand, because guiding
   // the developer there is half of what the guide is for.
   for (const setting of buildLukeGuide(guideInput()).settings) {
@@ -101,9 +131,20 @@ test("the facts say what is connected, never what connects it", () => {
   assert.match(rendered, /Conductor \(connected\)/);
   assert.match(rendered, /Copilot \(not connected\)/);
   assert.match(rendered, /Devin \(connected from the environment\)/);
+  // The tracker stands in its own fact, the way it stands in its own section.
+  assert.match(rendered, /Linear \(not connected\)/);
+  assert.match(rendered, /Integrations/);
   // The guide leaves the machine, so no key, prefix, or environment variable
   // value has any business in it.
   assert.doesNotMatch(rendered, /API key:/);
+});
+
+test("the facts describe creating a workspace, so Luke does not deny the capability", () => {
+  const rendered = JSON.stringify(buildLukeGuide(guideInput()).facts);
+
+  assert.match(rendered, /Creating workspaces/);
+  // The refusal shape rides with the offer: only reported projects exist.
+  assert.match(rendered, /Only reported projects/);
 });
 
 test("the facts follow the talk key, the microphone, and the storage the system offers", () => {
@@ -119,6 +160,15 @@ test("the facts follow the talk key, the microphone, and the storage the system 
     buildLukeGuide(guideInput({ hotkey: { held: false } })).facts,
   );
   assert.match(unregistered, /None is registered/);
+
+  // The ask key is a fact on the talk key's terms: the registered chord when
+  // there is one, and an honest absence when there is not.
+  assert.match(held, /⌥L, from any app: summons the panel/);
+  const askless = buildLukeGuide(guideInput({ askKey: undefined })).facts.find(
+    (fact) => fact.label === "Ask key",
+  );
+  assert.ok(askless);
+  assert.match(askless.detail, /None is registered/);
 
   const denied = JSON.stringify(buildLukeGuide(guideInput({ microphoneStatus: "denied" })).facts);
   assert.match(denied, /Privacy & Security/);
@@ -165,6 +215,14 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
       calls.push(`setShowInDock:${show}`);
       return answered;
     },
+    setShowOnAllDisplays: async (show: boolean) => {
+      calls.push(`setShowOnAllDisplays:${show}`);
+      return answered;
+    },
+    setFormFactor: async (formFactor: string) => {
+      calls.push(`setFormFactor:${formFactor}`);
+      return answered;
+    },
   };
   const seen: AppSettings[] = [];
 
@@ -179,8 +237,10 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
 
   assert.deepEqual(calls.sort(), [
     "setDuckOtherMedia:true",
+    "setFormFactor:notch",
     "setShowInDock:true",
     "setShowInMenuBar:true",
+    "setShowOnAllDisplays:true",
     "setVoice",
     "setVoiceCaptions:true",
     // The first choice offered is "slow", which is the 0.75 multiple.

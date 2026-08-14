@@ -25,14 +25,24 @@ import {
   type AppGuideSetting,
   type AppGuideSnapshot,
   appToggleText,
+  isPanelFormFactor,
   isRealtimeVoice,
+  PANEL_FORM_FACTOR_LIST,
   REALTIME_VOICE_LIST,
   REALTIME_VOICE_SPEED,
   type RealtimeVoiceSpeed,
 } from "@sidecar/core";
-import type { AppBridge, AppSettings, MicrophoneStatus } from "../shared/contracts";
+import type {
+  AppBridge,
+  AppSettings,
+  CredentialSource,
+  MicrophoneStatus,
+} from "../shared/contracts";
 import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "../shared/contracts";
-import { CREDENTIAL_PROVIDER_LIST } from "../shared/credential-providers";
+import {
+  CLOUD_AGENT_PROVIDER_LIST,
+  INTEGRATION_PROVIDER_LIST,
+} from "../shared/credential-providers";
 
 /** The ids a spoken change names Luke's settings by. */
 export const APP_SETTING_ID = {
@@ -42,6 +52,8 @@ export const APP_SETTING_ID = {
   DUCK_OTHER_MEDIA: "duck_other_media",
   SHOW_IN_MENU_BAR: "show_in_menu_bar",
   SHOW_IN_DOCK: "show_in_dock",
+  SHOW_ON_ALL_DISPLAYS: "show_on_all_displays",
+  FORM_FACTOR: "form_factor",
 } as const;
 
 export type AppSettingId = (typeof APP_SETTING_ID)[keyof typeof APP_SETTING_ID];
@@ -138,12 +150,37 @@ const SETTING_GUIDE: Record<
     adjustable: true,
     manual: `${SETTINGS_TAB}, under Preferences`,
   }),
+  showOnAllDisplays: (settings) => ({
+    id: APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS,
+    label: "Show Luke on all displays",
+    description:
+      "Whether Luke stands on every connected display at once; off keeps him to the main display alone.",
+    kind: APP_SETTING_KIND.TOGGLE,
+    value: appToggleText(settings.showOnAllDisplays),
+    adjustable: true,
+    manual: `${SETTINGS_TAB}, under Preferences`,
+  }),
+  formFactor: (settings) => ({
+    id: APP_SETTING_ID.FORM_FACTOR,
+    label: "Form factor",
+    description:
+      "How Luke stands on a display without a camera housing — notch draws him one pressed into the top edge, bubble floats him just under it. A display with a real notch ignores this.",
+    kind: APP_SETTING_KIND.CHOICE,
+    value: settings.formFactor,
+    choices: PANEL_FORM_FACTOR_LIST,
+    adjustable: true,
+    manual: `${SETTINGS_TAB}, under Preferences`,
+  }),
   // Described in the talk-key fact instead, which carries the key that
   // actually registered — this field is only the stored choice, absent on the
   // defaults and silently outbid when another app owns the chord. Not spoken-
   // changeable either way: a chord is recorded by typing it, so the fact says
   // where.
   voiceHotkey: () => undefined,
+  // Described in the ask-key fact instead, for exactly the talk key's
+  // reasons: the fact carries the key that registered, and a chord is
+  // recorded by typing it rather than saying it.
+  askHotkey: () => undefined,
   // Not a switch but a set of keys, so it is described in the facts instead:
   // which providers are connected, and that a key is only ever typed by hand.
   credentialSources: () => undefined,
@@ -157,8 +194,14 @@ export interface LukeGuideInput {
   /** Whether a Realtime credential can be minted at all. */
   voiceAvailable: boolean;
   microphoneStatus: MicrophoneStatus;
-  /** The talk key as the panel shows it, absent when none was registered. */
+  /**
+   * The talk key labelled the way macOS writes it, absent when none was
+   * registered. Labelled rather than drawn as keys: the guide is spoken and
+   * read, and a chord said aloud is one thing to press.
+   */
   hotkey: { hotkey?: string; held: boolean };
+  /** The ask key labelled on the same terms, absent when none was registered. */
+  askKey?: string;
 }
 
 function talkKeyFact(hotkey: LukeGuideInput["hotkey"]): AppGuideFact {
@@ -178,6 +221,22 @@ function talkKeyFact(hotkey: LukeGuideInput["hotkey"]): AppGuideFact {
   };
 }
 
+function askKeyFact(askKey: string | undefined): AppGuideFact {
+  if (!askKey) {
+    return {
+      label: "Ask key",
+      detail:
+        "None is registered right now — another app may own the shortcut, or voice is off. The Settings tab shows its state.",
+    };
+  }
+  return {
+    label: "Ask key",
+    detail:
+      `${askKey}, from any app: summons the panel with the caret in the typed composer, and the ` +
+      `same press puts it away. A different chord can be recorded, or the default restored, in ${SETTINGS_TAB}.`,
+  };
+}
+
 const MICROPHONE_DETAIL: Record<MicrophoneStatus, string> = {
   granted: "Granted. The microphone only opens while the talk key holds a turn.",
   denied:
@@ -187,23 +246,40 @@ const MICROPHONE_DETAIL: Record<MicrophoneStatus, string> = {
   unknown: "Unknown. The Settings tab's Permissions section shows its state.",
 };
 
+/** The same three answers a credential row gives, in words a fact can carry. */
+function connectionWord(source: CredentialSource): string {
+  return source === CREDENTIAL_SOURCE.NONE
+    ? "not connected"
+    : source === CREDENTIAL_SOURCE.ENVIRONMENT
+      ? "connected from the environment"
+      : "connected";
+}
+
 function providersFact(settings: AppSettings): AppGuideFact {
-  const roster = CREDENTIAL_PROVIDER_LIST.map((provider) => {
-    const source = settings.credentialSources[provider.id];
-    const connected =
-      source === CREDENTIAL_SOURCE.NONE
-        ? "not connected"
-        : source === CREDENTIAL_SOURCE.ENVIRONMENT
-          ? "connected from the environment"
-          : "connected";
-    return `${provider.displayName} (${connected})`;
-  });
+  const roster = CLOUD_AGENT_PROVIDER_LIST.map(
+    (provider) =>
+      `${provider.displayName} (${connectionWord(settings.credentialSources[provider.id])})`,
+  );
   return {
     label: "Cloud providers",
     detail:
       `${roster.join(", ")}. Connecting one takes its API key, typed by hand into ${SETTINGS_TAB} ` +
-      "on the provider's row — never spoken, and never repeated back. Local providers such as " +
-      "Claude Code need no key and are observed on their own.",
+      "under Cloud Agent API keys — never spoken, and never repeated back. Local providers such " +
+      "as Claude Code need no key and are observed on their own.",
+  };
+}
+
+function integrationsFact(settings: AppSettings): AppGuideFact {
+  const roster = INTEGRATION_PROVIDER_LIST.map(
+    (provider) =>
+      `${provider.displayName} (${connectionWord(settings.credentialSources[provider.id])})`,
+  );
+  return {
+    label: "Integrations",
+    detail:
+      `${roster.join(", ")}. Connecting Linear lets Luke read the developer's issues and, only ` +
+      `when asked in a turn the developer opened, move or comment on one. Its key is typed by ` +
+      `hand into ${SETTINGS_TAB} under Integrations — never spoken, and never repeated back.`,
   };
 }
 
@@ -228,10 +304,39 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "Two tabs. Sessions lists every observed session with its state, narrowable to all, local, " +
         "cloud, or one provider, and orderable by urgency (what needs the developer first) or " +
         "recency (what moved last first); a row can be opened, messaged, or controlled where its " +
-        "provider allows. Settings holds the preferences, the talk key, the cloud API keys, " +
-        "permissions, and Quit.",
+        "provider allows. Settings holds the preferences, the talk and ask keys, the cloud " +
+        "agent API keys, the integrations, permissions, the Feedback section, and Quit.",
+    },
+    {
+      label: "Feedback and prompts",
+      detail:
+        "The Feedback section at the foot of the Settings tab — or the menu bar item's Send " +
+        "Feedback… and Submit a Prompt… — opens a composer under the notch. Send feedback is for " +
+        "bugs and ideas; Submit a prompt sends a prompt to a coding agent, and one the founders " +
+        "like ships in the next release. Either goes by email to the founders with an optional " +
+        "name and email for credit and up to three screenshots. It is typed and sent by hand: a " +
+        "spoken ask can say where it lives, never write or send one.",
+    },
+    {
+      label: "Creating workspaces",
+      detail:
+        "Where a connected provider documents a creation endpoint — Conductor and Cursor today — " +
+        "an ask in conversation, spoken or typed, can create a new workspace in one of the " +
+        "projects that provider reports, optionally under a name the developer chose, and can " +
+        "hand the new agent an opening task in the developer's own words where the project takes " +
+        "one. Only reported projects can be named, a project that needs a task cannot be created " +
+        "without one, and a provider that reports none takes no ask.",
+    },
+    {
+      label: "Adding agents to a workspace",
+      detail:
+        "Where a session's provider documents it — Conductor today — the same kind of ask can " +
+        "start another agent in the workspace an observed session runs in, as one of the agent " +
+        "kinds that session's roster entry lists, optionally named and optionally with an " +
+        "opening task. A session whose entry lists no new agents takes no such ask.",
     },
     talkKeyFact(input.hotkey),
+    askKeyFact(input.askKey),
     { label: "Microphone access", detail: MICROPHONE_DETAIL[input.microphoneStatus] },
     ...(input.voiceAvailable
       ? [
@@ -251,6 +356,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
           },
         ]),
     providersFact(input.settings),
+    integrationsFact(input.settings),
     ...(input.settings.secretStorage === SECRET_STORAGE.UNAVAILABLE
       ? [
           {
@@ -290,6 +396,8 @@ export async function applySpokenSetting(
     | "setDuckOtherMedia"
     | "setShowInMenuBar"
     | "setShowInDock"
+    | "setShowOnAllDisplays"
+    | "setFormFactor"
   >,
   action: { setting: AppGuideSetting; value: string },
   onSettings: (settings: AppSettings) => void,
@@ -305,11 +413,16 @@ export async function applySpokenSetting(
           ? await bridge.setShowInMenuBar(enabled)
           : action.setting.id === APP_SETTING_ID.SHOW_IN_DOCK
             ? await bridge.setShowInDock(enabled)
-            : action.setting.id === APP_SETTING_ID.VOICE_SPEED && speed !== undefined
-              ? await bridge.setVoiceSpeed(speed)
-              : action.setting.id === APP_SETTING_ID.VOICE && isRealtimeVoice(action.value)
-                ? await bridge.setVoice(action.value)
-                : undefined;
+            : action.setting.id === APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS
+              ? await bridge.setShowOnAllDisplays(enabled)
+              : action.setting.id === APP_SETTING_ID.VOICE_SPEED && speed !== undefined
+                ? await bridge.setVoiceSpeed(speed)
+                : action.setting.id === APP_SETTING_ID.VOICE && isRealtimeVoice(action.value)
+                  ? await bridge.setVoice(action.value)
+                  : action.setting.id === APP_SETTING_ID.FORM_FACTOR &&
+                      isPanelFormFactor(action.value)
+                    ? await bridge.setFormFactor(action.value)
+                    : undefined;
   if (!result) {
     // An adjustable entry with no carrier is a guide ahead of its wiring;
     // refuse honestly rather than claim a change that never happened.

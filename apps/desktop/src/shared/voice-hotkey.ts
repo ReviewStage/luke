@@ -30,14 +30,21 @@ export const DEFAULT_VOICE_HOTKEYS: readonly string[] = ["Alt+Space", "Alt+S"];
 export const DEFAULT_ASK_HOTKEYS: readonly string[] = ["Alt+L", "Alt+Shift+L"];
 
 /**
- * The ask chords worth asking the system for, with any the talk key holds
- * left out. The talk key is configurable now, so a user can move it onto an
- * ask default — and the two Luke keys must never compete for one chord:
- * whichever registered first would silently cost the other its whole feature,
- * with nothing on screen saying why.
+ * The ask chords worth asking the system for, in order. A chosen chord goes
+ * first — it is what the user asked for — with the defaults kept behind it,
+ * exactly as the talk key's candidates work. Any chord the talk key holds is
+ * left out, the chosen one included: the two Luke keys must never compete for
+ * one chord — whichever registered first would silently cost the other its
+ * whole feature, with nothing on screen saying why.
  */
-export function askHotkeyCandidates(taken: readonly (string | undefined)[]): readonly string[] {
-  return DEFAULT_ASK_HOTKEYS.filter((candidate) => !taken.includes(candidate));
+export function askHotkeyCandidates(
+  chosen: string | undefined,
+  taken: readonly (string | undefined)[],
+): readonly string[] {
+  const candidates = chosen
+    ? [chosen, ...DEFAULT_ASK_HOTKEYS.filter((candidate) => candidate !== chosen)]
+    : DEFAULT_ASK_HOTKEYS;
+  return candidates.filter((candidate) => !taken.includes(candidate));
 }
 
 /**
@@ -274,6 +281,22 @@ export function voiceHotkeyLabel(accelerator: string): string {
     .map((modifier) => MODIFIER_SYMBOLS[modifier] ?? `${modifier}+`)
     .join("");
   return `${modifiers}${key}`;
+}
+
+/**
+ * The same chord as the keys a hand actually presses, in the order macOS
+ * writes them: one entry per key, so a surface can draw a cap each rather than
+ * one chip for the whole chord.
+ *
+ * The label stays what a sentence, a menu item, or a screen reader gets — a
+ * chord read aloud is one thing to press, and only a drawn keyboard needs the
+ * keys apart.
+ */
+export function voiceHotkeyKeycaps(accelerator: string): readonly string[] {
+  const parts = accelerator.split("+");
+  const key = parts[parts.length - 1] ?? "";
+  const modifiers = parts.slice(0, -1).map((modifier) => MODIFIER_SYMBOLS[modifier] ?? modifier);
+  return [...modifiers, key];
 }
 
 /**

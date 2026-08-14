@@ -64,7 +64,9 @@ export const WING_SLOT_ID_ATTRIBUTE = "data-slot-id";
 export const LEAVING_ATTRIBUTE = "data-leaving";
 
 const MOTION_TOKEN = {
+  SPRING: "--spring",
   SPRING_FAST: "--spring-fast",
+  SHAPE_DURATION: "--duration-shape",
   FAST_DURATION: "--duration-fast",
   EXIT_DURATION: "--duration-exit",
   EXIT_EASING: "--motion-exit",
@@ -104,20 +106,20 @@ const SESSION_LIST: ReorderList = {
 };
 
 /**
- * The wing's strip: marks laid along the wing. The wing hangs off the housing
- * and grows its far edge as the shape morphs — `--wing-bound` moves the left
- * edge of the very element `offsetLeft` is measured from — so a slot's
- * position is its distance from the anchored edge instead: measured from the
- * moving one, every morph would read as a reorder and spring marks that never
- * moved. The distance is negated so the numbers still grow the way the axis
- * runs and the travel arithmetic stays the plan's. Measuring the slot's own
- * far edge also keeps the overflow count still while only its digits widen,
- * because the digits grow away from the anchor.
+ * The wing's strip: marks laid along the wing, resting against the shape's far
+ * edge. The wing hangs off the housing and grows that edge as the shape
+ * morphs — `--wing-bound` moves the left edge of the very element `offsetLeft`
+ * is measured from, and the marks move with it — so a slot's position is its
+ * distance from the anchored edge instead: measured from the moving one, a
+ * morph would read as stillness and the marks would jump to the new edge in
+ * one frame. The distance is negated so the numbers still grow the way the
+ * axis runs and the travel arithmetic stays the plan's. Measuring the slot's
+ * own near edge also keeps the overflow count still while only its digits
+ * widen, because the digits grow away from the anchor.
  */
 const WING_STRIP: ReorderList = {
   idAttribute: WING_SLOT_ID_ATTRIBUTE,
-  offset: (element) =>
-    element.offsetLeft + element.offsetWidth - (element.offsetParent?.clientWidth ?? 0),
+  offset: (element) => element.offsetLeft - (element.offsetParent?.clientWidth ?? 0),
   translate: (px) => `translateX(${px}px)`,
   arrivesFromFan: false,
 };
@@ -203,6 +205,7 @@ function elementVisible(element: HTMLElement): boolean {
 function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T | null> {
   const listRef = useRef<T | null>(null);
   const baseline = useRef<Map<string, number> | undefined>(undefined);
+  const baselineWidth = useRef<number | undefined>(undefined);
   const wasLeaving = useRef<Set<string>>(new Set());
   const exitFades = useRef<Map<string, Animation>>(new Map());
 
@@ -213,6 +216,7 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
     const container = listRef.current;
     if (container === null) {
       baseline.current = undefined;
+      baselineWidth.current = undefined;
       wasLeaving.current = new Set();
       exitFades.current.clear();
       return;
@@ -250,6 +254,20 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
 
     const plan = planReorder(baseline.current, positions);
     baseline.current = positions;
+    // Whether this commit moved the list's bound out from under it — the
+    // wing's `--wing-bound` changing with the presentation is the one thing
+    // that does. Elements measured against the anchored edge read that as the
+    // travel it truly is, and it is a different gesture from a slot hop: the
+    // surface is what moved, so they ride the surface's spring. The bound is
+    // the box the offsets are measured against — the container's own
+    // `offsetParent`, the same node the elements report theirs from — never
+    // the container, which shrink-wraps its contents and holds its width
+    // while the bound beneath it moves.
+    const width = (container.offsetParent ?? container).clientWidth;
+    const boundMoved =
+      baselineWidth.current !== undefined &&
+      Math.abs(width - baselineWidth.current) > TRAVEL_EPSILON;
+    baselineWidth.current = width;
     if (
       plan.travels.size === 0 &&
       plan.arrivals.length === 0 &&
@@ -268,11 +286,19 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
     const quickDuration = parseMilliseconds(token(MOTION_TOKEN.QUICK_DURATION));
     const exitEasing = token(MOTION_TOKEN.EXIT_EASING).trim() || "ease";
     const fan = parsePixels(token(MOTION_TOKEN.ROW_FAN));
+    // A travel the bound caused rides the shape's spring for the shape's whole
+    // beat: the same curve over the same time holds a mark the same distance
+    // inside the surface's edge for every frame of the morph, where the fast
+    // spring would carry it past the edge onto the desktop.
+    const travelDuration = boundMoved
+      ? parseMilliseconds(token(MOTION_TOKEN.SHAPE_DURATION))
+      : fastDuration;
+    const travelSpring = boundMoved ? token(MOTION_TOKEN.SPRING).trim() || "ease" : springFast;
 
     const travel = (element: HTMLElement, from: number, delay: number) => {
       element.animate([{ transform: list.translate(from) }, { transform: list.translate(0) }], {
-        duration: fastDuration,
-        easing: springFast,
+        duration: travelDuration,
+        easing: travelSpring,
         delay,
         fill: "backwards",
         composite: "add",

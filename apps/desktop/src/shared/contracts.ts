@@ -3,8 +3,11 @@ import type {
   FixtureSnapshot,
   IssueToolAction,
   NormalizedSession,
+  ObservedWorkspaceProject,
+  PanelFormFactor,
   ProviderControlResult,
   ProviderMessageResult,
+  ProviderWorkspaceResult,
   RealtimeConnection,
   RealtimeVoice,
   RealtimeVoiceSpeed,
@@ -16,6 +19,7 @@ import type {
   WindowMode,
 } from "@sidecar/core";
 import type { CredentialProviderId } from "./credential-providers";
+import type { FeedbackResult, FeedbackSubmission } from "./feedback";
 
 export type { WindowMode } from "@sidecar/core";
 
@@ -93,6 +97,12 @@ export interface AppSettings {
    */
   voiceHotkey?: string;
   /**
+   * The ask-key chord the user chose, absent while the defaults stand. The
+   * stored choice on the talk key's exact terms: the registered key is what
+   * the row shows, and this only says whether there is a choice to reset.
+   */
+  askHotkey?: string;
+  /**
    * Whether Music and Spotify are turned down while a spoken exchange is
    * live, and back up after. On by default: speech over music is the failure
    * everyone has had, and the duck defers to the user everywhere it can — it
@@ -100,6 +110,18 @@ export interface AppSettings {
    * the duck is left where the hand put it.
    */
   duckOtherMedia: boolean;
+  /**
+   * Whether Luke stands on every connected display at once. Off by default:
+   * he keeps to the system's main display until asked, and turning this off
+   * again is what brings him back to it.
+   */
+  showOnAllDisplays: boolean;
+  /**
+   * How Luke stands on a display without a camera housing: a drawn notch
+   * pressed into the top edge, or the free-floating bubble every such display
+   * gets by default. A display with a real notch answers to neither.
+   */
+  formFactor: PanelFormFactor;
 }
 
 /**
@@ -175,9 +197,10 @@ export interface AppBootstrap {
    */
   realtimeAvailable: boolean;
   /**
-   * The talk key as the user should read it, absent when the system refused to
-   * register one — a shortcut nothing can trigger must not be shown as though
-   * it works.
+   * The accelerator the talk key was registered as, absent when the system
+   * refused to register one — a shortcut nothing can trigger must not be shown
+   * as though it works. Raw rather than labelled for the ask key's reason
+   * below: the renderer draws the keys apart and says the chord whole.
    */
   voiceHotkey?: string;
   /**
@@ -189,8 +212,8 @@ export interface AppBootstrap {
   /**
    * The accelerator that summons the ask field from any app, absent when the
    * system refused every candidate. The raw accelerator rather than a label,
-   * because the renderer needs both spellings: the keycap's ⌥L and aria's
-   * Alt+L.
+   * because the renderer needs both spellings: the keycaps' ⌥ and L, drawn as
+   * the two keys they are, and aria's Alt+L.
    */
   askHotkey?: string;
   /**
@@ -201,6 +224,8 @@ export interface AppBootstrap {
   /** Whether the panel should show the voice diagnostics block. */
   display: DisplayDiagnostic;
   sessions: readonly NormalizedSession[];
+  /** Where a new workspace can be created, as the adapters currently offer it. */
+  workspaceProjects: readonly ObservedWorkspaceProject[];
   /** Absent while no issue tracker is connected, which is its own answer. */
   issues?: readonly TrackedIssue[];
   settings: AppSettings;
@@ -209,7 +234,7 @@ export interface AppBootstrap {
 /** One validated issue act on its way to the main process. */
 export type IssueActionAsk = Extract<IssueToolAction, { kind: "issue-state" | "issue-comment" }>;
 
-/** The talk key as the panel should describe it. */
+/** The talk key as the panel should describe it, as an accelerator. */
 export interface VoiceHotkeyState {
   hotkey?: string;
   held: boolean;
@@ -251,6 +276,13 @@ export interface AppBridge {
   setShowInMenuBar(show: boolean): Promise<SettingsUpdateResult>;
   /** Shows or hides the Dock icon, and remembers the choice. */
   setShowInDock(show: boolean): Promise<SettingsUpdateResult>;
+  /**
+   * Stands Luke on every connected display, or brings him back to the main
+   * one alone, and remembers the choice.
+   */
+  setShowOnAllDisplays(show: boolean): Promise<SettingsUpdateResult>;
+  /** Chooses how Luke stands on a display without a housing, and remembers it. */
+  setFormFactor(formFactor: PanelFormFactor): Promise<SettingsUpdateResult>;
   /** Turns the on-screen caption of Luke's speech on or off. */
   setVoiceCaptions(enabled: boolean): Promise<SettingsUpdateResult>;
   /** Turns the quieting of Music and Spotify during a spoken exchange on or off. */
@@ -268,6 +300,13 @@ export interface AppBridge {
    * key the panel shows follows the same announcement it always has.
    */
   setVoiceHotkey(accelerator: string | undefined): Promise<SettingsUpdateResult>;
+  /**
+   * Moves the ask key the same way, or back to its defaults when omitted. The
+   * one extra rule is the standing one: a chord the talk key holds — or could
+   * fall back to on a later launch — is refused with a reason rather than
+   * stored and left to race it.
+   */
+  setAskHotkey(accelerator: string | undefined): Promise<SettingsUpdateResult>;
   /**
    * Opens an observed session where its provider keeps it. The renderer names
    * the session rather than its address, for the same reason it names a
@@ -293,12 +332,44 @@ export interface AppBridge {
     controlId: string,
   ): Promise<ProviderControlResult>;
   /**
+   * Creates one workspace the user just asked for, in a project its provider
+   * reported — carrying, where that project takes one, the opening task the
+   * user gave its agent in their own words. The renderer names a project it
+   * was shown, never a repository URL or path of its own, and the main
+   * process validates the ask again against what its adapters actually
+   * offered before the provider's documented creation endpoint is called.
+   */
+  createSessionWorkspace(
+    providerId: string,
+    providerProjectId: string,
+    name?: string,
+    task?: string,
+  ): Promise<ProviderWorkspaceResult>;
+  /**
+   * Starts another agent in the workspace an observed session runs in. The
+   * renderer names a session it is already drawing and an agent kind that
+   * session's roster entry listed; the main process validates both again
+   * against its registry before the adapter sees anything.
+   */
+  addWorkspaceAgent(
+    identity: SessionIdentity,
+    agent: string,
+    name?: string,
+    task?: string,
+  ): Promise<ProviderWorkspaceResult>;
+  /**
    * Carries one spoken issue act to the tracker that can take it. The renderer
    * names an issue and a transition it was shown; the main process resolves
    * both against its own latest observation before the tracker client sees
    * anything, so nothing a model composed reaches Linear as-is.
    */
   executeIssueAction(action: IssueActionAsk): Promise<TrackerActionResult>;
+  /**
+   * Carries one user-typed note to the people who make Luke, as email. The
+   * renderer sends only what the user wrote and attached — the destination is
+   * fixed in the main process, and no session material rides along.
+   */
+  sendFeedback(submission: FeedbackSubmission): Promise<FeedbackResult>;
   /** Brings the expanded panel forward so it can accept typed input. */
   focusPanel(): void;
   /** Mints a short-lived Realtime credential; the standing API key never crosses. */
@@ -306,8 +377,19 @@ export interface AppBridge {
   notifyReady(): void;
   quit(): void;
   onLifecycle(callback: (eventName: string) => void): () => void;
+  /** This window's own display, whenever its geometry or housing changes. */
   onDisplayChanged(callback: (display: DisplayDiagnostic) => void): () => void;
+  /**
+   * The settings as another window just changed them. A window's own change
+   * comes back in its reply; this is how every other window's rows and guide
+   * stop describing a state the store no longer holds.
+   */
+  onSettingsChanged(callback: (settings: AppSettings) => void): () => void;
   onSessionsChanged(callback: (sessions: readonly NormalizedSession[]) => void): () => void;
+  /** The projects a workspace can be created in, whenever the set changes. */
+  onWorkspaceProjectsChanged(
+    callback: (projects: readonly ObservedWorkspaceProject[]) => void,
+  ): () => void;
   /** The issue roster as last observed; `undefined` says no tracker is connected. */
   onIssuesChanged(callback: (issues: readonly TrackedIssue[] | undefined) => void): () => void;
   onAttentionSpeech(callback: (speech: readonly AttentionSpeech[]) => void): () => void;
@@ -344,15 +426,21 @@ export const channels = {
   setVoiceSpeed: "app:set-voice-speed",
   setVoiceCaptions: "app:set-voice-captions",
   setVoiceHotkey: "app:set-voice-hotkey",
+  setAskHotkey: "app:set-ask-hotkey",
   setDuckOtherMedia: "app:set-duck-other-media",
   setVoiceExchange: "app:set-voice-exchange",
   openProviderApiKeys: "app:open-provider-api-keys",
   setShowInMenuBar: "app:set-show-in-menu-bar",
   setShowInDock: "app:set-show-in-dock",
+  setShowOnAllDisplays: "app:set-show-on-all-displays",
+  setFormFactor: "app:set-form-factor",
   openSession: "app:open-session",
   sendSessionMessage: "app:send-session-message",
   executeSessionControl: "app:execute-session-control",
+  createSessionWorkspace: "app:create-session-workspace",
+  addWorkspaceAgent: "app:add-workspace-agent",
   executeIssueAction: "app:execute-issue-action",
+  sendFeedback: "app:send-feedback",
   focusPanel: "app:focus-panel",
   requestRealtimeCredential: "app:request-realtime-credential",
   attentionSpeech: "app:attention-speech",
@@ -364,7 +452,9 @@ export const channels = {
   rendererReady: "app:renderer-ready",
   lifecycle: "app:lifecycle",
   displayChanged: "app:display-changed",
+  settingsChanged: "app:settings-changed",
   sessionsChanged: "app:sessions-changed",
+  workspaceProjectsChanged: "app:workspace-projects-changed",
   issuesChanged: "app:issues-changed",
   quit: "app:quit",
 } as const;

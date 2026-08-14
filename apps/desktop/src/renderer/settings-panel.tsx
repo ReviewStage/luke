@@ -1,6 +1,10 @@
 import {
+  DEFAULT_PANEL_FORM_FACTOR,
+  isPanelFormFactor,
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
+  PANEL_FORM_FACTOR_LIST,
+  type PanelFormFactor,
   REALTIME_DEFAULTS,
   REALTIME_VOICE_LIST,
   REALTIME_VOICE_SPEED_LIST,
@@ -11,9 +15,13 @@ import { useEffect, useRef, useState } from "react";
 import type { AppSettings, CredentialSource, MicrophoneStatus } from "../shared/contracts";
 import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "../shared/contracts";
 import type { CredentialProvider } from "../shared/credential-providers";
-import { CREDENTIAL_PROVIDER_LIST } from "../shared/credential-providers";
+import {
+  CLOUD_AGENT_PROVIDER_LIST,
+  INTEGRATION_PROVIDER_LIST,
+} from "../shared/credential-providers";
 import {
   capturedVoiceHotkey,
+  DEFAULT_ASK_HOTKEYS,
   DEFAULT_VOICE_HOTKEYS,
   VOICE_HOTKEY_CAPTURE,
   voiceHotkeyLabel,
@@ -33,6 +41,9 @@ import {
   removalStage,
   removalWithdrawable,
 } from "./credential-removal";
+import type { FeedbackEntryControl } from "./feedback-entry";
+import { FeedbackSection } from "./feedback-panel";
+import { Keycaps } from "./keycaps";
 import { microphoneAccessRow } from "./microphone-access";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import { CloudBadge, ProviderMark } from "./provider-marks";
@@ -43,6 +54,7 @@ import {
   KeyboardIcon,
   KeyIcon,
   PencilIcon,
+  PlugIcon,
   PopUpIcon,
   PowerIcon,
   PreferencesIcon,
@@ -70,6 +82,8 @@ export interface SettingsPanelProps {
   onDuckOtherMediaChange: (enabled: boolean) => Promise<string | undefined>;
   /** The one credential being entered anywhere, and everything that can be done to it. */
   credentials: CredentialEntryControl;
+  /** The one note to the founders being written, and everything that can be done to it. */
+  feedback: FeedbackEntryControl;
   /** Chooses the voice Luke speaks with, from the set fixed by this build. */
   onVoiceChange: (voice: RealtimeVoice) => void;
   /** Chooses the pace Luke speaks at, from the set fixed by this build. */
@@ -90,8 +104,19 @@ export interface SettingsPanelProps {
    * and the row is where that answer belongs.
    */
   onShowInDockChange: (show: boolean) => Promise<string | undefined>;
+  /**
+   * Stands Luke on every connected display, or brings him back to the main
+   * one alone. The store answers with why when it refuses, and the row is
+   * where that answer belongs.
+   */
+  onShowOnAllDisplaysChange: (show: boolean) => Promise<string | undefined>;
+  /** Chooses how Luke stands on a display without a camera housing. */
+  onFormFactorChange: (formFactor: PanelFormFactor) => Promise<string | undefined>;
   onQuit: () => void;
-  /** The talk key as registered, shown so it can be learned — and pressed to be changed. */
+  /**
+   * The talk key as registered, as an accelerator: the row draws it as its
+   * separate keys and says it whole in the labels its buttons carry.
+   */
   voiceHotkey?: string;
   /** Whether that key can be held, which is what the row has to describe. */
   voiceHotkeyHeld: boolean;
@@ -101,9 +126,17 @@ export interface SettingsPanelProps {
    * that answer belongs.
    */
   onVoiceHotkeyChange: (accelerator: string | undefined) => Promise<string | undefined>;
+  /** The ask key as registered, an accelerator on the talk key's terms. */
+  askHotkey?: string;
   /**
-   * Whether the recording control has the keyboard. While it does, the talk
-   * key must not open a turn: the chord arriving is an entry, not an ask.
+   * Moves the ask key to a recorded chord, or back to the defaults when
+   * omitted, on the talk key's terms: the store answers with why when it
+   * refuses, and the row is where that answer belongs.
+   */
+  onAskHotkeyChange: (accelerator: string | undefined) => Promise<string | undefined>;
+  /**
+   * Whether a recording control has the keyboard. While one does, neither Luke
+   * key may act on its own press: the chord arriving is an entry, not an ask.
    */
   onShortcutCapture: (capturing: boolean) => void;
 }
@@ -389,6 +422,10 @@ function ProviderCredential({
         </span>
       </div>
 
+      {/* What connecting this one buys, for a provider whose section cannot
+          say it once for every row. */}
+      {provider.description ? <p className="settings-note">{provider.description}</p> : null}
+
       {entry ? (
         /* Named as a group, because Cancel, Save, and the link to the
            provider's own page are the same three words on every row. */
@@ -485,10 +522,22 @@ function speedOptionLabel(speed: RealtimeVoiceSpeed): string {
   return speed === REALTIME_DEFAULTS.SPEED ? `${speed}× (default)` : `${speed}×`;
 }
 
+/* The forms read as names, and the bubble carries its status into the menu the
+   way the default voice does. */
+function formFactorOptionLabel(formFactor: PanelFormFactor): string {
+  const name = formFactor.charAt(0).toUpperCase() + formFactor.slice(1);
+  return formFactor === DEFAULT_PANEL_FORM_FACTOR ? `${name} (default)` : name;
+}
+
+/* Why every Connect in a key-holding section is refusing, said once per
+   section: a disabled control with no words beside it reads as broken. */
+const STORAGE_UNAVAILABLE_NOTE =
+  "This system offers no encrypted credential storage, so Luke will not store a key here.";
+
 /**
- * Every provider that can hold a key, one line each. A provider is listed
- * whether or not it has one, because the list is how you learn which services
- * Luke can watch at all.
+ * Every agent provider that can hold a key, one line each. A provider is
+ * listed whether or not it has one, because the list is how you learn which
+ * services Luke can watch at all.
  */
 function CredentialsSection({
   settings,
@@ -507,9 +556,9 @@ function CredentialsSection({
     <section className="settings-section" style={{ "--row-index": 3 } as React.CSSProperties}>
       <h2>
         <KeyIcon />
-        Cloud API keys
+        Cloud Agent API keys
       </h2>
-      {CREDENTIAL_PROVIDER_LIST.map((provider) => (
+      {CLOUD_AGENT_PROVIDER_LIST.map((provider) => (
         <ProviderCredential
           key={provider.id}
           provider={provider}
@@ -522,9 +571,48 @@ function CredentialsSection({
       {/* True of every key here, so it is said once rather than per provider. */}
       <p className="settings-note">
         {storageUnavailable
-          ? "This system offers no encrypted credential storage, so Luke will not store a key here."
+          ? STORAGE_UNAVAILABLE_NOTE
           : "Luke reads only cloud workspaces you created, and never sends a prompt or any other change."}
       </p>
+    </section>
+  );
+}
+
+/**
+ * The services Luke connects to that are not agents: today, the issue tracker.
+ * Each row is the same credential line an agent provider gets — same entry,
+ * same trash, same environment fallback — with its own one-line answer to what
+ * connecting it buys, because the rows here do not all buy the same thing.
+ */
+function IntegrationsSection({
+  settings,
+  control,
+  panelOpen,
+}: {
+  settings: AppSettings;
+  control: CredentialEntryControl;
+  panelOpen: boolean;
+}): React.JSX.Element {
+  const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
+  return (
+    <section className="settings-section" style={{ "--row-index": 4 } as React.CSSProperties}>
+      <h2>
+        <PlugIcon />
+        Integrations
+      </h2>
+      {INTEGRATION_PROVIDER_LIST.map((provider) => (
+        <ProviderCredential
+          key={provider.id}
+          provider={provider}
+          source={settings.credentialSources[provider.id]}
+          storageUnavailable={storageUnavailable}
+          control={control}
+          panelOpen={panelOpen}
+        />
+      ))}
+      {/* The same refusal the agents' section explains: a Connect stilled by
+          missing storage needs its why in this section too. */}
+      {storageUnavailable ? <p className="settings-note">{STORAGE_UNAVAILABLE_NOTE}</p> : null}
     </section>
   );
 }
@@ -553,6 +641,10 @@ function PreferencesSection({
   onShowInMenuBarChange,
   dockShown,
   onShowInDockChange,
+  allDisplays,
+  onShowOnAllDisplaysChange,
+  formFactor,
+  onFormFactorChange,
 }: {
   voice: RealtimeVoice;
   onVoiceChange: (voice: RealtimeVoice) => void;
@@ -566,6 +658,10 @@ function PreferencesSection({
   onShowInMenuBarChange: (show: boolean) => Promise<string | undefined>;
   dockShown: boolean;
   onShowInDockChange: (show: boolean) => Promise<string | undefined>;
+  allDisplays: boolean;
+  onShowOnAllDisplaysChange: (show: boolean) => Promise<string | undefined>;
+  formFactor: PanelFormFactor;
+  onFormFactorChange: (formFactor: PanelFormFactor) => Promise<string | undefined>;
 }): React.JSX.Element {
   // The change is a round trip through the settings file, so the switch rests
   // until the store has answered rather than claiming a state it may not get.
@@ -596,6 +692,20 @@ function PreferencesSection({
     setDuckBusy(true);
     setRejection(await onDuckOtherMediaChange(!ducking));
     setDuckBusy(false);
+  };
+  // The display and form rows round-trip like the switches above, so each
+  // rests on its own flag and answers on the shared rejection line.
+  const [displayBusy, setDisplayBusy] = useState(false);
+  const toggleAllDisplays = async () => {
+    setDisplayBusy(true);
+    setRejection(await onShowOnAllDisplaysChange(!allDisplays));
+    setDisplayBusy(false);
+  };
+  const [formBusy, setFormBusy] = useState(false);
+  const chooseFormFactor = async (nextFormFactor: PanelFormFactor) => {
+    setFormBusy(true);
+    setRejection(await onFormFactorChange(nextFormFactor));
+    setFormBusy(false);
   };
   return (
     <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
@@ -752,6 +862,57 @@ function PreferencesSection({
           <span className="switch-thumb" />
         </button>
       </div>
+      <div className="settings-row">
+        <span className="settings-copy">
+          <strong>Show Luke on all displays</strong>
+        </span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={allDisplays}
+          aria-label="Show Luke on all displays"
+          className="switch"
+          disabled={displayBusy}
+          onClick={() => void toggleAllDisplays()}
+        >
+          <span className="switch-thumb" />
+        </button>
+      </div>
+      <div className="settings-row">
+        <span className="settings-copy">
+          <strong>Form factor</strong>
+          {/* Where the choice applies, because on a notched display this row
+              visibly does nothing: the real housing always wins. */}
+          <small>On displays without a notch.</small>
+        </span>
+        <span className="voice-select">
+          <select
+            aria-label="Form factor"
+            value={formFactor}
+            disabled={formBusy}
+            onChange={(event) => {
+              // The set is fixed by this build, so anything else arriving out
+              // of a select is a broken control rather than a choice.
+              const next = event.target.value;
+              if (isPanelFormFactor(next)) void chooseFormFactor(next);
+            }}
+            onFocus={() => {
+              // The panel can be showing without its window being key, and a
+              // menu opened then would drop its first choice.
+              window.sidecar.focusPanel();
+            }}
+          >
+            {PANEL_FORM_FACTOR_LIST.map((candidate) => (
+              <option key={candidate} value={candidate}>
+                {formFactorOptionLabel(candidate)}
+              </option>
+            ))}
+          </select>
+          <span className="voice-select-badge" aria-hidden="true">
+            <PopUpIcon />
+          </span>
+        </span>
+      </div>
       {rejection ? <p className="error-message">{rejection}</p> : null}
     </section>
   );
@@ -762,8 +923,9 @@ function PreferencesSection({
 const SHORTCUT_HINT = "Hold ⌃, ⌥ or ⌘ — ⇧ may join — and press a letter or Space.";
 
 /**
- * How Luke is reached rather than what he can see. The chord stays the plain
- * key chip it always was; the pencil beside it is the control. Pressing it
+ * How Luke is reached rather than what he can see. The chord is drawn as the
+ * keys it is — one cap each, the way a keyboard has them — and is a statement
+ * rather than a control; the pencil beside it is what moves it. Pressing it
  * starts a recording — what a chord may be is shown under the controls at
  * once, the next whole chord is stored and registered at once, and Escape (or
  * the pencil, now a cross) keeps the key that was already there. Recording
@@ -779,19 +941,25 @@ const SHORTCUT_HINT = "Hold ⌃, ⌥ or ⌘ — ⇧ may join — and press a let
  * chosen chord, and a row that showed the stored one would name a key that
  * answers nothing.
  */
-function ShortcutSection({
-  voiceHotkey,
-  voiceHotkeyHeld,
+function ShortcutRow({
+  title,
+  detail,
+  shown,
   chosen,
-  onVoiceHotkeyChange,
-  onShortcutCapture,
+  defaultKey,
+  onChange,
+  onCapture,
 }: {
-  voiceHotkey?: string | undefined;
-  voiceHotkeyHeld: boolean;
+  title: string;
+  detail: string;
+  /** The accelerator as registered, absent when no candidate answered. */
+  shown?: string | undefined;
   /** Whether a chosen chord is stored, which is what Reset has to undo. */
   chosen: boolean;
-  onVoiceHotkeyChange: (accelerator: string | undefined) => Promise<string | undefined>;
-  onShortcutCapture: (capturing: boolean) => void;
+  /** The first default, which is what the reset offers to return to. */
+  defaultKey: string;
+  onChange: (accelerator: string | undefined) => Promise<string | undefined>;
+  onCapture: (capturing: boolean) => void;
 }): React.JSX.Element {
   const [recording, setRecording] = useState(false);
   // The change is a round trip through the settings file and the system's
@@ -800,116 +968,167 @@ function ShortcutSection({
   const [busy, setBusy] = useState(false);
   const [rejection, setRejection] = useState<string>();
 
-  // The talk key stays registered while a chord is recorded — the recording
-  // ends by replacing it — so pressing the current chord mid-recording would
-  // open the microphone under the very field being typed into. The app is
-  // told when the field has the keyboard so it can hold that press, and the
-  // unmount arm covers the panel closing over an open recording.
+  // Both Luke keys stay registered while a chord is recorded — the recording
+  // ends by replacing one — so pressing a current chord mid-recording would
+  // open the microphone, or summon the composer, under the very field being
+  // typed into. The app is told when a field has the keyboard so it can hold
+  // that press, and the unmount arm covers the panel closing over an open
+  // recording.
   useEffect(() => {
-    onShortcutCapture(recording);
-    return () => onShortcutCapture(false);
-  }, [recording, onShortcutCapture]);
+    onCapture(recording);
+    return () => onCapture(false);
+  }, [recording, onCapture]);
 
   const apply = async (accelerator: string | undefined) => {
     setBusy(true);
-    setRejection(await onVoiceHotkeyChange(accelerator));
+    setRejection(await onChange(accelerator));
     setBusy(false);
   };
 
+  return (
+    <div className="settings-row">
+      <span className="settings-copy">
+        <strong>{title}</strong>
+        <small>{detail}</small>
+      </span>
+      <span className="shortcut-controls">
+        <span className="settings-actions">
+          {/* The chord as its own keys while there is one to press, and a
+              sentence when there is not: "Type a shortcut…" and "Unavailable"
+              are things being said about the key, not keys to draw. */}
+          {recording ? (
+            <span className="shortcut-state" data-recording="true">
+              Type a shortcut…
+            </span>
+          ) : shown ? (
+            <Keycaps className="shortcut-chord" accelerator={shown} />
+          ) : (
+            <span className="shortcut-state">Unavailable</span>
+          )}
+          {chosen && !recording ? (
+            <button
+              type="button"
+              className="icon-button"
+              disabled={busy}
+              aria-label={`Reset the shortcut to ${voiceHotkeyLabel(defaultKey)}`}
+              title={`Back to ${voiceHotkeyLabel(defaultKey)}`}
+              onClick={() => void apply(undefined)}
+            >
+              <ResetIcon />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="icon-button"
+            disabled={busy}
+            aria-label={
+              recording
+                ? "Type the new shortcut, or press Escape to keep this one"
+                : `Change the shortcut for ${title}`
+            }
+            title={recording ? "Cancel" : "Change…"}
+            onClick={() => {
+              if (recording) {
+                setRecording(false);
+                return;
+              }
+              setRejection(undefined);
+              setRecording(true);
+            }}
+            onFocus={() => {
+              // The panel can be showing without its window being key, and a
+              // recording no keystroke can reach would read as a dead control.
+              window.sidecar.focusPanel();
+            }}
+            // Focus leaving takes the recording with it: whatever was pressed
+            // instead is its own act, not a half-formed chord left armed.
+            onBlur={() => setRecording(false)}
+            onKeyDown={(event) => {
+              // A key that repeats is being held through the chord, not
+              // pressed as one; only its first arrival is read.
+              if (!recording || event.repeat) return;
+              // Nothing typed here is typing: not a Space press on the button,
+              // and not the panel's own Escape-to-close behind it.
+              event.preventDefault();
+              event.stopPropagation();
+              if (event.key === "Escape") {
+                setRecording(false);
+                return;
+              }
+              const read = capturedVoiceHotkey(event);
+              if (read.outcome === VOICE_HOTKEY_CAPTURE.PENDING) return;
+              if (read.outcome === VOICE_HOTKEY_CAPTURE.REFUSED) {
+                setRejection(SHORTCUT_HINT);
+                return;
+              }
+              setRejection(undefined);
+              setRecording(false);
+              void apply(read.accelerator);
+            }}
+          >
+            {recording ? <CloseIcon /> : <PencilIcon />}
+          </button>
+        </span>
+        {rejection ? (
+          <p className="error-message">{rejection}</p>
+        ) : recording ? (
+          <p className="shortcut-hint">{SHORTCUT_HINT}</p>
+        ) : null}
+      </span>
+    </div>
+  );
+}
+
+function ShortcutSection({
+  voiceHotkey,
+  voiceHotkeyHeld,
+  chosen,
+  onVoiceHotkeyChange,
+  askHotkey,
+  askChosen,
+  onAskHotkeyChange,
+  onShortcutCapture,
+}: {
+  voiceHotkey?: string | undefined;
+  voiceHotkeyHeld: boolean;
+  chosen: boolean;
+  onVoiceHotkeyChange: (accelerator: string | undefined) => Promise<string | undefined>;
+  askHotkey?: string | undefined;
+  askChosen: boolean;
+  onAskHotkeyChange: (accelerator: string | undefined) => Promise<string | undefined>;
+  onShortcutCapture: (capturing: boolean) => void;
+}): React.JSX.Element {
   return (
     <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
       <h2>
         <KeyboardIcon />
         Keyboard shortcuts
       </h2>
-      <div className="settings-row">
-        <span className="settings-copy">
-          <strong>Talk to Luke</strong>
-          {/* What the key actually does, which depends on whether it can
-              report being let go of. Describing a hold to someone whose key
-              can only toggle would leave them holding it and wondering. */}
-          <small>
-            {voiceHotkeyHeld
-              ? "Hold to talk, let go to send. Tap instead to keep it open."
-              : "Press to talk, again to send, again to interrupt."}
-          </small>
-        </span>
-        <span className="shortcut-controls">
-          <span className="settings-actions">
-            <span className="shortcut-key" data-recording={String(recording)}>
-              {recording ? "Type a shortcut…" : (voiceHotkey ?? "Unavailable")}
-            </span>
-            {chosen && !recording ? (
-              <button
-                type="button"
-                className="icon-button"
-                disabled={busy}
-                aria-label={`Reset the shortcut to ${voiceHotkeyLabel(DEFAULT_VOICE_HOTKEYS[0] ?? "")}`}
-                title={`Back to ${voiceHotkeyLabel(DEFAULT_VOICE_HOTKEYS[0] ?? "")}`}
-                onClick={() => void apply(undefined)}
-              >
-                <ResetIcon />
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className="icon-button"
-              disabled={busy}
-              aria-label={
-                recording
-                  ? "Type the new shortcut, or press Escape to keep this one"
-                  : "Change the shortcut for talking to Luke"
-              }
-              title={recording ? "Cancel" : "Change…"}
-              onClick={() => {
-                if (recording) {
-                  setRecording(false);
-                  return;
-                }
-                setRejection(undefined);
-                setRecording(true);
-              }}
-              onFocus={() => {
-                // The panel can be showing without its window being key, and a
-                // recording no keystroke can reach would read as a dead control.
-                window.sidecar.focusPanel();
-              }}
-              // Focus leaving takes the recording with it: whatever was pressed
-              // instead is its own act, not a half-formed chord left armed.
-              onBlur={() => setRecording(false)}
-              onKeyDown={(event) => {
-                // A key that repeats is being held through the chord, not
-                // pressed as one; only its first arrival is read.
-                if (!recording || event.repeat) return;
-                // Nothing typed here is typing: not a Space press on the button,
-                // and not the panel's own Escape-to-close behind it.
-                event.preventDefault();
-                event.stopPropagation();
-                if (event.key === "Escape") {
-                  setRecording(false);
-                  return;
-                }
-                const read = capturedVoiceHotkey(event);
-                if (read.outcome === VOICE_HOTKEY_CAPTURE.PENDING) return;
-                if (read.outcome === VOICE_HOTKEY_CAPTURE.REFUSED) {
-                  setRejection(SHORTCUT_HINT);
-                  return;
-                }
-                setRejection(undefined);
-                setRecording(false);
-                void apply(read.accelerator);
-              }}
-            >
-              {recording ? <CloseIcon /> : <PencilIcon />}
-            </button>
-          </span>
-          {rejection ? (
-            <p className="error-message">{rejection}</p>
-          ) : recording ? (
-            <p className="shortcut-hint">{SHORTCUT_HINT}</p>
-          ) : null}
-        </span>
-      </div>
+      <ShortcutRow
+        title="Talk to Luke"
+        // What the key actually does, which depends on whether it can report
+        // being let go of. Describing a hold to someone whose key can only
+        // toggle would leave them holding it and wondering.
+        detail={
+          voiceHotkeyHeld
+            ? "Hold to talk, let go to send. Tap instead to keep it open."
+            : "Press to talk, again to send, again to interrupt."
+        }
+        {...(voiceHotkey ? { shown: voiceHotkey } : {})}
+        chosen={chosen}
+        defaultKey={DEFAULT_VOICE_HOTKEYS[0] ?? ""}
+        onChange={onVoiceHotkeyChange}
+        onCapture={onShortcutCapture}
+      />
+      <ShortcutRow
+        title="Ask Luke"
+        detail="Press to type to Luke from any app. The same key puts it away."
+        {...(askHotkey ? { shown: askHotkey } : {})}
+        chosen={askChosen}
+        defaultKey={DEFAULT_ASK_HOTKEYS[0] ?? ""}
+        onChange={onAskHotkeyChange}
+        onCapture={onShortcutCapture}
+      />
     </section>
   );
 }
@@ -924,15 +1143,20 @@ export function SettingsPanel({
   onVoiceCaptionsChange,
   onDuckOtherMediaChange,
   credentials,
+  feedback,
   onVoiceChange,
   onVoiceSpeedChange,
   panelOpen,
   onShowInMenuBarChange,
   onShowInDockChange,
+  onShowOnAllDisplaysChange,
+  onFormFactorChange,
   onQuit,
   voiceHotkey,
   voiceHotkeyHeld,
   onVoiceHotkeyChange,
+  askHotkey,
+  onAskHotkeyChange,
   onShortcutCapture,
 }: SettingsPanelProps): React.JSX.Element {
   const microphone = microphoneAccessRow({ voiceAvailable, status: microphoneStatus });
@@ -957,6 +1181,10 @@ export function SettingsPanel({
           onShowInMenuBarChange={onShowInMenuBarChange}
           dockShown={settings.showInDock}
           onShowInDockChange={onShowInDockChange}
+          allDisplays={settings.showOnAllDisplays}
+          onShowOnAllDisplaysChange={onShowOnAllDisplaysChange}
+          formFactor={settings.formFactor}
+          onFormFactorChange={onFormFactorChange}
         />
       ) : null}
 
@@ -965,6 +1193,9 @@ export function SettingsPanel({
         voiceHotkeyHeld={voiceHotkeyHeld}
         chosen={settings?.voiceHotkey !== undefined}
         onVoiceHotkeyChange={onVoiceHotkeyChange}
+        {...(askHotkey ? { askHotkey } : {})}
+        askChosen={settings?.askHotkey !== undefined}
+        onAskHotkeyChange={onAskHotkeyChange}
         onShortcutCapture={onShortcutCapture}
       />
 
@@ -972,7 +1203,11 @@ export function SettingsPanel({
         <CredentialsSection settings={settings} control={credentials} panelOpen={panelOpen} />
       ) : null}
 
-      <section className="settings-section" style={{ "--row-index": 4 } as React.CSSProperties}>
+      {settings ? (
+        <IntegrationsSection settings={settings} control={credentials} panelOpen={panelOpen} />
+      ) : null}
+
+      <section className="settings-section" style={{ "--row-index": 5 } as React.CSSProperties}>
         <h2>
           <ShieldIcon />
           Permissions
@@ -1015,10 +1250,12 @@ export function SettingsPanel({
         {microphoneError ? <p className="error-message">{microphoneError}</p> : null}
       </section>
 
+      <FeedbackSection control={feedback} />
+
       <button
         type="button"
         className="quit-button"
-        style={{ "--row-index": 5 } as React.CSSProperties}
+        style={{ "--row-index": 6 } as React.CSSProperties}
         onClick={onQuit}
       >
         <PowerIcon />

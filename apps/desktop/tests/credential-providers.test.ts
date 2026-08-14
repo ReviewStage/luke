@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  CLOUD_AGENT_PROVIDER_LIST,
   CREDENTIAL_PROVIDER_ID,
   CREDENTIAL_PROVIDER_LIST,
   CREDENTIAL_PROVIDERS,
+  INTEGRATION_PROVIDER_LIST,
   isCredentialProviderId,
 } from "../src/shared/credential-providers";
 
@@ -34,6 +36,26 @@ test("describes every provider it lists", () => {
     assert.ok(provider.keyFormat.prefix.length > 0, provider.id);
     assert.ok(provider.keyFormat.label.length > 0, provider.id);
     assert.ok(provider.keyFormat.rejection.includes(provider.keyFormat.prefix), provider.id);
+  }
+});
+
+test("splits the settings sections without losing a provider", () => {
+  // The two sections together are exactly the registry: a provider missing
+  // from both would hold a key no row can enter, and one in both would be
+  // asked for the same key twice.
+  assert.deepEqual(
+    [...CLOUD_AGENT_PROVIDER_LIST, ...INTEGRATION_PROVIDER_LIST]
+      .map((provider) => provider.id)
+      .sort(),
+    CREDENTIAL_PROVIDER_LIST.map((provider) => provider.id).sort(),
+  );
+  assert.deepEqual(
+    INTEGRATION_PROVIDER_LIST.map((provider) => provider.id),
+    [CREDENTIAL_PROVIDER_ID.LINEAR],
+  );
+  // An integration's row carries its own answer to what connecting it buys.
+  for (const provider of INTEGRATION_PROVIDER_LIST) {
+    assert.ok(provider.description, `${provider.id} says what connecting it allows`);
   }
 });
 

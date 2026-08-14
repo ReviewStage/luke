@@ -13,6 +13,7 @@ import {
   VOICE_HOTKEY_ABSENCE,
   VOICE_HOTKEY_CAPTURE,
   voiceHotkeyCandidates,
+  voiceHotkeyKeycaps,
   voiceHotkeyLabel,
   voiceHotkeyReport,
   voiceHotkeyToShow,
@@ -43,10 +44,36 @@ test("the ask key is the talk key's sibling, never its rival", () => {
 test("an ask candidate the talk key holds is not asked for", () => {
   // The talk key is configurable, so it can be moved onto an ask default; the
   // chord it holds simply stops being a candidate rather than being fought over.
-  assert.deepEqual(askHotkeyCandidates([undefined, undefined]), DEFAULT_ASK_HOTKEYS);
-  assert.deepEqual(askHotkeyCandidates(["Alt+L", undefined]), ["Alt+Shift+L"]);
+  assert.deepEqual(askHotkeyCandidates(undefined, [undefined, undefined]), DEFAULT_ASK_HOTKEYS);
+  assert.deepEqual(askHotkeyCandidates(undefined, ["Alt+L", undefined]), ["Alt+Shift+L"]);
   // The talk key's own defaults hold nothing the ask key wants.
-  assert.deepEqual(askHotkeyCandidates(["Alt+Space", "Alt+S"]), DEFAULT_ASK_HOTKEYS);
+  assert.deepEqual(askHotkeyCandidates(undefined, ["Alt+Space", "Alt+S"]), DEFAULT_ASK_HOTKEYS);
+});
+
+test("a chosen ask chord goes first, with the defaults kept behind it", () => {
+  // Like the talk key's candidates: a chord another app claims while Luke is
+  // closed costs the user a different ask key rather than none.
+  assert.deepEqual(askHotkeyCandidates("Control+Alt+K", [undefined, undefined]), [
+    "Control+Alt+K",
+    ...DEFAULT_ASK_HOTKEYS,
+  ]);
+  // A chosen chord that is itself a default is not offered twice.
+  assert.deepEqual(askHotkeyCandidates("Alt+Shift+L", [undefined, undefined]), [
+    "Alt+Shift+L",
+    "Alt+L",
+  ]);
+  // The talk key outranks even a chosen chord: two Luke keys never compete.
+  assert.deepEqual(
+    askHotkeyCandidates("Control+Alt+K", ["Control+Alt+K", undefined]),
+    DEFAULT_ASK_HOTKEYS,
+  );
+  // The registrar hands in the talk key's whole candidate list, so a chosen
+  // chord on a talk-key default is filtered even before the helper has said
+  // which of them it actually sits on.
+  assert.deepEqual(
+    askHotkeyCandidates("Alt+S", [...DEFAULT_VOICE_HOTKEYS, undefined]),
+    DEFAULT_ASK_HOTKEYS,
+  );
 });
 
 test("a missing ask key reports on the talk key's terms", () => {
@@ -63,6 +90,24 @@ test("an accelerator reads the way macOS writes it", () => {
   assert.equal(voiceHotkeyLabel("Alt+Space"), "⌥Space");
   assert.equal(voiceHotkeyLabel("Alt+S"), "⌥S");
   assert.equal(voiceHotkeyLabel("Command+Shift+K"), "⌘⇧K");
+});
+
+test("a chord drawn as keys comes apart into the keys a hand presses", () => {
+  // The same glyphs the label is written with, one entry per key, in the order
+  // macOS prints them — the caps are the label taken apart, never a second
+  // spelling of it.
+  assert.deepEqual(voiceHotkeyKeycaps("Alt+Space"), ["⌥", "Space"]);
+  assert.deepEqual(voiceHotkeyKeycaps("Alt+S"), ["⌥", "S"]);
+  assert.deepEqual(voiceHotkeyKeycaps("Control+Alt+Shift+Command+K"), ["⌃", "⌥", "⇧", "⌘", "K"]);
+  for (const accelerator of ["Alt+Space", "Command+Shift+K"]) {
+    assert.equal(voiceHotkeyKeycaps(accelerator).join(""), voiceHotkeyLabel(accelerator));
+  }
+
+  // Every cap in a chord is distinct, which is what lets a surface draw them
+  // keyed by the glyph itself: a modifier appears once, and the key it ends in
+  // is never one of the modifier glyphs.
+  const caps = voiceHotkeyKeycaps("Control+Alt+Shift+Command+K");
+  assert.equal(new Set(caps).size, caps.length);
 });
 
 test("a missing talk key says which absence it is", () => {
@@ -203,25 +248,25 @@ test("the key survives the message that announces it being lost", () => {
   // The helper registers while the renderer is still loading, so the message
   // saying which key it got is sent to a window with nothing listening yet.
   // Bootstrap is the one the renderer asks for, so it is what answers.
-  assert.deepEqual(voiceHotkeyToShow({ voiceHotkey: "⌥Space", voiceHotkeyHeld: true }, undefined), {
-    hotkey: "⌥Space",
-    held: true,
-  });
+  assert.deepEqual(
+    voiceHotkeyToShow({ voiceHotkey: "Alt+Space", voiceHotkeyHeld: true }, undefined),
+    { hotkey: "Alt+Space", held: true },
+  );
 
   // A change only arrives when the helper stopped answering and the toggle took
   // over, which is news bootstrap cannot have.
   assert.deepEqual(
     voiceHotkeyToShow(
-      { voiceHotkey: "⌥Space", voiceHotkeyHeld: true },
-      { hotkey: "⌥S", held: false },
+      { voiceHotkey: "Alt+Space", voiceHotkeyHeld: true },
+      { hotkey: "Alt+S", held: false },
     ),
-    { hotkey: "⌥S", held: false },
+    { hotkey: "Alt+S", held: false },
   );
 
   // No key anywhere is the only way the panel should read "Unavailable".
   assert.deepEqual(voiceHotkeyToShow({ voiceHotkeyHeld: false }, undefined), { held: false });
   assert.deepEqual(
-    voiceHotkeyToShow({ voiceHotkey: "⌥Space", voiceHotkeyHeld: true }, { held: true }),
+    voiceHotkeyToShow({ voiceHotkey: "Alt+Space", voiceHotkeyHeld: true }, { held: true }),
     {
       held: true,
     },
