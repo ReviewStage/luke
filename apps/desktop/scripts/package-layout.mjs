@@ -12,6 +12,15 @@ export const PACKAGED_ARCHITECTURE = "arm64";
  */
 export const NATIVE_HELPERS = [
   { source: "MediaDuck.swift", binary: "mac-media-duck", frameworks: ["AppKit"] },
+  // CoreAudio for the processes holding the input device and whether each is
+  // running it; AppKit for the one thing CoreAudio will not answer, which is
+  // what a developer would recognise those processes by. It never opens a
+  // stream.
+  {
+    source: "MicrophoneUse.swift",
+    binary: "mac-microphone-use",
+    frameworks: ["AppKit", "CoreAudio"],
+  },
   { source: "OutputVolume.swift", binary: "mac-output-volume", frameworks: ["CoreAudio"] },
   { source: "ScreenGeometry.swift", binary: "mac-screen-geometry", frameworks: ["AppKit"] },
   {

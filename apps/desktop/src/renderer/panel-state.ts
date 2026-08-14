@@ -7,7 +7,11 @@ import type { WindowMode } from "../shared/contracts";
  * drawn in that same expanded window — it is the panel stood down to a single
  * field, so entering it costs no IPC either. The feedback shape is the second
  * thing the panel stands down to: the composer for a note to the founders,
- * asking for one thing the way the slot does and morphing the same way.
+ * asking for one thing the way the slot does and morphing the same way. The
+ * call prompt is the third, and the only one nobody asked for: an app has just
+ * taken the microphone, and this is the few seconds in which saying "not that
+ * one" is still cheap. It stands down the same way, because it is the same
+ * shape — one question, and room for the answer.
  */
 export const PANEL_PRESENTATION = {
   CAPSULE: "capsule",
@@ -15,6 +19,7 @@ export const PANEL_PRESENTATION = {
   PANEL: "panel",
   SLOT: "slot",
   FEEDBACK: "feedback",
+  CALL_PROMPT: "call-prompt",
 } as const;
 
 export type PanelPresentation = (typeof PANEL_PRESENTATION)[keyof typeof PANEL_PRESENTATION];
@@ -30,6 +35,7 @@ export const HIT_REGION = {
   PANEL: "panel",
   SLOT: "slot",
   FEEDBACK: "feedback",
+  CALL_PROMPT: "call-prompt",
 } as const;
 
 export type HitRegion = (typeof HIT_REGION)[keyof typeof HIT_REGION];
@@ -52,6 +58,16 @@ export const LEAVE_DELAY_MS = 110;
  * no answer to show, so what it returns to is left open like any other panel.
  */
 export const SETTLE_DELAY_MS = 1_700;
+
+/**
+ * How long the prompt stands there before taking its own answer.
+ *
+ * Long enough to read a name and reach a button, short enough that a panel
+ * nobody wanted is gone before it becomes something to dismiss. The countdown
+ * is drawn because a shape that vanishes on its own without saying it was
+ * going to reads as a glitch.
+ */
+export const CALL_PROMPT_MS = 5_000;
 
 export function presentationForMode(mode: WindowMode): PanelPresentation {
   return mode === "expanded" ? PANEL_PRESENTATION.PANEL : PANEL_PRESENTATION.CAPSULE;

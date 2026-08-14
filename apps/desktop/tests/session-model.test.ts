@@ -282,6 +282,13 @@ test("the caption names its own number so the count is never misread", () => {
   assert.equal(tallyCaption({ ...tally, attention: 0, working: 0, complete: 0 }), "tracked");
   assert.equal(tallyCaption(sessionTally([])), "none tracked");
   assert.equal(tallySummary(sessionTally([])), "No sessions tracked");
+  // The capsule says the call by sleeping, and a reader who cannot see a shut
+  // eye has to be told in the same breath as the count.
+  assert.equal(
+    tallySummary(tally, { holdingNotices: true }),
+    "6 sessions tracked, 1 needing you. Quiet until your call ends",
+  );
+  assert.equal(tallySummary(tally, { holdingNotices: false }), tallySummary(tally));
 });
 
 test("the filters offered run from everything to one agent, counted", () => {

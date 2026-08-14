@@ -66,8 +66,44 @@ export const APP_SETTING_DEFAULTS = {
   voiceCaptions: false,
   duckOtherMedia: true,
   sessionNotifications: true,
+  holdNoticesOnCall: false,
   showOnAllDisplays: false,
 } as const satisfies Partial<Record<keyof AppSettings, boolean>>;
+
+/**
+ * Whether the developer is on a call, as their own microphone reports it.
+ *
+ * Three answers rather than two, and the third is load-bearing: not every input
+ * device says what it is doing — Bluetooth headsets are known to read as idle
+ * throughout a call — so a build can find itself watching a device that will
+ * never answer. `UNAVAILABLE` is that device, and it is deliberately not `OFF`:
+ * the panel says so where the switch is, rather than leaving a switch on screen
+ * that quietly does nothing.
+ */
+export const CALL_STATUS = {
+  ON: "on",
+  OFF: "off",
+  UNAVAILABLE: "unavailable",
+} as const;
+
+export type CallStatus = (typeof CALL_STATUS)[keyof typeof CALL_STATUS];
+
+/**
+ * One app holding the microphone, as the helper named it.
+ *
+ * The identifier is the bundle identifier, because that is the only name for an
+ * app that survives a relaunch and is therefore the only thing an ignore list
+ * can be keyed by. The display name is what the developer would recognise, and
+ * is only ever drawn — never matched on.
+ *
+ * This stays on the machine. It reaches the panel and the settings file and
+ * nowhere else: the guide leaves the machine, so what a developer runs is not
+ * something it may carry.
+ */
+export interface CallApp {
+  id: string;
+  name: string;
+}
 
 /** Renderer-safe settings. Credentials are never sent to a renderer. */
 export interface AppSettings {
@@ -143,6 +179,21 @@ export interface AppSettings {
    * the eyes already on it.
    */
   sessionNotifications: boolean;
+  /**
+   * Whether a notice Luke would have spoken while the developer is on a call
+   * waits until the call ends, and is read out then. Off by default: it is
+   * what turns the microphone watch on at all, and a Luke who fell silent on
+   * a machine nobody had asked is a Luke who reads as broken. What waits is
+   * only the sentence — every session goes on reading as needing attention in
+   * the panel throughout, which is what the developer looks at afterwards.
+   */
+  holdNoticesOnCall: boolean;
+  /**
+   * The apps whose microphone use is not a call. A developer adds one by
+   * pressing Ignore on the prompt that appears when it first takes the device,
+   * and removes it in Settings; nothing else writes to it.
+   */
+  ignoredCallApps: readonly CallApp[];
   /**
    * Whether Luke stands on every connected display at once. Off by default:
    * he keeps to the system's main display until asked, and turning this off
@@ -275,6 +326,14 @@ export interface AppBootstrap {
    * arrives — or forever, where there is no helper to ask.
    */
   outputAudio?: OutputAudioState;
+  /**
+   * Whether the developer is on a call right now, as the microphone first read
+   * it. `UNAVAILABLE` is also what a build says before the helper has
+   * answered, so nothing is ever held on a reading that has not arrived.
+   */
+  callStatus: CallStatus;
+  /** Who is holding the microphone right now, empty until the helper answers. */
+  callApps: readonly CallApp[];
   /** Whether the panel should show the voice diagnostics block. */
   display: DisplayDiagnostic;
   sessions: readonly NormalizedSession[];
@@ -362,6 +421,21 @@ export interface AppBridge {
   setDuckOtherMedia(enabled: boolean): Promise<SettingsUpdateResult>;
   /** Turns the spoken announcement about a session that wants the user on or off. */
   setSessionNotifications(enabled: boolean): Promise<SettingsUpdateResult>;
+  /**
+   * Turns the holding of notices during a call on or off. The choice is kept
+   * whether or not this Mac's microphone reports itself: a setting that
+   * answers a question the machine cannot is still the user's answer, and it
+   * comes into effect the moment the machine can.
+   */
+  setHoldNoticesOnCall(enabled: boolean): Promise<SettingsUpdateResult>;
+  /**
+   * Adds one app to the ignore list. The renderer names an app it was shown —
+   * the prompt currently drawn, or a row of the list — and the main process
+   * resolves it against what it has actually read before anything is stored.
+   */
+  ignoreCallApp(app: CallApp): Promise<SettingsUpdateResult>;
+  /** Takes one app off the ignore list, by the identifier the list is keyed by. */
+  unignoreCallApp(id: string): Promise<SettingsUpdateResult>;
   /**
    * Whether a spoken exchange is live — a turn being held, a reply being
    * spoken, or the call coming up between them. It drives the media duck and
@@ -499,6 +573,24 @@ export interface AppBridge {
   /** The issue roster as last observed; `undefined` says no tracker is connected. */
   onIssuesChanged(callback: (issues: readonly TrackedIssue[] | undefined) => void): () => void;
   onAttentionSpeech(callback: (speech: readonly AttentionSpeech[]) => void): () => void;
+  /**
+   * A call starting or ending, and the microphone becoming unreadable. The
+   * panel only says what it is; the holding itself is decided in the main
+   * process, beside the reviews it holds.
+   */
+  onCallStatusChanged(callback: (status: CallStatus) => void): () => void;
+  /**
+   * An app that has just taken the microphone and is not already ignored. It
+   * is what the countdown prompt is drawn for, and it arrives once per arrival
+   * rather than for as long as the app holds the device.
+   */
+  onCallAppArrived(callback: (app: CallApp) => void): () => void;
+  /**
+   * Everyone currently holding the microphone, as the helper names them. The
+   * prompt is transient by design, so this is what makes a missed one
+   * recoverable: the same apps, in a row someone can go and look at.
+   */
+  onCallAppsChanged(callback: (apps: readonly CallApp[]) => void): () => void;
   /** The talk key going down, from whatever app happened to be frontmost. */
   onVoiceHotkeyPress(callback: () => void): () => void;
   /** The same key being let go of, which is what ends a held turn. */
@@ -548,6 +640,12 @@ export const channels = {
   setStopHotkey: "app:set-stop-hotkey",
   setDuckOtherMedia: "app:set-duck-other-media",
   setSessionNotifications: "app:set-session-notifications",
+  setHoldNoticesOnCall: "app:set-hold-notices-on-call",
+  ignoreCallApp: "app:ignore-call-app",
+  unignoreCallApp: "app:unignore-call-app",
+  callAppArrived: "app:call-app-arrived",
+  callAppsChanged: "app:call-apps-changed",
+  callStatusChanged: "app:call-status-changed",
   setVoiceExchange: "app:set-voice-exchange",
   openProviderApiKeys: "app:open-provider-api-keys",
   setShowInMenuBar: "app:set-show-in-menu-bar",

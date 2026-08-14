@@ -539,9 +539,24 @@ function dominantState(counts: {
 }
 
 /** One sentence that reads correctly for a screen reader in either mode. */
-export function tallySummary(tally: SessionTally): string {
-  if (tally.total === 0) return "No sessions tracked";
-  const sessionWord = tally.total === 1 ? "session" : "sessions";
+export function tallySummary(
+  tally: SessionTally,
+  /**
+   * Whether a call is keeping Luke quiet. It rides here because the capsule
+   * says it by sleeping, and a sleeping drawing says nothing to a reader who
+   * cannot see it — the count and the reason a face is shut have to arrive
+   * together or the label describes a Luke nobody else is looking at.
+   */
+  options: { holdingNotices?: boolean } = {},
+): string {
+  const counted =
+    tally.total === 0
+      ? "No sessions tracked"
+      : tallyCount(tally, tally.total === 1 ? "session" : "sessions");
+  return options.holdingNotices ? `${counted}. Quiet until your call ends` : counted;
+}
+
+function tallyCount(tally: SessionTally, sessionWord: string): string {
   if (tally.attention > 0) {
     return `${tally.total} ${sessionWord} tracked, ${tally.attention} needing you`;
   }

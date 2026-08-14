@@ -1,5 +1,6 @@
 export * from "./attention";
 export * from "./attention-examples";
+export * from "./attention-hold";
 export * from "./attention-prompt";
 export * from "./composite-provider-adapter";
 export * from "./fixtures";

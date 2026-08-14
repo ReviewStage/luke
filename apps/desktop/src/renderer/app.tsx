@@ -22,6 +22,8 @@ import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState }
 import type {
   AppBootstrap,
   AppSettings,
+  CallApp,
+  CallStatus,
   DisplayDiagnostic,
   MicrophoneStatus,
   OutputAudioState,
@@ -30,7 +32,7 @@ import type {
   VoiceHotkeyState,
   WindowMode,
 } from "../shared/contracts";
-import { CREDENTIAL_SOURCE, SESSION_OPEN_RESULT_STATUS } from "../shared/contracts";
+import { CALL_STATUS, CREDENTIAL_SOURCE, SESSION_OPEN_RESULT_STATUS } from "../shared/contracts";
 import type { CredentialProviderId } from "../shared/credential-providers";
 import {
   CREDENTIAL_PROVIDER_LIST,
@@ -46,6 +48,7 @@ import {
   voiceHotkeyToShow,
 } from "../shared/voice-hotkey";
 import { ASK_LUKE_INPUT_ID, askRefusal, focusAskField } from "./ask-luke";
+import { CallPrompt } from "./call-prompt";
 import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";
 import { isSubmittable, removalEndsEntry } from "./credential-entry";
 import {
@@ -70,6 +73,7 @@ import { applySpokenSetting, buildLukeGuide, isAppSettingId } from "./luke-guide
 import { NotchWings } from "./notch-wings";
 import { PanelBody, type SessionWriteHandlers } from "./panel-body";
 import {
+  CALL_PROMPT_MS,
   HIT_REGION,
   HIT_REGION_ATTRIBUTE,
   LEAVE_DELAY_MS,
@@ -207,7 +211,18 @@ function usePointerPassthrough(
       // the capsule's, so a press out where the marks unfold would otherwise
       // land on nothing and read as the pointer leaving.
       update(
-        kind === HIT_REGION.SURFACE ||
+        // The prompt takes the pointer for as long as it is drawn, wherever the
+        // pointer happens to be. Every other shape here is reached by hovering
+        // or pressing, so the pointer is already inside the window and the
+        // window is already intercepting; the prompt is the only one that
+        // arrives unasked, with the window click-through and the pointer over
+        // whatever app just opened the microphone. Waiting for a forwarded move
+        // to cross it is waiting for the one thing that is not guaranteed — and
+        // a question that cannot be reached is worse than one never asked. The
+        // cost is a few seconds of a mostly transparent window at the top of
+        // the screen swallowing clicks, which is what the countdown bounds.
+        drawn === PANEL_PRESENTATION.CALL_PROMPT ||
+          kind === HIT_REGION.SURFACE ||
           kind === HIT_REGION.CAPSULE ||
           (kind === HIT_REGION.PANEL && drawn === PANEL_PRESENTATION.PANEL) ||
           (kind === HIT_REGION.SLOT && drawn === PANEL_PRESENTATION.SLOT) ||
@@ -254,11 +269,13 @@ function shapeHeightStyle(
   panelHeight: number | undefined,
   slotHeight: number | undefined,
   feedbackHeight: number | undefined,
+  callPromptHeight: number | undefined,
 ): CSSProperties {
   return {
     ...(panelHeight === undefined ? {} : { "--panel-height": `${panelHeight}px` }),
     ...(slotHeight === undefined ? {} : { "--slot-height": `${slotHeight}px` }),
     ...(feedbackHeight === undefined ? {} : { "--feedback-height": `${feedbackHeight}px` }),
+    ...(callPromptHeight === undefined ? {} : { "--call-prompt-height": `${callPromptHeight}px` }),
   } as CSSProperties;
 }
 
@@ -306,6 +323,29 @@ export function App(): React.JSX.Element {
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [settings, setSettings] = useState<AppSettings>();
   const [microphoneStatus, setMicrophoneStatus] = useState<MicrophoneStatus>("not-determined");
+  /**
+   * Whether the developer is on a call. Only read here — the holding itself
+   * happens in the main process, beside the reviews it holds — but the settings
+   * row has to say what its switch is currently amounting to, and so does the
+   * guide.
+   */
+  const [callStatus, setCallStatus] = useState<CallStatus>(CALL_STATUS.UNAVAILABLE);
+  /**
+   * The app the prompt is currently asking about. It outlives the shape by one
+   * exit — a card that blanked the moment it was answered would leave an empty
+   * panel morphing shut — so it is cleared by the shape leaving, never by the
+   * answer.
+   */
+  const [callPrompt, setCallPrompt] = useState<CallApp>();
+  /** Which showing this is, so every one draws its countdown afresh. */
+  const [callPromptPlay, setCallPromptPlay] = useState(0);
+  const [callPromptPaused, setCallPromptPaused] = useState(false);
+  /**
+   * Who is on the microphone right now. The prompt is the moment to decide and
+   * this is the record of it — a prompt missed because the panel was busy, or
+   * gone before it was read, still leaves a row to answer.
+   */
+  const [callApps, setCallApps] = useState<readonly CallApp[]>([]);
   const [microphoneError, setMicrophoneError] = useState<string>();
   const [analyser, setAnalyser] = useState<AnalyserNode>();
   const [errand, setErrand] = useState<Errand>();
@@ -318,6 +358,7 @@ export function App(): React.JSX.Element {
   const [panelElement, panelHeight] = useShapeHeight();
   const [slotElement, slotHeight] = useShapeHeight();
   const [feedbackElement, feedbackHeight] = useShapeHeight();
+  const [callPromptElement, callPromptHeight] = useShapeHeight();
   const [captionTextElement, captionTextHeight] = useShapeHeight();
   const [voiceStatus, setVoiceStatus] = useState<RealtimeStatus>(REALTIME_STATUS.IDLE);
   /**
@@ -385,6 +426,28 @@ export function App(): React.JSX.Element {
   const askEngaged = useRef(false);
   const feedbackRef = useRef<FeedbackEntry | undefined>(undefined);
   const feedbackNoticeTimer = useRef<number | undefined>(undefined);
+  const callPromptTimer = useRef<number | undefined>(undefined);
+  /** Read by the answer, which runs after a state update has only been queued. */
+  const callPromptRef = useRef<CallApp | undefined>(undefined);
+  /**
+   * The shape the prompt interrupted, so answering it puts back what it took.
+   * Only ever the panel or the capsule: those are the two things it may
+   * interrupt, and it returns to whichever it was.
+   */
+  const callPromptOrigin = useRef<PanelPresentation>(PANEL_PRESENTATION.CAPSULE);
+  /**
+   * The prompt's clock. It holds the moment the bar runs out while it is
+   * running, and how much was left of it while a pointer is holding it — two
+   * meanings for one number, because only one of them is ever true at a time
+   * and keeping them apart would be keeping two things in step for nothing.
+   */
+  const callPromptClock = useRef(0);
+  /**
+   * The dismisser, so arming the clock does not depend on it. They would
+   * otherwise have to be declared in an order neither can satisfy: the timer
+   * ends in a dismissal, and a dismissal clears the timer.
+   */
+  const dismissCallPromptRef = useRef<(() => void) | undefined>(undefined);
   /**
    * The words a spoken open asked to start the note with, waiting for the
    * composer's lifecycle event to consume them. A ref rather than an event
@@ -760,6 +823,20 @@ export function App(): React.JSX.Element {
     [applySettingsReply],
   );
 
+  /** And again for the call hold. */
+  const changeHoldNoticesOnCall = useCallback(async (enabled: boolean) => {
+    const result = await window.sidecar.setHoldNoticesOnCall(enabled);
+    setSettings(result.settings);
+    return result.reason;
+  }, []);
+
+  /** Taking an app off the ignore list, from the row that lists it. */
+  const unignoreCallApp = useCallback(async (id: string) => {
+    const result = await window.sidecar.unignoreCallApp(id);
+    setSettings(result.settings);
+    return result.reason;
+  }, []);
+
   /**
    * The talk key going down. Every press goes to the session, including the one
    * that has no call to press against yet: the microphone opens with the call,
@@ -842,6 +919,89 @@ export function App(): React.JSX.Element {
     [applyPresentation],
   );
 
+  /**
+   * Puts the prompt away and returns the window to the capsule.
+   *
+   * The app it named is kept: the shape takes `--duration-exit` to leave, and
+   * blanking the card on the frame it was answered would draw an empty panel
+   * morphing shut. The next prompt replaces it.
+   */
+  /**
+   * Sets the prompt's clock running for however long is left of it. One place,
+   * because the deadline and the timeout have to agree: the pointer resting on
+   * the card reads the first to rebuild the second.
+   */
+  const armCallPrompt = useCallback((remainingMs: number) => {
+    window.clearTimeout(callPromptTimer.current);
+    callPromptClock.current = performance.now() + remainingMs;
+    callPromptTimer.current = window.setTimeout(() => {
+      callPromptTimer.current = undefined;
+      dismissCallPromptRef.current?.();
+    }, remainingMs);
+  }, []);
+
+  /**
+   * Holds the countdown while the pointer is on the card, and gives back what
+   * was left of it when the pointer goes. Reaching for the button is the one
+   * thing that must not run the clock out.
+   */
+  const holdCallPrompt = useCallback(
+    (hovered: boolean) => {
+      setCallPromptPaused(hovered);
+      if (hovered) {
+        window.clearTimeout(callPromptTimer.current);
+        callPromptTimer.current = undefined;
+        callPromptClock.current = Math.max(0, callPromptClock.current - performance.now());
+        return;
+      }
+      armCallPrompt(callPromptClock.current);
+    },
+    [armCallPrompt],
+  );
+
+  const dismissCallPrompt = useCallback(() => {
+    if (callPromptTimer.current !== undefined) {
+      window.clearTimeout(callPromptTimer.current);
+      callPromptTimer.current = undefined;
+    }
+    setCallPromptPaused(false);
+    if (presentationRef.current !== PANEL_PRESENTATION.CALL_PROMPT) return;
+    // A prompt that interrupted an open panel gives it back rather than closing
+    // it: the commonest way to see one is to have just switched the hold on,
+    // and being thrown out of Settings for answering a question Luke asked is
+    // no way to be thanked. The window is already the right size, so this costs
+    // no round trip and the tab is where it was left.
+    if (callPromptOrigin.current === PANEL_PRESENTATION.PANEL) {
+      applyPresentation(PANEL_PRESENTATION.PANEL);
+      return;
+    }
+    void changeMode(false);
+  }, [applyPresentation, changeMode]);
+
+  /**
+   * Takes the prompt's one answer. The store is told, and the shape leaves at
+   * once rather than running its countdown out: the question has been answered,
+   * and a bar still draining over an answered question reads as undone.
+   */
+  /**
+   * Ignoring from the settings row rather than the prompt. The same bridge
+   * call, named by the row that was pressed — which is an app the panel was
+   * shown, exactly as the prompt's is.
+   */
+  const ignoreCallAppById = useCallback(async (app: CallApp) => {
+    const result = await window.sidecar.ignoreCallApp(app);
+    setSettings(result.settings);
+    return result.reason;
+  }, []);
+
+  const ignoreCallApp = useCallback(async () => {
+    const app = callPromptRef.current;
+    dismissCallPrompt();
+    if (!app) return;
+    const result = await window.sidecar.ignoreCallApp(app);
+    setSettings(result.settings);
+  }, [dismissCallPrompt]);
+
   const handleHitRegionEnter = useCallback(() => {
     cancelHoverTransition();
     pointerInside.current = true;
@@ -865,6 +1025,59 @@ export function App(): React.JSX.Element {
     [],
   );
 
+  useEffect(() => {
+    dismissCallPromptRef.current = dismissCallPrompt;
+  }, [dismissCallPrompt]);
+
+  /**
+   * Stands the prompt up for an app that has just taken the microphone.
+   *
+   * It may interrupt the capsule, the peek, or an open panel — but never
+   * something half-written. A key being pasted and a note being typed are
+   * things someone is in the middle of, and a question about Zoom is not worth
+   * taking either away; the Calls section of Settings still has the same
+   * button afterwards.
+   */
+  const showCallPrompt = useCallback(
+    (app: CallApp) => {
+      const drawn = presentationRef.current;
+      if (drawn === PANEL_PRESENTATION.SLOT || drawn === PANEL_PRESENTATION.FEEDBACK) return;
+      if (drawn === PANEL_PRESENTATION.PANEL && (entryIsDrawn() || askEngaged.current)) return;
+
+      callPromptRef.current = app;
+      callPromptOrigin.current =
+        drawn === PANEL_PRESENTATION.PANEL ? PANEL_PRESENTATION.PANEL : PANEL_PRESENTATION.CAPSULE;
+      setCallPrompt(app);
+      cancelHoverTransition();
+
+      const arm = () => {
+        applyPresentation(PANEL_PRESENTATION.CALL_PROMPT);
+        // A second app arriving replaces the first, countdown and all: the
+        // question is about whichever one is drawn.
+        setCallPromptPaused(false);
+        setCallPromptPlay((play) => play + 1);
+        armCallPrompt(CALL_PROMPT_MS);
+      };
+
+      // An open panel is already the right window, so it stands down without a
+      // round trip. That is also the likeliest way to arrive here at all: the
+      // switch that starts the microphone watch is a row inside it, so the
+      // first thing it reads is announced while the panel is still open.
+      if (drawn === PANEL_PRESENTATION.PANEL) {
+        arm();
+        return;
+      }
+      void changeMode(true).then(() => {
+        // Checked again on the far side of the await: the mode round-trips
+        // through the main process, and a pointer or a key can have opened
+        // something else while it did.
+        if (presentationRef.current !== PANEL_PRESENTATION.PANEL) return;
+        arm();
+      });
+    },
+    [applyPresentation, armCallPrompt, cancelHoverTransition, changeMode, entryIsDrawn],
+  );
+
   const handleHitRegionLeave = useCallback(() => {
     cancelHoverTransition();
     pointerInside.current = false;
@@ -878,6 +1091,11 @@ export function App(): React.JSX.Element {
     // must not be allowed to discard: like the slot, it stays put until it is
     // dismissed, cancelled, or sent.
     if (current === PANEL_PRESENTATION.FEEDBACK) return;
+    // The prompt arrived on its own, so the pointer is almost never on it —
+    // and it counts itself down in seconds. Letting the pointer close it would
+    // mean a question that was gone before it could be read, which is worse
+    // than useless: it would have stood the panel up for nothing.
+    if (current === PANEL_PRESENTATION.CALL_PROMPT) return;
     // A key half-typed is one thing the pointer must not be allowed to
     // discard; an ask being typed to Luke is the other. Everything else on
     // the settings tab closes like the sessions tab does.
@@ -1153,6 +1371,7 @@ export function App(): React.JSX.Element {
   }, []);
 
   useEffect(() => () => window.clearTimeout(feedbackNoticeTimer.current), []);
+  useEffect(() => () => window.clearTimeout(callPromptTimer.current), []);
 
   /**
    * Opens the composer for a kind — from the section's own buttons, from the
@@ -1829,6 +2048,8 @@ export function App(): React.JSX.Element {
       // Only fill in what no push has said yet, like the issue roster: the
       // bootstrap snapshot is older than any change that raced past it.
       if (!outputAudioPushed.current && value.outputAudio) setOutputAudio(value.outputAudio);
+      setCallStatus(value.callStatus);
+      setCallApps(value.callApps);
       if (!value.realtimeAvailable) setVoiceStatus(REALTIME_STATUS.UNAVAILABLE);
       if (value.profile === "microphone") {
         window.setTimeout(() => void startMicrophone(), 500);
@@ -1878,6 +2099,10 @@ export function App(): React.JSX.Element {
       outputAudioPushed.current = true;
       setOutputAudio(state);
     });
+    const removeCallStatus = window.sidecar.onCallStatusChanged(setCallStatus);
+    const removeCallApps = window.sidecar.onCallAppsChanged(setCallApps);
+    // An app taking the microphone stands the panel up to ask about it.
+    const removeCallApp = window.sidecar.onCallAppArrived(showCallPrompt);
     // Straight to the conversation rather than through state: no panel
     // surface draws the issue roster, so a re-render would be work for nobody.
     const removeIssues = window.sidecar.onIssuesChanged((issues) => {
@@ -1893,7 +2118,10 @@ export function App(): React.JSX.Element {
       removeSessions();
       removeWorkspaceProjects();
       removeOutputAudio();
+      removeCallStatus();
       removeIssues();
+      removeCallApp();
+      removeCallApps();
       void stopMicrophone();
     };
   }, [
@@ -1903,6 +2131,7 @@ export function App(): React.JSX.Element {
     beginFeedback,
     cancelHoverTransition,
     changeTab,
+    showCallPrompt,
     startMicrophone,
     stopMicrophone,
     summonAsk,
@@ -2035,12 +2264,21 @@ export function App(): React.JSX.Element {
         ...(talkKey.hotkey ? { hotkey: voiceHotkeyLabel(talkKey.hotkey) } : {}),
         held: talkKey.held,
       },
+      callStatus,
       ...(askAccelerator ? { askKey: voiceHotkeyLabel(askAccelerator) } : {}),
       ...(stopAccelerator ? { stopKey: voiceHotkeyLabel(stopAccelerator) } : {}),
     });
     guideRef.current = guide;
     voiceSession.current?.updateGuide(guide);
-  }, [bootstrap, settings, microphoneStatus, voiceHotkey, askHotkeyChange, stopHotkeyChange]);
+  }, [
+    bootstrap,
+    settings,
+    microphoneStatus,
+    callStatus,
+    voiceHotkey,
+    askHotkeyChange,
+    stopHotkeyChange,
+  ]);
 
   useEffect(() => {
     // Two kinds of sentence share this channel, and their standing differs.
@@ -2056,9 +2294,14 @@ export function App(): React.JSX.Element {
       if (notices.length > 0) ensureAnnouncer().enqueue(notices);
       const session = voiceSession.current;
       if (!session?.microphoneCall) return;
-      for (const item of speech) {
-        if (item.source !== ATTENTION_SPEECH_SOURCE.STATUS_EDGE) session.speak(item);
-      }
+      // Every evaluator summary in the batch goes as one turn rather than one
+      // each: a turn already under way refuses the next, so sending them
+      // separately would leave all but the first unsaid — which is exactly
+      // what a call ending releases, several at once.
+      const summaries = speech.filter(
+        (item) => item.source !== ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
+      );
+      if (summaries.length > 0) session.speak(summaries);
     });
   }, [ensureAnnouncer]);
 
@@ -2099,6 +2342,12 @@ export function App(): React.JSX.Element {
       // through to the layers below rather than being swallowed by a reply
       // that had already ended.
       if (voiceSession.current?.stopSpeaking()) return;
+      // Escape answers the prompt the way letting it run out does: it is the
+      // only thing on screen, and the app it named is not exempted by it.
+      if (presentation === PANEL_PRESENTATION.CALL_PROMPT) {
+        dismissCallPrompt();
+        return;
+      }
       // Escape out of the slot is the entry's own way out, wherever the caret
       // happens to be: the slot is the only thing on screen, so there is nothing
       // else it could mean.
@@ -2129,6 +2378,7 @@ export function App(): React.JSX.Element {
     cancelEntry,
     changeMode,
     changeTab,
+    dismissCallPrompt,
     dismissFeedback,
     optionsOpen,
     presentation,
@@ -2283,8 +2533,15 @@ export function App(): React.JSX.Element {
     (outputIsSilent &&
       lukeCaption !== undefined &&
       !volumeHintDismissed(hintDismissal, silenceStretch, Date.now()));
+  // Whether Luke has gone deliberately quiet, which is the two halves the main
+  // process weighs to decide it: the developer is on a call, and they left the
+  // hold on. Recomputed here rather than sent as its own state, so the capsule
+  // can never disagree with the settings row it is drawn beside.
+  const holdingNotices =
+    callStatus === CALL_STATUS.ON && (settings ?? bootstrap.settings).holdNoticesOnCall;
   const panelOpen = presentation === PANEL_PRESENTATION.PANEL;
   const slotOpen = presentation === PANEL_PRESENTATION.SLOT;
+  const callPromptOpen = presentation === PANEL_PRESENTATION.CALL_PROMPT;
   const feedbackOpen = presentation === PANEL_PRESENTATION.FEEDBACK;
   // What the slot's field is for depends on what answers for that provider now,
   // and settings resolve after the first render.
@@ -2308,7 +2565,7 @@ export function App(): React.JSX.Element {
       data-capture={String(bootstrap.captureMode)}
       style={{
         ...notchStyle(display),
-        ...shapeHeightStyle(panelHeight, slotHeight, feedbackHeight),
+        ...shapeHeightStyle(panelHeight, slotHeight, feedbackHeight, callPromptHeight),
         ...captionSizeStyle(captionTextHeight, volumeHint),
       }}
     >
@@ -2348,6 +2605,10 @@ export function App(): React.JSX.Element {
               onVoiceCaptionsChange: changeVoiceCaptions,
               onDuckOtherMediaChange: changeDuckOtherMedia,
               onSessionNotificationsChange: changeSessionNotifications,
+              onHoldNoticesOnCallChange: changeHoldNoticesOnCall,
+              onUnignoreCallApp: unignoreCallApp,
+              callApps,
+              onIgnoreCallApp: ignoreCallAppById,
               credentials,
               feedback: feedbackControl,
               onVoiceChange: changeVoice,
@@ -2379,6 +2640,17 @@ export function App(): React.JSX.Element {
       {/* The panel stood down to its field. It shares the expanded window, so
           standing down to it costs no more than the peek does. */}
       <KeySlot control={credentials} source={slotSource} drawn={slotOpen} measure={slotElement} />
+      {/* The panel stood down to a question nobody asked for, on the same
+          terms as both of them. */}
+      <CallPrompt
+        app={callPrompt}
+        play={callPromptPlay}
+        drawn={callPromptOpen}
+        paused={callPromptPaused}
+        onHoverChange={holdCallPrompt}
+        onIgnore={() => void ignoreCallApp()}
+        measure={callPromptElement}
+      />
       {/* The panel stood down to the composer, on the same terms. */}
       <FeedbackSlot control={feedbackControl} drawn={feedbackOpen} measure={feedbackElement} />
       {/* Luke's own voice. Muted playback would defeat the point, so this is
@@ -2395,6 +2667,7 @@ export function App(): React.JSX.Element {
         fixtureSpeaking={fixtureSpeaking}
         hasAudioSignal={hasAudioSignal}
         voiceOpening={talkOpening}
+        holdingNotices={holdingNotices}
         presentation={presentation}
         housingWidth={display.notch.housingWidth}
       />
@@ -2454,7 +2727,7 @@ export function App(): React.JSX.Element {
           className="compact-hover-target"
           data-hit-region={HIT_REGION.CAPSULE}
           aria-expanded={panelOpen}
-          aria-label={`${tallySummary(tally)}. ${panelOpen ? "Close" : "Open"} the panel`}
+          aria-label={`${tallySummary(tally, { holdingNotices })}. ${panelOpen ? "Close" : "Open"} the panel`}
           // Keeps the press from moving focus here at all, so nothing is drawn
           // around the notch strip and a focused settings field keeps the caret.
           onMouseDown={(event) => event.preventDefault()}

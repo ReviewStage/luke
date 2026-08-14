@@ -60,9 +60,11 @@ function fakeSession(): FakeSession {
       this.setStatus(this.connectOpens ? REALTIME_STATUS.READY : REALTIME_STATUS.UNAVAILABLE);
       return this.connectOpens;
     },
-    speak(item: AttentionSpeech) {
+    speak(items: readonly AttentionSpeech[]) {
       if (!this.isConnected || this.status === REALTIME_STATUS.RESPONDING) return false;
-      this.spoken.push(item);
+      // One turn per call, however many notices ride in it — which is what the
+      // announcer's pacing is built on, and what a released hold sends.
+      this.spoken.push(...items);
       this.setStatus(REALTIME_STATUS.RESPONDING);
       return true;
     },

@@ -15,7 +15,7 @@ import {
   type WorkspaceAgentSelection,
 } from "@sidecar/core";
 import { Fragment, useEffect, useRef, useState } from "react";
-import type { AppSettings, CredentialSource, MicrophoneStatus } from "../shared/contracts";
+import type { AppSettings, CallApp, CredentialSource, MicrophoneStatus } from "../shared/contracts";
 import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "../shared/contracts";
 import type { CredentialProvider } from "../shared/credential-providers";
 import {
@@ -115,6 +115,14 @@ export interface SettingsPanelProps {
   onDuckOtherMediaChange: (enabled: boolean) => Promise<string | undefined>;
   /** Turns the macOS notification about a session that wants the user on or off. */
   onSessionNotificationsChange: (enabled: boolean) => Promise<string | undefined>;
+  /** Turns the holding of notices during a call on or off. */
+  onHoldNoticesOnCallChange: (enabled: boolean) => Promise<string | undefined>;
+  /** Who is holding the microphone right now, so a missed prompt is recoverable. */
+  callApps: readonly CallApp[];
+  /** Exempts one of them, the same act the prompt's own button performs. */
+  onIgnoreCallApp: (app: CallApp) => Promise<string | undefined>;
+  /** Takes one app off the ignore list, by the identifier it is keyed by. */
+  onUnignoreCallApp: (id: string) => Promise<string | undefined>;
   /** The one credential being entered anywhere, and everything that can be done to it. */
   credentials: CredentialEntryControl;
   /** The one note to the founders being written, and everything that can be done to it. */
@@ -986,6 +994,12 @@ function VoiceSection({
   onDuckOtherMediaChange,
   notifications,
   onSessionNotificationsChange,
+  holdNotices,
+  onHoldNoticesOnCallChange,
+  callApps,
+  ignoredCallApps,
+  onIgnoreCallApp,
+  onUnignoreCallApp,
 }: {
   voice: RealtimeVoice;
   onVoiceChange: (voice: RealtimeVoice) => void;
@@ -997,6 +1011,13 @@ function VoiceSection({
   onDuckOtherMediaChange: (enabled: boolean) => Promise<string | undefined>;
   notifications: boolean;
   onSessionNotificationsChange: (enabled: boolean) => Promise<string | undefined>;
+  holdNotices: boolean;
+  onHoldNoticesOnCallChange: (enabled: boolean) => Promise<string | undefined>;
+  /** Who is holding the microphone right now, so a missed prompt is recoverable. */
+  callApps: readonly CallApp[];
+  ignoredCallApps: readonly CallApp[];
+  onIgnoreCallApp: (app: CallApp) => Promise<string | undefined>;
+  onUnignoreCallApp: (id: string) => Promise<string | undefined>;
 }): React.JSX.Element {
   // Each change is a round trip through the settings file, so each switch
   // rests on its own flag until the store has answered rather than claiming a
@@ -1022,6 +1043,25 @@ function VoiceSection({
     setRejection(await onSessionNotificationsChange(!notifications));
     setNotificationsBusy(false);
   };
+  const [holdBusy, setHoldBusy] = useState(false);
+  const toggleHold = async () => {
+    setHoldBusy(true);
+    setRejection(await onHoldNoticesOnCallChange(!holdNotices));
+    setHoldBusy(false);
+  };
+  // One busy flag for the app rows, keyed by which app is being written: they
+  // are a list rather than a fixed set of switches, and only the row that was
+  // pressed should rest.
+  const [appBusy, setAppBusy] = useState<string>();
+  const actOnApp = async (id: string, run: () => Promise<string | undefined>) => {
+    setAppBusy(id);
+    setRejection(await run());
+    setAppBusy(undefined);
+  };
+  // Only what is still counting: an app already exempted belongs in the list
+  // below, and drawing it in both places would offer two answers to the same
+  // question.
+  const counting = callApps.filter((app) => !ignoredCallApps.some((entry) => entry.id === app.id));
   return (
     <section
       className="settings-section settings-plain"
@@ -1182,6 +1222,70 @@ function VoiceSection({
           <span className="switch-thumb" />
         </button>
       </div>
+      {/* Directly under the switch that decides whether Luke announces at all,
+          because this decides when he does not: the two are one behaviour read
+          from either end. */}
+      <div className="settings-row">
+        <span className="settings-copy">
+          <strong>Hold notices during calls</strong>
+          <small>
+            They wait while another app is using your microphone, and are read out afterwards.
+          </small>
+        </span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={holdNotices}
+          aria-label="Hold spoken notices until your call ends"
+          className="switch"
+          {...errandTargetProps(APP_SETTING_ID.HOLD_NOTICES_ON_CALL)}
+          disabled={holdBusy}
+          onClick={() => void toggleHold()}
+        >
+          <span className="switch-thumb" />
+        </button>
+      </div>
+      {/* The exceptions, drawn only while there are any to draw rather than as
+          an empty state explaining a thing that has not happened. No line under
+          either name: the control beside it already says which group the row is
+          in, and a sentence saying the same was long enough to push the button
+          onto a line of its own. */}
+      {counting.map((app) => (
+        <div className="settings-row call-app-row" key={app.id}>
+          <span className="settings-copy">
+            <strong>{app.name}</strong>
+          </span>
+          <span className="settings-actions">
+            <button
+              type="button"
+              className="quiet-button"
+              disabled={appBusy === app.id}
+              onClick={() => void actOnApp(app.id, () => onIgnoreCallApp(app))}
+            >
+              Not a call
+            </button>
+          </span>
+        </div>
+      ))}
+      {ignoredCallApps.map((app) => (
+        <div className="settings-row call-app-row" key={app.id}>
+          <span className="settings-copy">
+            <strong>{app.name}</strong>
+          </span>
+          <span className="settings-actions">
+            <button
+              type="button"
+              className="icon-button icon-button-danger"
+              disabled={appBusy === app.id}
+              aria-label={`Stop ignoring ${app.name}`}
+              title="Remove"
+              onClick={() => void actOnApp(app.id, () => onUnignoreCallApp(app.id))}
+            >
+              <TrashIcon />
+            </button>
+          </span>
+        </div>
+      ))}
       {rejection ? <p className="error-message">{rejection}</p> : null}
     </section>
   );
@@ -1662,6 +1766,10 @@ export function SettingsPanel({
   onVoiceCaptionsChange,
   onDuckOtherMediaChange,
   onSessionNotificationsChange,
+  onHoldNoticesOnCallChange,
+  callApps,
+  onIgnoreCallApp,
+  onUnignoreCallApp,
   credentials,
   feedback,
   onVoiceChange,
@@ -1770,6 +1878,12 @@ export function SettingsPanel({
           onDuckOtherMediaChange={onDuckOtherMediaChange}
           notifications={settings.sessionNotifications}
           onSessionNotificationsChange={onSessionNotificationsChange}
+          holdNotices={settings.holdNoticesOnCall}
+          onHoldNoticesOnCallChange={onHoldNoticesOnCallChange}
+          callApps={callApps}
+          ignoredCallApps={settings.ignoredCallApps}
+          onIgnoreCallApp={onIgnoreCallApp}
+          onUnignoreCallApp={onUnignoreCallApp}
         />
       ) : null}
 

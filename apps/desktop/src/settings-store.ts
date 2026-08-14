@@ -17,6 +17,7 @@ import { environmentRealtimeSpeed, environmentRealtimeVoice } from "./openai-rea
 import {
   APP_SETTING_DEFAULTS,
   type AppSettings,
+  type CallApp,
   CREDENTIAL_SOURCE,
   type CredentialSource,
   SECRET_STORAGE,
@@ -45,6 +46,8 @@ const SETTINGS_FIELD = {
   DEFAULT_WORKSPACE_PROVIDER: "defaultWorkspaceProvider",
   DUCK_OTHER_MEDIA: "duckOtherMedia",
   FORM_FACTOR: "formFactor",
+  HOLD_NOTICES_ON_CALL: "holdNoticesOnCall",
+  IGNORED_CALL_APPS: "ignoredCallApps",
   LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
   SESSION_NOTIFICATIONS: "sessionNotifications",
   SHOW_IN_DOCK: "showInDock",
@@ -58,6 +61,15 @@ const SETTINGS_FIELD = {
   VOICE_HOTKEY: "voiceHotkey",
   WORKSPACE_AGENT_DEFAULTS: "workspaceAgentDefaults",
 } as const;
+
+/**
+ * What the ignore list may hold. A developer adds one entry per app they are
+ * tired of, which is a handful; the cap is what keeps a hand-edited or corrupt
+ * file from becoming a settings page nobody can scroll.
+ */
+export const MAXIMUM_IGNORED_CALL_APPS = 50;
+const MAXIMUM_IGNORED_APP_ID_LENGTH = 256;
+const MAXIMUM_IGNORED_APP_NAME_LENGTH = 128;
 
 const API_KEY_LENGTH = {
   MINIMUM: 8,
@@ -157,6 +169,19 @@ interface PersistedSettings {
    */
   sessionNotifications: boolean;
   /**
+   * Whether a notice waits out a call rather than being spoken into it. Off
+   * unless the file says `true` outright, like the Dock icon: reading the
+   * microphone at all is something to opt into, and a Luke who went quiet on
+   * a machine nobody had asked would be a Luke who looked broken.
+   */
+  holdNoticesOnCall: boolean;
+  /**
+   * The apps whose microphone use is not a call, keyed by bundle identifier.
+   * Stored plainly like every other preference — an app a developer runs is
+   * not a credential, and it never leaves the machine.
+   */
+  ignoredCallApps: readonly CallApp[];
+  /**
    * Whether Luke stands on every connected display. Off unless the file says
    * `true` outright, like the Dock: a missing field, an older file, and a
    * corrupt value all land on the main display alone rather than raising
@@ -238,6 +263,32 @@ function environmentApiKey(
     if (value && !apiKeyRejection(value, provider.keyFormat)) return value;
   }
   return undefined;
+}
+
+/**
+ * The ignore list as the file holds it, with everything unusable dropped.
+ *
+ * An entry is a bundle identifier and a name to draw; anything that is not both
+ * a usable identifier and a string is discarded rather than repaired, because a
+ * malformed entry can only ever fail to match an app and would sit in the
+ * settings list forever looking like it did something. Bounded, because the
+ * list only grows by a developer pressing Ignore and a file that claims
+ * thousands is a file to stop reading.
+ */
+function storedIgnoredCallApps(value: unknown): readonly CallApp[] {
+  if (!Array.isArray(value)) return [];
+  const apps: CallApp[] = [];
+  for (const entry of value) {
+    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const candidate = entry as Record<string, unknown>;
+    const id = typeof candidate.id === "string" ? candidate.id.trim() : "";
+    if (!id || id.length > MAXIMUM_IGNORED_APP_ID_LENGTH) continue;
+    if (apps.some((app) => app.id === id)) continue;
+    const name = typeof candidate.name === "string" ? candidate.name.trim() : "";
+    apps.push({ id, name: name.slice(0, MAXIMUM_IGNORED_APP_NAME_LENGTH) || id });
+    if (apps.length >= MAXIMUM_IGNORED_CALL_APPS) break;
+  }
+  return apps;
 }
 
 function storedApiKeys(record: Record<string, unknown>): Record<string, string> {
@@ -337,6 +388,11 @@ function parsePersistedSettings(source: string): PersistedSettings {
       record[SETTINGS_FIELD.SESSION_NOTIFICATIONS],
       APP_SETTING_DEFAULTS.sessionNotifications,
     ),
+    holdNoticesOnCall: booleanSetting(
+      record[SETTINGS_FIELD.HOLD_NOTICES_ON_CALL],
+      APP_SETTING_DEFAULTS.holdNoticesOnCall,
+    ),
+    ignoredCallApps: storedIgnoredCallApps(record[SETTINGS_FIELD.IGNORED_CALL_APPS]),
     showOnAllDisplays: booleanSetting(
       record[SETTINGS_FIELD.SHOW_ON_ALL_DISPLAYS],
       APP_SETTING_DEFAULTS.showOnAllDisplays,
@@ -406,6 +462,8 @@ export class SettingsStore {
       ...(persisted.stopHotkey ? { stopHotkey: persisted.stopHotkey } : {}),
       duckOtherMedia: persisted.duckOtherMedia,
       sessionNotifications: persisted.sessionNotifications,
+      holdNoticesOnCall: persisted.holdNoticesOnCall,
+      ignoredCallApps: persisted.ignoredCallApps,
       showOnAllDisplays: persisted.showOnAllDisplays,
       formFactor: persisted.formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
       ...(persisted.defaultWorkspaceProvider
@@ -441,6 +499,14 @@ export class SettingsStore {
    */
   async duckOtherMedia(): Promise<boolean> {
     return (await this.#load()).duckOtherMedia;
+  }
+
+  /**
+   * Shallow for the same reason `duckOtherMedia()` is: the microphone watcher
+   * arms at startup, and arming it must never be what wakes the OS keychain.
+   */
+  async holdNoticesOnCall(): Promise<boolean> {
+    return (await this.#load()).holdNoticesOnCall;
   }
 
   /**
@@ -596,6 +662,62 @@ export class SettingsStore {
     return this.#setField((persisted) => {
       if (persisted.sessionNotifications === enabled) return;
       return { ...persisted, sessionNotifications: enabled };
+    });
+  }
+
+  /**
+   * Turns the holding of notices during a call on or off. A plain preference
+   * like the media duck's, and stored the same way whether or not this Mac's
+   * microphone reports itself: the answer is the user's, not the machine's.
+   */
+  async setHoldNoticesOnCall(enabled: boolean): Promise<SettingsUpdateResult> {
+    return this.#setField((persisted) => {
+      if (persisted.holdNoticesOnCall === enabled) return;
+      return { ...persisted, holdNoticesOnCall: enabled };
+    });
+  }
+
+  /** The ignore list, read shallowly so arming the watcher never wakes the keychain. */
+  async ignoredCallApps(): Promise<readonly CallApp[]> {
+    return (await this.#load()).ignoredCallApps;
+  }
+
+  /**
+   * Adds one app to the ignore list, or moves nothing if it is already there.
+   * The name is stored alongside the identifier because the settings list has
+   * to draw something a developer recognises, and the app may not be running
+   * by the time they go looking for it.
+   */
+  async ignoreCallApp(app: CallApp): Promise<SettingsUpdateResult> {
+    const id = app.id.trim();
+    if (!id || id.length > MAXIMUM_IGNORED_APP_ID_LENGTH) {
+      return { settings: await this.snapshot(), reason: "That app cannot be ignored." };
+    }
+    const name = app.name.trim().slice(0, MAXIMUM_IGNORED_APP_NAME_LENGTH) || id;
+    // A full list is a refusal rather than a silent no-op, so it goes round the
+    // write path rather than through it: nothing is written, and the reason is
+    // the row's to draw.
+    if ((await this.#load()).ignoredCallApps.length >= MAXIMUM_IGNORED_CALL_APPS) {
+      return {
+        settings: await this.snapshot(),
+        reason: "The ignore list is full. Remove one first.",
+      };
+    }
+    return this.#setField((persisted) => {
+      if (persisted.ignoredCallApps.some((ignored) => ignored.id === id)) return;
+      if (persisted.ignoredCallApps.length >= MAXIMUM_IGNORED_CALL_APPS) return;
+      return { ...persisted, ignoredCallApps: [...persisted.ignoredCallApps, { id, name }] };
+    });
+  }
+
+  /** Takes one app off the ignore list, by the identifier the list is keyed by. */
+  async unignoreCallApp(id: string): Promise<SettingsUpdateResult> {
+    return this.#setField((persisted) => {
+      if (!persisted.ignoredCallApps.some((ignored) => ignored.id === id)) return;
+      return {
+        ...persisted,
+        ignoredCallApps: persisted.ignoredCallApps.filter((ignored) => ignored.id !== id),
+      };
     });
   }
 
@@ -892,6 +1014,7 @@ export class SettingsStore {
       version: SETTINGS_FILE_VERSION,
       apiKeys: {},
       ...APP_SETTING_DEFAULTS,
+      ignoredCallApps: [],
     };
     if (source) {
       try {

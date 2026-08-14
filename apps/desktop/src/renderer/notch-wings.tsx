@@ -38,6 +38,13 @@ interface NotchWingsProps {
   hasAudioSignal: boolean;
   /** A pressed talk key still waiting for the call it asked to open. */
   voiceOpening: boolean;
+  /**
+   * Whether a call is holding Luke's notices back. The face sleeps through it,
+   * which is the only place on the capsule the state is reported — so it is the
+   * face's input rather than the badge's, and the badge only carries it in
+   * words for a reader who cannot see a shut eye.
+   */
+  holdingNotices: boolean;
   presentation: PanelPresentation;
   housingWidth: number;
 }
@@ -110,6 +117,7 @@ export function NotchWings({
   fixtureSpeaking,
   hasAudioSignal,
   voiceOpening,
+  holdingNotices,
   presentation,
   housingWidth,
 }: NotchWingsProps): React.JSX.Element {
@@ -146,6 +154,7 @@ export function NotchWings({
         fixtureSpeaking,
         voiceActive,
       }),
+      holdingNotices,
       attention: tally.attentionIds,
       working: tally.working,
       complete: tally.complete,
@@ -243,7 +252,7 @@ export function NotchWings({
             data-empty={String(tally.total === 0)}
             role="status"
             aria-live="polite"
-            aria-label={tallySummary(tally)}
+            aria-label={tallySummary(tally, { holdingNotices })}
           >
             <span className="count-value" aria-hidden="true">
               {tally.total}

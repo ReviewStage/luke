@@ -252,6 +252,9 @@
      key was copied from is behind this and has to stay readable. The floor is
      what those three need on a display with no housing to grow from. */
   --slot-width: max(460px, calc(var(--notch-housing-width) + 300px));
+  /* Narrower than the slot: a name and one button, where the slot holds a
+     field someone is pasting a long credential into. */
+  --call-prompt-width: max(400px, calc(var(--notch-housing-width) + 240px));
   /* Wider than the key slot — a note wraps where a key scrolls, and the credit
      fields share a line — and narrower than the panel, so the composer reads as
      the panel stood down to one thing rather than as the panel refilled. */
@@ -438,8 +441,15 @@ button:disabled {
 .app-stage[data-presentation="peek"] .panel-surface,
 .app-stage[data-presentation="slot"] .panel-surface,
 .app-stage[data-presentation="feedback"] .panel-surface,
+.app-stage[data-presentation="call-prompt"] .panel-surface,
 .app-stage[data-presentation="panel"] .panel-surface {
   box-shadow: var(--surface-shadow);
+}
+
+.app-stage[data-presentation="call-prompt"] .panel-surface {
+  width: var(--call-prompt-width);
+  height: var(--call-prompt-height, 118px);
+  border-radius: 0 0 var(--slot-radius) var(--slot-radius);
 }
 
 /* The panel narrowed to the width of one field. It is only ever arrived at from
@@ -1107,12 +1117,19 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transform: translateX(-50%) translateY(var(--shape-top));
 }
 
-.app-stage[data-notch="false"] .slot-stage {
+.app-stage[data-notch="false"] .slot-stage,
+.app-stage[data-notch="false"] .call-prompt-stage {
   transform: translateX(-50%) translateY(calc(var(--shape-top) - 6px));
 }
 
-.app-stage[data-notch="false"][data-presentation="slot"] .slot-stage {
+.app-stage[data-notch="false"][data-presentation="slot"] .slot-stage,
+.app-stage[data-notch="false"][data-presentation="call-prompt"] .call-prompt-stage {
   transform: translateX(-50%) translateY(var(--shape-top));
+}
+
+.app-stage[data-notch="false"][data-presentation="call-prompt"] .panel-surface {
+  height: var(--call-prompt-height, 118px);
+  border-radius: var(--slot-radius);
 }
 
 .app-stage[data-notch="false"][data-presentation="feedback"] .panel-surface {
@@ -2162,6 +2179,25 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   color: var(--text-primary);
 }
 
+/* Red under the pointer and grey the rest of the time, which is what every
+   other trash in the panel does. A row of red glyphs reads as a warning about
+   the list rather than an action available on it. */
+.icon-button-danger:hover {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger-text);
+}
+
+.icon-button-danger:disabled:hover {
+  background: var(--raised);
+}
+
+/* The label is two short words and must stay on one line: broken across two it
+   would be taller than the name beside it, and the row would grow to fit a
+   button that had plenty of room. */
+.call-app-row .quiet-button {
+  white-space: nowrap;
+}
+
 .icon-button:disabled {
   opacity: 0.4;
 }
@@ -2865,6 +2901,105 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
     opacity var(--duration-quick) var(--motion-exit) var(--slot-delay),
     transform var(--duration-shape) var(--spring) var(--slot-delay),
     visibility 0s linear var(--slot-delay);
+}
+
+/* Call prompt ------------------------------------------------------------ */
+
+/* Layered and animated exactly as the slot is, because it is the same act: the
+   panel stood down to one question. */
+.call-prompt-stage {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 50%;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(-6px);
+  transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-shape) var(--spring),
+    visibility 0s linear var(--duration-exit);
+  will-change: opacity, transform;
+}
+
+.app-stage[data-presentation="call-prompt"] .call-prompt-stage {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+  transition:
+    opacity var(--duration-quick) var(--motion-exit) var(--slot-delay),
+    transform var(--duration-shape) var(--spring) var(--slot-delay),
+    visibility 0s linear var(--slot-delay);
+}
+
+.call-prompt {
+  display: flex;
+  width: var(--call-prompt-width);
+  flex-direction: column;
+  gap: 4px;
+  padding: calc(max(var(--notch-top-inset), 32px) + 12px) 16px 0;
+  border-radius: 0 0 var(--slot-radius) var(--slot-radius);
+}
+
+.app-stage[data-presentation="call-prompt"] .call-prompt {
+  pointer-events: auto;
+}
+
+.call-prompt-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 560;
+}
+
+.call-prompt-detail {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.call-prompt-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-bottom: 11px;
+}
+
+/* The shape's own deadline, drawn along its foot. A track and a fill rather
+   than one element whose width shrinks: width would re-lay out the card on
+   every frame, and this is the one thing on screen animating for five
+   uninterrupted seconds. */
+.call-prompt-countdown {
+  overflow: hidden;
+  height: 2px;
+  border-radius: 1px;
+  margin-bottom: 13px;
+  background: var(--hairline);
+}
+
+.call-prompt-countdown-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: left center;
+  animation: call-prompt-drain var(--call-prompt-ms, 5000ms) linear forwards;
+  background: var(--text-secondary);
+}
+
+/* Held where it is while the pointer is on the card, or the keyboard is. Pausing
+   the drawn bar and the timer behind it from the same state is what keeps the
+   two from disagreeing about how long is left. */
+.call-prompt[data-paused="true"] .call-prompt-countdown-fill {
+  animation-play-state: paused;
+}
+
+@keyframes call-prompt-drain {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
 }
 
 /* Rounded like the shape it sits on, for the same reason the panel body is:

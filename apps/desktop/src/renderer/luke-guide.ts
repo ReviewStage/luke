@@ -29,6 +29,7 @@ import {
   DEFAULT_PANEL_FORM_FACTOR,
   isPanelFormFactor,
   isRealtimeVoice,
+  maximumHeldAttention,
   PANEL_FORM_FACTOR_LIST,
   PROVIDER_ID,
   type ProviderId,
@@ -41,10 +42,16 @@ import {
 import type {
   AppBridge,
   AppSettings,
+  CallStatus,
   CredentialSource,
   MicrophoneStatus,
 } from "../shared/contracts";
-import { APP_SETTING_DEFAULTS, CREDENTIAL_SOURCE, SECRET_STORAGE } from "../shared/contracts";
+import {
+  APP_SETTING_DEFAULTS,
+  CALL_STATUS,
+  CREDENTIAL_SOURCE,
+  SECRET_STORAGE,
+} from "../shared/contracts";
 import {
   CLOUD_AGENT_PROVIDER_LIST,
   CREDENTIAL_PROVIDERS,
@@ -60,6 +67,7 @@ export const APP_SETTING_ID = {
   VOICE_CAPTIONS: "voice_captions",
   DUCK_OTHER_MEDIA: "duck_other_media",
   SESSION_NOTIFICATIONS: "session_notifications",
+  HOLD_NOTICES_ON_CALL: "hold_notices_on_call",
   SHOW_IN_MENU_BAR: "show_in_menu_bar",
   SHOW_IN_DOCK: "show_in_dock",
   SHOW_ON_ALL_DISPLAYS: "show_on_all_displays",
@@ -205,6 +213,21 @@ const SETTING_GUIDE: Record<
     adjustable: true,
     manual: VOICE_PAGE,
   }),
+  holdNoticesOnCall: (settings) => ({
+    id: APP_SETTING_ID.HOLD_NOTICES_ON_CALL,
+    label: "Hold notices during calls",
+    description:
+      `Whether a notice Luke would have spoken while the developer is on a call waits until the ` +
+      `call ends and is read out then — the ${maximumHeldAttention} most recent, and only the ones ` +
+      "still true by then. It is also what starts the microphone watch at all: switched off, the " +
+      "device is not read. A call is the microphone being in use by an app other than Luke, and " +
+      "an app can be exempted; sessions go on showing as needing attention in the panel throughout.",
+    kind: APP_SETTING_KIND.TOGGLE,
+    value: appToggleText(settings.holdNoticesOnCall),
+    defaultValue: appToggleText(APP_SETTING_DEFAULTS.holdNoticesOnCall),
+    adjustable: true,
+    manual: VOICE_PAGE,
+  }),
   showInMenuBar: (settings) => ({
     id: APP_SETTING_ID.SHOW_IN_MENU_BAR,
     label: "Show Luke in the menu bar",
@@ -334,6 +357,15 @@ const SETTING_GUIDE: Record<
     adjustable: true,
     manual: APPEARANCE_PAGE,
   }),
+  // Deliberately absent, and this is the one entry where that is a trust
+  // decision rather than a shape one. The guide leaves the machine: it is sent
+  // into the voice conversation as context, so what a developer runs on their
+  // own Mac has no business in it — not the names, and not a count that would
+  // narrow them. The call fact says the list exists and where it is edited,
+  // which is everything Luke needs to answer a question about it, and a spoken
+  // ask cannot touch it: adding an entry needs the prompt, and removing one
+  // needs the row.
+  ignoredCallApps: () => undefined,
   // Described in the talk-key fact instead, which carries the key that
   // actually registered — this field is only the stored choice, absent on the
   // defaults and silently outbid when another app owns the chord. Not spoken-
@@ -373,6 +405,51 @@ export interface LukeGuideInput {
    * — another app owns Option-S, or another Luke key was moved onto it.
    */
   stopKey?: string;
+  /** Whether the developer is on a call, as the panel currently reads it. */
+  callStatus: CallStatus;
+}
+
+/**
+ * What a call is doing to Luke right now. It is a fact rather than a setting
+ * because it is the machine's answer, not the user's: the switch beside it is
+ * the setting, and this says what the switch is currently amounting to. Asked
+ * "why did you not tell me", Luke can only answer honestly if he knows both.
+ *
+ * A call is the microphone being in use by something that is not Luke. He is
+ * allowed to say that much and no more: nothing here knows which app opened
+ * the device, who is on the other end, or a syllable of what was said.
+ */
+
+/**
+ * Said in every branch: the developer can always ask why an app did or did not
+ * count, and the answer is the same wherever the microphone currently stands.
+ * Which apps are on that list is deliberately not said — see `ignoredCallApps`.
+ */
+const IGNORED_APPS_NOTE =
+  " When an app first takes the microphone — including whatever is already on it the moment the switch goes on — the panel stands down for a few seconds to name it, with a Not a call button that exempts it from counting. The Voice page of the panel's Settings tab lists whatever is on the microphone now with the same button, under the switch, and the exemptions already made with a way to remove them — so a prompt that was missed is still answerable there. Luke cannot say which apps any of those are, or change the list.";
+
+function callFact(status: CallStatus, holding: boolean): AppGuideFact {
+  if (status === CALL_STATUS.UNAVAILABLE) {
+    return {
+      label: "Calls",
+      detail:
+        "This Mac's microphone does not report whether it is in use — some do not, Bluetooth headsets especially — so no call can be noticed and nothing is ever held for one.",
+    };
+  }
+  if (status === CALL_STATUS.OFF) {
+    return {
+      label: "Calls",
+      detail: holding
+        ? `Nothing else is using the microphone, so notices are spoken as they are decided.${IGNORED_APPS_NOTE}`
+        : "Nothing else is using the microphone. Holding notices during calls is switched off anyway.",
+    };
+  }
+  return {
+    label: "Calls",
+    detail: holding
+      ? `Something other than Luke is using the microphone right now, so notices are waiting rather than being spoken. They are read out when it stops, and only the ones still true by then. Luke's face on the capsule is asleep for the duration, which is how the holding is shown — the session count beside it goes on counting normally, and speaking to him wakes him to answer.${IGNORED_APPS_NOTE}`
+      : "Something other than Luke is using the microphone right now, but holding notices during calls is switched off, so they are still being spoken.",
+  };
 }
 
 function talkKeyFact(hotkey: LukeGuideInput["hotkey"]): AppGuideFact {
@@ -530,6 +607,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     talkKeyFact(input.hotkey),
     askKeyFact(input.askKey),
     { label: "Microphone access", detail: MICROPHONE_DETAIL[input.microphoneStatus] },
+    callFact(input.callStatus, input.settings.holdNoticesOnCall),
     ...(input.voiceAvailable
       ? [
           {
@@ -647,6 +725,7 @@ export async function applySpokenSetting(
     | "setVoiceCaptions"
     | "setDuckOtherMedia"
     | "setSessionNotifications"
+    | "setHoldNoticesOnCall"
     | "setShowInMenuBar"
     | "setShowInDock"
     | "setShowOnAllDisplays"
@@ -684,20 +763,22 @@ export async function applySpokenSetting(
         ? await bridge.setDuckOtherMedia(enabled)
         : action.setting.id === APP_SETTING_ID.SESSION_NOTIFICATIONS
           ? await bridge.setSessionNotifications(enabled)
-          : action.setting.id === APP_SETTING_ID.SHOW_IN_MENU_BAR
-            ? await bridge.setShowInMenuBar(enabled)
-            : action.setting.id === APP_SETTING_ID.SHOW_IN_DOCK
-              ? await bridge.setShowInDock(enabled)
-              : action.setting.id === APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS
-                ? await bridge.setShowOnAllDisplays(enabled)
-                : action.setting.id === APP_SETTING_ID.VOICE_SPEED && speed !== undefined
-                  ? await bridge.setVoiceSpeed(speed)
-                  : action.setting.id === APP_SETTING_ID.VOICE && isRealtimeVoice(action.value)
-                    ? await bridge.setVoice(action.value)
-                    : action.setting.id === APP_SETTING_ID.FORM_FACTOR &&
-                        isPanelFormFactor(action.value)
-                      ? await bridge.setFormFactor(action.value)
-                      : undefined;
+          : action.setting.id === APP_SETTING_ID.HOLD_NOTICES_ON_CALL
+            ? await bridge.setHoldNoticesOnCall(enabled)
+            : action.setting.id === APP_SETTING_ID.SHOW_IN_MENU_BAR
+              ? await bridge.setShowInMenuBar(enabled)
+              : action.setting.id === APP_SETTING_ID.SHOW_IN_DOCK
+                ? await bridge.setShowInDock(enabled)
+                : action.setting.id === APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS
+                  ? await bridge.setShowOnAllDisplays(enabled)
+                  : action.setting.id === APP_SETTING_ID.VOICE_SPEED && speed !== undefined
+                    ? await bridge.setVoiceSpeed(speed)
+                    : action.setting.id === APP_SETTING_ID.VOICE && isRealtimeVoice(action.value)
+                      ? await bridge.setVoice(action.value)
+                      : action.setting.id === APP_SETTING_ID.FORM_FACTOR &&
+                          isPanelFormFactor(action.value)
+                        ? await bridge.setFormFactor(action.value)
+                        : undefined;
   if (!result) {
     // An adjustable entry with no carrier is a guide ahead of its wiring;
     // refuse honestly rather than claim a change that never happened.

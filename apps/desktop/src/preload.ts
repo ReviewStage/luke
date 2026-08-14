@@ -39,6 +39,9 @@ const bridge: AppBridge = {
   setStopHotkey: invoke(channels.setStopHotkey),
   setDuckOtherMedia: invoke(channels.setDuckOtherMedia),
   setSessionNotifications: invoke(channels.setSessionNotifications),
+  setHoldNoticesOnCall: invoke(channels.setHoldNoticesOnCall),
+  ignoreCallApp: invoke(channels.ignoreCallApp),
+  unignoreCallApp: invoke(channels.unignoreCallApp),
   setVoiceExchangeActive: (active) => {
     ipcRenderer.send(channels.setVoiceExchange, active);
   },
@@ -68,6 +71,9 @@ const bridge: AppBridge = {
   onStopHotkeyChanged: subscribe(channels.stopHotkeyChanged),
   onOutputAudioChanged: subscribe(channels.outputAudioChanged),
   onAttentionSpeech: subscribe(channels.attentionSpeech),
+  onCallStatusChanged: subscribe(channels.callStatusChanged),
+  onCallAppArrived: subscribe(channels.callAppArrived),
+  onCallAppsChanged: subscribe(channels.callAppsChanged),
 };
 
 contextBridge.exposeInMainWorld("sidecar", bridge);

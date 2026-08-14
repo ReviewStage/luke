@@ -24,6 +24,7 @@ function context(overrides: Partial<FaceContext> = {}): FaceContext {
   return {
     speaking: false,
     microphoneLive: false,
+    holdingNotices: false,
     attention: [],
     working: 0,
     complete: 0,
@@ -83,11 +84,31 @@ test("sessions arriving and finishing are still counted rather than named", () =
   assert.equal(noticedMotion(two, observed([], { total: 1 })), undefined);
 });
 
+test("a Focus puts the face to sleep, which is the only place it is shown", () => {
+  const busy = { attention: ["a"], working: 2, total: 4 };
+  // Sessions in hand and none of them worth waking him for: the sleep is what
+  // says the quiet is deliberate rather than a Luke with nothing to watch.
+  assert.equal(restingMotion(context({ ...busy, holdingNotices: true })), FACE_MOTION.SLEEPING);
+  assert.equal(restingMotion(context(busy)), undefined);
+
+  // A turn the developer opened is not what a Focus holds back, so speaking to
+  // him during one wakes him to answer.
+  assert.equal(
+    restingMotion(context({ ...busy, holdingNotices: true, microphoneLive: true })),
+    FACE_MOTION.LISTENING,
+  );
+  assert.equal(
+    restingMotion(context({ ...busy, holdingNotices: true, speaking: true })),
+    FACE_MOTION.TALKING,
+  );
+});
+
 test("only what stays true for as long as it holds may hold the face", () => {
   // Nothing to watch at all, which is a different thing from nothing happening.
   assert.equal(restingMotion(context()), FACE_MOTION.SLEEPING);
-  // The three rests are the whole of what repeats, so they are the whole of what
-  // the artwork is allowed to loop.
+  // The four rests are the whole of what repeats, so they are the whole of what
+  // the artwork is allowed to loop. The Focus adds no motion of its own: it
+  // borrows the sleep, so the set the gestures must avoid is unchanged.
   const rests = [FACE_MOTION.TALKING, FACE_MOTION.LISTENING, FACE_MOTION.SLEEPING];
   for (const pool of [asidePool(true), asidePool(false)]) {
     for (const aside of pool) {
@@ -275,7 +296,7 @@ test("without a turn to read, the meter is what there is", () => {
 });
 
 test("a turn drives the resting motion the face plays", () => {
-  const sessions = { attention: 1, working: 2, complete: 0, total: 3 };
+  const sessions = { holdingNotices: false, attention: [], working: 2, complete: 0, total: 3 };
 
   // Waiting sessions do not outrank a conversation in progress.
   assert.equal(

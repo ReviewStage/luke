@@ -14,6 +14,14 @@ import { FACE_MOTION, FACE_MOTION_CYCLE_MS, type FaceMotion } from "./luke-face-
 export interface FaceContext {
   speaking: boolean;
   microphoneLive: boolean;
+  /**
+   * Whether a call is keeping Luke's proactive notices back. It is the one
+   * input here that is not a session or a microphone, and it earns its place
+   * for the same reason the rest do: the capsule is the only thing on screen
+   * while the panel is shut, so a Luke who has gone deliberately quiet has
+   * nowhere else to say so.
+   */
+  holdingNotices: boolean;
   attention: readonly string[];
   working: number;
   complete: number;
@@ -71,9 +79,10 @@ export function faceYieldsToMeter(input: { turn?: SpeechTurn; hasAudioSignal: bo
 
 /**
  * What Luke settles into, which is usually nothing whatever. A rest repeats for
- * as long as it is true, so the only motions allowed to be one are the three
+ * as long as it is true, so the only motions allowed to be one are the four
  * that stay true while they hold: speech going into an open microphone, the
- * microphone open without it, and having nothing at all to watch.
+ * microphone open without it, a call holding his notices back, and having
+ * nothing at all to watch.
  *
  * Everything else rests as a still face — the drawing, and no motion — and
  * spends its moments on gestures instead. Nothing here asks who is waiting on
@@ -85,6 +94,17 @@ export function faceYieldsToMeter(input: { turn?: SpeechTurn; hasAudioSignal: bo
 export function restingMotion(context: FaceContext): FaceMotion | undefined {
   if (context.speaking) return FACE_MOTION.TALKING;
   if (context.microphoneLive) return FACE_MOTION.LISTENING;
+  // Asleep for the call, and the sleep is the whole indicator: nothing else on
+  // the capsule reports it, and a developer mid-sentence to another person is
+  // exactly the developer not reading a settings row. It comes after the two
+  // speaking rests because a call holds back what Luke would have started,
+  // never a turn the developer opened — talk to him and he wakes to answer.
+  //
+  // It is deliberately the same sleep an empty roster draws. The two mean the
+  // same thing to whoever is looking — Luke has nothing to say to you — and the
+  // count badge beside him is what tells them apart: asleep next to nothing and
+  // asleep next to four sessions are not read as the same picture.
+  if (context.holdingNotices) return FACE_MOTION.SLEEPING;
   // Nothing to watch at all, which is a different thing from nothing happening.
   if (context.total === 0) return FACE_MOTION.SLEEPING;
   return undefined;

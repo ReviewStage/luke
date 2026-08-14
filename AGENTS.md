@@ -97,6 +97,38 @@ Trust constraints:
   renderer draws while Luke speaks into that silence: his captions forced on,
   and a hint asking for volume. Luke never changes the system volume himself;
   turning it up stays the user's own act on their own keys.
+- Noticing that the developer is on a call is bounded the same way, and its
+  three answers are the bound. A native helper asks CoreAudio two documented
+  questions — which processes hold the input device, and whether each is
+  running it — and says so on every change. The setting is what starts it: with
+  the hold off the helper does not run and nothing is read, which is the
+  difference between a preference and a promise. It never opens a stream, so it can
+  learn which apps are listening and nothing whatever about what they hear:
+  who is on the other end and a syllable of what was said are both outside
+  what the API can answer. Naming them is what the ignore list is keyed by,
+  and it is the reason this went past a boolean — a hold with no way to say
+  "not that app" is a hold that gets switched off. That list stays on the
+  machine: it reaches the settings file and the panel, and it is deliberately
+  kept out of the guide, because the guide leaves the machine and what a
+  developer runs is not Luke's to carry. Luke opens the same device himself,
+  so his own processes are dropped by bundle identifier before anyone is
+  named and his own exchanges are subtracted after; a device running with
+  nobody nameable on it must answer `unavailable` rather than `on`, because an
+  unnamed process can be checked against neither the ignore list nor Luke's
+  own. A device that will not report at all — Bluetooth headsets especially —
+  answers `unavailable` for the same reason: a wrong `off` talks over a call,
+  and a wrong `on` is silence with no end in sight. Two things may
+  act on the answer — whether a proactive notice waits, and the sleeping face
+  that says so, because a hold nothing reports is indistinguishable from a Luke
+  who has stopped working — and the trigger is the device, a deterministic
+  edge, never anything Luke read or decided. A held notice is re-checked
+  against the session before it is ever spoken, and the count and the rows are
+  unchanged throughout: a call quiets what Luke would have started and hides
+  nothing he is watching. Reading the Mac's Focus instead would be the more
+  direct question and is deliberately not asked: macOS keeps it in a store
+  gated behind Full Disk Access, which is a whole home directory for one
+  boolean. Widening what a call governs, or what is read to notice one, is a
+  product decision rather than an implementation detail.
 - Keep unsupported capabilities explicit; do not invent fallback controls.
 - Keep Electron renderers sandboxed with context isolation and narrow IPC.
 - Commit only synthetic fixtures and repository-relative paths. This binds

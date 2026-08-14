@@ -309,6 +309,25 @@ test("sessions notify until asked otherwise, and the choice survives a reopen", 
   assert.equal(cipher.calls.encrypt, 0);
 });
 
+test("the call hold is off until switched on, and the choice survives a reopen", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+
+  // Off until asked: reading the microphone at all is what this switch turns
+  // on, so nobody gets it by having installed Luke.
+  assert.equal((await store.snapshot()).holdNoticesOnCall, false);
+  assert.equal(await store.holdNoticesOnCall(), false);
+  const enabled = await store.setHoldNoticesOnCall(true);
+
+  assert.equal(enabled.settings.holdNoticesOnCall, true);
+  assert.equal((await storeIn(directory).snapshot()).holdNoticesOnCall, true);
+  // Reading it arms the microphone watcher at startup, which must never be
+  // what wakes the Keychain.
+  assert.equal(cipher.calls.isAvailable, 0);
+  assert.equal(cipher.calls.encrypt, 0);
+});
+
 test("a corrupt notification value reads as the default rather than as off", async (t) => {
   const directory = await temporaryDirectory(t);
   // The duck's rule again: this switch's default is on, so nonsense lands on on.
@@ -319,6 +338,87 @@ test("a corrupt notification value reads as the default rather than as off", asy
   );
 
   assert.equal((await storeIn(directory).snapshot()).sessionNotifications, true);
+});
+
+test("a corrupt call hold value reads as the default rather than as on", async (t) => {
+  const directory = await temporaryDirectory(t);
+  // The Dock icon's rule rather than the media duck's: a value nobody can read
+  // must not switch a microphone watch on that was never asked for.
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({ version: 2, apiKeys: {}, holdNoticesOnCall: "always" }),
+    "utf8",
+  );
+
+  assert.equal((await storeIn(directory).snapshot()).holdNoticesOnCall, false);
+});
+
+test("an app is ignored by identifier, and taken off the list by the same one", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+
+  assert.deepEqual((await store.snapshot()).ignoredCallApps, []);
+  const ignored = await store.ignoreCallApp({ id: "com.example.dictation", name: "Dictation" });
+  assert.deepEqual(ignored.settings.ignoredCallApps, [
+    { id: "com.example.dictation", name: "Dictation" },
+  ]);
+
+  // Twice is once: pressing Ignore on a prompt for an app already ignored is a
+  // thing that can happen, and it must not grow the list.
+  const again = await store.ignoreCallApp({ id: "com.example.dictation", name: "Dictation" });
+  assert.equal(again.settings.ignoredCallApps.length, 1);
+
+  assert.deepEqual((await storeIn(directory).snapshot()).ignoredCallApps, [
+    { id: "com.example.dictation", name: "Dictation" },
+  ]);
+
+  const removed = await store.unignoreCallApp("com.example.dictation");
+  assert.deepEqual(removed.settings.ignoredCallApps, []);
+  // An app a developer runs is not a credential, so none of this reaches the
+  // keychain.
+  assert.equal(cipher.calls.isAvailable, 0);
+  assert.equal(cipher.calls.encrypt, 0);
+});
+
+test("an ignore entry that could never match an app is refused rather than stored", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  const refused = await store.ignoreCallApp({ id: "   ", name: "Nothing" });
+  assert.equal(refused.reason, "That app cannot be ignored.");
+  assert.deepEqual(refused.settings.ignoredCallApps, []);
+
+  // Removing something that was never there removes nothing and says nothing.
+  const removed = await store.unignoreCallApp("com.example.absent");
+  assert.equal(removed.reason, undefined);
+  assert.deepEqual(removed.settings.ignoredCallApps, []);
+});
+
+test("a malformed ignore list reads as the entries that could still match", async (t) => {
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({
+      version: 2,
+      apiKeys: {},
+      ignoredCallApps: [
+        { id: "us.zoom.xos", name: "zoom.us" },
+        { id: "", name: "Ghost" },
+        "not an entry",
+        { id: "us.zoom.xos", name: "Duplicate" },
+        { id: "com.example.named" },
+      ],
+    }),
+    "utf8",
+  );
+
+  // A malformed entry can only ever fail to match an app, and would sit in the
+  // settings list forever looking like it did something.
+  assert.deepEqual((await storeIn(directory).snapshot()).ignoredCallApps, [
+    { id: "us.zoom.xos", name: "zoom.us" },
+    { id: "com.example.named", name: "com.example.named" },
+  ]);
 });
 
 test("keeps each provider's key, environment fallback, and reported source separate", async (t) => {
@@ -376,6 +476,8 @@ test("keeps both keys when two providers are saved at once", async (t) => {
     voiceCaptions: false,
     duckOtherMedia: true,
     sessionNotifications: true,
+    holdNoticesOnCall: false,
+    ignoredCallApps: [],
     showOnAllDisplays: false,
   });
   const reopened = storeIn(directory, { providers: TEST_PROVIDERS });
@@ -577,6 +679,8 @@ test("keeps a Conductor key stored by an earlier version working", async (t) => 
     voiceCaptions: false,
     duckOtherMedia: true,
     sessionNotifications: true,
+    holdNoticesOnCall: false,
+    ignoredCallApps: [],
     showOnAllDisplays: false,
   });
   assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), "conductor-replacement-key");
@@ -601,6 +705,8 @@ test("carries a key belonging to a provider this build does not know", async (t)
     voiceCaptions: false,
     duckOtherMedia: true,
     sessionNotifications: true,
+    holdNoticesOnCall: false,
+    ignoredCallApps: [],
     showOnAllDisplays: false,
   });
 });
@@ -623,6 +729,8 @@ test("shows the menu bar item until asked otherwise, and remembers the answer", 
     voiceCaptions: false,
     duckOtherMedia: true,
     sessionNotifications: true,
+    holdNoticesOnCall: false,
+    ignoredCallApps: [],
     showOnAllDisplays: false,
   });
   // The choice outlives the run that heard it.
@@ -706,6 +814,8 @@ test("keeps Luke out of the Dock until asked, and remembers the answer", async (
     voiceCaptions: false,
     duckOtherMedia: true,
     sessionNotifications: true,
+    holdNoticesOnCall: false,
+    ignoredCallApps: [],
     showOnAllDisplays: false,
   });
   // The choice outlives the run that heard it.

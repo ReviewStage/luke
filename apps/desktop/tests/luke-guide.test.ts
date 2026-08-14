@@ -18,7 +18,7 @@ import {
   type LukeGuideInput,
 } from "../src/renderer/luke-guide";
 import type { AppSettings, SettingsUpdateResult } from "../src/shared/contracts";
-import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "../src/shared/contracts";
+import { CALL_STATUS, CREDENTIAL_SOURCE, SECRET_STORAGE } from "../src/shared/contracts";
 import { CREDENTIAL_PROVIDER_ID } from "../src/shared/credential-providers";
 
 function settings(overrides: Partial<AppSettings> = {}): AppSettings {
@@ -39,6 +39,8 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
     voiceCaptions: false,
     duckOtherMedia: true,
     sessionNotifications: true,
+    holdNoticesOnCall: true,
+    ignoredCallApps: [],
     showOnAllDisplays: false,
     formFactor: PANEL_FORM_FACTOR.BUBBLE,
     ...overrides,
@@ -50,6 +52,7 @@ function guideInput(overrides: Partial<LukeGuideInput> = {}): LukeGuideInput {
     settings: settings(),
     voiceAvailable: true,
     microphoneStatus: "granted",
+    callStatus: CALL_STATUS.OFF,
     hotkey: { hotkey: "⌥Space", held: true },
     askKey: "⌥L",
     stopKey: "⌥S",
@@ -436,6 +439,39 @@ test("the feedback fact says what a spoken open may do, and that sending stays b
   assert.match(fact.detail, /no spoken ask can send one/);
 });
 
+test("the call fact says what the switch is currently amounting to", () => {
+  const holding = buildLukeGuide(guideInput({ callStatus: CALL_STATUS.ON })).facts.find(
+    (fact) => fact.label === "Calls",
+  );
+  assert.ok(holding);
+  assert.match(holding.detail, /waiting rather than being spoken/);
+  // The sleeping face is a surface, and a surface the guide does not describe
+  // is one Luke denies having — asked why he is asleep, he must be able to say.
+  assert.match(holding.detail, /asleep/);
+  // And all he may say about the call itself is that the device is in use. The
+  // guide leaves the machine, so a fact naming the app on the other end would
+  // be carrying something Luke has no business knowing — and does not.
+  assert.match(holding.detail, /using the microphone/);
+
+  // The switch off is the other half of the answer: a call is happening and
+  // Luke is talking through it anyway, which he must not describe as holding.
+  const speaking = buildLukeGuide(
+    guideInput({
+      callStatus: CALL_STATUS.ON,
+      settings: settings({ holdNoticesOnCall: false }),
+    }),
+  ).facts.find((fact) => fact.label === "Calls");
+  assert.ok(speaking);
+  assert.match(speaking.detail, /switched off/);
+
+  // A microphone that never reports holds nothing, whatever the switch says.
+  const unreadable = buildLukeGuide(guideInput({ callStatus: CALL_STATUS.UNAVAILABLE })).facts.find(
+    (fact) => fact.label === "Calls",
+  );
+  assert.ok(unreadable);
+  assert.match(unreadable.detail, /does not report/);
+});
+
 test("every adjustable setting is carried to the bridge call its row uses", async () => {
   const calls: string[] = [];
   const answered: SettingsUpdateResult = { settings: settings() };
@@ -458,6 +494,10 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
     },
     setSessionNotifications: async (enabled: boolean) => {
       calls.push(`setSessionNotifications:${enabled}`);
+      return answered;
+    },
+    setHoldNoticesOnCall: async (enabled: boolean) => {
+      calls.push(`setHoldNoticesOnCall:${enabled}`);
       return answered;
     },
     setShowInMenuBar: async (show: boolean) => {
@@ -498,6 +538,7 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
   assert.deepEqual(calls.sort(), [
     "setDuckOtherMedia:true",
     "setFormFactor:notch",
+    "setHoldNoticesOnCall:true",
     "setSessionNotifications:true",
     "setShowInDock:true",
     "setShowInMenuBar:true",

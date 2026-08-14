@@ -6,6 +6,7 @@ import {
   CompositeSessionProviderAdapter,
   DEFAULT_PANEL_FORM_FACTOR,
   fixtureSnapshot,
+  HeldAttentionQueue,
   InMemorySessionRegistry,
   ISSUE_ACTION_KIND,
   isControllableAdapter,
@@ -62,6 +63,7 @@ import {
   systemPreferences,
   Tray,
 } from "electron";
+import { CallPresence } from "./call-presence";
 import { ClaudeCodeSessionAdapter } from "./claude-code-adapter";
 import { CodexSessionAdapter } from "./codex-adapter";
 import { ConductorSessionAdapter } from "./conductor-adapter";
@@ -75,6 +77,7 @@ import { LinearIssueTracker } from "./linear-tracker";
 import { readMacScreenGeometry } from "./macos-screen-geometry";
 import { keepWindowStationary } from "./macos-stationary-window";
 import { MediaDuckController } from "./media-duck";
+import { MicrophoneUseWatcher } from "./microphone-use";
 import { openAiAttentionEvaluatorFromEnvironment } from "./openai-attention-evaluator";
 import {
   openAiRealtimeCredentialsFromEnvironment,
@@ -87,6 +90,9 @@ import { SettingsStore } from "./settings-store";
 import {
   type AppBootstrap,
   type AppSettings,
+  CALL_STATUS,
+  type CallApp,
+  type CallStatus,
   channels,
   type DisplayDiagnostic,
   type MicrophoneStatus,
@@ -270,6 +276,49 @@ function startOutputVolumeWatch(): void {
   if (!outputVolumeWatcher.start()) outputVolumeWatcher = undefined;
 }
 
+/**
+ * The notices a call is keeping back, and what decides whether it is.
+ *
+ * All of it lives here rather than in a renderer for one reason: the review
+ * that produces a notice happens here, so this is the only place a notice can
+ * be kept from being sent at all. A renderer that received one and sat on it
+ * would be holding a sentence Luke had already been told to say.
+ */
+const heldAttention = new HeldAttentionQueue();
+/**
+ * A capture run says the ordinary state rather than the unread one. It never
+ * starts the watcher — evidence may not depend on whether whoever ran it
+ * happened to be on a call — and it reviews no attention either, so nothing
+ * can be held whatever this says; what it decides is which sentence the
+ * settings row draws, and that should be the one an idle microphone shows.
+ */
+let callStatus: CallStatus = captureMode ? CALL_STATUS.OFF : CALL_STATUS.UNAVAILABLE;
+let holdNoticesOnCall = false;
+let microphoneUseWatcher: MicrophoneUseWatcher | undefined;
+/**
+ * Turns the device's answer into the developer's. Luke opens the same
+ * microphone a call does, so his own exchanges are subtracted here — the
+ * statement of fact the renderer already sends for the media duck is the same
+ * one this reads.
+ */
+const callPresence = new CallPresence({
+  onChanged: (status) => applyCallStatus(status),
+  onAppArrived: (app) => announceCallApp(app),
+});
+/**
+ * The apps the last reading actually named, which is what a request to ignore
+ * one is checked against. The renderer names an app it was shown; this is what
+ * "was shown" means, so a bundle identifier the panel composed cannot reach the
+ * settings file and sit there matching nothing forever.
+ */
+let namedCallApps: readonly CallApp[] = [];
+/**
+ * Arrivals that had nowhere to go when they happened. Bounded because it only
+ * ever holds what was on the microphone during a startup or a settings read,
+ * which is a handful at most.
+ */
+let pendingCallApps: readonly CallApp[] = [];
+const MAXIMUM_PENDING_CALL_APPS = 5;
 let voiceHotkey: string | undefined;
 /**
  * The chord the user chose over the defaults, if any. Read from the settings
@@ -851,14 +900,19 @@ function focusExpandedPanel(preferredDisplayId?: number): void {
 
 /**
  * Which windows hold a live spoken exchange, and the single answer the media
- * duck is given: live anywhere is live. Only the voice host ever actually
- * opens one, but every window reports, so the union is what keeps a
- * bystander's idle from ending the host's exchange.
+ * duck and the call gate are given: live anywhere is live. Only the voice host
+ * ever actually opens one, but every window reports, so the union is what keeps
+ * a bystander's idle from ending the host's exchange.
  */
 const voiceExchanges = new Map<number, boolean>();
 
 function applyVoiceExchanges(): void {
-  mediaDuck.setExchangeActive([...voiceExchanges.values()].some(Boolean));
+  const active = [...voiceExchanges.values()].some(Boolean);
+  mediaDuck.setExchangeActive(active);
+  // The same statement, to the one other thing that has to know Luke is using
+  // the microphone: without it, every turn the developer takes with him would
+  // read as a call they had just joined.
+  callPresence.setExchangeActive(active);
 }
 
 /**
@@ -1030,6 +1084,8 @@ function registerIpc(): void {
       ...(askHotkey ? { askHotkey } : {}),
       ...(stopHotkey ? { stopHotkey } : {}),
       ...(outputAudio ? { outputAudio } : {}),
+      callStatus,
+      callApps: namedCallApps,
       display: displayDiagnostic(display),
       sessions: fixtureMode ? [] : sessionRegistry.snapshot().sessions,
       workspaceProjects: observedWorkspaceProjects(),
@@ -1526,6 +1582,82 @@ function registerIpc(): void {
     },
   );
 
+  // Turning the hold off lets go of whatever it is holding, the same way the
+  // duck restores rather than waiting for the next launch: the switch coming
+  // off is the developer asking to be told now.
+  ipcMain.handle(
+    channels.setHoldNoticesOnCall,
+    async (event, enabled: unknown): Promise<SettingsUpdateResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (typeof enabled !== "boolean") throw new Error("Invalid call hold request");
+      try {
+        const result = await settingsStore.setHoldNoticesOnCall(enabled);
+        applyHoldNoticesOnCall(result.settings.holdNoticesOnCall);
+        broadcastSettings(result.settings, event.sender);
+        return result;
+      } catch {
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "Could not save that setting on this system.",
+        };
+      }
+    },
+  );
+
+  // Ignoring is checked against what the helper actually named, not against
+  // what the panel sent: the renderer may only exempt an app Luke has really
+  // seen on the device, so a composed identifier cannot be stored to sit in
+  // the list matching nothing.
+  ipcMain.handle(
+    channels.ignoreCallApp,
+    async (event, app: unknown): Promise<SettingsUpdateResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (app === null || typeof app !== "object") throw new Error("Invalid ignore request");
+      const requested = app as { id?: unknown };
+      const id = typeof requested.id === "string" ? requested.id : "";
+      const named = namedCallApps.find((candidate) => candidate.id === id);
+      if (!named) {
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "That app is not one Luke has seen using the microphone.",
+        };
+      }
+      try {
+        const result = await settingsStore.ignoreCallApp(named);
+        callPresence.setIgnored(result.settings.ignoredCallApps);
+        broadcastSettings(result.settings, event.sender);
+        return result;
+      } catch {
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "Could not save that setting on this system.",
+        };
+      }
+    },
+  );
+
+  // Removing takes only the identifier, and needs no such check: taking an
+  // entry off a list the developer is looking at can only ever undo something
+  // they did, and an id that matches nothing removes nothing.
+  ipcMain.handle(
+    channels.unignoreCallApp,
+    async (event, id: unknown): Promise<SettingsUpdateResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (typeof id !== "string") throw new Error("Invalid ignore removal request");
+      try {
+        const result = await settingsStore.unignoreCallApp(id);
+        callPresence.setIgnored(result.settings.ignoredCallApps);
+        broadcastSettings(result.settings, event.sender);
+        return result;
+      } catch {
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "Could not save that setting on this system.",
+        };
+      }
+    },
+  );
+
   // A statement of state, not a request: the renderer says whether a spoken
   // exchange is live, and the duck holds every other decision — the setting,
   // the hangover after an exchange, which players are playing at all. Each
@@ -1981,7 +2113,13 @@ function registerIpc(): void {
   });
 
   ipcMain.on(channels.rendererReady, async (event) => {
-    if (!trustedSender(event) || !captureOutput) return;
+    if (!trustedSender(event)) return;
+    // A renderer that has finished bootstrapping is one that has registered its
+    // listeners, which is the earliest moment an arrival can actually be drawn.
+    // It is asked here rather than when the window was created because the
+    // window exists for some time before anything in it is listening.
+    flushPendingCallApps();
+    if (!captureOutput) return;
     // A capture run holds a single window, and the ready message is its own.
     const window = BrowserWindow.fromWebContents(event.sender);
     if (!window || window.isDestroyed()) return;
@@ -2048,6 +2186,161 @@ async function refreshProviderSessions(): Promise<void> {
   void reviewSessionAttention();
 }
 
+/**
+ * Whether a notice decided right now would wait rather than be spoken. Both
+ * halves have to be true, and `UNAVAILABLE` is deliberately not one of them: a
+ * microphone that will not say is a microphone Luke speaks over, because the
+ * failure that leaves a developer wondering why nothing was said is worse than
+ * the one that says something during a call.
+ */
+function holdingNotices(): boolean {
+  return holdNoticesOnCall && callStatus === CALL_STATUS.ON;
+}
+
+/**
+ * Says what the hold kept, once it is no longer keeping it.
+ *
+ * The queue is what decides which notices survive — it re-checks every one
+ * against the session as it stands — so a call that ran an hour ends in what
+ * is still true, not in what was true when it started. They go out as
+ * one message because they are one readout: a turn already under way refuses
+ * the next, and a queue emptying at a developer is not a welcome back.
+ */
+function releaseHeldAttention(): void {
+  if (heldAttention.size === 0) return;
+  const released = heldAttention.release(sessionRegistry.list());
+  if (released.length === 0) return;
+  voiceHostWindow()?.webContents.send(channels.attentionSpeech, released);
+}
+
+/**
+ * Takes the call status as the presence gate now reads it. The panel is told on
+ * every display, because the switch that governs this is drawn on each of them
+ * and has to say what it is currently doing.
+ */
+function applyCallStatus(status: CallStatus): void {
+  if (status === callStatus) return;
+  callStatus = status;
+  for (const window of panelWindows.values()) {
+    if (window.isDestroyed()) continue;
+    window.webContents.send(channels.callStatusChanged, status);
+  }
+  // A call ending is the whole point; losing the ability to read one has to do
+  // the same, or a helper that died mid-call would hold notices for ever.
+  if (!holdingNotices()) releaseHeldAttention();
+}
+
+/**
+ * Stops watching, and forgets everything the watch had learned.
+ *
+ * Switching the hold off is the developer saying they do not want the
+ * microphone read, so it stops being read: the helper goes, the apps it named
+ * are dropped, and the status returns to the one a build that never asked
+ * reports.
+ */
+function stopMicrophoneUseWatch(): void {
+  microphoneUseWatcher?.stop();
+  microphoneUseWatcher = undefined;
+  pendingCallApps = [];
+  namedCallApps = [];
+  callPresence.setReading(undefined);
+}
+
+/**
+ * Follows the switch. It is the switch's whole meaning: with the hold off Luke
+ * does not read the microphone at all, rather than reading it and declining to
+ * act, which is the difference between a preference and a promise.
+ */
+function applyHoldNoticesOnCall(enabled: boolean): void {
+  holdNoticesOnCall = enabled;
+  if (enabled) {
+    startMicrophoneUseWatch();
+    flushPendingCallApps();
+  } else {
+    stopMicrophoneUseWatch();
+  }
+  if (!holdingNotices()) releaseHeldAttention();
+}
+
+/**
+ * Starts watching the microphone, where there is one to watch.
+ *
+ * A capture run is left out along with every other platform: evidence has to
+ * come out the same twice, and whether the developer running it happened to be
+ * on a call is not something a screenshot may depend on. Left out means
+ * `UNAVAILABLE`, which is the honest answer for a run that never asked.
+ */
+/**
+ * Tells every panel about an app that has just taken the microphone, so the
+ * countdown prompt can be drawn for it. Only while the hold is on: a prompt
+ * offering to exempt an app from something Luke is not doing is a question
+ * nobody asked.
+ */
+function announceCallApp(app: CallApp): void {
+  if (deliverCallApp(app)) return;
+  // Nowhere to send it yet. An arrival is a one-shot edge — the app is only new
+  // once — so dropping it here would leave Luke asleep for something he never
+  // named, which is exactly what launching into a call already in progress
+  // does: the watcher starts several awaits before the first window exists, and
+  // the settings that decide whether to ask are still being read.
+  pendingCallApps = [...pendingCallApps.filter((held) => held.id !== app.id), app].slice(
+    -MAXIMUM_PENDING_CALL_APPS,
+  );
+}
+
+/**
+ * Sends one arrival to every panel, reporting whether there was anyone to send
+ * it to. Both refusals are temporary by nature: a window is about to exist, and
+ * a setting is about to finish being read.
+ */
+function deliverCallApp(app: CallApp): boolean {
+  if (!holdNoticesOnCall) return false;
+  const windows = [...panelWindows.values()].filter((window) => !window.isDestroyed());
+  if (windows.length === 0) return false;
+  for (const window of windows) window.webContents.send(channels.callAppArrived, app);
+  return true;
+}
+
+/**
+ * Asks again about the apps nobody could be asked about at the time.
+ *
+ * Only the ones still holding the device and still not exempted: a prompt for
+ * an app that has since released the microphone would be a question about
+ * something that already stopped, and one for an app the developer has since
+ * ignored would be asking them to decide it twice.
+ */
+function flushPendingCallApps(): void {
+  if (pendingCallApps.length === 0) return;
+  const pending = pendingCallApps;
+  pendingCallApps = [];
+  for (const app of pending) {
+    if (!namedCallApps.some((named) => named.id === app.id)) continue;
+    announceCallApp(app);
+  }
+}
+
+function startMicrophoneUseWatch(): void {
+  if (captureMode || process.platform !== "darwin" || microphoneUseWatcher) return;
+  microphoneUseWatcher = new MicrophoneUseWatcher({
+    onChanged: (reading) => {
+      namedCallApps = reading?.apps ?? [];
+      // Every panel is told who is on the device, so a prompt that was missed —
+      // skipped because the panel was busy, or gone before it was read — is
+      // still recoverable from a row someone can go and look at.
+      for (const window of panelWindows.values()) {
+        if (window.isDestroyed()) continue;
+        window.webContents.send(channels.callAppsChanged, namedCallApps);
+      }
+      callPresence.setReading(reading);
+    },
+    // The same channel a failing observer reports on, for the same reason: the
+    // panel gets the one answer it can act on, and whoever is working out why
+    // gets the sentence behind it.
+    onDiagnostic: (message) => process.stderr.write(`Microphone use: ${message}\n`),
+  });
+  microphoneUseWatcher.start();
+}
+
 async function reviewSessionAttention(): Promise<void> {
   if (!attentionReviewer || attentionReviewRunning) return;
   attentionReviewRunning = true;
@@ -2059,11 +2352,16 @@ async function reviewSessionAttention(): Promise<void> {
     // `decision` says the session needs attention, which the panel shows;
     // `outcome` says whether to voice it now, which only these reviews do.
     const speech = attentionSpeechFromReviews(reviews);
-    if (speech.length > 0) {
-      // Spoken once, by the one window that holds the voice: every display
-      // already shows the same session as needing attention.
-      voiceHostWindow()?.webContents.send(channels.attentionSpeech, speech);
+    if (speech.length === 0) return;
+    if (holdingNotices()) {
+      // Every session in it still reads as needing attention on every display
+      // throughout the Focus. What waits is the sentence, not the news.
+      heldAttention.hold(speech);
+      return;
     }
+    // Spoken once, by the one window that holds the voice: every display
+    // already shows the same session as needing attention.
+    voiceHostWindow()?.webContents.send(channels.attentionSpeech, speech);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`Attention review failed: ${message}\n`);
@@ -2530,6 +2828,18 @@ if (!app.requestSingleInstanceLock()) {
         sessionNotificationsEnabled = true;
       },
     );
+    // Read the same way and on the same terms — a file that cannot be read
+    // leaves the hold off, which is what a file that has never said means too.
+    void settingsStore.holdNoticesOnCall().then(
+      (enabled) => applyHoldNoticesOnCall(enabled),
+      () => undefined,
+    );
+    // The ignore list arms the same way, and on the same terms: a file that
+    // cannot be read ignores nothing rather than everything.
+    void settingsStore.ignoredCallApps().then(
+      (ignored) => callPresence.setIgnored(ignored),
+      () => undefined,
+    );
     // Awaited, so the chosen voice reaches the minter before the renderer
     // exists to ask for a credential: the first conversation must already
     // speak with it. A file that cannot be read means no choice was kept — it
@@ -2599,6 +2909,12 @@ app.on("will-quit", () => {
   // The same rule: a process of Luke's own does not outlive the app.
   outputVolumeWatcher?.stop();
   outputVolumeWatcher = undefined;
+  // The microphone watcher is a process of Luke's own for the same reason, and
+  // it holds nothing anyone is owed: whatever it was keeping back goes with it.
+  microphoneUseWatcher?.stop();
+  microphoneUseWatcher = undefined;
+  callPresence.stop();
+  heldAttention.clear();
   // The duck helper outlives this by one fade: closing its stdin is what asks
   // it to bring the players back up, so quitting mid-sentence costs the user
   // nothing.

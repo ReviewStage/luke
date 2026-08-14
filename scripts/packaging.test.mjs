@@ -38,6 +38,7 @@ function packagerOptions(signing = resolveSigningMode({})) {
     outputRoot: "/repo/apps/desktop/out",
     helperPaths: [
       "/repo/apps/desktop/.build/native/mac-media-duck",
+      "/repo/apps/desktop/.build/native/mac-microphone-use",
       "/repo/apps/desktop/.build/native/mac-output-volume",
       "/repo/apps/desktop/.build/native/mac-screen-geometry",
       "/repo/apps/desktop/.build/native/mac-talk-key",
@@ -157,6 +158,23 @@ test("the stationary window addon is compiled as a loadable Node-API module", ()
   assert.ok(compilerArguments.includes("-Wl,-undefined,dynamic_lookup"));
   // NSWindowCollectionBehaviorStationary is the whole reason the addon exists.
   assert.ok(compilerArguments.includes("AppKit"));
+});
+
+test("the microphone helper knows the bundle identifier Luke ships under", () => {
+  const options = packagerOptions();
+  const source = fs.readFileSync(
+    path.join(repoRoot, "apps", "desktop", "src", "microphone-use.ts"),
+    "utf8",
+  );
+
+  // The helper drops Luke's own processes by identifier prefix. A Luke that
+  // has been renamed and not told about it there would read his own
+  // conversation as a call the developer had just joined, for as long as it
+  // stayed connected — so the two literals are held together here.
+  assert.ok(
+    source.includes(`"${options.appBundleId}"`),
+    `LUKE_BUNDLE_PREFIXES carries ${options.appBundleId}`,
+  );
 });
 
 test("the talk key is compiled against the framework that reads it", () => {
