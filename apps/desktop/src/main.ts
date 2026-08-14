@@ -306,6 +306,27 @@ let sessionRefreshTimer: NodeJS.Timeout | undefined;
 let collapseTimer: NodeJS.Timeout | undefined;
 let sessionRefreshRunning = false;
 let attentionReviewRunning = false;
+/**
+ * The projects last announced to the renderer, serialized for comparison.
+ * Undefined until the first announcement decides what there is to compare.
+ */
+let lastWorkspaceProjects: string | undefined;
+
+/**
+ * Announces where a workspace can be created whenever the offer changes. This
+ * cannot ride the registry's own notifications alone: the registry only speaks
+ * when the session snapshot changes, and a pass can change the project list
+ * while leaving the sessions exactly as they were — a key just added with no
+ * workspaces yet, a project connected but not yet worked in — so the check
+ * runs on the observation cadence as well as on every commit.
+ */
+function broadcastWorkspaceProjects(): void {
+  const projects = observedWorkspaceProjects();
+  const serialized = JSON.stringify(projects);
+  if (serialized === lastWorkspaceProjects) return;
+  lastWorkspaceProjects = serialized;
+  panelWindow?.webContents.send(channels.workspaceProjectsChanged, projects);
+}
 
 function argumentValue(name: string): string | undefined {
   const index = process.argv.indexOf(name);
@@ -983,6 +1004,9 @@ async function refreshProviderSessions(): Promise<void> {
   } finally {
     sessionRefreshRunning = false;
   }
+  // The registry only spoke if the sessions themselves changed, and a pass can
+  // change the project list while leaving them exactly as they were.
+  broadcastWorkspaceProjects();
   // Attention review runs outside the observation guard so a slow model call
   // never delays the next provider snapshot.
   void reviewSessionAttention();
@@ -1012,18 +1036,11 @@ async function reviewSessionAttention(): Promise<void> {
 
 function startSessionObservation(): void {
   if (fixtureMode) return;
-  // The projects ride the same beat as the sessions: adapters refresh their
-  // project lists while observing, so the moment the registry commits is the
-  // moment the offer can have changed. Identical lists are not resent.
-  let lastWorkspaceProjects = JSON.stringify(observedWorkspaceProjects());
   sessionRegistry.subscribe((snapshot) => {
     panelWindow?.webContents.send(channels.sessionsChanged, snapshot.sessions);
-    const projects = observedWorkspaceProjects();
-    const serialized = JSON.stringify(projects);
-    if (serialized !== lastWorkspaceProjects) {
-      lastWorkspaceProjects = serialized;
-      panelWindow?.webContents.send(channels.workspaceProjectsChanged, projects);
-    }
+    // A commit is the earliest a write-triggered refresh can have changed the
+    // offer, so the announcement rides it rather than waiting for the timer.
+    broadcastWorkspaceProjects();
   });
   void refreshProviderSessions();
   sessionRefreshTimer = setInterval(() => {
