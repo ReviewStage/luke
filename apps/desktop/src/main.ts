@@ -4,11 +4,13 @@ import { pathToFileURL } from "node:url";
 import {
   attentionSpeechFromReviews,
   CompositeSessionProviderAdapter,
+  DEFAULT_PANEL_FORM_FACTOR,
   fixtureSnapshot,
   InMemorySessionRegistry,
   ISSUE_ACTION_KIND,
   isControllableAdapter,
   isMessageCapableAdapter,
+  isPanelFormFactor,
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
   issueCommentText,
@@ -18,6 +20,7 @@ import {
   normalizeObservedWorkspaceProjects,
   normalizeTrackedIssue,
   type ObservedWorkspaceProject,
+  type PanelFormFactor,
   PROVIDER_CONTROL_RESULT_STATUS,
   PROVIDER_MESSAGE_RESULT_STATUS,
   type ProviderControlResult,
@@ -25,6 +28,7 @@ import {
   type ProviderWorkspaceResult,
   positionNotchWindow,
   realtimeMintExplanation,
+  resolveNotchGeometry,
   SessionAttentionReviewer,
   type SessionIdentity,
   type SessionProviderAdapter,
@@ -34,6 +38,7 @@ import {
   type TrackerActionResult,
   workspaceNameText,
 } from "@sidecar/core";
+
 import {
   app,
   BrowserWindow,
@@ -44,6 +49,7 @@ import {
   ipcMain,
   Menu,
   nativeImage,
+  nativeTheme,
   powerMonitor,
   safeStorage,
   screen,
@@ -59,9 +65,12 @@ import { CopilotSessionAdapter } from "./copilot-adapter";
 import { CURSOR_PROVIDER, CursorSessionAdapter } from "./cursor-adapter";
 import { CursorLocalSessionAdapter } from "./cursor-local-adapter";
 import { DevinSessionAdapter } from "./devin-adapter";
+import { feedbackDeliveryFromEnvironment } from "./feedback-delivery";
 import { JulesSessionAdapter } from "./jules-adapter";
 import { LinearIssueTracker } from "./linear-tracker";
 import { readMacScreenGeometry } from "./macos-screen-geometry";
+import { keepWindowStationary } from "./macos-stationary-window";
+import { MediaDuckController } from "./media-duck";
 import { openAiAttentionEvaluatorFromEnvironment } from "./openai-attention-evaluator";
 import {
   openAiRealtimeCredentialsFromEnvironment,
@@ -71,6 +80,7 @@ import { OpenCodeSessionAdapter } from "./opencode-adapter";
 import { SettingsStore } from "./settings-store";
 import {
   type AppBootstrap,
+  type AppSettings,
   channels,
   type DisplayDiagnostic,
   type MicrophoneStatus,
@@ -85,6 +95,12 @@ import {
   type CredentialProviderId,
   isCredentialProviderId,
 } from "./shared/credential-providers";
+import {
+  FEEDBACK_KIND,
+  FEEDBACK_LIFECYCLE_EVENT,
+  type FeedbackResult,
+  feedbackSubmission,
+} from "./shared/feedback";
 import {
   askHotkeyCandidates,
   askHotkeyReport,
@@ -200,6 +216,11 @@ const attentionReviewer = attentionEvaluator
 // A fixture run stays credential-free for the same reason attention review
 // does: evidence must be reproducible without a key and without a network.
 const realtimeCredentials = fixtureMode ? undefined : openAiRealtimeCredentialsFromEnvironment();
+// Quiets Music and Spotify while a spoken exchange is live. It lives here
+// rather than in the renderer because letting the players back up must survive
+// anything the renderer does — and only this process may run a helper.
+const mediaDuck = new MediaDuckController();
+const feedbackDelivery = feedbackDeliveryFromEnvironment();
 let voiceHotkey: string | undefined;
 /**
  * The chord the user chose over the defaults, if any. Read from the settings
@@ -241,8 +262,8 @@ function registerVoiceHotkey(): void {
   // The helper first, because it is the only one of the two that reports the
   // key being let go of, and a key you hold is the whole point.
   talkKeyWatcher = new TalkKeyWatcher({
-    onPress: () => panelWindow?.webContents.send(channels.voiceHotkeyPress),
-    onRelease: () => panelWindow?.webContents.send(channels.voiceHotkeyRelease),
+    onPress: () => voiceHostWindow()?.webContents.send(channels.voiceHotkeyPress),
+    onRelease: () => voiceHostWindow()?.webContents.send(channels.voiceHotkeyRelease),
     onRegistered: (accelerator) => {
       voiceHotkey = accelerator;
       reportVoiceHotkey();
@@ -270,11 +291,11 @@ function registerVoiceHotkey(): void {
 function registerToggleHotkey(): void {
   for (const accelerator of voiceHotkeyCandidates(chosenVoiceHotkey)) {
     const registered = globalShortcut.register(accelerator, () => {
-      panelWindow?.webContents.send(channels.voiceHotkeyPress);
+      voiceHostWindow()?.webContents.send(channels.voiceHotkeyPress);
       // A toggle has only the one edge, so it reports a release immediately and
       // one short enough to read as a tap. Every press then latches or ends a
       // turn, which is the old behaviour exactly.
-      panelWindow?.webContents.send(channels.voiceHotkeyRelease);
+      voiceHostWindow()?.webContents.send(channels.voiceHotkeyRelease);
     });
     if (!registered) continue;
     voiceHotkey = accelerator;
@@ -285,6 +306,7 @@ function registerToggleHotkey(): void {
 }
 
 let askHotkey: string | undefined;
+let chosenAskHotkey: string | undefined;
 
 /**
  * Registers the key that summons the ask field from whatever app is frontmost,
@@ -296,7 +318,8 @@ let askHotkey: string | undefined;
  * The press does two things in order: stands the panel up focused, then asks
  * the renderer to put the caret in the field — or, when the caret is already
  * there, the renderer reads the same press as the dismissal, so one key
- * summons and puts away like every launcher does.
+ * summons and puts away like every launcher does. The panel that answers is
+ * the voice host's, the same window every other app-level ask lands in.
  */
 function registerAskHotkey(): void {
   // Re-runnable: moving the talk key lets everything go and registers afresh,
@@ -310,12 +333,20 @@ function registerAskHotkey(): void {
     process.stderr.write(`${askHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.NO_CREDENTIAL)}\n`);
     return;
   }
-  // A chord the talk key sits on — chosen by the user, or announced as
-  // registered — is not a candidate: the two Luke keys must never compete.
-  for (const accelerator of askHotkeyCandidates([chosenVoiceHotkey, voiceHotkey])) {
+  // Every chord the talk key could sit on is taken, not just the one it has
+  // announced: its helper falls back through its own candidates after this
+  // runs, so a chord it merely might take is already not the ask key's to
+  // have — the two Luke keys must never compete.
+  for (const accelerator of askHotkeyCandidates(chosenAskHotkey, [
+    ...voiceHotkeyCandidates(chosenVoiceHotkey),
+    voiceHotkey,
+  ])) {
     const registered = globalShortcut.register(accelerator, () => {
-      setWindowMode("expanded", true);
-      panelWindow?.webContents.send(channels.lifecycle, "ask:focus");
+      const host = voiceHostWindow();
+      const displayId = host ? displayIdFor(host.webContents) : undefined;
+      if (displayId === undefined) return;
+      setWindowMode(displayId, "expanded", true);
+      host?.webContents.send(channels.lifecycle, "ask:focus");
     });
     if (!registered) continue;
     askHotkey = accelerator;
@@ -326,21 +357,38 @@ function registerAskHotkey(): void {
 }
 
 /**
- * Tells a renderer the ask key it should be teaching, whenever that changes.
- * The raw accelerator travels, as in bootstrap: the renderer needs both its
- * spellings, and an absent key clears the hint rather than leaving a keycap
- * up for a chord that answers nothing.
+ * Tells every renderer the ask key it should be teaching, whenever that
+ * changes. The raw accelerator travels, as in bootstrap: the renderer needs
+ * both its spellings, and an absent key clears the hint rather than leaving a
+ * keycap up for a chord that answers nothing.
  */
 function sendAskHotkey(): void {
-  panelWindow?.webContents.send(channels.askHotkeyChanged, askHotkey);
+  for (const window of panelWindows.values()) {
+    window.webContents.send(channels.askHotkeyChanged, askHotkey);
+  }
 }
 
-/** Tells a renderer the key it should be showing, whenever that changes. */
+/**
+ * Moves the ask key to whatever `chosenAskHotkey` now says, while the app is
+ * running. Only the ask key's own chord is let go of — the talk key's
+ * registration must not flicker for a change that is none of its business —
+ * and unlike the talk key there is no helper exit to wait for: Electron
+ * releases a chord the moment it is asked to.
+ */
+function applyAskHotkey(): void {
+  if (askHotkey) globalShortcut.unregister(askHotkey);
+  registerAskHotkey();
+  sendAskHotkey();
+}
+
+/** Tells every renderer the key it should be showing, whenever that changes. */
 function sendVoiceHotkey(): void {
-  panelWindow?.webContents.send(channels.voiceHotkeyChanged, {
-    ...(voiceHotkey ? { hotkey: voiceHotkeyLabel(voiceHotkey) } : {}),
-    held: voiceHotkeyHeld,
-  });
+  for (const window of panelWindows.values()) {
+    window.webContents.send(channels.voiceHotkeyChanged, {
+      ...(voiceHotkey ? { hotkey: voiceHotkeyLabel(voiceHotkey) } : {}),
+      held: voiceHotkeyHeld,
+    });
+  }
 }
 
 function reportVoiceHotkey(): void {
@@ -378,19 +426,35 @@ async function applyVoiceHotkey(): Promise<void> {
   sendAskHotkey();
 }
 
-let windowMode: WindowMode = captureMode
+/** The mode every window is born in; only the dev and capture flags change it. */
+const initialWindowMode: WindowMode = captureMode
   ? process.argv.includes("--compact")
     ? "compact"
     : "expanded"
   : process.argv.includes("--expanded")
     ? "expanded"
     : "compact";
-let panelWindow: BrowserWindow | undefined;
+/**
+ * One panel window per display Luke stands on, keyed by the display's id, each
+ * with its own mode: a panel opened on one monitor must not resize the capsule
+ * on another. The collapse timers ride the same key, because a collapse is a
+ * single window's affair.
+ */
+const panelWindows = new Map<number, BrowserWindow>();
+const windowModes = new Map<number, WindowMode>();
+const collapseTimers = new Map<number, NodeJS.Timeout>();
 let tray: Tray | undefined;
-let selectedDisplayId: number | undefined;
+/**
+ * Whether Luke stands on every display, mirroring the settings file the way
+ * the minter mirrors the chosen voice: read once before any panel exists,
+ * updated by the same handler that stores a new choice, so every layout
+ * decision stays synchronous. Off means the system's main display alone.
+ */
+let showOnAllDisplays = false;
+/** The chosen form for displays without a housing, mirrored the same way. */
+let panelFormFactor: PanelFormFactor = DEFAULT_PANEL_FORM_FACTOR;
 let nativeScreens = new Map<number, NativeNotchGeometry>();
 let sessionRefreshTimer: NodeJS.Timeout | undefined;
-let collapseTimer: NodeJS.Timeout | undefined;
 let sessionRefreshRunning = false;
 let attentionReviewRunning = false;
 /**
@@ -412,7 +476,9 @@ function broadcastWorkspaceProjects(): void {
   const serialized = JSON.stringify(projects);
   if (serialized === lastWorkspaceProjects) return;
   lastWorkspaceProjects = serialized;
-  panelWindow?.webContents.send(channels.workspaceProjectsChanged, projects);
+  for (const window of panelWindows.values()) {
+    window.webContents.send(channels.workspaceProjectsChanged, projects);
+  }
 }
 
 function argumentValue(name: string): string | undefined {
@@ -420,25 +486,63 @@ function argumentValue(name: string): string | undefined {
   return index >= 0 ? process.argv[index + 1] : undefined;
 }
 
-function selectedDisplay(): Display {
-  const displays = screen.getAllDisplays();
-  return displays.find((display) => display.id === selectedDisplayId) ?? screen.getPrimaryDisplay();
+/**
+ * Where Luke stands right now: every connected display when asked to stand on
+ * all of them, the system's main display alone otherwise. A capture run stays
+ * on the main display regardless, where its fixture housing is pinned.
+ */
+function effectiveDisplayIds(): number[] {
+  if (!captureMode && showOnAllDisplays) {
+    return screen.getAllDisplays().map((display) => display.id);
+  }
+  return [screen.getPrimaryDisplay().id];
 }
 
-function layoutFor(display = selectedDisplay()) {
-  return positionNotchWindow(display, windowMode, nativeScreens.get(display.id));
+function displayById(displayId: number): Display | undefined {
+  return screen.getAllDisplays().find((display) => display.id === displayId);
 }
 
-function displayDiagnostic(display = selectedDisplay()): DisplayDiagnostic {
-  const layout = layoutFor(display);
+function windowModeFor(displayId: number): WindowMode {
+  return windowModes.get(displayId) ?? initialWindowMode;
+}
+
+function layoutFor(display: Display, mode: WindowMode) {
+  return positionNotchWindow(display, mode, nativeScreens.get(display.id), panelFormFactor);
+}
+
+function displayDiagnostic(display: Display): DisplayDiagnostic {
   return {
     id: display.id,
     label: display.label || `Display ${display.id}`,
     bounds: display.bounds,
     workArea: display.workArea,
     scaleFactor: display.scaleFactor,
-    notch: layout.notch,
+    notch: resolveNotchGeometry(display, nativeScreens.get(display.id), panelFormFactor),
   };
+}
+
+/**
+ * The one window a spoken conversation lives in. Voice is a single thing —
+ * one microphone, one reply, one face speaking — so the talk key and the
+ * attention readouts go to a single renderer rather than opening one
+ * conversation per display: the main display's window when Luke stands there,
+ * else the first window standing anywhere.
+ */
+function voiceHostWindow(): BrowserWindow | undefined {
+  const primary = panelWindows.get(screen.getPrimaryDisplay().id);
+  if (primary && !primary.isDestroyed()) return primary;
+  for (const window of panelWindows.values()) {
+    if (!window.isDestroyed()) return window;
+  }
+  return undefined;
+}
+
+/** The display a renderer message came from, so each window answers for itself. */
+function displayIdFor(sender: Electron.WebContents): number | undefined {
+  for (const [displayId, window] of panelWindows) {
+    if (!window.isDestroyed() && window.webContents === sender) return displayId;
+  }
+  return undefined;
 }
 
 function refreshNativeGeometry(): void {
@@ -463,18 +567,106 @@ function refreshNativeGeometry(): void {
  * animates the capsule into the panel inside it, where the viewport is constant
  * and the work stays on the compositor.
  */
-function positionPanel(): void {
-  if (!panelWindow || panelWindow.isDestroyed()) return;
-  const display = selectedDisplay();
-  selectedDisplayId = display.id;
-  const layout = layoutFor(display);
-  panelWindow.setBounds({
+function positionPanel(displayId: number): void {
+  const window = panelWindows.get(displayId);
+  if (!window || window.isDestroyed()) return;
+  const display = displayById(displayId);
+  // A window whose display has gone is the reconciler's to take down, not
+  // this function's to guess a home for.
+  if (!display) return;
+  const layout = layoutFor(display, windowModeFor(displayId));
+  window.setBounds({
     x: layout.x,
     y: layout.y,
     width: layout.width,
     height: layout.height,
   });
-  panelWindow.webContents.send(channels.displayChanged, displayDiagnostic(display));
+  window.webContents.send(channels.displayChanged, displayDiagnostic(display));
+}
+
+function positionPanels(): void {
+  for (const displayId of panelWindows.keys()) positionPanel(displayId);
+}
+
+/**
+ * Hands a fresh settings snapshot to every window but the one that asked —
+ * that one already holds it in its reply, and must redraw from the reply
+ * rather than race a broadcast. One window's change would otherwise leave
+ * every other window's rows and guide describing a state the store no longer
+ * holds.
+ */
+function broadcastSettings(settings: AppSettings, except: Electron.WebContents): void {
+  for (const window of panelWindows.values()) {
+    if (window.isDestroyed() || window.webContents === except) continue;
+    window.webContents.send(channels.settingsChanged, settings);
+  }
+}
+
+/**
+ * Makes the windows match the chosen displays: one raised on every chosen
+ * display that is connected, none anywhere else. A window whose display went
+ * away is moved to a display that needs one rather than destroyed beside a
+ * fresh create — a swap of the main display must carry the conversation and
+ * the panel's state across, not drop them on the floor. Raising before razing
+ * is load-bearing for what remains — a swap must never pass through zero
+ * windows, because all windows closed is how this process decides it is done.
+ * Everything that changes what the set should be lands here: a switch
+ * pressed, a display plugged or unplugged, the stored choice read at launch.
+ */
+function reconcilePanels(): void {
+  const wanted = effectiveDisplayIds();
+  const wantedSet = new Set(wanted);
+  const missing = wanted.filter((displayId) => !panelWindows.has(displayId));
+  const excess = [...panelWindows.keys()].filter((displayId) => !wantedSet.has(displayId));
+  // Pair each display that needs a window with a window that lost its display.
+  while (missing.length > 0 && excess.length > 0) {
+    const toDisplayId = missing.shift();
+    const fromDisplayId = excess.shift();
+    if (toDisplayId === undefined || fromDisplayId === undefined) break;
+    rebindPanel(fromDisplayId, toDisplayId);
+  }
+  for (const displayId of missing) createPanel(displayId);
+  for (const displayId of excess) {
+    const window = panelWindows.get(displayId);
+    panelWindows.delete(displayId);
+    windowModes.delete(displayId);
+    clearCollapseTimer(displayId);
+    // A window taken down takes its exchange report with it, so a host that
+    // goes mid-conversation releases the duck rather than pinning it forever.
+    voiceExchanges.delete(displayId);
+    applyVoiceExchanges();
+    window?.destroy();
+  }
+  positionPanels();
+}
+
+/**
+ * Moves a living window to another display, state and all: its mode, its
+ * collapse-in-flight, its exchange report, and the renderer behind it — which
+ * learns its new ground from the `displayChanged` the repositioning sends,
+ * exactly as it would for a geometry change in place.
+ */
+function rebindPanel(fromDisplayId: number, toDisplayId: number): void {
+  const window = panelWindows.get(fromDisplayId);
+  if (!window) return;
+  panelWindows.delete(fromDisplayId);
+  panelWindows.set(toDisplayId, window);
+  windowModes.set(toDisplayId, windowModeFor(fromDisplayId));
+  windowModes.delete(fromDisplayId);
+  // The timer's closure names the old display; the reposition below redraws
+  // whatever a cancelled collapse would have.
+  clearCollapseTimer(fromDisplayId);
+  const exchange = voiceExchanges.get(fromDisplayId);
+  voiceExchanges.delete(fromDisplayId);
+  if (exchange !== undefined) voiceExchanges.set(toDisplayId, exchange);
+  applyVoiceExchanges();
+}
+
+function clearCollapseTimer(displayId: number): void {
+  const timer = collapseTimers.get(displayId);
+  if (!timer) return;
+  clearTimeout(timer);
+  collapseTimers.delete(displayId);
 }
 
 function configurePanelBehavior(window: BrowserWindow): void {
@@ -486,19 +678,53 @@ function configurePanelBehavior(window: BrowserWindow): void {
     });
     window.setHiddenInMissionControl(true);
     window.setWindowButtonVisibility(false);
+    keepWindowStationary(window);
   }
 }
 
 /**
- * Brings the panel forward as the key window. An accessory app has no Dock
+ * Brings one panel forward as the key window. An accessory app has no Dock
  * presence, so the app itself has to come forward before one of its windows can
  * take keyboard focus.
  */
-function focusPanelWindow(): void {
-  if (!panelWindow || panelWindow.isDestroyed() || captureMode) return;
+function focusPanelWindow(window: BrowserWindow | undefined): void {
+  if (!window || window.isDestroyed() || captureMode) return;
   if (process.platform === "darwin") app.focus({ steal: true });
-  panelWindow.show();
-  panelWindow.focus();
+  window.show();
+  window.focus();
+}
+
+/**
+ * The expanded panel owed the keyboard: the one that asked, when the asker is
+ * known and still expanded, else whichever panel stands expanded. With two
+ * panels open, focus must return to the one the user was typing in rather
+ * than to whichever the map happens to list first.
+ */
+function focusExpandedPanel(preferredDisplayId?: number): void {
+  if (preferredDisplayId !== undefined && windowModeFor(preferredDisplayId) === "expanded") {
+    const preferred = panelWindows.get(preferredDisplayId);
+    if (preferred && !preferred.isDestroyed()) {
+      focusPanelWindow(preferred);
+      return;
+    }
+  }
+  for (const [displayId, window] of panelWindows) {
+    if (windowModeFor(displayId) !== "expanded") continue;
+    focusPanelWindow(window);
+    return;
+  }
+}
+
+/**
+ * Which windows hold a live spoken exchange, and the single answer the media
+ * duck is given: live anywhere is live. Only the voice host ever actually
+ * opens one, but every window reports, so the union is what keeps a
+ * bystander's idle from ending the host's exchange.
+ */
+const voiceExchanges = new Map<number, boolean>();
+
+function applyVoiceExchanges(): void {
+  mediaDuck.setExchangeActive([...voiceExchanges.values()].some(Boolean));
 }
 
 /**
@@ -518,39 +744,41 @@ function collapseDelay(): number {
  * every caller gets it — the panel, the tray, and the motion recorder alike.
  * Growing needs the window first, or the panel has nowhere to unfold into.
  * Shrinking needs the capsule drawn first, or the window clips the panel out
- * from under its own collapse.
+ * from under its own collapse. One display's window at a time: a panel opened
+ * on one monitor is no reason to resize the capsule on another.
  */
-function setWindowMode(mode: WindowMode, requestFocus: boolean): WindowMode {
-  windowMode = mode;
-  if (!panelWindow || panelWindow.isDestroyed()) return windowMode;
+function setWindowMode(displayId: number, mode: WindowMode, requestFocus: boolean): WindowMode {
+  windowModes.set(displayId, mode);
+  const window = panelWindows.get(displayId);
+  if (!window || window.isDestroyed()) return mode;
 
   const expanded = mode === "expanded";
-  panelWindow.setFocusable(expanded && !captureMode);
-  if (collapseTimer) {
-    clearTimeout(collapseTimer);
-    collapseTimer = undefined;
-  }
+  window.setFocusable(expanded && !captureMode);
+  clearCollapseTimer(displayId);
   if (expanded) {
-    positionPanel();
-    panelWindow.webContents.send(channels.lifecycle, `mode:${mode}`);
+    positionPanel(displayId);
+    window.webContents.send(channels.lifecycle, `mode:${mode}`);
   } else {
-    panelWindow.webContents.send(channels.lifecycle, `mode:${mode}`);
+    window.webContents.send(channels.lifecycle, `mode:${mode}`);
     const delay = collapseDelay();
-    if (delay === 0) positionPanel();
+    if (delay === 0) positionPanel(displayId);
     else {
-      collapseTimer = setTimeout(() => {
-        collapseTimer = undefined;
-        if (windowMode === "compact") positionPanel();
-      }, delay);
+      collapseTimers.set(
+        displayId,
+        setTimeout(() => {
+          collapseTimers.delete(displayId);
+          if (windowModeFor(displayId) === "compact") positionPanel(displayId);
+        }, delay),
+      );
     }
   }
 
   if (expanded && requestFocus && !captureMode) {
-    focusPanelWindow();
+    focusPanelWindow(window);
   } else {
-    panelWindow.showInactive();
+    window.showInactive();
   }
-  return windowMode;
+  return mode;
 }
 
 function microphoneStatus(): MicrophoneStatus {
@@ -640,8 +868,13 @@ function reportVoiceAvailability(): void {
 function registerIpc(): void {
   ipcMain.handle(channels.bootstrap, async (event): Promise<AppBootstrap> => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
+    // Each window bootstraps as itself: its own display, its own mode. The
+    // roster and the settings are the same everywhere.
+    const displayId = displayIdFor(event.sender) ?? effectiveDisplayIds()[0];
+    const display =
+      (displayId !== undefined ? displayById(displayId) : undefined) ?? screen.getPrimaryDisplay();
     return {
-      mode: windowMode,
+      mode: displayId !== undefined ? windowModeFor(displayId) : initialWindowMode,
       startPeeked,
       startInSlot,
       profile,
@@ -661,7 +894,7 @@ function registerIpc(): void {
       // spellings — the keycap's ⌥L and aria's Alt+L — and only the
       // accelerator can produce the pair.
       ...(askHotkey ? { askHotkey } : {}),
-      display: displayDiagnostic(),
+      display: displayDiagnostic(display),
       sessions: fixtureMode ? [] : sessionRegistry.snapshot().sessions,
       workspaceProjects: observedWorkspaceProjects(),
       ...(trackedIssues && !fixtureMode ? { issues: trackedIssues } : {}),
@@ -673,14 +906,21 @@ function registerIpc(): void {
     if (!trustedSender(event) || typeof expanded !== "boolean") {
       throw new Error("Invalid window mode request");
     }
-    return setWindowMode(expanded ? "expanded" : "compact", focus === true);
+    // The ask is the sender's own window's: expanding a panel on one display
+    // must not unfold one on every other.
+    const displayId = displayIdFor(event.sender);
+    if (displayId === undefined) throw new Error("Invalid window mode request");
+    return setWindowMode(displayId, expanded ? "expanded" : "compact", focus === true);
   });
 
   ipcMain.on(channels.setPointerInterception, (event, interceptsPointer: unknown) => {
     if (!trustedSender(event) || typeof interceptsPointer !== "boolean") {
       return;
     }
-    panelWindow?.setIgnoreMouseEvents(!interceptsPointer, { forward: true });
+    // The pointer question is per window too: the hit regions the renderer
+    // reported are its own.
+    const window = BrowserWindow.fromWebContents(event.sender);
+    window?.setIgnoreMouseEvents(!interceptsPointer, { forward: true });
   });
 
   ipcMain.handle(channels.requestMicrophone, async (event) => {
@@ -712,6 +952,7 @@ function registerIpc(): void {
         if (!result.reason && providerId === CREDENTIAL_PROVIDER_ID.LINEAR) {
           void refreshTrackedIssues();
         }
+        broadcastSettings(result.settings, event.sender);
         return result;
       } catch {
         // A filesystem failure is not something the user can act on, so it is
@@ -734,6 +975,7 @@ function registerIpc(): void {
       try {
         const result = await settingsStore.setShowInMenuBar(show);
         applyMenuBarVisibility(result.settings.showInMenuBar);
+        broadcastSettings(result.settings, event.sender);
         return result;
       } catch {
         // A filesystem failure is not something the user can act on, so it is
@@ -756,7 +998,57 @@ function registerIpc(): void {
       if (typeof show !== "boolean") throw new Error("Invalid Dock request");
       try {
         const result = await settingsStore.setShowInDock(show);
-        applyDockVisibility(result.settings.showInDock);
+        applyDockVisibility(result.settings.showInDock, displayIdFor(event.sender));
+        broadcastSettings(result.settings, event.sender);
+        return result;
+      } catch {
+        // A filesystem failure is not something the user can act on, so it is
+        // reported as one line rather than as a raw system error.
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "Could not save that setting on this system.",
+        };
+      }
+    },
+  );
+
+  // The windows follow the stored answer at once, like the status item: on
+  // raises a panel on every connected display, off brings Luke back to the
+  // main one alone.
+  ipcMain.handle(
+    channels.setShowOnAllDisplays,
+    async (event, show: unknown): Promise<SettingsUpdateResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (typeof show !== "boolean") throw new Error("Invalid display request");
+      try {
+        const result = await settingsStore.setShowOnAllDisplays(show);
+        showOnAllDisplays = result.settings.showOnAllDisplays;
+        reconcilePanels();
+        broadcastSettings(result.settings, event.sender);
+        return result;
+      } catch {
+        // A filesystem failure is not something the user can act on, so it is
+        // reported as one line rather than as a raw system error.
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "Could not save that setting on this system.",
+        };
+      }
+    },
+  );
+
+  // The form follows the stored answer at once, for the same reason: every
+  // window resizes around the housing the shape is about to draw or drop.
+  ipcMain.handle(
+    channels.setFormFactor,
+    async (event, formFactor: unknown): Promise<SettingsUpdateResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (!isPanelFormFactor(formFactor)) throw new Error("Invalid form factor request");
+      try {
+        const result = await settingsStore.setFormFactor(formFactor);
+        panelFormFactor = result.settings.formFactor;
+        positionPanels();
+        broadcastSettings(result.settings, event.sender);
         return result;
       } catch {
         // A filesystem failure is not something the user can act on, so it is
@@ -782,6 +1074,7 @@ function registerIpc(): void {
         // The next credential is minted for the new voice; a conversation
         // already open keeps the one it answered with.
         if (!result.reason) realtimeCredentials?.setVoice(voice);
+        broadcastSettings(result.settings, event.sender);
         return result;
       } catch {
         return {
@@ -803,6 +1096,7 @@ function registerIpc(): void {
         // The next credential is minted for the new pace; a conversation
         // already open keeps the one it answered at.
         if (!result.reason) realtimeCredentials?.setSpeed(speed);
+        broadcastSettings(result.settings, event.sender);
         return result;
       } catch {
         return {
@@ -821,7 +1115,9 @@ function registerIpc(): void {
       if (!trustedSender(event)) throw new Error("Untrusted renderer");
       if (typeof enabled !== "boolean") throw new Error("Invalid caption request");
       try {
-        return await settingsStore.setVoiceCaptions(enabled);
+        const result = await settingsStore.setVoiceCaptions(enabled);
+        broadcastSettings(result.settings, event.sender);
+        return result;
       } catch {
         // A filesystem failure is not something the user can act on, so it is
         // reported as one line rather than as a raw system error.
@@ -861,6 +1157,7 @@ function registerIpc(): void {
           // finished and the helper's own registration line can say the truth.
           await applyVoiceHotkey();
         }
+        broadcastSettings(result.settings, event.sender);
         return result;
       } catch {
         // A filesystem failure is not something the user can act on, so it is
@@ -872,6 +1169,90 @@ function registerIpc(): void {
       }
     },
   );
+
+  // The ask key is the user's to move on the talk key's exact terms, read
+  // through the same gate and registered at once. The one extra rule is the
+  // standing one — the two Luke keys must never compete for a chord — so a
+  // chord the talk key sits on is refused with words rather than stored and
+  // silently outbid.
+  ipcMain.handle(
+    channels.setAskHotkey,
+    async (event, accelerator: unknown): Promise<SettingsUpdateResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (accelerator !== undefined && typeof accelerator !== "string") {
+        throw new Error("Invalid shortcut request");
+      }
+      const chosen = accelerator === undefined ? undefined : parseVoiceHotkey(accelerator);
+      if (accelerator !== undefined && chosen === undefined) {
+        throw new Error("Invalid shortcut request");
+      }
+      // The talk key's whole candidate list is refused, not just the chord it
+      // holds now: its helper may fall back to any of them on a later launch,
+      // and an ask key stored on one would race it there.
+      if (
+        chosen &&
+        (voiceHotkeyCandidates(chosenVoiceHotkey).includes(chosen) || chosen === voiceHotkey)
+      ) {
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "That chord is reserved for the talk key.",
+        };
+      }
+      try {
+        const result = await settingsStore.setAskHotkey(chosen);
+        if (!result.reason) {
+          chosenAskHotkey = chosen;
+          applyAskHotkey();
+        }
+        broadcastSettings(result.settings, event.sender);
+        return result;
+      } catch {
+        // A filesystem failure is not something the user can act on, so it is
+        // reported as one line rather than as a raw system error.
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "Could not save that shortcut on this system.",
+        };
+      }
+    },
+  );
+
+  // The duck follows the stored answer at once, like the menu bar item: off
+  // must let a duck currently held go rather than waiting for the next launch.
+  ipcMain.handle(
+    channels.setDuckOtherMedia,
+    async (event, enabled: unknown): Promise<SettingsUpdateResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (typeof enabled !== "boolean") throw new Error("Invalid media duck request");
+      try {
+        const result = await settingsStore.setDuckOtherMedia(enabled);
+        mediaDuck.setEnabled(result.settings.duckOtherMedia);
+        broadcastSettings(result.settings, event.sender);
+        return result;
+      } catch {
+        // A filesystem failure is not something the user can act on, so it is
+        // reported as one line rather than as a raw system error.
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "Could not save that setting on this system.",
+        };
+      }
+    },
+  );
+
+  // A statement of state, not a request: the renderer says whether a spoken
+  // exchange is live, and the duck holds every other decision — the setting,
+  // the hangover after an exchange, which players are playing at all. Each
+  // window states only its own exchange: a bystander window reporting idle —
+  // one just raised on a plugged-in display, say — must never end the duck
+  // the speaking window opened, so the duck follows the union of them all.
+  ipcMain.on(channels.setVoiceExchange, (event, active: unknown) => {
+    if (!trustedSender(event) || typeof active !== "boolean") return;
+    const displayId = displayIdFor(event.sender);
+    if (displayId === undefined) return;
+    voiceExchanges.set(displayId, active);
+    applyVoiceExchanges();
+  });
 
   // Where to get a key is a question the panel cannot answer itself, so it
   // hands the question to the browser. The renderer names a provider rather
@@ -1184,11 +1565,35 @@ function registerIpc(): void {
     },
   );
 
+  // A note to the founders travels one road: typed in the composer, validated
+  // here as a whole, and handed to the courier whose destination is fixed by
+  // this build. Only what the user wrote and attached crosses — no session
+  // material, no identifiers, nothing observed — and a refusal comes back as an
+  // answer for the composer rather than a throw, because sending is the user's
+  // own act and its outcome belongs beside the field it left.
+  ipcMain.handle(
+    channels.sendFeedback,
+    async (event, submission: unknown): Promise<FeedbackResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      const parsed = feedbackSubmission(submission);
+      if (!parsed) throw new Error("Invalid feedback submission");
+      // A fixture run must be reproducible without a network, so it refuses
+      // rather than sending — and says so, because the composer still draws.
+      if (fixtureMode) {
+        return { delivered: false, reason: "A fixture run sends nothing." };
+      }
+      return feedbackDelivery.deliver(parsed);
+    },
+  );
+
   // The panel is normally shown without stealing focus. A text field cannot be
-  // typed into that way, so the renderer asks for focus when it opens one.
+  // typed into that way, so the renderer asks for focus when it opens one —
+  // for its own window, which is the one holding the field.
   ipcMain.on(channels.focusPanel, (event) => {
-    if (!trustedSender(event) || windowMode !== "expanded") return;
-    focusPanelWindow();
+    if (!trustedSender(event)) return;
+    const displayId = displayIdFor(event.sender);
+    if (displayId === undefined || windowModeFor(displayId) !== "expanded") return;
+    focusPanelWindow(panelWindows.get(displayId));
   });
 
   ipcMain.handle(channels.requestRealtimeCredential, async (event) => {
@@ -1203,9 +1608,12 @@ function registerIpc(): void {
   });
 
   ipcMain.on(channels.rendererReady, async (event) => {
-    if (!trustedSender(event) || !captureOutput || !panelWindow) return;
+    if (!trustedSender(event) || !captureOutput) return;
+    // A capture run holds a single window, and the ready message is its own.
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (!window || window.isDestroyed()) return;
     await new Promise((resolve) => setTimeout(resolve, 350));
-    const image = await panelWindow.webContents.capturePage(undefined, {
+    const image = await window.webContents.capturePage(undefined, {
       stayHidden: true,
       stayAwake: true,
     });
@@ -1279,7 +1687,9 @@ async function reviewSessionAttention(): Promise<void> {
     // `outcome` says whether to voice it now, which only these reviews do.
     const speech = attentionSpeechFromReviews(reviews);
     if (speech.length > 0) {
-      panelWindow?.webContents.send(channels.attentionSpeech, speech);
+      // Spoken once, by the one window that holds the voice: every display
+      // already shows the same session as needing attention.
+      voiceHostWindow()?.webContents.send(channels.attentionSpeech, speech);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -1292,7 +1702,9 @@ async function reviewSessionAttention(): Promise<void> {
 function startSessionObservation(): void {
   if (fixtureMode) return;
   sessionRegistry.subscribe((snapshot) => {
-    panelWindow?.webContents.send(channels.sessionsChanged, snapshot.sessions);
+    for (const window of panelWindows.values()) {
+      window.webContents.send(channels.sessionsChanged, snapshot.sessions);
+    }
     // A commit is the earliest a write-triggered refresh can have changed the
     // offer, so the announcement rides it rather than waiting for the timer.
     broadcastWorkspaceProjects();
@@ -1329,7 +1741,9 @@ async function refreshTrackedIssues(): Promise<void> {
       }
     }
     trackedIssues = connected ? collected : undefined;
-    panelWindow?.webContents.send(channels.issuesChanged, trackedIssues);
+    for (const window of panelWindows.values()) {
+      window.webContents.send(channels.issuesChanged, trackedIssues);
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`Issue observation failed: ${message}\n`);
@@ -1351,10 +1765,19 @@ function startIssueObservation(): void {
   issueRefreshTimer.unref();
 }
 
+/** Whether some panel window's renderer is asking, whichever display it is on. */
+function isPanelWebContents(webContents: Electron.WebContents): boolean {
+  for (const window of panelWindows.values()) {
+    if (!window.isDestroyed() && window.webContents === webContents) return true;
+  }
+  return false;
+}
+
 function configurePermissions(): void {
   session.defaultSession.setPermissionCheckHandler(
     (webContents, permission, _origin, details) =>
-      webContents === panelWindow?.webContents &&
+      webContents !== null &&
+      isPanelWebContents(webContents) &&
       permission === "media" &&
       details.mediaType === "audio",
   );
@@ -1362,7 +1785,7 @@ function configurePermissions(): void {
     (webContents, permission, callback, details) => {
       const mediaTypes = "mediaTypes" in details ? (details.mediaTypes ?? []) : [];
       callback(
-        webContents === panelWindow?.webContents &&
+        isPanelWebContents(webContents) &&
           permission === "media" &&
           mediaTypes.length > 0 &&
           mediaTypes.every((mediaType: string) => mediaType === "audio"),
@@ -1371,12 +1794,13 @@ function configurePermissions(): void {
   );
 }
 
-function createPanel(): void {
-  const display = screen.getPrimaryDisplay();
-  selectedDisplayId = display.id;
-  const layout = layoutFor(display);
+function createPanel(displayId: number): void {
+  const display = displayById(displayId);
+  if (!display) return;
+  windowModes.set(displayId, initialWindowMode);
+  const layout = layoutFor(display, initialWindowMode);
 
-  panelWindow = new BrowserWindow({
+  const window = new BrowserWindow({
     x: layout.x,
     y: layout.y,
     width: layout.width,
@@ -1395,7 +1819,7 @@ function createPanel(): void {
     fullscreenable: false,
     skipTaskbar: true,
     alwaysOnTop: true,
-    focusable: windowMode === "expanded" && !captureMode,
+    focusable: initialWindowMode === "expanded" && !captureMode,
     acceptFirstMouse: true,
     type: process.platform === "darwin" ? "panel" : undefined,
     webPreferences: {
@@ -1408,20 +1832,32 @@ function createPanel(): void {
       backgroundThrottling: false,
     },
   });
+  panelWindows.set(displayId, window);
 
-  configurePanelBehavior(panelWindow);
-  panelWindow.setIgnoreMouseEvents(true, { forward: true });
-  panelWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-  panelWindow.webContents.on("will-navigate", (event, url) => {
+  configurePanelBehavior(window);
+  window.setIgnoreMouseEvents(true, { forward: true });
+  window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  window.webContents.on("will-navigate", (event, url) => {
     if (url !== rendererUrl()) event.preventDefault();
   });
-  panelWindow.once("ready-to-show", () => {
-    if (!captureMode) panelWindow?.showInactive();
+  window.once("ready-to-show", () => {
+    if (!captureMode && !window.isDestroyed()) window.showInactive();
   });
-  panelWindow.on("closed", () => {
-    panelWindow = undefined;
+  // The reconciler deletes before it destroys, so this answers only a window
+  // that went down some other way — and it must not leave a ghost in the map,
+  // nor a phantom exchange holding the duck down. Found by the window rather
+  // than the id it was born under, because a rebind may have moved it.
+  window.on("closed", () => {
+    for (const [id, candidate] of [...panelWindows]) {
+      if (candidate !== window) continue;
+      panelWindows.delete(id);
+      windowModes.delete(id);
+      clearCollapseTimer(id);
+      voiceExchanges.delete(id);
+      applyVoiceExchanges();
+    }
   });
-  void panelWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
+  void window.loadFile(path.join(__dirname, "renderer", "index.html"));
 }
 
 function trayMenu(): Electron.Menu {
@@ -1440,8 +1876,42 @@ function trayMenu(): Electron.Menu {
       accelerator: "CommandOrControl+,",
       registerAccelerator: false,
       click: () => {
-        setWindowMode("expanded", true);
-        panelWindow?.webContents.send(channels.lifecycle, "tab:settings");
+        // The menu bar item lives on whichever display the user opened it
+        // from, but the panel it opens is the voice host's: one Settings, on
+        // the same window every other app-level ask lands in.
+        const host = voiceHostWindow();
+        const displayId = host ? displayIdFor(host.webContents) : undefined;
+        if (displayId === undefined) return;
+        setWindowMode(displayId, "expanded", true);
+        host?.webContents.send(channels.lifecycle, "tab:settings");
+      },
+    },
+    { type: "separator" },
+    {
+      // The same door the bottom of the settings tab offers, for whoever lives
+      // in the menu bar instead: the panel comes up on the composer, already
+      // set to the kind that was asked for — on the voice host's window, the
+      // same one every other app-level ask lands in.
+      label: "Send Feedback…",
+      click: () => {
+        const host = voiceHostWindow();
+        const displayId = host ? displayIdFor(host.webContents) : undefined;
+        if (displayId === undefined) return;
+        setWindowMode(displayId, "expanded", true);
+        host?.webContents.send(
+          channels.lifecycle,
+          FEEDBACK_LIFECYCLE_EVENT[FEEDBACK_KIND.FEEDBACK],
+        );
+      },
+    },
+    {
+      label: "Submit a Prompt…",
+      click: () => {
+        const host = voiceHostWindow();
+        const displayId = host ? displayIdFor(host.webContents) : undefined;
+        if (displayId === undefined) return;
+        setWindowMode(displayId, "expanded", true);
+        host?.webContents.send(channels.lifecycle, FEEDBACK_LIFECYCLE_EVENT[FEEDBACK_KIND.PROMPT]);
       },
     },
     { type: "separator" },
@@ -1495,6 +1965,33 @@ function applyMenuBarVisibility(show: boolean): void {
 }
 
 /**
+ * The Dock tile per theme: the porcelain tile for a light desktop, the
+ * space-black one for a dark. The bundle's `.icns` is cut from the dark tile
+ * and cannot follow the theme, and an unpackaged run has only Electron's stock
+ * icon, so the running app draws the Dock image itself from these.
+ */
+const DOCK_ICON_FILES = {
+  LIGHT: "luke-icon-light.png",
+  DARK: "luke-icon-dark.png",
+} as const;
+
+/**
+ * Draws Luke's own face in the Dock, matched to the theme. Called at startup,
+ * on every theme change, and after every `dock.show()` — showing the icon
+ * transforms the process, and macOS draws the fresh tile from the bundle's
+ * icon (in a dev run, Electron's stock one), forgetting any image set while
+ * there was no tile to wear it. Artwork missing from a build draws nothing,
+ * leaving the bundle icon (or the stock one) in place rather than an empty
+ * tile.
+ */
+function applyDockIcon(): void {
+  if (!app.dock) return;
+  const file = nativeTheme.shouldUseDarkColors ? DOCK_ICON_FILES.DARK : DOCK_ICON_FILES.LIGHT;
+  const image = nativeImage.createFromPath(path.join(__dirname, "icon", file));
+  if (!image.isEmpty()) app.dock.setIcon(image);
+}
+
+/**
  * macOS ignores a `dock.hide()` within a second of the last Dock change, so a
  * switch pressed twice cannot be honoured call by call; the applier below
  * paces itself to this instead, which is Electron's documented floor.
@@ -1504,15 +2001,20 @@ const DOCK_SETTLE_MS = 1100;
 /** The Dock state last asked for, and whether the applier is chasing it. */
 let dockDesired = false;
 let dockSettling = false;
+/** The display whose panel asked for the last Dock change, when one did. */
+let dockAskedFrom: number | undefined;
 
 /**
  * Puts Luke in the Dock or takes him back out, to match the setting. He ships
  * as an accessory app — the notch is his fixed point — so the icon is a second
- * door like the status item, losing nothing when it is hidden.
+ * door like the status item, losing nothing when it is hidden. `askedFrom` is
+ * the display whose panel held the switch, so the caret goes back where the
+ * press was made rather than to whichever panel stands first.
  */
-function applyDockVisibility(show: boolean): void {
+function applyDockVisibility(show: boolean, askedFrom?: number): void {
   if (process.platform !== "darwin") return;
   dockDesired = show;
+  dockAskedFrom = askedFrom;
   void settleDock();
 }
 
@@ -1527,12 +2029,18 @@ async function settleDock(): Promise<void> {
   dockSettling = true;
   try {
     while (app.dock.isVisible() !== dockDesired) {
-      if (dockDesired) await app.dock.show();
-      else app.dock.hide();
+      if (dockDesired) {
+        await app.dock.show();
+        // The show rebuilt the tile from the bundle icon; put Luke's face
+        // back on it.
+        applyDockIcon();
+      } else {
+        app.dock.hide();
+      }
       // Either direction transforms the process type, which can deactivate
       // the app; the panel the switch was pressed in is brought back forward
       // rather than left to lose its caret.
-      if (windowMode === "expanded") focusPanelWindow();
+      focusExpandedPanel(dockAskedFrom);
       await new Promise((resolve) => setTimeout(resolve, DOCK_SETTLE_MS));
     }
   } finally {
@@ -1543,7 +2051,9 @@ async function settleDock(): Promise<void> {
 function handleDisplayChange(): void {
   setTimeout(() => {
     refreshNativeGeometry();
-    positionPanel();
+    // The set of displays may have changed, not just their geometry: a chosen
+    // display arriving raises its window, one leaving takes its window down.
+    reconcilePanels();
   }, 100);
 }
 
@@ -1562,11 +2072,15 @@ if (!app.requestSingleInstanceLock()) {
   app.on("second-instance", (_event, argv) => {
     refreshNativeGeometry();
     if (argv.includes("--expanded")) {
-      setWindowMode("expanded", true);
+      const host = voiceHostWindow();
+      const displayId = host ? displayIdFor(host.webContents) : undefined;
+      if (displayId !== undefined) setWindowMode(displayId, "expanded", true);
       return;
     }
-    positionPanel();
-    if (panelWindow && !panelWindow.isDestroyed()) panelWindow.showInactive();
+    reconcilePanels();
+    for (const window of panelWindows.values()) {
+      if (!window.isDestroyed()) window.showInactive();
+    }
   });
   void app.whenReady().then(async () => {
     if (process.platform === "darwin") app.setActivationPolicy("accessory");
@@ -1586,6 +2100,11 @@ if (!app.requestSingleInstanceLock()) {
       (show) => applyMenuBarVisibility(show),
       () => applyMenuBarVisibility(true),
     );
+    // The Dock wears Luke's own face from the start, and keeps wearing the
+    // right one as the desktop changes mode — whether the icon is shown yet
+    // is a separate question, answered by the setting below.
+    applyDockIcon();
+    nativeTheme.on("updated", applyDockIcon);
     // The Dock icon reads the same file under the opposite default: it is
     // opt-in, so a file that cannot be read leaves Luke out of the Dock — the
     // accessory app the launch just asserted. Nothing to do until it says so.
@@ -1594,6 +2113,13 @@ if (!app.requestSingleInstanceLock()) {
         if (show) applyDockVisibility(true);
       },
       () => undefined,
+    );
+    // Armed from the settings file alone, like the status item, and for the
+    // same reason. A file that cannot be read leaves the duck on, the same
+    // answer a file that has never said gives.
+    void settingsStore.duckOtherMedia().then(
+      (enabled) => mediaDuck.setEnabled(enabled),
+      () => mediaDuck.setEnabled(true),
     );
     // Awaited, so the chosen voice reaches the minter before the renderer
     // exists to ask for a credential: the first conversation must already
@@ -1604,18 +2130,26 @@ if (!app.requestSingleInstanceLock()) {
     // The chosen pace rides the same await, for the same reason.
     const storedSpeed = await settingsStore.readVoiceSpeed().catch(() => undefined);
     if (storedSpeed) realtimeCredentials?.setSpeed(storedSpeed);
+    // Awaited so the panels are created on the chosen displays in their
+    // chosen form, rather than appearing on the main display and jumping. A
+    // file that cannot be read means no choice was kept — the main display,
+    // the default form — and must not keep the panels from starting.
+    showOnAllDisplays = await settingsStore.readShowOnAllDisplays().catch(() => false);
+    panelFormFactor =
+      (await settingsStore.readFormFactor().catch(() => undefined)) ?? DEFAULT_PANEL_FORM_FACTOR;
     reportVoiceAvailability();
     // Awaited for the same reason the voice is: the chosen chord has to be in
     // hand before the key is registered, or the first registration would take
     // the default away from the user who moved off it. A file that cannot be
     // read means no choice was kept, and the defaults answer.
     chosenVoiceHotkey = await settingsStore.readVoiceHotkey().catch(() => undefined);
+    chosenAskHotkey = await settingsStore.readAskHotkey().catch(() => undefined);
     // The report is not made here: the helper answers over its own stdout a
     // moment later, and a line printed now would state an absence that only
     // exists because nobody has answered yet.
     registerVoiceHotkey();
     registerAskHotkey();
-    createPanel();
+    reconcilePanels();
     configurePermissions();
     startSessionObservation();
     startIssueObservation();
@@ -1626,7 +2160,9 @@ if (!app.requestSingleInstanceLock()) {
     for (const eventName of ["resume", "unlock-screen", "user-did-become-active"] as const) {
       const handlePowerEvent = () => {
         handleDisplayChange();
-        panelWindow?.webContents.send(channels.lifecycle, eventName);
+        for (const window of panelWindows.values()) {
+          window.webContents.send(channels.lifecycle, eventName);
+        }
       };
       if (eventName === "resume") powerMonitor.on("resume", handlePowerEvent);
       if (eventName === "unlock-screen") {
@@ -1646,12 +2182,16 @@ app.on("will-quit", () => {
   // during quit, so its exit is not waited on.
   void talkKeyWatcher?.stop();
   talkKeyWatcher = undefined;
+  // The duck helper outlives this by one fade: closing its stdin is what asks
+  // it to bring the players back up, so quitting mid-sentence costs the user
+  // nothing.
+  mediaDuck.stop();
 });
 
 app.on("before-quit", () => {
   if (sessionRefreshTimer) clearInterval(sessionRefreshTimer);
   if (issueRefreshTimer) clearInterval(issueRefreshTimer);
-  if (collapseTimer) clearTimeout(collapseTimer);
+  for (const displayId of [...collapseTimers.keys()]) clearCollapseTimer(displayId);
 });
 
 app.on("window-all-closed", () => app.quit());

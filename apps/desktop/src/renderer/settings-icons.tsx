@@ -100,6 +100,18 @@ export function PopUpIcon(): React.JSX.Element {
   );
 }
 
+/** A plug: the services Luke connects to beyond the agents themselves. */
+export function PlugIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <path d="M9 2.6v5.2" />
+      <path d="M15 2.6v5.2" />
+      <path d="M6 7.8h12v4.4a4.4 4.4 0 0 1-4.4 4.4h-3.2A4.4 4.4 0 0 1 6 12.2Z" />
+      <path d="M12 16.6v4.8" />
+    </Glyph>
+  );
+}
+
 export function KeyboardIcon(): React.JSX.Element {
   return (
     <Glyph>
@@ -224,6 +236,48 @@ export function StopIcon(): React.JSX.Element {
       focusable="false"
     >
       <rect x="6.4" y="6.4" width="11.2" height="11.2" rx="2.6" />
+    </svg>
+  );
+}
+
+/** Words meant to carry: what the feedback section is for. */
+export function MegaphoneIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <path d="M3.4 10.2v3.6a1.6 1.6 0 0 0 1.6 1.6h1.8l1.2 4.2a1.3 1.3 0 0 0 1.3 1h.9a1 1 0 0 0 1-1.3l-1.1-3.9h1.7l7.4 3.4a1 1 0 0 0 1.4-.9V6.1a1 1 0 0 0-1.4-.9l-7.4 3.4H5a1.6 1.6 0 0 0-1.6 1.6Z" />
+    </Glyph>
+  );
+}
+
+/** A picture, on the control that attaches one. */
+export function ImageIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <rect x="3.4" y="4.6" width="17.2" height="14.8" rx="2.2" />
+      <circle cx="8.6" cy="9.6" r="1.6" />
+      <path d="m3.8 17.4 4.8-4.6 3.4 3.2 3.6-3.6 4.8 4.6" />
+    </Glyph>
+  );
+}
+
+/**
+ * Takes one attachment back off the note. Its own element rather than a
+ * `Glyph`: at the eight pixels it is drawn at, the shared 1.9 stroke thins to
+ * nothing and the X reads as a dot, so this one carries the weight it needs.
+ */
+export function RemoveIcon(): React.JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="3.4"
+      strokeLinecap="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M5.6 5.6 18.4 18.4" />
+      <path d="M18.4 5.6 5.6 18.4" />
     </svg>
   );
 }

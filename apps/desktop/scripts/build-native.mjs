@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { swiftCompilerArguments } from "./package-config.mjs";
+import { addonCompilerArguments, swiftCompilerArguments } from "./package-config.mjs";
 import { NATIVE_HELPERS } from "./package-layout.mjs";
 
 if (process.platform !== "darwin") {
@@ -19,7 +19,10 @@ fs.mkdirSync(outputDirectory, { recursive: true });
 for (const helper of NATIVE_HELPERS) {
   const source = path.join(appRoot, "native", "macos", helper.source);
   const output = path.join(outputDirectory, helper.binary);
-  const result = spawnSync("xcrun", swiftCompilerArguments(source, output, helper.frameworks), {
+  const compilerArguments = helper.source.endsWith(".swift")
+    ? swiftCompilerArguments(source, output, helper.frameworks)
+    : addonCompilerArguments(source, output, helper.frameworks);
+  const result = spawnSync("xcrun", compilerArguments, {
     stdio: "inherit",
   });
 

@@ -82,6 +82,12 @@ export interface CredentialProvider {
   environmentVariables: readonly string[];
   /** Present only for a provider that publishes more than one kind of key. */
   keyFormat?: CredentialFormat;
+  /**
+   * What connecting this service lets Luke do, said in one line under its row.
+   * Only an integration carries one: an agent provider's rows say it once for
+   * the whole section, because every key there buys the same observation.
+   */
+  description?: string;
 }
 
 /** Keyed by provider id so no caller has to build a key from an identifier. */
@@ -148,6 +154,7 @@ export const CREDENTIAL_PROVIDERS: Readonly<Record<CredentialProviderId, Credent
   [CREDENTIAL_PROVIDER_ID.LINEAR]: {
     id: CREDENTIAL_PROVIDER_ID.LINEAR,
     displayName: "Linear",
+    description: "Luke reads your issues and can move or comment on them when you ask.",
     hint: "Create a personal API key in Linear under Settings · Security & access.",
     apiKeysUrl: "https://linear.app/settings/account/security",
     environmentVariables: [LINEAR_ENVIRONMENT.API_KEY],
@@ -163,9 +170,22 @@ export const CREDENTIAL_PROVIDERS: Readonly<Record<CredentialProviderId, Credent
   },
 };
 
-/** Settings lists providers in this order. */
+/** Every provider that can hold a key, in the order Settings lists them. */
 export const CREDENTIAL_PROVIDER_LIST: readonly CredentialProvider[] =
   Object.values(CREDENTIAL_PROVIDERS);
+
+/* A key is a key, so the tracker lives in the one provider registry — but
+   Settings draws it apart: an issue tracker is an integration Luke reads and
+   acts on, not an agent whose sessions he observes. */
+const INTEGRATION_IDS: ReadonlySet<CredentialProviderId> = new Set([CREDENTIAL_PROVIDER_ID.LINEAR]);
+
+/** The coding-agent providers, in the order the Cloud Agent API keys section lists them. */
+export const CLOUD_AGENT_PROVIDER_LIST: readonly CredentialProvider[] =
+  CREDENTIAL_PROVIDER_LIST.filter((provider) => !INTEGRATION_IDS.has(provider.id));
+
+/** The services beyond the agents, in the order the Integrations section lists them. */
+export const INTEGRATION_PROVIDER_LIST: readonly CredentialProvider[] =
+  CREDENTIAL_PROVIDER_LIST.filter((provider) => INTEGRATION_IDS.has(provider.id));
 
 /**
  * Guards the provider id an IPC message carries. `hasOwn` rather than `in`: an
