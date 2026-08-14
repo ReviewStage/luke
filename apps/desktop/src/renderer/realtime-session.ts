@@ -163,6 +163,25 @@ export class RealtimeVoiceSession {
    */
   #audioEndingsReported = false;
   #settleTimer: ReturnType<typeof setTimeout> | undefined;
+  /**
+   * Whether the turn now under way is one the developer opened by speaking, and
+   * so the one and only turn a tool call may run in. It is set true when a
+   * push-to-talk commit opens a response and false for every turn Luke opens
+   * himself — a proactive readout, the reply that voices a tool's outcome — so
+   * a session summary or a tool output that reads like an instruction can never
+   * make Luke act. Nothing that decides on the developer's behalf reaches a
+   * write path; this is the runtime half of that, beside the standing
+   * instructions and the `tool_choice` withheld on every turn but this one.
+   */
+  #toolTurnArmed = false;
+  /**
+   * A monotonic id for the turn now under way, bumped whenever a new one
+   * begins. A tool follow-up captures it before awaiting the write and refuses
+   * to open if it has changed — the developer has taken the turn, or started
+   * another — so Luke never speaks the outcome over a live microphone or over
+   * a reply the developer is already hearing.
+   */
+  #turnEpoch = 0;
 
   constructor(options: RealtimeVoiceSessionOptions) {
     this.#options = options;
@@ -452,6 +471,10 @@ export class RealtimeVoiceSession {
     // detection off the server keeps everything since the last commit.
     this.#send(clearInputAudioEvents());
     this.#microphone.enabled = true;
+    // The developer taking the turn is a new turn, whatever a tool follow-up
+    // still in flight from the last one thinks: it will find this epoch and
+    // stand down rather than talk over the microphone now opening.
+    this.#turnEpoch += 1;
     this.#setStatus(REALTIME_STATUS.LISTENING);
     return true;
   }
@@ -469,7 +492,9 @@ export class RealtimeVoiceSession {
       this.#setStatus(REALTIME_STATUS.READY);
       return;
     }
-    this.#startResponse(pushToTalkCommitEvents());
+    // The one turn a tool may run in: the developer opened it and spoke into
+    // it, so a tool call it emits is the developer's own ask.
+    this.#startResponse(pushToTalkCommitEvents(), true);
   }
 
   /**
@@ -539,7 +564,7 @@ export class RealtimeVoiceSession {
     this.#options.onRemoteStream(undefined);
   }
 
-  #startResponse(events: readonly Record<string, unknown>[]): void {
+  #startResponse(events: readonly Record<string, unknown>[], toolsArmed = false): void {
     // The track is deliberately left as it is. A reply that was cut off left it
     // disabled, and re-opening it here would let the tail of that reply — still
     // arriving, because the server sent it before it was told to stop — be
@@ -551,6 +576,10 @@ export class RealtimeVoiceSession {
     this.#remoteQuiet = false;
     this.#responseItemId = undefined;
     this.#audibleSince = undefined;
+    // A new turn: only a developer-opened one may run a tool, and any tool
+    // follow-up still awaiting from the last turn will see this and stand down.
+    this.#toolTurnArmed = toolsArmed;
+    this.#turnEpoch += 1;
     this.#clearSettleTimer();
     this.#send(events);
     this.#setStatus(REALTIME_STATUS.RESPONDING);
@@ -723,26 +752,50 @@ export class RealtimeVoiceSession {
    * asked for something, and what became of it has to be said.
    */
   async #answerToolCalls(calls: readonly RealtimeFunctionCall[]): Promise<void> {
+    // The hard gate: a write runs only in the turn the developer opened by
+    // speaking. A call on any other turn — one Luke opened to read a notice or
+    // to voice an outcome — is refused whatever it names, so a session summary
+    // or a tool output that reads like an instruction can never make Luke act.
+    // The turn's tools are also withheld at the API, so this is belt to that
+    // suspenders rather than the only thing holding.
+    const armed = this.#toolTurnArmed;
+    // The turn these calls belong to. If it is no longer the current turn by
+    // the time the writes finish, the developer has moved on and the outcome
+    // must not be spoken over whatever they are now saying or hearing.
+    const epoch = this.#turnEpoch;
+
     for (const call of calls) {
-      const action = sessionToolAction(call, this.#sessions);
-      let output: Record<string, unknown>;
-      if (action.kind === "refused") {
-        output = { status: "refused", reason: action.reason };
-      } else if (!this.#options.carryAction) {
-        output = { status: "refused", reason: "Acting on sessions is not available." };
-      } else {
-        try {
-          output = await this.#options.carryAction(action);
-        } catch {
-          output = { status: "refused", reason: "The action could not be carried out." };
-        }
-      }
+      const output = await this.#toolCallOutput(call, armed);
       this.#send(functionCallOutputEvents(call.callId, output));
     }
-    // The call can have ended while an action was in flight; a reply asked for
-    // now would set a status no call stands behind.
-    if (!this.isConnected) return;
+
+    // A follow-up now would talk over a live microphone or a newer reply: the
+    // developer took the turn, started another, or the call is gone. The
+    // outcomes were still delivered as items, so the next turn has them.
+    if (!this.isConnected || this.#turnEpoch !== epoch) return;
     this.#startResponse(functionCallFollowUpEvents());
+  }
+
+  async #toolCallOutput(
+    call: RealtimeFunctionCall,
+    armed: boolean,
+  ): Promise<Record<string, unknown>> {
+    if (!armed) {
+      return {
+        status: "refused",
+        reason: "Only a request you make yourself can act on a session.",
+      };
+    }
+    const action = sessionToolAction(call, this.#sessions);
+    if (action.kind === "refused") return { status: "refused", reason: action.reason };
+    if (!this.#options.carryAction) {
+      return { status: "refused", reason: "Acting on sessions is not available." };
+    }
+    try {
+      return await this.#options.carryAction(action);
+    } catch {
+      return { status: "refused", reason: "The action could not be carried out." };
+    }
   }
 
   #send(events: readonly Record<string, unknown>[]): void {

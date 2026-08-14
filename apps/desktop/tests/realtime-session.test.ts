@@ -1019,6 +1019,12 @@ test("closing stops the microphone track", async () => {
   assert.equal(context.session.status, REALTIME_STATUS.IDLE);
 });
 
+/** Opens and commits a developer turn, which is the only turn a tool may run in. */
+function armDeveloperTurn(context: Harness): void {
+  context.session.startListening();
+  context.session.stopListening(true);
+}
+
 test("a spoken ask is carried through the carrier and its outcome is voiced", async () => {
   const carried: unknown[] = [];
   const context = harness({
@@ -1029,6 +1035,8 @@ test("a spoken ask is carried through the carrier and its outcome is voiced", as
   });
   await context.session.connect();
   context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
+  // The tool call arrives inside a turn the developer opened by speaking.
+  armDeveloperTurn(context);
   const sentBefore = context.sent.length;
 
   context.emit({
@@ -1079,6 +1087,7 @@ test("a tool call outside the roster is refused before any carrier runs", async 
   await context.session.connect();
   // The roster names one session that takes nothing.
   context.session.updateSessions([observedSession("session-a")]);
+  armDeveloperTurn(context);
   const sentBefore = context.sent.length;
 
   context.emit({
@@ -1117,4 +1126,98 @@ test("a tool call outside the roster is refused before any carrier runs", async 
     const raw = (event.item as { output?: string } | undefined)?.output ?? "{}";
     assert.equal((JSON.parse(raw) as { status?: string }).status, "refused");
   }
+});
+
+test("a tool call outside a turn the developer opened cannot act", async () => {
+  const carried: unknown[] = [];
+  const context = harness({
+    carryAction: async (action) => {
+      carried.push(action);
+      return { status: "accepted" };
+    },
+  });
+  await context.session.connect();
+  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
+  // No developer turn is opened: the call arrives on a turn Luke was not asked
+  // to act in — the shape a summary-driven injection would take.
+  const sentBefore = context.sent.length;
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "send_session_message",
+          call_id: "call-1",
+          arguments:
+            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"add tests"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  // The session takes messages and the identity is real, so only the turn gate
+  // stands between the call and the write — and it holds.
+  assert.deepEqual(carried, []);
+  const output = context.sent
+    .slice(sentBefore)
+    .find(
+      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+    );
+  assert.equal(
+    (
+      JSON.parse((output?.item as { output?: string } | undefined)?.output ?? "{}") as {
+        status?: string;
+      }
+    ).status,
+    "refused",
+  );
+});
+
+test("a tool outcome is not spoken over a turn the developer has taken", async () => {
+  let resolveWrite: ((output: Record<string, unknown>) => void) | undefined;
+  const context = harness({
+    carryAction: () =>
+      new Promise<Record<string, unknown>>((resolve) => {
+        resolveWrite = resolve;
+      }),
+  });
+  await context.session.connect();
+  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
+  armDeveloperTurn(context);
+  const sentBefore = context.sent.length;
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "send_session_message",
+          call_id: "call-1",
+          arguments:
+            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"add tests"}',
+        },
+      ],
+    },
+  });
+  // Let the answer reach the point where it is awaiting the write.
+  await Promise.resolve();
+  // The developer takes the turn while the write is still in flight.
+  context.session.startListening();
+  resolveWrite?.({ status: "accepted" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const events = context.sent.slice(sentBefore);
+  // The outcome was still delivered as an item, so the next turn has it...
+  assert.ok(
+    events.some(
+      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+    ),
+  );
+  // ...but no reply was opened to voice it over the microphone now open.
+  assert.ok(!events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE));
+  assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
 });

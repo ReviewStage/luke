@@ -8,6 +8,7 @@ import {
   attentionSpeechFromReviews,
   cancelResponseEvents,
   clearInputAudioEvents,
+  functionCallFollowUpEvents,
   functionCallOutputEvents,
   isRealtimeVoice,
   maximumVoiceContextSessions,
@@ -480,4 +481,13 @@ test("a tool call is answered with the outcome the provider gave", () => {
   assert.equal(item?.call_id, "call-1");
   assert.equal(item?.output, '{"status":"accepted"}');
   assert.deepEqual(functionCallOutputEvents("  ", { status: "accepted" }), []);
+});
+
+test("the reply that voices an outcome cannot itself call a tool", () => {
+  const [request] = functionCallFollowUpEvents();
+
+  assert.equal(request?.type, REALTIME_CLIENT_EVENT.RESPONSE_CREATE);
+  // The follow-up is opened to say what happened, not to act again — a tool
+  // output that reads like an instruction has nothing to act with.
+  assert.equal((request as { response?: { tool_choice?: unknown } }).response?.tool_choice, "none");
 });

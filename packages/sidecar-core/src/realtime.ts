@@ -682,9 +682,15 @@ export function functionCallOutputEvents(
   ];
 }
 
-/** Builds the event that asks for the reply voicing the tool outcomes. */
+/**
+ * Builds the event that asks for the reply voicing the tool outcomes. Its tools
+ * are withheld: this turn was opened to say what happened, not to act again, so
+ * a tool output that reads like an instruction cannot make it call anything —
+ * the same guard every Luke-opened turn carries, so the only turn that can act
+ * is the one the developer opened by speaking.
+ */
 export function functionCallFollowUpEvents(): readonly Record<string, unknown>[] {
-  return [{ type: REALTIME_CLIENT_EVENT.RESPONSE_CREATE }];
+  return [{ type: REALTIME_CLIENT_EVENT.RESPONSE_CREATE, response: { tool_choice: "none" } }];
 }
 
 /**
