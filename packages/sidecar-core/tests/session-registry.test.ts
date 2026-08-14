@@ -79,6 +79,27 @@ test("a session takes messages only when its adapter said so explicitly", () => 
   assert.notEqual(registry.revision, before);
 });
 
+test("a change in the agents a session can start is a revision the surface hears", () => {
+  const registry = new InMemorySessionRegistry();
+  const identity = { providerId: codex.id, providerSessionId: "run:spawn" };
+  const revisions: number[] = [];
+  registry.subscribe((snapshot) => {
+    revisions.push(snapshot.revision);
+  });
+
+  registry.upsert(codex, observation("run:spawn", 100));
+  assert.deepEqual(registry.get(identity)?.spawnableAgents, []);
+
+  // The roster flipping is a change the registry must notice on its own: the
+  // agents a row offers to start appear and disappear with it while nothing
+  // else moves.
+  const before = registry.revision;
+  registry.upsert(codex, observation("run:spawn", 100, { spawnableAgents: ["claude", "cursor"] }));
+  assert.deepEqual(registry.get(identity)?.spawnableAgents, ["claude", "cursor"]);
+  assert.equal(registry.revision, before + 1);
+  assert.deepEqual(revisions, [before, before + 1]);
+});
+
 test("keeps only the addresses Luke would open, and never a shortened one", () => {
   const registry = new InMemorySessionRegistry();
   const linkFor = (link: string) =>
