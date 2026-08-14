@@ -506,6 +506,13 @@ export function App(): React.JSX.Element {
     return result.reason;
   }, []);
 
+  /** The same road the captions switch travels, for the media duck. */
+  const changeDuckOtherMedia = useCallback(async (enabled: boolean) => {
+    const result = await window.sidecar.setDuckOtherMedia(enabled);
+    setSettings(result.settings);
+    return result.reason;
+  }, []);
+
   /**
    * The talk key going down. Every press goes to the session, including the one
    * that has no call to press against yet: the microphone opens with the call,
@@ -1153,6 +1160,18 @@ export function App(): React.JSX.Element {
     if (voiceStatus !== REALTIME_STATUS.CONNECTING) setTalkOpening(false);
   }, [voiceStatus]);
 
+  // The exchange is live from the press to the end of the reply — the call
+  // coming up, a turn being held, Luke speaking — and the media duck follows
+  // it. Whether anything actually comes down is the main process's question:
+  // it holds the setting, the hangover between turns, and the helper.
+  useEffect(() => {
+    window.sidecar.setVoiceExchangeActive(
+      voiceStatus === REALTIME_STATUS.CONNECTING ||
+        voiceStatus === REALTIME_STATUS.LISTENING ||
+        voiceStatus === REALTIME_STATUS.RESPONDING,
+    );
+  }, [voiceStatus]);
+
   useEffect(() => {
     const element = remoteAudio.current;
     if (!element) return;
@@ -1400,6 +1419,7 @@ export function App(): React.JSX.Element {
               voiceAvailable: bootstrap.realtimeAvailable,
               settings,
               onVoiceCaptionsChange: changeVoiceCaptions,
+              onDuckOtherMediaChange: changeDuckOtherMedia,
               credentials,
               onVoiceChange: changeVoice,
               onVoiceSpeedChange: changeVoiceSpeed,

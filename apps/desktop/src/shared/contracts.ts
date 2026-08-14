@@ -92,6 +92,14 @@ export interface AppSettings {
    * choice to reset, and the row keeps showing the key that actually answers.
    */
   voiceHotkey?: string;
+  /**
+   * Whether Music and Spotify are turned down while a spoken exchange is
+   * live, and back up after. On by default: speech over music is the failure
+   * everyone has had, and the duck defers to the user everywhere it can — it
+   * touches only a player that was playing, and a volume moved by hand during
+   * the duck is left where the hand put it.
+   */
+  duckOtherMedia: boolean;
 }
 
 /** A rejected update reports why without echoing the submitted value. */
@@ -227,6 +235,15 @@ export interface AppBridge {
   setShowInDock(show: boolean): Promise<SettingsUpdateResult>;
   /** Turns the on-screen caption of Luke's speech on or off. */
   setVoiceCaptions(enabled: boolean): Promise<SettingsUpdateResult>;
+  /** Turns the quieting of Music and Spotify during a spoken exchange on or off. */
+  setDuckOtherMedia(enabled: boolean): Promise<SettingsUpdateResult>;
+  /**
+   * Whether a spoken exchange is live — a turn being held, a reply being
+   * spoken, or the call coming up between them. It drives the media duck and
+   * nothing else, and it is a statement rather than a request: fire-and-forget,
+   * because the exchange must never wait on the players.
+   */
+  setVoiceExchangeActive(active: boolean): void;
   /**
    * Moves the talk key to a chord of the user's own, or back to the defaults
    * when omitted. The change is registered with the system at once, and the
@@ -304,6 +321,8 @@ export const channels = {
   setVoiceSpeed: "app:set-voice-speed",
   setVoiceCaptions: "app:set-voice-captions",
   setVoiceHotkey: "app:set-voice-hotkey",
+  setDuckOtherMedia: "app:set-duck-other-media",
+  setVoiceExchange: "app:set-voice-exchange",
   openProviderApiKeys: "app:open-provider-api-keys",
   setShowInMenuBar: "app:set-show-in-menu-bar",
   setShowInDock: "app:set-show-in-dock",

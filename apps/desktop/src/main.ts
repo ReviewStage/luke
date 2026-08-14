@@ -56,6 +56,7 @@ import { DevinSessionAdapter } from "./devin-adapter";
 import { JulesSessionAdapter } from "./jules-adapter";
 import { LinearIssueTracker } from "./linear-tracker";
 import { readMacScreenGeometry } from "./macos-screen-geometry";
+import { MediaDuckController } from "./media-duck";
 import { openAiAttentionEvaluatorFromEnvironment } from "./openai-attention-evaluator";
 import {
   openAiRealtimeCredentialsFromEnvironment,
@@ -194,6 +195,10 @@ const attentionReviewer = attentionEvaluator
 // A fixture run stays credential-free for the same reason attention review
 // does: evidence must be reproducible without a key and without a network.
 const realtimeCredentials = fixtureMode ? undefined : openAiRealtimeCredentialsFromEnvironment();
+// Quiets Music and Spotify while a spoken exchange is live. It lives here
+// rather than in the renderer because letting the players back up must survive
+// anything the renderer does — and only this process may run a helper.
+const mediaDuck = new MediaDuckController();
 let voiceHotkey: string | undefined;
 /**
  * The chord the user chose over the defaults, if any. Read from the settings
@@ -845,6 +850,36 @@ function registerIpc(): void {
     },
   );
 
+  // The duck follows the stored answer at once, like the menu bar item: off
+  // must let a duck currently held go rather than waiting for the next launch.
+  ipcMain.handle(
+    channels.setDuckOtherMedia,
+    async (event, enabled: unknown): Promise<SettingsUpdateResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (typeof enabled !== "boolean") throw new Error("Invalid media duck request");
+      try {
+        const result = await settingsStore.setDuckOtherMedia(enabled);
+        mediaDuck.setEnabled(result.settings.duckOtherMedia);
+        return result;
+      } catch {
+        // A filesystem failure is not something the user can act on, so it is
+        // reported as one line rather than as a raw system error.
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "Could not save that setting on this system.",
+        };
+      }
+    },
+  );
+
+  // A statement of state, not a request: the renderer says whether a spoken
+  // exchange is live, and the duck holds every other decision — the setting,
+  // the hangover after an exchange, which players are playing at all.
+  ipcMain.on(channels.setVoiceExchange, (event, active: unknown) => {
+    if (!trustedSender(event) || typeof active !== "boolean") return;
+    mediaDuck.setExchangeActive(active);
+  });
+
   // Where to get a key is a question the panel cannot answer itself, so it
   // hands the question to the browser. The renderer names a provider rather
   // than an address: the pages Luke can open are the ones in the provider
@@ -1412,6 +1447,13 @@ if (!app.requestSingleInstanceLock()) {
       },
       () => undefined,
     );
+    // Armed from the settings file alone, like the status item, and for the
+    // same reason. A file that cannot be read leaves the duck on, the same
+    // answer a file that has never said gives.
+    void settingsStore.duckOtherMedia().then(
+      (enabled) => mediaDuck.setEnabled(enabled),
+      () => mediaDuck.setEnabled(true),
+    );
     // Awaited, so the chosen voice reaches the minter before the renderer
     // exists to ask for a credential: the first conversation must already
     // speak with it. A file that cannot be read means no choice was kept — it
@@ -1463,6 +1505,10 @@ app.on("will-quit", () => {
   // during quit, so its exit is not waited on.
   void talkKeyWatcher?.stop();
   talkKeyWatcher = undefined;
+  // The duck helper outlives this by one fade: closing its stdin is what asks
+  // it to bring the players back up, so quitting mid-sentence costs the user
+  // nothing.
+  mediaDuck.stop();
 });
 
 app.on("before-quit", () => {

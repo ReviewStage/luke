@@ -8,6 +8,7 @@ export const PACKAGED_ARCHITECTURE = "arm64";
  * cannot be built without reaching the bundle or shipped without being built.
  */
 export const NATIVE_HELPERS = [
+  { source: "MediaDuck.swift", binary: "mac-media-duck", frameworks: ["AppKit"] },
   { source: "ScreenGeometry.swift", binary: "mac-screen-geometry", frameworks: ["AppKit"] },
   {
     source: "TalkKey.swift",
