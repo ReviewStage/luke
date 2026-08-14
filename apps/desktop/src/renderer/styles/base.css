@@ -1761,15 +1761,15 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   font-weight: 700;
 }
 
-/* The front page's list of pages. Its rows carry their own padding for the
-   hover pill, so the card keeps less of its own vertically — the pill's inset
-   already stands the first and last names off the card's edges — and the rows
-   sit at a menu's spacing rather than a form's: each is one name, so the 9px
-   a section keeps between rows of copy would read as gaps, not as calm. */
+/* The front page's list of pages. The rows sit at a menu's spacing rather
+   than a form's — each is one name, so the 9px a section keeps between rows
+   of copy would read as gaps, not as calm — and the card's own padding plus
+   the rows' pill padding puts the first and last rows' content 15px from the
+   card's edge, the same inset the sides keep. */
 .settings-index {
   gap: 3px;
-  padding-top: 5px;
-  padding-bottom: 5px;
+  padding-top: 11px;
+  padding-bottom: 11px;
 }
 
 /* A page that is one nameless group is no group at all: its rows stand on the
