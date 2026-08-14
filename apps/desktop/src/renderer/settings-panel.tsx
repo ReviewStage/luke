@@ -28,6 +28,7 @@ import {
   KeyIcon,
   PencilIcon,
   PowerIcon,
+  PreferencesIcon,
   ShieldIcon,
   TrashIcon,
 } from "./settings-icons";
@@ -50,6 +51,11 @@ export interface SettingsPanelProps {
    * and an entry can outlast the panel it was started in.
    */
   panelOpen: boolean;
+  /**
+   * Shows or hides the menu bar status item. The store answers with why when it
+   * refuses, and the row is where that answer belongs.
+   */
+  onShowInMenuBarChange: (show: boolean) => Promise<string | undefined>;
   onQuit: () => void;
   /** The talk key, shown so it can be learned. It is not editable yet. */
   voiceHotkey?: string;
@@ -438,7 +444,7 @@ function CredentialsSection({
   // about storage nobody has tried to use yet would be a guess.
   const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
   return (
-    <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
+    <section className="settings-section" style={{ "--row-index": 3 } as React.CSSProperties}>
       <h2>
         <KeyIcon />
         Cloud API keys
@@ -463,6 +469,56 @@ function CredentialsSection({
   );
 }
 
+/**
+ * The user's own choices about Luke, ahead of the sections about what Luke can
+ * reach. One so far: whether the status item stands in the menu bar as well as
+ * at the notch. A switch and nothing else, because nothing rides on the answer
+ * — Settings and Quit live in this panel, so the item is a second door rather
+ * than the only one.
+ */
+function PreferencesSection({
+  shown,
+  onChange,
+}: {
+  shown: boolean;
+  onChange: (show: boolean) => Promise<string | undefined>;
+}): React.JSX.Element {
+  // The change is a round trip through the settings file, so the switch rests
+  // until the store has answered rather than claiming a state it may not get.
+  const [busy, setBusy] = useState(false);
+  const [rejection, setRejection] = useState<string>();
+  const toggle = async () => {
+    setBusy(true);
+    setRejection(await onChange(!shown));
+    setBusy(false);
+  };
+  return (
+    <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
+      <h2>
+        <PreferencesIcon />
+        Preferences
+      </h2>
+      <div className="settings-row">
+        <span className="settings-copy">
+          <strong>Show Luke in the menu bar</strong>
+        </span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={shown}
+          aria-label="Show Luke in the menu bar"
+          className="switch"
+          disabled={busy}
+          onClick={() => void toggle()}
+        >
+          <span className="switch-thumb" />
+        </button>
+      </div>
+      {rejection ? <p className="error-message">{rejection}</p> : null}
+    </section>
+  );
+}
+
 export function SettingsPanel({
   microphoneStatus,
   microphoneError,
@@ -472,6 +528,7 @@ export function SettingsPanel({
   settings,
   credentials,
   panelOpen,
+  onShowInMenuBarChange,
   onQuit,
   voiceHotkey,
   voiceHotkeyHeld,
@@ -484,10 +541,14 @@ export function SettingsPanel({
       id={panelPanelId(PANEL_TAB.SETTINGS)}
       aria-labelledby={panelTabId(PANEL_TAB.SETTINGS)}
     >
-      {/* First, because it is how Luke is reached rather than what he can see.
-          Shown rather than offered: the key is fixed for now, and a control
-          that cannot change anything is worse than a plain statement of it. */}
-      <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
+      {settings ? (
+        <PreferencesSection shown={settings.showInMenuBar} onChange={onShowInMenuBarChange} />
+      ) : null}
+
+      {/* How Luke is reached rather than what he can see. Shown rather than
+          offered: the key is fixed for now, and a control that cannot change
+          anything is worse than a plain statement of it. */}
+      <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
         <h2>
           <KeyboardIcon />
           Keyboard shortcuts
@@ -512,7 +573,7 @@ export function SettingsPanel({
         <CredentialsSection settings={settings} control={credentials} panelOpen={panelOpen} />
       ) : null}
 
-      <section className="settings-section" style={{ "--row-index": 3 } as React.CSSProperties}>
+      <section className="settings-section" style={{ "--row-index": 4 } as React.CSSProperties}>
         <h2>
           <ShieldIcon />
           Permissions
@@ -558,7 +619,7 @@ export function SettingsPanel({
       <button
         type="button"
         className="quit-button"
-        style={{ "--row-index": 4 } as React.CSSProperties}
+        style={{ "--row-index": 5 } as React.CSSProperties}
         onClick={onQuit}
       >
         <PowerIcon />

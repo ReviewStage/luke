@@ -120,6 +120,20 @@ export function PowerIcon(): React.JSX.Element {
   );
 }
 
+/** Two sliders, drawn once for both controls that mean "choices". */
+function SliderMarks(): React.JSX.Element {
+  return (
+    <>
+      <path d="M3.6 8.4h5.2" />
+      <path d="M13.2 8.4h7.2" />
+      <circle cx="11" cy="8.4" r="2.2" />
+      <path d="M3.6 15.6h2.6" />
+      <path d="M10.6 15.6h9.8" />
+      <circle cx="8.4" cy="15.6" r="2.2" />
+    </>
+  );
+}
+
 /**
  * Two sliders rather than a funnel: the control it opens holds an order as well
  * as a filter, and a funnel would promise only the second.
@@ -127,12 +141,16 @@ export function PowerIcon(): React.JSX.Element {
 export function OptionsIcon(): React.JSX.Element {
   return (
     <Glyph className="options-glyph">
-      <path d="M3.6 8.4h5.2" />
-      <path d="M13.2 8.4h7.2" />
-      <circle cx="11" cy="8.4" r="2.2" />
-      <path d="M3.6 15.6h2.6" />
-      <path d="M10.6 15.6h9.8" />
-      <circle cx="8.4" cy="15.6" r="2.2" />
+      <SliderMarks />
+    </Glyph>
+  );
+}
+
+/** The same two sliders at a heading's size: settings the user has chosen. */
+export function PreferencesIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <SliderMarks />
     </Glyph>
   );
 }
