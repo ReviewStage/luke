@@ -1787,7 +1787,9 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    content goes first, over `--duration-exit` and with no delay — the state
    being entered declares its own `--row-delay` — and only its end releases
    the room, so the surface never resizes out from under something still
-   drawn. The swap is timed off the same token, mirrored in `PAGE_EXIT_MS`. */
+   drawn. The swap is timed off this same token, read live off the element
+   (`pageExitMs`), so a capture run or reduced motion — which zero it — swap
+   as fast as they stilled the fade. */
 .settings[data-page-leaving="true"] .settings-header,
 .settings[data-page-leaving="true"] .settings-section,
 .settings[data-page-leaving="true"] .quit-button {

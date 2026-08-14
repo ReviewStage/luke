@@ -67,7 +67,7 @@ import {
   TrashIcon,
 } from "./settings-icons";
 import {
-  PAGE_EXIT_MS,
+  pageExitMs,
   SETTINGS_SUBVIEW_LIST,
   SETTINGS_VIEW,
   type SettingsSubview,
@@ -1351,7 +1351,10 @@ export function SettingsPanel({
   // The page as drawn, trailing the page as asked: turning one is a leave and
   // then an arrival, and the leaving page must be held mounted through its own
   // exit — the surface never resizes out from under something still drawn.
-  // The swap is timed off the same token the stylesheet fades with.
+  // The swap is timed off the token the stylesheet fades with, read live off
+  // the element: a capture run and reduced motion zero it, and the drawn page
+  // has to swap as fast as the fade they stilled.
+  const box = useRef<HTMLDivElement | null>(null);
   const [drawnView, setDrawnView] = useState(view);
   // Whether a page has turned since this panel mounted, which is what scopes
   // the arrival animation: the tab's first draw belongs to the panel-arrival
@@ -1363,7 +1366,7 @@ export function SettingsPanel({
     const timer = window.setTimeout(() => {
       setDrawnView(view);
       setTurned(true);
-    }, PAGE_EXIT_MS);
+    }, pageExitMs(box.current));
     return () => window.clearTimeout(timer);
   }, [leaving, view]);
   // Moving between pages moves the keyboard with it: into a page, onto its
@@ -1388,6 +1391,7 @@ export function SettingsPanel({
   }, [drawnView, panelOpen]);
   return (
     <div
+      ref={box}
       className="settings"
       role="tabpanel"
       id={panelPanelId(PANEL_TAB.SETTINGS)}

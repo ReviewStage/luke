@@ -26,12 +26,32 @@ export const SETTINGS_SUBVIEW_LIST = [
 export type SettingsSubview = (typeof SETTINGS_SUBVIEW_LIST)[number];
 
 /**
- * How long a leaving page's content takes to go, in milliseconds — a mirror of
- * the stylesheet's `--duration-exit`, which is what fades it. The drawn page
- * swaps only once the old one has finished leaving, so the surface never
- * resizes out from under content still drawn.
+ * How long a leaving page's content takes to go when the token cannot be
+ * read, in milliseconds — a mirror of the stylesheet's resting
+ * `--duration-exit`, which is what fades it. The live value comes off the
+ * element instead wherever possible, because a capture run and reduced
+ * motion both zero the token, and the drawn page must swap as fast as the
+ * fade they stilled.
  */
 export const PAGE_EXIT_MS = 90;
+
+/**
+ * The stylesheet's `--duration-exit` as milliseconds. A computed time keeps
+ * its authored unit, so both spellings are read; anything unreadable falls
+ * back to the token's resting value rather than to no exit at all.
+ */
+export function pageExitFromToken(token: string): number {
+  const trimmed = token.trim();
+  const scale = trimmed.endsWith("ms") ? 1 : trimmed.endsWith("s") ? 1000 : undefined;
+  const parsed = Number.parseFloat(trimmed);
+  return scale === undefined || Number.isNaN(parsed) ? PAGE_EXIT_MS : parsed * scale;
+}
+
+/** Reads the exit duration off the element the fade actually runs on. */
+export function pageExitMs(element: Element | null): number {
+  if (!element) return PAGE_EXIT_MS;
+  return pageExitFromToken(getComputedStyle(element).getPropertyValue("--duration-exit"));
+}
 
 const NAV_ROW_ID: Record<SettingsSubview, string> = {
   [SETTINGS_VIEW.VOICE]: "settings-nav-voice",
