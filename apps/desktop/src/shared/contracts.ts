@@ -49,6 +49,12 @@ export interface AppSettings {
    * plaintext storage; while it is unknown the app says nothing about it.
    */
   secretStorage: SecretStorage;
+  /**
+   * Whether Luke stands in the menu bar as well as at the notch. Hiding the
+   * status item costs nothing it alone provides — Settings and Quit are both in
+   * the panel — so the choice is the user's to make and to keep.
+   */
+  showInMenuBar: boolean;
 }
 
 /** A rejected update reports why without echoing the submitted value. */
@@ -133,6 +139,8 @@ export interface AppBridge {
    * fixed by this build.
    */
   openProviderApiKeys(providerId: CredentialProviderId): void;
+  /** Shows or hides the menu bar status item, and remembers the choice. */
+  setShowInMenuBar(show: boolean): Promise<SettingsUpdateResult>;
   /**
    * Opens an observed session where its provider keeps it. The renderer names
    * the session rather than its address, for the same reason it names a
@@ -169,6 +177,7 @@ export const channels = {
   openMicrophoneSettings: "app:open-microphone-settings",
   setProviderApiKey: "app:set-provider-api-key",
   openProviderApiKeys: "app:open-provider-api-keys",
+  setShowInMenuBar: "app:set-show-in-menu-bar",
   openSession: "app:open-session",
   focusPanel: "app:focus-panel",
   requestRealtimeCredential: "app:request-realtime-credential",

@@ -617,6 +617,17 @@ export function App(): React.JSX.Element {
     [applyEntry],
   );
 
+  /**
+   * Shows or hides the menu bar status item. The reply carries the whole
+   * snapshot either way, so the row reads the state the store actually holds
+   * rather than the one the press hoped for.
+   */
+  const changeShowInMenuBar = useCallback(async (show: boolean) => {
+    const result = await window.sidecar.setShowInMenuBar(show);
+    setSettings(result.settings);
+    return result.reason;
+  }, []);
+
   const credentials: CredentialEntryControl = {
     entry,
     begin: beginEntry,
@@ -967,6 +978,7 @@ export function App(): React.JSX.Element {
               panelOpen,
               ...(shownHotkey.hotkey ? { voiceHotkey: shownHotkey.hotkey } : {}),
               voiceHotkeyHeld: shownHotkey.held,
+              onShowInMenuBarChange: changeShowInMenuBar,
               onQuit: () => window.sidecar.quit(),
             }}
           />

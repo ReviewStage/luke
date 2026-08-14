@@ -36,6 +36,8 @@ const bridge: AppBridge = {
   openProviderApiKeys: (providerId: CredentialProviderId) => {
     ipcRenderer.send(channels.openProviderApiKeys, providerId);
   },
+  setShowInMenuBar: (show: boolean) =>
+    ipcRenderer.invoke(channels.setShowInMenuBar, show) as Promise<SettingsUpdateResult>,
   openSession: (identity: SessionIdentity) => {
     ipcRenderer.send(channels.openSession, identity);
   },
