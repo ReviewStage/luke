@@ -1,5 +1,5 @@
 import { CAPSULE_SIDE_WIDTH, PANEL_WIDTH, PEEK_SIDE_GROWTH } from "@sidecar/core";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { LukeFace } from "./luke-face";
 import {
   faceYieldsToMeter,
@@ -9,7 +9,13 @@ import {
 } from "./luke-face-mood";
 import { PANEL_PRESENTATION, type PanelPresentation } from "./panel-state";
 import { ProviderMark } from "./provider-marks";
-import { type SessionTally, tallyCaption, tallySummary } from "./session-model";
+import { type ProviderTally, type SessionTally, tallyCaption, tallySummary } from "./session-model";
+import {
+  LEAVING_ATTRIBUTE,
+  useRoster,
+  useWingReorderMotion,
+  WING_SLOT_ID_ATTRIBUTE,
+} from "./session-motion";
 import { Waveform, type WaveformVoice } from "./waveform";
 
 /**
@@ -58,11 +64,36 @@ export function wingMarkCapacity(sideWidth: number): number {
 const PEEK_SIDE_WIDTH = CAPSULE_SIDE_WIDTH + PEEK_SIDE_GROWTH;
 
 /**
- * `--duration-exit`: the fade the marks leave on. A capacity that shrinks —
- * the panel closing back past the peek — must not unmount marks that are
- * mid-fade, so the smaller set is drawn only once the fade has finished.
+ * The strip beside the face, as slots: each provider's mark, then — when the
+ * providers outnumber the slots — the count standing in for the rest. The
+ * marks are a summary, and a summary that hides its own remainder reads as a
+ * complete list, so whatever does not fit is counted rather than dropped. The
+ * count is a slot like any other, so it takes the last one rather than being
+ * added past the edge of the peek — and it carries a slot id like any other,
+ * so a reorder glides it along with the marks instead of teleporting it.
  */
-const MARK_EXIT_MS = 90;
+export type WingSlot =
+  | { id: string; provider: ProviderTally }
+  | { id: typeof OVERFLOW_SLOT_ID; unshown: number };
+
+/**
+ * The one slot that is not a provider's, named by the glyph it draws. A mark's
+ * slot id is its provider id verbatim, so the count's must be a string no
+ * provider id can be — an id is a slug, and a slug never opens with the sign.
+ */
+export const OVERFLOW_SLOT_ID = "+";
+
+export function wingSlots(
+  providers: readonly ProviderTally[],
+  capacity: number,
+): readonly WingSlot[] {
+  const overflowing = providers.length > capacity;
+  const shown = providers.slice(0, overflowing ? capacity - 1 : capacity);
+  const unshown = providers.length - shown.length;
+  const slots: WingSlot[] = shown.map((provider) => ({ id: provider.providerId, provider }));
+  if (unshown > 0) slots.push({ id: OVERFLOW_SLOT_ID, unshown });
+  return slots;
+}
 
 export function NotchWings({
   tally,
@@ -108,24 +139,16 @@ export function NotchWings({
     presentation === PANEL_PRESENTATION.PANEL
       ? wingMarkCapacity((PANEL_WIDTH - housingWidth) / 2)
       : wingMarkCapacity(PEEK_SIDE_WIDTH);
-  const [drawnCapacity, setDrawnCapacity] = useState(capacity);
-  // Growing applies in the same render, so the new marks are already mounted
-  // when the presentation flips and unfold with everything else. Shrinking
-  // waits out the exit fade below.
-  if (capacity > drawnCapacity) setDrawnCapacity(capacity);
-  useEffect(() => {
-    if (capacity >= drawnCapacity) return;
-    const timer = window.setTimeout(() => setDrawnCapacity(capacity), MARK_EXIT_MS);
-    return () => window.clearTimeout(timer);
-  }, [capacity, drawnCapacity]);
-
-  // The marks are a summary, and a summary that hides its own remainder reads as
-  // a complete list, so whatever does not fit is counted rather than dropped.
-  // The count is a slot like any other, so it takes the last one rather than
-  // being added past the edge of the peek.
-  const overflowing = tally.providers.length > drawnCapacity;
-  const providers = tally.providers.slice(0, overflowing ? drawnCapacity - 1 : drawnCapacity);
-  const unshown = tally.providers.length - providers.length;
+  // Memoized because the roster below notices a new list by identity: the
+  // slots may only change when what they summarize does, not on every render
+  // a spoken word or a face gesture asks for.
+  const slots = useMemo(() => wingSlots(tally.providers, capacity), [tally.providers, capacity]);
+  // The same treatment the session rows get, along the other axis: a mark
+  // found somewhere new glides there, one whose provider left fades in the
+  // slot it held — which is also what keeps a capacity that shrinks from
+  // unmounting marks mid-fade — and only then does the gap close.
+  const marksRef = useWingReorderMotion();
+  const drawnSlots = useRoster(slots, marksRef);
 
   return (
     <>
@@ -144,13 +167,25 @@ export function NotchWings({
               />
             </span>
           ) : (
-            <span className="wing-marks" aria-hidden="true">
-              {providers.map((provider) => (
-                <span className="wing-mark" key={provider.providerId}>
-                  <ProviderMark providerId={provider.providerId} />
-                </span>
-              ))}
-              {unshown > 0 ? <span className="wing-more">+{unshown}</span> : null}
+            <span className="wing-marks" aria-hidden="true" ref={marksRef}>
+              {drawnSlots.map(({ item, leaving }) => {
+                // How the reorder measurement finds this slot again after a
+                // re-sort has moved it, and how a slot whose provider left
+                // says so while it fades where the reader last saw it.
+                const motion = {
+                  [WING_SLOT_ID_ATTRIBUTE]: item.id,
+                  [LEAVING_ATTRIBUTE]: String(leaving),
+                };
+                return "provider" in item ? (
+                  <span className="wing-mark" key={item.id} {...motion}>
+                    <ProviderMark providerId={item.provider.providerId} />
+                  </span>
+                ) : (
+                  <span className="wing-more" key={item.id} {...motion}>
+                    +{item.unshown}
+                  </span>
+                );
+              })}
             </span>
           )}
           {/* Luke himself. He is drawn in every state but one: he steps out of

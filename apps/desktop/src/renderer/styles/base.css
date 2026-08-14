@@ -603,7 +603,8 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 /* Reversed so the first provider — the one that needs a person soonest — is the
    mark nearest the face, and therefore the first to come out from behind it.
    Every mark holds its place and only fades, so none of them moves during the
-   morph. */
+   morph. A re-sort is the one thing that moves them, and session-motion glides
+   each mark to its new slot the way it glides the rows. */
 .wing-marks {
   display: flex;
   height: 22px;

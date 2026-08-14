@@ -2,23 +2,28 @@ import type { RefObject } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 /**
- * How the session list moves when its order changes under a reader.
+ * How the surfaces that draw the session set move when their order changes
+ * under a reader. Two of them do: the panel's list of rows, and the wing's
+ * strip of provider marks — one summary, drawn at two sizes, re-sorted by the
+ * same poll.
  *
- * Every poll re-sorts the rows, and React answers a new order by moving DOM
- * nodes — which repaints each row at its new position in one frame. A session
- * finishing its turn would teleport from the top of the list to the middle,
- * and the reader loses it. So the list is measured on every commit, and a row
- * found somewhere new is started back where the reader last saw it and
- * released — on `--spring-fast`, because a row hopping a slot is a small
- * element moving, not the surface resizing.
+ * Every poll re-sorts the set, and React answers a new order by moving DOM
+ * nodes — which repaints each element at its new position in one frame. A
+ * session finishing its turn would teleport from the top of the list to the
+ * middle, its provider's mark would hop across the wing, and the reader loses
+ * both. So each list is measured on every commit, and an element found
+ * somewhere new is started back where the reader last saw it and released —
+ * on `--spring-fast`, because an element hopping a slot is a small thing
+ * moving, not the surface resizing.
  *
  * Reorders come and go on the panel's own two-beat rule: content leaves before
- * the shape moves, and the shape moves before content arrives. A departing row
- * fades over `--duration-exit` while it still holds its slot (the roster below
- * keeps it rendered exactly that long), and only then do its neighbours close
- * the gap. An arriving row opens its gap first — it is measured, so the
- * neighbours travel at once — and only fades in after that same beat, so it is
- * never seen crossing a row that has not yet left its slot.
+ * the shape moves, and the shape moves before content arrives. A departing
+ * element fades over `--duration-exit` while it still holds its slot (the
+ * roster below keeps it rendered exactly that long), and only then do its
+ * neighbours close the gap. An arriving one opens its gap first — it is
+ * measured, so the neighbours travel at once — and only fades in after that
+ * same beat, so it is never seen crossing a neighbour that has not yet left
+ * its slot.
  *
  * Each travel is additive rather than a replacement. A second reorder landing
  * mid-flight does not cancel the first — cancelling is a dead stop and a
@@ -41,14 +46,22 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 export const SESSION_ROW_ID_ATTRIBUTE = "data-session-id";
 
 /**
- * How a row says it is on its way out. The fade it announces is drawn here
- * rather than in the stylesheet, because the row's own opacity transition
- * carries the panel-arrival stagger: a session that returned mid-fade would
- * wait out `--expand-delay` before resuming. An animation never touches the
- * property underneath, so cancelling it is all a return takes — the row is
+ * How each slot in the wing's strip names itself: a provider's mark by the
+ * provider, and the overflow count by its own sentinel — the count is a slot
+ * like any other, so it glides like any other.
+ */
+export const WING_SLOT_ID_ATTRIBUTE = "data-slot-id";
+
+/**
+ * How an element says it is on its way out, in either list. The fade it
+ * announces is drawn here rather than in the stylesheet, because the element's
+ * own opacity transition carries an entrance of its own — the row's
+ * panel-arrival stagger, the mark's unfold — and a return mid-fade would wait
+ * out that entrance's delay before resuming. An animation never touches the
+ * property underneath, so cancelling it is all a return takes — the element is
  * simply alive again, at once.
  */
-export const SESSION_ROW_LEAVING_ATTRIBUTE = "data-leaving";
+export const LEAVING_ATTRIBUTE = "data-leaving";
 
 const MOTION_TOKEN = {
   SPRING_FAST: "--spring-fast",
@@ -60,6 +73,54 @@ const MOTION_TOKEN = {
 } as const;
 
 type MotionToken = (typeof MOTION_TOKEN)[keyof typeof MOTION_TOKEN];
+
+/**
+ * One list this module watches: which attribute its elements carry, which way
+ * they stack, and how an arrival enters. Everything else — the springs, the
+ * beats, the additive travels — is the same gesture in either direction.
+ */
+interface ReorderList {
+  /** The attribute each element of this list names itself with. */
+  idAttribute: string;
+  /** The element's layout position along the axis the list stacks in. */
+  offset: (element: HTMLElement) => number;
+  /** A transform moving an element by so many pixels along that axis. */
+  translate: (px: number) => string;
+  /**
+   * Whether an arrival also travels in from one `--row-fan` step back, the way
+   * the row stack arrives. The wing's marks do not: an arriving mark already
+   * slides in on the stylesheet's own `@starting-style` gesture — the same
+   * unfold the whole wing makes — so the hook only holds its fade to the beat.
+   */
+  arrivesFromFan: boolean;
+}
+
+/** The session list: rows stacked top to bottom, arriving the way the stack arrives. */
+const SESSION_LIST: ReorderList = {
+  idAttribute: SESSION_ROW_ID_ATTRIBUTE,
+  offset: (element) => element.offsetTop,
+  translate: (px) => `translateY(${px}px)`,
+  arrivesFromFan: true,
+};
+
+/**
+ * The wing's strip: marks laid along the wing. The wing hangs off the housing
+ * and grows its far edge as the shape morphs — `--wing-bound` moves the left
+ * edge of the very element `offsetLeft` is measured from — so a slot's
+ * position is its distance from the anchored edge instead: measured from the
+ * moving one, every morph would read as a reorder and spring marks that never
+ * moved. The distance is negated so the numbers still grow the way the axis
+ * runs and the travel arithmetic stays the plan's. Measuring the slot's own
+ * far edge also keeps the overflow count still while only its digits widen,
+ * because the digits grow away from the anchor.
+ */
+const WING_STRIP: ReorderList = {
+  idAttribute: WING_SLOT_ID_ATTRIBUTE,
+  offset: (element) =>
+    element.offsetLeft + element.offsetWidth - (element.offsetParent?.clientWidth ?? 0),
+  translate: (px) => `translateX(${px}px)`,
+  arrivesFromFan: false,
+};
 
 /** Movement smaller than a hairline is measurement noise, not a reorder. */
 const TRAVEL_EPSILON = 0.5;
@@ -87,24 +148,25 @@ export function parsePixels(value: string): number {
 
 export interface ReorderPlan {
   /**
-   * Rows that persisted and moved: how far each must be offset, in pixels, to
-   * appear back where it was before springing to where it now sits.
+   * Elements that persisted and moved: how far each must be offset, in pixels,
+   * to appear back where it was before springing to where it now sits.
    */
   travels: ReadonlyMap<string, number>;
-  /** Rows with no previous position: they arrived rather than moved. */
+  /** Elements with no previous position: they arrived rather than moved. */
   arrivals: readonly string[];
 }
 
 const EMPTY_PLAN: ReorderPlan = { travels: new Map(), arrivals: [] };
 
 /**
- * What moved, given where each row was and where it now is. With no baseline
- * at all — the first measurement of a freshly built list — nothing "moved" and
- * nothing "arrived"; the list simply is, and animating it would replay an
- * entrance the panel's own arrival already owns. A baseline of an empty list
- * is different: a session appearing in one the reader is watching is an event.
- * Rows that left are not planned for — their exit is the roster's beat, and by
- * the time they leave this measurement their nodes are already gone.
+ * What moved, given where each element was and where it now is. With no
+ * baseline at all — the first measurement of a freshly built list — nothing
+ * "moved" and nothing "arrived"; the list simply is, and animating it would
+ * replay an entrance the panel's own arrival already owns. A baseline of an
+ * empty list is different: a session appearing in one the reader is watching
+ * is an event. Elements that left are not planned for — their exit is the
+ * roster's beat, and by the time they leave this measurement their nodes are
+ * already gone.
  */
 export function planReorder(
   previous: ReadonlyMap<string, number> | undefined,
@@ -114,78 +176,80 @@ export function planReorder(
 
   const travels = new Map<string, number>();
   const arrivals: string[] = [];
-  for (const [id, top] of next) {
+  for (const [id, position] of next) {
     const before = previous.get(id);
     if (before === undefined) {
       arrivals.push(id);
       continue;
     }
-    const travel = before - top;
+    const travel = before - position;
     if (Math.abs(travel) > TRAVEL_EPSILON) travels.set(id, travel);
   }
   return { travels, arrivals };
 }
 
-/** Only rows a reader can see are worth moving; hidden ones just take their place. */
-function rowVisible(row: HTMLElement): boolean {
-  return row.checkVisibility({ opacityProperty: true });
+/** Only elements a reader can see are worth moving; hidden ones just take their place. */
+function elementVisible(element: HTMLElement): boolean {
+  return element.checkVisibility({ opacityProperty: true });
 }
 
 /**
- * Watches the session list across commits and turns every reorder into motion.
+ * Watches one list across commits and turns every reorder into motion.
  * Returns the ref the list container must carry; a commit that unmounts the
- * container (the settings tab, the slot) drops the baseline, so the next list
- * built starts still instead of animating against positions from another life.
+ * container (the settings tab, the slot, the wing yielding to the meter) drops
+ * the baseline, so the next list built starts still instead of animating
+ * against positions from another life.
  */
-export function useSessionReorderMotion(): RefObject<HTMLDivElement | null> {
-  const listRef = useRef<HTMLDivElement | null>(null);
+function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T | null> {
+  const listRef = useRef<T | null>(null);
   const baseline = useRef<Map<string, number> | undefined>(undefined);
   const wasLeaving = useRef<Set<string>>(new Set());
   const exitFades = useRef<Map<string, Animation>>(new Map());
 
   // No dependency list: a reorder arrives as new props, but the measurement
-  // has to follow every commit that could have moved a row, and a handful of
-  // offset reads per commit costs less than proving which commits those are.
+  // has to follow every commit that could have moved an element, and a handful
+  // of offset reads per commit costs less than proving which commits those are.
   useLayoutEffect(() => {
-    const list = listRef.current;
-    if (list === null) {
+    const container = listRef.current;
+    if (container === null) {
       baseline.current = undefined;
       wasLeaving.current = new Set();
       exitFades.current.clear();
       return;
     }
 
-    const rows = new Map<string, HTMLElement>();
-    // `offsetTop` rather than a rect: it is the row's layout position, blind
-    // to both the scroll and every animation still in flight, so the baseline
-    // never needs correcting for either.
-    const tops = new Map<string, number>();
-    for (const row of list.querySelectorAll<HTMLElement>(`[${SESSION_ROW_ID_ATTRIBUTE}]`)) {
-      const id = row.getAttribute(SESSION_ROW_ID_ATTRIBUTE);
+    const elements = new Map<string, HTMLElement>();
+    // `offsetTop`/`offsetLeft` rather than a rect: it is the element's layout
+    // position, blind to both the scroll and every animation still in flight,
+    // so the baseline never needs correcting for either.
+    const positions = new Map<string, number>();
+    for (const element of container.querySelectorAll<HTMLElement>(`[${list.idAttribute}]`)) {
+      const id = element.getAttribute(list.idAttribute);
       if (id === null) continue;
-      rows.set(id, row);
-      tops.set(id, row.offsetTop);
+      elements.set(id, element);
+      positions.set(id, list.offset(element));
     }
 
-    // Rows whose leaving mark changed this commit: the newly departed begin
-    // their fade, and the returned have theirs cancelled. A fade belonging to
-    // a row no longer drawn died with its node and is only forgotten here.
+    // Elements whose leaving mark changed this commit: the newly departed
+    // begin their fade, and the returned have theirs cancelled. A fade
+    // belonging to an element no longer drawn died with its node and is only
+    // forgotten here.
     const departed: [string, HTMLElement][] = [];
     const returned: [string, HTMLElement][] = [];
     const leaving = new Set<string>();
-    for (const [id, row] of rows) {
-      if (row.getAttribute(SESSION_ROW_LEAVING_ATTRIBUTE) === "true") leaving.add(id);
+    for (const [id, element] of elements) {
+      if (element.getAttribute(LEAVING_ATTRIBUTE) === "true") leaving.add(id);
       const was = wasLeaving.current.has(id);
-      if (!was && leaving.has(id)) departed.push([id, row]);
-      else if (was && !leaving.has(id)) returned.push([id, row]);
+      if (!was && leaving.has(id)) departed.push([id, element]);
+      else if (was && !leaving.has(id)) returned.push([id, element]);
     }
     wasLeaving.current = leaving;
     for (const id of [...exitFades.current.keys()]) {
-      if (!rows.has(id)) exitFades.current.delete(id);
+      if (!elements.has(id)) exitFades.current.delete(id);
     }
 
-    const plan = planReorder(baseline.current, tops);
-    baseline.current = tops;
+    const plan = planReorder(baseline.current, positions);
+    baseline.current = positions;
     if (
       plan.travels.size === 0 &&
       plan.arrivals.length === 0 &&
@@ -195,7 +259,7 @@ export function useSessionReorderMotion(): RefObject<HTMLDivElement | null> {
       return;
     }
 
-    const style = getComputedStyle(list);
+    const style = getComputedStyle(container);
     const token = (name: MotionToken) => style.getPropertyValue(name);
     const fastDuration = parseMilliseconds(token(MOTION_TOKEN.FAST_DURATION));
     if (fastDuration < STILL_MS) return;
@@ -205,8 +269,8 @@ export function useSessionReorderMotion(): RefObject<HTMLDivElement | null> {
     const exitEasing = token(MOTION_TOKEN.EXIT_EASING).trim() || "ease";
     const fan = parsePixels(token(MOTION_TOKEN.ROW_FAN));
 
-    const travel = (row: HTMLElement, from: number, delay: number) => {
-      row.animate([{ transform: `translateY(${from}px)` }, { transform: "translateY(0px)" }], {
+    const travel = (element: HTMLElement, from: number, delay: number) => {
+      element.animate([{ transform: list.translate(from) }, { transform: list.translate(0) }], {
         duration: fastDuration,
         easing: springFast,
         delay,
@@ -216,62 +280,64 @@ export function useSessionReorderMotion(): RefObject<HTMLDivElement | null> {
     };
 
     // A malformed token would throw out of `animate` and take the whole tree
-    // down with the layout effect; the rows arriving in place is the better
-    // failure.
+    // down with the layout effect; the elements arriving in place is the
+    // better failure.
     try {
-      for (const [id, row] of departed) {
-        if (!rowVisible(row) || exitDuration < STILL_MS) continue;
+      for (const [id, element] of departed) {
+        if (!elementVisible(element) || exitDuration < STILL_MS) continue;
         exitFades.current.set(
           id,
-          // From wherever the row's opacity is, held at nothing until the
+          // From wherever the element's opacity is, held at nothing until the
           // roster lets the node go: the fade must outlive its own end,
-          // because the property underneath still says the row is drawn.
-          row.animate([{ opacity: getComputedStyle(row).opacity }, { opacity: 0 }], {
+          // because the property underneath still says the element is drawn.
+          element.animate([{ opacity: getComputedStyle(element).opacity }, { opacity: 0 }], {
             duration: exitDuration,
             easing: exitEasing,
             fill: "forwards",
           }),
         );
       }
-      for (const [id, row] of returned) {
+      for (const [id, element] of returned) {
         const fade = exitFades.current.get(id);
         if (fade === undefined) continue;
-        const held = getComputedStyle(row).opacity;
+        const held = getComputedStyle(element).opacity;
         fade.cancel();
         exitFades.current.delete(id);
-        if (rowVisible(row) && quickDuration >= STILL_MS) {
-          row.animate([{ opacity: held }, { opacity: 1 }], {
+        if (elementVisible(element) && quickDuration >= STILL_MS) {
+          element.animate([{ opacity: held }, { opacity: 1 }], {
             duration: quickDuration,
             easing: exitEasing,
           });
         }
       }
       for (const [id, from] of plan.travels) {
-        const row = rows.get(id);
-        if (row !== undefined && rowVisible(row)) travel(row, from, 0);
+        const element = elements.get(id);
+        if (element !== undefined && elementVisible(element)) travel(element, from, 0);
       }
       // The entrance waits only when it has something to wait for. The beat
       // exists so an arrival is never seen crossing a neighbour still leaving
       // its slot; with nothing travelling there is no one to cross, and a
-      // first session held invisible would leave the panel blank for the
+      // first element held invisible would leave the list blank for the
       // length of the hold.
       const beat = plan.travels.size > 0 ? exitDuration : 0;
       for (const id of plan.arrivals) {
-        const row = rows.get(id);
-        if (row === undefined || !rowVisible(row)) continue;
+        const element = elements.get(id);
+        if (element === undefined || !elementVisible(element)) continue;
         // The gap is already opening — the neighbours started travelling the
-        // moment this row took up space — so the row itself waits out the
-        // beat and then arrives the way the stack arrives: from one fan step
-        // above, on the same spring, becoming opaque as it drops.
+        // moment this element took up space — so the element itself waits out
+        // the beat and then arrives the way its own list arrives: the rows
+        // from one fan step above, on the same spring, becoming opaque as
+        // they drop; the marks on the slide the stylesheet already gives a
+        // late mount.
         if (quickDuration >= STILL_MS) {
-          row.animate([{ opacity: 0 }, { opacity: 1 }], {
+          element.animate([{ opacity: 0 }, { opacity: 1 }], {
             duration: quickDuration,
             easing: exitEasing,
             delay: beat,
             fill: "backwards",
           });
         }
-        if (fan > 0) travel(row, -fan, beat);
+        if (list.arrivesFromFan && fan > 0) travel(element, -fan, beat);
       }
     } catch {
       // Nothing to unwind: additive travels decay to zero on their own.
@@ -281,40 +347,50 @@ export function useSessionReorderMotion(): RefObject<HTMLDivElement | null> {
   return listRef;
 }
 
+/** The session list's reorder motion; the ref belongs on `.session-list`. */
+export function useSessionReorderMotion(): RefObject<HTMLDivElement | null> {
+  return useReorderMotion<HTMLDivElement>(SESSION_LIST);
+}
+
+/** The wing strip's reorder motion; the ref belongs on `.wing-marks`. */
+export function useWingReorderMotion(): RefObject<HTMLSpanElement | null> {
+  return useReorderMotion<HTMLSpanElement>(WING_STRIP);
+}
+
 /**
- * One row as the list actually draws it: a session, and whether it is on its
- * way out. A leaving row still holds its slot — the gap only closes once it
- * has finished fading — but it is already gone from the model, so the panel
- * renders it inert.
+ * One slot as its list actually draws it: an occupant, and whether it is on
+ * its way out. A leaving occupant still holds its slot — the gap only closes
+ * once it has finished fading — but it is already gone from the model, so the
+ * list renders it inert.
  */
 export interface RosterRow<T> {
-  session: T;
+  item: T;
   leaving: boolean;
 }
 
 interface Departure<T> {
-  session: T;
+  item: T;
   /** The slot it held when it left, so it fades where the reader last saw it. */
   index: number;
 }
 
 interface RosterState<T> {
   /** The list this roster was derived from, so a new one is noticed in render. */
-  sessions: readonly T[];
+  items: readonly T[];
   departures: readonly Departure<T>[];
 }
 
-/** The rows to draw: the living list, with each departure still in its slot. */
+/** The slots to draw: the living list, with each departure still in its slot. */
 export function rosterRows<T extends { id: string }>(
-  sessions: readonly T[],
+  items: readonly T[],
   departures: readonly Departure<T>[],
 ): readonly RosterRow<T>[] {
-  const rows: RosterRow<T>[] = sessions.map((session) => ({ session, leaving: false }));
+  const rows: RosterRow<T>[] = items.map((item) => ({ item, leaving: false }));
   // Ascending, so each splice lands at the slot measured against the rows
   // already re-inserted below it.
   for (const departure of [...departures].sort((first, second) => first.index - second.index)) {
     rows.splice(Math.min(departure.index, rows.length), 0, {
-      session: departure.session,
+      item: departure.item,
       leaving: true,
     });
   }
@@ -323,22 +399,23 @@ export function rosterRows<T extends { id: string }>(
 
 /**
  * The departures after a new list arrives: everything already fading that has
- * not come back, plus every drawn row the new list no longer contains, held at
- * the slot it was drawn in. A session that returns mid-fade is simply alive
- * again — its departure is dropped and the row it kept is the row it resumes.
+ * not come back, plus every drawn occupant the new list no longer contains,
+ * held at the slot it was drawn in. One that returns mid-fade is simply alive
+ * again — its departure is dropped and the slot it kept is the slot it
+ * resumes.
  */
 export function nextDepartures<T extends { id: string }>(
   drawn: readonly RosterRow<T>[],
-  sessions: readonly T[],
+  items: readonly T[],
   departures: readonly Departure<T>[],
 ): readonly Departure<T>[] {
-  const alive = new Set(sessions.map((session) => session.id));
-  const kept = departures.filter((departure) => !alive.has(departure.session.id));
-  const leaving = new Set(kept.map((departure) => departure.session.id));
+  const alive = new Set(items.map((item) => item.id));
+  const kept = departures.filter((departure) => !alive.has(departure.item.id));
+  const leaving = new Set(kept.map((departure) => departure.item.id));
   const next = [...kept];
   drawn.forEach((row, index) => {
-    if (!alive.has(row.session.id) && !leaving.has(row.session.id)) {
-      next.push({ session: row.session, index });
+    if (!alive.has(row.item.id) && !leaving.has(row.item.id)) {
+      next.push({ item: row.item, index });
     }
   });
   return next;
@@ -347,47 +424,47 @@ export function nextDepartures<T extends { id: string }>(
 /**
  * The departures once one of them has been let go. Each index was taken while
  * every other departure still held its slot, so the rows below the vanished
- * one step up a place — without that, a session still fading would be spliced
- * one slot too far into the shorter list and jump mid-fade.
+ * one step up a place — without that, an occupant still fading would be
+ * spliced one slot too far into the shorter list and jump mid-fade.
  */
 export function withoutDeparture<T extends { id: string }>(
   departures: readonly Departure<T>[],
   id: string,
 ): readonly Departure<T>[] {
-  const gone = departures.find((departure) => departure.session.id === id);
+  const gone = departures.find((departure) => departure.item.id === id);
   if (gone === undefined) return departures;
   return departures
-    .filter((departure) => departure.session.id !== id)
+    .filter((departure) => departure.item.id !== id)
     .map((departure) =>
       departure.index > gone.index ? { ...departure, index: departure.index - 1 } : departure,
     );
 }
 
 /**
- * Holds each departed session on screen for the exit beat, so a removal is a
- * fade and then a closing gap rather than a row vanishing between frames. The
- * beat is `--duration-exit`, read at the moment of departure from the same
+ * Holds each departed occupant on screen for the exit beat, so a removal is a
+ * fade and then a closing gap rather than an element vanishing between frames.
+ * The beat is `--duration-exit`, read at the moment of departure from the same
  * element the leaving fade inherits it through — a capture run zeroes the
  * token on the stage rather than at the root, and a roster that read the root
  * would hold a gap open for 90ms after the fade had already finished — so the
  * two always let go together. The root is only the fallback for a commit with
- * no list to read, where no row is drawn and the beat times nothing visible.
+ * no list to read, where nothing is drawn and the beat times nothing visible.
  */
-export function useSessionRoster<T extends { id: string }>(
-  sessions: readonly T[],
+export function useRoster<T extends { id: string }>(
+  items: readonly T[],
   stage: RefObject<HTMLElement | null>,
 ): readonly RosterRow<T>[] {
-  const [state, setState] = useState<RosterState<T>>({ sessions, departures: [] });
+  const [state, setState] = useState<RosterState<T>>({ items, departures: [] });
 
   // Derived during render rather than in an effect: an effect runs after the
   // commit, and the commit is exactly when React would have unmounted the
-  // departing row this roster exists to keep.
-  if (state.sessions !== sessions) {
+  // departing element this roster exists to keep.
+  if (state.items !== items) {
     setState({
-      sessions,
+      items,
       departures: nextDepartures(
-        rosterRows(state.sessions, state.departures),
-        sessions,
+        rosterRows(state.items, state.departures),
+        items,
         state.departures,
       ),
     });
@@ -396,7 +473,7 @@ export function useSessionRoster<T extends { id: string }>(
   const timers = useRef<Map<string, number>>(new Map());
   useEffect(() => {
     const pending = timers.current;
-    const leaving = new Set(state.departures.map((departure) => departure.session.id));
+    const leaving = new Set(state.departures.map((departure) => departure.item.id));
     for (const [id, timer] of pending) {
       if (!leaving.has(id)) {
         window.clearTimeout(timer);
@@ -404,7 +481,7 @@ export function useSessionRoster<T extends { id: string }>(
       }
     }
     for (const departure of state.departures) {
-      const id = departure.session.id;
+      const id = departure.item.id;
       if (pending.has(id)) continue;
       const beat = parseMilliseconds(
         getComputedStyle(stage.current ?? document.documentElement).getPropertyValue(
@@ -430,5 +507,5 @@ export function useSessionRoster<T extends { id: string }>(
     };
   }, []);
 
-  return rosterRows(state.sessions, state.departures);
+  return rosterRows(state.items, state.departures);
 }
