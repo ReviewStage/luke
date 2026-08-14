@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  APP_SETTING_KIND,
+  type AppGuideSnapshot,
   ATTENTION_DISPOSITION,
   type NormalizedSession,
   normalizeSession,
@@ -12,6 +14,7 @@ import {
   SESSION_STATUS,
 } from "@sidecar/core";
 import {
+  type AppActionCarrier,
   quietIsLukesOwn,
   RealtimeVoiceSession,
   type SessionActionCarrier,
@@ -68,6 +71,7 @@ function harness(
     connectionError?: Error;
     now?: () => number;
     carryAction?: SessionActionCarrier;
+    carryAppAction?: AppActionCarrier;
   } = {},
 ): Harness {
   const sent: Record<string, unknown>[] = [];
@@ -145,6 +149,7 @@ function harness(
       : { connectTimeoutMs: options.connectTimeoutMs }),
     ...(options.now ? { now: options.now } : {}),
     ...(options.carryAction ? { carryAction: options.carryAction } : {}),
+    ...(options.carryAppAction ? { carryAppAction: options.carryAppAction } : {}),
     onStatus: () => undefined,
     onLocalStream: () => undefined,
     onRemoteStream: () => undefined,
@@ -1401,4 +1406,152 @@ test("a cancelled reply's late transcript cannot pollute the next caption", asyn
     context.captions.some((caption) => caption?.includes("still streaming in")),
     false,
   );
+});
+
+const CAPTIONS_GUIDE: AppGuideSnapshot = {
+  facts: [{ label: "What Luke is", detail: "A macOS sidecar living beside the notch." }],
+  settings: [
+    {
+      id: "voice_captions",
+      label: "Captions",
+      description: "Luke's words on screen while he speaks.",
+      kind: APP_SETTING_KIND.TOGGLE,
+      value: "off",
+      adjustable: true,
+      manual: "the panel's Settings tab, under Preferences",
+    },
+  ],
+};
+
+test("the app guide reaches the conversation, and identical guides are not resent", async () => {
+  const context = harness();
+  await context.session.connect();
+  const sentBefore = context.sent.length;
+
+  context.session.updateGuide(CAPTIONS_GUIDE);
+  // The same knowledge again is not news; a changed value is.
+  context.session.updateGuide({ ...CAPTIONS_GUIDE });
+  context.session.updateGuide({
+    ...CAPTIONS_GUIDE,
+    settings: [
+      { ...CAPTIONS_GUIDE.settings[0], value: "on" } as (typeof CAPTIONS_GUIDE.settings)[0],
+    ],
+  });
+
+  const guideEvents = context.sent.slice(sentBefore).filter((event) => {
+    const item = event.item as { content?: { text?: string }[] } | undefined;
+    return item?.content?.[0]?.text?.startsWith("[app guide") === true;
+  });
+  assert.equal(guideEvents.length, 2);
+  // Context, not a prompt: telling Luke about himself never opens his mouth.
+  assert.equal(
+    context.sent
+      .slice(sentBefore)
+      .some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE),
+    false,
+  );
+});
+
+test("a spoken settings change is validated against the guide and carried", async () => {
+  const carried: unknown[] = [];
+  const context = harness({
+    carryAppAction: async (action) => {
+      carried.push(action);
+      return { status: "changed" };
+    },
+  });
+  await context.session.connect();
+  context.session.updateGuide(CAPTIONS_GUIDE);
+  armDeveloperTurn(context);
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "change_app_setting",
+          call_id: "call-guide-1",
+          arguments: '{"setting_id":"voice_captions","value":"on"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(carried, [
+    { kind: "setting", setting: CAPTIONS_GUIDE.settings[0], value: "on" },
+  ]);
+});
+
+test("a spoken ask about a setting the guide does not carry is refused before the carrier", async () => {
+  const carried: unknown[] = [];
+  const context = harness({
+    carryAppAction: async (action) => {
+      carried.push(action);
+      return { status: "changed" };
+    },
+  });
+  await context.session.connect();
+  // The guide was never provided, so the conversation was told about nothing.
+  armDeveloperTurn(context);
+  const sentBefore = context.sent.length;
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "change_app_setting",
+          call_id: "call-guide-2",
+          arguments: '{"setting_id":"voice_captions","value":"on"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(carried, []);
+  const output = context.sent
+    .slice(sentBefore)
+    .find(
+      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+    );
+  const answered = (output?.item as { output?: string } | undefined)?.output;
+  const outcome = JSON.parse(answered ?? "{}") as { status?: string };
+  assert.equal(outcome.status, "refused");
+});
+
+test("a spoken panel ask is validated against the roster and carried", async () => {
+  const carried: unknown[] = [];
+  const context = harness({
+    carryAppAction: async (action) => {
+      carried.push(action);
+      return { status: "shown" };
+    },
+  });
+  await context.session.connect();
+  context.session.updateGuide(CAPTIONS_GUIDE);
+  context.session.updateSessions([observedSession("session-a")]);
+  armDeveloperTurn(context);
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "show_panel",
+          call_id: "call-guide-3",
+          arguments: '{"filter":"claude-code","sort":"recency"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(carried, [
+    { kind: "panel", tab: "sessions", filter: "claude-code", sort: "recency" },
+  ]);
 });

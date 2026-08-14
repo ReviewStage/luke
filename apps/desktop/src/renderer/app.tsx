@@ -1,4 +1,7 @@
 import {
+  APP_PANEL_TAB,
+  type AppGuideSnapshot,
+  EMPTY_APP_GUIDE,
   FIXTURE_EPOCH_MS,
   type NormalizedSession,
   REALTIME_STATUS,
@@ -24,6 +27,7 @@ import { TALK_KEY_RELEASE, talkKeyRelease, voiceHotkeyToShow } from "../shared/v
 import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";
 import { isSubmittable, removalEndsEntry } from "./credential-entry";
 import { KeySlot } from "./key-slot";
+import { applySpokenSetting, buildLukeGuide } from "./luke-guide";
 import { NotchWings } from "./notch-wings";
 import { PanelBody, type SessionWriteHandlers } from "./panel-body";
 import {
@@ -36,13 +40,14 @@ import {
   SETTLE_DELAY_MS,
 } from "./panel-state";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
-import { quietIsLukesOwn, RealtimeVoiceSession } from "./realtime-session";
+import { type AppActionCarrier, quietIsLukesOwn, RealtimeVoiceSession } from "./realtime-session";
 import {
   arrangeSessions,
   DEFAULT_SESSION_VIEW,
   type DisplaySession,
   displaySessions,
   type SessionView,
+  sessionFilterFromSpoken,
   sessionTally,
   tallySummary,
 } from "./session-model";
@@ -263,6 +268,20 @@ export function App(): React.JSX.Element {
   const openSessionAloudRef = useRef<(identity: SessionIdentity) => Promise<SessionOpenResult>>(
     (identity) => window.sidecar.openSession(identity),
   );
+  /**
+   * The guide as last built, so a call that connects after the settings have
+   * already resolved still tells the conversation what Luke knows of himself.
+   */
+  const guideRef = useRef<AppGuideSnapshot>(EMPTY_APP_GUIDE);
+  /**
+   * The spoken asks about Luke himself, reached through a ref for the same
+   * reason the session acts are: the voice session is built once, and the
+   * handlers it needs are declared later, beside the presses they mirror.
+   */
+  const carryAppActionRef = useRef<AppActionCarrier>(async () => ({
+    status: "refused",
+    reason: "Luke is still starting up.",
+  }));
   /** When the talk key went down, which is what tells a hold from a tap. */
   const talkPressedAt = useRef<number | undefined>(undefined);
   /** Whether a tap has left a turn open for a later press to end. */
@@ -337,6 +356,10 @@ export function App(): React.JSX.Element {
           : action.kind === "control"
             ? window.sidecar.executeSessionControl(action.identity, action.control.id)
             : openSessionAloudRef.current(action.identity),
+      // The asks about Luke himself — a settings change, the panel shown —
+      // behind the same gauntlet: validated against the guide before this is
+      // called, and performed by the same handlers the panel's controls use.
+      carryAppAction: (action) => carryAppActionRef.current(action),
       onStatus: setVoiceStatus,
       onLocalStream: setLocalStream,
       onRemoteStream: setRemoteStream,
@@ -362,7 +385,10 @@ export function App(): React.JSX.Element {
       session.dropPendingTurn();
       return;
     }
-    if (await session.connect()) session.updateSessions(sessionsRef.current);
+    if (await session.connect()) {
+      session.updateSessions(sessionsRef.current);
+      session.updateGuide(guideRef.current);
+    }
   }, [ensureVoiceSession]);
   startMicrophoneRef.current = startMicrophone;
 
@@ -753,6 +779,40 @@ export function App(): React.JSX.Element {
   openSessionAloudRef.current = openSessionAloud;
 
   /**
+   * The spoken asks about Luke himself. A settings change goes through the
+   * same bridge calls the settings rows use, and the snapshot that comes back
+   * redraws the panel's switches; showing the panel is the capsule's press
+   * with a tab, and optionally a narrowing, chosen out loud. Both were
+   * validated against the guide before they arrive here, so this only
+   * performs and reports.
+   */
+  const carryAppAction = useCallback<AppActionCarrier>(
+    async (action) => {
+      if (action.kind === "setting") {
+        return applySpokenSetting(window.sidecar, action, setSettings);
+      }
+      changeTab(action.tab === APP_PANEL_TAB.SETTINGS ? PANEL_TAB.SETTINGS : PANEL_TAB.SESSIONS);
+      const filter = action.filter ? sessionFilterFromSpoken(action.filter) : undefined;
+      if (filter || action.sort) {
+        setSessionView((view) => ({
+          ...view,
+          ...(filter ? { filter } : {}),
+          ...(action.sort ? { sort: action.sort } : {}),
+        }));
+      }
+      await changeMode(true);
+      return {
+        status: "shown",
+        tab: action.tab,
+        ...(action.filter ? { filter: action.filter } : {}),
+        ...(action.sort ? { sort: action.sort } : {}),
+      };
+    },
+    [changeMode, changeTab],
+  );
+  carryAppActionRef.current = carryAppAction;
+
+  /**
    * The two writes a row can ask for, handed to the main process by session
    * identity. Unlike opening, neither closes the panel: the answer lands back
    * on the row that asked, and the user is mid-conversation with it.
@@ -913,6 +973,21 @@ export function App(): React.JSX.Element {
     sessionsRef.current = sessions;
     voiceSession.current?.updateSessions(sessions);
   }, [sessions]);
+
+  // Keep the conversation's view of Luke himself current, so a spoken question
+  // about a setting is answered from the value the store actually holds, and a
+  // change made in the panel is known to the conversation the moment it lands.
+  useEffect(() => {
+    if (!bootstrap) return;
+    const guide = buildLukeGuide({
+      settings: settings ?? bootstrap.settings,
+      voiceAvailable: bootstrap.realtimeAvailable,
+      microphoneStatus,
+      hotkey: voiceHotkeyToShow(bootstrap, voiceHotkey),
+    });
+    guideRef.current = guide;
+    voiceSession.current?.updateGuide(guide);
+  }, [bootstrap, settings, microphoneStatus, voiceHotkey]);
 
   useEffect(() => {
     // An update Luke cannot voice — no call open, or a turn already under way —

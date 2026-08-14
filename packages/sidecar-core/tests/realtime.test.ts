@@ -363,7 +363,7 @@ test("a resting-point update is voiced just like a blocking one", () => {
   assert.equal(speech[0]?.disposition, ATTENTION_DISPOSITION.SPEAK_AT_TURN_END);
 });
 
-test("the session is minted with the three acts and nothing wider", () => {
+test("the session is minted with the five acts and nothing wider", () => {
   const config = realtimeSessionConfig();
 
   assert.deepEqual(
@@ -372,6 +372,8 @@ test("the session is minted with the three acts and nothing wider", () => {
       REALTIME_TOOL.SEND_SESSION_MESSAGE,
       REALTIME_TOOL.RUN_SESSION_CONTROL,
       REALTIME_TOOL.OPEN_SESSION,
+      REALTIME_TOOL.CHANGE_APP_SETTING,
+      REALTIME_TOOL.SHOW_PANEL,
     ],
   );
   assert.equal(config.tool_choice, "auto");
