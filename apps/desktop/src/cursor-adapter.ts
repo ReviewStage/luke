@@ -300,10 +300,12 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
     // The repository offer rides beside the pass, never inside it: Cursor
     // documents this read as slow for a large organisation, so it runs on its
     // own clock with its own wide deadline, the sessions never wait on it, and
-    // an offer that lands after the pass is announced by the next one. The
-    // pass guard inside `request` keeps a late answer from writing across a
-    // credential change.
-    void this.#refreshRepositories(request, now);
+    // an offer that lands after the pass — or several — is announced by the
+    // next one. It reads through the credential-bound path rather than the
+    // pass-scoped request, because passes keep coming while it runs and each
+    // would discard exactly the slow answer this exists for; only a
+    // credential change may do that.
+    void this.#refreshRepositories(now);
 
     const body = await request(CURSOR_ROUTE.AGENTS, {
       [CURSOR_QUERY.LIMIT]: String(CURSOR_ADAPTER_DEFAULTS.AGENT_PAGE_SIZE),
@@ -367,11 +369,11 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
    * this, and an offer read must never fail a pass or escape as an unhandled
    * rejection.
    */
-  async #refreshRepositories(request: CloudRequest, now: number): Promise<void> {
+  async #refreshRepositories(now: number): Promise<void> {
     if (now - this.#repositoriesAttemptedAt < this.#repositoriesRefreshMs) return;
     this.#repositoriesAttemptedAt = now;
     try {
-      const body = await request(CURSOR_ROUTE.REPOSITORIES, undefined, {
+      const body = await this.credentialBoundRead(CURSOR_ROUTE.REPOSITORIES, undefined, {
         timeoutMs: CLOUD_ADAPTER_DEFAULTS.SLOW_REQUEST_TIMEOUT_MS,
       });
       this.#repositories = recordsFromPage(body, CURSOR_FIELD.ITEMS)

@@ -130,8 +130,13 @@ function runPayload(agent: TestAgent, run: TestRun): Record<string, unknown> {
 /** Serves the read-only subset of the public API the adapter is allowed to use. */
 function fakeCursorApi(
   agents: readonly TestAgent[],
-  options: { repositories?: readonly string[] } = {},
+  options: {
+    repositories?: readonly string[];
+    /** Holds the first repositories answer until released, like a slow org. */
+    gateFirstRepositoriesRead?: Promise<void>;
+  } = {},
 ): FakeCursorApi {
+  let repositoriesReads = 0;
   const requests: RecordedRequest[] = [];
   const fetch: CloudFetch = async (url, init) => {
     const { pathname, searchParams, search } = new URL(url);
@@ -148,6 +153,10 @@ function fakeCursorApi(
     const segments = pathname.split("/").filter((segment) => segment.length > 0);
     if (segments[0] === "v1" && segments[1] === "repositories" && segments.length === 2) {
       if (!options.repositories) return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
+      repositoriesReads += 1;
+      if (repositoriesReads === 1 && options.gateFirstRepositoriesRead) {
+        await options.gateFirstRepositoriesRead;
+      }
       return jsonResponse({
         items: options.repositories.map((repository) => ({ url: repository })),
       });
@@ -814,4 +823,52 @@ test("refuses a creation ask Cursor cannot take before any request exists", asyn
   });
   assert.deepEqual(unlisted, { status: "unsupported" });
   assert.equal(api.requests.length, requestsBefore);
+});
+
+test("a repository answer that outlives its pass still lands", async () => {
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const api = fakeCursorApi([], {
+    repositories: [TEST_REPOSITORY],
+    gateFirstRepositoriesRead: gate,
+  });
+  const adapter = adapterFor(api.fetch);
+
+  // The slow read starts on the first pass and is still in flight while more
+  // passes come and go — the very case the wide deadline exists for, so a
+  // newer pass must not discard its answer.
+  await adapter.observe();
+  await adapter.observe();
+  release();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(
+    adapter.workspaceProjects().map((project) => project.providerProjectId),
+    [TEST_REPOSITORY],
+  );
+});
+
+test("a repository answer never lands across a credential change", async () => {
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const api = fakeCursorApi([], {
+    repositories: [TEST_REPOSITORY],
+    gateFirstRepositoriesRead: gate,
+  });
+  let apiKey: string | undefined = TEST_API_KEY;
+  const adapter = adapterFor(api.fetch, { readApiKey: async () => apiKey });
+
+  await adapter.observe();
+  // The key is removed while the slow read is in flight: whatever it answers
+  // belongs to a credential that no longer stands, and must not be kept.
+  apiKey = undefined;
+  await adapter.observe();
+  release();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(adapter.workspaceProjects(), []);
 });

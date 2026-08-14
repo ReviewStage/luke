@@ -263,6 +263,13 @@ export abstract class CloudSessionAdapter
   readonly #minimumRefreshIntervalMs: number;
 
   #credential: string | undefined;
+  /**
+   * Bumped only when the credential changes or is rejected — unlike the pass
+   * counter, which moves on every observation. It is what a slow read that
+   * outlives its pass is bound to: several passes may come and go while it
+   * runs, and only a different credential makes its answer wrong.
+   */
+  #credentialEpoch = 0;
   #observations: readonly ProviderSessionObservation[] = [];
   #lastAttemptAt = Number.NEGATIVE_INFINITY;
   #collectPass = 0;
@@ -597,10 +604,41 @@ export abstract class CloudSessionAdapter
 
   #forgetObservedState(): void {
     // A pass still in flight was started under a credential that no longer
-    // stands, so its result must not land.
+    // stands, so its result must not land — and neither may a slow read's.
     this.#collectPass += 1;
+    this.#credentialEpoch += 1;
     this.forgetCachedIdentity();
     this.#observations = [];
+  }
+
+  /**
+   * One read bound to the credential rather than to one pass, for an offer
+   * that rides beside the passes and may outlive several — the pass-scoped
+   * request would discard exactly the slow answer such a read exists for.
+   * Only a credential change discards it: the read refuses to land across
+   * one, so nothing read as one user is ever kept as another's.
+   */
+  protected async credentialBoundRead(
+    segments: readonly string[],
+    query?: Readonly<Record<string, string>>,
+    options?: Readonly<{ timeoutMs?: number }>,
+  ): Promise<Record<string, unknown>> {
+    const epoch = this.#credentialEpoch;
+    const apiKey = this.#credential;
+    if (!apiKey) {
+      throw new CloudRequestError(
+        CLOUD_FAILURE.TRANSIENT,
+        `${this.provider.displayName} has no credential to read with`,
+      );
+    }
+    const body = await this.#requestJson(apiKey, segments, query, options);
+    if (epoch !== this.#credentialEpoch) {
+      throw new CloudRequestError(
+        CLOUD_FAILURE.TRANSIENT,
+        `${this.provider.displayName} read outlived its credential`,
+      );
+    }
+    return body;
   }
 
   /**
