@@ -2,6 +2,7 @@ import type {
   AttentionSpeech,
   NormalizedSession,
   RealtimeConnection,
+  RealtimeVoice,
   SessionIdentity,
 } from "@sidecar/core";
 import { contextBridge, ipcRenderer } from "electron";
@@ -33,6 +34,8 @@ const bridge: AppBridge = {
       providerId,
       apiKey,
     ) as Promise<SettingsUpdateResult>,
+  setVoice: (voice: RealtimeVoice) =>
+    ipcRenderer.invoke(channels.setVoice, voice) as Promise<SettingsUpdateResult>,
   openProviderApiKeys: (providerId: CredentialProviderId) => {
     ipcRenderer.send(channels.openProviderApiKeys, providerId);
   },

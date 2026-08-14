@@ -3,6 +3,7 @@ import {
   type NormalizedSession,
   REALTIME_STATUS,
   type RealtimeStatus,
+  type RealtimeVoice,
 } from "@sidecar/core";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import type {
@@ -638,6 +639,12 @@ export function App(): React.JSX.Element {
     remove: removeProviderApiKey,
   };
 
+  // The row marks the voice the main process reports rather than the one just
+  // pressed, so what is shown as chosen is always what was actually saved.
+  const changeVoice = useCallback((voice: RealtimeVoice) => {
+    void window.sidecar.setVoice(voice).then((result) => setSettings(result.settings));
+  }, []);
+
   /**
    * Sends a session to its provider and gets out of the way. Luke floats above
    * every window, so a panel left open would be sitting on top of the very chat
@@ -975,6 +982,7 @@ export function App(): React.JSX.Element {
               voiceAvailable: bootstrap.realtimeAvailable,
               settings,
               credentials,
+              onVoiceChange: changeVoice,
               panelOpen,
               ...(shownHotkey.hotkey ? { voiceHotkey: shownHotkey.hotkey } : {}),
               voiceHotkeyHeld: shownHotkey.held,

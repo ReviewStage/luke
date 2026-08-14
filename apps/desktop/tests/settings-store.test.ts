@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
+import { REALTIME_DEFAULTS, REALTIME_VOICE } from "@sidecar/core";
 import { type SecretCipher, SettingsStore } from "../src/settings-store";
 import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "../src/shared/contracts";
 import {
@@ -550,6 +551,72 @@ test("shows the menu bar item when the file says something a boolean is not", as
   );
 
   assert.equal((await storeIn(directory).snapshot()).showInMenuBar, true);
+});
+
+test("reports the default voice until one is chosen", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  assert.equal((await store.snapshot()).voice, REALTIME_DEFAULTS.VOICE);
+  assert.equal(await store.readVoice(), undefined);
+});
+
+test("stores the chosen voice plainly and reads it back from a new store instance", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+
+  const { settings, reason } = await store.setVoice(REALTIME_VOICE.MARIN);
+
+  assert.equal(reason, undefined);
+  assert.equal(settings.voice, REALTIME_VOICE.MARIN);
+  // A preference is not a credential, so choosing one never reaches the
+  // Keychain — and never raises its permission dialog.
+  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
+  assert.equal(await storeIn(directory).readVoice(), REALTIME_VOICE.MARIN);
+});
+
+test("prefers the chosen voice over the environment, and the environment over the default", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory, {
+    environment: { LUKE_REALTIME_VOICE: REALTIME_VOICE.SAGE },
+  });
+
+  assert.equal((await store.snapshot()).voice, REALTIME_VOICE.SAGE);
+  // The environment names the voice only until the user does, so it is
+  // reported in the snapshot but never as something the user stored.
+  assert.equal(await store.readVoice(), undefined);
+
+  await store.setVoice(REALTIME_VOICE.MARIN);
+  assert.equal((await store.snapshot()).voice, REALTIME_VOICE.MARIN);
+
+  await store.setVoice(undefined);
+  assert.equal((await store.snapshot()).voice, REALTIME_VOICE.SAGE);
+});
+
+test("ignores a stored or environment voice this build does not offer", async (t) => {
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({ version: 2, apiKeys: {}, voice: "baritone" }),
+  );
+  const store = storeIn(directory, { environment: { LUKE_REALTIME_VOICE: "baritone" } });
+
+  assert.equal(await store.readVoice(), undefined);
+  assert.equal((await store.snapshot()).voice, REALTIME_DEFAULTS.VOICE);
+});
+
+test("the voice and a stored key survive each other's writes", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
+  await store.setVoice(REALTIME_VOICE.MARIN);
+  await store.setApiKey(CONDUCTOR, "conductor-replacement-key");
+
+  const reopened = storeIn(directory);
+  assert.equal(await reopened.readApiKey(CONDUCTOR), "conductor-replacement-key");
+  assert.equal(await reopened.readVoice(), REALTIME_VOICE.MARIN);
 });
 
 test("recovers from a corrupt settings file", async (t) => {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { REALTIME_DEFAULTS, REALTIME_MINT_OUTCOME } from "@sidecar/core";
+import { REALTIME_DEFAULTS, REALTIME_MINT_OUTCOME, REALTIME_VOICE } from "@sidecar/core";
 import {
   OpenAiRealtimeCredentialMinter,
   openAiRealtimeCredentialsFromEnvironment,
@@ -97,6 +97,42 @@ test("an outstanding credential is reused until it nears expiry", async () => {
   now = EXPIRES_AT_SECONDS * 1000 - 1_000;
   await instance.mint();
   assert.equal(requests.length, 2);
+});
+
+test("changing the voice discards the outstanding credential and mints for the new one", async () => {
+  const { minter: instance, requests } = minter([mintResponse(), mintResponse()]);
+  await instance.mint();
+
+  instance.setVoice(REALTIME_VOICE.MARIN);
+  await instance.mint();
+
+  // The first credential was minted against the old voice, so serving it after
+  // the change would answer the next conversation with the wrong one.
+  assert.equal(requests.length, 2);
+  const body = JSON.parse(String(requests[1]?.init.body)) as {
+    session: { audio: { output: { voice: string } } };
+  };
+  assert.equal(body.session.audio.output.voice, REALTIME_VOICE.MARIN);
+  assert.equal(instance.diagnostics().voice, REALTIME_VOICE.MARIN);
+});
+
+test("the same voice again keeps the outstanding credential", async () => {
+  const { minter: instance, requests } = minter([mintResponse(), mintResponse()]);
+  await instance.mint();
+
+  instance.setVoice(REALTIME_DEFAULTS.VOICE);
+  await instance.mint();
+
+  assert.equal(requests.length, 1);
+});
+
+test("clearing the voice returns to the one the minter was built with", () => {
+  const { minter: instance } = minter([mintResponse()]);
+
+  instance.setVoice(REALTIME_VOICE.MARIN);
+  instance.setVoice(undefined);
+
+  assert.equal(instance.diagnostics().voice, REALTIME_DEFAULTS.VOICE);
 });
 
 test("every failure path leaves the voice experience unavailable", async () => {

@@ -1380,6 +1380,63 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transform: translateX(14px);
 }
 
+/* The voice, offered as macOS offers one value from a small fixed set: a
+   pop-up button — the current value on the face, the up-and-down badge on the
+   trailing edge. The `select` underneath is what opens the system's own menu;
+   only the closed control is drawn here, and only its colors move. */
+.voice-select {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.voice-select select {
+  appearance: none;
+  padding: 6px 27px 6px 11px;
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  background: var(--raised);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 620;
+  transition:
+    background-color var(--duration-hover) ease,
+    border-color var(--duration-hover) ease;
+}
+
+.voice-select select:hover {
+  background: var(--raised-strong);
+}
+
+/* The ring the input draws, because this is the same kind of landing place. */
+.voice-select select:focus-visible {
+  border-color: color-mix(in srgb, var(--state-working) 45%, transparent);
+  outline: none;
+}
+
+/* The badge answers no pointer — the select under it is the whole control. */
+.voice-select-badge {
+  position: absolute;
+  right: 5px;
+  display: flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--state-working) 24%, transparent);
+  color: var(--state-working);
+  pointer-events: none;
+}
+
+.voice-select-glyph {
+  width: 10px;
+  height: 10px;
+}
+
 /* One provider per line: mark, name, whether it is connected, and what you can
    do about that. Providers are separated by a rule rather than by nested cards,
    so the section stays one object however many keys it holds. */

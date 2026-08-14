@@ -70,6 +70,16 @@ export function TrashIcon(): React.JSX.Element {
   );
 }
 
+/** The up-and-down pair macOS badges a pop-up button with. */
+export function PopUpIcon(): React.JSX.Element {
+  return (
+    <Glyph className="voice-select-glyph">
+      <path d="M7.2 9.6 12 4.8l4.8 4.8" />
+      <path d="M7.2 14.4 12 19.2l4.8-4.8" />
+    </Glyph>
+  );
+}
+
 export function KeyboardIcon(): React.JSX.Element {
   return (
     <Glyph>

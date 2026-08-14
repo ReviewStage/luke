@@ -1,5 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { isRealtimeVoice, REALTIME_DEFAULTS, type RealtimeVoice } from "@sidecar/core";
+import { OPENAI_ENVIRONMENT } from "./openai-realtime-credentials";
 import {
   type AppSettings,
   CREDENTIAL_SOURCE,
@@ -27,6 +29,7 @@ const SETTINGS_FIELD = {
   LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
   SHOW_IN_MENU_BAR: "showInMenuBar",
   VERSION: "version",
+  VOICE: "voice",
 } as const;
 
 const API_KEY_LENGTH = {
@@ -72,6 +75,11 @@ interface PersistedSettings {
    * item is shown, because until the user hides it that is what Luke does.
    */
   showInMenuBar: boolean;
+  /**
+   * The voice the user chose, absent until one has been. A preference rather
+   * than a credential, so it is stored plainly and never touches the cipher.
+   */
+  voice?: RealtimeVoice;
 }
 
 interface ResolvedApiKey {
@@ -120,6 +128,12 @@ function environmentApiKey(
   return undefined;
 }
 
+/** The launch environment's voice, honoured only when it is one Luke offers. */
+function environmentVoice(environment: NodeJS.ProcessEnv): RealtimeVoice | undefined {
+  const value = environment[OPENAI_ENVIRONMENT.VOICE]?.trim();
+  return isRealtimeVoice(value) ? value : undefined;
+}
+
 function storedApiKeys(record: Record<string, unknown>): Record<string, string> {
   const apiKeys: Record<string, string> = {};
   const persisted = record[SETTINGS_FIELD.API_KEYS];
@@ -145,10 +159,15 @@ function parsePersistedSettings(source: string): PersistedSettings {
   const record = parsed as Record<string, unknown>;
   const version = record[SETTINGS_FIELD.VERSION];
   const showInMenuBar = record[SETTINGS_FIELD.SHOW_IN_MENU_BAR];
+  const voice = record[SETTINGS_FIELD.VOICE];
   return {
     version: typeof version === "number" ? version : SETTINGS_FILE_VERSION,
     apiKeys: storedApiKeys(record),
     showInMenuBar: typeof showInMenuBar === "boolean" ? showInMenuBar : true,
+    // A voice this build does not offer is dropped rather than carried: unlike
+    // a credential it has a default to fall back to, and honouring an unknown
+    // one would mint sessions the API refuses.
+    ...(isRealtimeVoice(voice) ? { voice } : {}),
   };
 }
 
@@ -190,6 +209,12 @@ export class SettingsStore {
       // a user with no key to protect.
       secretStorage: this.#secretStorage,
       showInMenuBar: (await this.#load()).showInMenuBar,
+      // Resolved the way the minter resolves it, so the panel marks the voice
+      // that would actually be heard.
+      voice:
+        (await this.#load()).voice ??
+        environmentVoice(this.#environment) ??
+        REALTIME_DEFAULTS.VOICE,
     };
   }
 
@@ -200,6 +225,32 @@ export class SettingsStore {
    */
   async showInMenuBar(): Promise<boolean> {
     return (await this.#load()).showInMenuBar;
+  }
+
+  /**
+   * Main-process only, like the resolved keys: the voice the user chose, for
+   * the minter at startup. Nothing chosen resolves to nothing — the minter
+   * already carries the environment's voice and the default.
+   */
+  async readVoice(): Promise<RealtimeVoice | undefined> {
+    return (await this.#load()).voice;
+  }
+
+  /** Stores the chosen voice, or returns to the default when omitted. */
+  async setVoice(voice: RealtimeVoice | undefined): Promise<SettingsUpdateResult> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (persisted.voice === voice) return;
+      const next: PersistedSettings = {
+        ...persisted,
+        version: SETTINGS_FILE_VERSION,
+      };
+      if (voice) next.voice = voice;
+      else delete next.voice;
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+    });
+    return { settings: await this.snapshot() };
   }
 
   /**

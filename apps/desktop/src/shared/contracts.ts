@@ -3,6 +3,7 @@ import type {
   FixtureSnapshot,
   NormalizedSession,
   RealtimeConnection,
+  RealtimeVoice,
   Rectangle,
   ResolvedNotchGeometry,
   SessionIdentity,
@@ -55,6 +56,12 @@ export interface AppSettings {
    * the panel — so the choice is the user's to make and to keep.
    */
   showInMenuBar: boolean;
+  /**
+   * The voice Luke speaks with, as the settings resolve it: the one the user
+   * chose, else the launch environment's, else the default — so the panel
+   * marks the voice that would actually be heard, not just a stored value.
+   */
+  voice: RealtimeVoice;
 }
 
 /** A rejected update reports why without echoing the submitted value. */
@@ -134,6 +141,12 @@ export interface AppBridge {
     apiKey: string | undefined,
   ): Promise<SettingsUpdateResult>;
   /**
+   * Chooses the voice Luke speaks with, from the set fixed by this build. It
+   * reaches the next conversation to connect; one already open keeps the
+   * voice it answered with.
+   */
+  setVoice(voice: RealtimeVoice): Promise<SettingsUpdateResult>;
+  /**
    * Opens a provider's own API-key page in the default browser. The renderer
    * names the provider, not the address, so the set of pages Luke can open is
    * fixed by this build.
@@ -176,6 +189,7 @@ export const channels = {
   requestMicrophone: "app:request-microphone",
   openMicrophoneSettings: "app:open-microphone-settings",
   setProviderApiKey: "app:set-provider-api-key",
+  setVoice: "app:set-voice",
   openProviderApiKeys: "app:open-provider-api-keys",
   setShowInMenuBar: "app:set-show-in-menu-bar",
   openSession: "app:open-session",
