@@ -4,6 +4,7 @@ import type {
   IssueToolAction,
   NormalizedSession,
   ObservedWorkspaceProject,
+  PanelFormFactor,
   ProviderControlResult,
   ProviderMessageResult,
   ProviderWorkspaceResult,
@@ -18,6 +19,7 @@ import type {
   WindowMode,
 } from "@sidecar/core";
 import type { CredentialProviderId } from "./credential-providers";
+import type { FeedbackResult, FeedbackSubmission } from "./feedback";
 
 export type { WindowMode } from "@sidecar/core";
 
@@ -94,6 +96,32 @@ export interface AppSettings {
    * choice to reset, and the row keeps showing the key that actually answers.
    */
   voiceHotkey?: string;
+  /**
+   * The ask-key chord the user chose, absent while the defaults stand. The
+   * stored choice on the talk key's exact terms: the registered key is what
+   * the row shows, and this only says whether there is a choice to reset.
+   */
+  askHotkey?: string;
+  /**
+   * Whether Music and Spotify are turned down while a spoken exchange is
+   * live, and back up after. On by default: speech over music is the failure
+   * everyone has had, and the duck defers to the user everywhere it can — it
+   * touches only a player that was playing, and a volume moved by hand during
+   * the duck is left where the hand put it.
+   */
+  duckOtherMedia: boolean;
+  /**
+   * Whether Luke stands on every connected display at once. Off by default:
+   * he keeps to the system's main display until asked, and turning this off
+   * again is what brings him back to it.
+   */
+  showOnAllDisplays: boolean;
+  /**
+   * How Luke stands on a display without a camera housing: a drawn notch
+   * pressed into the top edge, or the free-floating bubble every such display
+   * gets by default. A display with a real notch answers to neither.
+   */
+  formFactor: PanelFormFactor;
 }
 
 /** A rejected update reports why without echoing the submitted value. */
@@ -229,14 +257,37 @@ export interface AppBridge {
   setShowInMenuBar(show: boolean): Promise<SettingsUpdateResult>;
   /** Shows or hides the Dock icon, and remembers the choice. */
   setShowInDock(show: boolean): Promise<SettingsUpdateResult>;
+  /**
+   * Stands Luke on every connected display, or brings him back to the main
+   * one alone, and remembers the choice.
+   */
+  setShowOnAllDisplays(show: boolean): Promise<SettingsUpdateResult>;
+  /** Chooses how Luke stands on a display without a housing, and remembers it. */
+  setFormFactor(formFactor: PanelFormFactor): Promise<SettingsUpdateResult>;
   /** Turns the on-screen caption of Luke's speech on or off. */
   setVoiceCaptions(enabled: boolean): Promise<SettingsUpdateResult>;
+  /** Turns the quieting of Music and Spotify during a spoken exchange on or off. */
+  setDuckOtherMedia(enabled: boolean): Promise<SettingsUpdateResult>;
+  /**
+   * Whether a spoken exchange is live — a turn being held, a reply being
+   * spoken, or the call coming up between them. It drives the media duck and
+   * nothing else, and it is a statement rather than a request: fire-and-forget,
+   * because the exchange must never wait on the players.
+   */
+  setVoiceExchangeActive(active: boolean): void;
   /**
    * Moves the talk key to a chord of the user's own, or back to the defaults
    * when omitted. The change is registered with the system at once, and the
    * key the panel shows follows the same announcement it always has.
    */
   setVoiceHotkey(accelerator: string | undefined): Promise<SettingsUpdateResult>;
+  /**
+   * Moves the ask key the same way, or back to its defaults when omitted. The
+   * one extra rule is the standing one: a chord the talk key holds — or could
+   * fall back to on a later launch — is refused with a reason rather than
+   * stored and left to race it.
+   */
+  setAskHotkey(accelerator: string | undefined): Promise<SettingsUpdateResult>;
   /**
    * Opens an observed session where its provider keeps it. The renderer names
    * the session rather than its address, for the same reason it names a
@@ -280,6 +331,12 @@ export interface AppBridge {
    * anything, so nothing a model composed reaches Linear as-is.
    */
   executeIssueAction(action: IssueActionAsk): Promise<TrackerActionResult>;
+  /**
+   * Carries one user-typed note to the people who make Luke, as email. The
+   * renderer sends only what the user wrote and attached — the destination is
+   * fixed in the main process, and no session material rides along.
+   */
+  sendFeedback(submission: FeedbackSubmission): Promise<FeedbackResult>;
   /** Brings the expanded panel forward so it can accept typed input. */
   focusPanel(): void;
   /** Mints a short-lived Realtime credential; the standing API key never crosses. */
@@ -287,7 +344,14 @@ export interface AppBridge {
   notifyReady(): void;
   quit(): void;
   onLifecycle(callback: (eventName: string) => void): () => void;
+  /** This window's own display, whenever its geometry or housing changes. */
   onDisplayChanged(callback: (display: DisplayDiagnostic) => void): () => void;
+  /**
+   * The settings as another window just changed them. A window's own change
+   * comes back in its reply; this is how every other window's rows and guide
+   * stop describing a state the store no longer holds.
+   */
+  onSettingsChanged(callback: (settings: AppSettings) => void): () => void;
   onSessionsChanged(callback: (sessions: readonly NormalizedSession[]) => void): () => void;
   /** The projects a workspace can be created in, whenever the set changes. */
   onWorkspaceProjectsChanged(
@@ -324,14 +388,20 @@ export const channels = {
   setVoiceSpeed: "app:set-voice-speed",
   setVoiceCaptions: "app:set-voice-captions",
   setVoiceHotkey: "app:set-voice-hotkey",
+  setAskHotkey: "app:set-ask-hotkey",
+  setDuckOtherMedia: "app:set-duck-other-media",
+  setVoiceExchange: "app:set-voice-exchange",
   openProviderApiKeys: "app:open-provider-api-keys",
   setShowInMenuBar: "app:set-show-in-menu-bar",
   setShowInDock: "app:set-show-in-dock",
+  setShowOnAllDisplays: "app:set-show-on-all-displays",
+  setFormFactor: "app:set-form-factor",
   openSession: "app:open-session",
   sendSessionMessage: "app:send-session-message",
   executeSessionControl: "app:execute-session-control",
   createSessionWorkspace: "app:create-session-workspace",
   executeIssueAction: "app:execute-issue-action",
+  sendFeedback: "app:send-feedback",
   focusPanel: "app:focus-panel",
   requestRealtimeCredential: "app:request-realtime-credential",
   attentionSpeech: "app:attention-speech",
@@ -342,6 +412,7 @@ export const channels = {
   rendererReady: "app:renderer-ready",
   lifecycle: "app:lifecycle",
   displayChanged: "app:display-changed",
+  settingsChanged: "app:settings-changed",
   sessionsChanged: "app:sessions-changed",
   workspaceProjectsChanged: "app:workspace-projects-changed",
   issuesChanged: "app:issues-changed",

@@ -192,6 +192,10 @@
      the panel stood down to one field, not a different object. */
   --slot-radius: 28px;
   --wing-inset: 9px;
+  /* The panel's own content edge: where the tab bar, the rows, and the composer
+     all start. The wing's marks take the same start, so the strip up top reads
+     as the first line of the column below it. */
+  --panel-inset: 20px;
   --scroll-fade: 26px;
   --panel-width: 620px;
   /* How long the slot's contents wait before arriving. The slot is only ever
@@ -234,6 +238,10 @@
      key was copied from is behind this and has to stay readable. The floor is
      what those three need on a display with no housing to grow from. */
   --slot-width: max(460px, calc(var(--notch-housing-width) + 300px));
+  /* Wider than the key slot — a note wraps where a key scrolls, and the credit
+     fields share a line — and narrower than the panel, so the composer reads as
+     the panel stood down to one thing rather than as the panel refilled. */
+  --feedback-width: max(520px, calc(var(--notch-housing-width) + 340px));
   /* The mark sits outside the field's column, so everything else in the slot is
      indented past it by the same amount. */
   --slot-mark-size: 22px;
@@ -258,7 +266,8 @@
   --notch-concave-radius: calc(var(--panel-radius) * 0.489);
 }
 
-.app-stage[data-presentation="slot"] {
+.app-stage[data-presentation="slot"],
+.app-stage[data-presentation="feedback"] {
   --notch-concave-radius: calc(var(--slot-radius) * 0.489);
 }
 
@@ -414,6 +423,7 @@ button:disabled {
 .app-stage[data-presentation="capsule"][data-caption="true"] .panel-surface,
 .app-stage[data-presentation="peek"] .panel-surface,
 .app-stage[data-presentation="slot"] .panel-surface,
+.app-stage[data-presentation="feedback"] .panel-surface,
 .app-stage[data-presentation="panel"] .panel-surface {
   box-shadow: var(--surface-shadow);
 }
@@ -424,6 +434,15 @@ button:disabled {
 .app-stage[data-presentation="slot"] .panel-surface {
   width: var(--slot-width);
   height: var(--slot-height, 96px);
+  border-radius: 0 0 var(--slot-radius) var(--slot-radius);
+}
+
+/* The panel narrowed to the composer, in the slot's own family: reached from
+   the panel it is a shrink, and reached from the tray it retargets the growth
+   already under way, so the base rule's timing serves both. */
+.app-stage[data-presentation="feedback"] .panel-surface {
+  width: var(--feedback-width);
+  height: var(--feedback-height, 220px);
   border-radius: 0 0 var(--slot-radius) var(--slot-radius);
 }
 
@@ -643,9 +662,14 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 /* The wings keep the capsule's quiet form while the slot is drawn — one mark and
    the count, nothing unfolded — because the slot is asking for a key, and a list
    of sessions is not an answer to that. Only the bound changes, so nothing
-   spills past the narrower shape. */
+   spills past the narrower shape. The composer is asking for words and gets the
+   same quiet. */
 .app-stage[data-presentation="slot"] {
   --wing-bound: var(--slot-width);
+}
+
+.app-stage[data-presentation="feedback"] {
+  --wing-bound: var(--feedback-width);
 }
 
 .wing-left {
@@ -667,17 +691,30 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   padding: 0 var(--wing-inset);
 }
 
-/* Reversed so the first provider — the one that needs a person soonest — is the
-   mark nearest the face, and therefore the first to come out from behind it.
-   Every mark holds its place and only fades, so none of them moves during the
-   morph. A re-sort is the one thing that moves them, and session-motion glides
-   each mark to its new slot the way it glides the rows. */
+/* The left wing's inner spans the whole strip rather than shrinking to its
+   contents: the face keeps the notch's edge it always had, and the marks' own
+   auto margin is what holds them against the shape's far edge instead of
+   beside the face. */
+.wing-left .wing-inner {
+  flex: 1;
+  justify-content: flex-end;
+}
+
+/* Anchored to the shape's far edge — the auto margin holds it there — and
+   starting at `--panel-inset` from it, so the first mark lines up with the tab
+   bar and the rows below. The wing already pads `--wing-inset`; the margin
+   makes up the difference. Read the way a list is: the first provider — the
+   one that needs a person soonest — holds the leftmost slot, and the overflow
+   count trails the rest. The far edge is the one a morph moves, so the marks
+   move with it; session-motion glides them there on the surface's own spring,
+   the same way it glides a re-sorted mark to its new slot. */
 .wing-marks {
   display: flex;
   height: 22px;
-  flex-direction: row-reverse;
   align-items: center;
   gap: 7px;
+  margin-right: auto;
+  margin-left: calc(var(--panel-inset) - var(--wing-inset));
 }
 
 .wing-mark {
@@ -711,6 +748,20 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transition-duration: var(--duration-quick), var(--duration-shape);
   transition-timing-function: var(--motion-exit), var(--spring);
   transition-delay: var(--peek-delay);
+}
+
+/* The marks rest at the shape's far edge, not beside the face, so the peek's
+   early beat would draw them on the desktop ahead of an edge still most of its
+   travel away. They arrive the way the voice meter arrives in the growing
+   capsule: crossing the last of the shape's travel and finishing as it
+   settles, inside the black rather than ahead of it. The meter above keeps the
+   early beat — it stands beside the face, where the shape's edge passes at
+   once. */
+.app-stage[data-presentation="peek"] .wing-mark,
+.app-stage[data-presentation="peek"] .wing-more,
+.app-stage[data-presentation="panel"] .wing-mark,
+.app-stage[data-presentation="panel"] .wing-more {
+  transition-delay: calc(var(--duration-shape) - var(--duration-quick));
 }
 
 /* A mark can mount into a wing that is already unfolded — the panel's wing
@@ -931,9 +982,13 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 }
 
 /* Nothing to blend into on a display without a housing, so the shape stops
-   pretending: it lifts off the edge and closes into a free-floating pill. */
+   pretending: it lifts off the edge and closes into a free-floating pill. The
+   lift is `BUBBLE_LIFT` in packages/sidecar-core/src/geometry.ts — the two
+   must agree — and it is derived rather than chosen: the pill matches the
+   menu bar it floats beside, 24pt tall on a display without a housing. 32px
+   strip minus 4px each side is exactly that 24. */
 .app-stage[data-notch="false"] {
-  --shape-top: 6px;
+  --shape-top: 4px;
 }
 
 .app-stage[data-notch="false"] .panel-surface {
@@ -942,23 +997,54 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   border-radius: 999px;
 }
 
-/* The panel is too large to float, so it meets the top edge like any other
-   display's does. Lowering the lift to zero moves the surface, the wings, and
-   the press target together, because all three are anchored to it. The slot
-   holds a field, which is the same argument at a smaller size. */
-.app-stage[data-notch="false"][data-presentation="panel"],
-.app-stage[data-notch="false"][data-presentation="slot"] {
-  --shape-top: 0px;
-}
-
+/* The panel and the slot keep the pill's lift rather than gluing themselves to
+   the top edge: a bubble afloat at one size and docked at another would read
+   as two objects, and there is nothing up there to blend into at any size. The
+   lift is `BUBBLE_LIFT` in packages/sidecar-core/src/geometry.ts — the
+   expanded window is grown by it so the lifted panel's shadow still fades out
+   inside the stage — and every corner rounds, because an edge nothing meets is
+   an edge with no reason to be square. */
 .app-stage[data-notch="false"][data-presentation="panel"] .panel-surface {
   height: var(--panel-height, 520px);
-  border-radius: 0 0 var(--panel-radius) var(--panel-radius);
+  border-radius: var(--panel-radius);
 }
 
 .app-stage[data-notch="false"][data-presentation="slot"] .panel-surface {
   height: var(--slot-height, 96px);
-  border-radius: 0 0 var(--slot-radius) var(--slot-radius);
+  border-radius: var(--slot-radius);
+}
+
+/* The content rides the lift the chrome takes, arriving and leaving on the
+   same motion it always had — the offsets below are the stages' own resting
+   and drawn transforms with the lift added, so the spring covers the same
+   distance and only the destination moves. */
+.app-stage[data-notch="false"] .expanded-stage {
+  transform: translateX(-50%) translateY(calc(var(--shape-top) - 10px));
+}
+
+.app-stage[data-notch="false"][data-presentation="panel"] .expanded-stage {
+  transform: translateX(-50%) translateY(var(--shape-top));
+}
+
+.app-stage[data-notch="false"] .slot-stage {
+  transform: translateX(-50%) translateY(calc(var(--shape-top) - 6px));
+}
+
+.app-stage[data-notch="false"][data-presentation="slot"] .slot-stage {
+  transform: translateX(-50%) translateY(var(--shape-top));
+}
+
+.app-stage[data-notch="false"][data-presentation="feedback"] .panel-surface {
+  height: var(--feedback-height, 220px);
+  border-radius: var(--slot-radius);
+}
+
+.app-stage[data-notch="false"] .feedback-stage {
+  transform: translateX(-50%) translateY(calc(var(--shape-top) - 6px));
+}
+
+.app-stage[data-notch="false"][data-presentation="feedback"] .feedback-stage {
+  transform: translateX(-50%) translateY(var(--shape-top));
 }
 
 .app-stage[data-notch="false"] .wing,
@@ -986,13 +1072,15 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 /* The strip sits above everything, so wherever the shape holds something else
    to press, the stage around the strip has to stop taking the pointer. */
 .app-stage[data-presentation="panel"] .compact-stage,
-.app-stage[data-presentation="slot"] .compact-stage {
+.app-stage[data-presentation="slot"] .compact-stage,
+.app-stage[data-presentation="feedback"] .compact-stage {
   pointer-events: none;
 }
 
-/* Pressing the strip while the slot is drawn brings the whole panel back, with
-   the entry still in it. */
-.app-stage[data-presentation="slot"] .compact-hover-target {
+/* Pressing the strip while the slot or the composer is drawn brings the whole
+   panel back, with the entry still in it. */
+.app-stage[data-presentation="slot"] .compact-hover-target,
+.app-stage[data-presentation="feedback"] .compact-hover-target {
   cursor: pointer;
   pointer-events: auto;
 }
@@ -1307,7 +1395,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   display: flex;
   max-height: 520px;
   flex-direction: column;
-  padding: calc(max(var(--notch-top-inset), 32px) + 14px) 20px 18px;
+  padding: calc(max(var(--notch-top-inset), 32px) + 14px) var(--panel-inset) 18px;
   border-radius: 0 0 var(--panel-radius) var(--panel-radius);
 }
 
@@ -2099,6 +2187,329 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   font-size: 10px;
 }
 
+/* Feedback --------------------------------------------------------------- */
+
+/* Layered and hidden exactly as the key slot's stage is, but its own class:
+   the two stages coexist in the DOM — each holds its last entry through an
+   exit — and a shared class would let the rule that shows one show the other
+   over it. */
+.feedback-stage {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 50%;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(-6px);
+  transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-shape) var(--spring),
+    visibility 0s linear var(--duration-exit);
+  will-change: opacity, transform;
+}
+
+/* The composer arrives exactly as the key slot does, on the shape's own beat:
+   held back by the slot's delay so the panel's content has left first. */
+.app-stage[data-presentation="feedback"] .feedback-stage {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+  transition:
+    opacity var(--duration-quick) var(--motion-exit) var(--slot-delay),
+    transform var(--duration-shape) var(--spring) var(--slot-delay),
+    visibility 0s linear var(--slot-delay);
+}
+
+/* Rounded like the shape it sits on, for the same reason the key slot is:
+   past the corner is desktop, and a press there belongs to whatever is behind
+   Luke. Capped at the panel's own ceiling — the window is only as tall as the
+   panel plus the margin the spring overshoots into — and everything inside
+   holds its size except the preview, which yields whatever the cap takes. */
+.feedback-slot {
+  display: flex;
+  overflow: hidden;
+  width: var(--feedback-width);
+  max-height: 520px;
+  flex-direction: column;
+  gap: 8px;
+  padding: calc(max(var(--notch-top-inset), 32px) + 12px) 16px 15px;
+  border-radius: 0 0 var(--slot-radius) var(--slot-radius);
+}
+
+.feedback-slot > * {
+  flex: 0 0 auto;
+}
+
+.app-stage[data-presentation="feedback"] .feedback-slot {
+  pointer-events: auto;
+}
+
+/* The line under the composer yields to the buttons opposite it the same way
+   the key slot's does. */
+.feedback-foot .settings-note {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Everything below the preview, moved as one thing. The layout puts it at its
+   destination the instant a preview takes or gives back its room — that is
+   what keeps the surface to one clean spring — and these animations replay
+   the journey on that same spring, from where the row used to be to where it
+   now is. `--preview-room` is the distance, told to the stylesheet by the
+   component; unset it is zero, so the composer opening plays neither. */
+.feedback-follow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Going down, the row waits out the slot's content delay rather than the
+   surface's shorter one: the shape must lead, and a row that trails a beat
+   behind the edge is always over black — the same reason the panel's rows fan
+   open behind the surface. Coming back up it takes the shorter delay instead,
+   because against a rising edge it is the leader that stays covered. */
+.feedback-follow[data-follow="true"] {
+  animation: feedback-follow-down var(--duration-shape) var(--spring) var(--slot-delay) backwards;
+}
+
+.feedback-follow[data-follow="false"] {
+  animation: feedback-follow-up var(--duration-shape) var(--spring) var(--duration-exit) backwards;
+}
+
+@keyframes feedback-follow-down {
+  from {
+    transform: translateY(calc(-1 * var(--preview-room, 0px)));
+  }
+}
+
+@keyframes feedback-follow-up {
+  from {
+    transform: translateY(var(--preview-room, 0px));
+  }
+}
+
+/* Held to the width of its longest word, so saying "Sending…" does not slide
+   the Cancel beside it — the same floor the slot's confirm keeps. */
+.feedback-send {
+  min-width: 76px;
+}
+
+/* The note grows with its words — the box follows the text and the surface
+   follows the box on its spring — up to the point where scrolling the note is
+   kinder than a panel the height of the screen. No resize handle: the box is
+   already sized by what it holds. */
+.feedback-message {
+  min-height: 64px;
+  max-height: 150px;
+  overflow-y: auto;
+  resize: none;
+  field-sizing: content;
+  letter-spacing: 0;
+  line-height: 1.45;
+}
+
+/* The signature is one choice, so its two halves share one line. */
+.feedback-credit {
+  display: flex;
+  gap: 7px;
+}
+
+.feedback-credit .settings-input {
+  min-width: 0;
+  flex: 1;
+  letter-spacing: 0;
+}
+
+.feedback-images {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+/* A screenshot coming along, at the size of a control: enough to recognise,
+   not enough to read — pressing it opens the preview below, where it can be. */
+.feedback-image {
+  position: relative;
+  display: flex;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+}
+
+/* The chip itself is the way to look closer, and says so with the hand every
+   zoomable thing takes. */
+.feedback-image-open {
+  display: flex;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.4);
+  cursor: zoom-in;
+  transition: border-color var(--duration-hover) ease;
+}
+
+.feedback-image-open:hover {
+  border-color: color-mix(in srgb, var(--state-working) 45%, transparent);
+}
+
+.feedback-image-open[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--state-working) 60%, transparent);
+}
+
+.feedback-image-open img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* On the thumbnail's own corner, dark enough to sit on any screenshot. */
+.feedback-image-remove {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  display: flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--hairline);
+  background: rgba(20, 20, 20, 0.92);
+  color: var(--text-primary);
+  transition: background-color var(--duration-hover) ease;
+}
+
+.feedback-image-remove:hover {
+  background: color-mix(in srgb, var(--danger) 55%, rgba(20, 20, 20, 0.92));
+}
+
+.feedback-image-remove:disabled {
+  opacity: 0.4;
+}
+
+.feedback-image-remove svg {
+  width: 8px;
+  height: 8px;
+}
+
+/* The screenshot at a readable size: as wide as the note above it, no taller
+   than keeps the shape on screen, and the whole thing is the way back out.
+   `contain` rather than `cover`, because a preview that crops is not a
+   preview.
+
+   Its room lands in the layout at once, so the surface takes one clean spring
+   to the new height instead of chasing a growing box frame by frame. The
+   image itself does not move at all: it is uncovered, by a clip that rides
+   the surface's own delay, duration, and spring — the same trick the caption
+   uses — so the picture appears exactly as fast as the notch's edge sweeps
+   down over it, never ahead of the shape and never drawn past it. */
+.feedback-slot > .feedback-preview {
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
+  flex: 0 1 auto;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.4);
+  clip-path: inset(0 0 0 0 round 12px);
+  cursor: zoom-out;
+  transition: opacity var(--duration-quick) var(--motion-exit);
+}
+
+/* The arrival is an animation rather than a transition from `@starting-style`:
+   the engine starts an animation on a freshly mounted element without fail,
+   where a clip transition from a starting style is quietly skipped. `backwards`
+   holds the covered pose through the surface's own head start. */
+.feedback-slot > .feedback-preview[data-open="true"] {
+  animation:
+    feedback-preview-uncover var(--duration-shape) var(--spring) var(--duration-exit) backwards,
+    feedback-preview-arrive var(--duration-quick) var(--motion-exit) backwards;
+}
+
+/* From covered to the element's own resting clip; the pose every open starts at. */
+@keyframes feedback-preview-uncover {
+  from {
+    clip-path: inset(0 0 100% 0 round 12px);
+  }
+}
+
+@keyframes feedback-preview-arrive {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Leaving is immediate and brief, the way content always leaves ahead of the
+   shape: the image is gone over `--duration-exit`, and only the end of that
+   fade takes its room — so the surface never shrinks out from under a picture
+   still on screen. */
+.feedback-slot > .feedback-preview[data-open="false"] {
+  opacity: 0;
+  transition: opacity var(--duration-exit) var(--motion-exit);
+}
+
+.feedback-preview img {
+  display: block;
+  width: 100%;
+  max-height: 260px;
+  object-fit: contain;
+}
+
+/* Offers like the quiet buttons around it, with the picture glyph saying what
+   it takes. */
+.feedback-attach {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 11px;
+  border-radius: 10px;
+  background: var(--raised);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 640;
+  white-space: nowrap;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.feedback-attach:hover {
+  background: var(--raised-strong);
+  color: var(--text-primary);
+}
+
+.feedback-attach:disabled {
+  opacity: 0.4;
+}
+
+.feedback-attach:disabled:hover {
+  background: var(--raised);
+  color: var(--text-secondary);
+}
+
+.feedback-attach .icon-button-glyph {
+  width: 12px;
+  height: 12px;
+}
+
+/* A send that landed, said in the palette every settled answer uses. */
+.feedback-sent {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--state-complete);
+  font-size: 10.5px;
+  font-weight: 640;
+}
+
 /* Key slot --------------------------------------------------------------- */
 
 /* Layered like the panel and animated like it, because it is the panel: the
@@ -2277,6 +2688,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   .panel-surface,
   .expanded-stage,
   .slot-stage,
+  .feedback-stage,
   .key-slot-confirm,
   .wing-mark,
   .wing-more,

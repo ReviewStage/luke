@@ -1,8 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
+  DEFAULT_PANEL_FORM_FACTOR,
+  isPanelFormFactor,
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
+  type PanelFormFactor,
   REALTIME_DEFAULTS,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
@@ -33,9 +36,13 @@ const SETTINGS_FILE_MODE = 0o600;
 
 const SETTINGS_FIELD = {
   API_KEYS: "apiKeys",
+  ASK_HOTKEY: "askHotkey",
+  DUCK_OTHER_MEDIA: "duckOtherMedia",
+  FORM_FACTOR: "formFactor",
   LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
   SHOW_IN_DOCK: "showInDock",
   SHOW_IN_MENU_BAR: "showInMenuBar",
+  SHOW_ON_ALL_DISPLAYS: "showOnAllDisplays",
   VERSION: "version",
   VOICE: "voice",
   VOICE_CAPTIONS: "voiceCaptions",
@@ -115,6 +122,32 @@ interface PersistedSettings {
    * honouring it would claim a system key nothing was ever told about.
    */
   voiceHotkey?: string;
+  /**
+   * The ask-key chord the user chose, held to everything the talk key's is:
+   * stored plainly, absent while the defaults stand, and dropped rather than
+   * carried when this build cannot register it.
+   */
+  askHotkey?: string;
+  /**
+   * Whether Music and Spotify are turned down while a spoken exchange is
+   * live. On unless the file says `false` outright — like the menu bar item,
+   * this is what Luke does until the user asks otherwise, so a missing field
+   * and a corrupt value both land on doing it.
+   */
+  duckOtherMedia: boolean;
+  /**
+   * Whether Luke stands on every connected display. Off unless the file says
+   * `true` outright, like the Dock: a missing field, an older file, and a
+   * corrupt value all land on the main display alone rather than raising
+   * windows somewhere new.
+   */
+  showOnAllDisplays: boolean;
+  /**
+   * How Luke stands on a display without a housing, absent until the user has
+   * chosen. Held to the offered set like the voice: a value this build does
+   * not draw is dropped rather than honoured.
+   */
+  formFactor?: PanelFormFactor;
 }
 
 interface ResolvedApiKey {
@@ -190,10 +223,14 @@ function parsePersistedSettings(source: string): PersistedSettings {
   const showInMenuBar = record[SETTINGS_FIELD.SHOW_IN_MENU_BAR];
   const voice = record[SETTINGS_FIELD.VOICE];
   const voiceSpeed = record[SETTINGS_FIELD.VOICE_SPEED];
+  const formFactor = record[SETTINGS_FIELD.FORM_FACTOR];
   const storedHotkey = record[SETTINGS_FIELD.VOICE_HOTKEY];
   // Read through the same gate a submitted chord passes, so a hand-edited
   // value is either the one spelling the rest of the app uses or nothing.
   const voiceHotkey = typeof storedHotkey === "string" ? parseVoiceHotkey(storedHotkey) : undefined;
+  const storedAskHotkey = record[SETTINGS_FIELD.ASK_HOTKEY];
+  const askHotkey =
+    typeof storedAskHotkey === "string" ? parseVoiceHotkey(storedAskHotkey) : undefined;
   return {
     version: typeof version === "number" ? version : SETTINGS_FILE_VERSION,
     apiKeys: storedApiKeys(record),
@@ -207,6 +244,11 @@ function parsePersistedSettings(source: string): PersistedSettings {
     ...(isRealtimeVoiceSpeed(voiceSpeed) ? { voiceSpeed } : {}),
     voiceCaptions: record[SETTINGS_FIELD.VOICE_CAPTIONS] === true,
     ...(voiceHotkey ? { voiceHotkey } : {}),
+    ...(askHotkey ? { askHotkey } : {}),
+    duckOtherMedia: record[SETTINGS_FIELD.DUCK_OTHER_MEDIA] !== false,
+    showOnAllDisplays: record[SETTINGS_FIELD.SHOW_ON_ALL_DISPLAYS] === true,
+    // A form this build does not draw is dropped like an unknown voice.
+    ...(isPanelFormFactor(formFactor) ? { formFactor } : {}),
   };
 }
 
@@ -263,6 +305,10 @@ export class SettingsStore {
       ...((await this.#load()).voiceHotkey
         ? { voiceHotkey: (await this.#load()).voiceHotkey }
         : {}),
+      ...((await this.#load()).askHotkey ? { askHotkey: (await this.#load()).askHotkey } : {}),
+      duckOtherMedia: (await this.#load()).duckOtherMedia,
+      showOnAllDisplays: (await this.#load()).showOnAllDisplays,
+      formFactor: (await this.#load()).formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
     };
   }
 
@@ -282,6 +328,14 @@ export class SettingsStore {
    */
   async showInDock(): Promise<boolean> {
     return (await this.#load()).showInDock;
+  }
+
+  /**
+   * Shallow for the same reason `showInMenuBar()` is: the media duck arms at
+   * startup, and arming it must never be what wakes the OS keychain.
+   */
+  async duckOtherMedia(): Promise<boolean> {
+    return (await this.#load()).duckOtherMedia;
   }
 
   /**
@@ -382,6 +436,108 @@ export class SettingsStore {
       };
       if (accelerator) next.voiceHotkey = accelerator;
       else delete next.voiceHotkey;
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+    });
+    return { settings: await this.snapshot() };
+  }
+
+  /**
+   * Main-process only, like the talk key's: the ask-key chord the user chose,
+   * for registration at startup, or nothing while the defaults stand.
+   */
+  async readAskHotkey(): Promise<string | undefined> {
+    return (await this.#load()).askHotkey;
+  }
+
+  /**
+   * Stores the chosen ask-key chord, or returns to the defaults when omitted,
+   * on the talk key's exact terms: the chord arrives already read into its one
+   * canonical spelling, and resetting is the absence of a choice.
+   */
+  async setAskHotkey(accelerator: string | undefined): Promise<SettingsUpdateResult> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (persisted.askHotkey === accelerator) return;
+      const next: PersistedSettings = {
+        ...persisted,
+        version: SETTINGS_FILE_VERSION,
+      };
+      if (accelerator) next.askHotkey = accelerator;
+      else delete next.askHotkey;
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+    });
+    return { settings: await this.snapshot() };
+  }
+
+  /**
+   * Turns the quieting of Music and Spotify during a spoken exchange on or
+   * off. A plain preference like the caption's: no cipher, no invalid value,
+   * so the write either lands or throws.
+   */
+  async setDuckOtherMedia(enabled: boolean): Promise<SettingsUpdateResult> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (persisted.duckOtherMedia === enabled) return;
+      const next: PersistedSettings = {
+        ...persisted,
+        version: SETTINGS_FILE_VERSION,
+        duckOtherMedia: enabled,
+      };
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+    });
+    return { settings: await this.snapshot() };
+  }
+
+  /**
+   * Shallow like `showInDock()`: the displays Luke stands on are decided at
+   * launch from the settings file alone, never the keychain.
+   */
+  async readShowOnAllDisplays(): Promise<boolean> {
+    return (await this.#load()).showOnAllDisplays;
+  }
+
+  /**
+   * Remembers whether Luke stands on every display or the main one alone. A
+   * preference like the Dock's, and held to the same rule: nothing here
+   * touches the cipher.
+   */
+  async setShowOnAllDisplays(show: boolean): Promise<SettingsUpdateResult> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (persisted.showOnAllDisplays === show) return;
+      const next: PersistedSettings = {
+        ...persisted,
+        version: SETTINGS_FILE_VERSION,
+        showOnAllDisplays: show,
+      };
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+    });
+    return { settings: await this.snapshot() };
+  }
+
+  /**
+   * Shallow for the same reason as `readShowOnAllDisplays()`: the windows are
+   * placed at launch from the settings file alone, never the keychain.
+   */
+  async readFormFactor(): Promise<PanelFormFactor | undefined> {
+    return (await this.#load()).formFactor;
+  }
+
+  /** Stores the chosen form, or returns to the default when omitted. */
+  async setFormFactor(formFactor: PanelFormFactor | undefined): Promise<SettingsUpdateResult> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (persisted.formFactor === formFactor) return;
+      const next: PersistedSettings = {
+        ...persisted,
+        version: SETTINGS_FILE_VERSION,
+      };
+      if (formFactor) next.formFactor = formFactor;
+      else delete next.formFactor;
       await this.#write(next);
       this.#loading = Promise.resolve(next);
     });
@@ -572,6 +728,8 @@ export class SettingsStore {
       showInDock: false,
       showInMenuBar: true,
       voiceCaptions: false,
+      duckOtherMedia: true,
+      showOnAllDisplays: false,
     };
     if (source) {
       try {

@@ -22,8 +22,10 @@ import { WAVEFORM_VOICE, Waveform, type WaveformVoice } from "./waveform";
 /**
  * The strips beside the camera housing. They are rendered once for both window
  * modes and anchored to the notch rather than to a stage, so growing the window
- * moves nothing here: the face and the count badge stay put and the marks, the
- * meter, and the captions simply unfold into the space the expanded panel adds.
+ * re-lays out nothing here: the face and the count badge stay put, the meter
+ * and the captions unfold into the space the expanded panel adds, and the
+ * marks — resting against the shape's far edge — glide outward with it on the
+ * surface's own spring.
  */
 interface NotchWingsProps {
   tally: SessionTally;
@@ -40,20 +42,21 @@ interface NotchWingsProps {
 }
 
 /**
- * What one wing costs to fill, in the stylesheet's numbers: `--wing-inset` on
- * both sides, then the face and its gap, then a first mark and a gap-and-mark
- * for every mark after it.
+ * What one wing costs to fill, in the stylesheet's numbers: `--panel-inset` on
+ * the far side, where the marks start level with the tab bar and the rows,
+ * `--wing-inset` beside the housing, then the face and its gap, then a first
+ * mark and a gap-and-mark for every mark after it.
  */
-const WING_INSETS = 18;
+const WING_INSETS = 29;
 const FACE_AND_GAP = 26;
 const MARK_WIDTH = 14;
 const MARK_AND_GAP = 21;
 
 /**
  * How many marks fit beside the face in a wing of this width. The peek's side
- * is fixed at 124px whatever the housing measures, which is where the old
- * limit of four came from: the face and its gap cost 26px of the 106px between
- * the wing's insets, and each mark past the first costs 21px of the 80px that
+ * is fixed at 124px whatever the housing measures, which is where its limit of
+ * three comes from: the face and its gap cost 26px of the 95px between the
+ * wing's insets, and each mark past the first costs 21px of the 55px that
  * remain. The panel's side is what is left of `--panel-width` after the
  * housing, so it holds roughly twice as many.
  */
@@ -67,7 +70,7 @@ export function wingMarkCapacity(sideWidth: number): number {
 const PEEK_SIDE_WIDTH = CAPSULE_SIDE_WIDTH + PEEK_SIDE_GROWTH;
 
 /**
- * The strip beside the face, as slots: each provider's mark, then — when the
+ * The wing's strip, as slots: each provider's mark, then — when the
  * providers outnumber the slots — the count standing in for the rest. The
  * marks are a summary, and a summary that hides its own remainder reads as a
  * complete list, so whatever does not fit is counted rather than dropped. The

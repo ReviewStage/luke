@@ -22,6 +22,10 @@ for helper in mac-screen-geometry mac-talk-key; do
         exit 1
     fi
 done
+if [[ ! -f "$PACKAGED_APP/Contents/Resources/mac-stationary-window.node" ]]; then
+    printf 'error: packaged app is missing the mac-stationary-window.node addon\n' >&2
+    exit 1
+fi
 INFO_PLIST="$PACKAGED_APP/Contents/Info.plist"
 BUNDLE_ICON_FILE=$(plutil -extract CFBundleIconFile raw -o - "$INFO_PLIST")
 PACKAGED_ICON="$PACKAGED_APP/Contents/Resources/$BUNDLE_ICON_FILE"
