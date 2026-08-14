@@ -99,6 +99,56 @@ function decodedByteLength(base64) {
 }
 
 /**
+ * The bytes every claimed format is required to open with. A public endpoint
+ * relaying attachments from a trusted sender must not take a media type at
+ * its word: content that does not carry its format's own signature is refused,
+ * so arbitrary binaries cannot ride out under an image's name.
+ */
+const IMAGE_SIGNATURE = {
+  "image/png": (bytes) =>
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a,
+  "image/jpeg": (bytes) =>
+    bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff,
+  "image/webp": (bytes) =>
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50,
+};
+
+/** What each verified format's attachment is named; the extension is ours. */
+const IMAGE_EXTENSION = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+};
+
+/**
+ * @param {string} base64
+ * @param {string} mediaType
+ */
+function carriesImageSignature(base64, mediaType) {
+  const check = IMAGE_SIGNATURE[mediaType];
+  if (!check) return false;
+  // The first sixteen encoded quartets decode to the leading bytes, which is
+  // all any signature needs.
+  return check(Buffer.from(base64.slice(0, 64), "base64"));
+}
+
+/**
  * @param {unknown} value
  * @returns {{ name: string; mediaType: string; base64: string } | undefined}
  */
@@ -110,7 +160,18 @@ function feedbackImage(value) {
   if (typeof base64 !== "string" || base64.length === 0) return undefined;
   if (!BASE64_PATTERN.test(base64)) return undefined;
   if (decodedByteLength(base64) > FEEDBACK_LIMITS.IMAGE_MAX_BYTES) return undefined;
+  if (!carriesImageSignature(base64, mediaType)) return undefined;
   return { name: name.trim(), mediaType, base64 };
+}
+
+/**
+ * Whether an optional credit address is shaped like one worth handing Resend
+ * as a reply-to. A typo here must not cost the message itself: an address
+ * that fails this still rides in the body's credit line, and only the
+ * reply-to header goes without.
+ */
+function isReplyableEmail(value) {
+  return typeof value === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 /*
@@ -219,12 +280,17 @@ export async function POST(request) {
         subject,
         text: emailBody(submission),
         // Replying to the email answers the person who wrote it, when they
-        // said who that is.
-        ...(submission.email ? { reply_to: [submission.email] } : {}),
+        // said who that is — and only when the address is shaped like one:
+        // a typo in an optional field must not cost the message itself.
+        ...(isReplyableEmail(submission.email) ? { reply_to: [submission.email] } : {}),
         ...(submission.images.length > 0
           ? {
-              attachments: submission.images.map((image) => ({
-                filename: image.name,
+              // Named by this endpoint, not by the sender: the user's own
+              // filename stays in the body of their note if they typed it
+              // anywhere, and the attachment carries a name whose extension
+              // is the verified format's own.
+              attachments: submission.images.map((image, index) => ({
+                filename: `screenshot-${index + 1}.${IMAGE_EXTENSION[image.mediaType]}`,
                 content: image.base64,
               })),
             }
