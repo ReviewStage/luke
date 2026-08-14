@@ -37,6 +37,7 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
     voiceSpeed: REALTIME_VOICE_SPEED.NORMAL,
     voiceCaptions: false,
     duckOtherMedia: true,
+    sessionNotifications: true,
     showOnAllDisplays: false,
     formFactor: PANEL_FORM_FACTOR.BUBBLE,
     ...overrides,
@@ -50,6 +51,7 @@ function guideInput(overrides: Partial<LukeGuideInput> = {}): LukeGuideInput {
     microphoneStatus: "granted",
     hotkey: { hotkey: "⌥Space", held: true },
     askKey: "⌥L",
+    stopKey: "⌥S",
     ...overrides,
   };
 }
@@ -310,6 +312,29 @@ test("the guide describes the default workspace provider without offering to cha
   assert.equal(chosen.value, "Conductor");
 });
 
+test("the facts describe stopping a reply, exactly where a reply can exist", () => {
+  const rendered = JSON.stringify(buildLukeGuide(guideInput()).facts);
+
+  assert.match(rendered, /Stopping a reply/);
+  // The registered key leads, and Escape rides with it: the stop key answers
+  // from any app, Escape only while the panel has the keyboard.
+  assert.match(rendered, /⌥S, from any app/);
+  assert.match(rendered, /Escape does the same/);
+  // Guiding the developer to the row is half of what the guide is for.
+  assert.match(rendered, /A different stop chord can be recorded/);
+
+  // No key registered — another app owns ⌥S, or a Luke key was moved onto
+  // it — leaves Escape as the whole of the capability, said honestly.
+  const keyless = JSON.stringify(buildLukeGuide(guideInput({ stopKey: undefined })).facts);
+  assert.match(keyless, /Escape while Luke is speaking/);
+  assert.match(keyless, /No system-wide stop key is registered/);
+
+  // Without a voice there is no reply to stop, so the fact would describe a
+  // key that does nothing.
+  const voiceless = JSON.stringify(buildLukeGuide(guideInput({ voiceAvailable: false })).facts);
+  assert.doesNotMatch(voiceless, /Stopping a reply/);
+});
+
 test("the facts follow the talk key, the microphone, and the storage the system offers", () => {
   const held = JSON.stringify(buildLukeGuide(guideInput()).facts);
   assert.match(held, /hold to talk/);
@@ -350,6 +375,20 @@ test("the facts follow the talk key, the microphone, and the storage the system 
   assert.match(JSON.stringify(unprotected.facts), /no encrypted credential storage/);
 });
 
+test("the panel fact says the tabs answer an ask as well as a press", () => {
+  const fact = buildLukeGuide(guideInput()).facts.find(
+    (candidate) => candidate.label === "The panel",
+  );
+
+  assert.ok(fact);
+  // Switching between Sessions and Settings by asking Luke is a capability,
+  // and a capability the guide does not describe is one Luke will deny.
+  assert.match(fact.detail, /switched by pressing one or by asking Luke/);
+  assert.match(fact.detail, /the panel opens on that tab/);
+  assert.match(fact.detail, /Sessions lists/);
+  assert.match(fact.detail, /Settings holds/);
+});
+
 test("the feedback fact says what a spoken open may do, and that sending stays by hand", () => {
   const fact = buildLukeGuide(guideInput()).facts.find(
     (candidate) => candidate.label === "Feedback and prompts",
@@ -384,6 +423,10 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
     },
     setDuckOtherMedia: async (enabled: boolean) => {
       calls.push(`setDuckOtherMedia:${enabled}`);
+      return answered;
+    },
+    setSessionNotifications: async (enabled: boolean) => {
+      calls.push(`setSessionNotifications:${enabled}`);
       return answered;
     },
     setShowInMenuBar: async (show: boolean) => {
@@ -424,6 +467,7 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
   assert.deepEqual(calls.sort(), [
     "setDuckOtherMedia:true",
     "setFormFactor:notch",
+    "setSessionNotifications:true",
     "setShowInDock:true",
     "setShowInMenuBar:true",
     "setShowOnAllDisplays:true",

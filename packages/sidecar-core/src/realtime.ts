@@ -127,6 +127,7 @@ export const REALTIME_STATUS = {
 export type RealtimeStatus = (typeof REALTIME_STATUS)[keyof typeof REALTIME_STATUS];
 
 export const REALTIME_CLIENT_EVENT = {
+  SESSION_UPDATE: "session.update",
   INPUT_AUDIO_BUFFER_COMMIT: "input_audio_buffer.commit",
   INPUT_AUDIO_BUFFER_CLEAR: "input_audio_buffer.clear",
   CONVERSATION_ITEM_CREATE: "conversation.item.create",
@@ -172,9 +173,24 @@ export const REALTIME_SERVER_EVENT = {
   ERROR: "error",
 } as const;
 
+/**
+ * Who decided a proactive sentence was worth voicing. The two sources carry
+ * different standing: a status edge is a deterministic fact the registry
+ * observed and may open a call of Luke's own to be said; an evaluator summary
+ * is a model's words, and may only ride a call the developer already opened.
+ */
+export const ATTENTION_SPEECH_SOURCE = {
+  STATUS_EDGE: "status-edge",
+  EVALUATOR: "evaluator",
+} as const;
+
+export type AttentionSpeechSource =
+  (typeof ATTENTION_SPEECH_SOURCE)[keyof typeof ATTENTION_SPEECH_SOURCE];
+
 /** A proactive sentence the attention layer decided is worth voicing. */
 export interface AttentionSpeech extends SessionIdentity {
   disposition: AttentionDisposition;
+  source: AttentionSpeechSource;
   summary: string;
   decidedAt: number;
 }
@@ -241,7 +257,7 @@ const REALTIME_INSTRUCTION_LINES: readonly string[] = [
   "- Messages marked [app guide] describe Luke: the facts, and every setting with its current value and where it is changed by hand.",
   "- Answer questions about Luke and its settings from the guide alone; when the guide does not say, say you do not know.",
   "- change_app_setting changes only a setting the guide marks changeable by voice, when the developer asks. For every other setting, tell them the by-hand path the guide gives.",
-  "- show_panel opens Luke's own panel on its sessions or settings tab, and can narrow the session list to one provider or location or reorder it by urgency or recency — use it when the developer asks to see something of Luke's.",
+  "- show_panel opens Luke's own panel on its sessions or settings tab — or switches a panel already open to the tab they name — and can narrow the session list to one provider or location or reorder it by urgency or recency. Use it when the developer asks to see something of Luke's or to move between his tabs.",
   "- open_feedback_composer brings up the composer for a note the developer sends the founders by hand: feedback about Luke, or a prompt they may ship. It can start the note with the developer's own words as a draft — never words they did not say — and it never sends and never overwrites a note already being written: the developer reads, edits, and presses Send themselves.",
   "- When you refuse an ask you cannot carry out — a setting the guide keeps by hand, a capability you do not have, an act outside your tools — refuse honestly in one sentence, then offer once: would they like to send that ask to the founders as a prompt? Only on a clear yes, open the composer on the prompt kind with their ask as the draft, in their own words. Declined or ignored, let it go without another word, and do not repeat the offer for the same ask.",
   "- Never take a credential by voice, and never repeat one: keys are typed into the settings tab, and the guide only ever says whether a provider is connected.",
@@ -548,7 +564,8 @@ export function realtimeToolDefinitions(): readonly Record<string, unknown>[] {
       type: "function",
       name: REALTIME_TOOL.SHOW_PANEL,
       description:
-        "Show Luke's own panel on the developer's screen, the same as pressing the capsule. " +
+        "Show Luke's own panel on the developer's screen, the same as pressing the capsule — or, " +
+        "when the panel is already open, switch it to the named tab, the same as pressing that tab. " +
         "It can open the sessions list — narrowed to one provider or location, ordered by urgency or recency — or the settings tab.",
       parameters: {
         type: "object",
@@ -556,7 +573,7 @@ export function realtimeToolDefinitions(): readonly Record<string, unknown>[] {
           tab: {
             type: "string",
             enum: Object.values(APP_PANEL_TAB),
-            description: "Which tab to open. Defaults to sessions.",
+            description: "Which tab to open or switch to. Defaults to sessions.",
           },
           filter: {
             type: "string",
@@ -1135,6 +1152,27 @@ export function pushToTalkCommitEvents(): readonly Record<string, unknown>[] {
  */
 export function clearInputAudioEvents(): readonly Record<string, unknown>[] {
   return [{ type: REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_CLEAR }];
+}
+
+/**
+ * Builds the event that changes how fast a live call speaks, from its next
+ * reply on.
+ *
+ * The pace is the one output setting the API lets a running session change —
+ * a session's voice locks the moment the model first speaks, so a changed
+ * voice is heard by opening a new call rather than by any event this module
+ * could build. The API applies a pace only between turns, which the caller is
+ * left to time; a pace that is not a usable number builds nothing rather than
+ * an update the API would refuse.
+ */
+export function outputSpeedUpdateEvents(speed: number): readonly Record<string, unknown>[] {
+  if (!Number.isFinite(speed) || speed <= 0) return [];
+  return [
+    {
+      type: REALTIME_CLIENT_EVENT.SESSION_UPDATE,
+      session: { type: REALTIME_SESSION_TYPE, audio: { output: { speed } } },
+    },
+  ];
 }
 
 /**
@@ -1761,6 +1799,7 @@ export function attentionSpeechFromReviews(
       providerId: review.providerId,
       providerSessionId: review.providerSessionId,
       disposition: review.decision.disposition,
+      source: ATTENTION_SPEECH_SOURCE.EVALUATOR,
       summary,
       decidedAt: review.decision.decidedAt,
     });

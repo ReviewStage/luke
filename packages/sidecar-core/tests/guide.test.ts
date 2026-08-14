@@ -115,6 +115,9 @@ test("the standing instructions promise the guide the context actually delivers"
   assert.match(instructions, /\[app guide\]/);
   assert.match(instructions, /change_app_setting/);
   assert.match(instructions, /show_panel/);
+  // Switching an open panel between its tabs is the same ask, and the
+  // instructions must say so or Luke will deny a capability he has.
+  assert.match(instructions, /switches a panel already open/);
   assert.match(instructions, /open_feedback_composer/);
   assert.match(instructions, /create_workspace/);
   assert.match(instructions, /\[workspace projects\]/);

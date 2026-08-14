@@ -292,6 +292,35 @@ test("a corrupt media duck value reads as the default rather than as off", async
   assert.equal((await storeIn(directory).snapshot()).duckOtherMedia, true);
 });
 
+test("sessions notify until asked otherwise, and the choice survives a reopen", async (t) => {
+  const directory = await temporaryDirectory(t);
+  // A preference like the duck's: choosing it must reach the Keychain not at all.
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+
+  assert.equal((await store.snapshot()).sessionNotifications, true);
+  assert.equal(await store.readSessionNotifications(), true);
+  const disabled = await store.setSessionNotifications(false);
+
+  assert.equal(disabled.settings.sessionNotifications, false);
+  assert.equal((await storeIn(directory).snapshot()).sessionNotifications, false);
+  assert.equal(await storeIn(directory).readSessionNotifications(), false);
+  assert.equal(cipher.calls.isAvailable, 0);
+  assert.equal(cipher.calls.encrypt, 0);
+});
+
+test("a corrupt notification value reads as the default rather than as off", async (t) => {
+  const directory = await temporaryDirectory(t);
+  // The duck's rule again: this switch's default is on, so nonsense lands on on.
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({ version: 2, apiKeys: {}, sessionNotifications: "no" }),
+    "utf8",
+  );
+
+  assert.equal((await storeIn(directory).snapshot()).sessionNotifications, true);
+});
+
 test("keeps each provider's key, environment fallback, and reported source separate", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory, {
@@ -346,6 +375,7 @@ test("keeps both keys when two providers are saved at once", async (t) => {
     showInMenuBar: true,
     voiceCaptions: false,
     duckOtherMedia: true,
+    sessionNotifications: true,
     showOnAllDisplays: false,
   });
   const reopened = storeIn(directory, { providers: TEST_PROVIDERS });
@@ -546,6 +576,7 @@ test("keeps a Conductor key stored by an earlier version working", async (t) => 
     showInMenuBar: true,
     voiceCaptions: false,
     duckOtherMedia: true,
+    sessionNotifications: true,
     showOnAllDisplays: false,
   });
   assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), "conductor-replacement-key");
@@ -569,6 +600,7 @@ test("carries a key belonging to a provider this build does not know", async (t)
     showInMenuBar: true,
     voiceCaptions: false,
     duckOtherMedia: true,
+    sessionNotifications: true,
     showOnAllDisplays: false,
   });
 });
@@ -590,6 +622,7 @@ test("shows the menu bar item until asked otherwise, and remembers the answer", 
     showInMenuBar: false,
     voiceCaptions: false,
     duckOtherMedia: true,
+    sessionNotifications: true,
     showOnAllDisplays: false,
   });
   // The choice outlives the run that heard it.
@@ -672,6 +705,7 @@ test("keeps Luke out of the Dock until asked, and remembers the answer", async (
     showInMenuBar: true,
     voiceCaptions: false,
     duckOtherMedia: true,
+    sessionNotifications: true,
     showOnAllDisplays: false,
   });
   // The choice outlives the run that heard it.
@@ -921,16 +955,63 @@ test("ignores a stored ask-key chord this build cannot register", async (t) => {
   assert.equal((await store.snapshot()).askHotkey, undefined);
 });
 
-test("the two Luke keys survive each other's writes", async (t) => {
+test("stores the chosen stop-key chord on the other keys' terms and reads it back", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+
+  assert.equal(await store.readStopHotkey(), undefined);
+  assert.equal((await store.snapshot()).stopHotkey, undefined);
+
+  const { settings, reason } = await store.setStopHotkey("Control+Alt+X");
+
+  assert.equal(reason, undefined);
+  assert.equal(settings.stopHotkey, "Control+Alt+X");
+  // A preference is not a credential, so choosing one never reaches the
+  // Keychain — and never raises its permission dialog.
+  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
+  assert.equal(await storeIn(directory).readStopHotkey(), "Control+Alt+X");
+});
+
+test("clearing the stop-key chord returns to no choice at all", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  await store.setStopHotkey("Control+Alt+X");
+  const { settings } = await store.setStopHotkey(undefined);
+
+  assert.equal(settings.stopHotkey, undefined);
+  // Absent from the file rather than stored as an empty value: reset is the
+  // absence of a choice, and a reopened store must read it the same way.
+  assert.equal(await storeIn(directory).readStopHotkey(), undefined);
+});
+
+test("ignores a stored stop-key chord this build cannot register", async (t) => {
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({ version: 2, apiKeys: {}, stopHotkey: "F13" }),
+  );
+  const store = storeIn(directory);
+
+  // A hand-edited chord the registrar would refuse is dropped rather than
+  // carried: honouring it would claim a key nothing was ever told about.
+  assert.equal(await store.readStopHotkey(), undefined);
+  assert.equal((await store.snapshot()).stopHotkey, undefined);
+});
+
+test("the three Luke keys survive each other's writes", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
   await store.setVoiceHotkey("Control+Alt+Space");
   await store.setAskHotkey("Control+Alt+K");
+  await store.setStopHotkey("Control+Alt+X");
 
   const reopened = storeIn(directory);
   assert.equal(await reopened.readVoiceHotkey(), "Control+Alt+Space");
   assert.equal(await reopened.readAskHotkey(), "Control+Alt+K");
+  assert.equal(await reopened.readStopHotkey(), "Control+Alt+X");
 });
 
 test("the talk-key chord and a stored key survive each other's writes", async (t) => {

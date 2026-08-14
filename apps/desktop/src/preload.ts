@@ -84,8 +84,12 @@ const bridge: AppBridge = {
     ipcRenderer.invoke(channels.setVoiceHotkey, accelerator) as Promise<SettingsUpdateResult>,
   setAskHotkey: (accelerator: string | undefined) =>
     ipcRenderer.invoke(channels.setAskHotkey, accelerator) as Promise<SettingsUpdateResult>,
+  setStopHotkey: (accelerator: string | undefined) =>
+    ipcRenderer.invoke(channels.setStopHotkey, accelerator) as Promise<SettingsUpdateResult>,
   setDuckOtherMedia: (enabled: boolean) =>
     ipcRenderer.invoke(channels.setDuckOtherMedia, enabled) as Promise<SettingsUpdateResult>,
+  setSessionNotifications: (enabled: boolean) =>
+    ipcRenderer.invoke(channels.setSessionNotifications, enabled) as Promise<SettingsUpdateResult>,
   setVoiceExchangeActive: (active: boolean) => {
     ipcRenderer.send(channels.setVoiceExchange, active);
   },
@@ -210,6 +214,17 @@ const bridge: AppBridge = {
       callback(accelerator);
     ipcRenderer.on(channels.askHotkeyChanged, listener);
     return () => ipcRenderer.removeListener(channels.askHotkeyChanged, listener);
+  },
+  onStopHotkeyPress: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on(channels.stopHotkeyPress, listener);
+    return () => ipcRenderer.removeListener(channels.stopHotkeyPress, listener);
+  },
+  onStopHotkeyChanged: (callback: (accelerator: string | undefined) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, accelerator: string | undefined) =>
+      callback(accelerator);
+    ipcRenderer.on(channels.stopHotkeyChanged, listener);
+    return () => ipcRenderer.removeListener(channels.stopHotkeyChanged, listener);
   },
   onOutputAudioChanged: (callback: (state: OutputAudioState | undefined) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, state: OutputAudioState | undefined) =>

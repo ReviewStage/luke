@@ -9,4 +9,5 @@ export * from "./issues";
 export * from "./providers";
 export * from "./realtime";
 export * from "./session";
+export * from "./session-notices";
 export * from "./session-registry";

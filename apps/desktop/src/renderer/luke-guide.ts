@@ -56,6 +56,7 @@ export const APP_SETTING_ID = {
   VOICE_SPEED: "voice_speed",
   VOICE_CAPTIONS: "voice_captions",
   DUCK_OTHER_MEDIA: "duck_other_media",
+  SESSION_NOTIFICATIONS: "session_notifications",
   SHOW_IN_MENU_BAR: "show_in_menu_bar",
   SHOW_IN_DOCK: "show_in_dock",
   SHOW_ON_ALL_DISPLAYS: "show_on_all_displays",
@@ -120,7 +121,8 @@ const SETTING_GUIDE: Record<
   voice: (settings) => ({
     id: APP_SETTING_ID.VOICE,
     label: "Voice",
-    description: "Which voice Luke speaks with; a change is heard from the next conversation on.",
+    description:
+      "Which voice Luke speaks with; a change is heard right away — a conversation under way starts afresh in the new voice.",
     kind: APP_SETTING_KIND.CHOICE,
     value: settings.voice,
     choices: REALTIME_VOICE_LIST,
@@ -131,7 +133,7 @@ const SETTING_GUIDE: Record<
     id: APP_SETTING_ID.VOICE_SPEED,
     label: "Speed",
     description:
-      "How fast Luke talks — slow is 0.75×, normal 1×, quick 1.25×, fast 1.5× the voice's natural rate; a change is heard from the next conversation on.",
+      "How fast Luke talks — slow is 0.75×, normal 1×, quick 1.25×, fast 1.5× the voice's natural rate; a change is heard from the next reply on.",
     kind: APP_SETTING_KIND.CHOICE,
     value: voiceSpeedWord(settings.voiceSpeed),
     choices: VOICE_SPEED_WORDS.map((candidate) => candidate.word),
@@ -156,6 +158,18 @@ const SETTING_GUIDE: Record<
       "Whether Music and Spotify are turned down while a spoken exchange is live, and back up after.",
     kind: APP_SETTING_KIND.TOGGLE,
     value: appToggleText(settings.duckOtherMedia),
+    adjustable: true,
+    manual: `${SETTINGS_TAB}, under Preferences`,
+  }),
+  sessionNotifications: (settings) => ({
+    id: APP_SETTING_ID.SESSION_NOTIFICATIONS,
+    label: "Announce when a session needs you",
+    description:
+      "Luke says it out loud when an observed session starts waiting on the developer, stops on " +
+      "an error, or finishes — no conversation needs to be open, and the microphone stays off. " +
+      "Needs voice to be available; the panel and the capsule count show the same states either way.",
+    kind: APP_SETTING_KIND.TOGGLE,
+    value: appToggleText(settings.sessionNotifications),
     adjustable: true,
     manual: `${SETTINGS_TAB}, under Preferences`,
   }),
@@ -278,6 +292,9 @@ const SETTING_GUIDE: Record<
   // reasons: the fact carries the key that registered, and a chord is
   // recorded by typing it rather than saying it.
   askHotkey: () => undefined,
+  // Described in the stopping-a-reply fact instead, on the same terms as the
+  // other two keys' stored choices.
+  stopHotkey: () => undefined,
   // Not a switch but a set of keys, so it is described in the facts instead:
   // which providers are connected, and that a key is only ever typed by hand.
   credentialSources: () => undefined,
@@ -299,6 +316,11 @@ export interface LukeGuideInput {
   hotkey: { hotkey?: string; held: boolean };
   /** The ask key labelled on the same terms, absent when none was registered. */
   askKey?: string;
+  /**
+   * The stop key labelled on the same terms, absent when none was registered
+   * — another app owns Option-S, or another Luke key was moved onto it.
+   */
+  stopKey?: string;
 }
 
 function talkKeyFact(hotkey: LukeGuideInput["hotkey"]): AppGuideFact {
@@ -398,7 +420,9 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "The panel",
       detail:
-        "Two tabs. Sessions lists every observed session with its state, narrowable to all, local, " +
+        "Two tabs, switched by pressing one or by asking Luke — out loud or typed — to show it; " +
+        "asked while the panel is closed, the panel opens on that tab. " +
+        "Sessions lists every observed session with its state, narrowable to all, local, " +
         "cloud, or one provider, and orderable by urgency (what needs the developer first) or " +
         "recency (what moved last first); a row can be opened, messaged, or controlled where its " +
         "provider allows. Settings holds the preferences, the talk and ask keys, the cloud " +
@@ -448,6 +472,19 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     { label: "Microphone access", detail: MICROPHONE_DETAIL[input.microphoneStatus] },
     ...(input.voiceAvailable
       ? [
+          {
+            label: "Stopping a reply",
+            detail:
+              (input.stopKey
+                ? `${input.stopKey}, from any app, cuts the reply off and asks for nothing in ` +
+                  "its place; Escape does the same while Luke's panel has the keyboard."
+                : "Escape while Luke is speaking cuts the reply off and asks for nothing in " +
+                  "its place. No system-wide stop key is registered right now — another app " +
+                  "may own the shortcut.") +
+              " The talk key over a reply interrupts too, but takes the turn: the microphone " +
+              `opens with the same press. A different stop chord can be recorded, or the ` +
+              `default restored, in ${SETTINGS_TAB}.`,
+          },
           {
             label: "Muted output",
             detail:
@@ -549,6 +586,7 @@ export async function applySpokenSetting(
     | "setVoiceSpeed"
     | "setVoiceCaptions"
     | "setDuckOtherMedia"
+    | "setSessionNotifications"
     | "setShowInMenuBar"
     | "setShowInDock"
     | "setShowOnAllDisplays"
@@ -584,20 +622,22 @@ export async function applySpokenSetting(
       ? await bridge.setVoiceCaptions(enabled)
       : action.setting.id === APP_SETTING_ID.DUCK_OTHER_MEDIA
         ? await bridge.setDuckOtherMedia(enabled)
-        : action.setting.id === APP_SETTING_ID.SHOW_IN_MENU_BAR
-          ? await bridge.setShowInMenuBar(enabled)
-          : action.setting.id === APP_SETTING_ID.SHOW_IN_DOCK
-            ? await bridge.setShowInDock(enabled)
-            : action.setting.id === APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS
-              ? await bridge.setShowOnAllDisplays(enabled)
-              : action.setting.id === APP_SETTING_ID.VOICE_SPEED && speed !== undefined
-                ? await bridge.setVoiceSpeed(speed)
-                : action.setting.id === APP_SETTING_ID.VOICE && isRealtimeVoice(action.value)
-                  ? await bridge.setVoice(action.value)
-                  : action.setting.id === APP_SETTING_ID.FORM_FACTOR &&
-                      isPanelFormFactor(action.value)
-                    ? await bridge.setFormFactor(action.value)
-                    : undefined;
+        : action.setting.id === APP_SETTING_ID.SESSION_NOTIFICATIONS
+          ? await bridge.setSessionNotifications(enabled)
+          : action.setting.id === APP_SETTING_ID.SHOW_IN_MENU_BAR
+            ? await bridge.setShowInMenuBar(enabled)
+            : action.setting.id === APP_SETTING_ID.SHOW_IN_DOCK
+              ? await bridge.setShowInDock(enabled)
+              : action.setting.id === APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS
+                ? await bridge.setShowOnAllDisplays(enabled)
+                : action.setting.id === APP_SETTING_ID.VOICE_SPEED && speed !== undefined
+                  ? await bridge.setVoiceSpeed(speed)
+                  : action.setting.id === APP_SETTING_ID.VOICE && isRealtimeVoice(action.value)
+                    ? await bridge.setVoice(action.value)
+                    : action.setting.id === APP_SETTING_ID.FORM_FACTOR &&
+                        isPanelFormFactor(action.value)
+                      ? await bridge.setFormFactor(action.value)
+                      : undefined;
   if (!result) {
     // An adjustable entry with no carrier is a guide ahead of its wiring;
     // refuse honestly rather than claim a change that never happened.
@@ -609,11 +649,16 @@ export async function applySpokenSetting(
     status: "changed",
     setting: action.setting.label,
     value: action.value,
-    // The two rides on the minted session say so, the same promise their rows
-    // make: the change lands in the next conversation, never a live one.
-    ...(action.setting.id === APP_SETTING_ID.VOICE ||
-    action.setting.id === APP_SETTING_ID.VOICE_SPEED
-      ? { note: "The change is heard from the next conversation on." }
-      : {}),
+    // What each change means for the call now open, so the outcome Luke
+    // voices matches what actually happens. The API locks a session's voice
+    // once the model has spoken, so a changed voice is heard by starting the
+    // conversation afresh; a pace rides a session update and needs no restart.
+    ...(action.setting.id === APP_SETTING_ID.VOICE
+      ? {
+          note: "The new voice takes over as soon as this reply ends, and the conversation starts afresh in it.",
+        }
+      : action.setting.id === APP_SETTING_ID.VOICE_SPEED
+        ? { note: "The new pace is heard from the next reply on." }
+        : {}),
   };
 }

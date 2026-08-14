@@ -45,9 +45,11 @@ const SETTINGS_FIELD = {
   DUCK_OTHER_MEDIA: "duckOtherMedia",
   FORM_FACTOR: "formFactor",
   LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
+  SESSION_NOTIFICATIONS: "sessionNotifications",
   SHOW_IN_DOCK: "showInDock",
   SHOW_IN_MENU_BAR: "showInMenuBar",
   SHOW_ON_ALL_DISPLAYS: "showOnAllDisplays",
+  STOP_HOTKEY: "stopHotkey",
   VERSION: "version",
   VOICE: "voice",
   VOICE_CAPTIONS: "voiceCaptions",
@@ -135,12 +137,24 @@ interface PersistedSettings {
    */
   askHotkey?: string;
   /**
+   * The stop-key chord the user chose, held to the same terms as the other
+   * two keys' choices.
+   */
+  stopHotkey?: string;
+  /**
    * Whether Music and Spotify are turned down while a spoken exchange is
    * live. On unless the file says `false` outright — like the menu bar item,
    * this is what Luke does until the user asks otherwise, so a missing field
    * and a corrupt value both land on doing it.
    */
   duckOtherMedia: boolean;
+  /**
+   * Whether a session that wants the user is announced in Luke's voice. On
+   * unless the file says `false` outright, like the media duck: being told an
+   * agent finished is what Luke does until the user asks otherwise, so a
+   * missing field and a corrupt value both land on doing it.
+   */
+  sessionNotifications: boolean;
   /**
    * Whether Luke stands on every connected display. Off unless the file says
    * `true` outright, like the Dock: a missing field, an older file, and a
@@ -279,6 +293,9 @@ function parsePersistedSettings(source: string): PersistedSettings {
   const storedAskHotkey = record[SETTINGS_FIELD.ASK_HOTKEY];
   const askHotkey =
     typeof storedAskHotkey === "string" ? parseVoiceHotkey(storedAskHotkey) : undefined;
+  const storedStopHotkey = record[SETTINGS_FIELD.STOP_HOTKEY];
+  const stopHotkey =
+    typeof storedStopHotkey === "string" ? parseVoiceHotkey(storedStopHotkey) : undefined;
   return {
     version: typeof version === "number" ? version : SETTINGS_FILE_VERSION,
     apiKeys: storedApiKeys(record),
@@ -293,7 +310,9 @@ function parsePersistedSettings(source: string): PersistedSettings {
     voiceCaptions: record[SETTINGS_FIELD.VOICE_CAPTIONS] === true,
     ...(voiceHotkey ? { voiceHotkey } : {}),
     ...(askHotkey ? { askHotkey } : {}),
+    ...(stopHotkey ? { stopHotkey } : {}),
     duckOtherMedia: record[SETTINGS_FIELD.DUCK_OTHER_MEDIA] !== false,
+    sessionNotifications: record[SETTINGS_FIELD.SESSION_NOTIFICATIONS] !== false,
     showOnAllDisplays: record[SETTINGS_FIELD.SHOW_ON_ALL_DISPLAYS] === true,
     // A form this build does not draw is dropped like an unknown voice.
     ...(isPanelFormFactor(formFactor) ? { formFactor } : {}),
@@ -360,7 +379,9 @@ export class SettingsStore {
         ? { voiceHotkey: (await this.#load()).voiceHotkey }
         : {}),
       ...((await this.#load()).askHotkey ? { askHotkey: (await this.#load()).askHotkey } : {}),
+      ...((await this.#load()).stopHotkey ? { stopHotkey: (await this.#load()).stopHotkey } : {}),
       duckOtherMedia: (await this.#load()).duckOtherMedia,
+      sessionNotifications: (await this.#load()).sessionNotifications,
       showOnAllDisplays: (await this.#load()).showOnAllDisplays,
       formFactor: (await this.#load()).formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
       ...((await this.#load()).defaultWorkspaceProvider
@@ -532,6 +553,35 @@ export class SettingsStore {
   }
 
   /**
+   * Main-process only, like the other two keys': the stop-key chord the user
+   * chose, for registration at startup, or nothing while the default stands.
+   */
+  async readStopHotkey(): Promise<string | undefined> {
+    return (await this.#load()).stopHotkey;
+  }
+
+  /**
+   * Stores the chosen stop-key chord, or returns to the default when omitted,
+   * on the other two keys' exact terms: the chord arrives already read into
+   * its one canonical spelling, and resetting is the absence of a choice.
+   */
+  async setStopHotkey(accelerator: string | undefined): Promise<SettingsUpdateResult> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (persisted.stopHotkey === accelerator) return;
+      const next: PersistedSettings = {
+        ...persisted,
+        version: SETTINGS_FILE_VERSION,
+      };
+      if (accelerator) next.stopHotkey = accelerator;
+      else delete next.stopHotkey;
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+    });
+    return { settings: await this.snapshot() };
+  }
+
+  /**
    * Turns the quieting of Music and Spotify during a spoken exchange on or
    * off. A plain preference like the caption's: no cipher, no invalid value,
    * so the write either lands or throws.
@@ -544,6 +594,34 @@ export class SettingsStore {
         ...persisted,
         version: SETTINGS_FILE_VERSION,
         duckOtherMedia: enabled,
+      };
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+    });
+    return { settings: await this.snapshot() };
+  }
+
+  /**
+   * Shallow for the same reason as `duckOtherMedia()`: the announcer arms at
+   * startup, and arming it must never be what wakes the OS keychain.
+   */
+  async readSessionNotifications(): Promise<boolean> {
+    return (await this.#load()).sessionNotifications;
+  }
+
+  /**
+   * Turns the spoken announcement about a session that wants the user on or
+   * off. A plain preference like the media duck's: no cipher, no invalid
+   * value, so the write either lands or throws.
+   */
+  async setSessionNotifications(enabled: boolean): Promise<SettingsUpdateResult> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (persisted.sessionNotifications === enabled) return;
+      const next: PersistedSettings = {
+        ...persisted,
+        version: SETTINGS_FILE_VERSION,
+        sessionNotifications: enabled,
       };
       await this.#write(next);
       this.#loading = Promise.resolve(next);
@@ -866,6 +944,7 @@ export class SettingsStore {
       showInMenuBar: true,
       voiceCaptions: false,
       duckOtherMedia: true,
+      sessionNotifications: true,
       showOnAllDisplays: false,
     };
     if (source) {
