@@ -70,6 +70,11 @@ export interface SettingsPanelProps {
    * refuses, and the row is where that answer belongs.
    */
   onShowInMenuBarChange: (show: boolean) => Promise<string | undefined>;
+  /**
+   * Shows or hides the Dock icon. The store answers with why when it refuses,
+   * and the row is where that answer belongs.
+   */
+  onShowInDockChange: (show: boolean) => Promise<string | undefined>;
   onQuit: () => void;
   /** The talk key, shown so it can be learned. It is not editable yet. */
   voiceHotkey?: string;
@@ -497,9 +502,9 @@ function CredentialsSection({
  * ear — offered the way macOS offers one value from a small fixed set: a
  * pop-up button whose closed face is drawn here and whose open menu is the
  * system's, which also lets it escape a window sized to the panel rather than
- * being clipped by it. Below it, whether the status item stands in the menu
- * bar as well as at the notch: a switch and nothing else, because nothing
- * rides on the answer — Settings and Quit live in this panel, so the item is a
+ * being clipped by it. Below it, whether Luke stands in the menu bar and in
+ * the Dock as well as at the notch: switches and nothing else, because nothing
+ * rides on either answer — Settings and Quit live in this panel, so each is a
  * second door rather than the only one.
  */
 function PreferencesSection({
@@ -509,6 +514,8 @@ function PreferencesSection({
   onVoiceCaptionsChange,
   shown,
   onShowInMenuBarChange,
+  dockShown,
+  onShowInDockChange,
 }: {
   voice: RealtimeVoice;
   onVoiceChange: (voice: RealtimeVoice) => void;
@@ -516,6 +523,8 @@ function PreferencesSection({
   onVoiceCaptionsChange: (enabled: boolean) => Promise<string | undefined>;
   shown: boolean;
   onShowInMenuBarChange: (show: boolean) => Promise<string | undefined>;
+  dockShown: boolean;
+  onShowInDockChange: (show: boolean) => Promise<string | undefined>;
 }): React.JSX.Element {
   // The change is a round trip through the settings file, so the switch rests
   // until the store has answered rather than claiming a state it may not get.
@@ -534,6 +543,12 @@ function PreferencesSection({
     setCaptionsBusy(true);
     setRejection(await onVoiceCaptionsChange(!captions));
     setCaptionsBusy(false);
+  };
+  const [dockBusy, setDockBusy] = useState(false);
+  const toggleDock = async () => {
+    setDockBusy(true);
+    setRejection(await onShowInDockChange(!dockShown));
+    setDockBusy(false);
   };
   return (
     <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
@@ -614,6 +629,22 @@ function PreferencesSection({
           <span className="switch-thumb" />
         </button>
       </div>
+      <div className="settings-row">
+        <span className="settings-copy">
+          <strong>Show Luke in the Dock</strong>
+        </span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={dockShown}
+          aria-label="Show Luke in the Dock"
+          className="switch"
+          disabled={dockBusy}
+          onClick={() => void toggleDock()}
+        >
+          <span className="switch-thumb" />
+        </button>
+      </div>
       {rejection ? <p className="error-message">{rejection}</p> : null}
     </section>
   );
@@ -631,6 +662,7 @@ export function SettingsPanel({
   onVoiceChange,
   panelOpen,
   onShowInMenuBarChange,
+  onShowInDockChange,
   onQuit,
   voiceHotkey,
   voiceHotkeyHeld,
@@ -651,6 +683,8 @@ export function SettingsPanel({
           onVoiceCaptionsChange={onVoiceCaptionsChange}
           shown={settings.showInMenuBar}
           onShowInMenuBarChange={onShowInMenuBarChange}
+          dockShown={settings.showInDock}
+          onShowInDockChange={onShowInDockChange}
         />
       ) : null}
 

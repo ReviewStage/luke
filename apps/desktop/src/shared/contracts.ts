@@ -53,6 +53,12 @@ export interface AppSettings {
    */
   secretStorage: SecretStorage;
   /**
+   * Whether Luke stands in the Dock as well as at the notch. Off by default:
+   * an accessory app is what Luke ships as, so an icon among the user's apps
+   * is opted into rather than discovered.
+   */
+  showInDock: boolean;
+  /**
    * Whether Luke stands in the menu bar as well as at the notch. Hiding the
    * status item costs nothing it alone provides — Settings and Quit are both in
    * the panel — so the choice is the user's to make and to keep.
@@ -184,6 +190,8 @@ export interface AppBridge {
   openProviderApiKeys(providerId: CredentialProviderId): void;
   /** Shows or hides the menu bar status item, and remembers the choice. */
   setShowInMenuBar(show: boolean): Promise<SettingsUpdateResult>;
+  /** Shows or hides the Dock icon, and remembers the choice. */
+  setShowInDock(show: boolean): Promise<SettingsUpdateResult>;
   /** Turns the on-screen caption of Luke's speech on or off. */
   setVoiceCaptions(enabled: boolean): Promise<SettingsUpdateResult>;
   /**
@@ -242,6 +250,7 @@ export const channels = {
   setVoiceCaptions: "app:set-voice-captions",
   openProviderApiKeys: "app:open-provider-api-keys",
   setShowInMenuBar: "app:set-show-in-menu-bar",
+  setShowInDock: "app:set-show-in-dock",
   openSession: "app:open-session",
   sendSessionMessage: "app:send-session-message",
   executeSessionControl: "app:execute-session-control",

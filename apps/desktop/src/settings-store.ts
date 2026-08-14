@@ -27,6 +27,7 @@ const SETTINGS_FILE_MODE = 0o600;
 const SETTINGS_FIELD = {
   API_KEYS: "apiKeys",
   LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
+  SHOW_IN_DOCK: "showInDock",
   SHOW_IN_MENU_BAR: "showInMenuBar",
   VERSION: "version",
   VOICE: "voice",
@@ -70,6 +71,12 @@ interface PersistedSettings {
    * through untouched so an older build cannot discard a newer one's key.
    */
   apiKeys: Readonly<Record<string, string>>;
+  /**
+   * Whether Luke stands in the Dock. Off unless the file says `true` outright,
+   * so a missing field, an older file, and a corrupt value all land on the
+   * accessory app Luke ships as rather than putting an icon somewhere new.
+   */
+  showInDock: boolean;
   /**
    * Whether the menu bar status item is drawn. A file that has never said —
    * written before the choice existed, or hand-edited into nonsense — means the
@@ -164,6 +171,7 @@ function parsePersistedSettings(source: string): PersistedSettings {
   return {
     version: typeof version === "number" ? version : SETTINGS_FILE_VERSION,
     apiKeys: storedApiKeys(record),
+    showInDock: record[SETTINGS_FIELD.SHOW_IN_DOCK] === true,
     showInMenuBar: typeof showInMenuBar === "boolean" ? showInMenuBar : true,
     // A voice this build does not offer is dropped rather than carried: unlike
     // a credential it has a default to fall back to, and honouring an unknown
@@ -210,6 +218,7 @@ export class SettingsStore {
       // its own: a snapshot is taken on every launch, and most of them are for
       // a user with no key to protect.
       secretStorage: this.#secretStorage,
+      showInDock: (await this.#load()).showInDock,
       showInMenuBar: (await this.#load()).showInMenuBar,
       // Resolved the way the minter resolves it, so the panel marks the voice
       // that would actually be heard.
@@ -228,6 +237,15 @@ export class SettingsStore {
    */
   async showInMenuBar(): Promise<boolean> {
     return (await this.#load()).showInMenuBar;
+  }
+
+  /**
+   * Shallow for the same reason as `showInMenuBar()`: the Dock icon is decided
+   * at launch from the settings file alone, never the keychain behind the
+   * stored keys.
+   */
+  async showInDock(): Promise<boolean> {
+    return (await this.#load()).showInDock;
   }
 
   /**
@@ -352,6 +370,25 @@ export class SettingsStore {
   }
 
   /**
+   * Remembers whether Luke stands in the Dock. A preference like the menu
+   * bar's, and held to the same rule: nothing here touches the cipher.
+   */
+  async setShowInDock(show: boolean): Promise<SettingsUpdateResult> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (persisted.showInDock === show) return;
+      const next: PersistedSettings = {
+        ...persisted,
+        version: SETTINGS_FILE_VERSION,
+        showInDock: show,
+      };
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+    });
+    return { settings: await this.snapshot() };
+  }
+
+  /**
    * Runs one settings change at a time. Serializing only the file write is not
    * enough: a user with more than one provider row can start a second save
    * before the first lands, and both would read the same stored keys before
@@ -439,6 +476,7 @@ export class SettingsStore {
     let persisted: PersistedSettings = {
       version: SETTINGS_FILE_VERSION,
       apiKeys: {},
+      showInDock: false,
       showInMenuBar: true,
       voiceCaptions: false,
     };
