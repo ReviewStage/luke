@@ -85,6 +85,32 @@ export function isAppPanelTab(value: unknown): value is AppPanelTab {
 }
 
 /**
+ * The two kinds of note the feedback composer writes, exactly as the composer
+ * itself names them: feedback about the app, and a prompt for the founders.
+ * Defined here for the same reason the panel tabs are — a spoken ask to open
+ * the composer is validated against this fixed vocabulary, and a kind outside
+ * it names no composer the app has. Opening is all a spoken ask can do; what
+ * the composer holds is sent only by its own button, by hand.
+ */
+export const FEEDBACK_COMPOSER_KIND = {
+  FEEDBACK: "feedback",
+  PROMPT: "prompt",
+} as const;
+
+export type FeedbackComposerKind =
+  (typeof FEEDBACK_COMPOSER_KIND)[keyof typeof FEEDBACK_COMPOSER_KIND];
+
+const FEEDBACK_COMPOSER_KIND_LIST: readonly FeedbackComposerKind[] =
+  Object.values(FEEDBACK_COMPOSER_KIND);
+
+/** Guards a kind arriving from a tool call's untrusted arguments. */
+export function isFeedbackComposerKind(value: unknown): value is FeedbackComposerKind {
+  return (
+    typeof value === "string" && FEEDBACK_COMPOSER_KIND_LIST.includes(value as FeedbackComposerKind)
+  );
+}
+
+/**
  * The two orders the session list reads in. Defined here rather than in the
  * renderer because a spoken ask names an order too, and the words the panel's
  * own control uses and the words a tool call is validated against must be one

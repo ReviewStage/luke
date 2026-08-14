@@ -29,7 +29,7 @@ import type {
 } from "./shared/contracts";
 import { channels } from "./shared/contracts";
 import type { CredentialProviderId } from "./shared/credential-providers";
-import type { FeedbackResult, FeedbackSubmission } from "./shared/feedback";
+import type { FeedbackKind, FeedbackResult, FeedbackSubmission } from "./shared/feedback";
 
 const bridge: AppBridge = {
   getBootstrap: () => ipcRenderer.invoke(channels.bootstrap) as Promise<AppBootstrap>,
@@ -112,6 +112,8 @@ const bridge: AppBridge = {
     ipcRenderer.invoke(channels.executeIssueAction, action) as Promise<TrackerActionResult>,
   sendFeedback: (submission: FeedbackSubmission) =>
     ipcRenderer.invoke(channels.sendFeedback, submission) as Promise<FeedbackResult>,
+  summonFeedback: (kind: FeedbackKind) =>
+    ipcRenderer.invoke(channels.summonFeedback, kind) as Promise<void>,
   focusPanel: () => ipcRenderer.send(channels.focusPanel),
   requestRealtimeCredential: () =>
     ipcRenderer.invoke(channels.requestRealtimeCredential) as Promise<

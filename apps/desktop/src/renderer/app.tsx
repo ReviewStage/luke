@@ -2,6 +2,8 @@ import {
   APP_PANEL_TAB,
   type AppGuideSnapshot,
   EMPTY_APP_GUIDE,
+  FEEDBACK_COMPOSER_KIND,
+  type FeedbackComposerKind,
   FIXTURE_EPOCH_MS,
   type NormalizedSession,
   type ObservedWorkspaceProject,
@@ -29,7 +31,7 @@ import { CREDENTIAL_SOURCE, SESSION_OPEN_RESULT_STATUS } from "../shared/contrac
 import type { CredentialProviderId } from "../shared/credential-providers";
 import { CREDENTIAL_PROVIDER_LIST } from "../shared/credential-providers";
 import type { FeedbackImage, FeedbackKind } from "../shared/feedback";
-import { FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from "../shared/feedback";
+import { FEEDBACK_KIND, FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from "../shared/feedback";
 import {
   TALK_KEY_RELEASE,
   talkKeyRelease,
@@ -42,9 +44,9 @@ import { isSubmittable, removalEndsEntry } from "./credential-entry";
 import {
   type FeedbackEntry,
   type FeedbackEntryControl,
-  freshFeedbackEntry,
   IMAGE_REFUSAL,
   isSendable,
+  openedFeedbackEntry,
 } from "./feedback-entry";
 import { encodeFeedbackImage } from "./feedback-images";
 import { FeedbackSlot } from "./feedback-slot";
@@ -111,6 +113,17 @@ const FIXTURE_SPEAKING_CAPTION =
  * the line is gone before anyone wonders whether it is stuck.
  */
 const FEEDBACK_NOTICE_MS = 6_000;
+
+/**
+ * The composer kind a spoken open names, matched to the composer's own. The
+ * two vocabularies are defined apart — the tool's in brand-neutral core, the
+ * composer's beside the endpoint that reads a submission — so the seam between
+ * them is written down once, here, rather than assumed at a call site.
+ */
+const FEEDBACK_KIND_FOR_COMPOSER: Record<FeedbackComposerKind, FeedbackKind> = {
+  [FEEDBACK_COMPOSER_KIND.FEEDBACK]: FEEDBACK_KIND.FEEDBACK,
+  [FEEDBACK_COMPOSER_KIND.PROMPT]: FEEDBACK_KIND.PROMPT,
+};
 
 /**
  * The caption block's vertical padding — 5px above the text and 9px keeping
@@ -348,6 +361,13 @@ export function App(): React.JSX.Element {
   const askEngaged = useRef(false);
   const feedbackRef = useRef<FeedbackEntry | undefined>(undefined);
   const feedbackNoticeTimer = useRef<number | undefined>(undefined);
+  /**
+   * The words a spoken open asked to start the note with, waiting for the
+   * composer's lifecycle event to consume them. A ref rather than an event
+   * payload because the lifecycle channel carries names alone — and only ever
+   * the developer's own words, under the spoken tool's contract.
+   */
+  const spokenFeedbackDraft = useRef<string | undefined>(undefined);
   const pointerInside = useRef(false);
   const modeGeneration = useRef(0);
   const remoteAudio = useRef<HTMLAudioElement | null>(null);
@@ -977,26 +997,28 @@ export function App(): React.JSX.Element {
   useEffect(() => () => window.clearTimeout(feedbackNoticeTimer.current), []);
 
   /**
-   * Opens the composer for a kind — from the section's own buttons or from
-   * the tray — and stands the panel down to its shape, the way beginning a
-   * key entry stands it down to the slot: writing one note is one act. A
-   * draft is never discarded by asking again: opening over a half-written
-   * note brings that note back, and only an entry with nothing in it yet is
-   * re-labelled to the kind that was just asked for. Where leaving returns
-   * you follows the latest ask, not the first.
+   * Opens the composer for a kind — from the section's own buttons, from the
+   * tray, or asked of Luke out loud — and stands the panel down to its shape,
+   * the way beginning a key entry stands it down to the slot: writing one
+   * note is one act. What opening does to a note already there is
+   * {@link openedFeedbackEntry}'s to decide — a half-written note is brought
+   * back rather than discarded, and a starting draft lands only in an empty
+   * one. Reports whether the draft was placed, so the spoken path can say
+   * what it found; where leaving returns you follows the latest ask, not the
+   * first.
    */
   const beginFeedback = useCallback(
-    (kind: FeedbackKind, fromPanel: boolean) => {
+    (kind: FeedbackKind, fromPanel: boolean, draft?: string): boolean => {
       setFeedbackNotice(undefined);
-      const current = feedbackRef.current;
-      if (!current) {
-        applyFeedback(freshFeedbackEntry(kind, fromPanel));
-      } else if (!current.busy) {
-        const relabel = current.kind !== kind && current.message.trim().length === 0;
-        applyFeedback({ ...current, ...(relabel ? { kind } : {}), fromPanel });
-      }
+      const opened = openedFeedbackEntry(feedbackRef.current, {
+        kind,
+        fromPanel,
+        ...(draft !== undefined ? { draft } : {}),
+      });
+      if (opened.entry) applyFeedback(opened.entry);
       cancelHoverTransition();
       applyPresentation(PANEL_PRESENTATION.FEEDBACK);
+      return opened.drafted;
     },
     [applyFeedback, applyPresentation, cancelHoverTransition],
   );
@@ -1288,14 +1310,58 @@ export function App(): React.JSX.Element {
    * The spoken asks about Luke himself. A settings change goes through the
    * same bridge calls the settings rows use, and the snapshot that comes back
    * redraws the panel's switches; showing the panel is the capsule's press
-   * with a tab, and optionally a narrowing, chosen out loud. Both were
-   * validated against the guide before they arrive here, so this only
-   * performs and reports.
+   * with a tab, and optionally a narrowing, chosen out loud; opening the
+   * composer is the tray item's press, run through the tray's own path. All
+   * were validated against their fixed vocabularies before they arrive here,
+   * so this only performs and reports.
    */
   const carryAppAction = useCallback<AppActionCarrier>(
     async (action) => {
       if (action.kind === "setting") {
         return applySpokenSetting(window.sidecar, action, setSettings);
+      }
+      if (action.kind === "feedback") {
+        // The main process expands the window and sends the composer's
+        // lifecycle event down the same ordered channel as the mode event —
+        // exactly the tray items' gesture — so the composer's shape can never
+        // lose a race to the panel apply the expansion causes. The draft
+        // rides this ref because the lifecycle channel carries event names,
+        // not payloads: set before the ask, consumed when the event lands.
+        // Whether it will be placed is decided here with the same pure
+        // decision the open itself makes, on the same entry — the open lands
+        // a beat later on the event, and nothing else writes the entry in
+        // between — so the spoken outcome says what actually happens. And
+        // nothing here sends: the note leaves only by the Send button's own
+        // press.
+        const kind = FEEDBACK_KIND_FOR_COMPOSER[action.composer];
+        const drafted = openedFeedbackEntry(feedbackRef.current, {
+          kind,
+          fromPanel: false,
+          ...(action.draft === undefined ? {} : { draft: action.draft }),
+        }).drafted;
+        spokenFeedbackDraft.current = action.draft;
+        try {
+          await window.sidecar.summonFeedback(kind);
+        } catch (error) {
+          // The composer is not coming, so the event that would consume the
+          // draft is not coming either; a stale one must not season some
+          // later tray press.
+          spokenFeedbackDraft.current = undefined;
+          throw error;
+        }
+        return {
+          status: "opened",
+          kind: action.composer,
+          ...(action.draft === undefined
+            ? {}
+            : drafted
+              ? {
+                  note: "The ask is drafted in the composer; the developer edits and sends it by hand.",
+                }
+              : {
+                  note: "A note was already being written, so it was kept and nothing was drafted over it.",
+                }),
+        };
       }
       changeTab(action.tab === APP_PANEL_TAB.SETTINGS ? PANEL_TAB.SETTINGS : PANEL_TAB.SESSIONS);
       const spoken = action.filter ? sessionFilterFromSpoken(action.filter) : undefined;
@@ -1431,15 +1497,19 @@ export function App(): React.JSX.Element {
       // Held while a shortcut row is recording, for the same reason the talk
       // key's press is: the chord just typed is an entry, not an ask.
       if (eventName === "ask:focus" && !shortcutCapture.current) summonAsk();
-      // The tray's feedback items stand the surface straight down to the
-      // composer's shape, on the kind that was asked for. The tray has
-      // expanded the window itself; this is the renderer's half of the same
-      // gesture. The tab still moves to settings so that coming back to the
-      // panel later lands beside the section the shape belongs to.
+      // The tray's feedback items — and a spoken open, which rides the same
+      // gesture through the main process — stand the surface straight down to
+      // the composer's shape, on the kind that was asked for. The window was
+      // expanded before this event was sent; this is the renderer's half. The
+      // tab still moves to settings so that coming back to the panel later
+      // lands beside the section the shape belongs to, and a draft a spoken
+      // open left waiting is taken up here, then forgotten.
       const feedbackKind = feedbackKindForLifecycleEvent(eventName);
       if (feedbackKind) {
+        const draft = spokenFeedbackDraft.current;
+        spokenFeedbackDraft.current = undefined;
         changeTab(PANEL_TAB.SETTINGS);
-        beginFeedback(feedbackKind, false);
+        beginFeedback(feedbackKind, false, draft);
       }
     });
     const removeDisplay = window.sidecar.onDisplayChanged(setDisplay);

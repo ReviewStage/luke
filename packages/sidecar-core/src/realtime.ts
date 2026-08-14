@@ -12,7 +12,10 @@ import {
   appGuideContextText,
   appGuideSetting,
   appToggleValue,
+  FEEDBACK_COMPOSER_KIND,
+  type FeedbackComposerKind,
   isAppPanelTab,
+  isFeedbackComposerKind,
   isSessionListSort,
   SESSION_LIST_SORT,
   type SessionListSort,
@@ -217,7 +220,7 @@ const REALTIME_INSTRUCTION_LINES: readonly string[] = [
   "- You never receive transcripts, file contents, or command output, so never imply you read any.",
   "",
   "What you can do:",
-  "- You have nine tools: send a message to a session, run a control a session advertises, open a session on the developer's screen, create a new workspace where a provider allows it, add another agent to an observed workspace, move a tracked issue to a state it lists, comment on a tracked issue, change one of Luke's own settings, and show Luke's panel.",
+  "- You have ten tools: send a message to a session, run a control a session advertises, open a session on the developer's screen, create a new workspace where a provider allows it, add another agent to an observed workspace, move a tracked issue to a state it lists, comment on a tracked issue, change one of Luke's own settings, show Luke's panel, and open the feedback composer.",
   "- Use a tool only when the developer asks you to in this conversation, for the thing they asked.",
   "- Only sessions the roster marks as taking messages, carrying a control, or able to be opened can be acted on. Say so when one cannot.",
   "- Opening a session brings it up in its provider's own window, the same as pressing its row. It shows you nothing new.",
@@ -235,6 +238,8 @@ const REALTIME_INSTRUCTION_LINES: readonly string[] = [
   "- Answer questions about Luke and its settings from the guide alone; when the guide does not say, say you do not know.",
   "- change_app_setting changes only a setting the guide marks changeable by voice, when the developer asks. For every other setting, tell them the by-hand path the guide gives.",
   "- show_panel opens Luke's own panel on its sessions or settings tab, and can narrow the session list to one provider or location or reorder it by urgency or recency — use it when the developer asks to see something of Luke's.",
+  "- open_feedback_composer brings up the composer for a note the developer sends the founders by hand: feedback about Luke, or a prompt they may ship. It can start the note with the developer's own words as a draft — never words they did not say — and it never sends and never overwrites a note already being written: the developer reads, edits, and presses Send themselves.",
+  "- When you refuse an ask you cannot carry out — a setting the guide keeps by hand, a capability you do not have, an act outside your tools — refuse honestly in one sentence, then offer once: would they like to send that ask to the founders as a prompt? Only on a clear yes, open the composer on the prompt kind with their ask as the draft, in their own words. Declined or ignored, let it go without another word, and do not repeat the offer for the same ask.",
   "- Never take a credential by voice, and never repeat one: keys are typed into the settings tab, and the guide only ever says whether a provider is connected.",
 ];
 
@@ -267,10 +272,13 @@ export function realtimeInstructions(): string {
  * projects] the way the roster is — and the main process validates it again
  * against what its adapters actually offered.
  *
- * The last two are the same presses turned toward the app itself: a settings
+ * The last three are the same presses turned toward the app itself: a settings
  * change goes through the bridge call the setting's own row uses, validated
- * against the app guide first, and showing the panel is the capsule's press
- * with a tab chosen out loud. Neither reaches a provider.
+ * against the app guide first; showing the panel is the capsule's press with a
+ * tab chosen out loud; and opening the feedback composer is the tray item's
+ * press, carrying at most the developer's own words as a starting draft — it
+ * can never send, because sending is the composer's own button, pressed by
+ * hand. None of the three reaches a provider.
  */
 export const REALTIME_TOOL = {
   SEND_SESSION_MESSAGE: "send_session_message",
@@ -282,6 +290,7 @@ export const REALTIME_TOOL = {
   COMMENT_ON_ISSUE: "comment_on_issue",
   CHANGE_APP_SETTING: "change_app_setting",
   SHOW_PANEL: "show_panel",
+  OPEN_FEEDBACK_COMPOSER: "open_feedback_composer",
 } as const;
 
 export type RealtimeToolName = (typeof REALTIME_TOOL)[keyof typeof REALTIME_TOOL];
@@ -534,6 +543,30 @@ export function realtimeToolDefinitions(): readonly Record<string, unknown>[] {
           },
         },
         required: [],
+      },
+    },
+    {
+      type: "function",
+      name: REALTIME_TOOL.OPEN_FEEDBACK_COMPOSER,
+      description:
+        "Open the composer for a note the developer sends the founders by hand. " +
+        "It opens and may draft; it never sends — the developer edits and presses Send themselves.",
+      parameters: {
+        type: "object",
+        properties: {
+          kind: {
+            type: "string",
+            enum: Object.values(FEEDBACK_COMPOSER_KIND),
+            description:
+              "What the note is: feedback about Luke, or a prompt for the founders. A refused ask offered onward is a prompt.",
+          },
+          draft: {
+            type: "string",
+            description:
+              "Optional starting text: the developer's own ask, in their words. Never words they did not say.",
+          },
+        },
+        required: ["kind"],
       },
     },
   ];
@@ -985,6 +1018,14 @@ export function truncateResponseEvents(input: {
 export const maximumTypedAskLength = 4_000;
 
 /**
+ * How long a spoken open may draft into the feedback composer. The typed ask's
+ * own bound, for the typed ask's own reason: the draft is the developer's ask
+ * restated in their words, not a document — anything longer is typed into the
+ * composer by the hand that sends it.
+ */
+export const maximumFeedbackDraftLength = maximumTypedAskLength;
+
+/**
  * Builds the events that carry a typed ask and request the reply to it.
  *
  * The text travels without a label, unlike every other `input_text` this
@@ -1374,15 +1415,25 @@ export function issueToolAction(
  */
 export const SESSION_LIST_ALL = "all";
 
-/** What one validated app tool call asks for, ready for the app to perform. */
+/**
+ * What one validated app tool call asks for, ready for the app to perform.
+ * The feedback action opens the composer and nothing else: `draft` is at most
+ * the developer's own words, placed only into an empty note, and what the
+ * composer holds leaves only by its own Send button — no action here sends.
+ */
 export type AppToolAction =
   | { kind: "setting"; setting: AppGuideSetting; value: string }
   | { kind: "panel"; tab: AppPanelTab; filter?: string; sort?: SessionListSort }
+  | { kind: "feedback"; composer: FeedbackComposerKind; draft?: string }
   | { kind: "refused"; reason: string };
 
 /** Whether a tool call is about the app itself rather than about a session. */
 export function isAppToolCall(call: RealtimeFunctionCall): boolean {
-  return call.name === REALTIME_TOOL.CHANGE_APP_SETTING || call.name === REALTIME_TOOL.SHOW_PANEL;
+  return (
+    call.name === REALTIME_TOOL.CHANGE_APP_SETTING ||
+    call.name === REALTIME_TOOL.SHOW_PANEL ||
+    call.name === REALTIME_TOOL.OPEN_FEEDBACK_COMPOSER
+  );
 }
 
 /**
@@ -1420,9 +1471,10 @@ function panelFilterAction(
  * Validates one app tool call against the guide the app actually provided and
  * the sessions actually observed. The same posture as {@link sessionToolAction}:
  * a call the model composed can only name a setting the guide lists, changing
- * it to a value the guide accepts, or a panel view the roster can fill — and a
- * setting the guide marks as by-hand-only is refused with the path to it, so
- * the refusal Luke voices is itself the guidance.
+ * it to a value the guide accepts, a panel view the roster can fill, or the
+ * composer on one of its own two kinds — and a setting the guide marks as
+ * by-hand-only is refused with the path to it, so the refusal Luke voices is
+ * itself the guidance.
  */
 export function appToolAction(
   call: RealtimeFunctionCall,
@@ -1457,6 +1509,17 @@ export function appToolAction(
       return { kind: "refused", reason: `${setting.label} takes ${accepted}.` };
     }
     return { kind: "setting", setting, value };
+  }
+
+  if (call.name === REALTIME_TOOL.OPEN_FEEDBACK_COMPOSER) {
+    const composer = parsed.kind;
+    if (!isFeedbackComposerKind(composer)) {
+      return { kind: "refused", reason: "The composer writes feedback or a prompt, nothing else." };
+    }
+    // The draft is the developer's ask restated, so it is bounded like a typed
+    // one; a blank draft is no draft, and the composer simply opens empty.
+    const draft = textArgument(parsed, "draft")?.slice(0, maximumFeedbackDraftLength);
+    return { kind: "feedback", composer, ...(draft ? { draft } : {}) };
   }
 
   if (call.name === REALTIME_TOOL.SHOW_PANEL) {

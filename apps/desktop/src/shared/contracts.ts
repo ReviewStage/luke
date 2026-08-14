@@ -19,7 +19,7 @@ import type {
   WindowMode,
 } from "@sidecar/core";
 import type { CredentialProviderId } from "./credential-providers";
-import type { FeedbackResult, FeedbackSubmission } from "./feedback";
+import type { FeedbackKind, FeedbackResult, FeedbackSubmission } from "./feedback";
 
 export type { WindowMode } from "@sidecar/core";
 
@@ -370,6 +370,15 @@ export interface AppBridge {
    * fixed in the main process, and no session material rides along.
    */
   sendFeedback(submission: FeedbackSubmission): Promise<FeedbackResult>;
+  /**
+   * Brings the composer up on a kind, through the tray items' own gesture:
+   * the main process expands the window and sends the composer's lifecycle
+   * event down the same ordered channel as the mode event, so the shape that
+   * wins is always the composer — the ordering stays owned by setWindowMode
+   * for every caller. Opening is all this does; a note still leaves only
+   * through sendFeedback, from the composer's own Send button.
+   */
+  summonFeedback(kind: FeedbackKind): Promise<void>;
   /** Brings the expanded panel forward so it can accept typed input. */
   focusPanel(): void;
   /** Mints a short-lived Realtime credential; the standing API key never crosses. */
@@ -441,6 +450,7 @@ export const channels = {
   addWorkspaceAgent: "app:add-workspace-agent",
   executeIssueAction: "app:execute-issue-action",
   sendFeedback: "app:send-feedback",
+  summonFeedback: "app:summon-feedback",
   focusPanel: "app:focus-panel",
   requestRealtimeCredential: "app:request-realtime-credential",
   attentionSpeech: "app:attention-speech",
