@@ -1359,11 +1359,13 @@ const DOCK_ICON_FILES = {
 } as const;
 
 /**
- * Draws Luke's own face in the Dock, matched to the theme. Called once at
- * startup and again whenever the theme changes; macOS remembers the image
- * across `dock.hide()`, so this never needs to wait for the icon to be shown.
- * Artwork missing from a build draws nothing, leaving the bundle icon (or the
- * stock one) in place rather than an empty tile.
+ * Draws Luke's own face in the Dock, matched to the theme. Called at startup,
+ * on every theme change, and after every `dock.show()` — showing the icon
+ * transforms the process, and macOS draws the fresh tile from the bundle's
+ * icon (in a dev run, Electron's stock one), forgetting any image set while
+ * there was no tile to wear it. Artwork missing from a build draws nothing,
+ * leaving the bundle icon (or the stock one) in place rather than an empty
+ * tile.
  */
 function applyDockIcon(): void {
   if (!app.dock) return;
@@ -1405,8 +1407,14 @@ async function settleDock(): Promise<void> {
   dockSettling = true;
   try {
     while (app.dock.isVisible() !== dockDesired) {
-      if (dockDesired) await app.dock.show();
-      else app.dock.hide();
+      if (dockDesired) {
+        await app.dock.show();
+        // The show rebuilt the tile from the bundle icon; put Luke's face
+        // back on it.
+        applyDockIcon();
+      } else {
+        app.dock.hide();
+      }
       // Either direction transforms the process type, which can deactivate
       // the app; the panel the switch was pressed in is brought back forward
       // rather than left to lose its caret.
