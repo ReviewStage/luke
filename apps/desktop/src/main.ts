@@ -73,6 +73,8 @@ import {
   isCredentialProviderId,
 } from "./shared/credential-providers";
 import {
+  askHotkeyCandidates,
+  askHotkeyReport,
   parseVoiceHotkey,
   VOICE_HOTKEY_ABSENCE,
   type VoiceHotkeyAbsence,
@@ -249,6 +251,57 @@ function registerToggleHotkey(): void {
   voiceHotkeyAbsence = VOICE_HOTKEY_ABSENCE.ALREADY_OWNED;
 }
 
+let askHotkey: string | undefined;
+
+/**
+ * Registers the key that summons the ask field from whatever app is frontmost,
+ * on the talk key's own terms: never during a capture run, and never for a
+ * conversation that cannot open — a system-wide key that answers nothing is a
+ * key taken from every other app for no reason. Electron's registration is
+ * enough here, because a summons has no release edge to hear.
+ *
+ * The press does two things in order: stands the panel up focused, then asks
+ * the renderer to put the caret in the field — or, when the caret is already
+ * there, the renderer reads the same press as the dismissal, so one key
+ * summons and puts away like every launcher does.
+ */
+function registerAskHotkey(): void {
+  // Re-runnable: moving the talk key lets everything go and registers afresh,
+  // and a key that could not be re-taken must not still be claimed anywhere.
+  askHotkey = undefined;
+  if (captureMode) {
+    process.stderr.write(`${askHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.CAPTURE_RUN)}\n`);
+    return;
+  }
+  if (!realtimeCredentials) {
+    process.stderr.write(`${askHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.NO_CREDENTIAL)}\n`);
+    return;
+  }
+  // A chord the talk key sits on — chosen by the user, or announced as
+  // registered — is not a candidate: the two Luke keys must never compete.
+  for (const accelerator of askHotkeyCandidates([chosenVoiceHotkey, voiceHotkey])) {
+    const registered = globalShortcut.register(accelerator, () => {
+      setWindowMode("expanded", true);
+      panelWindow?.webContents.send(channels.lifecycle, "ask:focus");
+    });
+    if (!registered) continue;
+    askHotkey = accelerator;
+    process.stderr.write(`${askHotkeyReport(askHotkey, VOICE_HOTKEY_ABSENCE.ALREADY_OWNED)}\n`);
+    return;
+  }
+  process.stderr.write(`${askHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.ALREADY_OWNED)}\n`);
+}
+
+/**
+ * Tells a renderer the ask key it should be teaching, whenever that changes.
+ * The raw accelerator travels, as in bootstrap: the renderer needs both its
+ * spellings, and an absent key clears the hint rather than leaving a keycap
+ * up for a chord that answers nothing.
+ */
+function sendAskHotkey(): void {
+  panelWindow?.webContents.send(channels.askHotkeyChanged, askHotkey);
+}
+
 /** Tells a renderer the key it should be showing, whenever that changes. */
 function sendVoiceHotkey(): void {
   panelWindow?.webContents.send(channels.voiceHotkeyChanged, {
@@ -265,14 +318,15 @@ function reportVoiceHotkey(): void {
  * Moves the talk key to whatever `chosenVoiceHotkey` now says, while the app
  * is running. The old key is let go of in full before the new one is asked
  * for, so the two can never race for the same chord — and letting everything
- * go is exact rather than broad, because the talk key candidates are the only
- * global accelerators Luke ever registers. Letting go means waiting: the
- * system releases the old helper's chord when its process exits, not when the
- * kill is asked for, and the defaults sit in both helpers' candidate lists —
- * a successor that starts too early is refused the very fallback it was
- * promised. The panel keeps showing the old key until the new one actually
- * answers: the helper announces its own registration over stdout, and every
- * path without a helper is decided by the time `registerVoiceHotkey` returns.
+ * go takes the ask key down with it, because `unregisterAll` is exactly that,
+ * so the ask key is registered afresh once the talk key has settled. Letting
+ * go means waiting: the system releases the old helper's chord when its
+ * process exits, not when the kill is asked for, and the defaults sit in both
+ * helpers' candidate lists — a successor that starts too early is refused the
+ * very fallback it was promised. The panel keeps showing the old key until
+ * the new one actually answers: the helper announces its own registration
+ * over stdout, and every path without a helper is decided by the time
+ * `registerVoiceHotkey` returns.
  */
 async function applyVoiceHotkey(): Promise<void> {
   const released = talkKeyWatcher?.stop();
@@ -284,6 +338,11 @@ async function applyVoiceHotkey(): Promise<void> {
   voiceHotkeyAbsence = VOICE_HOTKEY_ABSENCE.ALREADY_OWNED;
   registerVoiceHotkey();
   if (!talkKeyWatcher) sendVoiceHotkey();
+  // The ask key went down with `unregisterAll`, and the chord it can have may
+  // itself have changed — the talk key may have moved onto or off of one of
+  // its candidates — so it is re-taken now and the panel told what it teaches.
+  registerAskHotkey();
+  sendAskHotkey();
 }
 
 let windowMode: WindowMode = captureMode
@@ -518,6 +577,10 @@ function registerIpc(): void {
       realtimeAvailable: realtimeCredentials !== undefined,
       ...(voiceHotkey ? { voiceHotkey: voiceHotkeyLabel(voiceHotkey) } : {}),
       voiceHotkeyHeld,
+      // The accelerator rather than its label: the renderer needs both
+      // spellings — the keycap's ⌥L and aria's Alt+L — and only the
+      // accelerator can produce the pair.
+      ...(askHotkey ? { askHotkey } : {}),
       display: displayDiagnostic(),
       sessions: fixtureMode ? [] : sessionRegistry.snapshot().sessions,
       settings: await settingsStore.snapshot(),
@@ -1205,6 +1268,7 @@ if (!app.requestSingleInstanceLock()) {
     // moment later, and a line printed now would state an absence that only
     // exists because nobody has answered yet.
     registerVoiceHotkey();
+    registerAskHotkey();
     createPanel();
     configurePermissions();
     startSessionObservation();

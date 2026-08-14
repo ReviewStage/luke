@@ -190,6 +190,7 @@ export interface RealtimeSessionOptions {
 const REALTIME_INSTRUCTION_LINES: readonly string[] = [
   "You are Luke, a spoken companion for a developer who is running coding agents.",
   "You watch their sessions from the side, and you can carry out exactly what the developer asks of one.",
+  "The developer speaks to you or types to you; either way it is them asking, and you answer out loud.",
   "",
   "How to speak:",
   "- The developer is working, not reading: be extremely brief. One short sentence by default, two at most, under twenty-five words.",
@@ -652,6 +653,40 @@ export function truncateResponseEvents(input: {
       content_index: 0,
       audio_end_ms: Math.floor(input.audioEndMs),
     },
+  ];
+}
+
+/**
+ * How long a typed ask may run. The same bound a session message carries:
+ * room for anything worth typing into a chat field, and a floor under a paste
+ * of a whole document — which is cut rather than sent, because the ask is a
+ * sentence to a companion, not a transfer.
+ */
+export const maximumTypedAskLength = 4_000;
+
+/**
+ * Builds the events that carry a typed ask and request the reply to it.
+ *
+ * The text travels without a label, unlike every other `input_text` this
+ * module builds: labels mark what the developer did not say, and a typed ask
+ * is the developer's own words as surely as a spoken one. The reply is
+ * requested with the session's own `tool_choice`, because typing opens a
+ * developer turn exactly as a push-to-talk commit does — the caller arms the
+ * turn on the same terms, and the roster gauntlet stands behind it unchanged.
+ */
+export function typedAskEvents(text: string): readonly Record<string, unknown>[] {
+  const ask = trimmedText(text)?.slice(0, maximumTypedAskLength);
+  if (!ask) return [];
+  return [
+    {
+      type: REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE,
+      item: {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: ask }],
+      },
+    },
+    { type: REALTIME_CLIENT_EVENT.RESPONSE_CREATE },
   ];
 }
 

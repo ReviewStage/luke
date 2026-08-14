@@ -698,3 +698,144 @@ html[data-keyboard="true"] button.row-main:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Ask Luke ----------------------------------------------------------------- */
+
+/* The panel's own composer, pinned under the list. It arrives at the tail of
+   the row fan (the wrapper is in base.css's arrival stack) and holds the
+   panel's foot — which is where Luke's caption rides when he answers, so the
+   question and its answer share an edge. */
+.ask-luke-row {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+/* The same pill every row composer draws, sized up a step because it addresses
+   Luke rather than one session. A press anywhere in it lands the caret, so the
+   whole pill says text. */
+.ask-luke {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 4px 4px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.4);
+  cursor: text;
+  transition:
+    border-color var(--duration-hover) ease,
+    background-color var(--duration-hover) ease;
+}
+
+/* Typing is the developer's half of the conversation, so the pill takes their
+   green — the colour the meter gives their voice, and nowhere else on the
+   surface — where a session's composer takes the working blue. */
+.ask-luke:focus-within {
+  border-color: color-mix(in srgb, var(--voice-developer) 50%, transparent);
+  background: rgba(0, 0, 0, 0.55);
+}
+
+/* The field itself is bare: the pill around it is the drawn edge. */
+.ask-luke-input {
+  min-width: 0;
+  flex: 1;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.ask-luke-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* How the reach is learned: the keycap surfaces while the pointer is over the
+   pill and stands down again once the caret is in or a draft holds the field —
+   whoever it could teach already knows. It keeps its layout box in every
+   state and only fades, so hovering re-shapes nothing, and it takes no
+   pointer: a press on it is a press on the field it names. */
+.ask-luke-hint {
+  flex: 0 0 auto;
+  padding: 2.5px 6px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--text-tertiary);
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 620;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-hover) ease;
+}
+
+.ask-luke[data-draft="false"]:hover:not(:focus-within) .ask-luke-hint {
+  opacity: 1;
+}
+
+/* Lit only once there is something to ask, in the same green the pill focuses
+   with: pressing it is the developer taking their turn. Colour is the whole
+   state change — the button must not grow or move inside an element that
+   reflows the pill. */
+.ask-luke-send {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--text-tertiary);
+  place-items: center;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.ask-luke-send:not(:disabled) {
+  background: var(--voice-developer);
+  color: rgba(0, 0, 0, 0.82);
+}
+
+.ask-luke-send:disabled {
+  cursor: default;
+}
+
+.ask-luke-send .control-icon {
+  width: 12px;
+  height: 12px;
+}
+
+/* An ask on its way to a call that may still be opening: the disc breathes
+   instead of a spinner arriving, because nothing in the pill may change size.
+   It holds still under the same token as every other loop — a capture must
+   land on one frame, and reduced motion asked for stillness. */
+.ask-luke[data-asking="true"] .ask-luke-send {
+  animation: ask-luke-breathe 900ms ease-in-out infinite;
+  animation-play-state: var(--loop-motion);
+}
+
+@keyframes ask-luke-breathe {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* Why the ask could not go, said once under the pill and replaced by typing.
+   A sent ask draws nothing here: the reply beginning is the confirmation. */
+.ask-luke-refusal {
+  overflow: hidden;
+  padding: 0 14px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

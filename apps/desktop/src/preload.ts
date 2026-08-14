@@ -107,6 +107,12 @@ const bridge: AppBridge = {
     ipcRenderer.on(channels.voiceHotkeyChanged, listener);
     return () => ipcRenderer.removeListener(channels.voiceHotkeyChanged, listener);
   },
+  onAskHotkeyChanged: (callback: (accelerator: string | undefined) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, accelerator: string | undefined) =>
+      callback(accelerator);
+    ipcRenderer.on(channels.askHotkeyChanged, listener);
+    return () => ipcRenderer.removeListener(channels.askHotkeyChanged, listener);
+  },
   onAttentionSpeech: (callback: (speech: readonly AttentionSpeech[]) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, speech: readonly AttentionSpeech[]) =>
       callback(speech);
