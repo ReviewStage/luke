@@ -1603,6 +1603,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
  * its timing from the state being entered, which is what keeps the two apart. */
 .session-row,
 .settings-section,
+.settings-header,
 .quit-button,
 .empty-state,
 .panel-header,
@@ -1632,6 +1633,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 
 .app-stage[data-presentation="panel"] .session-row,
 .app-stage[data-presentation="panel"] .settings-section,
+.app-stage[data-presentation="panel"] .settings-header,
 .app-stage[data-presentation="panel"] .quit-button,
 .app-stage[data-presentation="panel"] .empty-state,
 .app-stage[data-presentation="panel"] .panel-header,
@@ -1732,11 +1734,147 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   opacity: 1;
 }
 
+/* Every row stands at the height a label-and-subtext pair needs, whether or
+   not it carries the subtext: a list where the short rows sit shorter reads as
+   cramped rather than as calm. */
 .settings-row {
   display: flex;
+  min-height: 32px;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+/* A page's head: the way back beside the page's own name, above the sections
+   it holds. */
+.settings-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 9px;
+  padding: 0 2px;
+}
+
+.settings-header strong {
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+/* The front page's list of pages. The rows sit at a menu's spacing rather
+   than a form's — each is one name, so the 9px a section keeps between rows
+   of copy would read as gaps, not as calm — and the card's own padding plus
+   the rows' pill padding puts the first and last rows' content 15px from the
+   card's edge, the same inset the sides keep. */
+.settings-index {
+  gap: 3px;
+  padding-top: 11px;
+  padding-bottom: 11px;
+}
+
+/* A page that is one nameless group is no group at all: its rows stand on the
+   page itself, under the header that already names it, and a card around them
+   would be a border around nothing. With no card there is no card inset
+   either: the rows keep the header's own 2px, flush with the page's left
+   edge, rather than hanging indented where a border used to be. */
+.settings-plain {
+  padding: 2px;
+  border: 0;
+  background: none;
+}
+
+/* Turning a settings page follows the shape contract. Leaving: the old page's
+   content goes first, over `--duration-exit` and with no delay — the state
+   being entered declares its own `--row-delay` — and only its end releases
+   the room, so the surface never resizes out from under something still
+   drawn. The swap is timed off this same token, read live off the element
+   (`pageExitMs`), so a capture run or reduced motion — which zero it — swap
+   as fast as they stilled the fade. */
+.settings[data-page-leaving="true"] .settings-header,
+.settings[data-page-leaving="true"] .settings-section,
+.settings[data-page-leaving="true"] .quit-button {
+  --row-delay: 0s;
+
+  opacity: 0;
+}
+
+/* Arriving: the new page's room lands at once — the surface takes one clean
+   spring — and its content becomes visible only over black, riding the pair
+   every arriving element rides on the same `--row-delay` the panel's own
+   arrival fans out with. A mount animation with `backwards` fill rather than
+   a transition, because an element cannot transition from a style it never
+   held. Scoped to a panel that has actually turned a page, so the tab's
+   first draw stays the panel-arrival transition's alone. */
+@keyframes settings-page-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes settings-page-travel {
+  from {
+    transform: translateY(
+      calc((min(var(--row-index, 0), var(--row-fan-limit)) + 1) * var(--row-fan) * -1)
+    );
+  }
+}
+
+.settings[data-page-turned="true"] .settings-header,
+.settings[data-page-turned="true"] .settings-section,
+.settings[data-page-turned="true"] .quit-button {
+  animation:
+    settings-page-fade var(--duration-quick) var(--motion-exit) var(--row-delay) backwards,
+    settings-page-travel var(--duration-shape) var(--spring) var(--row-delay) backwards;
+}
+
+/* A front-page row that opens a page rather than holding a control: glyph,
+   name, what the page holds, and the chevron that promises somewhere to go.
+   The hover bleeds to the section's padding so the pill reads as the row. */
+.settings-nav {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 10px;
+  margin: 0 -8px;
+  padding: 4px 8px;
+  border-radius: 10px;
+  background: none;
+  text-align: left;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.settings-nav:hover {
+  background: var(--raised);
+}
+
+.settings-nav .settings-copy {
+  flex: 1;
+}
+
+/* The page's glyph in a small plate, the way macOS marks a settings row. */
+.settings-nav-mark {
+  display: flex;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  background: var(--raised-strong);
+  color: var(--text-secondary);
+}
+
+.settings-nav-mark .settings-icon {
+  width: 13px;
+  height: 13px;
+  opacity: 1;
+}
+
+.settings-chevron {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
 }
 
 .settings-copy {

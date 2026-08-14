@@ -74,8 +74,15 @@ export type AppSettingId = (typeof APP_SETTING_ID)[keyof typeof APP_SETTING_ID];
 /** Where the switches live, said once so every entry words it the same way. */
 const SETTINGS_TAB = "the panel's Settings tab";
 
+/* The tab's front page opens pages, and each setting is changed by hand on
+   one of them — so every by-hand path names its page, worded once each. */
+const VOICE_PAGE = `${SETTINGS_TAB}, on its Voice page`;
+const APPEARANCE_PAGE = `${SETTINGS_TAB}, on its Appearance page`;
+const SHORTCUTS_PAGE = `${SETTINGS_TAB}, on its Keyboard shortcuts page`;
+const CONNECTIONS_PAGE = `${SETTINGS_TAB}, on its Connections page`;
+
 /** Where the Conductor agent choices live, said once for both their entries. */
-const CONDUCTOR_ROW_PATH = `the Conductor row under Cloud Agent API keys, in ${SETTINGS_TAB}`;
+const CONDUCTOR_ROW_PATH = `the Conductor row under Cloud Agent API keys, in ${CONNECTIONS_PAGE}`;
 
 /**
  * The word both Conductor agent entries use for no choice at all. It is a
@@ -137,7 +144,7 @@ const SETTING_GUIDE: Record<
     defaultValue: REALTIME_DEFAULTS.VOICE,
     choices: REALTIME_VOICE_LIST,
     adjustable: true,
-    manual: `${SETTINGS_TAB}, under Preferences`,
+    manual: VOICE_PAGE,
   }),
   voiceSpeed: (settings) => ({
     id: APP_SETTING_ID.VOICE_SPEED,
@@ -149,7 +156,7 @@ const SETTING_GUIDE: Record<
     defaultValue: voiceSpeedWord(REALTIME_DEFAULTS.SPEED),
     choices: VOICE_SPEED_WORDS.map((candidate) => candidate.word),
     adjustable: true,
-    manual: `${SETTINGS_TAB}, under Preferences`,
+    manual: VOICE_PAGE,
   }),
   voiceCaptions: (settings) => ({
     id: APP_SETTING_ID.VOICE_CAPTIONS,
@@ -161,7 +168,7 @@ const SETTING_GUIDE: Record<
     value: appToggleText(settings.voiceCaptions),
     defaultValue: appToggleText(APP_SETTING_DEFAULTS.voiceCaptions),
     adjustable: true,
-    manual: `${SETTINGS_TAB}, under Preferences`,
+    manual: VOICE_PAGE,
   }),
   duckOtherMedia: (settings) => ({
     id: APP_SETTING_ID.DUCK_OTHER_MEDIA,
@@ -172,7 +179,7 @@ const SETTING_GUIDE: Record<
     value: appToggleText(settings.duckOtherMedia),
     defaultValue: appToggleText(APP_SETTING_DEFAULTS.duckOtherMedia),
     adjustable: true,
-    manual: `${SETTINGS_TAB}, under Preferences`,
+    manual: VOICE_PAGE,
   }),
   sessionNotifications: (settings) => ({
     id: APP_SETTING_ID.SESSION_NOTIFICATIONS,
@@ -185,7 +192,7 @@ const SETTING_GUIDE: Record<
     value: appToggleText(settings.sessionNotifications),
     defaultValue: appToggleText(APP_SETTING_DEFAULTS.sessionNotifications),
     adjustable: true,
-    manual: `${SETTINGS_TAB}, under Preferences`,
+    manual: VOICE_PAGE,
   }),
   showInMenuBar: (settings) => ({
     id: APP_SETTING_ID.SHOW_IN_MENU_BAR,
@@ -195,7 +202,7 @@ const SETTING_GUIDE: Record<
     value: appToggleText(settings.showInMenuBar),
     defaultValue: appToggleText(APP_SETTING_DEFAULTS.showInMenuBar),
     adjustable: true,
-    manual: `${SETTINGS_TAB}, under Preferences`,
+    manual: APPEARANCE_PAGE,
   }),
   showInDock: (settings) => ({
     id: APP_SETTING_ID.SHOW_IN_DOCK,
@@ -205,7 +212,7 @@ const SETTING_GUIDE: Record<
     value: appToggleText(settings.showInDock),
     defaultValue: appToggleText(APP_SETTING_DEFAULTS.showInDock),
     adjustable: true,
-    manual: `${SETTINGS_TAB}, under Preferences`,
+    manual: APPEARANCE_PAGE,
   }),
   showOnAllDisplays: (settings) => ({
     id: APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS,
@@ -216,7 +223,7 @@ const SETTING_GUIDE: Record<
     value: appToggleText(settings.showOnAllDisplays),
     defaultValue: appToggleText(APP_SETTING_DEFAULTS.showOnAllDisplays),
     adjustable: true,
-    manual: `${SETTINGS_TAB}, under Preferences`,
+    manual: APPEARANCE_PAGE,
   }),
   // One stored value, spoken of as two choices: the model, and — only while a
   // model whose agent documents levels is chosen — its effort, because a
@@ -302,7 +309,7 @@ const SETTING_GUIDE: Record<
     // default, and the first creation is what ends it.
     defaultValue: ASK_EACH_TIME_CHOICE,
     adjustable: false,
-    manual: `${SETTINGS_TAB}, under Preferences`,
+    manual: `${CONNECTIONS_PAGE}, under Workspaces`,
   }),
   formFactor: (settings) => ({
     id: APP_SETTING_ID.FORM_FACTOR,
@@ -314,7 +321,7 @@ const SETTING_GUIDE: Record<
     defaultValue: DEFAULT_PANEL_FORM_FACTOR,
     choices: PANEL_FORM_FACTOR_LIST,
     adjustable: true,
-    manual: `${SETTINGS_TAB}, under Preferences`,
+    manual: APPEARANCE_PAGE,
   }),
   // Described in the talk-key fact instead, which carries the key that
   // actually registered — this field is only the stored choice, absent on the
@@ -362,7 +369,7 @@ function talkKeyFact(hotkey: LukeGuideInput["hotkey"]): AppGuideFact {
     return {
       label: "Talk key",
       detail:
-        "None is registered right now — another app may own the shortcut. The Settings tab shows its state.",
+        "None is registered right now — another app may own the shortcut. The Settings tab's Keyboard shortcuts page shows its state.",
     };
   }
   const use = hotkey.held
@@ -370,7 +377,7 @@ function talkKeyFact(hotkey: LukeGuideInput["hotkey"]): AppGuideFact {
     : "press to talk, again to send, again to interrupt";
   return {
     label: "Talk key",
-    detail: `${hotkey.hotkey}, from any app: ${use}. A different chord can be recorded, or the default restored, in ${SETTINGS_TAB}.`,
+    detail: `${hotkey.hotkey}, from any app: ${use}. A different chord can be recorded, or the default restored, in ${SHORTCUTS_PAGE}.`,
   };
 }
 
@@ -379,14 +386,14 @@ function askKeyFact(askKey: string | undefined): AppGuideFact {
     return {
       label: "Ask key",
       detail:
-        "None is registered right now — another app may own the shortcut, or voice is off. The Settings tab shows its state.",
+        "None is registered right now — another app may own the shortcut, or voice is off. The Settings tab's Keyboard shortcuts page shows its state.",
     };
   }
   return {
     label: "Ask key",
     detail:
       `${askKey}, from any app: summons the panel with the caret in the typed composer, and the ` +
-      `same press puts it away. A different chord can be recorded, or the default restored, in ${SETTINGS_TAB}.`,
+      `same press puts it away. A different chord can be recorded, or the default restored, in ${SHORTCUTS_PAGE}.`,
   };
 }
 
@@ -416,9 +423,9 @@ function providersFact(settings: AppSettings): AppGuideFact {
   return {
     label: "Cloud providers",
     detail:
-      `${roster.join(", ")}. Connecting one takes its API key, typed by hand into ${SETTINGS_TAB} ` +
-      "under Cloud Agent API keys — never spoken, and never repeated back. Local providers such " +
-      "as Claude Code need no key and are observed on their own.",
+      `${roster.join(", ")}. Connecting one takes its API key, typed by hand into ` +
+      `${CONNECTIONS_PAGE}, under Cloud Agent API keys — never spoken, and never repeated back. ` +
+      "Local providers such as Claude Code need no key and are observed on their own.",
   };
 }
 
@@ -432,7 +439,7 @@ function integrationsFact(settings: AppSettings): AppGuideFact {
     detail:
       `${roster.join(", ")}. Connecting Linear lets Luke read the developer's issues and, only ` +
       `when asked in a turn the developer opened, move or comment on one. Its key is typed by ` +
-      `hand into ${SETTINGS_TAB} under Integrations — never spoken, and never repeated back.`,
+      `hand into ${CONNECTIONS_PAGE}, under Integrations — never spoken, and never repeated back.`,
   };
 }
 
@@ -459,8 +466,10 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "Sessions lists every observed session with its state, narrowable to all, local, " +
         "cloud, or one provider, and orderable by urgency (what needs the developer first) or " +
         "recency (what moved last first); a row can be opened, messaged, or controlled where its " +
-        "provider allows. Settings holds the preferences, the talk and ask keys, the cloud " +
-        "agent API keys, the integrations, permissions, the Feedback section, and Quit.",
+        "provider allows. Settings holds a front page whose rows open its Voice, Appearance, " +
+        "Keyboard shortcuts, and Connections pages — each led back out by its back button or " +
+        "Escape — and keeps the microphone permission, the Feedback section, and Quit on the " +
+        "front page itself.",
     },
     {
       label: "Feedback and prompts",
@@ -517,7 +526,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
                   "may own the shortcut.") +
               " The talk key over a reply interrupts too, but takes the turn: the microphone " +
               `opens with the same press. A different stop chord can be recorded, or the ` +
-              `default restored, in ${SETTINGS_TAB}.`,
+              `default restored, in ${SHORTCUTS_PAGE}.`,
           },
           {
             label: "Muted output",

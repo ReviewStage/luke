@@ -33,15 +33,15 @@ function FeedbackOffer({
 }
 
 /**
- * The last section of the settings tab: the two ways to write to the people
- * who make Luke. The section only offers — pressing either button stands the
+ * The last section of the settings front page: the two ways to write to the
+ * people who make Luke. The section only offers — pressing either button stands the
  * panel down to the composer's own shape, the way pressing Connect stands it
  * down to the key slot — and the line under the offers is where a landed send
  * reports back.
  */
 export function FeedbackSection({ control }: { control: FeedbackEntryControl }): React.JSX.Element {
   return (
-    <section className="settings-section" style={{ "--row-index": 5 } as React.CSSProperties}>
+    <section className="settings-section" style={{ "--row-index": 3 } as React.CSSProperties}>
       <h2>
         <MegaphoneIcon />
         Feedback

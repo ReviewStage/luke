@@ -132,12 +132,14 @@ test("the guide describes every spoken-adjustable setting with its current value
   );
 
   // Every entry says where the same change is made by hand, because guiding
-  // the developer there is half of what the guide is for — and every one of
-  // Luke's own settings states its default, so "back to the default" is an
-  // ask the guide can always ground. A toggle's default is one of its two
-  // words; a choice's default is one of its offered choices.
+  // the developer there is half of what the guide is for — and the Settings
+  // tab opens into pages, so a path that stops at the tab strands them on its
+  // front page. Every one of Luke's own settings also states its default, so
+  // "back to the default" is an ask the guide can always ground: a toggle's
+  // default is one of its two words, a choice's one of its offered choices.
   for (const setting of buildLukeGuide(guideInput()).settings) {
     assert.ok(setting.manual.length > 0, `${setting.id} has a by-hand path`);
+    assert.match(setting.manual, /Settings tab, on its \w[\w ]* page/);
     assert.ok(setting.defaultValue, `${setting.id} states its default`);
     const accepted =
       setting.kind === APP_SETTING_KIND.TOGGLE ? ["on", "off"] : (setting.choices ?? []);
@@ -146,6 +148,14 @@ test("the guide describes every spoken-adjustable setting with its current value
       `${setting.id}'s default is a value a spoken change can set`,
     );
   }
+
+  // The pages are named by what they hold: the voice rows live on the Voice
+  // page and the standing rows on Appearance, so the words Luke says match
+  // the row the developer will find.
+  assert.match(guideSetting(APP_SETTING_ID.VOICE, guideInput()).manual, /Voice page/);
+  assert.match(guideSetting(APP_SETTING_ID.VOICE_CAPTIONS, guideInput()).manual, /Voice page/);
+  assert.match(guideSetting(APP_SETTING_ID.SHOW_IN_DOCK, guideInput()).manual, /Appearance page/);
+  assert.match(guideSetting(APP_SETTING_ID.FORM_FACTOR, guideInput()).manual, /Appearance page/);
 });
 
 test("the facts say what is connected, never what connects it", () => {

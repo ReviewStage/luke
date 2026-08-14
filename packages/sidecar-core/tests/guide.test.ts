@@ -37,7 +37,7 @@ const GUIDE: AppGuideSnapshot = {
       value: "off",
       defaultValue: "off",
       adjustable: true,
-      manual: "the panel's Settings tab, under Preferences",
+      manual: "the panel's Settings tab, on its Voice page",
     },
     {
       id: "voice",
@@ -48,7 +48,7 @@ const GUIDE: AppGuideSnapshot = {
       defaultValue: "cedar",
       choices: ["cedar", "marin"],
       adjustable: true,
-      manual: "the panel's Settings tab, under Preferences",
+      manual: "the panel's Settings tab, on its Voice page",
     },
     {
       id: "microphone",
