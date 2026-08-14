@@ -232,39 +232,51 @@ export class RealtimeVoiceSession {
     this.#setStatus(REALTIME_STATUS.CONNECTING);
     this.#options.onError(undefined);
 
-    let connection: RealtimeConnection | undefined;
-    try {
-      connection = await this.#options.requestConnection();
-    } catch (error) {
-      // A stop that lands while the credential is being minted is not a fault
-      // to report. Every exit from here has to ask, not just the ones after the
-      // device exists.
-      if (this.#closed) return this.#abandonConnect();
-      return this.#fail(`Could not reach the main process: ${errorMessage(error)}`);
-    }
-    if (this.#closed) return this.#abandonConnect();
-    if (!connection) {
-      this.#setStatus(REALTIME_STATUS.UNAVAILABLE);
-      return false;
-    }
-
-    try {
-      const stream = await (this.#options.requestMicrophoneStream?.() ??
+    // The whole of the wait before the handshake is these two, and neither
+    // needs the other: the credential is minted over the network while the
+    // capture device opens. `allSettled` rather than `all`, because whichever
+    // one loses still has to be dealt with — a device that opened after a
+    // failed mint would be held with nobody left to release it.
+    const [connectionResult, streamResult] = await Promise.allSettled([
+      this.#options.requestConnection(),
+      this.#options.requestMicrophoneStream?.() ??
         navigator.mediaDevices.getUserMedia({
           audio: { autoGainControl: true, echoCancellation: true, noiseSuppression: true },
           video: false,
-        }));
-      this.#stream = stream;
+        }),
+    ]);
+    // Adopt the device before deciding anything, so every exit from here — a
+    // stop that landed mid-mint, a failed mint, no credential at all — releases
+    // it through the same teardown as the rest.
+    if (streamResult.status === "fulfilled") this.#stream = streamResult.value;
+
+    // A stop that lands while the credential is being minted is not a fault
+    // to report. Every exit from here has to ask, not just the ones after the
+    // handshake starts.
+    if (this.#closed) return this.#abandonConnect();
+    if (connectionResult.status === "rejected") {
+      return this.#fail(
+        `Could not reach the main process: ${errorMessage(connectionResult.reason)}`,
+      );
+    }
+    const connection = connectionResult.value;
+    if (!connection) {
+      this.#teardown();
+      this.#setStatus(REALTIME_STATUS.UNAVAILABLE);
+      return false;
+    }
+    if (streamResult.status === "rejected") {
+      return this.#fail(errorMessage(streamResult.reason));
+    }
+
+    try {
+      const stream = streamResult.value;
       const [microphone] = stream.getAudioTracks();
       if (!microphone) throw new Error("No microphone track was available");
       // Push-to-talk starts closed. Nothing is sent until the developer asks.
       microphone.enabled = false;
       this.#microphone = microphone;
       this.#options.onLocalStream(stream);
-      // `close()` can land while this is still awaiting. The device now exists,
-      // so bailing out without releasing it would leave the microphone held by
-      // a session the caller already stopped.
-      if (this.#closed) return this.#abandonConnect();
 
       const peer = this.#options.createPeerConnection?.() ?? new RTCPeerConnection();
       this.#peer = peer;
