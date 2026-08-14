@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type {
   AppBootstrap,
   AppBridge,
+  AppSettings,
   DisplayDiagnostic,
   MicrophoneStatus,
   SettingsUpdateResult,
@@ -26,6 +27,8 @@ const bridge: AppBridge = {
       providerId,
       apiKey,
     ) as Promise<SettingsUpdateResult>,
+  setLocalTranscripts: (enabled: boolean) =>
+    ipcRenderer.invoke(channels.setLocalTranscripts, enabled) as Promise<AppSettings>,
   openProviderApiKeys: (providerId: CredentialProviderId) => {
     ipcRenderer.send(channels.openProviderApiKeys, providerId);
   },

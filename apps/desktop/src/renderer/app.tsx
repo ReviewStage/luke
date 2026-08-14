@@ -744,6 +744,9 @@ export function App(): React.JSX.Element {
               microphoneError,
               onToggleMicrophone: () => void (analyser ? stopMicrophone() : startMicrophone()),
               settings,
+              onToggleLocalTranscripts: (enabled: boolean) => {
+                void window.sidecar.setLocalTranscripts(enabled).then(setSettings);
+              },
               credentials,
               panelOpen,
               onQuit: () => window.sidecar.quit(),

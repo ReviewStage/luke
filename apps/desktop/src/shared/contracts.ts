@@ -47,6 +47,12 @@ export interface AppSettings {
    * plaintext storage; while it is unknown the app says nothing about it.
    */
   secretStorage: SecretStorage;
+  /**
+   * Whether the observers on this machine may read what a session actually
+   * said. Off until the user turns it on, and it never widens what an attention
+   * evaluator is sent: a transcript stays on this Mac.
+   */
+  localTranscripts: boolean;
 }
 
 /** A rejected update reports why without echoing the submitted value. */
@@ -101,6 +107,8 @@ export interface AppBridge {
    * fixed by this build.
    */
   openProviderApiKeys(providerId: CredentialProviderId): void;
+  /** Turns local transcript reading on or off, and reports the settled state. */
+  setLocalTranscripts(enabled: boolean): Promise<AppSettings>;
   /**
    * Opens an observed session where its provider keeps it. The renderer names
    * the session rather than its address, for the same reason it names a
@@ -123,6 +131,7 @@ export const channels = {
   setPointerInterception: "app:set-pointer-interception",
   requestMicrophone: "app:request-microphone",
   setProviderApiKey: "app:set-provider-api-key",
+  setLocalTranscripts: "app:set-local-transcripts",
   openProviderApiKeys: "app:open-provider-api-keys",
   openSession: "app:open-session",
   focusPanel: "app:focus-panel",

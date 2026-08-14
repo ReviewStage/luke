@@ -24,6 +24,7 @@ import {
   CheckIcon,
   ExternalIcon,
   KeyIcon,
+  LaptopIcon,
   MicrophoneIcon,
   PencilIcon,
   PowerIcon,
@@ -36,6 +37,8 @@ export interface SettingsPanelProps {
   microphoneError?: string;
   onToggleMicrophone: () => void;
   settings?: AppSettings;
+  /** Turns local transcript reading on or off; see `AppSettings`. */
+  onToggleLocalTranscripts: (enabled: boolean) => void;
   /** The one credential being entered anywhere, and everything that can be done to it. */
   credentials: CredentialEntryControl;
   /**
@@ -461,12 +464,49 @@ function CredentialsSection({
   );
 }
 
+/**
+ * What the observers on this machine may read. Everything else Luke shows is a
+ * provider describing its own session; this is the session itself, so it is off
+ * until it is asked for and it is said plainly what turning it on does — and,
+ * just as plainly, what it does not: a transcript is read on this Mac, drawn on
+ * this Mac, and sent nowhere.
+ */
+function LocalTranscriptsSection({
+  enabled,
+  onToggle,
+}: {
+  enabled: boolean;
+  onToggle: (enabled: boolean) => void;
+}): React.JSX.Element {
+  return (
+    <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
+      <h2>
+        <LaptopIcon />
+        Local transcripts
+      </h2>
+      <div className="settings-row">
+        <span className="settings-copy">
+          <strong>{enabled ? "Showing the latest line" : "Off"}</strong>
+          <small>
+            Reads what agents on this Mac said, from the files they already write. Nothing is sent
+            off this Mac, and nothing is ever written back.
+          </small>
+        </span>
+        <button type="button" className="action-button" onClick={() => onToggle(!enabled)}>
+          {enabled ? "Turn off" : "Turn on"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export function SettingsPanel({
   microphoneStatus,
   microphoneActive,
   microphoneError,
   onToggleMicrophone,
   settings,
+  onToggleLocalTranscripts,
   credentials,
   panelOpen,
   onQuit,
@@ -488,7 +528,14 @@ export function SettingsPanel({
         <CredentialsSection settings={settings} control={credentials} panelOpen={panelOpen} />
       ) : null}
 
-      <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
+      {settings ? (
+        <LocalTranscriptsSection
+          enabled={settings.localTranscripts}
+          onToggle={onToggleLocalTranscripts}
+        />
+      ) : null}
+
+      <section className="settings-section" style={{ "--row-index": 3 } as React.CSSProperties}>
         <h2>
           <MicrophoneIcon />
           Microphone
@@ -508,7 +555,7 @@ export function SettingsPanel({
       <button
         type="button"
         className="quit-button"
-        style={{ "--row-index": 3 } as React.CSSProperties}
+        style={{ "--row-index": 4 } as React.CSSProperties}
         onClick={onQuit}
       >
         <PowerIcon />

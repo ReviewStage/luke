@@ -40,6 +40,7 @@ import { openAiAttentionEvaluatorFromEnvironment } from "./openai-attention-eval
 import { SettingsStore } from "./settings-store";
 import {
   type AppBootstrap,
+  type AppSettings,
   channels,
   type DisplayDiagnostic,
   type MicrophoneStatus,
@@ -78,6 +79,15 @@ const settingsStore = new SettingsStore({
     decrypt: (cipherText) => safeStorage.decryptString(cipherText),
   },
 });
+// Reading what a session said is the user's call, so every local observer asks
+// the same stored answer at the start of each pass rather than being rebuilt
+// when it changes.
+const readLocalTranscripts = () => settingsStore.readLocalTranscripts();
+const claudeCodeAdapter = new ClaudeCodeSessionAdapter({ readTranscript: readLocalTranscripts });
+const codexAdapter = new CodexSessionAdapter({ readTranscript: readLocalTranscripts });
+const cursorLocalAdapter = new CursorLocalSessionAdapter({
+  readTranscript: readLocalTranscripts,
+});
 const conductorAdapter = new ConductorSessionAdapter({
   readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.CONDUCTOR),
 });
@@ -89,7 +99,7 @@ const conductorAdapter = new ConductorSessionAdapter({
 const cursorAdapter = new CompositeSessionProviderAdapter({
   provider: CURSOR_PROVIDER,
   adapters: [
-    new CursorLocalSessionAdapter(),
+    cursorLocalAdapter,
     new CursorSessionAdapter({
       readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.CURSOR),
     }),
@@ -110,9 +120,10 @@ const adapterByCredentialProvider: ReadonlyMap<CredentialProviderId, SessionProv
     [CREDENTIAL_PROVIDER_ID.DEVIN, devinAdapter],
     [CREDENTIAL_PROVIDER_ID.JULES, julesAdapter],
   ]);
+const localSessionAdapters = [claudeCodeAdapter, codexAdapter, cursorAdapter] as const;
 const sessionAdapters = [
-  new ClaudeCodeSessionAdapter(),
-  new CodexSessionAdapter(),
+  claudeCodeAdapter,
+  codexAdapter,
   conductorAdapter,
   cursorAdapter,
   devinAdapter,
@@ -390,6 +401,20 @@ function registerIpc(): void {
           reason: "Could not save that API key on this system.",
         };
       }
+    },
+  );
+
+  // Turning transcripts on or off changes only what the local observers read,
+  // so the machine's own adapters are refreshed and the cloud ones are left
+  // alone. Nothing about this reaches an attention evaluator either way.
+  ipcMain.handle(
+    channels.setLocalTranscripts,
+    async (event, enabled: unknown): Promise<AppSettings> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (typeof enabled !== "boolean") throw new Error("Invalid transcript request");
+      const settings = await settingsStore.setLocalTranscripts(enabled);
+      for (const adapter of localSessionAdapters) void sessionRegistry.refresh(adapter);
+      return settings;
     },
   );
 

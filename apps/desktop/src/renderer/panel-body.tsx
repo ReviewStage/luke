@@ -43,6 +43,9 @@ function SessionRow({
       <span className="row-copy">
         <strong>{session.title}</strong>
         {session.detail ? <small>{session.detail}</small> : null}
+        {/* Only for a user who asked to see it, and only ever the last line:
+            the row is a place to recognise a session, not to read it. */}
+        {session.transcript ? <small className="row-transcript">{session.transcript}</small> : null}
         <small className="row-context">{session.context}</small>
       </span>
       <StateChip state={session.state} label={session.label} />

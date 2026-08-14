@@ -400,3 +400,12 @@ html[data-keyboard="true"] button.session-row:focus-visible {
 .row-copy .row-context {
   color: var(--text-tertiary);
 }
+
+/* The last thing said in the session, for a reader who turned transcripts on.
+   It is quoted material rather than something Luke observed about the session,
+   so it is set apart from both lines around it and never wraps: the row is the
+   same height whether or not anyone is reading along. */
+.row-copy .row-transcript {
+  color: var(--text-secondary);
+  font-style: italic;
+}

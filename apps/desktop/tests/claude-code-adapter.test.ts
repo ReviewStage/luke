@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
-import { SESSION_STATUS } from "@sidecar/core";
+import { SESSION_STATUS, TRANSCRIPT_ROLE } from "@sidecar/core";
 import { CLAUDE_CODE_PROVIDER, ClaudeCodeSessionAdapter } from "../src/claude-code-adapter";
 
 const TEST_TIME = Date.parse("2026-08-11T23:45:00.000Z");
@@ -16,6 +16,7 @@ const TEST_CLAUDE_EVENT_TYPE = {
   USER: "user",
 } as const;
 const TEST_CLAUDE_CONTENT_TYPE = {
+  TEXT: "text",
   TOOL_RESULT: "tool_result",
   TOOL_USE: "tool_use",
 } as const;
@@ -765,4 +766,56 @@ test("returns an empty snapshot when Claude Code has no local project directory"
   });
 
   assert.deepEqual(await adapter.observe(), []);
+});
+
+test("reads what was said only for a user who asked for it", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-luke",
+    "session-transcript",
+    [
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.USER,
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:44:50.000Z",
+        message: { content: SECRET_TRANSCRIPT_TEXT },
+      },
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:44:55.000Z",
+        message: {
+          content: [
+            { type: TEST_CLAUDE_CONTENT_TYPE.TEXT, text: SECRET_TRANSCRIPT_TEXT },
+            {
+              type: TEST_CLAUDE_CONTENT_TYPE.TOOL_USE,
+              name: "Bash",
+              input: { command: "pnpm test" },
+            },
+          ],
+        },
+      },
+    ],
+    TEST_TIME - 1_000,
+  );
+
+  const options = { claudeHome, now: () => TEST_TIME, maximumSessionAgeMs: 60_000 };
+  // The same session file, read twice: the gate is the only difference between
+  // an observation that carries the conversation and one that never opened it.
+  const withoutTranscripts = await new ClaudeCodeSessionAdapter(options).observe();
+  const withTranscripts = await new ClaudeCodeSessionAdapter({
+    ...options,
+    readTranscript: () => true,
+  }).observe();
+
+  assert.equal(withoutTranscripts[0]?.transcript, undefined);
+  assert.deepEqual(withTranscripts[0]?.transcript, [
+    { role: TRANSCRIPT_ROLE.USER, text: SECRET_TRANSCRIPT_TEXT },
+    { role: TRANSCRIPT_ROLE.AGENT, text: SECRET_TRANSCRIPT_TEXT },
+    { role: TRANSCRIPT_ROLE.TOOL, text: "Bash: pnpm test" },
+  ]);
+  // What Luke describes the session with is the same either way.
+  assert.deepEqual(withTranscripts[0]?.detail, withoutTranscripts[0]?.detail);
+  assert.equal(withTranscripts[0]?.status, withoutTranscripts[0]?.status);
 });

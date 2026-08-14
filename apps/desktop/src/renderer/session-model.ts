@@ -9,6 +9,7 @@ import {
   SESSION_STATUS,
   type SessionLocation,
   type SessionState,
+  TRANSCRIPT_ROLE,
 } from "@sidecar/core";
 import type { AppBootstrap } from "../shared/contracts";
 
@@ -89,6 +90,11 @@ export interface DisplaySession {
   detail: string;
   /** Where it is doing it: provider, repository, branch, model. */
   context: string;
+  /**
+   * The last thing said in the session, and who said it. Present only for a
+   * user who turned local transcripts on, and absent for every fixture row.
+   */
+  transcript?: string;
   state: SessionState;
   label: string;
   location: SessionLocation;
@@ -186,6 +192,23 @@ function sessionContext(session: NormalizedSession): string {
     .join(CONTEXT_SEPARATOR);
 }
 
+/**
+ * The newest line of the conversation, worded here rather than in the adapter
+ * that read it. A tool is named as a tool rather than by which tool, because
+ * the line it produced already says that and the row has one line to say it in.
+ */
+function sessionTranscript(session: NormalizedSession): string | undefined {
+  const latest = session.transcript.at(-1);
+  if (!latest) return undefined;
+  const speaker =
+    latest.role === TRANSCRIPT_ROLE.USER
+      ? "You"
+      : latest.role === TRANSCRIPT_ROLE.AGENT
+        ? session.provider.displayName
+        : "Tool";
+  return `${speaker}: ${latest.text}`;
+}
+
 function sessionState(session: NormalizedSession): SessionState {
   if (sessionNeedsAttention(session)) return SESSION_STATE.ATTENTION;
   if (session.status === SESSION_STATUS.COMPLETE) return SESSION_STATE.COMPLETE;
@@ -220,19 +243,23 @@ export function displaySessions(
         // cannot are drawn alike until a pointer is over one.
         openable: false,
       }))
-    : sessions.map((session) => ({
-        id: session.providerSessionId,
-        title: session.title,
-        providerId: session.providerId,
-        provider: session.provider.displayName,
-        detail: sessionDetail(session),
-        context: sessionContext(session),
-        state: sessionState(session),
-        label: STATE_LABEL[sessionState(session)],
-        location: session.location,
-        observedAt: session.observedAt,
-        openable: session.detail.link !== undefined,
-      }));
+    : sessions.map((session) => {
+        const transcript = sessionTranscript(session);
+        return {
+          id: session.providerSessionId,
+          title: session.title,
+          providerId: session.providerId,
+          provider: session.provider.displayName,
+          detail: sessionDetail(session),
+          context: sessionContext(session),
+          ...(transcript ? { transcript } : {}),
+          state: sessionState(session),
+          label: STATE_LABEL[sessionState(session)],
+          location: session.location,
+          observedAt: session.observedAt,
+          openable: session.detail.link !== undefined,
+        };
+      });
 
   return [...visible].sort(byUrgency);
 }

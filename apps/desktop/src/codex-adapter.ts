@@ -5,13 +5,21 @@ import path from "node:path";
 import {
   maximumSessionSummaryLength,
   maximumSessionTitleLength,
+  maximumTranscriptEntryLength,
   PROVIDER_ID,
   type ProviderSessionObservation,
   SESSION_STATUS,
   type SessionDetail,
   type SessionProvider,
   type SessionProviderAdapter,
+  type SessionTranscriptEntry,
+  TRANSCRIPT_ROLE,
 } from "@sidecar/core";
+import {
+  appendTranscriptEntry,
+  type TranscriptGate,
+  transcriptsRequested,
+} from "./local-session-adapter";
 
 const CODEX_PROVIDER_ID = PROVIDER_ID.CODEX;
 const CODEX_PROVIDER_NAME = "Codex";
@@ -76,6 +84,21 @@ const CODEX_EVENT_PAYLOAD = {
 
 const CODEX_RESPONSE_PAYLOAD = {
   FUNCTION_CALL: "function_call",
+  FUNCTION_CALL_OUTPUT: "function_call_output",
+  MESSAGE: "message",
+} as const;
+
+/** Who a rollout message belongs to. Read only for a transcript. */
+const CODEX_MESSAGE_ROLE = {
+  ASSISTANT: "assistant",
+  USER: "user",
+} as const;
+
+/** The content blocks a rollout message is written from. */
+const CODEX_CONTENT_TYPE = {
+  INPUT_TEXT: "input_text",
+  OUTPUT_TEXT: "output_text",
+  TEXT: "text",
 } as const;
 
 /**
@@ -156,6 +179,8 @@ export interface CodexAdapterOptions {
   maximumSessionAgeMs?: number;
   activeSessionFreshnessMs?: number;
   sqlite?: SqliteModuleLoader;
+  /** Off unless the user turned transcripts on; see `TranscriptGate`. */
+  readTranscript?: TranscriptGate;
 }
 
 function positiveInteger(value: number | undefined, fallback: number): number {
@@ -285,10 +310,57 @@ function activityFromCall(payload: Record<string, unknown>): string | undefined 
   return name;
 }
 
+/** The words in a rollout message, whichever way this build wrote them. */
+function messageText(payload: Record<string, unknown>): string | undefined {
+  const content = payload.content;
+  if (typeof content === "string") return oneLine(text(content), maximumTranscriptEntryLength);
+  if (!Array.isArray(content)) return undefined;
+  const spoken = content
+    .filter(isRecord)
+    .filter((block) => Object.values(CODEX_CONTENT_TYPE).some((type) => type === block.type))
+    .map((block) => text(block.text) ?? "")
+    .join(" ");
+  return oneLine(text(spoken), maximumTranscriptEntryLength);
+}
+
+/** What came back from a call, which Codex writes as its own response item. */
+function callOutputText(payload: Record<string, unknown>): string | undefined {
+  const output = payload.output;
+  if (typeof output === "string") return oneLine(text(output), maximumTranscriptEntryLength);
+  if (!isRecord(output)) return undefined;
+  return oneLine(text(output.content), maximumTranscriptEntryLength);
+}
+
+/** One line of the conversation itself, or nothing for every other item. */
+function transcriptFromResponseItem(
+  payload: Record<string, unknown>,
+): SessionTranscriptEntry | undefined {
+  if (payload.type === CODEX_RESPONSE_PAYLOAD.MESSAGE) {
+    const spoken = messageText(payload);
+    if (!spoken) return undefined;
+    if (payload.role === CODEX_MESSAGE_ROLE.USER) {
+      return { role: TRANSCRIPT_ROLE.USER, text: spoken };
+    }
+    if (payload.role === CODEX_MESSAGE_ROLE.ASSISTANT) {
+      return { role: TRANSCRIPT_ROLE.AGENT, text: spoken };
+    }
+    return undefined;
+  }
+  if (payload.type === CODEX_RESPONSE_PAYLOAD.FUNCTION_CALL) {
+    const called = oneLine(activityFromCall(payload), maximumTranscriptEntryLength);
+    return called ? { role: TRANSCRIPT_ROLE.TOOL, text: called } : undefined;
+  }
+  if (payload.type !== CODEX_RESPONSE_PAYLOAD.FUNCTION_CALL_OUTPUT) return undefined;
+  const returned = callOutputText(payload);
+  return returned ? { role: TRANSCRIPT_ROLE.TOOL, text: returned } : undefined;
+}
+
 interface ParsedCodexRollout {
   activity?: string;
   lastAgentMessage?: string;
   turnComplete?: boolean;
+  /** Collected only when the user asked for transcripts, and empty otherwise. */
+  transcript: SessionTranscriptEntry[];
 }
 
 /**
@@ -296,8 +368,8 @@ interface ParsedCodexRollout {
  * `task_complete` that nothing followed means the turn ended and the session is
  * holding for its developer; a `task_started` means it is still running.
  */
-function parseCodexRolloutTail(tail: string): ParsedCodexRollout {
-  const parsed: ParsedCodexRollout = {};
+function parseCodexRolloutTail(tail: string, includeTranscript: boolean): ParsedCodexRollout {
+  const parsed: ParsedCodexRollout = { transcript: [] };
   const lines = tail.split(/\r?\n/);
   for (const line of lines) {
     const record = recordFromJsonLine(line);
@@ -323,11 +395,13 @@ function parseCodexRolloutTail(tail: string): ParsedCodexRollout {
       }
       continue;
     }
-    if (
-      record.type === CODEX_ROLLOUT_TYPE.RESPONSE_ITEM &&
-      payload.type === CODEX_RESPONSE_PAYLOAD.FUNCTION_CALL
-    ) {
+    if (record.type !== CODEX_ROLLOUT_TYPE.RESPONSE_ITEM) continue;
+    if (payload.type === CODEX_RESPONSE_PAYLOAD.FUNCTION_CALL) {
       parsed.activity = activityFromCall(payload) ?? parsed.activity;
+    }
+    if (includeTranscript) {
+      const entry = transcriptFromResponseItem(payload);
+      if (entry) appendTranscriptEntry(parsed.transcript, entry);
     }
   }
   return parsed;
@@ -534,6 +608,7 @@ function observationFromThreadRow(
     observedAt,
     ...(rollout?.lastAgentMessage ? { summary: rollout.lastAgentMessage } : {}),
     detail: detailFromRow(row, rollout),
+    ...(rollout && rollout.transcript.length > 0 ? { transcript: rollout.transcript } : {}),
   };
 }
 
@@ -552,8 +627,10 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
   readonly #maximumSessionAgeMs: number;
   readonly #activeSessionFreshnessMs: number;
   readonly #sqlite: SqliteModuleLoader;
+  readonly #readTranscript: TranscriptGate | undefined;
 
   constructor(options: CodexAdapterOptions = {}) {
+    this.#readTranscript = options.readTranscript;
     this.#codexHome = options.codexHome ?? defaultCodexHome();
     this.#sqliteHome = options.sqliteHome;
     this.#now = options.now ?? Date.now;
@@ -573,6 +650,7 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
   }
 
   async observe(): Promise<readonly ProviderSessionObservation[]> {
+    const includeTranscript = await transcriptsRequested(this.#readTranscript);
     for (const databasePath of await stateDatabasePaths(this.#codexHome, this.#sqliteHome)) {
       const database = await openReadOnlyDatabase(this.#sqlite, databasePath);
       if (!database) continue;
@@ -594,7 +672,7 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
 
       // The rollout read happens with the database already closed, so a slow
       // disk never holds a read lock on state Codex itself is writing.
-      const rollouts = await this.#rollouts(rows);
+      const rollouts = await this.#rollouts(rows, includeTranscript);
       return rows
         .map((row) =>
           observationFromThreadRow(
@@ -616,7 +694,10 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
    * thread has already settled, and the cap keeps a crowded day from turning
    * one observation pass into dozens of file reads.
    */
-  async #rollouts(rows: readonly CodexThreadRow[]): Promise<Map<string, ParsedCodexRollout>> {
+  async #rollouts(
+    rows: readonly CodexThreadRow[],
+    includeTranscript: boolean,
+  ): Promise<Map<string, ParsedCodexRollout>> {
     const candidates = rows
       .filter((row) => (numberFromRow(row, CODEX_THREAD_COLUMN.ARCHIVED) ?? 0) === 0)
       .slice(0, CODEX_ADAPTER_DEFAULTS.MAXIMUM_ROLLOUT_READS)
@@ -635,7 +716,7 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
           candidate.rolloutPath,
           CODEX_ADAPTER_DEFAULTS.READ_ROLLOUT_TAIL_BYTES,
         );
-        return [candidate.id, parseCodexRolloutTail(tail)] as const;
+        return [candidate.id, parseCodexRolloutTail(tail, includeTranscript)] as const;
       }),
     );
     return new Map(parsed);

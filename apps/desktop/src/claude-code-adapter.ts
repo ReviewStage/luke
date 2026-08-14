@@ -3,14 +3,18 @@ import path from "node:path";
 import {
   maximumSessionSummaryLength,
   maximumSessionTitleLength,
+  maximumTranscriptEntryLength,
   PROVIDER_ID,
   type ProviderSessionObservation,
   SESSION_STATUS,
   type SessionDetail,
   type SessionProvider,
   type SessionProviderAdapter,
+  type SessionTranscriptEntry,
+  TRANSCRIPT_ROLE,
 } from "@sidecar/core";
 import {
+  appendTranscriptEntry,
   discoverSessionFiles,
   LOCAL_ADAPTER_DEFAULTS,
   nonNegativeNumber,
@@ -21,7 +25,9 @@ import {
   recordFromJsonLine,
   type SessionFileCandidate,
   statDirectoryEntry,
+  type TranscriptGate,
   tailRecords,
+  transcriptsRequested,
   workspaceLabel,
 } from "./local-session-adapter";
 
@@ -105,6 +111,8 @@ export interface ClaudeCodeAdapterOptions {
   activeSessionFreshnessMs?: number;
   readTailBytes?: number;
   readHeadBytes?: number;
+  /** Off unless the user turned transcripts on; see `TranscriptGate`. */
+  readTranscript?: TranscriptGate;
 }
 
 interface ParsedClaudeSessionTail {
@@ -120,6 +128,8 @@ interface ParsedClaudeSessionTail {
   stopReason?: string;
   timestampMs?: number;
   usedTool?: boolean;
+  /** Collected only when the user asked for transcripts, and empty otherwise. */
+  transcript: SessionTranscriptEntry[];
 }
 
 function sessionIdFromFileName(fileName: string): string | undefined {
@@ -182,23 +192,92 @@ function contentBlocks(record: Record<string, unknown>): Record<string, unknown>
 }
 
 /**
- * Names the tool the assistant reached for, preferring whichever input says
- * what the call is for. `Bash: Run the macOS packaging check` is the line a
- * developer can act on; `Bash` alone is not.
+ * Names one call the assistant made, preferring whichever input says what the
+ * call is for. `Bash: Run the macOS packaging check` is the line a developer
+ * can act on; `Bash` alone is not.
  */
+function callPhrase(block: Record<string, unknown>, maximumLength: number): string | undefined {
+  if (block.type !== CLAUDE_CONTENT_TYPE.TOOL_USE) return undefined;
+  const name = text(block.name);
+  if (!name) return undefined;
+  const input = isRecord(block.input) ? block.input : {};
+  for (const key of CLAUDE_TOOL_INPUT_KEY) {
+    const detail = oneLine(text(input[key]), maximumLength);
+    if (detail) return `${name}: ${detail}`;
+  }
+  return name;
+}
+
+/** The call the row reports: the newest one this record made. */
 function activityFromAssistant(record: Record<string, unknown>): string | undefined {
   for (const block of contentBlocks(record).reverse()) {
-    if (block.type !== CLAUDE_CONTENT_TYPE.TOOL_USE) continue;
-    const name = text(block.name);
-    if (!name) continue;
-    const input = isRecord(block.input) ? block.input : {};
-    for (const key of CLAUDE_TOOL_INPUT_KEY) {
-      const detail = oneLine(text(input[key]), CLAUDE_ADAPTER_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH);
-      if (detail) return `${name}: ${detail}`;
-    }
-    return name;
+    const phrase = callPhrase(block, CLAUDE_ADAPTER_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH);
+    if (phrase) return phrase;
   }
   return undefined;
+}
+
+/**
+ * The words in one content block. Claude Code writes a plain string for a
+ * prompt typed at the terminal and a block list for everything else, so both
+ * shapes are read rather than only the one a given build happens to use.
+ */
+function blockText(block: Record<string, unknown>): string | undefined {
+  if (block.type === CLAUDE_CONTENT_TYPE.TEXT) return text(block.text);
+  if (block.type !== CLAUDE_CONTENT_TYPE.TOOL_RESULT) return undefined;
+  const content = block.content;
+  if (typeof content === "string") return text(content);
+  if (!Array.isArray(content)) return undefined;
+  return text(
+    content
+      .filter(isRecord)
+      .map((nested) => text(nested.text) ?? "")
+      .join(" "),
+  );
+}
+
+function messageText(record: Record<string, unknown>): string | undefined {
+  const message = record.message;
+  const content = isRecord(message) ? message.content : record.content;
+  if (typeof content === "string") return oneLine(text(content), maximumTranscriptEntryLength);
+  return oneLine(
+    text(
+      contentBlocks(record)
+        .map((block) => blockText(block) ?? "")
+        .join(" "),
+    ),
+    maximumTranscriptEntryLength,
+  );
+}
+
+/**
+ * What this record adds to the conversation, in the order Claude Code wrote it.
+ * An assistant turn can both say something and call a tool, and the two are
+ * separate lines because they are separate acts.
+ */
+function transcriptFromRecord(
+  record: Record<string, unknown>,
+  eventType: ClaudeEventType,
+): SessionTranscriptEntry[] {
+  if (eventType === CLAUDE_EVENT_TYPE.ASSISTANT) {
+    const entries: SessionTranscriptEntry[] = [];
+    for (const block of contentBlocks(record)) {
+      const spoken =
+        block.type === CLAUDE_CONTENT_TYPE.TEXT
+          ? oneLine(blockText(block), maximumTranscriptEntryLength)
+          : undefined;
+      if (spoken) entries.push({ role: TRANSCRIPT_ROLE.AGENT, text: spoken });
+      const called = callPhrase(block, maximumTranscriptEntryLength);
+      if (called) entries.push({ role: TRANSCRIPT_ROLE.TOOL, text: called });
+    }
+    return entries;
+  }
+  if (eventType !== CLAUDE_EVENT_TYPE.USER) return [];
+  const spoken = messageText(record);
+  if (!spoken) return [];
+  return [
+    { role: isToolResult(record) ? TRANSCRIPT_ROLE.TOOL : TRANSCRIPT_ROLE.USER, text: spoken },
+  ];
 }
 
 function stopReasonFromRecord(record: Record<string, unknown>): string | undefined {
@@ -274,7 +353,11 @@ function turnEnded(parsed: ParsedClaudeSessionTail): boolean {
 }
 
 /** Folds one record into the running picture of the session. */
-function readClaudeRecord(record: Record<string, unknown>, parsed: ParsedClaudeSessionTail): void {
+function readClaudeRecord(
+  record: Record<string, unknown>,
+  parsed: ParsedClaudeSessionTail,
+  includeTranscript: boolean,
+): void {
   parsed.cwd = cwdFromRecord(record) ?? parsed.cwd;
   parsed.branch = text(record.gitBranch) ?? parsed.branch;
   parsed.timestampMs = timestampFromRecord(record) ?? parsed.timestampMs;
@@ -299,6 +382,11 @@ function readClaudeRecord(record: Record<string, unknown>, parsed: ParsedClaudeS
 
   const eventType = eventTypeFromRecord(record);
   if (!eventType) return;
+  if (includeTranscript) {
+    for (const entry of transcriptFromRecord(record, eventType)) {
+      appendTranscriptEntry(parsed.transcript, entry);
+    }
+  }
   parsed.eventType = eventType;
   // Anything the session went on to do means it got past the failure it
   // recorded earlier, so a stale error must not outlive it.
@@ -333,9 +421,9 @@ function readClaudeRecord(record: Record<string, unknown>, parsed: ParsedClaudeS
     : (activityFromAssistant(record) ?? parsed.activity);
 }
 
-function parseClaudeSessionTail(tail: string): ParsedClaudeSessionTail {
-  const parsed: ParsedClaudeSessionTail = {};
-  for (const record of tailRecords(tail)) readClaudeRecord(record, parsed);
+function parseClaudeSessionTail(tail: string, includeTranscript: boolean): ParsedClaudeSessionTail {
+  const parsed: ParsedClaudeSessionTail = { transcript: [] };
+  for (const record of tailRecords(tail)) readClaudeRecord(record, parsed, includeTranscript);
   return parsed;
 }
 
@@ -421,6 +509,7 @@ function observationFromSessionFile(
     observedAt,
     ...(parsed.awaySummary ? { summary: parsed.awaySummary } : {}),
     detail: detailFromTail(parsed),
+    ...(parsed.transcript.length > 0 ? { transcript: parsed.transcript } : {}),
   };
 }
 
@@ -440,8 +529,10 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
   readonly #activeSessionFreshnessMs: number;
   readonly #readTailBytes: number;
   readonly #readHeadBytes: number;
+  readonly #readTranscript: TranscriptGate | undefined;
 
   constructor(options: ClaudeCodeAdapterOptions = {}) {
+    this.#readTranscript = options.readTranscript;
     this.#claudeHome = options.claudeHome ?? defaultClaudeHome();
     this.#now = options.now ?? Date.now;
     this.#maximumProjectDirectories = positiveInteger(
@@ -472,6 +563,7 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
 
   async observe(): Promise<readonly ProviderSessionObservation[]> {
     const now = this.#now();
+    const includeTranscript = await transcriptsRequested(this.#readTranscript);
     const candidates = await discoverSessionFiles({
       projectsDirectory: path.join(this.#claudeHome, CLAUDE_PROJECTS_DIRECTORY),
       maximumProjectDirectories: this.#maximumProjectDirectories,
@@ -483,7 +575,7 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
     for (const candidate of candidates) {
       if (now - candidate.mtimeMs > this.#maximumSessionAgeMs) continue;
       const tail = await readTail(candidate.filePath, this.#readTailBytes);
-      const parsed = parseClaudeSessionTail(tail);
+      const parsed = parseClaudeSessionTail(tail, includeTranscript);
       if (!parsed.aiTitle) {
         parsed.aiTitle = titleFromHead(await readHead(candidate.filePath, this.#readHeadBytes));
       }

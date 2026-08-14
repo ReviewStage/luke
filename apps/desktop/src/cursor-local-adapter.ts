@@ -2,14 +2,18 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  maximumTranscriptEntryLength,
   type ProviderSessionObservation,
   SESSION_STATUS,
   type SessionDetail,
   type SessionProviderAdapter,
   type SessionStatus,
+  type SessionTranscriptEntry,
+  TRANSCRIPT_ROLE,
 } from "@sidecar/core";
 import { CURSOR_PROVIDER } from "./cursor-adapter";
 import {
+  appendTranscriptEntry,
   type DirectoryEntry,
   discoverSessionFiles,
   fileStats,
@@ -20,7 +24,9 @@ import {
   readTail,
   readTextFile,
   type SessionFileCandidate,
+  type TranscriptGate,
   tailRecords,
+  transcriptsRequested,
   UNKNOWN_WORKSPACE_LABEL,
   workspaceLabel,
 } from "./local-session-adapter";
@@ -71,10 +77,19 @@ const CURSOR_TURN_STATUS = {
   ERROR: "error",
 } as const;
 
-/** Who a message record belongs to. Its content is never read. */
+/**
+ * Who a message record belongs to. Its content is read only for a user who
+ * turned transcripts on; everything else this adapter reports is read without
+ * ever opening a message.
+ */
 const CURSOR_ROLE = {
   ASSISTANT: "assistant",
   USER: "user",
+} as const;
+
+/** The content blocks a Cursor message is written from. */
+const CURSOR_CONTENT_TYPE = {
+  TEXT: "text",
 } as const;
 
 const CURSOR_LOCAL_ADAPTER_DEFAULTS = {
@@ -91,6 +106,8 @@ export interface CursorLocalAdapterOptions {
   maximumSessionAgeMs?: number;
   activeSessionFreshnessMs?: number;
   readTailBytes?: number;
+  /** Off unless the user turned transcripts on; see `TranscriptGate`. */
+  readTranscript?: TranscriptGate;
 }
 
 interface CursorTranscriptCandidate extends SessionFileCandidate {
@@ -233,6 +250,55 @@ function isMessageRecord(record: Record<string, unknown>): boolean {
   return Object.values(CURSOR_ROLE).some((knownRole) => knownRole === role);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/** Collapses the newlines and runs of spaces a bounded line cannot show. */
+function oneLine(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.replace(/\s+/gu, " ").trim();
+  if (!normalized) return undefined;
+  return normalized.length > maximumTranscriptEntryLength
+    ? `${normalized.slice(0, maximumTranscriptEntryLength - 1).trimEnd()}\u2026`
+    : normalized;
+}
+
+/** What one message said, from the text blocks Cursor wrote it as. */
+function messageText(record: Record<string, unknown>): string | undefined {
+  const message = record.message;
+  const content = isRecord(message) ? message.content : record.content;
+  if (typeof content === "string") return oneLine(content);
+  if (!Array.isArray(content)) return undefined;
+  return oneLine(
+    content
+      .filter(isRecord)
+      .filter((block) => block.type === CURSOR_CONTENT_TYPE.TEXT)
+      .map((block) => (typeof block.text === "string" ? block.text : ""))
+      .join(" "),
+  );
+}
+
+/**
+ * The conversation itself, oldest line first, for a user who asked for it.
+ * Cursor's records carry no timestamps, so the file's own order is the only
+ * account of what was said when.
+ */
+function transcriptFromTail(tail: string): SessionTranscriptEntry[] {
+  const entries: SessionTranscriptEntry[] = [];
+  for (const record of tailRecords(tail)) {
+    if (!isMessageRecord(record)) continue;
+    const spoken = messageText(record);
+    if (!spoken) continue;
+    const role =
+      record[CURSOR_RECORD_FIELD.ROLE] === CURSOR_ROLE.USER
+        ? TRANSCRIPT_ROLE.USER
+        : TRANSCRIPT_ROLE.AGENT;
+    appendTranscriptEntry(entries, { role, text: spoken });
+  }
+  return entries;
+}
+
 /**
  * How the newest turn ended, or nothing while one is still open. Cursor marks
  * the end of a turn explicitly, so an open turn is read from the absence of
@@ -294,8 +360,9 @@ function defaultWorkspaceStorageDirectory(): string {
 
 /**
  * Observes the Cursor sessions that run on this machine, from the transcripts
- * Cursor already writes for itself. It reads no message content, needs no
- * credential, and reports nothing that Cursor has not written down.
+ * Cursor already writes for itself. It needs no credential and reports nothing
+ * that Cursor has not written down. Message content is read only for a user who
+ * turned transcripts on, and never to describe a session.
  */
 export class CursorLocalSessionAdapter implements SessionProviderAdapter {
   readonly provider = CURSOR_PROVIDER;
@@ -308,8 +375,10 @@ export class CursorLocalSessionAdapter implements SessionProviderAdapter {
   readonly #maximumSessionAgeMs: number;
   readonly #activeSessionFreshnessMs: number;
   readonly #readTailBytes: number;
+  readonly #readTranscript: TranscriptGate | undefined;
 
   constructor(options: CursorLocalAdapterOptions = {}) {
+    this.#readTranscript = options.readTranscript;
     this.#cursorHome = options.cursorHome ?? defaultCursorHome();
     this.#workspaceLabels = new CursorWorkspaceLabels(
       options.workspaceStorageDirectory ?? defaultWorkspaceStorageDirectory(),
@@ -339,6 +408,7 @@ export class CursorLocalSessionAdapter implements SessionProviderAdapter {
 
   async observe(): Promise<readonly ProviderSessionObservation[]> {
     const now = this.#now();
+    const includeTranscript = await transcriptsRequested(this.#readTranscript);
     const candidates = (
       await discoverSessionFiles({
         projectsDirectory: path.join(this.#cursorHome, CURSOR_DIRECTORY.PROJECTS),
@@ -356,7 +426,10 @@ export class CursorLocalSessionAdapter implements SessionProviderAdapter {
     const observations = new Map<string, ProviderSessionObservation>();
     for (const candidate of candidates) {
       if (observations.has(candidate.providerSessionId)) continue;
-      observations.set(candidate.providerSessionId, await this.#observationFor(candidate, now));
+      observations.set(
+        candidate.providerSessionId,
+        await this.#observationFor(candidate, now, includeTranscript),
+      );
     }
     return [...observations.values()];
   }
@@ -370,12 +443,15 @@ export class CursorLocalSessionAdapter implements SessionProviderAdapter {
   async #observationFor(
     candidate: CursorTranscriptCandidate,
     now: number,
+    includeTranscript: boolean,
   ): Promise<ProviderSessionObservation> {
     const label = this.#workspaceLabels.label(candidate.projectDirectoryName);
     const tail = await readTail(candidate.filePath, this.#readTailBytes);
     const isFresh = now - candidate.mtimeMs <= this.#activeSessionFreshnessMs;
     const status = statusFromTurn(closedTurn(tail), isFresh);
+    const transcript = includeTranscript ? transcriptFromTail(tail) : [];
     return {
+      ...(transcript.length > 0 ? { transcript } : {}),
       providerSessionId: candidate.providerSessionId,
       title: label,
       status,

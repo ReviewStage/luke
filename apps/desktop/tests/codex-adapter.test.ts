@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
-import { SESSION_STATUS } from "@sidecar/core";
+import { SESSION_STATUS, TRANSCRIPT_ROLE } from "@sidecar/core";
 import { CODEX_PROVIDER, CodexSessionAdapter } from "../src/codex-adapter";
 
 const TEST_TIME = Date.parse("2026-08-11T23:45:00.000Z");
@@ -14,6 +14,14 @@ const TEST_CODEX_SOURCE = {
 } as const;
 const TEST_CODEX_MODEL_PROVIDER = {
   OPENAI_SSE: "openai_sse",
+} as const;
+const TEST_CODEX_MESSAGE_ROLE = {
+  ASSISTANT: "assistant",
+  USER: "user",
+} as const;
+const TEST_CODEX_CONTENT_TYPE = {
+  INPUT_TEXT: "input_text",
+  OUTPUT_TEXT: "output_text",
 } as const;
 const TEST_SQLITE_ERROR = {
   UNKNOWN_BUILTIN_MODULE: "ERR_UNKNOWN_BUILTIN_MODULE",
@@ -648,4 +656,63 @@ test("returns an empty snapshot when node sqlite is unavailable", async (t) => {
   });
 
   assert.deepEqual(await adapter.observe(), []);
+});
+
+test("reads what was said only for a user who asked for it", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const rolloutPath = path.join(codexHome, "rollout-transcript.jsonl");
+  await writeCodexState(codexHome, [
+    { id: "codex-transcript", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000, rolloutPath },
+  ]);
+  await writeRollout(rolloutPath, [
+    { type: "event_msg", payload: { type: "task_started" } },
+    {
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: TEST_CODEX_MESSAGE_ROLE.USER,
+        content: [{ type: TEST_CODEX_CONTENT_TYPE.INPUT_TEXT, text: "Ship the release." }],
+      },
+    },
+    {
+      type: "response_item",
+      payload: {
+        type: "function_call",
+        name: "exec_command",
+        arguments: '{"cmd":"pnpm test","workdir":"/Users/test/luke"}',
+      },
+    },
+    {
+      type: "response_item",
+      payload: { type: "function_call_output", output: { content: "24 tests passed" } },
+    },
+    {
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: TEST_CODEX_MESSAGE_ROLE.ASSISTANT,
+        content: [{ type: TEST_CODEX_CONTENT_TYPE.OUTPUT_TEXT, text: "Released 0.1.6." }],
+      },
+    },
+  ]);
+
+  const options = { codexHome, now: () => TEST_TIME, maximumSessionAgeMs: 60_000 };
+  // The same thread, read twice: the gate is the only difference between an
+  // observation that carries the conversation and one that never opened it.
+  const [without] = await new CodexSessionAdapter(options).observe();
+  const [carried] = await new CodexSessionAdapter({
+    ...options,
+    readTranscript: () => true,
+  }).observe();
+
+  assert.equal(without?.transcript, undefined);
+  assert.deepEqual(carried?.transcript, [
+    { role: TRANSCRIPT_ROLE.USER, text: "Ship the release." },
+    { role: TRANSCRIPT_ROLE.TOOL, text: "exec_command: pnpm test" },
+    { role: TRANSCRIPT_ROLE.TOOL, text: "24 tests passed" },
+    { role: TRANSCRIPT_ROLE.AGENT, text: "Released 0.1.6." },
+  ]);
+  // What Luke describes the session with is the same either way.
+  assert.deepEqual(carried?.detail, without?.detail);
+  assert.equal(carried?.status, without?.status);
 });

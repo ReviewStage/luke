@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 import { pathToFileURL } from "node:url";
-import { SESSION_STATUS } from "@sidecar/core";
+import { SESSION_STATUS, TRANSCRIPT_ROLE } from "@sidecar/core";
 import { CURSOR_PROVIDER } from "../src/cursor-adapter";
 import { CursorLocalSessionAdapter } from "../src/cursor-local-adapter";
 
@@ -147,6 +147,7 @@ function adapterFor(
     maximumProjectDirectories?: number;
     maximumSessionFiles?: number;
     readTailBytes?: number;
+    readTranscript?: () => boolean;
   } = {},
 ): CursorLocalSessionAdapter {
   return new CursorLocalSessionAdapter({
@@ -187,6 +188,36 @@ test("observes an open turn as work, labelled by its folder and free of transcri
   // local once the registry normalizes it.
   assert.equal(observations[0]?.location, undefined);
   assert.equal(JSON.stringify(observations).includes(SECRET_TRANSCRIPT_TEXT), false);
+});
+
+test("reads what was said only for a user who asked for it", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "0b1f4b0e-2c5a-4d1e-9a3c-6d5f7e8a9b0c",
+    [
+      messageRecord(TEST_ROLE.USER, TEST_CONTENT_TYPE.TEXT),
+      messageRecord(TEST_ROLE.ASSISTANT, TEST_CONTENT_TYPE.TEXT),
+    ],
+    TEST_TIME - 5_000,
+  );
+
+  // The same state, read twice: the gate is the only difference between an
+  // observation that carries the conversation and one that never opened it.
+  const withoutTranscripts = await adapterFor(state).observe();
+  const withTranscripts = await adapterFor(state, { readTranscript: () => true }).observe();
+
+  assert.equal(withoutTranscripts[0]?.transcript, undefined);
+  assert.deepEqual(withTranscripts[0]?.transcript, [
+    { role: TRANSCRIPT_ROLE.USER, text: SECRET_TRANSCRIPT_TEXT },
+    { role: TRANSCRIPT_ROLE.AGENT, text: SECRET_TRANSCRIPT_TEXT },
+  ]);
+  // Turning it on widens what the row may show and nothing else: the fields
+  // Luke describes a session with are the same either way.
+  assert.deepEqual(withTranscripts[0]?.detail, withoutTranscripts[0]?.detail);
+  assert.equal(withTranscripts[0]?.summary, undefined);
 });
 
 test("tells a turn that finished from one that failed", async (t) => {

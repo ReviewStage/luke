@@ -253,6 +253,7 @@ test("keeps both keys when two providers are saved at once", async (t) => {
       [FIRST_CLOUD]: sealed("first-cloud-key"),
       [SECOND_CLOUD]: sealed("second-cloud-key"),
     },
+    localTranscripts: false,
   });
   const reopened = storeIn(directory, { providers: TEST_PROVIDERS });
   assert.equal(await reopened.readApiKey(FIRST_CLOUD), "first-cloud-key");
@@ -448,6 +449,7 @@ test("keeps a Conductor key stored by an earlier version working", async (t) => 
   assert.deepEqual(persisted, {
     version: 2,
     apiKeys: { [CONDUCTOR]: sealed("conductor-replacement-key") },
+    localTranscripts: false,
   });
   assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), "conductor-replacement-key");
 });
@@ -466,6 +468,7 @@ test("carries a key belonging to a provider this build does not know", async (t)
   assert.deepEqual(persisted, {
     version: 2,
     apiKeys: { "later-cloud": sealed("later-cloud-key"), [CONDUCTOR]: sealed(TEST_API_KEY) },
+    localTranscripts: false,
   });
 });
 
@@ -478,4 +481,36 @@ test("recovers from a corrupt settings file", async (t) => {
 
   assert.equal(settings.credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.ENCRYPTED_FILE);
   assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
+});
+
+test("reads local transcripts only after the user turns them on", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  // Nothing on disk yet, so the answer is the one that reads nothing.
+  assert.equal(await store.readLocalTranscripts(), false);
+  assert.equal((await store.snapshot()).localTranscripts, false);
+
+  const enabled = await store.setLocalTranscripts(true);
+
+  assert.equal(enabled.localTranscripts, true);
+  // The choice outlives the window it was made in.
+  assert.equal(await storeIn(directory).readLocalTranscripts(), true);
+  // Writing a key is not a way to change it.
+  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
+  assert.equal(await storeIn(directory).readLocalTranscripts(), true);
+
+  await store.setLocalTranscripts(false);
+  assert.equal(await storeIn(directory).readLocalTranscripts(), false);
+  assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), TEST_API_KEY);
+});
+
+test("a settings file written before transcripts existed reads as off", async (t) => {
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({ version: 2, apiKeys: { [CONDUCTOR]: sealed(TEST_API_KEY) } }),
+  );
+
+  assert.equal(await storeIn(directory).readLocalTranscripts(), false);
 });

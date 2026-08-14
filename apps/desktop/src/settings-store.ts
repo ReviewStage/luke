@@ -25,6 +25,7 @@ const SETTINGS_FILE_MODE = 0o600;
 const SETTINGS_FIELD = {
   API_KEYS: "apiKeys",
   LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
+  LOCAL_TRANSCRIPTS: "localTranscripts",
   VERSION: "version",
 } as const;
 
@@ -65,6 +66,13 @@ interface PersistedSettings {
    * through untouched so an older build cannot discard a newer one's key.
    */
   apiKeys: Readonly<Record<string, string>>;
+  /**
+   * Whether the local observers may read what a session actually said. Stored
+   * as a plain flag because it is a preference rather than a secret, and false
+   * whenever the file does not say otherwise — an install that has never been
+   * asked has not consented.
+   */
+  localTranscripts: boolean;
 }
 
 interface ResolvedApiKey {
@@ -140,6 +148,7 @@ function parsePersistedSettings(source: string): PersistedSettings {
   return {
     version: typeof version === "number" ? version : SETTINGS_FILE_VERSION,
     apiKeys: storedApiKeys(record),
+    localTranscripts: record[SETTINGS_FIELD.LOCAL_TRANSCRIPTS] === true,
   };
 }
 
@@ -180,6 +189,7 @@ export class SettingsStore {
       // its own: a snapshot is taken on every launch, and most of them are for
       // a user with no key to protect.
       secretStorage: this.#secretStorage,
+      localTranscripts: (await this.#load()).localTranscripts,
     };
   }
 
@@ -192,6 +202,31 @@ export class SettingsStore {
     const provider = this.#providers.find((candidate) => candidate.id === providerId);
     if (!provider) return undefined;
     return (await this.#resolveApiKey(provider)).apiKey;
+  }
+
+  /**
+   * Main-process only: whether the local observers may read message content.
+   * Asked once per observation pass, so it answers from the settings already
+   * loaded rather than re-reading the file.
+   */
+  async readLocalTranscripts(): Promise<boolean> {
+    return (await this.#load()).localTranscripts;
+  }
+
+  /**
+   * Turns transcript reading on or off. Nothing already observed is rewritten:
+   * turning it off stops the next pass from reading message content, and the
+   * pass after that replaces every session with one that carries none.
+   */
+  async setLocalTranscripts(enabled: boolean): Promise<AppSettings> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (persisted.localTranscripts === enabled) return;
+      const next: PersistedSettings = { ...persisted, localTranscripts: enabled };
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+    });
+    return this.snapshot();
   }
 
   /**
@@ -225,7 +260,11 @@ export class SettingsStore {
       const apiKeys = { ...persisted.apiKeys };
       if (ciphertext) apiKeys[providerId] = ciphertext;
       else delete apiKeys[providerId];
-      const next: PersistedSettings = { version: SETTINGS_FILE_VERSION, apiKeys };
+      const next: PersistedSettings = {
+        version: SETTINGS_FILE_VERSION,
+        apiKeys,
+        localTranscripts: persisted.localTranscripts,
+      };
       await this.#write(next);
       this.#loading = Promise.resolve(next);
       this.#resolved.delete(providerId);
@@ -318,7 +357,11 @@ export class SettingsStore {
       if (!canIgnoreFilesystemError(error)) throw error;
     }
 
-    let persisted: PersistedSettings = { version: SETTINGS_FILE_VERSION, apiKeys: {} };
+    let persisted: PersistedSettings = {
+      version: SETTINGS_FILE_VERSION,
+      apiKeys: {},
+      localTranscripts: false,
+    };
     if (source) {
       try {
         persisted = parsePersistedSettings(source);
