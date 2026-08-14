@@ -82,6 +82,7 @@ import {
 } from "./session-model";
 import { SESSION_OPTIONS_BUTTON_ID, SESSION_OPTIONS_ID } from "./session-parts";
 import { SETTING_PAGE, SETTINGS_VIEW, type SettingsView } from "./settings-views";
+import { panelEntryOpen, usePanelEntry } from "./use-panel-entry";
 import { useVoiceConversation } from "./use-voice-conversation";
 import {
   outputSilent,
@@ -272,8 +273,6 @@ export function App(): React.JSX.Element {
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [settings, setSettings] = useState<AppSettings>();
   const [errand, setErrand] = useState<Errand>();
-  const [entry, setEntry] = useState<CredentialEntry>();
-  const [feedback, setFeedback] = useState<FeedbackEntry>();
   const [feedbackNotice, setFeedbackNotice] = useState<string>();
   // Counts for nothing except having changed: each tick re-renders the rows so
   // their "how long ago" labels stay honest while they are on screen.
@@ -316,7 +315,13 @@ export function App(): React.JSX.Element {
   const hoverTimer = useRef<number | undefined>(undefined);
   const presentationRef = useRef<PanelPresentation>(PANEL_PRESENTATION.CAPSULE);
   const tabRef = useRef<PanelTab>(PANEL_TAB.SESSIONS);
-  const entryRef = useRef<CredentialEntry | undefined>(undefined);
+  /**
+   * Whether a composer is held, mirrored for the presentation cluster: a
+   * capsule close keeps the settings tab for a half-written key or note, and
+   * the pointer holds the panel open for a credential still on screen.
+   */
+  const credentialHeld = useRef(false);
+  const feedbackHeld = useRef(false);
   /**
    * Whether the caret is in the ask field. It holds the panel open against the
    * pointer the way a credential entry does, and for the same reason: the
@@ -324,7 +329,6 @@ export function App(): React.JSX.Element {
    * middle of typing.
    */
   const askEngaged = useRef(false);
-  const feedbackRef = useRef<FeedbackEntry | undefined>(undefined);
   const feedbackNoticeTimer = useRef<number | undefined>(undefined);
   /**
    * The words a spoken open asked to start the note with, waiting for the
@@ -459,7 +463,7 @@ export function App(): React.JSX.Element {
       // it resets either way.
       if (next === PANEL_PRESENTATION.CAPSULE) {
         setSessionView(DEFAULT_SESSION_VIEW);
-        if (entryRef.current === undefined && feedbackRef.current === undefined) {
+        if (!credentialHeld.current && !feedbackHeld.current) {
           changeTab(PANEL_TAB.SESSIONS);
         }
       }
@@ -554,7 +558,7 @@ export function App(): React.JSX.Element {
    * showing nothing but sessions.
    */
   const entryIsDrawn = useCallback(
-    () => entryRef.current !== undefined && tabRef.current === PANEL_TAB.SETTINGS,
+    () => credentialHeld.current && tabRef.current === PANEL_TAB.SETTINGS,
     [],
   );
 
@@ -606,23 +610,6 @@ export function App(): React.JSX.Element {
   );
 
   /**
-   * The single place an entry changes. A key being entered holds the panel open
-   * against the pointer, so ending one has to release that hold: an entry that
-   * ends while the pointer is already away — Escape out of the field, say —
-   * would otherwise leave the panel held open by nothing, because the pointer
-   * cannot leave a second time.
-   */
-  const applyEntry = useCallback(
-    (next: CredentialEntry | undefined) => {
-      const released = entryRef.current !== undefined && next === undefined;
-      entryRef.current = next;
-      setEntry(next);
-      if (released && !pointerInside.current) handleHitRegionLeave();
-    },
-    [handleHitRegionLeave],
-  );
-
-  /**
    * Brings the panel back around the line the entry belongs to, and leaves it
    * open the way every other way of opening it does — the pointer closes it by
    * visiting and leaving.
@@ -637,6 +624,17 @@ export function App(): React.JSX.Element {
     void changeMode(true);
   }, [changeMode, changeTab]);
 
+  const settlePanel = useCallback(() => {
+    hoverTimer.current = window.setTimeout(() => {
+      hoverTimer.current = undefined;
+      if (presentationRef.current === PANEL_PRESENTATION.PANEL) void changeMode(false);
+    }, SETTLE_DELAY_MS);
+  }, [changeMode]);
+
+  const leavePanel = useCallback(() => {
+    void changeMode(false);
+  }, [changeMode]);
+
   /**
    * Asking to write a key is asking for one thing, so the panel gets out of the
    * way of it: the shape goes down to the slot, which is the field and nothing
@@ -644,27 +642,31 @@ export function App(): React.JSX.Element {
    * stored key being replaced, or one standing in front of the environment's —
    * because they are all the same act.
    */
+  const credentialsEntry = usePanelEntry<CredentialEntry>({
+    aside: PANEL_PRESENTATION.SLOT,
+    restoresPanel: (held) => held.away !== true,
+    isSendable: isSubmittable,
+    send: async (sending) => {
+      const result = await window.sidecar.setProviderApiKey(sending.providerId, sending.draft);
+      setSettings(result.settings);
+      return result.reason ? { rejection: result.reason } : {};
+    },
+    pointerInside: () => pointerInside.current,
+    presentation: () => presentationRef.current,
+    onReleasedWhileAway: handleHitRegionLeave,
+    cancelHover: cancelHoverTransition,
+    applyPresentation,
+    restorePanel,
+    leave: leavePanel,
+    settle: settlePanel,
+    heldRef: credentialHeld,
+  });
+
   const beginEntry = useCallback(
     (providerId: CredentialProviderId) => {
-      applyEntry({ providerId, draft: "", busy: false, away: false });
-      cancelHoverTransition();
-      applyPresentation(PANEL_PRESENTATION.SLOT);
+      credentialsEntry.begin({ providerId, draft: "", busy: false, away: false });
     },
-    [applyEntry, applyPresentation, cancelHoverTransition],
-  );
-
-  const changeEntry = useCallback(
-    (draft: string) => {
-      const current = entryRef.current;
-      // A key being written is not a moment to change the entry: the reply on
-      // its way back is answering the entry that was sent, and it is recognised
-      // by being that same entry. Nothing may replace it underneath but ending
-      // it outright, which is a decision to stop listening for the reply.
-      if (!current || current.busy) return;
-      // Typing again answers the refusal, so the refusal goes.
-      applyEntry({ ...current, draft, rejection: undefined });
-    },
-    [applyEntry],
+    [credentialsEntry.begin],
   );
 
   /**
@@ -675,66 +677,17 @@ export function App(): React.JSX.Element {
    * panel is only stood down if the link was pressed from inside it.
    */
   const fetchKey = useCallback(() => {
-    const current = entryRef.current;
+    const current = credentialsEntry.latest();
     // Same rule as typing: the key on its way to the store is what the entry is
     // for, and going to fetch another one is not a reason to disturb it. Both
     // views disable the link while it is in flight, so this is the floor rather
     // than the answer.
-    if (!current || current.busy) return;
+    if (!panelEntryOpen(current)) return;
     window.sidecar.openProviderApiKeys(current.providerId);
-    applyEntry({ ...current, away: true });
+    credentialsEntry.apply({ ...current, away: true });
     if (presentationRef.current === PANEL_PRESENTATION.SLOT) return;
-    cancelHoverTransition();
-    applyPresentation(PANEL_PRESENTATION.SLOT);
-  }, [applyEntry, applyPresentation, cancelHoverTransition]);
-
-  const cancelEntry = useCallback(() => {
-    const away = entryRef.current?.away === true;
-    const aside = presentationRef.current === PANEL_PRESENTATION.SLOT;
-    applyEntry(undefined);
-    if (!aside) return;
-    // Giving up returns you where you were. If the key page was opened, that is
-    // the browser, and Luke leaves; if it was not, it is the panel this entry
-    // was started from.
-    if (away) void changeMode(false);
-    else restorePanel();
-  }, [applyEntry, changeMode, restorePanel]);
-
-  const commitEntry = useCallback(() => {
-    const current = entryRef.current;
-    if (!isSubmittable(current)) return;
-    const sending = { ...current, busy: true, rejection: undefined };
-    applyEntry(sending);
-    void window.sidecar.setProviderApiKey(current.providerId, current.draft).then((result) => {
-      // The store changed either way, so the sources are always taken.
-      setSettings(result.settings);
-      // Whoever is entering a key now is not necessarily whoever sent this one:
-      // Escape reaches the slot while a save is in flight, and so does another
-      // provider's Connect. A reply that outlived its own entry is spent.
-      if (entryRef.current !== sending) return;
-      if (result.reason) {
-        applyEntry({ ...sending, busy: false, rejection: result.reason });
-        return;
-      }
-      applyEntry(undefined);
-      // Saved from the slot: the whole panel comes back around the provider
-      // that is now connected, because the check appearing beside its name is
-      // the answer to what was just done.
-      if (presentationRef.current !== PANEL_PRESENTATION.SLOT) return;
-      restorePanel();
-      // An answer is worth reading and then done with. The pointer is usually
-      // still on the button that was pressed, and where it is not — the key was
-      // sent from the keyboard, or the shape shrank out from under it — nothing
-      // else would ever ask this panel to close, so it shows the answer and then
-      // takes its leave. Nothing else restores the panel this way: giving up has
-      // no answer to show.
-      if (pointerInside.current) return;
-      hoverTimer.current = window.setTimeout(() => {
-        hoverTimer.current = undefined;
-        if (presentationRef.current === PANEL_PRESENTATION.PANEL) void changeMode(false);
-      }, SETTLE_DELAY_MS);
-    });
-  }, [applyEntry, changeMode, restorePanel]);
+    credentialsEntry.standDown();
+  }, [credentialsEntry.apply, credentialsEntry.latest, credentialsEntry.standDown]);
 
   const removeProviderApiKey = useCallback(
     async (providerId: CredentialProviderId) => {
@@ -743,11 +696,23 @@ export function App(): React.JSX.Element {
       // Delete and the field are on the row together once the panel has been
       // brought back around an entry, and a key that has been removed cannot be
       // replaced.
-      if (removalEndsEntry(entryRef.current, providerId, result.reason)) applyEntry(undefined);
+      if (removalEndsEntry(credentialsEntry.latest(), providerId, result.reason)) {
+        credentialsEntry.apply(undefined);
+      }
       return result.reason;
     },
-    [applyEntry],
+    [credentialsEntry.apply, credentialsEntry.latest],
   );
+
+  const credentials: CredentialEntryControl = {
+    entry: credentialsEntry.entry,
+    begin: beginEntry,
+    change: (draft) => credentialsEntry.patch({ draft }),
+    fetchKey,
+    cancel: credentialsEntry.cancel,
+    commit: credentialsEntry.commit,
+    remove: removeProviderApiKey,
+  };
 
   /** Shows or hides the menu bar status item. */
   const changeShowInMenuBar = useCallback(
@@ -807,33 +772,11 @@ export function App(): React.JSX.Element {
     return [...names.entries()].map(([id, name]) => ({ id, name }));
   }, [workspaceProjects, storedWorkspaceProvider]);
 
-  const credentials: CredentialEntryControl = {
-    entry,
-    begin: beginEntry,
-    change: changeEntry,
-    fetchKey,
-    cancel: cancelEntry,
-    commit: commitEntry,
-    remove: removeProviderApiKey,
-  };
-
   /**
-   * The single place a feedback entry changes, for the same reason a
-   * credential's is: writing one holds the panel open against the pointer, so
-   * ending one has to release that hold — an entry that ends while the pointer
-   * is already away would otherwise leave the panel held open by nothing.
+   * Says a send landed, and stops saying it once it has been readable. Long
+   * enough to be read on the way back from the Send button, short enough that
+   * the line is gone before anyone wonders whether it is stuck.
    */
-  const applyFeedback = useCallback(
-    (next: FeedbackEntry | undefined) => {
-      const released = feedbackRef.current !== undefined && next === undefined;
-      feedbackRef.current = next;
-      setFeedback(next);
-      if (released && !pointerInside.current) handleHitRegionLeave();
-    },
-    [handleHitRegionLeave],
-  );
-
-  /** Says a send landed, and stops saying it once it has been readable. */
   const showFeedbackNotice = useCallback((notice: string) => {
     if (feedbackNoticeTimer.current !== undefined) {
       window.clearTimeout(feedbackNoticeTimer.current);
@@ -846,6 +789,41 @@ export function App(): React.JSX.Element {
   }, []);
 
   useEffect(() => () => window.clearTimeout(feedbackNoticeTimer.current), []);
+
+  const feedbackEntry = usePanelEntry<FeedbackEntry>({
+    aside: PANEL_PRESENTATION.FEEDBACK,
+    restoresPanel: (held) => held.fromPanel === true,
+    isSendable,
+    send: async (sending) => {
+      const name = sending.name.trim();
+      const email = sending.email.trim();
+      try {
+        const result = await window.sidecar.sendFeedback({
+          kind: sending.kind,
+          message: sending.message.trim(),
+          ...(name ? { name } : {}),
+          ...(email ? { email } : {}),
+          images: sending.images,
+        });
+        if (!result.delivered) {
+          return { rejection: result.reason ?? "Could not send that. Try again." };
+        }
+        return {};
+      } catch {
+        return { rejection: "Could not send that. Try again." };
+      }
+    },
+    onDelivered: () => showFeedbackNotice("Sent — thank you."),
+    pointerInside: () => pointerInside.current,
+    presentation: () => presentationRef.current,
+    onReleasedWhileAway: handleHitRegionLeave,
+    cancelHover: cancelHoverTransition,
+    applyPresentation,
+    restorePanel,
+    leave: leavePanel,
+    settle: settlePanel,
+    heldRef: feedbackHeld,
+  });
 
   /**
    * Opens the composer for a kind — from the section's own buttons, from the
@@ -861,17 +839,16 @@ export function App(): React.JSX.Element {
   const beginFeedback = useCallback(
     (kind: FeedbackKind, fromPanel: boolean, draft?: string): boolean => {
       setFeedbackNotice(undefined);
-      const opened = openedFeedbackEntry(feedbackRef.current, {
+      const opened = openedFeedbackEntry(feedbackEntry.latest(), {
         kind,
         fromPanel,
         ...(draft !== undefined ? { draft } : {}),
       });
-      if (opened.entry) applyFeedback(opened.entry);
-      cancelHoverTransition();
-      applyPresentation(PANEL_PRESENTATION.FEEDBACK);
+      if (opened.entry) feedbackEntry.apply(opened.entry);
+      feedbackEntry.standDown();
       return opened.drafted;
     },
-    [applyFeedback, applyPresentation, cancelHoverTransition],
+    [feedbackEntry.apply, feedbackEntry.latest, feedbackEntry.standDown],
   );
 
   /**
@@ -883,24 +860,9 @@ export function App(): React.JSX.Element {
    */
   const dismissFeedback = useCallback(() => {
     if (presentationRef.current !== PANEL_PRESENTATION.FEEDBACK) return;
-    if (feedbackRef.current?.fromPanel === true) restorePanel();
-    else void changeMode(false);
-  }, [changeMode, restorePanel]);
-
-  /**
-   * Every field writes through here, under the rule a credential's draft has:
-   * a note being sent is what the reply on its way back is answering, so
-   * nothing may change under it but ending it outright. Typing again answers
-   * the last refusal, so the refusal goes.
-   */
-  const changeFeedback = useCallback(
-    (patch: Partial<Pick<FeedbackEntry, "message" | "name" | "email">>) => {
-      const current = feedbackRef.current;
-      if (!current || current.busy) return;
-      applyFeedback({ ...current, ...patch, rejection: undefined });
-    },
-    [applyFeedback],
-  );
+    if (feedbackEntry.latest()?.fromPanel === true) restorePanel();
+    else leavePanel();
+  }, [feedbackEntry.latest, leavePanel, restorePanel]);
 
   /**
    * Takes picked or pasted files aboard. Encoding happens here on the user's
@@ -910,8 +872,8 @@ export function App(): React.JSX.Element {
    */
   const attachFeedbackImages = useCallback(
     async (files: readonly File[]) => {
-      const current = feedbackRef.current;
-      if (!current || current.busy) return;
+      const current = feedbackEntry.latest();
+      if (!panelEntryOpen(current)) return;
       const room = FEEDBACK_LIMITS.MAX_IMAGES - current.images.length;
       const taken = files.slice(0, Math.max(0, room));
       const encoded: FeedbackImage[] = [];
@@ -923,110 +885,42 @@ export function App(): React.JSX.Element {
       }
       // Read again after the awaits: typing meanwhile replaced the entry
       // object, and Cancel or a send may have ended it altogether.
-      const latest = feedbackRef.current;
-      if (!latest || latest.busy) return;
+      const latest = feedbackEntry.latest();
+      if (!panelEntryOpen(latest)) return;
       const rejection = refused
         ? IMAGE_REFUSAL.UNREADABLE
         : files.length > room
           ? IMAGE_REFUSAL.FULL
           : undefined;
-      applyFeedback({
+      feedbackEntry.apply({
         ...latest,
         images: [...latest.images, ...encoded].slice(0, FEEDBACK_LIMITS.MAX_IMAGES),
         rejection,
       });
     },
-    [applyFeedback],
+    [feedbackEntry.apply, feedbackEntry.latest],
   );
 
-  const removeFeedbackImage = useCallback(
-    (index: number) => {
-      const current = feedbackRef.current;
-      if (!current || current.busy) return;
-      applyFeedback({
+  const feedbackControl: FeedbackEntryControl = {
+    entry: feedbackEntry.entry,
+    ...(feedbackNotice ? { notice: feedbackNotice } : {}),
+    // The section's own buttons are the panel asking, so leaving returns there.
+    begin: (kind) => beginFeedback(kind, true),
+    changeMessage: (message) => feedbackEntry.patch({ message }),
+    changeName: (name) => feedbackEntry.patch({ name }),
+    changeEmail: (email) => feedbackEntry.patch({ email }),
+    attach: (files) => void attachFeedbackImages(files),
+    removeImage: (index) => {
+      const current = feedbackEntry.latest();
+      if (!panelEntryOpen(current)) return;
+      feedbackEntry.apply({
         ...current,
         images: current.images.filter((_, held) => held !== index),
       });
     },
-    [applyFeedback],
-  );
-
-  /** The one way a draft is discarded, and it is the user's own press. */
-  const cancelFeedback = useCallback(() => {
-    const aside = presentationRef.current === PANEL_PRESENTATION.FEEDBACK;
-    const fromPanel = feedbackRef.current?.fromPanel === true;
-    applyFeedback(undefined);
-    if (!aside) return;
-    // Giving up returns you where you were: the panel this was opened from,
-    // or — from the tray — out of the way entirely.
-    if (fromPanel) restorePanel();
-    else void changeMode(false);
-  }, [applyFeedback, changeMode, restorePanel]);
-
-  const commitFeedback = useCallback(() => {
-    const current = feedbackRef.current;
-    if (!isSendable(current)) return;
-    const sending: FeedbackEntry = { ...current, busy: true, rejection: undefined };
-    applyFeedback(sending);
-    const name = sending.name.trim();
-    const email = sending.email.trim();
-    void window.sidecar
-      .sendFeedback({
-        kind: sending.kind,
-        message: sending.message.trim(),
-        ...(name ? { name } : {}),
-        ...(email ? { email } : {}),
-        images: sending.images,
-      })
-      .then((result) => {
-        // A reply that outlived its own entry is spent, exactly as a
-        // credential's is: Cancel reaches the composer while a send is in
-        // flight, and so does beginning again.
-        if (feedbackRef.current !== sending) return;
-        if (!result.delivered) {
-          applyFeedback({
-            ...sending,
-            busy: false,
-            rejection: result.reason ?? "Could not send that. Try again.",
-          });
-          return;
-        }
-        // Sent from the shape: the whole panel comes back around the section
-        // that offered this, because the sent line under the offers is the
-        // answer to what was just done — the same restore a key saved from
-        // the slot gets. An answer is worth reading and then done with, so
-        // with the pointer away nothing else would ever ask this panel to
-        // close, and it shows the answer and then takes its leave.
-        feedbackRef.current = undefined;
-        setFeedback(undefined);
-        showFeedbackNotice("Sent — thank you.");
-        if (presentationRef.current === PANEL_PRESENTATION.FEEDBACK) restorePanel();
-        if (pointerInside.current) return;
-        cancelHoverTransition();
-        hoverTimer.current = window.setTimeout(() => {
-          hoverTimer.current = undefined;
-          if (presentationRef.current === PANEL_PRESENTATION.PANEL) void changeMode(false);
-        }, SETTLE_DELAY_MS);
-      })
-      .catch(() => {
-        if (feedbackRef.current !== sending) return;
-        applyFeedback({ ...sending, busy: false, rejection: "Could not send that. Try again." });
-      });
-  }, [applyFeedback, cancelHoverTransition, changeMode, restorePanel, showFeedbackNotice]);
-
-  const feedbackControl: FeedbackEntryControl = {
-    entry: feedback,
-    ...(feedbackNotice ? { notice: feedbackNotice } : {}),
-    // The section's own buttons are the panel asking, so leaving returns there.
-    begin: (kind) => beginFeedback(kind, true),
-    changeMessage: (message) => changeFeedback({ message }),
-    changeName: (name) => changeFeedback({ name }),
-    changeEmail: (email) => changeFeedback({ email }),
-    attach: (files) => void attachFeedbackImages(files),
-    removeImage: removeFeedbackImage,
     dismiss: dismissFeedback,
-    cancel: cancelFeedback,
-    commit: commitFeedback,
+    cancel: feedbackEntry.cancel,
+    commit: feedbackEntry.commit,
   };
 
   // The row marks the voice the main process reports rather than the one just
@@ -1266,7 +1160,7 @@ export function App(): React.JSX.Element {
         // nothing here sends: the note leaves only by the Send button's own
         // press.
         const kind = FEEDBACK_KIND_FOR_COMPOSER[action.composer];
-        const drafted = openedFeedbackEntry(feedbackRef.current, {
+        const drafted = openedFeedbackEntry(feedbackEntry.latest(), {
           kind,
           fromPanel: false,
           ...(action.draft === undefined ? {} : { draft: action.draft }),
@@ -1335,7 +1229,16 @@ export function App(): React.JSX.Element {
         ...(action.sort ? { sort: action.sort } : {}),
       };
     },
-    [changeMode, changeTab, settings, settingsView, bootstrap, releaseErrandChange, runErrand],
+    [
+      changeMode,
+      changeTab,
+      settings,
+      settingsView,
+      bootstrap,
+      releaseErrandChange,
+      runErrand,
+      feedbackEntry.latest,
+    ],
   );
 
   const defaultWorkspaceProvider = (settings ?? bootstrap?.settings)?.defaultWorkspaceProvider;
@@ -1631,7 +1534,7 @@ export function App(): React.JSX.Element {
       // happens to be: the slot is the only thing on screen, so there is nothing
       // else it could mean.
       if (presentation === PANEL_PRESENTATION.SLOT) {
-        cancelEntry();
+        credentialsEntry.cancel();
         return;
       }
       // Escape out of the composer leaves the shape and keeps the draft: a
@@ -1654,7 +1557,7 @@ export function App(): React.JSX.Element {
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [
-    cancelEntry,
+    credentialsEntry.cancel,
     changeMode,
     changeTab,
     dismissFeedback,
@@ -1768,7 +1671,9 @@ export function App(): React.JSX.Element {
   // What the slot's field is for depends on what answers for that provider now,
   // and settings resolve after the first render.
   const slotSource =
-    entry && settings ? settings.credentialSources[entry.providerId] : CREDENTIAL_SOURCE.NONE;
+    credentialsEntry.entry && settings
+      ? settings.credentialSources[credentialsEntry.entry.providerId]
+      : CREDENTIAL_SOURCE.NONE;
 
   return (
     <div
