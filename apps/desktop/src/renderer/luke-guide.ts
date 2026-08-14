@@ -32,9 +32,17 @@ import {
   REALTIME_VOICE_SPEED,
   type RealtimeVoiceSpeed,
 } from "@sidecar/core";
-import type { AppBridge, AppSettings, MicrophoneStatus } from "../shared/contracts";
+import type {
+  AppBridge,
+  AppSettings,
+  CredentialSource,
+  MicrophoneStatus,
+} from "../shared/contracts";
 import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "../shared/contracts";
-import { CREDENTIAL_PROVIDER_LIST } from "../shared/credential-providers";
+import {
+  CLOUD_AGENT_PROVIDER_LIST,
+  INTEGRATION_PROVIDER_LIST,
+} from "../shared/credential-providers";
 
 /** The ids a spoken change names Luke's settings by. */
 export const APP_SETTING_ID = {
@@ -232,23 +240,40 @@ const MICROPHONE_DETAIL: Record<MicrophoneStatus, string> = {
   unknown: "Unknown. The Settings tab's Permissions section shows its state.",
 };
 
+/** The same three answers a credential row gives, in words a fact can carry. */
+function connectionWord(source: CredentialSource): string {
+  return source === CREDENTIAL_SOURCE.NONE
+    ? "not connected"
+    : source === CREDENTIAL_SOURCE.ENVIRONMENT
+      ? "connected from the environment"
+      : "connected";
+}
+
 function providersFact(settings: AppSettings): AppGuideFact {
-  const roster = CREDENTIAL_PROVIDER_LIST.map((provider) => {
-    const source = settings.credentialSources[provider.id];
-    const connected =
-      source === CREDENTIAL_SOURCE.NONE
-        ? "not connected"
-        : source === CREDENTIAL_SOURCE.ENVIRONMENT
-          ? "connected from the environment"
-          : "connected";
-    return `${provider.displayName} (${connected})`;
-  });
+  const roster = CLOUD_AGENT_PROVIDER_LIST.map(
+    (provider) =>
+      `${provider.displayName} (${connectionWord(settings.credentialSources[provider.id])})`,
+  );
   return {
     label: "Cloud providers",
     detail:
       `${roster.join(", ")}. Connecting one takes its API key, typed by hand into ${SETTINGS_TAB} ` +
-      "on the provider's row — never spoken, and never repeated back. Local providers such as " +
-      "Claude Code need no key and are observed on their own.",
+      "under Cloud Agent API keys — never spoken, and never repeated back. Local providers such " +
+      "as Claude Code need no key and are observed on their own.",
+  };
+}
+
+function integrationsFact(settings: AppSettings): AppGuideFact {
+  const roster = INTEGRATION_PROVIDER_LIST.map(
+    (provider) =>
+      `${provider.displayName} (${connectionWord(settings.credentialSources[provider.id])})`,
+  );
+  return {
+    label: "Integrations",
+    detail:
+      `${roster.join(", ")}. Connecting Linear lets Luke read the developer's issues and, only ` +
+      `when asked in a turn the developer opened, move or comment on one. Its key is typed by ` +
+      `hand into ${SETTINGS_TAB} under Integrations — never spoken, and never repeated back.`,
   };
 }
 
@@ -273,8 +298,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "Two tabs. Sessions lists every observed session with its state, narrowable to all, local, " +
         "cloud, or one provider, and orderable by urgency (what needs the developer first) or " +
         "recency (what moved last first); a row can be opened, messaged, or controlled where its " +
-        "provider allows. Settings holds the preferences, the talk and ask keys, the cloud API " +
-        "keys, permissions, and Quit.",
+        "provider allows. Settings holds the preferences, the talk and ask keys, the cloud " +
+        "agent API keys, the integrations, permissions, and Quit.",
     },
     talkKeyFact(input.hotkey),
     askKeyFact(input.askKey),
@@ -289,6 +314,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
           },
         ]),
     providersFact(input.settings),
+    integrationsFact(input.settings),
     ...(input.settings.secretStorage === SECRET_STORAGE.UNAVAILABLE
       ? [
           {
