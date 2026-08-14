@@ -132,7 +132,7 @@ const TRAVEL_EPSILON = 0.5;
  * motion: capture zeroes the tokens outright and reduced motion leaves 1ms so
  * transitions still fire their end events. Neither wants an animation started.
  */
-const STILL_MS = 2;
+export const STILL_MS = 2;
 
 /** "460ms" or "0.46s" from a computed token, taken as milliseconds. */
 export function parseMilliseconds(value: string): number {

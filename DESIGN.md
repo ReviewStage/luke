@@ -15,8 +15,13 @@ and delays come only from the tokens in `base.css` (`--duration-shape`,
 `--duration-exit`, `--duration-quick`, `--duration-fast`, `--expand-delay`,
 `--peek-delay`, `--slot-delay`, `--row-stagger`). Never write a literal
 millisecond into a rule: reduced motion and capture runs zero the tokens, and
-a literal is a motion those runs cannot stop. A main-process constant that
-mirrors a CSS total (`COLLAPSE_ANIMATION_MS`) names the tokens it mirrors.
+a literal is a motion those runs cannot stop. The one sanctioned exception is
+an endless loop — a spinner, a breathing idle, the face's own motions — whose
+`animation-play-state` answers `--loop-motion` or `--face-motion`: those runs
+stop it by pausing rather than by zeroing, so its duration may be a literal,
+and a loop that carries one must answer a play-state token. A main-process
+constant that mirrors a CSS total (`COLLAPSE_ANIMATION_MS`) names the tokens
+it mirrors.
 
 ## The surface owns size; everything else owns transform and opacity
 

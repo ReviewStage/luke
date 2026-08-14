@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { usePrefersReducedMotion } from "./luke-face-mood";
 
 /**
  * Five, because the meter is as wide as the face it is drawn beside or in place
@@ -46,6 +47,10 @@ export function Waveform({
   const bars = useRef<Array<HTMLSpanElement | null>>([]);
   const report = useRef(onVoiceActivity);
   report.current = onVoiceActivity;
+  // Reduced motion stills the bars but not the listening: the loop keeps
+  // measuring and reporting — whether someone is speaking is a fact the wing
+  // and the face both act on — and only the per-frame drawing is withheld.
+  const reduced = usePrefersReducedMotion();
 
   useEffect(() => {
     // Fixture speech is intentionally static so screenshots and recordings are
@@ -73,14 +78,21 @@ export function Waveform({
         wasSpeaking = nextSpeaking;
         report.current?.(wasSpeaking);
       }
-      bars.current.forEach((bar, index) => {
-        if (!bar) return;
-        const variation = 0.72 + Math.sin(frame / 9 + index * 0.9) * 0.18;
-        bar.style.transform = `scaleY(${0.2 + rms * variation})`;
-      });
+      if (!reduced) {
+        bars.current.forEach((bar, index) => {
+          if (!bar) return;
+          const variation = 0.72 + Math.sin(frame / 9 + index * 0.9) * 0.18;
+          bar.style.transform = `scaleY(${0.2 + rms * variation})`;
+        });
+      }
       frame += 1;
       animationFrame = requestAnimationFrame(draw);
     };
+    // Bars a livelier moment already lifted go back to the stylesheet's rest,
+    // rather than freezing at whatever height the last frame drew.
+    if (reduced) {
+      for (const bar of bars.current) bar?.style.removeProperty("transform");
+    }
     animationFrame = requestAnimationFrame(draw);
     return () => {
       cancelAnimationFrame(animationFrame);
@@ -88,7 +100,7 @@ export function Waveform({
       // still on screen to be told so.
       report.current?.(false);
     };
-  }, [analyser]);
+  }, [analyser, reduced]);
 
   const isSpeaking = speaking || voiceActive;
 
