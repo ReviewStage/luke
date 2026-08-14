@@ -100,6 +100,18 @@ export function PopUpIcon(): React.JSX.Element {
   );
 }
 
+/** A plug: the services Luke connects to beyond the agents themselves. */
+export function PlugIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <path d="M9 2.6v5.2" />
+      <path d="M15 2.6v5.2" />
+      <path d="M6 7.8h12v4.4a4.4 4.4 0 0 1-4.4 4.4h-3.2A4.4 4.4 0 0 1 6 12.2Z" />
+      <path d="M12 16.6v4.8" />
+    </Glyph>
+  );
+}
+
 export function KeyboardIcon(): React.JSX.Element {
   return (
     <Glyph>

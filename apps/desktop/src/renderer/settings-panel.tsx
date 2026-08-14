@@ -15,7 +15,10 @@ import { useEffect, useRef, useState } from "react";
 import type { AppSettings, CredentialSource, MicrophoneStatus } from "../shared/contracts";
 import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "../shared/contracts";
 import type { CredentialProvider } from "../shared/credential-providers";
-import { CREDENTIAL_PROVIDER_LIST } from "../shared/credential-providers";
+import {
+  CLOUD_AGENT_PROVIDER_LIST,
+  INTEGRATION_PROVIDER_LIST,
+} from "../shared/credential-providers";
 import {
   capturedVoiceHotkey,
   DEFAULT_ASK_HOTKEYS,
@@ -48,6 +51,7 @@ import {
   KeyboardIcon,
   KeyIcon,
   PencilIcon,
+  PlugIcon,
   PopUpIcon,
   PowerIcon,
   PreferencesIcon,
@@ -410,6 +414,10 @@ function ProviderCredential({
         </span>
       </div>
 
+      {/* What connecting this one buys, for a provider whose section cannot
+          say it once for every row. */}
+      {provider.description ? <p className="settings-note">{provider.description}</p> : null}
+
       {entry ? (
         /* Named as a group, because Cancel, Save, and the link to the
            provider's own page are the same three words on every row. */
@@ -513,10 +521,15 @@ function formFactorOptionLabel(formFactor: PanelFormFactor): string {
   return formFactor === DEFAULT_PANEL_FORM_FACTOR ? `${name} (default)` : name;
 }
 
+/* Why every Connect in a key-holding section is refusing, said once per
+   section: a disabled control with no words beside it reads as broken. */
+const STORAGE_UNAVAILABLE_NOTE =
+  "This system offers no encrypted credential storage, so Luke will not store a key here.";
+
 /**
- * Every provider that can hold a key, one line each. A provider is listed
- * whether or not it has one, because the list is how you learn which services
- * Luke can watch at all.
+ * Every agent provider that can hold a key, one line each. A provider is
+ * listed whether or not it has one, because the list is how you learn which
+ * services Luke can watch at all.
  */
 function CredentialsSection({
   settings,
@@ -535,9 +548,9 @@ function CredentialsSection({
     <section className="settings-section" style={{ "--row-index": 3 } as React.CSSProperties}>
       <h2>
         <KeyIcon />
-        Cloud API keys
+        Cloud Agent API keys
       </h2>
-      {CREDENTIAL_PROVIDER_LIST.map((provider) => (
+      {CLOUD_AGENT_PROVIDER_LIST.map((provider) => (
         <ProviderCredential
           key={provider.id}
           provider={provider}
@@ -550,9 +563,48 @@ function CredentialsSection({
       {/* True of every key here, so it is said once rather than per provider. */}
       <p className="settings-note">
         {storageUnavailable
-          ? "This system offers no encrypted credential storage, so Luke will not store a key here."
+          ? STORAGE_UNAVAILABLE_NOTE
           : "Luke reads only cloud workspaces you created, and never sends a prompt or any other change."}
       </p>
+    </section>
+  );
+}
+
+/**
+ * The services Luke connects to that are not agents: today, the issue tracker.
+ * Each row is the same credential line an agent provider gets — same entry,
+ * same trash, same environment fallback — with its own one-line answer to what
+ * connecting it buys, because the rows here do not all buy the same thing.
+ */
+function IntegrationsSection({
+  settings,
+  control,
+  panelOpen,
+}: {
+  settings: AppSettings;
+  control: CredentialEntryControl;
+  panelOpen: boolean;
+}): React.JSX.Element {
+  const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
+  return (
+    <section className="settings-section" style={{ "--row-index": 4 } as React.CSSProperties}>
+      <h2>
+        <PlugIcon />
+        Integrations
+      </h2>
+      {INTEGRATION_PROVIDER_LIST.map((provider) => (
+        <ProviderCredential
+          key={provider.id}
+          provider={provider}
+          source={settings.credentialSources[provider.id]}
+          storageUnavailable={storageUnavailable}
+          control={control}
+          panelOpen={panelOpen}
+        />
+      ))}
+      {/* The same refusal the agents' section explains: a Connect stilled by
+          missing storage needs its why in this section too. */}
+      {storageUnavailable ? <p className="settings-note">{STORAGE_UNAVAILABLE_NOTE}</p> : null}
     </section>
   );
 }
@@ -1127,7 +1179,11 @@ export function SettingsPanel({
         <CredentialsSection settings={settings} control={credentials} panelOpen={panelOpen} />
       ) : null}
 
-      <section className="settings-section" style={{ "--row-index": 4 } as React.CSSProperties}>
+      {settings ? (
+        <IntegrationsSection settings={settings} control={credentials} panelOpen={panelOpen} />
+      ) : null}
+
+      <section className="settings-section" style={{ "--row-index": 5 } as React.CSSProperties}>
         <h2>
           <ShieldIcon />
           Permissions
@@ -1173,7 +1229,7 @@ export function SettingsPanel({
       <button
         type="button"
         className="quit-button"
-        style={{ "--row-index": 5 } as React.CSSProperties}
+        style={{ "--row-index": 6 } as React.CSSProperties}
         onClick={onQuit}
       >
         <PowerIcon />

@@ -26,6 +26,7 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
       [CREDENTIAL_PROVIDER_ID.CURSOR]: CREDENTIAL_SOURCE.NONE,
       [CREDENTIAL_PROVIDER_ID.DEVIN]: CREDENTIAL_SOURCE.ENVIRONMENT,
       [CREDENTIAL_PROVIDER_ID.JULES]: CREDENTIAL_SOURCE.NONE,
+      [CREDENTIAL_PROVIDER_ID.LINEAR]: CREDENTIAL_SOURCE.NONE,
     },
     secretStorage: SECRET_STORAGE.UNKNOWN,
     showInMenuBar: true,
@@ -130,6 +131,9 @@ test("the facts say what is connected, never what connects it", () => {
   assert.match(rendered, /Conductor \(connected\)/);
   assert.match(rendered, /Copilot \(not connected\)/);
   assert.match(rendered, /Devin \(connected from the environment\)/);
+  // The tracker stands in its own fact, the way it stands in its own section.
+  assert.match(rendered, /Linear \(not connected\)/);
+  assert.match(rendered, /Integrations/);
   // The guide leaves the machine, so no key, prefix, or environment variable
   // value has any business in it.
   assert.doesNotMatch(rendered, /API key:/);
