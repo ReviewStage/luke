@@ -66,13 +66,13 @@ test("the fan distance reads as pixels, and an unset token as none", () => {
 test("a session missing from the new list becomes a departure holding its slot", () => {
   const drawn = rosterRows(sessions("a", "b", "c"), []);
   const departures = nextDepartures(drawn, sessions("a", "c"), []);
-  assert.deepEqual(departures, [{ session: { id: "b" }, index: 1 }]);
+  assert.deepEqual(departures, [{ item: { id: "b" }, index: 1 }]);
 });
 
 test("a departure is drawn in the slot it held, marked leaving", () => {
-  const rows = rosterRows(sessions("a", "c"), [{ session: { id: "b" }, index: 1 }]);
+  const rows = rosterRows(sessions("a", "c"), [{ item: { id: "b" }, index: 1 }]);
   assert.deepEqual(
-    rows.map((row) => [row.session.id, row.leaving]),
+    rows.map((row) => [row.item.id, row.leaving]),
     [
       ["a", false],
       ["b", true],
@@ -82,26 +82,26 @@ test("a departure is drawn in the slot it held, marked leaving", () => {
 });
 
 test("a departure that held a slot past the end is drawn last", () => {
-  const rows = rosterRows(sessions("a"), [{ session: { id: "z" }, index: 4 }]);
+  const rows = rosterRows(sessions("a"), [{ item: { id: "z" }, index: 4 }]);
   assert.deepEqual(
-    rows.map((row) => row.session.id),
+    rows.map((row) => row.item.id),
     ["a", "z"],
   );
 });
 
 test("several departures keep their order among the living rows", () => {
   const rows = rosterRows(sessions("b", "d"), [
-    { session: { id: "c" }, index: 2 },
-    { session: { id: "a" }, index: 0 },
+    { item: { id: "c" }, index: 2 },
+    { item: { id: "a" }, index: 0 },
   ]);
   assert.deepEqual(
-    rows.map((row) => row.session.id),
+    rows.map((row) => row.item.id),
     ["a", "b", "c", "d"],
   );
 });
 
 test("a session returning mid-fade is alive again rather than a departure", () => {
-  const departures = [{ session: { id: "b" }, index: 1 }];
+  const departures = [{ item: { id: "b" }, index: 1 }];
   const drawn = rosterRows(sessions("a", "c"), departures);
   assert.deepEqual(nextDepartures(drawn, sessions("a", "b", "c"), departures), []);
 });
@@ -110,36 +110,36 @@ test("a departure expiring steps the ones below it up a slot", () => {
   // From [a, b, c, d, e], b and d left: b holds slot 1 and d slot 3. When b is
   // let go, d must still sit between c and e rather than jump past the end.
   const departures = [
-    { session: { id: "b" }, index: 1 },
-    { session: { id: "d" }, index: 3 },
+    { item: { id: "b" }, index: 1 },
+    { item: { id: "d" }, index: 3 },
   ];
   const remaining = withoutDeparture(departures, "b");
-  assert.deepEqual(remaining, [{ session: { id: "d" }, index: 2 }]);
+  assert.deepEqual(remaining, [{ item: { id: "d" }, index: 2 }]);
   assert.deepEqual(
-    rosterRows(sessions("a", "c", "e"), remaining).map((row) => row.session.id),
+    rosterRows(sessions("a", "c", "e"), remaining).map((row) => row.item.id),
     ["a", "c", "d", "e"],
   );
 });
 
 test("a departure expiring leaves the ones above it in place", () => {
   const departures = [
-    { session: { id: "b" }, index: 1 },
-    { session: { id: "d" }, index: 3 },
+    { item: { id: "b" }, index: 1 },
+    { item: { id: "d" }, index: 3 },
   ];
-  assert.deepEqual(withoutDeparture(departures, "d"), [{ session: { id: "b" }, index: 1 }]);
+  assert.deepEqual(withoutDeparture(departures, "d"), [{ item: { id: "b" }, index: 1 }]);
 });
 
 test("letting go of a session that is not departing changes nothing", () => {
-  const departures = [{ session: { id: "b" }, index: 1 }];
+  const departures = [{ item: { id: "b" }, index: 1 }];
   assert.deepEqual(withoutDeparture(departures, "x"), departures);
 });
 
 test("a departure still fading is kept while another begins", () => {
-  const departures = [{ session: { id: "b" }, index: 1 }];
+  const departures = [{ item: { id: "b" }, index: 1 }];
   const drawn = rosterRows(sessions("a", "c"), departures);
   const next = nextDepartures(drawn, sessions("a"), departures);
   assert.deepEqual(next, [
-    { session: { id: "b" }, index: 1 },
-    { session: { id: "c" }, index: 2 },
+    { item: { id: "b" }, index: 1 },
+    { item: { id: "c" }, index: 2 },
   ]);
 });

@@ -16,10 +16,10 @@ import {
   type SessionView,
 } from "./session-model";
 import {
+  LEAVING_ATTRIBUTE,
   SESSION_ROW_ID_ATTRIBUTE,
-  SESSION_ROW_LEAVING_ATTRIBUTE,
+  useRoster,
   useSessionReorderMotion,
-  useSessionRoster,
 } from "./session-motion";
 import {
   BranchGlyph,
@@ -298,7 +298,7 @@ function SessionRow({
     [SESSION_ROW_ID_ATTRIBUTE]: session.id,
     // A leaving row holds its slot while it fades, but its session is already
     // gone from the model, so nothing may read, focus, or press it.
-    [SESSION_ROW_LEAVING_ATTRIBUTE]: String(leaving),
+    [LEAVING_ATTRIBUTE]: String(leaving),
     inert: leaving,
     style: { "--row-index": index + 1 } as React.CSSProperties,
   };
@@ -427,7 +427,7 @@ export function PanelBody({
   settings,
 }: PanelBodyProps): React.JSX.Element {
   const sessionListRef = useSessionReorderMotion();
-  const rows = useSessionRoster(list.sessions, sessionListRef);
+  const rows = useRoster(list.sessions, sessionListRef);
   return (
     <div className="body">
       {/* The tab bar says what you are looking at; the options button says how
@@ -452,8 +452,8 @@ export function PanelBody({
             ) : (
               rows.map((row, index) => (
                 <SessionRow
-                  key={row.session.id}
-                  session={row.session}
+                  key={row.item.id}
+                  session={row.item}
                   index={index}
                   now={now}
                   leaving={row.leaving}
