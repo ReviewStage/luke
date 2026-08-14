@@ -35,6 +35,7 @@
   --mark-cursor: #ffffff;
   --mark-devin: #ffffff;
   --mark-jules: #715cd7;
+  --mark-linear: #5e6ad2;
   --mark-opencode: #ffffff;
   --mark-opencode-block: #5a5858;
 
@@ -802,6 +803,13 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    it takes the same scale they do. */
 .provider-mark[data-mark="jules"] {
   color: var(--mark-jules);
+  transform: scale(0.94);
+}
+
+/* Linear's mark is drawn full-bleed the way the Codex and Cursor marks are, so
+   it takes the same scale they do. */
+.provider-mark[data-mark="linear"] {
+  color: var(--mark-linear);
   transform: scale(0.94);
 }
 

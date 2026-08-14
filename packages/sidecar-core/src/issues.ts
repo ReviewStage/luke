@@ -1,0 +1,250 @@
+/**
+ * The issue-tracker model: the work items a tracker lists for the developer,
+ * and the two acts a tracker may be asked to carry for one of them. It mirrors
+ * the session model deliberately — bounded observations normalized once, acts
+ * validated against what the latest observation advertised — so an issue and a
+ * session are offered to the rest of the app under the same discipline.
+ */
+
+/**
+ * Stable tracker identifiers shared by the tracker client, the settings that
+ * hold its credential, and the UI that draws its mark.
+ */
+export const ISSUE_TRACKER_ID = {
+  LINEAR: "linear",
+} as const;
+
+export type IssueTrackerId = (typeof ISSUE_TRACKER_ID)[keyof typeof ISSUE_TRACKER_ID];
+
+/** A stable tracker identity and the label that can be shown or spoken. */
+export interface IssueTracker {
+  id: string;
+  displayName: string;
+}
+
+/** Identifies an issue without conflating identifiers from different trackers. */
+export interface IssueIdentity {
+  trackerId: string;
+  /** The tracker's human identifier, such as LUKE-123 — listed, shown, spoken. */
+  identifier: string;
+}
+
+/**
+ * One state an issue's tracker will accept it into, advertised with the issue
+ * the way a session's controls are: replaced with every observation, so a
+ * transition can never outlive the snapshot that promised it.
+ */
+export interface IssueTransition {
+  /** The tracker's own id for the state. Named in requests, never spoken. */
+  id: string;
+  /** The state's name as the tracker shows it, which is what is said aloud. */
+  name: string;
+}
+
+/**
+ * Tracker-owned data observed for one issue. Tracker clients are responsible
+ * for observing without writing, and for reporting only what their tracker
+ * actually lists — an issue with no advertised transitions cannot be moved.
+ */
+export interface TrackerIssueObservation {
+  /** The tracker's internal id, which its write endpoints name issues by. */
+  trackerIssueId: string;
+  identifier: string;
+  title: string;
+  /** The name of the state the issue is in now. */
+  stateName: string;
+  observedAt: number;
+  url?: string;
+  /** The states the tracker will accept this issue into, besides its own. */
+  transitions?: readonly IssueTransition[];
+  /**
+   * Set only by a client whose tracker documents taking a comment on this
+   * issue. Absent means no, the same default a session's message field takes.
+   */
+  canComment?: boolean;
+}
+
+/** The normalized issue shared by the main process, the bridge, and the voice roster. */
+export interface TrackedIssue extends IssueIdentity {
+  tracker: IssueTracker;
+  trackerIssueId: string;
+  title: string;
+  stateName: string;
+  observedAt: number;
+  url?: string;
+  transitions: readonly IssueTransition[];
+  canComment: boolean;
+}
+
+export const maximumIssueIdentifierLength = 30;
+export const maximumIssueTitleLength = 160;
+export const maximumIssueStateNameLength = 60;
+/** Enough for any workflow worth saying aloud; a roster line stays a line. */
+export const maximumIssueTransitions = 12;
+/** Long enough for any tracker's issue address without becoming a payload. */
+export const maximumIssueUrlLength = 300;
+/** A remark added to an issue, not a document pasted onto one. */
+export const maximumIssueCommentLength = 4_000;
+
+/**
+ * The text of a comment on its way to an issue, or nothing. Refused rather
+ * than cut when it runs long, for the same reason a session message is: a
+ * truncated comment says something its author did not.
+ */
+export function issueCommentText(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim();
+  if (!normalized || normalized.length > maximumIssueCommentLength) return undefined;
+  return normalized;
+}
+
+function requiredText(value: string, field: string): string {
+  const normalized = value.trim();
+  if (!normalized) throw new Error(`${field} must not be empty`);
+  return normalized;
+}
+
+function boundedText(value: string | undefined, maximumLength: number): string | undefined {
+  const normalized = value?.trim();
+  if (!normalized) return undefined;
+  return normalized.slice(0, maximumLength);
+}
+
+/**
+ * An issue's address, or nothing. Dropped rather than cut when it runs long —
+ * a truncated address is a different address — and held to `https` alone: a
+ * tracker lives in its own cloud, so an app scheme here would be improvised.
+ */
+function issueUrl(value: string | undefined): string | undefined {
+  const normalized = value?.trim();
+  if (!normalized || normalized.length > maximumIssueUrlLength) return undefined;
+  try {
+    return new URL(normalized).protocol === "https:" ? normalized : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function timestamp(value: number, field: string): number {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(`${field} must be a non-negative finite timestamp`);
+  }
+  return value;
+}
+
+function normalizeTransitions(
+  transitions: readonly IssueTransition[] | undefined,
+): readonly IssueTransition[] {
+  if (!transitions) return [];
+
+  const ids = new Set<string>();
+  return transitions.slice(0, maximumIssueTransitions).map((transition) => {
+    const id = requiredText(transition.id, "transition id");
+    if (ids.has(id)) throw new Error(`Duplicate issue transition: ${id}`);
+    ids.add(id);
+    return {
+      id,
+      name: boundedText(transition.name, maximumIssueStateNameLength) ?? id,
+    };
+  });
+}
+
+/**
+ * Bounds every field a tracker reported and fills the defaults, so the roster
+ * can speak any present field and an absent capability stays a refusal.
+ */
+export function normalizeTrackedIssue(
+  tracker: IssueTracker,
+  observation: TrackerIssueObservation,
+): TrackedIssue {
+  const trackerId = requiredText(tracker.id, "tracker id");
+  const identifier = requiredText(observation.identifier, "issue identifier").slice(
+    0,
+    maximumIssueIdentifierLength,
+  );
+  const url = issueUrl(observation.url);
+
+  return {
+    trackerId,
+    identifier,
+    tracker: {
+      id: trackerId,
+      displayName: boundedText(tracker.displayName, maximumIssueTitleLength) ?? trackerId,
+    },
+    trackerIssueId: requiredText(observation.trackerIssueId, "tracker issue id"),
+    title: boundedText(observation.title, maximumIssueTitleLength) ?? "Untitled issue",
+    stateName: boundedText(observation.stateName, maximumIssueStateNameLength) ?? "Unknown",
+    observedAt: timestamp(observation.observedAt, "observedAt"),
+    ...(url ? { url } : {}),
+    transitions: normalizeTransitions(observation.transitions),
+    // Anything but an explicit yes is a no, so a client that has not thought
+    // about comments reports an issue that cannot take one.
+    canComment: observation.canComment === true,
+  };
+}
+
+/** Returns whether a tracker explicitly advertised a transition for an issue. */
+export function supportsIssueTransition(issue: TrackedIssue, transitionId: string): boolean {
+  return issue.transitions.some((transition) => transition.id === transitionId);
+}
+
+export const TRACKER_ACTION_RESULT_STATUS = {
+  ACCEPTED: "accepted",
+  REJECTED: "rejected",
+  UNSUPPORTED: "unsupported",
+} as const;
+
+export type TrackerActionResultStatus =
+  (typeof TRACKER_ACTION_RESULT_STATUS)[keyof typeof TRACKER_ACTION_RESULT_STATUS];
+
+/**
+ * What became of an act. A rejection carries a reason the developer can hear,
+ * never the body itself; unsupported means the tracker has no documented way
+ * to do this right now, which is an answer rather than a failure.
+ */
+export type TrackerActionResult =
+  | { status: typeof TRACKER_ACTION_RESULT_STATUS.ACCEPTED }
+  | { status: typeof TRACKER_ACTION_RESULT_STATUS.REJECTED; reason: string }
+  | { status: typeof TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
+
+export const ISSUE_ACTION_KIND = {
+  SET_STATE: "set-state",
+  COMMENT: "comment",
+} as const;
+
+export type IssueActionKind = (typeof ISSUE_ACTION_KIND)[keyof typeof ISSUE_ACTION_KIND];
+
+/**
+ * A tracker-local request whose every field the main process resolved from its
+ * own latest observation: the internal id, and a transition the issue actually
+ * advertised. Nothing a model composed reaches a client as-is.
+ */
+export type TrackerIssueAction =
+  | {
+      kind: typeof ISSUE_ACTION_KIND.SET_STATE;
+      trackerIssueId: string;
+      transition: IssueTransition;
+    }
+  | {
+      kind: typeof ISSUE_ACTION_KIND.COMMENT;
+      trackerIssueId: string;
+      body: string;
+    };
+
+/**
+ * A tracker client has no dependency on Electron, a renderer, or live UI
+ * state. Observing must issue only reads; `execute` is the one place a client
+ * may change tracker state, and only ever with an act the developer asked for,
+ * against an issue and a transition the latest observation advertised.
+ * Nothing that decides on the developer's behalf may reach it.
+ */
+export interface IssueTrackerAdapter {
+  readonly tracker: IssueTracker;
+  /**
+   * The issues the tracker lists for the developer. `undefined` means the
+   * tracker is not connected — no credential, so nothing was asked — which is
+   * a different answer from a connected tracker listing nothing.
+   */
+  observe(): Promise<readonly TrackerIssueObservation[] | undefined>;
+  execute(action: TrackerIssueAction): Promise<TrackerActionResult>;
+}

@@ -75,3 +75,16 @@ test("takes only the Devin credentials its API version issues", () => {
     assert.equal(CREDENTIAL_PROVIDERS[providerId].keyFormat, undefined, providerId);
   }
 });
+
+test("takes only the Linear key kind a person holds", () => {
+  const linear = CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.LINEAR];
+
+  assert.equal(linear.displayName, "Linear");
+  assert.deepEqual(linear.environmentVariables, ["LINEAR_API_KEY"]);
+  // Luke reads the tracker as the user, with the key kind Linear issues to a
+  // person. An OAuth token names an application acting for a workspace, which
+  // is a different actor and would be refused where it matters least.
+  assert.equal(linear.keyFormat?.prefix, "lin_api_");
+  assert.equal(linear.keyFormat?.label, "Personal API key");
+  assert.match(linear.apiKeysUrl, /^https:\/\/linear\.app\/settings\//);
+});

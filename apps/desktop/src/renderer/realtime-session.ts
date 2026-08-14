@@ -10,7 +10,13 @@ import {
   EMPTY_APP_GUIDE,
   functionCallFollowUpEvents,
   functionCallOutputEvents,
+  type IssueToolAction,
   isAppToolCall,
+  isIssueToolName,
+  isSessionToolName,
+  issueContextEvents,
+  issueContextText,
+  issueToolAction,
   type NormalizedSession,
   proactiveSpeechEvents,
   pushToTalkCommitEvents,
@@ -25,6 +31,7 @@ import {
   sessionContextEvents,
   sessionContextText,
   sessionToolAction,
+  type TrackedIssue,
   truncateResponseEvents,
   typedAskEvents,
 } from "@sidecar/core";
@@ -61,6 +68,11 @@ export type AppActionCarrier = (
   action: Extract<AppToolAction, { kind: "setting" | "panel" }>,
 ) => Promise<Record<string, unknown>>;
 
+/** The issue half of the same courier: validated here, validated again in main. */
+export type IssueActionCarrier = (
+  action: Extract<IssueToolAction, { kind: "issue-state" | "issue-comment" }>,
+) => Promise<Record<string, unknown>>;
+
 export interface RealtimeVoiceSessionCallbacks {
   onStatus(status: RealtimeStatus): void;
   onLocalStream(stream: MediaStream | undefined): void;
@@ -81,6 +93,8 @@ export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbac
   carryAction?: SessionActionCarrier;
   /** Absent means spoken asks about Luke himself are refused with a reason. */
   carryAppAction?: AppActionCarrier;
+  /** Absent means issues can only be recited: every issue call is refused. */
+  carryIssueAction?: IssueActionCarrier;
   /**
    * The browser pieces, injectable so the microphone state machine can be
    * exercised without a real device or peer connection. Push-to-talk decides
@@ -151,6 +165,13 @@ export class RealtimeVoiceSession {
    */
   #guide: AppGuideSnapshot = EMPTY_APP_GUIDE;
   #guideContext: string | undefined;
+  /**
+   * The issue roster, held to the same rule — and `undefined` while no
+   * tracker is connected, so an issue call then has nothing to be validated
+   * against and is refused as such.
+   */
+  #issues: readonly TrackedIssue[] | undefined;
+  #issueContext: string | undefined;
   /**
    * Luke's own audio track. Cancelling stops the model producing more, but what
    * it already produced is on its way down the connection and keeps playing —
@@ -660,6 +681,8 @@ export class RealtimeVoiceSession {
     this.#sessions = [];
     this.#guide = EMPTY_APP_GUIDE;
     this.#guideContext = undefined;
+    this.#issues = undefined;
+    this.#issueContext = undefined;
     this.#generationDone = false;
     this.#remoteQuiet = false;
     this.#pendingTurn = false;
@@ -817,6 +840,21 @@ export class RealtimeVoiceSession {
     this.#send(appGuideContextEvents(guide));
   }
 
+  /**
+   * Tells the conversation what the issue tracker lists, under the same rule
+   * the session roster follows: identical rosters are not resent, and no
+   * tracker connected means no roster at all — the absence is itself what
+   * lets Luke say a tracker is not connected rather than inventing a board.
+   */
+  updateIssues(issues: readonly TrackedIssue[] | undefined): void {
+    this.#issues = issues;
+    if (!issues || !this.isConnected) return;
+    const context = issueContextText(issues);
+    if (context === this.#issueContext) return;
+    this.#issueContext = context;
+    this.#send(issueContextEvents(issues));
+  }
+
   #handleServerEvent(data: unknown): void {
     if (typeof data !== "string") return;
     let event: unknown;
@@ -968,7 +1006,7 @@ export class RealtimeVoiceSession {
     if (!armed) {
       return {
         status: "refused",
-        reason: "Only a request you make yourself can act on a session.",
+        reason: "Only a request you make yourself can act on a session or an issue.",
       };
     }
     // An ask about Luke himself is validated against the guide the app
@@ -986,6 +1024,10 @@ export class RealtimeVoiceSession {
         return { status: "refused", reason: "The change could not be made." };
       }
     }
+    if (isIssueToolName(call.name)) return this.#issueToolCallOutput(call);
+    if (!isSessionToolName(call.name)) {
+      return { status: "refused", reason: "No such tool exists." };
+    }
     const action = sessionToolAction(call, this.#sessions);
     if (action.kind === "refused") return { status: "refused", reason: action.reason };
     if (!this.#options.carryAction) {
@@ -993,6 +1035,23 @@ export class RealtimeVoiceSession {
     }
     try {
       return await this.#options.carryAction(action);
+    } catch {
+      return { status: "refused", reason: "The action could not be carried out." };
+    }
+  }
+
+  async #issueToolCallOutput(call: RealtimeFunctionCall): Promise<Record<string, unknown>> {
+    // No roster was ever sent, so there is nothing a call could have named.
+    if (!this.#issues) {
+      return { status: "refused", reason: "No issue tracker is connected." };
+    }
+    const action = issueToolAction(call, this.#issues);
+    if (action.kind === "refused") return { status: "refused", reason: action.reason };
+    if (!this.#options.carryIssueAction) {
+      return { status: "refused", reason: "Acting on issues is not available." };
+    }
+    try {
+      return await this.#options.carryIssueAction(action);
     } catch {
       return { status: "refused", reason: "The action could not be carried out." };
     }

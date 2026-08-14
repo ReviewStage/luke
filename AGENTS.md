@@ -53,6 +53,16 @@ Trust constraints:
   handed to the operating system, and nothing reaches the provider; an open
   asked of Luke still runs only in a developer-opened turn, and a session that
   reported no address is offered nowhere to open.
+- The issue tracker follows the same rule at one remove. Luke reads the issues
+  a tracker lists for the user under a user-supplied key and observes nothing
+  without one, exactly like a cloud session provider. The two acts a tracker
+  takes — moving an issue to a state its latest observation listed, adding a
+  comment — happen only as the direct product of a turn the developer opened
+  themselves, through the tracker's own documented endpoint under the same
+  key, validated against the observed issue roster in the renderer and again
+  in the main process before the tracker client sees anything. Observation
+  sends only the read document; the write documents are fixed by the build and
+  issued only for a validated act.
 - Keep unsupported capabilities explicit; do not invent fallback controls.
 - Keep Electron renderers sandboxed with context isolation and narrow IPC.
 - Commit only synthetic fixtures and repository-relative paths. This binds

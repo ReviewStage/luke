@@ -6,11 +6,14 @@ import {
   CompositeSessionProviderAdapter,
   fixtureSnapshot,
   InMemorySessionRegistry,
+  ISSUE_ACTION_KIND,
   isControllableAdapter,
   isMessageCapableAdapter,
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
+  issueCommentText,
   type NativeNotchGeometry,
+  normalizeTrackedIssue,
   PROVIDER_CONTROL_RESULT_STATUS,
   PROVIDER_MESSAGE_RESULT_STATUS,
   type ProviderControlResult,
@@ -21,6 +24,9 @@ import {
   type SessionIdentity,
   type SessionProviderAdapter,
   sessionMessageText,
+  TRACKER_ACTION_RESULT_STATUS,
+  type TrackedIssue,
+  type TrackerActionResult,
 } from "@sidecar/core";
 import {
   app,
@@ -48,6 +54,7 @@ import { CURSOR_PROVIDER, CursorSessionAdapter } from "./cursor-adapter";
 import { CursorLocalSessionAdapter } from "./cursor-local-adapter";
 import { DevinSessionAdapter } from "./devin-adapter";
 import { JulesSessionAdapter } from "./jules-adapter";
+import { LinearIssueTracker } from "./linear-tracker";
 import { readMacScreenGeometry } from "./macos-screen-geometry";
 import { openAiAttentionEvaluatorFromEnvironment } from "./openai-attention-evaluator";
 import {
@@ -155,6 +162,19 @@ const sessionAdapters = [
   julesAdapter,
   new OpenCodeSessionAdapter(),
 ] as const;
+// The issue tracker is not a session provider: its issues feed the voice
+// roster rather than the registry, so it stands beside the adapters rather
+// than among them.
+const linearTracker = new LinearIssueTracker({
+  readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.LINEAR),
+});
+const issueTrackers = [linearTracker] as const;
+/** A board changes at the pace of hands, not of models; a minute is current. */
+const ISSUE_REFRESH_INTERVAL_MS = 60_000;
+/** The latest roster, which is also what every spoken act is validated against. */
+let trackedIssues: readonly TrackedIssue[] | undefined;
+let issueRefreshTimer: NodeJS.Timeout | undefined;
+let issueRefreshRunning = false;
 // A fixture run must stay deterministic and credential-free, so it never builds
 // an evaluator — not just capture runs.
 const attentionEvaluator = fixtureMode ? undefined : openAiAttentionEvaluatorFromEnvironment();
@@ -539,6 +559,32 @@ function isSessionIdentity(value: unknown): value is SessionIdentity {
 }
 
 /**
+ * Whether a renderer message is a validated issue act. Like a session
+ * identity, a malformed one is a broken request rather than something the
+ * user can act on — and everything it names is re-resolved against the
+ * latest observation before a tracker client sees any of it.
+ */
+function isIssueActionAsk(value: unknown): value is {
+  kind: "issue-state" | "issue-comment";
+  identity: { trackerId: string; identifier: string };
+  transition?: { id: string; name: string };
+  body?: string;
+} {
+  if (value === null || typeof value !== "object") return false;
+  const { kind, identity } = value as {
+    kind?: unknown;
+    identity?: { trackerId?: unknown; identifier?: unknown };
+  };
+  if (kind !== "issue-state" && kind !== "issue-comment") return false;
+  return (
+    typeof identity?.trackerId === "string" &&
+    identity.trackerId.trim().length > 0 &&
+    typeof identity.identifier === "string" &&
+    identity.identifier.trim().length > 0
+  );
+}
+
+/**
  * States on startup whether voice is on, and why not when it is off. A packaged
  * app has no visible stderr, but the common case during local testing is a
  * terminal launch — where this is the difference between a one-line answer and
@@ -583,6 +629,7 @@ function registerIpc(): void {
       ...(askHotkey ? { askHotkey } : {}),
       display: displayDiagnostic(),
       sessions: fixtureMode ? [] : sessionRegistry.snapshot().sessions,
+      ...(trackedIssues && !fixtureMode ? { issues: trackedIssues } : {}),
       settings: await settingsStore.snapshot(),
     };
   });
@@ -625,6 +672,11 @@ function registerIpc(): void {
         // every save.
         const adapter = adapterByCredentialProvider.get(providerId);
         if (!result.reason && adapter) void sessionRegistry.refresh(adapter);
+        // The tracker's key connects the tracker, not a session provider, so
+        // its save refreshes the roster instead of the registry.
+        if (!result.reason && providerId === CREDENTIAL_PROVIDER_ID.LINEAR) {
+          void refreshTrackedIssues();
+        }
         return result;
       } catch {
         // A filesystem failure is not something the user can act on, so it is
@@ -912,6 +964,63 @@ function registerIpc(): void {
     },
   );
 
+  // A spoken issue act runs the same gauntlet a session act does, in the same
+  // two halves: the renderer refused anything its roster did not advertise,
+  // and here every named thing is resolved again from the latest observation —
+  // the issue by its identity, the transition by the id the tracker itself
+  // listed — so what reaches a tracker client is built from observed state,
+  // never from what a model composed.
+  ipcMain.handle(
+    channels.executeIssueAction,
+    async (event, action: unknown): Promise<TrackerActionResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (!isIssueActionAsk(action)) throw new Error("Invalid issue action request");
+      // A fixture run observes no tracker, so it refuses every act — a
+      // deterministic capture must not reach Linear.
+      const issue = trackedIssues?.find(
+        (candidate) =>
+          candidate.trackerId === action.identity.trackerId &&
+          candidate.identifier === action.identity.identifier,
+      );
+      if (!issue) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
+      const tracker = issueTrackers.find((candidate) => candidate.tracker.id === issue.trackerId);
+      if (!tracker) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
+
+      let result: TrackerActionResult;
+      if (action.kind === "issue-state") {
+        const transition = issue.transitions.find(
+          (candidate) => candidate.id === action.transition?.id,
+        );
+        if (!transition) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
+        result = await tracker.execute({
+          kind: ISSUE_ACTION_KIND.SET_STATE,
+          trackerIssueId: issue.trackerIssueId,
+          transition,
+        });
+      } else {
+        if (!issue.canComment) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
+        const body = issueCommentText(action.body);
+        if (!body) {
+          return {
+            status: TRACKER_ACTION_RESULT_STATUS.REJECTED,
+            reason: "A comment has to be shorter than a document and longer than nothing.",
+          };
+        }
+        result = await tracker.execute({
+          kind: ISSUE_ACTION_KIND.COMMENT,
+          trackerIssueId: issue.trackerIssueId,
+          body,
+        });
+      }
+      // An act that landed changes the board, so the roster should catch up
+      // as soon as Linear will say.
+      if (result.status === TRACKER_ACTION_RESULT_STATUS.ACCEPTED) {
+        void refreshTrackedIssues();
+      }
+      return result;
+    },
+  );
+
   // The panel is normally shown without stealing focus. A text field cannot be
   // typed into that way, so the renderer asks for focus when it opens one.
   ipcMain.on(channels.focusPanel, (event) => {
@@ -1003,6 +1112,45 @@ function startSessionObservation(): void {
     void refreshProviderSessions();
   }, SESSION_REFRESH_INTERVAL_MS);
   sessionRefreshTimer.unref();
+}
+
+/**
+ * Reads the issue roster from every connected tracker. A failing pass keeps
+ * the roster it has rather than blanking it — a tracker that cannot answer is
+ * not a board with nothing on it — and a tracker with no key stays absent,
+ * which is how the renderer knows there is nothing to advertise.
+ */
+async function refreshTrackedIssues(): Promise<void> {
+  if (fixtureMode || issueRefreshRunning) return;
+  issueRefreshRunning = true;
+  try {
+    const collected: TrackedIssue[] = [];
+    let connected = false;
+    for (const tracker of issueTrackers) {
+      const observations = await tracker.observe();
+      if (!observations) continue;
+      connected = true;
+      for (const observation of observations) {
+        collected.push(normalizeTrackedIssue(tracker.tracker, observation));
+      }
+    }
+    trackedIssues = connected ? collected : undefined;
+    panelWindow?.webContents.send(channels.issuesChanged, trackedIssues);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`Issue observation failed: ${message}\n`);
+  } finally {
+    issueRefreshRunning = false;
+  }
+}
+
+function startIssueObservation(): void {
+  if (fixtureMode) return;
+  void refreshTrackedIssues();
+  issueRefreshTimer = setInterval(() => {
+    void refreshTrackedIssues();
+  }, ISSUE_REFRESH_INTERVAL_MS);
+  issueRefreshTimer.unref();
 }
 
 function configurePermissions(): void {
@@ -1272,6 +1420,7 @@ if (!app.requestSingleInstanceLock()) {
     createPanel();
     configurePermissions();
     startSessionObservation();
+    startIssueObservation();
 
     screen.on("display-added", handleDisplayChange);
     screen.on("display-removed", handleDisplayChange);
@@ -1303,6 +1452,7 @@ app.on("will-quit", () => {
 
 app.on("before-quit", () => {
   if (sessionRefreshTimer) clearInterval(sessionRefreshTimer);
+  if (issueRefreshTimer) clearInterval(issueRefreshTimer);
   if (collapseTimer) clearTimeout(collapseTimer);
 });
 
