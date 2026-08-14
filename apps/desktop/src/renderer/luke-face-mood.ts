@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 import { FACE_MOTION, FACE_MOTION_CYCLE_MS, type FaceMotion } from "./luke-face-art";
 
 /**
@@ -195,6 +195,23 @@ export function asidePool(working: boolean): readonly WeightedAside[] {
 }
 
 /**
+ * Tricks for the pointer coming to rest on Luke himself. The flyoff is the
+ * showpiece and takes most of the pool; the rest are the loudest of the idle
+ * asides, because a hover has earned something bigger than a blink. Nothing
+ * here may carry meaning — a hand crosses the strip whenever it likes, and a
+ * face that hopped like a task had just finished would be lying about the
+ * sessions.
+ */
+export const HOVER_ASIDES: readonly WeightedAside[] = [
+  { motion: FACE_MOTION.FLYOFF, weight: 46 },
+  { motion: FACE_MOTION.REFRESH, weight: 16 },
+  { motion: FACE_MOTION.HIDING, weight: 12 },
+  { motion: FACE_MOTION.BOOP, weight: 10 },
+  { motion: FACE_MOTION.WINK, weight: 8 },
+  { motion: FACE_MOTION.TEASE, weight: 8 },
+];
+
+/**
  * One gesture, sampled by weight. `roll` is a number in [0, 1) — passed in
  * rather than drawn here so that what the face does with a moment is decided by
  * something a test can hold still.
@@ -221,6 +238,57 @@ const STILLNESS_MIN_MS = 7_000;
 const STILLNESS_MAX_MS = 21_000;
 const stillnessDelay = () =>
   STILLNESS_MIN_MS + Math.random() * (STILLNESS_MAX_MS - STILLNESS_MIN_MS);
+
+/**
+ * How far past the drawn face a hover still counts. The face is 18px in a
+ * strip at the very top of the screen, and asking for the pixel is asking to
+ * miss: a pointer resting anywhere near Luke means Luke. Wide enough to be
+ * forgiving, narrow enough that the reach stays his — it must not swallow the
+ * marks beside him or read the whole strip as a face.
+ */
+const HOVER_REACH_PX = 8;
+
+/**
+ * Whether the pointer is resting on Luke himself, give or take the reach. Read
+ * from the window's own pointer stream rather than from the face element,
+ * because the wing takes no pointer at all: the strip under the housing is one
+ * button, and a face that answered enter and leave itself would swallow the
+ * press that opens the panel. The box is measured at each move rather than
+ * cached, because it travels with the shape while never being what animates — a
+ * motion transforms layers inside the svg, so a face mid-flyoff is still
+ * hovered where it took off from.
+ */
+export function useFaceHover(face: RefObject<HTMLElement | null>): boolean {
+  const [hovered, setHovered] = useState(false);
+
+  useEffect(() => {
+    const moved = (event: MouseEvent) => {
+      const rect = face.current?.getBoundingClientRect();
+      // No box is no reading, not a leave. The meter takes the face's place
+      // for a turn, and a pointer that never moved off the capsule must not be
+      // told it left — the trick would rearm and fire again, unasked, the
+      // moment the face returned. Only a measured miss rearms it.
+      if (rect === undefined || rect.width === 0) return;
+      setHovered(
+        event.clientX >= rect.left - HOVER_REACH_PX &&
+          event.clientX <= rect.right + HOVER_REACH_PX &&
+          event.clientY >= rect.top - HOVER_REACH_PX &&
+          event.clientY <= rect.bottom + HOVER_REACH_PX,
+      );
+    };
+    // The pointer can leave the window without a final move inside it, and a
+    // hover that survived that would replay a trick on the way back in.
+    const left = () => setHovered(false);
+    window.addEventListener("mousemove", moved);
+    document.documentElement.addEventListener("mouseleave", left);
+    return () => {
+      window.removeEventListener("mousemove", moved);
+      document.documentElement.removeEventListener("mouseleave", left);
+    };
+  }, [face]);
+
+  return hovered;
+}
 
 /** Reduced motion is a setting, not a media query the stylesheet alone can answer:
  * holding every loop still leaves the poses, and switching between poses is the
@@ -293,7 +361,7 @@ export function facePlay(
  * stuck saying something that has stopped being true — and what they give it
  * back to is stillness.
  */
-export function useFaceMotion(context: FaceContext, still: boolean): FacePlay {
+export function useFaceMotion(context: FaceContext, still: boolean, hovered = false): FacePlay {
   const resting = restingMotion(context);
   const [gesture, setGesture] = useState<PlayingGesture>();
   const plays = useRef(0);
@@ -340,6 +408,20 @@ export function useFaceMotion(context: FaceContext, still: boolean): FacePlay {
     );
     return () => window.clearTimeout(timer);
   }, [gesture]);
+
+  // The pointer arriving on the face is greeted once, at the arrival, and
+  // staying put earns nothing more: leaving and coming back is what asks again.
+  // Tracked against the pointer seen last time rather than the last render, for
+  // the same reason the observations above are — so nothing else changing under
+  // a held hover can replay the trick.
+  const hoveredBefore = useRef(false);
+  useEffect(() => {
+    const arrived = hovered && !hoveredBefore.current;
+    hoveredBefore.current = hovered;
+    if (!arrived || still) return;
+    plays.current += 1;
+    setGesture({ motion: chooseAside(HOVER_ASIDES, Math.random()), play: plays.current });
+  }, [hovered, still]);
 
   // Stillness, and then something small. Waiting is only scheduled while nothing
   // is resting on the face and nothing is already playing, so the gaps never

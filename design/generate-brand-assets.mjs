@@ -468,6 +468,42 @@ const MOTIONS = {
       },
     ],
   },
+  // The hover showpiece: a little crouch, a banked dash off the edge, a beat
+  // out of sight, and a swoop back in from the other side that lands with a
+  // touch of overshoot. The teleport from one side to the other happens far
+  // above the frame, so the wing's clip never draws the face crossing back —
+  // it leaves to the right and returns from the upper left.
+  flyoff: {
+    moment: "hover flourish (fly off and swoop back)",
+    layers: [
+      {
+        type: "rotate",
+        pivot: [120, 124],
+        values: [0, -10, 22, 10, -14, -14, 5, 0, 0],
+        keyTimes: [0, 0.1, 0.26, 0.34, 0.4, 0.46, 0.62, 0.72, 1],
+        dur: 3,
+      },
+      {
+        type: "translate",
+        values: [
+          [0, 0],
+          [-16, 6],
+          [280, -90],
+          [280, -240],
+          [-340, -240],
+          [-340, -110],
+          [16, 8],
+          [0, 0],
+          [0, 0],
+        ],
+        keyTimes: [0, 0.1, 0.26, 0.34, 0.4, 0.46, 0.62, 0.72, 1],
+        // The dash accelerates away and the swoop brakes in; everything the
+        // frame cannot see keeps the default curve.
+        splines: [EASE, "0.5 0 0.9 0.5", EASE, EASE, EASE, "0.1 0.5 0.3 1", EASE, EASE],
+        dur: 3,
+      },
+    ],
+  },
   // Two eyebrow waggles — pure mischief.
   tease: {
     moment: "playful (brow waggle)",

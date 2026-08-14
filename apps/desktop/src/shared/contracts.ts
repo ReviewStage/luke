@@ -1,6 +1,7 @@
 import type {
   AttentionSpeech,
   FixtureSnapshot,
+  IssueToolAction,
   NormalizedSession,
   ObservedWorkspaceProject,
   ProviderControlResult,
@@ -12,6 +13,8 @@ import type {
   Rectangle,
   ResolvedNotchGeometry,
   SessionIdentity,
+  TrackedIssue,
+  TrackerActionResult,
   WindowMode,
 } from "@sidecar/core";
 import type { CredentialProviderId } from "./credential-providers";
@@ -176,8 +179,13 @@ export interface AppBootstrap {
   sessions: readonly NormalizedSession[];
   /** Where a new workspace can be created, as the adapters currently offer it. */
   workspaceProjects: readonly ObservedWorkspaceProject[];
+  /** Absent while no issue tracker is connected, which is its own answer. */
+  issues?: readonly TrackedIssue[];
   settings: AppSettings;
 }
+
+/** One validated issue act on its way to the main process. */
+export type IssueActionAsk = Extract<IssueToolAction, { kind: "issue-state" | "issue-comment" }>;
 
 /** The talk key as the panel should describe it. */
 export interface VoiceHotkeyState {
@@ -265,6 +273,13 @@ export interface AppBridge {
     providerProjectId: string,
     name?: string,
   ): Promise<ProviderWorkspaceResult>;
+  /**
+   * Carries one spoken issue act to the tracker that can take it. The renderer
+   * names an issue and a transition it was shown; the main process resolves
+   * both against its own latest observation before the tracker client sees
+   * anything, so nothing a model composed reaches Linear as-is.
+   */
+  executeIssueAction(action: IssueActionAsk): Promise<TrackerActionResult>;
   /** Brings the expanded panel forward so it can accept typed input. */
   focusPanel(): void;
   /** Mints a short-lived Realtime credential; the standing API key never crosses. */
@@ -278,6 +293,8 @@ export interface AppBridge {
   onWorkspaceProjectsChanged(
     callback: (projects: readonly ObservedWorkspaceProject[]) => void,
   ): () => void;
+  /** The issue roster as last observed; `undefined` says no tracker is connected. */
+  onIssuesChanged(callback: (issues: readonly TrackedIssue[] | undefined) => void): () => void;
   onAttentionSpeech(callback: (speech: readonly AttentionSpeech[]) => void): () => void;
   /** The talk key going down, from whatever app happened to be frontmost. */
   onVoiceHotkeyPress(callback: () => void): () => void;
@@ -314,6 +331,7 @@ export const channels = {
   sendSessionMessage: "app:send-session-message",
   executeSessionControl: "app:execute-session-control",
   createSessionWorkspace: "app:create-session-workspace",
+  executeIssueAction: "app:execute-issue-action",
   focusPanel: "app:focus-panel",
   requestRealtimeCredential: "app:request-realtime-credential",
   attentionSpeech: "app:attention-speech",
@@ -326,5 +344,6 @@ export const channels = {
   displayChanged: "app:display-changed",
   sessionsChanged: "app:sessions-changed",
   workspaceProjectsChanged: "app:workspace-projects-changed",
+  issuesChanged: "app:issues-changed",
   quit: "app:quit",
 } as const;

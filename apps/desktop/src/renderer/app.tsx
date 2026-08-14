@@ -10,6 +10,7 @@ import {
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
   type SessionIdentity,
+  type TrackedIssue,
   VOICE_CAPTION_MAX_HEIGHT,
 } from "@sidecar/core";
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -326,6 +327,17 @@ export function App(): React.JSX.Element {
   const talkLatched = useRef(false);
   const sessionsRef = useRef<readonly NormalizedSession[]>([]);
   const workspaceProjectsRef = useRef<readonly ObservedWorkspaceProject[]>([]);
+  /**
+   * The issue roster as last pushed, for a conversation that connects later.
+   * Never state: no panel surface draws it — it exists to be spoken from.
+   */
+  const issuesRef = useRef<readonly TrackedIssue[] | undefined>(undefined);
+  /**
+   * Whether a live roster push has arrived. The bootstrap reply resolves
+   * whenever the main process gets to it, so a push can land first — and the
+   * bootstrap's older snapshot must then not clobber it.
+   */
+  const issuesPushed = useRef(false);
 
   const changeTab = useCallback((next: PanelTab) => {
     tabRef.current = next;
@@ -405,6 +417,10 @@ export function App(): React.JSX.Element {
       // behind the same gauntlet: validated against the guide before this is
       // called, and performed by the same handlers the panel's controls use.
       carryAppAction: (action) => carryAppActionRef.current(action),
+      // The issue acts have no rows to share a bridge call with, but the shape
+      // is the same: validated against the roster here, and again in the main
+      // process against what it observed.
+      carryIssueAction: (action) => window.sidecar.executeIssueAction(action),
       onStatus: setVoiceStatus,
       onLocalStream: setLocalStream,
       onRemoteStream: setRemoteStream,
@@ -441,6 +457,7 @@ export function App(): React.JSX.Element {
       session.updateSessions(sessionsRef.current);
       session.updateWorkspaceProjects(workspaceProjectsRef.current);
       session.updateGuide(guideRef.current);
+      session.updateIssues(issuesRef.current);
     }
     return permission;
   }, [ensureVoiceSession]);
@@ -1039,6 +1056,9 @@ export function App(): React.JSX.Element {
       setBootstrap(value);
       setSessions(value.sessions);
       setWorkspaceProjects(value.workspaceProjects);
+      // Only fill in what no push has said yet: the bootstrap snapshot is
+      // older than any roster change that raced past it.
+      if (!issuesPushed.current) issuesRef.current = value.issues;
       setSettings(value.settings);
       setDisplay(value.display);
       if (modeGeneration.current === bootstrapGeneration) {
@@ -1074,12 +1094,20 @@ export function App(): React.JSX.Element {
     const removeDisplay = window.sidecar.onDisplayChanged(setDisplay);
     const removeSessions = window.sidecar.onSessionsChanged(setSessions);
     const removeWorkspaceProjects = window.sidecar.onWorkspaceProjectsChanged(setWorkspaceProjects);
+    // Straight to the conversation rather than through state: no panel
+    // surface draws the issue roster, so a re-render would be work for nobody.
+    const removeIssues = window.sidecar.onIssuesChanged((issues) => {
+      issuesPushed.current = true;
+      issuesRef.current = issues;
+      voiceSession.current?.updateIssues(issues);
+    });
     return () => {
       cancelHoverTransition();
       removeLifecycle();
       removeDisplay();
       removeSessions();
       removeWorkspaceProjects();
+      removeIssues();
       void stopMicrophone();
     };
   }, [

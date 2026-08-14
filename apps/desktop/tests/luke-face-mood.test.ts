@@ -12,6 +12,7 @@ import {
   type FaceObservation,
   facePlay,
   faceYieldsToMeter,
+  HOVER_ASIDES,
   noticedMotion,
   playedMotion,
   restingMotion,
@@ -163,6 +164,34 @@ test("a moment is sampled by weight, and the smallest gesture is most of the poo
     // Every weight is a real share, or the pool is lying about its own odds.
     for (const aside of pool) assert.ok(aside.weight > 0, `${aside.motion} can never be chosen`);
   }
+});
+
+test("a hover earns a trick, and the trick says nothing about the sessions", () => {
+  // A hand crosses the strip whenever it likes, so nothing a hover plays may
+  // mean anything — not a rest, not a moment, not the sway that means work.
+  const spoken = [
+    FACE_MOTION.TALKING,
+    FACE_MOTION.LISTENING,
+    FACE_MOTION.SLEEPING,
+    FACE_MOTION.WAITING,
+    FACE_MOTION.SUCCESS,
+    FACE_MOTION.NOTIFICATION,
+    FACE_MOTION.MONITORING,
+  ];
+  for (const aside of HOVER_ASIDES) {
+    assert.ok(
+      !spoken.includes(aside.motion),
+      `${aside.motion} carries meaning and cannot be hover`,
+    );
+    assert.ok(aside.weight > 0, `${aside.motion} can never be chosen`);
+  }
+  // The flyoff is the showpiece: the likeliest answer to a hover, and near
+  // enough half the pool that most visits get the big one.
+  const total = HOVER_ASIDES.reduce((sum, aside) => sum + aside.weight, 0);
+  const flyoff = HOVER_ASIDES.find((aside) => aside.motion === FACE_MOTION.FLYOFF);
+  assert.ok(flyoff, "the flyoff is what the hover was built for");
+  assert.ok((flyoff?.weight ?? 0) / total > 0.4, "the flyoff has to be the usual trick");
+  assert.equal(chooseAside(HOVER_ASIDES, 0), FACE_MOTION.FLYOFF);
 });
 
 test("a gesture the rest is covering is not a play", () => {

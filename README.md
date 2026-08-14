@@ -42,6 +42,18 @@ organization's sessions, and Luke reports only the sessions belonging to whoever
 the token authenticates as. Every provider integration is read-only. None
 requires hooks, plugins, wrappers, or changes to how a session is launched.
 
+## Issue tracker support
+
+- Linear — reads the issues assigned to you after you supply a Linear personal
+  API key (`lin_api_…`, from Settings or `LINEAR_API_KEY`), and sends Linear
+  nothing without one.
+
+The board feeds the spoken conversation rather than the panel: with a key
+saved, Luke knows each assigned issue's identifier, title, state, and the
+states its team's workflow allows, so you can ask where LUKE-123 stands, ask
+Luke to move it to one of those states, or add a comment — each only when you
+ask, out loud or typed, through Linear's own GraphQL API under your key.
+
 ## What works in v0.1
 
 - A compact, top-center capsule shows how many sessions Luke is tracking.

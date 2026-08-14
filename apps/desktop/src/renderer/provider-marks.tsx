@@ -1,4 +1,4 @@
-import { PROVIDER_ID } from "@sidecar/core";
+import { ISSUE_TRACKER_ID, PROVIDER_ID } from "@sidecar/core";
 import { useId } from "react";
 
 /**
@@ -15,7 +15,8 @@ import { useId } from "react";
  * Cursor via Simple Icons (CC0-1.0, sourced from https://cursor.com/brand),
  * Devin's verbatim from the mark https://devin.ai serves as its own favicon
  * and site header, Jules via Simple Icons (CC0-1.0, sourced from
- * https://jules.google), and OpenCode's two-tone terminal mark verbatim from
+ * https://jules.google), Linear via Simple Icons (CC0-1.0, sourced from
+ * https://linear.app), and OpenCode's two-tone terminal mark verbatim from
  * the favicon https://opencode.ai serves. Each keeps its own brand colour
  * (see the `--mark-*` custom properties), so a mark says which provider a
  * session belongs to while the chips and row tints say what state it is in.
@@ -50,6 +51,9 @@ const DEVIN_PATH =
    surface — so it keeps its brand colour rather than taking the frame's. */
 const OPENCODE_FRAME_PATH = "M384 416H128V96H384V416ZM320 160H192V352H320V160Z";
 const OPENCODE_BLOCK_PATH = "M320 224V352H192V224H320Z";
+
+const LINEAR_PATH =
+  "M2.886 4.18A11.982 11.982 0 0 1 11.99 0C18.624 0 24 5.376 24 12.009c0 3.64-1.62 6.903-4.18 9.105L2.887 4.18ZM1.817 5.626l16.556 16.556c-.524.33-1.075.62-1.65.866L.951 7.277c.247-.575.537-1.126.866-1.65ZM.322 9.163l14.515 14.515c-.71.172-1.443.282-2.195.322L0 11.358a12 12 0 0 1 .322-2.195Zm-.17 4.862 9.823 9.824a12.02 12.02 0 0 1-9.824-9.824Z";
 
 const JULES_PATH =
   "M4.2 24q-1.26 0-2.13-.87T1.2 21v-.6q0-.51.345-.855T2.4 19.2t.855.345.345.855v.6q0 .24.18.42t.42.18.42-.18.18-.42V7.2q0-3 2.1-5.1T12 0t5.1 2.1 2.1 5.1V21q0 .24.18.42t.42.18.42-.18.18-.42v-.6q0-.51.345-.855t.855-.345.855.345.345.855v.6q0 1.26-.87 2.13T19.8 24t-2.13-.87T16.8 21v-5.4h-1.62v4.8q0 .51-.345.855t-.855.345-.855-.345-.345-.855v-4.8h-1.59v4.8q0 .51-.345.855t-.855.345-.855-.345-.345-.855v-4.8H7.2V21q0 1.26-.87 2.13T4.2 24m4.2-11.4q.54 0 .87-.45t.33-1.05-.33-1.05-.87-.45-.87.45-.33 1.05.33 1.05.87.45m7.2 0q.54 0 .87-.45t.33-1.05-.33-1.05-.87-.45-.87.45-.33 1.05.33 1.05.87.45";
@@ -197,6 +201,20 @@ function JulesMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
+function LinearMark({ className }: MarkProps): React.JSX.Element {
+  return (
+    <svg
+      className={className}
+      data-mark={ISSUE_TRACKER_ID.LINEAR}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path fill="currentColor" d={LINEAR_PATH} />
+    </svg>
+  );
+}
+
 function OpenCodeMark({ className }: MarkProps): React.JSX.Element {
   // The box crops the favicon's 512 canvas to a square the glyph fills top to
   // bottom, centred as published; the paths themselves are untouched.
@@ -232,6 +250,7 @@ const PROVIDER_MARKS = new Map<string, (props: MarkProps) => React.JSX.Element>(
   [PROVIDER_ID.CURSOR, CursorMark],
   [PROVIDER_ID.DEVIN, DevinMark],
   [PROVIDER_ID.JULES, JulesMark],
+  [ISSUE_TRACKER_ID.LINEAR, LinearMark],
   [PROVIDER_ID.OPENCODE, OpenCodeMark],
 ]);
 

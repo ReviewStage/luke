@@ -1,9 +1,10 @@
 import { CAPSULE_SIDE_WIDTH, PANEL_WIDTH, PEEK_SIDE_GROWTH } from "@sidecar/core";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { LukeFace } from "./luke-face";
 import {
   faceYieldsToMeter,
   speechFaceInputs,
+  useFaceHover,
   useFaceMotion,
   usePrefersReducedMotion,
 } from "./luke-face-mood";
@@ -130,6 +131,9 @@ export function NotchWings({
     ...(meterVoice ? { turn: meterVoice } : {}),
     hasAudioSignal: meterShown,
   });
+  // The box the hover is read against, not the face itself: the drawing is
+  // remounted for every play, and the hover has to survive the trick it fires.
+  const faceElement = useRef<HTMLSpanElement>(null);
   const face = useFaceMotion(
     {
       ...speechFaceInputs({
@@ -144,6 +148,7 @@ export function NotchWings({
       total: tally.total,
     },
     usePrefersReducedMotion(),
+    useFaceHover(faceElement),
   );
 
   // The wing is bounded by the shape its state draws, so its capacity is too:
@@ -209,9 +214,13 @@ export function NotchWings({
 
               Keyed on the play so that each one is a new drawing: a motion plays
               once now, and an element already wearing an animation does not
-              replay it on being handed the same one. */}
+              replay it on being handed the same one. The wrapper is what the
+              hover is measured against, so it holds still across those
+              remounts — and hovering it is a moment the face reacts to. */}
           {yieldToMeter ? null : (
-            <LukeFace key={face.play} motion={face.motion} repeat={face.repeat} />
+            <span className="wing-face" ref={faceElement}>
+              <LukeFace key={face.play} motion={face.motion} repeat={face.repeat} />
+            </span>
           )}
         </div>
       </div>
