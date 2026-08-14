@@ -10,6 +10,7 @@ import {
   type SessionDetail,
   type SessionIdentity,
   type SessionProvider,
+  type SessionWorkspace,
 } from "./session";
 
 export interface SessionRegistrySnapshot {
@@ -29,6 +30,7 @@ function copySession(session: NormalizedSession): NormalizedSession {
     detail: { ...session.detail },
     controls: session.controls.map((control) => ({ ...control })),
     spawnableAgents: [...session.spawnableAgents],
+    ...(session.workspace ? { workspace: { ...session.workspace } } : {}),
     attention: { ...session.attention },
   };
 }
@@ -68,6 +70,15 @@ function sameItems<T>(
   );
 }
 
+function sameOptional<T extends object>(
+  first: T | undefined,
+  second: T | undefined,
+  same: (first: T, second: T) => boolean,
+): boolean {
+  if (first === undefined || second === undefined) return first === second;
+  return same(first, second);
+}
+
 /**
  * Compares the observed context field by field. A detail that changed without
  * the status changing is exactly the case the registry exists to notice — a
@@ -102,6 +113,11 @@ const sameAttention = exhaustiveSame<AttentionDecision>({
   summary: (first, second) => first.summary === second.summary,
 });
 
+const sameWorkspace = exhaustiveSame<SessionWorkspace>({
+  providerWorkspaceId: (first, second) => first.providerWorkspaceId === second.providerWorkspaceId,
+  name: (first, second) => first.name === second.name,
+});
+
 const sameSession = exhaustiveSame<NormalizedSession>({
   providerId: (first, second) => first.providerId === second.providerId,
   providerSessionId: (first, second) => first.providerSessionId === second.providerSessionId,
@@ -117,6 +133,7 @@ const sameSession = exhaustiveSame<NormalizedSession>({
   spawnableAgents: (first, second) =>
     sameItems(first.spawnableAgents, second.spawnableAgents, Object.is),
   spawnTarget: (first, second) => first.spawnTarget === second.spawnTarget,
+  workspace: (first, second) => sameOptional(first.workspace, second.workspace, sameWorkspace),
   attention: (first, second) => sameAttention(first.attention, second.attention),
 });
 

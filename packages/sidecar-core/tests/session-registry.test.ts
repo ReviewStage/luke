@@ -86,6 +86,17 @@ test("a workspace grouping is bounded, and one without an id is dropped whole", 
 
   const ungrouped = registry.upsert(codex, observation("run:ungrouped", 100));
   assert.equal(ungrouped.workspace, undefined);
+
+  // Grouping a session that was ungrouped is a change the registry must
+  // notice on its own: the tray appears while nothing else moves.
+  const before = registry.revision;
+  registry.upsert(
+    codex,
+    observation("run:ungrouped", 100, {
+      workspace: { providerWorkspaceId: "workspace-1", name: "lisbon-v2" },
+    }),
+  );
+  assert.notEqual(registry.revision, before);
 });
 
 test("a session takes messages only when its adapter said so explicitly", () => {
