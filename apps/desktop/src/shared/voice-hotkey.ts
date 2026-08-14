@@ -17,6 +17,19 @@
 export const DEFAULT_VOICE_HOTKEYS: readonly string[] = ["Alt+Space", "Alt+S"];
 
 /**
+ * The key that summons the ask field from whatever app is frontmost, tried in
+ * order like the talk key's candidates.
+ *
+ * A sibling of the talk key on purpose: hold Option-Space to speak to Luke,
+ * tap Option-L to type to him — one modifier for both halves of the same
+ * conversation. It is deliberately not Command-L, which is the address bar in
+ * every browser and a taken chord in most editors; a global registration
+ * would swallow it machine-wide. Option-L costs the system only the ¬
+ * character, and Option-letter is the family launcher apps already claim.
+ */
+export const DEFAULT_ASK_HOTKEYS: readonly string[] = ["Alt+L", "Alt+Shift+L"];
+
+/**
  * The talk key a panel should show.
  *
  * Two things can say what the key is, and neither is reliably first. The helper
@@ -123,4 +136,14 @@ const ABSENCE_REASONS: Readonly<Record<VoiceHotkeyAbsence, string>> = {
 export function voiceHotkeyReport(hotkey: string | undefined, absence: VoiceHotkeyAbsence): string {
   if (hotkey) return `Luke talk key: ${voiceHotkeyLabel(hotkey)}`;
   return `Luke talk key: unavailable — ${ABSENCE_REASONS[absence]}`;
+}
+
+/**
+ * The startup line for the ask key, on the talk key's exact terms: the two
+ * are the two halves of one conversation, and their absences have the same
+ * three causes.
+ */
+export function askHotkeyReport(hotkey: string | undefined, absence: VoiceHotkeyAbsence): string {
+  if (hotkey) return `Luke ask key: ${voiceHotkeyLabel(hotkey)}`;
+  return `Luke ask key: unavailable — ${ABSENCE_REASONS[absence]}`;
 }

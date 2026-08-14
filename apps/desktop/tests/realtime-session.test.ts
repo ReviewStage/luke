@@ -1028,6 +1028,136 @@ function armDeveloperTurn(context: Harness): void {
   context.session.stopListening(true);
 }
 
+test("a typed ask opens a developer turn and asks for the reply to it", async () => {
+  const context = harness();
+  await context.session.connect();
+  const sentBefore = context.sent.length;
+
+  assert.equal(context.session.sendText("What needs me right now?"), true);
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+  // The microphone stays exactly as it was: typing never opens the device.
+  assert.equal(context.microphoneEnabled(), false);
+  const events = context.sent.slice(sentBefore);
+  assert.deepEqual(
+    events.map((event) => event.type),
+    [REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE, REALTIME_CLIENT_EVENT.RESPONSE_CREATE],
+  );
+  const item = events[0]?.item as { role?: string; content?: { text?: string }[] };
+  assert.equal(item.role, "user");
+  assert.equal(item.content?.[0]?.text, "What needs me right now?");
+});
+
+test("a typed ask can carry a tool call, because the developer opened the turn", async () => {
+  const carried: unknown[] = [];
+  const context = harness({
+    carryAction: async (action) => {
+      carried.push(action);
+      return { status: "accepted" };
+    },
+  });
+  await context.session.connect();
+  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
+  // The turn is opened by typing rather than by the talk key: the two arm the
+  // gate on the same terms, because both are the developer's own ask.
+  context.session.sendText("ask claude code to add tests");
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "send_session_message",
+          call_id: "call-1",
+          arguments:
+            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"add tests"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(carried, [
+    {
+      kind: "message",
+      identity: { providerId: "claude-code", providerSessionId: "session-a" },
+      text: "add tests",
+    },
+  ]);
+  // The outcome is voiced, exactly as a spoken ask's would be.
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+});
+
+test("a typed ask interrupts the reply it arrives over", async () => {
+  let now = 10_000;
+  const context = harness({ now: () => now });
+  await context.session.connect();
+  context.deliverRemoteTrack();
+  armDeveloperTurn(context);
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
+    item: { id: "item-1" },
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    item_id: "item-1",
+    delta: "There are two sessions",
+  });
+  context.session.reportRemoteAudioActive();
+  now = 11_200;
+  const sentBefore = context.sent.length;
+
+  assert.equal(context.session.sendText("open the codex one"), true);
+
+  // The reply being talked over is cut the way holding the talk key cuts it:
+  // silenced at once, cancelled, and trimmed to what was actually heard.
+  assert.equal(context.lukeAudible(), false);
+  assert.equal(context.captions.at(-1), undefined);
+  const events = context.sent.slice(sentBefore);
+  assert.deepEqual(
+    events.map((event) => event.type),
+    [
+      REALTIME_CLIENT_EVENT.RESPONSE_CANCEL,
+      REALTIME_CLIENT_EVENT.OUTPUT_AUDIO_BUFFER_CLEAR,
+      REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_TRUNCATE,
+      REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE,
+      REALTIME_CLIENT_EVENT.RESPONSE_CREATE,
+    ],
+  );
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+});
+
+test("a typed ask does not interrupt the developer's own open microphone", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.session.startListening();
+  const sentBefore = context.sent.length;
+
+  // Half a spoken question is still theirs: the keystroke is refused rather
+  // than the microphone's turn being discarded under them.
+  assert.equal(context.session.sendText("hello"), false);
+  assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
+  assert.equal(context.microphoneEnabled(), true);
+  assert.deepEqual(context.sent.slice(sentBefore), []);
+});
+
+test("a typed ask with nothing in it opens nothing", async () => {
+  const context = harness();
+  await context.session.connect();
+  const sentBefore = context.sent.length;
+
+  assert.equal(context.session.sendText("   "), false);
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+  assert.deepEqual(context.sent.slice(sentBefore), []);
+});
+
+test("a typed ask before the call is open reports it could not go", () => {
+  const context = harness();
+
+  assert.equal(context.session.sendText("What needs me?"), false);
+  assert.deepEqual(context.sent, []);
+});
+
 test("a spoken ask is carried through the carrier and its outcome is voiced", async () => {
   const carried: unknown[] = [];
   const context = harness({

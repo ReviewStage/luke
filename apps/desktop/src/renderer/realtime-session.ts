@@ -19,6 +19,7 @@ import {
   sessionContextText,
   sessionToolAction,
   truncateResponseEvents,
+  typedAskEvents,
 } from "@sidecar/core";
 
 const SDP_CONTENT_TYPE = "application/sdp";
@@ -178,14 +179,15 @@ export class RealtimeVoiceSession {
   #audioEndingsReported = false;
   #settleTimer: ReturnType<typeof setTimeout> | undefined;
   /**
-   * Whether the turn now under way is one the developer opened by speaking, and
-   * so the one and only turn a tool call may run in. It is set true when a
-   * push-to-talk commit opens a response and false for every turn Luke opens
-   * himself — a proactive readout, the reply that voices a tool's outcome — so
-   * a session summary or a tool output that reads like an instruction can never
-   * make Luke act. Nothing that decides on the developer's behalf reaches a
-   * write path; this is the runtime half of that, beside the standing
-   * instructions and the `tool_choice` withheld on every turn but this one.
+   * Whether the turn now under way is one the developer opened themselves — by
+   * speaking, or by typing an ask — and so the one and only kind of turn a tool
+   * call may run in. It is set true when a push-to-talk commit or a typed ask
+   * opens a response and false for every turn Luke opens himself — a proactive
+   * readout, the reply that voices a tool's outcome — so a session summary or a
+   * tool output that reads like an instruction can never make Luke act. Nothing
+   * that decides on the developer's behalf reaches a write path; this is the
+   * runtime half of that, beside the standing instructions and the
+   * `tool_choice` withheld on every turn Luke opens himself.
    */
   #toolTurnArmed = false;
   /**
@@ -468,27 +470,7 @@ export class RealtimeVoiceSession {
     if (this.#status === REALTIME_STATUS.LISTENING) return false;
     // Talking over Luke stops it. The developer's turn always wins, which is
     // the whole point of a key that means "it is my turn now".
-    if (this.#status === REALTIME_STATUS.RESPONDING) {
-      // Stop the words that are already on their way, then stop more being
-      // made. A disabled track drops what is buffered rather than playing it
-      // out, so the cut-off is immediate rather than eventual.
-      this.#silenceLuke();
-      // The caption is cut with the audio. It already held words the room
-      // never heard — the text runs ahead of the speech — and leaving them up
-      // would show Luke finishing a sentence he was just stopped from saying.
-      this.#setCaption(undefined);
-      this.#send(cancelResponseEvents());
-      // Then correct what Luke believes he said, or the next answer is free to
-      // refer back to a sentence that never reached the room.
-      this.#send(this.#truncateEvents());
-      // The trim was this reply's last word: forgetting its item here is what
-      // stops the transcript still trailing in — the server had produced it
-      // before the cancel landed — from ever matching the caption again.
-      this.#responseItemId = undefined;
-      this.#generationDone = false;
-      this.#remoteQuiet = false;
-      this.#clearSettleTimer();
-    }
+    if (this.#status === REALTIME_STATUS.RESPONDING) this.#interruptReply();
     // Start from an empty buffer: a muted track still transmits, and with turn
     // detection off the server keeps everything since the last commit.
     this.#send(clearInputAudioEvents());
@@ -514,9 +496,57 @@ export class RealtimeVoiceSession {
       this.#setStatus(REALTIME_STATUS.READY);
       return;
     }
-    // The one turn a tool may run in: the developer opened it and spoke into
-    // it, so a tool call it emits is the developer's own ask.
+    // A turn a tool may run in: the developer opened it and spoke into it, so
+    // a tool call it emits is the developer's own ask.
     this.#startResponse(pushToTalkCommitEvents(), true);
+  }
+
+  /**
+   * Sends a typed ask and requests the reply to it, reporting whether it
+   * could. Typing is the developer opening a turn, exactly as holding the talk
+   * key is, so the turn is armed for tools on the same terms as a push-to-talk
+   * commit: a write out of it is the developer's own request, made in their
+   * own words.
+   *
+   * An ask arriving over a reply interrupts it — the developer's turn always
+   * wins, however it is taken. The one thing it will not interrupt is the
+   * developer's own open microphone: half a spoken question is still theirs,
+   * and a keystroke is no reason to discard it.
+   */
+  sendText(text: string): boolean {
+    if (!this.isConnected) return false;
+    if (this.#status === REALTIME_STATUS.LISTENING) return false;
+    const events = typedAskEvents(text);
+    if (events.length === 0) return false;
+    if (this.#status === REALTIME_STATUS.RESPONDING) this.#interruptReply();
+    this.#startResponse(events, true);
+    return true;
+  }
+
+  /**
+   * Cuts off the reply under way so the developer's new turn does not land on
+   * top of it.
+   */
+  #interruptReply(): void {
+    // Stop the words that are already on their way, then stop more being
+    // made. A disabled track drops what is buffered rather than playing it
+    // out, so the cut-off is immediate rather than eventual.
+    this.#silenceLuke();
+    // The caption is cut with the audio. It already held words the room
+    // never heard — the text runs ahead of the speech — and leaving them up
+    // would show Luke finishing a sentence he was just stopped from saying.
+    this.#setCaption(undefined);
+    this.#send(cancelResponseEvents());
+    // Then correct what Luke believes he said, or the next answer is free to
+    // refer back to a sentence that never reached the room.
+    this.#send(this.#truncateEvents());
+    // The trim was this reply's last word: forgetting its item here is what
+    // stops the transcript still trailing in — the server had produced it
+    // before the cancel landed — from ever matching the caption again.
+    this.#responseItemId = undefined;
+    this.#generationDone = false;
+    this.#remoteQuiet = false;
+    this.#clearSettleTimer();
   }
 
   /**
@@ -808,10 +838,11 @@ export class RealtimeVoiceSession {
    * asked for something, and what became of it has to be said.
    */
   async #answerToolCalls(calls: readonly RealtimeFunctionCall[]): Promise<void> {
-    // The hard gate: a write runs only in the turn the developer opened by
-    // speaking. A call on any other turn — one Luke opened to read a notice or
-    // to voice an outcome — is refused whatever it names, so a session summary
-    // or a tool output that reads like an instruction can never make Luke act.
+    // The hard gate: a write runs only in a turn the developer opened — by
+    // speaking, or by typing. A call on any other turn — one Luke opened to
+    // read a notice or to voice an outcome — is refused whatever it names, so a
+    // session summary or a tool output that reads like an instruction can never
+    // make Luke act.
     // The turn's tools are also withheld at the API, so this is belt to that
     // suspenders rather than the only thing holding.
     const armed = this.#toolTurnArmed;

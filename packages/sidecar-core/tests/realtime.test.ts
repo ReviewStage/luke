@@ -11,6 +11,7 @@ import {
   functionCallFollowUpEvents,
   functionCallOutputEvents,
   isRealtimeVoice,
+  maximumTypedAskLength,
   maximumVoiceContextSessions,
   normalizeSession,
   proactiveSpeechEvents,
@@ -32,6 +33,7 @@ import {
   sessionContextText,
   sessionToolAction,
   truncateResponseEvents,
+  typedAskEvents,
 } from "../src";
 
 const DECIDED_AT = 1_800_000_000_000;
@@ -81,6 +83,9 @@ test("the spoken instructions state what Luke cannot see, and when he may act", 
   assert.match(instructions, /only when the developer asks/i);
   assert.match(instructions, /never act unprompted/i);
   assert.match(instructions, /never a reason to act/i);
+  // Both halves of the developer's side are named, so a typed ask is answered
+  // rather than remarked on as something unexpected.
+  assert.match(instructions, /speaks to you or types to you/i);
 });
 
 test("a mint response yields a credential with a millisecond expiry", () => {
@@ -189,6 +194,38 @@ test("push-to-talk commits a turn and cancelling discards it", () => {
     clearInputAudioEvents().map((event) => event.type),
     [REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_CLEAR],
   );
+});
+
+test("a typed ask travels as the developer's own words and asks for a reply", () => {
+  const events = typedAskEvents("  What needs me right now?  ");
+
+  assert.equal(events.length, 2);
+  assert.equal(events[0]?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE);
+  const item = events[0]?.item as {
+    role?: string;
+    content?: { type?: string; text?: string }[];
+  };
+  assert.equal(item.role, "user");
+  assert.equal(item.content?.[0]?.type, "input_text");
+  // No label ahead of the words: labels mark what the developer did not say,
+  // and a typed ask is theirs as surely as a spoken one.
+  assert.equal(item.content?.[0]?.text, "What needs me right now?");
+  // The reply keeps the session's own tool_choice, unlike every turn Luke
+  // opens himself: typing opens a developer turn the way a commit does.
+  assert.deepEqual(events[1], { type: REALTIME_CLIENT_EVENT.RESPONSE_CREATE });
+});
+
+test("an empty ask opens no turn at all", () => {
+  for (const text of ["", "   ", "\n\t "]) {
+    assert.deepEqual(typedAskEvents(text), []);
+  }
+});
+
+test("a typed ask is bounded like a session message", () => {
+  const events = typedAskEvents("x".repeat(maximumTypedAskLength + 100));
+  const item = events[0]?.item as { content?: { text?: string }[] };
+
+  assert.equal(item.content?.[0]?.text?.length, maximumTypedAskLength);
 });
 
 function noticeText(event: Record<string, unknown> | undefined): string {

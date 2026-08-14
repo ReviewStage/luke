@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  askHotkeyReport,
+  DEFAULT_ASK_HOTKEYS,
   DEFAULT_VOICE_HOTKEYS,
   TALK_KEY_RELEASE,
   TALK_KEY_TAP_MS,
@@ -15,6 +17,32 @@ test("the default is the chord a macOS voice assistant is reached for", () => {
   // Option-Space is where Superwhisper, the ChatGPT desktop app and Alfred sit;
   // Option-S is Wispr Flow's default, for a machine where the first is taken.
   assert.deepEqual(DEFAULT_VOICE_HOTKEYS, ["Alt+Space", "Alt+S"]);
+});
+
+test("the ask key is the talk key's sibling, never its rival", () => {
+  // One modifier for both halves of the conversation — and Command-L is
+  // deliberately not here: globally registered, it would swallow the address
+  // bar of every browser on the machine.
+  for (const accelerator of DEFAULT_ASK_HOTKEYS) {
+    assert.match(accelerator, /^Alt\+/);
+    assert.ok(!accelerator.startsWith("Command"));
+    assert.ok(!accelerator.startsWith("CommandOrControl"));
+  }
+  // Two Luke keys must never compete for one chord: whichever registered
+  // first would silently cost the other its whole feature.
+  for (const accelerator of DEFAULT_ASK_HOTKEYS) {
+    assert.ok(!DEFAULT_VOICE_HOTKEYS.includes(accelerator));
+  }
+});
+
+test("a missing ask key reports on the talk key's terms", () => {
+  assert.equal(askHotkeyReport("Alt+L", VOICE_HOTKEY_ABSENCE.ALREADY_OWNED), "Luke ask key: ⌥L");
+  assert.match(
+    askHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.ALREADY_OWNED),
+    /another app already owns it/,
+  );
+  assert.match(askHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.CAPTURE_RUN), /capture run/);
+  assert.match(askHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.NO_CREDENTIAL), /voice is off/);
 });
 
 test("an accelerator reads the way macOS writes it", () => {

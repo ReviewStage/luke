@@ -72,6 +72,8 @@ import {
   isCredentialProviderId,
 } from "./shared/credential-providers";
 import {
+  askHotkeyReport,
+  DEFAULT_ASK_HOTKEYS,
   DEFAULT_VOICE_HOTKEYS,
   VOICE_HOTKEY_ABSENCE,
   type VoiceHotkeyAbsence,
@@ -239,6 +241,42 @@ function registerToggleHotkey(): void {
     return;
   }
   voiceHotkeyAbsence = VOICE_HOTKEY_ABSENCE.ALREADY_OWNED;
+}
+
+let askHotkey: string | undefined;
+
+/**
+ * Registers the key that summons the ask field from whatever app is frontmost,
+ * on the talk key's own terms: never during a capture run, and never for a
+ * conversation that cannot open — a system-wide key that answers nothing is a
+ * key taken from every other app for no reason. Electron's registration is
+ * enough here, because a summons has no release edge to hear.
+ *
+ * The press does two things in order: stands the panel up focused, then asks
+ * the renderer to put the caret in the field — or, when the caret is already
+ * there, the renderer reads the same press as the dismissal, so one key
+ * summons and puts away like every launcher does.
+ */
+function registerAskHotkey(): void {
+  if (captureMode) {
+    process.stderr.write(`${askHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.CAPTURE_RUN)}\n`);
+    return;
+  }
+  if (!realtimeCredentials) {
+    process.stderr.write(`${askHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.NO_CREDENTIAL)}\n`);
+    return;
+  }
+  for (const accelerator of DEFAULT_ASK_HOTKEYS) {
+    const registered = globalShortcut.register(accelerator, () => {
+      setWindowMode("expanded", true);
+      panelWindow?.webContents.send(channels.lifecycle, "ask:focus");
+    });
+    if (!registered) continue;
+    askHotkey = accelerator;
+    process.stderr.write(`${askHotkeyReport(askHotkey, VOICE_HOTKEY_ABSENCE.ALREADY_OWNED)}\n`);
+    return;
+  }
+  process.stderr.write(`${askHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.ALREADY_OWNED)}\n`);
 }
 
 /** Tells a renderer the key it should be showing, whenever that changes. */
@@ -483,6 +521,10 @@ function registerIpc(): void {
       realtimeAvailable: realtimeCredentials !== undefined,
       ...(voiceHotkey ? { voiceHotkey: voiceHotkeyLabel(voiceHotkey) } : {}),
       voiceHotkeyHeld,
+      // The accelerator rather than its label: the renderer needs both
+      // spellings — the keycap's ⌥L and aria's Alt+L — and only the
+      // accelerator can produce the pair.
+      ...(askHotkey ? { askHotkey } : {}),
       display: displayDiagnostic(),
       sessions: fixtureMode ? [] : sessionRegistry.snapshot().sessions,
       settings: await settingsStore.snapshot(),
@@ -1023,6 +1065,7 @@ if (!app.requestSingleInstanceLock()) {
     // moment later, and a line printed now would state an absence that only
     // exists because nobody has answered yet.
     registerVoiceHotkey();
+    registerAskHotkey();
     createPanel();
     configurePermissions();
     startSessionObservation();

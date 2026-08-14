@@ -91,7 +91,7 @@ export function removalEndsEntry(
 }
 
 /** Long enough for any stage to arrive, and short enough to be a backstop. */
-const FOCUS_FRAME_LIMIT = 60;
+export const FOCUS_FRAME_LIMIT = 60;
 
 /**
  * Hands focus to an element as soon as it can take it, and answers with the way

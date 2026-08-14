@@ -143,6 +143,13 @@ export interface AppBootstrap {
    * the panel says which of the two the user actually has.
    */
   voiceHotkeyHeld: boolean;
+  /**
+   * The accelerator that summons the ask field from any app, absent when the
+   * system refused every candidate. The raw accelerator rather than a label,
+   * because the renderer needs both spellings: the keycap's ⌥L and aria's
+   * Alt+L.
+   */
+  askHotkey?: string;
   /** Whether the panel should show the voice diagnostics block. */
   display: DisplayDiagnostic;
   sessions: readonly NormalizedSession[];
