@@ -327,6 +327,12 @@ export function App(): React.JSX.Element {
    * Never state: no panel surface draws it — it exists to be spoken from.
    */
   const issuesRef = useRef<readonly TrackedIssue[] | undefined>(undefined);
+  /**
+   * Whether a live roster push has arrived. The bootstrap reply resolves
+   * whenever the main process gets to it, so a push can land first — and the
+   * bootstrap's older snapshot must then not clobber it.
+   */
+  const issuesPushed = useRef(false);
 
   const changeTab = useCallback((next: PanelTab) => {
     tabRef.current = next;
@@ -1037,7 +1043,9 @@ export function App(): React.JSX.Element {
     void window.sidecar.getBootstrap().then((value) => {
       setBootstrap(value);
       setSessions(value.sessions);
-      issuesRef.current = value.issues;
+      // Only fill in what no push has said yet: the bootstrap snapshot is
+      // older than any roster change that raced past it.
+      if (!issuesPushed.current) issuesRef.current = value.issues;
       setSettings(value.settings);
       setDisplay(value.display);
       if (modeGeneration.current === bootstrapGeneration) {
@@ -1075,6 +1083,7 @@ export function App(): React.JSX.Element {
     // Straight to the conversation rather than through state: no panel
     // surface draws the issue roster, so a re-render would be work for nobody.
     const removeIssues = window.sidecar.onIssuesChanged((issues) => {
+      issuesPushed.current = true;
       issuesRef.current = issues;
       voiceSession.current?.updateIssues(issues);
     });

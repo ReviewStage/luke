@@ -175,6 +175,13 @@ const ISSUE_REFRESH_INTERVAL_MS = 60_000;
 let trackedIssues: readonly TrackedIssue[] | undefined;
 let issueRefreshTimer: NodeJS.Timeout | undefined;
 let issueRefreshRunning = false;
+/**
+ * Whether a pass was asked for while one was running. A key save or clear
+ * must reach the roster on the very next pass, not be swallowed by an
+ * interval tick that happened to be in flight — so the guard queues instead
+ * of dropping.
+ */
+let issueRefreshQueued = false;
 // A fixture run must stay deterministic and credential-free, so it never builds
 // an evaluator — not just capture runs.
 const attentionEvaluator = fixtureMode ? undefined : openAiAttentionEvaluatorFromEnvironment();
@@ -1121,7 +1128,11 @@ function startSessionObservation(): void {
  * which is how the renderer knows there is nothing to advertise.
  */
 async function refreshTrackedIssues(): Promise<void> {
-  if (fixtureMode || issueRefreshRunning) return;
+  if (fixtureMode) return;
+  if (issueRefreshRunning) {
+    issueRefreshQueued = true;
+    return;
+  }
   issueRefreshRunning = true;
   try {
     const collected: TrackedIssue[] = [];
@@ -1141,6 +1152,10 @@ async function refreshTrackedIssues(): Promise<void> {
     process.stderr.write(`Issue observation failed: ${message}\n`);
   } finally {
     issueRefreshRunning = false;
+    if (issueRefreshQueued) {
+      issueRefreshQueued = false;
+      void refreshTrackedIssues();
+    }
   }
 }
 

@@ -17,6 +17,7 @@ import {
   issueContextEvents,
   issueContextText,
   issueToolAction,
+  issueTrackerDisconnectedEvents,
   type NormalizedSession,
   proactiveSpeechEvents,
   pushToTalkCommitEvents,
@@ -848,7 +849,16 @@ export class RealtimeVoiceSession {
    */
   updateIssues(issues: readonly TrackedIssue[] | undefined): void {
     this.#issues = issues;
-    if (!issues || !this.isConnected) return;
+    if (!this.isConnected) return;
+    if (!issues) {
+      // A conversation that was never told about a board has nothing to
+      // withdraw; one that was must be told the board is gone, or Luke keeps
+      // answering from a tracker nobody is observing.
+      if (this.#issueContext === undefined) return;
+      this.#issueContext = undefined;
+      this.#send(issueTrackerDisconnectedEvents());
+      return;
+    }
     const context = issueContextText(issues);
     if (context === this.#issueContext) return;
     this.#issueContext = context;

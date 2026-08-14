@@ -98,14 +98,22 @@ export function issueCommentText(value: unknown): string | undefined {
   return normalized;
 }
 
+/** Required, and flattened for the same reason {@link boundedText} is. */
 function requiredText(value: string, field: string): string {
-  const normalized = value.trim();
+  const normalized = value.trim().replace(/\s+/g, " ");
   if (!normalized) throw new Error(`${field} must not be empty`);
   return normalized;
 }
 
+/**
+ * Bounded and flattened to one line. Issue fields are written by anyone in
+ * the tracker's workspace, and the roster they end up in is line-structured —
+ * a title carrying its own line breaks could forge roster entries or a
+ * bracketed label. Flattening here means no rendering of an issue ever has
+ * to remember to.
+ */
 function boundedText(value: string | undefined, maximumLength: number): string | undefined {
-  const normalized = value?.trim();
+  const normalized = value?.trim().replace(/\s+/g, " ");
   if (!normalized) return undefined;
   return normalized.slice(0, maximumLength);
 }

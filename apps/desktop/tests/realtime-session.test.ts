@@ -1850,10 +1850,9 @@ test("the conversation is told which issues the tracker lists", async () => {
     false,
   );
 
-  // An unchanged roster is not resent, and no tracker means no roster at all.
+  // An unchanged roster is not resent.
   const sentBefore = context.sent.length;
   context.session.updateIssues([trackedIssue()]);
-  context.session.updateIssues(undefined);
   assert.equal(context.sent.length, sentBefore);
 });
 
@@ -2026,4 +2025,37 @@ test("an issue call outside a turn the developer opened cannot act", async () =>
   );
   const raw = (output?.item as { output?: string } | undefined)?.output ?? "{}";
   assert.equal((JSON.parse(raw) as { status?: string }).status, "refused");
+});
+
+test("a tracker that disconnects withdraws the roster, and a reconnect resends it", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.session.updateIssues([trackedIssue()]);
+  const sentBefore = context.sent.length;
+
+  // Disconnecting is news once; staying disconnected is not.
+  context.session.updateIssues(undefined);
+  context.session.updateIssues(undefined);
+
+  const withdrawals = context.sent.slice(sentBefore).filter((event) => {
+    const item = event.item as { content?: { text?: string }[] } | undefined;
+    return item?.content?.[0]?.text?.includes("no longer connected") === true;
+  });
+  assert.equal(withdrawals.length, 1);
+
+  // The same roster arriving again after a reconnect is news again: the
+  // conversation was told to disregard it, so it has to be retold.
+  context.session.updateIssues([trackedIssue()]);
+  const rosters = context.sent.slice(sentBefore).filter((event) => {
+    const item = event.item as { content?: { text?: string }[] } | undefined;
+    return item?.content?.[0]?.text?.includes("LUKE-123") === true;
+  });
+  assert.equal(rosters.length, 1);
+
+  // A conversation never told about a board has nothing to withdraw.
+  const fresh = harness();
+  await fresh.session.connect();
+  const freshBefore = fresh.sent.length;
+  fresh.session.updateIssues(undefined);
+  assert.equal(fresh.sent.length, freshBefore);
 });

@@ -18,6 +18,7 @@ import {
   issueContextEvents,
   issueContextText,
   issueToolAction,
+  issueTrackerDisconnectedEvents,
   maximumTypedAskLength,
   maximumVoiceContextIssues,
   maximumVoiceContextSessions,
@@ -744,4 +745,16 @@ test("the session and issue tools answer to their own validators", () => {
   assert.equal(isIssueToolName(REALTIME_TOOL.UPDATE_ISSUE_STATE), true);
   assert.equal(isIssueToolName(REALTIME_TOOL.COMMENT_ON_ISSUE), true);
   assert.equal(isIssueToolName("delete_everything"), false);
+});
+
+test("a disconnected tracker withdraws the roster without starting a reply", () => {
+  const events = issueTrackerDisconnectedEvents();
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0]?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE);
+  assert.match(noticeText(events[0]), /no longer connected/i);
+  assert.equal(
+    events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE),
+    false,
+  );
 });
