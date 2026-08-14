@@ -391,6 +391,11 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   }, [ensureVoiceSession]);
 
   const stopMicrophone = useCallback(async () => {
+    // The call is gone, so a tap-to-keep-open turn cannot still be open. Leaving
+    // the latch set would make the next press — after a key is connected again —
+    // look like the end of that turn and do nothing.
+    talkLatched.current = false;
+    talkPressedAt.current = undefined;
     await voiceSession.current?.close();
   }, []);
 

@@ -561,8 +561,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       : [
           {
             label: "Voice",
-            detail:
-              "Off: no OPENAI_API_KEY reached the process Luke was launched with, so no conversation can be opened.",
+            detail: "Off: no OpenAI key is connected, so no conversation can be opened.",
           },
         ]),
     providersFact(input.settings),
