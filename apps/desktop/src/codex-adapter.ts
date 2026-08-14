@@ -293,18 +293,19 @@ function argumentPhrase(value: unknown): string | undefined {
   return tokens.every((token) => token !== undefined) ? text(tokens.join(" ")) : undefined;
 }
 
-/** Names the tool Codex called, preferring whichever argument says what it is for. */
-function activityFromCall(payload: Record<string, unknown>): string | undefined {
+/**
+ * Names the tool Codex called, preferring whichever argument says what it is
+ * for. The row and a transcript line have different room for it, so how much
+ * of the argument survives is the caller's to say.
+ */
+function callPhrase(payload: Record<string, unknown>, maximumLength: number): string | undefined {
   const name = text(payload.name);
   if (!name) return undefined;
   const parsedArguments = text(payload.arguments)
     ? recordFromJsonLine(payload.arguments as string)
     : undefined;
   for (const key of CODEX_CALL_ARGUMENT_KEY) {
-    const detail = oneLine(
-      argumentPhrase(parsedArguments?.[key]),
-      CODEX_ADAPTER_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH,
-    );
+    const detail = oneLine(argumentPhrase(parsedArguments?.[key]), maximumLength);
     if (detail) return `${name}: ${detail}`;
   }
   return name;
@@ -347,7 +348,7 @@ function transcriptFromResponseItem(
     return undefined;
   }
   if (payload.type === CODEX_RESPONSE_PAYLOAD.FUNCTION_CALL) {
-    const called = oneLine(activityFromCall(payload), maximumTranscriptEntryLength);
+    const called = callPhrase(payload, maximumTranscriptEntryLength);
     return called ? { role: TRANSCRIPT_ROLE.TOOL, text: called } : undefined;
   }
   if (payload.type !== CODEX_RESPONSE_PAYLOAD.FUNCTION_CALL_OUTPUT) return undefined;
@@ -397,7 +398,8 @@ function parseCodexRolloutTail(tail: string, includeTranscript: boolean): Parsed
     }
     if (record.type !== CODEX_ROLLOUT_TYPE.RESPONSE_ITEM) continue;
     if (payload.type === CODEX_RESPONSE_PAYLOAD.FUNCTION_CALL) {
-      parsed.activity = activityFromCall(payload) ?? parsed.activity;
+      parsed.activity =
+        callPhrase(payload, CODEX_ADAPTER_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH) ?? parsed.activity;
     }
     if (includeTranscript) {
       const entry = transcriptFromResponseItem(payload);

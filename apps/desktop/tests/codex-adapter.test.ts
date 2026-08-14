@@ -679,7 +679,7 @@ test("reads what was said only for a user who asked for it", async (t) => {
       payload: {
         type: "function_call",
         name: "exec_command",
-        arguments: '{"cmd":"pnpm test","workdir":"/Users/test/luke"}',
+        arguments: JSON.stringify({ cmd: `pnpm test ${"-".repeat(200)}`, workdir: "/Users/test" }),
       },
     },
     {
@@ -708,7 +708,9 @@ test("reads what was said only for a user who asked for it", async (t) => {
   assert.equal(without?.transcript, undefined);
   assert.deepEqual(carried?.transcript, [
     { role: TRANSCRIPT_ROLE.USER, text: "Ship the release." },
-    { role: TRANSCRIPT_ROLE.TOOL, text: "exec_command: pnpm test" },
+    // A call is a transcript line here rather than the 80-character phrase the
+    // row shows, so it is bounded like every other line of the conversation.
+    { role: TRANSCRIPT_ROLE.TOOL, text: `exec_command: pnpm test ${"-".repeat(200)}` },
     { role: TRANSCRIPT_ROLE.TOOL, text: "24 tests passed" },
     { role: TRANSCRIPT_ROLE.AGENT, text: "Released 0.1.6." },
   ]);
