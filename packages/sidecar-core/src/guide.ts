@@ -43,6 +43,13 @@ export interface AppGuideSetting {
   kind: AppSettingKind;
   /** The current value as it should be said: `on`/`off`, or one of `choices`. */
   value: string;
+  /**
+   * The value the setting holds until the user chooses, said the same way as
+   * `value` — it is what an ask for "the default" is a change to, so a guide
+   * without it is one that cannot honour that ask. Absent only for something
+   * the app has no default of its own for, such as a system permission.
+   */
+  defaultValue?: string;
   /** Every value a choice accepts, in the order settings offers them. */
   choices?: readonly string[];
   /** Whether a spoken ask may change it; false means describe, never act. */
@@ -169,6 +176,7 @@ function settingLine(setting: AppGuideSetting): string {
   const parts = [
     `- ${setting.label} — ${setting.description}`,
     `currently ${setting.value}`,
+    ...(setting.defaultValue !== undefined ? [`default: ${setting.defaultValue}`] : []),
     ...(setting.choices ? [`choices: ${setting.choices.join(", ")}`] : []),
     setting.adjustable
       ? `changeable by voice [setting_id=${setting.id}]`
@@ -180,7 +188,8 @@ function settingLine(setting: AppGuideSetting): string {
 
 /**
  * Renders the guide the conversation is allowed to know about itself: the
- * facts, then every setting with its current value and how it changes. The
+ * facts, then every setting with its current value, its default, and how it
+ * changes. The
  * ids are printed in the same breath as the values so a spoken change can
  * name a setting the way tool calls name sessions — exactly as listed.
  */

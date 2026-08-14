@@ -12,6 +12,7 @@ import {
 } from "@sidecar/core";
 import { environmentRealtimeSpeed, environmentRealtimeVoice } from "./openai-realtime-credentials";
 import {
+  APP_SETTING_DEFAULTS,
   type AppSettings,
   CREDENTIAL_SOURCE,
   type CredentialSource,
@@ -169,6 +170,15 @@ interface ResolvedApiKey {
   source: CredentialSource;
 }
 
+/**
+ * Reads a stored switch: a boolean is honoured, and anything else — a missing
+ * field, an older file, a corrupt value — lands on the stated default rather
+ * than switching anything on or off by accident.
+ */
+function booleanSetting(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
+
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
 }
@@ -234,7 +244,6 @@ function parsePersistedSettings(source: string): PersistedSettings {
   }
   const record = parsed as Record<string, unknown>;
   const version = record[SETTINGS_FIELD.VERSION];
-  const showInMenuBar = record[SETTINGS_FIELD.SHOW_IN_MENU_BAR];
   const voice = record[SETTINGS_FIELD.VOICE];
   const voiceSpeed = record[SETTINGS_FIELD.VOICE_SPEED];
   const formFactor = record[SETTINGS_FIELD.FORM_FACTOR];
@@ -251,21 +260,39 @@ function parsePersistedSettings(source: string): PersistedSettings {
   return {
     version: typeof version === "number" ? version : SETTINGS_FILE_VERSION,
     apiKeys: storedApiKeys(record),
-    showInDock: record[SETTINGS_FIELD.SHOW_IN_DOCK] === true,
-    showInMenuBar: typeof showInMenuBar === "boolean" ? showInMenuBar : true,
+    showInDock: booleanSetting(
+      record[SETTINGS_FIELD.SHOW_IN_DOCK],
+      APP_SETTING_DEFAULTS.showInDock,
+    ),
+    showInMenuBar: booleanSetting(
+      record[SETTINGS_FIELD.SHOW_IN_MENU_BAR],
+      APP_SETTING_DEFAULTS.showInMenuBar,
+    ),
     // A voice this build does not offer is dropped rather than carried: unlike
     // a credential it has a default to fall back to, and honouring an unknown
     // one would mint sessions the API refuses.
     ...(isRealtimeVoice(voice) ? { voice } : {}),
     // A pace outside the offered set is dropped for the same reason.
     ...(isRealtimeVoiceSpeed(voiceSpeed) ? { voiceSpeed } : {}),
-    voiceCaptions: record[SETTINGS_FIELD.VOICE_CAPTIONS] === true,
+    voiceCaptions: booleanSetting(
+      record[SETTINGS_FIELD.VOICE_CAPTIONS],
+      APP_SETTING_DEFAULTS.voiceCaptions,
+    ),
     ...(voiceHotkey ? { voiceHotkey } : {}),
     ...(askHotkey ? { askHotkey } : {}),
     ...(stopHotkey ? { stopHotkey } : {}),
-    duckOtherMedia: record[SETTINGS_FIELD.DUCK_OTHER_MEDIA] !== false,
-    sessionNotifications: record[SETTINGS_FIELD.SESSION_NOTIFICATIONS] !== false,
-    showOnAllDisplays: record[SETTINGS_FIELD.SHOW_ON_ALL_DISPLAYS] === true,
+    duckOtherMedia: booleanSetting(
+      record[SETTINGS_FIELD.DUCK_OTHER_MEDIA],
+      APP_SETTING_DEFAULTS.duckOtherMedia,
+    ),
+    sessionNotifications: booleanSetting(
+      record[SETTINGS_FIELD.SESSION_NOTIFICATIONS],
+      APP_SETTING_DEFAULTS.sessionNotifications,
+    ),
+    showOnAllDisplays: booleanSetting(
+      record[SETTINGS_FIELD.SHOW_ON_ALL_DISPLAYS],
+      APP_SETTING_DEFAULTS.showOnAllDisplays,
+    ),
     // A form this build does not draw is dropped like an unknown voice.
     ...(isPanelFormFactor(formFactor) ? { formFactor } : {}),
   };
@@ -803,12 +830,7 @@ export class SettingsStore {
     let persisted: PersistedSettings = {
       version: SETTINGS_FILE_VERSION,
       apiKeys: {},
-      showInDock: false,
-      showInMenuBar: true,
-      voiceCaptions: false,
-      duckOtherMedia: true,
-      sessionNotifications: true,
-      showOnAllDisplays: false,
+      ...APP_SETTING_DEFAULTS,
     };
     if (source) {
       try {
