@@ -1,24 +1,28 @@
 import os from "node:os";
 import path from "node:path";
 import {
+  isRecord,
   maximumSessionSummaryLength,
   maximumSessionTitleLength,
+  nonNegativeNumber,
+  oneLine,
   PROVIDER_ID,
   type ProviderSessionObservation,
+  positiveInteger,
+  recordFromJsonLine,
   SESSION_STATUS,
   type SessionDetail,
   type SessionProvider,
   type SessionProviderAdapter,
+  text,
+  wholeNumber,
 } from "@sidecar/core";
 import {
   discoverSessionFiles,
   LOCAL_ADAPTER_DEFAULTS,
-  nonNegativeNumber,
-  positiveInteger,
   readDirectory,
   readHead,
   readTail,
-  recordFromJsonLine,
   type SessionFileCandidate,
   statDirectoryEntry,
   tailRecords,
@@ -157,24 +161,6 @@ function eventTypeFromRecord(record: Record<string, unknown>): ClaudeEventType |
     : undefined;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function text(value: unknown): string | undefined {
-  const normalized = typeof value === "string" ? value.trim() : "";
-  return normalized || undefined;
-}
-
-/** Collapses the newlines and runs of spaces a one-line row cannot show. */
-function oneLine(value: string | undefined, maximumLength: number): string | undefined {
-  const normalized = value?.replace(/\s+/gu, " ").trim();
-  if (!normalized) return undefined;
-  return normalized.length > maximumLength
-    ? `${normalized.slice(0, maximumLength - 1).trimEnd()}…`
-    : normalized;
-}
-
 function contentBlocks(record: Record<string, unknown>): Record<string, unknown>[] {
   const message = record.message;
   const content = isRecord(message) ? message.content : record.content;
@@ -209,10 +195,6 @@ function stopReasonFromRecord(record: Record<string, unknown>): string | undefin
 function modelFromRecord(record: Record<string, unknown>): string | undefined {
   const message = record.message;
   return isRecord(message) ? text(message.model) : undefined;
-}
-
-function wholeNumber(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 /**

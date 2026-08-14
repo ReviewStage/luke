@@ -1,6 +1,7 @@
 import type { Dirent, Stats } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { recordFromJsonLine } from "@sidecar/core";
 
 /**
  * The shared half of every adapter that observes sessions on this machine:
@@ -52,16 +53,6 @@ interface ProjectSessionsDirectory {
   project: DirectoryEntry;
   sessionsDirectory: string;
   mtimeMs: number;
-}
-
-export function positiveInteger(value: number | undefined, fallback: number): number {
-  if (value === undefined || !Number.isFinite(value) || value <= 0) return fallback;
-  return Math.floor(value);
-}
-
-export function nonNegativeNumber(value: number | undefined, fallback: number): number {
-  if (value === undefined || !Number.isFinite(value) || value < 0) return fallback;
-  return value;
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
@@ -158,17 +149,6 @@ export function readTail(filePath: string, maximumBytes: number): Promise<string
 /** The start of a session file, for the records a provider writes only once. */
 export function readHead(filePath: string, maximumBytes: number): Promise<string> {
   return readRegion(filePath, maximumBytes, () => 0);
-}
-
-export function recordFromJsonLine(line: string): Record<string, unknown> | undefined {
-  try {
-    const parsed = JSON.parse(line) as unknown;
-    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 function tailLines(tail: string): string[] {

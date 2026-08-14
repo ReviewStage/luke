@@ -21,6 +21,7 @@ import {
   type NormalizedSession,
   type ObservedWorkspaceProject,
   outputSpeedUpdateEvents,
+  positiveInteger,
   proactiveSpeechEvents,
   pushToTalkCommitEvents,
   REALTIME_DATA_CHANNEL,
@@ -121,11 +122,6 @@ export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbac
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-function positiveInteger(value: number | undefined, fallback: number): number {
-  if (value === undefined || !Number.isFinite(value) || value <= 0) return fallback;
-  return Math.floor(value);
 }
 
 /**

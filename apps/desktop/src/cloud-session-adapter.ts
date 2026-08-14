@@ -1,6 +1,8 @@
 import {
   type ControllableSessionProviderAdapter,
+  isRecord,
   type MessageCapableSessionProviderAdapter,
+  nonNegativeNumber,
   PROVIDER_MESSAGE_RESULT_STATUS,
   type ProviderControlRequest,
   type ProviderControlResult,
@@ -10,12 +12,14 @@ import {
   type ProviderWorkspaceAgentRequest,
   type ProviderWorkspaceRequest,
   type ProviderWorkspaceResult,
+  positiveInteger,
   SESSION_LOCATION,
   SESSION_STATUS,
   type SessionControl,
   type SessionProvider,
   type SessionStatus,
   sessionMessageText,
+  text,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceAgentCapableSessionProviderAdapter,
   type WorkspaceAgentSelection,
@@ -172,28 +176,12 @@ export interface CloudWriteRoute {
   body?: Readonly<Record<string, unknown>>;
 }
 
-export function positiveInteger(value: number | undefined, fallback: number): number {
-  if (value === undefined || !Number.isFinite(value) || value <= 0) return fallback;
-  return Math.floor(value);
-}
-
-export function nonNegativeNumber(value: number | undefined, fallback: number): number {
-  if (value === undefined || !Number.isFinite(value) || value < 0) return fallback;
-  return value;
-}
-
 export function isDefined<Value>(value: Value | undefined): value is Value {
   return value !== undefined;
 }
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
 export function textFromRecord(record: Record<string, unknown>, key: string): string | undefined {
-  const value = record[key];
-  const normalized = typeof value === "string" ? value.trim() : "";
-  return normalized || undefined;
+  return text(record[key]);
 }
 
 export function timestampFromRecord(

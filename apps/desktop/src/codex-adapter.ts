@@ -1,24 +1,23 @@
 import os from "node:os";
 import path from "node:path";
 import {
+  isRecord,
   maximumSessionSummaryLength,
   maximumSessionTitleLength,
+  nonNegativeNumber,
+  oneLine,
   PROVIDER_ID,
   type ProviderSessionObservation,
+  positiveInteger,
+  recordFromJsonLine,
   SESSION_STATUS,
   type SessionDetail,
   type SessionProvider,
   type SessionProviderAdapter,
+  text,
+  wholeNumber,
 } from "@sidecar/core";
-import {
-  nonNegativeNumber,
-  positiveInteger,
-  readTail,
-  readTextFile,
-  recordFromJsonLine,
-  uniquePaths,
-  workspaceLabel,
-} from "./local-session-adapter";
+import { readTail, readTextFile, uniquePaths, workspaceLabel } from "./local-session-adapter";
 import {
   canIgnoreSqliteError,
   defaultSqliteModule,
@@ -154,23 +153,6 @@ export interface CodexAdapterOptions {
   sqlite?: SqliteModuleLoader;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function text(value: unknown): string | undefined {
-  const normalized = typeof value === "string" ? value.trim() : "";
-  return normalized || undefined;
-}
-
-function oneLine(value: string | undefined, maximumLength: number): string | undefined {
-  const normalized = value?.replace(/\s+/gu, " ").trim();
-  if (!normalized) return undefined;
-  return normalized.length > maximumLength
-    ? `${normalized.slice(0, maximumLength - 1).trimEnd()}…`
-    : normalized;
-}
-
 /**
  * Reads one argument as the phrase that names the work. Codex passes some of
  * them as a list rather than a string — a search's terms, a command's argv —
@@ -253,14 +235,11 @@ function parseCodexRolloutTail(tail: string): ParsedCodexRollout {
 }
 
 function numberFromRow(row: CodexThreadRow, key: string): number | undefined {
-  const value = row[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  return wholeNumber(row[key]);
 }
 
 function textFromRow(row: CodexThreadRow, key: string): string | undefined {
-  const value = row[key];
-  const normalized = typeof value === "string" ? value.trim() : "";
-  return normalized || undefined;
+  return text(row[key]);
 }
 
 function timestampFromRow(row: CodexThreadRow): number {

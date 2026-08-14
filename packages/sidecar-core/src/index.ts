@@ -6,6 +6,7 @@ export * from "./fixtures";
 export * from "./geometry";
 export * from "./guide";
 export * from "./issues";
+export * from "./json";
 export * from "./providers";
 export * from "./realtime";
 export * from "./session";

@@ -1,3 +1,4 @@
+import { nonNegativeNumber, positiveInteger } from "./json";
 import {
   ATTENTION_DISPOSITION,
   type AttentionDecision,
@@ -160,16 +161,6 @@ interface SpokenRecord {
 interface AttentionCandidate {
   session: NormalizedSession;
   update: AttentionUpdate;
-}
-
-function positiveInteger(value: number | undefined, fallback: number): number {
-  if (value === undefined || !Number.isFinite(value) || value <= 0) return fallback;
-  return Math.floor(value);
-}
-
-function nonNegativeNumber(value: number | undefined, fallback: number): number {
-  if (value === undefined || !Number.isFinite(value) || value < 0) return fallback;
-  return value;
 }
 
 function isAttentionDisposition(value: unknown): value is AttentionDisposition {

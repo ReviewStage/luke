@@ -1,23 +1,27 @@
 import os from "node:os";
 import path from "node:path";
 import {
+  isRecord,
   maximumSessionTitleLength,
+  nonNegativeNumber,
+  oneLine,
   PROVIDER_ID,
   type ProviderSessionObservation,
+  positiveInteger,
+  recordFromJsonLine,
   SESSION_STATUS,
   type SessionDetail,
   type SessionProvider,
   type SessionProviderAdapter,
   type SessionStatus,
+  text,
+  wholeNumber,
 } from "@sidecar/core";
 import {
   discoverSessionFiles,
   LOCAL_ADAPTER_DEFAULTS,
-  nonNegativeNumber,
-  positiveInteger,
   readDirectory,
   readTextFile,
-  recordFromJsonLine,
   type SessionFileCandidate,
   statDirectoryEntry,
   uniquePaths,
@@ -210,27 +214,6 @@ interface OpenCodeSessionSnapshot {
   observedAt: number;
   turn?: OpenCodeTurn;
   activity?: string;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function text(value: unknown): string | undefined {
-  const normalized = typeof value === "string" ? value.trim() : "";
-  return normalized || undefined;
-}
-
-function wholeNumber(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function oneLine(value: string | undefined, maximumLength: number): string | undefined {
-  const normalized = value?.replace(/\s+/gu, " ").trim();
-  if (!normalized) return undefined;
-  return normalized.length > maximumLength
-    ? `${normalized.slice(0, maximumLength - 1).trimEnd()}…`
-    : normalized;
 }
 
 function numberFromRow(row: OpenCodeRow, key: string): number | undefined {
