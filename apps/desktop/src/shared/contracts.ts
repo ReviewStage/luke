@@ -1,6 +1,7 @@
 import type {
   AttentionSpeech,
   FixtureSnapshot,
+  IssueToolAction,
   NormalizedSession,
   ProviderControlResult,
   ProviderMessageResult,
@@ -10,6 +11,8 @@ import type {
   Rectangle,
   ResolvedNotchGeometry,
   SessionIdentity,
+  TrackedIssue,
+  TrackerActionResult,
   WindowMode,
 } from "@sidecar/core";
 import type { CredentialProviderId } from "./credential-providers";
@@ -172,8 +175,13 @@ export interface AppBootstrap {
   /** Whether the panel should show the voice diagnostics block. */
   display: DisplayDiagnostic;
   sessions: readonly NormalizedSession[];
+  /** Absent while no issue tracker is connected, which is its own answer. */
+  issues?: readonly TrackedIssue[];
   settings: AppSettings;
 }
+
+/** One validated issue act on its way to the main process. */
+export type IssueActionAsk = Extract<IssueToolAction, { kind: "issue-state" | "issue-comment" }>;
 
 /** The talk key as the panel should describe it. */
 export interface VoiceHotkeyState {
@@ -249,6 +257,13 @@ export interface AppBridge {
     identity: SessionIdentity,
     controlId: string,
   ): Promise<ProviderControlResult>;
+  /**
+   * Carries one spoken issue act to the tracker that can take it. The renderer
+   * names an issue and a transition it was shown; the main process resolves
+   * both against its own latest observation before the tracker client sees
+   * anything, so nothing a model composed reaches Linear as-is.
+   */
+  executeIssueAction(action: IssueActionAsk): Promise<TrackerActionResult>;
   /** Brings the expanded panel forward so it can accept typed input. */
   focusPanel(): void;
   /** Mints a short-lived Realtime credential; the standing API key never crosses. */
@@ -258,6 +273,8 @@ export interface AppBridge {
   onLifecycle(callback: (eventName: string) => void): () => void;
   onDisplayChanged(callback: (display: DisplayDiagnostic) => void): () => void;
   onSessionsChanged(callback: (sessions: readonly NormalizedSession[]) => void): () => void;
+  /** The issue roster as last observed; `undefined` says no tracker is connected. */
+  onIssuesChanged(callback: (issues: readonly TrackedIssue[] | undefined) => void): () => void;
   onAttentionSpeech(callback: (speech: readonly AttentionSpeech[]) => void): () => void;
   /** The talk key going down, from whatever app happened to be frontmost. */
   onVoiceHotkeyPress(callback: () => void): () => void;
@@ -293,6 +310,7 @@ export const channels = {
   openSession: "app:open-session",
   sendSessionMessage: "app:send-session-message",
   executeSessionControl: "app:execute-session-control",
+  executeIssueAction: "app:execute-issue-action",
   focusPanel: "app:focus-panel",
   requestRealtimeCredential: "app:request-realtime-credential",
   attentionSpeech: "app:attention-speech",
@@ -304,5 +322,6 @@ export const channels = {
   lifecycle: "app:lifecycle",
   displayChanged: "app:display-changed",
   sessionsChanged: "app:sessions-changed",
+  issuesChanged: "app:issues-changed",
   quit: "app:quit",
 } as const;

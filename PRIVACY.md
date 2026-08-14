@@ -71,6 +71,27 @@ By default, these requests go to the provider's own API. Changing
 to that configured endpoint, whose policies then govern the request and
 response data.
 
+## Optional issue-tracker reads and spoken acts
+
+Linear is read the way the cloud providers are: without a key, Luke sends
+Linear no request and knows nothing about your board. With a key — from Luke's
+Settings or `LINEAR_API_KEY` — Luke sends it in the `Authorization` header of
+GraphQL `POST` requests to Linear's API and reads the issues assigned to the
+authenticated user: identifiers, titles, current state, issue links, and the
+team's workflow states. Completed and cancelled issues are not requested, and
+issue descriptions and comment threads are never read. Returned metadata is
+held in memory; response bodies are not persisted.
+
+Reading and acting are separate GraphQL documents, and observation only ever
+sends the read. Luke calls Linear's two write mutations — moving an issue to
+another of its team's states, and adding a comment — only to carry out
+something you just asked for in a turn you opened — spoken or typed — and only
+against an issue and a state the latest read actually listed. Nothing Luke
+decides on its own reaches either mutation.
+
+Changing `LINEAR_API_URL` sends the credential to that configured endpoint,
+whose policies then govern the request and response data.
+
 ## Local display and microphone
 
 The local panel may show a session's provider-assigned title, status, current
@@ -109,6 +130,12 @@ current value, the talk key, and whether each cloud provider is connected — so
 a spoken question about Luke can be answered and a spoken ask can change a
 setting. The guide never includes an API key, any part of one, or any value
 read from your environment beyond whether one exists.
+
+With a Linear key saved, the conversation also carries the issue roster — each
+assigned issue's identifier, title, state, and the states its team's workflow
+allows — so a question about your board can be answered and an ask validated
+against what Linear actually listed. No issue description or comment thread is
+ever included, because Luke never reads one.
 
 Luke does not record the conversation, write audio to disk, or keep a
 transcript. With captions enabled in Settings — they are off by default — the

@@ -1,11 +1,12 @@
-import { PROVIDER_ID } from "@sidecar/core";
+import { ISSUE_TRACKER_ID, PROVIDER_ID } from "@sidecar/core";
 
 /**
- * The providers Luke can hold a credential for: the subset of the observed
- * providers whose sessions live in a cloud service with no local state to read,
- * and which must observe nothing at all until the user supplies a key. The ids
- * are core's, so a credential row and a session row name the same provider —
- * that is what lets one mark registry serve both.
+ * The services Luke can hold a credential for: the subset of the observed
+ * providers whose sessions live in a cloud service with no local state to
+ * read, plus the issue tracker Luke reads the same way — each of which must
+ * observe nothing at all until the user supplies a key. The ids are core's,
+ * so a credential row names the same service a session row or the issue
+ * roster does — that is what lets one mark registry serve them all.
  */
 export const CREDENTIAL_PROVIDER_ID = {
   CONDUCTOR: PROVIDER_ID.CONDUCTOR,
@@ -13,6 +14,7 @@ export const CREDENTIAL_PROVIDER_ID = {
   CURSOR: PROVIDER_ID.CURSOR,
   DEVIN: PROVIDER_ID.DEVIN,
   JULES: PROVIDER_ID.JULES,
+  LINEAR: ISSUE_TRACKER_ID.LINEAR,
 } as const;
 
 export type CredentialProviderId =
@@ -41,6 +43,10 @@ const DEVIN_ENVIRONMENT = {
 
 const JULES_ENVIRONMENT = {
   API_KEY: "JULES_API_KEY",
+} as const;
+
+const LINEAR_ENVIRONMENT = {
+  API_KEY: "LINEAR_API_KEY",
 } as const;
 
 /**
@@ -138,6 +144,22 @@ export const CREDENTIAL_PROVIDERS: Readonly<Record<CredentialProviderId, Credent
     hint: "Create a key in Jules under Settings · API key. It is shown only once.",
     apiKeysUrl: "https://jules.google.com/settings",
     environmentVariables: [JULES_ENVIRONMENT.API_KEY],
+  },
+  [CREDENTIAL_PROVIDER_ID.LINEAR]: {
+    id: CREDENTIAL_PROVIDER_ID.LINEAR,
+    displayName: "Linear",
+    hint: "Create a personal API key in Linear under Settings · Security & access.",
+    apiKeysUrl: "https://linear.app/settings/account/security",
+    environmentVariables: [LINEAR_ENVIRONMENT.API_KEY],
+    // Linear issues its personal API keys under one prefix; an OAuth access
+    // token belongs to an application acting for a workspace, which is not
+    // what Luke is, so a credential without the prefix would only mislead.
+    keyFormat: {
+      label: "Personal API key",
+      prefix: "lin_api_",
+      rejection:
+        "Linear's personal API keys start with lin_api_. OAuth tokens belong to an application rather than to Luke.",
+    },
   },
 };
 

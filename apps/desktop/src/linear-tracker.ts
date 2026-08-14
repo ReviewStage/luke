@@ -1,0 +1,263 @@
+import {
+  ISSUE_ACTION_KIND,
+  type IssueTracker,
+  type IssueTrackerAdapter,
+  type IssueTransition,
+  maximumIssueTransitions,
+  TRACKER_ACTION_RESULT_STATUS,
+  type TrackerActionResult,
+  type TrackerIssueAction,
+  type TrackerIssueObservation,
+} from "@sidecar/core";
+import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "./shared/credential-providers";
+
+// Shared with the credential registry so the key the user saves and the
+// tracker Luke reads with it can never name different things.
+const LINEAR_TRACKER_ID = CREDENTIAL_PROVIDER_ID.LINEAR;
+const LINEAR_TRACKER_NAME = CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.LINEAR].displayName;
+
+const LINEAR_ENVIRONMENT = {
+  API_URL: "LINEAR_API_URL",
+} as const;
+
+/** Linear's GraphQL API answers at one endpoint for reads and writes alike. */
+const LINEAR_DEFAULT_API_URL = "https://api.linear.app/graphql";
+
+const REQUEST_TIMEOUT_MS = 10_000;
+/** More issues than anyone holds in their head at once, and the roster says fewer. */
+const ISSUE_PAGE_SIZE = 25;
+
+/**
+ * The one read this client makes, fixed by this build. GraphQL has no method
+ * to make a request read-only the way a GET is, so the separation is held
+ * where it can be held: `observe` only ever sends this document, and the two
+ * write documents below are sent only by `execute`, only for an action the
+ * main process already validated against its own latest observation.
+ *
+ * The fields ask for what the roster says and nothing wider — no description,
+ * no comment thread, no other assignee's work. Completed and cancelled issues
+ * are not a board anyone is asked to act on, so they are filtered at the
+ * source rather than carried and hidden.
+ */
+const LINEAR_READ_ASSIGNED_ISSUES = `query AssignedIssues($first: Int!) {
+  viewer {
+    assignedIssues(
+      first: $first
+      orderBy: updatedAt
+      filter: { state: { type: { nin: ["completed", "canceled"] } } }
+    ) {
+      nodes {
+        id
+        identifier
+        title
+        url
+        state { id name }
+        team { states { nodes { id name position } } }
+      }
+    }
+  }
+}`;
+
+/** The two writes Linear documents for the two acts Luke can be asked for. */
+const LINEAR_WRITE = {
+  [ISSUE_ACTION_KIND.SET_STATE]: `mutation SetIssueState($id: String!, $stateId: String!) {
+  issueUpdate(id: $id, input: { stateId: $stateId }) { success }
+}`,
+  [ISSUE_ACTION_KIND.COMMENT]: `mutation CommentOnIssue($issueId: String!, $body: String!) {
+  commentCreate(input: { issueId: $issueId, body: $body }) { success }
+}`,
+} as const;
+
+export interface LinearTrackerOptions {
+  /**
+   * Resolved at observation time, so a key saved or cleared in settings takes
+   * effect on the next pass without the tracker being rebuilt.
+   */
+  readApiKey: () => Promise<string | undefined>;
+  /** Injectable so tests exercise the client without a network. */
+  fetchImplementation?: typeof fetch;
+  now?: () => number;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function textField(record: Record<string, unknown>, field: string): string | undefined {
+  const value = record[field];
+  const normalized = typeof value === "string" ? value.trim() : "";
+  return normalized || undefined;
+}
+
+interface LinearState {
+  id: string;
+  name: string;
+  position: number;
+}
+
+function stateFrom(value: unknown): LinearState | undefined {
+  if (!isRecord(value)) return undefined;
+  const id = textField(value, "id");
+  const name = textField(value, "name");
+  if (!id || !name) return undefined;
+  const position = typeof value.position === "number" ? value.position : 0;
+  return { id, name, position };
+}
+
+/**
+ * The states an issue can be asked into: its team's workflow in board order,
+ * minus the state it is already in. Linear accepts any state on the team, so
+ * the whole workflow is the advertisement and the bound in core caps it.
+ */
+function transitionsFrom(node: Record<string, unknown>, currentStateId: string): IssueTransition[] {
+  const team = isRecord(node.team) ? node.team : undefined;
+  const states = isRecord(team?.states) ? team.states : undefined;
+  const nodes = Array.isArray(states?.nodes) ? states.nodes : [];
+  return nodes
+    .map(stateFrom)
+    .filter((state): state is LinearState => state !== undefined && state.id !== currentStateId)
+    .sort((left, right) => left.position - right.position)
+    .slice(0, maximumIssueTransitions)
+    .map((state) => ({ id: state.id, name: state.name }));
+}
+
+/**
+ * Reads the issues Linear lists for the user, and carries the two acts the
+ * user can ask of one, through Linear's own GraphQL API under the user's own
+ * key. With no key it observes nothing and issues no request at all.
+ */
+export class LinearIssueTracker implements IssueTrackerAdapter {
+  readonly tracker: IssueTracker = {
+    id: LINEAR_TRACKER_ID,
+    displayName: LINEAR_TRACKER_NAME,
+  };
+
+  readonly #readApiKey: () => Promise<string | undefined>;
+  readonly #fetch: typeof fetch;
+  readonly #now: () => number;
+  readonly #endpoint: string;
+
+  constructor(options: LinearTrackerOptions) {
+    this.#readApiKey = options.readApiKey;
+    this.#fetch = options.fetchImplementation ?? fetch;
+    this.#now = options.now ?? Date.now;
+    this.#endpoint = process.env[LINEAR_ENVIRONMENT.API_URL]?.trim() || LINEAR_DEFAULT_API_URL;
+  }
+
+  async observe(): Promise<readonly TrackerIssueObservation[] | undefined> {
+    const apiKey = await this.#readApiKey();
+    // No key, no request: the tracker is not connected, which is a different
+    // answer from a connected tracker listing nothing.
+    if (!apiKey) return undefined;
+
+    const payload = await this.#post(apiKey, LINEAR_READ_ASSIGNED_ISSUES, {
+      first: ISSUE_PAGE_SIZE,
+    });
+    if (payload.errors) throw new Error("Linear answered the read with errors");
+    const viewer =
+      isRecord(payload.data) && isRecord(payload.data.viewer) ? payload.data.viewer : undefined;
+    const issues = isRecord(viewer?.assignedIssues) ? viewer.assignedIssues : undefined;
+    const nodes = Array.isArray(issues?.nodes) ? issues.nodes : [];
+    const observedAt = this.#now();
+
+    // A malformed issue is skipped rather than failing the pass: the roster
+    // should say what Linear could say, not go silent over one broken node.
+    return nodes.flatMap((node): TrackerIssueObservation[] => {
+      if (!isRecord(node)) return [];
+      const trackerIssueId = textField(node, "id");
+      const identifier = textField(node, "identifier");
+      const title = textField(node, "title");
+      const state = stateFrom(node.state);
+      if (!trackerIssueId || !identifier || !title || !state) return [];
+      const url = textField(node, "url");
+      return [
+        {
+          trackerIssueId,
+          identifier,
+          title,
+          stateName: state.name,
+          observedAt,
+          ...(url ? { url } : {}),
+          transitions: transitionsFrom(node, state.id),
+          canComment: true,
+        },
+      ];
+    });
+  }
+
+  async execute(action: TrackerIssueAction): Promise<TrackerActionResult> {
+    const apiKey = await this.#readApiKey();
+    if (!apiKey) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
+
+    const [document, variables, resultField] =
+      action.kind === ISSUE_ACTION_KIND.SET_STATE
+        ? ([
+            LINEAR_WRITE[ISSUE_ACTION_KIND.SET_STATE],
+            { id: action.trackerIssueId, stateId: action.transition.id },
+            "issueUpdate",
+          ] as const)
+        : ([
+            LINEAR_WRITE[ISSUE_ACTION_KIND.COMMENT],
+            { issueId: action.trackerIssueId, body: action.body },
+            "commentCreate",
+          ] as const);
+
+    // What became of the act is an answer for the conversation, never a
+    // throw: the developer asked for something, and the reply has to say.
+    let payload: GraphQlPayload;
+    try {
+      payload = await this.#post(apiKey, document, variables);
+    } catch {
+      return {
+        status: TRACKER_ACTION_RESULT_STATUS.REJECTED,
+        reason: "The request to Linear did not complete.",
+      };
+    }
+    if (payload.errors) {
+      return {
+        status: TRACKER_ACTION_RESULT_STATUS.REJECTED,
+        reason: "Linear rejected that change.",
+      };
+    }
+    const result = isRecord(payload.data) ? payload.data[resultField] : undefined;
+    if (!isRecord(result) || result.success !== true) {
+      return {
+        status: TRACKER_ACTION_RESULT_STATUS.REJECTED,
+        reason: "Linear did not confirm that change.",
+      };
+    }
+    return { status: TRACKER_ACTION_RESULT_STATUS.ACCEPTED };
+  }
+
+  async #post(
+    apiKey: string,
+    document: string,
+    variables: Record<string, unknown>,
+  ): Promise<GraphQlPayload> {
+    const response = await this.#fetch(this.#endpoint, {
+      method: "POST",
+      headers: {
+        // A personal API key is its own authorization; only an OAuth token
+        // takes a Bearer prefix, and the credential registry refuses those.
+        authorization: apiKey,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ query: document, variables }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (!response.ok) throw new Error(`Linear answered ${response.status}`);
+    const payload: unknown = await response.json();
+    if (!isRecord(payload)) throw new Error("Linear answered with something other than GraphQL");
+    return {
+      ...(isRecord(payload.data) ? { data: payload.data } : {}),
+      ...(Array.isArray(payload.errors) && payload.errors.length > 0
+        ? { errors: payload.errors }
+        : {}),
+    };
+  }
+}
+
+interface GraphQlPayload {
+  data?: Record<string, unknown>;
+  errors?: readonly unknown[];
+}
