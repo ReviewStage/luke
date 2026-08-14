@@ -49,7 +49,7 @@ import {
 import type { FeedbackEntryControl } from "./feedback-entry";
 import { FeedbackSection } from "./feedback-panel";
 import { Keycaps } from "./keycaps";
-import { errandTargetProps } from "./luke-errand";
+import { type ErrandTarget, errandTargetProps } from "./luke-errand";
 import { APP_SETTING_ID } from "./luke-guide";
 import { microphoneAccessRow } from "./microphone-access";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
@@ -605,6 +605,162 @@ function formFactorOptionLabel(formFactor: PanelFormFactor): string {
   return formFactor === DEFAULT_PANEL_FORM_FACTOR ? `${name} (default)` : name;
 }
 
+/**
+ * The round trip a settings control waits on. Each change is asked of the
+ * store, the control rests until it answers rather than claiming a state it
+ * may not get, and a refusal is kept here — under this control — rather than
+ * on a line shared with every other row. One write in flight must not still
+ * another control.
+ *
+ * Some choices cannot be refused (the voice, the pace): those answer void,
+ * and there is nothing to rest for.
+ */
+function useSettingWrite<Value>(
+  // biome-ignore lint/suspicious/noConfusingVoidType: the voice and pace cannot be refused, so those writes answer void
+  onChange: (value: Value) => void | Promise<string | undefined>,
+): {
+  busy: boolean;
+  rejection: string | undefined;
+  run: (value: Value) => void;
+} {
+  const [busy, setBusy] = useState(false);
+  const [rejection, setRejection] = useState<string>();
+  const run = (value: Value) => {
+    const reply = onChange(value);
+    if (!(reply instanceof Promise)) return;
+    setBusy(true);
+    void reply.then((reason) => {
+      setRejection(reason);
+      setBusy(false);
+    });
+  };
+  return { busy, rejection, run };
+}
+
+/**
+ * A settings switch: its name, optional why, and the thumb. The write and the
+ * refusal live here, so two switches can be in flight at once and a refusal
+ * names the row that asked.
+ */
+function SwitchRow({
+  label,
+  detail,
+  checked,
+  ariaLabel,
+  errand,
+  onChange,
+}: {
+  label: string;
+  detail?: string;
+  checked: boolean;
+  /** When the visible name is too short to stand as the control's own name. */
+  ariaLabel?: string;
+  /** The id a spoken change names this switch by, so an errand lands on it. */
+  errand?: ErrandTarget;
+  onChange: (enabled: boolean) => Promise<string | undefined>;
+}): React.JSX.Element {
+  const { busy, rejection, run } = useSettingWrite(onChange);
+  return (
+    <>
+      <div className="settings-row">
+        <span className="settings-copy">
+          <strong>{label}</strong>
+          {detail ? <small>{detail}</small> : null}
+        </span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={checked}
+          aria-label={ariaLabel ?? label}
+          className="switch"
+          {...(errand ? errandTargetProps(errand) : {})}
+          disabled={busy}
+          onClick={() => run(!checked)}
+        >
+          <span className="switch-thumb" />
+        </button>
+      </div>
+      {rejection ? <p className="error-message">{rejection}</p> : null}
+    </>
+  );
+}
+
+/**
+ * A settings pop-up: its name, optional why, and one value from a small fixed
+ * set. The closed face is drawn here and the open menu is the system's, which
+ * is also why the window is focused before the menu opens — a menu opened
+ * while the panel is showing without being key would drop its first choice.
+ * The up-and-down badge is the macOS mark for that kind of button; the select
+ * alone answers the pointer.
+ */
+function SelectRow<Value extends string | number>({
+  label,
+  detail,
+  value,
+  options,
+  parse,
+  ariaLabel,
+  errand,
+  onChange,
+}: {
+  label: string;
+  detail?: string;
+  value: Value;
+  options: readonly { value: Value; label: string }[];
+  parse: (raw: string) => Value | undefined;
+  /** When the visible name is too short to stand as the control's own name. */
+  ariaLabel?: string;
+  /**
+   * The id a spoken change names this pop-up by. Marked on the `select`
+   * rather than the box positioning it: an errand outlines what it lands on,
+   * and only the `select` is drawn with the corners that outline has to take.
+   */
+  errand?: ErrandTarget;
+  // biome-ignore lint/suspicious/noConfusingVoidType: the voice and pace cannot be refused, so those writes answer void
+  onChange: (value: Value) => void | Promise<string | undefined>;
+}): React.JSX.Element {
+  const { busy, rejection, run } = useSettingWrite(onChange);
+  return (
+    <>
+      <div className="settings-row">
+        <span className="settings-copy">
+          <strong>{label}</strong>
+          {detail ? <small>{detail}</small> : null}
+        </span>
+        <span className="voice-select">
+          <select
+            {...(errand ? errandTargetProps(errand) : {})}
+            aria-label={ariaLabel ?? label}
+            value={value}
+            disabled={busy}
+            onChange={(event) => {
+              const next = parse(event.target.value);
+              if (next !== undefined) run(next);
+            }}
+            onFocus={() => {
+              // The panel can be showing without its window being key, and a
+              // menu opened then would drop its first choice.
+              window.sidecar.focusPanel();
+            }}
+          >
+            {options.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          {/* Drawn over the select, the way macOS badges a pop-up button; the
+              select alone answers the pointer. */}
+          <span className="voice-select-badge" aria-hidden="true">
+            <PopUpIcon />
+          </span>
+        </span>
+      </div>
+      {rejection ? <p className="error-message">{rejection}</p> : null}
+    </>
+  );
+}
+
 /* Why every Connect in a key-holding section is refusing, said once per
    section: a disabled control with no words beside it reads as broken. */
 const STORAGE_UNAVAILABLE_NOTE =
@@ -634,10 +790,6 @@ function WorkspaceAgentRow({
     selection: WorkspaceAgentSelection | undefined,
   ) => Promise<string | undefined>;
 }): React.JSX.Element {
-  // The change is a round trip through the settings file, so the selects rest
-  // until the store has answered rather than claiming a state it may not get.
-  const [busy, setBusy] = useState(false);
-  const [rejection, setRejection] = useState<string>();
   // The table's models flattened in its own order, each remembering its
   // agent's effort levels, so the select's indices are as stable as the build
   // that documents them.
@@ -653,119 +805,82 @@ function WorkspaceAgentRow({
     (choice) => choice.agent === selection?.agent && choice.model === selection?.model,
   );
   const chosen = chosenIndex >= 0 ? choices[chosenIndex] : undefined;
-  const choose = async (next: WorkspaceAgentSelection | undefined) => {
-    setBusy(true);
-    setRejection(await onChange(providerId, next));
-    setBusy(false);
-  };
+  const providerDefault = `${provider.displayName}'s default`;
   return (
     <>
-      <div className="settings-row">
-        <span className="settings-copy">
-          <strong>New agents run</strong>
-          {/* Scope, because this row must not claim the provider's own app:
-              only what Luke itself creates — a workspace, or another agent in
-              one — starts on this choice. */}
-          <small>For workspaces and agents created through Luke.</small>
-        </span>
-        <span className="voice-select">
-          <select
-            aria-label={`The model new ${provider.displayName} workspaces run`}
-            value={chosenIndex >= 0 ? String(chosenIndex) : PROVIDER_DEFAULT_VALUE}
-            disabled={busy}
-            onChange={(event) => {
-              const next = event.target.value;
-              if (next === PROVIDER_DEFAULT_VALUE) {
-                void choose(undefined);
-                return;
-              }
-              // The set is the one this row offered, so anything else arriving
-              // out of the select is a broken control rather than a choice.
-              const choice = choices[Number(next)];
-              if (!choice) return;
-              // A chosen effort survives a model change only where the new
-              // agent documents the same level; anywhere else it returns to
-              // the provider's default rather than riding somewhere unlisted.
-              const effort =
-                selection?.effort && choice.efforts.includes(selection.effort)
-                  ? selection.effort
-                  : undefined;
-              void choose({
-                agent: choice.agent,
-                model: choice.model,
-                ...(effort ? { effort } : {}),
-              });
-            }}
-            onFocus={() => {
-              // The panel can be showing without its window being key, and a
-              // menu opened then would drop its first choice.
-              window.sidecar.focusPanel();
-            }}
-          >
-            <option value={PROVIDER_DEFAULT_VALUE}>{`${provider.displayName}'s default`}</option>
-            {choices.map((choice, index) => (
-              // Indexed on purpose: the list is fixed by the build, and the
-              // index is the same word the select's value speaks.
-              // biome-ignore lint/suspicious/noArrayIndexKey: the list is build-fixed
-              <option key={index} value={String(index)}>
-                {choice.label}
-              </option>
-            ))}
-          </select>
-          <span className="voice-select-badge" aria-hidden="true">
-            <PopUpIcon />
-          </span>
-        </span>
-      </div>
+      <SelectRow
+        label="New agents run"
+        ariaLabel={`The model new ${provider.displayName} workspaces run`}
+        detail={
+          /* Scope, because this row must not claim the provider's own app:
+             only what Luke itself creates — a workspace, or another agent in
+             one — starts on this choice. */
+          "For workspaces and agents created through Luke."
+        }
+        value={chosenIndex >= 0 ? String(chosenIndex) : PROVIDER_DEFAULT_VALUE}
+        options={[
+          { value: PROVIDER_DEFAULT_VALUE, label: providerDefault },
+          // Indexed on purpose: the list is fixed by the build, and the
+          // index is the same word the select's value speaks.
+          ...choices.map((choice, index) => ({
+            value: String(index),
+            label: choice.label,
+          })),
+        ]}
+        parse={(raw) => {
+          if (raw === PROVIDER_DEFAULT_VALUE) return raw;
+          // The set is the one this row offered, so anything else arriving
+          // out of the select is a broken control rather than a choice.
+          return choices[Number(raw)] ? raw : undefined;
+        }}
+        onChange={(next) => {
+          if (next === PROVIDER_DEFAULT_VALUE) return onChange(providerId, undefined);
+          const choice = choices[Number(next)];
+          if (!choice) return;
+          // A chosen effort survives a model change only where the new
+          // agent documents the same level; anywhere else it returns to
+          // the provider's default rather than riding somewhere unlisted.
+          const effort =
+            selection?.effort && choice.efforts.includes(selection.effort)
+              ? selection.effort
+              : undefined;
+          return onChange(providerId, {
+            agent: choice.agent,
+            model: choice.model,
+            ...(effort ? { effort } : {}),
+          });
+        }}
+      />
       {chosen && chosen.efforts.length > 0 ? (
-        <div className="settings-row">
-          <span className="settings-copy">
-            <strong>Effort</strong>
-            <small>How hard the chosen model thinks.</small>
-          </span>
-          <span className="voice-select">
-            <select
-              aria-label={`The effort new ${provider.displayName} agents think at`}
-              value={
-                selection?.effort && chosen.efforts.includes(selection.effort)
-                  ? selection.effort
-                  : PROVIDER_DEFAULT_VALUE
-              }
-              disabled={busy}
-              onChange={(event) => {
-                const next = event.target.value;
-                // Held to the chosen agent's own documented levels, so the
-                // stored selection is always one whole the table lists.
-                const effort =
-                  next !== PROVIDER_DEFAULT_VALUE && chosen.efforts.includes(next)
-                    ? next
-                    : undefined;
-                void choose({
-                  agent: chosen.agent,
-                  model: chosen.model,
-                  ...(effort ? { effort } : {}),
-                });
-              }}
-              onFocus={() => {
-                // The panel can be showing without its window being key, and
-                // a menu opened then would drop its first choice.
-                window.sidecar.focusPanel();
-              }}
-            >
-              <option value={PROVIDER_DEFAULT_VALUE}>{`${provider.displayName}'s default`}</option>
-              {chosen.efforts.map((effort) => (
-                <option key={effort} value={effort}>
-                  {effort}
-                </option>
-              ))}
-            </select>
-            <span className="voice-select-badge" aria-hidden="true">
-              <PopUpIcon />
-            </span>
-          </span>
-        </div>
+        <SelectRow
+          label="Effort"
+          ariaLabel={`The effort new ${provider.displayName} agents think at`}
+          detail="How hard the chosen model thinks."
+          value={
+            selection?.effort && chosen.efforts.includes(selection.effort)
+              ? selection.effort
+              : PROVIDER_DEFAULT_VALUE
+          }
+          options={[
+            { value: PROVIDER_DEFAULT_VALUE, label: providerDefault },
+            ...chosen.efforts.map((effort) => ({ value: effort, label: effort })),
+          ]}
+          parse={(raw) => {
+            if (raw === PROVIDER_DEFAULT_VALUE) return raw;
+            // Held to the chosen agent's own documented levels, so the
+            // stored selection is always one whole the table lists.
+            return chosen.efforts.includes(raw) ? raw : undefined;
+          }}
+          onChange={(next) => {
+            const effort = next !== PROVIDER_DEFAULT_VALUE ? next : undefined;
+            return onChange(providerId, {
+              agent: chosen.agent,
+              model: chosen.model,
+              ...(effort ? { effort } : {}),
+            });
+          }}
+        />
       ) : null}
-      {rejection ? <p className="error-message">{rejection}</p> : null}
     </>
   );
 }
@@ -998,191 +1113,98 @@ function VoiceSection({
   notifications: boolean;
   onSessionNotificationsChange: (enabled: boolean) => Promise<string | undefined>;
 }): React.JSX.Element {
-  // Each change is a round trip through the settings file, so each switch
-  // rests on its own flag until the store has answered rather than claiming a
-  // state it may not get — one save in flight must not still another switch.
-  // The rejection line is shared: it reports the last answer, whichever row
-  // asked.
-  const [rejection, setRejection] = useState<string>();
-  const [captionsBusy, setCaptionsBusy] = useState(false);
-  const toggleCaptions = async () => {
-    setCaptionsBusy(true);
-    setRejection(await onVoiceCaptionsChange(!captions));
-    setCaptionsBusy(false);
-  };
-  const [duckBusy, setDuckBusy] = useState(false);
-  const toggleDucking = async () => {
-    setDuckBusy(true);
-    setRejection(await onDuckOtherMediaChange(!ducking));
-    setDuckBusy(false);
-  };
-  const [notificationsBusy, setNotificationsBusy] = useState(false);
-  const toggleNotifications = async () => {
-    setNotificationsBusy(true);
-    setRejection(await onSessionNotificationsChange(!notifications));
-    setNotificationsBusy(false);
-  };
   return (
     <section
       className="settings-section settings-plain"
       style={{ "--row-index": 1 } as React.CSSProperties}
     >
-      <div className="settings-row">
-        <span className="settings-copy">
-          <strong>Voice</strong>
-          {/* When it lands, because a control that seems not to act invites a
-              second press. The API locks a session's voice once the model has
-              spoken, so a call already open is quietly reopened in the new
-              voice — heard right away, at the price of the conversation
-              starting afresh. */}
-          <small>How Luke sounds; a conversation under way starts afresh.</small>
-        </span>
-        {/* Every control a spoken change can reach carries the id that change
-            names it by, so an errand lands on the control itself rather than
-            somewhere near it. The control is marked rather than the row — the
-            switch is what moved, and the row is only what explains it — and,
-            here, the `select` rather than the box positioning it: the errand
-            outlines what it lands on, and only the `select` is drawn with the
-            corners that outline has to take. */}
-        <span className="voice-select">
-          <select
-            {...errandTargetProps(APP_SETTING_ID.VOICE)}
-            aria-label="Voice"
-            value={voice}
-            onChange={(event) => {
-              // The set is fixed by this build, so anything else arriving out
-              // of a select is a broken control rather than a choice.
-              const next = event.target.value;
-              if (isRealtimeVoice(next)) onVoiceChange(next);
-            }}
-            onFocus={() => {
-              // The panel can be showing without its window being key, and a
-              // menu opened then would drop its first choice.
-              window.sidecar.focusPanel();
-            }}
-          >
-            {REALTIME_VOICE_LIST.map((candidate) => (
-              <option key={candidate} value={candidate}>
-                {voiceOptionLabel(candidate)}
-              </option>
-            ))}
-          </select>
-          {/* Drawn over the select, the way macOS badges a pop-up button; the
-              select alone answers the pointer. */}
-          <span className="voice-select-badge" aria-hidden="true">
-            <PopUpIcon />
-          </span>
-        </span>
-      </div>
-      <div className="settings-row">
-        <span className="settings-copy">
-          <strong>Speed</strong>
-          {/* Unlike the voice, a pace change rides a session update onto the
-              call already open, so nothing starts over. */}
-          <small>How fast Luke talks, from his next reply on.</small>
-        </span>
-        <span className="voice-select">
-          <select
-            {...errandTargetProps(APP_SETTING_ID.VOICE_SPEED)}
-            aria-label="Speed"
-            value={speed}
-            onChange={(event) => {
-              // A select serializes its value to a string, so the number is
-              // read back out and held to the set fixed by this build.
-              const next = Number(event.target.value);
-              if (isRealtimeVoiceSpeed(next)) onVoiceSpeedChange(next);
-            }}
-            onFocus={() => {
-              // The panel can be showing without its window being key, and a
-              // menu opened then would drop its first choice.
-              window.sidecar.focusPanel();
-            }}
-          >
-            {REALTIME_VOICE_SPEED_LIST.map((candidate) => (
-              <option key={candidate} value={candidate}>
-                {speedOptionLabel(candidate)}
-              </option>
-            ))}
-          </select>
-          <span className="voice-select-badge" aria-hidden="true">
-            <PopUpIcon />
-          </span>
-        </span>
-      </div>
-      <div className="settings-row">
-        <span className="settings-copy">
-          <strong>Captions</strong>
-          {/* Off by default: the voice experience ships as sound, so the words
-              are chosen rather than discovered. What is *not* kept is the one
-              thing worth a line — the caption is the reply being said. The
-              muted exception is stated because it overrides this very switch:
-              a reply the Mac would swallow is captioned whatever it says. */}
-          <small>
-            Luke&rsquo;s words on screen as he speaks, and on their own while your Mac is muted.
-            Nothing is kept.
-          </small>
-        </span>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={captions}
-          aria-label="Caption Luke's speech on screen"
-          className="switch"
-          {...errandTargetProps(APP_SETTING_ID.VOICE_CAPTIONS)}
-          disabled={captionsBusy}
-          onClick={() => void toggleCaptions()}
-        >
-          <span className="switch-thumb" />
-        </button>
-      </div>
-      <div className="settings-row">
-        <span className="settings-copy">
-          <strong>Quiet Music and Spotify</strong>
-          {/* Named by app rather than as "other media": these two are the ones
-              macOS lets Luke turn down, and a switch claiming more would claim
-              a capability the system does not grant. The first duck is also
-              when macOS asks whether Luke may speak to each player at all. */}
-          <small>Their volume dips while you and Luke are talking, and returns after.</small>
-        </span>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={ducking}
-          aria-label="Quiet Music and Spotify while talking with Luke"
-          className="switch"
-          {...errandTargetProps(APP_SETTING_ID.DUCK_OTHER_MEDIA)}
-          disabled={duckBusy}
-          onClick={() => void toggleDucking()}
-        >
-          <span className="switch-thumb" />
-        </button>
-      </div>
-      <div className="settings-row">
-        <span className="settings-copy">
-          <strong>Announce when a session needs you</strong>
-          {/* The three edges by name, because the switch governs exactly these
-              and the panel already shows everything else: the voice is for the
-              developer whose eyes are on another screen entirely. No
-              conversation needs to be open — Luke opens a speak-only call for
-              the sentence, and the microphone stays untouched. */}
-          <small>
-            Luke says it out loud when an agent starts waiting on you, hits an error, or finishes.
-          </small>
-        </span>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={notifications}
-          aria-label="Announce when a session needs you"
-          className="switch"
-          {...errandTargetProps(APP_SETTING_ID.SESSION_NOTIFICATIONS)}
-          disabled={notificationsBusy}
-          onClick={() => void toggleNotifications()}
-        >
-          <span className="switch-thumb" />
-        </button>
-      </div>
-      {rejection ? <p className="error-message">{rejection}</p> : null}
+      <SelectRow
+        label="Voice"
+        errand={APP_SETTING_ID.VOICE}
+        detail={
+          /* When it lands, because a control that seems not to act invites a
+             second press. The API locks a session's voice once the model has
+             spoken, so a call already open is quietly reopened in the new
+             voice — heard right away, at the price of the conversation
+             starting afresh. */
+          "How Luke sounds; a conversation under way starts afresh."
+        }
+        value={voice}
+        options={REALTIME_VOICE_LIST.map((candidate) => ({
+          value: candidate,
+          label: voiceOptionLabel(candidate),
+        }))}
+        parse={(raw) => {
+          // The set is fixed by this build, so anything else arriving out
+          // of a select is a broken control rather than a choice.
+          return isRealtimeVoice(raw) ? raw : undefined;
+        }}
+        onChange={onVoiceChange}
+      />
+      <SelectRow
+        label="Speed"
+        errand={APP_SETTING_ID.VOICE_SPEED}
+        detail={
+          /* Unlike the voice, a pace change rides a session update onto the
+             call already open, so nothing starts over. */
+          "How fast Luke talks, from his next reply on."
+        }
+        value={speed}
+        options={REALTIME_VOICE_SPEED_LIST.map((candidate) => ({
+          value: candidate,
+          label: speedOptionLabel(candidate),
+        }))}
+        parse={(raw) => {
+          // A select serializes its value to a string, so the number is
+          // read back out and held to the set fixed by this build.
+          const next = Number(raw);
+          return isRealtimeVoiceSpeed(next) ? next : undefined;
+        }}
+        onChange={onVoiceSpeedChange}
+      />
+      <SwitchRow
+        label="Captions"
+        ariaLabel="Caption Luke's speech on screen"
+        errand={APP_SETTING_ID.VOICE_CAPTIONS}
+        detail={
+          /* Off by default: the voice experience ships as sound, so the words
+             are chosen rather than discovered. What is *not* kept is the one
+             thing worth a line — the caption is the reply being said. The
+             muted exception is stated because it overrides this very switch:
+             a reply the Mac would swallow is captioned whatever it says. */
+          "Luke\u2019s words on screen as he speaks, and on their own while your Mac is muted. Nothing is kept."
+        }
+        checked={captions}
+        onChange={onVoiceCaptionsChange}
+      />
+      <SwitchRow
+        label="Quiet Music and Spotify"
+        ariaLabel="Quiet Music and Spotify while talking with Luke"
+        errand={APP_SETTING_ID.DUCK_OTHER_MEDIA}
+        detail={
+          /* Named by app rather than as "other media": these two are the ones
+             macOS lets Luke turn down, and a switch claiming more would claim
+             a capability the system does not grant. The first duck is also
+             when macOS asks whether Luke may speak to each player at all. */
+          "Their volume dips while you and Luke are talking, and returns after."
+        }
+        checked={ducking}
+        onChange={onDuckOtherMediaChange}
+      />
+      <SwitchRow
+        label="Announce when a session needs you"
+        errand={APP_SETTING_ID.SESSION_NOTIFICATIONS}
+        detail={
+          /* The three edges by name, because the switch governs exactly these
+             and the panel already shows everything else: the voice is for the
+             developer whose eyes are on another screen entirely. No
+             conversation needs to be open — Luke opens a speak-only call for
+             the sentence, and the microphone stays untouched. */
+          "Luke says it out loud when an agent starts waiting on you, hits an error, or finishes."
+        }
+        checked={notifications}
+        onChange={onSessionNotificationsChange}
+      />
     </section>
   );
 }
@@ -1213,127 +1235,49 @@ function AppearanceSection({
   formFactor: PanelFormFactor;
   onFormFactorChange: (formFactor: PanelFormFactor) => Promise<string | undefined>;
 }): React.JSX.Element {
-  // The same resting discipline the Voice page's switches keep: each change is
-  // its own round trip, each control rests on its own flag, and the rejection
-  // line reports the last answer whichever row asked.
-  const [rejection, setRejection] = useState<string>();
-  const [busy, setBusy] = useState(false);
-  const toggle = async () => {
-    setBusy(true);
-    setRejection(await onShowInMenuBarChange(!shown));
-    setBusy(false);
-  };
-  const [dockBusy, setDockBusy] = useState(false);
-  const toggleDock = async () => {
-    setDockBusy(true);
-    setRejection(await onShowInDockChange(!dockShown));
-    setDockBusy(false);
-  };
-  const [displayBusy, setDisplayBusy] = useState(false);
-  const toggleAllDisplays = async () => {
-    setDisplayBusy(true);
-    setRejection(await onShowOnAllDisplaysChange(!allDisplays));
-    setDisplayBusy(false);
-  };
-  const [formBusy, setFormBusy] = useState(false);
-  const chooseFormFactor = async (nextFormFactor: PanelFormFactor) => {
-    setFormBusy(true);
-    setRejection(await onFormFactorChange(nextFormFactor));
-    setFormBusy(false);
-  };
   return (
     <section
       className="settings-section settings-plain"
       style={{ "--row-index": 1 } as React.CSSProperties}
     >
-      <div className="settings-row">
-        <span className="settings-copy">
-          <strong>Show Luke in the menu bar</strong>
-        </span>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={shown}
-          aria-label="Show Luke in the menu bar"
-          className="switch"
-          {...errandTargetProps(APP_SETTING_ID.SHOW_IN_MENU_BAR)}
-          disabled={busy}
-          onClick={() => void toggle()}
-        >
-          <span className="switch-thumb" />
-        </button>
-      </div>
-      <div className="settings-row">
-        <span className="settings-copy">
-          <strong>Show Luke in the Dock</strong>
-        </span>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={dockShown}
-          aria-label="Show Luke in the Dock"
-          className="switch"
-          {...errandTargetProps(APP_SETTING_ID.SHOW_IN_DOCK)}
-          disabled={dockBusy}
-          onClick={() => void toggleDock()}
-        >
-          <span className="switch-thumb" />
-        </button>
-      </div>
-      <div className="settings-row">
-        <span className="settings-copy">
-          <strong>Show Luke on all displays</strong>
-        </span>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={allDisplays}
-          aria-label="Show Luke on all displays"
-          className="switch"
-          {...errandTargetProps(APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS)}
-          disabled={displayBusy}
-          onClick={() => void toggleAllDisplays()}
-        >
-          <span className="switch-thumb" />
-        </button>
-      </div>
-      <div className="settings-row">
-        <span className="settings-copy">
-          <strong>Form factor</strong>
-          {/* Where the choice applies, because on a notched display this row
-              visibly does nothing: the real housing always wins. */}
-          <small>On displays without a notch.</small>
-        </span>
-        <span className="voice-select">
-          <select
-            {...errandTargetProps(APP_SETTING_ID.FORM_FACTOR)}
-            aria-label="Form factor"
-            value={formFactor}
-            disabled={formBusy}
-            onChange={(event) => {
-              // The set is fixed by this build, so anything else arriving out
-              // of a select is a broken control rather than a choice.
-              const next = event.target.value;
-              if (isPanelFormFactor(next)) void chooseFormFactor(next);
-            }}
-            onFocus={() => {
-              // The panel can be showing without its window being key, and a
-              // menu opened then would drop its first choice.
-              window.sidecar.focusPanel();
-            }}
-          >
-            {PANEL_FORM_FACTOR_LIST.map((candidate) => (
-              <option key={candidate} value={candidate}>
-                {formFactorOptionLabel(candidate)}
-              </option>
-            ))}
-          </select>
-          <span className="voice-select-badge" aria-hidden="true">
-            <PopUpIcon />
-          </span>
-        </span>
-      </div>
-      {rejection ? <p className="error-message">{rejection}</p> : null}
+      <SwitchRow
+        label="Show Luke in the menu bar"
+        errand={APP_SETTING_ID.SHOW_IN_MENU_BAR}
+        checked={shown}
+        onChange={onShowInMenuBarChange}
+      />
+      <SwitchRow
+        label="Show Luke in the Dock"
+        errand={APP_SETTING_ID.SHOW_IN_DOCK}
+        checked={dockShown}
+        onChange={onShowInDockChange}
+      />
+      <SwitchRow
+        label="Show Luke on all displays"
+        errand={APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS}
+        checked={allDisplays}
+        onChange={onShowOnAllDisplaysChange}
+      />
+      <SelectRow
+        label="Form factor"
+        errand={APP_SETTING_ID.FORM_FACTOR}
+        detail={
+          /* Where the choice applies, because on a notched display this row
+             visibly does nothing: the real housing always wins. */
+          "On displays without a notch."
+        }
+        value={formFactor}
+        options={PANEL_FORM_FACTOR_LIST.map((candidate) => ({
+          value: candidate,
+          label: formFactorOptionLabel(candidate),
+        }))}
+        parse={(raw) => {
+          // The set is fixed by this build, so anything else arriving out
+          // of a select is a broken control rather than a choice.
+          return isPanelFormFactor(raw) ? raw : undefined;
+        }}
+        onChange={onFormFactorChange}
+      />
     </section>
   );
 }
@@ -1354,69 +1298,40 @@ function WorkspacesSection({
     providerId: ProviderId | undefined,
   ) => Promise<string | undefined>;
 }): React.JSX.Element {
-  // The same resting discipline every settings control keeps: the change is a
-  // round trip through the settings file, so the select rests until the store
-  // has answered rather than claiming a choice it may not get.
-  const [rejection, setRejection] = useState<string>();
-  const [defaultProviderBusy, setDefaultProviderBusy] = useState(false);
-  const chooseDefaultProvider = async (providerId: ProviderId | undefined) => {
-    setDefaultProviderBusy(true);
-    setRejection(await onDefaultWorkspaceProviderChange(providerId));
-    setDefaultProviderBusy(false);
-  };
   return (
     <section className="settings-section" style={{ "--row-index": 3 } as React.CSSProperties}>
       <h2>
         <FolderIcon />
         Workspaces
       </h2>
-      <div className="settings-row">
-        <span className="settings-copy">
-          <strong>Default workspace provider</strong>
-          {/* How the default comes to exist, because the row is most often
-              read before any choice was made here: the first workspace
-              created in conversation fills it in, and this select is where
-              that choice is seen, changed, or returned to asking. */}
-          <small>
-            Where an ask that names no provider creates a workspace. Your first creation sets it.
-          </small>
-        </span>
-        <span className="voice-select">
-          <select
-            aria-label="Default workspace provider"
-            value={defaultWorkspaceProvider ?? ASK_EACH_TIME}
-            disabled={defaultProviderBusy}
-            onChange={(event) => {
-              const next = event.target.value;
-              if (next === ASK_EACH_TIME) {
-                void chooseDefaultProvider(undefined);
-                return;
-              }
-              // The set is the one this row offered, so anything else arriving
-              // out of the select is a broken control rather than a choice.
-              if (isProviderId(next) && workspaceProviders.some((option) => option.id === next)) {
-                void chooseDefaultProvider(next);
-              }
-            }}
-            onFocus={() => {
-              // The panel can be showing without its window being key, and a
-              // menu opened then would drop its first choice.
-              window.sidecar.focusPanel();
-            }}
-          >
-            <option value={ASK_EACH_TIME}>Ask each time</option>
-            {workspaceProviders.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.name}
-              </option>
-            ))}
-          </select>
-          <span className="voice-select-badge" aria-hidden="true">
-            <PopUpIcon />
-          </span>
-        </span>
-      </div>
-      {rejection ? <p className="error-message">{rejection}</p> : null}
+      <SelectRow
+        label="Default workspace provider"
+        detail={
+          /* How the default comes to exist, because the row is most often
+             read before any choice was made here: the first workspace
+             created in conversation fills it in, and this select is where
+             that choice is seen, changed, or returned to asking. */
+          "Where an ask that names no provider creates a workspace. Your first creation sets it."
+        }
+        value={defaultWorkspaceProvider ?? ASK_EACH_TIME}
+        options={[
+          { value: ASK_EACH_TIME, label: "Ask each time" },
+          ...workspaceProviders.map((option) => ({ value: option.id, label: option.name })),
+        ]}
+        parse={(raw) => {
+          if (raw === ASK_EACH_TIME) return raw;
+          // The set is the one this row offered, so anything else arriving
+          // out of the select is a broken control rather than a choice.
+          if (isProviderId(raw) && workspaceProviders.some((option) => option.id === raw)) {
+            return raw;
+          }
+          return undefined;
+        }}
+        onChange={(next) => {
+          if (next === ASK_EACH_TIME) return onDefaultWorkspaceProviderChange(undefined);
+          if (isProviderId(next)) return onDefaultWorkspaceProviderChange(next);
+        }}
+      />
     </section>
   );
 }
