@@ -174,13 +174,20 @@ private struct MediaDuckCommand {
 
     /// Only what `duck` changed goes back, and only if it is still where the
     /// duck left it: a volume the user moved meanwhile — or a player they
-    /// quit — is theirs, not this helper's to overrule.
+    /// quit — is theirs, not this helper's to overrule. A read that merely
+    /// failed is neither of those: it says nothing about the user's intent,
+    /// so the memory is kept for the next restore rather than the player
+    /// being stranded quiet with nothing left to bring it back.
     static func restore() {
         let restoring = ducked
         ducked = [:]
         var restored = 0
-        for entry in restoring.values {
-            guard isRunning(entry.player), let current = volume(of: entry.player) else { continue }
+        for (key, entry) in restoring {
+            guard isRunning(entry.player) else { continue }
+            guard let current = volume(of: entry.player) else {
+                ducked[key] = entry
+                continue
+            }
             guard abs(current - entry.ducked) <= RESTORE_TOLERANCE else { continue }
             fade(entry.player, from: current, to: entry.original, stepSeconds: RESTORE_STEP_SECONDS)
             restored += 1
