@@ -440,7 +440,16 @@ test("session context stays bounded when many sessions are observed", () => {
 
   const lines = sessionContextText(sessions).split("\n").slice(1);
 
-  assert.equal(lines.length, maximumVoiceContextSessions);
+  // The bound holds, and what it cut is said: a session past it must read as
+  // unlisted, never as nonexistent.
+  assert.equal(lines.length, maximumVoiceContextSessions + 1);
+  assert.match(lines.at(-1) ?? "", /5 more observed sessions are not listed/);
+
+  const exactlyAtBound = sessionContextText(sessions.slice(0, maximumVoiceContextSessions))
+    .split("\n")
+    .slice(1);
+  assert.equal(exactlyAtBound.length, maximumVoiceContextSessions);
+  assert.doesNotMatch(exactlyAtBound.at(-1) ?? "", /not listed/);
 });
 
 test("a resting-point update is voiced just like a blocking one", () => {
