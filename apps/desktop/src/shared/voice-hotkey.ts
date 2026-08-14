@@ -69,10 +69,22 @@ function joinVoiceHotkey(held: ReadonlySet<VoiceHotkeyModifier>, key: string): s
 }
 
 /**
+ * Whether the modifiers held cannot anchor a talk key: none at all, or Shift
+ * alone. Shift-and-a-letter is how every app types a capital, and
+ * Shift-and-Space is typed mid-sentence, so a chord Shift carries by itself
+ * takes plain typing away exactly as a bare key would. Shift may still join a
+ * chord another modifier anchors.
+ */
+function tooLightToHold(held: ReadonlySet<VoiceHotkeyModifier>): boolean {
+  return held.size === 0 || (held.size === 1 && held.has(VOICE_HOTKEY_MODIFIER.SHIFT));
+}
+
+/**
  * Reads an accelerator into the one spelling the rest of the app uses, or
  * refuses it. This is the gate a stored or submitted chord passes on its way to
- * the system: one key from the helper's table behind at least one modifier —
- * a bare key would take plain typing away from every app on the machine.
+ * the system: one key from the helper's table behind at least one modifier
+ * heavier than Shift — a bare key, or a Shift-only chord, would take plain
+ * typing away from every app on the machine.
  */
 export function parseVoiceHotkey(value: string): string | undefined {
   const held = new Set<VoiceHotkeyModifier>();
@@ -89,7 +101,7 @@ export function parseVoiceHotkey(value: string): string | undefined {
     if (!candidate || key !== undefined) return undefined;
     key = candidate;
   }
-  if (!key || held.size === 0) return undefined;
+  if (!key || tooLightToHold(held)) return undefined;
   return joinVoiceHotkey(held, key);
 }
 
@@ -110,7 +122,7 @@ export const VOICE_HOTKEY_CAPTURE = {
   CAPTURED: "captured",
   /** Only modifiers so far — the chord is still being formed, not refused. */
   PENDING: "pending",
-  /** A key the talk key cannot be, or one pressed with no modifier at all. */
+  /** A key the talk key cannot be, or one held by nothing heavier than Shift. */
   REFUSED: "refused",
 } as const;
 
@@ -155,7 +167,7 @@ export function capturedVoiceHotkey(chord: VoiceHotkeyChord): VoiceHotkeyCapture
   if (chord.altKey) held.add(VOICE_HOTKEY_MODIFIER.ALT);
   if (chord.shiftKey) held.add(VOICE_HOTKEY_MODIFIER.SHIFT);
   if (chord.metaKey) held.add(VOICE_HOTKEY_MODIFIER.COMMAND);
-  if (!key || held.size === 0) return { outcome: VOICE_HOTKEY_CAPTURE.REFUSED };
+  if (!key || tooLightToHold(held)) return { outcome: VOICE_HOTKEY_CAPTURE.REFUSED };
   return { outcome: VOICE_HOTKEY_CAPTURE.CAPTURED, accelerator: joinVoiceHotkey(held, key) };
 }
 

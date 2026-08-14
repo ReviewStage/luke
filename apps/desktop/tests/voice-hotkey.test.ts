@@ -63,6 +63,11 @@ test("a chord the helper cannot register is refused rather than guessed at", () 
   assert.equal(parseVoiceHotkey("K"), undefined);
   // A bare modifier cannot be a Carbon hot key at all.
   assert.equal(parseVoiceHotkey("Alt"), undefined);
+  // Shift alone is a bare key in disguise: Shift+S is how capitals are typed,
+  // and Shift+Space lands mid-sentence. Shift may only join a heavier chord.
+  assert.equal(parseVoiceHotkey("Shift+S"), undefined);
+  assert.equal(parseVoiceHotkey("Shift+Space"), undefined);
+  assert.equal(parseVoiceHotkey("Shift+Command+S"), "Shift+Command+S");
   // Keys outside the helper's table: digits, function keys, two keys at once.
   assert.equal(parseVoiceHotkey("Alt+1"), undefined);
   assert.equal(parseVoiceHotkey("Alt+F5"), undefined);
@@ -104,6 +109,11 @@ test("a keystroke is read as a chord from the physical key", () => {
 
   // A bare key, or one outside the helper's table, is an answer — a wrong one.
   assert.deepEqual(capturedVoiceHotkey({ ...chord, code: "KeyS" }), {
+    outcome: VOICE_HOTKEY_CAPTURE.REFUSED,
+  });
+  // So is a key Shift alone is holding: recording it would fire the talk key
+  // on every capital S typed anywhere.
+  assert.deepEqual(capturedVoiceHotkey({ ...chord, code: "KeyS", shiftKey: true }), {
     outcome: VOICE_HOTKEY_CAPTURE.REFUSED,
   });
   assert.deepEqual(capturedVoiceHotkey({ ...chord, code: "Digit1", altKey: true }), {

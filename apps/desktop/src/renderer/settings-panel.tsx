@@ -721,7 +721,7 @@ function PreferencesSection({
 
 /* What a talk key may be: offered the moment recording starts, and restated
    in the error line for the keystroke that was not one. */
-const SHORTCUT_HINT = "Hold ⌃, ⌥, ⇧ or ⌘ and press a letter or Space.";
+const SHORTCUT_HINT = "Hold ⌃, ⌥ or ⌘ — ⇧ may join — and press a letter or Space.";
 
 /**
  * How Luke is reached rather than what he can see. The chord stays the plain
