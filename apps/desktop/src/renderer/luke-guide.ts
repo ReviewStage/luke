@@ -352,6 +352,11 @@ const SETTING_GUIDE: Record<
   credentialSources: () => undefined,
   // Only worth a word when it has refused a key, which the facts carry.
   secretStorage: () => undefined,
+  /* Not a setting: it is whether the OpenAI key resolved, which the credential
+     row is where anyone changes. Luke is told whether he can speak at all
+     through `voiceAvailable` on the guide itself, so a spoken ask about it is
+     already answered without a settings entry to adjust. */
+  voiceAvailable: () => undefined,
 };
 
 /** What the guide needs from the app to describe the current state of it. */
@@ -449,7 +454,8 @@ function integrationsFact(settings: AppSettings): AppGuideFact {
     label: "Integrations",
     detail:
       `${roster.join(", ")}. Connecting Linear lets Luke read the developer's issues and, only ` +
-      `when asked in a turn the developer opened, move or comment on one. Its key is typed by ` +
+      `when asked in a turn the developer opened, move or comment on one. Connecting OpenAI is ` +
+      `what lets Luke speak, and review which sessions need a person. Each key is typed by ` +
       `hand into ${CONNECTIONS_PAGE}, under Integrations — never spoken, and never repeated back.`,
   };
 }
@@ -556,8 +562,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       : [
           {
             label: "Voice",
-            detail:
-              "Off: no OPENAI_API_KEY reached the process Luke was launched with, so no conversation can be opened.",
+            detail: "Off: no OpenAI key is connected, so no conversation can be opened.",
           },
         ]),
     providersFact(input.settings),

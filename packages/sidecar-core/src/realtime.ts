@@ -713,7 +713,7 @@ export type RealtimeMintOutcome =
  * never any part of a minted secret.
  */
 export interface RealtimeDiagnostics {
-  /** Whether the main process found a non-empty `OPENAI_API_KEY`. */
+  /** Whether the main process resolved an OpenAI key, from either place one can come from. */
   apiKeyConfigured: boolean;
   /** A fixture or evidence run never mints, regardless of credentials. */
   fixtureMode: boolean;
@@ -732,7 +732,7 @@ const REALTIME_MINT_EXPLANATIONS: Record<RealtimeMintOutcome, string> = {
   [REALTIME_MINT_OUTCOME.NOT_ATTEMPTED]: "No credential has been requested yet.",
   [REALTIME_MINT_OUTCOME.SUCCEEDED]: "A short-lived credential was minted.",
   [REALTIME_MINT_OUTCOME.NO_API_KEY]:
-    "OPENAI_API_KEY was empty or unset in the process Luke was launched with. Exporting it in a shell does not reach an app opened from Finder.",
+    "No OpenAI key has been given. Connect one in Settings, under Integrations. Exporting OPENAI_API_KEY in a shell also works, but does not reach an app opened from Finder.",
   [REALTIME_MINT_OUTCOME.DISABLED_BY_FIXTURE]:
     "This is a fixture or evidence run, which never uses credentials.",
   [REALTIME_MINT_OUTCOME.HTTP_ERROR]: "The API rejected the mint request.",

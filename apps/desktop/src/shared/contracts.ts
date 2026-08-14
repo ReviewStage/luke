@@ -80,6 +80,14 @@ export interface AppSettings {
    */
   secretStorage: SecretStorage;
   /**
+   * Whether a Realtime credential could actually be minted: a key resolved, and
+   * this run will use it. It travels with the settings rather than only with
+   * bootstrap because storing the key is what turns voice on — the reply to that
+   * save, and the broadcast beside it, are how every panel learns it, and how
+   * they learn a deleted key turned it back off.
+   */
+  voiceAvailable: boolean;
+  /**
    * Whether Luke stands in the Dock as well as at the notch. Off by default:
    * an accessory app is what Luke ships as, so an icon among the user's apps
    * is opted into rather than discovered.
@@ -239,11 +247,6 @@ export interface AppBootstrap {
   chromiumVersion: string;
   nodeVersion: string;
   microphoneStatus: MicrophoneStatus;
-  /**
-   * Whether a Realtime credential can be minted at all. False leaves the voice
-   * experience explicitly off rather than failing when the user first speaks.
-   */
-  realtimeAvailable: boolean;
   /**
    * The accelerator the talk key was registered as, absent when the system
    * refused to register one — a shortcut nothing can trigger must not be shown

@@ -29,6 +29,7 @@ import {
   type CredentialFormat,
   type CredentialProvider,
   type CredentialProviderId,
+  VOICE_CREDENTIAL_PROVIDER_ID,
 } from "./shared/credential-providers";
 import { parseVoiceHotkey } from "./shared/voice-hotkey";
 import { isWorkspaceAgentSelection } from "./shared/workspace-agents";
@@ -87,6 +88,13 @@ export interface SettingsStoreOptions {
   cipher: SecretCipher;
   environment?: NodeJS.ProcessEnv;
   providers?: readonly CredentialProvider[];
+  /**
+   * Whether this run will use the credentials it resolves. A fixture or evidence
+   * run will not, and the panel has to mark what would actually happen rather
+   * than what is stored — so `voiceAvailable` is false there however good the
+   * key is. Only the app knows which kind of run this is. True by default.
+   */
+  credentialsUsable?: boolean;
 }
 
 interface PersistedSettings {
@@ -362,6 +370,7 @@ export class SettingsStore {
   readonly #cipher: SecretCipher;
   readonly #environment: NodeJS.ProcessEnv;
   readonly #providers: readonly CredentialProvider[];
+  readonly #credentialsUsable: boolean;
   #loading: Promise<PersistedSettings> | undefined;
   #resolved = new Map<CredentialProviderId, ResolvedApiKey>();
   #mutations: Promise<void> = Promise.resolve();
@@ -372,6 +381,7 @@ export class SettingsStore {
     this.#cipher = options.cipher;
     this.#environment = options.environment ?? process.env;
     this.#providers = options.providers ?? CREDENTIAL_PROVIDER_LIST;
+    this.#credentialsUsable = options.credentialsUsable ?? true;
   }
 
   async snapshot(): Promise<AppSettings> {
@@ -390,6 +400,12 @@ export class SettingsStore {
       // its own: a snapshot is taken on every launch, and most of them are for
       // a user with no key to protect.
       secretStorage: this.#secretStorage,
+      // Whether a spoken turn could actually be minted: a key resolved, and this
+      // run will use it. Resolved here rather than left to the panel because it
+      // is the same question the voice and the pace are answered by — what would
+      // actually happen — and it travels with every settings reply, so storing a
+      // key is what turns voice on and deleting one is what turns it off.
+      voiceAvailable: await this.#voiceAvailable(),
       showInDock: persisted.showInDock,
       showInMenuBar: persisted.showInMenuBar,
       // Resolved the way the minter resolves it, so the panel marks the voice
@@ -701,6 +717,17 @@ export class SettingsStore {
       else delete next.workspaceAgentDefaults;
       return next;
     });
+  }
+
+  /**
+   * Whether the credential Luke speaks through resolved to something this run
+   * would use. A run that refuses its credentials does not ask for the key at
+   * all: reading a stored one means a Keychain decrypt, which a run that would
+   * not use it has no business asking for.
+   */
+  async #voiceAvailable(): Promise<boolean> {
+    if (!this.#credentialsUsable) return false;
+    return (await this.readApiKey(VOICE_CREDENTIAL_PROVIDER_ID)) !== undefined;
   }
 
   /**

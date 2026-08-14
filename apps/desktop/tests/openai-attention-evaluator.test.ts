@@ -8,7 +8,7 @@ import {
 } from "@sidecar/core";
 import {
   OpenAiAttentionEvaluator,
-  openAiAttentionEvaluatorFromEnvironment,
+  openAiAttentionEvaluator,
 } from "../src/openai-attention-evaluator";
 
 const DECIDED_AT = 1_800_000_000_000;
@@ -200,24 +200,27 @@ test("reads a decision from a payload that carries aggregated output text", asyn
   });
 });
 
-test("builds an evaluator only when the environment supplies a key", (t) => {
+test("builds an evaluator only when there is a key to build one from", (t) => {
   const environment = { ...process.env };
   t.after(() => {
     process.env = environment;
   });
 
-  process.env.OPENAI_API_KEY = "";
-  assert.equal(openAiAttentionEvaluatorFromEnvironment(), undefined);
+  // The key is the caller's to resolve — the settings store reads the stored one
+  // and falls back to `OPENAI_API_KEY` — so review stays off until one arrives,
+  // whichever of the two it came from.
+  assert.equal(openAiAttentionEvaluator(undefined), undefined);
+  assert.equal(openAiAttentionEvaluator("   "), undefined);
 
-  process.env.OPENAI_API_KEY = `  ${API_KEY}  `;
+  // The model and the endpoint are still the environment's to choose.
   process.env.LUKE_ATTENTION_MODEL = "  gpt-test  ";
   process.env.OPENAI_BASE_URL = "https://gateway.test/v1/";
-  const configured = openAiAttentionEvaluatorFromEnvironment();
+  const configured = openAiAttentionEvaluator(`  ${API_KEY}  `);
   assert.ok(configured);
   assert.equal(configured.model, "gpt-test");
 
   delete process.env.LUKE_ATTENTION_MODEL;
-  const defaulted = openAiAttentionEvaluatorFromEnvironment();
+  const defaulted = openAiAttentionEvaluator(API_KEY);
   assert.ok(defaulted);
   assert.equal(defaulted.model, "gpt-5.6-luna");
 
