@@ -176,6 +176,14 @@ export interface ProviderSessionObservation {
    * agent from this list.
    */
   spawnableAgents?: readonly string[];
+  /**
+   * The provider-owned identifier of the place a new agent lands — the
+   * workspace around this session — when that is narrower than the session
+   * itself. Like a control's `target`, it rides the advertisement so it is
+   * replaced with every observation and can never outlive the snapshot that
+   * promised it, the way state an adapter kept on the side could.
+   */
+  spawnTarget?: string;
 }
 
 /**
@@ -195,6 +203,8 @@ export interface NormalizedSession extends SessionIdentity {
   canReceiveMessage: boolean;
   /** The agents that can be started alongside this session, or none. */
   spawnableAgents: readonly string[];
+  /** Where a started agent lands, when narrower than the session itself. */
+  spawnTarget?: string;
   attention: AttentionDecision;
 }
 
@@ -381,6 +391,7 @@ export function normalizeSession(
   });
   const observedAt = timestamp(observation.observedAt, "observedAt");
   const summary = boundedText(observation.summary, maximumSessionSummaryLength);
+  const spawnTarget = boundedText(observation.spawnTarget, maximumSessionDetailLength);
 
   return {
     providerId,
@@ -400,6 +411,7 @@ export function normalizeSession(
     // about messaging reports a session that cannot be messaged.
     canReceiveMessage: observation.canReceiveMessage === true,
     spawnableAgents: normalizeSpawnableAgents(observation.spawnableAgents),
+    ...(spawnTarget ? { spawnTarget } : {}),
     attention: normalizeAttention(attention),
   };
 }

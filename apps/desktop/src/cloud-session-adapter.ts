@@ -427,9 +427,10 @@ export abstract class CloudSessionAdapter
     const observation = this.#observations.find(
       (candidate) => candidate.providerSessionId === request.providerSessionId,
     );
+    if (!observation) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
     // The advertised list — not the caller's word — is what the route is
     // built from, so an agent kind is only ever one the last pass promised.
-    const agent = observation?.spawnableAgents?.find((candidate) => candidate === request.agent);
+    const agent = observation.spawnableAgents?.find((candidate) => candidate === request.agent);
     if (!agent) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
 
     const name = request.name === undefined ? undefined : workspaceNameText(request.name);
@@ -447,23 +448,32 @@ export abstract class CloudSessionAdapter
       };
     }
 
+    // The route is built in the same synchronous step as the validation, from
+    // the observation's own spawn target: a pass landing while the key is read
+    // must not be able to swap the snapshot between the check and the route.
+    const route = this.workspaceAgentRoute(
+      observation.spawnTarget ?? request.providerSessionId,
+      agent,
+      name,
+      task,
+    );
+    if (!route) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+
     const apiKey = await this.#readApiKey().catch(() => undefined);
     if (!apiKey) return this.#missingKeyRejection();
-
-    const route = this.workspaceAgentRoute(request.providerSessionId, agent, name, task);
-    if (!route) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
     return this.#postWrite(apiKey, route);
   }
 
   /**
    * Where this provider's documented start-another-agent endpoint lives and
-   * what it takes. The agent handed in is one the latest observation listed
-   * for this session, so the route is built from what the provider itself
-   * promised. The default is that a provider starts nothing, the same way a
-   * read-only adapter stays read-only by writing nothing.
+   * what it takes. The target handed in is the observation's own `spawnTarget`
+   * — the session id itself when none was reported — and the agent is one the
+   * latest observation listed, so the route is built from what the provider
+   * itself promised. The default is that a provider starts nothing, the same
+   * way a read-only adapter stays read-only by writing nothing.
    */
   protected workspaceAgentRoute(
-    _providerSessionId: string,
+    _spawnTarget: string,
     _agent: string,
     _name: string | undefined,
     _task: string | undefined,

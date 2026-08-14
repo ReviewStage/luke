@@ -245,12 +245,6 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
    * this cache holds, so it can never name a project observation did not see.
    */
   #projects: readonly ConductorProject[] = [];
-  /**
-   * Which workspace each reported row stands for. The row's identity is a
-   * chat's, but a new agent lands in the workspace around it, and only the
-   * latest pass may say which that is.
-   */
-  #workspaceIdBySessionId: ReadonlyMap<string, string> = new Map();
 
   constructor(options: ConductorAdapterOptions) {
     super(
@@ -274,7 +268,6 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
   protected override forgetCachedIdentity(): void {
     this.#userId = undefined;
     this.#projects = [];
-    this.#workspaceIdBySessionId = new Map();
   }
 
   /**
@@ -386,14 +379,6 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
         byWorkspace.set(workspaceId, observation);
       }
     }
-    // A new agent lands in the workspace behind a row, so each emitted row
-    // remembers which workspace it stands for — for this pass only.
-    this.#workspaceIdBySessionId = new Map(
-      [...byWorkspace.entries()].map(([workspaceId, observation]) => [
-        observation.providerSessionId,
-        workspaceId,
-      ]),
-    );
     return [...byWorkspace.values()];
   }
 
@@ -512,19 +497,17 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
   }
 
   protected override workspaceAgentRoute(
-    providerSessionId: string,
+    spawnTarget: string,
     agent: string,
     name: string | undefined,
     task: string | undefined,
-  ): CloudWriteRoute | undefined {
-    // The workspace is read back from what this pass observed, never from the
-    // request: a row the last pass did not emit has no workspace to land in.
-    const workspaceId = this.#workspaceIdBySessionId.get(providerSessionId);
-    if (!workspaceId) return undefined;
+  ): CloudWriteRoute {
+    // The target is the workspace id the observation itself advertised, so
+    // the route acts on what the user was shown — never on state kept aside.
     return {
       segments: [CONDUCTOR_ROUTE_SEGMENT.V0, CONDUCTOR_ROUTE_SEGMENT.SESSIONS],
       body: {
-        [CONDUCTOR_SESSION_CREATE_FIELD.WORKSPACE_ID]: workspaceId,
+        [CONDUCTOR_SESSION_CREATE_FIELD.WORKSPACE_ID]: spawnTarget,
         [CONDUCTOR_SESSION_CREATE_FIELD.AGENT]: agent,
         ...(name ? { [CONDUCTOR_SESSION_CREATE_FIELD.NAME]: name } : {}),
         // The opening task rides the creation itself: `POST /v0/sessions`
@@ -604,8 +587,11 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
           reported?.status === CONDUCTOR_SESSION_STATUS.WORKING),
       // Another agent lands in the workspace around this row, whatever state
       // the row's own chat is in: the workspace was observed this pass, and
-      // that is the thing the creation endpoint takes.
+      // that is the thing the creation endpoint takes. Its id rides the
+      // advertisement — like a control's target — so it can never outlive the
+      // snapshot that promised it.
       spawnableAgents: CONDUCTOR_SPAWNABLE_AGENTS,
+      spawnTarget: session.workspace.id,
       ...(reported?.status === CONDUCTOR_SESSION_STATUS.WORKING
         ? { controls: [CONDUCTOR_CANCEL_CONTROL] }
         : {}),
