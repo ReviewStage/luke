@@ -295,6 +295,24 @@ test("session context carries only bounded, redacted fields", () => {
   // what a provider has not promised.
   assert.match(text, /provider_session_id=session-a/);
   assert.match(text, /takes no messages/);
+  // A session that reported no address is offered nowhere to open — and the
+  // roster says which sessions can be, never where they are.
+  assert.match(text, /cannot be opened/);
+  assert.doesNotMatch(text, /https:/);
+
+  const linked = normalizeSession(
+    { id: "devin", displayName: "Devin" },
+    {
+      providerSessionId: "devin-1",
+      title: "Devin: luke",
+      status: SESSION_STATUS.WORKING,
+      observedAt: DECIDED_AT,
+      detail: { link: "https://app.devin.ai/sessions/devin-1" },
+    },
+  );
+  const linkedText = sessionContextText([linked]);
+  assert.match(linkedText, /can be opened/);
+  assert.doesNotMatch(linkedText, /https:/);
 });
 
 test("an empty roster says so rather than implying Luke sees nothing at all", () => {
@@ -345,12 +363,16 @@ test("a resting-point update is voiced just like a blocking one", () => {
   assert.equal(speech[0]?.disposition, ATTENTION_DISPOSITION.SPEAK_AT_TURN_END);
 });
 
-test("the session is minted with the two acts and nothing wider", () => {
+test("the session is minted with the three acts and nothing wider", () => {
   const config = realtimeSessionConfig();
 
   assert.deepEqual(
     config.tools.map((tool) => (tool as { name?: unknown }).name),
-    [REALTIME_TOOL.SEND_SESSION_MESSAGE, REALTIME_TOOL.RUN_SESSION_CONTROL],
+    [
+      REALTIME_TOOL.SEND_SESSION_MESSAGE,
+      REALTIME_TOOL.RUN_SESSION_CONTROL,
+      REALTIME_TOOL.OPEN_SESSION,
+    ],
   );
   assert.equal(config.tool_choice, "auto");
 });
@@ -409,6 +431,7 @@ function actionableSession() {
       observedAt: DECIDED_AT,
       canReceiveMessage: true,
       controls: [{ id: "cancel-run", label: "Stop this run", kind: "stop" }],
+      detail: { link: "https://app.devin.ai/sessions/devin-1" },
     },
   );
 }
@@ -435,6 +458,15 @@ test("a tool call can act only on a session Luke was shown, doing what it advert
       kind: "control",
       identity: { providerId: "devin", providerSessionId: "devin-1" },
       control: { id: "cancel-run", label: "Stop this run", kind: "stop" },
+    },
+  );
+  // The open action carries the identity and nothing else: the address stays
+  // in the main process's registry, where the press reads it back.
+  assert.deepEqual(
+    sessionToolAction(messageCall(`{${identity}}`, REALTIME_TOOL.OPEN_SESSION), roster),
+    {
+      kind: "open",
+      identity: { providerId: "devin", providerSessionId: "devin-1" },
     },
   );
 
@@ -468,6 +500,15 @@ test("a tool call can act only on a session Luke was shown, doing what it advert
     [quiet],
   );
   assert.equal(silentRefusal.kind, "refused");
+  // No address means nowhere to open, however real the identity is.
+  const nowhereToOpen = sessionToolAction(
+    messageCall(
+      '{"provider_id":"codex","provider_session_id":"thread-1"}',
+      REALTIME_TOOL.OPEN_SESSION,
+    ),
+    [quiet],
+  );
+  assert.equal(nowhereToOpen.kind, "refused");
 });
 
 test("a tool call is answered with the outcome the provider gave", () => {

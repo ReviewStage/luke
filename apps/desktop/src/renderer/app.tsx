@@ -4,6 +4,7 @@ import {
   REALTIME_STATUS,
   type RealtimeStatus,
   type RealtimeVoice,
+  type SessionIdentity,
 } from "@sidecar/core";
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -11,10 +12,11 @@ import type {
   AppSettings,
   DisplayDiagnostic,
   MicrophoneStatus,
+  SessionOpenResult,
   VoiceHotkeyState,
   WindowMode,
 } from "../shared/contracts";
-import { CREDENTIAL_SOURCE } from "../shared/contracts";
+import { CREDENTIAL_SOURCE, SESSION_OPEN_RESULT_STATUS } from "../shared/contracts";
 import type { CredentialProviderId } from "../shared/credential-providers";
 import { CREDENTIAL_PROVIDER_LIST } from "../shared/credential-providers";
 import { TALK_KEY_RELEASE, talkKeyRelease, voiceHotkeyToShow } from "../shared/voice-hotkey";
@@ -219,6 +221,14 @@ export function App(): React.JSX.Element {
    */
   const heardLuke = useRef(false);
   const startMicrophoneRef = useRef<(() => Promise<void>) | undefined>(undefined);
+  /**
+   * The spoken form of pressing a row, reached through a ref for the same
+   * reason `startMicrophoneRef` is: the voice session is built once, and the
+   * handler it needs is declared later, beside the press it mirrors.
+   */
+  const openSessionAloudRef = useRef<(identity: SessionIdentity) => Promise<SessionOpenResult>>(
+    (identity) => window.sidecar.openSession(identity),
+  );
   /** When the talk key went down, which is what tells a hold from a tap. */
   const talkPressedAt = useRef<number | undefined>(undefined);
   /** Whether a tap has left a turn open for a later press to end. */
@@ -284,13 +294,15 @@ export function App(): React.JSX.Element {
   const ensureVoiceSession = useCallback((): RealtimeVoiceSession => {
     voiceSession.current ??= new RealtimeVoiceSession({
       requestConnection: () => window.sidecar.requestRealtimeCredential(),
-      // The same two bridge calls the rows' composer and chips use: a spoken
-      // ask is a third way to ask for the same act, behind the same gauntlet
-      // in the main process.
+      // The same bridge calls the rows use — the composer, the chips, and the
+      // press that opens a session: a spoken ask is a third way to ask for the
+      // same act, behind the same gauntlet in the main process.
       carryAction: (action) =>
         action.kind === "message"
           ? window.sidecar.sendSessionMessage(action.identity, action.text)
-          : window.sidecar.executeSessionControl(action.identity, action.control.id),
+          : action.kind === "control"
+            ? window.sidecar.executeSessionControl(action.identity, action.control.id)
+            : openSessionAloudRef.current(action.identity),
       onStatus: setVoiceStatus,
       onLocalStream: setLocalStream,
       onRemoteStream: setRemoteStream,
@@ -662,7 +674,7 @@ export function App(): React.JSX.Element {
    */
   const openSession = useCallback(
     (session: DisplaySession) => {
-      window.sidecar.openSession({
+      void window.sidecar.openSession({
         providerId: session.providerId,
         providerSessionId: session.id,
       });
@@ -671,6 +683,28 @@ export function App(): React.JSX.Element {
     },
     [cancelHoverTransition, changeMode],
   );
+
+  /**
+   * The same press asked for out loud. It stands the panel down for the same
+   * reason the pressed row does — Luke floats above the very chat he was asked
+   * to bring forward — but only once something actually opened, and only if the
+   * panel is up at all: a spoken ask usually arrives with the panel away.
+   */
+  const openSessionAloud = useCallback(
+    async (identity: SessionIdentity): Promise<SessionOpenResult> => {
+      const result = await window.sidecar.openSession(identity);
+      if (
+        result.status === SESSION_OPEN_RESULT_STATUS.OPENED &&
+        presentationRef.current === PANEL_PRESENTATION.PANEL
+      ) {
+        cancelHoverTransition();
+        void changeMode(false);
+      }
+      return result;
+    },
+    [cancelHoverTransition, changeMode],
+  );
+  openSessionAloudRef.current = openSessionAloud;
 
   /**
    * The two writes a row can ask for, handed to the main process by session

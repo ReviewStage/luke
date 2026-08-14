@@ -13,6 +13,7 @@ import type {
   AppBridge,
   DisplayDiagnostic,
   MicrophoneStatus,
+  SessionOpenResult,
   SettingsUpdateResult,
   VoiceHotkeyState,
   WindowMode,
@@ -43,9 +44,8 @@ const bridge: AppBridge = {
   },
   setShowInMenuBar: (show: boolean) =>
     ipcRenderer.invoke(channels.setShowInMenuBar, show) as Promise<SettingsUpdateResult>,
-  openSession: (identity: SessionIdentity) => {
-    ipcRenderer.send(channels.openSession, identity);
-  },
+  openSession: (identity: SessionIdentity) =>
+    ipcRenderer.invoke(channels.openSession, identity) as Promise<SessionOpenResult>,
   sendSessionMessage: (identity: SessionIdentity, text: string) =>
     ipcRenderer.invoke(
       channels.sendSessionMessage,

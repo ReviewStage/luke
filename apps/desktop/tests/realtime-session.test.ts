@@ -1076,6 +1076,66 @@ test("a spoken ask is carried through the carrier and its outcome is voiced", as
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
 });
 
+test("a spoken ask to open a session is carried, and one with no address is refused", async () => {
+  const carried: unknown[] = [];
+  const context = harness({
+    carryAction: async (action) => {
+      carried.push(action);
+      return { status: "opened" };
+    },
+  });
+  await context.session.connect();
+  // One session reported an address; the other reported none and so has
+  // nowhere to be opened, however real its identity is.
+  context.session.updateSessions([
+    observedSession("session-a", { detail: { link: "https://claude.ai/session/session-a" } }),
+    observedSession("session-b"),
+  ]);
+  armDeveloperTurn(context);
+  const sentBefore = context.sent.length;
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "open_session",
+          call_id: "call-1",
+          arguments: '{"provider_id":"claude-code","provider_session_id":"session-a"}',
+        },
+        {
+          type: "function_call",
+          name: "open_session",
+          call_id: "call-2",
+          arguments: '{"provider_id":"claude-code","provider_session_id":"session-b"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  // The carried action names the session, never its address: the main process
+  // reads the link back out of its own registry, the same as a pressed row.
+  assert.deepEqual(carried, [
+    { kind: "open", identity: { providerId: "claude-code", providerSessionId: "session-a" } },
+  ]);
+  const outputs = context.sent
+    .slice(sentBefore)
+    .filter(
+      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+    );
+  const statuses = outputs.map(
+    (event) =>
+      (
+        JSON.parse((event.item as { output?: string } | undefined)?.output ?? "{}") as {
+          status?: string;
+        }
+      ).status,
+  );
+  assert.deepEqual(statuses, ["opened", "refused"]);
+});
+
 test("a tool call outside the roster is refused before any carrier runs", async () => {
   const carried: unknown[] = [];
   const context = harness({

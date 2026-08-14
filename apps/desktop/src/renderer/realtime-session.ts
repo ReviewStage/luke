@@ -40,7 +40,7 @@ const REALTIME_SETTLE_TIMEOUT_MS = 20_000;
  * again against its registry — the carrier is a courier, not a gate.
  */
 export type SessionActionCarrier = (
-  action: Extract<SessionToolAction, { kind: "message" | "control" }>,
+  action: Extract<SessionToolAction, { kind: "message" | "control" | "open" }>,
 ) => Promise<Record<string, unknown>>;
 
 export interface RealtimeVoiceSessionCallbacks {

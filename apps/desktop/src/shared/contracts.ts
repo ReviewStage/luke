@@ -72,6 +72,28 @@ export interface SettingsUpdateResult {
   reason?: string;
 }
 
+/**
+ * What became of a request to open a session. Opening is a local act — the
+ * session's address is handed to the operating system, never to a provider —
+ * so the answer is the app's own: opened, refused by the system, or
+ * unsupported because the session never reported an address. A pressed row
+ * ignores the answer; a spoken ask says it aloud, and grounding that sentence
+ * is why this is answered at all.
+ */
+export const SESSION_OPEN_RESULT_STATUS = {
+  OPENED: "opened",
+  REJECTED: "rejected",
+  UNSUPPORTED: "unsupported",
+} as const;
+
+export type SessionOpenResultStatus =
+  (typeof SESSION_OPEN_RESULT_STATUS)[keyof typeof SESSION_OPEN_RESULT_STATUS];
+
+export type SessionOpenResult =
+  | { status: typeof SESSION_OPEN_RESULT_STATUS.OPENED }
+  | { status: typeof SESSION_OPEN_RESULT_STATUS.REJECTED; reason: string }
+  | { status: typeof SESSION_OPEN_RESULT_STATUS.UNSUPPORTED };
+
 export interface DisplayDiagnostic {
   id: number;
   label: string;
@@ -160,9 +182,10 @@ export interface AppBridge {
    * Opens an observed session where its provider keeps it. The renderer names
    * the session rather than its address, for the same reason it names a
    * provider above: the places Luke can send you are the sessions it is already
-   * watching, and no URL crosses this boundary.
+   * watching, and no URL crosses this boundary. The answer says what became of
+   * the press, so a spoken ask can report it rather than guess.
    */
-  openSession(identity: SessionIdentity): void;
+  openSession(identity: SessionIdentity): Promise<SessionOpenResult>;
   /**
    * Hands one user-typed message to an observed session, through its
    * provider's documented API. The renderer names a session it is already

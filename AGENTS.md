@@ -46,7 +46,12 @@ Trust constraints:
   direct product of a turn the developer opened, never of anything Luke read or
   was told. A session whose provider documents no way in, or whose current state is
   documented for none, advertises nothing and is offered nothing; local
-  sessions have no such endpoint and stay entirely read-only.
+  sessions have no such endpoint and stay entirely read-only. Opening a
+  session — its row pressed, or the same press asked for out loud — is not a
+  write and needs no endpoint: the address its provider reported is handed to
+  the operating system, and nothing reaches the provider; a spoken open still
+  runs only in a developer-opened turn, and a session that reported no address
+  is offered nowhere to open.
 - Keep unsupported capabilities explicit; do not invent fallback controls.
 - Keep Electron renderers sandboxed with context isolation and narrow IPC.
 - Commit only synthetic fixtures and repository-relative paths. This binds
