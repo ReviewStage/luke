@@ -5,6 +5,7 @@ import {
   type AppGuideSetting,
   REALTIME_VOICE,
   REALTIME_VOICE_LIST,
+  REALTIME_VOICE_SPEED,
 } from "@sidecar/core";
 import {
   APP_SETTING_ID,
@@ -27,7 +28,9 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
     },
     secretStorage: SECRET_STORAGE.UNKNOWN,
     showInMenuBar: true,
+    showInDock: false,
     voice: REALTIME_VOICE.CEDAR,
+    voiceSpeed: REALTIME_VOICE_SPEED.NORMAL,
     voiceCaptions: false,
     ...overrides,
   };
@@ -68,6 +71,22 @@ test("the guide describes every spoken-adjustable setting with its current value
 
   const menuBar = guideSetting(APP_SETTING_ID.SHOW_IN_MENU_BAR);
   assert.equal(menuBar.value, "on");
+
+  const dock = guideSetting(APP_SETTING_ID.SHOW_IN_DOCK);
+  assert.equal(dock.value, "off");
+
+  // The pace is offered in words a voice can carry, current value included.
+  const speed = guideSetting(APP_SETTING_ID.VOICE_SPEED);
+  assert.equal(speed.kind, APP_SETTING_KIND.CHOICE);
+  assert.equal(speed.value, "normal");
+  assert.deepEqual(speed.choices, ["slow", "normal", "quick", "fast"]);
+  assert.equal(
+    guideSetting(
+      APP_SETTING_ID.VOICE_SPEED,
+      guideInput({ settings: settings({ voiceSpeed: REALTIME_VOICE_SPEED.FAST }) }),
+    ).value,
+    "fast",
+  );
 
   // Every entry says where the same change is made by hand, because guiding
   // the developer there is half of what the guide is for.
@@ -121,12 +140,20 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
       calls.push("setVoice");
       return answered;
     },
+    setVoiceSpeed: async (speed: number) => {
+      calls.push(`setVoiceSpeed:${speed}`);
+      return answered;
+    },
     setVoiceCaptions: async (enabled: boolean) => {
       calls.push(`setVoiceCaptions:${enabled}`);
       return answered;
     },
     setShowInMenuBar: async (show: boolean) => {
       calls.push(`setShowInMenuBar:${show}`);
+      return answered;
+    },
+    setShowInDock: async (show: boolean) => {
+      calls.push(`setShowInDock:${show}`);
       return answered;
     },
   };
@@ -141,7 +168,14 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
     assert.equal(outcome.status, "changed", `${setting.id} is wired to the bridge`);
   }
 
-  assert.deepEqual(calls.sort(), ["setShowInMenuBar:true", "setVoice", "setVoiceCaptions:true"]);
+  assert.deepEqual(calls.sort(), [
+    "setShowInDock:true",
+    "setShowInMenuBar:true",
+    "setVoice",
+    "setVoiceCaptions:true",
+    // The first choice offered is "slow", which is the 0.75 multiple.
+    "setVoiceSpeed:0.75",
+  ]);
   // The snapshot the store answered with is handed back either way, so the
   // panel's switches redraw from what was actually stored.
   assert.equal(seen.length, calls.length);

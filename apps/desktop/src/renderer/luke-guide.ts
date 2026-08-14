@@ -27,6 +27,8 @@ import {
   appToggleText,
   isRealtimeVoice,
   REALTIME_VOICE_LIST,
+  REALTIME_VOICE_SPEED,
+  type RealtimeVoiceSpeed,
 } from "@sidecar/core";
 import type { AppBridge, AppSettings, MicrophoneStatus } from "../shared/contracts";
 import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "../shared/contracts";
@@ -35,14 +37,36 @@ import { CREDENTIAL_PROVIDER_LIST } from "../shared/credential-providers";
 /** The ids a spoken change names Luke's settings by. */
 export const APP_SETTING_ID = {
   VOICE: "voice",
+  VOICE_SPEED: "voice_speed",
   VOICE_CAPTIONS: "voice_captions",
   SHOW_IN_MENU_BAR: "show_in_menu_bar",
+  SHOW_IN_DOCK: "show_in_dock",
 } as const;
 
 export type AppSettingId = (typeof APP_SETTING_ID)[keyof typeof APP_SETTING_ID];
 
 /** Where the switches live, said once so every entry words it the same way. */
 const SETTINGS_TAB = "the panel's Settings tab";
+
+/**
+ * The words a pace is asked for in, slowest to fastest, each paired with the
+ * multiple it means. The settings row shows the multiples; a conversation
+ * offers the words, because "quick" survives speech where "1.25×" does not.
+ */
+const VOICE_SPEED_WORDS: readonly { word: string; speed: RealtimeVoiceSpeed }[] = [
+  { word: "slow", speed: REALTIME_VOICE_SPEED.SLOW },
+  { word: "normal", speed: REALTIME_VOICE_SPEED.NORMAL },
+  { word: "quick", speed: REALTIME_VOICE_SPEED.QUICK },
+  { word: "fast", speed: REALTIME_VOICE_SPEED.FAST },
+];
+
+function voiceSpeedWord(speed: RealtimeVoiceSpeed): string {
+  return VOICE_SPEED_WORDS.find((candidate) => candidate.speed === speed)?.word ?? "normal";
+}
+
+function voiceSpeedFromWord(word: string): RealtimeVoiceSpeed | undefined {
+  return VOICE_SPEED_WORDS.find((candidate) => candidate.word === word)?.speed;
+}
 
 /**
  * One guide entry per settings field, or an explicit nothing. Exhaustive over
@@ -63,6 +87,17 @@ const SETTING_GUIDE: Record<
     adjustable: true,
     manual: `${SETTINGS_TAB}, under Preferences`,
   }),
+  voiceSpeed: (settings) => ({
+    id: APP_SETTING_ID.VOICE_SPEED,
+    label: "Speed",
+    description:
+      "How fast Luke talks — slow is 0.75×, normal 1×, quick 1.25×, fast 1.5× the voice's natural rate; a change is heard from the next conversation on.",
+    kind: APP_SETTING_KIND.CHOICE,
+    value: voiceSpeedWord(settings.voiceSpeed),
+    choices: VOICE_SPEED_WORDS.map((candidate) => candidate.word),
+    adjustable: true,
+    manual: `${SETTINGS_TAB}, under Preferences`,
+  }),
   voiceCaptions: (settings) => ({
     id: APP_SETTING_ID.VOICE_CAPTIONS,
     label: "Captions",
@@ -78,6 +113,15 @@ const SETTING_GUIDE: Record<
     description: "Whether Luke also stands in the menu bar as a status item.",
     kind: APP_SETTING_KIND.TOGGLE,
     value: appToggleText(settings.showInMenuBar),
+    adjustable: true,
+    manual: `${SETTINGS_TAB}, under Preferences`,
+  }),
+  showInDock: (settings) => ({
+    id: APP_SETTING_ID.SHOW_IN_DOCK,
+    label: "Show Luke in the Dock",
+    description: "Whether Luke also stands in the Dock as an app icon.",
+    kind: APP_SETTING_KIND.TOGGLE,
+    value: appToggleText(settings.showInDock),
     adjustable: true,
     manual: `${SETTINGS_TAB}, under Preferences`,
   }),
@@ -208,19 +252,27 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
  * and the sentence out loud never disagree.
  */
 export async function applySpokenSetting(
-  bridge: Pick<AppBridge, "setVoice" | "setVoiceCaptions" | "setShowInMenuBar">,
+  bridge: Pick<
+    AppBridge,
+    "setVoice" | "setVoiceSpeed" | "setVoiceCaptions" | "setShowInMenuBar" | "setShowInDock"
+  >,
   action: { setting: AppGuideSetting; value: string },
   onSettings: (settings: AppSettings) => void,
 ): Promise<Record<string, unknown>> {
   const enabled = action.value === APP_TOGGLE_VALUE.ON;
+  const speed = voiceSpeedFromWord(action.value);
   const result =
     action.setting.id === APP_SETTING_ID.VOICE_CAPTIONS
       ? await bridge.setVoiceCaptions(enabled)
       : action.setting.id === APP_SETTING_ID.SHOW_IN_MENU_BAR
         ? await bridge.setShowInMenuBar(enabled)
-        : action.setting.id === APP_SETTING_ID.VOICE && isRealtimeVoice(action.value)
-          ? await bridge.setVoice(action.value)
-          : undefined;
+        : action.setting.id === APP_SETTING_ID.SHOW_IN_DOCK
+          ? await bridge.setShowInDock(enabled)
+          : action.setting.id === APP_SETTING_ID.VOICE_SPEED && speed !== undefined
+            ? await bridge.setVoiceSpeed(speed)
+            : action.setting.id === APP_SETTING_ID.VOICE && isRealtimeVoice(action.value)
+              ? await bridge.setVoice(action.value)
+              : undefined;
   if (!result) {
     // An adjustable entry with no carrier is a guide ahead of its wiring;
     // refuse honestly rather than claim a change that never happened.
@@ -232,8 +284,11 @@ export async function applySpokenSetting(
     status: "changed",
     setting: action.setting.label,
     value: action.value,
-    ...(action.setting.id === APP_SETTING_ID.VOICE
-      ? { note: "The new voice is heard from the next conversation on." }
+    // The two rides on the minted session say so, the same promise their rows
+    // make: the change lands in the next conversation, never a live one.
+    ...(action.setting.id === APP_SETTING_ID.VOICE ||
+    action.setting.id === APP_SETTING_ID.VOICE_SPEED
+      ? { note: "The change is heard from the next conversation on." }
       : {}),
   };
 }
