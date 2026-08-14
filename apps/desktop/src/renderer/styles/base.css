@@ -192,6 +192,10 @@
      the panel stood down to one field, not a different object. */
   --slot-radius: 28px;
   --wing-inset: 9px;
+  /* The panel's own content edge: where the tab bar, the rows, and the composer
+     all start. The wing's marks take the same start, so the strip up top reads
+     as the first line of the column below it. */
+  --panel-inset: 20px;
   --scroll-fade: 26px;
   --panel-width: 620px;
   /* How long the slot's contents wait before arriving. The slot is only ever
@@ -667,17 +671,30 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   padding: 0 var(--wing-inset);
 }
 
-/* Reversed so the first provider — the one that needs a person soonest — is the
-   mark nearest the face, and therefore the first to come out from behind it.
-   Every mark holds its place and only fades, so none of them moves during the
-   morph. A re-sort is the one thing that moves them, and session-motion glides
-   each mark to its new slot the way it glides the rows. */
+/* The left wing's inner spans the whole strip rather than shrinking to its
+   contents: the face keeps the notch's edge it always had, and the marks' own
+   auto margin is what holds them against the shape's far edge instead of
+   beside the face. */
+.wing-left .wing-inner {
+  flex: 1;
+  justify-content: flex-end;
+}
+
+/* Anchored to the shape's far edge — the auto margin holds it there — and
+   starting at `--panel-inset` from it, so the first mark lines up with the tab
+   bar and the rows below. The wing already pads `--wing-inset`; the margin
+   makes up the difference. Read the way a list is: the first provider — the
+   one that needs a person soonest — holds the leftmost slot, and the overflow
+   count trails the rest. The far edge is the one a morph moves, so the marks
+   move with it; session-motion glides them there on the surface's own spring,
+   the same way it glides a re-sorted mark to its new slot. */
 .wing-marks {
   display: flex;
   height: 22px;
-  flex-direction: row-reverse;
   align-items: center;
   gap: 7px;
+  margin-right: auto;
+  margin-left: calc(var(--panel-inset) - var(--wing-inset));
 }
 
 .wing-mark {
@@ -711,6 +728,20 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transition-duration: var(--duration-quick), var(--duration-shape);
   transition-timing-function: var(--motion-exit), var(--spring);
   transition-delay: var(--peek-delay);
+}
+
+/* The marks rest at the shape's far edge, not beside the face, so the peek's
+   early beat would draw them on the desktop ahead of an edge still most of its
+   travel away. They arrive the way the voice meter arrives in the growing
+   capsule: crossing the last of the shape's travel and finishing as it
+   settles, inside the black rather than ahead of it. The meter above keeps the
+   early beat — it stands beside the face, where the shape's edge passes at
+   once. */
+.app-stage[data-presentation="peek"] .wing-mark,
+.app-stage[data-presentation="peek"] .wing-more,
+.app-stage[data-presentation="panel"] .wing-mark,
+.app-stage[data-presentation="panel"] .wing-more {
+  transition-delay: calc(var(--duration-shape) - var(--duration-quick));
 }
 
 /* A mark can mount into a wing that is already unfolded — the panel's wing
@@ -1307,7 +1338,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   display: flex;
   max-height: 520px;
   flex-direction: column;
-  padding: calc(max(var(--notch-top-inset), 32px) + 14px) 20px 18px;
+  padding: calc(max(var(--notch-top-inset), 32px) + 14px) var(--panel-inset) 18px;
   border-radius: 0 0 var(--panel-radius) var(--panel-radius);
 }
 
