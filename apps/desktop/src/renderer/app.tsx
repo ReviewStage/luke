@@ -1085,7 +1085,11 @@ export function App(): React.JSX.Element {
 
   // The talk key is registered by the main process so it answers from any app,
   // which is the whole point: no window to find, nothing to focus first. Both
-  // edges arrive, because a turn you hold ends when the key does.
+  // edges arrive, because a turn you hold ends when the key does. Only the
+  // press defers to a chord being recorded: the release always lands, so a
+  // hold opened before the recording began still ends when the key comes up
+  // rather than leaving the microphone open under the field — and a release
+  // whose press was held back finds nothing pressed and answers nothing.
   useEffect(
     () =>
       window.sidecar.onVoiceHotkeyPress(() => {
@@ -1093,13 +1097,7 @@ export function App(): React.JSX.Element {
       }),
     [beginTalk],
   );
-  useEffect(
-    () =>
-      window.sidecar.onVoiceHotkeyRelease(() => {
-        if (!shortcutCapture.current) endTalk();
-      }),
-    [endTalk],
-  );
+  useEffect(() => window.sidecar.onVoiceHotkeyRelease(endTalk), [endTalk]);
   useEffect(() => window.sidecar.onVoiceHotkeyChanged(setVoiceHotkey), []);
 
   // The rows say how long ago each session was seen, and a label left alone
