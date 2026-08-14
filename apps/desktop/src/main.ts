@@ -266,15 +266,19 @@ function reportVoiceHotkey(): void {
  * is running. The old key is let go of in full before the new one is asked
  * for, so the two can never race for the same chord — and letting everything
  * go is exact rather than broad, because the talk key candidates are the only
- * global accelerators Luke ever registers. The panel keeps showing the old
- * key until the new one actually answers: the helper announces its own
- * registration over stdout, and every path without a helper is decided by the
- * time `registerVoiceHotkey` returns.
+ * global accelerators Luke ever registers. Letting go means waiting: the
+ * system releases the old helper's chord when its process exits, not when the
+ * kill is asked for, and the defaults sit in both helpers' candidate lists —
+ * a successor that starts too early is refused the very fallback it was
+ * promised. The panel keeps showing the old key until the new one actually
+ * answers: the helper announces its own registration over stdout, and every
+ * path without a helper is decided by the time `registerVoiceHotkey` returns.
  */
-function applyVoiceHotkey(): void {
-  talkKeyWatcher?.stop();
+async function applyVoiceHotkey(): Promise<void> {
+  const released = talkKeyWatcher?.stop();
   talkKeyWatcher = undefined;
   globalShortcut.unregisterAll();
+  await released;
   voiceHotkey = undefined;
   voiceHotkeyHeld = true;
   voiceHotkeyAbsence = VOICE_HOTKEY_ABSENCE.ALREADY_OWNED;
@@ -703,7 +707,9 @@ function registerIpc(): void {
         const result = await settingsStore.setVoiceHotkey(chosen);
         if (!result.reason) {
           chosenVoiceHotkey = chosen;
-          applyVoiceHotkey();
+          // Awaited so the renderer's controls stay at rest until the swap has
+          // finished and the helper's own registration line can say the truth.
+          await applyVoiceHotkey();
         }
         return result;
       } catch {
@@ -1225,8 +1231,9 @@ if (!app.requestSingleInstanceLock()) {
 app.on("will-quit", () => {
   globalShortcut.unregisterAll();
   // The helper is a process of Luke's own, so it does not outlive the app that
-  // spawned it and leave a key registered against nothing.
-  talkKeyWatcher?.stop();
+  // spawned it and leave a key registered against nothing. Nothing succeeds it
+  // during quit, so its exit is not waited on.
+  void talkKeyWatcher?.stop();
   talkKeyWatcher = undefined;
 });
 
