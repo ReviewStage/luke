@@ -17,6 +17,7 @@ import {
   observedAgoLabel,
   SESSION_FILTER,
   SESSION_SORT,
+  sessionListRuns,
   sessionTally,
   tallyCaption,
   tallySummary,
@@ -55,6 +56,7 @@ test("the most urgent sessions are listed first in either data source", () => {
     SESSION_STATE.ATTENTION,
     SESSION_STATE.WORKING,
     SESSION_STATE.WORKING,
+    SESSION_STATE.WORKING,
     SESSION_STATE.COMPLETE,
     SESSION_STATE.UNKNOWN,
   ]);
@@ -78,7 +80,7 @@ test("a row carries where its session runs, from either data source", () => {
   );
 
   assert.equal(fixture.get("cursor-agent"), SESSION_LOCATION.CLOUD);
-  assert.equal(fixture.get("conductor-workspace"), SESSION_LOCATION.CLOUD);
+  assert.equal(fixture.get("conductor-chat-tidy"), SESSION_LOCATION.CLOUD);
   assert.equal(fixture.get("codex-bootstrap"), SESSION_LOCATION.LOCAL);
 
   const live = displaySessions(bootstrap(false), [
@@ -141,7 +143,7 @@ test("the line under the title says the state when the provider said nothing", (
   assert.equal(spoken?.detail, "Running tests");
 
   // The fixture's silent row proves the same fallback in the visual evidence.
-  const conductor = FIXTURE_SESSIONS.find((session) => session.id === "conductor-workspace");
+  const conductor = FIXTURE_SESSIONS.find((session) => session.id === "conductor-chat-tidy");
   assert.equal(conductor?.detail, "Complete");
 });
 
@@ -206,27 +208,28 @@ test("the tally counts per state and per provider", () => {
   assert.deepEqual(
     { ...tally, providers: undefined },
     {
-      total: 5,
+      total: 6,
       attention: 1,
       // Named as well as counted: Luke's face reacts to a session that has just
       // started asking, which the count alone cannot report.
       attentionIds: ["claude-review"],
-      working: 2,
+      working: 3,
       complete: 1,
       idle: 1,
       state: SESSION_STATE.ATTENTION,
       providers: undefined,
     },
   );
-  // Providers follow the order their most urgent session takes, so Cursor's
-  // working agent is listed ahead of Conductor's completed session and Devin's
-  // suspended one. Five is one more than the wings hold, so the fixture also
-  // proves the remainder is counted rather than dropped.
+  // Providers follow the order their most urgent session takes, so Conductor's
+  // working chat seats it ahead of Cursor's older one and Devin's suspended
+  // session — and its two chats count as two sessions under one mark. Five is
+  // one more than the wings hold, so the fixture also proves the remainder is
+  // counted rather than dropped.
   assert.deepEqual(tally.providers, [
     { providerId: PROVIDER_ID.CLAUDE_CODE, provider: "Claude Code", total: 1, attention: 1 },
     { providerId: PROVIDER_ID.CODEX, provider: "Codex", total: 1, attention: 0 },
+    { providerId: PROVIDER_ID.CONDUCTOR, provider: "Conductor", total: 2, attention: 0 },
     { providerId: PROVIDER_ID.CURSOR, provider: "Cursor", total: 1, attention: 0 },
-    { providerId: PROVIDER_ID.CONDUCTOR, provider: "Conductor", total: 1, attention: 0 },
     { providerId: PROVIDER_ID.DEVIN, provider: "Devin", total: 1, attention: 0 },
   ]);
 });
@@ -272,7 +275,7 @@ test("the caption names its own number so the count is never misread", () => {
   const tally = sessionTally(displaySessions(bootstrap(true), []));
 
   assert.equal(tallyCaption(tally), "1 needs you");
-  assert.equal(tallySummary(tally), "5 sessions tracked, 1 needing you");
+  assert.equal(tallySummary(tally), "6 sessions tracked, 1 needing you");
   assert.equal(tallyCaption({ ...tally, attention: 2 }), "2 need you");
   assert.equal(tallyCaption({ ...tally, attention: 0, working: 3 }), "3 working");
   assert.equal(tallyCaption({ ...tally, attention: 0, working: 0 }), "1 complete");
@@ -285,9 +288,9 @@ test("the filters offered run from everything to one agent, counted", () => {
   const list = arrangeSessions(FIXTURE_SESSIONS, DEFAULT_SESSION_VIEW);
 
   assert.deepEqual(list.options, [
-    { filter: SESSION_FILTER.ALL, label: "All", count: 5 },
+    { filter: SESSION_FILTER.ALL, label: "All", count: 6 },
     { filter: SESSION_FILTER.LOCAL, label: "Local", count: 2 },
-    { filter: SESSION_FILTER.CLOUD, label: "Cloud", count: 3 },
+    { filter: SESSION_FILTER.CLOUD, label: "Cloud", count: 4 },
     {
       filter: PROVIDER_ID.CLAUDE_CODE,
       label: "Claude Code",
@@ -298,7 +301,7 @@ test("the filters offered run from everything to one agent, counted", () => {
     {
       filter: PROVIDER_ID.CONDUCTOR,
       label: "Conductor",
-      count: 1,
+      count: 2,
       providerId: PROVIDER_ID.CONDUCTOR,
     },
     { filter: PROVIDER_ID.CURSOR, label: "Cursor", count: 1, providerId: PROVIDER_ID.CURSOR },
@@ -378,15 +381,15 @@ test("a filter narrows the list without changing what is tracked", () => {
 
   assert.deepEqual(
     cloud.sessions.map((session) => session.id),
-    ["cursor-agent", "conductor-workspace", "devin-session"],
+    ["conductor-chat-package", "conductor-chat-tidy", "cursor-agent", "devin-session"],
   );
   assert.deepEqual(
     agent.sessions.map((session) => session.id),
     ["claude-review"],
   );
   assert.equal(cloud.filter, SESSION_FILTER.CLOUD);
-  assert.equal(cloud.total, 5);
-  assert.equal(agent.total, 5);
+  assert.equal(cloud.total, 6);
+  assert.equal(agent.total, 6);
 });
 
 test("a filter whose last session has left falls back to showing everything", () => {
@@ -486,13 +489,30 @@ test("the two orderings answer different questions about the same sessions", () 
     sort: SESSION_SORT.RECENCY,
   });
 
+  // In either order Conductor's two chats sit together: under urgency the
+  // working chat earns the seat and its finished sibling follows; under
+  // recency the finished chat, seen last, leads and the working one follows.
   assert.deepEqual(
     urgent.sessions.map((session) => session.id),
-    ["claude-review", "codex-bootstrap", "cursor-agent", "conductor-workspace", "devin-session"],
+    [
+      "claude-review",
+      "codex-bootstrap",
+      "conductor-chat-package",
+      "conductor-chat-tidy",
+      "cursor-agent",
+      "devin-session",
+    ],
   );
   assert.deepEqual(
     recent.sessions.map((session) => session.id),
-    ["conductor-workspace", "codex-bootstrap", "claude-review", "cursor-agent", "devin-session"],
+    [
+      "conductor-chat-tidy",
+      "conductor-chat-package",
+      "codex-bootstrap",
+      "claude-review",
+      "cursor-agent",
+      "devin-session",
+    ],
   );
 });
 
@@ -504,7 +524,7 @@ test("filtering leaves the chosen ordering in force", () => {
 
   assert.deepEqual(
     recentCloud.sessions.map((session) => session.id),
-    ["conductor-workspace", "cursor-agent", "devin-session"],
+    ["conductor-chat-tidy", "conductor-chat-package", "cursor-agent", "devin-session"],
   );
 });
 
@@ -518,6 +538,108 @@ test("sessions of one state are ordered by which moved most recently", () => {
     arrangeSessions(working, DEFAULT_SESSION_VIEW).sessions.map((session) => session.id),
     ["fresh", "stale"],
   );
+});
+
+const CONDUCTOR_PROVIDER = { id: PROVIDER_ID.CONDUCTOR, displayName: "Conductor" };
+
+test("chats of one workspace sit together and read as one tray run", () => {
+  const chatOf = (
+    id: string,
+    status: (typeof SESSION_STATUS)[keyof typeof SESSION_STATUS],
+    observedAt: number,
+  ) =>
+    normalizeSession(CONDUCTOR_PROVIDER, {
+      providerSessionId: id,
+      title: `Chat ${id}`,
+      status,
+      observedAt,
+      detail: { repository: "luke" },
+      workspace: { providerWorkspaceId: "workspace-lisbon", name: "lisbon-v2" },
+    });
+
+  const rows = displaySessions(bootstrap(false), [
+    chatOf("chat-asking", SESSION_STATUS.WAITING, 1_000),
+    liveSession(CODEX_PROVIDER, "codex-between", SESSION_STATUS.WORKING, 5_000),
+    chatOf("chat-finished", SESSION_STATUS.COMPLETE, 9_000),
+  ]);
+  const arranged = arrangeSessions(rows, DEFAULT_SESSION_VIEW).sessions;
+
+  // The finished chat would have sorted below the stranger; the run pulls it
+  // up beside its asking sibling instead, seated where that sibling earned.
+  assert.deepEqual(
+    arranged.map((session) => session.id),
+    ["chat-asking", "chat-finished", "codex-between"],
+  );
+  // The tray is one run holding both chats — carrying the checkout its header
+  // names — and the stranger is a run of one with no workspace at all.
+  assert.deepEqual(sessionListRuns(arranged), [
+    {
+      workspace: { id: "workspace-lisbon", name: "lisbon-v2" },
+      repository: "luke",
+      indexes: [0, 1],
+    },
+    { indexes: [2] },
+  ]);
+});
+
+test("a lone chat is a run of one, and namesake workspaces never join", () => {
+  // Two workspaces wearing one name: the id is what groups, so each stays a
+  // run of its own — drawn as a plain row, not a tray — rather than joining
+  // under the name they happen to share.
+  const chatOf = (id: string, workspaceId: string) =>
+    normalizeSession(CONDUCTOR_PROVIDER, {
+      providerSessionId: id,
+      title: `Chat ${id}`,
+      status: SESSION_STATUS.WORKING,
+      observedAt: 1_000,
+      workspace: { providerWorkspaceId: workspaceId, name: "lisbon-v2" },
+    });
+
+  const rows = displaySessions(bootstrap(false), [
+    chatOf("chat-one", "workspace-one"),
+    chatOf("chat-two", "workspace-two"),
+  ]);
+  const arranged = arrangeSessions(rows, DEFAULT_SESSION_VIEW).sessions;
+
+  assert.deepEqual(
+    sessionListRuns(arranged).map((run) => ({
+      workspaceId: run.workspace?.id,
+      indexes: run.indexes,
+    })),
+    [
+      { workspaceId: "workspace-one", indexes: [0] },
+      { workspaceId: "workspace-two", indexes: [1] },
+    ],
+  );
+});
+
+test("a row carries its workspace by name, falling back to the id", () => {
+  const [named] = displaySessions(bootstrap(false), [
+    normalizeSession(CONDUCTOR_PROVIDER, {
+      providerSessionId: "chat-named",
+      title: "Chat named",
+      status: SESSION_STATUS.WORKING,
+      observedAt: 1_000,
+      workspace: { providerWorkspaceId: "workspace-1", name: "lisbon-v2" },
+    }),
+  ]);
+  assert.deepEqual(named?.workspace, { id: "workspace-1", name: "lisbon-v2" });
+
+  const [unnamed] = displaySessions(bootstrap(false), [
+    normalizeSession(CONDUCTOR_PROVIDER, {
+      providerSessionId: "chat-unnamed",
+      title: "Chat unnamed",
+      status: SESSION_STATUS.WORKING,
+      observedAt: 1_000,
+      workspace: { providerWorkspaceId: "workspace-2" },
+    }),
+  ]);
+  assert.deepEqual(unnamed?.workspace, { id: "workspace-2", name: "workspace-2" });
+
+  const [ungrouped] = displaySessions(bootstrap(false), [
+    liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.WORKING),
+  ]);
+  assert.equal(ungrouped?.workspace, undefined);
 });
 
 test("a row offers writes only where its provider promised them", () => {

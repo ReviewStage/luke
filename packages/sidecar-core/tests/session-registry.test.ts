@@ -64,6 +64,30 @@ test("normalizes provider observations without conflating provider-local identit
   assert.equal(registry.list().length, 2);
 });
 
+test("a workspace grouping is bounded, and one without an id is dropped whole", () => {
+  const registry = new InMemorySessionRegistry();
+
+  const grouped = registry.upsert(
+    codex,
+    observation("run:grouped", 100, {
+      workspace: { providerWorkspaceId: "  workspace-1  ", name: "  lisbon-v2  " },
+    }),
+  );
+  assert.deepEqual(grouped.workspace, { providerWorkspaceId: "workspace-1", name: "lisbon-v2" });
+
+  // A workspace no sibling could ever be matched to groups nothing.
+  const unidentified = registry.upsert(
+    codex,
+    observation("run:unidentified", 100, {
+      workspace: { providerWorkspaceId: "   ", name: "lisbon-v2" },
+    }),
+  );
+  assert.equal(unidentified.workspace, undefined);
+
+  const ungrouped = registry.upsert(codex, observation("run:ungrouped", 100));
+  assert.equal(ungrouped.workspace, undefined);
+});
+
 test("a session takes messages only when its adapter said so explicitly", () => {
   const registry = new InMemorySessionRegistry();
   const identity = { providerId: codex.id, providerSessionId: "run:message" };

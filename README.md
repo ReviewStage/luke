@@ -61,6 +61,10 @@ ask, out loud or typed, through Linear's own GraphQL API under your key.
 - Rows show the provider-assigned title (with a workspace fallback), current
   activity, error or turn recap, repository context, and whether the session is
   working, waiting, complete, failed, or merely observed.
+- A provider that nests chats in a workspace — Conductor today — gets one row
+  per chat: several chats sit inside one tray named by the workspace at its
+  top, a workspace holding a single chat stays one row titled by the
+  workspace, and each chat can be opened, messaged, or controlled on its own.
 - Sessions that appear to need attention are placed first.
 - An options button beside the tabs opens filtering and sorting: the list can be
   narrowed to the sessions running locally, to those running in the cloud, or to

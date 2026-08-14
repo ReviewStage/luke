@@ -147,6 +147,20 @@ export interface SessionDetail {
 }
 
 /**
+ * The place a provider groups several sessions under — a workspace holding
+ * more than one chat. It is identity plus a name, nothing else: the id is what
+ * a surface groups rows by and the name is what it titles the group, and a
+ * session without one is simply ungrouped. Only an adapter whose provider
+ * actually nests chats inside a shared workspace reports it; inventing a
+ * group around a provider's lone sessions would draw structure that is not
+ * there.
+ */
+export interface SessionWorkspace {
+  providerWorkspaceId: string;
+  name?: string;
+}
+
+/**
  * Provider-owned data observed for a session. Provider adapters are responsible
  * for observing without writing provider files, and for bounding every field
  * they report so one session cannot crowd out the rest of the panel.
@@ -184,6 +198,8 @@ export interface ProviderSessionObservation {
    * promised it, the way state an adapter kept on the side could.
    */
   spawnTarget?: string;
+  /** The workspace this session is one chat of, when its provider nests them. */
+  workspace?: SessionWorkspace;
 }
 
 /**
@@ -205,6 +221,8 @@ export interface NormalizedSession extends SessionIdentity {
   spawnableAgents: readonly string[];
   /** Where a started agent lands, when narrower than the session itself. */
   spawnTarget?: string;
+  /** The workspace this session is one chat of, when its provider nests them. */
+  workspace?: SessionWorkspace;
   attention: AttentionDecision;
 }
 
@@ -346,6 +364,21 @@ function normalizeSpawnableAgents(agents: readonly string[] | undefined): readon
   return [...unique];
 }
 
+/**
+ * The workspace a session reported around itself, or nothing. A workspace
+ * without an id cannot group anything, so it is dropped whole rather than
+ * kept as a group no sibling chat could ever be matched to.
+ */
+function normalizeWorkspace(workspace: SessionWorkspace | undefined): SessionWorkspace | undefined {
+  const providerWorkspaceId = boundedText(
+    workspace?.providerWorkspaceId,
+    maximumSessionDetailLength,
+  );
+  if (!providerWorkspaceId) return undefined;
+  const name = boundedText(workspace?.name, maximumSessionTitleLength);
+  return { providerWorkspaceId, ...(name ? { name } : {}) };
+}
+
 /** Normalizes the two-part identity used to locate a session in the registry. */
 export function normalizeSessionIdentity(identity: SessionIdentity): SessionIdentity {
   return {
@@ -392,6 +425,7 @@ export function normalizeSession(
   const observedAt = timestamp(observation.observedAt, "observedAt");
   const summary = boundedText(observation.summary, maximumSessionSummaryLength);
   const spawnTarget = boundedText(observation.spawnTarget, maximumSessionDetailLength);
+  const workspace = normalizeWorkspace(observation.workspace);
 
   return {
     providerId,
@@ -412,6 +446,7 @@ export function normalizeSession(
     canReceiveMessage: observation.canReceiveMessage === true,
     spawnableAgents: normalizeSpawnableAgents(observation.spawnableAgents),
     ...(spawnTarget ? { spawnTarget } : {}),
+    ...(workspace ? { workspace } : {}),
     attention: normalizeAttention(attention),
   };
 }

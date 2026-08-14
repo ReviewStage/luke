@@ -1676,6 +1676,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
  * immediate, and the stagger below, so arriving fans out. A transition reads
  * its timing from the state being entered, which is what keeps the two apart. */
 .session-row,
+.workspace-tray,
 .settings-section,
 .settings-header,
 .quit-button,
@@ -1706,6 +1707,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 }
 
 .app-stage[data-presentation="panel"] .session-row,
+.app-stage[data-presentation="panel"] .workspace-tray,
 .app-stage[data-presentation="panel"] .settings-section,
 .app-stage[data-presentation="panel"] .settings-header,
 .app-stage[data-presentation="panel"] .quit-button,
@@ -1720,6 +1722,19 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 
   opacity: 1;
   transform: none;
+}
+
+/* Rows inside a workspace tray ride the tray's arrival. The tray is the
+   member of the stack in their stead — it fans in at its lead row's turn — so
+   a row inside it must not fan a second time within the card, which would
+   read as the chats sliding around inside their own tray. The hover pair
+   stays, because the tray answers nothing and its rows still do. */
+.workspace-tray .session-row {
+  opacity: 1;
+  transform: none;
+  transition:
+    border-color var(--duration-hover) ease,
+    background-color var(--duration-hover) ease;
 }
 
 /* A departing session's fade is drawn by session-motion rather than here: the

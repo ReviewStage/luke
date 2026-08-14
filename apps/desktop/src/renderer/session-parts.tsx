@@ -30,6 +30,23 @@ export function BranchGlyph(): React.JSX.Element {
   );
 }
 
+/**
+ * Rides beside a workspace's name to say what kind of thing the tray is. The
+ * shape is the tray itself in miniature — one box with its name line across
+ * the top — drawn in whatever text colour the line already has, like the
+ * branch glyph beside a branch.
+ */
+export function WorkspaceGlyph(): React.JSX.Element {
+  return (
+    <svg className="workspace-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <g fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+        <rect x="2.2" y="2.8" width="11.6" height="10.4" rx="2.6" />
+        <path d="M2.8 6.5h10.4" />
+      </g>
+    </svg>
+  );
+}
+
 /** Leads a finished session's sentence, the way a spinner leads a working one. */
 export function CheckGlyph(): React.JSX.Element {
   return (
