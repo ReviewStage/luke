@@ -315,6 +315,8 @@ export function App(): React.JSX.Element {
    * own state follows.
    */
   const [askHotkeyChange, setAskHotkeyChange] = useState<{ accelerator?: string }>();
+  /** The stop key on the ask key's exact terms, for the guide's sake. */
+  const [stopHotkeyChange, setStopHotkeyChange] = useState<{ accelerator?: string }>();
   const [localStream, setLocalStream] = useState<MediaStream>();
   const [remoteStream, setRemoteStream] = useState<MediaStream>();
   const [voiceCaption, setVoiceCaption] = useState<string>();
@@ -1209,6 +1211,13 @@ export function App(): React.JSX.Element {
     return result.reason;
   }, []);
 
+  // The stop key, under the same rule again.
+  const changeStopHotkey = useCallback(async (accelerator: string | undefined) => {
+    const result = await window.sidecar.setStopHotkey(accelerator);
+    setSettings(result.settings);
+    return result.reason;
+  }, []);
+
   // True while a settings row is recording a chord. Both Luke keys stay
   // registered through a recording — the recording is how one gets replaced —
   // so a press of a current chord landing then is held here rather than
@@ -1664,9 +1673,10 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     if (!bootstrap) return;
     const askAccelerator = askHotkeyChange ? askHotkeyChange.accelerator : bootstrap.askHotkey;
-    // Both keys reach the guide labelled: it is spoken and read, so a chord
-    // belongs there as the one word macOS writes it as rather than as the keys
-    // the panel draws apart.
+    const stopAccelerator = stopHotkeyChange ? stopHotkeyChange.accelerator : bootstrap.stopHotkey;
+    // All three keys reach the guide labelled: it is spoken and read, so a
+    // chord belongs there as the one word macOS writes it as rather than as
+    // the keys the panel draws apart.
     const talkKey = voiceHotkeyToShow(bootstrap, voiceHotkey);
     const guide = buildLukeGuide({
       settings: settings ?? bootstrap.settings,
@@ -1677,10 +1687,11 @@ export function App(): React.JSX.Element {
         held: talkKey.held,
       },
       ...(askAccelerator ? { askKey: voiceHotkeyLabel(askAccelerator) } : {}),
+      ...(stopAccelerator ? { stopKey: voiceHotkeyLabel(stopAccelerator) } : {}),
     });
     guideRef.current = guide;
     voiceSession.current?.updateGuide(guide);
-  }, [bootstrap, settings, microphoneStatus, voiceHotkey, askHotkeyChange]);
+  }, [bootstrap, settings, microphoneStatus, voiceHotkey, askHotkeyChange, stopHotkeyChange]);
 
   useEffect(() => {
     // An update Luke cannot voice — no call open, or a turn already under way —
@@ -1714,6 +1725,13 @@ export function App(): React.JSX.Element {
         voiceSession.current?.stopListening(false);
         return;
       }
+      // Stopping Luke mid-sentence is the same shape one layer on: a reply
+      // being spoken is the most open thing there is, and Escape asks for
+      // quiet without opening a turn in its place. The session itself answers
+      // whether there was a reply to stop, so a press that found none falls
+      // through to the layers below rather than being swallowed by a reply
+      // that had already ended.
+      if (voiceSession.current?.stopSpeaking()) return;
       // Escape out of the slot is the entry's own way out, wherever the caret
       // happens to be: the slot is the only thing on screen, so there is nothing
       // else it could mean.
@@ -1768,6 +1786,25 @@ export function App(): React.JSX.Element {
     () =>
       window.sidecar.onAskHotkeyChanged((accelerator) =>
         setAskHotkeyChange(accelerator ? { accelerator } : {}),
+      ),
+    [],
+  );
+  // The stop key asks for quiet from any app, exactly as Escape asks for it
+  // from the panel: the session itself answers whether there is a reply to
+  // stop, so a press over silence simply does nothing. It defers to a chord
+  // being recorded on the talk key's terms — the keystroke there is an answer
+  // to the field, not an ask of Luke.
+  useEffect(
+    () =>
+      window.sidecar.onStopHotkeyPress(() => {
+        if (!shortcutCapture.current) voiceSession.current?.stopSpeaking();
+      }),
+    [],
+  );
+  useEffect(
+    () =>
+      window.sidecar.onStopHotkeyChanged((accelerator) =>
+        setStopHotkeyChange(accelerator ? { accelerator } : {}),
       ),
     [],
   );
@@ -1845,6 +1882,7 @@ export function App(): React.JSX.Element {
         : undefined;
   const shownHotkey = voiceHotkeyToShow(bootstrap, voiceHotkey);
   const shownAskHotkey = askHotkeyChange ? askHotkeyChange.accelerator : bootstrap.askHotkey;
+  const shownStopHotkey = stopHotkeyChange ? stopHotkeyChange.accelerator : bootstrap.stopHotkey;
   // The muted evidence run is the speaking run with the hint drawn over it: a
   // capture has no system output to read, so the state is asked for directly.
   const fixtureMuted = bootstrap.profile === "muted";
@@ -1948,6 +1986,8 @@ export function App(): React.JSX.Element {
               // label the chord whole for the buttons beside them.
               ...(shownAskHotkey ? { askHotkey: shownAskHotkey } : {}),
               onAskHotkeyChange: changeAskHotkey,
+              ...(shownStopHotkey ? { stopHotkey: shownStopHotkey } : {}),
+              onStopHotkeyChange: changeStopHotkey,
               onShortcutCapture: changeShortcutCapture,
               onShowInMenuBarChange: changeShowInMenuBar,
               onShowInDockChange: changeShowInDock,

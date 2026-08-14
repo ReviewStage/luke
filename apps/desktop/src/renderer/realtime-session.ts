@@ -641,6 +641,26 @@ export class RealtimeVoiceSession {
   }
 
   /**
+   * Cuts off the reply under way without opening anything in its place — the
+   * developer asking for quiet rather than for a turn. The cut is the same
+   * one talking or typing over Luke makes: silenced at once, cancelled, and
+   * trimmed to what was actually heard, so the next answer cannot refer back
+   * to words that never reached the room. Reports whether there was a reply
+   * to stop, so the key that asked keeps its other meanings when there was
+   * not.
+   */
+  stopSpeaking(): boolean {
+    if (this.#status !== REALTIME_STATUS.RESPONDING) return false;
+    this.#interruptReply();
+    // A stop opens no reply of its own, so the turn moves on here: a tool
+    // follow-up still awaiting its write finds an epoch that is no longer its
+    // own and stands down, rather than speaking over the quiet just asked for.
+    this.#turnEpoch += 1;
+    this.#setStatus(REALTIME_STATUS.READY);
+    return true;
+  }
+
+  /**
    * Voices a proactive update that the attention layer already approved,
    * reporting whether it could. A refusal is not a loss: the caller shows the
    * sentence instead, which is the same thing it does when voice is off. That

@@ -1048,6 +1048,120 @@ test("taking the turn cuts Luke off mid-reply", async () => {
   assert.equal(context.microphoneEnabled(), true);
 });
 
+test("a stop cuts the reply where it stands and opens nothing in its place", async () => {
+  let clock = 1_000;
+  const context = harness({ now: () => clock });
+  await context.session.connect();
+  context.deliverRemoteTrack();
+  context.session.beginTurn();
+  context.session.endTurn(true);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
+    item: { id: "item_reply" },
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    item_id: "item_reply",
+    delta: "There are two sessions",
+  });
+  context.session.reportRemoteAudioActive();
+  clock = 2_500;
+  const before = context.sent.length;
+
+  assert.equal(context.session.stopSpeaking(), true);
+
+  // The cut is the same one talking over him makes — silenced at once,
+  // cancelled, and trimmed to the second and a half that was heard — but the
+  // turn ends there: no microphone opens and no reply is asked for.
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+  assert.equal(context.lukeAudible(), false);
+  assert.equal(context.microphoneEnabled(), false);
+  assert.equal(context.captions.at(-1), undefined);
+  const events = context.sent.slice(before);
+  assert.deepEqual(
+    events.map((event) => event.type),
+    [
+      REALTIME_CLIENT_EVENT.RESPONSE_CANCEL,
+      REALTIME_CLIENT_EVENT.OUTPUT_AUDIO_BUFFER_CLEAR,
+      REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_TRUNCATE,
+    ],
+  );
+  assert.equal(events.at(-1)?.audio_end_ms, 1_500);
+
+  // The next reply has to be audible again.
+  context.session.beginTurn();
+  context.session.endTurn(true);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED });
+  assert.equal(context.lukeAudible(), true);
+});
+
+test("a stop with nothing being spoken reports so and sends nothing", async () => {
+  const context = harness();
+  await context.session.connect();
+  const before = context.sent.length;
+
+  // Ready is not a reply, and neither is the developer's own open microphone:
+  // the key that asked keeps its other meanings.
+  assert.equal(context.session.stopSpeaking(), false);
+  context.session.startListening();
+  assert.equal(context.session.stopSpeaking(), false);
+  assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
+
+  assert.deepEqual(
+    context.sent.slice(before).map((event) => event.type),
+    [REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_CLEAR],
+  );
+});
+
+test("a stopped reply's tool follow-up stands down instead of speaking over the quiet", async () => {
+  let resolveCarry: ((outcome: Record<string, unknown>) => void) | undefined;
+  const context = harness({
+    carryAction: () =>
+      new Promise((resolve) => {
+        resolveCarry = resolve;
+      }),
+  });
+  await context.session.connect();
+  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
+  armDeveloperTurn(context);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-a" } });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      id: "resp-a",
+      output: [
+        {
+          type: "function_call",
+          name: "send_session_message",
+          call_id: "call-1",
+          arguments:
+            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"add tests"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.ok(resolveCarry, "the write is under way when the stop lands");
+
+  // The developer asks for quiet while the write is still in flight.
+  assert.equal(context.session.stopSpeaking(), true);
+  const before = context.sent.length;
+  resolveCarry?.({ status: "accepted" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  // The outcome is still delivered as an item, so the next turn has it — but
+  // no reply opens to voice it: the quiet just asked for holds.
+  const events = context.sent.slice(before);
+  assert.ok(
+    events.some(
+      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+    ),
+  );
+  assert.ok(!events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE));
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+});
+
 test("closing stops the microphone track", async () => {
   const context = harness();
   await context.session.connect();

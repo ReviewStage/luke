@@ -93,17 +93,21 @@ One key runs it, and it answers from whatever app is frontmost:
 - **Tap** it instead — under a quarter of a second — to leave the turn open for
   a question too long to hold through. Tap again to send.
 - **Press while Luke is talking** to cut him off and take the turn back.
-- **Escape** discards an open turn instead of sending it, while the panel is the
-  frontmost window.
+- **`⌥S`** stops Luke mid-sentence and asks for nothing in its place — S is for
+  stop, and it answers from any app. **Escape** does the same while the panel
+  is the frontmost window, and discards an open turn instead of sending it.
 
-If another app already owns `⌥Space`, Luke falls back to `⌥S`. Settings shows
-which key you actually have, under **Keyboard shortcuts** — and the pencil
-beside it records a chord of your own: hold `⌃`, `⌥` or `⌘` — `⇧` may join,
-but not carry a chord alone, since `⇧S` is how capitals are typed — and press
-a letter or Space, as the row itself explains while it listens. The change takes effect
-at once, the reset arrow beside it returns the defaults, and if something else
-owns your chord Luke falls back to the defaults and shows the key that
-actually answered.
+Settings shows which keys you actually have — or an honest absence, if another
+app already owns a chord — under **Keyboard shortcuts**, one row each for the
+talk, ask, and stop keys. The pencil beside a row records a chord of your own:
+hold `⌃`, `⌥` or `⌘` — `⇧` may join, but not carry a chord alone, since `⇧S`
+is how capitals are typed — and press a letter or Space, as the row itself
+explains while it listens. The change takes effect at once, the reset arrow
+beside it returns the defaults, and if something else owns your chord Luke
+falls back to the defaults and shows the key that actually answered. The keys
+never compete for one chord: the stop key refuses a chord the other two hold,
+and a talk or ask key moved onto the stop key's chord wins it — the stop key
+stands down, and Escape remains its fallback.
 
 Holding is read by a small helper Luke ships beside the app, because Electron
 reports a global key being pressed but never released. The helper is told the

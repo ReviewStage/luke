@@ -22,6 +22,7 @@ import {
 import {
   capturedVoiceHotkey,
   DEFAULT_ASK_HOTKEYS,
+  DEFAULT_STOP_HOTKEYS,
   DEFAULT_VOICE_HOTKEYS,
   VOICE_HOTKEY_CAPTURE,
   voiceHotkeyLabel,
@@ -134,8 +135,16 @@ export interface SettingsPanelProps {
    * refuses, and the row is where that answer belongs.
    */
   onAskHotkeyChange: (accelerator: string | undefined) => Promise<string | undefined>;
+  /** The stop key as registered, an accelerator on the talk key's terms. */
+  stopHotkey?: string;
   /**
-   * Whether a recording control has the keyboard. While one does, neither Luke
+   * Moves the stop key to a recorded chord, or back to the default when
+   * omitted, on the other rows' terms: the store answers with why when it
+   * refuses, and the row is where that answer belongs.
+   */
+  onStopHotkeyChange: (accelerator: string | undefined) => Promise<string | undefined>;
+  /**
+   * Whether a recording control has the keyboard. While one does, no Luke
    * key may act on its own press: the chord arriving is an entry, not an ask.
    */
   onShortcutCapture: (capturing: boolean) => void;
@@ -1087,6 +1096,9 @@ function ShortcutSection({
   askHotkey,
   askChosen,
   onAskHotkeyChange,
+  stopHotkey,
+  stopChosen,
+  onStopHotkeyChange,
   onShortcutCapture,
 }: {
   voiceHotkey?: string | undefined;
@@ -1096,6 +1108,9 @@ function ShortcutSection({
   askHotkey?: string | undefined;
   askChosen: boolean;
   onAskHotkeyChange: (accelerator: string | undefined) => Promise<string | undefined>;
+  stopHotkey?: string | undefined;
+  stopChosen: boolean;
+  onStopHotkeyChange: (accelerator: string | undefined) => Promise<string | undefined>;
   onShortcutCapture: (capturing: boolean) => void;
 }): React.JSX.Element {
   return (
@@ -1129,6 +1144,15 @@ function ShortcutSection({
         onChange={onAskHotkeyChange}
         onCapture={onShortcutCapture}
       />
+      <ShortcutRow
+        title="Stop Luke"
+        detail="Press to cut off a reply mid-sentence, from any app. Escape does the same here."
+        {...(stopHotkey ? { shown: stopHotkey } : {})}
+        chosen={stopChosen}
+        defaultKey={DEFAULT_STOP_HOTKEYS[0] ?? ""}
+        onChange={onStopHotkeyChange}
+        onCapture={onShortcutCapture}
+      />
     </section>
   );
 }
@@ -1157,6 +1181,8 @@ export function SettingsPanel({
   onVoiceHotkeyChange,
   askHotkey,
   onAskHotkeyChange,
+  stopHotkey,
+  onStopHotkeyChange,
   onShortcutCapture,
 }: SettingsPanelProps): React.JSX.Element {
   const microphone = microphoneAccessRow({ voiceAvailable, status: microphoneStatus });
@@ -1196,6 +1222,9 @@ export function SettingsPanel({
         {...(askHotkey ? { askHotkey } : {})}
         askChosen={settings?.askHotkey !== undefined}
         onAskHotkeyChange={onAskHotkeyChange}
+        {...(stopHotkey ? { stopHotkey } : {})}
+        stopChosen={settings?.stopHotkey !== undefined}
+        onStopHotkeyChange={onStopHotkeyChange}
         onShortcutCapture={onShortcutCapture}
       />
 
