@@ -26,6 +26,7 @@ import type {
   MicrophoneStatus,
   OutputAudioState,
   SessionOpenResult,
+  SettingsUpdateResult,
   VoiceHotkeyState,
   WindowMode,
 } from "../shared/contracts";
@@ -734,29 +735,30 @@ export function App(): React.JSX.Element {
   }, []);
 
   /**
-   * The switch redraws from what was actually stored rather than from the
-   * press, the same way the menu bar's does: the reply is the settings
-   * snapshot either way, and a refusal comes back as the row's own line.
+   * Applies a settings write's reply: the snapshot the store actually holds,
+   * and any refusal for the row to show. Every settings row travels this
+   * road so it redraws from what was stored rather than from the press.
    */
-  const changeVoiceCaptions = useCallback(async (enabled: boolean) => {
-    const result = await window.sidecar.setVoiceCaptions(enabled);
+  const applySettingsReply = useCallback((result: SettingsUpdateResult) => {
     setSettings(result.settings);
     return result.reason;
   }, []);
 
-  /** The same road the captions switch travels, for the media duck. */
-  const changeDuckOtherMedia = useCallback(async (enabled: boolean) => {
-    const result = await window.sidecar.setDuckOtherMedia(enabled);
-    setSettings(result.settings);
-    return result.reason;
-  }, []);
+  const changeVoiceCaptions = useCallback(
+    async (enabled: boolean) => applySettingsReply(await window.sidecar.setVoiceCaptions(enabled)),
+    [applySettingsReply],
+  );
 
-  /** And again for the notification banners. */
-  const changeSessionNotifications = useCallback(async (enabled: boolean) => {
-    const result = await window.sidecar.setSessionNotifications(enabled);
-    setSettings(result.settings);
-    return result.reason;
-  }, []);
+  const changeDuckOtherMedia = useCallback(
+    async (enabled: boolean) => applySettingsReply(await window.sidecar.setDuckOtherMedia(enabled)),
+    [applySettingsReply],
+  );
+
+  const changeSessionNotifications = useCallback(
+    async (enabled: boolean) =>
+      applySettingsReply(await window.sidecar.setSessionNotifications(enabled)),
+    [applySettingsReply],
+  );
 
   /**
    * The talk key going down. Every press goes to the session, including the one
@@ -1054,59 +1056,41 @@ export function App(): React.JSX.Element {
     [applyEntry],
   );
 
-  /**
-   * Shows or hides the menu bar status item. The reply carries the whole
-   * snapshot either way, so the row reads the state the store actually holds
-   * rather than the one the press hoped for.
-   */
-  const changeShowInMenuBar = useCallback(async (show: boolean) => {
-    const result = await window.sidecar.setShowInMenuBar(show);
-    setSettings(result.settings);
-    return result.reason;
-  }, []);
+  /** Shows or hides the menu bar status item. */
+  const changeShowInMenuBar = useCallback(
+    async (show: boolean) => applySettingsReply(await window.sidecar.setShowInMenuBar(show)),
+    [applySettingsReply],
+  );
 
-  // The Dock icon, on the same round trip: the row reads the state the store
-  // actually holds rather than the one the press hoped for.
-  const changeShowInDock = useCallback(async (show: boolean) => {
-    const result = await window.sidecar.setShowInDock(show);
-    setSettings(result.settings);
-    return result.reason;
-  }, []);
+  const changeShowInDock = useCallback(
+    async (show: boolean) => applySettingsReply(await window.sidecar.setShowInDock(show)),
+    [applySettingsReply],
+  );
 
-  // Every display or the main one alone, on the same round trip: the row
-  // reads the state the store actually holds rather than the one the press
-  // hoped for.
-  const changeShowOnAllDisplays = useCallback(async (show: boolean) => {
-    const result = await window.sidecar.setShowOnAllDisplays(show);
-    setSettings(result.settings);
-    return result.reason;
-  }, []);
+  const changeShowOnAllDisplays = useCallback(
+    async (show: boolean) => applySettingsReply(await window.sidecar.setShowOnAllDisplays(show)),
+    [applySettingsReply],
+  );
 
-  // The form for displays without a housing, under the same rule.
-  const changeFormFactor = useCallback(async (formFactor: PanelFormFactor) => {
-    const result = await window.sidecar.setFormFactor(formFactor);
-    setSettings(result.settings);
-    return result.reason;
-  }, []);
+  const changeFormFactor = useCallback(
+    async (formFactor: PanelFormFactor) =>
+      applySettingsReply(await window.sidecar.setFormFactor(formFactor)),
+    [applySettingsReply],
+  );
 
-  // Where a nameless creation ask goes, under the same rule — the same store
-  // write the first creation makes on its own, offered by hand so the choice
-  // can be changed or returned to asking each time.
-  const changeDefaultWorkspaceProvider = useCallback(async (providerId: ProviderId | undefined) => {
-    const result = await window.sidecar.setDefaultWorkspaceProvider(providerId);
-    setSettings(result.settings);
-    return result.reason;
-  }, []);
+  // Where a nameless creation ask goes — the same store write the first
+  // creation makes on its own, offered by hand so the choice can be changed
+  // or returned to asking each time.
+  const changeDefaultWorkspaceProvider = useCallback(
+    async (providerId: ProviderId | undefined) =>
+      applySettingsReply(await window.sidecar.setDefaultWorkspaceProvider(providerId)),
+    [applySettingsReply],
+  );
 
-  // The agent and model one provider starts new workspaces with, under the
-  // same rule: the row reads the state the store actually holds.
   const changeWorkspaceAgentDefault = useCallback(
-    async (providerId: ProviderId, selection: WorkspaceAgentSelection | undefined) => {
-      const result = await window.sidecar.setWorkspaceAgentDefault(providerId, selection);
-      setSettings(result.settings);
-      return result.reason;
-    },
-    [],
+    async (providerId: ProviderId, selection: WorkspaceAgentSelection | undefined) =>
+      applySettingsReply(await window.sidecar.setWorkspaceAgentDefault(providerId, selection)),
+    [applySettingsReply],
   );
 
   /**
@@ -1354,14 +1338,20 @@ export function App(): React.JSX.Element {
 
   // The row marks the voice the main process reports rather than the one just
   // pressed, so what is shown as chosen is always what was actually saved.
-  const changeVoice = useCallback((voice: RealtimeVoice) => {
-    void window.sidecar.setVoice(voice).then((result) => setSettings(result.settings));
-  }, []);
+  const changeVoice = useCallback(
+    (voice: RealtimeVoice) => {
+      void window.sidecar.setVoice(voice).then(applySettingsReply);
+    },
+    [applySettingsReply],
+  );
 
   // The pace, under the same rule as the voice above.
-  const changeVoiceSpeed = useCallback((speed: RealtimeVoiceSpeed) => {
-    void window.sidecar.setVoiceSpeed(speed).then((result) => setSettings(result.settings));
-  }, []);
+  const changeVoiceSpeed = useCallback(
+    (speed: RealtimeVoiceSpeed) => {
+      void window.sidecar.setVoiceSpeed(speed).then(applySettingsReply);
+    },
+    [applySettingsReply],
+  );
 
   /**
    * Carries a changed pace onto the call now open, whichever hand changed it:
@@ -1430,26 +1420,26 @@ export function App(): React.JSX.Element {
    * that actually registered, the same way it always has — so the reply
    * carries only the stored choice and any refusal.
    */
-  const changeVoiceHotkey = useCallback(async (accelerator: string | undefined) => {
-    const result = await window.sidecar.setVoiceHotkey(accelerator);
-    setSettings(result.settings);
-    return result.reason;
-  }, []);
+  const changeVoiceHotkey = useCallback(
+    async (accelerator: string | undefined) =>
+      applySettingsReply(await window.sidecar.setVoiceHotkey(accelerator)),
+    [applySettingsReply],
+  );
 
   // The ask key, under the same rule: the key the row shows follows the main
   // process's own announcement of what actually registered.
-  const changeAskHotkey = useCallback(async (accelerator: string | undefined) => {
-    const result = await window.sidecar.setAskHotkey(accelerator);
-    setSettings(result.settings);
-    return result.reason;
-  }, []);
+  const changeAskHotkey = useCallback(
+    async (accelerator: string | undefined) =>
+      applySettingsReply(await window.sidecar.setAskHotkey(accelerator)),
+    [applySettingsReply],
+  );
 
   // The stop key, under the same rule again.
-  const changeStopHotkey = useCallback(async (accelerator: string | undefined) => {
-    const result = await window.sidecar.setStopHotkey(accelerator);
-    setSettings(result.settings);
-    return result.reason;
-  }, []);
+  const changeStopHotkey = useCallback(
+    async (accelerator: string | undefined) =>
+      applySettingsReply(await window.sidecar.setStopHotkey(accelerator)),
+    [applySettingsReply],
+  );
 
   // True while a settings row is recording a chord. Both Luke keys stay
   // registered through a recording — the recording is how one gets replaced —

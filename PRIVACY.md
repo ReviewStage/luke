@@ -117,9 +117,11 @@ whose policies then govern the request and response data.
 
 The local panel may show a session's provider-assigned title, status, current
 activity or error, recap — provider-designated, or for Conductor the agent's
-parting words read from its transcript — repository, branch, model, and
-session or change links. The links and model label are kept out of the optional
-attention-review request described below.
+parting words read from its transcript — repository, branch, model, the name
+and identifier of the workspace a chat is grouped under where its provider
+nests them, and session or change links. The links, model label, and workspace
+identifier are kept out of the optional attention-review request described
+below.
 
 The microphone is optional and is used two ways.
 
@@ -143,7 +145,8 @@ Realtime API over a direct WebRTC connection from your Mac, and plays back the
 spoken reply. OpenAI's policies govern that audio and the reply.
 
 Alongside the audio, Luke sends the same bounded session fields the attention
-review uses — provider name, session title, status, and each session's recap —
+review uses — provider name, session title, status, the name of the workspace
+a chat belongs to where its provider groups them, and each session's recap —
 so a spoken question about your sessions can be answered. No message history,
 file content, or command output is ever included: a recap can reflect what a
 session was asked and replied — for Conductor it is the agent's own parting
@@ -198,13 +201,15 @@ short-lived client secret minted for one call, which expires on its own.
 Without `OPENAI_API_KEY`, Luke does not send an attention-review request.
 
 With `OPENAI_API_KEY`, Luke sends the configured Responses-compatible endpoint
-the provider name, displayed session title, previous and current status, review
+the provider name, displayed session title, the name of the workspace a chat
+belongs to where its provider groups them, previous and current status, review
 trigger, repository, branch, current tool activity, reported error, and the
 session recap — provider-designated, or for Conductor the agent's parting
-words read from its transcript. Titles and recaps can reflect task and reply
-content; for a Conductor session, the title can contain the project-name
-fallback described above. The request also includes fixed review instructions
-and synthetic examples. The API key is sent to that endpoint as the request's
+words read from its transcript. Titles, workspace names, and recaps can
+reflect task and reply content; for a Conductor chat, the title is the chat's
+own name and the workspace name can contain the project-name fallback
+described above. The request also includes fixed review instructions and
+synthetic examples. The API key is sent to that endpoint as the request's
 bearer credential.
 
 Luke does not send message history beyond that recap, command output, file

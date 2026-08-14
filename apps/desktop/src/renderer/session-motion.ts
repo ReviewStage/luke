@@ -53,6 +53,17 @@ export const SESSION_ROW_ID_ATTRIBUTE = "data-session-id";
 export const WING_SLOT_ID_ATTRIBUTE = "data-slot-id";
 
 /**
+ * How a workspace tray names itself to the measurement pass. A tray is a slot
+ * of the list in its own right: when a re-sort moves the whole group, the
+ * tray travels and its rows ride it — measured rows inside a measured tray
+ * are translated only by their movement within it, which is usually nothing.
+ * Without this the card would teleport to its new seat while its rows sprang
+ * from their old one, clipped invisible outside the box they had not yet
+ * caught up with.
+ */
+export const WORKSPACE_TRAY_ID_ATTRIBUTE = "data-tray-id";
+
+/**
  * How an element says it is on its way out, in either list. The fade it
  * announces is drawn here rather than in the stylesheet, because the element's
  * own opacity transition carries an entrance of its own — the row's
@@ -84,6 +95,12 @@ type MotionToken = (typeof MOTION_TOKEN)[keyof typeof MOTION_TOKEN];
 interface ReorderList {
   /** The attribute each element of this list names itself with. */
   idAttribute: string;
+  /**
+   * The attribute a group of this list's elements travels as one under, when
+   * the list has such groups at all. A grouped element's own travel is only
+   * its movement within the group; the group's element carries the rest.
+   */
+  groupAttribute?: string;
   /** The element's layout position along the axis the list stacks in. */
   offset: (element: HTMLElement) => number;
   /** A transform moving an element by so many pixels along that axis. */
@@ -100,6 +117,7 @@ interface ReorderList {
 /** The session list: rows stacked top to bottom, arriving the way the stack arrives. */
 const SESSION_LIST: ReorderList = {
   idAttribute: SESSION_ROW_ID_ATTRIBUTE,
+  groupAttribute: WORKSPACE_TRAY_ID_ATTRIBUTE,
   offset: (element) => element.offsetTop,
   translate: (px) => `translateY(${px}px)`,
   arrivesFromFan: true,
@@ -205,6 +223,7 @@ function elementVisible(element: HTMLElement): boolean {
 function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T | null> {
   const listRef = useRef<T | null>(null);
   const baseline = useRef<Map<string, number> | undefined>(undefined);
+  const groupBaseline = useRef<Map<string, number> | undefined>(undefined);
   const baselineWidth = useRef<number | undefined>(undefined);
   const wasLeaving = useRef<Set<string>>(new Set());
   const exitFades = useRef<Map<string, Animation>>(new Map());
@@ -216,6 +235,7 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
     const container = listRef.current;
     if (container === null) {
       baseline.current = undefined;
+      groupBaseline.current = undefined;
       baselineWidth.current = undefined;
       wasLeaving.current = new Set();
       exitFades.current.clear();
@@ -232,6 +252,21 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
       if (id === null) continue;
       elements.set(id, element);
       positions.set(id, list.offset(element));
+    }
+
+    // The groups are slots too, measured in their own namespace: a group's
+    // travel is applied to the group's element, and the elements inside it
+    // are translated only by their movement within it — riding the group is
+    // the usual case, and it is a travel of nothing.
+    const groupElements = new Map<string, HTMLElement>();
+    const groupPositions = new Map<string, number>();
+    if (list.groupAttribute !== undefined) {
+      for (const element of container.querySelectorAll<HTMLElement>(`[${list.groupAttribute}]`)) {
+        const id = element.getAttribute(list.groupAttribute);
+        if (id === null) continue;
+        groupElements.set(id, element);
+        groupPositions.set(id, list.offset(element));
+      }
     }
 
     // Elements whose leaving mark changed this commit: the newly departed
@@ -254,6 +289,10 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
 
     const plan = planReorder(baseline.current, positions);
     baseline.current = positions;
+    // A group with no baseline is chrome that just appeared — its rows carry
+    // their own entrances — so only its travels are ever animated.
+    const groupPlan = planReorder(groupBaseline.current ?? new Map(), groupPositions);
+    groupBaseline.current = groupPositions;
     // Whether this commit moved the list's bound out from under it — the
     // wing's `--wing-bound` changing with the presentation is the one thing
     // that does. Elements measured against the anchored edge read that as the
@@ -270,6 +309,7 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
     baselineWidth.current = width;
     if (
       plan.travels.size === 0 &&
+      groupPlan.travels.size === 0 &&
       plan.arrivals.length === 0 &&
       departed.length === 0 &&
       returned.length === 0
@@ -336,9 +376,26 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
           });
         }
       }
+      for (const [id, from] of groupPlan.travels) {
+        const element = groupElements.get(id);
+        if (element !== undefined && elementVisible(element)) travel(element, from, 0);
+      }
+      // How far the group an element rides in is already travelling. Its own
+      // travel is what remains: usually nothing, because a group's elements
+      // move with it, and the remainder when they also reordered inside it.
+      const groupTravelOf = (element: HTMLElement): number => {
+        if (list.groupAttribute === undefined) return 0;
+        const group = element.closest<HTMLElement>(`[${list.groupAttribute}]`);
+        const groupId = group?.getAttribute(list.groupAttribute);
+        return groupId === null || groupId === undefined
+          ? 0
+          : (groupPlan.travels.get(groupId) ?? 0);
+      };
       for (const [id, from] of plan.travels) {
         const element = elements.get(id);
-        if (element !== undefined && elementVisible(element)) travel(element, from, 0);
+        if (element === undefined || !elementVisible(element)) continue;
+        const within = from - groupTravelOf(element);
+        if (Math.abs(within) > TRAVEL_EPSILON) travel(element, within, 0);
       }
       // The entrance waits only when it has something to wait for. The beat
       // exists so an arrival is never seen crossing a neighbour still leaving
