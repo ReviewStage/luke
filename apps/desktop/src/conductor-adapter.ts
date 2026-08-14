@@ -222,26 +222,6 @@ const CONDUCTOR_SESSION_STATUS = {
   ERROR: "error",
 } as const;
 
-/**
- * Which chat gets to speak for its workspace, most urgent first. A failure
- * outranks a question — both want a person, but only one of them is stuck —
- * and a question outranks work still running.
- *
- * Unknown outranks complete, which reads backwards until the provider's shapes
- * are laid over it: complete only ever comes from an archived chat, and unknown
- * is an open one — idle long enough to decay, or with a status that could not
- * be read. However quiet, the open chat is where the user would return, so a
- * closed sibling must not make the workspace read as finished or take the
- * press that would have landed there.
- */
-const STATUS_URGENCY: readonly SessionStatus[] = [
-  SESSION_STATUS.ERROR,
-  SESSION_STATUS.WAITING,
-  SESSION_STATUS.WORKING,
-  SESSION_STATUS.UNKNOWN,
-  SESSION_STATUS.COMPLETE,
-];
-
 type ConductorSessionStatus =
   (typeof CONDUCTOR_SESSION_STATUS)[keyof typeof CONDUCTOR_SESSION_STATUS];
 
@@ -310,6 +290,7 @@ interface ConductorSession {
   workspace: ConductorWorkspace;
   archived: boolean;
   archivedAt?: number;
+  name?: string;
   model?: string;
   deepLink?: string;
 }
@@ -322,14 +303,14 @@ interface ConductorSession {
  * transcripts view names the sessions the same pass observed and takes back
  * each chat's agent kind and the bounded tail its recap — the settled turn's
  * parting words — is read from; the history behind that tail is never asked
- * for, and the tail itself never leaves this adapter. Each workspace is
- * reported as one session — the workspace is the
- * unit Conductor's own surface shows, and the one its name names — in the state
- * of whichever chat inside it most needs a person, and that chat is the one a
- * write reaches: the writes it supports are a user-typed prompt and a stop for
- * the running turn, each through Conductor's own endpoint on a chat that
- * advertised it, and a new workspace in a project the latest pass listed,
- * through Conductor's documented creation endpoint.
+ * for, and the tail itself never leaves this adapter. Each chat is reported
+ * as its own session, carrying the workspace around it as its group — the
+ * workspace is the unit Conductor's own surface shows, but the chat is the
+ * thing a press opens and a write reaches, and a workspace holding two chats
+ * in two states is two facts, not one. The writes it supports are a
+ * user-typed prompt and a stop for the running turn, each through Conductor's
+ * own endpoint on a chat that advertised it, and a new workspace in a project
+ * the latest pass listed, through Conductor's documented creation endpoint.
  */
 export class ConductorSessionAdapter extends CloudSessionAdapter {
   readonly #maximumObservedWorkspaces: number;
@@ -492,27 +473,17 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       ),
     ]);
 
-    // One row per workspace. The workspace is the session the user knows —
-    // it is what titles the row — so two chats inside it would draw as
-    // identical lines that open different places. Every chat's status is
-    // still read, because the workspace is in whatever state its neediest
-    // chat is in; that chat is the one the row reports and the one a press
-    // opens.
-    const byWorkspace = new Map<string, ProviderSessionObservation>();
-    sessions.forEach((session, index) => {
-      const observation = this.#observationFor(
-        session,
-        reportedStatuses[index],
-        transcripts?.get(session.id),
-        now,
-      );
-      if (!observation) return;
-      const held = byWorkspace.get(session.workspace.id);
-      if (!held || urgencyOrder(observation, held) < 0) {
-        byWorkspace.set(session.workspace.id, observation);
-      }
-    });
-    return [...byWorkspace.values()];
+    // One row per chat, each grouped under its workspace. Two chats used to
+    // collapse into one row because their generated names drew as identical
+    // lines — but the workspace grouping now names the group once, which
+    // leaves each chat free to say what it alone is doing, be opened where it
+    // alone lives, and take the message meant for it rather than for whichever
+    // sibling most needed a person.
+    return sessions
+      .map((session, index) =>
+        this.#observationFor(session, reportedStatuses[index], transcripts?.get(session.id), now),
+      )
+      .filter(isDefined);
   }
 
   async #identity(request: CloudRequest): Promise<string | undefined> {
@@ -596,14 +567,18 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
           const archivedAt = timestampFromRecord(record, CONDUCTOR_FIELD.ARCHIVED_AT);
           const model = modelLabel(record);
           const deepLink = textFromRecord(record, CONDUCTOR_FIELD.DEEP_LINK);
-          // The chat's own `name` is deliberately not read: Conductor generates
-          // it, nobody chose it, and the one thing it ever did here — titling
-          // the row — belongs to the workspace's name instead.
+          // The chat's own name tells it from its siblings now that every chat
+          // is a row of its own; the workspace's name moved to the group.
+          const name = textFromRecord(record, CONDUCTOR_FIELD.NAME)?.slice(
+            0,
+            maximumSessionTitleLength,
+          );
           return {
             id,
             workspace,
-            archived: textFromRecord(record, CONDUCTOR_FIELD.ARCHIVED_AT) !== undefined,
+            archived: archivedAt !== undefined,
             ...(archivedAt === undefined ? {} : { archivedAt }),
+            ...(name ? { name } : {}),
             ...(model ? { model } : {}),
             ...(deepLink ? { deepLink } : {}),
           };
@@ -725,14 +700,21 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     const model = agentAndModelLabel(transcript?.agentKind, session.model);
     return {
       providerSessionId: session.id,
-      // The workspace's name is the name the user knows this work by — it is
-      // what Conductor itself shows them — where a chat's own name is generated
-      // and identifies nothing. So the workspace titles the row, and it is not
-      // reported as a branch: it never was one, and the surface now draws a
-      // branch under a glyph that says so.
-      title: session.workspace.name ?? session.workspace.repositoryLabel,
+      // The chat's own name titles the row, because the row is the chat; the
+      // workspace's name — the name the user knows the work by — rides the
+      // grouping below and names all of its chats at once. A chat Conductor
+      // never named still falls back to those, and none of them is reported
+      // as a branch: a workspace name never was one.
+      title: session.name ?? session.workspace.name ?? session.workspace.repositoryLabel,
       status,
       observedAt,
+      // The workspace this chat is one voice of. Its name falls back to the
+      // repository so an unnamed workspace still groups under something a
+      // person can say out loud.
+      workspace: {
+        providerWorkspaceId: session.workspace.id,
+        name: session.workspace.name ?? session.workspace.repositoryLabel,
+      },
       // Conductor documents both halves of a send — queued while a session is
       // idle, steered into the turn while it works — so any open chat takes a
       // message. A closed one is settled, and an errored one is documented for
@@ -889,17 +871,6 @@ function agentAndModelLabel(
 ): string | undefined {
   const label = [agentKind, model].filter(isDefined).join(" · ");
   return label || undefined;
-}
-
-/** Most urgent first, and between two equally urgent chats, the one that moved last. */
-function urgencyOrder(
-  first: ProviderSessionObservation,
-  second: ProviderSessionObservation,
-): number {
-  return (
-    STATUS_URGENCY.indexOf(first.status) - STATUS_URGENCY.indexOf(second.status) ||
-    second.observedAt - first.observedAt
-  );
 }
 
 /** Conductor reports the model it resolved as well as the one that was asked for. */

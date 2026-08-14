@@ -477,12 +477,16 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "Sessions lists every observed session with its state, narrowable to all, local, " +
         "cloud, or one provider, and orderable by urgency (what needs the developer first) or " +
         "recency (what moved last first); a row can be opened, messaged, or controlled where its " +
-        "provider allows. Settings holds a front page whose rows open its Voice, Appearance, " +
-        "Keyboard shortcuts, and Connections pages — each led back out by its back button or " +
-        "Escape — and keeps the microphone permission, the Feedback section, and Quit on the " +
-        "front page itself. A change Luke makes himself is shown as it is made: the panel " +
-        "comes forward on the tab, and the page, the change belongs to, and his face leaves " +
-        "the strip under the housing, dives to the control that moved, and floats back.",
+        "provider allows. Where a provider nests chats in a workspace — Conductor today — each " +
+        "chat is its own row: a workspace holding several draws them inside one tray named by " +
+        "the workspace at its top, one holding a single chat stays one row titled by the " +
+        "workspace, and every chat can be seen, opened, and messaged individually. Settings " +
+        "holds a front page whose rows open its Voice, Appearance, Keyboard shortcuts, and " +
+        "Connections pages — each led back out by its back button or Escape — and keeps the " +
+        "microphone permission, the Feedback section, and Quit on the front page itself. A " +
+        "change Luke makes himself is shown as it is made: the panel comes forward on the tab, " +
+        "and the page, the change belongs to, and his face leaves the strip under the housing, " +
+        "dives to the control that moved, and floats back.",
     },
     {
       label: "Feedback and prompts",

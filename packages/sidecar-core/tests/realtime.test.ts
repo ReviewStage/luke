@@ -411,6 +411,52 @@ test("session context carries only bounded, redacted fields", () => {
   assert.doesNotMatch(linkedText, /https:/);
 });
 
+test("a chat carries its workspace in the roster, so siblings read apart out loud", () => {
+  const chat = normalizeSession(
+    { id: "conductor", displayName: "Conductor" },
+    {
+      providerSessionId: "chat-1",
+      title: "Revamp the notch panel",
+      status: SESSION_STATUS.WORKING,
+      observedAt: DECIDED_AT,
+      workspace: { providerWorkspaceId: "workspace-1", name: "lisbon-v2" },
+    },
+  );
+
+  const text = sessionContextText([chat]);
+
+  assert.match(text, /Revamp the notch panel/);
+  assert.match(text, /a chat in workspace lisbon-v2/);
+
+  // An unnamed workspace goes unmentioned rather than leaking its internal id
+  // off the machine: the id identifies nothing out loud.
+  const unnamed = normalizeSession(
+    { id: "conductor", displayName: "Conductor" },
+    {
+      providerSessionId: "chat-2",
+      title: "Chase the memory leak",
+      status: SESSION_STATUS.WORKING,
+      observedAt: DECIDED_AT,
+      workspace: { providerWorkspaceId: "workspace-internal-uuid" },
+    },
+  );
+  const unnamedText = sessionContextText([unnamed]);
+  assert.doesNotMatch(unnamedText, /workspace-internal-uuid/);
+  assert.doesNotMatch(unnamedText, /a chat in workspace/);
+
+  // A session no provider grouped says nothing about workspaces at all.
+  const ungrouped = normalizeSession(
+    { id: "claude-code", displayName: "Claude Code" },
+    {
+      providerSessionId: "session-b",
+      title: "checkout-service",
+      status: SESSION_STATUS.WORKING,
+      observedAt: DECIDED_AT,
+    },
+  );
+  assert.doesNotMatch(sessionContextText([ungrouped]), /workspace/);
+});
+
 test("an empty roster says so rather than implying Luke sees nothing at all", () => {
   assert.match(sessionContextText([]), /No coding-agent sessions/);
 });

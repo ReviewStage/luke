@@ -384,6 +384,112 @@ html[data-keyboard="true"] button.session-row:focus-visible {
   white-space: nowrap;
 }
 
+/* A workspace's chats sit in a tray: one card that visibly contains them,
+   named once at its top, its chats divided by hairlines inside. One border
+   does all the containing — the rows inside give up their own — so membership
+   is a fact of the drawing rather than an inference from a narrowed gap. The
+   tray must not be positioned: the reorder measurement reads each row's
+   offsetTop, and a positioned tray would become the offset parent and make a
+   row's position read as its place inside the tray instead of in the list. */
+.workspace-tray {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  border: 1px solid var(--hairline);
+  border-radius: 15px;
+  background: var(--card);
+  overflow: clip;
+}
+
+/* The same wrapper when its run earns no tray. It generates no box at all, so
+   the row inside is a flex child of the list exactly as a bare row was — the
+   wrapper exists only so a workspace crossing between one chat and several
+   never changes the row's parent, which would remount it and wipe a follow-up
+   being typed. */
+.session-run {
+  display: contents;
+}
+
+/* The tray's name line: the workspace's name on the left, and at the far end
+   the glyph leading the checkout. Everything here is in the panel's own face —
+   the line is what the user calls the work, not an identifier to be
+   consulted. */
+.workspace-tray-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 14px 8px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.workspace-glyph {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+}
+
+.workspace-tray-name {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 560;
+  letter-spacing: -0.05px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-tray-meta {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+/* Rows inside the tray hand their box to it: no border, no radius, no fill of
+   their own, a hairline seam between neighbours. The attention tint keeps its
+   ground — a chat that needs a person says so inside a tray exactly as loudly
+   as outside one — and hover keeps working through the rules the plain row
+   already has, because a borderless row's border-color simply draws nothing. */
+.workspace-tray .session-row {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.workspace-tray .session-row + .session-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.workspace-tray .session-row[data-state="attention"] {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+/* Hover inside the tray answers on the ground alone. The row hover rules
+   recolor `border-color`, and a nested chat's only border is the hairline
+   seam to the sibling above it — recolored, the second chat's seam would
+   flare on hover while the first chat, seamless under the header, showed no
+   border at all. The seam is furniture, so it holds still under every hover
+   path, the attention rows' included: each selector here outweighs the hover
+   rule it pins by exactly the tray class, so the grounds those rules raise
+   still land while the border colour stays the seam's own. */
+.workspace-tray button.session-row:hover,
+.workspace-tray button.session-row[data-state="attention"]:hover,
+.workspace-tray
+  .session-row[data-actions][data-openable]:hover:not(
+    :has(.row-compose:hover, .row-action:hover, .row-stop:hover)
+  ),
+.workspace-tray
+  .session-row[data-actions][data-openable][data-state="attention"]:hover:not(
+    :has(.row-compose:hover, .row-action:hover, .row-stop:hover)
+  ) {
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
 /* What the session is doing, worded to carry the state. The glyph ahead of it
    answers at a glance — a spinner turning, a check — and the attention colour
    is spent here and nowhere else on the line, because a person being needed is

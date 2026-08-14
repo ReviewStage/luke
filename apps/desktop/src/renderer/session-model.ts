@@ -107,6 +107,17 @@ export interface SessionAction {
   kind?: SessionControlKind;
 }
 
+/**
+ * The workspace a row's session is one chat of, when its provider nests them.
+ * The id is what rows are grouped by — always beside the provider id, because
+ * two providers' workspace ids share no namespace — and the name is what the
+ * group is titled.
+ */
+export interface DisplayWorkspace {
+  id: string;
+  name: string;
+}
+
 export interface DisplaySession {
   id: string;
   title: string;
@@ -141,6 +152,8 @@ export interface DisplaySession {
   canMessage: boolean;
   /** Actions the provider advertised for this session, in its own words. */
   actions: readonly SessionAction[];
+  /** The workspace this row is one chat of, when its provider nests them. */
+  workspace?: DisplayWorkspace;
 }
 
 /** One filter someone can choose, and how many sessions it would leave. */
@@ -280,6 +293,17 @@ export function displaySessions(
           openable: session.detail.link !== undefined,
           canMessage: session.canReceiveMessage,
           actions: session.controls,
+          // A workspace the provider left unnamed still groups its chats; the
+          // id is at least stable, where a made-up name would claim knowledge
+          // the provider never reported.
+          ...(session.workspace
+            ? {
+                workspace: {
+                  id: session.workspace.providerWorkspaceId,
+                  name: session.workspace.name ?? session.workspace.providerWorkspaceId,
+                },
+              }
+            : {}),
         };
       });
 
@@ -347,6 +371,82 @@ function filterOptions(sessions: readonly DisplaySession[]): readonly SessionFil
   ];
 }
 
+/** Whether two rows are chats of one workspace. The provider id rides the
+ * comparison because two providers' workspace ids share no namespace. */
+function sameWorkspace(first: DisplaySession, second: DisplaySession): boolean {
+  return (
+    first.workspace !== undefined &&
+    second.workspace !== undefined &&
+    first.providerId === second.providerId &&
+    first.workspace.id === second.workspace.id
+  );
+}
+
+/**
+ * Seats every workspace's chats together without disturbing what the sort
+ * decided: a workspace sits where its best-read chat sorted, and its other
+ * chats follow in their own sorted order, so the group is exactly as urgent —
+ * or as recent — as the chat that earned its seat. Ungrouped sessions keep
+ * their seats, and a group whose sibling would have sat between two strangers
+ * simply closes the gap.
+ */
+function seatWorkspacesTogether(sessions: readonly DisplaySession[]): readonly DisplaySession[] {
+  const seated: DisplaySession[] = [];
+  const taken = new Set<string>();
+  for (const session of sessions) {
+    if (taken.has(session.id)) continue;
+    taken.add(session.id);
+    seated.push(session);
+    if (!session.workspace) continue;
+    for (const sibling of sessions) {
+      if (taken.has(sibling.id) || !sameWorkspace(session, sibling)) continue;
+      taken.add(sibling.id);
+      seated.push(sibling);
+    }
+  }
+  return seated;
+}
+
+/**
+ * One stretch of the drawn list: a workspace's adjacent chats — the tray the
+ * panel draws around them, named once at its top — or a single ungrouped
+ * session. Runs are read off the arranged order rather than kept as state, so
+ * a re-sort that reseats a workspace can never leave a stale tray behind.
+ */
+export interface SessionListRun {
+  /** The tray's workspace; absent for a session no provider grouped. */
+  workspace?: DisplayWorkspace;
+  /** The checkout the tray's chats work in, when any of them reported one. */
+  repository?: string;
+  /** Indexes into the arranged list, adjacent and in order. */
+  indexes: readonly number[];
+}
+
+export function sessionListRuns(sessions: readonly DisplaySession[]): readonly SessionListRun[] {
+  const runs: SessionListRun[] = [];
+  for (let index = 0; index < sessions.length; index += 1) {
+    const session = sessions[index];
+    if (!session) continue;
+    const previous = index > 0 ? sessions[index - 1] : undefined;
+    const held = runs.at(-1);
+    if (held?.workspace && previous && sameWorkspace(session, previous)) {
+      const repository = held.repository ?? session.repository;
+      runs[runs.length - 1] = {
+        ...held,
+        ...(repository ? { repository } : {}),
+        indexes: [...held.indexes, index],
+      };
+      continue;
+    }
+    runs.push({
+      ...(session.workspace ? { workspace: session.workspace } : {}),
+      ...(session.workspace && session.repository ? { repository: session.repository } : {}),
+      indexes: [index],
+    });
+  }
+  return runs;
+}
+
 /**
  * The list as it is drawn. A chosen filter whose last session has since left —
  * an agent's only session finished, say — falls back to All rather than leaving
@@ -375,7 +475,7 @@ export function arrangeSessions(
   const matching = filter === view.filter ? chosen : sessions;
 
   return {
-    sessions: [...matching].sort(bySort(view.sort)),
+    sessions: seatWorkspacesTogether([...matching].sort(bySort(view.sort))),
     total: sessions.length,
     filter,
     options,

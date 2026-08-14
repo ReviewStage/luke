@@ -233,7 +233,8 @@ const REALTIME_INSTRUCTION_LINES: readonly string[] = [
   "- When you do not know something, say so in one sentence rather than guessing or hedging.",
   "",
   "What you can see:",
-  "- Only a session's provider, title, status, and a redacted summary.",
+  "- Only a session's provider, title, status, a redacted summary, and the workspace it is one chat of when its provider groups chats that way.",
+  "- Chats sharing a workspace are still separate sessions: each is opened, messaged, and controlled on its own, so say which chat you mean, not just whose workspace it is in.",
   "- The issue roster, when a tracker is connected: each tracked issue's identifier, title, and state.",
   "- You never receive transcripts, file contents, or command output, so never imply you read any.",
   "",
@@ -786,8 +787,9 @@ function sessionCapabilityText(session: NormalizedSession): string {
  * Renders the session roster the conversation is allowed to know about.
  *
  * These are the same bounded, redacted fields the attention layer already
- * sends — provider, title, status, and the provider's own summary — plus what
- * each session can be asked to do and the identity a tool call names it by.
+ * sends — provider, title, status, and the provider's own summary — plus the
+ * workspace a chat belongs to when its provider groups them, what each
+ * session can be asked to do, and the identity a tool call names it by.
  * No transcript, file path, or command output is ever included.
  */
 export function sessionContextText(sessions: readonly NormalizedSession[]): string {
@@ -796,17 +798,21 @@ export function sessionContextText(sessions: readonly NormalizedSession[]): stri
   const overflow = sessions.length - maximumVoiceContextSessions;
   return [
     "Currently observed sessions:",
-    ...sessions
-      .slice(0, maximumVoiceContextSessions)
-      .map((session) =>
-        [
-          `- ${session.provider.displayName}`,
-          session.title,
-          session.status,
-          session.summary ?? "no summary reported",
-          `[${sessionCapabilityText(session)}]`,
-        ].join(" — "),
-      ),
+    ...sessions.slice(0, maximumVoiceContextSessions).map((session) =>
+      [
+        `- ${session.provider.displayName}`,
+        session.title,
+        // The workspace tells siblings' chats apart out loud, so it rides
+        // beside the title wherever a provider named one — and only by its
+        // name: an internal workspace id identifies nothing out loud, so an
+        // unnamed workspace goes unmentioned rather than leaking the id off
+        // the machine, the same rule the attention update follows.
+        ...(session.workspace?.name ? [`a chat in workspace ${session.workspace.name}`] : []),
+        session.status,
+        session.summary ?? "no summary reported",
+        `[${sessionCapabilityText(session)}]`,
+      ].join(" — "),
+    ),
     // A session past the bound must read as unlisted, never as nonexistent:
     // denying a session the panel plainly shows teaches the user that Luke
     // cannot be asked about their work at all.

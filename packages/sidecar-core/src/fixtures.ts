@@ -15,6 +15,12 @@ export const SESSION_STATE = {
 
 export type SessionState = (typeof SESSION_STATE)[keyof typeof SESSION_STATE];
 
+/** The workspace a fixture row is one chat of, shaped as the surface draws it. */
+export interface WorkspaceSnapshot {
+  id: string;
+  name: string;
+}
+
 export interface SessionSnapshot {
   id: string;
   title: string;
@@ -44,6 +50,8 @@ export interface SessionSnapshot {
   canMessage?: boolean;
   /** Drawn only, like the composer: the controls a live session would show. */
   actions?: readonly SessionControl[];
+  /** The workspace this row is one chat of, when its provider nests them. */
+  workspace?: WorkspaceSnapshot;
 }
 
 export interface FixtureSnapshot {
@@ -95,24 +103,40 @@ const smokeFixture: FixtureSnapshot = {
       location: SESSION_LOCATION.LOCAL,
       observedAt: minutesBeforeEpoch(9),
     },
-    // The most recently observed session is also the least urgent one, so the
-    // fixture tells the two orderings apart rather than agreeing with both.
+    // Two Conductor chats of one workspace, titled by their own names and
+    // grouped under the workspace's — the name the user knows the work by,
+    // which never was a branch. The pair is what proves a run of chats joins
+    // into one card in the one screenshot the evidence is reviewed from.
     {
-      id: "conductor-workspace",
-      // Conductor sessions are titled by the workspace's own name — the name
-      // the user knows the work by — and carry no branch, because the
-      // workspace name never was one.
-      title: "lisbon-v2",
+      id: "conductor-chat-package",
+      title: "amber-shoal",
       providerId: PROVIDER_ID.CONDUCTOR,
       provider: "Conductor",
-      // A provider that reported no activity, failure, or recap: the surface
-      // words the state itself, and this row is what proves it does.
+      detail: "Packaging the macOS build.",
+      repository: "luke",
+      model: "claude-opus-5",
+      state: SESSION_STATE.WORKING,
+      location: SESSION_LOCATION.CLOUD,
+      observedAt: minutesBeforeEpoch(6),
+      workspace: { id: "conductor-lisbon", name: "lisbon-v2" },
+    },
+    // The complete chat is also the most recently observed session while being
+    // among the least urgent, so the fixture tells the two orderings apart
+    // rather than agreeing with both. A provider that reported no activity,
+    // failure, or recap: the surface words the state itself, and this row is
+    // what proves it does.
+    {
+      id: "conductor-chat-tidy",
+      title: "gentle-cove",
+      providerId: PROVIDER_ID.CONDUCTOR,
+      provider: "Conductor",
       detail: "",
       repository: "luke",
       model: "claude-opus-5",
       state: SESSION_STATE.COMPLETE,
       location: SESSION_LOCATION.CLOUD,
       observedAt: minutesBeforeEpoch(1),
+      workspace: { id: "conductor-lisbon", name: "lisbon-v2" },
     },
     {
       id: "cursor-agent",

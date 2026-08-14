@@ -98,6 +98,21 @@ test("derives an update only when a session reports something new", () => {
   );
 });
 
+test("the update names the workspace a chat belongs to, and only by its name", () => {
+  const grouped = session(claude, "chat", {
+    workspace: { providerWorkspaceId: "workspace-1", name: "lisbon-v2" },
+  });
+  // The name is the part a readout says; the id identifies nothing out loud
+  // and stays on the machine.
+  assert.equal(attentionUpdate(grouped)?.workspace, "lisbon-v2");
+
+  const unnamed = session(claude, "chat", {
+    workspace: { providerWorkspaceId: "workspace-1" },
+  });
+  assert.equal(attentionUpdate(unnamed)?.workspace, undefined);
+  assert.equal(attentionUpdate(session(claude, "chat"))?.workspace, undefined);
+});
+
 test("rejects model output that does not satisfy the decision contract", () => {
   assert.equal(attentionDecisionFromModel(undefined, DECIDED_AT), undefined);
   assert.equal(attentionDecisionFromModel("silent", DECIDED_AT), undefined);

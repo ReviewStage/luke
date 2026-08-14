@@ -14,13 +14,16 @@ import {
   type DisplaySession,
   observedAgoLabel,
   type SessionAction,
+  type SessionListRun,
   type SessionView,
+  sessionListRuns,
 } from "./session-model";
 import {
   LEAVING_ATTRIBUTE,
   SESSION_ROW_ID_ATTRIBUTE,
   useRoster,
   useSessionReorderMotion,
+  WORKSPACE_TRAY_ID_ATTRIBUTE,
 } from "./session-motion";
 import {
   BranchGlyph,
@@ -29,6 +32,7 @@ import {
   SessionOptions,
   SessionOptionsButton,
   SessionsPanel,
+  WorkspaceGlyph,
 } from "./session-parts";
 import { SendIcon, StopIcon } from "./settings-icons";
 import { SettingsPanel, type SettingsPanelProps } from "./settings-panel";
@@ -280,6 +284,7 @@ function SessionRow({
   index,
   now,
   leaving,
+  inWorkspaceTray = false,
   onOpen,
   writes,
 }: {
@@ -287,6 +292,8 @@ function SessionRow({
   index: number;
   now: number;
   leaving: boolean;
+  /** Whether this row is drawn inside its workspace's tray. */
+  inWorkspaceTray?: boolean;
   onOpen: (session: DisplaySession) => void;
   writes: SessionWriteHandlers;
 }): React.JSX.Element {
@@ -305,8 +312,15 @@ function SessionRow({
   };
   // The identifier that tells this row from its neighbours: the branch, or the
   // repository where a provider reported no branch. The glyph belongs to the
-  // branch alone — under a repository name it would say the wrong thing.
-  const place = session.branch ?? session.repository;
+  // branch alone — under a repository name it would say the wrong thing. A row
+  // inside a tray leaves a bare repository unsaid: the tray's own header has
+  // already named it, once, for every chat it holds.
+  const place = session.branch ?? (inWorkspaceTray ? undefined : session.repository);
+  // A lone chat is its workspace: with no tray to name it, the row takes the
+  // workspace's name — the name the user knows the work by — because the
+  // chat's own generated name only earns a line once there is a sibling to
+  // tell it from.
+  const title = !inWorkspaceTray && session.workspace ? session.workspace.name : session.title;
   const content = (
     <>
       <span
@@ -318,7 +332,7 @@ function SessionRow({
         {session.location === SESSION_LOCATION.CLOUD ? <CloudBadge /> : null}
       </span>
       <span className="row-copy">
-        <strong>{session.title}</strong>
+        <strong>{title}</strong>
         <small className="row-doing">
           {session.state === SESSION_STATE.WORKING ? (
             <span className="row-spinner" aria-hidden="true" />
@@ -382,6 +396,68 @@ function SessionRow({
       )}
       <SessionRowActions session={session} writes={writes} />
     </article>
+  );
+}
+
+/** Whether a run draws the tray: only several chats earn its chrome. */
+export function runDrawsTray(run: SessionListRun): boolean {
+  return run.workspace !== undefined && run.indexes.length > 1;
+}
+
+/**
+ * One run of the list, tray or not. Several of one workspace's chats sit in
+ * the tray: a single card that visibly contains them, named once at its top —
+ * the workspace's name on the left, and at the far end the glyph leading the
+ * repository — with the chats divided by hairlines inside.
+ * A workspace holding one chat earns no tray — its row already says
+ * everything the tray would — and an ungrouped session never does; either
+ * way the wrapper stays, drawing as nothing. It has to: a workspace crosses
+ * between one chat and several as siblings come and go, and if that crossing
+ * changed the row's parent element, React would remount the row and wipe a
+ * follow-up someone was typing into it. The chrome is a class, never a
+ * different tree.
+ *
+ * The header is furniture rather than a session — it opens nothing and takes
+ * nothing — and it names the tray in the reading order the same way it does
+ * on screen: the workspace once, then its chats. A tray is a member of the
+ * arrival stack in its rows' stead: it fans in at its lead row's turn, and
+ * the rows ride it rather than fanning a second time inside it. A wrapper
+ * that draws as nothing leaves its row in the stack exactly as before.
+ */
+function SessionRun({
+  run,
+  children,
+}: {
+  run: SessionListRun;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  const tray = runDrawsTray(run);
+  return (
+    <section
+      className={tray ? "workspace-tray" : "session-run"}
+      {...(tray && run.workspace
+        ? {
+            // The tray is a slot of the list in its own right: measured by
+            // this id, it travels to a re-sorted seat carrying its rows,
+            // which are translated only by their movement within it.
+            [WORKSPACE_TRAY_ID_ATTRIBUTE]: run.workspace.id,
+            style: { "--row-index": (run.indexes[0] ?? 0) + 1 } as React.CSSProperties,
+          }
+        : {})}
+    >
+      {/* Held in its slot by the null, so the header appearing or leaving can
+          never reseat the keyed rows beside it. */}
+      {tray ? (
+        <header className="workspace-tray-header">
+          <span className="workspace-tray-name">{run.workspace?.name}</span>
+          <span className="workspace-tray-meta">
+            <WorkspaceGlyph />
+            {run.repository ? <span>{run.repository}</span> : null}
+          </span>
+        </header>
+      ) : null}
+      {children}
+    </section>
   );
 }
 
@@ -460,17 +536,37 @@ export function PanelBody({
             {rows.length === 0 ? (
               <EmptyState />
             ) : (
-              rows.map((row, index) => (
-                <SessionRow
-                  key={row.item.id}
-                  session={row.item}
-                  index={index}
-                  now={now}
-                  leaving={row.leaving}
-                  onOpen={onOpenSession}
-                  writes={writes}
-                />
-              ))
+              // Runs are read over the drawn order, leaving rows and all: a
+              // fading chat still holds its slot in its tray, and the tray
+              // may not close around it until it has gone.
+              sessionListRuns(rows.map((row) => row.item)).map((run) => {
+                const tray = runDrawsTray(run);
+                const lead = rows[run.indexes[0] ?? 0];
+                // A workspace run is keyed by the workspace however many chats
+                // it holds, so crossing between one and several keeps the same
+                // wrapper — and the rows inside it — mounted. An ungrouped
+                // session is its own run, keyed by itself.
+                const runKey = run.workspace?.id ?? lead?.item.id ?? "";
+                return (
+                  <SessionRun key={runKey} run={run}>
+                    {run.indexes.map((index) => {
+                      const row = rows[index];
+                      return row ? (
+                        <SessionRow
+                          key={row.item.id}
+                          session={row.item}
+                          index={index}
+                          now={now}
+                          leaving={row.leaving}
+                          inWorkspaceTray={tray}
+                          onOpen={onOpenSession}
+                          writes={writes}
+                        />
+                      ) : null;
+                    })}
+                  </SessionRun>
+                );
+              })
             )}
           </div>
           {/* Luke's own composer holds the panel's foot, under whatever the
