@@ -990,18 +990,49 @@ function applyMenuBarVisibility(show: boolean): void {
 }
 
 /**
+ * macOS ignores a `dock.hide()` within a second of the last Dock change, so a
+ * switch pressed twice cannot be honoured call by call; the applier below
+ * paces itself to this instead, which is Electron's documented floor.
+ */
+const DOCK_SETTLE_MS = 1100;
+
+/** The Dock state last asked for, and whether the applier is chasing it. */
+let dockDesired = false;
+let dockSettling = false;
+
+/**
  * Puts Luke in the Dock or takes him back out, to match the setting. He ships
  * as an accessory app — the notch is his fixed point — so the icon is a second
- * door like the status item, losing nothing when it is hidden. Either
- * direction transforms the process type, which can deactivate the app, so the
- * panel the switch was pressed in is brought back forward rather than left to
- * lose its caret.
+ * door like the status item, losing nothing when it is hidden.
  */
 function applyDockVisibility(show: boolean): void {
   if (process.platform !== "darwin") return;
-  if (show) void app.dock?.show();
-  else app.dock?.hide();
-  if (windowMode === "expanded") focusPanelWindow();
+  dockDesired = show;
+  void settleDock();
+}
+
+/**
+ * Chases the desired state rather than relaying each press: a hide within a
+ * second of the last Dock change is silently ignored by macOS, so the icon is
+ * re-checked after every change and asked again until it matches — the switch
+ * and the file must not end a quick on-and-off disagreeing with the Dock.
+ */
+async function settleDock(): Promise<void> {
+  if (dockSettling || !app.dock) return;
+  dockSettling = true;
+  try {
+    while (app.dock.isVisible() !== dockDesired) {
+      if (dockDesired) await app.dock.show();
+      else app.dock.hide();
+      // Either direction transforms the process type, which can deactivate
+      // the app; the panel the switch was pressed in is brought back forward
+      // rather than left to lose its caret.
+      if (windowMode === "expanded") focusPanelWindow();
+      await new Promise((resolve) => setTimeout(resolve, DOCK_SETTLE_MS));
+    }
+  } finally {
+    dockSettling = false;
+  }
 }
 
 function handleDisplayChange(): void {
