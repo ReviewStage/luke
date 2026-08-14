@@ -6,6 +6,7 @@ import {
   SESSION_STATE,
 } from "@sidecar/core";
 import { useCallback, useRef, useState } from "react";
+import { type AskHandler, AskLuke } from "./ask-luke";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
 import { CloudBadge, ProviderMark } from "./provider-marks";
 import {
@@ -398,6 +399,12 @@ export interface PanelBodyProps {
   onOpenSession: (session: DisplaySession) => void;
   /** Carries a typed reply or an advertised action to the session's provider. */
   writes: SessionWriteHandlers;
+  /** Carries a typed ask to Luke's own conversation, answering why it could not go. */
+  ask: AskHandler;
+  /** Reports someone being part-way through an ask, so the panel holds for them. */
+  onAskEngaged: (engaged: boolean) => void;
+  /** The registered summon key the field should teach, if the system granted one. */
+  askShortcut?: string;
   /**
    * Whether there is anything for the sheet to decide. Decided by the panel
    * rather than here, because whoever offers the button also has to be the one
@@ -419,6 +426,9 @@ export function PanelBody({
   now,
   onOpenSession,
   writes,
+  ask,
+  onAskEngaged,
+  askShortcut,
   offerOptions,
   optionsOpen,
   onOptionsToggle,
@@ -463,6 +473,16 @@ export function PanelBody({
               ))
             )}
           </div>
+          {/* Luke's own composer holds the panel's foot, under whatever the
+              list shows — even an empty one, because "what needs me?" is a
+              question worth typing before any session has appeared. It arrives
+              at the tail of the same fan the rows ride. */}
+          <AskLuke
+            ask={ask}
+            onEngagedChange={onAskEngaged}
+            rowIndex={rows.length + 1}
+            {...(askShortcut ? { shortcut: askShortcut } : {})}
+          />
         </SessionsPanel>
       )}
     </div>

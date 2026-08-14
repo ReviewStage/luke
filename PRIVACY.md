@@ -112,8 +112,8 @@ transcript, file content, or command output is ever included.
 
 Luke also sends the list of projects a new workspace could be created in —
 each project's provider, repository label, and provider-assigned identifier —
-so a spoken ask to create one can be validated against what the provider
-actually offers.
+so an ask to create one can be validated against what the provider actually
+offers.
 
 Luke also sends an app guide describing itself — its features, each setting's
 current value, the talk key, and whether each cloud provider is connected — so

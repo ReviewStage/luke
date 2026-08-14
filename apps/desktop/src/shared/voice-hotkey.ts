@@ -17,6 +17,30 @@
 export const DEFAULT_VOICE_HOTKEYS: readonly string[] = ["Alt+Space", "Alt+S"];
 
 /**
+ * The key that summons the ask field from whatever app is frontmost, tried in
+ * order like the talk key's candidates.
+ *
+ * A sibling of the talk key on purpose: hold Option-Space to speak to Luke,
+ * tap Option-L to type to him — one modifier for both halves of the same
+ * conversation. It is deliberately not Command-L, which is the address bar in
+ * every browser and a taken chord in most editors; a global registration
+ * would swallow it machine-wide. Option-L costs the system only the ¬
+ * character, and Option-letter is the family launcher apps already claim.
+ */
+export const DEFAULT_ASK_HOTKEYS: readonly string[] = ["Alt+L", "Alt+Shift+L"];
+
+/**
+ * The ask chords worth asking the system for, with any the talk key holds
+ * left out. The talk key is configurable now, so a user can move it onto an
+ * ask default — and the two Luke keys must never compete for one chord:
+ * whichever registered first would silently cost the other its whole feature,
+ * with nothing on screen saying why.
+ */
+export function askHotkeyCandidates(taken: readonly (string | undefined)[]): readonly string[] {
+  return DEFAULT_ASK_HOTKEYS.filter((candidate) => !taken.includes(candidate));
+}
+
+/**
  * The modifiers a talk key may carry, written the way Electron accelerators
  * name them. Their order here is the order macOS writes a chord in — ⌃⌥⇧⌘ —
  * so every accelerator this module produces reads the way the menu bar would
@@ -278,4 +302,14 @@ const ABSENCE_REASONS: Readonly<Record<VoiceHotkeyAbsence, string>> = {
 export function voiceHotkeyReport(hotkey: string | undefined, absence: VoiceHotkeyAbsence): string {
   if (hotkey) return `Luke talk key: ${voiceHotkeyLabel(hotkey)}`;
   return `Luke talk key: unavailable — ${ABSENCE_REASONS[absence]}`;
+}
+
+/**
+ * The startup line for the ask key, on the talk key's exact terms: the two
+ * are the two halves of one conversation, and their absences have the same
+ * three causes.
+ */
+export function askHotkeyReport(hotkey: string | undefined, absence: VoiceHotkeyAbsence): string {
+  if (hotkey) return `Luke ask key: ${voiceHotkeyLabel(hotkey)}`;
+  return `Luke ask key: unavailable — ${ABSENCE_REASONS[absence]}`;
 }

@@ -26,6 +26,7 @@ import { CREDENTIAL_SOURCE, SESSION_OPEN_RESULT_STATUS } from "../shared/contrac
 import type { CredentialProviderId } from "../shared/credential-providers";
 import { CREDENTIAL_PROVIDER_LIST } from "../shared/credential-providers";
 import { TALK_KEY_RELEASE, talkKeyRelease, voiceHotkeyToShow } from "../shared/voice-hotkey";
+import { ASK_LUKE_INPUT_ID, askRefusal, focusAskField } from "./ask-luke";
 import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";
 import { isSubmittable, removalEndsEntry } from "./credential-entry";
 import { KeySlot } from "./key-slot";
@@ -250,14 +251,37 @@ export function App(): React.JSX.Element {
    */
   const [talkOpening, setTalkOpening] = useState(false);
   const [voiceHotkey, setVoiceHotkey] = useState<VoiceHotkeyState>();
+  /**
+   * The ask key as last re-taken, superseding bootstrap's once it has changed
+   * at all: moving the talk key re-registers every global chord, and the ask
+   * key can land somewhere new or nowhere. Wrapped so "changed to none" is
+   * told apart from "never changed" — the same reading order the talk key's
+   * own state follows.
+   */
+  const [askHotkeyChange, setAskHotkeyChange] = useState<{ accelerator?: string }>();
   const [localStream, setLocalStream] = useState<MediaStream>();
   const [remoteStream, setRemoteStream] = useState<MediaStream>();
   const [voiceCaption, setVoiceCaption] = useState<string>();
+  /**
+   * Whether the reply under way answers an ask the developer typed. A typed
+   * ask is read, not only heard, so its reply draws the caption whatever the
+   * captions preference says — the preference is about speech being
+   * duplicated, and here the words are the half of the conversation the
+   * developer chose. Cleared the moment the turn moves on.
+   */
+  const [typedAsk, setTypedAsk] = useState(false);
   const audioContext = useRef<AudioContext | undefined>(undefined);
   const hoverTimer = useRef<number | undefined>(undefined);
   const presentationRef = useRef<PanelPresentation>(PANEL_PRESENTATION.CAPSULE);
   const tabRef = useRef<PanelTab>(PANEL_TAB.SESSIONS);
   const entryRef = useRef<CredentialEntry | undefined>(undefined);
+  /**
+   * Whether the caret is in the ask field. It holds the panel open against the
+   * pointer the way a credential entry does, and for the same reason: the
+   * pointer wandering off is not a decision about the thing someone is in the
+   * middle of typing.
+   */
+  const askEngaged = useRef(false);
   const pointerInside = useRef(false);
   const modeGeneration = useRef(0);
   const remoteAudio = useRef<HTMLAudioElement | null>(null);
@@ -273,7 +297,7 @@ export function App(): React.JSX.Element {
    * anything.
    */
   const heardLuke = useRef(false);
-  const startMicrophoneRef = useRef<(() => Promise<void>) | undefined>(undefined);
+  const startMicrophoneRef = useRef<(() => Promise<MicrophoneStatus>) | undefined>(undefined);
   /**
    * The spoken form of pressing a row, reached through a ref for the same
    * reason `startMicrophoneRef` is: the voice session is built once, and the
@@ -395,7 +419,12 @@ export function App(): React.JSX.Element {
     await voiceSession.current?.close();
   }, []);
 
-  const startMicrophone = useCallback(async () => {
+  /**
+   * Opens the call, answering with what the system said about the microphone —
+   * the one fact a caller that could not send anything needs in order to say
+   * why.
+   */
+  const startMicrophone = useCallback(async (): Promise<MicrophoneStatus> => {
     setMicrophoneError(undefined);
     const session = ensureVoiceSession();
     const permission = await window.sidecar.requestMicrophone();
@@ -406,13 +435,14 @@ export function App(): React.JSX.Element {
       // press put up is taken down here rather than by a status settling.
       session.dropPendingTurn();
       setTalkOpening(false);
-      return;
+      return permission;
     }
     if (await session.connect()) {
       session.updateSessions(sessionsRef.current);
       session.updateWorkspaceProjects(workspaceProjectsRef.current);
       session.updateGuide(guideRef.current);
     }
+    return permission;
   }, [ensureVoiceSession]);
   startMicrophoneRef.current = startMicrophone;
 
@@ -581,10 +611,10 @@ export function App(): React.JSX.Element {
     // browser, fetching the key it is waiting for — so the pointer being away
     // from it is the normal case rather than a dismissal.
     if (current === PANEL_PRESENTATION.SLOT) return;
-    // A key half-typed is the one thing the pointer must not be allowed to
-    // discard. Everything else on the settings tab closes like the sessions
-    // tab does.
-    if (current === PANEL_PRESENTATION.PANEL && entryIsDrawn()) return;
+    // A key half-typed is one thing the pointer must not be allowed to
+    // discard; an ask being typed to Luke is the other. Everything else on
+    // the settings tab closes like the sessions tab does.
+    if (current === PANEL_PRESENTATION.PANEL && (entryIsDrawn() || askEngaged.current)) return;
     hoverTimer.current = window.setTimeout(() => {
       hoverTimer.current = undefined;
       if (presentationRef.current === PANEL_PRESENTATION.PEEK) {
@@ -594,11 +624,26 @@ export function App(): React.JSX.Element {
         // scheduled: an entry can begin inside the delay — pressing Connect and
         // reaching for the keyboard does exactly that — and a close decided
         // before it began would discard it.
-        if (entryIsDrawn()) return;
+        if (entryIsDrawn() || askEngaged.current) return;
         void changeMode(false);
       }
     }, LEAVE_DELAY_MS);
   }, [applyPresentation, cancelHoverTransition, changeMode, entryIsDrawn]);
+
+  /**
+   * The ask field taking or letting go of the caret. Letting go while the
+   * pointer is already away has to release the hold the caret had on the
+   * panel — the pointer cannot leave a second time — which is the same rule
+   * ending a credential entry follows.
+   */
+  const changeAskEngagement = useCallback(
+    (engaged: boolean) => {
+      const released = askEngaged.current && !engaged;
+      askEngaged.current = engaged;
+      if (released && !pointerInside.current) handleHitRegionLeave();
+    },
+    [handleHitRegionLeave],
+  );
 
   /**
    * The single place an entry changes. A key being entered holds the panel open
@@ -843,6 +888,51 @@ export function App(): React.JSX.Element {
   openSessionAloudRef.current = openSessionAloud;
 
   /**
+   * The ask key, pressed anywhere on the system. The main process has already
+   * stood the panel up focused; what is left is the caret — or the dismissal,
+   * because a summons repeated over its own open field is someone asking the
+   * launcher to go away, the same second press every launcher answers.
+   */
+  const summonAsk = useCallback(() => {
+    const field = document.getElementById(ASK_LUKE_INPUT_ID);
+    if (
+      presentationRef.current === PANEL_PRESENTATION.PANEL &&
+      field !== null &&
+      document.activeElement === field
+    ) {
+      cancelHoverTransition();
+      void changeMode(false);
+      return;
+    }
+    changeTab(PANEL_TAB.SESSIONS);
+    focusAskField();
+  }, [cancelHoverTransition, changeMode, changeTab]);
+
+  /**
+   * A typed ask to Luke himself. It rides the same call the talk key opens —
+   * permission, connect, then the turn — and opens the same kind of turn:
+   * typing is the developer asking in their own words, so the turn may carry
+   * a tool the way a spoken one may, behind the same roster gauntlet. Answers
+   * with why the ask could not go, or nothing when it did — the reply is
+   * spoken, and its words land under the panel as the answer.
+   */
+  const askLuke = useCallback(
+    async (text: string): Promise<string | undefined> => {
+      const session = ensureVoiceSession();
+      let microphone: MicrophoneStatus = "granted";
+      if (!session.isConnected) {
+        microphone = (await startMicrophoneRef.current?.()) ?? microphone;
+      }
+      if (session.sendText(text)) {
+        setTypedAsk(true);
+        return undefined;
+      }
+      return askRefusal(session.status, microphone);
+    },
+    [ensureVoiceSession],
+  );
+
+  /**
    * The spoken asks about Luke himself. A settings change goes through the
    * same bridge calls the settings rows use, and the snapshot that comes back
    * redraws the panel's switches; showing the panel is the capsule's press
@@ -979,6 +1069,7 @@ export function App(): React.JSX.Element {
       if (eventName === "mode:compact") applyAuthoritativeMode("compact");
       if (eventName === "mode:expanded") applyAuthoritativeMode("expanded");
       if (eventName === "tab:settings") changeTab(PANEL_TAB.SETTINGS);
+      if (eventName === "ask:focus") summonAsk();
     });
     const removeDisplay = window.sidecar.onDisplayChanged(setDisplay);
     const removeSessions = window.sidecar.onSessionsChanged(setSessions);
@@ -999,6 +1090,7 @@ export function App(): React.JSX.Element {
     changeTab,
     startMicrophone,
     stopMicrophone,
+    summonAsk,
   ]);
 
   // The waveform follows whoever is actually talking: the developer while
@@ -1036,7 +1128,12 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     voiceStatusRef.current = voiceStatus;
     // Each reply is heard from scratch, so the previous one cannot vouch for it.
-    if (voiceStatus !== REALTIME_STATUS.RESPONDING) heardLuke.current = false;
+    if (voiceStatus !== REALTIME_STATUS.RESPONDING) {
+      heardLuke.current = false;
+      // The reply that answered the typed ask is over, so the caption goes
+      // back to being the preference's to grant.
+      setTypedAsk(false);
+    }
     // Any settled status ends the wait the press started, however it ended:
     // listening takes the meter live, ready means the turn was dropped
     // mid-handshake, and a failure has its own message to show.
@@ -1146,6 +1243,13 @@ export function App(): React.JSX.Element {
   );
   useEffect(() => window.sidecar.onVoiceHotkeyRelease(endTalk), [endTalk]);
   useEffect(() => window.sidecar.onVoiceHotkeyChanged(setVoiceHotkey), []);
+  useEffect(
+    () =>
+      window.sidecar.onAskHotkeyChanged((accelerator) =>
+        setAskHotkeyChange(accelerator ? { accelerator } : {}),
+      ),
+    [],
+  );
 
   // The rows say how long ago each session was seen, and a label left alone
   // goes stale the moment a minute passes with no session changing — the very
@@ -1219,16 +1323,19 @@ export function App(): React.JSX.Element {
         ? WAVEFORM_VOICE.DEVELOPER
         : undefined;
   const shownHotkey = voiceHotkeyToShow(bootstrap, voiceHotkey);
+  const shownAskHotkey = askHotkeyChange ? askHotkeyChange.accelerator : bootstrap.askHotkey;
   const fixtureSpeaking = bootstrap.profile === "speaking";
   const hasAudioSignal = fixtureSpeaking || analyser !== undefined;
-  // Luke's words, drawn only when captions are on and the reply they belong
-  // to is his turn: the preference is off by default, the session already
-  // clears the words when a reply ends or is cut off, and the turn gate keeps
-  // a caption that raced a status change from being drawn late. A capture run
-  // draws the fixture's words regardless, or the strip ships unphotographed.
+  // Luke's words, drawn only when there is a reason to read them and the reply
+  // they belong to is his turn: the captions preference, or the reply
+  // answering an ask the developer typed — a typed conversation's answer must
+  // be readable whatever the preference says. The session already clears the
+  // words when a reply ends or is cut off, and the turn gate keeps a caption
+  // that raced a status change from being drawn late. A capture run draws the
+  // fixture's words regardless, or the strip ships unphotographed.
   const lukeCaption = fixtureSpeaking
     ? FIXTURE_SPEAKING_CAPTION
-    : settings?.voiceCaptions === true && voiceTurn === WAVEFORM_VOICE.LUKE
+    : (settings?.voiceCaptions === true || typedAsk) && voiceTurn === WAVEFORM_VOICE.LUKE
       ? voiceCaption
       : undefined;
   const panelOpen = presentation === PANEL_PRESENTATION.PANEL;
@@ -1272,6 +1379,9 @@ export function App(): React.JSX.Element {
             now={now}
             onOpenSession={openSession}
             writes={sessionWrites}
+            ask={askLuke}
+            onAskEngaged={changeAskEngagement}
+            {...(shownAskHotkey ? { askShortcut: shownAskHotkey } : {})}
             offerOptions={offerOptions}
             optionsOpen={optionsOpen}
             onOptionsToggle={() => setOptionsOpen((open) => !open)}
