@@ -1764,8 +1764,14 @@ function registerIpc(): void {
           // A model named for this creation becomes the default on the same
           // first-choice terms as the provider: only while nothing is chosen.
           // A default already held is the user's, changed by asking for the
-          // setting itself — never as a side effect of one creation.
-          if (namedSelection !== undefined && stored === undefined) {
+          // setting itself — never as a side effect of one creation. Read
+          // again here rather than trusting the pre-creation snapshot: a
+          // choice made by hand while the provider was answering is already
+          // held, and must not lose to the request it overlapped.
+          if (
+            namedSelection !== undefined &&
+            (await settingsStore.readWorkspaceAgentDefault(adapter.provider.id)) === undefined
+          ) {
             const saved = await settingsStore.setWorkspaceAgentDefault(
               adapter.provider.id,
               namedSelection,
