@@ -2,6 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  agedStatus,
   nonNegativeNumber,
   type ProviderSessionObservation,
   positiveInteger,
@@ -254,15 +255,21 @@ function closedTurn(tail: string): { failed: boolean } | undefined {
  * A turn Cursor has closed is holding for the user; one it failed is stuck
  * until someone comes back to it, which asks something different and is
  * reported as such. Anything else is a turn still in progress. A transcript
- * that has gone quiet reports neither: after a quarter of an hour its last
- * record cannot tell a turn that just ended from a chat left open yesterday.
- * A failure does not decay that way, because it does not heal by going stale —
- * which is how every other adapter treats one too.
+ * has no heartbeat, so an open turn that has gone quiet is unknown rather
+ * than still working.
  */
-function statusFromTurn(turn: { failed: boolean } | undefined, isFresh: boolean): SessionStatus {
+function statusFromTurn(
+  turn: { failed: boolean } | undefined,
+  observedAt: number,
+  now: number,
+  freshnessMs: number,
+): SessionStatus {
   if (turn?.failed) return SESSION_STATUS.ERROR;
-  if (!isFresh) return SESSION_STATUS.UNKNOWN;
-  return turn ? SESSION_STATUS.WAITING : SESSION_STATUS.WORKING;
+  const status = turn ? SESSION_STATUS.WAITING : SESSION_STATUS.WORKING;
+  if (status === SESSION_STATUS.WORKING && now - observedAt > freshnessMs) {
+    return SESSION_STATUS.UNKNOWN;
+  }
+  return agedStatus(status, observedAt, now, freshnessMs);
 }
 
 /**
@@ -373,8 +380,12 @@ export class CursorLocalSessionAdapter implements SessionProviderAdapter {
   ): Promise<ProviderSessionObservation> {
     const label = this.#workspaceLabels.label(candidate.projectDirectoryName);
     const tail = await readTail(candidate.filePath, this.#readTailBytes);
-    const isFresh = now - candidate.mtimeMs <= this.#activeSessionFreshnessMs;
-    const status = statusFromTurn(closedTurn(tail), isFresh);
+    const status = statusFromTurn(
+      closedTurn(tail),
+      candidate.mtimeMs,
+      now,
+      this.#activeSessionFreshnessMs,
+    );
     return {
       providerSessionId: candidate.providerSessionId,
       title: label,

@@ -1,6 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import {
+  agedStatus,
   isRecord,
   maximumSessionSummaryLength,
   maximumSessionTitleLength,
@@ -345,18 +346,18 @@ function statusFromTail(
   now: number,
   activeSessionFreshnessMs: number,
 ): ProviderSessionObservation["status"] {
-  const isFresh = now - observedAt <= activeSessionFreshnessMs;
   if (parsed.eventType === CLAUDE_EVENT_TYPE.RESULT) return SESSION_STATUS.COMPLETE;
-  // A failure does not heal by going stale, which is how the cloud adapters
-  // treat one too. Only a turn that ended decays, because Luke cannot tell one
-  // that just finished from a session the developer walked away from — and a
-  // session out of the observation window altogether is dropped, not aged.
   if (parsed.apiError) return SESSION_STATUS.ERROR;
-  if (!isFresh) return SESSION_STATUS.UNKNOWN;
-  if (parsed.eventType === CLAUDE_EVENT_TYPE.ASSISTANT) {
-    return turnEnded(parsed) ? SESSION_STATUS.WAITING : SESSION_STATUS.WORKING;
+  const status =
+    parsed.eventType === CLAUDE_EVENT_TYPE.ASSISTANT && turnEnded(parsed)
+      ? SESSION_STATUS.WAITING
+      : SESSION_STATUS.WORKING;
+  // A transcript has no heartbeat, so an open turn that has gone quiet is
+  // unknown rather than still working.
+  if (status === SESSION_STATUS.WORKING && now - observedAt > activeSessionFreshnessMs) {
+    return SESSION_STATUS.UNKNOWN;
   }
-  return SESSION_STATUS.WORKING;
+  return agedStatus(status, observedAt, now, activeSessionFreshnessMs);
 }
 
 /**

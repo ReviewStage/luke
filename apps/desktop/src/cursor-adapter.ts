@@ -1,4 +1,5 @@
 import {
+  agedStatus,
   isRecord,
   maximumObservedWorkspaceProjects,
   maximumSessionSummaryLength,
@@ -518,15 +519,12 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
     if (agent.archived) return SESSION_STATUS.COMPLETE;
     // A run state this build does not know is not guessed at.
     if (!run?.status) return SESSION_STATUS.UNKNOWN;
-    const status = SESSION_STATUS_BY_CURSOR_RUN_STATUS[run.status];
-    // Cursor reports live state, and the run's timestamp marks when that state
-    // was entered rather than a heartbeat, so a long turn is still working and
-    // a run that stopped for good stays complete however long ago it stopped.
-    // Only a finished run decays: once it is stale Luke cannot tell a turn that
-    // just ended from one the user walked away from hours ago.
-    return status === SESSION_STATUS.WAITING
-      ? this.statusWhileRecent(status, observedAt, now)
-      : status;
+    return agedStatus(
+      SESSION_STATUS_BY_CURSOR_RUN_STATUS[run.status],
+      observedAt,
+      now,
+      CLOUD_ADAPTER_DEFAULTS.ACTIVE_SESSION_FRESHNESS_MS,
+    );
   }
 
   async #latestRun(request: CloudRequest, agentId: string, runId: string): Promise<CursorRun> {

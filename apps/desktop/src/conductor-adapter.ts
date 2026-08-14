@@ -1,4 +1,5 @@
 import {
+  agedStatus,
   maximumSessionSummaryLength,
   maximumSessionTitleLength,
   type ProviderSessionObservation,
@@ -769,17 +770,11 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
   ): SessionStatus {
     if (session.archived) return SESSION_STATUS.COMPLETE;
     if (!reportedStatus) return SESSION_STATUS.UNKNOWN;
-    // Conductor reports live state, and its timestamp marks when that state was
-    // entered rather than a heartbeat, so a long turn is still working.
-    if (reportedStatus === CONDUCTOR_SESSION_STATUS.WORKING) return SESSION_STATUS.WORKING;
-    // A failure does not heal by going stale, so only an idle session decays:
-    // once it is stale Luke cannot tell a turn that just ended from a chat the
-    // user walked away from hours ago.
-    if (reportedStatus === CONDUCTOR_SESSION_STATUS.ERROR) return SESSION_STATUS.ERROR;
-    return this.statusWhileRecent(
+    return agedStatus(
       SESSION_STATUS_BY_CONDUCTOR_STATUS[reportedStatus],
       observedAt,
       now,
+      CLOUD_ADAPTER_DEFAULTS.ACTIVE_SESSION_FRESHNESS_MS,
     );
   }
 

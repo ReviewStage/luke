@@ -1,4 +1,5 @@
 import {
+  agedStatus,
   isRecord,
   type ProviderSessionObservation,
   positiveInteger,
@@ -293,14 +294,11 @@ export class JulesSessionAdapter extends CloudSessionAdapter {
   #statusFor(session: JulesSession, now: number): SessionStatus {
     // A state this build does not know is not guessed at.
     if (!session.state) return SESSION_STATUS.UNKNOWN;
-    const status = SESSION_STATUS_BY_JULES_STATE[session.state];
-    // `updateTime` marks when the session last changed rather than a
-    // heartbeat, so a long turn is still working and a completed session stays
-    // complete however long ago it finished. Only waiting decays: once it is
-    // stale Luke cannot tell a session that just asked for feedback from one
-    // the user walked away from hours ago.
-    return status === SESSION_STATUS.WAITING
-      ? this.statusWhileRecent(status, session.observedAt, now)
-      : status;
+    return agedStatus(
+      SESSION_STATUS_BY_JULES_STATE[session.state],
+      session.observedAt,
+      now,
+      CLOUD_ADAPTER_DEFAULTS.ACTIVE_SESSION_FRESHNESS_MS,
+    );
   }
 }

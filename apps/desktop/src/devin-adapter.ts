@@ -1,4 +1,5 @@
 import {
+  agedStatus,
   isRecord,
   type ProviderSessionObservation,
   positiveInteger,
@@ -435,13 +436,11 @@ export class DevinSessionAdapter extends CloudSessionAdapter {
       (session.status === DEVIN_SESSION_STATUS.RUNNING && session.detail
         ? SESSION_STATUS_BY_RUNNING_DETAIL[session.detail]
         : undefined) ?? SESSION_STATUS_BY_DEVIN_STATUS[session.status];
-    // Devin reports live state, and its timestamp marks when that state was
-    // entered rather than a heartbeat, so a long turn is still working and a
-    // session that ended stays ended however long ago it did. Only a session
-    // holding for the user decays: once it is stale Luke cannot tell a question
-    // just asked from one the user walked away from hours ago.
-    return status === SESSION_STATUS.WAITING
-      ? this.statusWhileRecent(status, session.observedAt, now)
-      : status;
+    return agedStatus(
+      status,
+      session.observedAt,
+      now,
+      CLOUD_ADAPTER_DEFAULTS.ACTIVE_SESSION_FRESHNESS_MS,
+    );
   }
 }

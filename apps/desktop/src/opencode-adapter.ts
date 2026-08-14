@@ -1,6 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import {
+  agedStatus,
   isRecord,
   maximumSessionTitleLength,
   nonNegativeNumber,
@@ -274,22 +275,27 @@ function turnFromMessage(record: Record<string, unknown>): OpenCodeTurn {
 }
 
 /**
- * A turn that failed is stuck until someone comes back to it, and a failure
- * does not heal by going stale — which is how every other adapter treats one.
- * Past that, the last message's bookkeeping answers what recency alone cannot:
- * an assistant message whose turn ended is holding for the developer, and one
- * still open is working. Once the session is stale neither reading survives,
- * because Luke cannot tell a turn that just ended from a session abandoned
- * hours ago — and a killed OpenCode process leaves an open turn on disk
- * forever, so an open turn decays the same way.
+ * A turn that failed is stuck until someone comes back to it. Past that, the
+ * last message's bookkeeping answers what recency alone cannot: an assistant
+ * message whose turn ended is holding for the developer, and one still open
+ * is working. A killed OpenCode process leaves an open turn on disk forever,
+ * so an open turn that has gone quiet is unknown rather than still working.
  */
-function statusFromTurn(turn: OpenCodeTurn | undefined, isFresh: boolean): SessionStatus {
+function statusFromTurn(
+  turn: OpenCodeTurn | undefined,
+  observedAt: number,
+  now: number,
+  freshnessMs: number,
+): SessionStatus {
   if (turn?.failure) return SESSION_STATUS.ERROR;
-  if (!isFresh) return SESSION_STATUS.UNKNOWN;
-  if (turn?.role === OPENCODE_ROLE.ASSISTANT) {
-    return turn.completed || turn.aborted ? SESSION_STATUS.WAITING : SESSION_STATUS.WORKING;
+  const status =
+    turn?.role === OPENCODE_ROLE.ASSISTANT && (turn.completed || turn.aborted)
+      ? SESSION_STATUS.WAITING
+      : SESSION_STATUS.WORKING;
+  if (status === SESSION_STATUS.WORKING && now - observedAt > freshnessMs) {
+    return SESSION_STATUS.UNKNOWN;
   }
-  return SESSION_STATUS.WORKING;
+  return agedStatus(status, observedAt, now, freshnessMs);
 }
 
 /**
@@ -342,11 +348,10 @@ function observationFromSnapshot(
   now: number,
   activeSessionFreshnessMs: number,
 ): ProviderSessionObservation {
-  const isFresh = now - snapshot.observedAt <= activeSessionFreshnessMs;
   return {
     providerSessionId: snapshot.providerSessionId,
     title: sessionTitle(snapshot.title, snapshot.directory),
-    status: statusFromTurn(snapshot.turn, isFresh),
+    status: statusFromTurn(snapshot.turn, snapshot.observedAt, now, activeSessionFreshnessMs),
     observedAt: snapshot.observedAt,
     detail: detailFromSnapshot(snapshot),
   };
@@ -524,8 +529,10 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
     // cap above, not a scan.
     for (const snapshot of snapshots) {
       snapshot.turn = this.#turnFor(database, snapshot.providerSessionId);
-      const isFresh = now - snapshot.observedAt <= this.#activeSessionFreshnessMs;
-      if (statusFromTurn(snapshot.turn, isFresh) === SESSION_STATUS.WORKING) {
+      if (
+        statusFromTurn(snapshot.turn, snapshot.observedAt, now, this.#activeSessionFreshnessMs) ===
+        SESSION_STATUS.WORKING
+      ) {
         snapshot.activity = this.#activityFor(database, snapshot.providerSessionId);
       }
     }

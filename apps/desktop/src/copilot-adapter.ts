@@ -1,4 +1,5 @@
 import {
+  agedStatus,
   isRecord,
   type ProviderSessionObservation,
   positiveInteger,
@@ -292,14 +293,11 @@ export class CopilotSessionAdapter extends CloudSessionAdapter {
     if (task.archived) return SESSION_STATUS.COMPLETE;
     // A state this build does not know is not guessed at.
     if (!task.state) return SESSION_STATUS.UNKNOWN;
-    const status = SESSION_STATUS_BY_COPILOT_STATE[task.state];
-    // `updated_at` marks when the task last changed rather than a heartbeat,
-    // so a long turn is still working and a completed task stays complete
-    // however long ago it finished. Only waiting decays: once it is stale Luke
-    // cannot tell a task that just asked for the user from one the user walked
-    // away from hours ago.
-    return status === SESSION_STATUS.WAITING
-      ? this.statusWhileRecent(status, task.observedAt, now)
-      : status;
+    return agedStatus(
+      SESSION_STATUS_BY_COPILOT_STATE[task.state],
+      task.observedAt,
+      now,
+      CLOUD_ADAPTER_DEFAULTS.ACTIVE_SESSION_FRESHNESS_MS,
+    );
   }
 }
