@@ -159,6 +159,13 @@ convenience; `./scripts/check.sh` and CI remain authoritative.
   (`feat`, `fix`, `docs`, `chore`, etc.).
 - For Linear work, use its suggested branch name when available and the ticket
   ID as the scope: `feat(LUKE-123): add Codex support`.
+- When a PR branch falls behind or conflicts with origin/main, run
+  `git rebase origin/main` and force-push (`git push --force-with-lease`); do
+  not create merge commits from main on the branch. Main squash-merges
+  through a merge queue, so merge commits never survive to main anyway, and a
+  branch left conflicting with main silently stops all `pull_request` CI runs
+  (GitHub cannot build the merge commit) — keeping branches rebased is what
+  keeps CI running.
 
 ## Panel motion
 
