@@ -33,14 +33,15 @@ const MOCK_MODE = {
 type MockMode = (typeof MOCK_MODE)[keyof typeof MOCK_MODE];
 
 /**
- * Where in the pinned section each presentation begins, as a share of the
- * scroll runway. The capsule keeps a beat at the start so arriving at the
- * section shows the product at rest before it answers; the panel takes the
- * back half, so it is open for the whole of the pin's tail and is what the
- * section leaves the visitor looking at.
+ * Where each presentation begins, as a share of the pinned travel — from the
+ * moment the pin catches to the moment the section lets it go. The capsule
+ * keeps a beat at the start so arriving at the section shows the product at
+ * rest before it answers; the panel takes the back of the travel, so it is
+ * open for the whole of the pin's tail and is what the section leaves the
+ * visitor looking at.
  */
-const PEEK_AT = 0.14;
-const PANEL_AT = 0.46;
+const PEEK_AT = 0.1;
+const PANEL_AT = 0.35;
 
 /** The values a MacBook's notch reports, matching the renderer's fixture. */
 const HOUSING_WIDTH = 210;
@@ -255,6 +256,7 @@ export function NotchMock(): React.JSX.Element {
   const [panelHeight, setPanelHeight] = useState<number>();
   const modeRef = useRef<MockMode>(MOCK_MODE.CAPSULE);
   const scrollSection = useRef<HTMLDivElement>(null);
+  const pin = useRef<HTMLDivElement>(null);
 
   const applyMode = useCallback((next: MockMode) => {
     if (modeRef.current === next) return;
@@ -262,23 +264,31 @@ export function NotchMock(): React.JSX.Element {
     setMode(next);
   }, []);
 
-  // The scroll is the whole interaction. Progress through the pinned section
-  // is read off the section's own box — no thresholds in pixels, so the same
-  // arc plays on a phone and on a desktop — and each presentation holds its
-  // share of the runway in either direction: scrolling back up folds the
-  // panel down to the peek and the peek back into the capsule.
+  // The scroll is the whole interaction. Progress is the pin's own travel —
+  // from where the sticky top catches the art to where the section's end
+  // releases it — read entirely off layout-resolved values. Nothing here is
+  // the live viewport: `window.innerHeight` shrinks and grows as a phone's
+  // URL bar collapses, and a threshold measured against it jumps mid-scroll,
+  // which is the very bounce the runway's `svh` units exist to avoid. Each
+  // presentation holds its share of the travel in either direction:
+  // scrolling back up folds the panel down to the peek and the peek back
+  // into the capsule.
   useEffect(() => {
     const section = scrollSection.current;
-    if (!section) return;
+    const pinned = pin.current;
+    if (!section || !pinned) return;
     let frame: number | undefined;
     const update = () => {
       frame = undefined;
-      const runway = section.offsetHeight - window.innerHeight;
-      if (runway <= 0) {
+      // The sticky offset is written in svh, so its used value only moves on
+      // a real viewport change — orientation, not browser chrome.
+      const pinTop = Number.parseFloat(getComputedStyle(pinned).top) || 0;
+      const travel = section.offsetHeight - pinned.offsetHeight - pinTop;
+      if (travel <= 0) {
         applyMode(MOCK_MODE.PANEL);
         return;
       }
-      const progress = -section.getBoundingClientRect().top / runway;
+      const progress = (pinTop - section.getBoundingClientRect().top) / travel;
       applyMode(
         progress >= PANEL_AT
           ? MOCK_MODE.PANEL
@@ -337,7 +347,7 @@ export function NotchMock(): React.JSX.Element {
 
   return (
     <div className="mock-scroll" ref={scrollSection}>
-      <div className="mock-pin">
+      <div className="mock-pin" ref={pin}>
         {/* One labelled image, like the old mock: nothing inside is a control,
             so the whole recreation reads as a single illustration. The hidden
             stage stays inert so find-in-page cannot match invisible titles and

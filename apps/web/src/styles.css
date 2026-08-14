@@ -266,8 +266,8 @@ button {
   display: flex;
   justify-content: center;
   /* `transform: scale()` leaves the layout box at full size, so the pin
-     tracks the scale itself or a phone reserves 560px for a 270px visual.
-     `clip` keeps the untransformed 700px width from opening a horizontal
+     tracks the scale itself or a phone reserves 560px for a 300px visual.
+     `clip` keeps the untransformed art width from opening a horizontal
      scrollbar — and it must be `clip`, not `hidden`: a scroll container
      ancestor is exactly what stops `position: sticky` from sticking. */
   height: calc(var(--mock-height) * var(--mock-scale));
@@ -1119,11 +1119,19 @@ button {
   .mock-pin {
     margin-inline: calc(50% - 50vw);
   }
+
+  /* The 700px box exists for the desktop shadow's room, and a phone spends
+     that room on nothing but feeding the frame's own corners to the pin's
+     clip. 660 still holds the 620px panel with margin for its shadow, and is
+     what lets every scale step below actually fit its screen. */
+  .mock {
+    width: 660px;
+  }
 }
 
-/* Each step is the largest scale whose 620px panel still clears the screen
-   with a little margin at the step's floor, so the art fills a phone instead
-   of floating in it and the pin's clip never eats the panel's own edges. */
+/* Each step is the largest scale whose 660px art still clears the screen at
+   the step's floor, so the mock fills a phone instead of floating in it and
+   the pin's clip never eats the frame's edges. */
 @media (max-width: 520px) {
   :root {
     --mock-scale: 0.58;
@@ -1142,9 +1150,15 @@ button {
   }
 }
 
-@media (max-width: 380px) {
+@media (max-width: 384px) {
   :root {
     --mock-scale: 0.54;
+  }
+}
+
+@media (max-width: 356px) {
+  :root {
+    --mock-scale: 0.5;
   }
 }
 
