@@ -60,6 +60,8 @@ import {
   channels,
   type DisplayDiagnostic,
   type MicrophoneStatus,
+  SESSION_OPEN_RESULT_STATUS,
+  type SessionOpenResult,
   type SettingsUpdateResult,
   type WindowMode,
 } from "./shared/contracts";
@@ -601,22 +603,37 @@ function registerIpc(): void {
     void shell.openExternal(CREDENTIAL_PROVIDERS[providerId].apiKeysUrl);
   });
 
-  // Pressing a session hands its provider's own address to the system. Luke
-  // does not draw the chat, navigate it, or write to it — the provider opens
-  // its own window and Luke has already stood down — so this stays inside what
-  // a read-only sidecar may do.
+  // Pressing a session — on its row, or out loud — hands its provider's own
+  // address to the system. Luke does not draw the chat, navigate it, or write
+  // to it — the provider opens its own window and Luke has already stood
+  // down — so this stays inside what a read-only sidecar may do.
   //
   // The renderer names a session rather than an address, so the set of places
   // Luke can send you is the set of sessions currently observed. The address is
   // read back out of the registry, which holds only normalized sessions: an
   // address a provider reported in a scheme outside `SESSION_LINK_SCHEME` never
   // reached one. A fixture run has an empty registry and so opens nothing,
-  // which is what a deterministic capture needs.
-  ipcMain.on(channels.openSession, (event, identity: unknown) => {
-    if (!trustedSender(event) || !isSessionIdentity(identity)) return;
-    const link = sessionRegistry.get(identity)?.detail.link;
-    if (link) void shell.openExternal(link);
-  });
+  // which is what a deterministic capture needs. The answer says what became
+  // of the press: a row ignores it, but a spoken ask has to say something, and
+  // it must be what happened rather than what was hoped.
+  ipcMain.handle(
+    channels.openSession,
+    async (event, identity: unknown): Promise<SessionOpenResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (!isSessionIdentity(identity)) throw new Error("Invalid session open request");
+      const link = sessionRegistry.get(identity)?.detail.link;
+      if (!link) return { status: SESSION_OPEN_RESULT_STATUS.UNSUPPORTED };
+      try {
+        await shell.openExternal(link);
+        return { status: SESSION_OPEN_RESULT_STATUS.OPENED };
+      } catch {
+        return {
+          status: SESSION_OPEN_RESULT_STATUS.REJECTED,
+          reason: "The system could not open that session.",
+        };
+      }
+    },
+  );
 
   // A reply typed on a row is handed to the session's own provider, through
   // the adapter that observed it — the one component that knows the documented
