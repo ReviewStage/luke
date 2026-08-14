@@ -40,8 +40,15 @@ const recentSenders = new Map();
 
 /** @param {Request} request */
 function senderAddress(request) {
-  // The first hop in the forwarded chain is the caller as the platform saw it.
-  return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  // `x-real-ip` is the client as Vercel itself saw it, set by the platform
+  // and not forwardable past it. The forwarded chain is only a fallback for
+  // running the function elsewhere: its first hop is client-controlled, so a
+  // brake keyed on it alone could be rotated past with forged addresses.
+  return (
+    request.headers.get("x-real-ip")?.trim() ||
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    "unknown"
+  );
 }
 
 /**

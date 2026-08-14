@@ -135,6 +135,17 @@ export function FeedbackSlot({
     setPreview(index === preview ? undefined : index);
   };
 
+  // The preview follows the image it shows, not an offset: removing the
+  // previewed image closes the preview, and removing one above it moves the
+  // index down so the same picture stays on screen.
+  const removeImage = (index: number) => {
+    if (preview !== undefined) {
+      if (index === preview) setPreview(undefined);
+      else if (index < preview) setPreview(preview - 1);
+    }
+    control.removeImage(index);
+  };
+
   return (
     <div className="feedback-stage" aria-hidden={!live} inert={!live}>
       <div className="feedback-slot" ref={measure} data-hit-region={HIT_REGION.FEEDBACK}>
@@ -225,7 +236,7 @@ export function FeedbackSlot({
                 aria-label={`Remove ${image.name}`}
                 title="Remove"
                 disabled={busy}
-                onClick={() => control.removeImage(index)}
+                onClick={() => removeImage(index)}
               >
                 <RemoveIcon />
               </button>

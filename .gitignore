@@ -16,3 +16,7 @@ pnpm-debug.log*
 
 # Local agent context is not a repository input.
 .context/
+
+# Local build and agent state, never inputs
+.vercel/
+.claude/
