@@ -1,6 +1,7 @@
 import type {
   AttentionSpeech,
   NormalizedSession,
+  PanelFormFactor,
   ProviderControlResult,
   ProviderMessageResult,
   RealtimeConnection,
@@ -14,6 +15,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type {
   AppBootstrap,
   AppBridge,
+  AppSettings,
   DisplayDiagnostic,
   IssueActionAsk,
   MicrophoneStatus,
@@ -52,6 +54,10 @@ const bridge: AppBridge = {
     ipcRenderer.invoke(channels.setShowInMenuBar, show) as Promise<SettingsUpdateResult>,
   setShowInDock: (show: boolean) =>
     ipcRenderer.invoke(channels.setShowInDock, show) as Promise<SettingsUpdateResult>,
+  setShowOnAllDisplays: (show: boolean) =>
+    ipcRenderer.invoke(channels.setShowOnAllDisplays, show) as Promise<SettingsUpdateResult>,
+  setFormFactor: (formFactor: PanelFormFactor) =>
+    ipcRenderer.invoke(channels.setFormFactor, formFactor) as Promise<SettingsUpdateResult>,
   setVoiceCaptions: (enabled: boolean) =>
     ipcRenderer.invoke(channels.setVoiceCaptions, enabled) as Promise<SettingsUpdateResult>,
   setVoiceHotkey: (accelerator: string | undefined) =>
@@ -96,6 +102,12 @@ const bridge: AppBridge = {
       callback(display);
     ipcRenderer.on(channels.displayChanged, listener);
     return () => ipcRenderer.removeListener(channels.displayChanged, listener);
+  },
+  onSettingsChanged: (callback: (settings: AppSettings) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, settings: AppSettings) =>
+      callback(settings);
+    ipcRenderer.on(channels.settingsChanged, listener);
+    return () => ipcRenderer.removeListener(channels.settingsChanged, listener);
   },
   onSessionsChanged: (callback: (sessions: readonly NormalizedSession[]) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, sessions: readonly NormalizedSession[]) =>

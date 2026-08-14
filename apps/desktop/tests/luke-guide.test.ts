@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   APP_SETTING_KIND,
   type AppGuideSetting,
+  PANEL_FORM_FACTOR,
   REALTIME_VOICE,
   REALTIME_VOICE_LIST,
   REALTIME_VOICE_SPEED,
@@ -32,6 +33,9 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
     voice: REALTIME_VOICE.CEDAR,
     voiceSpeed: REALTIME_VOICE_SPEED.NORMAL,
     voiceCaptions: false,
+    duckOtherMedia: true,
+    showOnAllDisplays: false,
+    formFactor: PANEL_FORM_FACTOR.BUBBLE,
     ...overrides,
   };
 }
@@ -87,6 +91,30 @@ test("the guide describes every spoken-adjustable setting with its current value
       guideInput({ settings: settings({ voiceSpeed: REALTIME_VOICE_SPEED.FAST }) }),
     ).value,
     "fast",
+  );
+
+  // One switch covers every display: off keeps Luke to the main one alone.
+  const allDisplays = guideSetting(APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS);
+  assert.equal(allDisplays.kind, APP_SETTING_KIND.TOGGLE);
+  assert.equal(allDisplays.value, "off");
+  assert.equal(
+    guideSetting(
+      APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS,
+      guideInput({ settings: settings({ showOnAllDisplays: true }) }),
+    ).value,
+    "on",
+  );
+
+  const formFactor = guideSetting(APP_SETTING_ID.FORM_FACTOR);
+  assert.equal(formFactor.kind, APP_SETTING_KIND.CHOICE);
+  assert.equal(formFactor.value, PANEL_FORM_FACTOR.BUBBLE);
+  assert.deepEqual(formFactor.choices, [PANEL_FORM_FACTOR.NOTCH, PANEL_FORM_FACTOR.BUBBLE]);
+  assert.equal(
+    guideSetting(
+      APP_SETTING_ID.FORM_FACTOR,
+      guideInput({ settings: settings({ formFactor: PANEL_FORM_FACTOR.NOTCH }) }),
+    ).value,
+    PANEL_FORM_FACTOR.NOTCH,
   );
 
   // Every entry says where the same change is made by hand, because guiding
@@ -170,6 +198,14 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
       calls.push(`setShowInDock:${show}`);
       return answered;
     },
+    setShowOnAllDisplays: async (show: boolean) => {
+      calls.push(`setShowOnAllDisplays:${show}`);
+      return answered;
+    },
+    setFormFactor: async (formFactor: string) => {
+      calls.push(`setFormFactor:${formFactor}`);
+      return answered;
+    },
   };
   const seen: AppSettings[] = [];
 
@@ -184,8 +220,10 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
 
   assert.deepEqual(calls.sort(), [
     "setDuckOtherMedia:true",
+    "setFormFactor:notch",
     "setShowInDock:true",
     "setShowInMenuBar:true",
+    "setShowOnAllDisplays:true",
     "setVoice",
     "setVoiceCaptions:true",
     // The first choice offered is "slow", which is the 0.75 multiple.

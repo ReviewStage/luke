@@ -4,6 +4,7 @@ import {
   EMPTY_APP_GUIDE,
   FIXTURE_EPOCH_MS,
   type NormalizedSession,
+  type PanelFormFactor,
   REALTIME_STATUS,
   type RealtimeStatus,
   type RealtimeVoice,
@@ -338,6 +339,12 @@ export function App(): React.JSX.Element {
    * bootstrap's older snapshot must then not clobber it.
    */
   const issuesPushed = useRef(false);
+  /**
+   * Whether another window's settings change has arrived, under the same rule
+   * as the roster above: a push that lands before the bootstrap reply is the
+   * newer truth, and the bootstrap's older snapshot must not clobber it.
+   */
+  const settingsPushed = useRef(false);
 
   const changeTab = useCallback((next: PanelTab) => {
     tabRef.current = next;
@@ -820,6 +827,22 @@ export function App(): React.JSX.Element {
     return result.reason;
   }, []);
 
+  // Every display or the main one alone, on the same round trip: the row
+  // reads the state the store actually holds rather than the one the press
+  // hoped for.
+  const changeShowOnAllDisplays = useCallback(async (show: boolean) => {
+    const result = await window.sidecar.setShowOnAllDisplays(show);
+    setSettings(result.settings);
+    return result.reason;
+  }, []);
+
+  // The form for displays without a housing, under the same rule.
+  const changeFormFactor = useCallback(async (formFactor: PanelFormFactor) => {
+    const result = await window.sidecar.setFormFactor(formFactor);
+    setSettings(result.settings);
+    return result.reason;
+  }, []);
+
   const credentials: CredentialEntryControl = {
     entry,
     begin: beginEntry,
@@ -1067,7 +1090,7 @@ export function App(): React.JSX.Element {
       // Only fill in what no push has said yet: the bootstrap snapshot is
       // older than any roster change that raced past it.
       if (!issuesPushed.current) issuesRef.current = value.issues;
-      setSettings(value.settings);
+      if (!settingsPushed.current) setSettings(value.settings);
       setDisplay(value.display);
       if (modeGeneration.current === bootstrapGeneration) {
         applyAuthoritativeMode(value.mode);
@@ -1102,6 +1125,13 @@ export function App(): React.JSX.Element {
       if (eventName === "ask:focus" && !shortcutCapture.current) summonAsk();
     });
     const removeDisplay = window.sidecar.onDisplayChanged(setDisplay);
+    // Another window's settings change: this window's rows and guide redraw
+    // from the same snapshot its reply carried, so no window describes a
+    // state the store no longer holds.
+    const removeSettings = window.sidecar.onSettingsChanged((pushed) => {
+      settingsPushed.current = true;
+      setSettings(pushed);
+    });
     const removeSessions = window.sidecar.onSessionsChanged(setSessions);
     // Straight to the conversation rather than through state: no panel
     // surface draws the issue roster, so a re-render would be work for nobody.
@@ -1114,6 +1144,7 @@ export function App(): React.JSX.Element {
       cancelHoverTransition();
       removeLifecycle();
       removeDisplay();
+      removeSettings();
       removeSessions();
       removeIssues();
       void stopMicrophone();
@@ -1453,6 +1484,8 @@ export function App(): React.JSX.Element {
               onShortcutCapture: changeShortcutCapture,
               onShowInMenuBarChange: changeShowInMenuBar,
               onShowInDockChange: changeShowInDock,
+              onShowOnAllDisplaysChange: changeShowOnAllDisplays,
+              onFormFactorChange: changeFormFactor,
               onQuit: () => window.sidecar.quit(),
             }}
           />

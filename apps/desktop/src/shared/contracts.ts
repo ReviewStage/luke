@@ -3,6 +3,7 @@ import type {
   FixtureSnapshot,
   IssueToolAction,
   NormalizedSession,
+  PanelFormFactor,
   ProviderControlResult,
   ProviderMessageResult,
   RealtimeConnection,
@@ -106,6 +107,18 @@ export interface AppSettings {
    * the duck is left where the hand put it.
    */
   duckOtherMedia: boolean;
+  /**
+   * Whether Luke stands on every connected display at once. Off by default:
+   * he keeps to the system's main display until asked, and turning this off
+   * again is what brings him back to it.
+   */
+  showOnAllDisplays: boolean;
+  /**
+   * How Luke stands on a display without a camera housing: a drawn notch
+   * pressed into the top edge, or the free-floating bubble every such display
+   * gets by default. A display with a real notch answers to neither.
+   */
+  formFactor: PanelFormFactor;
 }
 
 /** A rejected update reports why without echoing the submitted value. */
@@ -239,6 +252,13 @@ export interface AppBridge {
   setShowInMenuBar(show: boolean): Promise<SettingsUpdateResult>;
   /** Shows or hides the Dock icon, and remembers the choice. */
   setShowInDock(show: boolean): Promise<SettingsUpdateResult>;
+  /**
+   * Stands Luke on every connected display, or brings him back to the main
+   * one alone, and remembers the choice.
+   */
+  setShowOnAllDisplays(show: boolean): Promise<SettingsUpdateResult>;
+  /** Chooses how Luke stands on a display without a housing, and remembers it. */
+  setFormFactor(formFactor: PanelFormFactor): Promise<SettingsUpdateResult>;
   /** Turns the on-screen caption of Luke's speech on or off. */
   setVoiceCaptions(enabled: boolean): Promise<SettingsUpdateResult>;
   /** Turns the quieting of Music and Spotify during a spoken exchange on or off. */
@@ -301,7 +321,14 @@ export interface AppBridge {
   notifyReady(): void;
   quit(): void;
   onLifecycle(callback: (eventName: string) => void): () => void;
+  /** This window's own display, whenever its geometry or housing changes. */
   onDisplayChanged(callback: (display: DisplayDiagnostic) => void): () => void;
+  /**
+   * The settings as another window just changed them. A window's own change
+   * comes back in its reply; this is how every other window's rows and guide
+   * stop describing a state the store no longer holds.
+   */
+  onSettingsChanged(callback: (settings: AppSettings) => void): () => void;
   onSessionsChanged(callback: (sessions: readonly NormalizedSession[]) => void): () => void;
   /** The issue roster as last observed; `undefined` says no tracker is connected. */
   onIssuesChanged(callback: (issues: readonly TrackedIssue[] | undefined) => void): () => void;
@@ -340,6 +367,8 @@ export const channels = {
   openProviderApiKeys: "app:open-provider-api-keys",
   setShowInMenuBar: "app:set-show-in-menu-bar",
   setShowInDock: "app:set-show-in-dock",
+  setShowOnAllDisplays: "app:set-show-on-all-displays",
+  setFormFactor: "app:set-form-factor",
   openSession: "app:open-session",
   sendSessionMessage: "app:send-session-message",
   executeSessionControl: "app:execute-session-control",
@@ -354,6 +383,7 @@ export const channels = {
   rendererReady: "app:renderer-ready",
   lifecycle: "app:lifecycle",
   displayChanged: "app:display-changed",
+  settingsChanged: "app:settings-changed",
   sessionsChanged: "app:sessions-changed",
   issuesChanged: "app:issues-changed",
   quit: "app:quit",
