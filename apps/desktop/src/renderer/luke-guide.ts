@@ -221,10 +221,12 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "Creating workspaces",
       detail:
-        "Where a connected provider documents a creation endpoint — Conductor today — an ask in " +
-        "conversation, spoken or typed, can create a new workspace in one of the projects that " +
-        "provider reports, optionally under a name the developer chose. Only reported projects " +
-        "can be named, and a provider that reports none takes no ask.",
+        "Where a connected provider documents a creation endpoint — Conductor and Cursor today — " +
+        "an ask in conversation, spoken or typed, can create a new workspace in one of the " +
+        "projects that provider reports, optionally under a name the developer chose, and can " +
+        "hand the new agent an opening task in the developer's own words where the project takes " +
+        "one. Only reported projects can be named, a project that needs a task cannot be created " +
+        "without one, and a provider that reports none takes no ask.",
     },
     talkKeyFact(input.hotkey),
     { label: "Microphone access", detail: MICROPHONE_DETAIL[input.microphoneStatus] },

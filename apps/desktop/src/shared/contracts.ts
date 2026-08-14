@@ -263,15 +263,17 @@ export interface AppBridge {
   ): Promise<ProviderControlResult>;
   /**
    * Creates one workspace the user just asked for, in a project its provider
-   * reported. The renderer names a project it was shown, never a repository
-   * URL or path, and the main process validates the ask again against what
-   * its adapters actually offered before the provider's documented creation
-   * endpoint is called.
+   * reported — carrying, where that project takes one, the opening task the
+   * user gave its agent in their own words. The renderer names a project it
+   * was shown, never a repository URL or path of its own, and the main
+   * process validates the ask again against what its adapters actually
+   * offered before the provider's documented creation endpoint is called.
    */
   createSessionWorkspace(
     providerId: string,
     providerProjectId: string,
     name?: string,
+    task?: string,
   ): Promise<ProviderWorkspaceResult>;
   /**
    * Carries one spoken issue act to the tracker that can take it. The renderer

@@ -15,6 +15,7 @@ import {
   type SessionProvider,
   type SessionStatus,
   sessionMessageText,
+  WORKSPACE_TASK_SUPPORT,
   type WorkspaceCapableSessionProviderAdapter,
   type WorkspaceProject,
   workspaceNameText,
@@ -395,10 +396,13 @@ export abstract class CloudSessionAdapter
 
   /**
    * Creates one workspace the user just asked for, in one project the latest
-   * pass reported, through the provider's documented creation endpoint. The
-   * same refusals guard it that guard a message: a project the last pass did
-   * not report, a name outside its bound, and a missing credential all answer
-   * without touching the network.
+   * pass reported, through the provider's documented creation endpoint — and,
+   * when the user gave the new agent an opening task, hands that over too,
+   * either inside the creation request or through the provider's documented
+   * follow-up on what the creation returned. The same refusals guard it that
+   * guard a message: a project the last pass did not report, a name or task
+   * outside its bound, a task a project does not take or the absence of one it
+   * needs, and a missing credential all answer without touching the network.
    */
   async createWorkspace(request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult> {
     const project = this.workspaceProjects().find(
@@ -414,25 +418,93 @@ export abstract class CloudSessionAdapter
       };
     }
 
+    // The task is held to the project's own word for it, again here: the
+    // renderer already refused what it could, but an adapter answers for its
+    // own writes.
+    const task = request.task === undefined ? undefined : sessionMessageText(request.task);
+    if (request.task !== undefined && !task) {
+      return {
+        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        reason: "A task has to be shorter than a document and longer than nothing.",
+      };
+    }
+    if (task && project.taskSupport === WORKSPACE_TASK_SUPPORT.NONE) {
+      return {
+        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        reason: "This project takes no opening task.",
+      };
+    }
+    if (!task && project.taskSupport === WORKSPACE_TASK_SUPPORT.REQUIRED) {
+      return {
+        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        reason: "This project needs an opening task to create a workspace.",
+      };
+    }
+
     const apiKey = await this.#readApiKey().catch(() => undefined);
     if (!apiKey) return this.#missingKeyRejection();
 
-    const route = this.workspaceCreationRoute(project, name);
+    const route = this.workspaceCreationRoute(project, name, task);
     if (!route) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
-    return this.#postWrite(apiKey, route, WRITE_SUBJECT.PROJECT);
+    const created = await this.#postWriteDetailed(apiKey, route, WRITE_SUBJECT.PROJECT);
+    if (created.outcome.status !== PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED || !task) {
+      return created.outcome;
+    }
+
+    // The workspace stands; what is left is the task. A provider whose
+    // creation request already carried it has nothing to answer here, and one
+    // that hands tasks somewhere the creation response names answers with
+    // that route — built from what the provider itself just returned.
+    const followUp = this.workspaceTaskRoute(created.body ?? {}, task);
+    if (followUp === undefined) return created.outcome;
+    if ("undeliverable" in followUp) {
+      return {
+        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        reason: `The workspace was created, but its opening task was not delivered: ${followUp.undeliverable}`,
+      };
+    }
+    const delivered = await this.#postWriteDetailed(apiKey, followUp, WRITE_SUBJECT.SESSION);
+    if (delivered.outcome.status === PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED) {
+      return created.outcome;
+    }
+    return {
+      status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+      reason: `The workspace was created, but its opening task was not delivered: ${
+        delivered.outcome.status === PROVIDER_MESSAGE_RESULT_STATUS.REJECTED
+          ? delivered.outcome.reason
+          : "the provider documents no way to hand it over."
+      }`,
+    };
   }
 
   /**
    * Where this provider's documented workspace-creation endpoint lives and what
    * it takes. The project handed in is one the latest pass reported, so the
-   * route is built from what the provider itself offered. The default is that
-   * a provider creates nothing, the same way a read-only adapter stays
-   * read-only by writing nothing.
+   * route is built from what the provider itself offered; the task arrives
+   * here so a provider whose creation request carries it can put it in the
+   * body. The default is that a provider creates nothing, the same way a
+   * read-only adapter stays read-only by writing nothing.
    */
   protected workspaceCreationRoute(
     _project: WorkspaceProject,
     _name: string | undefined,
+    _task: string | undefined,
   ): CloudWriteRoute | undefined {
+    return undefined;
+  }
+
+  /**
+   * Where an opening task goes once the workspace exists, for a provider that
+   * documents the hand-over as its own endpoint on something the creation
+   * response names. Returning nothing says the creation request already
+   * carried the task; a provider whose response did not name the place the
+   * task goes answers `undeliverable` with why, so a created-but-idle
+   * workspace is reported as exactly that rather than claimed complete.
+   */
+  protected workspaceTaskRoute(
+    _creationBody: Record<string, unknown>,
+    _task: string,
+  ): CloudWriteRoute | { undeliverable: string } | undefined {
     return undefined;
   }
 
@@ -573,6 +645,19 @@ export abstract class CloudSessionAdapter
     route: CloudWriteRoute,
     subject: WriteSubject = WRITE_SUBJECT.SESSION,
   ): Promise<ProviderMessageResult> {
+    return (await this.#postWriteDetailed(apiKey, route, subject)).outcome;
+  }
+
+  /**
+   * The same write, keeping what the provider answered with: a creation
+   * response names the thing it created, and a follow-up write is built from
+   * that. The body never travels further than the adapter that asked for it.
+   */
+  async #postWriteDetailed(
+    apiKey: string,
+    route: CloudWriteRoute,
+    subject: WriteSubject,
+  ): Promise<{ outcome: ProviderMessageResult; body?: Record<string, unknown> }> {
     const name = this.provider.displayName;
     let response: Response;
     try {
@@ -592,8 +677,10 @@ export abstract class CloudSessionAdapter
       });
     } catch {
       return {
-        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
-        reason: `${name} could not be reached, so nothing was sent.`,
+        outcome: {
+          status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+          reason: `${name} could not be reached, so nothing was sent.`,
+        },
       };
     }
 
@@ -603,29 +690,43 @@ export abstract class CloudSessionAdapter
       // minimum interval, the row would keep offering what the provider has
       // already taken.
       this.#lastAttemptAt = Number.NEGATIVE_INFINITY;
-      return { status: PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED };
+      // An unreadable body is not a failed write: the provider already said
+      // yes, so only a follow-up that needed the body has anything to miss.
+      const body = await response.json().catch(() => undefined);
+      return {
+        outcome: { status: PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED },
+        ...(isRecord(body) ? { body } : {}),
+      };
     }
     if (response.status === HTTP_STATUS.UNAUTHORIZED || response.status === HTTP_STATUS.FORBIDDEN) {
       return {
-        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
-        reason: `${name} rejected the configured API key.`,
+        outcome: {
+          status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+          reason: `${name} rejected the configured API key.`,
+        },
       };
     }
     if (response.status === HTTP_STATUS.NOT_FOUND) {
       return {
-        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
-        reason: `${name} no longer has this ${subject}.`,
+        outcome: {
+          status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+          reason: `${name} no longer has this ${subject}.`,
+        },
       };
     }
     if (response.status === HTTP_STATUS.CONFLICT) {
       return {
-        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
-        reason: `${name} says this ${subject} has moved on since Luke last looked.`,
+        outcome: {
+          status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+          reason: `${name} says this ${subject} has moved on since Luke last looked.`,
+        },
       };
     }
     return {
-      status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
-      reason: `${name} answered with status ${response.status}, so the request may not have landed.`,
+      outcome: {
+        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        reason: `${name} answered with status ${response.status}, so the request may not have landed.`,
+      },
     };
   }
 

@@ -47,6 +47,7 @@ import {
   sessionToolAction,
   truncateResponseEvents,
   typedAskEvents,
+  WORKSPACE_TASK_SUPPORT,
   workspaceProjectContextEvents,
   workspaceProjectContextText,
 } from "../src";
@@ -593,6 +594,7 @@ const OFFERED_PROJECT: ObservedWorkspaceProject = {
   providerName: "Conductor",
   providerProjectId: "proj-1",
   repository: "luke",
+  taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
 };
 
 test("the projects context lists each project with the identity a call names", () => {
@@ -666,6 +668,78 @@ test("a creation ask can only name a project Luke was shown", () => {
     sessionToolAction(messageCall(`{${identity}}`, REALTIME_TOOL.CREATE_WORKSPACE), [
       actionableSession(),
     ]),
+  ];
+  for (const refusal of refusals) assert.equal(refusal.kind, "refused");
+});
+
+test("an opening task is held to the project's own word for it", () => {
+  const requiresTask: ObservedWorkspaceProject = {
+    ...OFFERED_PROJECT,
+    providerId: "cursor",
+    providerName: "Cursor",
+    taskSupport: WORKSPACE_TASK_SUPPORT.REQUIRED,
+  };
+  const takesNoTask: ObservedWorkspaceProject = {
+    ...OFFERED_PROJECT,
+    providerId: "devin",
+    providerName: "Devin",
+    taskSupport: WORKSPACE_TASK_SUPPORT.NONE,
+  };
+  const projects = [OFFERED_PROJECT, requiresTask, takesNoTask];
+
+  // A task rides through where the project takes one, in the developer's words.
+  assert.deepEqual(
+    sessionToolAction(
+      messageCall(
+        '{"provider_id":"cursor","project_id":"proj-1","task":"Add the XYZ feature"}',
+        REALTIME_TOOL.CREATE_WORKSPACE,
+      ),
+      [],
+      projects,
+    ),
+    {
+      kind: "create-workspace",
+      providerId: "cursor",
+      providerProjectId: "proj-1",
+      task: "Add the XYZ feature",
+    },
+  );
+  // A project with an optional task is happy either way.
+  const bare = sessionToolAction(
+    messageCall(
+      '{"provider_id":"conductor","project_id":"proj-1"}',
+      REALTIME_TOOL.CREATE_WORKSPACE,
+    ),
+    [],
+    projects,
+  );
+  assert.equal(bare.kind, "create-workspace");
+
+  const refusals = [
+    // A project that needs a task cannot be created without one.
+    sessionToolAction(
+      messageCall('{"provider_id":"cursor","project_id":"proj-1"}', REALTIME_TOOL.CREATE_WORKSPACE),
+      [],
+      projects,
+    ),
+    // A project that takes none is handed none.
+    sessionToolAction(
+      messageCall(
+        '{"provider_id":"devin","project_id":"proj-1","task":"Add the XYZ feature"}',
+        REALTIME_TOOL.CREATE_WORKSPACE,
+      ),
+      [],
+      projects,
+    ),
+    // A task is bounded like the message it is.
+    sessionToolAction(
+      messageCall(
+        `{"provider_id":"cursor","project_id":"proj-1","task":"${"a".repeat(4_100)}"}`,
+        REALTIME_TOOL.CREATE_WORKSPACE,
+      ),
+      [],
+      projects,
+    ),
   ];
   for (const refusal of refusals) assert.equal(refusal.kind, "refused");
 });

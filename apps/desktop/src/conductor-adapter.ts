@@ -6,6 +6,7 @@ import {
   type SessionControl,
   type SessionProvider,
   type SessionStatus,
+  WORKSPACE_TASK_SUPPORT,
   type WorkspaceProject,
 } from "@sidecar/core";
 import {
@@ -73,6 +74,8 @@ const CONDUCTOR_MESSAGE_FIELD = {
 const CONDUCTOR_WORKSPACE_FIELD = {
   PROJECT_ID: "projectId",
   NAME: "name",
+  /** The first session, as `POST /v0/workspaces` names it in its response. */
+  SESSION_ID: "sessionId",
 } as const;
 
 /**
@@ -249,18 +252,28 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     this.#projects = [];
   }
 
-  /** Where Conductor will create a workspace: the projects the last pass listed. */
+  /**
+   * Where Conductor will create a workspace: the projects the last pass
+   * listed. An opening task is optional — Conductor makes an idle workspace
+   * happily — and is handed over after creation, through the documented
+   * message endpoint on the first session the creation response names.
+   */
   override workspaceProjects(): readonly WorkspaceProject[] {
     return this.#projects.map((project) => ({
       providerProjectId: project.id,
       repository: project.repositoryLabel,
+      taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
     }));
   }
 
   protected override workspaceCreationRoute(
     project: WorkspaceProject,
     name: string | undefined,
+    _task: string | undefined,
   ): CloudWriteRoute {
+    // The task deliberately does not ride here: Conductor's creation endpoint
+    // documents no prompt field, so the task goes through the documented
+    // message endpoint once the response says which session takes it.
     return {
       segments: [CONDUCTOR_ROUTE_SEGMENT.V0, CONDUCTOR_ROUTE_SEGMENT.WORKSPACES],
       body: {
@@ -268,6 +281,21 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
         ...(name ? { [CONDUCTOR_WORKSPACE_FIELD.NAME]: name } : {}),
       },
     };
+  }
+
+  protected override workspaceTaskRoute(
+    creationBody: Record<string, unknown>,
+    task: string,
+  ): CloudWriteRoute | { undeliverable: string } {
+    // The creation response documents the first session's id; the task is a
+    // message to exactly that session, under the same key, through the same
+    // documented endpoint a typed row uses.
+    const sessionId = textFromRecord(creationBody, CONDUCTOR_WORKSPACE_FIELD.SESSION_ID);
+    const route = sessionId ? this.messageRoute(sessionId, task) : undefined;
+    if (!route) {
+      return { undeliverable: "Conductor did not say which session takes the opening message." };
+    }
+    return route;
   }
 
   protected async collect(

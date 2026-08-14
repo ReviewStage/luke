@@ -418,6 +418,7 @@ export function App(): React.JSX.Element {
                   action.providerId,
                   action.providerProjectId,
                   action.name,
+                  action.task,
                 )
               : openSessionAloudRef.current(action.identity),
       // The asks about Luke himself — a settings change, the panel shown —

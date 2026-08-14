@@ -128,7 +128,10 @@ function runPayload(agent: TestAgent, run: TestRun): Record<string, unknown> {
 }
 
 /** Serves the read-only subset of the public API the adapter is allowed to use. */
-function fakeCursorApi(agents: readonly TestAgent[]): FakeCursorApi {
+function fakeCursorApi(
+  agents: readonly TestAgent[],
+  options: { repositories?: readonly string[] } = {},
+): FakeCursorApi {
   const requests: RecordedRequest[] = [];
   const fetch: CloudFetch = async (url, init) => {
     const { pathname, searchParams, search } = new URL(url);
@@ -143,13 +146,33 @@ function fakeCursorApi(agents: readonly TestAgent[]): FakeCursorApi {
     });
 
     const segments = pathname.split("/").filter((segment) => segment.length > 0);
+    if (segments[0] === "v1" && segments[1] === "repositories" && segments.length === 2) {
+      if (!options.repositories) return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
+      return jsonResponse({
+        items: options.repositories.map((repository) => ({ url: repository })),
+      });
+    }
     if (segments[0] !== "v1" || segments[1] !== "agents") {
       return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
     }
 
-    // The two documented writers: a follow-up run for an agent, and a cancel
-    // for the run it is still working.
+    // The three documented writers: a new agent, a follow-up run for an
+    // existing one, and a cancel for the run it is still working.
     if (init.method === "POST") {
+      if (segments.length === 2) {
+        const body = JSON.parse(typeof init.body === "string" ? init.body : "{}") as {
+          prompt?: { text?: string };
+          repos?: { url?: string }[];
+        };
+        const repository = body.repos?.[0]?.url;
+        if (!body.prompt?.text || !options.repositories?.includes(repository ?? "")) {
+          return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
+        }
+        return jsonResponse(
+          { agent: { id: "bc-new-agent", status: "ACTIVE" }, run: { id: "run-first" } },
+          201,
+        );
+      }
       const agent = agents.find((candidate) => candidate.id === segments[2]);
       if (agent && segments[3] === "runs" && segments.length === 4) {
         return jsonResponse({ run: { id: "run-followup", agentId: agent.id } }, 201);
@@ -258,12 +281,13 @@ test("observes a running agent under the name Cursor gave it", async () => {
     link: "https://cursor.com/agents/agent-running",
     change: TEST_PULL_REQUEST_URL,
   });
-  // One list call, then one read of the run that list named. Nothing else.
+  // The repository offer, one list call, then one read of the run that list
+  // named. Nothing else.
   assert.deepEqual(
     api.requests.map((request) => request.pathname),
-    ["/v1/agents", "/v1/agents/agent-running/runs/run-running"],
+    ["/v1/repositories", "/v1/agents", "/v1/agents/agent-running/runs/run-running"],
   );
-  assert.equal(api.requests[0]?.search, "?limit=100");
+  assert.equal(api.requests[1]?.search, "?limit=100");
   assert.equal(
     api.requests.every(
       (request) => request.method === "GET" && request.authorization === `Bearer ${TEST_API_KEY}`,
@@ -383,7 +407,7 @@ test("reports an archived agent as complete without reading its run", async () =
   assert.equal(observations[0]?.observedAt, TEST_TIME - 20_000);
   assert.deepEqual(
     api.requests.map((request) => request.pathname),
-    ["/v1/agents"],
+    ["/v1/repositories", "/v1/agents"],
   );
 });
 
@@ -398,7 +422,7 @@ test("leaves an agent that has never run unknown without reading a run", async (
   assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
   assert.deepEqual(
     api.requests.map((request) => request.pathname),
-    ["/v1/agents"],
+    ["/v1/repositories", "/v1/agents"],
   );
 });
 
@@ -445,7 +469,7 @@ test("ignores agents untouched for longer than the maximum session age", async (
   assert.deepEqual(observations, []);
   assert.deepEqual(
     api.requests.map((request) => request.pathname),
-    ["/v1/agents"],
+    ["/v1/repositories", "/v1/agents"],
   );
 });
 
@@ -719,4 +743,69 @@ test("stops the run the user saw through Cursor's cancel endpoint, sending no bo
   // Cursor documents no body for a cancel.
   assert.equal(write?.contentType, undefined);
   assert.equal(write?.body, undefined);
+});
+
+test("offers the repositories Cursor lists, on a cadence far below the observation pass", async () => {
+  const api = fakeCursorApi([], { repositories: [TEST_REPOSITORY] });
+  let now = TEST_TIME;
+  const adapter = adapterFor(api.fetch, { now: () => now });
+
+  assert.deepEqual(adapter.workspaceProjects(), []);
+  await adapter.observe();
+  assert.deepEqual(adapter.workspaceProjects(), [
+    // Cursor's creation endpoint requires a prompt, so every repository needs
+    // an opening task: there is no idle agent to make.
+    { providerProjectId: TEST_REPOSITORY, repository: "luke", taskSupport: "required" },
+  ]);
+
+  // Cursor documents strict limits on the repository list, so the next pass
+  // must not read it again: one repositories request, however many passes.
+  const repositoryReads = () =>
+    api.requests.filter((request) => request.pathname === "/v1/repositories").length;
+  assert.equal(repositoryReads(), 1);
+  now += 60_000;
+  await adapter.observe();
+  assert.equal(repositoryReads(), 1);
+});
+
+test("launches a new agent through Cursor's documented creation endpoint", async () => {
+  const api = fakeCursorApi([], { repositories: [TEST_REPOSITORY] });
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+
+  const result = await adapter.createWorkspace({
+    providerProjectId: TEST_REPOSITORY,
+    name: "readme touch-up",
+    task: "Add a README with setup instructions",
+  });
+
+  assert.deepEqual(result, { status: "accepted" });
+  const write = api.requests.at(-1);
+  assert.equal(write?.method, "POST");
+  assert.equal(write?.pathname, "/v1/agents");
+  assert.equal(write?.authorization, `Bearer ${TEST_API_KEY}`);
+  assert.deepEqual(JSON.parse(write?.body ?? ""), {
+    prompt: { text: "Add a README with setup instructions" },
+    repos: [{ url: TEST_REPOSITORY }],
+    name: "readme touch-up",
+  });
+});
+
+test("refuses a creation ask Cursor cannot take before any request exists", async () => {
+  const api = fakeCursorApi([], { repositories: [TEST_REPOSITORY] });
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+  const requestsBefore = api.requests.length;
+
+  // No task, no agent: Cursor documents no way to create one idle.
+  const taskless = await adapter.createWorkspace({ providerProjectId: TEST_REPOSITORY });
+  assert.equal(taskless.status, "rejected");
+
+  // A repository Cursor did not list is nowhere to create, however real.
+  const unlisted = await adapter.createWorkspace({
+    providerProjectId: "https://github.com/reviewstage/unlisted",
+    task: "Add a README",
+  });
+  assert.deepEqual(unlisted, { status: "unsupported" });
+  assert.equal(api.requests.length, requestsBefore);
 });

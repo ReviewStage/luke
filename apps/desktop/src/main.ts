@@ -1011,6 +1011,7 @@ function registerIpc(): void {
       providerId: unknown,
       providerProjectId: unknown,
       name: unknown,
+      task: unknown,
     ): Promise<ProviderWorkspaceResult> => {
       if (!trustedSender(event)) throw new Error("Untrusted renderer");
       if (
@@ -1018,7 +1019,8 @@ function registerIpc(): void {
         !providerId.trim() ||
         typeof providerProjectId !== "string" ||
         !providerProjectId.trim() ||
-        (name !== undefined && typeof name !== "string")
+        (name !== undefined && typeof name !== "string") ||
+        (task !== undefined && typeof task !== "string")
       ) {
         throw new Error("Invalid workspace creation request");
       }
@@ -1038,9 +1040,19 @@ function registerIpc(): void {
           reason: "A workspace name has to be short enough to say and longer than nothing.",
         };
       }
+      // The task's own bound, and its fit to the project, are answered by the
+      // adapter, which validates both against the projects it actually offers.
+      const openingTask = task === undefined ? undefined : sessionMessageText(task);
+      if (task !== undefined && openingTask === undefined) {
+        return {
+          status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+          reason: "A task has to be shorter than a document and longer than nothing.",
+        };
+      }
       const result = await adapter.createWorkspace({
         providerProjectId,
         ...(workspaceName ? { name: workspaceName } : {}),
+        ...(openingTask ? { task: openingTask } : {}),
       });
       // A workspace that landed is a session the panel should be showing, so
       // the next look must actually ask rather than serve the cache.

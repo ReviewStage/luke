@@ -1415,6 +1415,7 @@ test("a spoken ask for a new workspace is carried, and an unlisted project is re
       providerName: "Conductor",
       providerProjectId: "proj-1",
       repository: "luke",
+      taskSupport: "optional",
     },
   ]);
   // The projects travel as context the way the roster does, and an identical
@@ -1431,6 +1432,7 @@ test("a spoken ask for a new workspace is carried, and an unlisted project is re
       providerName: "Conductor",
       providerProjectId: "proj-1",
       repository: "luke",
+      taskSupport: "optional",
     },
   ]);
   assert.equal(context.sent.length, sentBeforeContext + 1);
@@ -1446,7 +1448,8 @@ test("a spoken ask for a new workspace is carried, and an unlisted project is re
           type: "function_call",
           name: "create_workspace",
           call_id: "call-1",
-          arguments: '{"provider_id":"conductor","project_id":"proj-1","name":"fix the panel"}',
+          arguments:
+            '{"provider_id":"conductor","project_id":"proj-1","name":"fix the panel","task":"wire the XYZ feature"}',
         },
         {
           type: "function_call",
@@ -1467,6 +1470,7 @@ test("a spoken ask for a new workspace is carried, and an unlisted project is re
       providerId: "conductor",
       providerProjectId: "proj-1",
       name: "fix the panel",
+      task: "wire the XYZ feature",
     },
   ]);
   const outputs = context.sent

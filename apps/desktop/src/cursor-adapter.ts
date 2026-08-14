@@ -1,4 +1,5 @@
 import {
+  maximumObservedWorkspaceProjects,
   maximumSessionSummaryLength,
   maximumSessionTitleLength,
   type ProviderSessionObservation,
@@ -7,6 +8,8 @@ import {
   type SessionControl,
   type SessionProvider,
   type SessionStatus,
+  WORKSPACE_TASK_SUPPORT,
+  type WorkspaceProject,
 } from "@sidecar/core";
 import {
   CLOUD_ADAPTER_DEFAULTS,
@@ -42,18 +45,23 @@ const CURSOR_DEFAULT_API_URL = "https://api.cursor.com";
 const CURSOR_ROUTE_SEGMENT = {
   AGENTS: "agents",
   CANCEL: "cancel",
+  REPOSITORIES: "repositories",
   RUNS: "runs",
   V1: "v1",
 } as const;
 
 /**
- * Documented public API routes. The reads list agents and their runs; the
- * writers are `POST …/agents/{id}/runs`, which is Cursor's documented
- * follow-up — a new run on the agent's existing conversation and workspace
- * state — and `POST …/runs/{runId}/cancel`, which stops one that is active.
+ * Documented public API routes. The reads list agents, their runs, and the
+ * repositories the key may launch agents in; the writers are
+ * `POST …/agents/{id}/runs`, which is Cursor's documented follow-up — a new
+ * run on the agent's existing conversation and workspace state —
+ * `POST …/runs/{runId}/cancel`, which stops one that is active, and
+ * `POST /v1/agents`, which is its documented way to launch a new agent on a
+ * repository the key can reach.
  */
 const CURSOR_ROUTE = {
   AGENTS: [CURSOR_ROUTE_SEGMENT.V1, CURSOR_ROUTE_SEGMENT.AGENTS],
+  REPOSITORIES: [CURSOR_ROUTE_SEGMENT.V1, CURSOR_ROUTE_SEGMENT.REPOSITORIES],
 } as const;
 
 /** The body `POST …/agents/{id}/runs` documents. */
@@ -61,6 +69,25 @@ const CURSOR_MESSAGE_FIELD = {
   PROMPT: "prompt",
   TEXT: "text",
 } as const;
+
+/** The body `POST /v1/agents` documents, of it the fields Luke ever sends. */
+const CURSOR_CREATE_FIELD = {
+  PROMPT: "prompt",
+  TEXT: "text",
+  NAME: "name",
+  REPOS: "repos",
+  URL: "url",
+} as const;
+
+/**
+ * How often the repository list is re-read. Cursor documents strict limits on
+ * this endpoint — one request a minute, thirty an hour — and repository access
+ * changes on the scale of days, so the list rides its own slow cadence rather
+ * than the observation pass. A failed read retries sooner, but never inside
+ * the documented per-minute limit.
+ */
+const CURSOR_REPOSITORY_REFRESH_MS = 60 * 60 * 1000;
+const CURSOR_REPOSITORY_RETRY_MS = 5 * 60 * 1000;
 
 const CURSOR_CANCEL_RUN_CONTROL_ID = "cancel-run";
 
@@ -228,11 +255,22 @@ function agentFromRecord(record: Record<string, unknown>): CursorAgent | undefin
  * Observes Cursor cloud agents through the documented public API. It reads only
  * the agents the supplied key owns, observation issues no request that can
  * change provider state, and it reports nothing at all without a credential.
- * The one write it supports is a user-typed follow-up, through Cursor's own
- * run endpoint, to an agent it advertised as taking one.
+ * The writes it supports are a user-typed follow-up, through Cursor's own run
+ * endpoint, to an agent it advertised as taking one, and a new agent — asked
+ * for with the user's own opening task — in a repository Cursor listed for
+ * this key, through its documented creation endpoint.
  */
 export class CursorSessionAdapter extends CloudSessionAdapter {
   readonly #maximumObservedSessions: number;
+
+  /**
+   * The repositories the key may launch agents in, as Cursor last listed
+   * them. They are where a new workspace — a new agent — can be created, so a
+   * creation ask is honoured only against what this cache holds.
+   */
+  #repositories: readonly string[] = [];
+  #repositoriesAttemptedAt = Number.NEGATIVE_INFINITY;
+  #repositoriesRefreshMs = CURSOR_REPOSITORY_RETRY_MS;
 
   constructor(options: CursorAdapterOptions) {
     super(
@@ -249,10 +287,30 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
     );
   }
 
+  protected override forgetCachedIdentity(): void {
+    this.#repositories = [];
+    this.#repositoriesAttemptedAt = Number.NEGATIVE_INFINITY;
+    this.#repositoriesRefreshMs = CURSOR_REPOSITORY_RETRY_MS;
+  }
+
   protected async collect(
     request: CloudRequest,
     now: number,
   ): Promise<readonly ProviderSessionObservation[]> {
+    // The repository list rides the pass but not its cadence: Cursor's own
+    // limits on that endpoint are far below the observation interval, so it is
+    // re-read on its own clock and a failure costs the offer, never the pass.
+    if (now - this.#repositoriesAttemptedAt >= this.#repositoriesRefreshMs) {
+      this.#repositoriesAttemptedAt = now;
+      const repositories = await this.tolerateItemFailure(() => this.#listRepositories(request));
+      if (repositories) {
+        this.#repositories = repositories;
+        this.#repositoriesRefreshMs = CURSOR_REPOSITORY_REFRESH_MS;
+      } else {
+        this.#repositoriesRefreshMs = CURSOR_REPOSITORY_RETRY_MS;
+      }
+    }
+
     const body = await request(CURSOR_ROUTE.AGENTS, {
       [CURSOR_QUERY.LIMIT]: String(CURSOR_ADAPTER_DEFAULTS.AGENT_PAGE_SIZE),
     });
@@ -306,6 +364,48 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
       !agent.archived &&
       (run?.status === CURSOR_RUN_STATUS.RUNNING || run?.status === CURSOR_RUN_STATUS.CREATING)
     );
+  }
+
+  /** Reads `GET /v1/repositories`, keeping only usable entries. */
+  async #listRepositories(request: CloudRequest): Promise<readonly string[]> {
+    const body = await request(CURSOR_ROUTE.REPOSITORIES);
+    return recordsFromPage(body, CURSOR_FIELD.ITEMS)
+      .map((record) => textFromRecord(record, CURSOR_FIELD.URL))
+      .filter(isDefined)
+      .slice(0, maximumObservedWorkspaceProjects);
+  }
+
+  /**
+   * Where Cursor will launch a new agent: the repositories it listed for this
+   * key. Cursor's creation endpoint requires a prompt — there is no idle agent
+   * to make — so every project needs an opening task. The repository URL is
+   * the identifier because it is the identifier Cursor's own API uses; it is
+   * still one the provider reported, never one an ask composed.
+   */
+  override workspaceProjects(): readonly WorkspaceProject[] {
+    return this.#repositories.map((url) => ({
+      providerProjectId: url,
+      repository: repositoryLabel(url, undefined),
+      taskSupport: WORKSPACE_TASK_SUPPORT.REQUIRED,
+    }));
+  }
+
+  protected override workspaceCreationRoute(
+    project: WorkspaceProject,
+    name: string | undefined,
+    task: string | undefined,
+  ): CloudWriteRoute | undefined {
+    // The base refuses a task-less ask before this is called; the guard here
+    // is that a request without a prompt must not exist even in principle.
+    if (!task) return undefined;
+    return {
+      segments: CURSOR_ROUTE.AGENTS,
+      body: {
+        [CURSOR_CREATE_FIELD.PROMPT]: { [CURSOR_CREATE_FIELD.TEXT]: task },
+        [CURSOR_CREATE_FIELD.REPOS]: [{ [CURSOR_CREATE_FIELD.URL]: project.providerProjectId }],
+        ...(name ? { [CURSOR_CREATE_FIELD.NAME]: name } : {}),
+      },
+    };
   }
 
   protected override messageRoute(

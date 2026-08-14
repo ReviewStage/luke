@@ -127,6 +127,26 @@ export function isMessageCapableAdapter(
 }
 
 /**
+ * Whether a new workspace in a project carries an opening task — the
+ * developer's own words for what its agent should start on. A provider whose
+ * creation endpoint requires a prompt cannot make an idle workspace, and one
+ * that documents no way to hand a task at creation cannot take one; each
+ * project says which it is, so an ask can be validated before a request
+ * exists.
+ */
+export const WORKSPACE_TASK_SUPPORT = {
+  NONE: "none",
+  OPTIONAL: "optional",
+  REQUIRED: "required",
+} as const;
+
+export type WorkspaceTaskSupport =
+  (typeof WORKSPACE_TASK_SUPPORT)[keyof typeof WORKSPACE_TASK_SUPPORT];
+
+const WORKSPACE_TASK_SUPPORT_LIST: readonly WorkspaceTaskSupport[] =
+  Object.values(WORKSPACE_TASK_SUPPORT);
+
+/**
  * One place a provider will create a workspace: a project it reported on the
  * latest observation pass. A request can only name one of these, so the set of
  * places a workspace can be asked for is the set the provider itself listed —
@@ -137,6 +157,8 @@ export interface WorkspaceProject {
   providerProjectId: string;
   /** The repository label the project is named by out loud and on screen. */
   repository: string;
+  /** Whether a new workspace here takes — or needs — an opening task. */
+  taskSupport: WorkspaceTaskSupport;
 }
 
 /** A workspace project as the app reports it, stamped with who offered it. */
@@ -186,6 +208,11 @@ export function normalizeObservedWorkspaceProjects(
       providerName: project.providerName.trim() || providerId,
       providerProjectId,
       repository,
+      // A support level this build does not know is read as none, so an ask
+      // is refused rather than guessed at.
+      taskSupport: WORKSPACE_TASK_SUPPORT_LIST.includes(project.taskSupport)
+        ? project.taskSupport
+        : WORKSPACE_TASK_SUPPORT.NONE,
     });
     if (normalized.length >= maximumObservedWorkspaceProjects) break;
   }
@@ -197,6 +224,13 @@ export interface ProviderWorkspaceRequest {
   providerProjectId: string;
   /** The name the user chose, when they chose one; the provider names it otherwise. */
   name?: string;
+  /**
+   * The opening task for the workspace's agent, in the user's own words —
+   * present only when the user gave one, and only for a project whose
+   * `taskSupport` takes it. It is the same class of content as a message to
+   * an existing session, and it travels under the same rules.
+   */
+  task?: string;
 }
 
 /**

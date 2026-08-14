@@ -56,6 +56,8 @@ interface TestApi {
   projects: readonly TestProject[];
   workspaces: readonly TestWorkspace[];
   sessions: readonly TestSession[];
+  /** Misbehave: answer a creation without naming the first session. */
+  createWithoutSessionId?: boolean;
 }
 
 interface RecordedRequest {
@@ -110,6 +112,7 @@ function sessionPayload(session: TestSession): Record<string, unknown> {
 /** Serves the read-only subset of the public API the adapter is allowed to use. */
 function fakeConductorApi(api: TestApi): FakeConductorApi {
   const requests: RecordedRequest[] = [];
+  const createdSessionIds = new Set<string>();
   const fetch: CloudFetch = async (url, init) => {
     const { pathname } = new URL(url);
     const headers = new Headers(init.headers);
@@ -132,9 +135,22 @@ function fakeConductorApi(api: TestApi): FakeConductorApi {
         if (!api.projects.some((project) => project.id === body.projectId)) {
           return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
         }
-        return jsonResponse({ id: "workspace-new", projectId: body.projectId }, 201);
+        if (api.createWithoutSessionId) {
+          return jsonResponse({ workspaceId: "workspace-new" }, 201);
+        }
+        createdSessionIds.add("session-new");
+        return jsonResponse(
+          {
+            workspaceId: "workspace-new",
+            sessionId: "session-new",
+            deepLink: "conductor://workspace?id=workspace-new",
+          },
+          201,
+        );
       }
-      const session = api.sessions.find((candidate) => candidate.id === segments[2]);
+      const session =
+        api.sessions.find((candidate) => candidate.id === segments[2]) ??
+        (createdSessionIds.has(segments[2] ?? "") ? { id: segments[2] ?? "" } : undefined);
       const writer = segments[3];
       if (!session || segments[1] !== "sessions" || segments.length !== 4) {
         return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
@@ -1078,7 +1094,8 @@ test("offers the projects the last pass listed as places a workspace can be crea
   assert.deepEqual(adapter.workspaceProjects(), []);
   await adapter.observe();
   assert.deepEqual(adapter.workspaceProjects(), [
-    { providerProjectId: LUKE_PROJECT.id, repository: "luke" },
+    // Conductor makes an idle workspace happily, so the task is optional.
+    { providerProjectId: LUKE_PROJECT.id, repository: "luke", taskSupport: "optional" },
   ]);
 });
 
@@ -1138,4 +1155,63 @@ test("refuses a creation ask for a project the last pass did not list", async ()
   });
   assert.equal(overlong.status, "rejected");
   assert.equal(api.requests.length, requestsBefore);
+});
+
+test("hands an opening task to the first session the creation response names", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [],
+    sessions: [],
+  });
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+
+  const result = await adapter.createWorkspace({
+    providerProjectId: LUKE_PROJECT.id,
+    task: "Add a smoke test for the panel motion",
+  });
+
+  assert.deepEqual(result, { status: "accepted" });
+  // Two documented writes, in order: the creation, then the message to
+  // exactly the session Conductor said it made.
+  const writes = api.requests.filter((request) => request.method === "POST");
+  assert.deepEqual(
+    writes.map((request) => request.pathname),
+    ["/v0/workspaces", "/v0/sessions/session-new/messages"],
+  );
+  assert.deepEqual(JSON.parse(writes[1]?.body ?? ""), {
+    message: "Add a smoke test for the panel motion",
+  });
+});
+
+test("reports a workspace whose task could not be delivered as exactly that", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [],
+    sessions: [],
+    createWithoutSessionId: true,
+  });
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+
+  const result = await adapter.createWorkspace({
+    providerProjectId: LUKE_PROJECT.id,
+    task: "Add a smoke test",
+  });
+
+  // The workspace stands, so claiming failure outright would be as wrong as
+  // claiming success: the answer says which half landed.
+  assert.equal(result.status, "rejected");
+  assert.match(
+    (result as { reason?: string }).reason ?? "",
+    /created, but its opening task was not delivered/,
+  );
+  // No message request was guessed at without a session to send it to.
+  const writes = api.requests.filter((request) => request.method === "POST");
+  assert.deepEqual(
+    writes.map((request) => request.pathname),
+    ["/v0/workspaces"],
+  );
 });
