@@ -1001,6 +1001,16 @@ function reportVoiceAvailability(): void {
 }
 
 /**
+ * A validate step that answers with words instead of a value. The refusal is
+ * its own type so the factory can tell it from anything a setting might one
+ * day validate to — a shape sniffed for a `settings` key would turn such a
+ * value into a silent no-op the day the two collide.
+ */
+class SettingsRefusal {
+  constructor(readonly result: SettingsUpdateResult) {}
+}
+
+/**
  * One write path for every settings change the renderer can ask for. Trust,
  * catch, snapshot, and broadcast are identical on every channel — only what
  * is valid, what is stored, and what the write sets in motion differ. A
@@ -1015,9 +1025,7 @@ function registerSettingHandler<Value>(
     apply,
     refusal,
   }: {
-    validate: (
-      ...args: unknown[]
-    ) => Value | SettingsUpdateResult | Promise<Value | SettingsUpdateResult>;
+    validate: (...args: unknown[]) => Value | SettingsRefusal | Promise<Value | SettingsRefusal>;
     save: (value: Value) => Promise<SettingsUpdateResult>;
     apply?: (
       result: SettingsUpdateResult,
@@ -1032,8 +1040,8 @@ function registerSettingHandler<Value>(
     const value = await validate(...args);
     // A validate step that already answered — a chord spoken for, refused with
     // words — leaves without a write, a side effect, or a broadcast.
-    if (typeof value === "object" && value !== null && "settings" in value) {
-      return value;
+    if (value instanceof SettingsRefusal) {
+      return value.result;
     }
     try {
       const result = await save(value);
@@ -1158,7 +1166,7 @@ function registerIpc(): void {
       if (apiKey !== undefined && typeof apiKey !== "string") {
         throw new Error("Invalid API key request");
       }
-      return { providerId, apiKey: typeof apiKey === "string" ? apiKey : undefined };
+      return { providerId, apiKey };
     },
     save: ({ providerId, apiKey }) => settingsStore.setApiKey(providerId, apiKey),
     apply(result, { providerId }) {
@@ -1264,10 +1272,7 @@ function registerIpc(): void {
       if (selection !== undefined && !isWorkspaceAgentSelection(providerId, selection)) {
         throw new Error("Unknown workspace agent");
       }
-      return {
-        providerId,
-        selection: selection === undefined ? undefined : selection,
-      };
+      return { providerId, selection };
     },
     save: ({ providerId, selection }) =>
       settingsStore.setWorkspaceAgentDefault(providerId, selection),
@@ -1353,10 +1358,10 @@ function registerIpc(): void {
         chosen &&
         (voiceHotkeyCandidates(chosenVoiceHotkey).includes(chosen) || chosen === voiceHotkey)
       ) {
-        return {
+        return new SettingsRefusal({
           settings: await settingsStore.snapshot(),
           reason: "That chord is reserved for the talk key.",
-        };
+        });
       }
       return chosen;
     },
@@ -1382,19 +1387,19 @@ function registerIpc(): void {
         chosen &&
         (voiceHotkeyCandidates(chosenVoiceHotkey).includes(chosen) || chosen === voiceHotkey)
       ) {
-        return {
+        return new SettingsRefusal({
           settings: await settingsStore.snapshot(),
           reason: "That chord is reserved for the talk key.",
-        };
+        });
       }
       if (
         chosen &&
         (askHotkeyCandidates(chosenAskHotkey, []).includes(chosen) || chosen === askHotkey)
       ) {
-        return {
+        return new SettingsRefusal({
           settings: await settingsStore.snapshot(),
           reason: "That chord is reserved for the ask key.",
-        };
+        });
       }
       return chosen;
     },
