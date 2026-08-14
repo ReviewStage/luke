@@ -25,7 +25,12 @@ import type {
 import { CREDENTIAL_SOURCE, SESSION_OPEN_RESULT_STATUS } from "../shared/contracts";
 import type { CredentialProviderId } from "../shared/credential-providers";
 import { CREDENTIAL_PROVIDER_LIST } from "../shared/credential-providers";
-import { TALK_KEY_RELEASE, talkKeyRelease, voiceHotkeyToShow } from "../shared/voice-hotkey";
+import {
+  TALK_KEY_RELEASE,
+  talkKeyRelease,
+  voiceHotkeyLabel,
+  voiceHotkeyToShow,
+} from "../shared/voice-hotkey";
 import { ASK_LUKE_INPUT_ID, askRefusal, focusAskField } from "./ask-luke";
 import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";
 import { isSubmittable, removalEndsEntry } from "./credential-entry";
@@ -848,10 +853,19 @@ export function App(): React.JSX.Element {
     return result.reason;
   }, []);
 
-  // True while the settings row is recording a chord. The talk key stays
-  // registered through a recording — the recording is how it gets replaced —
-  // so a press of the current chord landing then is held here rather than
-  // opening the microphone under the field being typed into.
+  // The ask key, under the same rule: the key the row shows follows the main
+  // process's own announcement of what actually registered.
+  const changeAskHotkey = useCallback(async (accelerator: string | undefined) => {
+    const result = await window.sidecar.setAskHotkey(accelerator);
+    setSettings(result.settings);
+    return result.reason;
+  }, []);
+
+  // True while a settings row is recording a chord. Both Luke keys stay
+  // registered through a recording — the recording is how one gets replaced —
+  // so a press of a current chord landing then is held here rather than
+  // opening the microphone, or summoning the composer, under the field being
+  // typed into.
   const shortcutCapture = useRef(false);
   const changeShortcutCapture = useCallback((capturing: boolean) => {
     shortcutCapture.current = capturing;
@@ -1083,7 +1097,9 @@ export function App(): React.JSX.Element {
       if (eventName === "mode:compact") applyAuthoritativeMode("compact");
       if (eventName === "mode:expanded") applyAuthoritativeMode("expanded");
       if (eventName === "tab:settings") changeTab(PANEL_TAB.SETTINGS);
-      if (eventName === "ask:focus") summonAsk();
+      // Held while a shortcut row is recording, for the same reason the talk
+      // key's press is: the chord just typed is an entry, not an ask.
+      if (eventName === "ask:focus" && !shortcutCapture.current) summonAsk();
     });
     const removeDisplay = window.sidecar.onDisplayChanged(setDisplay);
     const removeSessions = window.sidecar.onSessionsChanged(setSessions);
@@ -1191,15 +1207,17 @@ export function App(): React.JSX.Element {
   // change made in the panel is known to the conversation the moment it lands.
   useEffect(() => {
     if (!bootstrap) return;
+    const askAccelerator = askHotkeyChange ? askHotkeyChange.accelerator : bootstrap.askHotkey;
     const guide = buildLukeGuide({
       settings: settings ?? bootstrap.settings,
       voiceAvailable: bootstrap.realtimeAvailable,
       microphoneStatus,
       hotkey: voiceHotkeyToShow(bootstrap, voiceHotkey),
+      ...(askAccelerator ? { askKey: voiceHotkeyLabel(askAccelerator) } : {}),
     });
     guideRef.current = guide;
     voiceSession.current?.updateGuide(guide);
-  }, [bootstrap, settings, microphoneStatus, voiceHotkey]);
+  }, [bootstrap, settings, microphoneStatus, voiceHotkey, askHotkeyChange]);
 
   useEffect(() => {
     // An update Luke cannot voice — no call open, or a turn already under way —
@@ -1427,6 +1445,11 @@ export function App(): React.JSX.Element {
               ...(shownHotkey.hotkey ? { voiceHotkey: shownHotkey.hotkey } : {}),
               voiceHotkeyHeld: shownHotkey.held,
               onVoiceHotkeyChange: changeVoiceHotkey,
+              // Labelled here because the ask key travels as an accelerator —
+              // the composer's keycap needs both spellings, but the row shows
+              // the key the way macOS writes it, as the talk key's row does.
+              ...(shownAskHotkey ? { askHotkey: voiceHotkeyLabel(shownAskHotkey) } : {}),
+              onAskHotkeyChange: changeAskHotkey,
               onShortcutCapture: changeShortcutCapture,
               onShowInMenuBarChange: changeShowInMenuBar,
               onShowInDockChange: changeShowInDock,

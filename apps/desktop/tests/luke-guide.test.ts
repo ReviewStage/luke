@@ -42,6 +42,7 @@ function guideInput(overrides: Partial<LukeGuideInput> = {}): LukeGuideInput {
     voiceAvailable: true,
     microphoneStatus: "granted",
     hotkey: { hotkey: "⌥Space", held: true },
+    askKey: "⌥L",
     ...overrides,
   };
 }
@@ -119,6 +120,15 @@ test("the facts follow the talk key, the microphone, and the storage the system 
     buildLukeGuide(guideInput({ hotkey: { held: false } })).facts,
   );
   assert.match(unregistered, /None is registered/);
+
+  // The ask key is a fact on the talk key's terms: the registered chord when
+  // there is one, and an honest absence when there is not.
+  assert.match(held, /⌥L, from any app: summons the panel/);
+  const askless = buildLukeGuide(guideInput({ askKey: undefined })).facts.find(
+    (fact) => fact.label === "Ask key",
+  );
+  assert.ok(askless);
+  assert.match(askless.detail, /None is registered/);
 
   const denied = JSON.stringify(buildLukeGuide(guideInput({ microphoneStatus: "denied" })).facts);
   assert.match(denied, /Privacy & Security/);

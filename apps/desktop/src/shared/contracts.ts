@@ -93,6 +93,12 @@ export interface AppSettings {
    */
   voiceHotkey?: string;
   /**
+   * The ask-key chord the user chose, absent while the defaults stand. The
+   * stored choice on the talk key's exact terms: the registered key is what
+   * the row shows, and this only says whether there is a choice to reset.
+   */
+  askHotkey?: string;
+  /**
    * Whether Music and Spotify are turned down while a spoken exchange is
    * live, and back up after. On by default: speech over music is the failure
    * everyone has had, and the duck defers to the user everywhere it can — it
@@ -251,6 +257,12 @@ export interface AppBridge {
    */
   setVoiceHotkey(accelerator: string | undefined): Promise<SettingsUpdateResult>;
   /**
+   * Moves the ask key the same way, or back to its defaults when omitted. The
+   * one extra rule is the standing one: a chord the talk key holds is refused
+   * with a reason rather than stored and silently outbid.
+   */
+  setAskHotkey(accelerator: string | undefined): Promise<SettingsUpdateResult>;
+  /**
    * Opens an observed session where its provider keeps it. The renderer names
    * the session rather than its address, for the same reason it names a
    * provider above: the places Luke can send you are the sessions it is already
@@ -321,6 +333,7 @@ export const channels = {
   setVoiceSpeed: "app:set-voice-speed",
   setVoiceCaptions: "app:set-voice-captions",
   setVoiceHotkey: "app:set-voice-hotkey",
+  setAskHotkey: "app:set-ask-hotkey",
   setDuckOtherMedia: "app:set-duck-other-media",
   setVoiceExchange: "app:set-voice-exchange",
   openProviderApiKeys: "app:open-provider-api-keys",

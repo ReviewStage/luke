@@ -285,6 +285,7 @@ function registerToggleHotkey(): void {
 }
 
 let askHotkey: string | undefined;
+let chosenAskHotkey: string | undefined;
 
 /**
  * Registers the key that summons the ask field from whatever app is frontmost,
@@ -312,7 +313,10 @@ function registerAskHotkey(): void {
   }
   // A chord the talk key sits on — chosen by the user, or announced as
   // registered — is not a candidate: the two Luke keys must never compete.
-  for (const accelerator of askHotkeyCandidates([chosenVoiceHotkey, voiceHotkey])) {
+  for (const accelerator of askHotkeyCandidates(chosenAskHotkey, [
+    chosenVoiceHotkey,
+    voiceHotkey,
+  ])) {
     const registered = globalShortcut.register(accelerator, () => {
       setWindowMode("expanded", true);
       panelWindow?.webContents.send(channels.lifecycle, "ask:focus");
@@ -333,6 +337,19 @@ function registerAskHotkey(): void {
  */
 function sendAskHotkey(): void {
   panelWindow?.webContents.send(channels.askHotkeyChanged, askHotkey);
+}
+
+/**
+ * Moves the ask key to whatever `chosenAskHotkey` now says, while the app is
+ * running. Only the ask key's own chord is let go of — the talk key's
+ * registration must not flicker for a change that is none of its business —
+ * and unlike the talk key there is no helper exit to wait for: Electron
+ * releases a chord the moment it is asked to.
+ */
+function applyAskHotkey(): void {
+  if (askHotkey) globalShortcut.unregister(askHotkey);
+  registerAskHotkey();
+  sendAskHotkey();
 }
 
 /** Tells a renderer the key it should be showing, whenever that changes. */
@@ -838,6 +855,46 @@ function registerIpc(): void {
           // Awaited so the renderer's controls stay at rest until the swap has
           // finished and the helper's own registration line can say the truth.
           await applyVoiceHotkey();
+        }
+        return result;
+      } catch {
+        // A filesystem failure is not something the user can act on, so it is
+        // reported as one line rather than as a raw system error.
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "Could not save that shortcut on this system.",
+        };
+      }
+    },
+  );
+
+  // The ask key is the user's to move on the talk key's exact terms, read
+  // through the same gate and registered at once. The one extra rule is the
+  // standing one — the two Luke keys must never compete for a chord — so a
+  // chord the talk key sits on is refused with words rather than stored and
+  // silently outbid.
+  ipcMain.handle(
+    channels.setAskHotkey,
+    async (event, accelerator: unknown): Promise<SettingsUpdateResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (accelerator !== undefined && typeof accelerator !== "string") {
+        throw new Error("Invalid shortcut request");
+      }
+      const chosen = accelerator === undefined ? undefined : parseVoiceHotkey(accelerator);
+      if (accelerator !== undefined && chosen === undefined) {
+        throw new Error("Invalid shortcut request");
+      }
+      if (chosen && (chosen === chosenVoiceHotkey || chosen === voiceHotkey)) {
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "That chord is the talk key's.",
+        };
+      }
+      try {
+        const result = await settingsStore.setAskHotkey(chosen);
+        if (!result.reason) {
+          chosenAskHotkey = chosen;
+          applyAskHotkey();
         }
         return result;
       } catch {
@@ -1500,6 +1557,7 @@ if (!app.requestSingleInstanceLock()) {
     // the default away from the user who moved off it. A file that cannot be
     // read means no choice was kept, and the defaults answer.
     chosenVoiceHotkey = await settingsStore.readVoiceHotkey().catch(() => undefined);
+    chosenAskHotkey = await settingsStore.readAskHotkey().catch(() => undefined);
     // The report is not made here: the helper answers over its own stdout a
     // moment later, and a line printed now would state an absence that only
     // exists because nobody has answered yet.
