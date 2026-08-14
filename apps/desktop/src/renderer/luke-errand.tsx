@@ -49,9 +49,11 @@ import { parseMilliseconds, parsePixels, STILL_MS } from "./session-motion";
  *
  * Everything moves with `transform` and `opacity` alone; the control it lands
  * on is read for its box and never restyled, so nothing about a settings row
- * changes because an errand happened to visit it. The beats come from the
- * motion tokens, which is what makes a capture run and reduced motion — both
- * of which zero them — get no errand rather than an instant one.
+ * changes because an errand happened to visit it. The one thing it does move
+ * is a scroller, and only to bring the landing into view — the same thing the
+ * keyboard does on the way to a control, and for the same reason. The beats
+ * come from the motion tokens, which is what makes a capture run and reduced
+ * motion — both of which zero them — get no errand rather than an instant one.
  */
 
 /** How a control says an errand may land on it, and which one it answers to. */
@@ -273,6 +275,13 @@ export function errandBeats(tokens: ErrandTokens, wait: ErrandWait): ErrandBeats
   };
 }
 
+/**
+ * The turn the captions belong to. Mirrors `WAVEFORM_VOICE.LUKE` as the stage
+ * spells it in `data-voice`, read here rather than imported because this only
+ * ever asks the DOM a question about itself.
+ */
+const ERRAND_SPEAKING_VOICE = "luke";
+
 /** How many points the drift is drawn with. Enough that the bow reads as curved. */
 const DRIFT_SAMPLES = 8;
 
@@ -304,6 +313,57 @@ export interface ErrandDriftStep {
  */
 function driftEase(progress: number): number {
   return progress * progress * (3 - 2 * progress);
+}
+
+/**
+ * How much more of the panel the captions may take while a flight is out.
+ *
+ * Luke's words are drawn on the shape rather than in the panel's flow, so the
+ * panel reserves their block under its own padding — and that block is
+ * measured off wrapped text, which means it grows line by line for as long as
+ * he is talking. A flight lasts about a second and an errand sets off out of a
+ * reply, so it is airborne for exactly the stretch the reservation is growing
+ * in. On a panel already at its full height that room comes out of the list
+ * the control is in, and a control measured before it can be clipped out of
+ * view by the time he lands on it.
+ *
+ * A muted Mac is what makes this the normal case rather than a corner: the
+ * captions are drawn whatever the preference says, because then they are the
+ * only part of the reply arriving at all. So the room is reserved before the
+ * landing is chosen — all of it when no words have been measured yet, and
+ * whatever is left of it once some have.
+ */
+export function captionRoom(input: {
+  /** Whether a caption block is drawn right now. */
+  drawn: boolean;
+  /** Whether Luke holds the turn, which is when one can still appear. */
+  speaking: boolean;
+  /** The block's height as measured so far. */
+  size: number;
+  /** The most it is ever allowed to take. */
+  max: number;
+}): number {
+  if (!input.drawn && !input.speaking) return 0;
+  return Math.max(0, input.max - input.size);
+}
+
+/**
+ * Where a scroller has to sit for the landing to still be visible once that
+ * room is taken. Nothing if it already is; otherwise the least scrolling that
+ * clears it — and never so much that the control's own top leaves the view,
+ * because a switch you can see the bottom of is worse than one sitting low.
+ */
+export function errandScrollTop(input: {
+  scrollTop: number;
+  view: { top: number; bottom: number };
+  target: { top: number; bottom: number };
+  room: number;
+}): number {
+  const above = input.target.top - input.view.top;
+  if (above < 0) return input.scrollTop + above;
+  const below = input.target.bottom - (input.view.bottom - Math.max(0, input.room));
+  if (below <= 0) return input.scrollTop;
+  return input.scrollTop + Math.min(below, above);
 }
 
 /** The largest sway that keeps `base + sway * direction` between two edges. */
@@ -394,6 +454,8 @@ const MOTION_TOKEN = {
   EXPAND_DELAY: "--expand-delay",
   ROW_STAGGER: "--row-stagger",
   ROW_FAN_LIMIT: "--row-fan-limit",
+  CAPTION_SIZE: "--caption-size",
+  CAPTION_MAX: "--caption-max",
 } as const;
 
 type MotionToken = (typeof MOTION_TOKEN)[keyof typeof MOTION_TOKEN];
@@ -410,6 +472,31 @@ const RING_BLOOM = 0.26;
 
 /** How far past the control the ring has spread by the time it is gone. */
 const RING_SPREAD = 1.16;
+
+/**
+ * Scrolls the landing clear of the room the captions may still take. Reads the
+ * scroller off the control rather than being told which one: the errand knows
+ * what it is flying to, not what the panel happens to have wrapped it in.
+ */
+function keepInView(stage: HTMLElement, target: HTMLElement, room: number): void {
+  for (
+    let node = target.parentElement;
+    node !== null && node !== stage;
+    node = node.parentElement
+  ) {
+    const overflow = getComputedStyle(node).overflowY;
+    if (overflow !== "auto" && overflow !== "scroll") continue;
+    const view = node.getBoundingClientRect();
+    const box = target.getBoundingClientRect();
+    node.scrollTop = errandScrollTop({
+      scrollTop: node.scrollTop,
+      view: { top: view.top, bottom: view.bottom },
+      target: { top: box.top, bottom: box.bottom },
+      room,
+    });
+    return;
+  }
+}
 
 /** Only a control a reader can actually see is worth flying to. */
 function drawn(element: HTMLElement): boolean {
@@ -530,10 +617,21 @@ export function LukeErrand({ errand, onLanded, onReturned }: LukeErrandProps): R
       // No face is the meter standing in Luke's place, and no target is a
       // control this build does not draw. Either way there is no journey.
       if (face === null || !drawn(face) || target === undefined) return returnHome();
-      // A control below the fold of the settings tab is scrolled to first, so
-      // the flight lands somewhere a reader is looking. `nearest` leaves an
-      // already-visible control exactly where it is, which is the usual case.
-      target.scrollIntoView({ block: "nearest", behavior: "instant" });
+      // A control below the fold of a settings page is scrolled to first, so
+      // the flight lands somewhere a reader is looking — and far enough above
+      // the foot that the captions still to come cannot take the view back.
+      // An already-visible control with room to spare is left exactly where it
+      // is, which is the usual case.
+      keepInView(
+        stage,
+        target,
+        captionRoom({
+          drawn: stage.dataset.caption === "true",
+          speaking: stage.dataset.voice === ERRAND_SPEAKING_VOICE,
+          size: parsePixels(token(MOTION_TOKEN.CAPTION_SIZE)),
+          max: parsePixels(token(MOTION_TOKEN.CAPTION_MAX)),
+        }),
+      );
 
       const stageBox = stage.getBoundingClientRect();
       const journey = errandJourney(

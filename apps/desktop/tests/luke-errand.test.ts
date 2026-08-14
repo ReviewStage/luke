@@ -10,6 +10,7 @@ import {
   SESSION_LIST_SORT,
 } from "@sidecar/core";
 import {
+  captionRoom,
   ERRAND_TARGET,
   ERRAND_WAIT,
   type ErrandJourney,
@@ -19,6 +20,7 @@ import {
   errandDrift,
   errandFlies,
   errandJourney,
+  errandScrollTop,
   errandTargets,
   tabErrandTarget,
 } from "../src/renderer/luke-errand";
@@ -369,4 +371,58 @@ test("every setting is signed on the page it is actually drawn on", () => {
       `${setting.id} is opened on the ${page} page and the guide sends a hand to ${setting.manual}`,
     );
   }
+});
+
+test("the captions' room is reserved only while there are words or words coming", () => {
+  const block = { size: 28, max: 70 };
+  // Nothing is drawn and nobody is talking, so nothing is coming either.
+  assert.equal(captionRoom({ ...block, drawn: false, speaking: false }), 0);
+  // Drawn: what is left of the block is what it can still take.
+  assert.equal(captionRoom({ ...block, drawn: true, speaking: false }), 42);
+  // A muted Mac captions whatever the preference says, so a reply under way
+  // with nothing measured yet may still take the whole block.
+  assert.equal(captionRoom({ size: 0, max: 70, drawn: false, speaking: true }), 70);
+  // Already at its limit: it has nothing left to take.
+  assert.equal(captionRoom({ size: 70, max: 70, drawn: true, speaking: true }), 0);
+});
+
+test("a landing is scrolled clear of the room the captions may still take", () => {
+  const view = { top: 100, bottom: 400 };
+  // Comfortably inside, with the room to spare: left exactly where it is.
+  assert.equal(
+    errandScrollTop({ scrollTop: 0, view, target: { top: 150, bottom: 170 }, room: 70 }),
+    0,
+  );
+  // Inside now, but inside the band the captions are about to take: scrolled
+  // up by just enough to clear it, which is what a muted reply would have
+  // clipped out of view by the time he landed.
+  assert.equal(
+    errandScrollTop({ scrollTop: 40, view, target: { top: 350, bottom: 370 }, room: 70 }),
+    80,
+  );
+  // The same control with no captions coming needs no scrolling at all.
+  assert.equal(
+    errandScrollTop({ scrollTop: 40, view, target: { top: 350, bottom: 370 }, room: 0 }),
+    40,
+  );
+  // Above the view: brought down to its top, room or no room.
+  assert.equal(
+    errandScrollTop({ scrollTop: 90, view, target: { top: 60, bottom: 80 }, room: 70 }),
+    50,
+  );
+});
+
+test("a control taller than what is left keeps its own top on screen", () => {
+  // Clearing the whole band would push the control's head out of the view.
+  // Its top is where its name and its switch are, so that is what is kept: a
+  // switch sitting a little low still reads, one scrolled past does not.
+  assert.equal(
+    errandScrollTop({
+      scrollTop: 0,
+      view: { top: 100, bottom: 400 },
+      target: { top: 120, bottom: 390 },
+      room: 70,
+    }),
+    20,
+  );
 });
