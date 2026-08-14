@@ -70,3 +70,58 @@ export type ProviderControlResult =
 export interface ControllableSessionProviderAdapter extends SessionProviderAdapter {
   executeControl(request: ProviderControlRequest): Promise<ProviderControlResult>;
 }
+
+/** Whether an adapter can run a control at all, before asking it to. */
+export function isControllableAdapter(
+  adapter: SessionProviderAdapter,
+): adapter is ControllableSessionProviderAdapter {
+  return (
+    typeof (adapter as Partial<ControllableSessionProviderAdapter>).executeControl === "function"
+  );
+}
+
+export const PROVIDER_MESSAGE_RESULT_STATUS = {
+  ACCEPTED: "accepted",
+  REJECTED: "rejected",
+  UNSUPPORTED: "unsupported",
+} as const;
+
+export type ProviderMessageResultStatus =
+  (typeof PROVIDER_MESSAGE_RESULT_STATUS)[keyof typeof PROVIDER_MESSAGE_RESULT_STATUS];
+
+/** A user-authored message for one session the adapter has already observed. */
+export interface ProviderSessionMessage {
+  providerSessionId: string;
+  text: string;
+}
+
+/**
+ * What became of a send. A rejection carries a reason the user can act on,
+ * never the message itself; unsupported means the adapter has no documented
+ * way to message this session, which is an answer rather than a failure.
+ */
+export type ProviderMessageResult =
+  | { status: typeof PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED }
+  | { status: typeof PROVIDER_MESSAGE_RESULT_STATUS.REJECTED; reason: string }
+  | { status: typeof PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+
+/**
+ * Optional extension for adapters whose provider documents a way to hand a
+ * message to an existing session. It is the one place an adapter may change
+ * provider state, and only ever with text a user chose to send: adapters must
+ * refuse any session that did not advertise `canReceiveMessage` on its latest
+ * observation, and nothing that decides on the user's behalf — the attention
+ * evaluator above all — may reach this interface.
+ */
+export interface MessageCapableSessionProviderAdapter extends SessionProviderAdapter {
+  sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult>;
+}
+
+/** Whether an adapter can carry a message at all, before asking it to. */
+export function isMessageCapableAdapter(
+  adapter: SessionProviderAdapter,
+): adapter is MessageCapableSessionProviderAdapter {
+  return (
+    typeof (adapter as Partial<MessageCapableSessionProviderAdapter>).sendMessage === "function"
+  );
+}

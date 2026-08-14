@@ -3,6 +3,10 @@ import test from "node:test";
 import {
   CompositeSessionProviderAdapter,
   InMemorySessionRegistry,
+  type MessageCapableSessionProviderAdapter,
+  PROVIDER_MESSAGE_RESULT_STATUS,
+  type ProviderMessageResult,
+  type ProviderSessionMessage,
   type ProviderSessionObservation,
   SESSION_LOCATION,
   SESSION_STATUS,
@@ -131,4 +135,71 @@ test("refuses to observe one provider's sessions under another's identity", () =
       }),
     /cursor cannot observe codex/,
   );
+});
+
+function messenger(
+  provider: SessionProvider,
+  answer: (message: ProviderSessionMessage) => ProviderMessageResult,
+): MessageCapableSessionProviderAdapter {
+  return {
+    provider,
+    observe: async () => [],
+    sendMessage: async (message) => answer(message),
+  };
+}
+
+test("carries a message past observers that have never seen the session", async () => {
+  const sent: ProviderSessionMessage[] = [];
+  const adapter = new CompositeSessionProviderAdapter({
+    provider: cursor,
+    adapters: [
+      // The local observer can carry no message at all, and must not stop one.
+      observerOf(cursor, [observation("local-session")]),
+      messenger(cursor, () => ({ status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED })),
+      messenger(cursor, (message) => {
+        sent.push(message);
+        return { status: PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED };
+      }),
+    ],
+  });
+
+  const result = await adapter.sendMessage({ providerSessionId: "cloud-agent", text: "go on" });
+
+  assert.deepEqual(result, { status: PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED });
+  assert.deepEqual(sent, [{ providerSessionId: "cloud-agent", text: "go on" }]);
+});
+
+test("lets the observer that holds the session refuse for itself", async () => {
+  const unreachable: ProviderSessionMessage[] = [];
+  const adapter = new CompositeSessionProviderAdapter({
+    provider: cursor,
+    adapters: [
+      messenger(cursor, () => ({
+        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        reason: "Cursor is still busy with the current run",
+      })),
+      messenger(cursor, (message) => {
+        unreachable.push(message);
+        return { status: PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED };
+      }),
+    ],
+  });
+
+  const result = await adapter.sendMessage({ providerSessionId: "cloud-agent", text: "go on" });
+
+  // A rejection is the session's own answer, so it must not be shopped past
+  // the observer that gave it to one that would say yes to a different session.
+  assert.equal(result.status, PROVIDER_MESSAGE_RESULT_STATUS.REJECTED);
+  assert.deepEqual(unreachable, []);
+});
+
+test("answers unsupported when no observer can carry a message", async () => {
+  const adapter = new CompositeSessionProviderAdapter({
+    provider: cursor,
+    adapters: [observerOf(cursor, [observation("local-session")])],
+  });
+
+  const result = await adapter.sendMessage({ providerSessionId: "local-session", text: "go on" });
+
+  assert.deepEqual(result, { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED });
 });

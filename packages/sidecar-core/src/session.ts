@@ -47,10 +47,34 @@ export interface AttentionDecision {
   summary?: string;
 }
 
+/**
+ * What a control does to the session, at the altitude a surface draws at: a
+ * stop ends the turn that is running and is drawn as the stop glyph every chat
+ * surface uses, while anything else is a provider-worded action drawn by its
+ * label. The adapter says which its control is, because only it knows what the
+ * endpoint behind the control means.
+ */
+export const SESSION_CONTROL_KIND = {
+  ACTION: "action",
+  STOP: "stop",
+} as const;
+
+export type SessionControlKind = (typeof SESSION_CONTROL_KIND)[keyof typeof SESSION_CONTROL_KIND];
+
 /** A provider-defined action that has been explicitly exposed for one session. */
 export interface SessionControl {
   id: string;
   label: string;
+  /** Absent means a plain action, drawn by its label. */
+  kind?: SessionControlKind;
+  /**
+   * The provider-owned identifier of the thing this control acts on, when that
+   * is narrower than the session — the run a stop stops, say. It rides the
+   * advertisement so it is replaced with every observation and can never
+   * outlive the snapshot that promised it, the way state an adapter kept on
+   * the side could.
+   */
+  target?: string;
 }
 
 /** A stable provider identity and the label that can be shown in the UI. */
@@ -137,6 +161,13 @@ export interface ProviderSessionObservation {
   summary?: string;
   detail?: SessionDetail;
   controls?: readonly SessionControl[];
+  /**
+   * Set only by an adapter whose provider documents taking a message for this
+   * session in its current state, through the provider's own API. Absent means
+   * no: a session that cannot be messaged is reported as such rather than
+   * offered a control that would have to be improvised.
+   */
+  canReceiveMessage?: boolean;
 }
 
 /**
@@ -152,6 +183,8 @@ export interface NormalizedSession extends SessionIdentity {
   summary?: string;
   detail: SessionDetail;
   controls: readonly SessionControl[];
+  /** Whether this session's provider will take a message for it right now. */
+  canReceiveMessage: boolean;
   attention: AttentionDecision;
 }
 
@@ -161,6 +194,20 @@ export const maximumSessionSummaryLength = 500;
 export const maximumSessionDetailLength = 120;
 /** Long enough for any provider's session address without becoming a payload. */
 export const maximumSessionLinkLength = 300;
+/** A reply typed into a row, not a document pasted through one. */
+export const maximumSessionMessageLength = 4_000;
+
+/**
+ * The text of a message on its way to a session, or nothing. Unlike an observed
+ * field this one is refused rather than cut when it runs long: a truncated
+ * message says something its author did not.
+ */
+export function sessionMessageText(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim();
+  if (!normalized || normalized.length > maximumSessionMessageLength) return undefined;
+  return normalized;
+}
 
 function requiredText(value: string, field: string): string {
   const normalized = value.trim();
@@ -217,9 +264,17 @@ function normalizeControls(
     const id = requiredText(control.id, "control id");
     if (ids.has(id)) throw new Error(`Duplicate session control: ${id}`);
     ids.add(id);
+    // A kind this build does not know is dropped rather than passed through:
+    // the control still works, drawn as a plain action by its label.
+    const kind = Object.values(SESSION_CONTROL_KIND).find(
+      (candidate) => candidate === control.kind,
+    );
+    const target = boundedText(control.target, maximumSessionDetailLength);
     return {
       id,
       label: boundedText(control.label, maximumSessionTitleLength) ?? id,
+      ...(kind ? { kind } : {}),
+      ...(target ? { target } : {}),
     };
   });
 }
@@ -310,6 +365,9 @@ export function normalizeSession(
     ...(summary ? { summary } : {}),
     detail: normalizeSessionDetail(observation.detail),
     controls: normalizeControls(observation.controls),
+    // Anything but an explicit yes is a no, so an adapter that has not thought
+    // about messaging reports a session that cannot be messaged.
+    canReceiveMessage: observation.canReceiveMessage === true,
     attention: normalizeAttention(attention),
   };
 }

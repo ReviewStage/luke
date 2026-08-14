@@ -214,6 +214,15 @@ function taskFromRecord(record: Record<string, unknown>): CopilotTask | undefine
  * agent-tasks API. It reads only the tasks the supplied token can see, issues
  * no request that can change provider state, and reports nothing at all
  * without a credential.
+ *
+ * Deliberately read-only where the other cloud adapters write: as of the
+ * pinned API version, GitHub documents no way to message, steer, or stop an
+ * existing task — the agents panel can, but its API is undocumented, and the
+ * one documented follow-up is a public `@copilot` comment on the task's pull
+ * request, which is an act of publishing to the repository rather than a
+ * message to a session and needs scopes this adapter never asks for. So no
+ * task advertises `canReceiveMessage` or a control, and the row's link — the
+ * task's own page, where steering lives — is the honest way in.
  */
 export class CopilotSessionAdapter extends CloudSessionAdapter {
   readonly #maximumObservedTasks: number;

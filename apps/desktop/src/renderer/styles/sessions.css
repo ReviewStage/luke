@@ -482,3 +482,219 @@ html[data-keyboard="true"] button.session-row:focus-visible {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+/* A row with a second line stacks, and hands its box's padding down: the first
+   line has to keep today's geometry so the two kinds of row read as one list,
+   and the actions line has to reach the same left edge as the copy above it. */
+.session-row[data-actions] {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+}
+
+.row-main {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-radius: 15px 15px 0 0;
+  background: transparent;
+  text-align: left;
+}
+
+/* The whole openable row is the press target now, controls excepted, so the
+   whole row takes the hand and the lift. The one place neither belongs is a
+   pointer that is on a control: a press there is about the message or the
+   action, and a lift under it would promise a window it will not open. */
+.session-row[data-actions][data-openable] {
+  cursor: pointer;
+}
+
+.session-row[data-actions][data-openable]:hover:not(
+  :has(.row-compose:hover, .row-action:hover, .row-stop:hover)
+) {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: var(--raised);
+}
+
+.session-row[data-actions][data-openable][data-state="attention"]:hover:not(
+  :has(.row-compose:hover, .row-action:hover, .row-stop:hover)
+) {
+  border-color: color-mix(in srgb, var(--accent) 46%, transparent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+/* The ring wraps the row, not the half of it the button covers: what pressing
+   opens is the session, and the ring has to trace the thing the press means.
+   The button still holds the focus — it is what the keyboard activates — and
+   the row draws for it, the same seam the hover lift answers through. */
+html[data-keyboard="true"] .session-row[data-actions]:has(> button.row-main:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+}
+
+html[data-keyboard="true"] button.row-main:focus-visible {
+  outline: none;
+}
+
+/* What a provider promised for this session: a composer that is simply there,
+   the way every chat surface keeps one on screen, and each advertised action
+   beside it. One quiet line — the row above it is the subject, this is what
+   can be done about it. */
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  padding: 0 14px 11px 56px;
+}
+
+.row-action {
+  padding: 5px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--raised);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 640;
+  white-space: nowrap;
+  transition:
+    background-color var(--duration-hover) ease,
+    border-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.row-action:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  color: var(--text-primary);
+}
+
+.row-action:disabled {
+  opacity: 0.4;
+}
+
+/* The stop every chat surface has: one round control holding the square. It
+   is drawn the same weight as the send button so the two read as siblings,
+   and its label lives on hover and in the accessible name. */
+.row-stop {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  border: 1px solid var(--hairline);
+  border-radius: 50%;
+  background: var(--raised);
+  color: var(--text-secondary);
+  place-items: center;
+  transition:
+    border-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.row-stop:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  color: var(--text-primary);
+}
+
+.row-stop:disabled {
+  opacity: 0.4;
+}
+
+.control-icon {
+  width: 12px;
+  height: 12px;
+}
+
+/* The composer is one pill — hairline around the pair, field on the left,
+   send on the right — because that is the shape a message field has had since
+   phones started drawing them, and matching it is what makes the affordance
+   need no label. */
+.row-compose {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 3px 3px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.4);
+  /* The whole pill is the field — a press anywhere in it lands the caret —
+     so the whole pill says so, against the hand the row around it shows. */
+  cursor: text;
+  transition:
+    border-color var(--duration-hover) ease,
+    background-color var(--duration-hover) ease;
+}
+
+.row-compose:focus-within {
+  border-color: color-mix(in srgb, var(--state-working) 45%, transparent);
+  background: rgba(0, 0, 0, 0.55);
+}
+
+/* The field itself is bare: the pill around it is the drawn edge. */
+.row-compose-input {
+  min-width: 0;
+  flex: 1;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 11px;
+  outline: none;
+}
+
+.row-compose-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.row-compose-input:disabled {
+  color: var(--text-tertiary);
+  cursor: not-allowed;
+}
+
+/* Lit only once there is something to send, like every composer people
+   already know. Colour is the whole state change: the button must not grow
+   or move inside an element that reflows the pill. */
+.row-send {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--text-tertiary);
+  place-items: center;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.row-send:not(:disabled) {
+  background: var(--text-primary);
+  color: rgba(0, 0, 0, 0.82);
+}
+
+.row-send:disabled {
+  cursor: default;
+}
+
+.row-send .control-icon {
+  width: 11px;
+  height: 11px;
+}
+
+/* What became of the last write, said on its own line under the controls that
+   asked for it. It is one bounded sentence from this build or the provider's
+   status, never transcript. */
+.row-feedback {
+  overflow: hidden;
+  flex-basis: 100%;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

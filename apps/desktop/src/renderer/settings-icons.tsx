@@ -188,3 +188,32 @@ export function CloudIcon(): React.JSX.Element {
     </Glyph>
   );
 }
+
+/**
+ * The stop glyph every chat surface uses: a filled, slightly rounded square.
+ * Filled rather than stroked, because at control size a stroked square reads
+ * as a checkbox.
+ */
+export function StopIcon(): React.JSX.Element {
+  return (
+    <svg
+      className="control-icon"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect x="6.4" y="6.4" width="11.2" height="11.2" rx="2.6" />
+    </svg>
+  );
+}
+
+/** Sends what was typed, drawn the way every chat surface draws it: an arrow up. */
+export function SendIcon(): React.JSX.Element {
+  return (
+    <Glyph className="control-icon">
+      <path d="M12 18.6V5.8" />
+      <path d="m6.4 11.2 5.6-5.6 5.6 5.6" />
+    </Glyph>
+  );
+}

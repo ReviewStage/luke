@@ -7,6 +7,7 @@ import {
   SESSION_LOCATION,
   SESSION_STATE,
   SESSION_STATUS,
+  type SessionControlKind,
   type SessionLocation,
   type SessionState,
 } from "@sidecar/core";
@@ -78,6 +79,14 @@ export const DEFAULT_SESSION_VIEW: SessionView = {
   sort: SESSION_SORT.URGENCY,
 };
 
+/** One provider-advertised action, exactly as the adapter advertised it. */
+export interface SessionAction {
+  id: string;
+  label: string;
+  /** A stop is drawn as the stop glyph; anything else is drawn by its label. */
+  kind?: SessionControlKind;
+}
+
 export interface DisplaySession {
   id: string;
   title: string;
@@ -104,6 +113,14 @@ export interface DisplaySession {
    * main process: the row only has to know that pressing it would do something.
    */
   openable: boolean;
+  /**
+   * Whether the provider will take a typed message for this session right now.
+   * Like the address, the route stays in the main process; the row only has to
+   * know whether to offer the field.
+   */
+  canMessage: boolean;
+  /** Actions the provider advertised for this session, in its own words. */
+  actions: readonly SessionAction[];
 }
 
 /** One filter someone can choose, and how many sessions it would leave. */
@@ -210,10 +227,14 @@ export function displaySessions(
         detail: session.detail || STATE_LABEL[session.state],
         label: STATE_LABEL[session.state],
         // A fixture stands for sessions that are not on the machine drawing
-        // them, so there is nothing for a press to open. Nothing is lost from
-        // the visual evidence by that: a row that can be opened and one that
-        // cannot are drawn alike until a pointer is over one.
+        // them, so there is nothing for a press to open. The composer and the
+        // controls are still drawn where the fixture says a live session would
+        // have them — the evidence has to show them — but a fixture run cannot
+        // reach a provider: the main process refuses every write against its
+        // empty registry.
         openable: false,
+        canMessage: session.canMessage === true,
+        actions: session.actions ?? [],
       }))
     : sessions.map((session) => {
         const state = sessionState(session);
@@ -231,6 +252,8 @@ export function displaySessions(
           location: session.location,
           observedAt: session.observedAt,
           openable: session.detail.link !== undefined,
+          canMessage: session.canReceiveMessage,
+          actions: session.controls,
         };
       });
 

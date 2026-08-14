@@ -6,13 +6,20 @@ import {
   CompositeSessionProviderAdapter,
   fixtureSnapshot,
   InMemorySessionRegistry,
+  isControllableAdapter,
+  isMessageCapableAdapter,
   isRealtimeVoice,
   type NativeNotchGeometry,
+  PROVIDER_CONTROL_RESULT_STATUS,
+  PROVIDER_MESSAGE_RESULT_STATUS,
+  type ProviderControlResult,
+  type ProviderMessageResult,
   positionNotchWindow,
   realtimeMintExplanation,
   SessionAttentionReviewer,
   type SessionIdentity,
   type SessionProviderAdapter,
+  sessionMessageText,
 } from "@sidecar/core";
 import {
   app,
@@ -610,6 +617,81 @@ function registerIpc(): void {
     const link = sessionRegistry.get(identity)?.detail.link;
     if (link) void shell.openExternal(link);
   });
+
+  // A reply typed on a row is handed to the session's own provider, through
+  // the adapter that observed it — the one component that knows the documented
+  // way in. The renderer names a session it is already drawing, the text is
+  // bounded before an adapter sees it, and only a session whose latest
+  // observation advertised taking messages gets one. Refusals are answers for
+  // the row, never thrown: a send is the user's own act, and what became of it
+  // belongs beside the field it left.
+  ipcMain.handle(
+    channels.sendSessionMessage,
+    async (event, identity: unknown, text: unknown): Promise<ProviderMessageResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (!isSessionIdentity(identity)) throw new Error("Invalid session message request");
+      const messageText = sessionMessageText(text);
+      if (!messageText) {
+        return {
+          status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+          reason: "A message has to be shorter than a document and longer than nothing.",
+        };
+      }
+      // A fixture run has an empty registry, so it refuses every send — a
+      // deterministic capture must not reach any provider.
+      const session = sessionRegistry.get(identity);
+      if (!session?.canReceiveMessage) {
+        return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+      }
+      const adapter = sessionAdapters.find(
+        (candidate) => candidate.provider.id === identity.providerId,
+      );
+      if (!adapter || !isMessageCapableAdapter(adapter)) {
+        return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+      }
+      const result = await adapter.sendMessage({
+        providerSessionId: identity.providerSessionId,
+        text: messageText,
+      });
+      // A message that landed changes what the session is doing, so the row
+      // should catch up as soon as its provider will say.
+      if (result.status === PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED) {
+        void sessionRegistry.refresh(adapter);
+      }
+      return result;
+    },
+  );
+
+  // A control runs the same gauntlet a message does, and one more: the id the
+  // renderer names must be a control the session's latest observation actually
+  // advertised. The registry is what advertised it, so the registry is what
+  // answers whether it stands.
+  ipcMain.handle(
+    channels.executeSessionControl,
+    async (event, identity: unknown, controlId: unknown): Promise<ProviderControlResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (!isSessionIdentity(identity) || typeof controlId !== "string" || !controlId.trim()) {
+        throw new Error("Invalid session control request");
+      }
+      const session = sessionRegistry.get(identity);
+      const control = session?.controls.find((candidate) => candidate.id === controlId);
+      if (!control) return { status: PROVIDER_CONTROL_RESULT_STATUS.UNSUPPORTED };
+      const adapter = sessionAdapters.find(
+        (candidate) => candidate.provider.id === identity.providerId,
+      );
+      if (!adapter || !isControllableAdapter(adapter)) {
+        return { status: PROVIDER_CONTROL_RESULT_STATUS.UNSUPPORTED };
+      }
+      const result = await adapter.executeControl({
+        providerSessionId: identity.providerSessionId,
+        control,
+      });
+      if (result.status === PROVIDER_CONTROL_RESULT_STATUS.ACCEPTED) {
+        void sessionRegistry.refresh(adapter);
+      }
+      return result;
+    },
+  );
 
   // The panel is normally shown without stealing focus. A text field cannot be
   // typed into that way, so the renderer asks for focus when it opens one.

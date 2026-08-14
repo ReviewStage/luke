@@ -2,7 +2,9 @@ import {
   maximumSessionSummaryLength,
   maximumSessionTitleLength,
   type ProviderSessionObservation,
+  SESSION_CONTROL_KIND,
   SESSION_STATUS,
+  type SessionControl,
   type SessionProvider,
   type SessionStatus,
 } from "@sidecar/core";
@@ -11,6 +13,7 @@ import {
   type CloudAdapterOptions,
   type CloudRequest,
   CloudSessionAdapter,
+  type CloudWriteRoute,
   isDefined,
   isRecord,
   knownValue,
@@ -38,14 +41,44 @@ const CURSOR_DEFAULT_API_URL = "https://api.cursor.com";
 
 const CURSOR_ROUTE_SEGMENT = {
   AGENTS: "agents",
+  CANCEL: "cancel",
   RUNS: "runs",
   V1: "v1",
 } as const;
 
-/** Read-only routes from the documented public API. Luke never calls a writer. */
+/**
+ * Documented public API routes. The reads list agents and their runs; the
+ * writers are `POST …/agents/{id}/runs`, which is Cursor's documented
+ * follow-up — a new run on the agent's existing conversation and workspace
+ * state — and `POST …/runs/{runId}/cancel`, which stops one that is active.
+ */
 const CURSOR_ROUTE = {
   AGENTS: [CURSOR_ROUTE_SEGMENT.V1, CURSOR_ROUTE_SEGMENT.AGENTS],
 } as const;
+
+/** The body `POST …/agents/{id}/runs` documents. */
+const CURSOR_MESSAGE_FIELD = {
+  PROMPT: "prompt",
+  TEXT: "text",
+} as const;
+
+const CURSOR_CANCEL_RUN_CONTROL_ID = "cancel-run";
+
+/**
+ * The one control this adapter can honour, advertised per session and only in
+ * the state Cursor documents it for. The run it would cancel rides the
+ * advertisement as the control's target, so a press stops the run the user
+ * was shown — state an adapter kept on the side could outlive the snapshot
+ * that promised it, but a control cannot.
+ */
+function cursorCancelRunControl(runId: string): SessionControl {
+  return {
+    id: CURSOR_CANCEL_RUN_CONTROL_ID,
+    label: "Stop this run",
+    kind: SESSION_CONTROL_KIND.STOP,
+    target: runId,
+  };
+}
 
 const CURSOR_QUERY = {
   LIMIT: "limit",
@@ -193,8 +226,10 @@ function agentFromRecord(record: Record<string, unknown>): CursorAgent | undefin
 
 /**
  * Observes Cursor cloud agents through the documented public API. It reads only
- * the agents the supplied key owns, issues no request that can change provider
- * state, and reports nothing at all without a credential.
+ * the agents the supplied key owns, observation issues no request that can
+ * change provider state, and it reports nothing at all without a credential.
+ * The one write it supports is a user-typed follow-up, through Cursor's own
+ * run endpoint, to an agent it advertised as taking one.
  */
 export class CursorSessionAdapter extends CloudSessionAdapter {
   readonly #maximumObservedSessions: number;
@@ -250,6 +285,61 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
     return observations.filter(isDefined);
   }
 
+  /**
+   * Cursor documents a follow-up only against an agent whose latest run has
+   * finished: an archived agent cannot take new runs, a running one answers
+   * conflict until its run ends, and what a follow-up does to a failed or
+   * expired run is documented nowhere. Only the case Cursor has promised is
+   * advertised.
+   */
+  #agentTakesMessages(agent: CursorAgent, run: CursorRun | undefined): boolean {
+    return !agent.archived && run?.status === CURSOR_RUN_STATUS.FINISHED;
+  }
+
+  /**
+   * Cursor documents cancelling a run that is still active, and answers
+   * conflict for one that has already settled. An active run is the only state
+   * the control is advertised in.
+   */
+  #agentTakesCancel(agent: CursorAgent, run: CursorRun | undefined): boolean {
+    return (
+      !agent.archived &&
+      (run?.status === CURSOR_RUN_STATUS.RUNNING || run?.status === CURSOR_RUN_STATUS.CREATING)
+    );
+  }
+
+  protected override messageRoute(
+    providerSessionId: string,
+    text: string,
+  ): CloudWriteRoute | undefined {
+    return {
+      segments: [...CURSOR_ROUTE.AGENTS, providerSessionId, CURSOR_ROUTE_SEGMENT.RUNS],
+      body: {
+        [CURSOR_MESSAGE_FIELD.PROMPT]: { [CURSOR_MESSAGE_FIELD.TEXT]: text },
+      },
+    };
+  }
+
+  protected override controlRoute(
+    providerSessionId: string,
+    control: SessionControl,
+  ): CloudWriteRoute | undefined {
+    // The run to cancel is the advertised control's own target, so it is the
+    // run of the observation the user pressed, under the credential that
+    // observed it.
+    if (control.id !== CURSOR_CANCEL_RUN_CONTROL_ID || !control.target) return undefined;
+    return {
+      segments: [
+        ...CURSOR_ROUTE.AGENTS,
+        providerSessionId,
+        CURSOR_ROUTE_SEGMENT.RUNS,
+        control.target,
+        CURSOR_ROUTE_SEGMENT.CANCEL,
+      ],
+      // Cursor documents no body for a cancel, so none is sent.
+    };
+  }
+
   async #observationFor(
     request: CloudRequest,
     agent: CursorAgent,
@@ -275,6 +365,10 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
       title: agent.name ?? repository ?? UNKNOWN_AGENT_LABEL,
       status,
       observedAt,
+      canReceiveMessage: this.#agentTakesMessages(agent, run),
+      ...(latestRunId && this.#agentTakesCancel(agent, run)
+        ? { controls: [cursorCancelRunControl(latestRunId)] }
+        : {}),
       ...(run?.result ? { summary: run.result } : {}),
       detail: {
         ...(repository ? { repository } : {}),

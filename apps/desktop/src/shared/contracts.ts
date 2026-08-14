@@ -2,6 +2,8 @@ import type {
   AttentionSpeech,
   FixtureSnapshot,
   NormalizedSession,
+  ProviderControlResult,
+  ProviderMessageResult,
   RealtimeConnection,
   RealtimeVoice,
   Rectangle,
@@ -161,6 +163,22 @@ export interface AppBridge {
    * watching, and no URL crosses this boundary.
    */
   openSession(identity: SessionIdentity): void;
+  /**
+   * Hands one user-typed message to an observed session, through its
+   * provider's documented API. The renderer names a session it is already
+   * drawing, never an address or a credential, and the answer says what became
+   * of the send so the row can report it.
+   */
+  sendSessionMessage(identity: SessionIdentity, text: string): Promise<ProviderMessageResult>;
+  /**
+   * Runs one control a session's provider advertised for it. The renderer
+   * names the control by the id it was advertised under; a control the
+   * session's latest observation did not carry is refused, not improvised.
+   */
+  executeSessionControl(
+    identity: SessionIdentity,
+    controlId: string,
+  ): Promise<ProviderControlResult>;
   /** Brings the expanded panel forward so it can accept typed input. */
   focusPanel(): void;
   /** Mints a short-lived Realtime credential; the standing API key never crosses. */
@@ -193,6 +211,8 @@ export const channels = {
   openProviderApiKeys: "app:open-provider-api-keys",
   setShowInMenuBar: "app:set-show-in-menu-bar",
   openSession: "app:open-session",
+  sendSessionMessage: "app:send-session-message",
+  executeSessionControl: "app:execute-session-control",
   focusPanel: "app:focus-panel",
   requestRealtimeCredential: "app:request-realtime-credential",
   attentionSpeech: "app:attention-speech",

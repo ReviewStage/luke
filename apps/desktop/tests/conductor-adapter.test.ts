@@ -62,6 +62,8 @@ interface RecordedRequest {
   method: string;
   pathname: string;
   authorization: string | undefined;
+  contentType: string | undefined;
+  body: string | undefined;
 }
 
 interface FakeConductorApi {
@@ -115,9 +117,27 @@ function fakeConductorApi(api: TestApi): FakeConductorApi {
       method: init.method ?? "",
       pathname,
       authorization: headers.get("authorization") ?? undefined,
+      contentType: headers.get("content-type") ?? undefined,
+      body: typeof init.body === "string" ? init.body : undefined,
     });
 
     const segments = pathname.split("/").filter((segment) => segment.length > 0);
+    // The two documented writers: a prompt for one session, and a cancel for
+    // the turn it is working.
+    if (init.method === "POST") {
+      const session = api.sessions.find((candidate) => candidate.id === segments[2]);
+      const writer = segments[3];
+      if (!session || segments[1] !== "sessions" || segments.length !== 4) {
+        return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
+      }
+      if (writer === "messages") {
+        return jsonResponse({ messageId: "message-1", state: "queued" }, 201);
+      }
+      if (writer === "cancel") {
+        return jsonResponse({ sessionId: session.id, status: "idle", canceledQueuedMessages: 0 });
+      }
+      return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
+    }
     if (segments[0] === "me") {
       return jsonResponse(api.userId ? { userId: api.userId } : {});
     }
@@ -231,7 +251,11 @@ test("observes cloud sessions the signed-in user created, under their own names"
   assert.equal(observations[0]?.title, TEST_WORKSPACE_NAME);
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
   assert.equal(observations[0]?.observedAt, TEST_TIME - 5_000);
-  assert.equal(observations[0]?.controls, undefined);
+  // A working session can be stopped and can take a message, both documented.
+  assert.deepEqual(observations[0]?.controls, [
+    { id: "cancel-turn", label: "Stop this turn", kind: "stop" },
+  ]);
+  assert.equal(observations[0]?.canReceiveMessage, true);
   assert.deepEqual(observations[0]?.detail, {
     repository: "luke",
     model: "claude-opus-5",
@@ -907,4 +931,126 @@ test("keeps observing when one session's status cannot be read", async () => {
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "session-readable");
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
+});
+
+test("advertises a message for any open chat and a stop only while one works", async () => {
+  // One workspace per chat: a workspace is one row, reported through its
+  // neediest chat, so each state under test needs a workspace of its own.
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [
+      ownedWorkspace("workspace-idle", TEST_TIME - 30_000),
+      ownedWorkspace("workspace-working", TEST_TIME - 31_000),
+      ownedWorkspace("workspace-failed", TEST_TIME - 32_000),
+      ownedWorkspace("workspace-closed", TEST_TIME - 33_000),
+    ],
+    sessions: [
+      {
+        id: "session-idle",
+        workspaceId: "workspace-idle",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 5_000,
+      },
+      {
+        id: "session-working",
+        workspaceId: "workspace-working",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.WORKING,
+        statusUpdatedAt: TEST_TIME - 6_000,
+      },
+      {
+        id: "session-failed",
+        workspaceId: "workspace-failed",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.ERROR,
+        statusUpdatedAt: TEST_TIME - 7_000,
+      },
+      {
+        id: "session-closed",
+        workspaceId: "workspace-closed",
+        name: TEST_SESSION_NAME,
+        archivedAt: new Date(TEST_TIME - 8_000).toISOString(),
+      },
+    ],
+  });
+
+  const observations = await adapterFor(api.fetch).observe();
+  const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
+
+  assert.equal(byId.get("session-idle")?.canReceiveMessage, true);
+  assert.equal(byId.get("session-working")?.canReceiveMessage, true);
+  // A failed chat is documented for no writer, and a closed one is settled.
+  assert.equal(byId.get("session-failed")?.canReceiveMessage, false);
+  assert.equal(byId.get("session-closed")?.canReceiveMessage, false);
+  assert.equal(byId.get("session-idle")?.controls, undefined);
+  assert.deepEqual(byId.get("session-working")?.controls, [
+    { id: "cancel-turn", label: "Stop this turn", kind: "stop" },
+  ]);
+});
+
+test("hands a user prompt to Conductor's documented message endpoint", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 30_000)],
+    sessions: [
+      {
+        id: "session-idle",
+        workspaceId: "workspace-active",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 5_000,
+      },
+    ],
+  });
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+
+  const result = await adapter.sendMessage({
+    providerSessionId: "session-idle",
+    text: "Rebase onto main before continuing",
+  });
+
+  assert.deepEqual(result, { status: "accepted" });
+  const write = api.requests.at(-1);
+  assert.equal(write?.method, "POST");
+  assert.equal(write?.pathname, "/v0/sessions/session-idle/messages");
+  assert.equal(write?.authorization, `Bearer ${TEST_API_KEY}`);
+  assert.deepEqual(JSON.parse(write?.body ?? ""), {
+    message: "Rebase onto main before continuing",
+  });
+});
+
+test("stops a working turn through Conductor's cancel endpoint, sending no body", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 30_000)],
+    sessions: [
+      {
+        id: "session-working",
+        workspaceId: "workspace-active",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.WORKING,
+        statusUpdatedAt: TEST_TIME - 5_000,
+      },
+    ],
+  });
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+
+  const result = await adapter.executeControl({
+    providerSessionId: "session-working",
+    control: { id: "cancel-turn", label: "Stop this turn", kind: "stop" },
+  });
+
+  assert.deepEqual(result, { status: "accepted" });
+  const write = api.requests.at(-1);
+  assert.equal(write?.method, "POST");
+  assert.equal(write?.pathname, "/v0/sessions/session-working/cancel");
+  // Conductor documents no body for a cancel.
+  assert.equal(write?.contentType, undefined);
+  assert.equal(write?.body, undefined);
 });

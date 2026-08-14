@@ -11,7 +11,11 @@ import {
   type RealtimeConnection,
   SESSION_STATUS,
 } from "@sidecar/core";
-import { quietIsLukesOwn, RealtimeVoiceSession } from "../src/renderer/realtime-session";
+import {
+  quietIsLukesOwn,
+  RealtimeVoiceSession,
+  type SessionActionCarrier,
+} from "../src/renderer/realtime-session";
 
 const CONNECTION: RealtimeConnection = {
   value: "ek_test_secret",
@@ -62,6 +66,7 @@ function harness(
     connectionDelayMs?: number;
     connectionError?: Error;
     now?: () => number;
+    carryAction?: SessionActionCarrier;
   } = {},
 ): Harness {
   const sent: Record<string, unknown>[] = [];
@@ -137,6 +142,7 @@ function harness(
       ? {}
       : { connectTimeoutMs: options.connectTimeoutMs }),
     ...(options.now ? { now: options.now } : {}),
+    ...(options.carryAction ? { carryAction: options.carryAction } : {}),
     onStatus: () => undefined,
     onLocalStream: () => undefined,
     onRemoteStream: () => undefined,
@@ -1011,4 +1017,209 @@ test("closing stops the microphone track", async () => {
 
   assert.equal(context.microphoneStopped(), true);
   assert.equal(context.session.status, REALTIME_STATUS.IDLE);
+});
+
+/** Opens and commits a developer turn, which is the only turn a tool may run in. */
+function armDeveloperTurn(context: Harness): void {
+  context.session.startListening();
+  context.session.stopListening(true);
+}
+
+test("a spoken ask is carried through the carrier and its outcome is voiced", async () => {
+  const carried: unknown[] = [];
+  const context = harness({
+    carryAction: async (action) => {
+      carried.push(action);
+      return { status: "accepted" };
+    },
+  });
+  await context.session.connect();
+  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
+  // The tool call arrives inside a turn the developer opened by speaking.
+  armDeveloperTurn(context);
+  const sentBefore = context.sent.length;
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "send_session_message",
+          call_id: "call-1",
+          arguments:
+            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"add tests"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(carried, [
+    {
+      kind: "message",
+      identity: { providerId: "claude-code", providerSessionId: "session-a" },
+      text: "add tests",
+    },
+  ]);
+  const followUp = context.sent.slice(sentBefore);
+  const output = followUp.find(
+    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+  );
+  assert.equal((output?.item as { output?: string } | undefined)?.output, '{"status":"accepted"}');
+  assert.equal(
+    followUp.at(-1)?.type,
+    REALTIME_CLIENT_EVENT.RESPONSE_CREATE,
+    "the outcome is voiced by the reply that follows",
+  );
+  // The turn never ended: the reply resumes over the outcome.
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+});
+
+test("a tool call outside the roster is refused before any carrier runs", async () => {
+  const carried: unknown[] = [];
+  const context = harness({
+    carryAction: async (action) => {
+      carried.push(action);
+      return { status: "accepted" };
+    },
+  });
+  await context.session.connect();
+  // The roster names one session that takes nothing.
+  context.session.updateSessions([observedSession("session-a")]);
+  armDeveloperTurn(context);
+  const sentBefore = context.sent.length;
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "send_session_message",
+          call_id: "call-1",
+          arguments:
+            '{"provider_id":"claude-code","provider_session_id":"session-unknown","text":"hi"}',
+        },
+        {
+          type: "function_call",
+          name: "send_session_message",
+          call_id: "call-2",
+          arguments: '{"provider_id":"claude-code","provider_session_id":"session-a","text":"hi"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  // Nothing was carried: one call named a session Luke was never shown, the
+  // other named one that advertised nothing. Both were answered anyway, so the
+  // model is never left waiting on a call that will not return.
+  assert.deepEqual(carried, []);
+  const outputs = context.sent
+    .slice(sentBefore)
+    .filter(
+      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+    );
+  assert.equal(outputs.length, 2);
+  for (const event of outputs) {
+    const raw = (event.item as { output?: string } | undefined)?.output ?? "{}";
+    assert.equal((JSON.parse(raw) as { status?: string }).status, "refused");
+  }
+});
+
+test("a tool call outside a turn the developer opened cannot act", async () => {
+  const carried: unknown[] = [];
+  const context = harness({
+    carryAction: async (action) => {
+      carried.push(action);
+      return { status: "accepted" };
+    },
+  });
+  await context.session.connect();
+  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
+  // No developer turn is opened: the call arrives on a turn Luke was not asked
+  // to act in — the shape a summary-driven injection would take.
+  const sentBefore = context.sent.length;
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "send_session_message",
+          call_id: "call-1",
+          arguments:
+            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"add tests"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  // The session takes messages and the identity is real, so only the turn gate
+  // stands between the call and the write — and it holds.
+  assert.deepEqual(carried, []);
+  const events = context.sent.slice(sentBefore);
+  const output = events.find(
+    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+  );
+  assert.equal(
+    (
+      JSON.parse((output?.item as { output?: string } | undefined)?.output ?? "{}") as {
+        status?: string;
+      }
+    ).status,
+    "refused",
+  );
+  // The call is answered so the model is not left waiting, but the turn opens
+  // no reply: a turn Luke was not asked to act in must not talk on either.
+  assert.ok(!events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE));
+});
+
+test("a tool outcome is not spoken over a turn the developer has taken", async () => {
+  let resolveWrite: ((output: Record<string, unknown>) => void) | undefined;
+  const context = harness({
+    carryAction: () =>
+      new Promise<Record<string, unknown>>((resolve) => {
+        resolveWrite = resolve;
+      }),
+  });
+  await context.session.connect();
+  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
+  armDeveloperTurn(context);
+  const sentBefore = context.sent.length;
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "send_session_message",
+          call_id: "call-1",
+          arguments:
+            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"add tests"}',
+        },
+      ],
+    },
+  });
+  // Let the answer reach the point where it is awaiting the write.
+  await Promise.resolve();
+  // The developer takes the turn while the write is still in flight.
+  context.session.startListening();
+  resolveWrite?.({ status: "accepted" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const events = context.sent.slice(sentBefore);
+  // The outcome was still delivered as an item, so the next turn has it...
+  assert.ok(
+    events.some(
+      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+    ),
+  );
+  // ...but no reply was opened to voice it over the microphone now open.
+  assert.ok(!events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE));
+  assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
 });

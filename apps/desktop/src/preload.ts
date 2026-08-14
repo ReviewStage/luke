@@ -1,6 +1,8 @@
 import type {
   AttentionSpeech,
   NormalizedSession,
+  ProviderControlResult,
+  ProviderMessageResult,
   RealtimeConnection,
   RealtimeVoice,
   SessionIdentity,
@@ -44,6 +46,18 @@ const bridge: AppBridge = {
   openSession: (identity: SessionIdentity) => {
     ipcRenderer.send(channels.openSession, identity);
   },
+  sendSessionMessage: (identity: SessionIdentity, text: string) =>
+    ipcRenderer.invoke(
+      channels.sendSessionMessage,
+      identity,
+      text,
+    ) as Promise<ProviderMessageResult>,
+  executeSessionControl: (identity: SessionIdentity, controlId: string) =>
+    ipcRenderer.invoke(
+      channels.executeSessionControl,
+      identity,
+      controlId,
+    ) as Promise<ProviderControlResult>,
   focusPanel: () => ipcRenderer.send(channels.focusPanel),
   requestRealtimeCredential: () =>
     ipcRenderer.invoke(channels.requestRealtimeCredential) as Promise<

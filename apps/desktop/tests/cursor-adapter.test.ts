@@ -60,6 +60,8 @@ interface RecordedRequest {
   pathname: string;
   search: string;
   authorization: string | undefined;
+  contentType: string | undefined;
+  body: string | undefined;
 }
 
 interface FakeCursorApi {
@@ -136,10 +138,31 @@ function fakeCursorApi(agents: readonly TestAgent[]): FakeCursorApi {
       pathname,
       search,
       authorization: headers.get("authorization") ?? undefined,
+      contentType: headers.get("content-type") ?? undefined,
+      body: typeof init.body === "string" ? init.body : undefined,
     });
 
     const segments = pathname.split("/").filter((segment) => segment.length > 0);
     if (segments[0] !== "v1" || segments[1] !== "agents") {
+      return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
+    }
+
+    // The two documented writers: a follow-up run for an agent, and a cancel
+    // for the run it is still working.
+    if (init.method === "POST") {
+      const agent = agents.find((candidate) => candidate.id === segments[2]);
+      if (agent && segments[3] === "runs" && segments.length === 4) {
+        return jsonResponse({ run: { id: "run-followup", agentId: agent.id } }, 201);
+      }
+      if (
+        agent &&
+        segments[3] === "runs" &&
+        agent.run?.id === segments[4] &&
+        segments[5] === "cancel" &&
+        segments.length === 6
+      ) {
+        return jsonResponse({});
+      }
       return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
     }
 
@@ -220,7 +243,12 @@ test("observes a running agent under the name Cursor gave it", async () => {
   assert.equal(observations[0]?.title, TEST_AGENT_NAME);
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
   assert.equal(observations[0]?.observedAt, TEST_TIME - 30_000);
-  assert.equal(observations[0]?.controls, undefined);
+  // A running agent can be stopped and nothing else; the follow-up belongs to
+  // a finished run.
+  assert.deepEqual(observations[0]?.controls, [
+    { id: "cancel-run", label: "Stop this run", kind: "stop", target: "run-running" },
+  ]);
+  assert.equal(observations[0]?.canReceiveMessage, false);
   assert.equal(observations[0]?.summary, TEST_RUN_RESULT);
   // The repository the run names, which is the only place the API reports one
   // for an agent that came from a list page.
@@ -605,4 +633,90 @@ test("keeps the previous snapshot when the list request fails transiently", asyn
 
   assert.equal(observed.length, 1);
   assert.deepEqual(duringOutage, observed);
+});
+
+function finishedAgent(id: string, updatedAt: number): TestAgent {
+  return {
+    id,
+    name: TEST_AGENT_NAME,
+    createdAt: updatedAt,
+    updatedAt,
+    run: { id: `run-${id}`, status: TEST_RUN_STATUS.FINISHED, updatedAt },
+  };
+}
+
+test("advertises a follow-up only for an agent whose run has finished", async () => {
+  const api = fakeCursorApi([
+    finishedAgent("agent-finished", TEST_TIME - 1_000),
+    runningAgent("agent-running", TEST_TIME - 2_000),
+    {
+      id: "agent-errored",
+      name: TEST_AGENT_NAME,
+      createdAt: TEST_TIME - 3_000,
+      run: { id: "run-agent-errored", status: TEST_RUN_STATUS.ERROR },
+    },
+    {
+      id: "agent-filed",
+      name: TEST_AGENT_NAME,
+      archived: true,
+      createdAt: TEST_TIME - 4_000,
+    },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+  const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
+
+  assert.equal(byId.get("agent-finished")?.canReceiveMessage, true);
+  // A running agent answers conflict until its run ends, and what a follow-up
+  // does after a failure is documented nowhere; neither is promised one.
+  assert.equal(byId.get("agent-running")?.canReceiveMessage, false);
+  assert.equal(byId.get("agent-errored")?.canReceiveMessage, false);
+  assert.equal(byId.get("agent-filed")?.canReceiveMessage, false);
+  // The stoppable one is the one still running.
+  assert.deepEqual(byId.get("agent-running")?.controls, [
+    { id: "cancel-run", label: "Stop this run", kind: "stop", target: "run-agent-running" },
+  ]);
+  assert.equal(byId.get("agent-finished")?.controls, undefined);
+});
+
+test("hands a follow-up to Cursor's documented run endpoint", async () => {
+  const api = fakeCursorApi([finishedAgent("agent-finished", TEST_TIME - 1_000)]);
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+
+  const result = await adapter.sendMessage({
+    providerSessionId: "agent-finished",
+    text: "Also add troubleshooting steps",
+  });
+
+  assert.deepEqual(result, { status: "accepted" });
+  const write = api.requests.at(-1);
+  assert.equal(write?.method, "POST");
+  assert.equal(write?.pathname, "/v1/agents/agent-finished/runs");
+  assert.equal(write?.authorization, `Bearer ${TEST_API_KEY}`);
+  assert.deepEqual(JSON.parse(write?.body ?? ""), {
+    prompt: { text: "Also add troubleshooting steps" },
+  });
+});
+
+test("stops the run the user saw through Cursor's cancel endpoint, sending no body", async () => {
+  const api = fakeCursorApi([runningAgent("agent-running", TEST_TIME - 1_000)]);
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+  // Deliberately without a target: the route must be built from the control
+  // the adapter itself advertised, never from the caller's copy of it.
+  const cancelControl = { id: "cancel-run", label: "Stop this run", kind: "stop" };
+
+  const result = await adapter.executeControl({
+    providerSessionId: "agent-running",
+    control: cancelControl,
+  });
+
+  assert.deepEqual(result, { status: "accepted" });
+  const write = api.requests.at(-1);
+  assert.equal(write?.method, "POST");
+  assert.equal(write?.pathname, "/v1/agents/agent-running/runs/run-agent-running/cancel");
+  // Cursor documents no body for a cancel.
+  assert.equal(write?.contentType, undefined);
+  assert.equal(write?.body, undefined);
 });

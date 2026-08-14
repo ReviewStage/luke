@@ -2,6 +2,8 @@ import {
   type AttentionSpeech,
   cancelResponseEvents,
   clearInputAudioEvents,
+  functionCallFollowUpEvents,
+  functionCallOutputEvents,
   type NormalizedSession,
   proactiveSpeechEvents,
   pushToTalkCommitEvents,
@@ -9,9 +11,13 @@ import {
   REALTIME_SERVER_EVENT,
   REALTIME_STATUS,
   type RealtimeConnection,
+  type RealtimeFunctionCall,
   type RealtimeStatus,
+  realtimeFunctionCalls,
+  type SessionToolAction,
   sessionContextEvents,
   sessionContextText,
+  sessionToolAction,
   truncateResponseEvents,
 } from "@sidecar/core";
 
@@ -27,6 +33,16 @@ const CONNECT_TIMEOUT_MS = 15_000;
  */
 const REALTIME_SETTLE_TIMEOUT_MS = 20_000;
 
+/**
+ * Carries one validated action to the process that can perform it, answering
+ * with what became of it. The renderer validates a tool call against the
+ * observed roster before this is called, and the main process validates it
+ * again against its registry — the carrier is a courier, not a gate.
+ */
+export type SessionActionCarrier = (
+  action: Extract<SessionToolAction, { kind: "message" | "control" }>,
+) => Promise<Record<string, unknown>>;
+
 export interface RealtimeVoiceSessionCallbacks {
   onStatus(status: RealtimeStatus): void;
   onLocalStream(stream: MediaStream | undefined): void;
@@ -36,6 +52,8 @@ export interface RealtimeVoiceSessionCallbacks {
 
 export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbacks {
   requestConnection(): Promise<RealtimeConnection | undefined>;
+  /** Absent means Luke can only speak: every tool call is refused with a reason. */
+  carryAction?: SessionActionCarrier;
   /**
    * The browser pieces, injectable so the microphone state machine can be
    * exercised without a real device or peer connection. Push-to-talk decides
@@ -94,6 +112,12 @@ export class RealtimeVoiceSession {
   #closed = false;
   #sessionContext: string | undefined;
   /**
+   * The roster as last reported, kept whole rather than as its rendered text:
+   * it is what a tool call is validated against, and a call may only name a
+   * session Luke was actually shown.
+   */
+  #sessions: readonly NormalizedSession[] = [];
+  /**
    * Luke's own audio track. Cancelling stops the model producing more, but what
    * it already produced is on its way down the connection and keeps playing —
    * so cutting him off means silencing this end too, which is the only half of
@@ -139,6 +163,25 @@ export class RealtimeVoiceSession {
    */
   #audioEndingsReported = false;
   #settleTimer: ReturnType<typeof setTimeout> | undefined;
+  /**
+   * Whether the turn now under way is one the developer opened by speaking, and
+   * so the one and only turn a tool call may run in. It is set true when a
+   * push-to-talk commit opens a response and false for every turn Luke opens
+   * himself — a proactive readout, the reply that voices a tool's outcome — so
+   * a session summary or a tool output that reads like an instruction can never
+   * make Luke act. Nothing that decides on the developer's behalf reaches a
+   * write path; this is the runtime half of that, beside the standing
+   * instructions and the `tool_choice` withheld on every turn but this one.
+   */
+  #toolTurnArmed = false;
+  /**
+   * A monotonic id for the turn now under way, bumped whenever a new one
+   * begins. A tool follow-up captures it before awaiting the write and refuses
+   * to open if it has changed — the developer has taken the turn, or started
+   * another — so Luke never speaks the outcome over a live microphone or over
+   * a reply the developer is already hearing.
+   */
+  #turnEpoch = 0;
 
   constructor(options: RealtimeVoiceSessionOptions) {
     this.#options = options;
@@ -428,6 +471,10 @@ export class RealtimeVoiceSession {
     // detection off the server keeps everything since the last commit.
     this.#send(clearInputAudioEvents());
     this.#microphone.enabled = true;
+    // The developer taking the turn is a new turn, whatever a tool follow-up
+    // still in flight from the last one thinks: it will find this epoch and
+    // stand down rather than talk over the microphone now opening.
+    this.#turnEpoch += 1;
     this.#setStatus(REALTIME_STATUS.LISTENING);
     return true;
   }
@@ -445,7 +492,9 @@ export class RealtimeVoiceSession {
       this.#setStatus(REALTIME_STATUS.READY);
       return;
     }
-    this.#startResponse(pushToTalkCommitEvents());
+    // The one turn a tool may run in: the developer opened it and spoke into
+    // it, so a tool call it emits is the developer's own ask.
+    this.#startResponse(pushToTalkCommitEvents(), true);
   }
 
   /**
@@ -502,6 +551,7 @@ export class RealtimeVoiceSession {
     });
     this.#stream = undefined;
     this.#sessionContext = undefined;
+    this.#sessions = [];
     this.#generationDone = false;
     this.#remoteQuiet = false;
     this.#pendingTurn = false;
@@ -514,7 +564,7 @@ export class RealtimeVoiceSession {
     this.#options.onRemoteStream(undefined);
   }
 
-  #startResponse(events: readonly Record<string, unknown>[]): void {
+  #startResponse(events: readonly Record<string, unknown>[], toolsArmed = false): void {
     // The track is deliberately left as it is. A reply that was cut off left it
     // disabled, and re-opening it here would let the tail of that reply — still
     // arriving, because the server sent it before it was told to stop — be
@@ -526,6 +576,10 @@ export class RealtimeVoiceSession {
     this.#remoteQuiet = false;
     this.#responseItemId = undefined;
     this.#audibleSince = undefined;
+    // A new turn: only a developer-opened one may run a tool, and any tool
+    // follow-up still awaiting from the last turn will see this and stand down.
+    this.#toolTurnArmed = toolsArmed;
+    this.#turnEpoch += 1;
     this.#clearSettleTimer();
     this.#send(events);
     this.#setStatus(REALTIME_STATUS.RESPONDING);
@@ -614,6 +668,7 @@ export class RealtimeVoiceSession {
    * data. Identical rosters are not resent.
    */
   updateSessions(sessions: readonly NormalizedSession[]): void {
+    this.#sessions = sessions;
     if (!this.isConnected) return;
     const context = sessionContextText(sessions);
     if (context === this.#sessionContext) return;
@@ -651,6 +706,14 @@ export class RealtimeVoiceSession {
       return;
     }
     if (type === REALTIME_SERVER_EVENT.RESPONSE_DONE) {
+      // A reply that asked for tools has not finished talking: the calls are
+      // answered and the reply resumes over their outcomes, so the turn stays
+      // open rather than ending on a reply that was only half made.
+      const calls = realtimeFunctionCalls(event);
+      if (calls.length > 0) {
+        void this.#answerToolCalls(calls);
+        return;
+      }
       // Generation is done; the reply is not. The turn ends when Luke stops
       // being audible, which the caller reports from the audio itself rather
       // than from an event — the one that would say so is undocumented.
@@ -677,6 +740,66 @@ export class RealtimeVoiceSession {
       // commit is the common case — which would otherwise leave the session
       // stuck in `responding` and unable to take another turn.
       this.#finishResponse();
+    }
+  }
+
+  /**
+   * Answers the tool calls one reply made, then asks for the reply that voices
+   * their outcomes. Every call is validated against the roster Luke was shown
+   * before anything is carried, every outcome — including each refusal — is
+   * answered so the model never waits on a call that will not return, and the
+   * carrier's own failure is an outcome rather than an exception: the developer
+   * asked for something, and what became of it has to be said.
+   */
+  async #answerToolCalls(calls: readonly RealtimeFunctionCall[]): Promise<void> {
+    // The hard gate: a write runs only in the turn the developer opened by
+    // speaking. A call on any other turn — one Luke opened to read a notice or
+    // to voice an outcome — is refused whatever it names, so a session summary
+    // or a tool output that reads like an instruction can never make Luke act.
+    // The turn's tools are also withheld at the API, so this is belt to that
+    // suspenders rather than the only thing holding.
+    const armed = this.#toolTurnArmed;
+    // The turn these calls belong to. If it is no longer the current turn by
+    // the time the writes finish, the developer has moved on and the outcome
+    // must not be spoken over whatever they are now saying or hearing.
+    const epoch = this.#turnEpoch;
+
+    for (const call of calls) {
+      const output = await this.#toolCallOutput(call, armed);
+      this.#send(functionCallOutputEvents(call.callId, output));
+    }
+
+    // An unarmed turn — a proactive readout, a follow-up — carries no outcome
+    // to voice: every call on it was refused, and opening a reply here would be
+    // a turn that was meant to stay silent talking on without its instructions.
+    // The calls are still answered above, so the model is not left waiting.
+    if (!armed) return;
+    // A follow-up now would talk over a live microphone or a newer reply: the
+    // developer took the turn, started another, or the call is gone. The
+    // outcomes were still delivered as items, so the next turn has them.
+    if (!this.isConnected || this.#turnEpoch !== epoch) return;
+    this.#startResponse(functionCallFollowUpEvents());
+  }
+
+  async #toolCallOutput(
+    call: RealtimeFunctionCall,
+    armed: boolean,
+  ): Promise<Record<string, unknown>> {
+    if (!armed) {
+      return {
+        status: "refused",
+        reason: "Only a request you make yourself can act on a session.",
+      };
+    }
+    const action = sessionToolAction(call, this.#sessions);
+    if (action.kind === "refused") return { status: "refused", reason: action.reason };
+    if (!this.#options.carryAction) {
+      return { status: "refused", reason: "Acting on sessions is not available." };
+    }
+    try {
+      return await this.#options.carryAction(action);
+    } catch {
+      return { status: "refused", reason: "The action could not be carried out." };
     }
   }
 

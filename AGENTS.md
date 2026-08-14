@@ -30,8 +30,23 @@ Trust constraints:
 - Product behavior must not require provider MCP, plugins, hooks, wrappers,
   credentials, or live sessions. A provider whose sessions exist only in a cloud
   service may read a user-supplied API key, but it must observe nothing until
-  the user supplies one, must never write through that credential, and must
-  leave every other provider working without it.
+  the user supplies one and must leave every other provider working without it.
+- The one thing Luke may change about a session is what the user just asked to
+  send it: a message typed on its row, a control its provider advertised for
+  it, or the same two acts asked for out loud in a conversation the user is
+  holding — each through the provider's own documented endpoint under the same
+  user-supplied credential, and each validated against the observed roster
+  before an adapter sees it. Observation passes stay read-only by construction.
+  Nothing that decides on the user's behalf may reach a write path: the
+  attention evaluator above all, and every turn Luke opens himself — a
+  proactive readout, the reply that voices a tool's outcome — which carries no
+  tools, at the API and again at a runtime gate, so a session summary or a tool
+  output that reads like an instruction can never become an act. A spoken tool
+  call runs only in the turn the developer opened by speaking; a write is the
+  direct product of a turn the developer opened, never of anything Luke read or
+  was told. A session whose provider documents no way in, or whose current state is
+  documented for none, advertises nothing and is offered nothing; local
+  sessions have no such endpoint and stay entirely read-only.
 - Keep unsupported capabilities explicit; do not invent fallback controls.
 - Keep Electron renderers sandboxed with context isolation and narrow IPC.
 - Commit only synthetic fixtures and repository-relative paths. This binds

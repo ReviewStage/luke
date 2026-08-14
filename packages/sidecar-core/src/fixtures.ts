@@ -1,5 +1,10 @@
 import { PROVIDER_ID, type ProviderId } from "./providers";
-import { SESSION_LOCATION, type SessionLocation } from "./session";
+import {
+  SESSION_CONTROL_KIND,
+  SESSION_LOCATION,
+  type SessionControl,
+  type SessionLocation,
+} from "./session";
 
 export const SESSION_STATE = {
   WORKING: "working",
@@ -31,6 +36,14 @@ export interface SessionSnapshot {
   location: SessionLocation;
   /** When the session was last seen, in the same units a live observation uses. */
   observedAt: number;
+  /**
+   * Drawn only: a fixture row can show the composer a live session would have,
+   * but a fixture run refuses every write — its registry is empty, so nothing
+   * a capture could press reaches a provider.
+   */
+  canMessage?: boolean;
+  /** Drawn only, like the composer: the controls a live session would show. */
+  actions?: readonly SessionControl[];
 }
 
 export interface FixtureSnapshot {
@@ -112,6 +125,9 @@ const smokeFixture: FixtureSnapshot = {
       state: SESSION_STATE.WORKING,
       location: SESSION_LOCATION.CLOUD,
       observedAt: minutesBeforeEpoch(18),
+      // What a working Cursor agent advertises live, so the one screenshot the
+      // evidence is reviewed from also proves the stop control is drawn.
+      actions: [{ id: "cancel-run", label: "Stop this run", kind: SESSION_CONTROL_KIND.STOP }],
     },
     // A fifth session keeps every state and every provider mark visible in the
     // one screenshot the visual evidence is reviewed from. It is also one more
@@ -129,6 +145,9 @@ const smokeFixture: FixtureSnapshot = {
       state: SESSION_STATE.UNKNOWN,
       location: SESSION_LOCATION.CLOUD,
       observedAt: minutesBeforeEpoch(41),
+      // A suspended Devin session takes a message live — sending is what
+      // resumes one — so this row is what puts the composer in the evidence.
+      canMessage: true,
     },
   ],
 };
