@@ -103,10 +103,21 @@ const SESSION_LIST: ReorderList = {
   arrivesFromFan: true,
 };
 
-/** The wing's strip: marks laid along the wing, whichever way the flex runs. */
+/**
+ * The wing's strip: marks laid along the wing. The wing hangs off the housing
+ * and grows its far edge as the shape morphs — `--wing-bound` moves the left
+ * edge of the very element `offsetLeft` is measured from — so a slot's
+ * position is its distance from the anchored edge instead: measured from the
+ * moving one, every morph would read as a reorder and spring marks that never
+ * moved. The distance is negated so the numbers still grow the way the axis
+ * runs and the travel arithmetic stays the plan's. Measuring the slot's own
+ * far edge also keeps the overflow count still while only its digits widen,
+ * because the digits grow away from the anchor.
+ */
 const WING_STRIP: ReorderList = {
   idAttribute: WING_SLOT_ID_ATTRIBUTE,
-  offset: (element) => element.offsetLeft,
+  offset: (element) =>
+    element.offsetLeft + element.offsetWidth - (element.offsetParent?.clientWidth ?? 0),
   translate: (px) => `translateX(${px}px)`,
   arrivesFromFan: false,
 };
