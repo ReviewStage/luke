@@ -2,11 +2,12 @@
  * Luke's knowledge of himself, in one place.
  *
  * Everything the voice conversation may know about the app — what Luke is on
- * screen, every setting with its current value, and where each is changed by
- * hand — is assembled here into the `AppGuideSnapshot` the conversation is
- * sent. A feature this file does not describe is one Luke will deny having,
- * and a setting it does not mark changeable is one no spoken ask can touch,
- * so adding either to the app means adding it here in the same change.
+ * screen, every setting with its current value and its default, and where
+ * each is changed by hand — is assembled here into the `AppGuideSnapshot` the
+ * conversation is sent. A feature this file does not describe is one Luke
+ * will deny having, and a setting it does not mark changeable is one no
+ * spoken ask can touch, so adding either to the app means adding it here in
+ * the same change.
  *
  * The settings half is compile-enforced: `SETTING_GUIDE` is a `Record` over
  * every key of `AppSettings`, so a new settings field does not build until a
@@ -25,9 +26,11 @@ import {
   type AppGuideSetting,
   type AppGuideSnapshot,
   appToggleText,
+  DEFAULT_PANEL_FORM_FACTOR,
   isPanelFormFactor,
   isRealtimeVoice,
   PANEL_FORM_FACTOR_LIST,
+  REALTIME_DEFAULTS,
   REALTIME_VOICE_LIST,
   REALTIME_VOICE_SPEED,
   type RealtimeVoiceSpeed,
@@ -38,7 +41,7 @@ import type {
   CredentialSource,
   MicrophoneStatus,
 } from "../shared/contracts";
-import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "../shared/contracts";
+import { APP_SETTING_DEFAULTS, CREDENTIAL_SOURCE, SECRET_STORAGE } from "../shared/contracts";
 import {
   CLOUD_AGENT_PROVIDER_LIST,
   INTEGRATION_PROVIDER_LIST,
@@ -98,6 +101,7 @@ const SETTING_GUIDE: Record<
       "Which voice Luke speaks with; a change is heard right away — a conversation under way starts afresh in the new voice.",
     kind: APP_SETTING_KIND.CHOICE,
     value: settings.voice,
+    defaultValue: REALTIME_DEFAULTS.VOICE,
     choices: REALTIME_VOICE_LIST,
     adjustable: true,
     manual: `${SETTINGS_TAB}, under Preferences`,
@@ -109,6 +113,7 @@ const SETTING_GUIDE: Record<
       "How fast Luke talks — slow is 0.75×, normal 1×, quick 1.25×, fast 1.5× the voice's natural rate; a change is heard from the next reply on.",
     kind: APP_SETTING_KIND.CHOICE,
     value: voiceSpeedWord(settings.voiceSpeed),
+    defaultValue: voiceSpeedWord(REALTIME_DEFAULTS.SPEED),
     choices: VOICE_SPEED_WORDS.map((candidate) => candidate.word),
     adjustable: true,
     manual: `${SETTINGS_TAB}, under Preferences`,
@@ -121,6 +126,7 @@ const SETTING_GUIDE: Record<
       "whatever this says, while the Mac's output is muted or at zero.",
     kind: APP_SETTING_KIND.TOGGLE,
     value: appToggleText(settings.voiceCaptions),
+    defaultValue: appToggleText(APP_SETTING_DEFAULTS.voiceCaptions),
     adjustable: true,
     manual: `${SETTINGS_TAB}, under Preferences`,
   }),
@@ -131,6 +137,7 @@ const SETTING_GUIDE: Record<
       "Whether Music and Spotify are turned down while a spoken exchange is live, and back up after.",
     kind: APP_SETTING_KIND.TOGGLE,
     value: appToggleText(settings.duckOtherMedia),
+    defaultValue: appToggleText(APP_SETTING_DEFAULTS.duckOtherMedia),
     adjustable: true,
     manual: `${SETTINGS_TAB}, under Preferences`,
   }),
@@ -143,6 +150,7 @@ const SETTING_GUIDE: Record<
       "Needs voice to be available; the panel and the capsule count show the same states either way.",
     kind: APP_SETTING_KIND.TOGGLE,
     value: appToggleText(settings.sessionNotifications),
+    defaultValue: appToggleText(APP_SETTING_DEFAULTS.sessionNotifications),
     adjustable: true,
     manual: `${SETTINGS_TAB}, under Preferences`,
   }),
@@ -152,6 +160,7 @@ const SETTING_GUIDE: Record<
     description: "Whether Luke also stands in the menu bar as a status item.",
     kind: APP_SETTING_KIND.TOGGLE,
     value: appToggleText(settings.showInMenuBar),
+    defaultValue: appToggleText(APP_SETTING_DEFAULTS.showInMenuBar),
     adjustable: true,
     manual: `${SETTINGS_TAB}, under Preferences`,
   }),
@@ -161,6 +170,7 @@ const SETTING_GUIDE: Record<
     description: "Whether Luke also stands in the Dock as an app icon.",
     kind: APP_SETTING_KIND.TOGGLE,
     value: appToggleText(settings.showInDock),
+    defaultValue: appToggleText(APP_SETTING_DEFAULTS.showInDock),
     adjustable: true,
     manual: `${SETTINGS_TAB}, under Preferences`,
   }),
@@ -171,6 +181,7 @@ const SETTING_GUIDE: Record<
       "Whether Luke stands on every connected display at once; off keeps him to the main display alone.",
     kind: APP_SETTING_KIND.TOGGLE,
     value: appToggleText(settings.showOnAllDisplays),
+    defaultValue: appToggleText(APP_SETTING_DEFAULTS.showOnAllDisplays),
     adjustable: true,
     manual: `${SETTINGS_TAB}, under Preferences`,
   }),
@@ -181,6 +192,7 @@ const SETTING_GUIDE: Record<
       "How Luke stands on a display without a camera housing — notch draws him one pressed into the top edge, bubble floats him just under it. A display with a real notch ignores this.",
     kind: APP_SETTING_KIND.CHOICE,
     value: settings.formFactor,
+    defaultValue: DEFAULT_PANEL_FORM_FACTOR,
     choices: PANEL_FORM_FACTOR_LIST,
     adjustable: true,
     manual: `${SETTINGS_TAB}, under Preferences`,
