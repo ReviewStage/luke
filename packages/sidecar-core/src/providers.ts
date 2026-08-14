@@ -219,6 +219,46 @@ export function normalizeObservedWorkspaceProjects(
   return normalized;
 }
 
+/**
+ * One model an agent runs: the id its provider's endpoints take, and the name
+ * a person reads. The label stands alone — no vendor beside it — because a
+ * model's own name already says whose it is.
+ */
+export interface WorkspaceAgentModel {
+  id: string;
+  label: string;
+}
+
+/**
+ * One agent kind a provider's creation endpoints take, with the models it
+ * runs and the effort levels it thinks at — all exactly as the provider
+ * documents them. An app declares these as build-fixed tables, the way it
+ * fixes any other documented value set, so a choice is only ever offered from
+ * what the build knows the provider takes. An agent that takes no effort
+ * levels documents an empty list, and is simply never offered one.
+ */
+export interface WorkspaceAgentModels {
+  agent: string;
+  models: readonly WorkspaceAgentModel[];
+  efforts: readonly string[];
+}
+
+/**
+ * The agent kind, model, and optionally effort a user chose for new
+ * workspaces, as one value on purpose: a model id or an effort level only
+ * means anything beside the agent that runs it, and fields stored apart could
+ * recombine into a pairing no table ever listed. Effort is optional inside
+ * the pair — absent, the provider's own default effort stands.
+ */
+export interface WorkspaceAgentSelection {
+  /** The agent kind, exactly as the provider's documented set names it. */
+  agent: string;
+  /** The model id, exactly as documented for that agent. */
+  model: string;
+  /** The effort level, exactly as documented for that agent, when chosen. */
+  effort?: string;
+}
+
 /** A user-asked request for a new workspace in one reported project. */
 export interface ProviderWorkspaceRequest {
   providerProjectId: string;
@@ -231,6 +271,13 @@ export interface ProviderWorkspaceRequest {
    * an existing session, and it travels under the same rules.
    */
   task?: string;
+  /**
+   * The agent kind and model the user chose for new workspaces, present only
+   * when they chose one and only from the build's documented table for this
+   * provider. Absent, the provider's own defaults decide — the adapter sends
+   * nothing at all rather than a guess.
+   */
+  agentSelection?: WorkspaceAgentSelection;
 }
 
 /**
@@ -277,6 +324,15 @@ export interface ProviderWorkspaceAgentRequest {
   name?: string;
   /** The new agent's opening task, in the user's own words, when they gave one. */
   task?: string;
+  /**
+   * The model the user's stored choice names for exactly this agent kind,
+   * present only when the kinds match and the pairing is in the build's
+   * documented table. The asked-for agent always wins over a stored pairing:
+   * a preference rides along with the user's ask, never against it.
+   */
+  model?: string;
+  /** The effort level riding with that model, under exactly the same rules. */
+  effort?: string;
 }
 
 /**

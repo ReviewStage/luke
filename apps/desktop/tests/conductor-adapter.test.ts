@@ -1142,6 +1142,67 @@ test("creates a workspace through Conductor's documented creation endpoint", asy
   assert.deepEqual(JSON.parse(api.requests.at(-1)?.body ?? ""), { projectId: LUKE_PROJECT.id });
 });
 
+test("a chosen agent and model ride the creation, and an unlisted pairing does not", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [],
+    sessions: [],
+  });
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+
+  // A selection the build's table lists is sent exactly as documented, the
+  // effort riding along when one was chosen.
+  const chosen = await adapter.createWorkspace({
+    providerProjectId: LUKE_PROJECT.id,
+    agentSelection: { agent: "claude", model: "sonnet", effort: "max" },
+  });
+  assert.deepEqual(chosen, { status: "accepted" });
+  assert.deepEqual(JSON.parse(api.requests.at(-1)?.body ?? ""), {
+    projectId: LUKE_PROJECT.id,
+    agent: "claude",
+    model: "sonnet",
+    effort: "max",
+  });
+
+  // No effort chosen sends none, so Conductor's default effort stands.
+  const effortless = await adapter.createWorkspace({
+    providerProjectId: LUKE_PROJECT.id,
+    agentSelection: { agent: "claude", model: "sonnet" },
+  });
+  assert.deepEqual(effortless, { status: "accepted" });
+  assert.deepEqual(JSON.parse(api.requests.at(-1)?.body ?? ""), {
+    projectId: LUKE_PROJECT.id,
+    agent: "claude",
+    model: "sonnet",
+  });
+
+  // A selection outside the table — a foreign model, or an effort its agent
+  // does not document — is dropped whole rather than sent: the adapter
+  // answers for its own writes, and Conductor's defaults stand instead.
+  for (const agentSelection of [
+    { agent: "claude", model: "gpt-5.5" },
+    { agent: "claude", model: "sonnet", effort: "ultra" },
+  ]) {
+    const unlisted = await adapter.createWorkspace({
+      providerProjectId: LUKE_PROJECT.id,
+      agentSelection,
+    });
+    assert.deepEqual(unlisted, { status: "accepted" });
+    assert.deepEqual(JSON.parse(api.requests.at(-1)?.body ?? ""), {
+      projectId: LUKE_PROJECT.id,
+    });
+  }
+
+  // No choice at all sends no agent and no model, so Conductor's own
+  // defaults decide — an absent field is not the same request as a guessed one.
+  await adapter.createWorkspace({ providerProjectId: LUKE_PROJECT.id });
+  assert.deepEqual(JSON.parse(api.requests.at(-1)?.body ?? ""), {
+    projectId: LUKE_PROJECT.id,
+  });
+});
+
 test("refuses a creation ask for a project the last pass did not list", async () => {
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
@@ -1269,6 +1330,61 @@ test("starts another agent in the workspace behind an observed row", async () =>
     name: "xyz feature",
     message: "Build the XYZ feature",
   });
+});
+
+test("a stored model rides a new agent only as the pairing the table lists", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 30_000)],
+    sessions: [
+      {
+        id: "session-idle",
+        workspaceId: "workspace-active",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 5_000,
+      },
+    ],
+  });
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+
+  // A model documented for the asked-for agent kind rides along, its effort
+  // beside it when one was chosen.
+  const listed = await adapter.spawnWorkspaceAgent({
+    providerSessionId: "session-idle",
+    agent: "codex",
+    model: "gpt-5.6-sol",
+    effort: "ultra",
+  });
+  assert.deepEqual(listed, { status: "accepted" });
+  assert.deepEqual(JSON.parse(api.requests.at(-1)?.body ?? ""), {
+    workspaceId: "workspace-active",
+    agent: "codex",
+    model: "gpt-5.6-sol",
+    effort: "ultra",
+  });
+
+  // A selection outside the table — the model documented for a different
+  // agent, or an effort this one does not take — is dropped whole rather than
+  // sent, so the asked-for kind starts on Conductor's own defaults instead of
+  // erroring.
+  for (const stored of [
+    { model: "sonnet" },
+    { model: "gpt-5.6-sol", effort: "not-a-level" },
+  ] as const) {
+    const mismatched = await adapter.spawnWorkspaceAgent({
+      providerSessionId: "session-idle",
+      agent: "codex",
+      ...stored,
+    });
+    assert.deepEqual(mismatched, { status: "accepted" });
+    assert.deepEqual(JSON.parse(api.requests.at(-1)?.body ?? ""), {
+      workspaceId: "workspace-active",
+      agent: "codex",
+    });
+  }
 });
 
 test("refuses to start an agent the row never listed, before any request exists", async () => {

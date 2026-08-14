@@ -4,6 +4,7 @@ import type {
   ObservedWorkspaceProject,
   PanelFormFactor,
   ProviderControlResult,
+  ProviderId,
   ProviderMessageResult,
   ProviderWorkspaceResult,
   RealtimeConnection,
@@ -12,6 +13,7 @@ import type {
   SessionIdentity,
   TrackedIssue,
   TrackerActionResult,
+  WorkspaceAgentSelection,
 } from "@sidecar/core";
 import { contextBridge, ipcRenderer } from "electron";
 import type {
@@ -62,6 +64,20 @@ const bridge: AppBridge = {
     ipcRenderer.invoke(channels.setShowOnAllDisplays, show) as Promise<SettingsUpdateResult>,
   setFormFactor: (formFactor: PanelFormFactor) =>
     ipcRenderer.invoke(channels.setFormFactor, formFactor) as Promise<SettingsUpdateResult>,
+  setDefaultWorkspaceProvider: (providerId: ProviderId | undefined) =>
+    ipcRenderer.invoke(
+      channels.setDefaultWorkspaceProvider,
+      providerId,
+    ) as Promise<SettingsUpdateResult>,
+  setWorkspaceAgentDefault: (
+    providerId: ProviderId,
+    selection: WorkspaceAgentSelection | undefined,
+  ) =>
+    ipcRenderer.invoke(
+      channels.setWorkspaceAgentDefault,
+      providerId,
+      selection,
+    ) as Promise<SettingsUpdateResult>,
   setVoiceCaptions: (enabled: boolean) =>
     ipcRenderer.invoke(channels.setVoiceCaptions, enabled) as Promise<SettingsUpdateResult>,
   setVoiceHotkey: (accelerator: string | undefined) =>
@@ -92,6 +108,7 @@ const bridge: AppBridge = {
     providerProjectId: string,
     name?: string,
     task?: string,
+    agentSelection?: WorkspaceAgentSelection,
   ) =>
     ipcRenderer.invoke(
       channels.createSessionWorkspace,
@@ -99,14 +116,24 @@ const bridge: AppBridge = {
       providerProjectId,
       name,
       task,
+      agentSelection,
     ) as Promise<ProviderWorkspaceResult>,
-  addWorkspaceAgent: (identity: SessionIdentity, agent: string, name?: string, task?: string) =>
+  addWorkspaceAgent: (
+    identity: SessionIdentity,
+    agent: string,
+    name?: string,
+    task?: string,
+    model?: string,
+    effort?: string,
+  ) =>
     ipcRenderer.invoke(
       channels.addWorkspaceAgent,
       identity,
       agent,
       name,
       task,
+      model,
+      effort,
     ) as Promise<ProviderWorkspaceResult>,
   executeIssueAction: (action: IssueActionAsk) =>
     ipcRenderer.invoke(channels.executeIssueAction, action) as Promise<TrackerActionResult>,

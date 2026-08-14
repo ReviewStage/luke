@@ -4,9 +4,11 @@ import {
   APP_SETTING_KIND,
   type AppGuideSetting,
   PANEL_FORM_FACTOR,
+  PROVIDER_ID,
   REALTIME_VOICE,
   REALTIME_VOICE_LIST,
   REALTIME_VOICE_SPEED,
+  type WorkspaceAgentSelection,
 } from "@sidecar/core";
 import {
   APP_SETTING_ID,
@@ -145,6 +147,167 @@ test("the facts describe creating a workspace, so Luke does not deny the capabil
   assert.match(rendered, /Creating workspaces/);
   // The refusal shape rides with the offer: only reported projects exist.
   assert.match(rendered, /Only reported projects/);
+  // Where a nameless ask goes rides with it too, so the remembered first
+  // choice is something Luke explains rather than something that surprises.
+  assert.match(rendered, /default workspace provider/);
+  assert.match(rendered, /first workspace created saves its provider/);
+  // And so is what the new agent runs, because a model the user never chose
+  // is exactly the surprise this setting exists to end.
+  assert.match(rendered, /its model, and its effort/);
+});
+
+test("the guide offers what a new Conductor agent runs, by the names people know", () => {
+  // Unset reads as the provider's own defaults, which is what actually holds,
+  // and the choices are the labels people know the models by — never wire ids.
+  const unset = guideSetting(APP_SETTING_ID.WORKSPACE_AGENT_MODEL);
+  assert.equal(unset.kind, APP_SETTING_KIND.CHOICE);
+  assert.equal(unset.value, "Conductor's default");
+  assert.equal(unset.adjustable, true);
+  assert.equal(unset.choices?.[0], "Conductor's default");
+  assert.ok(unset.choices?.includes("Fable 5"));
+  assert.ok(unset.choices?.includes("GPT-5.6 Sol"));
+  assert.equal(unset.choices?.includes("fable-5"), false);
+  // The by-hand path names the provider's own row, not the Preferences list.
+  assert.match(unset.manual, /Conductor row under Cloud Agent API keys/);
+
+  // No model chosen means no effort entry at all: a level with no model to
+  // ride has nowhere documented to go, so nothing offers one.
+  const withoutModel = buildLukeGuide(guideInput()).settings.find(
+    (candidate) => candidate.id === APP_SETTING_ID.WORKSPACE_AGENT_EFFORT,
+  );
+  assert.equal(withoutModel, undefined);
+
+  // A chosen model is said by its label, and its agent's documented levels
+  // become the effort entry's choices.
+  const chosenInput = guideInput({
+    settings: settings({
+      workspaceAgentDefaults: {
+        [PROVIDER_ID.CONDUCTOR]: { agent: "codex", model: "gpt-5.6-sol", effort: "xhigh" },
+      },
+    }),
+  });
+  assert.equal(
+    guideSetting(APP_SETTING_ID.WORKSPACE_AGENT_MODEL, chosenInput).value,
+    "GPT-5.6 Sol",
+  );
+  const effort = guideSetting(APP_SETTING_ID.WORKSPACE_AGENT_EFFORT, chosenInput);
+  assert.equal(effort.value, "xhigh");
+  assert.equal(effort.adjustable, true);
+  assert.deepEqual(effort.choices, [
+    "Conductor's default",
+    "none",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+    "ultra",
+  ]);
+
+  // A chosen model whose agent documents no levels — Cursor's — offers none.
+  const cursorInput = guideInput({
+    settings: settings({
+      workspaceAgentDefaults: {
+        [PROVIDER_ID.CONDUCTOR]: { agent: "cursor", model: "composer-2.5" },
+      },
+    }),
+  });
+  assert.equal(
+    buildLukeGuide(cursorInput).settings.find(
+      (candidate) => candidate.id === APP_SETTING_ID.WORKSPACE_AGENT_EFFORT,
+    ),
+    undefined,
+  );
+});
+
+test("a spoken model or effort change composes the one stored selection", async () => {
+  const carried: (WorkspaceAgentSelection | undefined)[] = [];
+  const bridge = {
+    setWorkspaceAgentDefault: async (
+      _providerId: string,
+      selection: WorkspaceAgentSelection | undefined,
+    ) => {
+      carried.push(selection);
+      return { settings: settings() };
+    },
+  } as unknown as Parameters<typeof applySpokenSetting>[0];
+  const stored = settings({
+    workspaceAgentDefaults: {
+      [PROVIDER_ID.CONDUCTOR]: { agent: "codex", model: "gpt-5.6-sol", effort: "xhigh" },
+    },
+  });
+  const input = guideInput({ settings: stored });
+
+  // A model named by its label lands as its wire pairing, and the chosen
+  // effort survives because the new agent documents the same level.
+  await applySpokenSetting(
+    bridge,
+    { setting: guideSetting(APP_SETTING_ID.WORKSPACE_AGENT_MODEL, input), value: "Fable 5" },
+    () => undefined,
+    stored,
+  );
+  assert.deepEqual(carried.at(-1), { agent: "claude", model: "fable-5", effort: "xhigh" });
+
+  // One whose agent documents no levels drops the effort rather than sending
+  // it somewhere unlisted.
+  await applySpokenSetting(
+    bridge,
+    { setting: guideSetting(APP_SETTING_ID.WORKSPACE_AGENT_MODEL, input), value: "Cursor Auto" },
+    () => undefined,
+    stored,
+  );
+  assert.deepEqual(carried.at(-1), { agent: "cursor", model: "auto" });
+
+  // An effort change rides the model already chosen, and the default word
+  // returns the effort alone to Conductor.
+  await applySpokenSetting(
+    bridge,
+    { setting: guideSetting(APP_SETTING_ID.WORKSPACE_AGENT_EFFORT, input), value: "ultra" },
+    () => undefined,
+    stored,
+  );
+  assert.deepEqual(carried.at(-1), { agent: "codex", model: "gpt-5.6-sol", effort: "ultra" });
+  await applySpokenSetting(
+    bridge,
+    {
+      setting: guideSetting(APP_SETTING_ID.WORKSPACE_AGENT_EFFORT, input),
+      value: "Conductor's default",
+    },
+    () => undefined,
+    stored,
+  );
+  assert.deepEqual(carried.at(-1), { agent: "codex", model: "gpt-5.6-sol" });
+
+  // The default word on the model entry clears the whole selection.
+  await applySpokenSetting(
+    bridge,
+    {
+      setting: guideSetting(APP_SETTING_ID.WORKSPACE_AGENT_MODEL, input),
+      value: "Conductor's default",
+    },
+    () => undefined,
+    stored,
+  );
+  assert.equal(carried.at(-1), undefined);
+  assert.equal(carried.length, 5);
+});
+
+test("the guide describes the default workspace provider without offering to change it", () => {
+  // Unset reads as the asking state, not as a missing value.
+  const unset = guideSetting(APP_SETTING_ID.DEFAULT_WORKSPACE_PROVIDER);
+  assert.equal(unset.kind, APP_SETTING_KIND.CHOICE);
+  assert.equal(unset.value, "not chosen yet");
+  // Kept by hand: the first creation is the spoken way it changes, so the
+  // spoken refusal must carry the by-hand path instead of a carrier.
+  assert.equal(unset.adjustable, false);
+  assert.match(unset.manual, /Settings tab/);
+
+  // A chosen provider is said by the name its rows use, never as a raw id.
+  const chosen = guideSetting(
+    APP_SETTING_ID.DEFAULT_WORKSPACE_PROVIDER,
+    guideInput({ settings: settings({ defaultWorkspaceProvider: PROVIDER_ID.CONDUCTOR }) }),
+  );
+  assert.equal(chosen.value, "Conductor");
 });
 
 test("the facts follow the talk key, the microphone, and the storage the system offers", () => {
@@ -239,6 +402,13 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
       calls.push(`setFormFactor:${formFactor}`);
       return answered;
     },
+    setWorkspaceAgentDefault: async (
+      _providerId: string,
+      selection: WorkspaceAgentSelection | undefined,
+    ) => {
+      calls.push(`setWorkspaceAgentDefault:${selection ? selection.model : "default"}`);
+      return answered;
+    },
   };
   const seen: AppSettings[] = [];
 
@@ -261,6 +431,8 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
     "setVoiceCaptions:true",
     // The first choice offered is "slow", which is the 0.75 multiple.
     "setVoiceSpeed:0.75",
+    // The first choice offered is "Conductor's default", which clears.
+    "setWorkspaceAgentDefault:default",
   ]);
   // The snapshot the store answered with is handed back either way, so the
   // panel's switches redraw from what was actually stored.

@@ -18,6 +18,7 @@ import {
   sessionMessageText,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceAgentCapableSessionProviderAdapter,
+  type WorkspaceAgentSelection,
   type WorkspaceCapableSessionProviderAdapter,
   type WorkspaceProject,
   workspaceNameText,
@@ -456,6 +457,8 @@ export abstract class CloudSessionAdapter
       agent,
       name,
       task,
+      request.model,
+      request.effort,
     );
     if (!route) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
 
@@ -477,6 +480,8 @@ export abstract class CloudSessionAdapter
     _agent: string,
     _name: string | undefined,
     _task: string | undefined,
+    _model: string | undefined,
+    _effort: string | undefined,
   ): CloudWriteRoute | undefined {
     return undefined;
   }
@@ -531,7 +536,7 @@ export abstract class CloudSessionAdapter
     const apiKey = await this.#readApiKey().catch(() => undefined);
     if (!apiKey) return this.#missingKeyRejection();
 
-    const route = this.workspaceCreationRoute(project, name, task);
+    const route = this.workspaceCreationRoute(project, name, task, request.agentSelection);
     if (!route) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
     const created = await this.#postWriteDetailed(apiKey, route, WRITE_SUBJECT.PROJECT);
     if (created.outcome.status !== PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED || !task) {
@@ -576,6 +581,7 @@ export abstract class CloudSessionAdapter
     _project: WorkspaceProject,
     _name: string | undefined,
     _task: string | undefined,
+    _agentSelection: WorkspaceAgentSelection | undefined,
   ): CloudWriteRoute | undefined {
     return undefined;
   }

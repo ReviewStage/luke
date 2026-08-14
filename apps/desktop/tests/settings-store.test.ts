@@ -5,6 +5,7 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 import {
   PANEL_FORM_FACTOR,
+  PROVIDER_ID,
   REALTIME_DEFAULTS,
   REALTIME_VOICE,
   REALTIME_VOICE_SPEED,
@@ -1018,6 +1019,117 @@ test("ignores a stored form this build does not draw", async (t) => {
 
   assert.equal(await storeIn(directory).readFormFactor(), undefined);
   assert.equal((await storeIn(directory).snapshot()).formFactor, PANEL_FORM_FACTOR.BUBBLE);
+});
+
+test("asks each time until a default workspace provider is chosen, and remembers the choice", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  // Unset on purpose: the default is always a choice the user made — by hand
+  // or by their first creation — never one made for them.
+  assert.equal((await store.snapshot()).defaultWorkspaceProvider, undefined);
+  assert.equal(await store.readDefaultWorkspaceProvider(), undefined);
+
+  const { settings, reason } = await store.setDefaultWorkspaceProvider(PROVIDER_ID.CONDUCTOR);
+
+  assert.equal(reason, undefined);
+  assert.equal(settings.defaultWorkspaceProvider, PROVIDER_ID.CONDUCTOR);
+  // The choice outlives the run that heard it.
+  assert.equal(await storeIn(directory).readDefaultWorkspaceProvider(), PROVIDER_ID.CONDUCTOR);
+
+  // Clearing is returning to asking each time, not storing an answer.
+  const cleared = await store.setDefaultWorkspaceProvider(undefined);
+  assert.equal(cleared.settings.defaultWorkspaceProvider, undefined);
+  assert.equal(await storeIn(directory).readDefaultWorkspaceProvider(), undefined);
+});
+
+test("changes the default workspace provider without touching the cipher", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+
+  const { settings } = await store.setDefaultWorkspaceProvider(PROVIDER_ID.CURSOR);
+
+  assert.equal(settings.defaultWorkspaceProvider, PROVIDER_ID.CURSOR);
+  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
+});
+
+test("ignores a stored default provider this build does not know", async (t) => {
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({ version: 2, apiKeys: {}, defaultWorkspaceProvider: "someone-else" }),
+  );
+
+  assert.equal(await storeIn(directory).readDefaultWorkspaceProvider(), undefined);
+  assert.equal((await storeIn(directory).snapshot()).defaultWorkspaceProvider, undefined);
+});
+
+test("starts new workspaces on the provider's defaults until a pairing is chosen", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  assert.equal((await store.snapshot()).workspaceAgentDefaults, undefined);
+  assert.equal(await store.readWorkspaceAgentDefault(PROVIDER_ID.CONDUCTOR), undefined);
+
+  const chosen = { agent: "claude", model: "sonnet", effort: "max" };
+  const { settings, reason } = await store.setWorkspaceAgentDefault(PROVIDER_ID.CONDUCTOR, chosen);
+
+  assert.equal(reason, undefined);
+  assert.deepEqual(settings.workspaceAgentDefaults, { [PROVIDER_ID.CONDUCTOR]: chosen });
+  // The choice outlives the run that heard it.
+  assert.deepEqual(
+    await storeIn(directory).readWorkspaceAgentDefault(PROVIDER_ID.CONDUCTOR),
+    chosen,
+  );
+
+  // Clearing returns that one provider to its own defaults.
+  const cleared = await store.setWorkspaceAgentDefault(PROVIDER_ID.CONDUCTOR, undefined);
+  assert.equal(cleared.settings.workspaceAgentDefaults, undefined);
+  assert.equal(
+    await storeIn(directory).readWorkspaceAgentDefault(PROVIDER_ID.CONDUCTOR),
+    undefined,
+  );
+});
+
+test("changes a workspace agent pairing without touching the cipher", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+
+  const { settings } = await store.setWorkspaceAgentDefault(PROVIDER_ID.CONDUCTOR, {
+    agent: "codex",
+    model: "gpt-5.6-sol",
+  });
+
+  assert.deepEqual(settings.workspaceAgentDefaults?.[PROVIDER_ID.CONDUCTOR], {
+    agent: "codex",
+    model: "gpt-5.6-sol",
+  });
+  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
+});
+
+test("ignores a stored pairing this build's table does not list", async (t) => {
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({
+      version: 2,
+      apiKeys: {},
+      workspaceAgentDefaults: {
+        // A listed model under an effort its agent does not document, a
+        // provider the table documents nothing for, and a provider this build
+        // does not know: each names a request no endpoint takes.
+        conductor: { agent: "claude", model: "sonnet", effort: "sideways" },
+        cursor: { agent: "cursor", model: "composer-2.5" },
+        "someone-else": { agent: "claude", model: "sonnet" },
+      },
+    }),
+  );
+
+  const store = storeIn(directory);
+  assert.equal(await store.readWorkspaceAgentDefault(PROVIDER_ID.CONDUCTOR), undefined);
+  assert.equal((await store.snapshot()).workspaceAgentDefaults, undefined);
 });
 
 test("the voice and a stored key survive each other's writes", async (t) => {
