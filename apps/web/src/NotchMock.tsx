@@ -301,13 +301,17 @@ export function NotchMock(): React.JSX.Element {
   }, [applyMode]);
 
   // `useShapeHeight` in the renderer: the black surface ends where the content
-  // does, so the panel's height is measured rather than guessed.
+  // does, so the panel's height is measured rather than guessed. Measured as
+  // layout height, not `getBoundingClientRect()`: the mock is drawn under
+  // `scale(var(--mock-scale))`, and a rect is post-transform — feeding that
+  // back into the surface's own coordinate space cut the shape short by the
+  // scale, which left the last rows drawn past the black on every phone.
   const observer = useRef<ResizeObserver>(undefined);
   const measurePanel = useCallback((element: HTMLElement | null) => {
     observer.current?.disconnect();
     observer.current = undefined;
     if (!element) return;
-    const measure = () => setPanelHeight(Math.ceil(element.getBoundingClientRect().height));
+    const measure = () => setPanelHeight(element.offsetHeight);
     const nextObserver = new ResizeObserver(measure);
     nextObserver.observe(element);
     observer.current = nextObserver;

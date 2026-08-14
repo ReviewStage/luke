@@ -1110,15 +1110,23 @@ button {
 
 @media (max-width: 700px) {
   :root {
-    --mock-scale: 0.62;
+    --mock-scale: 0.75;
+  }
+
+  /* A notch lives on an edge-to-edge display, and a phone has one: the pin
+     escapes the shell's column so the art is sized by the screen rather than
+     by the text measure. The copy above keeps the shell's padding. */
+  .mock-pin {
+    margin-inline: calc(50% - 50vw);
   }
 }
 
+/* Each step is the largest scale whose 620px panel still clears the screen
+   with a little margin at the step's floor, so the art fills a phone instead
+   of floating in it and the pin's clip never eats the panel's own edges. */
 @media (max-width: 520px) {
   :root {
-    /* Sized so the scaled 700px art clears the shell's padding on a 360px
-       display instead of losing its frame edges to the pin's clip. */
-    --mock-scale: 0.46;
+    --mock-scale: 0.58;
   }
 
   .shell {
@@ -1131,6 +1139,12 @@ button {
 
   .mock-scroll {
     margin-top: var(--space-7);
+  }
+}
+
+@media (max-width: 380px) {
+  :root {
+    --mock-scale: 0.54;
   }
 }
 
