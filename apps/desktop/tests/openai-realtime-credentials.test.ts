@@ -185,13 +185,42 @@ test("the model and voice come from the environment when set", () => {
   try {
     process.env.OPENAI_API_KEY = API_KEY;
     process.env.LUKE_REALTIME_MODEL = "gpt-realtime-preview";
-    process.env.LUKE_REALTIME_VOICE = "cedar";
+    process.env.LUKE_REALTIME_VOICE = REALTIME_VOICE.MARIN;
 
     assert.equal(openAiRealtimeCredentialsFromEnvironment()?.model, "gpt-realtime-preview");
+    assert.equal(
+      openAiRealtimeCredentialsFromEnvironment()?.diagnostics().voice,
+      REALTIME_VOICE.MARIN,
+    );
   } finally {
     for (const [name, value] of [
       ["OPENAI_API_KEY", previous.key],
       ["LUKE_REALTIME_MODEL", previous.model],
+      ["LUKE_REALTIME_VOICE", previous.voice],
+    ] as const) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+});
+
+test("a voice from the environment that Luke does not offer is not minted", () => {
+  // The settings snapshot already refuses it, so honouring it here would have
+  // the panel mark the default while every session was minted for a name the
+  // API refuses.
+  const previous = { key: process.env.OPENAI_API_KEY, voice: process.env.LUKE_REALTIME_VOICE };
+  try {
+    process.env.OPENAI_API_KEY = API_KEY;
+    process.env.LUKE_REALTIME_VOICE = "baritone";
+
+    assert.equal(
+      openAiRealtimeCredentialsFromEnvironment()?.diagnostics().voice,
+      REALTIME_DEFAULTS.VOICE,
+    );
+    assert.equal(unavailableRealtimeDiagnostics(true).voice, REALTIME_DEFAULTS.VOICE);
+  } finally {
+    for (const [name, value] of [
+      ["OPENAI_API_KEY", previous.key],
       ["LUKE_REALTIME_VOICE", previous.voice],
     ] as const) {
       if (value === undefined) delete process.env[name];

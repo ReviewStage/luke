@@ -895,8 +895,9 @@ if (!app.requestSingleInstanceLock()) {
     );
     // Awaited, so the chosen voice reaches the minter before the renderer
     // exists to ask for a credential: the first conversation must already
-    // speak with it.
-    const storedVoice = await settingsStore.readVoice();
+    // speak with it. A file that cannot be read means no choice was kept — it
+    // must not keep the panel, the hotkey, or observation from starting.
+    const storedVoice = await settingsStore.readVoice().catch(() => undefined);
     if (storedVoice) realtimeCredentials?.setVoice(storedVoice);
     reportVoiceAvailability();
     // The report is not made here: the helper answers over its own stdout a

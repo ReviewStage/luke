@@ -1,4 +1,5 @@
 import {
+  isRealtimeVoice,
   REALTIME_CALLS_PATH,
   REALTIME_CLIENT_SECRETS_PATH,
   REALTIME_DEFAULTS,
@@ -6,6 +7,7 @@ import {
   type RealtimeConnection,
   type RealtimeDiagnostics,
   type RealtimeMintOutcome,
+  type RealtimeVoice,
   realtimeClientSecretRequest,
   realtimeCredentialFromResponse,
   realtimeCredentialIsUsable,
@@ -60,6 +62,18 @@ function trimmedText(value: string | undefined): string | undefined {
 
 function withoutTrailingSlash(value: string): string {
   return value.endsWith("/") ? value.slice(0, -1) : value;
+}
+
+/**
+ * The launch environment's voice, honoured only when it is one Luke offers.
+ * The one gate for every reader — the minter, its diagnostics, and the
+ * settings snapshot — so what the panel marks is always what would be minted.
+ */
+export function environmentRealtimeVoice(
+  environment: NodeJS.ProcessEnv = process.env,
+): RealtimeVoice | undefined {
+  const value = environment[OPENAI_ENVIRONMENT.VOICE]?.trim();
+  return isRealtimeVoice(value) ? value : undefined;
 }
 
 /**
@@ -244,7 +258,7 @@ export function unavailableRealtimeDiagnostics(fixtureMode: boolean): RealtimeDi
     apiKeyConfigured,
     fixtureMode,
     model: trimmedText(process.env[OPENAI_ENVIRONMENT.MODEL]) ?? REALTIME_DEFAULTS.MODEL,
-    voice: trimmedText(process.env[OPENAI_ENVIRONMENT.VOICE]) ?? REALTIME_DEFAULTS.VOICE,
+    voice: environmentRealtimeVoice() ?? REALTIME_DEFAULTS.VOICE,
     endpoint: `${OPENAI_DEFAULTS.BASE_URL}${REALTIME_CLIENT_SECRETS_PATH}`,
     lastOutcome: fixtureMode
       ? REALTIME_MINT_OUTCOME.DISABLED_BY_FIXTURE
@@ -259,7 +273,7 @@ export function openAiRealtimeCredentialsFromEnvironment(
   if (!apiKey) return undefined;
 
   const model = trimmedText(options.model) ?? trimmedText(process.env[OPENAI_ENVIRONMENT.MODEL]);
-  const voice = trimmedText(options.voice) ?? trimmedText(process.env[OPENAI_ENVIRONMENT.VOICE]);
+  const voice = trimmedText(options.voice) ?? environmentRealtimeVoice();
 
   return new OpenAiRealtimeCredentialMinter({
     ...options,

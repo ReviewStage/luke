@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { isRealtimeVoice, REALTIME_DEFAULTS, type RealtimeVoice } from "@sidecar/core";
-import { OPENAI_ENVIRONMENT } from "./openai-realtime-credentials";
+import { environmentRealtimeVoice } from "./openai-realtime-credentials";
 import {
   type AppSettings,
   CREDENTIAL_SOURCE,
@@ -128,12 +128,6 @@ function environmentApiKey(
   return undefined;
 }
 
-/** The launch environment's voice, honoured only when it is one Luke offers. */
-function environmentVoice(environment: NodeJS.ProcessEnv): RealtimeVoice | undefined {
-  const value = environment[OPENAI_ENVIRONMENT.VOICE]?.trim();
-  return isRealtimeVoice(value) ? value : undefined;
-}
-
 function storedApiKeys(record: Record<string, unknown>): Record<string, string> {
   const apiKeys: Record<string, string> = {};
   const persisted = record[SETTINGS_FIELD.API_KEYS];
@@ -213,7 +207,7 @@ export class SettingsStore {
       // that would actually be heard.
       voice:
         (await this.#load()).voice ??
-        environmentVoice(this.#environment) ??
+        environmentRealtimeVoice(this.#environment) ??
         REALTIME_DEFAULTS.VOICE,
     };
   }
