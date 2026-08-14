@@ -14,13 +14,17 @@ import {
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
   issueCommentText,
+  isWorkspaceCapableAdapter,
   type NativeNotchGeometry,
+  normalizeObservedWorkspaceProjects,
   normalizeTrackedIssue,
+  type ObservedWorkspaceProject,
   type PanelFormFactor,
   PROVIDER_CONTROL_RESULT_STATUS,
   PROVIDER_MESSAGE_RESULT_STATUS,
   type ProviderControlResult,
   type ProviderMessageResult,
+  type ProviderWorkspaceResult,
   positionNotchWindow,
   realtimeMintExplanation,
   resolveNotchGeometry,
@@ -31,7 +35,9 @@ import {
   TRACKER_ACTION_RESULT_STATUS,
   type TrackedIssue,
   type TrackerActionResult,
+  workspaceNameText,
 } from "@sidecar/core";
+
 import {
   app,
   BrowserWindow,
@@ -450,6 +456,29 @@ let nativeScreens = new Map<number, NativeNotchGeometry>();
 let sessionRefreshTimer: NodeJS.Timeout | undefined;
 let sessionRefreshRunning = false;
 let attentionReviewRunning = false;
+/**
+ * The projects last announced to the renderer, serialized for comparison.
+ * Undefined until the first announcement decides what there is to compare.
+ */
+let lastWorkspaceProjects: string | undefined;
+
+/**
+ * Announces where a workspace can be created whenever the offer changes. This
+ * cannot ride the registry's own notifications alone: the registry only speaks
+ * when the session snapshot changes, and a pass can change the project list
+ * while leaving the sessions exactly as they were — a key just added with no
+ * workspaces yet, a project connected but not yet worked in — so the check
+ * runs on the observation cadence as well as on every commit.
+ */
+function broadcastWorkspaceProjects(): void {
+  const projects = observedWorkspaceProjects();
+  const serialized = JSON.stringify(projects);
+  if (serialized === lastWorkspaceProjects) return;
+  lastWorkspaceProjects = serialized;
+  for (const window of panelWindows.values()) {
+    window.webContents.send(channels.workspaceProjectsChanged, projects);
+  }
+}
 
 function argumentValue(name: string): string | undefined {
   const index = process.argv.indexOf(name);
@@ -866,6 +895,7 @@ function registerIpc(): void {
       ...(askHotkey ? { askHotkey } : {}),
       display: displayDiagnostic(display),
       sessions: fixtureMode ? [] : sessionRegistry.snapshot().sessions,
+      workspaceProjects: observedWorkspaceProjects(),
       ...(trackedIssues && !fixtureMode ? { issues: trackedIssues } : {}),
       settings: await settingsStore.snapshot(),
     };
@@ -1349,6 +1379,59 @@ function registerIpc(): void {
     },
   );
 
+  // A new workspace runs the same gauntlet a message does, against the list
+  // that offered it: the renderer names a project rather than a repository, and
+  // only a project an adapter reported on its latest pass — read back here from
+  // the adapter itself, never from the request — reaches the provider's
+  // documented creation endpoint. A fixture run offers no projects at all, so
+  // it refuses every ask without touching a network.
+  ipcMain.handle(
+    channels.createSessionWorkspace,
+    async (
+      event,
+      providerId: unknown,
+      providerProjectId: unknown,
+      name: unknown,
+    ): Promise<ProviderWorkspaceResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (
+        typeof providerId !== "string" ||
+        !providerId.trim() ||
+        typeof providerProjectId !== "string" ||
+        !providerProjectId.trim() ||
+        (name !== undefined && typeof name !== "string")
+      ) {
+        throw new Error("Invalid workspace creation request");
+      }
+      if (fixtureMode) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+      const adapter = sessionAdapters.find((candidate) => candidate.provider.id === providerId);
+      if (!adapter || !isWorkspaceCapableAdapter(adapter)) {
+        return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+      }
+      const offered = adapter
+        .workspaceProjects()
+        .some((project) => project.providerProjectId === providerProjectId);
+      if (!offered) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+      const workspaceName = name === undefined ? undefined : workspaceNameText(name);
+      if (name !== undefined && workspaceName === undefined) {
+        return {
+          status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+          reason: "A workspace name has to be short enough to say and longer than nothing.",
+        };
+      }
+      const result = await adapter.createWorkspace({
+        providerProjectId,
+        ...(workspaceName ? { name: workspaceName } : {}),
+      });
+      // A workspace that landed is a session the panel should be showing, so
+      // the next look must actually ask rather than serve the cache.
+      if (result.status === PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED) {
+        void sessionRegistry.refresh(adapter);
+      }
+      return result;
+    },
+  );
+
   // A spoken issue act runs the same gauntlet a session act does, in the same
   // two halves: the renderer refused anything its roster did not advertise,
   // and here every named thing is resolved again from the latest observation —
@@ -1466,6 +1549,27 @@ function registerIpc(): void {
   });
 }
 
+/**
+ * Where a workspace can be created right now, as the adapters offer it: each
+ * capable adapter's latest project list, stamped with its provider and bounded
+ * once here so the panel and the conversation are handed the same list. A
+ * fixture run offers nothing, for the same reason it observes nothing.
+ */
+function observedWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
+  if (fixtureMode) return [];
+  return normalizeObservedWorkspaceProjects(
+    sessionAdapters.flatMap((adapter) =>
+      isWorkspaceCapableAdapter(adapter)
+        ? adapter.workspaceProjects().map((project) => ({
+            ...project,
+            providerId: adapter.provider.id,
+            providerName: adapter.provider.displayName,
+          }))
+        : [],
+    ),
+  );
+}
+
 async function refreshProviderSessions(): Promise<void> {
   if (fixtureMode || sessionRefreshRunning) return;
   sessionRefreshRunning = true;
@@ -1487,6 +1591,9 @@ async function refreshProviderSessions(): Promise<void> {
   } finally {
     sessionRefreshRunning = false;
   }
+  // The registry only spoke if the sessions themselves changed, and a pass can
+  // change the project list while leaving them exactly as they were.
+  broadcastWorkspaceProjects();
   // Attention review runs outside the observation guard so a slow model call
   // never delays the next provider snapshot.
   void reviewSessionAttention();
@@ -1522,6 +1629,9 @@ function startSessionObservation(): void {
     for (const window of panelWindows.values()) {
       window.webContents.send(channels.sessionsChanged, snapshot.sessions);
     }
+    // A commit is the earliest a write-triggered refresh can have changed the
+    // offer, so the announcement rides it rather than waiting for the timer.
+    broadcastWorkspaceProjects();
   });
   void refreshProviderSessions();
   sessionRefreshTimer = setInterval(() => {

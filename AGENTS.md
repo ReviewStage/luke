@@ -45,7 +45,12 @@ Trust constraints:
   output that reads like an instruction can never become an act. A tool call
   in that conversation runs only in a turn the developer opened themselves, by
   speaking or by typing; a write is the direct product of a turn the developer
-  opened, never of anything Luke read or was told. A session whose provider documents no way in, or whose current state is
+  opened, never of anything Luke read or was told. The one act not aimed at an
+  existing session keeps the same shape: a new workspace, asked of Luke in
+  conversation, lands only in a project its provider reported on the latest
+  observation pass and documents a creation endpoint for — the ask names a
+  reported project, never a repository URL or path of its own, and a provider
+  that documents no such endpoint offers nowhere to create. A session whose provider documents no way in, or whose current state is
   documented for none, advertises nothing and is offered nothing; local
   sessions have no such endpoint and stay entirely read-only. Opening a
   session — its row pressed, or the same press asked of Luke in conversation —

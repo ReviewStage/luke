@@ -3,9 +3,11 @@ import type {
   FixtureSnapshot,
   IssueToolAction,
   NormalizedSession,
+  ObservedWorkspaceProject,
   PanelFormFactor,
   ProviderControlResult,
   ProviderMessageResult,
+  ProviderWorkspaceResult,
   RealtimeConnection,
   RealtimeVoice,
   RealtimeVoiceSpeed,
@@ -203,6 +205,8 @@ export interface AppBootstrap {
   /** Whether the panel should show the voice diagnostics block. */
   display: DisplayDiagnostic;
   sessions: readonly NormalizedSession[];
+  /** Where a new workspace can be created, as the adapters currently offer it. */
+  workspaceProjects: readonly ObservedWorkspaceProject[];
   /** Absent while no issue tracker is connected, which is its own answer. */
   issues?: readonly TrackedIssue[];
   settings: AppSettings;
@@ -309,6 +313,18 @@ export interface AppBridge {
     controlId: string,
   ): Promise<ProviderControlResult>;
   /**
+   * Creates one workspace the user just asked for, in a project its provider
+   * reported. The renderer names a project it was shown, never a repository
+   * URL or path, and the main process validates the ask again against what
+   * its adapters actually offered before the provider's documented creation
+   * endpoint is called.
+   */
+  createSessionWorkspace(
+    providerId: string,
+    providerProjectId: string,
+    name?: string,
+  ): Promise<ProviderWorkspaceResult>;
+  /**
    * Carries one spoken issue act to the tracker that can take it. The renderer
    * names an issue and a transition it was shown; the main process resolves
    * both against its own latest observation before the tracker client sees
@@ -337,6 +353,10 @@ export interface AppBridge {
    */
   onSettingsChanged(callback: (settings: AppSettings) => void): () => void;
   onSessionsChanged(callback: (sessions: readonly NormalizedSession[]) => void): () => void;
+  /** The projects a workspace can be created in, whenever the set changes. */
+  onWorkspaceProjectsChanged(
+    callback: (projects: readonly ObservedWorkspaceProject[]) => void,
+  ): () => void;
   /** The issue roster as last observed; `undefined` says no tracker is connected. */
   onIssuesChanged(callback: (issues: readonly TrackedIssue[] | undefined) => void): () => void;
   onAttentionSpeech(callback: (speech: readonly AttentionSpeech[]) => void): () => void;
@@ -379,6 +399,7 @@ export const channels = {
   openSession: "app:open-session",
   sendSessionMessage: "app:send-session-message",
   executeSessionControl: "app:execute-session-control",
+  createSessionWorkspace: "app:create-session-workspace",
   executeIssueAction: "app:execute-issue-action",
   sendFeedback: "app:send-feedback",
   focusPanel: "app:focus-panel",
@@ -393,6 +414,7 @@ export const channels = {
   displayChanged: "app:display-changed",
   settingsChanged: "app:settings-changed",
   sessionsChanged: "app:sessions-changed",
+  workspaceProjectsChanged: "app:workspace-projects-changed",
   issuesChanged: "app:issues-changed",
   quit: "app:quit",
 } as const;

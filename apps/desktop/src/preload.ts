@@ -1,9 +1,11 @@
 import type {
   AttentionSpeech,
   NormalizedSession,
+  ObservedWorkspaceProject,
   PanelFormFactor,
   ProviderControlResult,
   ProviderMessageResult,
+  ProviderWorkspaceResult,
   RealtimeConnection,
   RealtimeVoice,
   RealtimeVoiceSpeed,
@@ -84,6 +86,13 @@ const bridge: AppBridge = {
       identity,
       controlId,
     ) as Promise<ProviderControlResult>,
+  createSessionWorkspace: (providerId: string, providerProjectId: string, name?: string) =>
+    ipcRenderer.invoke(
+      channels.createSessionWorkspace,
+      providerId,
+      providerProjectId,
+      name,
+    ) as Promise<ProviderWorkspaceResult>,
   executeIssueAction: (action: IssueActionAsk) =>
     ipcRenderer.invoke(channels.executeIssueAction, action) as Promise<TrackerActionResult>,
   sendFeedback: (submission: FeedbackSubmission) =>
@@ -117,6 +126,16 @@ const bridge: AppBridge = {
       callback(sessions);
     ipcRenderer.on(channels.sessionsChanged, listener);
     return () => ipcRenderer.removeListener(channels.sessionsChanged, listener);
+  },
+  onWorkspaceProjectsChanged: (
+    callback: (projects: readonly ObservedWorkspaceProject[]) => void,
+  ) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      projects: readonly ObservedWorkspaceProject[],
+    ) => callback(projects);
+    ipcRenderer.on(channels.workspaceProjectsChanged, listener);
+    return () => ipcRenderer.removeListener(channels.workspaceProjectsChanged, listener);
   },
   onIssuesChanged: (callback: (issues: readonly TrackedIssue[] | undefined) => void) => {
     const listener = (

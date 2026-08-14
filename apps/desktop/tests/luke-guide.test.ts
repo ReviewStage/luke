@@ -139,6 +139,14 @@ test("the facts say what is connected, never what connects it", () => {
   assert.doesNotMatch(rendered, /API key:/);
 });
 
+test("the facts describe creating a workspace, so Luke does not deny the capability", () => {
+  const rendered = JSON.stringify(buildLukeGuide(guideInput()).facts);
+
+  assert.match(rendered, /Creating workspaces/);
+  // The refusal shape rides with the offer: only reported projects exist.
+  assert.match(rendered, /Only reported projects/);
+});
+
 test("the facts follow the talk key, the microphone, and the storage the system offers", () => {
   const held = JSON.stringify(buildLukeGuide(guideInput()).facts);
   assert.match(held, /hold to talk/);

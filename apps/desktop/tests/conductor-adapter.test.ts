@@ -122,9 +122,18 @@ function fakeConductorApi(api: TestApi): FakeConductorApi {
     });
 
     const segments = pathname.split("/").filter((segment) => segment.length > 0);
-    // The two documented writers: a prompt for one session, and a cancel for
-    // the turn it is working.
+    // The three documented writers: a prompt for one session, a cancel for the
+    // turn it is working, and a new workspace in one project.
     if (init.method === "POST") {
+      if (segments[1] === "workspaces" && segments.length === 2) {
+        const body = JSON.parse(typeof init.body === "string" ? init.body : "{}") as {
+          projectId?: string;
+        };
+        if (!api.projects.some((project) => project.id === body.projectId)) {
+          return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
+        }
+        return jsonResponse({ id: "workspace-new", projectId: body.projectId }, 201);
+      }
       const session = api.sessions.find((candidate) => candidate.id === segments[2]);
       const writer = segments[3];
       if (!session || segments[1] !== "sessions" || segments.length !== 4) {
@@ -1053,4 +1062,80 @@ test("stops a working turn through Conductor's cancel endpoint, sending no body"
   // Conductor documents no body for a cancel.
   assert.equal(write?.contentType, undefined);
   assert.equal(write?.body, undefined);
+});
+
+test("offers the projects the last pass listed as places a workspace can be created", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [],
+    sessions: [],
+  });
+  const adapter = adapterFor(api.fetch);
+
+  // Nothing is offered before observation, or after the credential goes: the
+  // offer is the last pass's own project list and nothing longer-lived.
+  assert.deepEqual(adapter.workspaceProjects(), []);
+  await adapter.observe();
+  assert.deepEqual(adapter.workspaceProjects(), [
+    { providerProjectId: LUKE_PROJECT.id, repository: "luke" },
+  ]);
+});
+
+test("creates a workspace through Conductor's documented creation endpoint", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [],
+    sessions: [],
+  });
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+
+  const named = await adapter.createWorkspace({
+    providerProjectId: LUKE_PROJECT.id,
+    name: "fix the notch panel",
+  });
+
+  assert.deepEqual(named, { status: "accepted" });
+  const write = api.requests.at(-1);
+  assert.equal(write?.method, "POST");
+  assert.equal(write?.pathname, "/v0/workspaces");
+  assert.equal(write?.authorization, `Bearer ${TEST_API_KEY}`);
+  assert.deepEqual(JSON.parse(write?.body ?? ""), {
+    projectId: LUKE_PROJECT.id,
+    name: "fix the notch panel",
+  });
+
+  // Left unnamed, the ask carries no name at all: Conductor generates one, and
+  // an empty field is not the same request as an absent one.
+  const unnamed = await adapter.createWorkspace({ providerProjectId: LUKE_PROJECT.id });
+  assert.deepEqual(unnamed, { status: "accepted" });
+  assert.deepEqual(JSON.parse(api.requests.at(-1)?.body ?? ""), { projectId: LUKE_PROJECT.id });
+});
+
+test("refuses a creation ask for a project the last pass did not list", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [],
+    sessions: [],
+  });
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+  const requestsBefore = api.requests.length;
+
+  const unlisted = await adapter.createWorkspace({ providerProjectId: "project-unknown" });
+
+  // No request exists for a project observation did not see.
+  assert.deepEqual(unlisted, { status: "unsupported" });
+  assert.equal(api.requests.length, requestsBefore);
+
+  // A name outside its bound is refused before a request exists too.
+  const overlong = await adapter.createWorkspace({
+    providerProjectId: LUKE_PROJECT.id,
+    name: "a".repeat(200),
+  });
+  assert.equal(overlong.status, "rejected");
+  assert.equal(api.requests.length, requestsBefore);
 });

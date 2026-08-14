@@ -311,6 +311,14 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "name and email for credit and up to three screenshots. It is typed and sent by hand: a " +
         "spoken ask can say where it lives, never write or send one.",
     },
+    {
+      label: "Creating workspaces",
+      detail:
+        "Where a connected provider documents a creation endpoint — Conductor today — an ask in " +
+        "conversation, spoken or typed, can create a new workspace in one of the projects that " +
+        "provider reports, optionally under a name the developer chose. Only reported projects " +
+        "can be named, and a provider that reports none takes no ask.",
+    },
     talkKeyFact(input.hotkey),
     askKeyFact(input.askKey),
     { label: "Microphone access", detail: MICROPHONE_DETAIL[input.microphoneStatus] },

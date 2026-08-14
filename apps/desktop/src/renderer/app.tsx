@@ -4,6 +4,7 @@ import {
   EMPTY_APP_GUIDE,
   FIXTURE_EPOCH_MS,
   type NormalizedSession,
+  type ObservedWorkspaceProject,
   type PanelFormFactor,
   REALTIME_STATUS,
   type RealtimeStatus,
@@ -249,6 +250,9 @@ function useShapeHeight(): [(element: HTMLElement | null) => void, number | unde
 export function App(): React.JSX.Element {
   const [bootstrap, setBootstrap] = useState<AppBootstrap>();
   const [sessions, setSessions] = useState<readonly NormalizedSession[]>([]);
+  const [workspaceProjects, setWorkspaceProjects] = useState<readonly ObservedWorkspaceProject[]>(
+    [],
+  );
   const [display, setDisplay] = useState<DisplayDiagnostic>();
   const [presentation, setPresentation] = useState<PanelPresentation>(PANEL_PRESENTATION.CAPSULE);
   const [tab, setTab] = useState<PanelTab>(PANEL_TAB.SESSIONS);
@@ -354,6 +358,14 @@ export function App(): React.JSX.Element {
   /** Whether a tap has left a turn open for a later press to end. */
   const talkLatched = useRef(false);
   const sessionsRef = useRef<readonly NormalizedSession[]>([]);
+  const workspaceProjectsRef = useRef<readonly ObservedWorkspaceProject[]>([]);
+  /**
+   * Whether a live projects push has arrived. The bootstrap reply resolves
+   * whenever the main process gets to it, so a push can land first — and the
+   * bootstrap's older snapshot must then not clobber it, because the main
+   * process will not repeat a list it believes it already announced.
+   */
+  const workspaceProjectsPushed = useRef(false);
   /**
    * The issue roster as last pushed, for a conversation that connects later.
    * Never state: no panel surface draws it — it exists to be spoken from.
@@ -442,7 +454,13 @@ export function App(): React.JSX.Element {
           ? window.sidecar.sendSessionMessage(action.identity, action.text)
           : action.kind === "control"
             ? window.sidecar.executeSessionControl(action.identity, action.control.id)
-            : openSessionAloudRef.current(action.identity),
+            : action.kind === "create-workspace"
+              ? window.sidecar.createSessionWorkspace(
+                  action.providerId,
+                  action.providerProjectId,
+                  action.name,
+                )
+              : openSessionAloudRef.current(action.identity),
       // The asks about Luke himself — a settings change, the panel shown —
       // behind the same gauntlet: validated against the guide before this is
       // called, and performed by the same handlers the panel's controls use.
@@ -485,6 +503,7 @@ export function App(): React.JSX.Element {
     }
     if (await session.connect()) {
       session.updateSessions(sessionsRef.current);
+      session.updateWorkspaceProjects(workspaceProjectsRef.current);
       session.updateGuide(guideRef.current);
       session.updateIssues(issuesRef.current);
     }
@@ -1331,7 +1350,9 @@ export function App(): React.JSX.Element {
       setBootstrap(value);
       setSessions(value.sessions);
       // Only fill in what no push has said yet: the bootstrap snapshot is
-      // older than any roster change that raced past it.
+      // older than any change that raced past it, and the main process will
+      // not repeat a list it believes it already announced.
+      if (!workspaceProjectsPushed.current) setWorkspaceProjects(value.workspaceProjects);
       if (!issuesPushed.current) issuesRef.current = value.issues;
       if (!settingsPushed.current) setSettings(value.settings);
       setDisplay(value.display);
@@ -1386,6 +1407,10 @@ export function App(): React.JSX.Element {
       setSettings(pushed);
     });
     const removeSessions = window.sidecar.onSessionsChanged(setSessions);
+    const removeWorkspaceProjects = window.sidecar.onWorkspaceProjectsChanged((projects) => {
+      workspaceProjectsPushed.current = true;
+      setWorkspaceProjects(projects);
+    });
     // Straight to the conversation rather than through state: no panel
     // surface draws the issue roster, so a re-render would be work for nobody.
     const removeIssues = window.sidecar.onIssuesChanged((issues) => {
@@ -1399,6 +1424,7 @@ export function App(): React.JSX.Element {
       removeDisplay();
       removeSettings();
       removeSessions();
+      removeWorkspaceProjects();
       removeIssues();
       void stopMicrophone();
     };
@@ -1486,6 +1512,14 @@ export function App(): React.JSX.Element {
     sessionsRef.current = sessions;
     voiceSession.current?.updateSessions(sessions);
   }, [sessions]);
+
+  // Keep the conversation's view of where a workspace can be created current,
+  // for the same reason the roster is: a spoken creation ask is validated
+  // against this list, so it has to be the list the adapters actually offer.
+  useEffect(() => {
+    workspaceProjectsRef.current = workspaceProjects;
+    voiceSession.current?.updateWorkspaceProjects(workspaceProjects);
+  }, [workspaceProjects]);
 
   // Keep the conversation's view of Luke himself current, so a spoken question
   // about a setting is answered from the value the store actually holds, and a

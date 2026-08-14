@@ -6,6 +6,7 @@ import {
   type SessionControl,
   type SessionProvider,
   type SessionStatus,
+  type WorkspaceProject,
 } from "@sidecar/core";
 import {
   CLOUD_ADAPTER_DEFAULTS,
@@ -38,8 +39,10 @@ const CONDUCTOR_DEFAULT_API_URL = "https://api.conductor.build";
  * Documented public API routes. The reads walk projects, workspaces, and
  * sessions; the writers are `POST …/sessions/{id}/messages`, which is
  * Conductor's documented way to hand a prompt to an existing session — queued
- * while it is idle, steered into the running turn while it works — and
- * `POST …/sessions/{id}/cancel`, which stops the current turn.
+ * while it is idle, steered into the running turn while it works —
+ * `POST …/sessions/{id}/cancel`, which stops the current turn, and
+ * `POST /v0/workspaces`, which is its documented way to create a workspace in
+ * a project the user already connected.
  */
 const CONDUCTOR_ROUTE = {
   IDENTITY: ["me"],
@@ -58,6 +61,18 @@ const CONDUCTOR_ROUTE_SEGMENT = {
 /** The body `POST …/sessions/{id}/messages` documents. */
 const CONDUCTOR_MESSAGE_FIELD = {
   MESSAGE: "message",
+} as const;
+
+/**
+ * The body `POST /v0/workspaces` documents. The project names where; the name
+ * is optional and Conductor generates one — and the branch it names — when it
+ * is left off. The endpoint also takes an agent, model, and effort, which are
+ * deliberately not sent: Conductor's own defaults are the user's own settings
+ * there, and a sidecar has no business overriding them.
+ */
+const CONDUCTOR_WORKSPACE_FIELD = {
+  PROJECT_ID: "projectId",
+  NAME: "name",
 } as const;
 
 /**
@@ -195,13 +210,20 @@ interface ConductorSession {
  * of whichever chat inside it most needs a person, and that chat is the one a
  * write reaches: the writes it supports are a user-typed prompt and a stop for
  * the running turn, each through Conductor's own endpoint on a chat that
- * advertised it.
+ * advertised it, and a new workspace in a project the latest pass listed,
+ * through Conductor's documented creation endpoint.
  */
 export class ConductorSessionAdapter extends CloudSessionAdapter {
   readonly #maximumObservedWorkspaces: number;
   readonly #maximumObservedSessions: number;
 
   #userId: string | undefined;
+  /**
+   * The projects the latest pass listed, kept because they are also where a
+   * workspace can be created: a creation ask is honoured only against what
+   * this cache holds, so it can never name a project observation did not see.
+   */
+  #projects: readonly ConductorProject[] = [];
 
   constructor(options: ConductorAdapterOptions) {
     super(
@@ -224,6 +246,28 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
 
   protected override forgetCachedIdentity(): void {
     this.#userId = undefined;
+    this.#projects = [];
+  }
+
+  /** Where Conductor will create a workspace: the projects the last pass listed. */
+  override workspaceProjects(): readonly WorkspaceProject[] {
+    return this.#projects.map((project) => ({
+      providerProjectId: project.id,
+      repository: project.repositoryLabel,
+    }));
+  }
+
+  protected override workspaceCreationRoute(
+    project: WorkspaceProject,
+    name: string | undefined,
+  ): CloudWriteRoute {
+    return {
+      segments: [CONDUCTOR_ROUTE_SEGMENT.V0, CONDUCTOR_ROUTE_SEGMENT.WORKSPACES],
+      body: {
+        [CONDUCTOR_WORKSPACE_FIELD.PROJECT_ID]: project.providerProjectId,
+        ...(name ? { [CONDUCTOR_WORKSPACE_FIELD.NAME]: name } : {}),
+      },
+    };
   }
 
   protected async collect(
@@ -236,6 +280,7 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     // Every fan-out below is already bounded by the caps in
     // CONDUCTOR_ADAPTER_DEFAULTS, so at most a dozen requests are ever in flight.
     const projects = await this.#listProjects(request);
+    this.#projects = projects;
     const workspaces = (
       await Promise.all(
         projects.map((project) =>

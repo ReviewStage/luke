@@ -22,8 +22,10 @@ import {
   maximumTypedAskLength,
   maximumVoiceContextIssues,
   maximumVoiceContextSessions,
+  maximumWorkspaceNameLength,
   normalizeSession,
   normalizeTrackedIssue,
+  type ObservedWorkspaceProject,
   proactiveSpeechEvents,
   pushToTalkCommitEvents,
   REALTIME_CLIENT_EVENT,
@@ -45,6 +47,8 @@ import {
   sessionToolAction,
   truncateResponseEvents,
   typedAskEvents,
+  workspaceProjectContextEvents,
+  workspaceProjectContextText,
 } from "../src";
 
 const DECIDED_AT = 1_800_000_000_000;
@@ -431,7 +435,7 @@ test("a resting-point update is voiced just like a blocking one", () => {
   assert.equal(speech[0]?.disposition, ATTENTION_DISPOSITION.SPEAK_AT_TURN_END);
 });
 
-test("the session is minted with the seven acts and nothing wider", () => {
+test("the session is minted with the eight acts and nothing wider", () => {
   const config = realtimeSessionConfig();
 
   assert.deepEqual(
@@ -440,6 +444,7 @@ test("the session is minted with the seven acts and nothing wider", () => {
       REALTIME_TOOL.SEND_SESSION_MESSAGE,
       REALTIME_TOOL.RUN_SESSION_CONTROL,
       REALTIME_TOOL.OPEN_SESSION,
+      REALTIME_TOOL.CREATE_WORKSPACE,
       REALTIME_TOOL.UPDATE_ISSUE_STATE,
       REALTIME_TOOL.COMMENT_ON_ISSUE,
       REALTIME_TOOL.CHANGE_APP_SETTING,
@@ -581,6 +586,88 @@ test("a tool call can act only on a session Luke was shown, doing what it advert
     [quiet],
   );
   assert.equal(nowhereToOpen.kind, "refused");
+});
+
+const OFFERED_PROJECT: ObservedWorkspaceProject = {
+  providerId: "conductor",
+  providerName: "Conductor",
+  providerProjectId: "proj-1",
+  repository: "luke",
+};
+
+test("the projects context lists each project with the identity a call names", () => {
+  const text = workspaceProjectContextText([OFFERED_PROJECT]);
+
+  assert.match(text, /Conductor — luke \[provider_id=conductor project_id=proj-1\]/);
+  // An empty list is said in words, or the conversation would be free to
+  // imagine somewhere a workspace could go.
+  assert.match(workspaceProjectContextText([]), /No provider currently offers/);
+
+  const [event] = workspaceProjectContextEvents([OFFERED_PROJECT]);
+  assert.equal(event?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE);
+  const item = (event as { item?: { content?: { text?: string }[] } }).item;
+  assert.match(item?.content?.[0]?.text ?? "", /^\[workspace projects, sent automatically\]/);
+  // Context, never a prompt: nothing here may open Luke's mouth.
+  assert.equal(
+    workspaceProjectContextEvents([OFFERED_PROJECT]).some(
+      (candidate) => candidate.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE,
+    ),
+    false,
+  );
+});
+
+test("a creation ask can only name a project Luke was shown", () => {
+  const projects = [OFFERED_PROJECT];
+  const identity = '"provider_id":"conductor","project_id":"proj-1"';
+
+  assert.deepEqual(
+    sessionToolAction(messageCall(`{${identity}}`, REALTIME_TOOL.CREATE_WORKSPACE), [], projects),
+    { kind: "create-workspace", providerId: "conductor", providerProjectId: "proj-1" },
+  );
+  assert.deepEqual(
+    sessionToolAction(
+      messageCall(`{${identity},"name":"fix the panel"}`, REALTIME_TOOL.CREATE_WORKSPACE),
+      [],
+      projects,
+    ),
+    {
+      kind: "create-workspace",
+      providerId: "conductor",
+      providerProjectId: "proj-1",
+      name: "fix the panel",
+    },
+  );
+
+  // Every way a call can point somewhere Luke was not shown — or carry a name
+  // outside its bound — is a refusal with a reason he can say aloud.
+  const refusals = [
+    sessionToolAction(
+      messageCall(
+        '{"provider_id":"conductor","project_id":"other"}',
+        REALTIME_TOOL.CREATE_WORKSPACE,
+      ),
+      [],
+      projects,
+    ),
+    sessionToolAction(
+      messageCall('{"provider_id":"devin","project_id":"proj-1"}', REALTIME_TOOL.CREATE_WORKSPACE),
+      [],
+      projects,
+    ),
+    sessionToolAction(
+      messageCall(
+        `{${identity},"name":"${"a".repeat(maximumWorkspaceNameLength + 1)}"}`,
+        REALTIME_TOOL.CREATE_WORKSPACE,
+      ),
+      [],
+      projects,
+    ),
+    // No list, no ask: a roster of sessions is not a list of projects.
+    sessionToolAction(messageCall(`{${identity}}`, REALTIME_TOOL.CREATE_WORKSPACE), [
+      actionableSession(),
+    ]),
+  ];
+  for (const refusal of refusals) assert.equal(refusal.kind, "refused");
 });
 
 test("a tool call is answered with the outcome the provider gave", () => {

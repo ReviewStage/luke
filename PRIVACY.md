@@ -41,8 +41,8 @@ provider no request and reports none of its sessions; the Cursor sessions
 running on this machine are read from disk and are unaffected by whether a
 Cursor key exists.
 
-When a key is supplied, Luke sends it as a bearer credential to that provider
-and issues authenticated `GET` requests only:
+When a key is supplied, Luke sends it as a bearer credential to that provider,
+and observation issues authenticated `GET` requests only:
 
 - For Conductor, Luke reads the authenticated identity, projects, workspaces the
   authenticated user created, sessions, and session statuses. It processes
@@ -55,7 +55,13 @@ and issues authenticated `GET` requests only:
   refs and run branches, timestamps, archive and run status, provider-designated
   run results, and pull-request links.
 
-Luke does not call provider write routes. Provider-assigned names and results
+Observation never calls a provider write route. Luke calls one only when you
+ask for the act it performs — a message typed on a session's row or asked for
+out loud, a control a session's provider advertised (such as cancelling a
+Conductor turn), or a new Conductor workspace in one of the projects Conductor
+reports — each through the provider's own documented endpoint under the same
+key, and each validated against what the latest observation actually reported.
+Nothing automatic reaches a write route. Provider-assigned names and results
 can reflect task or prompt content; Luke uses their bounded values to distinguish
 sessions and describe outcomes. Returned metadata is held in memory for display;
 response bodies are not persisted.
@@ -124,6 +130,11 @@ Alongside the audio, Luke sends the same bounded session fields the attention
 review uses — provider name, session title, status, and the provider's own
 summary — so a spoken question about your sessions can be answered. No
 transcript, file content, or command output is ever included.
+
+Luke also sends the list of projects a new workspace could be created in —
+each project's provider, repository label, and provider-assigned identifier —
+so an ask to create one can be validated against what the provider actually
+offers.
 
 Luke also sends an app guide describing itself — its features, each setting's
 current value, the talk key, and whether each cloud provider is connected — so
