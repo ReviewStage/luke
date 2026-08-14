@@ -6,9 +6,11 @@ import {
   normalizeSession,
   normalizeSessionIdentity,
   type ProviderSessionObservation,
+  type SessionControl,
   type SessionDetail,
   type SessionIdentity,
   type SessionProvider,
+  type SessionWorkspace,
 } from "./session";
 
 export interface SessionRegistrySnapshot {
@@ -27,8 +29,54 @@ function copySession(session: NormalizedSession): NormalizedSession {
     provider: { ...session.provider },
     detail: { ...session.detail },
     controls: session.controls.map((control) => ({ ...control })),
+    spawnableAgents: [...session.spawnableAgents],
+    ...(session.workspace ? { workspace: { ...session.workspace } } : {}),
     attention: { ...session.attention },
   };
+}
+
+/**
+ * An equality function from a comparator per field. The `Record` is exhaustive
+ * over `T` on purpose: a new field does not compile until someone decides how
+ * it compares.
+ *
+ * Comparators are collected once at module load, then walked with the same
+ * short-circuit as the old `&&` chain, so `#commit` still does one field
+ * compare per key rather than serializing the session on every observation.
+ */
+function exhaustiveSame<T extends object>(
+  equality: Record<keyof T, (first: T, second: T) => boolean>,
+): (first: T, second: T) => boolean {
+  const comparators = Object.values(equality) as Array<(first: T, second: T) => boolean>;
+  return (first, second) => {
+    for (const compare of comparators) {
+      if (!compare(first, second)) return false;
+    }
+    return true;
+  };
+}
+
+function sameItems<T>(
+  first: readonly T[],
+  second: readonly T[],
+  same: (first: T, second: T) => boolean,
+): boolean {
+  return (
+    first.length === second.length &&
+    first.every((item, index) => {
+      const other = second[index];
+      return other !== undefined && same(item, other);
+    })
+  );
+}
+
+function sameOptional<T extends object>(
+  first: T | undefined,
+  second: T | undefined,
+  same: (first: T, second: T) => boolean,
+): boolean {
+  if (first === undefined || second === undefined) return first === second;
+  return same(first, second);
 }
 
 /**
@@ -37,53 +85,57 @@ function copySession(session: NormalizedSession): NormalizedSession {
  * session that moved from one file to the next is still working, and the row
  * has to follow it.
  */
-function sameDetail(first: SessionDetail, second: SessionDetail): boolean {
-  return (
-    first.activity === second.activity &&
-    first.repository === second.repository &&
-    first.branch === second.branch &&
-    first.model === second.model &&
-    first.error === second.error &&
-    first.link === second.link &&
-    first.change === second.change
-  );
-}
+const sameDetail = exhaustiveSame<SessionDetail>({
+  activity: (first, second) => first.activity === second.activity,
+  repository: (first, second) => first.repository === second.repository,
+  branch: (first, second) => first.branch === second.branch,
+  model: (first, second) => first.model === second.model,
+  error: (first, second) => first.error === second.error,
+  link: (first, second) => first.link === second.link,
+  change: (first, second) => first.change === second.change,
+});
 
-function sameControls(
-  first: readonly NormalizedSession["controls"][number][],
-  second: readonly NormalizedSession["controls"][number][],
-): boolean {
-  return (
-    first.length === second.length &&
-    first.every(
-      (control, index) =>
-        control.id === second[index]?.id &&
-        control.label === second[index]?.label &&
-        control.kind === second[index]?.kind &&
-        control.target === second[index]?.target,
-    )
-  );
-}
+const sameControl = exhaustiveSame<SessionControl>({
+  id: (first, second) => first.id === second.id,
+  label: (first, second) => first.label === second.label,
+  kind: (first, second) => first.kind === second.kind,
+  target: (first, second) => first.target === second.target,
+});
 
-function sameSession(first: NormalizedSession, second: NormalizedSession): boolean {
-  return (
-    first.providerId === second.providerId &&
-    first.providerSessionId === second.providerSessionId &&
-    first.provider.id === second.provider.id &&
-    first.provider.displayName === second.provider.displayName &&
-    first.title === second.title &&
-    first.status === second.status &&
-    first.observedAt === second.observedAt &&
-    first.location === second.location &&
-    first.summary === second.summary &&
-    first.canReceiveMessage === second.canReceiveMessage &&
-    sameDetail(first.detail, second.detail) &&
-    first.attention.disposition === second.attention.disposition &&
-    first.attention.decidedAt === second.attention.decidedAt &&
-    first.attention.summary === second.attention.summary &&
-    sameControls(first.controls, second.controls)
-  );
-}
+const sameProvider = exhaustiveSame<SessionProvider>({
+  id: (first, second) => first.id === second.id,
+  displayName: (first, second) => first.displayName === second.displayName,
+});
+
+const sameAttention = exhaustiveSame<AttentionDecision>({
+  disposition: (first, second) => first.disposition === second.disposition,
+  decidedAt: (first, second) => first.decidedAt === second.decidedAt,
+  summary: (first, second) => first.summary === second.summary,
+});
+
+const sameWorkspace = exhaustiveSame<SessionWorkspace>({
+  providerWorkspaceId: (first, second) => first.providerWorkspaceId === second.providerWorkspaceId,
+  name: (first, second) => first.name === second.name,
+});
+
+const sameSession = exhaustiveSame<NormalizedSession>({
+  providerId: (first, second) => first.providerId === second.providerId,
+  providerSessionId: (first, second) => first.providerSessionId === second.providerSessionId,
+  provider: (first, second) => sameProvider(first.provider, second.provider),
+  title: (first, second) => first.title === second.title,
+  status: (first, second) => first.status === second.status,
+  observedAt: (first, second) => first.observedAt === second.observedAt,
+  location: (first, second) => first.location === second.location,
+  summary: (first, second) => first.summary === second.summary,
+  detail: (first, second) => sameDetail(first.detail, second.detail),
+  controls: (first, second) => sameItems(first.controls, second.controls, sameControl),
+  canReceiveMessage: (first, second) => first.canReceiveMessage === second.canReceiveMessage,
+  spawnableAgents: (first, second) =>
+    sameItems(first.spawnableAgents, second.spawnableAgents, Object.is),
+  spawnTarget: (first, second) => first.spawnTarget === second.spawnTarget,
+  workspace: (first, second) => sameOptional(first.workspace, second.workspace, sameWorkspace),
+  attention: (first, second) => sameAttention(first.attention, second.attention),
+});
 
 function sameProviderSessions(
   first: ReadonlyMap<string, NormalizedSession>,
