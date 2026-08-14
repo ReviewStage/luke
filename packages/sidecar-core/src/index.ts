@@ -5,6 +5,7 @@ export * from "./composite-provider-adapter";
 export * from "./fixtures";
 export * from "./geometry";
 export * from "./guide";
+export * from "./issues";
 export * from "./providers";
 export * from "./realtime";
 export * from "./session";

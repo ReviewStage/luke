@@ -7,12 +7,15 @@ import {
   DEFAULT_PANEL_FORM_FACTOR,
   fixtureSnapshot,
   InMemorySessionRegistry,
+  ISSUE_ACTION_KIND,
   isControllableAdapter,
   isMessageCapableAdapter,
   isPanelFormFactor,
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
+  issueCommentText,
   type NativeNotchGeometry,
+  normalizeTrackedIssue,
   type PanelFormFactor,
   PROVIDER_CONTROL_RESULT_STATUS,
   PROVIDER_MESSAGE_RESULT_STATUS,
@@ -25,6 +28,9 @@ import {
   type SessionIdentity,
   type SessionProviderAdapter,
   sessionMessageText,
+  TRACKER_ACTION_RESULT_STATUS,
+  type TrackedIssue,
+  type TrackerActionResult,
 } from "@sidecar/core";
 import {
   app,
@@ -36,6 +42,7 @@ import {
   ipcMain,
   Menu,
   nativeImage,
+  nativeTheme,
   powerMonitor,
   safeStorage,
   screen,
@@ -52,7 +59,9 @@ import { CURSOR_PROVIDER, CursorSessionAdapter } from "./cursor-adapter";
 import { CursorLocalSessionAdapter } from "./cursor-local-adapter";
 import { DevinSessionAdapter } from "./devin-adapter";
 import { JulesSessionAdapter } from "./jules-adapter";
+import { LinearIssueTracker } from "./linear-tracker";
 import { readMacScreenGeometry } from "./macos-screen-geometry";
+import { MediaDuckController } from "./media-duck";
 import { openAiAttentionEvaluatorFromEnvironment } from "./openai-attention-evaluator";
 import {
   openAiRealtimeCredentialsFromEnvironment,
@@ -77,9 +86,12 @@ import {
   isCredentialProviderId,
 } from "./shared/credential-providers";
 import {
-  DEFAULT_VOICE_HOTKEYS,
+  askHotkeyCandidates,
+  askHotkeyReport,
+  parseVoiceHotkey,
   VOICE_HOTKEY_ABSENCE,
   type VoiceHotkeyAbsence,
+  voiceHotkeyCandidates,
   voiceHotkeyLabel,
   voiceHotkeyReport,
 } from "./shared/voice-hotkey";
@@ -156,6 +168,26 @@ const sessionAdapters = [
   julesAdapter,
   new OpenCodeSessionAdapter(),
 ] as const;
+// The issue tracker is not a session provider: its issues feed the voice
+// roster rather than the registry, so it stands beside the adapters rather
+// than among them.
+const linearTracker = new LinearIssueTracker({
+  readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.LINEAR),
+});
+const issueTrackers = [linearTracker] as const;
+/** A board changes at the pace of hands, not of models; a minute is current. */
+const ISSUE_REFRESH_INTERVAL_MS = 60_000;
+/** The latest roster, which is also what every spoken act is validated against. */
+let trackedIssues: readonly TrackedIssue[] | undefined;
+let issueRefreshTimer: NodeJS.Timeout | undefined;
+let issueRefreshRunning = false;
+/**
+ * Whether a pass was asked for while one was running. A key save or clear
+ * must reach the roster on the very next pass, not be swallowed by an
+ * interval tick that happened to be in flight — so the guard queues instead
+ * of dropping.
+ */
+let issueRefreshQueued = false;
 // A fixture run must stay deterministic and credential-free, so it never builds
 // an evaluator — not just capture runs.
 const attentionEvaluator = fixtureMode ? undefined : openAiAttentionEvaluatorFromEnvironment();
@@ -168,7 +200,17 @@ const attentionReviewer = attentionEvaluator
 // A fixture run stays credential-free for the same reason attention review
 // does: evidence must be reproducible without a key and without a network.
 const realtimeCredentials = fixtureMode ? undefined : openAiRealtimeCredentialsFromEnvironment();
+// Quiets Music and Spotify while a spoken exchange is live. It lives here
+// rather than in the renderer because letting the players back up must survive
+// anything the renderer does — and only this process may run a helper.
+const mediaDuck = new MediaDuckController();
 let voiceHotkey: string | undefined;
+/**
+ * The chord the user chose over the defaults, if any. Read from the settings
+ * file before the key is first registered, and moved by the settings panel
+ * afterwards; the defaults stay behind it as fallbacks either way.
+ */
+let chosenVoiceHotkey: string | undefined;
 let talkKeyWatcher: TalkKeyWatcher | undefined;
 /**
  * Whether the key reports being let go of. The helper does and the Electron
@@ -217,7 +259,7 @@ function registerVoiceHotkey(): void {
       sendVoiceHotkey();
     },
   });
-  if (talkKeyWatcher.start(DEFAULT_VOICE_HOTKEYS)) return;
+  if (talkKeyWatcher.start(voiceHotkeyCandidates(chosenVoiceHotkey))) return;
   talkKeyWatcher = undefined;
   registerToggleHotkey();
   reportVoiceHotkey();
@@ -230,7 +272,7 @@ function registerVoiceHotkey(): void {
  * worth standing up rather than leaving the user with no key at all.
  */
 function registerToggleHotkey(): void {
-  for (const accelerator of DEFAULT_VOICE_HOTKEYS) {
+  for (const accelerator of voiceHotkeyCandidates(chosenVoiceHotkey)) {
     const registered = globalShortcut.register(accelerator, () => {
       voiceHostWindow()?.webContents.send(channels.voiceHotkeyPress);
       // A toggle has only the one edge, so it reports a release immediately and
@@ -246,6 +288,63 @@ function registerToggleHotkey(): void {
   voiceHotkeyAbsence = VOICE_HOTKEY_ABSENCE.ALREADY_OWNED;
 }
 
+let askHotkey: string | undefined;
+
+/**
+ * Registers the key that summons the ask field from whatever app is frontmost,
+ * on the talk key's own terms: never during a capture run, and never for a
+ * conversation that cannot open — a system-wide key that answers nothing is a
+ * key taken from every other app for no reason. Electron's registration is
+ * enough here, because a summons has no release edge to hear.
+ *
+ * The press does two things in order: stands the panel up focused, then asks
+ * the renderer to put the caret in the field — or, when the caret is already
+ * there, the renderer reads the same press as the dismissal, so one key
+ * summons and puts away like every launcher does. The panel that answers is
+ * the voice host's, the same window every other app-level ask lands in.
+ */
+function registerAskHotkey(): void {
+  // Re-runnable: moving the talk key lets everything go and registers afresh,
+  // and a key that could not be re-taken must not still be claimed anywhere.
+  askHotkey = undefined;
+  if (captureMode) {
+    process.stderr.write(`${askHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.CAPTURE_RUN)}\n`);
+    return;
+  }
+  if (!realtimeCredentials) {
+    process.stderr.write(`${askHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.NO_CREDENTIAL)}\n`);
+    return;
+  }
+  // A chord the talk key sits on — chosen by the user, or announced as
+  // registered — is not a candidate: the two Luke keys must never compete.
+  for (const accelerator of askHotkeyCandidates([chosenVoiceHotkey, voiceHotkey])) {
+    const registered = globalShortcut.register(accelerator, () => {
+      const host = voiceHostWindow();
+      const displayId = host ? displayIdFor(host.webContents) : undefined;
+      if (displayId === undefined) return;
+      setWindowMode(displayId, "expanded", true);
+      host?.webContents.send(channels.lifecycle, "ask:focus");
+    });
+    if (!registered) continue;
+    askHotkey = accelerator;
+    process.stderr.write(`${askHotkeyReport(askHotkey, VOICE_HOTKEY_ABSENCE.ALREADY_OWNED)}\n`);
+    return;
+  }
+  process.stderr.write(`${askHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.ALREADY_OWNED)}\n`);
+}
+
+/**
+ * Tells every renderer the ask key it should be teaching, whenever that
+ * changes. The raw accelerator travels, as in bootstrap: the renderer needs
+ * both its spellings, and an absent key clears the hint rather than leaving a
+ * keycap up for a chord that answers nothing.
+ */
+function sendAskHotkey(): void {
+  for (const window of panelWindows.values()) {
+    window.webContents.send(channels.askHotkeyChanged, askHotkey);
+  }
+}
+
 /** Tells every renderer the key it should be showing, whenever that changes. */
 function sendVoiceHotkey(): void {
   for (const window of panelWindows.values()) {
@@ -258,6 +357,37 @@ function sendVoiceHotkey(): void {
 
 function reportVoiceHotkey(): void {
   process.stderr.write(`${voiceHotkeyReport(voiceHotkey, voiceHotkeyAbsence)}\n`);
+}
+
+/**
+ * Moves the talk key to whatever `chosenVoiceHotkey` now says, while the app
+ * is running. The old key is let go of in full before the new one is asked
+ * for, so the two can never race for the same chord — and letting everything
+ * go takes the ask key down with it, because `unregisterAll` is exactly that,
+ * so the ask key is registered afresh once the talk key has settled. Letting
+ * go means waiting: the system releases the old helper's chord when its
+ * process exits, not when the kill is asked for, and the defaults sit in both
+ * helpers' candidate lists — a successor that starts too early is refused the
+ * very fallback it was promised. The panel keeps showing the old key until
+ * the new one actually answers: the helper announces its own registration
+ * over stdout, and every path without a helper is decided by the time
+ * `registerVoiceHotkey` returns.
+ */
+async function applyVoiceHotkey(): Promise<void> {
+  const released = talkKeyWatcher?.stop();
+  talkKeyWatcher = undefined;
+  globalShortcut.unregisterAll();
+  await released;
+  voiceHotkey = undefined;
+  voiceHotkeyHeld = true;
+  voiceHotkeyAbsence = VOICE_HOTKEY_ABSENCE.ALREADY_OWNED;
+  registerVoiceHotkey();
+  if (!talkKeyWatcher) sendVoiceHotkey();
+  // The ask key went down with `unregisterAll`, and the chord it can have may
+  // itself have changed — the talk key may have moved onto or off of one of
+  // its candidates — so it is re-taken now and the panel told what it teaches.
+  registerAskHotkey();
+  sendAskHotkey();
 }
 
 /** The mode every window is born in; only the dev and capture flags change it. */
@@ -557,6 +687,32 @@ function isSessionIdentity(value: unknown): value is SessionIdentity {
 }
 
 /**
+ * Whether a renderer message is a validated issue act. Like a session
+ * identity, a malformed one is a broken request rather than something the
+ * user can act on — and everything it names is re-resolved against the
+ * latest observation before a tracker client sees any of it.
+ */
+function isIssueActionAsk(value: unknown): value is {
+  kind: "issue-state" | "issue-comment";
+  identity: { trackerId: string; identifier: string };
+  transition?: { id: string; name: string };
+  body?: string;
+} {
+  if (value === null || typeof value !== "object") return false;
+  const { kind, identity } = value as {
+    kind?: unknown;
+    identity?: { trackerId?: unknown; identifier?: unknown };
+  };
+  if (kind !== "issue-state" && kind !== "issue-comment") return false;
+  return (
+    typeof identity?.trackerId === "string" &&
+    identity.trackerId.trim().length > 0 &&
+    typeof identity.identifier === "string" &&
+    identity.identifier.trim().length > 0
+  );
+}
+
+/**
  * States on startup whether voice is on, and why not when it is off. A packaged
  * app has no visible stderr, but the common case during local testing is a
  * terminal launch — where this is the difference between a one-line answer and
@@ -600,8 +756,13 @@ function registerIpc(): void {
       realtimeAvailable: realtimeCredentials !== undefined,
       ...(voiceHotkey ? { voiceHotkey: voiceHotkeyLabel(voiceHotkey) } : {}),
       voiceHotkeyHeld,
+      // The accelerator rather than its label: the renderer needs both
+      // spellings — the keycap's ⌥L and aria's Alt+L — and only the
+      // accelerator can produce the pair.
+      ...(askHotkey ? { askHotkey } : {}),
       display: displayDiagnostic(display),
       sessions: fixtureMode ? [] : sessionRegistry.snapshot().sessions,
+      ...(trackedIssues && !fixtureMode ? { issues: trackedIssues } : {}),
       settings: await settingsStore.snapshot(),
     };
   });
@@ -651,6 +812,11 @@ function registerIpc(): void {
         // every save.
         const adapter = adapterByCredentialProvider.get(providerId);
         if (!result.reason && adapter) void sessionRegistry.refresh(adapter);
+        // The tracker's key connects the tracker, not a session provider, so
+        // its save refreshes the roster instead of the registry.
+        if (!result.reason && providerId === CREDENTIAL_PROVIDER_ID.LINEAR) {
+          void refreshTrackedIssues();
+        }
         return result;
       } catch {
         // A filesystem failure is not something the user can act on, so it is
@@ -819,6 +985,76 @@ function registerIpc(): void {
     },
   );
 
+  // The talk key is the user's to move — a chord another tool already holds,
+  // or a hand that does not reach ⌥Space. What arrives is read through the
+  // same gate the stored value passes, so only a chord the registrars can
+  // actually take is ever stored; omitting one returns the defaults, making
+  // reset the absence of a choice rather than a second stored value. The new
+  // chord is registered at once — a shortcut that only moved on the next
+  // launch would read as a control that does nothing.
+  ipcMain.handle(
+    channels.setVoiceHotkey,
+    async (event, accelerator: unknown): Promise<SettingsUpdateResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (accelerator !== undefined && typeof accelerator !== "string") {
+        throw new Error("Invalid shortcut request");
+      }
+      const chosen = accelerator === undefined ? undefined : parseVoiceHotkey(accelerator);
+      // The renderer records chords through the same reader, so one that does
+      // not parse is a malformed request rather than a choice to answer.
+      if (accelerator !== undefined && chosen === undefined) {
+        throw new Error("Invalid shortcut request");
+      }
+      try {
+        const result = await settingsStore.setVoiceHotkey(chosen);
+        if (!result.reason) {
+          chosenVoiceHotkey = chosen;
+          // Awaited so the renderer's controls stay at rest until the swap has
+          // finished and the helper's own registration line can say the truth.
+          await applyVoiceHotkey();
+        }
+        return result;
+      } catch {
+        // A filesystem failure is not something the user can act on, so it is
+        // reported as one line rather than as a raw system error.
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "Could not save that shortcut on this system.",
+        };
+      }
+    },
+  );
+
+  // The duck follows the stored answer at once, like the menu bar item: off
+  // must let a duck currently held go rather than waiting for the next launch.
+  ipcMain.handle(
+    channels.setDuckOtherMedia,
+    async (event, enabled: unknown): Promise<SettingsUpdateResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (typeof enabled !== "boolean") throw new Error("Invalid media duck request");
+      try {
+        const result = await settingsStore.setDuckOtherMedia(enabled);
+        mediaDuck.setEnabled(result.settings.duckOtherMedia);
+        return result;
+      } catch {
+        // A filesystem failure is not something the user can act on, so it is
+        // reported as one line rather than as a raw system error.
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "Could not save that setting on this system.",
+        };
+      }
+    },
+  );
+
+  // A statement of state, not a request: the renderer says whether a spoken
+  // exchange is live, and the duck holds every other decision — the setting,
+  // the hangover after an exchange, which players are playing at all.
+  ipcMain.on(channels.setVoiceExchange, (event, active: unknown) => {
+    if (!trustedSender(event) || typeof active !== "boolean") return;
+    mediaDuck.setExchangeActive(active);
+  });
+
   // Where to get a key is a question the panel cannot answer itself, so it
   // hands the question to the browser. The renderer names a provider rather
   // than an address: the pages Luke can open are the ones in the provider
@@ -945,6 +1181,63 @@ function registerIpc(): void {
     },
   );
 
+  // A spoken issue act runs the same gauntlet a session act does, in the same
+  // two halves: the renderer refused anything its roster did not advertise,
+  // and here every named thing is resolved again from the latest observation —
+  // the issue by its identity, the transition by the id the tracker itself
+  // listed — so what reaches a tracker client is built from observed state,
+  // never from what a model composed.
+  ipcMain.handle(
+    channels.executeIssueAction,
+    async (event, action: unknown): Promise<TrackerActionResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (!isIssueActionAsk(action)) throw new Error("Invalid issue action request");
+      // A fixture run observes no tracker, so it refuses every act — a
+      // deterministic capture must not reach Linear.
+      const issue = trackedIssues?.find(
+        (candidate) =>
+          candidate.trackerId === action.identity.trackerId &&
+          candidate.identifier === action.identity.identifier,
+      );
+      if (!issue) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
+      const tracker = issueTrackers.find((candidate) => candidate.tracker.id === issue.trackerId);
+      if (!tracker) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
+
+      let result: TrackerActionResult;
+      if (action.kind === "issue-state") {
+        const transition = issue.transitions.find(
+          (candidate) => candidate.id === action.transition?.id,
+        );
+        if (!transition) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
+        result = await tracker.execute({
+          kind: ISSUE_ACTION_KIND.SET_STATE,
+          trackerIssueId: issue.trackerIssueId,
+          transition,
+        });
+      } else {
+        if (!issue.canComment) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
+        const body = issueCommentText(action.body);
+        if (!body) {
+          return {
+            status: TRACKER_ACTION_RESULT_STATUS.REJECTED,
+            reason: "A comment has to be shorter than a document and longer than nothing.",
+          };
+        }
+        result = await tracker.execute({
+          kind: ISSUE_ACTION_KIND.COMMENT,
+          trackerIssueId: issue.trackerIssueId,
+          body,
+        });
+      }
+      // An act that landed changes the board, so the roster should catch up
+      // as soon as Linear will say.
+      if (result.status === TRACKER_ACTION_RESULT_STATUS.ACCEPTED) {
+        void refreshTrackedIssues();
+      }
+      return result;
+    },
+  );
+
   // The panel is normally shown without stealing focus. A text field cannot be
   // typed into that way, so the renderer asks for focus when it opens one —
   // for its own window, which is the one holding the field.
@@ -1046,6 +1339,55 @@ function startSessionObservation(): void {
     void refreshProviderSessions();
   }, SESSION_REFRESH_INTERVAL_MS);
   sessionRefreshTimer.unref();
+}
+
+/**
+ * Reads the issue roster from every connected tracker. A failing pass keeps
+ * the roster it has rather than blanking it — a tracker that cannot answer is
+ * not a board with nothing on it — and a tracker with no key stays absent,
+ * which is how the renderer knows there is nothing to advertise.
+ */
+async function refreshTrackedIssues(): Promise<void> {
+  if (fixtureMode) return;
+  if (issueRefreshRunning) {
+    issueRefreshQueued = true;
+    return;
+  }
+  issueRefreshRunning = true;
+  try {
+    const collected: TrackedIssue[] = [];
+    let connected = false;
+    for (const tracker of issueTrackers) {
+      const observations = await tracker.observe();
+      if (!observations) continue;
+      connected = true;
+      for (const observation of observations) {
+        collected.push(normalizeTrackedIssue(tracker.tracker, observation));
+      }
+    }
+    trackedIssues = connected ? collected : undefined;
+    for (const window of panelWindows.values()) {
+      window.webContents.send(channels.issuesChanged, trackedIssues);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`Issue observation failed: ${message}\n`);
+  } finally {
+    issueRefreshRunning = false;
+    if (issueRefreshQueued) {
+      issueRefreshQueued = false;
+      void refreshTrackedIssues();
+    }
+  }
+}
+
+function startIssueObservation(): void {
+  if (fixtureMode) return;
+  void refreshTrackedIssues();
+  issueRefreshTimer = setInterval(() => {
+    void refreshTrackedIssues();
+  }, ISSUE_REFRESH_INTERVAL_MS);
+  issueRefreshTimer.unref();
 }
 
 /** Whether some panel window's renderer is asking, whichever display it is on. */
@@ -1215,6 +1557,31 @@ function applyMenuBarVisibility(show: boolean): void {
 }
 
 /**
+ * The Dock tile per theme: the porcelain tile for a light desktop, the
+ * space-black one for a dark. The bundle's `.icns` is cut from the dark tile
+ * and cannot follow the theme, and an unpackaged run has only Electron's stock
+ * icon, so the running app draws the Dock image itself from these.
+ */
+const DOCK_ICON_FILES = {
+  LIGHT: "luke-icon-light.png",
+  DARK: "luke-icon-dark.png",
+} as const;
+
+/**
+ * Draws Luke's own face in the Dock, matched to the theme. Called once at
+ * startup and again whenever the theme changes; macOS remembers the image
+ * across `dock.hide()`, so this never needs to wait for the icon to be shown.
+ * Artwork missing from a build draws nothing, leaving the bundle icon (or the
+ * stock one) in place rather than an empty tile.
+ */
+function applyDockIcon(): void {
+  if (!app.dock) return;
+  const file = nativeTheme.shouldUseDarkColors ? DOCK_ICON_FILES.DARK : DOCK_ICON_FILES.LIGHT;
+  const image = nativeImage.createFromPath(path.join(__dirname, "icon", file));
+  if (!image.isEmpty()) app.dock.setIcon(image);
+}
+
+/**
  * macOS ignores a `dock.hide()` within a second of the last Dock change, so a
  * switch pressed twice cannot be honoured call by call; the applier below
  * paces itself to this instead, which is Electron's documented floor.
@@ -1312,6 +1679,11 @@ if (!app.requestSingleInstanceLock()) {
       (show) => applyMenuBarVisibility(show),
       () => applyMenuBarVisibility(true),
     );
+    // The Dock wears Luke's own face from the start, and keeps wearing the
+    // right one as the desktop changes mode — whether the icon is shown yet
+    // is a separate question, answered by the setting below.
+    applyDockIcon();
+    nativeTheme.on("updated", applyDockIcon);
     // The Dock icon reads the same file under the opposite default: it is
     // opt-in, so a file that cannot be read leaves Luke out of the Dock — the
     // accessory app the launch just asserted. Nothing to do until it says so.
@@ -1320,6 +1692,13 @@ if (!app.requestSingleInstanceLock()) {
         if (show) applyDockVisibility(true);
       },
       () => undefined,
+    );
+    // Armed from the settings file alone, like the status item, and for the
+    // same reason. A file that cannot be read leaves the duck on, the same
+    // answer a file that has never said gives.
+    void settingsStore.duckOtherMedia().then(
+      (enabled) => mediaDuck.setEnabled(enabled),
+      () => mediaDuck.setEnabled(true),
     );
     // Awaited, so the chosen voice reaches the minter before the renderer
     // exists to ask for a credential: the first conversation must already
@@ -1338,13 +1717,20 @@ if (!app.requestSingleInstanceLock()) {
     panelFormFactor =
       (await settingsStore.readFormFactor().catch(() => undefined)) ?? DEFAULT_PANEL_FORM_FACTOR;
     reportVoiceAvailability();
+    // Awaited for the same reason the voice is: the chosen chord has to be in
+    // hand before the key is registered, or the first registration would take
+    // the default away from the user who moved off it. A file that cannot be
+    // read means no choice was kept, and the defaults answer.
+    chosenVoiceHotkey = await settingsStore.readVoiceHotkey().catch(() => undefined);
     // The report is not made here: the helper answers over its own stdout a
     // moment later, and a line printed now would state an absence that only
     // exists because nobody has answered yet.
     registerVoiceHotkey();
+    registerAskHotkey();
     reconcilePanels();
     configurePermissions();
     startSessionObservation();
+    startIssueObservation();
 
     screen.on("display-added", handleDisplayChange);
     screen.on("display-removed", handleDisplayChange);
@@ -1370,13 +1756,19 @@ if (!app.requestSingleInstanceLock()) {
 app.on("will-quit", () => {
   globalShortcut.unregisterAll();
   // The helper is a process of Luke's own, so it does not outlive the app that
-  // spawned it and leave a key registered against nothing.
-  talkKeyWatcher?.stop();
+  // spawned it and leave a key registered against nothing. Nothing succeeds it
+  // during quit, so its exit is not waited on.
+  void talkKeyWatcher?.stop();
   talkKeyWatcher = undefined;
+  // The duck helper outlives this by one fade: closing its stdin is what asks
+  // it to bring the players back up, so quitting mid-sentence costs the user
+  // nothing.
+  mediaDuck.stop();
 });
 
 app.on("before-quit", () => {
   if (sessionRefreshTimer) clearInterval(sessionRefreshTimer);
+  if (issueRefreshTimer) clearInterval(issueRefreshTimer);
   for (const displayId of [...collapseTimers.keys()]) clearCollapseTimer(displayId);
 });
 

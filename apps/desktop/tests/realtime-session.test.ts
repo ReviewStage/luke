@@ -4,17 +4,21 @@ import {
   APP_SETTING_KIND,
   type AppGuideSnapshot,
   ATTENTION_DISPOSITION,
+  ISSUE_TRACKER_ID,
   type NormalizedSession,
   normalizeSession,
+  normalizeTrackedIssue,
   type ProviderSessionObservation,
   REALTIME_CLIENT_EVENT,
   REALTIME_SERVER_EVENT,
   REALTIME_STATUS,
   type RealtimeConnection,
   SESSION_STATUS,
+  type TrackedIssue,
 } from "@sidecar/core";
 import {
   type AppActionCarrier,
+  type IssueActionCarrier,
   quietIsLukesOwn,
   RealtimeVoiceSession,
   type SessionActionCarrier,
@@ -74,6 +78,7 @@ function harness(
     now?: () => number;
     carryAction?: SessionActionCarrier;
     carryAppAction?: AppActionCarrier;
+    carryIssueAction?: IssueActionCarrier;
   } = {},
 ): Harness {
   const sent: Record<string, unknown>[] = [];
@@ -156,6 +161,7 @@ function harness(
     ...(options.now ? { now: options.now } : {}),
     ...(options.carryAction ? { carryAction: options.carryAction } : {}),
     ...(options.carryAppAction ? { carryAppAction: options.carryAppAction } : {}),
+    ...(options.carryIssueAction ? { carryIssueAction: options.carryIssueAction } : {}),
     onStatus: () => undefined,
     onLocalStream: () => undefined,
     onRemoteStream: () => undefined,
@@ -1057,6 +1063,231 @@ function armDeveloperTurn(context: Harness): void {
   context.session.stopListening(true);
 }
 
+test("a typed ask opens a developer turn and asks for the reply to it", async () => {
+  const context = harness();
+  await context.session.connect();
+  const sentBefore = context.sent.length;
+
+  assert.equal(context.session.sendText("What needs me right now?"), true);
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+  // The microphone stays exactly as it was: typing never opens the device.
+  assert.equal(context.microphoneEnabled(), false);
+  const events = context.sent.slice(sentBefore);
+  assert.deepEqual(
+    events.map((event) => event.type),
+    [REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE, REALTIME_CLIENT_EVENT.RESPONSE_CREATE],
+  );
+  const item = events[0]?.item as { role?: string; content?: { text?: string }[] };
+  assert.equal(item.role, "user");
+  assert.equal(item.content?.[0]?.text, "What needs me right now?");
+});
+
+test("a typed ask can carry a tool call, because the developer opened the turn", async () => {
+  const carried: unknown[] = [];
+  const context = harness({
+    carryAction: async (action) => {
+      carried.push(action);
+      return { status: "accepted" };
+    },
+  });
+  await context.session.connect();
+  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
+  // The turn is opened by typing rather than by the talk key: the two arm the
+  // gate on the same terms, because both are the developer's own ask.
+  context.session.sendText("ask claude code to add tests");
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "send_session_message",
+          call_id: "call-1",
+          arguments:
+            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"add tests"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(carried, [
+    {
+      kind: "message",
+      identity: { providerId: "claude-code", providerSessionId: "session-a" },
+      text: "add tests",
+    },
+  ]);
+  // The outcome is voiced, exactly as a spoken ask's would be.
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+});
+
+test("a typed ask interrupts the reply it arrives over", async () => {
+  let now = 10_000;
+  const context = harness({ now: () => now });
+  await context.session.connect();
+  context.deliverRemoteTrack();
+  armDeveloperTurn(context);
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
+    item: { id: "item-1" },
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    item_id: "item-1",
+    delta: "There are two sessions",
+  });
+  context.session.reportRemoteAudioActive();
+  now = 11_200;
+  const sentBefore = context.sent.length;
+
+  assert.equal(context.session.sendText("open the codex one"), true);
+
+  // The reply being talked over is cut the way holding the talk key cuts it:
+  // silenced at once, cancelled, and trimmed to what was actually heard.
+  assert.equal(context.lukeAudible(), false);
+  assert.equal(context.captions.at(-1), undefined);
+  const events = context.sent.slice(sentBefore);
+  assert.deepEqual(
+    events.map((event) => event.type),
+    [
+      REALTIME_CLIENT_EVENT.RESPONSE_CANCEL,
+      REALTIME_CLIENT_EVENT.OUTPUT_AUDIO_BUFFER_CLEAR,
+      REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_TRUNCATE,
+      REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE,
+      REALTIME_CLIENT_EVENT.RESPONSE_CREATE,
+    ],
+  );
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+});
+
+test("a cancelled reply's late finish cannot act in the turn that replaced it", async () => {
+  const carried: unknown[] = [];
+  const context = harness({
+    carryAction: async (action) => {
+      carried.push(action);
+      return { status: "accepted" };
+    },
+  });
+  await context.session.connect();
+  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
+  // A spoken turn opens reply A, and the server confirms it by name.
+  armDeveloperTurn(context);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-a" } });
+  // The developer types over it, opening a new armed turn.
+  assert.equal(context.session.sendText("never mind — what needs me?"), true);
+  const sentBefore = context.sent.length;
+
+  // Reply A's finished form arrives late — the server had completed it before
+  // the cancel landed — carrying the very call the developer interrupted.
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      id: "resp-a",
+      output: [
+        {
+          type: "function_call",
+          name: "send_session_message",
+          call_id: "call-stale",
+          arguments:
+            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"do it anyway"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  // Nothing was carried: the session takes messages and the identity is real,
+  // so only the freshness of the reply stands between the call and the write —
+  // and it holds, however armed the turn that superseded it is.
+  assert.deepEqual(carried, []);
+  const events = context.sent.slice(sentBefore);
+  const output = events.find(
+    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+  );
+  assert.equal(
+    (
+      JSON.parse((output?.item as { output?: string } | undefined)?.output ?? "{}") as {
+        status?: string;
+      }
+    ).status,
+    "refused",
+  );
+  // No reply was opened to voice the refusal, and the new turn is still under way.
+  assert.ok(!events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE));
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+
+  // The reply the typed ask actually asked for still acts in full.
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-b" } });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      id: "resp-b",
+      output: [
+        {
+          type: "function_call",
+          name: "send_session_message",
+          call_id: "call-fresh",
+          arguments:
+            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"status?"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(carried.length, 1);
+});
+
+test("a cancelled reply's late finish does not end the turn that replaced it", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.deliverRemoteTrack();
+  armDeveloperTurn(context);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-a" } });
+  context.session.sendText("actually, open the codex session");
+
+  // Reply A finishes late with nothing to say, while reply B is still in the
+  // quiet gap before its first word.
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE, response: { id: "resp-a" } });
+  context.session.reportRemoteAudioIdle();
+
+  // A stale finish must not mark generation done: paired with that gap's
+  // quiet, it would end a reply that has not begun to be heard.
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+});
+
+test("a typed ask does not interrupt the developer's own open microphone", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.session.startListening();
+  const sentBefore = context.sent.length;
+
+  // Half a spoken question is still theirs: the keystroke is refused rather
+  // than the microphone's turn being discarded under them.
+  assert.equal(context.session.sendText("hello"), false);
+  assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
+  assert.equal(context.microphoneEnabled(), true);
+  assert.deepEqual(context.sent.slice(sentBefore), []);
+});
+
+test("a typed ask with nothing in it opens nothing", async () => {
+  const context = harness();
+  await context.session.connect();
+  const sentBefore = context.sent.length;
+
+  assert.equal(context.session.sendText("   "), false);
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+  assert.deepEqual(context.sent.slice(sentBefore), []);
+});
+
+test("a typed ask before the call is open reports it could not go", () => {
+  const context = harness();
+
+  assert.equal(context.session.sendText("What needs me?"), false);
+  assert.deepEqual(context.sent, []);
+});
+
 test("a spoken ask is carried through the carrier and its outcome is voiced", async () => {
   const carried: unknown[] = [];
   const context = harness({
@@ -1578,4 +1809,253 @@ test("a spoken panel ask is validated against the roster and carried", async () 
   assert.deepEqual(carried, [
     { kind: "panel", tab: "sessions", filter: "claude-code", sort: "recency" },
   ]);
+});
+
+function trackedIssue(
+  overrides: Partial<Parameters<typeof normalizeTrackedIssue>[1]> = {},
+): TrackedIssue {
+  return normalizeTrackedIssue(
+    { id: ISSUE_TRACKER_ID.LINEAR, displayName: "Linear" },
+    {
+      trackerIssueId: "issue-uuid-1",
+      identifier: "LUKE-123",
+      title: "Add Codex support",
+      stateName: "In Progress",
+      observedAt: 1_800_000_000_000,
+      transitions: [{ id: "state-done", name: "Done" }],
+      canComment: true,
+      ...overrides,
+    },
+  );
+}
+
+test("the conversation is told which issues the tracker lists", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  context.session.updateIssues([trackedIssue()]);
+
+  const contextEvent = context.sent.find((event) => {
+    const item = event.item as { content?: { text?: string }[] } | undefined;
+    return item?.content?.[0]?.text?.includes("[observed issue tracker, sent automatically]");
+  });
+  assert.ok(contextEvent, "the issue roster was sent");
+  const text =
+    (contextEvent?.item as { content?: { text?: string }[] } | undefined)?.content?.[0]?.text ?? "";
+  assert.match(text, /LUKE-123/);
+  assert.match(text, /states: Done/);
+  // Context is never a prompt: nothing here asks Luke to start talking.
+  assert.equal(
+    context.sent.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE),
+    false,
+  );
+
+  // An unchanged roster is not resent.
+  const sentBefore = context.sent.length;
+  context.session.updateIssues([trackedIssue()]);
+  assert.equal(context.sent.length, sentBefore);
+});
+
+test("a spoken issue ask is carried through its own carrier and voiced", async () => {
+  const carried: unknown[] = [];
+  const context = harness({
+    carryIssueAction: async (action) => {
+      carried.push(action);
+      return { status: "accepted" };
+    },
+  });
+  await context.session.connect();
+  context.session.updateIssues([trackedIssue()]);
+  armDeveloperTurn(context);
+  const sentBefore = context.sent.length;
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "update_issue_state",
+          call_id: "call-1",
+          arguments: '{"tracker_id":"linear","issue_id":"LUKE-123","state":"Done"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(carried, [
+    {
+      kind: "issue-state",
+      identity: { trackerId: "linear", identifier: "LUKE-123" },
+      transition: { id: "state-done", name: "Done" },
+    },
+  ]);
+  const followUp = context.sent.slice(sentBefore);
+  const output = followUp.find(
+    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+  );
+  assert.equal((output?.item as { output?: string } | undefined)?.output, '{"status":"accepted"}');
+  assert.equal(
+    followUp.at(-1)?.type,
+    REALTIME_CLIENT_EVENT.RESPONSE_CREATE,
+    "the outcome is voiced by the reply that follows",
+  );
+});
+
+test("an issue call with no tracker connected is refused before any carrier runs", async () => {
+  const carried: unknown[] = [];
+  const context = harness({
+    carryIssueAction: async (action) => {
+      carried.push(action);
+      return { status: "accepted" };
+    },
+  });
+  await context.session.connect();
+  // No updateIssues call: no roster was ever sent.
+  armDeveloperTurn(context);
+  const sentBefore = context.sent.length;
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "update_issue_state",
+          call_id: "call-1",
+          arguments: '{"tracker_id":"linear","issue_id":"LUKE-123","state":"Done"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(carried, []);
+  const output = context.sent
+    .slice(sentBefore)
+    .find(
+      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+    );
+  const raw = (output?.item as { output?: string } | undefined)?.output ?? "{}";
+  const parsed = JSON.parse(raw) as { status?: string; reason?: string };
+  assert.equal(parsed.status, "refused");
+  assert.match(parsed.reason ?? "", /no issue tracker is connected/i);
+});
+
+test("an issue call outside the roster is refused before any carrier runs", async () => {
+  const carried: unknown[] = [];
+  const context = harness({
+    carryIssueAction: async (action) => {
+      carried.push(action);
+      return { status: "accepted" };
+    },
+  });
+  await context.session.connect();
+  context.session.updateIssues([trackedIssue({ canComment: false })]);
+  armDeveloperTurn(context);
+  const sentBefore = context.sent.length;
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "update_issue_state",
+          call_id: "call-1",
+          arguments: '{"tracker_id":"linear","issue_id":"LUKE-999","state":"Done"}',
+        },
+        {
+          type: "function_call",
+          name: "comment_on_issue",
+          call_id: "call-2",
+          arguments: '{"tracker_id":"linear","issue_id":"LUKE-123","body":"hi"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  // Nothing was carried: one call named an issue Luke was never shown, the
+  // other an act the issue does not take. Both were answered anyway.
+  assert.deepEqual(carried, []);
+  const outputs = context.sent
+    .slice(sentBefore)
+    .filter(
+      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+    );
+  assert.equal(outputs.length, 2);
+  for (const event of outputs) {
+    const raw = (event.item as { output?: string } | undefined)?.output ?? "{}";
+    assert.equal((JSON.parse(raw) as { status?: string }).status, "refused");
+  }
+});
+
+test("an issue call outside a turn the developer opened cannot act", async () => {
+  const carried: unknown[] = [];
+  const context = harness({
+    carryIssueAction: async (action) => {
+      carried.push(action);
+      return { status: "accepted" };
+    },
+  });
+  await context.session.connect();
+  context.session.updateIssues([trackedIssue()]);
+  // No developer turn: the call arrives on a turn Luke opened himself.
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "update_issue_state",
+          call_id: "call-1",
+          arguments: '{"tracker_id":"linear","issue_id":"LUKE-123","state":"Done"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(carried, []);
+  const output = context.sent.find(
+    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+  );
+  const raw = (output?.item as { output?: string } | undefined)?.output ?? "{}";
+  assert.equal((JSON.parse(raw) as { status?: string }).status, "refused");
+});
+
+test("a tracker that disconnects withdraws the roster, and a reconnect resends it", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.session.updateIssues([trackedIssue()]);
+  const sentBefore = context.sent.length;
+
+  // Disconnecting is news once; staying disconnected is not.
+  context.session.updateIssues(undefined);
+  context.session.updateIssues(undefined);
+
+  const withdrawals = context.sent.slice(sentBefore).filter((event) => {
+    const item = event.item as { content?: { text?: string }[] } | undefined;
+    return item?.content?.[0]?.text?.includes("no longer connected") === true;
+  });
+  assert.equal(withdrawals.length, 1);
+
+  // The same roster arriving again after a reconnect is news again: the
+  // conversation was told to disregard it, so it has to be retold.
+  context.session.updateIssues([trackedIssue()]);
+  const rosters = context.sent.slice(sentBefore).filter((event) => {
+    const item = event.item as { content?: { text?: string }[] } | undefined;
+    return item?.content?.[0]?.text?.includes("LUKE-123") === true;
+  });
+  assert.equal(rosters.length, 1);
+
+  // A conversation never told about a board has nothing to withdraw.
+  const fresh = harness();
+  await fresh.session.connect();
+  const freshBefore = fresh.sent.length;
+  fresh.session.updateIssues(undefined);
+  assert.equal(fresh.sent.length, freshBefore);
 });

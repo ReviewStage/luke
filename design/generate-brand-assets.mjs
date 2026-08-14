@@ -33,8 +33,12 @@ const APP_RENDERER = join(HERE, "..", "apps", "desktop", "src", "renderer");
 // ---------- Palette ----------
 // Inks are named for the UI mode they serve: the dark-mode asset is light.
 const INKS = { light: "#1d1d1f", dark: "#f5f5f7" };
-const TILE = ["#48484a", "#1c1c1e"]; // space-black gradient, mode-independent
-const TILE_INK = "#f8fafc";
+// Icon tiles follow the same naming: the dark-mode tile is space black under a
+// light face, the light-mode tile is porcelain under a dark one.
+const TILES = {
+  light: { gradient: ["#fbfbfd", "#d8d8dd"], ink: "#1d1d1f" },
+  dark: { gradient: ["#48484a", "#1c1c1e"], ink: "#f8fafc" },
+};
 
 // ---------- Artwork parameters ----------
 // The face lives on a 240x240 canvas: stroke weight, nose corner radius,
@@ -468,6 +472,42 @@ const MOTIONS = {
       },
     ],
   },
+  // The hover showpiece: a little crouch, a banked dash off the edge, a beat
+  // out of sight, and a swoop back in from the other side that lands with a
+  // touch of overshoot. The teleport from one side to the other happens far
+  // above the frame, so the wing's clip never draws the face crossing back —
+  // it leaves to the right and returns from the upper left.
+  flyoff: {
+    moment: "hover flourish (fly off and swoop back)",
+    layers: [
+      {
+        type: "rotate",
+        pivot: [120, 124],
+        values: [0, -10, 22, 10, -14, -14, 5, 0, 0],
+        keyTimes: [0, 0.1, 0.26, 0.34, 0.4, 0.46, 0.62, 0.72, 1],
+        dur: 3,
+      },
+      {
+        type: "translate",
+        values: [
+          [0, 0],
+          [-16, 6],
+          [280, -90],
+          [280, -240],
+          [-340, -240],
+          [-340, -110],
+          [16, 8],
+          [0, 0],
+          [0, 0],
+        ],
+        keyTimes: [0, 0.1, 0.26, 0.34, 0.4, 0.46, 0.62, 0.72, 1],
+        // The dash accelerates away and the swoop brakes in; everything the
+        // frame cannot see keeps the default curve.
+        splines: [EASE, "0.5 0 0.9 0.5", EASE, EASE, EASE, "0.1 0.5 0.3 1", EASE, EASE],
+        dur: 3,
+      },
+    ],
+  },
   // Two eyebrow waggles — pure mischief.
   tease: {
     moment: "playful (brow waggle)",
@@ -896,19 +936,24 @@ function emitModes(baseName, svgWithCurrentColor, title) {
 emitModes("luke-mark", tightMarkSvg(face()), "Luke");
 emitModes("luke-wordmark", wordSvg(wordmark()), "LUKE");
 
-// App icon: space-black tile with the white face; works on both modes. The
-// glyph spans ~58% of the tile width, centered — typical macOS glyph-in-tile
-// proportion, measured from the artwork's bounding box.
+// App icon, one per mode: the same squircle tile under the face, space black
+// for dark mode and porcelain for light. The packaged `.icns` is cut from the
+// dark set — one bundle icon has to serve both modes and space black does —
+// and the running app swaps the Dock image between the two as the theme
+// changes. The glyph spans ~58% of the tile width, centered — typical macOS
+// glyph-in-tile proportion, measured from the artwork's bounding box.
 const bbox = faceBBox();
 const glyphScale = (224 * 0.58) / bbox.w;
 const gx = 120 - bbox.cx * glyphScale;
 const gy = 120 - bbox.cy * glyphScale;
-const icon =
-  `${svgOpen(240, 240)}<defs><linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">` +
-  `<stop offset="0" stop-color="${TILE[0]}"/><stop offset="1" stop-color="${TILE[1]}"/></linearGradient></defs>` +
-  `<rect x="8" y="8" width="224" height="224" rx="52" fill="url(#tile)"/>` +
-  `<g color="${TILE_INK}" transform="translate(${fmt(gx)} ${fmt(gy)}) scale(${fmt(glyphScale)})">${face()}</g></svg>`;
-emit("icon/luke-icon.svg", icon.replaceAll("currentColor", TILE_INK), "Luke app icon");
+for (const [mode, tile] of Object.entries(TILES)) {
+  const icon =
+    `${svgOpen(240, 240)}<defs><linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">` +
+    `<stop offset="0" stop-color="${tile.gradient[0]}"/><stop offset="1" stop-color="${tile.gradient[1]}"/></linearGradient></defs>` +
+    `<rect x="8" y="8" width="224" height="224" rx="52" fill="url(#tile)"/>` +
+    `<g color="${tile.ink}" transform="translate(${fmt(gx)} ${fmt(gy)}) scale(${fmt(glyphScale)})">${face()}</g></svg>`;
+  emit(`icon/luke-icon-${mode}.svg`, icon.replaceAll("currentColor", tile.ink), "Luke app icon");
+}
 
 // Menu-bar template source: pure black, macOS recolors it. Square canvas
 // with the artwork filling ~90% of it, per status-item conventions.

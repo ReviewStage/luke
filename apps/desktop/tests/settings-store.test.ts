@@ -250,6 +250,47 @@ test("a corrupt captions value reads as off rather than switching them on", asyn
   assert.equal((await storeIn(directory).snapshot()).voiceCaptions, false);
 });
 
+test("other media is quieted until asked otherwise, and the choice survives a reopen", async (t) => {
+  const directory = await temporaryDirectory(t);
+  // A preference is not a credential, so choosing it must reach the Keychain
+  // not at all.
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+
+  assert.equal((await store.snapshot()).duckOtherMedia, true);
+  const disabled = await store.setDuckOtherMedia(false);
+
+  assert.equal(disabled.settings.duckOtherMedia, false);
+  assert.equal((await storeIn(directory).snapshot()).duckOtherMedia, false);
+  assert.equal(cipher.calls.isAvailable, 0);
+  assert.equal(cipher.calls.encrypt, 0);
+});
+
+test("switching the media duck never disturbs a stored key", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
+
+  await store.setDuckOtherMedia(false);
+  const on = await store.setDuckOtherMedia(true);
+
+  assert.equal(on.settings.duckOtherMedia, true);
+  assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), TEST_API_KEY);
+});
+
+test("a corrupt media duck value reads as the default rather than as off", async (t) => {
+  const directory = await temporaryDirectory(t);
+  // The mirror of the captions rule: each lands on its own default, and this
+  // one's default is on.
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({ version: 2, apiKeys: {}, duckOtherMedia: "no" }),
+    "utf8",
+  );
+
+  assert.equal((await storeIn(directory).snapshot()).duckOtherMedia, true);
+});
+
 test("keeps each provider's key, environment fallback, and reported source separate", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory, {
@@ -303,6 +344,7 @@ test("keeps both keys when two providers are saved at once", async (t) => {
     showInDock: false,
     showInMenuBar: true,
     voiceCaptions: false,
+    duckOtherMedia: true,
     showOnAllDisplays: false,
   });
   const reopened = storeIn(directory, { providers: TEST_PROVIDERS });
@@ -502,6 +544,7 @@ test("keeps a Conductor key stored by an earlier version working", async (t) => 
     showInDock: false,
     showInMenuBar: true,
     voiceCaptions: false,
+    duckOtherMedia: true,
     showOnAllDisplays: false,
   });
   assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), "conductor-replacement-key");
@@ -524,6 +567,7 @@ test("carries a key belonging to a provider this build does not know", async (t)
     showInDock: false,
     showInMenuBar: true,
     voiceCaptions: false,
+    duckOtherMedia: true,
     showOnAllDisplays: false,
   });
 });
@@ -544,6 +588,7 @@ test("shows the menu bar item until asked otherwise, and remembers the answer", 
     showInDock: false,
     showInMenuBar: false,
     voiceCaptions: false,
+    duckOtherMedia: true,
     showOnAllDisplays: false,
   });
   // The choice outlives the run that heard it.
@@ -625,6 +670,7 @@ test("keeps Luke out of the Dock until asked, and remembers the answer", async (
     showInDock: true,
     showInMenuBar: true,
     voiceCaptions: false,
+    duckOtherMedia: true,
     showOnAllDisplays: false,
   });
   // The choice outlives the run that heard it.
@@ -777,6 +823,69 @@ test("ignores a stored or environment pace this build does not offer", async (t)
 
   assert.equal(await store.readVoiceSpeed(), undefined);
   assert.equal((await store.snapshot()).voiceSpeed, REALTIME_DEFAULTS.SPEED);
+});
+
+test("reports no talk-key chord until one is chosen", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  assert.equal(await store.readVoiceHotkey(), undefined);
+  assert.equal((await store.snapshot()).voiceHotkey, undefined);
+});
+
+test("stores the chosen talk-key chord plainly and reads it back from a new store instance", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+
+  const { settings, reason } = await store.setVoiceHotkey("Shift+Command+L");
+
+  assert.equal(reason, undefined);
+  assert.equal(settings.voiceHotkey, "Shift+Command+L");
+  // A preference is not a credential, so choosing one never reaches the
+  // Keychain — and never raises its permission dialog.
+  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
+  assert.equal(await storeIn(directory).readVoiceHotkey(), "Shift+Command+L");
+});
+
+test("clearing the talk-key chord returns to no choice at all", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  await store.setVoiceHotkey("Shift+Command+L");
+  const { settings } = await store.setVoiceHotkey(undefined);
+
+  assert.equal(settings.voiceHotkey, undefined);
+  // Absent from the file rather than stored as an empty value: reset is the
+  // absence of a choice, and a reopened store must read it the same way.
+  assert.equal(await storeIn(directory).readVoiceHotkey(), undefined);
+});
+
+test("ignores a stored talk-key chord this build cannot register", async (t) => {
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({ version: 2, apiKeys: {}, voiceHotkey: "F13" }),
+  );
+  const store = storeIn(directory);
+
+  // A hand-edited chord the registrars would refuse is dropped rather than
+  // carried: honouring it would claim a key nothing was ever told about.
+  assert.equal(await store.readVoiceHotkey(), undefined);
+  assert.equal((await store.snapshot()).voiceHotkey, undefined);
+});
+
+test("the talk-key chord and a stored key survive each other's writes", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
+  await store.setVoiceHotkey("Control+Alt+Space");
+  await store.setApiKey(CONDUCTOR, "conductor-replacement-key");
+
+  const reopened = storeIn(directory);
+  assert.equal(await reopened.readApiKey(CONDUCTOR), "conductor-replacement-key");
+  assert.equal(await reopened.readVoiceHotkey(), "Control+Alt+Space");
 });
 
 test("keeps Luke to the main display until asked, and remembers the answer", async (t) => {

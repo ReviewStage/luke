@@ -10,10 +10,20 @@ import {
   clearInputAudioEvents,
   functionCallFollowUpEvents,
   functionCallOutputEvents,
+  ISSUE_TRACKER_ID,
+  isIssueToolName,
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
+  isSessionToolName,
+  issueContextEvents,
+  issueContextText,
+  issueToolAction,
+  issueTrackerDisconnectedEvents,
+  maximumTypedAskLength,
+  maximumVoiceContextIssues,
   maximumVoiceContextSessions,
   normalizeSession,
+  normalizeTrackedIssue,
   proactiveSpeechEvents,
   pushToTalkCommitEvents,
   REALTIME_CLIENT_EVENT,
@@ -34,6 +44,7 @@ import {
   sessionContextText,
   sessionToolAction,
   truncateResponseEvents,
+  typedAskEvents,
 } from "../src";
 
 const DECIDED_AT = 1_800_000_000_000;
@@ -83,6 +94,9 @@ test("the spoken instructions state what Luke cannot see, and when he may act", 
   assert.match(instructions, /only when the developer asks/i);
   assert.match(instructions, /never act unprompted/i);
   assert.match(instructions, /never a reason to act/i);
+  // Both halves of the developer's side are named, so a typed ask is answered
+  // rather than remarked on as something unexpected.
+  assert.match(instructions, /speaks to you or types to you/i);
 });
 
 test("a mint response yields a credential with a millisecond expiry", () => {
@@ -211,6 +225,38 @@ test("push-to-talk commits a turn and cancelling discards it", () => {
     clearInputAudioEvents().map((event) => event.type),
     [REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_CLEAR],
   );
+});
+
+test("a typed ask travels as the developer's own words and asks for a reply", () => {
+  const events = typedAskEvents("  What needs me right now?  ");
+
+  assert.equal(events.length, 2);
+  assert.equal(events[0]?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE);
+  const item = events[0]?.item as {
+    role?: string;
+    content?: { type?: string; text?: string }[];
+  };
+  assert.equal(item.role, "user");
+  assert.equal(item.content?.[0]?.type, "input_text");
+  // No label ahead of the words: labels mark what the developer did not say,
+  // and a typed ask is theirs as surely as a spoken one.
+  assert.equal(item.content?.[0]?.text, "What needs me right now?");
+  // The reply keeps the session's own tool_choice, unlike every turn Luke
+  // opens himself: typing opens a developer turn the way a commit does.
+  assert.deepEqual(events[1], { type: REALTIME_CLIENT_EVENT.RESPONSE_CREATE });
+});
+
+test("an empty ask opens no turn at all", () => {
+  for (const text of ["", "   ", "\n\t "]) {
+    assert.deepEqual(typedAskEvents(text), []);
+  }
+});
+
+test("a typed ask is bounded like a session message", () => {
+  const events = typedAskEvents("x".repeat(maximumTypedAskLength + 100));
+  const item = events[0]?.item as { content?: { text?: string }[] };
+
+  assert.equal(item.content?.[0]?.text?.length, maximumTypedAskLength);
 });
 
 function noticeText(event: Record<string, unknown> | undefined): string {
@@ -385,7 +431,7 @@ test("a resting-point update is voiced just like a blocking one", () => {
   assert.equal(speech[0]?.disposition, ATTENTION_DISPOSITION.SPEAK_AT_TURN_END);
 });
 
-test("the session is minted with the five acts and nothing wider", () => {
+test("the session is minted with the seven acts and nothing wider", () => {
   const config = realtimeSessionConfig();
 
   assert.deepEqual(
@@ -394,6 +440,8 @@ test("the session is minted with the five acts and nothing wider", () => {
       REALTIME_TOOL.SEND_SESSION_MESSAGE,
       REALTIME_TOOL.RUN_SESSION_CONTROL,
       REALTIME_TOOL.OPEN_SESSION,
+      REALTIME_TOOL.UPDATE_ISSUE_STATE,
+      REALTIME_TOOL.COMMENT_ON_ISSUE,
       REALTIME_TOOL.CHANGE_APP_SETTING,
       REALTIME_TOOL.SHOW_PANEL,
     ],
@@ -555,4 +603,158 @@ test("the reply that voices an outcome cannot itself call a tool", () => {
   // The follow-up is opened to say what happened, not to act again — a tool
   // output that reads like an instruction has nothing to act with.
   assert.equal((request as { response?: { tool_choice?: unknown } }).response?.tool_choice, "none");
+});
+
+function actionableIssue() {
+  return normalizeTrackedIssue(
+    { id: ISSUE_TRACKER_ID.LINEAR, displayName: "Linear" },
+    {
+      trackerIssueId: "issue-uuid-1",
+      identifier: "LUKE-123",
+      title: "Add Codex support",
+      stateName: "In Progress",
+      observedAt: DECIDED_AT,
+      transitions: [
+        { id: "state-done", name: "Done" },
+        { id: "state-review", name: "In Review" },
+      ],
+      canComment: true,
+    },
+  );
+}
+
+function issueCall(argumentsJson: string, name: string = REALTIME_TOOL.UPDATE_ISSUE_STATE) {
+  return { name, callId: "call-1", argumentsJson };
+}
+
+test("issue context carries the roster and what each issue will take", () => {
+  const context = issueContextText([actionableIssue()]);
+
+  assert.match(context, /Linear — LUKE-123 — Add Codex support — In Progress/);
+  assert.match(context, /tracker_id=linear issue_id=LUKE-123/);
+  assert.match(context, /states: Done, In Review/);
+  assert.match(context, /takes comments/);
+  // A connected tracker with nothing listed is an answer, not an absence.
+  assert.match(issueContextText([]), /lists no issues/i);
+});
+
+test("issue context never asks Luke to start talking", () => {
+  const events = issueContextEvents([actionableIssue()]);
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0]?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE);
+  assert.equal(
+    events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE),
+    false,
+  );
+});
+
+test("issue context stays bounded when many issues are tracked", () => {
+  const issues = Array.from({ length: maximumVoiceContextIssues + 10 }, (_, index) =>
+    normalizeTrackedIssue(
+      { id: ISSUE_TRACKER_ID.LINEAR, displayName: "Linear" },
+      {
+        trackerIssueId: `issue-${index}`,
+        identifier: `LUKE-${index}`,
+        title: `Issue ${index}`,
+        stateName: "Todo",
+        observedAt: DECIDED_AT,
+      },
+    ),
+  );
+
+  const lines = issueContextText(issues).split("\n");
+  // One header line plus the bounded roster.
+  assert.equal(lines.length, maximumVoiceContextIssues + 1);
+});
+
+test("an issue tool call can act only on an issue Luke was shown, going where its tracker allows", () => {
+  const roster = [actionableIssue()];
+  const identity = '"tracker_id":"linear","issue_id":"LUKE-123"';
+
+  assert.deepEqual(issueToolAction(issueCall(`{${identity},"state":"Done"}`), roster), {
+    kind: "issue-state",
+    identity: { trackerId: "linear", identifier: "LUKE-123" },
+    transition: { id: "state-done", name: "Done" },
+  });
+  // A spoken state arrives with its case retold rather than copied.
+  assert.deepEqual(issueToolAction(issueCall(`{${identity},"state":"done"}`), roster), {
+    kind: "issue-state",
+    identity: { trackerId: "linear", identifier: "LUKE-123" },
+    transition: { id: "state-done", name: "Done" },
+  });
+  assert.deepEqual(
+    issueToolAction(
+      issueCall(`{${identity},"body":"deferred to next release"}`, REALTIME_TOOL.COMMENT_ON_ISSUE),
+      roster,
+    ),
+    {
+      kind: "issue-comment",
+      identity: { trackerId: "linear", identifier: "LUKE-123" },
+      body: "deferred to next release",
+    },
+  );
+
+  // Every way a call can point somewhere Luke was not shown is a refusal with
+  // a reason he can say aloud, never a request that reaches a bridge.
+  const refusals = [
+    issueToolAction(issueCall("not json"), roster),
+    issueToolAction(
+      issueCall('{"tracker_id":"linear","issue_id":"LUKE-999","state":"Done"}'),
+      roster,
+    ),
+    // The issue's own state is not a transition its tracker advertised.
+    issueToolAction(issueCall(`{${identity},"state":"In Progress"}`), roster),
+    issueToolAction(issueCall(`{${identity},"state":""}`), roster),
+    issueToolAction(issueCall(`{${identity},"body":""}`, REALTIME_TOOL.COMMENT_ON_ISSUE), roster),
+    issueToolAction(
+      issueCall(`{${identity},"body":"${"a".repeat(4_100)}"}`, REALTIME_TOOL.COMMENT_ON_ISSUE),
+      roster,
+    ),
+    issueToolAction(issueCall(`{${identity},"state":"Done"}`, "delete_everything"), roster),
+  ];
+  for (const refusal of refusals) assert.equal(refusal.kind, "refused");
+
+  // An issue that advertised nothing is offered nothing, out loud too.
+  const still = normalizeTrackedIssue(
+    { id: ISSUE_TRACKER_ID.LINEAR, displayName: "Linear" },
+    {
+      trackerIssueId: "issue-uuid-2",
+      identifier: "LUKE-124",
+      title: "Read-only issue",
+      stateName: "Todo",
+      observedAt: DECIDED_AT,
+    },
+  );
+  const quietIdentity = '"tracker_id":"linear","issue_id":"LUKE-124"';
+  assert.equal(
+    issueToolAction(issueCall(`{${quietIdentity},"state":"Done"}`), [still]).kind,
+    "refused",
+  );
+  assert.equal(
+    issueToolAction(issueCall(`{${quietIdentity},"body":"hi"}`, REALTIME_TOOL.COMMENT_ON_ISSUE), [
+      still,
+    ]).kind,
+    "refused",
+  );
+});
+
+test("the session and issue tools answer to their own validators", () => {
+  assert.equal(isSessionToolName(REALTIME_TOOL.SEND_SESSION_MESSAGE), true);
+  assert.equal(isSessionToolName(REALTIME_TOOL.UPDATE_ISSUE_STATE), false);
+  assert.equal(isIssueToolName(REALTIME_TOOL.UPDATE_ISSUE_STATE), true);
+  assert.equal(isIssueToolName(REALTIME_TOOL.COMMENT_ON_ISSUE), true);
+  assert.equal(isIssueToolName("delete_everything"), false);
+});
+
+test("a disconnected tracker withdraws the roster without starting a reply", () => {
+  const events = issueTrackerDisconnectedEvents();
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0]?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE);
+  assert.match(noticeText(events[0]), /no longer connected/i);
+  assert.equal(
+    events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE),
+    false,
+  );
 });

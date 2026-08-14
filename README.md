@@ -42,6 +42,18 @@ organization's sessions, and Luke reports only the sessions belonging to whoever
 the token authenticates as. Every provider integration is read-only. None
 requires hooks, plugins, wrappers, or changes to how a session is launched.
 
+## Issue tracker support
+
+- Linear — reads the issues assigned to you after you supply a Linear personal
+  API key (`lin_api_…`, from Settings or `LINEAR_API_KEY`), and sends Linear
+  nothing without one.
+
+The board feeds the spoken conversation rather than the panel: with a key
+saved, Luke knows each assigned issue's identifier, title, state, and the
+states its team's workflow allows, so you can ask where LUKE-123 stands, ask
+Luke to move it to one of those states, or add a comment — each only when you
+ask, out loud or typed, through Linear's own GraphQL API under your key.
+
 ## What works in v0.1
 
 - A compact, top-center capsule shows how many sessions Luke is tracking.
@@ -85,8 +97,13 @@ One key runs it, and it answers from whatever app is frontmost:
   frontmost window.
 
 If another app already owns `⌥Space`, Luke falls back to `⌥S`. Settings shows
-which key you actually have, under **Keyboard shortcuts**. It is not
-configurable yet.
+which key you actually have, under **Keyboard shortcuts** — and the pencil
+beside it records a chord of your own: hold `⌃`, `⌥` or `⌘` — `⇧` may join,
+but not carry a chord alone, since `⇧S` is how capitals are typed — and press
+a letter or Space, as the row itself explains while it listens. The change takes effect
+at once, the reset arrow beside it returns the defaults, and if something else
+owns your chord Luke falls back to the defaults and shows the key that
+actually answered.
 
 Holding is read by a small helper Luke ships beside the app, because Electron
 reports a global key being pressed but never released. The helper is told the

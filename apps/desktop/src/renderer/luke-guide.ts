@@ -41,6 +41,7 @@ export const APP_SETTING_ID = {
   VOICE: "voice",
   VOICE_SPEED: "voice_speed",
   VOICE_CAPTIONS: "voice_captions",
+  DUCK_OTHER_MEDIA: "duck_other_media",
   SHOW_IN_MENU_BAR: "show_in_menu_bar",
   SHOW_IN_DOCK: "show_in_dock",
   SHOW_ON_ALL_DISPLAYS: "show_on_all_displays",
@@ -111,6 +112,16 @@ const SETTING_GUIDE: Record<
     adjustable: true,
     manual: `${SETTINGS_TAB}, under Preferences`,
   }),
+  duckOtherMedia: (settings) => ({
+    id: APP_SETTING_ID.DUCK_OTHER_MEDIA,
+    label: "Quiet Music and Spotify",
+    description:
+      "Whether Music and Spotify are turned down while a spoken exchange is live, and back up after.",
+    kind: APP_SETTING_KIND.TOGGLE,
+    value: appToggleText(settings.duckOtherMedia),
+    adjustable: true,
+    manual: `${SETTINGS_TAB}, under Preferences`,
+  }),
   showInMenuBar: (settings) => ({
     id: APP_SETTING_ID.SHOW_IN_MENU_BAR,
     label: "Show Luke in the menu bar",
@@ -150,6 +161,12 @@ const SETTING_GUIDE: Record<
     adjustable: true,
     manual: `${SETTINGS_TAB}, under Preferences`,
   }),
+  // Described in the talk-key fact instead, which carries the key that
+  // actually registered — this field is only the stored choice, absent on the
+  // defaults and silently outbid when another app owns the chord. Not spoken-
+  // changeable either way: a chord is recorded by typing it, so the fact says
+  // where.
+  voiceHotkey: () => undefined,
   // Not a switch but a set of keys, so it is described in the facts instead:
   // which providers are connected, and that a key is only ever typed by hand.
   credentialSources: () => undefined,
@@ -175,11 +192,12 @@ function talkKeyFact(hotkey: LukeGuideInput["hotkey"]): AppGuideFact {
         "None is registered right now — another app may own the shortcut. The Settings tab shows its state.",
     };
   }
+  const use = hotkey.held
+    ? "hold to talk, let go to send; tap instead to keep the turn open"
+    : "press to talk, again to send, again to interrupt";
   return {
     label: "Talk key",
-    detail: hotkey.held
-      ? `${hotkey.hotkey}, from any app: hold to talk, let go to send; tap instead to keep the turn open.`
-      : `${hotkey.hotkey}, from any app: press to talk, again to send, again to interrupt.`,
+    detail: `${hotkey.hotkey}, from any app: ${use}. A different chord can be recorded, or the default restored, in ${SETTINGS_TAB}.`,
   };
 }
 
@@ -223,7 +241,9 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       label: "What Luke is",
       detail:
         "A macOS sidecar living beside the notch. The capsule under the housing counts observed " +
-        "sessions; hovering it peeks, pressing it opens the panel, and Escape closes what is open.",
+        "sessions; hovering it peeks, pressing it opens the panel, and Escape closes what is open. " +
+        "Resting the pointer on the face itself earns one trick — usually flying off the strip and " +
+        "swooping back — and another only after the pointer leaves and returns.",
     },
     {
       label: "The panel",
@@ -282,6 +302,7 @@ export async function applySpokenSetting(
     | "setVoice"
     | "setVoiceSpeed"
     | "setVoiceCaptions"
+    | "setDuckOtherMedia"
     | "setShowInMenuBar"
     | "setShowInDock"
     | "setShowOnAllDisplays"
@@ -295,20 +316,22 @@ export async function applySpokenSetting(
   const result =
     action.setting.id === APP_SETTING_ID.VOICE_CAPTIONS
       ? await bridge.setVoiceCaptions(enabled)
-      : action.setting.id === APP_SETTING_ID.SHOW_IN_MENU_BAR
-        ? await bridge.setShowInMenuBar(enabled)
-        : action.setting.id === APP_SETTING_ID.SHOW_IN_DOCK
-          ? await bridge.setShowInDock(enabled)
-          : action.setting.id === APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS
-            ? await bridge.setShowOnAllDisplays(enabled)
-            : action.setting.id === APP_SETTING_ID.VOICE_SPEED && speed !== undefined
-              ? await bridge.setVoiceSpeed(speed)
-              : action.setting.id === APP_SETTING_ID.VOICE && isRealtimeVoice(action.value)
-                ? await bridge.setVoice(action.value)
-                : action.setting.id === APP_SETTING_ID.FORM_FACTOR &&
-                    isPanelFormFactor(action.value)
-                  ? await bridge.setFormFactor(action.value)
-                  : undefined;
+      : action.setting.id === APP_SETTING_ID.DUCK_OTHER_MEDIA
+        ? await bridge.setDuckOtherMedia(enabled)
+        : action.setting.id === APP_SETTING_ID.SHOW_IN_MENU_BAR
+          ? await bridge.setShowInMenuBar(enabled)
+          : action.setting.id === APP_SETTING_ID.SHOW_IN_DOCK
+            ? await bridge.setShowInDock(enabled)
+            : action.setting.id === APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS
+              ? await bridge.setShowOnAllDisplays(enabled)
+              : action.setting.id === APP_SETTING_ID.VOICE_SPEED && speed !== undefined
+                ? await bridge.setVoiceSpeed(speed)
+                : action.setting.id === APP_SETTING_ID.VOICE && isRealtimeVoice(action.value)
+                  ? await bridge.setVoice(action.value)
+                  : action.setting.id === APP_SETTING_ID.FORM_FACTOR &&
+                      isPanelFormFactor(action.value)
+                    ? await bridge.setFormFactor(action.value)
+                    : undefined;
   if (!result) {
     // An adjustable entry with no carrier is a guide ahead of its wiring;
     // refuse honestly rather than claim a change that never happened.

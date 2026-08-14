@@ -9,8 +9,23 @@
   background: var(--voice-luke);
 }
 
-/* Stated, not offered: the key cannot be changed yet, so it is set as text
-   rather than dressed up as a control that would do nothing. */
+/* The chip, the buttons that move it, and the line that explains them: one
+   right-aligned column, so the rule for what a chord may be appears directly
+   under the controls it governs rather than across the whole row. */
+.shortcut-controls {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.shortcut-controls .error-message {
+  text-align: right;
+}
+
+/* A statement, not a control: the pencil beside it is what moves the key.
+   The chip only brightens while a recording holds it open. */
 .shortcut-key {
   padding: 4px 8px;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -20,4 +35,24 @@
   font-family: "SF Mono", Menlo, monospace;
   font-size: 11px;
   white-space: nowrap;
+  transition:
+    border-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+/* Recording holds the chip open rather than swapping it for a field: the
+   border brightening is the whole state, and the words inside say what to
+   type. */
+.shortcut-key[data-recording="true"] {
+  border-color: rgba(255, 255, 255, 0.35);
+  color: var(--text-secondary);
+}
+
+/* The error line's shape without its alarm: what a chord may be, told while
+   one is being typed rather than after a keystroke has been refused. */
+.shortcut-hint {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  text-align: right;
 }

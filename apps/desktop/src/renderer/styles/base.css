@@ -35,6 +35,7 @@
   --mark-cursor: #ffffff;
   --mark-devin: #ffffff;
   --mark-jules: #715cd7;
+  --mark-linear: #5e6ad2;
   --mark-opencode: #ffffff;
   --mark-opencode-block: #5a5858;
 
@@ -280,8 +281,11 @@ body,
   user-select: none;
 }
 
-/* The one place a selection is wanted. */
-.settings-input {
+/* The places a selection is wanted: a credential being pasted, and an ask
+   being written — the one field whose contents are worth re-reading and
+   reworking before they are sent. */
+.settings-input,
+.ask-luke-input {
   -webkit-user-select: text;
   user-select: text;
 }
@@ -802,6 +806,13 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transform: scale(0.94);
 }
 
+/* Linear's mark is drawn full-bleed the way the Codex and Cursor marks are, so
+   it takes the same scale they do. */
+.provider-mark[data-mark="linear"] {
+  color: var(--mark-linear);
+  transform: scale(0.94);
+}
+
 /* OpenCode's frame fills its box top to bottom the way the Codex and Cursor
    marks do, so it takes the same scale they do. */
 .provider-mark[data-mark="opencode"] {
@@ -845,6 +856,16 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    The loud motions leave the square the artwork is drawn in — a pirouette and a
    duck both need more room than a face at rest — so nothing is clipped here. The
    wing clips them instead, at the housing, which is the edge that matters. */
+/* The box the hover is measured against. It wraps the face exactly and never
+   moves when a motion does — the motions transform layers inside the svg — so a
+   face mid-flyoff is still hovered where it took off from. Like the rest of the
+   wing it takes no pointer; the window's own pointer stream is what reads it,
+   which is how the strip's one button keeps every press. */
+.wing-face {
+  display: flex;
+  flex: 0 0 auto;
+}
+
 .luke-face {
   width: 18px;
   height: 18px;
@@ -1403,7 +1424,8 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .settings-section,
 .quit-button,
 .empty-state,
-.panel-header {
+.panel-header,
+.ask-luke-row {
   --row-delay: 0s;
 
   opacity: 0;
@@ -1431,7 +1453,8 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .app-stage[data-presentation="panel"] .settings-section,
 .app-stage[data-presentation="panel"] .quit-button,
 .app-stage[data-presentation="panel"] .empty-state,
-.app-stage[data-presentation="panel"] .panel-header {
+.app-stage[data-presentation="panel"] .panel-header,
+.app-stage[data-presentation="panel"] .ask-luke-row {
   --row-delay: calc(
     var(--expand-delay) +
     min(var(--row-index, 0), var(--row-fan-limit)) *

@@ -1,6 +1,7 @@
 import type {
   AttentionSpeech,
   FixtureSnapshot,
+  IssueToolAction,
   NormalizedSession,
   PanelFormFactor,
   ProviderControlResult,
@@ -11,6 +12,8 @@ import type {
   Rectangle,
   ResolvedNotchGeometry,
   SessionIdentity,
+  TrackedIssue,
+  TrackerActionResult,
   WindowMode,
 } from "@sidecar/core";
 import type { CredentialProviderId } from "./credential-providers";
@@ -83,6 +86,21 @@ export interface AppSettings {
    * housing all day are something to opt into rather than discover.
    */
   voiceCaptions: boolean;
+  /**
+   * The talk-key chord the user chose, absent while the defaults stand. This
+   * is the stored choice rather than the registered key — the two differ when
+   * another app owns the chosen chord — so it says only whether there is a
+   * choice to reset, and the row keeps showing the key that actually answers.
+   */
+  voiceHotkey?: string;
+  /**
+   * Whether Music and Spotify are turned down while a spoken exchange is
+   * live, and back up after. On by default: speech over music is the failure
+   * everyone has had, and the duck defers to the user everywhere it can — it
+   * touches only a player that was playing, and a volume moved by hand during
+   * the duck is left where the hand put it.
+   */
+  duckOtherMedia: boolean;
   /**
    * Whether Luke stands on every connected display at once. Off by default:
    * he keeps to the system's main display until asked, and turning this off
@@ -168,11 +186,23 @@ export interface AppBootstrap {
    * the panel says which of the two the user actually has.
    */
   voiceHotkeyHeld: boolean;
+  /**
+   * The accelerator that summons the ask field from any app, absent when the
+   * system refused every candidate. The raw accelerator rather than a label,
+   * because the renderer needs both spellings: the keycap's ⌥L and aria's
+   * Alt+L.
+   */
+  askHotkey?: string;
   /** Whether the panel should show the voice diagnostics block. */
   display: DisplayDiagnostic;
   sessions: readonly NormalizedSession[];
+  /** Absent while no issue tracker is connected, which is its own answer. */
+  issues?: readonly TrackedIssue[];
   settings: AppSettings;
 }
+
+/** One validated issue act on its way to the main process. */
+export type IssueActionAsk = Extract<IssueToolAction, { kind: "issue-state" | "issue-comment" }>;
 
 /** The talk key as the panel should describe it. */
 export interface VoiceHotkeyState {
@@ -225,6 +255,21 @@ export interface AppBridge {
   setFormFactor(formFactor: PanelFormFactor): Promise<SettingsUpdateResult>;
   /** Turns the on-screen caption of Luke's speech on or off. */
   setVoiceCaptions(enabled: boolean): Promise<SettingsUpdateResult>;
+  /** Turns the quieting of Music and Spotify during a spoken exchange on or off. */
+  setDuckOtherMedia(enabled: boolean): Promise<SettingsUpdateResult>;
+  /**
+   * Whether a spoken exchange is live — a turn being held, a reply being
+   * spoken, or the call coming up between them. It drives the media duck and
+   * nothing else, and it is a statement rather than a request: fire-and-forget,
+   * because the exchange must never wait on the players.
+   */
+  setVoiceExchangeActive(active: boolean): void;
+  /**
+   * Moves the talk key to a chord of the user's own, or back to the defaults
+   * when omitted. The change is registered with the system at once, and the
+   * key the panel shows follows the same announcement it always has.
+   */
+  setVoiceHotkey(accelerator: string | undefined): Promise<SettingsUpdateResult>;
   /**
    * Opens an observed session where its provider keeps it. The renderer names
    * the session rather than its address, for the same reason it names a
@@ -249,6 +294,13 @@ export interface AppBridge {
     identity: SessionIdentity,
     controlId: string,
   ): Promise<ProviderControlResult>;
+  /**
+   * Carries one spoken issue act to the tracker that can take it. The renderer
+   * names an issue and a transition it was shown; the main process resolves
+   * both against its own latest observation before the tracker client sees
+   * anything, so nothing a model composed reaches Linear as-is.
+   */
+  executeIssueAction(action: IssueActionAsk): Promise<TrackerActionResult>;
   /** Brings the expanded panel forward so it can accept typed input. */
   focusPanel(): void;
   /** Mints a short-lived Realtime credential; the standing API key never crosses. */
@@ -259,6 +311,8 @@ export interface AppBridge {
   /** This window's own display, whenever its geometry or housing changes. */
   onDisplayChanged(callback: (display: DisplayDiagnostic) => void): () => void;
   onSessionsChanged(callback: (sessions: readonly NormalizedSession[]) => void): () => void;
+  /** The issue roster as last observed; `undefined` says no tracker is connected. */
+  onIssuesChanged(callback: (issues: readonly TrackedIssue[] | undefined) => void): () => void;
   onAttentionSpeech(callback: (speech: readonly AttentionSpeech[]) => void): () => void;
   /** The talk key going down, from whatever app happened to be frontmost. */
   onVoiceHotkeyPress(callback: () => void): () => void;
@@ -269,6 +323,12 @@ export interface AppBridge {
    * it means asking a helper, and it can change if that helper stops answering.
    */
   onVoiceHotkeyChanged(callback: (state: VoiceHotkeyState) => void): () => void;
+  /**
+   * The ask key being re-taken — moving the talk key lets every global chord
+   * go, so the ask key can land somewhere new or nowhere. Absent means the
+   * hint comes down: a keycap must not teach a chord that answers nothing.
+   */
+  onAskHotkeyChanged(callback: (accelerator: string | undefined) => void): () => void;
 }
 
 export const channels = {
@@ -281,6 +341,9 @@ export const channels = {
   setVoice: "app:set-voice",
   setVoiceSpeed: "app:set-voice-speed",
   setVoiceCaptions: "app:set-voice-captions",
+  setVoiceHotkey: "app:set-voice-hotkey",
+  setDuckOtherMedia: "app:set-duck-other-media",
+  setVoiceExchange: "app:set-voice-exchange",
   openProviderApiKeys: "app:open-provider-api-keys",
   setShowInMenuBar: "app:set-show-in-menu-bar",
   setShowInDock: "app:set-show-in-dock",
@@ -289,15 +352,18 @@ export const channels = {
   openSession: "app:open-session",
   sendSessionMessage: "app:send-session-message",
   executeSessionControl: "app:execute-session-control",
+  executeIssueAction: "app:execute-issue-action",
   focusPanel: "app:focus-panel",
   requestRealtimeCredential: "app:request-realtime-credential",
   attentionSpeech: "app:attention-speech",
   voiceHotkeyPress: "app:voice-hotkey-press",
   voiceHotkeyRelease: "app:voice-hotkey-release",
   voiceHotkeyChanged: "app:voice-hotkey-changed",
+  askHotkeyChanged: "app:ask-hotkey-changed",
   rendererReady: "app:renderer-ready",
   lifecycle: "app:lifecycle",
   displayChanged: "app:display-changed",
   sessionsChanged: "app:sessions-changed",
+  issuesChanged: "app:issues-changed",
   quit: "app:quit",
 } as const;

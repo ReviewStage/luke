@@ -8,12 +8,15 @@ import type {
   RealtimeVoice,
   RealtimeVoiceSpeed,
   SessionIdentity,
+  TrackedIssue,
+  TrackerActionResult,
 } from "@sidecar/core";
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   AppBootstrap,
   AppBridge,
   DisplayDiagnostic,
+  IssueActionAsk,
   MicrophoneStatus,
   SessionOpenResult,
   SettingsUpdateResult,
@@ -56,6 +59,13 @@ const bridge: AppBridge = {
     ipcRenderer.invoke(channels.setFormFactor, formFactor) as Promise<SettingsUpdateResult>,
   setVoiceCaptions: (enabled: boolean) =>
     ipcRenderer.invoke(channels.setVoiceCaptions, enabled) as Promise<SettingsUpdateResult>,
+  setVoiceHotkey: (accelerator: string | undefined) =>
+    ipcRenderer.invoke(channels.setVoiceHotkey, accelerator) as Promise<SettingsUpdateResult>,
+  setDuckOtherMedia: (enabled: boolean) =>
+    ipcRenderer.invoke(channels.setDuckOtherMedia, enabled) as Promise<SettingsUpdateResult>,
+  setVoiceExchangeActive: (active: boolean) => {
+    ipcRenderer.send(channels.setVoiceExchange, active);
+  },
   openSession: (identity: SessionIdentity) =>
     ipcRenderer.invoke(channels.openSession, identity) as Promise<SessionOpenResult>,
   sendSessionMessage: (identity: SessionIdentity, text: string) =>
@@ -70,6 +80,8 @@ const bridge: AppBridge = {
       identity,
       controlId,
     ) as Promise<ProviderControlResult>,
+  executeIssueAction: (action: IssueActionAsk) =>
+    ipcRenderer.invoke(channels.executeIssueAction, action) as Promise<TrackerActionResult>,
   focusPanel: () => ipcRenderer.send(channels.focusPanel),
   requestRealtimeCredential: () =>
     ipcRenderer.invoke(channels.requestRealtimeCredential) as Promise<
@@ -94,6 +106,14 @@ const bridge: AppBridge = {
     ipcRenderer.on(channels.sessionsChanged, listener);
     return () => ipcRenderer.removeListener(channels.sessionsChanged, listener);
   },
+  onIssuesChanged: (callback: (issues: readonly TrackedIssue[] | undefined) => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      issues: readonly TrackedIssue[] | undefined,
+    ) => callback(issues);
+    ipcRenderer.on(channels.issuesChanged, listener);
+    return () => ipcRenderer.removeListener(channels.issuesChanged, listener);
+  },
   onVoiceHotkeyPress: (callback: () => void) => {
     const listener = () => callback();
     ipcRenderer.on(channels.voiceHotkeyPress, listener);
@@ -109,6 +129,12 @@ const bridge: AppBridge = {
       callback(state);
     ipcRenderer.on(channels.voiceHotkeyChanged, listener);
     return () => ipcRenderer.removeListener(channels.voiceHotkeyChanged, listener);
+  },
+  onAskHotkeyChanged: (callback: (accelerator: string | undefined) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, accelerator: string | undefined) =>
+      callback(accelerator);
+    ipcRenderer.on(channels.askHotkeyChanged, listener);
+    return () => ipcRenderer.removeListener(channels.askHotkeyChanged, listener);
   },
   onAttentionSpeech: (callback: (speech: readonly AttentionSpeech[]) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, speech: readonly AttentionSpeech[]) =>

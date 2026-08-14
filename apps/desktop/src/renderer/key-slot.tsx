@@ -101,9 +101,10 @@ export function KeySlot({
         <span className="settings-label key-slot-label">{credential}</span>
         <div className="key-slot-row">
           {/* Whose key this is, said the way the settings line says it — mark
-              and cloud badge together, because a provider that needs a key is
-              one whose sessions live in a cloud service, and the same mark
-              cannot differ between the line and the slot it opens. */}
+              and cloud badge together, because a service that needs a key is
+              one that lives in a cloud — a provider's sessions or the issue
+              tracker alike — and the same mark cannot differ between the line
+              and the slot it opens. */}
           <span className="key-slot-mark">
             <ProviderMark providerId={provider.id} />
             <CloudBadge />

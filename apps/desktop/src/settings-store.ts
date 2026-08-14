@@ -26,6 +26,7 @@ import {
   type CredentialProvider,
   type CredentialProviderId,
 } from "./shared/credential-providers";
+import { parseVoiceHotkey } from "./shared/voice-hotkey";
 
 const SETTINGS_FILE_NAME = "settings.json";
 const SETTINGS_TEMPORARY_FILE_NAME = "settings.json.tmp";
@@ -35,6 +36,7 @@ const SETTINGS_FILE_MODE = 0o600;
 
 const SETTINGS_FIELD = {
   API_KEYS: "apiKeys",
+  DUCK_OTHER_MEDIA: "duckOtherMedia",
   FORM_FACTOR: "formFactor",
   LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
   SHOW_IN_DOCK: "showInDock",
@@ -44,6 +46,7 @@ const SETTINGS_FIELD = {
   VOICE: "voice",
   VOICE_CAPTIONS: "voiceCaptions",
   VOICE_SPEED: "voiceSpeed",
+  VOICE_HOTKEY: "voiceHotkey",
 } as const;
 
 const API_KEY_LENGTH = {
@@ -111,6 +114,20 @@ interface PersistedSettings {
    * all land on the default rather than switching something on.
    */
   voiceCaptions: boolean;
+  /**
+   * The talk-key chord the user chose, absent while the defaults stand. A
+   * preference like the voice, stored plainly — and like the voice, a value
+   * this build cannot register is dropped rather than carried, because
+   * honouring it would claim a system key nothing was ever told about.
+   */
+  voiceHotkey?: string;
+  /**
+   * Whether Music and Spotify are turned down while a spoken exchange is
+   * live. On unless the file says `false` outright — like the menu bar item,
+   * this is what Luke does until the user asks otherwise, so a missing field
+   * and a corrupt value both land on doing it.
+   */
+  duckOtherMedia: boolean;
   /**
    * Whether Luke stands on every connected display. Off unless the file says
    * `true` outright, like the Dock: a missing field, an older file, and a
@@ -200,6 +217,10 @@ function parsePersistedSettings(source: string): PersistedSettings {
   const voice = record[SETTINGS_FIELD.VOICE];
   const voiceSpeed = record[SETTINGS_FIELD.VOICE_SPEED];
   const formFactor = record[SETTINGS_FIELD.FORM_FACTOR];
+  const storedHotkey = record[SETTINGS_FIELD.VOICE_HOTKEY];
+  // Read through the same gate a submitted chord passes, so a hand-edited
+  // value is either the one spelling the rest of the app uses or nothing.
+  const voiceHotkey = typeof storedHotkey === "string" ? parseVoiceHotkey(storedHotkey) : undefined;
   return {
     version: typeof version === "number" ? version : SETTINGS_FILE_VERSION,
     apiKeys: storedApiKeys(record),
@@ -212,6 +233,8 @@ function parsePersistedSettings(source: string): PersistedSettings {
     // A pace outside the offered set is dropped for the same reason.
     ...(isRealtimeVoiceSpeed(voiceSpeed) ? { voiceSpeed } : {}),
     voiceCaptions: record[SETTINGS_FIELD.VOICE_CAPTIONS] === true,
+    ...(voiceHotkey ? { voiceHotkey } : {}),
+    duckOtherMedia: record[SETTINGS_FIELD.DUCK_OTHER_MEDIA] !== false,
     showOnAllDisplays: record[SETTINGS_FIELD.SHOW_ON_ALL_DISPLAYS] === true,
     // A form this build does not draw is dropped like an unknown voice.
     ...(isPanelFormFactor(formFactor) ? { formFactor } : {}),
@@ -268,6 +291,10 @@ export class SettingsStore {
         environmentRealtimeSpeed(this.#environment) ??
         REALTIME_DEFAULTS.SPEED,
       voiceCaptions: (await this.#load()).voiceCaptions,
+      ...((await this.#load()).voiceHotkey
+        ? { voiceHotkey: (await this.#load()).voiceHotkey }
+        : {}),
+      duckOtherMedia: (await this.#load()).duckOtherMedia,
       showOnAllDisplays: (await this.#load()).showOnAllDisplays,
       formFactor: (await this.#load()).formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
     };
@@ -289,6 +316,14 @@ export class SettingsStore {
    */
   async showInDock(): Promise<boolean> {
     return (await this.#load()).showInDock;
+  }
+
+  /**
+   * Shallow for the same reason `showInMenuBar()` is: the media duck arms at
+   * startup, and arming it must never be what wakes the OS keychain.
+   */
+  async duckOtherMedia(): Promise<boolean> {
+    return (await this.#load()).duckOtherMedia;
   }
 
   /**
@@ -357,6 +392,57 @@ export class SettingsStore {
         ...persisted,
         version: SETTINGS_FILE_VERSION,
         voiceCaptions: enabled,
+      };
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+    });
+    return { settings: await this.snapshot() };
+  }
+
+  /**
+   * Main-process only, for registration at startup: the talk-key chord the
+   * user chose, or nothing while the defaults stand — the registrar already
+   * carries those.
+   */
+  async readVoiceHotkey(): Promise<string | undefined> {
+    return (await this.#load()).voiceHotkey;
+  }
+
+  /**
+   * Stores the chosen talk-key chord, or returns to the defaults when
+   * omitted. The caller hands in a chord already read into its one canonical
+   * spelling; what arrives here is written as given, so resetting is the
+   * absence of a choice rather than a second stored value.
+   */
+  async setVoiceHotkey(accelerator: string | undefined): Promise<SettingsUpdateResult> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (persisted.voiceHotkey === accelerator) return;
+      const next: PersistedSettings = {
+        ...persisted,
+        version: SETTINGS_FILE_VERSION,
+      };
+      if (accelerator) next.voiceHotkey = accelerator;
+      else delete next.voiceHotkey;
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+    });
+    return { settings: await this.snapshot() };
+  }
+
+  /**
+   * Turns the quieting of Music and Spotify during a spoken exchange on or
+   * off. A plain preference like the caption's: no cipher, no invalid value,
+   * so the write either lands or throws.
+   */
+  async setDuckOtherMedia(enabled: boolean): Promise<SettingsUpdateResult> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (persisted.duckOtherMedia === enabled) return;
+      const next: PersistedSettings = {
+        ...persisted,
+        version: SETTINGS_FILE_VERSION,
+        duckOtherMedia: enabled,
       };
       await this.#write(next);
       this.#loading = Promise.resolve(next);
@@ -601,6 +687,7 @@ export class SettingsStore {
       showInDock: false,
       showInMenuBar: true,
       voiceCaptions: false,
+      duckOtherMedia: true,
       showOnAllDisplays: false,
     };
     if (source) {

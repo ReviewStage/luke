@@ -33,25 +33,46 @@ Trust constraints:
   the user supplies one and must leave every other provider working without it.
 - The one thing Luke may change about a session is what the user just asked to
   send it: a message typed on its row, a control its provider advertised for
-  it, or the same two acts asked for out loud in a conversation the user is
-  holding — each through the provider's own documented endpoint under the same
-  user-supplied credential, and each validated against the observed roster
-  before an adapter sees it. Observation passes stay read-only by construction.
+  it, or the same two acts asked of Luke — out loud, or typed into his own
+  composer — in a conversation the user is holding — each through the
+  provider's own documented endpoint under the same user-supplied credential,
+  and each validated against the observed roster before an adapter sees it.
+  Observation passes stay read-only by construction.
   Nothing that decides on the user's behalf may reach a write path: the
   attention evaluator above all, and every turn Luke opens himself — a
   proactive readout, the reply that voices a tool's outcome — which carries no
   tools, at the API and again at a runtime gate, so a session summary or a tool
-  output that reads like an instruction can never become an act. A spoken tool
-  call runs only in the turn the developer opened by speaking; a write is the
-  direct product of a turn the developer opened, never of anything Luke read or
-  was told. A session whose provider documents no way in, or whose current state is
+  output that reads like an instruction can never become an act. A tool call
+  in that conversation runs only in a turn the developer opened themselves, by
+  speaking or by typing; a write is the direct product of a turn the developer
+  opened, never of anything Luke read or was told. A session whose provider documents no way in, or whose current state is
   documented for none, advertises nothing and is offered nothing; local
   sessions have no such endpoint and stay entirely read-only. Opening a
-  session — its row pressed, or the same press asked for out loud — is not a
-  write and needs no endpoint: the address its provider reported is handed to
-  the operating system, and nothing reaches the provider; a spoken open still
-  runs only in a developer-opened turn, and a session that reported no address
-  is offered nowhere to open.
+  session — its row pressed, or the same press asked of Luke in conversation —
+  is not a write and needs no endpoint: the address its provider reported is
+  handed to the operating system, and nothing reaches the provider; an open
+  asked of Luke still runs only in a developer-opened turn, and a session that
+  reported no address is offered nowhere to open.
+- The issue tracker follows the same rule at one remove. Luke reads the issues
+  a tracker lists for the user under a user-supplied key and observes nothing
+  without one, exactly like a cloud session provider. The two acts a tracker
+  takes — moving an issue to a state its latest observation listed, adding a
+  comment — happen only as the direct product of a turn the developer opened
+  themselves, through the tracker's own documented endpoint under the same
+  key, validated against the observed issue roster in the renderer and again
+  in the main process before the tracker client sees anything. Observation
+  sends only the read document; the write documents are fixed by the build and
+  issued only for a validated act.
+- Quieting other media is bounded the way the talk key is: a native helper that
+  can do one narrow thing. While a spoken exchange is live, Luke may lower the
+  volume of the players the helper names — Music and Spotify, through their own
+  scripting interfaces, behind the system's per-app consent — and restore it
+  afterwards. He never pauses them and reads nothing beyond whether each is
+  playing and how loud; a volume the user moved during the duck stays where
+  their hand put it; and the whole behavior is a setting. The trigger is the
+  exchange itself — a deterministic status edge, never anything Luke read,
+  heard, or decided — so no model output can reach it. Widening the player
+  list is a product decision, not an implementation detail.
 - Keep unsupported capabilities explicit; do not invent fallback controls.
 - Keep Electron renderers sandboxed with context isolation and narrow IPC.
 - Commit only synthetic fixtures and repository-relative paths. This binds

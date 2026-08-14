@@ -4,6 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
+  APPLE_EVENTS_USAGE_DESCRIPTION,
   createPackagerOptions,
   ICONSET_SOURCES,
   iconutilArguments,
@@ -35,6 +36,7 @@ function packagerOptions(signing = resolveSigningMode({})) {
     appRoot: "/repo/apps/desktop",
     outputRoot: "/repo/apps/desktop/out",
     helperPaths: [
+      "/repo/apps/desktop/.build/native/mac-media-duck",
       "/repo/apps/desktop/.build/native/mac-screen-geometry",
       "/repo/apps/desktop/.build/native/mac-talk-key",
     ],
@@ -162,6 +164,19 @@ test("packaging includes the Luke license and approved microphone description", 
   assert.equal(options.extendInfo.NSMicrophoneUsageDescription, MICROPHONE_USAGE_DESCRIPTION);
 });
 
+test("packaging includes the approved Apple Events description", () => {
+  const options = packagerOptions();
+
+  // Spelled out for the same reason the microphone's is: this is the sentence
+  // macOS shows when it asks whether Luke may speak to Music or Spotify, so a
+  // change to it is a change to what the user consented to.
+  assert.equal(
+    options.extendInfo.NSAppleEventsUsageDescription,
+    "Luke turns Music and Spotify down while you are having a spoken conversation, and back up afterwards. He never pauses them, and reads nothing beyond whether each is playing and how loud.",
+  );
+  assert.equal(options.extendInfo.NSAppleEventsUsageDescription, APPLE_EVENTS_USAGE_DESCRIPTION);
+});
+
 test("packaging uses the generated Luke application icon", () => {
   assert.equal(packagerOptions().icon, iconPath);
 });
@@ -180,16 +195,16 @@ test("the iconset maps every required macOS size to a consistent source PNG", ()
     "icon_512x512@2x.png",
   ]);
   assert.deepEqual(ICONSET_SOURCES, {
-    "icon_16x16.png": "luke-icon-16.png",
-    "icon_16x16@2x.png": "luke-icon-32.png",
-    "icon_32x32.png": "luke-icon-32.png",
-    "icon_32x32@2x.png": "luke-icon-64.png",
-    "icon_128x128.png": "luke-icon-128.png",
-    "icon_128x128@2x.png": "luke-icon-256.png",
-    "icon_256x256.png": "luke-icon-256.png",
-    "icon_256x256@2x.png": "luke-icon-512.png",
-    "icon_512x512.png": "luke-icon-512.png",
-    "icon_512x512@2x.png": "luke-icon-1024.png",
+    "icon_16x16.png": "luke-icon-dark-16.png",
+    "icon_16x16@2x.png": "luke-icon-dark-32.png",
+    "icon_32x32.png": "luke-icon-dark-32.png",
+    "icon_32x32@2x.png": "luke-icon-dark-64.png",
+    "icon_128x128.png": "luke-icon-dark-128.png",
+    "icon_128x128@2x.png": "luke-icon-dark-256.png",
+    "icon_256x256.png": "luke-icon-dark-256.png",
+    "icon_256x256@2x.png": "luke-icon-dark-512.png",
+    "icon_512x512.png": "luke-icon-dark-512.png",
+    "icon_512x512@2x.png": "luke-icon-dark-1024.png",
   });
 });
 
@@ -239,4 +254,7 @@ test("release entitlements allow required capabilities without unsigned executab
   );
   assert.match(entitlements, /<key>com\.apple\.security\.cs\.allow-jit<\/key>/);
   assert.match(entitlements, /<key>com\.apple\.security\.device\.audio-input<\/key>/);
+  // Apple Events are what the media duck speaks: without this, a hardened
+  // build fails the first duck rather than asking the user.
+  assert.match(entitlements, /<key>com\.apple\.security\.automation\.apple-events<\/key>/);
 });
