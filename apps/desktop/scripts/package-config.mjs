@@ -34,6 +34,24 @@ export const SIGNING_MODE = {
   DEVELOPER_ID: "developer-id",
 };
 
+export function addonCompilerArguments(source, output, frameworks = ["AppKit"]) {
+  return [
+    "clang",
+    "-target",
+    SWIFT_TARGET_TRIPLE,
+    "-fobjc-arc",
+    "-Wall",
+    "-dynamiclib",
+    // Node-API symbols have no library to link against at build time; they
+    // resolve from the Electron binary the addon is loaded into.
+    "-Wl,-undefined,dynamic_lookup",
+    ...frameworks.flatMap((framework) => ["-framework", framework]),
+    source,
+    "-o",
+    output,
+  ];
+}
+
 export function swiftCompilerArguments(source, output, frameworks = ["AppKit"]) {
   return [
     "swiftc",
