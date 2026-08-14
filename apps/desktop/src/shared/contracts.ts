@@ -52,6 +52,23 @@ export const SECRET_STORAGE = {
 
 export type SecretStorage = (typeof SECRET_STORAGE)[keyof typeof SECRET_STORAGE];
 
+/**
+ * What each plain preference is until the user chooses otherwise. The store
+ * falls back to these when the settings file has never said, and the app
+ * guide carries the same values so a spoken ask for "the default" names a
+ * real one — stated once so the two can never drift. The voice, pace, and
+ * form factor keep their defaults beside their own types in `@sidecar/core`,
+ * and the three keys' defaults live with the registrar that owns them.
+ */
+export const APP_SETTING_DEFAULTS = {
+  showInDock: false,
+  showInMenuBar: true,
+  voiceCaptions: false,
+  duckOtherMedia: true,
+  sessionNotifications: true,
+  showOnAllDisplays: false,
+} as const satisfies Partial<Record<keyof AppSettings, boolean>>;
+
 /** Renderer-safe settings. Credentials are never sent to a renderer. */
 export interface AppSettings {
   /** Where each provider's key comes from, keyed by provider id. */

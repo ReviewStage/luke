@@ -2,11 +2,12 @@
  * Luke's knowledge of himself, in one place.
  *
  * Everything the voice conversation may know about the app — what Luke is on
- * screen, every setting with its current value, and where each is changed by
- * hand — is assembled here into the `AppGuideSnapshot` the conversation is
- * sent. A feature this file does not describe is one Luke will deny having,
- * and a setting it does not mark changeable is one no spoken ask can touch,
- * so adding either to the app means adding it here in the same change.
+ * screen, every setting with its current value and its default, and where
+ * each is changed by hand — is assembled here into the `AppGuideSnapshot` the
+ * conversation is sent. A feature this file does not describe is one Luke
+ * will deny having, and a setting it does not mark changeable is one no
+ * spoken ask can touch, so adding either to the app means adding it here in
+ * the same change.
  *
  * The settings half is compile-enforced: `SETTING_GUIDE` is a `Record` over
  * every key of `AppSettings`, so a new settings field does not build until a
@@ -25,11 +26,13 @@ import {
   type AppGuideSetting,
   type AppGuideSnapshot,
   appToggleText,
+  DEFAULT_PANEL_FORM_FACTOR,
   isPanelFormFactor,
   isRealtimeVoice,
   PANEL_FORM_FACTOR_LIST,
   PROVIDER_ID,
   type ProviderId,
+  REALTIME_DEFAULTS,
   REALTIME_VOICE_LIST,
   REALTIME_VOICE_SPEED,
   type RealtimeVoiceSpeed,
@@ -41,7 +44,7 @@ import type {
   CredentialSource,
   MicrophoneStatus,
 } from "../shared/contracts";
-import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "../shared/contracts";
+import { APP_SETTING_DEFAULTS, CREDENTIAL_SOURCE, SECRET_STORAGE } from "../shared/contracts";
 import {
   CLOUD_AGENT_PROVIDER_LIST,
   CREDENTIAL_PROVIDERS,
@@ -80,6 +83,12 @@ const CONDUCTOR_ROW_PATH = `the Conductor row under Cloud Agent API keys, in ${S
  * half to Conductor's own default.
  */
 const CONDUCTOR_DEFAULT_CHOICE = "Conductor's default";
+
+/**
+ * The provider entry's word for no default at all, the same words its row
+ * offers: while nothing is chosen, Luke asks which provider each time.
+ */
+const ASK_EACH_TIME_CHOICE = "ask each time";
 
 /**
  * The words a pace is asked for in, slowest to fastest, each paired with the
@@ -125,6 +134,7 @@ const SETTING_GUIDE: Record<
       "Which voice Luke speaks with; a change is heard right away — a conversation under way starts afresh in the new voice.",
     kind: APP_SETTING_KIND.CHOICE,
     value: settings.voice,
+    defaultValue: REALTIME_DEFAULTS.VOICE,
     choices: REALTIME_VOICE_LIST,
     adjustable: true,
     manual: `${SETTINGS_TAB}, under Preferences`,
@@ -136,6 +146,7 @@ const SETTING_GUIDE: Record<
       "How fast Luke talks — slow is 0.75×, normal 1×, quick 1.25×, fast 1.5× the voice's natural rate; a change is heard from the next reply on.",
     kind: APP_SETTING_KIND.CHOICE,
     value: voiceSpeedWord(settings.voiceSpeed),
+    defaultValue: voiceSpeedWord(REALTIME_DEFAULTS.SPEED),
     choices: VOICE_SPEED_WORDS.map((candidate) => candidate.word),
     adjustable: true,
     manual: `${SETTINGS_TAB}, under Preferences`,
@@ -148,6 +159,7 @@ const SETTING_GUIDE: Record<
       "whatever this says, while the Mac's output is muted or at zero.",
     kind: APP_SETTING_KIND.TOGGLE,
     value: appToggleText(settings.voiceCaptions),
+    defaultValue: appToggleText(APP_SETTING_DEFAULTS.voiceCaptions),
     adjustable: true,
     manual: `${SETTINGS_TAB}, under Preferences`,
   }),
@@ -158,6 +170,7 @@ const SETTING_GUIDE: Record<
       "Whether Music and Spotify are turned down while a spoken exchange is live, and back up after.",
     kind: APP_SETTING_KIND.TOGGLE,
     value: appToggleText(settings.duckOtherMedia),
+    defaultValue: appToggleText(APP_SETTING_DEFAULTS.duckOtherMedia),
     adjustable: true,
     manual: `${SETTINGS_TAB}, under Preferences`,
   }),
@@ -170,6 +183,7 @@ const SETTING_GUIDE: Record<
       "Needs voice to be available; the panel and the capsule count show the same states either way.",
     kind: APP_SETTING_KIND.TOGGLE,
     value: appToggleText(settings.sessionNotifications),
+    defaultValue: appToggleText(APP_SETTING_DEFAULTS.sessionNotifications),
     adjustable: true,
     manual: `${SETTINGS_TAB}, under Preferences`,
   }),
@@ -179,6 +193,7 @@ const SETTING_GUIDE: Record<
     description: "Whether Luke also stands in the menu bar as a status item.",
     kind: APP_SETTING_KIND.TOGGLE,
     value: appToggleText(settings.showInMenuBar),
+    defaultValue: appToggleText(APP_SETTING_DEFAULTS.showInMenuBar),
     adjustable: true,
     manual: `${SETTINGS_TAB}, under Preferences`,
   }),
@@ -188,6 +203,7 @@ const SETTING_GUIDE: Record<
     description: "Whether Luke also stands in the Dock as an app icon.",
     kind: APP_SETTING_KIND.TOGGLE,
     value: appToggleText(settings.showInDock),
+    defaultValue: appToggleText(APP_SETTING_DEFAULTS.showInDock),
     adjustable: true,
     manual: `${SETTINGS_TAB}, under Preferences`,
   }),
@@ -198,6 +214,7 @@ const SETTING_GUIDE: Record<
       "Whether Luke stands on every connected display at once; off keeps him to the main display alone.",
     kind: APP_SETTING_KIND.TOGGLE,
     value: appToggleText(settings.showOnAllDisplays),
+    defaultValue: appToggleText(APP_SETTING_DEFAULTS.showOnAllDisplays),
     adjustable: true,
     manual: `${SETTINGS_TAB}, under Preferences`,
   }),
@@ -232,6 +249,9 @@ const SETTING_GUIDE: Record<
             entry.models.map((model) => model.label),
           ),
         ],
+        // The default is itself one of the choices, so an ask to restore it
+        // is an ordinary change to the value listed.
+        defaultValue: CONDUCTOR_DEFAULT_CHOICE,
         adjustable: true,
         manual: CONDUCTOR_ROW_PATH,
       },
@@ -245,6 +265,7 @@ const SETTING_GUIDE: Record<
               kind: APP_SETTING_KIND.CHOICE,
               value: chosen.effort ?? CONDUCTOR_DEFAULT_CHOICE,
               choices: [CONDUCTOR_DEFAULT_CHOICE, ...chosenAgent.efforts],
+              defaultValue: CONDUCTOR_DEFAULT_CHOICE,
               adjustable: true,
               manual: CONDUCTOR_ROW_PATH,
             },
@@ -267,7 +288,19 @@ const SETTING_GUIDE: Record<
     kind: APP_SETTING_KIND.CHOICE,
     value: settings.defaultWorkspaceProvider
       ? workspaceProviderName(settings.defaultWorkspaceProvider)
-      : "not chosen yet",
+      : ASK_EACH_TIME_CHOICE,
+    // Descriptive, never a spoken vocabulary — the entry is by-hand-only.
+    // The two named providers are the two that document a creation endpoint,
+    // the same two the "Creating workspaces" fact names; a third gaining one
+    // updates both.
+    choices: [
+      ASK_EACH_TIME_CHOICE,
+      workspaceProviderName(PROVIDER_ID.CONDUCTOR),
+      workspaceProviderName(PROVIDER_ID.CURSOR),
+    ],
+    // Every install starts with no provider chosen: asking each time is the
+    // default, and the first creation is what ends it.
+    defaultValue: ASK_EACH_TIME_CHOICE,
     adjustable: false,
     manual: `${SETTINGS_TAB}, under Preferences`,
   }),
@@ -278,6 +311,7 @@ const SETTING_GUIDE: Record<
       "How Luke stands on a display without a camera housing — notch draws him one pressed into the top edge, bubble floats him just under it. A display with a real notch ignores this.",
     kind: APP_SETTING_KIND.CHOICE,
     value: settings.formFactor,
+    defaultValue: DEFAULT_PANEL_FORM_FACTOR,
     choices: PANEL_FORM_FACTOR_LIST,
     adjustable: true,
     manual: `${SETTINGS_TAB}, under Preferences`,

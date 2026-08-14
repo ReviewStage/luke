@@ -5,6 +5,7 @@ import {
   type AppGuideSetting,
   PANEL_FORM_FACTOR,
   PROVIDER_ID,
+  REALTIME_DEFAULTS,
   REALTIME_VOICE,
   REALTIME_VOICE_LIST,
   REALTIME_VOICE_SPEED,
@@ -67,6 +68,7 @@ test("the guide describes every spoken-adjustable setting with its current value
   assert.equal(captionsOff.kind, APP_SETTING_KIND.TOGGLE);
   assert.equal(captionsOff.value, "off");
   assert.equal(captionsOff.adjustable, true);
+  assert.equal(captionsOff.defaultValue, "off");
 
   const captionsOn = guideSetting(
     APP_SETTING_ID.VOICE_CAPTIONS,
@@ -78,17 +80,23 @@ test("the guide describes every spoken-adjustable setting with its current value
   assert.equal(voice.kind, APP_SETTING_KIND.CHOICE);
   assert.equal(voice.value, REALTIME_VOICE.CEDAR);
   assert.deepEqual(voice.choices, REALTIME_VOICE_LIST);
+  // The guide states the same default the settings row marks, so a spoken
+  // "back to the default voice" names the value the row calls (default).
+  assert.equal(voice.defaultValue, REALTIME_DEFAULTS.VOICE);
 
   const menuBar = guideSetting(APP_SETTING_ID.SHOW_IN_MENU_BAR);
   assert.equal(menuBar.value, "on");
+  assert.equal(menuBar.defaultValue, "on");
 
   const dock = guideSetting(APP_SETTING_ID.SHOW_IN_DOCK);
   assert.equal(dock.value, "off");
+  assert.equal(dock.defaultValue, "off");
 
   // The pace is offered in words a voice can carry, current value included.
   const speed = guideSetting(APP_SETTING_ID.VOICE_SPEED);
   assert.equal(speed.kind, APP_SETTING_KIND.CHOICE);
   assert.equal(speed.value, "normal");
+  assert.equal(speed.defaultValue, "normal");
   assert.deepEqual(speed.choices, ["slow", "normal", "quick", "fast"]);
   assert.equal(
     guideSetting(
@@ -113,6 +121,7 @@ test("the guide describes every spoken-adjustable setting with its current value
   const formFactor = guideSetting(APP_SETTING_ID.FORM_FACTOR);
   assert.equal(formFactor.kind, APP_SETTING_KIND.CHOICE);
   assert.equal(formFactor.value, PANEL_FORM_FACTOR.BUBBLE);
+  assert.equal(formFactor.defaultValue, PANEL_FORM_FACTOR.BUBBLE);
   assert.deepEqual(formFactor.choices, [PANEL_FORM_FACTOR.NOTCH, PANEL_FORM_FACTOR.BUBBLE]);
   assert.equal(
     guideSetting(
@@ -123,9 +132,19 @@ test("the guide describes every spoken-adjustable setting with its current value
   );
 
   // Every entry says where the same change is made by hand, because guiding
-  // the developer there is half of what the guide is for.
+  // the developer there is half of what the guide is for — and every one of
+  // Luke's own settings states its default, so "back to the default" is an
+  // ask the guide can always ground. A toggle's default is one of its two
+  // words; a choice's default is one of its offered choices.
   for (const setting of buildLukeGuide(guideInput()).settings) {
     assert.ok(setting.manual.length > 0, `${setting.id} has a by-hand path`);
+    assert.ok(setting.defaultValue, `${setting.id} states its default`);
+    const accepted =
+      setting.kind === APP_SETTING_KIND.TOGGLE ? ["on", "off"] : (setting.choices ?? []);
+    assert.ok(
+      accepted.includes(setting.defaultValue),
+      `${setting.id}'s default is a value a spoken change can set`,
+    );
   }
 });
 
@@ -295,10 +314,12 @@ test("a spoken model or effort change composes the one stored selection", async 
 });
 
 test("the guide describes the default workspace provider without offering to change it", () => {
-  // Unset reads as the asking state, not as a missing value.
+  // Unset reads as the asking state — the default every install starts in —
+  // not as a missing value.
   const unset = guideSetting(APP_SETTING_ID.DEFAULT_WORKSPACE_PROVIDER);
   assert.equal(unset.kind, APP_SETTING_KIND.CHOICE);
-  assert.equal(unset.value, "not chosen yet");
+  assert.equal(unset.value, "ask each time");
+  assert.equal(unset.defaultValue, "ask each time");
   // Kept by hand: the first creation is the spoken way it changes, so the
   // spoken refusal must carry the by-hand path instead of a carrier.
   assert.equal(unset.adjustable, false);
