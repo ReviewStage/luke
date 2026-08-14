@@ -33,6 +33,7 @@ const SETTINGS_FILE_MODE = 0o600;
 
 const SETTINGS_FIELD = {
   API_KEYS: "apiKeys",
+  DUCK_OTHER_MEDIA: "duckOtherMedia",
   LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
   SHOW_IN_DOCK: "showInDock",
   SHOW_IN_MENU_BAR: "showInMenuBar",
@@ -115,6 +116,13 @@ interface PersistedSettings {
    * honouring it would claim a system key nothing was ever told about.
    */
   voiceHotkey?: string;
+  /**
+   * Whether Music and Spotify are turned down while a spoken exchange is
+   * live. On unless the file says `false` outright — like the menu bar item,
+   * this is what Luke does until the user asks otherwise, so a missing field
+   * and a corrupt value both land on doing it.
+   */
+  duckOtherMedia: boolean;
 }
 
 interface ResolvedApiKey {
@@ -207,6 +215,7 @@ function parsePersistedSettings(source: string): PersistedSettings {
     ...(isRealtimeVoiceSpeed(voiceSpeed) ? { voiceSpeed } : {}),
     voiceCaptions: record[SETTINGS_FIELD.VOICE_CAPTIONS] === true,
     ...(voiceHotkey ? { voiceHotkey } : {}),
+    duckOtherMedia: record[SETTINGS_FIELD.DUCK_OTHER_MEDIA] !== false,
   };
 }
 
@@ -263,6 +272,7 @@ export class SettingsStore {
       ...((await this.#load()).voiceHotkey
         ? { voiceHotkey: (await this.#load()).voiceHotkey }
         : {}),
+      duckOtherMedia: (await this.#load()).duckOtherMedia,
     };
   }
 
@@ -282,6 +292,14 @@ export class SettingsStore {
    */
   async showInDock(): Promise<boolean> {
     return (await this.#load()).showInDock;
+  }
+
+  /**
+   * Shallow for the same reason `showInMenuBar()` is: the media duck arms at
+   * startup, and arming it must never be what wakes the OS keychain.
+   */
+  async duckOtherMedia(): Promise<boolean> {
+    return (await this.#load()).duckOtherMedia;
   }
 
   /**
@@ -382,6 +400,26 @@ export class SettingsStore {
       };
       if (accelerator) next.voiceHotkey = accelerator;
       else delete next.voiceHotkey;
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+    });
+    return { settings: await this.snapshot() };
+  }
+
+  /**
+   * Turns the quieting of Music and Spotify during a spoken exchange on or
+   * off. A plain preference like the caption's: no cipher, no invalid value,
+   * so the write either lands or throws.
+   */
+  async setDuckOtherMedia(enabled: boolean): Promise<SettingsUpdateResult> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (persisted.duckOtherMedia === enabled) return;
+      const next: PersistedSettings = {
+        ...persisted,
+        version: SETTINGS_FILE_VERSION,
+        duckOtherMedia: enabled,
+      };
       await this.#write(next);
       this.#loading = Promise.resolve(next);
     });
@@ -572,6 +610,7 @@ export class SettingsStore {
       showInDock: false,
       showInMenuBar: true,
       voiceCaptions: false,
+      duckOtherMedia: true,
     };
     if (source) {
       try {

@@ -66,6 +66,8 @@ export interface SettingsPanelProps {
    * with why when it refuses, and the row is where that answer belongs.
    */
   onVoiceCaptionsChange: (enabled: boolean) => Promise<string | undefined>;
+  /** Turns the quieting of Music and Spotify during a spoken exchange on or off. */
+  onDuckOtherMediaChange: (enabled: boolean) => Promise<string | undefined>;
   /** The one credential being entered anywhere, and everything that can be done to it. */
   credentials: CredentialEntryControl;
   /** Chooses the voice Luke speaks with, from the set fixed by this build. */
@@ -545,6 +547,8 @@ function PreferencesSection({
   onVoiceSpeedChange,
   captions,
   onVoiceCaptionsChange,
+  ducking,
+  onDuckOtherMediaChange,
   shown,
   onShowInMenuBarChange,
   dockShown,
@@ -556,6 +560,8 @@ function PreferencesSection({
   onVoiceSpeedChange: (speed: RealtimeVoiceSpeed) => void;
   captions: boolean;
   onVoiceCaptionsChange: (enabled: boolean) => Promise<string | undefined>;
+  ducking: boolean;
+  onDuckOtherMediaChange: (enabled: boolean) => Promise<string | undefined>;
   shown: boolean;
   onShowInMenuBarChange: (show: boolean) => Promise<string | undefined>;
   dockShown: boolean;
@@ -584,6 +590,12 @@ function PreferencesSection({
     setDockBusy(true);
     setRejection(await onShowInDockChange(!dockShown));
     setDockBusy(false);
+  };
+  const [duckBusy, setDuckBusy] = useState(false);
+  const toggleDucking = async () => {
+    setDuckBusy(true);
+    setRejection(await onDuckOtherMediaChange(!ducking));
+    setDuckBusy(false);
   };
   return (
     <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
@@ -678,6 +690,27 @@ function PreferencesSection({
           className="switch"
           disabled={captionsBusy}
           onClick={() => void toggleCaptions()}
+        >
+          <span className="switch-thumb" />
+        </button>
+      </div>
+      <div className="settings-row">
+        <span className="settings-copy">
+          <strong>Quiet Music and Spotify</strong>
+          {/* Named by app rather than as "other media": these two are the ones
+              macOS lets Luke turn down, and a switch claiming more would claim
+              a capability the system does not grant. The first duck is also
+              when macOS asks whether Luke may speak to each player at all. */}
+          <small>Their volume dips while you and Luke are talking, and returns after.</small>
+        </span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={ducking}
+          aria-label="Quiet Music and Spotify while talking with Luke"
+          className="switch"
+          disabled={duckBusy}
+          onClick={() => void toggleDucking()}
         >
           <span className="switch-thumb" />
         </button>
@@ -884,6 +917,7 @@ export function SettingsPanel({
   voiceAvailable,
   settings,
   onVoiceCaptionsChange,
+  onDuckOtherMediaChange,
   credentials,
   onVoiceChange,
   onVoiceSpeedChange,
@@ -912,6 +946,8 @@ export function SettingsPanel({
           onVoiceSpeedChange={onVoiceSpeedChange}
           captions={settings.voiceCaptions}
           onVoiceCaptionsChange={onVoiceCaptionsChange}
+          ducking={settings.duckOtherMedia}
+          onDuckOtherMediaChange={onDuckOtherMediaChange}
           shown={settings.showInMenuBar}
           onShowInMenuBarChange={onShowInMenuBarChange}
           dockShown={settings.showInDock}

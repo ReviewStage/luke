@@ -245,6 +245,47 @@ test("a corrupt captions value reads as off rather than switching them on", asyn
   assert.equal((await storeIn(directory).snapshot()).voiceCaptions, false);
 });
 
+test("other media is quieted until asked otherwise, and the choice survives a reopen", async (t) => {
+  const directory = await temporaryDirectory(t);
+  // A preference is not a credential, so choosing it must reach the Keychain
+  // not at all.
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+
+  assert.equal((await store.snapshot()).duckOtherMedia, true);
+  const disabled = await store.setDuckOtherMedia(false);
+
+  assert.equal(disabled.settings.duckOtherMedia, false);
+  assert.equal((await storeIn(directory).snapshot()).duckOtherMedia, false);
+  assert.equal(cipher.calls.isAvailable, 0);
+  assert.equal(cipher.calls.encrypt, 0);
+});
+
+test("switching the media duck never disturbs a stored key", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
+
+  await store.setDuckOtherMedia(false);
+  const on = await store.setDuckOtherMedia(true);
+
+  assert.equal(on.settings.duckOtherMedia, true);
+  assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), TEST_API_KEY);
+});
+
+test("a corrupt media duck value reads as the default rather than as off", async (t) => {
+  const directory = await temporaryDirectory(t);
+  // The mirror of the captions rule: each lands on its own default, and this
+  // one's default is on.
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({ version: 2, apiKeys: {}, duckOtherMedia: "no" }),
+    "utf8",
+  );
+
+  assert.equal((await storeIn(directory).snapshot()).duckOtherMedia, true);
+});
+
 test("keeps each provider's key, environment fallback, and reported source separate", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory, {
@@ -298,6 +339,7 @@ test("keeps both keys when two providers are saved at once", async (t) => {
     showInDock: false,
     showInMenuBar: true,
     voiceCaptions: false,
+    duckOtherMedia: true,
   });
   const reopened = storeIn(directory, { providers: TEST_PROVIDERS });
   assert.equal(await reopened.readApiKey(FIRST_CLOUD), "first-cloud-key");
@@ -496,6 +538,7 @@ test("keeps a Conductor key stored by an earlier version working", async (t) => 
     showInDock: false,
     showInMenuBar: true,
     voiceCaptions: false,
+    duckOtherMedia: true,
   });
   assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), "conductor-replacement-key");
 });
@@ -517,6 +560,7 @@ test("carries a key belonging to a provider this build does not know", async (t)
     showInDock: false,
     showInMenuBar: true,
     voiceCaptions: false,
+    duckOtherMedia: true,
   });
 });
 
@@ -536,6 +580,7 @@ test("shows the menu bar item until asked otherwise, and remembers the answer", 
     showInDock: false,
     showInMenuBar: false,
     voiceCaptions: false,
+    duckOtherMedia: true,
   });
   // The choice outlives the run that heard it.
   assert.equal((await storeIn(directory).snapshot()).showInMenuBar, false);
@@ -616,6 +661,7 @@ test("keeps Luke out of the Dock until asked, and remembers the answer", async (
     showInDock: true,
     showInMenuBar: true,
     voiceCaptions: false,
+    duckOtherMedia: true,
   });
   // The choice outlives the run that heard it.
   assert.equal((await storeIn(directory).snapshot()).showInDock, true);

@@ -9,6 +9,11 @@ export const LICENSE_RESOURCE_NAME = "LUKE-LICENSE.txt";
 // what consent is given against. It has to say where the audio goes.
 export const MICROPHONE_USAGE_DESCRIPTION =
   "Luke uses the microphone for spoken conversation. Audio from a turn you start is sent to OpenAI to answer it, and is never recorded or written to disk.";
+// The sentence macOS shows when it asks whether Luke may speak to Music or
+// Spotify, so it is what consent is given against. It has to say what is done
+// to them, and what is not.
+export const APPLE_EVENTS_USAGE_DESCRIPTION =
+  "Luke turns Music and Spotify down while you are having a spoken conversation, and back up afterwards. He never pauses them, and reads nothing beyond whether each is playing and how loud.";
 export const ICONSET_SOURCES = Object.freeze({
   "icon_16x16.png": "luke-icon-16.png",
   "icon_16x16@2x.png": "luke-icon-32.png",
@@ -78,6 +83,7 @@ export function createPackagerOptions({
       CFBundleDisplayName: "Luke",
       LSMinimumSystemVersion: MACOS_DEPLOYMENT_TARGET,
       LSUIElement: true,
+      NSAppleEventsUsageDescription: APPLE_EVENTS_USAGE_DESCRIPTION,
       NSMicrophoneUsageDescription: MICROPHONE_USAGE_DESCRIPTION,
       NSPrefersDisplaySafeAreaCompatibilityMode: false,
     },

@@ -148,6 +148,10 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
       calls.push(`setVoiceCaptions:${enabled}`);
       return answered;
     },
+    setDuckOtherMedia: async (enabled: boolean) => {
+      calls.push(`setDuckOtherMedia:${enabled}`);
+      return answered;
+    },
     setShowInMenuBar: async (show: boolean) => {
       calls.push(`setShowInMenuBar:${show}`);
       return answered;
@@ -169,6 +173,7 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
   }
 
   assert.deepEqual(calls.sort(), [
+    "setDuckOtherMedia:true",
     "setShowInDock:true",
     "setShowInMenuBar:true",
     "setVoice",

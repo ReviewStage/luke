@@ -56,6 +56,11 @@ const bridge: AppBridge = {
     ipcRenderer.invoke(channels.setVoiceCaptions, enabled) as Promise<SettingsUpdateResult>,
   setVoiceHotkey: (accelerator: string | undefined) =>
     ipcRenderer.invoke(channels.setVoiceHotkey, accelerator) as Promise<SettingsUpdateResult>,
+  setDuckOtherMedia: (enabled: boolean) =>
+    ipcRenderer.invoke(channels.setDuckOtherMedia, enabled) as Promise<SettingsUpdateResult>,
+  setVoiceExchangeActive: (active: boolean) => {
+    ipcRenderer.send(channels.setVoiceExchange, active);
+  },
   openSession: (identity: SessionIdentity) =>
     ipcRenderer.invoke(channels.openSession, identity) as Promise<SessionOpenResult>,
   sendSessionMessage: (identity: SessionIdentity, text: string) =>

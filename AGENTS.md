@@ -63,6 +63,16 @@ Trust constraints:
   in the main process before the tracker client sees anything. Observation
   sends only the read document; the write documents are fixed by the build and
   issued only for a validated act.
+- Quieting other media is bounded the way the talk key is: a native helper that
+  can do one narrow thing. While a spoken exchange is live, Luke may lower the
+  volume of the players the helper names — Music and Spotify, through their own
+  scripting interfaces, behind the system's per-app consent — and restore it
+  afterwards. He never pauses them and reads nothing beyond whether each is
+  playing and how loud; a volume the user moved during the duck stays where
+  their hand put it; and the whole behavior is a setting. The trigger is the
+  exchange itself — a deterministic status edge, never anything Luke read,
+  heard, or decided — so no model output can reach it. Widening the player
+  list is a product decision, not an implementation detail.
 - Keep unsupported capabilities explicit; do not invent fallback controls.
 - Keep Electron renderers sandboxed with context isolation and narrow IPC.
 - Commit only synthetic fixtures and repository-relative paths. This binds
