@@ -1517,7 +1517,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   margin: 0;
 }
 
-/* The one switch in the panel. On is the palette connected and complete
+/* The panel's switches. On is the palette connected and complete
    already use, so an item that is drawn reads the same way a provider that is
    reachable does. Only the thumb moves, only by transform, and on
    `--spring-fast` — the bounce every small element in the app rides. */

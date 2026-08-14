@@ -561,6 +561,29 @@ function registerIpc(): void {
     },
   );
 
+  // The Dock icon follows the stored answer at once, like the status item: a
+  // setting that only took effect on the next launch would read as a toggle
+  // that does nothing.
+  ipcMain.handle(
+    channels.setShowInDock,
+    async (event, show: unknown): Promise<SettingsUpdateResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (typeof show !== "boolean") throw new Error("Invalid Dock request");
+      try {
+        const result = await settingsStore.setShowInDock(show);
+        applyDockVisibility(result.settings.showInDock);
+        return result;
+      } catch {
+        // A filesystem failure is not something the user can act on, so it is
+        // reported as one line rather than as a raw system error.
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "Could not save that setting on this system.",
+        };
+      }
+    },
+  );
+
   // The voice is a preference rather than a credential, but it travels the
   // same road: the renderer names a value from a set fixed by this build and
   // hears back the settings as they now stand.
@@ -966,6 +989,52 @@ function applyMenuBarVisibility(show: boolean): void {
   destroyTray();
 }
 
+/**
+ * macOS ignores a `dock.hide()` within a second of the last Dock change, so a
+ * switch pressed twice cannot be honoured call by call; the applier below
+ * paces itself to this instead, which is Electron's documented floor.
+ */
+const DOCK_SETTLE_MS = 1100;
+
+/** The Dock state last asked for, and whether the applier is chasing it. */
+let dockDesired = false;
+let dockSettling = false;
+
+/**
+ * Puts Luke in the Dock or takes him back out, to match the setting. He ships
+ * as an accessory app — the notch is his fixed point — so the icon is a second
+ * door like the status item, losing nothing when it is hidden.
+ */
+function applyDockVisibility(show: boolean): void {
+  if (process.platform !== "darwin") return;
+  dockDesired = show;
+  void settleDock();
+}
+
+/**
+ * Chases the desired state rather than relaying each press: a hide within a
+ * second of the last Dock change is silently ignored by macOS, so the icon is
+ * re-checked after every change and asked again until it matches — the switch
+ * and the file must not end a quick on-and-off disagreeing with the Dock.
+ */
+async function settleDock(): Promise<void> {
+  if (dockSettling || !app.dock) return;
+  dockSettling = true;
+  try {
+    while (app.dock.isVisible() !== dockDesired) {
+      if (dockDesired) await app.dock.show();
+      else app.dock.hide();
+      // Either direction transforms the process type, which can deactivate
+      // the app; the panel the switch was pressed in is brought back forward
+      // rather than left to lose its caret.
+      if (windowMode === "expanded") focusPanelWindow();
+      await new Promise((resolve) => setTimeout(resolve, DOCK_SETTLE_MS));
+    }
+  } finally {
+    dockSettling = false;
+  }
+}
+
 function handleDisplayChange(): void {
   setTimeout(() => {
     refreshNativeGeometry();
@@ -1011,6 +1080,15 @@ if (!app.requestSingleInstanceLock()) {
     void settingsStore.showInMenuBar().then(
       (show) => applyMenuBarVisibility(show),
       () => applyMenuBarVisibility(true),
+    );
+    // The Dock icon reads the same file under the opposite default: it is
+    // opt-in, so a file that cannot be read leaves Luke out of the Dock — the
+    // accessory app the launch just asserted. Nothing to do until it says so.
+    void settingsStore.showInDock().then(
+      (show) => {
+        if (show) applyDockVisibility(true);
+      },
+      () => undefined,
     );
     // Awaited, so the chosen voice reaches the minter before the renderer
     // exists to ask for a credential: the first conversation must already

@@ -694,6 +694,14 @@ export function App(): React.JSX.Element {
     return result.reason;
   }, []);
 
+  // The Dock icon, on the same round trip: the row reads the state the store
+  // actually holds rather than the one the press hoped for.
+  const changeShowInDock = useCallback(async (show: boolean) => {
+    const result = await window.sidecar.setShowInDock(show);
+    setSettings(result.settings);
+    return result.reason;
+  }, []);
+
   const credentials: CredentialEntryControl = {
     entry,
     begin: beginEntry,
@@ -1115,6 +1123,7 @@ export function App(): React.JSX.Element {
               ...(shownHotkey.hotkey ? { voiceHotkey: shownHotkey.hotkey } : {}),
               voiceHotkeyHeld: shownHotkey.held,
               onShowInMenuBarChange: changeShowInMenuBar,
+              onShowInDockChange: changeShowInDock,
               onQuit: () => window.sidecar.quit(),
             }}
           />

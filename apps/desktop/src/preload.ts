@@ -44,6 +44,8 @@ const bridge: AppBridge = {
   },
   setShowInMenuBar: (show: boolean) =>
     ipcRenderer.invoke(channels.setShowInMenuBar, show) as Promise<SettingsUpdateResult>,
+  setShowInDock: (show: boolean) =>
+    ipcRenderer.invoke(channels.setShowInDock, show) as Promise<SettingsUpdateResult>,
   setVoiceCaptions: (enabled: boolean) =>
     ipcRenderer.invoke(channels.setVoiceCaptions, enabled) as Promise<SettingsUpdateResult>,
   openSession: (identity: SessionIdentity) =>
