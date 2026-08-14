@@ -292,13 +292,12 @@
 .session-row {
   display: flex;
   width: 100%;
-  min-height: 66px;
   flex: 0 0 auto;
   align-items: center;
-  gap: 13px;
-  padding: 0 15px;
+  gap: 12px;
+  padding: 11px 14px;
   border: 1px solid var(--hairline);
-  border-radius: 17px;
+  border-radius: 15px;
   background: rgba(255, 255, 255, 0.028);
   text-align: left;
 }
@@ -311,10 +310,10 @@
 /* Whether pressing a row would do anything is answered by the pointer and
    nowhere else: a row that can be opened lifts under it, one that cannot stays
    exactly as it was drawn. That is also why nothing is added at rest — every
-   mark and every chip on this row already means something, and one more on some
-   rows would be read as another state before it was read as an affordance.
-   Colour alone: the row's `transform` is spoken for by its arrival, and its box
-   is what the surface behind it is measured from, so neither may move. */
+   glyph on this row already means something, and one more on some rows would be
+   read as another state before it was read as an affordance. Colour alone: the
+   row's `transform` is spoken for by its arrival, and its box is what the
+   surface behind it is measured from, so neither may move. */
 button.session-row:hover {
   border-color: rgba(255, 255, 255, 0.16);
   background: var(--raised);
@@ -335,36 +334,36 @@ html[data-keyboard="true"] button.session-row:focus-visible {
   outline-offset: -3px;
 }
 
-/* Neutral tile: the mark inside carries the provider's own colour, so tinting
-   the tile by state would put two colour systems on top of each other. */
-.row-avatar {
+/* The mark stands bare. The tile it used to sit in was the one box on the row
+   that carried no information — a hairline square inside a hairline card — and
+   the mark's own colour and silhouette are the identification. The slot keeps a
+   fixed size so every title starts on the same column whatever shape the mark
+   is, and so the cloud badge has a corner to hold whichever mark it rides. */
+.row-mark {
   position: relative;
   display: grid;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   flex: 0 0 auto;
-  border-radius: 11px;
-  background: var(--raised);
-  box-shadow: inset 0 0 0 1px var(--hairline);
   place-items: center;
 }
 
-.row-avatar .provider-mark {
-  width: 17px;
-  height: 17px;
+.row-mark .provider-mark {
+  width: 20px;
+  height: 20px;
 }
 
-/* Against a 32px tile the badge can be read at a glance, so it is sized to be
-   read rather than to be minimal. */
-.row-avatar .cloud-badge {
-  right: -4px;
-  bottom: -4px;
-  width: 14px;
-  height: 14px;
+/* Tucked closer than it sat on the tile: with no box edge to overlap, the
+   badge reads as attached to the mark only while it touches it. */
+.row-mark .cloud-badge {
+  right: -2px;
+  bottom: -1px;
+  width: 13px;
+  height: 13px;
 }
 
-.row-avatar .cloud-badge svg {
-  width: 9px;
+.row-mark .cloud-badge svg {
+  width: 8.5px;
 }
 
 .row-copy {
@@ -372,7 +371,7 @@ html[data-keyboard="true"] button.session-row:focus-visible {
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 4px;
+  gap: 3.5px;
 }
 
 .row-copy strong {
@@ -385,19 +384,375 @@ html[data-keyboard="true"] button.session-row:focus-visible {
   white-space: nowrap;
 }
 
-.row-copy small {
-  overflow: hidden;
+/* What the session is doing, worded to carry the state. The glyph ahead of it
+   answers at a glance — a spinner turning, a check — and the attention colour
+   is spent here and nowhere else on the line, because a person being needed is
+   the one thing worth a colour. */
+.row-doing {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
   color: var(--text-secondary);
+  font-size: 10.5px;
+}
+
+/* The ellipsis needs a text box rather than a flex row to bite on, so the
+   words sit in their own span beside the glyph. */
+.row-doing-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-row[data-state="attention"] .row-doing {
+  color: var(--accent);
+  font-weight: 560;
+}
+
+/* A session nothing is known about has nothing urgent to say, so its line sits
+   back with the identifier under it. */
+.session-row[data-state="unknown"] .row-doing {
+  color: var(--text-tertiary);
+}
+
+/* Turns on its own clock — it means "still happening", not "arriving" — and
+   holds still under the same token that stills Luke: a capture must land on
+   one frame, and reduced motion asked for stillness, which the row survives
+   because the sentence still says Working in words. */
+.row-spinner {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  border-top-color: rgba(255, 255, 255, 0.62);
+  animation: row-spin 900ms linear infinite;
+  animation-play-state: var(--loop-motion);
+}
+
+@keyframes row-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+.row-check {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 auto;
+  color: var(--state-complete);
+  opacity: 0.85;
+}
+
+/* Which checkout this is, for the rows that would otherwise read alike. An
+   identifier rather than prose, so it is set in the system's mono face — and
+   it is the line a reader consults rather than scans, so it sits back a step. */
+.row-place {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4.5px;
+  color: var(--text-tertiary);
+  font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  font-size: 9.5px;
+}
+
+.row-place span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-branch-glyph {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+}
+
+/* When the session was last seen, where every Apple surface puts it. Top-right
+   against the title's line rather than centred on the row, so two-line and
+   three-line rows hold it at the same height. */
+.row-when {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  padding-top: 2px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* A row with a second line stacks, and hands its box's padding down: the first
+   line has to keep today's geometry so the two kinds of row read as one list,
+   and the actions line has to reach the same left edge as the copy above it. */
+.session-row[data-actions] {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+}
+
+.row-main {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-radius: 15px 15px 0 0;
+  background: transparent;
+  text-align: left;
+}
+
+/* The whole openable row is the press target now, controls excepted, so the
+   whole row takes the hand and the lift. The one place neither belongs is a
+   pointer that is on a control: a press there is about the message or the
+   action, and a lift under it would promise a window it will not open. */
+.session-row[data-actions][data-openable] {
+  cursor: pointer;
+}
+
+.session-row[data-actions][data-openable]:hover:not(
+  :has(.row-compose:hover, .row-action:hover, .row-stop:hover)
+) {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: var(--raised);
+}
+
+.session-row[data-actions][data-openable][data-state="attention"]:hover:not(
+  :has(.row-compose:hover, .row-action:hover, .row-stop:hover)
+) {
+  border-color: color-mix(in srgb, var(--accent) 46%, transparent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+/* The ring wraps the row, not the half of it the button covers: what pressing
+   opens is the session, and the ring has to trace the thing the press means.
+   The button still holds the focus — it is what the keyboard activates — and
+   the row draws for it, the same seam the hover lift answers through. */
+html[data-keyboard="true"] .session-row[data-actions]:has(> button.row-main:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+}
+
+html[data-keyboard="true"] button.row-main:focus-visible {
+  outline: none;
+}
+
+/* What a provider promised for this session: a composer that is simply there,
+   the way every chat surface keeps one on screen, and each advertised action
+   beside it. One quiet line — the row above it is the subject, this is what
+   can be done about it. */
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  padding: 0 14px 11px 56px;
+}
+
+.row-action {
+  padding: 5px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--raised);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 640;
+  white-space: nowrap;
+  transition:
+    background-color var(--duration-hover) ease,
+    border-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.row-action:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  color: var(--text-primary);
+}
+
+.row-action:disabled {
+  opacity: 0.4;
+}
+
+/* The stop every chat surface has: one round control holding the square. It
+   is drawn the same weight as the send button so the two read as siblings,
+   and its label lives on hover and in the accessible name. */
+.row-stop {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  border: 1px solid var(--hairline);
+  border-radius: 50%;
+  background: var(--raised);
+  color: var(--text-secondary);
+  place-items: center;
+  transition:
+    border-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.row-stop:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  color: var(--text-primary);
+}
+
+.row-stop:disabled {
+  opacity: 0.4;
+}
+
+.control-icon {
+  width: 12px;
+  height: 12px;
+}
+
+/* The composer is one pill — hairline around the pair, field on the left,
+   send on the right — because that is the shape a message field has had since
+   phones started drawing them, and matching it is what makes the affordance
+   need no label. */
+.row-compose {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 3px 3px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.4);
+  /* The whole pill is the field — a press anywhere in it lands the caret —
+     so the whole pill says so, against the hand the row around it shows. */
+  cursor: text;
+  transition:
+    border-color var(--duration-hover) ease,
+    background-color var(--duration-hover) ease;
+}
+
+.row-compose:focus-within {
+  border-color: color-mix(in srgb, var(--state-working) 45%, transparent);
+  background: rgba(0, 0, 0, 0.55);
+}
+
+/* The field itself is bare: the pill around it is the drawn edge. */
+.row-compose-input {
+  min-width: 0;
+  flex: 1;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 11px;
+  outline: none;
+}
+
+.row-compose-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.row-compose-input:disabled {
+  color: var(--text-tertiary);
+  cursor: not-allowed;
+}
+
+/* Lit only once there is something to send, like every composer people
+   already know. Colour is the whole state change: the button must not grow
+   or move inside an element that reflows the pill. */
+.row-send {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--text-tertiary);
+  place-items: center;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.row-send:not(:disabled) {
+  background: var(--text-primary);
+  color: rgba(0, 0, 0, 0.82);
+}
+
+.row-send:disabled {
+  cursor: default;
+}
+
+.row-send .control-icon {
+  width: 11px;
+  height: 11px;
+}
+
+/* What became of the last write, said on its own line under the controls that
+   asked for it. It is one bounded sentence from this build or the provider's
+   status, never transcript. */
+.row-feedback {
+  overflow: hidden;
+  flex-basis: 100%;
+  color: var(--text-tertiary);
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Where the session is, under what it is doing. It is the line a reader scans
-   only when two rows say the same thing, so it sits back a step. Qualified by
-   the parent because `.row-copy small` above is an element selector and would
-   otherwise out-rank a bare class, leaving both lines the same weight. */
-.row-copy .row-context {
+/* Ask Luke ----------------------------------------------------------------- */
+
+/* The panel's own composer, pinned under the list. It arrives at the tail of
+   the row fan (the wrapper is in base.css's arrival stack) and holds the
+   panel's foot — which is where Luke's caption rides when he answers, so the
+   question and its answer share an edge. */
+.ask-luke-row {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+/* The same pill every row composer draws, sized up a step because it addresses
+   Luke rather than one session. A press anywhere in it lands the caret, so the
+   whole pill says text. */
+.ask-luke {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 4px 4px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.4);
+  cursor: text;
+  transition:
+    border-color var(--duration-hover) ease,
+    background-color var(--duration-hover) ease;
+}
+
+/* Typing is the developer's half of the conversation, so the pill takes their
+   green — the colour the meter gives their voice, and nowhere else on the
+   surface — where a session's composer takes the working blue. */
+.ask-luke:focus-within {
+  border-color: color-mix(in srgb, var(--voice-developer) 50%, transparent);
+  background: rgba(0, 0, 0, 0.55);
+}
+
+/* The field itself is bare: the pill around it is the drawn edge. */
+.ask-luke-input {
+  min-width: 0;
+  flex: 1;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.ask-luke-input::placeholder {
   color: var(--text-tertiary);
 }
 
@@ -408,4 +763,83 @@ html[data-keyboard="true"] button.session-row:focus-visible {
 .row-copy .row-transcript {
   color: var(--text-secondary);
   font-style: italic;
+}
+
+/* How the reach is learned: the keycaps surface while the pointer is over the
+   pill and stand down again once the caret is in or a draft holds the field —
+   whoever they could teach already knows. They keep their layout box in every
+   state and only fade, so hovering re-shapes nothing, and they take no
+   pointer: a press on them is a press on the field they name.
+
+   A step smaller than a settings row's caps: these ride inside the composer
+   beside its placeholder, where a full-size key would read as a control rather
+   than as the hint it is. */
+.ask-luke-hint {
+  --keycap-size: 16px;
+  --keycap-text: 9.5px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-hover) ease;
+}
+
+.ask-luke[data-draft="false"]:hover:not(:focus-within) .ask-luke-hint {
+  opacity: 1;
+}
+
+/* Lit only once there is something to ask, in the same green the pill focuses
+   with: pressing it is the developer taking their turn. Colour is the whole
+   state change — the button must not grow or move inside an element that
+   reflows the pill. */
+.ask-luke-send {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--text-tertiary);
+  place-items: center;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.ask-luke-send:not(:disabled) {
+  background: var(--voice-developer);
+  color: rgba(0, 0, 0, 0.82);
+}
+
+.ask-luke-send:disabled {
+  cursor: default;
+}
+
+.ask-luke-send .control-icon {
+  width: 12px;
+  height: 12px;
+}
+
+/* An ask on its way to a call that may still be opening: the disc breathes
+   instead of a spinner arriving, because nothing in the pill may change size.
+   It holds still under the same token as every other loop — a capture must
+   land on one frame, and reduced motion asked for stillness. */
+.ask-luke[data-asking="true"] .ask-luke-send {
+  animation: ask-luke-breathe 900ms ease-in-out infinite;
+  animation-play-state: var(--loop-motion);
+}
+
+@keyframes ask-luke-breathe {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* Why the ask could not go, said once under the pill and replaced by typing.
+   A sent ask draws nothing here: the reply beginning is the confirmation. */
+.ask-luke-refusal {
+  overflow: hidden;
+  padding: 0 14px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

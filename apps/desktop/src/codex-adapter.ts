@@ -1,4 +1,3 @@
-import type { Stats } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -20,6 +19,12 @@ import {
   type TranscriptGate,
   transcriptsRequested,
 } from "./local-session-adapter";
+import {
+  canIgnoreSqliteError,
+  defaultSqliteModule,
+  openReadOnlyDatabase,
+  type SqliteModuleLoader,
+} from "./local-sqlite";
 
 const CODEX_PROVIDER_ID = PROVIDER_ID.CODEX;
 const CODEX_PROVIDER_NAME = "Codex";
@@ -150,22 +155,6 @@ const CODEX_THREAD_QUERY = `
 
 type CodexThreadRow = Record<string, unknown>;
 
-interface SqliteStatement {
-  all(...anonymousParameters: readonly unknown[]): unknown[];
-}
-
-interface SqliteDatabase {
-  close(): void;
-  enableDefensive?(enabled: boolean): void;
-  prepare(source: string): SqliteStatement;
-}
-
-interface SqliteModule {
-  DatabaseSync: new (location: string, options: { readOnly: boolean }) => SqliteDatabase;
-}
-
-type SqliteModuleLoader = () => Promise<SqliteModule>;
-
 export const CODEX_PROVIDER: SessionProvider = {
   id: CODEX_PROVIDER_ID,
   displayName: CODEX_PROVIDER_NAME,
@@ -205,23 +194,6 @@ function canIgnoreFilesystemError(error: unknown): boolean {
       error.code === "EACCES" ||
       error.code === "EPERM")
   );
-}
-
-function canIgnoreSqliteError(error: unknown): boolean {
-  if (isNodeError(error) && error.code === "ERR_UNKNOWN_BUILTIN_MODULE") return true;
-  if (!(error instanceof Error)) return false;
-  return /no such table|no such column|unable to open database file|readonly database/i.test(
-    error.message,
-  );
-}
-
-async function fileStats(filePath: string): Promise<Stats | undefined> {
-  try {
-    return await fs.stat(filePath);
-  } catch (error) {
-    if (canIgnoreFilesystemError(error)) return undefined;
-    throw error;
-  }
 }
 
 async function readTextFile(filePath: string): Promise<string | undefined> {
@@ -407,28 +379,6 @@ function parseCodexRolloutTail(tail: string, includeTranscript: boolean): Parsed
     }
   }
   return parsed;
-}
-
-async function defaultSqliteModule(): Promise<SqliteModule> {
-  return (await import("node:sqlite")) as SqliteModule;
-}
-
-async function openReadOnlyDatabase(
-  sqlite: SqliteModuleLoader,
-  filePath: string,
-): Promise<SqliteDatabase | undefined> {
-  const stats = await fileStats(filePath);
-  if (!stats?.isFile()) return undefined;
-
-  try {
-    const module = await sqlite();
-    const database = new module.DatabaseSync(filePath, { readOnly: true });
-    database.enableDefensive?.(true);
-    return database;
-  } catch (error) {
-    if (canIgnoreSqliteError(error) || canIgnoreFilesystemError(error)) return undefined;
-    throw error;
-  }
 }
 
 function numberFromRow(row: CodexThreadRow, key: string): number | undefined {

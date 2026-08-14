@@ -16,8 +16,14 @@ if [[ -z "$PACKAGED_APP" ]]; then
     printf 'error: Electron Packager did not produce Luke.app\n' >&2
     exit 1
 fi
-if [[ ! -x "$PACKAGED_APP/Contents/Resources/mac-screen-geometry" ]]; then
-    printf 'error: packaged app is missing the AppKit screen-geometry helper\n' >&2
+for helper in mac-screen-geometry mac-talk-key; do
+    if [[ ! -x "$PACKAGED_APP/Contents/Resources/$helper" ]]; then
+        printf 'error: packaged app is missing the %s helper\n' "$helper" >&2
+        exit 1
+    fi
+done
+if [[ ! -f "$PACKAGED_APP/Contents/Resources/mac-stationary-window.node" ]]; then
+    printf 'error: packaged app is missing the mac-stationary-window.node addon\n' >&2
     exit 1
 fi
 INFO_PLIST="$PACKAGED_APP/Contents/Info.plist"

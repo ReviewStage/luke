@@ -47,10 +47,34 @@ export interface AttentionDecision {
   summary?: string;
 }
 
+/**
+ * What a control does to the session, at the altitude a surface draws at: a
+ * stop ends the turn that is running and is drawn as the stop glyph every chat
+ * surface uses, while anything else is a provider-worded action drawn by its
+ * label. The adapter says which its control is, because only it knows what the
+ * endpoint behind the control means.
+ */
+export const SESSION_CONTROL_KIND = {
+  ACTION: "action",
+  STOP: "stop",
+} as const;
+
+export type SessionControlKind = (typeof SESSION_CONTROL_KIND)[keyof typeof SESSION_CONTROL_KIND];
+
 /** A provider-defined action that has been explicitly exposed for one session. */
 export interface SessionControl {
   id: string;
   label: string;
+  /** Absent means a plain action, drawn by its label. */
+  kind?: SessionControlKind;
+  /**
+   * The provider-owned identifier of the thing this control acts on, when that
+   * is narrower than the session — the run a stop stops, say. It rides the
+   * advertisement so it is replaced with every observation and can never
+   * outlive the snapshot that promised it, the way state an adapter kept on
+   * the side could.
+   */
+  target?: string;
 }
 
 /** A stable provider identity and the label that can be shown in the UI. */
@@ -167,6 +191,29 @@ export interface ProviderSessionObservation {
    * value is nothing at all.
    */
   transcript?: readonly SessionTranscriptEntry[];
+  /**
+   * Set only by an adapter whose provider documents taking a message for this
+   * session in its current state, through the provider's own API. Absent means
+   * no: a session that cannot be messaged is reported as such rather than
+   * offered a control that would have to be improvised.
+   */
+  canReceiveMessage?: boolean;
+  /**
+   * The kinds of agent this session's provider documents starting alongside it
+   * — in the same workspace — named exactly as the provider's creation
+   * endpoint takes them. Absent means none: only an adapter whose provider
+   * documents such an endpoint lists anything, and an ask can only name an
+   * agent from this list.
+   */
+  spawnableAgents?: readonly string[];
+  /**
+   * The provider-owned identifier of the place a new agent lands — the
+   * workspace around this session — when that is narrower than the session
+   * itself. Like a control's `target`, it rides the advertisement so it is
+   * replaced with every observation and can never outlive the snapshot that
+   * promised it, the way state an adapter kept on the side could.
+   */
+  spawnTarget?: string;
 }
 
 /**
@@ -182,12 +229,22 @@ export interface NormalizedSession extends SessionIdentity {
   summary?: string;
   detail: SessionDetail;
   controls: readonly SessionControl[];
+  /** Whether this session's provider will take a message for it right now. */
+  canReceiveMessage: boolean;
+  /** The agents that can be started alongside this session, or none. */
+  spawnableAgents: readonly string[];
+  /** Where a started agent lands, when narrower than the session itself. */
+  spawnTarget?: string;
   attention: AttentionDecision;
   /** Empty unless the user turned transcripts on for the observing adapter. */
   transcript: readonly SessionTranscriptEntry[];
 }
 
 export const maximumSessionTitleLength = 160;
+/** An agent kind is a short identifier, never a sentence. */
+export const maximumSpawnableAgentLength = 40;
+/** How many kinds of agent one session may offer to start. */
+export const maximumSpawnableAgents = 8;
 export const maximumSessionSummaryLength = 500;
 /** One line of context beside a title, not a paragraph. */
 export const maximumSessionDetailLength = 120;
@@ -201,6 +258,20 @@ export const maximumSessionLinkLength = 300;
  */
 export const maximumTranscriptEntries = 12;
 export const maximumTranscriptEntryLength = 400;
+/** A reply typed into a row, not a document pasted through one. */
+export const maximumSessionMessageLength = 4_000;
+
+/**
+ * The text of a message on its way to a session, or nothing. Unlike an observed
+ * field this one is refused rather than cut when it runs long: a truncated
+ * message says something its author did not.
+ */
+export function sessionMessageText(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim();
+  if (!normalized || normalized.length > maximumSessionMessageLength) return undefined;
+  return normalized;
+}
 
 function requiredText(value: string, field: string): string {
   const normalized = value.trim();
@@ -257,9 +328,17 @@ function normalizeControls(
     const id = requiredText(control.id, "control id");
     if (ids.has(id)) throw new Error(`Duplicate session control: ${id}`);
     ids.add(id);
+    // A kind this build does not know is dropped rather than passed through:
+    // the control still works, drawn as a plain action by its label.
+    const kind = Object.values(SESSION_CONTROL_KIND).find(
+      (candidate) => candidate === control.kind,
+    );
+    const target = boundedText(control.target, maximumSessionDetailLength);
     return {
       id,
       label: boundedText(control.label, maximumSessionTitleLength) ?? id,
+      ...(kind ? { kind } : {}),
+      ...(target ? { target } : {}),
     };
   });
 }
@@ -308,6 +387,23 @@ export function normalizeSessionTranscript(
   return entries;
 }
 
+/**
+ * Bounds and deduplicates the agents a session offers to start beside it. An
+ * entry outside its bound is dropped rather than cut: a truncated agent kind
+ * names a different agent, and this list is what a creation ask is held to.
+ */
+function normalizeSpawnableAgents(agents: readonly string[] | undefined): readonly string[] {
+  if (!agents) return [];
+  const unique = new Set<string>();
+  for (const agent of agents) {
+    const normalized = agent.trim();
+    if (!normalized || normalized.length > maximumSpawnableAgentLength) continue;
+    unique.add(normalized);
+    if (unique.size >= maximumSpawnableAgents) break;
+  }
+  return [...unique];
+}
+
 /** Normalizes the two-part identity used to locate a session in the registry. */
 export function normalizeSessionIdentity(identity: SessionIdentity): SessionIdentity {
   return {
@@ -353,6 +449,7 @@ export function normalizeSession(
   });
   const observedAt = timestamp(observation.observedAt, "observedAt");
   const summary = boundedText(observation.summary, maximumSessionSummaryLength);
+  const spawnTarget = boundedText(observation.spawnTarget, maximumSessionDetailLength);
 
   return {
     providerId,
@@ -368,6 +465,11 @@ export function normalizeSession(
     ...(summary ? { summary } : {}),
     detail: normalizeSessionDetail(observation.detail),
     controls: normalizeControls(observation.controls),
+    // Anything but an explicit yes is a no, so an adapter that has not thought
+    // about messaging reports a session that cannot be messaged.
+    canReceiveMessage: observation.canReceiveMessage === true,
+    spawnableAgents: normalizeSpawnableAgents(observation.spawnableAgents),
+    ...(spawnTarget ? { spawnTarget } : {}),
     attention: normalizeAttention(attention),
     transcript: normalizeSessionTranscript(observation.transcript),
   };

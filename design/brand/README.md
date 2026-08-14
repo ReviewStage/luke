@@ -16,19 +16,26 @@ with `rsvg-convert`):
 
 ```sh
 cd design/brand
-for s in 16 32 64 128 256 512 1024; do
-  rsvg-convert -w $s -h $s icon/luke-icon.svg -o icon/luke-icon-$s.png
+for m in light dark; do
+  for s in 16 32 64 128 256 512 1024; do
+    rsvg-convert -w $s -h $s icon/luke-icon-$m.svg -o icon/luke-icon-$m-$s.png
+  done
 done
 rsvg-convert -w 18 -h 18 menubar/luke-menubar-template.svg -o menubar/lukeTemplate.png
 rsvg-convert -w 36 -h 36 menubar/luke-menubar-template.svg -o menubar/lukeTemplate@2x.png
+rsvg-convert -w 660 -h 400 dmg/luke-dmg-background.svg -o dmg/luke-dmg-background.png
+rsvg-convert -w 1320 -h 800 dmg/luke-dmg-background.svg -o dmg/luke-dmg-background@2x.png
 ```
 
 ## In the app
 
 `menubar/lukeTemplate{,@2x}.png` is copied into the desktop app's `dist/menubar/`
-by `apps/desktop/scripts/build.mjs` and handed to `Tray` — the one piece of
-artwork the app loads from a file, because macOS status items take a
-`NativeImage` rather than markup.
+by `apps/desktop/scripts/build.mjs` and handed to `Tray`, and
+`icon/luke-icon-{light,dark}-512.png` are copied into `dist/icon/` and handed to
+`app.dock.setIcon` — the two pieces of artwork the app loads from files, because
+macOS status items and the Dock take a `NativeImage` rather than markup. The
+menu-bar template is recolored by the system; the Dock tile is not, so the app
+swaps it between the two mode icons as the theme changes.
 
 The notch panel draws the face itself rather than loading these SVGs, because it
 needs two things a baked asset cannot give it: `currentColor`, so one drawing
@@ -52,8 +59,10 @@ any of them has drifted.
 
 `-dark` assets are light ink (`#f5f5f7`) for dark UIs; `-light` assets are near-black
 (`#1d1d1f`) for light UIs. The brand accent, when one is needed, is Apple system blue
-`#0A84FF`. The app icon uses a space-black tile with a white face and works on either
-mode.
+`#0A84FF`. The app icon follows the same naming: a space-black tile with a white face
+for dark mode, a porcelain tile with a near-black face for light. The packaged `.icns`
+is cut from the dark set, which reads on either desktop; the running app swaps the
+Dock image between the two.
 
 ## Sizing
 
@@ -70,8 +79,9 @@ keep the full 240×240 canvas — they need headroom to move.
 | `luke-mark-{light,dark}.svg` | The static face mark |
 | `luke-wordmark-{light,dark}.svg` | Face-first caps LUKE wordmark |
 | `luke-wordmark-talking-{light,dark}.svg` | Animated hero: the face talks mid-word |
-| `icon/luke-icon.svg` + `luke-icon-{16…1024}.png` | App icon (squircle tile) |
-| `menubar/luke-menubar-template.svg` + `lukeTemplate{,@2x}.png` | macOS menu-bar template image (pure black + alpha; macOS recolors it). Packaging builds `Luke.icns` from the icon PNGs automatically in `apps/desktop/scripts/package.mjs`; no `.icns` is committed |
+| `icon/luke-icon-{light,dark}.svg` + `luke-icon-{light,dark}-{16…1024}.png` | App icon (squircle tile), per mode |
+| `menubar/luke-menubar-template.svg` + `lukeTemplate{,@2x}.png` | macOS menu-bar template image (pure black + alpha; macOS recolors it). Packaging builds `Luke.icns` from the dark icon PNGs automatically in `apps/desktop/scripts/package.mjs`; no `.icns` is committed |
+| `dmg/luke-dmg-background.svg` + `luke-dmg-background{,@2x}.png` | Neutral installer background with a branded drag-and-drop arrow |
 | `motion/luke-<state>-{light,dark}.svg` | Animated state marks (below) |
 
 ## Motion states

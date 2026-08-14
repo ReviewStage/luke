@@ -1,0 +1,73 @@
+/* The speech meters, and the key that starts them. */
+
+/* Two voices, two colours, both named where the face reads them from too. */
+.waveform[data-voice="developer"] .waveform-bar {
+  background: var(--voice-developer);
+}
+
+.waveform[data-voice="luke"] .waveform-bar {
+  background: var(--voice-luke);
+}
+
+/* The chip, the buttons that move it, and the line that explains them: one
+   right-aligned column, so the rule for what a chord may be appears directly
+   under the controls it governs rather than across the whole row. */
+.shortcut-controls {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  /* The size a chord reads at in a row of settings, kept here rather than on
+     the caps: what stands where the keys would be is sized by the same two
+     numbers, so the row keeps one height whichever it is drawing. */
+  --keycap-size: 20px;
+  --keycap-text: 11px;
+}
+
+.shortcut-controls .error-message {
+  text-align: right;
+}
+
+/* A statement, not a control: the pencil beside it is what moves the key. The
+   caps are the shared ones, lit the way a key the user actually has should be
+   — the composer's hint teaches a reach, this one reports a setting. */
+.shortcut-chord .keycap {
+  color: var(--text-primary);
+}
+
+/* What is said where the keys would be, when there are none to draw: the chord
+   being typed, or none having registered. Shaped like a lone cap so the row
+   keeps its height, and lettered rather than keyed because neither is
+   something to press. */
+.shortcut-state {
+  display: inline-flex;
+  height: var(--keycap-size);
+  align-items: center;
+  padding: 0 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--text-tertiary);
+  font-size: var(--keycap-text);
+  white-space: nowrap;
+  transition:
+    border-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+/* Recording brightens the words rather than swapping them for a field: the
+   edge lighting up is the whole state, and what it says is what to type. */
+.shortcut-state[data-recording="true"] {
+  border-color: rgba(255, 255, 255, 0.35);
+  color: var(--text-secondary);
+}
+
+/* The error line's shape without its alarm: what a chord may be, told while
+   one is being typed rather than after a keystroke has been refused. */
+.shortcut-hint {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  text-align: right;
+}

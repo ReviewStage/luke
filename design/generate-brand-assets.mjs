@@ -24,6 +24,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { DMG_WINDOW } from "./dmg-window.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = join(HERE, "brand");
@@ -32,8 +33,12 @@ const APP_RENDERER = join(HERE, "..", "apps", "desktop", "src", "renderer");
 // ---------- Palette ----------
 // Inks are named for the UI mode they serve: the dark-mode asset is light.
 const INKS = { light: "#1d1d1f", dark: "#f5f5f7" };
-const TILE = ["#48484a", "#1c1c1e"]; // space-black gradient, mode-independent
-const TILE_INK = "#f8fafc";
+// Icon tiles follow the same naming: the dark-mode tile is space black under a
+// light face, the light-mode tile is porcelain under a dark one.
+const TILES = {
+  light: { gradient: ["#fbfbfd", "#d8d8dd"], ink: "#1d1d1f" },
+  dark: { gradient: ["#48484a", "#1c1c1e"], ink: "#f8fafc" },
+};
 
 // ---------- Artwork parameters ----------
 // The face lives on a 240x240 canvas: stroke weight, nose corner radius,
@@ -100,22 +105,49 @@ const LID_WIDTH = fmt(Math.max(4.5, FACE.eyeR * 0.5));
 const lid = (cx) =>
   `<path d="${lidD(cx)}" stroke="currentColor" stroke-width="${LID_WIDTH}" stroke-linecap="round" fill="none"/>`;
 
-// The z's that drift off a sleeping head: where each starts, how big, and how
-// far into the shared three-second loop it is when the loop begins.
+// The z's that drift off a sleeping head: where each starts, how big, and where
+// in the shared three-second loop its rise begins. The stagger is a keyframe
+// phase rather than a negative delay: a paused animation with a negative delay
+// holds at its resolved current time, not its first frame, so a capture run or
+// reduced motion stopping the loop at time zero would freeze two z's mid-air.
+// With every glyph's own loop starting invisible, paused means unseen.
 const SLEEP_Z = [
-  { x: 176, y: 62, size: 8, delay: 0 },
-  { x: 190, y: 46, size: 11, delay: -1 },
-  { x: 166, y: 44, size: 6, delay: -2 },
+  { x: 176, y: 62, size: 8, start: 0 },
+  { x: 190, y: 46, size: 11, start: 0.4 },
+  { x: 166, y: 44, size: 6, start: 0.2 },
 ];
 const SLEEP_Z_DURATION = 3;
+// How much of the loop a z spends rising; the rest of it is spent unseen.
+const SLEEP_Z_RISE = 0.6;
 const SLEEP_Z_WIDTH = 3.5;
 const SLEEP_Z_DRIFT = [6, -16];
 const zGlyphD = (size) => `M 0 0 H ${size} L 0 ${size} H ${size}`;
-const zGlyph = ({ x, y, size, delay }) =>
-  `<g opacity="0" transform="translate(${x} ${y})">` +
-  `<animate attributeName="opacity" values="0;0.85;0" dur="${SLEEP_Z_DURATION}s" begin="${delay}s" repeatCount="indefinite"/>` +
-  `<animateTransform attributeName="transform" type="translate" values="${x} ${y};${x + SLEEP_Z_DRIFT[0]} ${y + SLEEP_Z_DRIFT[1]}" dur="${SLEEP_Z_DURATION}s" begin="${delay}s" repeatCount="indefinite"/>` +
-  `<path d="${zGlyphD(size)}" stroke="currentColor" stroke-width="${SLEEP_Z_WIDTH}" stroke-linecap="round" stroke-linejoin="round" fill="none"/></g>`;
+/** A z's rise as keyframe times, holding its resting value outside the window. */
+const zTrack = (start, times, values) => {
+  const shifted = times.map((time, index) => [+(start + time).toFixed(4), values[index]]);
+  const framed = [[0, values[0]], ...shifted, [1, values[values.length - 1]]];
+  // A window already touching either edge needs no frame drawn onto it.
+  const kept = framed.filter(([time], index) => index === 0 || time > framed[index - 1][0]);
+  return {
+    times: kept.map(([time]) => time),
+    values: kept.map(([, value]) => value),
+  };
+};
+const zGlyph = ({ x, y, size, start }) => {
+  const rise = SLEEP_Z_RISE;
+  const opacity = zTrack(start, [0, rise / 2, rise], ["0", "0.85", "0"]);
+  const travel = zTrack(
+    start,
+    [0, rise],
+    [`${x} ${y}`, `${x + SLEEP_Z_DRIFT[0]} ${y + SLEEP_Z_DRIFT[1]}`],
+  );
+  return (
+    `<g opacity="0" transform="translate(${x} ${y})">` +
+    `<animate attributeName="opacity" values="${opacity.values.join(";")}" keyTimes="${opacity.times.join(";")}" dur="${SLEEP_Z_DURATION}s" repeatCount="indefinite"/>` +
+    `<animateTransform attributeName="transform" type="translate" values="${travel.values.join(";")}" keyTimes="${travel.times.join(";")}" dur="${SLEEP_Z_DURATION}s" repeatCount="indefinite"/>` +
+    `<path d="${zGlyphD(size)}" stroke="currentColor" stroke-width="${SLEEP_Z_WIDTH}" stroke-linecap="round" stroke-linejoin="round" fill="none"/></g>`
+  );
+};
 
 // Composes the face. opts: { eyes, extra } override the defaults.
 function face(opts = {}) {
@@ -145,7 +177,13 @@ const MOTIONS = {
   talking: {
     moment: "speaking / narrating (head bob)",
     layers: [
-      { type: "rotate", pivot: [120, 150], values: [-4, 4, -4], dur: 0.65 },
+      {
+        type: "rotate",
+        pivot: [120, 150],
+        values: [0, -4, 4, 0],
+        keyTimes: [0, 0.25, 0.75, 1],
+        dur: 0.65,
+      },
       {
         type: "translate",
         values: [
@@ -356,20 +394,26 @@ const MOTIONS = {
       },
     ],
   },
-  // A slow continuous rock from the base — quiet work, made visible.
+  // One slow rock from the base, out to each side and back — quiet work, made
+  // visible. It begins and ends upright, so the app can spend it as a gesture
+  // between stretches of stillness rather than rocking for as long as work runs.
   monitoring: {
     moment: "humming along (slow sway)",
-    layers: [{ type: "rotate", pivot: [120, 196], values: [-3.5, 3.5, -3.5], dur: 3.2 }],
+    layers: [{ type: "rotate", pivot: [120, 196], values: [0, 3.5, 0, -3.5, 0], dur: 3.6 }],
   },
-  // Leans in from the side, settles, then eases back — an entrance.
+  // Leans in from the side and settles — an entrance. It ends at the resting
+  // pose and stays there: a play that ended leaning back out would snap to the
+  // drawn rest the instant the animation dropped. It alone begins away from
+  // rest, because it is made for the moment the face is first drawn, where
+  // there is no earlier pose to snap from.
   appear: {
     moment: "attaching (peek-slide in)",
     layers: [
       {
         type: "rotate",
         pivot: [76, 190],
-        values: [8, 8, 0, 0, 8, 8],
-        keyTimes: [0, 0.15, 0.3, 0.75, 0.9, 1],
+        values: [8, 8, 0, 0],
+        keyTimes: [0, 0.15, 0.3, 1],
         dur: 4,
       },
       {
@@ -379,45 +423,54 @@ const MOTIONS = {
           [-16, 0],
           [0, 0],
           [0, 0],
-          [-16, 0],
-          [-16, 0],
         ],
-        keyTimes: [0, 0.15, 0.3, 0.75, 0.9, 1],
+        keyTimes: [0, 0.15, 0.3, 1],
         dur: 4,
       },
     ],
   },
-  // From a slight slouch to bolt upright with a touch of overshoot.
+  // Settles into a slouch, bolts upright with a touch of overshoot, and comes
+  // back to rest. The slouch is inside the gesture rather than at either end of
+  // it: a motion that begins away from rest starts by snapping there.
   attention: {
     moment: "attention caught (perk up)",
     layers: [
       {
         type: "rotate",
         pivot: [120, 150],
-        values: [6, 6, -2.5, 0.8, 0, 6],
-        keyTimes: [0, 0.35, 0.45, 0.55, 0.75, 1],
+        values: [0, 6, 6, -2.5, 0.8, 0, 0],
+        keyTimes: [0, 0.2, 0.42, 0.5, 0.58, 0.75, 1],
         dur: 4.5,
       },
       {
         type: "translate",
         values: [
+          [0, 0],
           [0, 3],
           [0, 3],
           [0, -1.5],
           [0, 0],
           [0, 0],
-          [0, 3],
+          [0, 0],
         ],
-        keyTimes: [0, 0.35, 0.45, 0.55, 0.75, 1],
+        keyTimes: [0, 0.2, 0.42, 0.5, 0.58, 0.75, 1],
         dur: 4.5,
       },
     ],
   },
-  // A slow vertical drift with a lazy rotation on a different period.
+  // A slow vertical drift with a lazy rotation, out of rest and back into it.
+  // Both layers share a period: the app plays a motion once and returns the face
+  // to rest, so a layer on its own period would be cut wherever it had got to.
   floating: {
     moment: "hovering idle",
     layers: [
-      { type: "rotate", pivot: [120, 124], values: [-2, 2, -2], dur: 5.76 },
+      {
+        type: "rotate",
+        pivot: [120, 124],
+        values: [0, -2, 2, 0],
+        keyTimes: [0, 0.25, 0.75, 1],
+        dur: 4.8,
+      },
       {
         type: "translate",
         values: [
@@ -425,7 +478,7 @@ const MOTIONS = {
           [0, -8],
           [0, 0],
         ],
-        dur: 4.4,
+        dur: 4.8,
       },
     ],
   },
@@ -445,6 +498,42 @@ const MOTIONS = {
         ],
         keyTimes: [0, 0.35, 0.45, 0.65, 0.78, 1],
         dur: 5,
+      },
+    ],
+  },
+  // The hover showpiece: a little crouch, a banked dash off the edge, a beat
+  // out of sight, and a swoop back in from the other side that lands with a
+  // touch of overshoot. The teleport from one side to the other happens far
+  // above the frame, so the wing's clip never draws the face crossing back —
+  // it leaves to the right and returns from the upper left.
+  flyoff: {
+    moment: "hover flourish (fly off and swoop back)",
+    layers: [
+      {
+        type: "rotate",
+        pivot: [120, 124],
+        values: [0, -10, 22, 10, -14, -14, 5, 0, 0],
+        keyTimes: [0, 0.1, 0.26, 0.34, 0.4, 0.46, 0.62, 0.72, 1],
+        dur: 3,
+      },
+      {
+        type: "translate",
+        values: [
+          [0, 0],
+          [-16, 6],
+          [280, -90],
+          [280, -240],
+          [-340, -240],
+          [-340, -110],
+          [16, 8],
+          [0, 0],
+          [0, 0],
+        ],
+        keyTimes: [0, 0.1, 0.26, 0.34, 0.4, 0.46, 0.62, 0.72, 1],
+        // The dash accelerates away and the swoop brakes in; everything the
+        // frame cannot see keeps the default curve.
+        splines: [EASE, "0.5 0 0.9 0.5", EASE, EASE, EASE, "0.1 0.5 0.3 1", EASE, EASE],
+        dur: 3,
       },
     ],
   },
@@ -647,21 +736,24 @@ function motionCss(name, motion) {
 }
 
 function faceMotionCss() {
-  const drift = cssKeyframes(
-    "luke-sleep-z",
-    [
-      { at: 0, declaration: "opacity: 0;\n    transform: translate(0, 0);" },
-      { at: 0.5, declaration: "opacity: 0.85;" },
-      {
-        at: 1,
-        declaration: `opacity: 0;\n    transform: translate(${SLEEP_Z_DRIFT[0]}px, ${SLEEP_Z_DRIFT[1]}px);`,
-      },
-    ],
-    [],
-  );
+  const resting = "opacity: 0;\n    transform: translate(0, 0);";
+  const drifted = `opacity: 0;\n    transform: translate(${SLEEP_Z_DRIFT[0]}px, ${SLEEP_Z_DRIFT[1]}px);`;
+  const zBlocks = SLEEP_Z.map((z, index) => {
+    const end = +(z.start + SLEEP_Z_RISE).toFixed(4);
+    const steps = [
+      { at: 0, declaration: resting },
+      ...(z.start > 0 ? [{ at: z.start, declaration: resting }] : []),
+      { at: +(z.start + SLEEP_Z_RISE / 2).toFixed(4), declaration: "opacity: 0.85;" },
+      { at: end, declaration: drifted },
+      ...(end < 1 ? [{ at: 1, declaration: drifted }] : []),
+    ];
+    return cssKeyframes(`luke-sleep-z-${index + 1}`, steps, []);
+  });
   const zRules = [
-    `.luke-face-z {\n  animation-name: luke-sleep-z;\n  animation-duration: ${SLEEP_Z_DURATION}s;\n}`,
-    ...SLEEP_Z.map((z, index) => `.luke-face-z-${index + 1} {\n  animation-delay: ${z.delay}s;\n}`),
+    `.luke-face-z {\n  animation-duration: ${SLEEP_Z_DURATION}s;\n}`,
+    ...SLEEP_Z.map(
+      (z, index) => `.luke-face-z-${index + 1} {\n  animation-name: luke-sleep-z-${index + 1};\n}`,
+    ),
   ];
   return [
     "/* Generated by design/generate-brand-assets.mjs. Do not edit by hand: change",
@@ -673,11 +765,12 @@ function faceMotionCss() {
     "",
     MOTION_NAMES.map((name) => motionCss(name, MOTIONS[name])).join("\n\n"),
     "",
-    "/* The z's drift on their own loop, offset from each other so they never rise",
-    "   as a group. Held at its first frame the loop is invisible, which is what a",
-    "   capture run and reduced motion both want. */",
+    "/* The z's share one loop, each rising through its own window of it so they",
+    "   never rise as a group. The stagger is cut into the keyframes rather than",
+    "   carried as a delay: every glyph's first frame is invisible, so a paused",
+    "   loop — a capture run, reduced motion — shows no z at all. */",
     "",
-    [drift, ...zRules].join("\n\n"),
+    [...zBlocks, ...zRules].join("\n\n"),
     "",
   ].join("\n");
 }
@@ -876,25 +969,44 @@ function emitModes(baseName, svgWithCurrentColor, title) {
 emitModes("luke-mark", tightMarkSvg(face()), "Luke");
 emitModes("luke-wordmark", wordSvg(wordmark()), "LUKE");
 
-// App icon: space-black tile with the white face; works on both modes. The
-// glyph spans ~58% of the tile width, centered — typical macOS glyph-in-tile
-// proportion, measured from the artwork's bounding box.
+// App icon, one per mode: the same squircle tile under the face, space black
+// for dark mode and porcelain for light. The packaged `.icns` is cut from the
+// dark set — one bundle icon has to serve both modes and space black does —
+// and the running app swaps the Dock image between the two as the theme
+// changes. The glyph spans ~58% of the tile width, centered — typical macOS
+// glyph-in-tile proportion, measured from the artwork's bounding box.
 const bbox = faceBBox();
 const glyphScale = (224 * 0.58) / bbox.w;
 const gx = 120 - bbox.cx * glyphScale;
 const gy = 120 - bbox.cy * glyphScale;
-const icon =
-  `${svgOpen(240, 240)}<defs><linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">` +
-  `<stop offset="0" stop-color="${TILE[0]}"/><stop offset="1" stop-color="${TILE[1]}"/></linearGradient></defs>` +
-  `<rect x="8" y="8" width="224" height="224" rx="52" fill="url(#tile)"/>` +
-  `<g color="${TILE_INK}" transform="translate(${fmt(gx)} ${fmt(gy)}) scale(${fmt(glyphScale)})">${face()}</g></svg>`;
-emit("icon/luke-icon.svg", icon.replaceAll("currentColor", TILE_INK), "Luke app icon");
+for (const [mode, tile] of Object.entries(TILES)) {
+  const icon =
+    `${svgOpen(240, 240)}<defs><linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">` +
+    `<stop offset="0" stop-color="${tile.gradient[0]}"/><stop offset="1" stop-color="${tile.gradient[1]}"/></linearGradient></defs>` +
+    `<rect x="8" y="8" width="224" height="224" rx="52" fill="url(#tile)"/>` +
+    `<g color="${tile.ink}" transform="translate(${fmt(gx)} ${fmt(gy)}) scale(${fmt(glyphScale)})">${face()}</g></svg>`;
+  emit(`icon/luke-icon-${mode}.svg`, icon.replaceAll("currentColor", tile.ink), "Luke app icon");
+}
 
 // Menu-bar template source: pure black, macOS recolors it. Square canvas
 // with the artwork filling ~90% of it, per status-item conventions.
 const side = Math.max(bbox.w, bbox.h) * 1.1;
 const menubar = `${svgOpenAt(bbox.cx - side / 2, bbox.cy - side / 2, side, side)}${face()}</svg>`;
 emit("menubar/luke-menubar-template.svg", menubar.replaceAll("currentColor", "#000000"), "Luke");
+
+// DMG background: a quiet field with the same rounded monoline language as the
+// face. Shared window geometry keeps the arrow centered between the two icons.
+const dmgBackground = DMG_WINDOW.BACKGROUND.PNG;
+const arrowY = DMG_WINDOW.POSITIONS.APP.Y;
+const arrowStart = DMG_WINDOW.POSITIONS.APP.X + DMG_WINDOW.ICON_SIZE;
+const arrowEnd = DMG_WINDOW.POSITIONS.APPLICATIONS.X - DMG_WINDOW.ICON_SIZE;
+const arrowHead = 28;
+const dmg =
+  `${svgOpen(dmgBackground.WIDTH, dmgBackground.HEIGHT)}` +
+  `<rect width="${dmgBackground.WIDTH}" height="${dmgBackground.HEIGHT}" fill="#f5f5f7"/>` +
+  `<path d="M ${arrowStart} ${arrowY} H ${arrowEnd} M ${arrowEnd - arrowHead} ${arrowY - arrowHead} L ${arrowEnd} ${arrowY} L ${arrowEnd - arrowHead} ${arrowY + arrowHead}" ` +
+  `fill="none" stroke="#6e6e73" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+emit("dmg/luke-dmg-background.svg", dmg, "Drag Luke to Applications");
 
 // Animated state marks, per mode.
 for (const name of MOTION_NAMES) {

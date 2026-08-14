@@ -11,6 +11,7 @@ import {
   resolveSigningMode,
   SIGNING_MODE,
 } from "./package-config.mjs";
+import { NATIVE_HELPERS } from "./package-layout.mjs";
 
 if (process.platform !== "darwin") {
   throw new Error("Packaging Luke requires macOS");
@@ -20,7 +21,9 @@ const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(scriptDirectory, "..");
 const repoRoot = path.resolve(appRoot, "../..");
 const outputRoot = path.join(appRoot, "out");
-const helperPath = path.join(appRoot, ".build", "native", "mac-screen-geometry");
+const helperPaths = NATIVE_HELPERS.map((helper) =>
+  path.join(appRoot, ".build", "native", helper.binary),
+);
 const iconsetPath = path.join(appRoot, ".build", "luke.iconset");
 const iconPath = path.join(appRoot, ".build", "Luke.icns");
 const licensePath = path.join(appRoot, ".build", LICENSE_RESOURCE_NAME);
@@ -28,8 +31,12 @@ const entitlementsPath = path.join(appRoot, "native", "macos", "entitlements.pli
 const desktopPackage = JSON.parse(fs.readFileSync(path.join(appRoot, "package.json"), "utf8"));
 const signing = resolveSigningMode(process.env);
 
-if (!fs.existsSync(helperPath)) {
-  throw new Error(`macOS screen-geometry helper is missing: ${helperPath}`);
+for (const helperPath of helperPaths) {
+  // A helper missing here is a feature missing at runtime with no other sign of
+  // it, so the package fails rather than shipping without one.
+  if (!fs.existsSync(helperPath)) {
+    throw new Error(`macOS helper is missing: ${helperPath}`);
+  }
 }
 
 fs.mkdirSync(path.dirname(licensePath), { recursive: true });
@@ -52,7 +59,7 @@ const appPaths = await packager(
   createPackagerOptions({
     appRoot,
     outputRoot,
-    helperPath,
+    helperPaths,
     iconPath,
     licensePath,
     entitlementsPath,

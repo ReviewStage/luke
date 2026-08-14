@@ -14,6 +14,7 @@ import {
   arrangeSessions,
   DEFAULT_SESSION_VIEW,
   displaySessions,
+  observedAgoLabel,
   SESSION_FILTER,
   SESSION_SORT,
   sessionTally,
@@ -118,6 +119,71 @@ test("a row is a control only where its provider gave an address", () => {
   );
 });
 
+// The sentence under the title is the one place the row states what is
+// happening — there is no chip at the other end — so a provider that reported
+// nothing must still leave the row reading as Working or Complete.
+test("the line under the title says the state when the provider said nothing", () => {
+  const [bare] = displaySessions(bootstrap(false), [
+    liveSession(CLAUDE_PROVIDER, "claude-quiet", SESSION_STATUS.WORKING),
+  ]);
+  assert.equal(bare?.detail, "Working");
+  assert.equal(bare?.detail, bare?.label);
+
+  const [spoken] = displaySessions(bootstrap(false), [
+    normalizeSession(CODEX_PROVIDER, {
+      providerSessionId: "codex-busy",
+      title: "Session codex-busy",
+      status: SESSION_STATUS.WORKING,
+      observedAt: 1_000,
+      detail: { activity: "Running tests" },
+    }),
+  ]);
+  assert.equal(spoken?.detail, "Running tests");
+
+  // The fixture's silent row proves the same fallback in the visual evidence.
+  const conductor = FIXTURE_SESSIONS.find((session) => session.id === "conductor-workspace");
+  assert.equal(conductor?.detail, "Complete");
+});
+
+test("a row carries the identifiers that tell it from its neighbours", () => {
+  const [live] = displaySessions(bootstrap(false), [
+    normalizeSession(CODEX_PROVIDER, {
+      providerSessionId: "codex-checkout",
+      title: "Session codex-checkout",
+      status: SESSION_STATUS.WORKING,
+      observedAt: 1_000,
+      detail: { repository: "luke", branch: "dean/session-rows", model: "gpt-5.6-luna" },
+    }),
+  ]);
+  assert.equal(live?.repository, "luke");
+  assert.equal(live?.branch, "dean/session-rows");
+  assert.equal(live?.model, "gpt-5.6-luna");
+
+  // The fixture keeps one row with a repository and no branch, so the surface's
+  // fallback line stays visible in the evidence.
+  const devin = FIXTURE_SESSIONS.find((session) => session.id === "devin-session");
+  assert.equal(devin?.branch, undefined);
+  assert.equal(devin?.repository, "sidecar-native");
+});
+
+// The label answers "is this thing alive", so it reports the coarsest unit
+// that has begun rather than telling time. A timestamp ahead of the clock is
+// clock skew, not the future, and reads as Now.
+test("how long ago a session was seen is worded by the unit that has begun", () => {
+  const minute = 60_000;
+  const now = 100 * 24 * 60 * minute;
+
+  assert.equal(observedAgoLabel(now, now), "Now");
+  assert.equal(observedAgoLabel(now - 59_000, now), "Now");
+  assert.equal(observedAgoLabel(now + minute, now), "Now");
+  assert.equal(observedAgoLabel(now - minute, now), "1m");
+  assert.equal(observedAgoLabel(now - 59 * minute, now), "59m");
+  assert.equal(observedAgoLabel(now - 60 * minute, now), "1h");
+  assert.equal(observedAgoLabel(now - 23 * 60 * minute, now), "23h");
+  assert.equal(observedAgoLabel(now - 24 * 60 * minute, now), "1d");
+  assert.equal(observedAgoLabel(now - 3 * 24 * 60 * minute, now), "3d");
+});
+
 test("a speaking disposition needs a person even while the session works", () => {
   const speaking = normalizeSession(
     CLAUDE_PROVIDER,
@@ -163,6 +229,29 @@ test("the tally counts per state and per provider", () => {
     { providerId: PROVIDER_ID.CONDUCTOR, provider: "Conductor", total: 1, attention: 0 },
     { providerId: PROVIDER_ID.DEVIN, provider: "Devin", total: 1, attention: 0 },
   ]);
+});
+
+// The wing's marks and the rows are two drawings of the same order, so
+// choosing the other sort re-seats the providers with the sessions: a mark
+// that stayed put while the rows re-sorted would name the top row's agent
+// wrong. The counts are counts, and no ordering may change them.
+test("the providers re-seat with the rows when the other sort is chosen", () => {
+  const recent = sessionTally(FIXTURE_SESSIONS, SESSION_SORT.RECENCY);
+
+  assert.deepEqual(
+    recent.providers.map((provider) => provider.providerId),
+    [
+      PROVIDER_ID.CONDUCTOR,
+      PROVIDER_ID.CODEX,
+      PROVIDER_ID.CLAUDE_CODE,
+      PROVIDER_ID.CURSOR,
+      PROVIDER_ID.DEVIN,
+    ],
+  );
+  assert.deepEqual(
+    { ...recent, providers: undefined },
+    { ...sessionTally(FIXTURE_SESSIONS), providers: undefined },
+  );
 });
 
 test("the badge state follows the most urgent session", () => {
@@ -313,6 +402,46 @@ test("a filter whose last session has left falls back to showing everything", ()
   }
 });
 
+// A spoken ask can narrow to the only agent there is, which no chip offers —
+// chips appear only once there is a second value to tell apart. The narrowing
+// must survive anyway: it hides nothing while it is the only agent, and the
+// moment another appears the list stays on what the developer asked to watch
+// rather than widening out from under them.
+test("a filter that still matches survives even when no chip offers it", () => {
+  const codexOnly = displaySessions(bootstrap(false), [
+    liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.WORKING),
+    liveSession(CODEX_PROVIDER, "codex-2", SESSION_STATUS.COMPLETE),
+  ]);
+  const narrowed = arrangeSessions(codexOnly, {
+    ...DEFAULT_SESSION_VIEW,
+    filter: PROVIDER_ID.CODEX,
+  });
+
+  assert.equal(narrowed.filter, PROVIDER_ID.CODEX);
+  assert.equal(narrowed.sessions.length, 2);
+  // No second agent yet, so no chips are offered — the filter outlives them.
+  assert.deepEqual(
+    narrowed.options.map((option) => option.filter),
+    [SESSION_FILTER.ALL],
+  );
+
+  const withClaude = displaySessions(bootstrap(false), [
+    liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.WORKING),
+    liveSession(CODEX_PROVIDER, "codex-2", SESSION_STATUS.COMPLETE),
+    liveSession(CLAUDE_PROVIDER, "claude-1", SESSION_STATUS.WORKING),
+  ]);
+  const still = arrangeSessions(withClaude, {
+    ...DEFAULT_SESSION_VIEW,
+    filter: PROVIDER_ID.CODEX,
+  });
+
+  assert.equal(still.filter, PROVIDER_ID.CODEX);
+  assert.deepEqual(
+    still.sessions.map((session) => session.providerId),
+    [PROVIDER_ID.CODEX, PROVIDER_ID.CODEX],
+  );
+});
+
 // The panel stores the filter this returns rather than only drawing it, so a
 // filter that emptied is dropped instead of lying dormant behind an All that
 // only looks chosen. That write is safe exactly while arranging the result
@@ -389,4 +518,36 @@ test("sessions of one state are ordered by which moved most recently", () => {
     arrangeSessions(working, DEFAULT_SESSION_VIEW).sessions.map((session) => session.id),
     ["fresh", "stale"],
   );
+});
+
+test("a row offers writes only where its provider promised them", () => {
+  const quiet = liveSession(CLAUDE_PROVIDER, "local", SESSION_STATUS.WORKING);
+  const writable = normalizeSession(CODEX_PROVIDER, {
+    providerSessionId: "cloud",
+    title: "Session cloud",
+    status: SESSION_STATUS.WAITING,
+    observedAt: 1_000,
+    canReceiveMessage: true,
+    controls: [{ id: "approve-plan", label: "Approve the plan" }],
+  });
+
+  const rows = displaySessions(bootstrap(false), [quiet, writable]);
+  const byId = new Map(rows.map((row) => [row.id, row]));
+
+  assert.equal(byId.get("local")?.canMessage, false);
+  assert.deepEqual(byId.get("local")?.actions, []);
+  assert.equal(byId.get("cloud")?.canMessage, true);
+  assert.deepEqual(byId.get("cloud")?.actions, [{ id: "approve-plan", label: "Approve the plan" }]);
+  // The fixture draws the affordances so the evidence shows them, exactly
+  // where a live session would have them: the composer on the suspended Devin
+  // row, the stop on the working Cursor agent, and nothing anywhere else.
+  const fixtureById = new Map(FIXTURE_SESSIONS.map((row) => [row.id, row]));
+  assert.equal(fixtureById.get("devin-session")?.canMessage, true);
+  assert.deepEqual(fixtureById.get("cursor-agent")?.actions, [
+    { id: "cancel-run", label: "Stop this run", kind: "stop" },
+  ]);
+  for (const row of FIXTURE_SESSIONS) {
+    if (row.id === "devin-session") continue;
+    assert.equal(row.canMessage, false);
+  }
 });

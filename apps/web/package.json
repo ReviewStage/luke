@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "description": "Luke landing page",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "build": "vite build",
     "dev": "vite",

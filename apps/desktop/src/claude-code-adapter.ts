@@ -500,7 +500,13 @@ function observationFromSessionFile(
   now: number,
   activeSessionFreshnessMs: number,
 ): ProviderSessionObservation {
-  const observedAt = Math.max(candidate.mtimeMs, parsed.timestampMs ?? 0);
+  // The transcript's own clock, not the file's. Claude Code touches session
+  // files in bulk long after their conversations ended — appending bookkeeping
+  // records and bumping mtimes — so mtime says when something last handled the
+  // file, while the last timestamped record says when the session last moved.
+  // Trusting mtime made every touched session read as active just now. The
+  // file's date remains the fallback for a tail that carried no timestamp.
+  const observedAt = parsed.timestampMs ?? candidate.mtimeMs;
   const status = statusFromTail(parsed, observedAt, now, activeSessionFreshnessMs);
   return {
     providerSessionId: candidate.providerSessionId,
@@ -585,6 +591,10 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
         now,
         this.#activeSessionFreshnessMs,
       );
+      // The mtime check above is only a cheap gate on reading the file. The
+      // observation window is enforced here, against the transcript's clock:
+      // a touch must not carry a long-dead session back into the panel.
+      if (now - observation.observedAt > this.#maximumSessionAgeMs) continue;
       if (!observations.has(observation.providerSessionId)) {
         observations.set(observation.providerSessionId, observation);
       }

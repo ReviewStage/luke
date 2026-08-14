@@ -9,17 +9,22 @@
 
 @keyframes luke-talking-1 {
   0% {
+    transform: rotate(0deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  25% {
     transform: rotate(-4deg);
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
 
-  50% {
+  75% {
     transform: rotate(4deg);
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
 
   100% {
-    transform: rotate(-4deg);
+    transform: rotate(0deg);
   }
 }
 
@@ -605,24 +610,34 @@
 
 @keyframes luke-monitoring-1 {
   0% {
-    transform: rotate(-3.5deg);
+    transform: rotate(0deg);
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
 
-  50% {
+  25% {
     transform: rotate(3.5deg);
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
 
-  100% {
+  50% {
+    transform: rotate(0deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  75% {
     transform: rotate(-3.5deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  100% {
+    transform: rotate(0deg);
   }
 }
 
 .luke-face[data-motion="monitoring"] .luke-face-layer-1 {
   transform-origin: 120px 196px;
   animation-name: luke-monitoring-1;
-  animation-duration: 3.2s;
+  animation-duration: 3.6s;
 }
 
 /* appear — attaching (peek-slide in) */
@@ -643,18 +658,8 @@
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
 
-  75% {
-    transform: rotate(0deg);
-    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
-  }
-
-  90% {
-    transform: rotate(8deg);
-    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
-  }
-
   100% {
-    transform: rotate(8deg);
+    transform: rotate(0deg);
   }
 }
 
@@ -674,18 +679,8 @@
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
 
-  75% {
-    transform: translate(0px, 0px);
-    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
-  }
-
-  90% {
-    transform: translate(-16px, 0px);
-    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
-  }
-
   100% {
-    transform: translate(-16px, 0px);
+    transform: translate(0px, 0px);
   }
 }
 
@@ -704,21 +699,26 @@
 
 @keyframes luke-attention-1 {
   0% {
+    transform: rotate(0deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  20% {
     transform: rotate(6deg);
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
 
-  35% {
+  42% {
     transform: rotate(6deg);
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
 
-  45% {
+  50% {
     transform: rotate(-2.5deg);
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
 
-  55% {
+  58% {
     transform: rotate(0.8deg);
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
@@ -729,27 +729,32 @@
   }
 
   100% {
-    transform: rotate(6deg);
+    transform: rotate(0deg);
   }
 }
 
 @keyframes luke-attention-2 {
   0% {
+    transform: translate(0px, 0px);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  20% {
     transform: translate(0px, 3px);
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
 
-  35% {
+  42% {
     transform: translate(0px, 3px);
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
 
-  45% {
+  50% {
     transform: translate(0px, -1.5px);
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
 
-  55% {
+  58% {
     transform: translate(0px, 0px);
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
@@ -760,7 +765,7 @@
   }
 
   100% {
-    transform: translate(0px, 3px);
+    transform: translate(0px, 0px);
   }
 }
 
@@ -779,17 +784,22 @@
 
 @keyframes luke-floating-1 {
   0% {
+    transform: rotate(0deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  25% {
     transform: rotate(-2deg);
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
 
-  50% {
+  75% {
     transform: rotate(2deg);
     animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   }
 
   100% {
-    transform: rotate(-2deg);
+    transform: rotate(0deg);
   }
 }
 
@@ -812,12 +822,12 @@
 .luke-face[data-motion="floating"] .luke-face-layer-1 {
   transform-origin: 120px 124px;
   animation-name: luke-floating-1;
-  animation-duration: 5.76s;
+  animation-duration: 4.8s;
 }
 
 .luke-face[data-motion="floating"] .luke-face-layer-2 {
   animation-name: luke-floating-2;
-  animation-duration: 4.4s;
+  animation-duration: 4.8s;
 }
 
 /* hiding — minimized (peekaboo duck) */
@@ -856,6 +866,111 @@
 .luke-face[data-motion="hiding"] .luke-face-layer-1 {
   animation-name: luke-hiding-1;
   animation-duration: 5s;
+}
+
+/* flyoff — hover flourish (fly off and swoop back) */
+
+@keyframes luke-flyoff-1 {
+  0% {
+    transform: rotate(0deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  10% {
+    transform: rotate(-10deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  26% {
+    transform: rotate(22deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  34% {
+    transform: rotate(10deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  40% {
+    transform: rotate(-14deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  46% {
+    transform: rotate(-14deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  62% {
+    transform: rotate(5deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  72% {
+    transform: rotate(0deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes luke-flyoff-2 {
+  0% {
+    transform: translate(0px, 0px);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  10% {
+    transform: translate(-16px, 6px);
+    animation-timing-function: cubic-bezier(0.5, 0, 0.9, 0.5);
+  }
+
+  26% {
+    transform: translate(280px, -90px);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  34% {
+    transform: translate(280px, -240px);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  40% {
+    transform: translate(-340px, -240px);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  46% {
+    transform: translate(-340px, -110px);
+    animation-timing-function: cubic-bezier(0.1, 0.5, 0.3, 1);
+  }
+
+  62% {
+    transform: translate(16px, 8px);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  72% {
+    transform: translate(0px, 0px);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  100% {
+    transform: translate(0px, 0px);
+  }
+}
+
+.luke-face[data-motion="flyoff"] .luke-face-layer-1 {
+  transform-origin: 120px 124px;
+  animation-name: luke-flyoff-1;
+  animation-duration: 3s;
+}
+
+.luke-face[data-motion="flyoff"] .luke-face-layer-2 {
+  animation-name: luke-flyoff-2;
+  animation-duration: 3s;
 }
 
 /* tease — playful (brow waggle) */
@@ -939,18 +1054,49 @@
   animation-duration: 2.4s;
 }
 
-/* The z's drift on their own loop, offset from each other so they never rise
-   as a group. Held at its first frame the loop is invisible, which is what a
-   capture run and reduced motion both want. */
+/* The z's share one loop, each rising through its own window of it so they
+   never rise as a group. The stagger is cut into the keyframes rather than
+   carried as a delay: every glyph's first frame is invisible, so a paused
+   loop — a capture run, reduced motion — shows no z at all. */
 
-@keyframes luke-sleep-z {
+@keyframes luke-sleep-z-1 {
   0% {
     opacity: 0;
     transform: translate(0, 0);
     animation-timing-function: linear;
   }
 
-  50% {
+  30% {
+    opacity: 0.85;
+    animation-timing-function: linear;
+  }
+
+  60% {
+    opacity: 0;
+    transform: translate(6px, -16px);
+    animation-timing-function: linear;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(6px, -16px);
+  }
+}
+
+@keyframes luke-sleep-z-2 {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0);
+    animation-timing-function: linear;
+  }
+
+  40% {
+    opacity: 0;
+    transform: translate(0, 0);
+    animation-timing-function: linear;
+  }
+
+  70% {
     opacity: 0.85;
     animation-timing-function: linear;
   }
@@ -961,19 +1107,48 @@
   }
 }
 
+@keyframes luke-sleep-z-3 {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0);
+    animation-timing-function: linear;
+  }
+
+  20% {
+    opacity: 0;
+    transform: translate(0, 0);
+    animation-timing-function: linear;
+  }
+
+  50% {
+    opacity: 0.85;
+    animation-timing-function: linear;
+  }
+
+  80% {
+    opacity: 0;
+    transform: translate(6px, -16px);
+    animation-timing-function: linear;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(6px, -16px);
+  }
+}
+
 .luke-face-z {
-  animation-name: luke-sleep-z;
   animation-duration: 3s;
 }
 
 .luke-face-z-1 {
-  animation-delay: 0s;
+  animation-name: luke-sleep-z-1;
 }
 
 .luke-face-z-2 {
-  animation-delay: -1s;
+  animation-name: luke-sleep-z-2;
 }
 
 .luke-face-z-3 {
-  animation-delay: -2s;
+  animation-name: luke-sleep-z-3;
 }

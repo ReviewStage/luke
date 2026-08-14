@@ -9,6 +9,7 @@ import {
   type CloudAdapterOptions,
   type CloudRequest,
   CloudSessionAdapter,
+  type CloudWriteRoute,
   isDefined,
   isRecord,
   knownValue,
@@ -34,22 +35,29 @@ const UNKNOWN_SESSION_LABEL = "Cloud session";
 const DEVIN_SESSION_FAILED_MESSAGE = "The session stopped on an error";
 
 /**
- * Read-only routes from the documented public API. Luke never calls a writer,
- * and it reads v3 rather than the deprecated v1 the older `apk_` keys are for:
- * v3 is the only version that says who a credential belongs to and that can
- * narrow a list to one person.
+ * Documented public API routes, read with v3 rather than the deprecated v1 the
+ * older `apk_` keys are for: v3 is the only version that says who a credential
+ * belongs to and that can narrow a list to one person. The one writer among
+ * them is `messages`, which is Devin's documented way to hand a message to an
+ * existing session.
  */
 const DEVIN_ROUTE_SEGMENT = {
   SELF: "self",
   V3: "v3",
   ORGANIZATIONS: "organizations",
   SESSIONS: "sessions",
+  MESSAGES: "messages",
 } as const;
 
 const DEVIN_QUERY = {
   FIRST: "first",
   UPDATED_AFTER: "updated_after",
   USER_IDS: "user_ids",
+} as const;
+
+/** The body `POST …/sessions/{id}/messages` documents. */
+const DEVIN_MESSAGE_FIELD = {
+  MESSAGE: "message",
 } as const;
 
 const DEVIN_FIELD = {
@@ -253,9 +261,11 @@ function sessionFromRecord(
  * Observes Devin cloud sessions through the documented public v3 API. Devin
  * lists an organization's sessions rather than a credential owner's, so this
  * first asks Devin who the credential belongs to and then reads only that
- * person's sessions. It issues no request that can change provider state,
- * reports nothing at all without a credential, and reports nothing for a
- * service-user credential, which names an organization rather than a person.
+ * person's sessions. Observation issues no request that can change provider
+ * state, reports nothing at all without a credential, and reports nothing for
+ * a service-user credential, which names an organization rather than a person.
+ * The one write it supports is a user-typed message, through Devin's own
+ * message endpoint, to a session it advertised as taking one.
  */
 export class DevinSessionAdapter extends CloudSessionAdapter {
   readonly #maximumObservedSessions: number;
@@ -358,6 +368,42 @@ export class DevinSessionAdapter extends CloudSessionAdapter {
       .filter((session) => session.observedAt >= openedAt);
   }
 
+  /**
+   * Devin's message endpoint takes a message for an active session and itself
+   * resumes a suspended one, so both advertise it. A session that exited or
+   * failed is documented for no writer, and an archived one the user has
+   * already filed away — neither is offered a control Devin has not promised
+   * to honour.
+   */
+  #sessionTakesMessages(session: DevinSession): boolean {
+    return (
+      !session.archived &&
+      (session.status === DEVIN_SESSION_STATUS.RUNNING ||
+        session.status === DEVIN_SESSION_STATUS.SUSPENDED)
+    );
+  }
+
+  protected override messageRoute(
+    providerSessionId: string,
+    text: string,
+  ): CloudWriteRoute | undefined {
+    // The identity was learned when the session was observed, and only a
+    // session that was observed can be messaged; no identity, no route.
+    const identity = this.#principal;
+    if (!identity) return undefined;
+    return {
+      segments: [
+        DEVIN_ROUTE_SEGMENT.V3,
+        DEVIN_ROUTE_SEGMENT.ORGANIZATIONS,
+        identity.orgId,
+        DEVIN_ROUTE_SEGMENT.SESSIONS,
+        providerSessionId,
+        DEVIN_ROUTE_SEGMENT.MESSAGES,
+      ],
+      body: { [DEVIN_MESSAGE_FIELD.MESSAGE]: text },
+    };
+  }
+
   #observationFor(session: DevinSession, now: number): ProviderSessionObservation {
     const status = this.#statusFor(session, now);
     return {
@@ -367,6 +413,7 @@ export class DevinSessionAdapter extends CloudSessionAdapter {
       title: session.name ?? session.repository ?? UNKNOWN_SESSION_LABEL,
       status,
       observedAt: session.observedAt,
+      canReceiveMessage: this.#sessionTakesMessages(session),
       detail: {
         ...(session.repository ? { repository: session.repository } : {}),
         ...(status === SESSION_STATUS.ERROR ? { error: DEVIN_SESSION_FAILED_MESSAGE } : {}),

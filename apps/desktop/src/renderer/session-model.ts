@@ -4,9 +4,12 @@ import {
   type NormalizedSession,
   PROVIDER_ID_LIST,
   type ProviderId,
+  SESSION_LIST_SORT,
   SESSION_LOCATION,
   SESSION_STATE,
   SESSION_STATUS,
+  type SessionControlKind,
+  type SessionListSort,
   type SessionLocation,
   type SessionState,
   TRANSCRIPT_ROLE,
@@ -19,8 +22,6 @@ export const STATE_LABEL: Record<SessionState, string> = {
   [SESSION_STATE.COMPLETE]: "Complete",
   [SESSION_STATE.UNKNOWN]: "Idle",
 };
-
-const CONTEXT_SEPARATOR = " · ";
 
 /** The state order the surface reads top-down and the badge collapses to. */
 const STATE_PRIORITY: readonly SessionState[] = [
@@ -57,13 +58,31 @@ function matchesFilter(session: DisplaySession, filter: SessionFilter): boolean 
   return session.providerId === filter;
 }
 
-/** The two questions a list of agent sessions is read to answer. */
-export const SESSION_SORT = {
-  URGENCY: "urgency",
-  RECENCY: "recency",
-} as const;
+/**
+ * Reads a spoken filter into the list's own vocabulary. The values are the
+ * same strings the chips use — the coarse scopes and the provider ids — so a
+ * validated spoken ask maps one-to-one; anything else is nothing rather than
+ * a guess, and the list is left as it was.
+ */
+export function sessionFilterFromSpoken(value: string): SessionFilter | undefined {
+  if (
+    value === SESSION_FILTER.ALL ||
+    value === SESSION_FILTER.LOCAL ||
+    value === SESSION_FILTER.CLOUD
+  ) {
+    return value;
+  }
+  return isProviderId(value) ? value : undefined;
+}
 
-export type SessionSort = (typeof SESSION_SORT)[keyof typeof SESSION_SORT];
+/**
+ * The two questions a list of agent sessions is read to answer. The set is
+ * core's, because a spoken ask names an order in the same words this control
+ * does and the two must not drift into separate vocabularies.
+ */
+export const SESSION_SORT = SESSION_LIST_SORT;
+
+export type SessionSort = SessionListSort;
 
 export interface SessionView {
   filter: SessionFilter;
@@ -81,20 +100,35 @@ export const DEFAULT_SESSION_VIEW: SessionView = {
   sort: SESSION_SORT.URGENCY,
 };
 
+/** One provider-advertised action, exactly as the adapter advertised it. */
+export interface SessionAction {
+  id: string;
+  label: string;
+  /** A stop is drawn as the stop glyph; anything else is drawn by its label. */
+  kind?: SessionControlKind;
+}
+
 export interface DisplaySession {
   id: string;
   title: string;
   providerId: string;
   provider: string;
-  /** What the session is doing, or what stopped it. */
+  /** What the session is doing, or what stopped it, worded to carry the state. */
   detail: string;
-  /** Where it is doing it: provider, repository, branch, model. */
-  context: string;
   /**
    * The last thing said in the session, and who said it. Present only for a
    * user who turned local transcripts on, and absent for every fixture row.
    */
   transcript?: string;
+  /**
+   * Which checkout the work is in. Two fields rather than one line, because the
+   * row draws a branch under its own glyph and a repository plain, and only the
+   * fields can say which kind of identifier this is.
+   */
+  repository?: string;
+  branch?: string;
+  /** Read on the provider mark's hover, never spent on a line of the row. */
+  model?: string;
   state: SessionState;
   label: string;
   location: SessionLocation;
@@ -105,6 +139,14 @@ export interface DisplaySession {
    * main process: the row only has to know that pressing it would do something.
    */
   openable: boolean;
+  /**
+   * Whether the provider will take a typed message for this session right now.
+   * Like the address, the route stays in the main process; the row only has to
+   * know whether to offer the field.
+   */
+  canMessage: boolean;
+  /** Actions the provider advertised for this session, in its own words. */
+  actions: readonly SessionAction[];
 }
 
 /** One filter someone can choose, and how many sessions it would leave. */
@@ -152,6 +194,7 @@ export interface SessionTally {
   idle: number;
   /** The state the count badge and the notch capsule adopt. */
   state: SessionState;
+  /** One agent each, seated where its first session reads under the sort. */
   providers: readonly ProviderTally[];
 }
 
@@ -169,27 +212,13 @@ function sessionNeedsAttention(session: NormalizedSession): boolean {
  * The line under the title. What stopped a session outranks what it was doing,
  * and what it was doing outranks the recap of a turn that has already ended.
  *
- * It is empty when a provider reported none of them. Falling back to the status
- * would only restate the chip at the other end of the same row.
+ * When a provider reported none of them, the line says the state in so many
+ * words. This sentence is the one place the row states it — there is no chip at
+ * the other end any more — so a session whose provider said nothing still reads
+ * as Working or Complete rather than as a row with a line missing.
  */
-function sessionDetail(session: NormalizedSession): string {
-  return session.detail.error ?? session.detail.activity ?? session.summary ?? "";
-}
-
-/**
- * The line under that. It answers "which one is this?" for the rows that would
- * otherwise read alike — two checkouts of one repository, or one repository on
- * two branches.
- */
-function sessionContext(session: NormalizedSession): string {
-  return [
-    session.provider.displayName,
-    session.detail.repository,
-    session.detail.branch,
-    session.detail.model,
-  ]
-    .filter((part): part is string => part !== undefined && part.length > 0)
-    .join(CONTEXT_SEPARATOR);
+function sessionDetail(session: NormalizedSession, state: SessionState): string {
+  return session.detail.error ?? session.detail.activity ?? session.summary ?? STATE_LABEL[state];
 }
 
 /**
@@ -229,6 +258,11 @@ function byRecency(first: DisplaySession, second: DisplaySession): number {
   return second.observedAt - first.observedAt || byUrgency(first, second);
 }
 
+/** The comparator a sort names — one answer for the list and the wing's marks. */
+function bySort(sort: SessionSort): (first: DisplaySession, second: DisplaySession) => number {
+  return sort === SESSION_SORT.RECENCY ? byRecency : byUrgency;
+}
+
 export function displaySessions(
   bootstrap: AppBootstrap,
   sessions: readonly NormalizedSession[],
@@ -236,28 +270,41 @@ export function displaySessions(
   const visible: readonly DisplaySession[] = bootstrap.fixtureMode
     ? bootstrap.fixture.sessions.map((session) => ({
         ...session,
+        // The same wording rule the live path applies: a fixture row whose
+        // provider said nothing states its own state, so the evidence shows
+        // the fallback rather than a gap.
+        detail: session.detail || STATE_LABEL[session.state],
         label: STATE_LABEL[session.state],
         // A fixture stands for sessions that are not on the machine drawing
-        // them, so there is nothing for a press to open. Nothing is lost from
-        // the visual evidence by that: a row that can be opened and one that
-        // cannot are drawn alike until a pointer is over one.
+        // them, so there is nothing for a press to open. The composer and the
+        // controls are still drawn where the fixture says a live session would
+        // have them — the evidence has to show them — but a fixture run cannot
+        // reach a provider: the main process refuses every write against its
+        // empty registry.
         openable: false,
+        canMessage: session.canMessage === true,
+        actions: session.actions ?? [],
       }))
     : sessions.map((session) => {
+        const state = sessionState(session);
         const transcript = sessionTranscript(session);
         return {
           id: session.providerSessionId,
           title: session.title,
           providerId: session.providerId,
           provider: session.provider.displayName,
-          detail: sessionDetail(session),
-          context: sessionContext(session),
+          detail: sessionDetail(session, state),
           ...(transcript ? { transcript } : {}),
-          state: sessionState(session),
-          label: STATE_LABEL[sessionState(session)],
+          repository: session.detail.repository,
+          branch: session.detail.branch,
+          model: session.detail.model,
+          state,
+          label: STATE_LABEL[state],
           location: session.location,
           observedAt: session.observedAt,
           openable: session.detail.link !== undefined,
+          canMessage: session.canReceiveMessage,
+          actions: session.controls,
         };
       });
 
@@ -330,34 +377,52 @@ function filterOptions(sessions: readonly DisplaySession[]): readonly SessionFil
  * an agent's only session finished, say — falls back to All rather than leaving
  * an empty panel, because the one thing this list may never do is hide a
  * session the capsule is still counting.
+ *
+ * Showing something is the whole of the test: a filter still matching sessions
+ * survives even while no chip offers it, which happens when a spoken ask names
+ * the only provider or location there is. Collapsing it then would be quietly
+ * wrong twice over — Luke has just said the list was narrowed, and the moment
+ * a second agent appeared the list would widen out from under a developer who
+ * asked to watch one. While the filter is chipless it hides nothing (every
+ * session matches), and as soon as another value exists its chip and the
+ * options button's "showing X only" badge both appear.
  */
 export function arrangeSessions(
   sessions: readonly DisplaySession[],
   view: SessionView,
 ): ArrangedSessions {
   const options = filterOptions(sessions);
-  const filter = options.some((option) => option.filter === view.filter)
-    ? view.filter
-    : SESSION_FILTER.ALL;
-  const matching =
-    filter === SESSION_FILTER.ALL
+  const chosen =
+    view.filter === SESSION_FILTER.ALL
       ? sessions
-      : sessions.filter((session) => matchesFilter(session, filter));
+      : sessions.filter((session) => matchesFilter(session, view.filter));
+  const filter = chosen.length > 0 ? view.filter : SESSION_FILTER.ALL;
+  const matching = filter === view.filter ? chosen : sessions;
 
   return {
-    sessions: [...matching].sort(view.sort === SESSION_SORT.RECENCY ? byRecency : byUrgency),
+    sessions: [...matching].sort(bySort(view.sort)),
     total: sessions.length,
     filter,
     options,
   };
 }
 
-export function sessionTally(sessions: readonly DisplaySession[]): SessionTally {
+/**
+ * Counted across everything tracked, whatever the list is narrowed to — but
+ * read in the sort the list is read in, so the providers sit in the order
+ * their first sessions do and the wing's marks match the rows. With no view in
+ * force — the capsule, say — the sessions read by urgency, which is also the
+ * sort the panel opens on.
+ */
+export function sessionTally(
+  sessions: readonly DisplaySession[],
+  sort: SessionSort = SESSION_SORT.URGENCY,
+): SessionTally {
   const providers = new Map<string, ProviderTally>();
   const counts = { attention: 0, working: 0, complete: 0, idle: 0 };
   const attentionIds: string[] = [];
 
-  for (const session of sessions) {
+  for (const session of [...sessions].sort(bySort(sort))) {
     if (session.state === SESSION_STATE.ATTENTION) {
       counts.attention += 1;
       attentionIds.push(session.id);
@@ -407,6 +472,26 @@ export function tallySummary(tally: SessionTally): string {
   }
   if (tally.working > 0) return `${tally.total} ${sessionWord} tracked, ${tally.working} working`;
   return `${tally.total} ${sessionWord} tracked`;
+}
+
+/**
+ * How long ago a session was last seen, in the coarsest unit that has begun,
+ * because the label answers "is this thing alive" rather than telling time.
+ * Single-letter units, the way Mail and Messages abbreviate: the label is
+ * consulted, not read, and "23m" against the row's edge says everything
+ * "23 min" did. Anything under a minute is "Now" — and so is a timestamp ahead
+ * of the clock, which a provider's clock skew can produce and a negative age
+ * would only dramatize. `now` is an argument rather than a clock read here:
+ * fixture rows are measured against the fixture's own epoch so the evidence
+ * stays reproducible, and live rows against whatever render tick asked.
+ */
+export function observedAgoLabel(observedAt: number, now: number): string {
+  const elapsedMinutes = Math.floor((now - observedAt) / 60_000);
+  if (elapsedMinutes < 1) return "Now";
+  if (elapsedMinutes < 60) return `${elapsedMinutes}m`;
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) return `${elapsedHours}h`;
+  return `${Math.floor(elapsedHours / 24)}d`;
 }
 
 /**

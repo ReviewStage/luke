@@ -60,6 +60,8 @@ interface RecordedRequest {
   pathname: string;
   search: string;
   authorization: string | undefined;
+  contentType: string | undefined;
+  body: string | undefined;
 }
 
 interface FakeCursorApi {
@@ -126,7 +128,15 @@ function runPayload(agent: TestAgent, run: TestRun): Record<string, unknown> {
 }
 
 /** Serves the read-only subset of the public API the adapter is allowed to use. */
-function fakeCursorApi(agents: readonly TestAgent[]): FakeCursorApi {
+function fakeCursorApi(
+  agents: readonly TestAgent[],
+  options: {
+    repositories?: readonly string[];
+    /** Holds the first repositories answer until released, like a slow org. */
+    gateFirstRepositoriesRead?: Promise<void>;
+  } = {},
+): FakeCursorApi {
+  let repositoriesReads = 0;
   const requests: RecordedRequest[] = [];
   const fetch: CloudFetch = async (url, init) => {
     const { pathname, searchParams, search } = new URL(url);
@@ -136,10 +146,55 @@ function fakeCursorApi(agents: readonly TestAgent[]): FakeCursorApi {
       pathname,
       search,
       authorization: headers.get("authorization") ?? undefined,
+      contentType: headers.get("content-type") ?? undefined,
+      body: typeof init.body === "string" ? init.body : undefined,
     });
 
     const segments = pathname.split("/").filter((segment) => segment.length > 0);
+    if (segments[0] === "v1" && segments[1] === "repositories" && segments.length === 2) {
+      if (!options.repositories) return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
+      repositoriesReads += 1;
+      if (repositoriesReads === 1 && options.gateFirstRepositoriesRead) {
+        await options.gateFirstRepositoriesRead;
+      }
+      return jsonResponse({
+        items: options.repositories.map((repository) => ({ url: repository })),
+      });
+    }
     if (segments[0] !== "v1" || segments[1] !== "agents") {
+      return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
+    }
+
+    // The three documented writers: a new agent, a follow-up run for an
+    // existing one, and a cancel for the run it is still working.
+    if (init.method === "POST") {
+      if (segments.length === 2) {
+        const body = JSON.parse(typeof init.body === "string" ? init.body : "{}") as {
+          prompt?: { text?: string };
+          repos?: { url?: string }[];
+        };
+        const repository = body.repos?.[0]?.url;
+        if (!body.prompt?.text || !options.repositories?.includes(repository ?? "")) {
+          return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
+        }
+        return jsonResponse(
+          { agent: { id: "bc-new-agent", status: "ACTIVE" }, run: { id: "run-first" } },
+          201,
+        );
+      }
+      const agent = agents.find((candidate) => candidate.id === segments[2]);
+      if (agent && segments[3] === "runs" && segments.length === 4) {
+        return jsonResponse({ run: { id: "run-followup", agentId: agent.id } }, 201);
+      }
+      if (
+        agent &&
+        segments[3] === "runs" &&
+        agent.run?.id === segments[4] &&
+        segments[5] === "cancel" &&
+        segments.length === 6
+      ) {
+        return jsonResponse({});
+      }
       return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
     }
 
@@ -220,7 +275,12 @@ test("observes a running agent under the name Cursor gave it", async () => {
   assert.equal(observations[0]?.title, TEST_AGENT_NAME);
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
   assert.equal(observations[0]?.observedAt, TEST_TIME - 30_000);
-  assert.equal(observations[0]?.controls, undefined);
+  // A running agent can be stopped and nothing else; the follow-up belongs to
+  // a finished run.
+  assert.deepEqual(observations[0]?.controls, [
+    { id: "cancel-run", label: "Stop this run", kind: "stop", target: "run-running" },
+  ]);
+  assert.equal(observations[0]?.canReceiveMessage, false);
   assert.equal(observations[0]?.summary, TEST_RUN_RESULT);
   // The repository the run names, which is the only place the API reports one
   // for an agent that came from a list page.
@@ -230,12 +290,13 @@ test("observes a running agent under the name Cursor gave it", async () => {
     link: "https://cursor.com/agents/agent-running",
     change: TEST_PULL_REQUEST_URL,
   });
-  // One list call, then one read of the run that list named. Nothing else.
+  // The repository offer, one list call, then one read of the run that list
+  // named. Nothing else.
   assert.deepEqual(
     api.requests.map((request) => request.pathname),
-    ["/v1/agents", "/v1/agents/agent-running/runs/run-running"],
+    ["/v1/repositories", "/v1/agents", "/v1/agents/agent-running/runs/run-running"],
   );
-  assert.equal(api.requests[0]?.search, "?limit=100");
+  assert.equal(api.requests[1]?.search, "?limit=100");
   assert.equal(
     api.requests.every(
       (request) => request.method === "GET" && request.authorization === `Bearer ${TEST_API_KEY}`,
@@ -355,7 +416,7 @@ test("reports an archived agent as complete without reading its run", async () =
   assert.equal(observations[0]?.observedAt, TEST_TIME - 20_000);
   assert.deepEqual(
     api.requests.map((request) => request.pathname),
-    ["/v1/agents"],
+    ["/v1/repositories", "/v1/agents"],
   );
 });
 
@@ -370,7 +431,7 @@ test("leaves an agent that has never run unknown without reading a run", async (
   assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
   assert.deepEqual(
     api.requests.map((request) => request.pathname),
-    ["/v1/agents"],
+    ["/v1/repositories", "/v1/agents"],
   );
 });
 
@@ -417,7 +478,7 @@ test("ignores agents untouched for longer than the maximum session age", async (
   assert.deepEqual(observations, []);
   assert.deepEqual(
     api.requests.map((request) => request.pathname),
-    ["/v1/agents"],
+    ["/v1/repositories", "/v1/agents"],
   );
 });
 
@@ -605,4 +666,209 @@ test("keeps the previous snapshot when the list request fails transiently", asyn
 
   assert.equal(observed.length, 1);
   assert.deepEqual(duringOutage, observed);
+});
+
+function finishedAgent(id: string, updatedAt: number): TestAgent {
+  return {
+    id,
+    name: TEST_AGENT_NAME,
+    createdAt: updatedAt,
+    updatedAt,
+    run: { id: `run-${id}`, status: TEST_RUN_STATUS.FINISHED, updatedAt },
+  };
+}
+
+test("advertises a follow-up only for an agent whose run has finished", async () => {
+  const api = fakeCursorApi([
+    finishedAgent("agent-finished", TEST_TIME - 1_000),
+    runningAgent("agent-running", TEST_TIME - 2_000),
+    {
+      id: "agent-errored",
+      name: TEST_AGENT_NAME,
+      createdAt: TEST_TIME - 3_000,
+      run: { id: "run-agent-errored", status: TEST_RUN_STATUS.ERROR },
+    },
+    {
+      id: "agent-filed",
+      name: TEST_AGENT_NAME,
+      archived: true,
+      createdAt: TEST_TIME - 4_000,
+    },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+  const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
+
+  assert.equal(byId.get("agent-finished")?.canReceiveMessage, true);
+  // A running agent answers conflict until its run ends, and what a follow-up
+  // does after a failure is documented nowhere; neither is promised one.
+  assert.equal(byId.get("agent-running")?.canReceiveMessage, false);
+  assert.equal(byId.get("agent-errored")?.canReceiveMessage, false);
+  assert.equal(byId.get("agent-filed")?.canReceiveMessage, false);
+  // The stoppable one is the one still running.
+  assert.deepEqual(byId.get("agent-running")?.controls, [
+    { id: "cancel-run", label: "Stop this run", kind: "stop", target: "run-agent-running" },
+  ]);
+  assert.equal(byId.get("agent-finished")?.controls, undefined);
+});
+
+test("hands a follow-up to Cursor's documented run endpoint", async () => {
+  const api = fakeCursorApi([finishedAgent("agent-finished", TEST_TIME - 1_000)]);
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+
+  const result = await adapter.sendMessage({
+    providerSessionId: "agent-finished",
+    text: "Also add troubleshooting steps",
+  });
+
+  assert.deepEqual(result, { status: "accepted" });
+  const write = api.requests.at(-1);
+  assert.equal(write?.method, "POST");
+  assert.equal(write?.pathname, "/v1/agents/agent-finished/runs");
+  assert.equal(write?.authorization, `Bearer ${TEST_API_KEY}`);
+  assert.deepEqual(JSON.parse(write?.body ?? ""), {
+    prompt: { text: "Also add troubleshooting steps" },
+  });
+});
+
+test("stops the run the user saw through Cursor's cancel endpoint, sending no body", async () => {
+  const api = fakeCursorApi([runningAgent("agent-running", TEST_TIME - 1_000)]);
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+  // Deliberately without a target: the route must be built from the control
+  // the adapter itself advertised, never from the caller's copy of it.
+  const cancelControl = { id: "cancel-run", label: "Stop this run", kind: "stop" };
+
+  const result = await adapter.executeControl({
+    providerSessionId: "agent-running",
+    control: cancelControl,
+  });
+
+  assert.deepEqual(result, { status: "accepted" });
+  const write = api.requests.at(-1);
+  assert.equal(write?.method, "POST");
+  assert.equal(write?.pathname, "/v1/agents/agent-running/runs/run-agent-running/cancel");
+  // Cursor documents no body for a cancel.
+  assert.equal(write?.contentType, undefined);
+  assert.equal(write?.body, undefined);
+});
+
+test("offers the repositories Cursor lists, on a cadence far below the observation pass", async () => {
+  const api = fakeCursorApi([], { repositories: [TEST_REPOSITORY] });
+  let now = TEST_TIME;
+  const adapter = adapterFor(api.fetch, { now: () => now });
+
+  assert.deepEqual(adapter.workspaceProjects(), []);
+  await adapter.observe();
+  // The offer rides beside the pass, so let it land before asserting on it.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(adapter.workspaceProjects(), [
+    // Cursor's creation endpoint requires a prompt, so every repository needs
+    // an opening task: there is no idle agent to make.
+    { providerProjectId: TEST_REPOSITORY, repository: "luke", taskSupport: "required" },
+  ]);
+
+  // Cursor documents strict limits on the repository list, so the next pass
+  // must not read it again: one repositories request, however many passes.
+  const repositoryReads = () =>
+    api.requests.filter((request) => request.pathname === "/v1/repositories").length;
+  assert.equal(repositoryReads(), 1);
+  now += 60_000;
+  await adapter.observe();
+  assert.equal(repositoryReads(), 1);
+});
+
+test("launches a new agent through Cursor's documented creation endpoint", async () => {
+  const api = fakeCursorApi([], { repositories: [TEST_REPOSITORY] });
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+  // The offer rides beside the pass, so let it land before asserting on it.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const result = await adapter.createWorkspace({
+    providerProjectId: TEST_REPOSITORY,
+    name: "readme touch-up",
+    task: "Add a README with setup instructions",
+  });
+
+  assert.deepEqual(result, { status: "accepted" });
+  const write = api.requests.at(-1);
+  assert.equal(write?.method, "POST");
+  assert.equal(write?.pathname, "/v1/agents");
+  assert.equal(write?.authorization, `Bearer ${TEST_API_KEY}`);
+  assert.deepEqual(JSON.parse(write?.body ?? ""), {
+    prompt: { text: "Add a README with setup instructions" },
+    repos: [{ url: TEST_REPOSITORY }],
+    name: "readme touch-up",
+  });
+});
+
+test("refuses a creation ask Cursor cannot take before any request exists", async () => {
+  const api = fakeCursorApi([], { repositories: [TEST_REPOSITORY] });
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+  // The offer rides beside the pass, so let it land before asserting on it.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const requestsBefore = api.requests.length;
+
+  // No task, no agent: Cursor documents no way to create one idle.
+  const taskless = await adapter.createWorkspace({ providerProjectId: TEST_REPOSITORY });
+  assert.equal(taskless.status, "rejected");
+
+  // A repository Cursor did not list is nowhere to create, however real.
+  const unlisted = await adapter.createWorkspace({
+    providerProjectId: "https://github.com/reviewstage/unlisted",
+    task: "Add a README",
+  });
+  assert.deepEqual(unlisted, { status: "unsupported" });
+  assert.equal(api.requests.length, requestsBefore);
+});
+
+test("a repository answer that outlives its pass still lands", async () => {
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const api = fakeCursorApi([], {
+    repositories: [TEST_REPOSITORY],
+    gateFirstRepositoriesRead: gate,
+  });
+  const adapter = adapterFor(api.fetch);
+
+  // The slow read starts on the first pass and is still in flight while more
+  // passes come and go — the very case the wide deadline exists for, so a
+  // newer pass must not discard its answer.
+  await adapter.observe();
+  await adapter.observe();
+  release();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(
+    adapter.workspaceProjects().map((project) => project.providerProjectId),
+    [TEST_REPOSITORY],
+  );
+});
+
+test("a repository answer never lands across a credential change", async () => {
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const api = fakeCursorApi([], {
+    repositories: [TEST_REPOSITORY],
+    gateFirstRepositoriesRead: gate,
+  });
+  let apiKey: string | undefined = TEST_API_KEY;
+  const adapter = adapterFor(api.fetch, { readApiKey: async () => apiKey });
+
+  await adapter.observe();
+  // The key is removed while the slow read is in flight: whatever it answers
+  // belongs to a credential that no longer stands, and must not be kept.
+  apiKey = undefined;
+  await adapter.observe();
+  release();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(adapter.workspaceProjects(), []);
 });

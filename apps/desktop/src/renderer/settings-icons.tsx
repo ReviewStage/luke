@@ -70,6 +70,68 @@ export function TrashIcon(): React.JSX.Element {
   );
 }
 
+/** An arrow turning back on itself: returns a setting to its default. */
+export function ResetIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M2.5 5.1v5.2h5.2" />
+      <path d="M4.6 14.6a7.8 7.8 0 1 0 1.9-8.1L2.5 10.3" />
+    </Glyph>
+  );
+}
+
+/** Stands down without choosing: the cancel a control becomes mid-act. */
+export function CloseIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M6.8 6.8 17.2 17.2" />
+      <path d="M17.2 6.8 6.8 17.2" />
+    </Glyph>
+  );
+}
+
+/** The up-and-down pair macOS badges a pop-up button with. */
+export function PopUpIcon(): React.JSX.Element {
+  return (
+    <Glyph className="voice-select-glyph">
+      <path d="M7.2 9.6 12 4.8l4.8 4.8" />
+      <path d="M7.2 14.4 12 19.2l4.8-4.8" />
+    </Glyph>
+  );
+}
+
+/** A plug: the services Luke connects to beyond the agents themselves. */
+export function PlugIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <path d="M9 2.6v5.2" />
+      <path d="M15 2.6v5.2" />
+      <path d="M6 7.8h12v4.4a4.4 4.4 0 0 1-4.4 4.4h-3.2A4.4 4.4 0 0 1 6 12.2Z" />
+      <path d="M12 16.6v4.8" />
+    </Glyph>
+  );
+}
+
+export function KeyboardIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <rect x="2.4" y="6" width="19.2" height="12" rx="2.4" />
+      <path d="M6.4 10h.01M10 10h.01M13.6 10h.01M17.2 10h.01" />
+      <path d="M7.6 14h8.8" />
+    </Glyph>
+  );
+}
+
+/** What the app has been allowed to reach, which is what this group is about. */
+export function ShieldIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <path d="M12 2.6 4.8 5.6v5.5c0 4.4 3 8.4 7.2 9.9 4.2-1.5 7.2-5.5 7.2-9.9V5.6Z" />
+      <path d="m8.9 11.9 2.2 2.2 4-4.2" />
+    </Glyph>
+  );
+}
+
 export function MicrophoneIcon(): React.JSX.Element {
   return (
     <Glyph>
@@ -100,6 +162,20 @@ export function PowerIcon(): React.JSX.Element {
   );
 }
 
+/** Two sliders, drawn once for both controls that mean "choices". */
+function SliderMarks(): React.JSX.Element {
+  return (
+    <>
+      <path d="M3.6 8.4h5.2" />
+      <path d="M13.2 8.4h7.2" />
+      <circle cx="11" cy="8.4" r="2.2" />
+      <path d="M3.6 15.6h2.6" />
+      <path d="M10.6 15.6h9.8" />
+      <circle cx="8.4" cy="15.6" r="2.2" />
+    </>
+  );
+}
+
 /**
  * Two sliders rather than a funnel: the control it opens holds an order as well
  * as a filter, and a funnel would promise only the second.
@@ -107,12 +183,16 @@ export function PowerIcon(): React.JSX.Element {
 export function OptionsIcon(): React.JSX.Element {
   return (
     <Glyph className="options-glyph">
-      <path d="M3.6 8.4h5.2" />
-      <path d="M13.2 8.4h7.2" />
-      <circle cx="11" cy="8.4" r="2.2" />
-      <path d="M3.6 15.6h2.6" />
-      <path d="M10.6 15.6h9.8" />
-      <circle cx="8.4" cy="15.6" r="2.2" />
+      <SliderMarks />
+    </Glyph>
+  );
+}
+
+/** The same two sliders at a heading's size: settings the user has chosen. */
+export function PreferencesIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <SliderMarks />
     </Glyph>
   );
 }
@@ -137,6 +217,77 @@ export function CloudIcon(): React.JSX.Element {
   return (
     <Glyph className="filter-icon">
       <path d="M7.3 18.4h9.5a4.3 4.3 0 0 0 .8-8.52 6.1 6.1 0 0 0-11.66-1.3A4.35 4.35 0 0 0 7.3 18.4Z" />
+    </Glyph>
+  );
+}
+
+/**
+ * The stop glyph every chat surface uses: a filled, slightly rounded square.
+ * Filled rather than stroked, because at control size a stroked square reads
+ * as a checkbox.
+ */
+export function StopIcon(): React.JSX.Element {
+  return (
+    <svg
+      className="control-icon"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect x="6.4" y="6.4" width="11.2" height="11.2" rx="2.6" />
+    </svg>
+  );
+}
+
+/** Words meant to carry: what the feedback section is for. */
+export function MegaphoneIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <path d="M3.4 10.2v3.6a1.6 1.6 0 0 0 1.6 1.6h1.8l1.2 4.2a1.3 1.3 0 0 0 1.3 1h.9a1 1 0 0 0 1-1.3l-1.1-3.9h1.7l7.4 3.4a1 1 0 0 0 1.4-.9V6.1a1 1 0 0 0-1.4-.9l-7.4 3.4H5a1.6 1.6 0 0 0-1.6 1.6Z" />
+    </Glyph>
+  );
+}
+
+/** A picture, on the control that attaches one. */
+export function ImageIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <rect x="3.4" y="4.6" width="17.2" height="14.8" rx="2.2" />
+      <circle cx="8.6" cy="9.6" r="1.6" />
+      <path d="m3.8 17.4 4.8-4.6 3.4 3.2 3.6-3.6 4.8 4.6" />
+    </Glyph>
+  );
+}
+
+/**
+ * Takes one attachment back off the note. Its own element rather than a
+ * `Glyph`: at the eight pixels it is drawn at, the shared 1.9 stroke thins to
+ * nothing and the X reads as a dot, so this one carries the weight it needs.
+ */
+export function RemoveIcon(): React.JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="3.4"
+      strokeLinecap="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M5.6 5.6 18.4 18.4" />
+      <path d="M18.4 5.6 5.6 18.4" />
+    </svg>
+  );
+}
+
+/** Sends what was typed, drawn the way every chat surface draws it: an arrow up. */
+export function SendIcon(): React.JSX.Element {
+  return (
+    <Glyph className="control-icon">
+      <path d="M12 18.6V5.8" />
+      <path d="m6.4 11.2 5.6-5.6 5.6 5.6" />
     </Glyph>
   );
 }

@@ -1,17 +1,20 @@
-import { PROVIDER_ID } from "@sidecar/core";
+import { ISSUE_TRACKER_ID, PROVIDER_ID } from "@sidecar/core";
 
 /**
- * The providers Luke can hold a credential for: the subset of the observed
- * providers whose sessions live in a cloud service with no local state to read,
- * and which must observe nothing at all until the user supplies a key. The ids
- * are core's, so a credential row and a session row name the same provider —
- * that is what lets one mark registry serve both.
+ * The services Luke can hold a credential for: the subset of the observed
+ * providers whose sessions live in a cloud service with no local state to
+ * read, plus the issue tracker Luke reads the same way — each of which must
+ * observe nothing at all until the user supplies a key. The ids are core's,
+ * so a credential row names the same service a session row or the issue
+ * roster does — that is what lets one mark registry serve them all.
  */
 export const CREDENTIAL_PROVIDER_ID = {
   CONDUCTOR: PROVIDER_ID.CONDUCTOR,
+  COPILOT: PROVIDER_ID.COPILOT,
   CURSOR: PROVIDER_ID.CURSOR,
   DEVIN: PROVIDER_ID.DEVIN,
   JULES: PROVIDER_ID.JULES,
+  LINEAR: ISSUE_TRACKER_ID.LINEAR,
 } as const;
 
 export type CredentialProviderId =
@@ -26,6 +29,10 @@ const CONDUCTOR_ENVIRONMENT = {
   API_TOKEN: "CONDUCTOR_API_TOKEN",
 } as const;
 
+const COPILOT_ENVIRONMENT = {
+  API_KEY: "COPILOT_API_KEY",
+} as const;
+
 const CURSOR_ENVIRONMENT = {
   API_KEY: "CURSOR_API_KEY",
 } as const;
@@ -36,6 +43,10 @@ const DEVIN_ENVIRONMENT = {
 
 const JULES_ENVIRONMENT = {
   API_KEY: "JULES_API_KEY",
+} as const;
+
+const LINEAR_ENVIRONMENT = {
+  API_KEY: "LINEAR_API_KEY",
 } as const;
 
 /**
@@ -71,6 +82,12 @@ export interface CredentialProvider {
   environmentVariables: readonly string[];
   /** Present only for a provider that publishes more than one kind of key. */
   keyFormat?: CredentialFormat;
+  /**
+   * What connecting this service lets Luke do, said in one line under its row.
+   * Only an integration carries one: an agent provider's rows say it once for
+   * the whole section, because every key there buys the same observation.
+   */
+  description?: string;
 }
 
 /** Keyed by provider id so no caller has to build a key from an identifier. */
@@ -81,6 +98,20 @@ export const CREDENTIAL_PROVIDERS: Readonly<Record<CredentialProviderId, Credent
     hint: "Create a key in Conductor under Settings · API keys.",
     apiKeysUrl: "https://app.conductor.build/users/api-keys",
     environmentVariables: [CONDUCTOR_ENVIRONMENT.API_KEY, CONDUCTOR_ENVIRONMENT.API_TOKEN],
+  },
+  [CREDENTIAL_PROVIDER_ID.COPILOT]: {
+    id: CREDENTIAL_PROVIDER_ID.COPILOT,
+    displayName: "Copilot",
+    // GitHub's agent-tasks endpoints answer only user tokens. The copy names
+    // the kind to create because the wrong kinds also come from GitHub: a
+    // classic PAT cannot carry the Agent tasks permission, and an installation
+    // token is refused by the endpoint itself.
+    hint: "Create a GitHub fine-grained personal access token with Agent tasks read access. Classic and installation tokens will not work.",
+    apiKeysUrl: "https://github.com/settings/personal-access-tokens/new",
+    environmentVariables: [COPILOT_ENVIRONMENT.API_KEY],
+    // No key format: Luke accepts two kinds GitHub issues — fine-grained
+    // personal access tokens (`github_pat_…`) and GitHub App user tokens
+    // (`ghu_…`) — so a single prefix would refuse a working credential.
   },
   [CREDENTIAL_PROVIDER_ID.CURSOR]: {
     id: CREDENTIAL_PROVIDER_ID.CURSOR,
@@ -120,11 +151,41 @@ export const CREDENTIAL_PROVIDERS: Readonly<Record<CredentialProviderId, Credent
     apiKeysUrl: "https://jules.google.com/settings",
     environmentVariables: [JULES_ENVIRONMENT.API_KEY],
   },
+  [CREDENTIAL_PROVIDER_ID.LINEAR]: {
+    id: CREDENTIAL_PROVIDER_ID.LINEAR,
+    displayName: "Linear",
+    description: "Luke reads your issues and can move or comment on them when you ask.",
+    hint: "Create a personal API key in Linear under Settings · Security & access.",
+    apiKeysUrl: "https://linear.app/settings/account/security",
+    environmentVariables: [LINEAR_ENVIRONMENT.API_KEY],
+    // Linear issues its personal API keys under one prefix; an OAuth access
+    // token belongs to an application acting for a workspace, which is not
+    // what Luke is, so a credential without the prefix would only mislead.
+    keyFormat: {
+      label: "Personal API key",
+      prefix: "lin_api_",
+      rejection:
+        "Linear's personal API keys start with lin_api_. OAuth tokens belong to an application rather than to Luke.",
+    },
+  },
 };
 
-/** Settings lists providers in this order. */
+/** Every provider that can hold a key, in the order Settings lists them. */
 export const CREDENTIAL_PROVIDER_LIST: readonly CredentialProvider[] =
   Object.values(CREDENTIAL_PROVIDERS);
+
+/* A key is a key, so the tracker lives in the one provider registry — but
+   Settings draws it apart: an issue tracker is an integration Luke reads and
+   acts on, not an agent whose sessions he observes. */
+const INTEGRATION_IDS: ReadonlySet<CredentialProviderId> = new Set([CREDENTIAL_PROVIDER_ID.LINEAR]);
+
+/** The coding-agent providers, in the order the Cloud Agent API keys section lists them. */
+export const CLOUD_AGENT_PROVIDER_LIST: readonly CredentialProvider[] =
+  CREDENTIAL_PROVIDER_LIST.filter((provider) => !INTEGRATION_IDS.has(provider.id));
+
+/** The services beyond the agents, in the order the Integrations section lists them. */
+export const INTEGRATION_PROVIDER_LIST: readonly CredentialProvider[] =
+  CREDENTIAL_PROVIDER_LIST.filter((provider) => INTEGRATION_IDS.has(provider.id));
 
 /**
  * Guards the provider id an IPC message carries. `hasOwn` rather than `in`: an

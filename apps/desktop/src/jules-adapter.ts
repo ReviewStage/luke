@@ -1,6 +1,7 @@
 import {
   type ProviderSessionObservation,
   SESSION_STATUS,
+  type SessionControl,
   type SessionProvider,
   type SessionStatus,
 } from "@sidecar/core";
@@ -10,6 +11,7 @@ import {
   type CloudAdapterOptions,
   type CloudRequest,
   CloudSessionAdapter,
+  type CloudWriteRoute,
   isDefined,
   isRecord,
   knownValue,
@@ -39,9 +41,34 @@ const JULES_ROUTE_SEGMENT = {
   V1ALPHA: "v1alpha",
 } as const;
 
-/** The one read-only route Luke calls. Every other route writes or is transcript. */
+/**
+ * The one read-only route Luke calls, which is also where the two writers it
+ * can make hang: Google custom methods on a session resource. `:sendMessage`
+ * is Jules's documented way to hand a message to an active session, and
+ * `:approvePlan` clears a plan the session is holding for.
+ */
 const JULES_ROUTE = {
   SESSIONS: [JULES_ROUTE_SEGMENT.V1ALPHA, JULES_ROUTE_SEGMENT.SESSIONS],
+} as const;
+
+/** The custom methods `POST …/sessions/{id}:<action>` documents. */
+const JULES_ACTION = {
+  SEND_MESSAGE: "sendMessage",
+  APPROVE_PLAN: "approvePlan",
+} as const;
+
+/** The body `:sendMessage` documents; `:approvePlan` documents an empty one. */
+const JULES_MESSAGE_FIELD = {
+  PROMPT: "prompt",
+} as const;
+
+/**
+ * The one control this adapter can honour, advertised only while a session is
+ * actually holding for a plan approval.
+ */
+const JULES_APPROVE_PLAN_CONTROL = {
+  id: "approve-plan",
+  label: "Approve the plan",
 } as const;
 
 const JULES_QUERY = {
@@ -152,9 +179,25 @@ function sessionFromRecord(record: Record<string, unknown>): JulesSession | unde
 }
 
 /**
+ * Which states Jules documents `sendMessage` for: an "active" session — one
+ * that is planning, working, or holding for the user. A paused session's
+ * revival is documented nowhere, and a completed or failed one is settled, so
+ * none of those advertises the capability.
+ */
+const JULES_MESSAGEABLE_STATES: ReadonlySet<JulesState> = new Set([
+  JULES_STATE.PLANNING,
+  JULES_STATE.IN_PROGRESS,
+  JULES_STATE.AWAITING_PLAN_APPROVAL,
+  JULES_STATE.AWAITING_USER_FEEDBACK,
+]);
+
+/**
  * Observes Google Jules sessions through the documented alpha API. It reads
- * only the sessions the supplied key owns, issues no request that can change
- * provider state, and reports nothing at all without a credential.
+ * only the sessions the supplied key owns, observation issues no request that
+ * can change provider state, and it reports nothing at all without a
+ * credential. The writes it supports are a user-typed message and a plan
+ * approval, each through Jules's own custom method on a session that
+ * advertised it.
  */
 export class JulesSessionAdapter extends CloudSessionAdapter {
   readonly #maximumObservedSessions: number;
@@ -200,6 +243,29 @@ export class JulesSessionAdapter extends CloudSessionAdapter {
       .map((session) => this.#observationFor(session, now));
   }
 
+  protected override messageRoute(
+    providerSessionId: string,
+    text: string,
+  ): CloudWriteRoute | undefined {
+    return {
+      segments: [...JULES_ROUTE.SESSIONS, providerSessionId],
+      action: JULES_ACTION.SEND_MESSAGE,
+      body: { [JULES_MESSAGE_FIELD.PROMPT]: text },
+    };
+  }
+
+  protected override controlRoute(
+    providerSessionId: string,
+    control: SessionControl,
+  ): CloudWriteRoute | undefined {
+    if (control.id !== JULES_APPROVE_PLAN_CONTROL.id) return undefined;
+    return {
+      segments: [...JULES_ROUTE.SESSIONS, providerSessionId],
+      action: JULES_ACTION.APPROVE_PLAN,
+      // Jules documents an empty request for an approval, so none is sent.
+    };
+  }
+
   #observationFor(session: JulesSession, now: number): ProviderSessionObservation {
     const status = this.#statusFor(session, now);
     return {
@@ -209,6 +275,10 @@ export class JulesSessionAdapter extends CloudSessionAdapter {
       title: session.repositoryLabel,
       status,
       observedAt: session.observedAt,
+      canReceiveMessage: session.state !== undefined && JULES_MESSAGEABLE_STATES.has(session.state),
+      ...(session.state === JULES_STATE.AWAITING_PLAN_APPROVAL
+        ? { controls: [JULES_APPROVE_PLAN_CONTROL] }
+        : {}),
       detail: {
         repository: session.repositoryLabel,
         // The starting branch is chosen by whoever opened the session, unlike

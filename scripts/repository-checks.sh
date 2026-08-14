@@ -21,6 +21,7 @@ required_files=(
     apps/desktop/scripts/package.mjs
     apps/desktop/scripts/release.mjs
     apps/desktop/native/macos/ScreenGeometry.swift
+    apps/desktop/native/macos/TalkKey.swift
     packages/sidecar-core/package.json
     scripts/release-macos.sh
     scripts/verify.sh

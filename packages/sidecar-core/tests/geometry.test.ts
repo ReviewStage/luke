@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CAPSULE_SIDE_WIDTH, PEEK_SIDE_GROWTH, positionNotchWindow, SURFACE_MARGIN } from "../src";
+import {
+  BUBBLE_LIFT,
+  CAPSULE_SIDE_WIDTH,
+  PANEL_FORM_FACTOR,
+  PEEK_SIDE_GROWTH,
+  positionNotchWindow,
+  SIMULATED_HOUSING_WIDTH,
+  SURFACE_MARGIN,
+  VOICE_CAPTION_MAX_HEIGHT,
+} from "../src";
 
 const notchedDisplay = {
   bounds: { x: 0, y: 0, width: 1512, height: 982 },
@@ -23,7 +32,9 @@ test("anchors the compact window to the physical top edge", () => {
     x: 487,
     y: 0,
     width: 538,
-    height: 78,
+    // The top inset, the caption block Luke's words wrap into below it, and
+    // the margin the overshoot and the shadow fall in.
+    height: 148,
     notch: {
       topInset: 38,
       housingWidth: 210,
@@ -61,14 +72,100 @@ test("uses a top-center fallback without inventing a notch", () => {
   assert.equal(result.x, -1124);
   assert.equal(result.y, -200);
   assert.equal(result.width, peekWidth(0) + SURFACE_MARGIN * 2);
-  assert.equal(result.height, 32 + SURFACE_MARGIN);
+  assert.equal(result.height, 32 + VOICE_CAPTION_MAX_HEIGHT + SURFACE_MARGIN);
   assert.equal(result.notch.hasNotch, false);
   assert.equal(result.notch.topInset, 25);
   assert.equal(result.notch.source, "work-area");
 });
 
+test("the notch form gives a display without a housing the simulated one", () => {
+  const plainDisplay = {
+    bounds: { x: 1512, y: 0, width: 2560, height: 1440 },
+    workArea: { x: 1512, y: 24, width: 2560, height: 1416 },
+  };
+  const result = positionNotchWindow(
+    plainDisplay,
+    "compact",
+    // The AppKit helper answered for this display: no housing, no inset.
+    { displayId: 2, safeAreaTop: 0, notchWidth: 0, hasNotch: false },
+    PANEL_FORM_FACTOR.NOTCH,
+  );
+
+  assert.deepEqual(result.notch, {
+    topInset: 0,
+    housingWidth: SIMULATED_HOUSING_WIDTH,
+    hasNotch: true,
+    source: "simulated",
+  });
+  // The window grows to hold the peek around the simulated housing, exactly as
+  // it would around a real one of the same width.
+  assert.equal(result.width, peekWidth(SIMULATED_HOUSING_WIDTH) + SURFACE_MARGIN * 2);
+  assert.equal(result.height, 32 + VOICE_CAPTION_MAX_HEIGHT + SURFACE_MARGIN);
+});
+
+test("the notch form never argues with a real housing", () => {
+  const result = positionNotchWindow(
+    notchedDisplay,
+    "compact",
+    { displayId: 1, safeAreaTop: 38, notchWidth: 210, hasNotch: true },
+    PANEL_FORM_FACTOR.NOTCH,
+  );
+
+  assert.deepEqual(result.notch, {
+    topInset: 38,
+    housingWidth: 210,
+    hasNotch: true,
+    source: "appkit",
+  });
+});
+
+test("the bubble form is the default and invents nothing", () => {
+  const plainDisplay = {
+    bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+    workArea: { x: 0, y: 25, width: 1920, height: 1055 },
+  };
+
+  assert.deepEqual(
+    positionNotchWindow(plainDisplay, "compact"),
+    positionNotchWindow(plainDisplay, "compact", undefined, PANEL_FORM_FACTOR.BUBBLE),
+  );
+  assert.equal(positionNotchWindow(plainDisplay, "compact").notch.hasNotch, false);
+});
+
+test("an expanded bubble window holds the lifted panel's shadow", () => {
+  const plainDisplay = {
+    bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+    workArea: { x: 0, y: 25, width: 1920, height: 1055 },
+  };
+
+  // The bubble panel floats off the top edge, so its window is taller by the
+  // same lift; a housing — real or simulated — keeps the panel at the edge.
+  assert.equal(
+    positionNotchWindow(plainDisplay, "expanded").height,
+    520 + SURFACE_MARGIN + BUBBLE_LIFT,
+  );
+  assert.equal(
+    positionNotchWindow(plainDisplay, "expanded", undefined, PANEL_FORM_FACTOR.NOTCH).height,
+    520 + SURFACE_MARGIN,
+  );
+  assert.equal(
+    positionNotchWindow(notchedDisplay, "expanded", {
+      displayId: 1,
+      safeAreaTop: 38,
+      notchWidth: 210,
+      hasNotch: true,
+    }).height,
+    520 + SURFACE_MARGIN,
+  );
+});
+
 test("keeps the expanded panel attached to the same display edge", () => {
-  const result = positionNotchWindow(notchedDisplay, "expanded");
+  const result = positionNotchWindow(notchedDisplay, "expanded", {
+    displayId: 1,
+    safeAreaTop: 38,
+    notchWidth: 210,
+    hasNotch: true,
+  });
 
   assert.equal(result.x, 406);
   assert.equal(result.y, 0);

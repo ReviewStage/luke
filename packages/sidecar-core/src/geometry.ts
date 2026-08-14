@@ -22,8 +22,53 @@ export interface ResolvedNotchGeometry {
   topInset: number;
   housingWidth: number;
   hasNotch: boolean;
-  source: "appkit" | "fixture" | "work-area";
+  source: "appkit" | "fixture" | "work-area" | "simulated";
 }
+
+/**
+ * How the compact shape stands on a display without a camera housing — an
+ * external monitor, or a MacBook built before the notch. `NOTCH` draws the
+ * housing the display never had, pressed into the top edge; `BUBBLE` is the
+ * free-floating pill, which is what every display without a housing gets until
+ * the user asks otherwise. A display with a real notch answers to neither.
+ */
+export const PANEL_FORM_FACTOR = {
+  NOTCH: "notch",
+  BUBBLE: "bubble",
+} as const;
+
+export type PanelFormFactor = (typeof PANEL_FORM_FACTOR)[keyof typeof PANEL_FORM_FACTOR];
+
+export const PANEL_FORM_FACTOR_LIST: readonly PanelFormFactor[] = Object.values(PANEL_FORM_FACTOR);
+
+/** Guards a form factor arriving from persisted or renderer-supplied data. */
+export function isPanelFormFactor(value: unknown): value is PanelFormFactor {
+  return typeof value === "string" && PANEL_FORM_FACTOR_LIST.includes(value as PanelFormFactor);
+}
+
+export const DEFAULT_PANEL_FORM_FACTOR: PanelFormFactor = PANEL_FORM_FACTOR.BUBBLE;
+
+/**
+ * The housing a display is given when it has none and the user asks for the
+ * notch form: the 14-inch MacBook Pro's, the same housing the capture fixture
+ * pins and the one every drawn proportion was measured against.
+ */
+export const SIMULATED_HOUSING_WIDTH = 210;
+
+/**
+ * `--shape-top` in the renderer's stylesheet; the two must agree. How far the
+ * bubble floats off the display's top edge — every shape of it, the panel
+ * included, because a bubble glued to the edge at one size and afloat at
+ * another would read as two objects. The expanded window grows by this much
+ * so the lifted panel's shadow still fades out inside it.
+ *
+ * The value is derived rather than chosen: the pill matches the menu bar it
+ * floats beside, which is 24pt tall on a display without a housing — one step
+ * up from the 22pt item capsule, which left the face and marks cramped. The
+ * pill's height is the 32px compact strip minus the lift on each side, so a
+ * lift of 4 is what makes it exactly that 24.
+ */
+export const BUBBLE_LIFT = 4;
 
 export type WindowMode = "compact" | "expanded";
 
@@ -50,6 +95,14 @@ export interface NotchWindowLayout extends Rectangle {
 export const CAPSULE_SIDE_WIDTH = 36;
 export const PEEK_SIDE_GROWTH = 88;
 export const SURFACE_MARGIN = 40;
+/**
+ * `--caption-max` in the renderer's stylesheet; the two must agree. The
+ * tallest compact shape is the capsule or peek grown a caption block below
+ * the housing — Luke's words while he speaks, wrapping to as many as four
+ * lines as they stream in — and the window holds that whole block for the
+ * same reason it holds the peek's width: speech must never cost an IPC resize.
+ */
+export const VOICE_CAPTION_MAX_HEIGHT = 70;
 /** `--panel-width` in the renderer's stylesheet; the two must agree. */
 export const PANEL_WIDTH = 620;
 const peekSideWidth = CAPSULE_SIDE_WIDTH + PEEK_SIDE_GROWTH;
@@ -58,21 +111,30 @@ const panelHeight = 520;
 export function resolveNotchGeometry(
   display: DisplayGeometry,
   native?: NativeNotchGeometry,
+  formFactor: PanelFormFactor = DEFAULT_PANEL_FORM_FACTOR,
 ): ResolvedNotchGeometry {
-  if (native) {
-    return {
-      topInset: Math.max(0, Math.round(native.safeAreaTop)),
-      housingWidth: native.hasNotch ? Math.max(0, Math.round(native.notchWidth)) : 0,
-      hasNotch: native.hasNotch,
-      source: native.source ?? "appkit",
-    };
-  }
-
+  const physical: ResolvedNotchGeometry = native
+    ? {
+        topInset: Math.max(0, Math.round(native.safeAreaTop)),
+        housingWidth: native.hasNotch ? Math.max(0, Math.round(native.notchWidth)) : 0,
+        hasNotch: native.hasNotch,
+        source: native.source ?? "appkit",
+      }
+    : {
+        topInset: Math.max(0, display.workArea.y - display.bounds.y),
+        housingWidth: 0,
+        hasNotch: false,
+        source: "work-area",
+      };
+  // A real housing is never argued with; only its absence takes the form
+  // factor's answer. The top inset is carried through untouched — the window
+  // and the stylesheet already hold every housing to the same 32px floor.
+  if (physical.hasNotch || formFactor !== PANEL_FORM_FACTOR.NOTCH) return physical;
   return {
-    topInset: Math.max(0, display.workArea.y - display.bounds.y),
-    housingWidth: 0,
-    hasNotch: false,
-    source: "work-area",
+    topInset: physical.topInset,
+    housingWidth: SIMULATED_HOUSING_WIDTH,
+    hasNotch: true,
+    source: "simulated",
   };
 }
 
@@ -80,17 +142,27 @@ export function positionNotchWindow(
   display: DisplayGeometry,
   mode: WindowMode,
   native?: NativeNotchGeometry,
+  formFactor: PanelFormFactor = DEFAULT_PANEL_FORM_FACTOR,
 ): NotchWindowLayout {
-  const notch = resolveNotchGeometry(display, native);
+  const notch = resolveNotchGeometry(display, native, formFactor);
   const housingWidth = notch.hasNotch ? notch.housingWidth : 0;
   const width =
     mode === "expanded"
       ? Math.min(PANEL_WIDTH + SURFACE_MARGIN * 2, display.bounds.width)
       : Math.min(housingWidth + peekSideWidth * 2 + SURFACE_MARGIN * 2, display.bounds.width);
+  // A bubble panel floats `BUBBLE_LIFT` below the top edge, and the margin was
+  // measured from a panel drawn at the edge, so the lift is added back or the
+  // last of the shadow's tail meets the window edge as a faint line.
   const height =
     mode === "expanded"
-      ? Math.min(panelHeight + SURFACE_MARGIN, display.bounds.height)
-      : Math.min(Math.max(32, notch.topInset) + SURFACE_MARGIN, display.bounds.height);
+      ? Math.min(
+          panelHeight + SURFACE_MARGIN + (notch.hasNotch ? 0 : BUBBLE_LIFT),
+          display.bounds.height,
+        )
+      : Math.min(
+          Math.max(32, notch.topInset) + VOICE_CAPTION_MAX_HEIGHT + SURFACE_MARGIN,
+          display.bounds.height,
+        );
   const x = Math.round(display.bounds.x + (display.bounds.width - width) / 2);
 
   return {

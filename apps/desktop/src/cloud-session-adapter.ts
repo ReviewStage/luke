@@ -1,10 +1,26 @@
 import {
+  type ControllableSessionProviderAdapter,
+  type MessageCapableSessionProviderAdapter,
+  PROVIDER_MESSAGE_RESULT_STATUS,
+  type ProviderControlRequest,
+  type ProviderControlResult,
+  type ProviderMessageResult,
+  type ProviderSessionMessage,
   type ProviderSessionObservation,
+  type ProviderWorkspaceAgentRequest,
+  type ProviderWorkspaceRequest,
+  type ProviderWorkspaceResult,
   SESSION_LOCATION,
   SESSION_STATUS,
+  type SessionControl,
   type SessionProvider,
-  type SessionProviderAdapter,
   type SessionStatus,
+  sessionMessageText,
+  WORKSPACE_TASK_SUPPORT,
+  type WorkspaceAgentCapableSessionProviderAdapter,
+  type WorkspaceCapableSessionProviderAdapter,
+  type WorkspaceProject,
+  workspaceNameText,
 } from "@sidecar/core";
 
 const UNKNOWN_REPOSITORY_LABEL = "workspace";
@@ -12,11 +28,14 @@ const GIT_SUFFIX = ".git";
 
 const HTTP_METHOD = {
   GET: "GET",
+  POST: "POST",
 } as const;
 
 const HTTP_STATUS = {
   UNAUTHORIZED: 401,
   FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  CONFLICT: 409,
 } as const;
 
 /**
@@ -41,10 +60,22 @@ const AUTHORIZATION_HEADERS: Readonly<
   [CLOUD_AUTH_SCHEME.GOOGLE_API_KEY_HEADER]: (apiKey) => ({ [GOOGLE_API_KEY_HEADER]: apiKey }),
 };
 
+const DEFAULT_REQUEST_HEADERS: Readonly<Record<string, string>> = {
+  Accept: "application/json",
+};
+
 export const CLOUD_FAILURE = {
   UNAUTHORIZED: "unauthorized",
   TRANSIENT: "transient",
 } as const;
+
+/** What a write acts on, as a refusal should name it. */
+const WRITE_SUBJECT = {
+  SESSION: "session",
+  PROJECT: "project",
+} as const;
+
+type WriteSubject = (typeof WRITE_SUBJECT)[keyof typeof WRITE_SUBJECT];
 
 export type CloudFailure = (typeof CLOUD_FAILURE)[keyof typeof CLOUD_FAILURE];
 
@@ -57,6 +88,13 @@ export const CLOUD_ADAPTER_DEFAULTS = {
   ACTIVE_SESSION_FRESHNESS_MS: 15 * 60 * 1000,
   MINIMUM_REFRESH_INTERVAL_MS: 15 * 1000,
   REQUEST_TIMEOUT_MS: 8 * 1000,
+  /**
+   * For the rare read a provider documents as slow — Cursor's repository list
+   * can take tens of seconds for a large organisation. A read on this deadline
+   * must never hold the observation pass; it is for work that rides beside
+   * one.
+   */
+  SLOW_REQUEST_TIMEOUT_MS: 45 * 1000,
 } as const;
 
 export type CloudFetch = (url: string, init: RequestInit) => Promise<Response>;
@@ -90,14 +128,34 @@ export interface CloudAdapterProfile {
 }
 
 /**
- * The only way a subclass reaches its provider. It authenticates, bounds, and
- * parses the request, and it can express nothing but a read, so no adapter
- * built on it can change provider state.
+ * The only way a subclass reaches its provider while observing. It
+ * authenticates, bounds, and parses the request, and it can express nothing
+ * but a read, so no observation pass built on it can change provider state.
+ * The deadline can be widened only to the slow bound, and only for a read the
+ * provider itself documents as slow.
  */
 export type CloudRequest = (
   segments: readonly string[],
   query?: Readonly<Record<string, string>>,
+  options?: Readonly<{ timeoutMs?: number }>,
 ) => Promise<Record<string, unknown>>;
+
+/**
+ * One documented write a provider takes for one of its sessions: the route and
+ * the exact body its endpoint asks for. A subclass describes the request; the
+ * base is the only thing that issues one.
+ */
+export interface CloudWriteRoute {
+  segments: readonly string[];
+  /**
+   * A Google-style custom method, appended to the path as `:action` rather
+   * than as a segment: it names what the request does to the resource the
+   * segments already name.
+   */
+  action?: string;
+  /** Left off entirely for an endpoint that documents an empty request. */
+  body?: Readonly<Record<string, unknown>>;
+}
 
 export function positiveInteger(value: number | undefined, fallback: number): number {
   if (value === undefined || !Number.isFinite(value) || value <= 0) return fallback;
@@ -184,8 +242,20 @@ function resolveBaseUrl(profile: CloudAdapterProfile, configured: string | undef
  * refresh cadence, the failure rules that decide whether a snapshot survives,
  * and bounded read-only requests. A subclass supplies only the provider's
  * routes and how its reported state maps onto Luke's.
+ *
+ * The only writes any of this can make are `sendMessage`, `executeControl`,
+ * and `createWorkspace`, and each acts on nothing but what a user asked for
+ * against something the last pass observed — a session that advertised the
+ * capability being used, or a project the provider itself listed.
+ * Observation itself stays read-only.
  */
-export abstract class CloudSessionAdapter implements SessionProviderAdapter {
+export abstract class CloudSessionAdapter
+  implements
+    MessageCapableSessionProviderAdapter,
+    ControllableSessionProviderAdapter,
+    WorkspaceCapableSessionProviderAdapter,
+    WorkspaceAgentCapableSessionProviderAdapter
+{
   readonly provider: SessionProvider;
 
   readonly #readApiKey: () => Promise<string | undefined>;
@@ -196,6 +266,13 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
   readonly #minimumRefreshIntervalMs: number;
 
   #credential: string | undefined;
+  /**
+   * Bumped only when the credential changes or is rejected — unlike the pass
+   * counter, which moves on every observation. It is what a slow read that
+   * outlives its pass is bound to: several passes may come and go while it
+   * runs, and only a different credential makes its answer wrong.
+   */
+  #credentialEpoch = 0;
   #observations: readonly ProviderSessionObservation[] = [];
   #lastAttemptAt = Number.NEGATIVE_INFINITY;
   #collectPass = 0;
@@ -259,6 +336,290 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
     return this.#observations;
   }
 
+  /**
+   * Sends one user-typed message to one observed session, through the
+   * provider's documented message endpoint. Everything that could make this a
+   * different kind of write is refused before a request exists: a session the
+   * last pass did not observe, one that did not advertise `canReceiveMessage`,
+   * text outside the message bound, and a missing credential all answer
+   * without touching the network.
+   */
+  async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
+    const observation = this.#observations.find(
+      (candidate) => candidate.providerSessionId === message.providerSessionId,
+    );
+    if (!observation?.canReceiveMessage) {
+      return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+    }
+
+    const text = sessionMessageText(message.text);
+    if (!text) {
+      return {
+        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        reason: "A message has to be shorter than a document and longer than nothing.",
+      };
+    }
+
+    // The credential is read at send time, not held from the observation pass,
+    // so a key the user just replaced or removed is honoured immediately. Its
+    // absence is a rejection with the actual reason, not "unsupported": the
+    // session advertised taking messages while a key stood behind it, and a
+    // key that has since gone is a different fact than a session that moved on.
+    const apiKey = await this.#readApiKey().catch(() => undefined);
+    if (!apiKey) return this.#missingKeyRejection();
+
+    const route = this.messageRoute(message.providerSessionId, text);
+    if (!route) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+    return this.#postWrite(apiKey, route);
+  }
+
+  #missingKeyRejection(): ProviderMessageResult {
+    return {
+      status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+      reason: `${this.provider.displayName}'s API key is no longer configured.`,
+    };
+  }
+
+  /**
+   * Runs one provider-defined control against one observed session, through
+   * the endpoint the provider documents for it. The same refusals guard it
+   * that guard a message: no request exists for a session the last pass did
+   * not observe, for a control that session did not advertise, or without a
+   * credential.
+   */
+  async executeControl(request: ProviderControlRequest): Promise<ProviderControlResult> {
+    const observation = this.#observations.find(
+      (candidate) => candidate.providerSessionId === request.providerSessionId,
+    );
+    // The advertised control — not the caller's copy of it — is what the route
+    // is built from, so whatever it targets is the thing the last pass actually
+    // saw, and nothing a caller sends can redirect it.
+    const advertised = observation?.controls?.find((control) => control.id === request.control.id);
+    if (!advertised) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+
+    const apiKey = await this.#readApiKey().catch(() => undefined);
+    if (!apiKey) return this.#missingKeyRejection();
+
+    const route = this.controlRoute(request.providerSessionId, advertised);
+    if (!route) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+    return this.#postWrite(apiKey, route);
+  }
+
+  /**
+   * The projects the latest pass reported this provider will create a
+   * workspace in. Empty by default, so a provider that documents no creation
+   * endpoint offers nowhere — the same posture as the write routes below.
+   */
+  workspaceProjects(): readonly WorkspaceProject[] {
+    return [];
+  }
+
+  /**
+   * Starts another agent in the workspace one observed session runs in,
+   * through the provider's documented endpoint. The same refusals guard it
+   * that guard a message: a session the last pass did not observe, an agent
+   * its observation did not list, a name or task outside its bound, and a
+   * missing credential all answer without touching the network.
+   */
+  async spawnWorkspaceAgent(
+    request: ProviderWorkspaceAgentRequest,
+  ): Promise<ProviderWorkspaceResult> {
+    const observation = this.#observations.find(
+      (candidate) => candidate.providerSessionId === request.providerSessionId,
+    );
+    if (!observation) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+    // The advertised list — not the caller's word — is what the route is
+    // built from, so an agent kind is only ever one the last pass promised.
+    const agent = observation.spawnableAgents?.find((candidate) => candidate === request.agent);
+    if (!agent) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+
+    const name = request.name === undefined ? undefined : workspaceNameText(request.name);
+    if (request.name !== undefined && !name) {
+      return {
+        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        reason: "A session name has to be short enough to say and longer than nothing.",
+      };
+    }
+    const task = request.task === undefined ? undefined : sessionMessageText(request.task);
+    if (request.task !== undefined && !task) {
+      return {
+        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        reason: "A task has to be shorter than a document and longer than nothing.",
+      };
+    }
+
+    // The route is built in the same synchronous step as the validation, from
+    // the observation's own spawn target: a pass landing while the key is read
+    // must not be able to swap the snapshot between the check and the route.
+    const route = this.workspaceAgentRoute(
+      observation.spawnTarget ?? request.providerSessionId,
+      agent,
+      name,
+      task,
+    );
+    if (!route) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+
+    const apiKey = await this.#readApiKey().catch(() => undefined);
+    if (!apiKey) return this.#missingKeyRejection();
+    return this.#postWrite(apiKey, route);
+  }
+
+  /**
+   * Where this provider's documented start-another-agent endpoint lives and
+   * what it takes. The target handed in is the observation's own `spawnTarget`
+   * — the session id itself when none was reported — and the agent is one the
+   * latest observation listed, so the route is built from what the provider
+   * itself promised. The default is that a provider starts nothing, the same
+   * way a read-only adapter stays read-only by writing nothing.
+   */
+  protected workspaceAgentRoute(
+    _spawnTarget: string,
+    _agent: string,
+    _name: string | undefined,
+    _task: string | undefined,
+  ): CloudWriteRoute | undefined {
+    return undefined;
+  }
+
+  /**
+   * Creates one workspace the user just asked for, in one project the latest
+   * pass reported, through the provider's documented creation endpoint — and,
+   * when the user gave the new agent an opening task, hands that over too,
+   * either inside the creation request or through the provider's documented
+   * follow-up on what the creation returned. The same refusals guard it that
+   * guard a message: a project the last pass did not report, a name or task
+   * outside its bound, a task a project does not take or the absence of one it
+   * needs, and a missing credential all answer without touching the network.
+   */
+  async createWorkspace(request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult> {
+    const project = this.workspaceProjects().find(
+      (candidate) => candidate.providerProjectId === request.providerProjectId,
+    );
+    if (!project) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+
+    const name = request.name === undefined ? undefined : workspaceNameText(request.name);
+    if (request.name !== undefined && !name) {
+      return {
+        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        reason: "A workspace name has to be short enough to say and longer than nothing.",
+      };
+    }
+
+    // The task is held to the project's own word for it, again here: the
+    // renderer already refused what it could, but an adapter answers for its
+    // own writes.
+    const task = request.task === undefined ? undefined : sessionMessageText(request.task);
+    if (request.task !== undefined && !task) {
+      return {
+        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        reason: "A task has to be shorter than a document and longer than nothing.",
+      };
+    }
+    if (task && project.taskSupport === WORKSPACE_TASK_SUPPORT.NONE) {
+      return {
+        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        reason: "This project takes no opening task.",
+      };
+    }
+    if (!task && project.taskSupport === WORKSPACE_TASK_SUPPORT.REQUIRED) {
+      return {
+        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        reason: "This project needs an opening task to create a workspace.",
+      };
+    }
+
+    const apiKey = await this.#readApiKey().catch(() => undefined);
+    if (!apiKey) return this.#missingKeyRejection();
+
+    const route = this.workspaceCreationRoute(project, name, task);
+    if (!route) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+    const created = await this.#postWriteDetailed(apiKey, route, WRITE_SUBJECT.PROJECT);
+    if (created.outcome.status !== PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED || !task) {
+      return created.outcome;
+    }
+
+    // The workspace stands; what is left is the task. A provider whose
+    // creation request already carried it has nothing to answer here, and one
+    // that hands tasks somewhere the creation response names answers with
+    // that route — built from what the provider itself just returned.
+    const followUp = this.workspaceTaskRoute(created.body ?? {}, task);
+    if (followUp === undefined) return created.outcome;
+    if ("undeliverable" in followUp) {
+      return {
+        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        reason: `The workspace was created, but its opening task was not delivered: ${followUp.undeliverable}`,
+      };
+    }
+    const delivered = await this.#postWriteDetailed(apiKey, followUp, WRITE_SUBJECT.SESSION);
+    if (delivered.outcome.status === PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED) {
+      return created.outcome;
+    }
+    return {
+      status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+      reason: `The workspace was created, but its opening task was not delivered: ${
+        delivered.outcome.status === PROVIDER_MESSAGE_RESULT_STATUS.REJECTED
+          ? delivered.outcome.reason
+          : "the provider documents no way to hand it over."
+      }`,
+    };
+  }
+
+  /**
+   * Where this provider's documented workspace-creation endpoint lives and what
+   * it takes. The project handed in is one the latest pass reported, so the
+   * route is built from what the provider itself offered; the task arrives
+   * here so a provider whose creation request carries it can put it in the
+   * body. The default is that a provider creates nothing, the same way a
+   * read-only adapter stays read-only by writing nothing.
+   */
+  protected workspaceCreationRoute(
+    _project: WorkspaceProject,
+    _name: string | undefined,
+    _task: string | undefined,
+  ): CloudWriteRoute | undefined {
+    return undefined;
+  }
+
+  /**
+   * Where an opening task goes once the workspace exists, for a provider that
+   * documents the hand-over as its own endpoint on something the creation
+   * response names. Returning nothing says the creation request already
+   * carried the task; a provider whose response did not name the place the
+   * task goes answers `undeliverable` with why, so a created-but-idle
+   * workspace is reported as exactly that rather than claimed complete.
+   */
+  protected workspaceTaskRoute(
+    _creationBody: Record<string, unknown>,
+    _task: string,
+  ): CloudWriteRoute | { undeliverable: string } | undefined {
+    return undefined;
+  }
+
+  /**
+   * Where this provider's documented message endpoint lives and what it takes.
+   * Returning nothing says this adapter cannot form the request — a provider
+   * that documents no message endpoint at all, or an identity it has not
+   * learned — never that the send failed. The default is that a provider takes
+   * no messages, so a read-only adapter stays read-only by writing nothing.
+   */
+  protected messageRoute(_providerSessionId: string, _text: string): CloudWriteRoute | undefined {
+    return undefined;
+  }
+
+  /**
+   * Where a documented control's endpoint lives. The control handed in is the
+   * one the latest observation advertised, so a route built from its `target`
+   * acts on what the user was shown. The default is that a provider advertises
+   * no controls, so only an adapter that advertised one has anything to answer
+   * here.
+   */
+  protected controlRoute(
+    _providerSessionId: string,
+    _control: SessionControl,
+  ): CloudWriteRoute | undefined {
+    return undefined;
+  }
+
   /** Runs one authenticated pass. Duplicate session ids are dropped by the base. */
   protected abstract collect(
     request: CloudRequest,
@@ -287,6 +648,16 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
       : SESSION_STATUS.UNKNOWN;
   }
 
+  /**
+   * The headers every request carries besides the credential. A subclass
+   * overrides this only when its provider asks for its own media type or a
+   * version pin; the authorization header is layered on after these, so no
+   * override can replace the credential.
+   */
+  protected requestHeaders(): Readonly<Record<string, string>> {
+    return DEFAULT_REQUEST_HEADERS;
+  }
+
   /** Keeps one failed resource from discarding an otherwise complete pass. */
   protected async tolerateItemFailure<Result>(
     operation: () => Promise<Result>,
@@ -303,10 +674,45 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
 
   #forgetObservedState(): void {
     // A pass still in flight was started under a credential that no longer
-    // stands, so its result must not land.
+    // stands, so its result must not land — and neither may a slow read's.
     this.#collectPass += 1;
+    this.#credentialEpoch += 1;
     this.forgetCachedIdentity();
     this.#observations = [];
+  }
+
+  /**
+   * One read bound to the credential rather than to one pass, for an offer
+   * that rides beside the passes and may outlive several — the pass-scoped
+   * request would discard exactly the slow answer such a read exists for.
+   * Only a credential change discards it: the read refuses to land across
+   * one, so nothing read as one user is ever kept as another's. What the
+   * caller does with the answer is handed in rather than returned, so the
+   * check and the write share one synchronous step and a credential cleared
+   * in the gap between them has no gap to land in.
+   */
+  protected async credentialBoundRead(
+    segments: readonly string[],
+    query: Readonly<Record<string, string>> | undefined,
+    options: Readonly<{ timeoutMs?: number }> | undefined,
+    apply: (body: Record<string, unknown>) => void,
+  ): Promise<void> {
+    const epoch = this.#credentialEpoch;
+    const apiKey = this.#credential;
+    if (!apiKey) {
+      throw new CloudRequestError(
+        CLOUD_FAILURE.TRANSIENT,
+        `${this.provider.displayName} has no credential to read with`,
+      );
+    }
+    const body = await this.#requestJson(apiKey, segments, query, options);
+    if (epoch !== this.#credentialEpoch) {
+      throw new CloudRequestError(
+        CLOUD_FAILURE.TRANSIENT,
+        `${this.provider.displayName} read outlived its credential`,
+      );
+    }
+    apply(body);
   }
 
   /**
@@ -316,9 +722,9 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
    * it over state that belongs to the new credential.
    */
   #requestForPass(pass: number, apiKey: string): CloudRequest {
-    return async (segments, query) => {
+    return async (segments, query, options) => {
       this.#assertPassCurrent(pass);
-      const body = await this.#requestJson(apiKey, segments, query);
+      const body = await this.#requestJson(apiKey, segments, query, options);
       this.#assertPassCurrent(pass);
       return body;
     };
@@ -333,28 +739,141 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
     }
   }
 
-  #url(segments: readonly string[], query: Readonly<Record<string, string>>): string {
+  #url(
+    segments: readonly string[],
+    query: Readonly<Record<string, string>>,
+    action?: string,
+  ): string {
     const url = new URL(this.#baseUrl);
-    url.pathname = `/${segments.map((segment) => encodeURIComponent(segment)).join("/")}`;
+    // The action rides after the segments unencoded: `:sendMessage` is part of
+    // the route, and encoding its colon would name a different route.
+    url.pathname = `/${segments.map((segment) => encodeURIComponent(segment)).join("/")}${
+      action ? `:${action}` : ""
+    }`;
     for (const [name, value] of Object.entries(query)) url.searchParams.set(name, value);
     return url.href;
+  }
+
+  /**
+   * The one authenticated write. It shares the read path's timeout and its
+   * refusal to echo anything the provider said into an error a user sees, and
+   * it answers with what became of the request rather than throwing: a write
+   * is a user's own act, so every outcome has to land back on the row it left.
+   * The subject is what the route acts on, so a refusal names the thing that
+   * actually went missing.
+   */
+  async #postWrite(
+    apiKey: string,
+    route: CloudWriteRoute,
+    subject: WriteSubject = WRITE_SUBJECT.SESSION,
+  ): Promise<ProviderMessageResult> {
+    return (await this.#postWriteDetailed(apiKey, route, subject)).outcome;
+  }
+
+  /**
+   * The same write, keeping what the provider answered with: a creation
+   * response names the thing it created, and a follow-up write is built from
+   * that. The body never travels further than the adapter that asked for it.
+   */
+  async #postWriteDetailed(
+    apiKey: string,
+    route: CloudWriteRoute,
+    subject: WriteSubject,
+  ): Promise<{ outcome: ProviderMessageResult; body?: Record<string, unknown> }> {
+    const name = this.provider.displayName;
+    let response: Response;
+    try {
+      response = await this.#fetch(this.#url(route.segments, {}, route.action), {
+        method: HTTP_METHOD.POST,
+        // The same layering as a read: the provider's own headers first, the
+        // credential after them so no override can replace it.
+        headers: {
+          ...this.requestHeaders(),
+          ...this.#authorizationHeaders(apiKey),
+          // An endpoint that documents an empty request gets exactly that,
+          // not an empty JSON object it never asked for.
+          ...(route.body === undefined ? {} : { "Content-Type": "application/json" }),
+        },
+        ...(route.body === undefined ? {} : { body: JSON.stringify(route.body) }),
+        signal: AbortSignal.timeout(CLOUD_ADAPTER_DEFAULTS.REQUEST_TIMEOUT_MS),
+      });
+    } catch {
+      return {
+        outcome: {
+          status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+          reason: `${name} could not be reached, so nothing was sent.`,
+        },
+      };
+    }
+
+    if (response.ok) {
+      // A write that landed changes what the session is doing, so the refresh
+      // that follows must actually ask: served from the cache inside the
+      // minimum interval, the row would keep offering what the provider has
+      // already taken.
+      this.#lastAttemptAt = Number.NEGATIVE_INFINITY;
+      // An unreadable body is not a failed write: the provider already said
+      // yes, so only a follow-up that needed the body has anything to miss.
+      const body = await response.json().catch(() => undefined);
+      return {
+        outcome: { status: PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED },
+        ...(isRecord(body) ? { body } : {}),
+      };
+    }
+    if (response.status === HTTP_STATUS.UNAUTHORIZED || response.status === HTTP_STATUS.FORBIDDEN) {
+      return {
+        outcome: {
+          status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+          reason: `${name} rejected the configured API key.`,
+        },
+      };
+    }
+    if (response.status === HTTP_STATUS.NOT_FOUND) {
+      return {
+        outcome: {
+          status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+          reason: `${name} no longer has this ${subject}.`,
+        },
+      };
+    }
+    if (response.status === HTTP_STATUS.CONFLICT) {
+      return {
+        outcome: {
+          status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+          reason: `${name} says this ${subject} has moved on since Luke last looked.`,
+        },
+      };
+    }
+    return {
+      outcome: {
+        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        reason: `${name} answered with status ${response.status}, so the request may not have landed.`,
+      },
+    };
   }
 
   async #requestJson(
     apiKey: string,
     segments: readonly string[],
     query: Readonly<Record<string, string>> = {},
+    options: Readonly<{ timeoutMs?: number }> = {},
   ): Promise<Record<string, unknown>> {
     const name = this.provider.displayName;
+    // A widened deadline never widens past the slow bound: the option exists
+    // for a read the provider documents as slow, not for one that never ends.
+    const timeoutMs = Math.min(
+      positiveInteger(options.timeoutMs, CLOUD_ADAPTER_DEFAULTS.REQUEST_TIMEOUT_MS),
+      CLOUD_ADAPTER_DEFAULTS.SLOW_REQUEST_TIMEOUT_MS,
+    );
     let response: Response;
     try {
       response = await this.#fetch(this.#url(segments, query), {
         method: HTTP_METHOD.GET,
         headers: {
+          ...this.requestHeaders(),
           ...this.#authorizationHeaders(apiKey),
-          Accept: "application/json",
         },
-        signal: AbortSignal.timeout(CLOUD_ADAPTER_DEFAULTS.REQUEST_TIMEOUT_MS),
+        signal: AbortSignal.timeout(timeoutMs),
       });
     } catch {
       throw new CloudRequestError(CLOUD_FAILURE.TRANSIENT, `${name} request failed`);

@@ -5,13 +5,16 @@ import type { WindowMode } from "../shared/contracts";
  * window, so moving between them is pure CSS and never touches the main
  * process; only the panel needs a larger window to unfold into. The slot is
  * drawn in that same expanded window — it is the panel stood down to a single
- * field, so entering it costs no IPC either.
+ * field, so entering it costs no IPC either. The feedback shape is the second
+ * thing the panel stands down to: the composer for a note to the founders,
+ * asking for one thing the way the slot does and morphing the same way.
  */
 export const PANEL_PRESENTATION = {
   CAPSULE: "capsule",
   PEEK: "peek",
   PANEL: "panel",
   SLOT: "slot",
+  FEEDBACK: "feedback",
 } as const;
 
 export type PanelPresentation = (typeof PANEL_PRESENTATION)[keyof typeof PANEL_PRESENTATION];
@@ -23,6 +26,7 @@ export const HIT_REGION = {
   CAPSULE: "capsule",
   PANEL: "panel",
   SLOT: "slot",
+  FEEDBACK: "feedback",
 } as const;
 
 export type HitRegion = (typeof HIT_REGION)[keyof typeof HIT_REGION];

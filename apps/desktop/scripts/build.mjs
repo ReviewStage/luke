@@ -7,14 +7,22 @@ const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(scriptDirectory, "..");
 const outputRoot = path.join(appRoot, "dist");
 const brandRoot = path.resolve(appRoot, "../../design/brand");
-// The menu bar item is the one piece of artwork the app cannot inline: macOS
-// takes a NativeImage read from a file, not markup. Both scales travel, because
-// `nativeImage` finds the `@2x` file by looking beside the one it was given.
+// The menu bar item and the Dock icon are the two pieces of artwork the app
+// cannot inline: macOS takes a NativeImage read from a file, not markup. Both
+// menu bar scales travel, because `nativeImage` finds the `@2x` file by looking
+// beside the one it was given. The Dock takes one large PNG per mode — macOS
+// recolors the template item itself, but the Dock tile has to be swapped by
+// hand as the theme changes, which is why there are two.
 const MENU_BAR_IMAGES = ["lukeTemplate.png", "lukeTemplate@2x.png"];
+const DOCK_ICON_IMAGES = {
+  "luke-icon-light.png": "luke-icon-light-512.png",
+  "luke-icon-dark.png": "luke-icon-dark-512.png",
+};
 
 await fs.rm(outputRoot, { recursive: true, force: true });
 await fs.mkdir(path.join(outputRoot, "renderer"), { recursive: true });
 await fs.mkdir(path.join(outputRoot, "menubar"), { recursive: true });
+await fs.mkdir(path.join(outputRoot, "icon"), { recursive: true });
 
 await Promise.all([
   build({
@@ -72,8 +80,11 @@ await fs.copyFile(
   path.join(outputRoot, "renderer/index.html"),
 );
 
-await Promise.all(
-  MENU_BAR_IMAGES.map((name) =>
+await Promise.all([
+  ...MENU_BAR_IMAGES.map((name) =>
     fs.copyFile(path.join(brandRoot, "menubar", name), path.join(outputRoot, "menubar", name)),
   ),
-);
+  ...Object.entries(DOCK_ICON_IMAGES).map(([name, source]) =>
+    fs.copyFile(path.join(brandRoot, "icon", source), path.join(outputRoot, "icon", name)),
+  ),
+]);

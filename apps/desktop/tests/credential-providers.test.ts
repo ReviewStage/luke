@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  CLOUD_AGENT_PROVIDER_LIST,
   CREDENTIAL_PROVIDER_ID,
   CREDENTIAL_PROVIDER_LIST,
   CREDENTIAL_PROVIDERS,
+  INTEGRATION_PROVIDER_LIST,
   isCredentialProviderId,
 } from "../src/shared/credential-providers";
 
@@ -37,6 +39,42 @@ test("describes every provider it lists", () => {
   }
 });
 
+test("splits the settings sections without losing a provider", () => {
+  // The two sections together are exactly the registry: a provider missing
+  // from both would hold a key no row can enter, and one in both would be
+  // asked for the same key twice.
+  assert.deepEqual(
+    [...CLOUD_AGENT_PROVIDER_LIST, ...INTEGRATION_PROVIDER_LIST]
+      .map((provider) => provider.id)
+      .sort(),
+    CREDENTIAL_PROVIDER_LIST.map((provider) => provider.id).sort(),
+  );
+  assert.deepEqual(
+    INTEGRATION_PROVIDER_LIST.map((provider) => provider.id),
+    [CREDENTIAL_PROVIDER_ID.LINEAR],
+  );
+  // An integration's row carries its own answer to what connecting it buys.
+  for (const provider of INTEGRATION_PROVIDER_LIST) {
+    assert.ok(provider.description, `${provider.id} says what connecting it allows`);
+  }
+});
+
+test("sends the user to the one GitHub token kind the agent-tasks API answers", () => {
+  const copilot = CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.COPILOT];
+
+  assert.equal(copilot.displayName, "Copilot");
+  assert.deepEqual(copilot.environmentVariables, ["COPILOT_API_KEY"]);
+  // The endpoint takes only user tokens, and GitHub also issues the kinds it
+  // refuses, so the copy has to name what to create and what will not work.
+  assert.match(copilot.hint, /fine-grained personal access token/i);
+  assert.match(copilot.hint, /Agent tasks/);
+  assert.match(copilot.hint, /installation/i);
+  assert.match(copilot.apiKeysUrl, /personal-access-tokens\/new$/);
+  // No key format: fine-grained PATs and GitHub App user tokens carry
+  // different prefixes, and a single one would refuse a working credential.
+  assert.equal(copilot.keyFormat, undefined);
+});
+
 test("takes only the Devin credentials its API version issues", () => {
   const devin = CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.DEVIN];
 
@@ -58,4 +96,17 @@ test("takes only the Devin credentials its API version issues", () => {
   for (const providerId of [CREDENTIAL_PROVIDER_ID.CONDUCTOR, CREDENTIAL_PROVIDER_ID.CURSOR]) {
     assert.equal(CREDENTIAL_PROVIDERS[providerId].keyFormat, undefined, providerId);
   }
+});
+
+test("takes only the Linear key kind a person holds", () => {
+  const linear = CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.LINEAR];
+
+  assert.equal(linear.displayName, "Linear");
+  assert.deepEqual(linear.environmentVariables, ["LINEAR_API_KEY"]);
+  // Luke reads the tracker as the user, with the key kind Linear issues to a
+  // person. An OAuth token names an application acting for a workspace, which
+  // is a different actor and would be refused where it matters least.
+  assert.equal(linear.keyFormat?.prefix, "lin_api_");
+  assert.equal(linear.keyFormat?.label, "Personal API key");
+  assert.match(linear.apiKeysUrl, /^https:\/\/linear\.app\/settings\//);
 });

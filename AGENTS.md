@@ -30,8 +30,69 @@ Trust constraints:
 - Product behavior must not require provider MCP, plugins, hooks, wrappers,
   credentials, or live sessions. A provider whose sessions exist only in a cloud
   service may read a user-supplied API key, but it must observe nothing until
-  the user supplies one, must never write through that credential, and must
-  leave every other provider working without it.
+  the user supplies one and must leave every other provider working without it.
+- The one thing Luke may change about a session is what the user just asked to
+  send it: a message typed on its row, a control its provider advertised for
+  it, or the same two acts asked of Luke — out loud, or typed into his own
+  composer — in a conversation the user is holding — each through the
+  provider's own documented endpoint under the same user-supplied credential,
+  and each validated against the observed roster before an adapter sees it.
+  Observation passes stay read-only by construction.
+  Nothing that decides on the user's behalf may reach a write path: the
+  attention evaluator above all, and every turn Luke opens himself — a
+  proactive readout, the reply that voices a tool's outcome — which carries no
+  tools, at the API and again at a runtime gate, so a session summary or a tool
+  output that reads like an instruction can never become an act. A tool call
+  in that conversation runs only in a turn the developer opened themselves, by
+  speaking or by typing; a write is the direct product of a turn the developer
+  opened, never of anything Luke read or was told. The one act not aimed at an
+  existing session keeps the same shape: a new workspace, asked of Luke in
+  conversation, lands only in a project its provider reported on the latest
+  observation pass and documents a creation endpoint for — the ask names a
+  reported project, never a repository URL or path of its own, and a provider
+  that documents no such endpoint offers nowhere to create. The ask may carry
+  the new agent's opening task — the developer's own words, bounded and
+  delivered like a message to an existing session, through the provider's
+  documented endpoints — and each project says whether it takes one, needs
+  one, or takes none, so a provider that cannot make an idle workspace is
+  offered no task-less ask and one that takes no task is handed none. Another
+  agent in a workspace already observed is the same ask at one remove: it
+  lands only in the workspace behind a roster row, as one of the agent kinds
+  that row's latest observation listed, through the provider's documented
+  endpoint — a session whose provider lists none takes no such ask. A session whose provider documents no way in, or whose current state is
+  documented for none, advertises nothing and is offered nothing; local
+  sessions have no such endpoint and stay entirely read-only. Opening a
+  session — its row pressed, or the same press asked of Luke in conversation —
+  is not a write and needs no endpoint: the address its provider reported is
+  handed to the operating system, and nothing reaches the provider; an open
+  asked of Luke still runs only in a developer-opened turn, and a session that
+  reported no address is offered nowhere to open.
+- The issue tracker follows the same rule at one remove. Luke reads the issues
+  a tracker lists for the user under a user-supplied key and observes nothing
+  without one, exactly like a cloud session provider. The two acts a tracker
+  takes — moving an issue to a state its latest observation listed, adding a
+  comment — happen only as the direct product of a turn the developer opened
+  themselves, through the tracker's own documented endpoint under the same
+  key, validated against the observed issue roster in the renderer and again
+  in the main process before the tracker client sees anything. Observation
+  sends only the read document; the write documents are fixed by the build and
+  issued only for a validated act.
+- Quieting other media is bounded the way the talk key is: a native helper that
+  can do one narrow thing. While a spoken exchange is live, Luke may lower the
+  volume of the players the helper names — Music and Spotify, through their own
+  scripting interfaces, behind the system's per-app consent — and restore it
+  afterwards. He never pauses them and reads nothing beyond whether each is
+  playing and how loud; a volume the user moved during the duck stays where
+  their hand put it; and the whole behavior is a setting. The trigger is the
+  exchange itself — a deterministic status edge, never anything Luke read,
+  heard, or decided — so no model output can reach it. Widening the player
+  list is a product decision, not an implementation detail.
+- The same shape, smaller still, watches whether Luke can be heard at all: a
+  native helper reads the default output device's mute switch and volume —
+  nothing else — and can write nothing. What it learns decides only what the
+  renderer draws while Luke speaks into that silence: his captions forced on,
+  and a hint asking for volume. Luke never changes the system volume himself;
+  turning it up stays the user's own act on their own keys.
 - Keep unsupported capabilities explicit; do not invent fallback controls.
 - Keep Electron renderers sandboxed with context isolation and narrow IPC.
 - Commit only synthetic fixtures and repository-relative paths. This binds
@@ -77,6 +138,11 @@ convenience; `./scripts/check.sh` and CI remain authoritative.
   ID as the scope: `feat(LUKE-123): add Codex support`.
 
 ## Panel motion
+
+DESIGN.md is the binding contract for how anything drawn on the surface may
+move — the spring vocabulary, how content joins and leaves a resizing shape,
+and how a motion change is proven. Read it before adding or altering any
+animation; this section covers only the window and the surface themselves.
 
 The window is a stage; the drawn surface is the shape. A window therefore holds
 the largest shape its mode can draw — a compact window holds the peek and an
@@ -139,9 +205,60 @@ compares every output without writing and fails on any drift.
 
 The app draws the face rather than loading the SVGs because it needs
 `currentColor` and CSS animation: `--face-motion` is what holds every loop still
-for a capture run and for reduced motion, and SMIL answers to neither. Motion
-that carries meaning is chosen in `luke-face-mood.ts`; anything that carries none
-belongs in its aside list, never in a rest.
+for a capture run and for reduced motion, and SMIL answers to neither.
+
+The face is still unless something is happening to it, and what is happening is
+chosen in `luke-face-mood.ts`. A gesture plays once and a rest repeats, so only
+a motion that stays true for as long as it holds may be a rest: speech, an open
+microphone, and nothing whatever to watch. Everything else is a gesture — fired
+at a change, or drawn by weight from the pool between stillnesses — and a
+gesture that carries meaning may only be offered while its meaning is true.
+
+Two rules follow from playing a motion once, and both belong to the artwork
+table rather than the app. Every motion the app plays begins and ends at the
+resting pose, because one that starts elsewhere snaps there on the way in and
+back out of it on the way out. Every layer of a gesture shares a period,
+because the app hands the face back after the longest of them and a layer on
+its own period would be cut wherever it had got to. A rest is under no such
+rule: it is cut whenever its meaning stops being true rather than at any
+boundary of its own, so its layers may run on offset periods — `talking` bobs
+against its rock deliberately, like a person mid-sentence.
+
+## Luke's knowledge of himself
+
+`apps/desktop/src/renderer/luke-guide.ts` is the one place Luke's
+self-knowledge is described: what Luke is on screen, every user-facing setting
+with its current value, and where each is changed by hand. The renderer builds
+an `AppGuideSnapshot` from it and sends it into the voice conversation as
+`[app guide]` context, the same way the session roster travels; the spoken
+`change_app_setting` and `show_panel` tools are validated against that
+snapshot, so the guide is simultaneously what Luke can say about himself and
+the outer bound of what a spoken ask can do to him.
+
+**When you add a feature or a setting, teach the guide about it in the same
+change.** The settings half is compile-enforced: `SETTING_GUIDE` is a `Record`
+over every key of `AppSettings`, so a new settings field does not build until
+you either write its guide entry or return `undefined` with a comment saying
+how the guide covers it instead. The facts half has no such lever, so the rule
+is stated here: a capability, surface, or shortcut the guide does not describe
+is one Luke will deny having, and a stale entry is one he will misdescribe.
+Update the facts whenever you change what the panel holds, what a key does, or
+what a provider connection means.
+
+Rules the guide must keep:
+
+- A spoken settings change runs only in a turn the developer opened by
+  speaking, is validated against the guide before any carrier runs, and goes
+  through the same bridge call the setting's own row uses — never a new write
+  path.
+- Mark a setting `adjustable` only after wiring its id into
+  `applySpokenSetting`; the test suite refuses an adjustable entry the bridge
+  cannot carry. A setting only a hand may change stays in the guide with
+  `adjustable: false` and a `manual` path, because the refusal Luke voices is
+  itself the guidance.
+- Credentials are never adjustable, never spoken, and never described beyond
+  whether a provider is connected. The guide leaves the machine, so nothing in
+  it may carry a key, a key's shape, or an environment variable's value.
 
 ## TypeScript value sets and keys
 

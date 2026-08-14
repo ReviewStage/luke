@@ -50,6 +50,7 @@ export const FACE_MOTION = {
   ATTENTION: "attention",
   FLOATING: "floating",
   HIDING: "hiding",
+  FLYOFF: "flyoff",
   TEASE: "tease",
   WAITING: "waiting",
 } as const;
@@ -70,11 +71,12 @@ export const FACE_MOTION_CYCLE_MS: Record<FaceMotion, number> = {
   sleeping: 4800,
   refresh: 4500,
   boop: 3200,
-  monitoring: 3200,
+  monitoring: 3600,
   appear: 4000,
   attention: 4500,
-  floating: 5760,
+  floating: 4800,
   hiding: 5000,
+  flyoff: 3000,
   tease: 4200,
   waiting: 2400,
 };
@@ -101,6 +103,7 @@ export const FACE_MOTION_PARTS: Record<
   attention: { brows: false, lids: false, sleepZ: false },
   floating: { brows: false, lids: false, sleepZ: false },
   hiding: { brows: false, lids: false, sleepZ: false },
+  flyoff: { brows: false, lids: false, sleepZ: false },
   tease: { brows: true, lids: false, sleepZ: false },
   waiting: { brows: false, lids: false, sleepZ: false },
 };

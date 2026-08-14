@@ -1,0 +1,218 @@
+import { REALTIME_STATUS, type RealtimeStatus } from "@sidecar/core";
+import { useCallback, useRef, useState } from "react";
+import type { MicrophoneStatus } from "../shared/contracts";
+import { FOCUS_FRAME_LIMIT } from "./credential-entry";
+import { Keycaps } from "./keycaps";
+import { SendIcon } from "./settings-icons";
+
+/**
+ * What the field is for, in the fewest words that say it. "Ask" rather than
+ * "message": Luke answers rather than receives, and the reply arrives out
+ * loud with its words landing right below the field.
+ */
+const ASK_PLACEHOLDER = "Ask Luke…";
+
+/**
+ * How the ask field is found from outside the component, the way the options
+ * sheet is found by its id: the ask key is answered at the app level, where
+ * the panel it may have to open lives, and the field it lands in is here.
+ */
+export const ASK_LUKE_INPUT_ID = "ask-luke-input";
+
+/**
+ * Puts the caret in the ask field, waiting out the panel's arrival on the way.
+ *
+ * The ask key can arrive with the panel closed or with Settings showing, so
+ * the field it is reaching for may not be drawn until React has answered —
+ * and a hidden stage refuses focus outright, the same trap `focusWhenVisible`
+ * waits out. So this seeks by id, frame by frame, until the field exists and
+ * is visible, and gives up on the same backstop rather than holding an
+ * intention forever.
+ */
+export function focusAskField(): () => void {
+  let frame = 0;
+  let frames = 0;
+  const take = () => {
+    const element = document.getElementById(ASK_LUKE_INPUT_ID);
+    if (element && getComputedStyle(element).visibility === "visible") {
+      element.focus({ preventScroll: true });
+      return;
+    }
+    if (frames++ > FOCUS_FRAME_LIMIT) return;
+    frame = requestAnimationFrame(take);
+  };
+  take();
+  return () => cancelAnimationFrame(frame);
+}
+
+/**
+ * Carries one typed ask to the conversation. Answers with why it could not be
+ * sent, or with nothing when it was — the reply itself is spoken, so a sent
+ * ask needs no confirmation line under a field the answer is about to land
+ * beside.
+ */
+export type AskHandler = (text: string) => Promise<string | undefined>;
+
+/**
+ * Why an ask could not be opened, said in one sentence the field can show.
+ *
+ * The refusal is diagnosed from the same two facts the settings rows draw —
+ * how far the voice loop got, and what the system said about the microphone —
+ * so the sentence under the field and the rows in settings can never tell two
+ * different stories.
+ */
+export function askRefusal(status: RealtimeStatus, microphone: MicrophoneStatus): string {
+  if (status === REALTIME_STATUS.LISTENING) {
+    return "The microphone is open — finish saying it instead.";
+  }
+  if (status === REALTIME_STATUS.UNAVAILABLE) {
+    return "Asking Luke needs an OpenAI API key — connect one in Settings.";
+  }
+  if (status === REALTIME_STATUS.CONNECTING) {
+    return "Still connecting — ask again in a moment.";
+  }
+  if (microphone !== "granted") {
+    return "Luke answers out loud, so the conversation needs the microphone — allow it in Settings.";
+  }
+  if (status === REALTIME_STATUS.FAILED) {
+    return "The conversation could not be opened — Settings says why.";
+  }
+  return "Luke could not take that just now.";
+}
+
+/**
+ * The panel's own composer: one pill under the session list, addressed to Luke
+ * rather than to any session. Typing is the developer's half of the
+ * conversation, so the pill answers in their green — the colour the meter
+ * gives their voice — and the reply lands as Luke's spoken words, captioned at
+ * the panel's foot directly below the field that asked.
+ *
+ * Sending is deliberately quiet. A sent ask clears the field and nothing else:
+ * the reply beginning is the confirmation, and a line saying "sent" would sit
+ * between the question and its answer. Only a refusal earns a sentence, and it
+ * leaves the draft in place, because a refused ask is still the developer's
+ * words.
+ */
+export function AskLuke({
+  ask,
+  onEngagedChange,
+  rowIndex,
+  shortcut,
+}: {
+  ask: AskHandler;
+  /**
+   * Whether someone is part-way through an ask, which is what holds the panel
+   * open against the pointer wandering off — the same hold a half-typed
+   * credential has. The caret is the signal: a draft someone walked away from
+   * is not a reason to pin the panel forever.
+   */
+  onEngagedChange: (engaged: boolean) => void;
+  /** Where the field stands in the panel's arrival stack, after the rows. */
+  rowIndex: number;
+  /**
+   * The accelerator the main process actually registered for summoning this
+   * field, absent when every candidate was refused. The pill teaches only a
+   * key that answers — a hint for a chord another app owns would be a lie.
+   */
+  shortcut?: string;
+}): React.JSX.Element {
+  const [draft, setDraft] = useState("");
+  const [asking, setAsking] = useState(false);
+  const [refusal, setRefusal] = useState<string>();
+  const field = useRef<HTMLInputElement | null>(null);
+  /**
+   * One ask at a time, as a ref rather than state for the same reason the row
+   * composer holds one: disabling only lands with the next render, and a
+   * second Enter inside that window would ask the same question twice.
+   */
+  const askInFlight = useRef(false);
+
+  const submit = useCallback(async () => {
+    const text = draft.trim();
+    if (!text || askInFlight.current) return;
+    askInFlight.current = true;
+    setAsking(true);
+    setRefusal(undefined);
+    try {
+      const reason = await ask(text);
+      if (reason) {
+        // The draft stays: a refused ask is still the developer's words.
+        setRefusal(reason);
+      } else {
+        // The ask has become the conversation's; the field empties for the
+        // next one, and the caret stays for it.
+        setDraft("");
+      }
+    } finally {
+      askInFlight.current = false;
+      setAsking(false);
+    }
+  }, [ask, draft]);
+
+  return (
+    <div className="ask-luke-row" style={{ "--row-index": rowIndex } as React.CSSProperties}>
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: pointer-only by design — the keyboard already lands in the field by tabbing, and the click handler only places the caret. */}
+      <form
+        className="ask-luke"
+        data-asking={String(asking)}
+        data-draft={String(draft.length > 0)}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submit();
+        }}
+        // The whole pill is the field: a press on its padding or its glow is
+        // someone reaching for the caret, so the caret is what they get.
+        onClick={() => field.current?.focus()}
+      >
+        <input
+          ref={field}
+          id={ASK_LUKE_INPUT_ID}
+          className="ask-luke-input"
+          aria-label="Ask Luke"
+          {...(shortcut ? { "aria-keyshortcuts": shortcut } : {})}
+          placeholder={ASK_PLACEHOLDER}
+          autoComplete="off"
+          spellCheck={false}
+          value={draft}
+          onChange={(event) => {
+            // Typing again answers the refusal, so the refusal goes.
+            setRefusal(undefined);
+            setDraft(event.target.value);
+          }}
+          onFocus={() => {
+            // The panel can be showing without its window being key, and a
+            // field that cannot be typed into is worse than no field.
+            window.sidecar.focusPanel();
+            onEngagedChange(true);
+          }}
+          onBlur={() => onEngagedChange(false)}
+          onKeyDown={(event) => {
+            // Escape lets go of the field rather than closing the panel
+            // behind it. The draft survives: the field is not going anywhere.
+            if (event.key === "Escape") {
+              event.stopPropagation();
+              event.currentTarget.blur();
+            }
+          }}
+        />
+        {/* How the reach is learned: the keycaps surface under a hovering
+            pointer and stand down once the caret is in or a draft holds the
+            field — whoever they could teach already knows. Drawn only for a key
+            the system actually granted, as the separate keys a hand presses.
+            Left readable: a reader announcing the caps agrees with
+            aria-keyshortcuts. */}
+        {shortcut ? <Keycaps className="ask-luke-hint" accelerator={shortcut} /> : null}
+        <button
+          type="submit"
+          className="ask-luke-send"
+          aria-label="Ask Luke"
+          title="Ask Luke"
+          disabled={asking || !draft.trim()}
+        >
+          <SendIcon />
+        </button>
+      </form>
+      {refusal ? <small className="ask-luke-refusal">{refusal}</small> : null}
+    </div>
+  );
+}

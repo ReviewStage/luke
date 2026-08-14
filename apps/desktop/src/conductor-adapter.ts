@@ -1,15 +1,20 @@
 import {
   maximumSessionTitleLength,
   type ProviderSessionObservation,
+  SESSION_CONTROL_KIND,
   SESSION_STATUS,
+  type SessionControl,
   type SessionProvider,
   type SessionStatus,
+  WORKSPACE_TASK_SUPPORT,
+  type WorkspaceProject,
 } from "@sidecar/core";
 import {
   CLOUD_ADAPTER_DEFAULTS,
   type CloudAdapterOptions,
   type CloudRequest,
   CloudSessionAdapter,
+  type CloudWriteRoute,
   isDefined,
   knownValue,
   positiveInteger,
@@ -31,17 +36,74 @@ const CONDUCTOR_ENVIRONMENT = {
 
 const CONDUCTOR_DEFAULT_API_URL = "https://api.conductor.build";
 
-/** Read-only routes from the documented public API. Luke never calls a writer. */
+/**
+ * Documented public API routes. The reads walk projects, workspaces, and
+ * sessions; the writers are `POST …/sessions/{id}/messages`, which is
+ * Conductor's documented way to hand a prompt to an existing session — queued
+ * while it is idle, steered into the running turn while it works —
+ * `POST …/sessions/{id}/cancel`, which stops the current turn, and
+ * `POST /v0/workspaces`, which is its documented way to create a workspace in
+ * a project the user already connected.
+ */
 const CONDUCTOR_ROUTE = {
   IDENTITY: ["me"],
   PROJECTS: ["v0", "projects"],
 } as const;
 
 const CONDUCTOR_ROUTE_SEGMENT = {
+  CANCEL: "cancel",
+  MESSAGES: "messages",
   SESSIONS: "sessions",
   STATUS: "status",
   V0: "v0",
   WORKSPACES: "workspaces",
+} as const;
+
+/** The body `POST …/sessions/{id}/messages` documents. */
+const CONDUCTOR_MESSAGE_FIELD = {
+  MESSAGE: "message",
+} as const;
+
+/**
+ * The body `POST /v0/workspaces` documents. The project names where; the name
+ * is optional and Conductor generates one — and the branch it names — when it
+ * is left off. The endpoint also takes an agent, model, and effort, which are
+ * deliberately not sent: Conductor's own defaults are the user's own settings
+ * there, and a sidecar has no business overriding them.
+ */
+const CONDUCTOR_WORKSPACE_FIELD = {
+  PROJECT_ID: "projectId",
+  NAME: "name",
+  /** The first session, as `POST /v0/workspaces` names it in its response. */
+  SESSION_ID: "sessionId",
+} as const;
+
+/** The body `POST /v0/sessions` documents, of it the fields Luke ever sends. */
+const CONDUCTOR_SESSION_CREATE_FIELD = {
+  WORKSPACE_ID: "workspaceId",
+  AGENT: "agent",
+  NAME: "name",
+  MESSAGE: "message",
+} as const;
+
+/**
+ * The kinds of agent Conductor's session-creation endpoint documents, named
+ * exactly as it takes them. The endpoint also takes `acp`, which is a
+ * protocol shim with no defaults of its own rather than an agent someone asks
+ * for by name, so it is deliberately not offered. Model, effort, and fast
+ * mode are likewise never sent: Conductor's defaults are the user's own
+ * settings there.
+ */
+const CONDUCTOR_SPAWNABLE_AGENTS: readonly string[] = ["claude", "codex", "cursor"];
+
+/**
+ * The one control this adapter can honour, advertised only while a session is
+ * actually working a turn there is something to stop.
+ */
+const CONDUCTOR_CANCEL_CONTROL = {
+  id: "cancel-turn",
+  label: "Stop this turn",
+  kind: SESSION_CONTROL_KIND.STOP,
 } as const;
 
 const CONDUCTOR_QUERY = {
@@ -74,6 +136,26 @@ const CONDUCTOR_SESSION_STATUS = {
   WORKING: "working",
   ERROR: "error",
 } as const;
+
+/**
+ * Which chat gets to speak for its workspace, most urgent first. A failure
+ * outranks a question — both want a person, but only one of them is stuck —
+ * and a question outranks work still running.
+ *
+ * Unknown outranks complete, which reads backwards until the provider's shapes
+ * are laid over it: complete only ever comes from an archived chat, and unknown
+ * is an open one — idle long enough to decay, or with a status that could not
+ * be read. However quiet, the open chat is where the user would return, so a
+ * closed sibling must not make the workspace read as finished or take the
+ * press that would have landed there.
+ */
+const STATUS_URGENCY: readonly SessionStatus[] = [
+  SESSION_STATUS.ERROR,
+  SESSION_STATUS.WAITING,
+  SESSION_STATUS.WORKING,
+  SESSION_STATUS.UNKNOWN,
+  SESSION_STATUS.COMPLETE,
+];
 
 type ConductorSessionStatus =
   (typeof CONDUCTOR_SESSION_STATUS)[keyof typeof CONDUCTOR_SESSION_STATUS];
@@ -133,7 +215,6 @@ interface ConductorWorkspace {
 
 interface ConductorSession {
   id: string;
-  name?: string;
   workspace: ConductorWorkspace;
   archived: boolean;
   archivedAt?: number;
@@ -143,14 +224,27 @@ interface ConductorSession {
 
 /**
  * Observes Conductor cloud sessions through the documented public API. It reads
- * only workspaces the authenticated user created, issues no request that can
- * change provider state, and reports nothing at all without a credential.
+ * only workspaces the authenticated user created, observation issues no request
+ * that can change provider state, and it reports nothing at all without a
+ * credential. Each workspace is reported as one session — the workspace is the
+ * unit Conductor's own surface shows, and the one its name names — in the state
+ * of whichever chat inside it most needs a person, and that chat is the one a
+ * write reaches: the writes it supports are a user-typed prompt and a stop for
+ * the running turn, each through Conductor's own endpoint on a chat that
+ * advertised it, and a new workspace in a project the latest pass listed,
+ * through Conductor's documented creation endpoint.
  */
 export class ConductorSessionAdapter extends CloudSessionAdapter {
   readonly #maximumObservedWorkspaces: number;
   readonly #maximumObservedSessions: number;
 
   #userId: string | undefined;
+  /**
+   * The projects the latest pass listed, kept because they are also where a
+   * workspace can be created: a creation ask is honoured only against what
+   * this cache holds, so it can never name a project observation did not see.
+   */
+  #projects: readonly ConductorProject[] = [];
 
   constructor(options: ConductorAdapterOptions) {
     super(
@@ -173,6 +267,53 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
 
   protected override forgetCachedIdentity(): void {
     this.#userId = undefined;
+    this.#projects = [];
+  }
+
+  /**
+   * Where Conductor will create a workspace: the projects the last pass
+   * listed. An opening task is optional — Conductor makes an idle workspace
+   * happily — and is handed over after creation, through the documented
+   * message endpoint on the first session the creation response names.
+   */
+  override workspaceProjects(): readonly WorkspaceProject[] {
+    return this.#projects.map((project) => ({
+      providerProjectId: project.id,
+      repository: project.repositoryLabel,
+      taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
+    }));
+  }
+
+  protected override workspaceCreationRoute(
+    project: WorkspaceProject,
+    name: string | undefined,
+    _task: string | undefined,
+  ): CloudWriteRoute {
+    // The task deliberately does not ride here: Conductor's creation endpoint
+    // documents no prompt field, so the task goes through the documented
+    // message endpoint once the response says which session takes it.
+    return {
+      segments: [CONDUCTOR_ROUTE_SEGMENT.V0, CONDUCTOR_ROUTE_SEGMENT.WORKSPACES],
+      body: {
+        [CONDUCTOR_WORKSPACE_FIELD.PROJECT_ID]: project.providerProjectId,
+        ...(name ? { [CONDUCTOR_WORKSPACE_FIELD.NAME]: name } : {}),
+      },
+    };
+  }
+
+  protected override workspaceTaskRoute(
+    creationBody: Record<string, unknown>,
+    task: string,
+  ): CloudWriteRoute | { undeliverable: string } {
+    // The creation response documents the first session's id; the task is a
+    // message to exactly that session, under the same key, through the same
+    // documented endpoint a typed row uses.
+    const sessionId = textFromRecord(creationBody, CONDUCTOR_WORKSPACE_FIELD.SESSION_ID);
+    const route = sessionId ? this.messageRoute(sessionId, task) : undefined;
+    if (!route) {
+      return { undeliverable: "Conductor did not say which session takes the opening message." };
+    }
+    return route;
   }
 
   protected async collect(
@@ -185,6 +326,7 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     // Every fan-out below is already bounded by the caps in
     // CONDUCTOR_ADAPTER_DEFAULTS, so at most a dozen requests are ever in flight.
     const projects = await this.#listProjects(request);
+    this.#projects = projects;
     const workspaces = (
       await Promise.all(
         projects.map((project) =>
@@ -216,10 +358,28 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       .flat()
       .slice(0, this.#maximumObservedSessions);
 
-    const observations = await Promise.all(
-      sessions.map((session) => this.#observationFor(request, session, now)),
+    const observed = await Promise.all(
+      sessions.map((session) =>
+        this.#observationFor(request, session, now).then(
+          (observation) => observation && { workspaceId: session.workspace.id, observation },
+        ),
+      ),
     );
-    return observations.filter(isDefined);
+
+    // One row per workspace. The workspace is the session the user knows —
+    // it is what titles the row — so two chats inside it would draw as
+    // identical lines that open different places. Every chat's status is
+    // still read, because the workspace is in whatever state its neediest
+    // chat is in; that chat is the one the row reports and the one a press
+    // opens.
+    const byWorkspace = new Map<string, ProviderSessionObservation>();
+    for (const { workspaceId, observation } of observed.filter(isDefined)) {
+      const held = byWorkspace.get(workspaceId);
+      if (!held || urgencyOrder(observation, held) < 0) {
+        byWorkspace.set(workspaceId, observation);
+      }
+    }
+    return [...byWorkspace.values()];
   }
 
   async #identity(request: CloudRequest): Promise<string | undefined> {
@@ -302,17 +462,15 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
           if (!id) return undefined;
           const archivedAt = timestampFromRecord(record, CONDUCTOR_FIELD.ARCHIVED_AT);
           const model = modelLabel(record);
-          const name = textFromRecord(record, CONDUCTOR_FIELD.NAME)?.slice(
-            0,
-            maximumSessionTitleLength,
-          );
           const deepLink = textFromRecord(record, CONDUCTOR_FIELD.DEEP_LINK);
+          // The chat's own `name` is deliberately not read: Conductor generates
+          // it, nobody chose it, and the one thing it ever did here — titling
+          // the row — belongs to the workspace's name instead.
           return {
             id,
             workspace,
             archived: textFromRecord(record, CONDUCTOR_FIELD.ARCHIVED_AT) !== undefined,
             ...(archivedAt === undefined ? {} : { archivedAt }),
-            ...(name ? { name } : {}),
             ...(model ? { model } : {}),
             ...(deepLink ? { deepLink } : {}),
           };
@@ -338,6 +496,58 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     );
   }
 
+  protected override workspaceAgentRoute(
+    spawnTarget: string,
+    agent: string,
+    name: string | undefined,
+    task: string | undefined,
+  ): CloudWriteRoute {
+    // The target is the workspace id the observation itself advertised, so
+    // the route acts on what the user was shown — never on state kept aside.
+    return {
+      segments: [CONDUCTOR_ROUTE_SEGMENT.V0, CONDUCTOR_ROUTE_SEGMENT.SESSIONS],
+      body: {
+        [CONDUCTOR_SESSION_CREATE_FIELD.WORKSPACE_ID]: spawnTarget,
+        [CONDUCTOR_SESSION_CREATE_FIELD.AGENT]: agent,
+        ...(name ? { [CONDUCTOR_SESSION_CREATE_FIELD.NAME]: name } : {}),
+        // The opening task rides the creation itself: `POST /v0/sessions`
+        // documents taking the first message inline.
+        ...(task ? { [CONDUCTOR_SESSION_CREATE_FIELD.MESSAGE]: task } : {}),
+      },
+    };
+  }
+
+  protected override messageRoute(
+    providerSessionId: string,
+    text: string,
+  ): CloudWriteRoute | undefined {
+    return {
+      segments: [
+        CONDUCTOR_ROUTE_SEGMENT.V0,
+        CONDUCTOR_ROUTE_SEGMENT.SESSIONS,
+        providerSessionId,
+        CONDUCTOR_ROUTE_SEGMENT.MESSAGES,
+      ],
+      body: { [CONDUCTOR_MESSAGE_FIELD.MESSAGE]: text },
+    };
+  }
+
+  protected override controlRoute(
+    providerSessionId: string,
+    control: SessionControl,
+  ): CloudWriteRoute | undefined {
+    if (control.id !== CONDUCTOR_CANCEL_CONTROL.id) return undefined;
+    return {
+      segments: [
+        CONDUCTOR_ROUTE_SEGMENT.V0,
+        CONDUCTOR_ROUTE_SEGMENT.SESSIONS,
+        providerSessionId,
+        CONDUCTOR_ROUTE_SEGMENT.CANCEL,
+      ],
+      // Conductor documents no body for a cancel, so none is sent.
+    };
+  }
+
   async #observationFor(
     request: CloudRequest,
     session: ConductorSession,
@@ -359,15 +569,34 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     const status = this.#statusFor(session, reported?.status, observedAt, now);
     return {
       providerSessionId: session.id,
-      // A workspace holds several chats and a project holds several workspaces,
-      // so labelling by the project's repository gave every session in a repo
-      // the same row. The session's own name is what separates them.
-      title: session.name ?? session.workspace.name ?? session.workspace.repositoryLabel,
+      // The workspace's name is the name the user knows this work by — it is
+      // what Conductor itself shows them — where a chat's own name is generated
+      // and identifies nothing. So the workspace titles the row, and it is not
+      // reported as a branch: it never was one, and the surface now draws a
+      // branch under a glyph that says so.
+      title: session.workspace.name ?? session.workspace.repositoryLabel,
       status,
       observedAt,
+      // Conductor documents both halves of a send — queued while a session is
+      // idle, steered into the turn while it works — so any open chat takes a
+      // message. A closed one is settled, and an errored one is documented for
+      // no writer.
+      canReceiveMessage:
+        !session.archived &&
+        (reported?.status === CONDUCTOR_SESSION_STATUS.IDLE ||
+          reported?.status === CONDUCTOR_SESSION_STATUS.WORKING),
+      // Another agent lands in the workspace around this row, whatever state
+      // the row's own chat is in: the workspace was observed this pass, and
+      // that is the thing the creation endpoint takes. Its id rides the
+      // advertisement — like a control's target — so it can never outlive the
+      // snapshot that promised it.
+      spawnableAgents: CONDUCTOR_SPAWNABLE_AGENTS,
+      spawnTarget: session.workspace.id,
+      ...(reported?.status === CONDUCTOR_SESSION_STATUS.WORKING
+        ? { controls: [CONDUCTOR_CANCEL_CONTROL] }
+        : {}),
       detail: {
         repository: session.workspace.repositoryLabel,
-        ...(session.workspace.name ? { branch: session.workspace.name } : {}),
         ...(session.model ? { model: session.model } : {}),
         ...(reported?.errorMessage ? { error: reported.errorMessage } : {}),
         ...(session.deepLink ? { link: session.deepLink } : {}),
@@ -427,6 +656,17 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       ...(errorMessage ? { errorMessage } : {}),
     };
   }
+}
+
+/** Most urgent first, and between two equally urgent chats, the one that moved last. */
+function urgencyOrder(
+  first: ProviderSessionObservation,
+  second: ProviderSessionObservation,
+): number {
+  return (
+    STATUS_URGENCY.indexOf(first.status) - STATUS_URGENCY.indexOf(second.status) ||
+    second.observedAt - first.observedAt
+  );
 }
 
 /** Conductor reports the model it resolved as well as the one that was asked for. */
