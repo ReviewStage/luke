@@ -4,6 +4,7 @@ import {
   EMPTY_APP_GUIDE,
   FIXTURE_EPOCH_MS,
   type NormalizedSession,
+  type PanelFormFactor,
   REALTIME_STATUS,
   type RealtimeStatus,
   type RealtimeVoice,
@@ -746,6 +747,22 @@ export function App(): React.JSX.Element {
     return result.reason;
   }, []);
 
+  // Every display or the main one alone, on the same round trip: the row
+  // reads the state the store actually holds rather than the one the press
+  // hoped for.
+  const changeShowOnAllDisplays = useCallback(async (show: boolean) => {
+    const result = await window.sidecar.setShowOnAllDisplays(show);
+    setSettings(result.settings);
+    return result.reason;
+  }, []);
+
+  // The form for displays without a housing, under the same rule.
+  const changeFormFactor = useCallback(async (formFactor: PanelFormFactor) => {
+    const result = await window.sidecar.setFormFactor(formFactor);
+    setSettings(result.settings);
+    return result.reason;
+  }, []);
+
   const credentials: CredentialEntryControl = {
     entry,
     begin: beginEntry,
@@ -1239,6 +1256,8 @@ export function App(): React.JSX.Element {
               voiceHotkeyHeld: shownHotkey.held,
               onShowInMenuBarChange: changeShowInMenuBar,
               onShowInDockChange: changeShowInDock,
+              onShowOnAllDisplaysChange: changeShowOnAllDisplays,
+              onFormFactorChange: changeFormFactor,
               onQuit: () => window.sidecar.quit(),
             }}
           />

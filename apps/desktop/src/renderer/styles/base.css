@@ -910,9 +910,13 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 }
 
 /* Nothing to blend into on a display without a housing, so the shape stops
-   pretending: it lifts off the edge and closes into a free-floating pill. */
+   pretending: it lifts off the edge and closes into a free-floating pill. The
+   lift is `BUBBLE_LIFT` in packages/sidecar-core/src/geometry.ts — the two
+   must agree — and it is derived rather than chosen: the pill matches the
+   menu bar it floats beside, 24pt tall on a display without a housing. 32px
+   strip minus 4px each side is exactly that 24. */
 .app-stage[data-notch="false"] {
-  --shape-top: 6px;
+  --shape-top: 4px;
 }
 
 .app-stage[data-notch="false"] .panel-surface {
@@ -921,23 +925,21 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   border-radius: 999px;
 }
 
-/* The panel is too large to float, so it meets the top edge like any other
-   display's does. Lowering the lift to zero moves the surface, the wings, and
-   the press target together, because all three are anchored to it. The slot
-   holds a field, which is the same argument at a smaller size. */
-.app-stage[data-notch="false"][data-presentation="panel"],
-.app-stage[data-notch="false"][data-presentation="slot"] {
-  --shape-top: 0px;
-}
-
+/* The panel and the slot keep the pill's lift rather than gluing themselves to
+   the top edge: a bubble afloat at one size and docked at another would read
+   as two objects, and there is nothing up there to blend into at any size. The
+   lift is `BUBBLE_LIFT` in packages/sidecar-core/src/geometry.ts — the
+   expanded window is grown by it so the lifted panel's shadow still fades out
+   inside the stage — and every corner rounds, because an edge nothing meets is
+   an edge with no reason to be square. */
 .app-stage[data-notch="false"][data-presentation="panel"] .panel-surface {
   height: var(--panel-height, 520px);
-  border-radius: 0 0 var(--panel-radius) var(--panel-radius);
+  border-radius: var(--panel-radius);
 }
 
 .app-stage[data-notch="false"][data-presentation="slot"] .panel-surface {
   height: var(--slot-height, 96px);
-  border-radius: 0 0 var(--slot-radius) var(--slot-radius);
+  border-radius: var(--slot-radius);
 }
 
 .app-stage[data-notch="false"] .wing,

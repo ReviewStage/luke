@@ -1,6 +1,10 @@
 import {
+  DEFAULT_PANEL_FORM_FACTOR,
+  isPanelFormFactor,
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
+  PANEL_FORM_FACTOR_LIST,
+  type PanelFormFactor,
   REALTIME_DEFAULTS,
   REALTIME_VOICE_LIST,
   REALTIME_VOICE_SPEED_LIST,
@@ -80,6 +84,14 @@ export interface SettingsPanelProps {
    * and the row is where that answer belongs.
    */
   onShowInDockChange: (show: boolean) => Promise<string | undefined>;
+  /**
+   * Stands Luke on every connected display, or brings him back to the main
+   * one alone. The store answers with why when it refuses, and the row is
+   * where that answer belongs.
+   */
+  onShowOnAllDisplaysChange: (show: boolean) => Promise<string | undefined>;
+  /** Chooses how Luke stands on a display without a camera housing. */
+  onFormFactorChange: (formFactor: PanelFormFactor) => Promise<string | undefined>;
   onQuit: () => void;
   /** The talk key, shown so it can be learned. It is not editable yet. */
   voiceHotkey?: string;
@@ -464,6 +476,13 @@ function speedOptionLabel(speed: RealtimeVoiceSpeed): string {
   return speed === REALTIME_DEFAULTS.SPEED ? `${speed}× (default)` : `${speed}×`;
 }
 
+/* The forms read as names, and the bubble carries its status into the menu the
+   way the default voice does. */
+function formFactorOptionLabel(formFactor: PanelFormFactor): string {
+  const name = formFactor.charAt(0).toUpperCase() + formFactor.slice(1);
+  return formFactor === DEFAULT_PANEL_FORM_FACTOR ? `${name} (default)` : name;
+}
+
 /**
  * Every provider that can hold a key, one line each. A provider is listed
  * whether or not it has one, because the list is how you learn which services
@@ -530,6 +549,10 @@ function PreferencesSection({
   onShowInMenuBarChange,
   dockShown,
   onShowInDockChange,
+  allDisplays,
+  onShowOnAllDisplaysChange,
+  formFactor,
+  onFormFactorChange,
 }: {
   voice: RealtimeVoice;
   onVoiceChange: (voice: RealtimeVoice) => void;
@@ -541,6 +564,10 @@ function PreferencesSection({
   onShowInMenuBarChange: (show: boolean) => Promise<string | undefined>;
   dockShown: boolean;
   onShowInDockChange: (show: boolean) => Promise<string | undefined>;
+  allDisplays: boolean;
+  onShowOnAllDisplaysChange: (show: boolean) => Promise<string | undefined>;
+  formFactor: PanelFormFactor;
+  onFormFactorChange: (formFactor: PanelFormFactor) => Promise<string | undefined>;
 }): React.JSX.Element {
   // The change is a round trip through the settings file, so the switch rests
   // until the store has answered rather than claiming a state it may not get.
@@ -565,6 +592,20 @@ function PreferencesSection({
     setDockBusy(true);
     setRejection(await onShowInDockChange(!dockShown));
     setDockBusy(false);
+  };
+  // The display and form rows round-trip like the switches above, so each
+  // rests on its own flag and answers on the shared rejection line.
+  const [displayBusy, setDisplayBusy] = useState(false);
+  const toggleAllDisplays = async () => {
+    setDisplayBusy(true);
+    setRejection(await onShowOnAllDisplaysChange(!allDisplays));
+    setDisplayBusy(false);
+  };
+  const [formBusy, setFormBusy] = useState(false);
+  const chooseFormFactor = async (nextFormFactor: PanelFormFactor) => {
+    setFormBusy(true);
+    setRejection(await onFormFactorChange(nextFormFactor));
+    setFormBusy(false);
   };
   return (
     <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
@@ -695,6 +736,57 @@ function PreferencesSection({
           <span className="switch-thumb" />
         </button>
       </div>
+      <div className="settings-row">
+        <span className="settings-copy">
+          <strong>Show Luke on all displays</strong>
+        </span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={allDisplays}
+          aria-label="Show Luke on all displays"
+          className="switch"
+          disabled={displayBusy}
+          onClick={() => void toggleAllDisplays()}
+        >
+          <span className="switch-thumb" />
+        </button>
+      </div>
+      <div className="settings-row">
+        <span className="settings-copy">
+          <strong>Form factor</strong>
+          {/* Where the choice applies, because on a notched display this row
+              visibly does nothing: the real housing always wins. */}
+          <small>On displays without a notch.</small>
+        </span>
+        <span className="voice-select">
+          <select
+            aria-label="Form factor"
+            value={formFactor}
+            disabled={formBusy}
+            onChange={(event) => {
+              // The set is fixed by this build, so anything else arriving out
+              // of a select is a broken control rather than a choice.
+              const next = event.target.value;
+              if (isPanelFormFactor(next)) void chooseFormFactor(next);
+            }}
+            onFocus={() => {
+              // The panel can be showing without its window being key, and a
+              // menu opened then would drop its first choice.
+              window.sidecar.focusPanel();
+            }}
+          >
+            {PANEL_FORM_FACTOR_LIST.map((candidate) => (
+              <option key={candidate} value={candidate}>
+                {formFactorOptionLabel(candidate)}
+              </option>
+            ))}
+          </select>
+          <span className="voice-select-badge" aria-hidden="true">
+            <PopUpIcon />
+          </span>
+        </span>
+      </div>
       {rejection ? <p className="error-message">{rejection}</p> : null}
     </section>
   );
@@ -714,6 +806,8 @@ export function SettingsPanel({
   panelOpen,
   onShowInMenuBarChange,
   onShowInDockChange,
+  onShowOnAllDisplaysChange,
+  onFormFactorChange,
   onQuit,
   voiceHotkey,
   voiceHotkeyHeld,
@@ -738,6 +832,10 @@ export function SettingsPanel({
           onShowInMenuBarChange={onShowInMenuBarChange}
           dockShown={settings.showInDock}
           onShowInDockChange={onShowInDockChange}
+          allDisplays={settings.showOnAllDisplays}
+          onShowOnAllDisplaysChange={onShowOnAllDisplaysChange}
+          formFactor={settings.formFactor}
+          onFormFactorChange={onFormFactorChange}
         />
       ) : null}
 

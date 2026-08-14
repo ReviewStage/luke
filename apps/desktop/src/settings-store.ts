@@ -1,8 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
+  DEFAULT_PANEL_FORM_FACTOR,
+  isPanelFormFactor,
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
+  type PanelFormFactor,
   REALTIME_DEFAULTS,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
@@ -32,9 +35,11 @@ const SETTINGS_FILE_MODE = 0o600;
 
 const SETTINGS_FIELD = {
   API_KEYS: "apiKeys",
+  FORM_FACTOR: "formFactor",
   LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
   SHOW_IN_DOCK: "showInDock",
   SHOW_IN_MENU_BAR: "showInMenuBar",
+  SHOW_ON_ALL_DISPLAYS: "showOnAllDisplays",
   VERSION: "version",
   VOICE: "voice",
   VOICE_CAPTIONS: "voiceCaptions",
@@ -106,6 +111,19 @@ interface PersistedSettings {
    * all land on the default rather than switching something on.
    */
   voiceCaptions: boolean;
+  /**
+   * Whether Luke stands on every connected display. Off unless the file says
+   * `true` outright, like the Dock: a missing field, an older file, and a
+   * corrupt value all land on the main display alone rather than raising
+   * windows somewhere new.
+   */
+  showOnAllDisplays: boolean;
+  /**
+   * How Luke stands on a display without a housing, absent until the user has
+   * chosen. Held to the offered set like the voice: a value this build does
+   * not draw is dropped rather than honoured.
+   */
+  formFactor?: PanelFormFactor;
 }
 
 interface ResolvedApiKey {
@@ -181,6 +199,7 @@ function parsePersistedSettings(source: string): PersistedSettings {
   const showInMenuBar = record[SETTINGS_FIELD.SHOW_IN_MENU_BAR];
   const voice = record[SETTINGS_FIELD.VOICE];
   const voiceSpeed = record[SETTINGS_FIELD.VOICE_SPEED];
+  const formFactor = record[SETTINGS_FIELD.FORM_FACTOR];
   return {
     version: typeof version === "number" ? version : SETTINGS_FILE_VERSION,
     apiKeys: storedApiKeys(record),
@@ -193,6 +212,9 @@ function parsePersistedSettings(source: string): PersistedSettings {
     // A pace outside the offered set is dropped for the same reason.
     ...(isRealtimeVoiceSpeed(voiceSpeed) ? { voiceSpeed } : {}),
     voiceCaptions: record[SETTINGS_FIELD.VOICE_CAPTIONS] === true,
+    showOnAllDisplays: record[SETTINGS_FIELD.SHOW_ON_ALL_DISPLAYS] === true,
+    // A form this build does not draw is dropped like an unknown voice.
+    ...(isPanelFormFactor(formFactor) ? { formFactor } : {}),
   };
 }
 
@@ -246,6 +268,8 @@ export class SettingsStore {
         environmentRealtimeSpeed(this.#environment) ??
         REALTIME_DEFAULTS.SPEED,
       voiceCaptions: (await this.#load()).voiceCaptions,
+      showOnAllDisplays: (await this.#load()).showOnAllDisplays,
+      formFactor: (await this.#load()).formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
     };
   }
 
@@ -334,6 +358,59 @@ export class SettingsStore {
         version: SETTINGS_FILE_VERSION,
         voiceCaptions: enabled,
       };
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+    });
+    return { settings: await this.snapshot() };
+  }
+
+  /**
+   * Shallow like `showInDock()`: the displays Luke stands on are decided at
+   * launch from the settings file alone, never the keychain.
+   */
+  async readShowOnAllDisplays(): Promise<boolean> {
+    return (await this.#load()).showOnAllDisplays;
+  }
+
+  /**
+   * Remembers whether Luke stands on every display or the main one alone. A
+   * preference like the Dock's, and held to the same rule: nothing here
+   * touches the cipher.
+   */
+  async setShowOnAllDisplays(show: boolean): Promise<SettingsUpdateResult> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (persisted.showOnAllDisplays === show) return;
+      const next: PersistedSettings = {
+        ...persisted,
+        version: SETTINGS_FILE_VERSION,
+        showOnAllDisplays: show,
+      };
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+    });
+    return { settings: await this.snapshot() };
+  }
+
+  /**
+   * Shallow for the same reason as `readShowOnAllDisplays()`: the windows are
+   * placed at launch from the settings file alone, never the keychain.
+   */
+  async readFormFactor(): Promise<PanelFormFactor | undefined> {
+    return (await this.#load()).formFactor;
+  }
+
+  /** Stores the chosen form, or returns to the default when omitted. */
+  async setFormFactor(formFactor: PanelFormFactor | undefined): Promise<SettingsUpdateResult> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (persisted.formFactor === formFactor) return;
+      const next: PersistedSettings = {
+        ...persisted,
+        version: SETTINGS_FILE_VERSION,
+      };
+      if (formFactor) next.formFactor = formFactor;
+      else delete next.formFactor;
       await this.#write(next);
       this.#loading = Promise.resolve(next);
     });
@@ -524,6 +601,7 @@ export class SettingsStore {
       showInDock: false,
       showInMenuBar: true,
       voiceCaptions: false,
+      showOnAllDisplays: false,
     };
     if (source) {
       try {

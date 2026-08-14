@@ -1,6 +1,7 @@
 import type {
   AttentionSpeech,
   NormalizedSession,
+  PanelFormFactor,
   ProviderControlResult,
   ProviderMessageResult,
   RealtimeConnection,
@@ -49,6 +50,10 @@ const bridge: AppBridge = {
     ipcRenderer.invoke(channels.setShowInMenuBar, show) as Promise<SettingsUpdateResult>,
   setShowInDock: (show: boolean) =>
     ipcRenderer.invoke(channels.setShowInDock, show) as Promise<SettingsUpdateResult>,
+  setShowOnAllDisplays: (show: boolean) =>
+    ipcRenderer.invoke(channels.setShowOnAllDisplays, show) as Promise<SettingsUpdateResult>,
+  setFormFactor: (formFactor: PanelFormFactor) =>
+    ipcRenderer.invoke(channels.setFormFactor, formFactor) as Promise<SettingsUpdateResult>,
   setVoiceCaptions: (enabled: boolean) =>
     ipcRenderer.invoke(channels.setVoiceCaptions, enabled) as Promise<SettingsUpdateResult>,
   openSession: (identity: SessionIdentity) =>

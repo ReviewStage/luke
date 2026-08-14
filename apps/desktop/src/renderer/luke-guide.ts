@@ -25,7 +25,9 @@ import {
   type AppGuideSetting,
   type AppGuideSnapshot,
   appToggleText,
+  isPanelFormFactor,
   isRealtimeVoice,
+  PANEL_FORM_FACTOR_LIST,
   REALTIME_VOICE_LIST,
   REALTIME_VOICE_SPEED,
   type RealtimeVoiceSpeed,
@@ -41,6 +43,8 @@ export const APP_SETTING_ID = {
   VOICE_CAPTIONS: "voice_captions",
   SHOW_IN_MENU_BAR: "show_in_menu_bar",
   SHOW_IN_DOCK: "show_in_dock",
+  SHOW_ON_ALL_DISPLAYS: "show_on_all_displays",
+  FORM_FACTOR: "form_factor",
 } as const;
 
 export type AppSettingId = (typeof APP_SETTING_ID)[keyof typeof APP_SETTING_ID];
@@ -122,6 +126,27 @@ const SETTING_GUIDE: Record<
     description: "Whether Luke also stands in the Dock as an app icon.",
     kind: APP_SETTING_KIND.TOGGLE,
     value: appToggleText(settings.showInDock),
+    adjustable: true,
+    manual: `${SETTINGS_TAB}, under Preferences`,
+  }),
+  showOnAllDisplays: (settings) => ({
+    id: APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS,
+    label: "Show Luke on all displays",
+    description:
+      "Whether Luke stands on every connected display at once; off keeps him to the main display alone.",
+    kind: APP_SETTING_KIND.TOGGLE,
+    value: appToggleText(settings.showOnAllDisplays),
+    adjustable: true,
+    manual: `${SETTINGS_TAB}, under Preferences`,
+  }),
+  formFactor: (settings) => ({
+    id: APP_SETTING_ID.FORM_FACTOR,
+    label: "Form factor",
+    description:
+      "How Luke stands on a display without a camera housing — notch draws him one pressed into the top edge, bubble floats him just under it. A display with a real notch ignores this.",
+    kind: APP_SETTING_KIND.CHOICE,
+    value: settings.formFactor,
+    choices: PANEL_FORM_FACTOR_LIST,
     adjustable: true,
     manual: `${SETTINGS_TAB}, under Preferences`,
   }),
@@ -254,7 +279,13 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
 export async function applySpokenSetting(
   bridge: Pick<
     AppBridge,
-    "setVoice" | "setVoiceSpeed" | "setVoiceCaptions" | "setShowInMenuBar" | "setShowInDock"
+    | "setVoice"
+    | "setVoiceSpeed"
+    | "setVoiceCaptions"
+    | "setShowInMenuBar"
+    | "setShowInDock"
+    | "setShowOnAllDisplays"
+    | "setFormFactor"
   >,
   action: { setting: AppGuideSetting; value: string },
   onSettings: (settings: AppSettings) => void,
@@ -268,11 +299,16 @@ export async function applySpokenSetting(
         ? await bridge.setShowInMenuBar(enabled)
         : action.setting.id === APP_SETTING_ID.SHOW_IN_DOCK
           ? await bridge.setShowInDock(enabled)
-          : action.setting.id === APP_SETTING_ID.VOICE_SPEED && speed !== undefined
-            ? await bridge.setVoiceSpeed(speed)
-            : action.setting.id === APP_SETTING_ID.VOICE && isRealtimeVoice(action.value)
-              ? await bridge.setVoice(action.value)
-              : undefined;
+          : action.setting.id === APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS
+            ? await bridge.setShowOnAllDisplays(enabled)
+            : action.setting.id === APP_SETTING_ID.VOICE_SPEED && speed !== undefined
+              ? await bridge.setVoiceSpeed(speed)
+              : action.setting.id === APP_SETTING_ID.VOICE && isRealtimeVoice(action.value)
+                ? await bridge.setVoice(action.value)
+                : action.setting.id === APP_SETTING_ID.FORM_FACTOR &&
+                    isPanelFormFactor(action.value)
+                  ? await bridge.setFormFactor(action.value)
+                  : undefined;
   if (!result) {
     // An adjustable entry with no carrier is a guide ahead of its wiring;
     // refuse honestly rather than claim a change that never happened.

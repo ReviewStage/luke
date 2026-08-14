@@ -3,7 +3,12 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
-import { REALTIME_DEFAULTS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/core";
+import {
+  PANEL_FORM_FACTOR,
+  REALTIME_DEFAULTS,
+  REALTIME_VOICE,
+  REALTIME_VOICE_SPEED,
+} from "@sidecar/core";
 import { type SecretCipher, SettingsStore } from "../src/settings-store";
 import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "../src/shared/contracts";
 import {
@@ -298,6 +303,7 @@ test("keeps both keys when two providers are saved at once", async (t) => {
     showInDock: false,
     showInMenuBar: true,
     voiceCaptions: false,
+    showOnAllDisplays: false,
   });
   const reopened = storeIn(directory, { providers: TEST_PROVIDERS });
   assert.equal(await reopened.readApiKey(FIRST_CLOUD), "first-cloud-key");
@@ -496,6 +502,7 @@ test("keeps a Conductor key stored by an earlier version working", async (t) => 
     showInDock: false,
     showInMenuBar: true,
     voiceCaptions: false,
+    showOnAllDisplays: false,
   });
   assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), "conductor-replacement-key");
 });
@@ -517,6 +524,7 @@ test("carries a key belonging to a provider this build does not know", async (t)
     showInDock: false,
     showInMenuBar: true,
     voiceCaptions: false,
+    showOnAllDisplays: false,
   });
 });
 
@@ -536,6 +544,7 @@ test("shows the menu bar item until asked otherwise, and remembers the answer", 
     showInDock: false,
     showInMenuBar: false,
     voiceCaptions: false,
+    showOnAllDisplays: false,
   });
   // The choice outlives the run that heard it.
   assert.equal((await storeIn(directory).snapshot()).showInMenuBar, false);
@@ -616,6 +625,7 @@ test("keeps Luke out of the Dock until asked, and remembers the answer", async (
     showInDock: true,
     showInMenuBar: true,
     voiceCaptions: false,
+    showOnAllDisplays: false,
   });
   // The choice outlives the run that heard it.
   assert.equal((await storeIn(directory).snapshot()).showInDock, true);
@@ -767,6 +777,81 @@ test("ignores a stored or environment pace this build does not offer", async (t)
 
   assert.equal(await store.readVoiceSpeed(), undefined);
   assert.equal((await store.snapshot()).voiceSpeed, REALTIME_DEFAULTS.SPEED);
+});
+
+test("keeps Luke to the main display until asked, and remembers the answer", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  assert.equal((await store.snapshot()).showOnAllDisplays, false);
+  assert.equal(await store.readShowOnAllDisplays(), false);
+
+  const { settings, reason } = await store.setShowOnAllDisplays(true);
+
+  assert.equal(reason, undefined);
+  assert.equal(settings.showOnAllDisplays, true);
+  // The choice outlives the run that heard it.
+  assert.equal(await storeIn(directory).readShowOnAllDisplays(), true);
+});
+
+test("changes the displays preference without touching the cipher", async (t) => {
+  // A preference is not a credential, so storing one must never be the reason
+  // the Keychain dialog appears.
+  const directory = await temporaryDirectory(t);
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+
+  const { settings } = await store.setShowOnAllDisplays(true);
+
+  assert.equal(settings.showOnAllDisplays, true);
+  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
+});
+
+test("keeps Luke to the main display when the file says something a boolean is not", async (t) => {
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({ version: 2, apiKeys: {}, showOnAllDisplays: "every one of them" }),
+  );
+
+  assert.equal(await storeIn(directory).readShowOnAllDisplays(), false);
+});
+
+test("draws the bubble until a form is chosen, and remembers the choice", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  assert.equal((await store.snapshot()).formFactor, PANEL_FORM_FACTOR.BUBBLE);
+  assert.equal(await store.readFormFactor(), undefined);
+
+  const { settings, reason } = await store.setFormFactor(PANEL_FORM_FACTOR.NOTCH);
+
+  assert.equal(reason, undefined);
+  assert.equal(settings.formFactor, PANEL_FORM_FACTOR.NOTCH);
+  // The choice outlives the run that heard it.
+  assert.equal(await storeIn(directory).readFormFactor(), PANEL_FORM_FACTOR.NOTCH);
+});
+
+test("changes the form without touching the cipher", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+
+  const { settings } = await store.setFormFactor(PANEL_FORM_FACTOR.NOTCH);
+
+  assert.equal(settings.formFactor, PANEL_FORM_FACTOR.NOTCH);
+  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
+});
+
+test("ignores a stored form this build does not draw", async (t) => {
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({ version: 2, apiKeys: {}, formFactor: "hexagon" }),
+  );
+
+  assert.equal(await storeIn(directory).readFormFactor(), undefined);
+  assert.equal((await storeIn(directory).snapshot()).formFactor, PANEL_FORM_FACTOR.BUBBLE);
 });
 
 test("the voice and a stored key survive each other's writes", async (t) => {
