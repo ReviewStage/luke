@@ -26,6 +26,8 @@ import type {
 import { CREDENTIAL_SOURCE, SESSION_OPEN_RESULT_STATUS } from "../shared/contracts";
 import type { CredentialProviderId } from "../shared/credential-providers";
 import { CREDENTIAL_PROVIDER_LIST } from "../shared/credential-providers";
+import type { FeedbackImage, FeedbackKind } from "../shared/feedback";
+import { FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from "../shared/feedback";
 import {
   TALK_KEY_RELEASE,
   talkKeyRelease,
@@ -35,6 +37,15 @@ import {
 import { ASK_LUKE_INPUT_ID, askRefusal, focusAskField } from "./ask-luke";
 import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";
 import { isSubmittable, removalEndsEntry } from "./credential-entry";
+import {
+  type FeedbackEntry,
+  type FeedbackEntryControl,
+  freshFeedbackEntry,
+  IMAGE_REFUSAL,
+  isSendable,
+} from "./feedback-entry";
+import { encodeFeedbackImage } from "./feedback-images";
+import { FeedbackSlot } from "./feedback-slot";
 import { KeySlot } from "./key-slot";
 import { applySpokenSetting, buildLukeGuide } from "./luke-guide";
 import { NotchWings } from "./notch-wings";
@@ -84,6 +95,13 @@ const REMOTE_QUIET_MS = 2_500;
  */
 const FIXTURE_SPEAKING_CAPTION =
   "Claude Code finished checkout-service, and Codex is still migrating the payments schema. Two sessions are waiting on you.";
+
+/**
+ * How long the settings tab keeps saying a note to the founders was sent. Long
+ * enough to be read on the way back from the Send button, short enough that
+ * the line is gone before anyone wonders whether it is stuck.
+ */
+const FEEDBACK_NOTICE_MS = 6_000;
 
 /**
  * The caption block's vertical padding — 5px above the text and 9px keeping
@@ -146,7 +164,8 @@ function usePointerPassthrough(
         kind === HIT_REGION.SURFACE ||
           kind === HIT_REGION.CAPSULE ||
           (kind === HIT_REGION.PANEL && drawn === PANEL_PRESENTATION.PANEL) ||
-          (kind === HIT_REGION.SLOT && drawn === PANEL_PRESENTATION.SLOT),
+          (kind === HIT_REGION.SLOT && drawn === PANEL_PRESENTATION.SLOT) ||
+          (kind === HIT_REGION.FEEDBACK && drawn === PANEL_PRESENTATION.FEEDBACK),
       );
     },
     [update],
@@ -188,10 +207,12 @@ function notchStyle(display: DisplayDiagnostic): CSSProperties {
 function shapeHeightStyle(
   panelHeight: number | undefined,
   slotHeight: number | undefined,
+  feedbackHeight: number | undefined,
 ): CSSProperties {
   return {
     ...(panelHeight === undefined ? {} : { "--panel-height": `${panelHeight}px` }),
     ...(slotHeight === undefined ? {} : { "--slot-height": `${slotHeight}px` }),
+    ...(feedbackHeight === undefined ? {} : { "--feedback-height": `${feedbackHeight}px` }),
   } as CSSProperties;
 }
 
@@ -238,11 +259,14 @@ export function App(): React.JSX.Element {
   const [microphoneError, setMicrophoneError] = useState<string>();
   const [analyser, setAnalyser] = useState<AnalyserNode>();
   const [entry, setEntry] = useState<CredentialEntry>();
+  const [feedback, setFeedback] = useState<FeedbackEntry>();
+  const [feedbackNotice, setFeedbackNotice] = useState<string>();
   // Counts for nothing except having changed: each tick re-renders the rows so
   // their "how long ago" labels stay honest while they are on screen.
   const [, setClock] = useState(0);
   const [panelElement, panelHeight] = useShapeHeight();
   const [slotElement, slotHeight] = useShapeHeight();
+  const [feedbackElement, feedbackHeight] = useShapeHeight();
   const [captionTextElement, captionTextHeight] = useShapeHeight();
   const [voiceStatus, setVoiceStatus] = useState<RealtimeStatus>(REALTIME_STATUS.IDLE);
   /**
@@ -285,6 +309,8 @@ export function App(): React.JSX.Element {
    * middle of typing.
    */
   const askEngaged = useRef(false);
+  const feedbackRef = useRef<FeedbackEntry | undefined>(undefined);
+  const feedbackNoticeTimer = useRef<number | undefined>(undefined);
   const pointerInside = useRef(false);
   const modeGeneration = useRef(0);
   const remoteAudio = useRef<HTMLAudioElement | null>(null);
@@ -380,13 +406,16 @@ export function App(): React.JSX.Element {
       // go, not a state the capsule remembers, and a filter left in place would
       // let the panel hide a session the capsule is still counting.
       //
-      // A key half-entered is the one exception, and only to the tab: it is
-      // what someone is in the middle of, so however the panel closed, it opens
-      // again where they left it. The list is not something anyone is in the
-      // middle of, so it resets either way.
+      // Something half-written is the one exception, and only to the tab — a
+      // key being entered or a note to the founders alike: it is what someone
+      // is in the middle of, so however the panel closed, it opens again where
+      // they left it. The list is not something anyone is in the middle of, so
+      // it resets either way.
       if (next === PANEL_PRESENTATION.CAPSULE) {
         setSessionView(DEFAULT_SESSION_VIEW);
-        if (entryRef.current === undefined) changeTab(PANEL_TAB.SESSIONS);
+        if (entryRef.current === undefined && feedbackRef.current === undefined) {
+          changeTab(PANEL_TAB.SESSIONS);
+        }
       }
     },
     [changeTab],
@@ -635,6 +664,10 @@ export function App(): React.JSX.Element {
     // browser, fetching the key it is waiting for — so the pointer being away
     // from it is the normal case rather than a dismissal.
     if (current === PANEL_PRESENTATION.SLOT) return;
+    // The composer holds words someone is in the middle of, which the pointer
+    // must not be allowed to discard: like the slot, it stays put until it is
+    // dismissed, cancelled, or sent.
+    if (current === PANEL_PRESENTATION.FEEDBACK) return;
     // A key half-typed is one thing the pointer must not be allowed to
     // discard; an ask being typed to Luke is the other. Everything else on
     // the settings tab closes like the sessions tab does.
@@ -851,6 +884,216 @@ export function App(): React.JSX.Element {
     cancel: cancelEntry,
     commit: commitEntry,
     remove: removeProviderApiKey,
+  };
+
+  /**
+   * The single place a feedback entry changes, for the same reason a
+   * credential's is: writing one holds the panel open against the pointer, so
+   * ending one has to release that hold — an entry that ends while the pointer
+   * is already away would otherwise leave the panel held open by nothing.
+   */
+  const applyFeedback = useCallback(
+    (next: FeedbackEntry | undefined) => {
+      const released = feedbackRef.current !== undefined && next === undefined;
+      feedbackRef.current = next;
+      setFeedback(next);
+      if (released && !pointerInside.current) handleHitRegionLeave();
+    },
+    [handleHitRegionLeave],
+  );
+
+  /** Says a send landed, and stops saying it once it has been readable. */
+  const showFeedbackNotice = useCallback((notice: string) => {
+    if (feedbackNoticeTimer.current !== undefined) {
+      window.clearTimeout(feedbackNoticeTimer.current);
+    }
+    setFeedbackNotice(notice);
+    feedbackNoticeTimer.current = window.setTimeout(() => {
+      feedbackNoticeTimer.current = undefined;
+      setFeedbackNotice(undefined);
+    }, FEEDBACK_NOTICE_MS);
+  }, []);
+
+  useEffect(() => () => window.clearTimeout(feedbackNoticeTimer.current), []);
+
+  /**
+   * Opens the composer for a kind — from the section's own buttons or from
+   * the tray — and stands the panel down to its shape, the way beginning a
+   * key entry stands it down to the slot: writing one note is one act. A
+   * draft is never discarded by asking again: opening over a half-written
+   * note brings that note back, and only an entry with nothing in it yet is
+   * re-labelled to the kind that was just asked for. Where leaving returns
+   * you follows the latest ask, not the first.
+   */
+  const beginFeedback = useCallback(
+    (kind: FeedbackKind, fromPanel: boolean) => {
+      setFeedbackNotice(undefined);
+      const current = feedbackRef.current;
+      if (!current) {
+        applyFeedback(freshFeedbackEntry(kind, fromPanel));
+      } else if (!current.busy) {
+        const relabel = current.kind !== kind && current.message.trim().length === 0;
+        applyFeedback({ ...current, ...(relabel ? { kind } : {}), fromPanel });
+      }
+      cancelHoverTransition();
+      applyPresentation(PANEL_PRESENTATION.FEEDBACK);
+    },
+    [applyFeedback, applyPresentation, cancelHoverTransition],
+  );
+
+  /**
+   * Leaves the shape and keeps the draft — Escape's meaning here. A note is
+   * longer than a key, and a key is the only thing Escape is allowed to
+   * discard; the way back in is the same button, now reading "keep writing".
+   * Where it returns you is where the composer was last asked for from: the
+   * panel, or — from the tray — nothing at all.
+   */
+  const dismissFeedback = useCallback(() => {
+    if (presentationRef.current !== PANEL_PRESENTATION.FEEDBACK) return;
+    if (feedbackRef.current?.fromPanel === true) restorePanel();
+    else void changeMode(false);
+  }, [changeMode, restorePanel]);
+
+  /**
+   * Every field writes through here, under the rule a credential's draft has:
+   * a note being sent is what the reply on its way back is answering, so
+   * nothing may change under it but ending it outright. Typing again answers
+   * the last refusal, so the refusal goes.
+   */
+  const changeFeedback = useCallback(
+    (patch: Partial<Pick<FeedbackEntry, "message" | "name" | "email">>) => {
+      const current = feedbackRef.current;
+      if (!current || current.busy) return;
+      applyFeedback({ ...current, ...patch, rejection: undefined });
+    },
+    [applyFeedback],
+  );
+
+  /**
+   * Takes picked or pasted files aboard. Encoding happens here on the user's
+   * machine — scaled and re-written where a screenshot would not fit the
+   * request a submission has to travel as — and what could not come is said
+   * beside the field rather than dropped in silence.
+   */
+  const attachFeedbackImages = useCallback(
+    async (files: readonly File[]) => {
+      const current = feedbackRef.current;
+      if (!current || current.busy) return;
+      const room = FEEDBACK_LIMITS.MAX_IMAGES - current.images.length;
+      const taken = files.slice(0, Math.max(0, room));
+      const encoded: FeedbackImage[] = [];
+      let refused = false;
+      for (const file of taken) {
+        const image = await encodeFeedbackImage(file);
+        if (image) encoded.push(image);
+        else refused = true;
+      }
+      // Read again after the awaits: typing meanwhile replaced the entry
+      // object, and Cancel or a send may have ended it altogether.
+      const latest = feedbackRef.current;
+      if (!latest || latest.busy) return;
+      const rejection = refused
+        ? IMAGE_REFUSAL.UNREADABLE
+        : files.length > room
+          ? IMAGE_REFUSAL.FULL
+          : undefined;
+      applyFeedback({
+        ...latest,
+        images: [...latest.images, ...encoded].slice(0, FEEDBACK_LIMITS.MAX_IMAGES),
+        rejection,
+      });
+    },
+    [applyFeedback],
+  );
+
+  const removeFeedbackImage = useCallback(
+    (index: number) => {
+      const current = feedbackRef.current;
+      if (!current || current.busy) return;
+      applyFeedback({
+        ...current,
+        images: current.images.filter((_, held) => held !== index),
+      });
+    },
+    [applyFeedback],
+  );
+
+  /** The one way a draft is discarded, and it is the user's own press. */
+  const cancelFeedback = useCallback(() => {
+    const aside = presentationRef.current === PANEL_PRESENTATION.FEEDBACK;
+    const fromPanel = feedbackRef.current?.fromPanel === true;
+    applyFeedback(undefined);
+    if (!aside) return;
+    // Giving up returns you where you were: the panel this was opened from,
+    // or — from the tray — out of the way entirely.
+    if (fromPanel) restorePanel();
+    else void changeMode(false);
+  }, [applyFeedback, changeMode, restorePanel]);
+
+  const commitFeedback = useCallback(() => {
+    const current = feedbackRef.current;
+    if (!isSendable(current)) return;
+    const sending: FeedbackEntry = { ...current, busy: true, rejection: undefined };
+    applyFeedback(sending);
+    const name = sending.name.trim();
+    const email = sending.email.trim();
+    void window.sidecar
+      .sendFeedback({
+        kind: sending.kind,
+        message: sending.message.trim(),
+        ...(name ? { name } : {}),
+        ...(email ? { email } : {}),
+        images: sending.images,
+      })
+      .then((result) => {
+        // A reply that outlived its own entry is spent, exactly as a
+        // credential's is: Cancel reaches the composer while a send is in
+        // flight, and so does beginning again.
+        if (feedbackRef.current !== sending) return;
+        if (!result.delivered) {
+          applyFeedback({
+            ...sending,
+            busy: false,
+            rejection: result.reason ?? "Could not send that. Try again.",
+          });
+          return;
+        }
+        // Sent from the shape: the whole panel comes back around the section
+        // that offered this, because the sent line under the offers is the
+        // answer to what was just done — the same restore a key saved from
+        // the slot gets. An answer is worth reading and then done with, so
+        // with the pointer away nothing else would ever ask this panel to
+        // close, and it shows the answer and then takes its leave.
+        feedbackRef.current = undefined;
+        setFeedback(undefined);
+        showFeedbackNotice("Sent — thank you.");
+        if (presentationRef.current === PANEL_PRESENTATION.FEEDBACK) restorePanel();
+        if (pointerInside.current) return;
+        cancelHoverTransition();
+        hoverTimer.current = window.setTimeout(() => {
+          hoverTimer.current = undefined;
+          if (presentationRef.current === PANEL_PRESENTATION.PANEL) void changeMode(false);
+        }, SETTLE_DELAY_MS);
+      })
+      .catch(() => {
+        if (feedbackRef.current !== sending) return;
+        applyFeedback({ ...sending, busy: false, rejection: "Could not send that. Try again." });
+      });
+  }, [applyFeedback, cancelHoverTransition, changeMode, restorePanel, showFeedbackNotice]);
+
+  const feedbackControl: FeedbackEntryControl = {
+    entry: feedback,
+    ...(feedbackNotice ? { notice: feedbackNotice } : {}),
+    // The section's own buttons are the panel asking, so leaving returns there.
+    begin: (kind) => beginFeedback(kind, true),
+    changeMessage: (message) => changeFeedback({ message }),
+    changeName: (name) => changeFeedback({ name }),
+    changeEmail: (email) => changeFeedback({ email }),
+    attach: (files) => void attachFeedbackImages(files),
+    removeImage: removeFeedbackImage,
+    dismiss: dismissFeedback,
+    cancel: cancelFeedback,
+    commit: commitFeedback,
   };
 
   // The row marks the voice the main process reports rather than the one just
@@ -1123,6 +1366,16 @@ export function App(): React.JSX.Element {
       // Held while a shortcut row is recording, for the same reason the talk
       // key's press is: the chord just typed is an entry, not an ask.
       if (eventName === "ask:focus" && !shortcutCapture.current) summonAsk();
+      // The tray's feedback items stand the surface straight down to the
+      // composer's shape, on the kind that was asked for. The tray has
+      // expanded the window itself; this is the renderer's half of the same
+      // gesture. The tab still moves to settings so that coming back to the
+      // panel later lands beside the section the shape belongs to.
+      const feedbackKind = feedbackKindForLifecycleEvent(eventName);
+      if (feedbackKind) {
+        changeTab(PANEL_TAB.SETTINGS);
+        beginFeedback(feedbackKind, false);
+      }
     });
     const removeDisplay = window.sidecar.onDisplayChanged(setDisplay);
     // Another window's settings change: this window's rows and guide redraw
@@ -1153,6 +1406,7 @@ export function App(): React.JSX.Element {
     applyAuthoritativeMode,
     applyPresentation,
     beginEntry,
+    beginFeedback,
     cancelHoverTransition,
     changeTab,
     startMicrophone,
@@ -1289,6 +1543,13 @@ export function App(): React.JSX.Element {
         cancelEntry();
         return;
       }
+      // Escape out of the composer leaves the shape and keeps the draft: a
+      // note is longer than a key, and a key is the only thing Escape is
+      // allowed to discard.
+      if (presentation === PANEL_PRESENTATION.FEEDBACK) {
+        dismissFeedback();
+        return;
+      }
       if (presentation !== PANEL_PRESENTATION.PANEL) return;
       // Otherwise it closes the nearest thing that is open, one layer at a
       // time: the options sheet, then the settings tab, then the panel itself.
@@ -1298,7 +1559,16 @@ export function App(): React.JSX.Element {
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [cancelEntry, changeMode, changeTab, optionsOpen, presentation, tab, voiceStatus]);
+  }, [
+    cancelEntry,
+    changeMode,
+    changeTab,
+    dismissFeedback,
+    optionsOpen,
+    presentation,
+    tab,
+    voiceStatus,
+  ]);
 
   // The talk key is registered by the main process so it answers from any app,
   // which is the whole point: no window to find, nothing to focus first. Both
@@ -1413,6 +1683,7 @@ export function App(): React.JSX.Element {
       : undefined;
   const panelOpen = presentation === PANEL_PRESENTATION.PANEL;
   const slotOpen = presentation === PANEL_PRESENTATION.SLOT;
+  const feedbackOpen = presentation === PANEL_PRESENTATION.FEEDBACK;
   // What the slot's field is for depends on what answers for that provider now,
   // and settings resolve after the first render.
   const slotSource =
@@ -1432,7 +1703,7 @@ export function App(): React.JSX.Element {
       data-capture={String(bootstrap.captureMode)}
       style={{
         ...notchStyle(display),
-        ...shapeHeightStyle(panelHeight, slotHeight),
+        ...shapeHeightStyle(panelHeight, slotHeight, feedbackHeight),
         ...captionSizeStyle(captionTextHeight),
       }}
     >
@@ -1470,6 +1741,7 @@ export function App(): React.JSX.Element {
               onVoiceCaptionsChange: changeVoiceCaptions,
               onDuckOtherMediaChange: changeDuckOtherMedia,
               credentials,
+              feedback: feedbackControl,
               onVoiceChange: changeVoice,
               onVoiceSpeedChange: changeVoiceSpeed,
               panelOpen,
@@ -1495,6 +1767,8 @@ export function App(): React.JSX.Element {
       {/* The panel stood down to its field. It shares the expanded window, so
           standing down to it costs no more than the peek does. */}
       <KeySlot control={credentials} source={slotSource} drawn={slotOpen} measure={slotElement} />
+      {/* The panel stood down to the composer, on the same terms. */}
+      <FeedbackSlot control={feedbackControl} drawn={feedbackOpen} measure={feedbackElement} />
       {/* Luke's own voice. Muted playback would defeat the point, so this is
           the one element allowed to make sound. */}
       <audio ref={remoteAudio} autoPlay hidden>
