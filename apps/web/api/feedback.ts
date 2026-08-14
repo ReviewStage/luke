@@ -18,6 +18,39 @@ const RESEND_URL = "https://api.resend.com/emails";
 const DESTINATION = "founders@stagereview.app";
 const DEFAULT_FROM = "Luke <feedback@tryluke.dev>";
 
+/**
+ * A best-effort brake on abuse: the endpoint is public and each accepted
+ * submission spends mail quota, so one address gets a handful per window and
+ * a 429 after. The counter lives in the function instance, which makes it a
+ * per-instance brake rather than a guarantee — platform-level rules (Vercel's
+ * firewall) are the real backstop — but it turns "curl in a loop" from a
+ * flooded inbox into a trickle at zero infrastructure cost.
+ */
+const RATE_LIMIT = {
+  WINDOW_MS: 10 * 60_000,
+  MAX_PER_WINDOW: 6,
+  /** The counter map is bounded; past this it forgets rather than grows. */
+  MAX_TRACKED_SENDERS: 10_000,
+} as const;
+
+const recentSenders = new Map<string, { windowStart: number; count: number }>();
+
+function senderAddress(request: Request): string {
+  // The first hop in the forwarded chain is the caller as the platform saw it.
+  return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+}
+
+function rateLimited(sender: string, now: number): boolean {
+  const held = recentSenders.get(sender);
+  if (!held || now - held.windowStart >= RATE_LIMIT.WINDOW_MS) {
+    if (recentSenders.size >= RATE_LIMIT.MAX_TRACKED_SENDERS) recentSenders.clear();
+    recentSenders.set(sender, { windowStart: now, count: 1 });
+    return false;
+  }
+  held.count += 1;
+  return held.count > RATE_LIMIT.MAX_PER_WINDOW;
+}
+
 const FEEDBACK_KIND = {
   FEEDBACK: "feedback",
   PROMPT: "prompt",
@@ -140,6 +173,9 @@ function json(status: number, body: Record<string, unknown>): Response {
 export async function POST(request: Request): Promise<Response> {
   const apiKey = process.env.RESEND_API_KEY?.trim();
   if (!apiKey) return json(503, { reason: "The feedback service is not configured." });
+  if (rateLimited(senderAddress(request), Date.now())) {
+    return json(429, { reason: "Too many submissions from this address. Try again later." });
+  }
 
   let payload: unknown;
   try {
