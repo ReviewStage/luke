@@ -228,6 +228,14 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "one. Only reported projects can be named, a project that needs a task cannot be created " +
         "without one, and a provider that reports none takes no ask.",
     },
+    {
+      label: "Adding agents to a workspace",
+      detail:
+        "Where a session's provider documents it — Conductor today — the same kind of ask can " +
+        "start another agent in the workspace an observed session runs in, as one of the agent " +
+        "kinds that session's roster entry lists, optionally named and optionally with an " +
+        "opening task. A session whose entry lists no new agents takes no such ask.",
+    },
     talkKeyFact(input.hotkey),
     { label: "Microphone access", detail: MICROPHONE_DETAIL[input.microphoneStatus] },
     ...(input.voiceAvailable

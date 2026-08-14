@@ -168,6 +168,14 @@ export interface ProviderSessionObservation {
    * offered a control that would have to be improvised.
    */
   canReceiveMessage?: boolean;
+  /**
+   * The kinds of agent this session's provider documents starting alongside it
+   * — in the same workspace — named exactly as the provider's creation
+   * endpoint takes them. Absent means none: only an adapter whose provider
+   * documents such an endpoint lists anything, and an ask can only name an
+   * agent from this list.
+   */
+  spawnableAgents?: readonly string[];
 }
 
 /**
@@ -185,10 +193,16 @@ export interface NormalizedSession extends SessionIdentity {
   controls: readonly SessionControl[];
   /** Whether this session's provider will take a message for it right now. */
   canReceiveMessage: boolean;
+  /** The agents that can be started alongside this session, or none. */
+  spawnableAgents: readonly string[];
   attention: AttentionDecision;
 }
 
 export const maximumSessionTitleLength = 160;
+/** An agent kind is a short identifier, never a sentence. */
+export const maximumSpawnableAgentLength = 40;
+/** How many kinds of agent one session may offer to start. */
+export const maximumSpawnableAgents = 8;
 export const maximumSessionSummaryLength = 500;
 /** One line of context beside a title, not a paragraph. */
 export const maximumSessionDetailLength = 120;
@@ -305,6 +319,23 @@ export function normalizeSessionDetail(detail: SessionDetail | undefined): Sessi
   };
 }
 
+/**
+ * Bounds and deduplicates the agents a session offers to start beside it. An
+ * entry outside its bound is dropped rather than cut: a truncated agent kind
+ * names a different agent, and this list is what a creation ask is held to.
+ */
+function normalizeSpawnableAgents(agents: readonly string[] | undefined): readonly string[] {
+  if (!agents) return [];
+  const unique = new Set<string>();
+  for (const agent of agents) {
+    const normalized = agent.trim();
+    if (!normalized || normalized.length > maximumSpawnableAgentLength) continue;
+    unique.add(normalized);
+    if (unique.size >= maximumSpawnableAgents) break;
+  }
+  return [...unique];
+}
+
 /** Normalizes the two-part identity used to locate a session in the registry. */
 export function normalizeSessionIdentity(identity: SessionIdentity): SessionIdentity {
   return {
@@ -368,6 +399,7 @@ export function normalizeSession(
     // Anything but an explicit yes is a no, so an adapter that has not thought
     // about messaging reports a session that cannot be messaged.
     canReceiveMessage: observation.canReceiveMessage === true,
+    spawnableAgents: normalizeSpawnableAgents(observation.spawnableAgents),
     attention: normalizeAttention(attention),
   };
 }

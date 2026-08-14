@@ -263,3 +263,40 @@ export function isWorkspaceCapableAdapter(
     typeof candidate.createWorkspace === "function"
   );
 }
+
+/**
+ * A user-asked request for another agent in the workspace an observed session
+ * already runs in. The session names the workspace; the agent must be one that
+ * session's latest observation listed as spawnable.
+ */
+export interface ProviderWorkspaceAgentRequest {
+  providerSessionId: string;
+  /** The kind of agent, exactly as the observation listed it. */
+  agent: string;
+  /** The name the user chose, when they chose one. */
+  name?: string;
+  /** The new agent's opening task, in the user's own words, when they gave one. */
+  task?: string;
+}
+
+/**
+ * Optional extension for adapters whose provider documents starting another
+ * agent in an existing workspace. The same rules bind it that bind a message:
+ * it acts only on what a user just asked for, only against a session the
+ * latest observation reported with the agent it listed, through the provider's
+ * own documented endpoint — and nothing that decides on the user's behalf may
+ * reach it.
+ */
+export interface WorkspaceAgentCapableSessionProviderAdapter extends SessionProviderAdapter {
+  spawnWorkspaceAgent(request: ProviderWorkspaceAgentRequest): Promise<ProviderWorkspaceResult>;
+}
+
+/** Whether an adapter can start another agent at all, before asking it to. */
+export function isWorkspaceAgentCapableAdapter(
+  adapter: SessionProviderAdapter,
+): adapter is WorkspaceAgentCapableSessionProviderAdapter {
+  return (
+    typeof (adapter as Partial<WorkspaceAgentCapableSessionProviderAdapter>).spawnWorkspaceAgent ===
+    "function"
+  );
+}

@@ -78,6 +78,24 @@ const CONDUCTOR_WORKSPACE_FIELD = {
   SESSION_ID: "sessionId",
 } as const;
 
+/** The body `POST /v0/sessions` documents, of it the fields Luke ever sends. */
+const CONDUCTOR_SESSION_CREATE_FIELD = {
+  WORKSPACE_ID: "workspaceId",
+  AGENT: "agent",
+  NAME: "name",
+  MESSAGE: "message",
+} as const;
+
+/**
+ * The kinds of agent Conductor's session-creation endpoint documents, named
+ * exactly as it takes them. The endpoint also takes `acp`, which is a
+ * protocol shim with no defaults of its own rather than an agent someone asks
+ * for by name, so it is deliberately not offered. Model, effort, and fast
+ * mode are likewise never sent: Conductor's defaults are the user's own
+ * settings there.
+ */
+const CONDUCTOR_SPAWNABLE_AGENTS: readonly string[] = ["claude", "codex", "cursor"];
+
 /**
  * The one control this adapter can honour, advertised only while a session is
  * actually working a turn there is something to stop.
@@ -227,6 +245,12 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
    * this cache holds, so it can never name a project observation did not see.
    */
   #projects: readonly ConductorProject[] = [];
+  /**
+   * Which workspace each reported row stands for. The row's identity is a
+   * chat's, but a new agent lands in the workspace around it, and only the
+   * latest pass may say which that is.
+   */
+  #workspaceIdBySessionId: ReadonlyMap<string, string> = new Map();
 
   constructor(options: ConductorAdapterOptions) {
     super(
@@ -250,6 +274,7 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
   protected override forgetCachedIdentity(): void {
     this.#userId = undefined;
     this.#projects = [];
+    this.#workspaceIdBySessionId = new Map();
   }
 
   /**
@@ -361,6 +386,14 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
         byWorkspace.set(workspaceId, observation);
       }
     }
+    // A new agent lands in the workspace behind a row, so each emitted row
+    // remembers which workspace it stands for — for this pass only.
+    this.#workspaceIdBySessionId = new Map(
+      [...byWorkspace.entries()].map(([workspaceId, observation]) => [
+        observation.providerSessionId,
+        workspaceId,
+      ]),
+    );
     return [...byWorkspace.values()];
   }
 
@@ -478,6 +511,29 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     );
   }
 
+  protected override workspaceAgentRoute(
+    providerSessionId: string,
+    agent: string,
+    name: string | undefined,
+    task: string | undefined,
+  ): CloudWriteRoute | undefined {
+    // The workspace is read back from what this pass observed, never from the
+    // request: a row the last pass did not emit has no workspace to land in.
+    const workspaceId = this.#workspaceIdBySessionId.get(providerSessionId);
+    if (!workspaceId) return undefined;
+    return {
+      segments: [CONDUCTOR_ROUTE_SEGMENT.V0, CONDUCTOR_ROUTE_SEGMENT.SESSIONS],
+      body: {
+        [CONDUCTOR_SESSION_CREATE_FIELD.WORKSPACE_ID]: workspaceId,
+        [CONDUCTOR_SESSION_CREATE_FIELD.AGENT]: agent,
+        ...(name ? { [CONDUCTOR_SESSION_CREATE_FIELD.NAME]: name } : {}),
+        // The opening task rides the creation itself: `POST /v0/sessions`
+        // documents taking the first message inline.
+        ...(task ? { [CONDUCTOR_SESSION_CREATE_FIELD.MESSAGE]: task } : {}),
+      },
+    };
+  }
+
   protected override messageRoute(
     providerSessionId: string,
     text: string,
@@ -546,6 +602,10 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
         !session.archived &&
         (reported?.status === CONDUCTOR_SESSION_STATUS.IDLE ||
           reported?.status === CONDUCTOR_SESSION_STATUS.WORKING),
+      // Another agent lands in the workspace around this row, whatever state
+      // the row's own chat is in: the workspace was observed this pass, and
+      // that is the thing the creation endpoint takes.
+      spawnableAgents: CONDUCTOR_SPAWNABLE_AGENTS,
       ...(reported?.status === CONDUCTOR_SESSION_STATUS.WORKING
         ? { controls: [CONDUCTOR_CANCEL_CONTROL] }
         : {}),

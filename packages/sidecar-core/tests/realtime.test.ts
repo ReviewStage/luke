@@ -436,7 +436,7 @@ test("a resting-point update is voiced just like a blocking one", () => {
   assert.equal(speech[0]?.disposition, ATTENTION_DISPOSITION.SPEAK_AT_TURN_END);
 });
 
-test("the session is minted with the eight acts and nothing wider", () => {
+test("the session is minted with the nine acts and nothing wider", () => {
   const config = realtimeSessionConfig();
 
   assert.deepEqual(
@@ -446,6 +446,7 @@ test("the session is minted with the eight acts and nothing wider", () => {
       REALTIME_TOOL.RUN_SESSION_CONTROL,
       REALTIME_TOOL.OPEN_SESSION,
       REALTIME_TOOL.CREATE_WORKSPACE,
+      REALTIME_TOOL.ADD_WORKSPACE_AGENT,
       REALTIME_TOOL.UPDATE_ISSUE_STATE,
       REALTIME_TOOL.COMMENT_ON_ISSUE,
       REALTIME_TOOL.CHANGE_APP_SETTING,
@@ -668,6 +669,85 @@ test("a creation ask can only name a project Luke was shown", () => {
     sessionToolAction(messageCall(`{${identity}}`, REALTIME_TOOL.CREATE_WORKSPACE), [
       actionableSession(),
     ]),
+  ];
+  for (const refusal of refusals) assert.equal(refusal.kind, "refused");
+});
+
+test("another agent can only be added as a kind the session's own entry lists", () => {
+  const spawning = normalizeSession(
+    { id: "conductor", displayName: "Conductor" },
+    {
+      providerSessionId: "chat-1",
+      title: "bucharest-v1",
+      status: SESSION_STATUS.WAITING,
+      observedAt: DECIDED_AT,
+      spawnableAgents: ["claude", "codex", "cursor"],
+    },
+  );
+  const roster = [spawning, actionableSession()];
+  const identity = '"provider_id":"conductor","provider_session_id":"chat-1"';
+
+  // The roster says what can be started here, so the ask can name it exactly.
+  assert.match(sessionContextText(roster), /new agents: claude, codex, cursor/);
+
+  assert.deepEqual(
+    sessionToolAction(
+      messageCall(
+        `{${identity},"agent":"codex","name":"xyz feature","task":"Build the XYZ feature"}`,
+        REALTIME_TOOL.ADD_WORKSPACE_AGENT,
+      ),
+      roster,
+    ),
+    {
+      kind: "add-agent",
+      identity: { providerId: "conductor", providerSessionId: "chat-1" },
+      agent: "codex",
+      name: "xyz feature",
+      task: "Build the XYZ feature",
+    },
+  );
+  // Bare is fine too: the agent is the only thing the endpoint cannot default.
+  assert.deepEqual(
+    sessionToolAction(
+      messageCall(`{${identity},"agent":"claude"}`, REALTIME_TOOL.ADD_WORKSPACE_AGENT),
+      roster,
+    ),
+    {
+      kind: "add-agent",
+      identity: { providerId: "conductor", providerSessionId: "chat-1" },
+      agent: "claude",
+    },
+  );
+
+  const refusals = [
+    // An agent kind the entry does not list is refused, not forwarded.
+    sessionToolAction(
+      messageCall(`{${identity},"agent":"devin"}`, REALTIME_TOOL.ADD_WORKSPACE_AGENT),
+      roster,
+    ),
+    // A session that lists no new agents takes no such ask at all.
+    sessionToolAction(
+      messageCall(
+        '{"provider_id":"devin","provider_session_id":"devin-1","agent":"claude"}',
+        REALTIME_TOOL.ADD_WORKSPACE_AGENT,
+      ),
+      roster,
+    ),
+    // The name and the task keep their bounds.
+    sessionToolAction(
+      messageCall(
+        `{${identity},"agent":"claude","name":"${"a".repeat(maximumWorkspaceNameLength + 1)}"}`,
+        REALTIME_TOOL.ADD_WORKSPACE_AGENT,
+      ),
+      roster,
+    ),
+    sessionToolAction(
+      messageCall(
+        `{${identity},"agent":"claude","task":"${"a".repeat(4_100)}"}`,
+        REALTIME_TOOL.ADD_WORKSPACE_AGENT,
+      ),
+      roster,
+    ),
   ];
   for (const refusal of refusals) assert.equal(refusal.kind, "refused");
 });

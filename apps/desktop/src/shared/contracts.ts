@@ -276,6 +276,18 @@ export interface AppBridge {
     task?: string,
   ): Promise<ProviderWorkspaceResult>;
   /**
+   * Starts another agent in the workspace an observed session runs in. The
+   * renderer names a session it is already drawing and an agent kind that
+   * session's roster entry listed; the main process validates both again
+   * against its registry before the adapter sees anything.
+   */
+  addWorkspaceAgent(
+    identity: SessionIdentity,
+    agent: string,
+    name?: string,
+    task?: string,
+  ): Promise<ProviderWorkspaceResult>;
+  /**
    * Carries one spoken issue act to the tracker that can take it. The renderer
    * names an issue and a transition it was shown; the main process resolves
    * both against its own latest observation before the tracker client sees
@@ -333,6 +345,7 @@ export const channels = {
   sendSessionMessage: "app:send-session-message",
   executeSessionControl: "app:execute-session-control",
   createSessionWorkspace: "app:create-session-workspace",
+  addWorkspaceAgent: "app:add-workspace-agent",
   executeIssueAction: "app:execute-issue-action",
   focusPanel: "app:focus-panel",
   requestRealtimeCredential: "app:request-realtime-credential",

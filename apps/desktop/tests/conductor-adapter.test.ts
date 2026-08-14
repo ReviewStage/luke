@@ -148,6 +148,17 @@ function fakeConductorApi(api: TestApi): FakeConductorApi {
           201,
         );
       }
+      if (segments[1] === "sessions" && segments.length === 2) {
+        const body = JSON.parse(typeof init.body === "string" ? init.body : "{}") as {
+          workspaceId?: string;
+          agent?: string;
+        };
+        const workspaceExists = api.workspaces.some(
+          (workspace) => workspace.id === body.workspaceId,
+        );
+        if (!workspaceExists || !body.agent) return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
+        return jsonResponse({ sessionId: "session-spawned", workspaceId: body.workspaceId }, 201);
+      }
       const session =
         api.sessions.find((candidate) => candidate.id === segments[2]) ??
         (createdSessionIds.has(segments[2] ?? "") ? { id: segments[2] ?? "" } : undefined);
@@ -1214,4 +1225,83 @@ test("reports a workspace whose task could not be delivered as exactly that", as
     writes.map((request) => request.pathname),
     ["/v0/workspaces"],
   );
+});
+
+test("starts another agent in the workspace behind an observed row", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 30_000)],
+    sessions: [
+      {
+        id: "session-idle",
+        workspaceId: "workspace-active",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 5_000,
+      },
+    ],
+  });
+  const adapter = adapterFor(api.fetch);
+  const observations = await adapter.observe();
+
+  // The roster row says which agents its workspace can take, exactly as the
+  // endpoint takes them.
+  assert.deepEqual(observations[0]?.spawnableAgents, ["claude", "codex", "cursor"]);
+
+  const result = await adapter.spawnWorkspaceAgent({
+    providerSessionId: "session-idle",
+    agent: "codex",
+    name: "xyz feature",
+    task: "Build the XYZ feature",
+  });
+
+  assert.deepEqual(result, { status: "accepted" });
+  const write = api.requests.at(-1);
+  assert.equal(write?.method, "POST");
+  assert.equal(write?.pathname, "/v0/sessions");
+  assert.equal(write?.authorization, `Bearer ${TEST_API_KEY}`);
+  // The workspace is read back from the pass, and the opening task rides the
+  // creation itself — Conductor documents the first message inline.
+  assert.deepEqual(JSON.parse(write?.body ?? ""), {
+    workspaceId: "workspace-active",
+    agent: "codex",
+    name: "xyz feature",
+    message: "Build the XYZ feature",
+  });
+});
+
+test("refuses to start an agent the row never listed, before any request exists", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 30_000)],
+    sessions: [
+      {
+        id: "session-idle",
+        workspaceId: "workspace-active",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 5_000,
+      },
+    ],
+  });
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+  const requestsBefore = api.requests.length;
+
+  // An agent kind the observation did not list, and a session the pass did
+  // not emit, are both nowhere to land.
+  const unlisted = await adapter.spawnWorkspaceAgent({
+    providerSessionId: "session-idle",
+    agent: "acp",
+  });
+  const unobserved = await adapter.spawnWorkspaceAgent({
+    providerSessionId: "session-unseen",
+    agent: "claude",
+  });
+
+  assert.deepEqual(unlisted, { status: "unsupported" });
+  assert.deepEqual(unobserved, { status: "unsupported" });
+  assert.equal(api.requests.length, requestsBefore);
 });

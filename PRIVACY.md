@@ -60,10 +60,11 @@ and observation issues authenticated `GET` requests only:
 Observation never calls a provider write route. Luke calls one only when you
 ask for the act it performs — a message typed on a session's row or asked for
 out loud, a control a session's provider advertised (such as cancelling a
-Conductor turn), or a new workspace: a Conductor workspace in one of the
+Conductor turn), a new workspace: a Conductor workspace in one of the
 projects Conductor reports, or a Cursor agent in a repository Cursor lists —
-each through the provider's own documented endpoint under the same key, and
-each validated against what the latest observation actually reported. A new
+or another agent started in the workspace an observed Conductor session runs
+in — each through the provider's own documented endpoint under the same key,
+and each validated against what the latest observation actually reported. A new
 workspace can carry the opening task you gave its agent, in your words; that
 text goes to the provider the same way a message to an existing session does,
 and nowhere else. Nothing automatic reaches a write route. Provider-assigned names and results

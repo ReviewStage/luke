@@ -420,7 +420,14 @@ export function App(): React.JSX.Element {
                   action.name,
                   action.task,
                 )
-              : openSessionAloudRef.current(action.identity),
+              : action.kind === "add-agent"
+                ? window.sidecar.addWorkspaceAgent(
+                    action.identity,
+                    action.agent,
+                    action.name,
+                    action.task,
+                  )
+                : openSessionAloudRef.current(action.identity),
       // The asks about Luke himself — a settings change, the panel shown —
       // behind the same gauntlet: validated against the guide before this is
       // called, and performed by the same handlers the panel's controls use.

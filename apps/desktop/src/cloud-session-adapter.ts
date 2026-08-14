@@ -7,6 +7,7 @@ import {
   type ProviderMessageResult,
   type ProviderSessionMessage,
   type ProviderSessionObservation,
+  type ProviderWorkspaceAgentRequest,
   type ProviderWorkspaceRequest,
   type ProviderWorkspaceResult,
   SESSION_LOCATION,
@@ -16,6 +17,7 @@ import {
   type SessionStatus,
   sessionMessageText,
   WORKSPACE_TASK_SUPPORT,
+  type WorkspaceAgentCapableSessionProviderAdapter,
   type WorkspaceCapableSessionProviderAdapter,
   type WorkspaceProject,
   workspaceNameText,
@@ -251,7 +253,8 @@ export abstract class CloudSessionAdapter
   implements
     MessageCapableSessionProviderAdapter,
     ControllableSessionProviderAdapter,
-    WorkspaceCapableSessionProviderAdapter
+    WorkspaceCapableSessionProviderAdapter,
+    WorkspaceAgentCapableSessionProviderAdapter
 {
   readonly provider: SessionProvider;
 
@@ -409,6 +412,63 @@ export abstract class CloudSessionAdapter
    */
   workspaceProjects(): readonly WorkspaceProject[] {
     return [];
+  }
+
+  /**
+   * Starts another agent in the workspace one observed session runs in,
+   * through the provider's documented endpoint. The same refusals guard it
+   * that guard a message: a session the last pass did not observe, an agent
+   * its observation did not list, a name or task outside its bound, and a
+   * missing credential all answer without touching the network.
+   */
+  async spawnWorkspaceAgent(
+    request: ProviderWorkspaceAgentRequest,
+  ): Promise<ProviderWorkspaceResult> {
+    const observation = this.#observations.find(
+      (candidate) => candidate.providerSessionId === request.providerSessionId,
+    );
+    // The advertised list — not the caller's word — is what the route is
+    // built from, so an agent kind is only ever one the last pass promised.
+    const agent = observation?.spawnableAgents?.find((candidate) => candidate === request.agent);
+    if (!agent) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+
+    const name = request.name === undefined ? undefined : workspaceNameText(request.name);
+    if (request.name !== undefined && !name) {
+      return {
+        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        reason: "A session name has to be short enough to say and longer than nothing.",
+      };
+    }
+    const task = request.task === undefined ? undefined : sessionMessageText(request.task);
+    if (request.task !== undefined && !task) {
+      return {
+        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        reason: "A task has to be shorter than a document and longer than nothing.",
+      };
+    }
+
+    const apiKey = await this.#readApiKey().catch(() => undefined);
+    if (!apiKey) return this.#missingKeyRejection();
+
+    const route = this.workspaceAgentRoute(request.providerSessionId, agent, name, task);
+    if (!route) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+    return this.#postWrite(apiKey, route);
+  }
+
+  /**
+   * Where this provider's documented start-another-agent endpoint lives and
+   * what it takes. The agent handed in is one the latest observation listed
+   * for this session, so the route is built from what the provider itself
+   * promised. The default is that a provider starts nothing, the same way a
+   * read-only adapter stays read-only by writing nothing.
+   */
+  protected workspaceAgentRoute(
+    _providerSessionId: string,
+    _agent: string,
+    _name: string | undefined,
+    _task: string | undefined,
+  ): CloudWriteRoute | undefined {
+    return undefined;
   }
 
   /**

@@ -55,7 +55,11 @@ Trust constraints:
   delivered like a message to an existing session, through the provider's
   documented endpoints — and each project says whether it takes one, needs
   one, or takes none, so a provider that cannot make an idle workspace is
-  offered no task-less ask and one that takes no task is handed none. A session whose provider documents no way in, or whose current state is
+  offered no task-less ask and one that takes no task is handed none. Another
+  agent in a workspace already observed is the same ask at one remove: it
+  lands only in the workspace behind a roster row, as one of the agent kinds
+  that row's latest observation listed, through the provider's documented
+  endpoint — a session whose provider lists none takes no such ask. A session whose provider documents no way in, or whose current state is
   documented for none, advertises nothing and is offered nothing; local
   sessions have no such endpoint and stay entirely read-only. Opening a
   session — its row pressed, or the same press asked of Luke in conversation —
