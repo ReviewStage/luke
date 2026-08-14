@@ -35,6 +35,18 @@ export function agedStatus(
 }
 
 /**
+ * Shared bounds for every provider. A session reads the same whether Luke
+ * observed it on disk or over the network.
+ */
+export const OBSERVATION_WINDOW = {
+  MAXIMUM_SESSION_AGE_MS: 24 * 60 * 60 * 1000,
+  ACTIVE_SESSION_FRESHNESS_MS: 15 * 60 * 1000,
+} as const;
+
+/** The label a session takes when Luke cannot name the folder or repository it belongs to. */
+export const UNKNOWN_WORKSPACE_LABEL = "workspace";
+
+/**
  * Where a session's work is actually running. It is not the provider: the same
  * provider can hold a session on this machine and one in a datacentre, and only
  * the session knows which it is. Local is the default, so a session is only

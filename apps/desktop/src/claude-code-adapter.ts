@@ -6,6 +6,7 @@ import {
   maximumSessionSummaryLength,
   maximumSessionTitleLength,
   nonNegativeNumber,
+  OBSERVATION_WINDOW,
   oneLine,
   PROVIDER_ID,
   type ProviderSessionObservation,
@@ -443,11 +444,11 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
     );
     this.#maximumSessionAgeMs = nonNegativeNumber(
       options.maximumSessionAgeMs,
-      LOCAL_ADAPTER_DEFAULTS.MAXIMUM_SESSION_AGE_MS,
+      OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS,
     );
     this.#activeSessionFreshnessMs = nonNegativeNumber(
       options.activeSessionFreshnessMs,
-      LOCAL_ADAPTER_DEFAULTS.ACTIVE_SESSION_FRESHNESS_MS,
+      OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
     );
     this.#readTailBytes = positiveInteger(
       options.readTailBytes,

@@ -3,6 +3,7 @@ import {
   isRecord,
   type MessageCapableSessionProviderAdapter,
   nonNegativeNumber,
+  OBSERVATION_WINDOW,
   PROVIDER_MESSAGE_RESULT_STATUS,
   type ProviderControlRequest,
   type ProviderControlResult,
@@ -20,6 +21,7 @@ import {
   type SessionStatus,
   sessionMessageText,
   text,
+  UNKNOWN_WORKSPACE_LABEL,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceAgentCapableSessionProviderAdapter,
   type WorkspaceAgentSelection,
@@ -28,7 +30,6 @@ import {
   workspaceNameText,
 } from "@sidecar/core";
 
-const UNKNOWN_REPOSITORY_LABEL = "workspace";
 const GIT_SUFFIX = ".git";
 
 const HTTP_METHOD = {
@@ -92,12 +93,10 @@ type WriteSubject = (typeof WRITE_SUBJECT)[keyof typeof WRITE_SUBJECT];
 export type CloudFailure = (typeof CLOUD_FAILURE)[keyof typeof CLOUD_FAILURE];
 
 /**
- * Shared bounds for every cloud provider. They match the local adapters so a
- * session reads the same whether Luke observed it on disk or over the network.
+ * Cloud-only request bounds. The observation window itself is shared with
+ * every local provider.
  */
 export const CLOUD_ADAPTER_DEFAULTS = {
-  MAXIMUM_SESSION_AGE_MS: 24 * 60 * 60 * 1000,
-  ACTIVE_SESSION_FRESHNESS_MS: 15 * 60 * 1000,
   MINIMUM_REFRESH_INTERVAL_MS: 15 * 1000,
   REQUEST_TIMEOUT_MS: 8 * 1000,
   /**
@@ -228,7 +227,7 @@ export function repositoryLabel(
   const repository = lastSegment?.endsWith(GIT_SUFFIX)
     ? lastSegment.slice(0, -GIT_SUFFIX.length)
     : lastSegment;
-  return repository || fallbackName?.trim() || UNKNOWN_REPOSITORY_LABEL;
+  return repository || fallbackName?.trim() || UNKNOWN_WORKSPACE_LABEL;
 }
 
 const defaultFetch: CloudFetch = (url, init) => fetch(url, init);
@@ -651,7 +650,7 @@ export abstract class CloudSessionAdapter
     observedAt: number,
     now: number,
   ): SessionStatus {
-    return now - observedAt <= CLOUD_ADAPTER_DEFAULTS.ACTIVE_SESSION_FRESHNESS_MS
+    return now - observedAt <= OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS
       ? status
       : SESSION_STATUS.UNKNOWN;
   }

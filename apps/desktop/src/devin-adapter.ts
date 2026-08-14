@@ -1,6 +1,7 @@
 import {
   agedStatus,
   isRecord,
+  OBSERVATION_WINDOW,
   type ProviderSessionObservation,
   positiveInteger,
   SESSION_STATUS,
@@ -8,7 +9,6 @@ import {
   type SessionStatus,
 } from "@sidecar/core";
 import {
-  CLOUD_ADAPTER_DEFAULTS,
   type CloudAdapterOptions,
   type CloudRequest,
   CloudSessionAdapter,
@@ -343,7 +343,7 @@ export class DevinSessionAdapter extends CloudSessionAdapter {
     identity: DevinIdentity,
     now: number,
   ): Promise<DevinSession[]> {
-    const openedAt = now - CLOUD_ADAPTER_DEFAULTS.MAXIMUM_SESSION_AGE_MS;
+    const openedAt = now - OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS;
     const body = await request(
       [
         DEVIN_ROUTE_SEGMENT.V3,
@@ -440,7 +440,7 @@ export class DevinSessionAdapter extends CloudSessionAdapter {
       status,
       session.observedAt,
       now,
-      CLOUD_ADAPTER_DEFAULTS.ACTIVE_SESSION_FRESHNESS_MS,
+      OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
     );
   }
 }

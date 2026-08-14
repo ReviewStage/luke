@@ -1,6 +1,7 @@
 import {
   agedStatus,
   isRecord,
+  OBSERVATION_WINDOW,
   type ProviderSessionObservation,
   positiveInteger,
   SESSION_STATUS,
@@ -9,7 +10,6 @@ import {
   type SessionStatus,
 } from "@sidecar/core";
 import {
-  CLOUD_ADAPTER_DEFAULTS,
   CLOUD_AUTH_SCHEME,
   type CloudAdapterOptions,
   type CloudRequest,
@@ -236,9 +236,7 @@ export class JulesSessionAdapter extends CloudSessionAdapter {
     return recordsFromPage(body, JULES_FIELD.SESSIONS)
       .map(sessionFromRecord)
       .filter(isDefined)
-      .filter(
-        (session) => now - session.observedAt <= CLOUD_ADAPTER_DEFAULTS.MAXIMUM_SESSION_AGE_MS,
-      )
+      .filter((session) => now - session.observedAt <= OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS)
       .sort((first, second) => second.observedAt - first.observedAt)
       .slice(0, this.#maximumObservedSessions)
       .map((session) => this.#observationFor(session, now));
@@ -298,7 +296,7 @@ export class JulesSessionAdapter extends CloudSessionAdapter {
       SESSION_STATUS_BY_JULES_STATE[session.state],
       session.observedAt,
       now,
-      CLOUD_ADAPTER_DEFAULTS.ACTIVE_SESSION_FRESHNESS_MS,
+      OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
     );
   }
 }

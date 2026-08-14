@@ -4,6 +4,7 @@ import {
   maximumObservedWorkspaceProjects,
   maximumSessionSummaryLength,
   maximumSessionTitleLength,
+  OBSERVATION_WINDOW,
   type ProviderSessionObservation,
   positiveInteger,
   SESSION_CONTROL_KIND,
@@ -318,9 +319,7 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
     const agents = recordsFromPage(body, CURSOR_FIELD.ITEMS)
       .map(agentFromRecord)
       .filter(isDefined)
-      .filter(
-        (agent) => now - agent.lastActivityAt <= CLOUD_ADAPTER_DEFAULTS.MAXIMUM_SESSION_AGE_MS,
-      )
+      .filter((agent) => now - agent.lastActivityAt <= OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS)
       // When a day holds more agents than Luke observes, the ones that can
       // still change take the budget: an agent the user filed away has nothing
       // left to say, however recently it was touched.
@@ -482,7 +481,7 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
     // The run's timestamp is the moment its state was entered; the agent's is
     // only the last resort, because it also moves for edits that are not work.
     const observedAt = run?.updatedAt ?? agent.lastActivityAt;
-    if (now - observedAt > CLOUD_ADAPTER_DEFAULTS.MAXIMUM_SESSION_AGE_MS) return undefined;
+    if (now - observedAt > OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS) return undefined;
 
     const status = this.#statusFor(agent, run, observedAt, now);
     // A run names the repository it pushed to, so a list item that carries no
@@ -523,7 +522,7 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
       SESSION_STATUS_BY_CURSOR_RUN_STATUS[run.status],
       observedAt,
       now,
-      CLOUD_ADAPTER_DEFAULTS.ACTIVE_SESSION_FRESHNESS_MS,
+      OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
     );
   }
 

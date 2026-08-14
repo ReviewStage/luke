@@ -4,12 +4,14 @@ import { fileURLToPath } from "node:url";
 import {
   agedStatus,
   nonNegativeNumber,
+  OBSERVATION_WINDOW,
   type ProviderSessionObservation,
   positiveInteger,
   SESSION_STATUS,
   type SessionDetail,
   type SessionProviderAdapter,
   type SessionStatus,
+  UNKNOWN_WORKSPACE_LABEL,
 } from "@sidecar/core";
 import { CURSOR_PROVIDER } from "./cursor-adapter";
 import {
@@ -22,7 +24,6 @@ import {
   readTextFile,
   type SessionFileCandidate,
   tailRecords,
-  UNKNOWN_WORKSPACE_LABEL,
   workspaceLabel,
 } from "./local-session-adapter";
 
@@ -332,11 +333,11 @@ export class CursorLocalSessionAdapter implements SessionProviderAdapter {
     );
     this.#maximumSessionAgeMs = nonNegativeNumber(
       options.maximumSessionAgeMs,
-      LOCAL_ADAPTER_DEFAULTS.MAXIMUM_SESSION_AGE_MS,
+      OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS,
     );
     this.#activeSessionFreshnessMs = nonNegativeNumber(
       options.activeSessionFreshnessMs,
-      LOCAL_ADAPTER_DEFAULTS.ACTIVE_SESSION_FRESHNESS_MS,
+      OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
     );
     this.#readTailBytes = positiveInteger(
       options.readTailBytes,

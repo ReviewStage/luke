@@ -1,6 +1,7 @@
 import {
   agedStatus,
   isRecord,
+  OBSERVATION_WINDOW,
   type ProviderSessionObservation,
   positiveInteger,
   SESSION_STATUS,
@@ -8,7 +9,6 @@ import {
   type SessionStatus,
 } from "@sidecar/core";
 import {
-  CLOUD_ADAPTER_DEFAULTS,
   type CloudAdapterOptions,
   type CloudRequest,
   CloudSessionAdapter,
@@ -259,14 +259,14 @@ export class CopilotSessionAdapter extends CloudSessionAdapter {
     const body = await request(COPILOT_ROUTE.TASKS, {
       [COPILOT_QUERY.PER_PAGE]: String(COPILOT_ADAPTER_DEFAULTS.TASK_PAGE_SIZE),
       [COPILOT_QUERY.SINCE]: new Date(
-        now - CLOUD_ADAPTER_DEFAULTS.MAXIMUM_SESSION_AGE_MS,
+        now - OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS,
       ).toISOString(),
     });
 
     return recordsFromPage(body, COPILOT_FIELD.TASKS)
       .map(taskFromRecord)
       .filter(isDefined)
-      .filter((task) => now - task.observedAt <= CLOUD_ADAPTER_DEFAULTS.MAXIMUM_SESSION_AGE_MS)
+      .filter((task) => now - task.observedAt <= OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS)
       .sort((first, second) => second.observedAt - first.observedAt)
       .slice(0, this.#maximumObservedTasks)
       .map((task) => this.#observationFor(task, now));
@@ -297,7 +297,7 @@ export class CopilotSessionAdapter extends CloudSessionAdapter {
       SESSION_STATUS_BY_COPILOT_STATE[task.state],
       task.observedAt,
       now,
-      CLOUD_ADAPTER_DEFAULTS.ACTIVE_SESSION_FRESHNESS_MS,
+      OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
     );
   }
 }

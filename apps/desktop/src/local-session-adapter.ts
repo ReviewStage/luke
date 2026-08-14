@@ -1,7 +1,7 @@
 import type { Dirent, Stats } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { recordFromJsonLine } from "@sidecar/core";
+import { recordFromJsonLine, UNKNOWN_WORKSPACE_LABEL } from "@sidecar/core";
 
 /**
  * The shared half of every adapter that observes sessions on this machine:
@@ -9,16 +9,8 @@ import { recordFromJsonLine } from "@sidecar/core";
  * itself. Nothing here opens a file for writing, and no caller may.
  */
 
-/** The label a session takes when Luke cannot name the folder it belongs to. */
-export const UNKNOWN_WORKSPACE_LABEL = "workspace";
-
-/**
- * Shared bounds for every local provider. They match the cloud adapters, so a
- * session reads the same whether Luke observed it on disk or over the network.
- */
+/** How much of a transcript one local observation pass may read. */
 export const LOCAL_ADAPTER_DEFAULTS = {
-  MAXIMUM_SESSION_AGE_MS: 24 * 60 * 60 * 1000,
-  ACTIVE_SESSION_FRESHNESS_MS: 15 * 60 * 1000,
   READ_TAIL_BYTES: 64 * 1024,
 } as const;
 

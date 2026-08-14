@@ -5,6 +5,7 @@ import {
   maximumSessionSummaryLength,
   maximumSessionTitleLength,
   nonNegativeNumber,
+  OBSERVATION_WINDOW,
   oneLine,
   PROVIDER_ID,
   type ProviderSessionObservation,
@@ -106,8 +107,6 @@ const CODEX_CALL_ARGUMENT_KEY = [
 
 const CODEX_ADAPTER_DEFAULTS = {
   MAXIMUM_SESSION_ROWS: 40,
-  MAXIMUM_SESSION_AGE_MS: 24 * 60 * 60 * 1000,
-  ACTIVE_SESSION_FRESHNESS_MS: 15 * 60 * 1000,
   /** Enough to reach past one turn's token accounting to its boundary event. */
   READ_ROLLOUT_TAIL_BYTES: 64 * 1024,
   /** Only the threads that can still change are worth a second file read. */
@@ -429,11 +428,11 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
     );
     this.#maximumSessionAgeMs = nonNegativeNumber(
       options.maximumSessionAgeMs,
-      CODEX_ADAPTER_DEFAULTS.MAXIMUM_SESSION_AGE_MS,
+      OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS,
     );
     this.#activeSessionFreshnessMs = nonNegativeNumber(
       options.activeSessionFreshnessMs,
-      CODEX_ADAPTER_DEFAULTS.ACTIVE_SESSION_FRESHNESS_MS,
+      OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
     );
     this.#sqlite = options.sqlite ?? defaultSqliteModule;
   }
