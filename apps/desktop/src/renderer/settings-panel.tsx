@@ -521,6 +521,11 @@ function formFactorOptionLabel(formFactor: PanelFormFactor): string {
   return formFactor === DEFAULT_PANEL_FORM_FACTOR ? `${name} (default)` : name;
 }
 
+/* Why every Connect in a key-holding section is refusing, said once per
+   section: a disabled control with no words beside it reads as broken. */
+const STORAGE_UNAVAILABLE_NOTE =
+  "This system offers no encrypted credential storage, so Luke will not store a key here.";
+
 /**
  * Every agent provider that can hold a key, one line each. A provider is
  * listed whether or not it has one, because the list is how you learn which
@@ -558,7 +563,7 @@ function CredentialsSection({
       {/* True of every key here, so it is said once rather than per provider. */}
       <p className="settings-note">
         {storageUnavailable
-          ? "This system offers no encrypted credential storage, so Luke will not store a key here."
+          ? STORAGE_UNAVAILABLE_NOTE
           : "Luke reads only cloud workspaces you created, and never sends a prompt or any other change."}
       </p>
     </section>
@@ -597,6 +602,9 @@ function IntegrationsSection({
           panelOpen={panelOpen}
         />
       ))}
+      {/* The same refusal the agents' section explains: a Connect stilled by
+          missing storage needs its why in this section too. */}
+      {storageUnavailable ? <p className="settings-note">{STORAGE_UNAVAILABLE_NOTE}</p> : null}
     </section>
   );
 }
