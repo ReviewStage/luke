@@ -1161,11 +1161,10 @@ test("a tool call outside a turn the developer opened cannot act", async () => {
   // The session takes messages and the identity is real, so only the turn gate
   // stands between the call and the write — and it holds.
   assert.deepEqual(carried, []);
-  const output = context.sent
-    .slice(sentBefore)
-    .find(
-      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-    );
+  const events = context.sent.slice(sentBefore);
+  const output = events.find(
+    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+  );
   assert.equal(
     (
       JSON.parse((output?.item as { output?: string } | undefined)?.output ?? "{}") as {
@@ -1174,6 +1173,9 @@ test("a tool call outside a turn the developer opened cannot act", async () => {
     ).status,
     "refused",
   );
+  // The call is answered so the model is not left waiting, but the turn opens
+  // no reply: a turn Luke was not asked to act in must not talk on either.
+  assert.ok(!events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE));
 });
 
 test("a tool outcome is not spoken over a turn the developer has taken", async () => {

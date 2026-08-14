@@ -769,6 +769,11 @@ export class RealtimeVoiceSession {
       this.#send(functionCallOutputEvents(call.callId, output));
     }
 
+    // An unarmed turn — a proactive readout, a follow-up — carries no outcome
+    // to voice: every call on it was refused, and opening a reply here would be
+    // a turn that was meant to stay silent talking on without its instructions.
+    // The calls are still answered above, so the model is not left waiting.
+    if (!armed) return;
     // A follow-up now would talk over a live microphone or a newer reply: the
     // developer took the turn, started another, or the call is gone. The
     // outcomes were still delivered as items, so the next turn has them.

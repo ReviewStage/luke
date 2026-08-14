@@ -63,13 +63,16 @@ function feedbackFor(result: ProviderMessageResult | ProviderControlResult): str
 function RowActionButton({
   action,
   pendingAction,
+  busy,
   onRun,
 }: {
   action: SessionAction;
   pendingAction: string | undefined;
+  /** Any write in flight, the composer's included, holds every control down. */
+  busy: boolean;
   onRun: (actionId: string) => void;
 }): React.JSX.Element {
-  const held = pendingAction !== undefined;
+  const held = busy;
   // The whole row opens the session; a press on a control is a press on the
   // control alone, so it must not travel up and open a window as well.
   const run = (event: React.MouseEvent) => {
@@ -125,6 +128,11 @@ function SessionRowActions({
    * window would send the same words twice. A ref answers in the same tick.
    */
   const writeInFlight = useRef(false);
+  // One write at a time for the whole row: while the composer is sending, the
+  // controls are held, and while a control runs, the composer is. Otherwise the
+  // one not in flight stays enabled, takes a press, and does nothing — the row
+  // looking clickable while only the in-flight write will run.
+  const busy = sending || pendingAction !== undefined;
 
   const send = useCallback(async () => {
     const text = draft.trim();
@@ -200,7 +208,7 @@ function SessionRowActions({
             autoComplete="off"
             spellCheck={false}
             value={draft}
-            disabled={sending}
+            disabled={busy}
             onChange={(event) => setDraft(event.target.value)}
             onFocus={() => {
               // The panel can be showing without its window being key, and a
@@ -221,7 +229,7 @@ function SessionRowActions({
             className="row-send"
             aria-label={`Send to ${session.provider}`}
             title={`Send to ${session.provider}`}
-            disabled={sending || !draft.trim()}
+            disabled={busy || !draft.trim()}
           >
             <SendIcon />
           </button>
@@ -232,6 +240,7 @@ function SessionRowActions({
           key={action.id}
           action={action}
           pendingAction={pendingAction}
+          busy={busy}
           onRun={(actionId) => void runAction(actionId)}
         />
       ))}
