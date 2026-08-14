@@ -143,28 +143,10 @@ const CONDUCTOR_SQL_FIELD = {
 } as const;
 
 /**
- * How much of a transcript's end is read: enough to hold the last message's
- * header and a recap's worth of parting words, and no more of the history.
+ * How much of the final message is read: enough for a recap's worth of its
+ * opening words — where an agent puts the outcome — and no more of it.
  */
 const CONDUCTOR_TRANSCRIPT_TAIL_LENGTH = 2_000;
-
-/**
- * The one query document this adapter ever sends, fixed by this build. The
- * endpoint takes a read as a POSTed document rather than a GET, so the
- * separation is held the way the Linear tracker holds it: observation only
- * ever sends this SELECT, and nothing reaches its text but session ids the
- * same pass reported — each validated as a UUID first, so no name, title, or
- * message a provider controls can ever be spliced into the document.
- *
- * The columns ask for the agent kind and the transcript's bounded tail — the
- * settled turn's parting words — and never the conversation behind them.
- */
-const CONDUCTOR_READ_TRANSCRIPT_TAILS =
-  `SELECT ${CONDUCTOR_SQL_FIELD.SESSION_ID}, ${CONDUCTOR_SQL_FIELD.AGENT_TYPE}, ` +
-  `RIGHT(transcript, ${CONDUCTOR_TRANSCRIPT_TAIL_LENGTH}) AS ${CONDUCTOR_SQL_FIELD.TRANSCRIPT_TAIL} ` +
-  `FROM session_transcripts_view WHERE ${CONDUCTOR_SQL_FIELD.SESSION_ID} IN`;
-
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * How Conductor's plain-text transcript marks who is speaking. A line inside a
@@ -176,6 +158,48 @@ const CONDUCTOR_TRANSCRIPT_SPEAKER = {
   USER: "## User",
   ASSISTANT: "## Assistant",
 } as const;
+
+/** A header as the transcript embeds it: its own line between two messages. */
+const CONDUCTOR_ASSISTANT_HEADER = `\n${CONDUCTOR_TRANSCRIPT_SPEAKER.ASSISTANT}\n`;
+const CONDUCTOR_USER_HEADER = `\n${CONDUCTOR_TRANSCRIPT_SPEAKER.USER}\n`;
+
+/** The header as a Postgres string literal, its newlines written as escapes. */
+function sqlHeaderLiteral(header: string): string {
+  return `E'${header.replaceAll("\n", "\\n")}'`;
+}
+
+/**
+ * The one query document this adapter ever sends, fixed by this build. The
+ * endpoint takes a read as a POSTed document rather than a GET, so the
+ * separation is held the way the Linear tracker holds it: observation only
+ * ever sends this SELECT, and nothing reaches its text but session ids the
+ * same pass reported — each validated as a UUID first, so no name, title, or
+ * message a provider controls can ever be spliced into the document.
+ *
+ * The columns ask for the agent kind and the opening of the transcript's
+ * final message — the settled turn's parting words — and never the
+ * conversation behind it. Who wrote that message is computed in the view,
+ * from whichever speaker header stands nearest the transcript's end, and the
+ * returned tail is anchored at that header rather than cut at a fixed
+ * distance: a fixed cut left any final message longer than the cut without
+ * its header, which read as unattributable and silently cost most long-form
+ * agents their recap. A chat whose user spoke last answers with no tail at
+ * all.
+ */
+const CONDUCTOR_READ_TRANSCRIPT_TAILS_PREFIX =
+  `SELECT ${CONDUCTOR_SQL_FIELD.SESSION_ID}, ${CONDUCTOR_SQL_FIELD.AGENT_TYPE}, ` +
+  `CASE WHEN assistant_from_end > 0 AND (user_from_end = 0 OR assistant_from_end < user_from_end) ` +
+  `THEN SUBSTRING(transcript FROM GREATEST(LENGTH(transcript) - assistant_from_end - ${CONDUCTOR_ASSISTANT_HEADER.length - 2}, 1) ` +
+  `FOR ${CONDUCTOR_ASSISTANT_HEADER.length + CONDUCTOR_TRANSCRIPT_TAIL_LENGTH}) ` +
+  `END AS ${CONDUCTOR_SQL_FIELD.TRANSCRIPT_TAIL} ` +
+  `FROM (SELECT ${CONDUCTOR_SQL_FIELD.SESSION_ID}, ${CONDUCTOR_SQL_FIELD.AGENT_TYPE}, transcript, ` +
+  `position(reverse(${sqlHeaderLiteral(CONDUCTOR_ASSISTANT_HEADER)}) in reverse(transcript)) AS assistant_from_end, ` +
+  `position(reverse(${sqlHeaderLiteral(CONDUCTOR_USER_HEADER)}) in reverse(transcript)) AS user_from_end ` +
+  `FROM session_transcripts_view WHERE ${CONDUCTOR_SQL_FIELD.SESSION_ID} IN (`;
+
+const CONDUCTOR_READ_TRANSCRIPT_TAILS_SUFFIX = ")) AS attributed";
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** The view's own mark for history it left out of the concise transcript. */
 const CONDUCTOR_TRANSCRIPT_ELIDED = /^\[\d+ messages? elided\]$/;
@@ -758,7 +782,9 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     const ids = sessions.map((session) => session.id).filter((id) => UUID_PATTERN.test(id));
     if (ids.length === 0) return transcripts;
 
-    const document = `${CONDUCTOR_READ_TRANSCRIPT_TAILS} (${ids.map((id) => `'${id}'`).join(", ")})`;
+    const document = `${CONDUCTOR_READ_TRANSCRIPT_TAILS_PREFIX}${ids
+      .map((id) => `'${id}'`)
+      .join(", ")}${CONDUCTOR_READ_TRANSCRIPT_TAILS_SUFFIX}`;
     const body = await request(CONDUCTOR_ROUTE.SQL, undefined, { document });
     for (const row of recordsFromPage(body, CONDUCTOR_SQL_FIELD.ROWS)) {
       const sessionId = textFromRecord(row, CONDUCTOR_SQL_FIELD.SESSION_ID);

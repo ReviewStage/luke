@@ -428,9 +428,15 @@ test("reads a settled chat's parting words from the transcripts view as its reca
   assert.equal(reads[0]?.authorization, `Bearer ${TEST_API_KEY}`);
   assert.deepEqual(JSON.parse(reads[0]?.body ?? ""), {
     query:
-      "SELECT session_id, agent_type, RIGHT(transcript, 2000) AS transcript_tail " +
+      "SELECT session_id, agent_type, " +
+      "CASE WHEN assistant_from_end > 0 AND (user_from_end = 0 OR assistant_from_end < user_from_end) " +
+      "THEN SUBSTRING(transcript FROM GREATEST(LENGTH(transcript) - assistant_from_end - 12, 1) FOR 2014) " +
+      "END AS transcript_tail " +
+      "FROM (SELECT session_id, agent_type, transcript, " +
+      "position(reverse(E'\\n## Assistant\\n') in reverse(transcript)) AS assistant_from_end, " +
+      "position(reverse(E'\\n## User\\n') in reverse(transcript)) AS user_from_end " +
       "FROM session_transcripts_view WHERE session_id IN " +
-      `('${IDLE_SESSION_UUID}', '${CLOSED_SESSION_UUID}')`,
+      `('${IDLE_SESSION_UUID}', '${CLOSED_SESSION_UUID}')) AS attributed`,
   });
 });
 
@@ -496,7 +502,9 @@ test("reports no recap for a tail it cannot attribute to the agent", async () =>
         status: TEST_CONDUCTOR_STATUS.IDLE,
         statusUpdatedAt: TEST_TIME - 1_000,
       },
-      // A tail cut inside one long message holds no header naming its speaker.
+      // A tail with no header names no speaker. The view anchors what it
+      // returns at the final message's own header, so this is a misbehaving
+      // answer — attribution is still refused rather than assumed.
       {
         id: CLOSED_SESSION_UUID,
         workspaceId: "workspace-headerless",

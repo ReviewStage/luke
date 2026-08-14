@@ -53,12 +53,12 @@ describes.
   from Git remotes (or the project name when no usable remote is available);
   timestamps; model configuration; archive state; status and reported errors;
   and session deep links. For the sessions it observed, Luke also queries
-  Conductor's transcripts view for each chat's agent kind and a bounded tail
-  of Conductor's own plain-text transcript. From that tail Luke takes only the
-  last message's words — and only while the chat is idle or closed and that
-  message is the agent's — as the session's recap. The tail is inspected in
-  memory and discarded, the transcript behind it is never requested, and
-  nothing but the bounded recap and agent kind is reported.
+  Conductor's transcripts view for each chat's agent kind, which speaker wrote
+  the transcript's last message, and — only when that speaker is the agent —
+  the bounded opening of that final message. Luke reports its words as the
+  session's recap only while the chat is idle or closed. The excerpt is
+  inspected in memory and discarded, the conversation behind it is never
+  requested, and nothing but the bounded recap and agent kind is reported.
 - For Cursor, Luke reads agents owned by the supplied key and their latest runs,
   and — on a much slower cadence, within Cursor's documented limits — the list
   of repositories the key may launch agents in. It processes identifiers, agent
