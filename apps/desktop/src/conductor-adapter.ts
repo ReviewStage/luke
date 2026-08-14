@@ -8,6 +8,7 @@ import {
   type SessionProvider,
   type SessionStatus,
   WORKSPACE_TASK_SUPPORT,
+  type WorkspaceAgentSelection,
   type WorkspaceProject,
 } from "@sidecar/core";
 import {
@@ -25,6 +26,7 @@ import {
   timestampFromRecord,
 } from "./cloud-session-adapter";
 import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "./shared/credential-providers";
+import { isListedWorkspaceAgentModel, workspaceAgentModels } from "./shared/workspace-agents";
 
 // Shared with the credential registry so the key the user saves and the
 // provider Luke observes with it can never name different things.
@@ -70,13 +72,17 @@ const CONDUCTOR_MESSAGE_FIELD = {
 /**
  * The body `POST /v0/workspaces` documents. The project names where; the name
  * is optional and Conductor generates one — and the branch it names — when it
- * is left off. The endpoint also takes an agent, model, and effort, which are
- * deliberately not sent: Conductor's own defaults are the user's own settings
- * there, and a sidecar has no business overriding them.
+ * is left off. The agent, model, and effort ride only when the user chose
+ * them in settings, held to the build's documented table on the way; unset,
+ * none is sent, so Conductor's own defaults decide. Fast mode is never sent —
+ * the user is not offered it, so Conductor's default stands.
  */
 const CONDUCTOR_WORKSPACE_FIELD = {
   PROJECT_ID: "projectId",
   NAME: "name",
+  AGENT: "agent",
+  MODEL: "model",
+  EFFORT: "effort",
   /** The first session, as `POST /v0/workspaces` names it in its response. */
   SESSION_ID: "sessionId",
 } as const;
@@ -85,19 +91,25 @@ const CONDUCTOR_WORKSPACE_FIELD = {
 const CONDUCTOR_SESSION_CREATE_FIELD = {
   WORKSPACE_ID: "workspaceId",
   AGENT: "agent",
+  MODEL: "model",
+  EFFORT: "effort",
   NAME: "name",
   MESSAGE: "message",
 } as const;
 
 /**
  * The kinds of agent Conductor's session-creation endpoint documents, named
- * exactly as it takes them. The endpoint also takes `acp`, which is a
- * protocol shim with no defaults of its own rather than an agent someone asks
- * for by name, so it is deliberately not offered. Model, effort, and fast
- * mode are likewise never sent: Conductor's defaults are the user's own
- * settings there.
+ * exactly as it takes them — read from the build's one table of Conductor's
+ * agents and models, so the kinds a roster advertises and the pairings the
+ * settings row offers can never disagree. The endpoint also takes `acp`,
+ * which is a protocol shim with no defaults of its own rather than an agent
+ * someone asks for by name, so the table deliberately leaves it out. Effort
+ * and fast mode are never sent: the user is not offered either, so
+ * Conductor's defaults stand.
  */
-const CONDUCTOR_SPAWNABLE_AGENTS: readonly string[] = ["claude", "codex", "cursor"];
+const CONDUCTOR_SPAWNABLE_AGENTS: readonly string[] = workspaceAgentModels(
+  CONDUCTOR_PROVIDER_ID,
+).map((entry) => entry.agent);
 
 /**
  * The one control this adapter can honour, advertised only while a session is
@@ -373,15 +385,32 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     project: WorkspaceProject,
     name: string | undefined,
     _task: string | undefined,
+    agentSelection: WorkspaceAgentSelection | undefined,
   ): CloudWriteRoute {
     // The task deliberately does not ride here: Conductor's creation endpoint
     // documents no prompt field, so the task goes through the documented
     // message endpoint once the response says which session takes it.
+    //
+    // The chosen agent, model, and effort ride together, and only as a
+    // selection the build's table lists — the adapter answers for its own
+    // writes, so a value that slipped past the store is dropped here rather
+    // than sent.
+    const chosen =
+      agentSelection && isListedWorkspaceAgentModel(CONDUCTOR_PROVIDER_ID, agentSelection)
+        ? agentSelection
+        : undefined;
     return {
       segments: [CONDUCTOR_ROUTE_SEGMENT.V0, CONDUCTOR_ROUTE_SEGMENT.WORKSPACES],
       body: {
         [CONDUCTOR_WORKSPACE_FIELD.PROJECT_ID]: project.providerProjectId,
         ...(name ? { [CONDUCTOR_WORKSPACE_FIELD.NAME]: name } : {}),
+        ...(chosen
+          ? {
+              [CONDUCTOR_WORKSPACE_FIELD.AGENT]: chosen.agent,
+              [CONDUCTOR_WORKSPACE_FIELD.MODEL]: chosen.model,
+              ...(chosen.effort ? { [CONDUCTOR_WORKSPACE_FIELD.EFFORT]: chosen.effort } : {}),
+            }
+          : {}),
       },
     };
   }
@@ -605,14 +634,32 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     agent: string,
     name: string | undefined,
     task: string | undefined,
+    model: string | undefined,
+    effort: string | undefined,
   ): CloudWriteRoute {
     // The target is the workspace id the observation itself advertised, so
     // the route acts on what the user was shown — never on state kept aside.
+    //
+    // The model and effort arrive only when the stored selection names
+    // exactly this agent kind, and are held to the build's table once more
+    // here as the whole they were chosen as: the adapter answers for its own
+    // writes, and an effort must not outlive the model it was chosen beside.
+    const chosen =
+      model &&
+      isListedWorkspaceAgentModel(CONDUCTOR_PROVIDER_ID, {
+        agent,
+        model,
+        ...(effort ? { effort } : {}),
+      })
+        ? { model, effort }
+        : undefined;
     return {
       segments: [CONDUCTOR_ROUTE_SEGMENT.V0, CONDUCTOR_ROUTE_SEGMENT.SESSIONS],
       body: {
         [CONDUCTOR_SESSION_CREATE_FIELD.WORKSPACE_ID]: spawnTarget,
         [CONDUCTOR_SESSION_CREATE_FIELD.AGENT]: agent,
+        ...(chosen ? { [CONDUCTOR_SESSION_CREATE_FIELD.MODEL]: chosen.model } : {}),
+        ...(chosen?.effort ? { [CONDUCTOR_SESSION_CREATE_FIELD.EFFORT]: chosen.effort } : {}),
         ...(name ? { [CONDUCTOR_SESSION_CREATE_FIELD.NAME]: name } : {}),
         // The opening task rides the creation itself: `POST /v0/sessions`
         // documents taking the first message inline.

@@ -40,6 +40,7 @@ import {
   workspaceProjectContextEvents,
   workspaceProjectContextText,
 } from "@sidecar/core";
+import { workspaceAgentModels } from "../shared/workspace-agents";
 
 const SDP_CONTENT_TYPE = "application/sdp";
 
@@ -991,16 +992,21 @@ export class RealtimeVoiceSession {
   /**
    * Tells the conversation where a workspace can be created, the same way the
    * roster travels: context that must never open Luke's mouth, kept whole
-   * because it is what a spoken creation ask is validated against. Identical
-   * lists are not resent.
+   * because it is what a spoken creation ask is validated against. The default
+   * provider rides along because it is part of the same answer — where a
+   * nameless ask goes — and a changed default is news the way a changed list
+   * is. Identical lists under identical defaults are not resent.
    */
-  updateWorkspaceProjects(projects: readonly ObservedWorkspaceProject[]): void {
+  updateWorkspaceProjects(
+    projects: readonly ObservedWorkspaceProject[],
+    defaultProviderId?: string,
+  ): void {
     this.#workspaceProjects = projects;
     if (!this.#carriesContext()) return;
-    const context = workspaceProjectContextText(projects);
+    const context = workspaceProjectContextText(projects, defaultProviderId);
     if (context === this.#workspaceProjectContext) return;
     this.#workspaceProjectContext = context;
-    this.#send(workspaceProjectContextEvents(projects));
+    this.#send(workspaceProjectContextEvents(projects, defaultProviderId));
   }
 
   /**
@@ -1234,7 +1240,14 @@ export class RealtimeVoiceSession {
     if (!isSessionToolName(call.name)) {
       return { status: "refused", reason: "No such tool exists." };
     }
-    const action = sessionToolAction(call, this.#sessions, this.#workspaceProjects);
+    // The build's own model tables ride into validation, so a creation ask
+    // that names a model is held to the same set the settings rows offer.
+    const action = sessionToolAction(
+      call,
+      this.#sessions,
+      this.#workspaceProjects,
+      workspaceAgentModels,
+    );
     if (action.kind === "refused") return { status: "refused", reason: action.reason };
     if (!this.#options.carryAction) {
       return { status: "refused", reason: "Acting on sessions is not available." };

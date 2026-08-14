@@ -3,12 +3,15 @@ import path from "node:path";
 import {
   DEFAULT_PANEL_FORM_FACTOR,
   isPanelFormFactor,
+  isProviderId,
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
   type PanelFormFactor,
+  type ProviderId,
   REALTIME_DEFAULTS,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
+  type WorkspaceAgentSelection,
 } from "@sidecar/core";
 import { environmentRealtimeSpeed, environmentRealtimeVoice } from "./openai-realtime-credentials";
 import {
@@ -28,6 +31,7 @@ import {
   type CredentialProviderId,
 } from "./shared/credential-providers";
 import { parseVoiceHotkey } from "./shared/voice-hotkey";
+import { isWorkspaceAgentSelection } from "./shared/workspace-agents";
 
 const SETTINGS_FILE_NAME = "settings.json";
 const SETTINGS_TEMPORARY_FILE_NAME = "settings.json.tmp";
@@ -38,6 +42,7 @@ const SETTINGS_FILE_MODE = 0o600;
 const SETTINGS_FIELD = {
   API_KEYS: "apiKeys",
   ASK_HOTKEY: "askHotkey",
+  DEFAULT_WORKSPACE_PROVIDER: "defaultWorkspaceProvider",
   DUCK_OTHER_MEDIA: "duckOtherMedia",
   FORM_FACTOR: "formFactor",
   LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
@@ -51,6 +56,7 @@ const SETTINGS_FIELD = {
   VOICE_CAPTIONS: "voiceCaptions",
   VOICE_SPEED: "voiceSpeed",
   VOICE_HOTKEY: "voiceHotkey",
+  WORKSPACE_AGENT_DEFAULTS: "workspaceAgentDefaults",
 } as const;
 
 const API_KEY_LENGTH = {
@@ -163,6 +169,20 @@ interface PersistedSettings {
    * not draw is dropped rather than honoured.
    */
   formFactor?: PanelFormFactor;
+  /**
+   * The provider a conversational ask creates a workspace in when it names
+   * none, absent until the user's first creation chooses it. Held to the
+   * providers this build knows: an unknown id is dropped rather than steered
+   * by, because it names nowhere an ask could actually go.
+   */
+  defaultWorkspaceProvider?: ProviderId;
+  /**
+   * The agent kind and model new workspaces start with, per provider, each
+   * entry absent while that provider's own defaults stand. Held to the
+   * build's documented table twice over: an unknown provider and an unlisted
+   * pairing are both dropped, because each names something no endpoint takes.
+   */
+  workspaceAgentDefaults?: Readonly<Partial<Record<ProviderId, WorkspaceAgentSelection>>>;
 }
 
 interface ResolvedApiKey {
@@ -237,6 +257,32 @@ function storedApiKeys(record: Record<string, unknown>): Record<string, string> 
   return apiKeys;
 }
 
+/**
+ * Reads the stored per-provider agent choices, keeping only entries the
+ * build's own table lists. A file written by another build may pair an agent
+ * with a model this one does not know; honouring it would send a value no
+ * documented endpoint takes, so it is dropped the way an unknown voice is.
+ */
+function storedWorkspaceAgentDefaults(
+  record: Record<string, unknown>,
+): Partial<Record<ProviderId, WorkspaceAgentSelection>> | undefined {
+  const persisted = record[SETTINGS_FIELD.WORKSPACE_AGENT_DEFAULTS];
+  if (persisted === null || typeof persisted !== "object" || Array.isArray(persisted)) {
+    return undefined;
+  }
+  const defaults: Partial<Record<ProviderId, WorkspaceAgentSelection>> = {};
+  for (const [providerId, value] of Object.entries(persisted)) {
+    if (!isProviderId(providerId)) continue;
+    if (!isWorkspaceAgentSelection(providerId, value)) continue;
+    defaults[providerId] = {
+      agent: value.agent,
+      model: value.model,
+      ...(value.effort !== undefined ? { effort: value.effort } : {}),
+    };
+  }
+  return Object.keys(defaults).length > 0 ? defaults : undefined;
+}
+
 function parsePersistedSettings(source: string): PersistedSettings {
   const parsed: unknown = JSON.parse(source);
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
@@ -247,6 +293,8 @@ function parsePersistedSettings(source: string): PersistedSettings {
   const voice = record[SETTINGS_FIELD.VOICE];
   const voiceSpeed = record[SETTINGS_FIELD.VOICE_SPEED];
   const formFactor = record[SETTINGS_FIELD.FORM_FACTOR];
+  const defaultWorkspaceProvider = record[SETTINGS_FIELD.DEFAULT_WORKSPACE_PROVIDER];
+  const workspaceAgentDefaults = storedWorkspaceAgentDefaults(record);
   const storedHotkey = record[SETTINGS_FIELD.VOICE_HOTKEY];
   // Read through the same gate a submitted chord passes, so a hand-edited
   // value is either the one spelling the rest of the app uses or nothing.
@@ -295,6 +343,12 @@ function parsePersistedSettings(source: string): PersistedSettings {
     ),
     // A form this build does not draw is dropped like an unknown voice.
     ...(isPanelFormFactor(formFactor) ? { formFactor } : {}),
+    // A provider this build does not know is dropped the same way: it names
+    // nowhere a creation ask could go, so honouring it would steer nothing.
+    ...(typeof defaultWorkspaceProvider === "string" && isProviderId(defaultWorkspaceProvider)
+      ? { defaultWorkspaceProvider }
+      : {}),
+    ...(workspaceAgentDefaults ? { workspaceAgentDefaults } : {}),
   };
 }
 
@@ -357,6 +411,12 @@ export class SettingsStore {
       sessionNotifications: (await this.#load()).sessionNotifications,
       showOnAllDisplays: (await this.#load()).showOnAllDisplays,
       formFactor: (await this.#load()).formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
+      ...((await this.#load()).defaultWorkspaceProvider
+        ? { defaultWorkspaceProvider: (await this.#load()).defaultWorkspaceProvider }
+        : {}),
+      ...((await this.#load()).workspaceAgentDefaults
+        ? { workspaceAgentDefaults: (await this.#load()).workspaceAgentDefaults }
+        : {}),
     };
   }
 
@@ -643,6 +703,83 @@ export class SettingsStore {
       };
       if (formFactor) next.formFactor = formFactor;
       else delete next.formFactor;
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+    });
+    return { settings: await this.snapshot() };
+  }
+
+  /**
+   * Shallow like `readFormFactor()`: whether a default provider has been
+   * chosen decides only whether a creation saves one, and that answer must
+   * never wake the keychain behind the stored keys.
+   */
+  async readDefaultWorkspaceProvider(): Promise<ProviderId | undefined> {
+    return (await this.#load()).defaultWorkspaceProvider;
+  }
+
+  /**
+   * Stores the provider a nameless creation ask goes to, or returns to asking
+   * each time when omitted. A preference like the form factor's: no cipher,
+   * and the absence of a choice is itself the stored state.
+   */
+  async setDefaultWorkspaceProvider(
+    providerId: ProviderId | undefined,
+  ): Promise<SettingsUpdateResult> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (persisted.defaultWorkspaceProvider === providerId) return;
+      const next: PersistedSettings = {
+        ...persisted,
+        version: SETTINGS_FILE_VERSION,
+      };
+      if (providerId) next.defaultWorkspaceProvider = providerId;
+      else delete next.defaultWorkspaceProvider;
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+    });
+    return { settings: await this.snapshot() };
+  }
+
+  /**
+   * Shallow like the default provider's read, and read at the same moment: a
+   * creation ask must not wake the keychain to learn which model it carries.
+   */
+  async readWorkspaceAgentDefault(
+    providerId: ProviderId,
+  ): Promise<WorkspaceAgentSelection | undefined> {
+    return (await this.#load()).workspaceAgentDefaults?.[providerId];
+  }
+
+  /**
+   * Stores the agent kind and model one provider starts new workspaces with,
+   * or returns to that provider's own defaults when omitted. One provider's
+   * choice never disturbs another's, the way one provider's key never
+   * disturbs another's ciphertext.
+   */
+  async setWorkspaceAgentDefault(
+    providerId: ProviderId,
+    selection: WorkspaceAgentSelection | undefined,
+  ): Promise<SettingsUpdateResult> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      const current = persisted.workspaceAgentDefaults?.[providerId];
+      if (
+        current?.agent === selection?.agent &&
+        current?.model === selection?.model &&
+        current?.effort === selection?.effort
+      ) {
+        return;
+      }
+      const defaults = { ...persisted.workspaceAgentDefaults };
+      if (selection) defaults[providerId] = selection;
+      else delete defaults[providerId];
+      const next: PersistedSettings = {
+        ...persisted,
+        version: SETTINGS_FILE_VERSION,
+      };
+      if (Object.keys(defaults).length > 0) next.workspaceAgentDefaults = defaults;
+      else delete next.workspaceAgentDefaults;
       await this.#write(next);
       this.#loading = Promise.resolve(next);
     });

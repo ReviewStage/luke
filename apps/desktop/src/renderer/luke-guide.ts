@@ -30,10 +30,13 @@ import {
   isPanelFormFactor,
   isRealtimeVoice,
   PANEL_FORM_FACTOR_LIST,
+  PROVIDER_ID,
+  type ProviderId,
   REALTIME_DEFAULTS,
   REALTIME_VOICE_LIST,
   REALTIME_VOICE_SPEED,
   type RealtimeVoiceSpeed,
+  type WorkspaceAgentSelection,
 } from "@sidecar/core";
 import type {
   AppBridge,
@@ -44,8 +47,11 @@ import type {
 import { APP_SETTING_DEFAULTS, CREDENTIAL_SOURCE, SECRET_STORAGE } from "../shared/contracts";
 import {
   CLOUD_AGENT_PROVIDER_LIST,
+  CREDENTIAL_PROVIDERS,
   INTEGRATION_PROVIDER_LIST,
+  isCredentialProviderId,
 } from "../shared/credential-providers";
+import { workspaceAgentModelLabel, workspaceAgentModels } from "../shared/workspace-agents";
 
 /** The ids a spoken change names Luke's settings by. */
 export const APP_SETTING_ID = {
@@ -58,12 +64,31 @@ export const APP_SETTING_ID = {
   SHOW_IN_DOCK: "show_in_dock",
   SHOW_ON_ALL_DISPLAYS: "show_on_all_displays",
   FORM_FACTOR: "form_factor",
+  DEFAULT_WORKSPACE_PROVIDER: "default_workspace_provider",
+  WORKSPACE_AGENT_MODEL: "workspace_agent_model",
+  WORKSPACE_AGENT_EFFORT: "workspace_agent_effort",
 } as const;
 
 export type AppSettingId = (typeof APP_SETTING_ID)[keyof typeof APP_SETTING_ID];
 
 /** Where the switches live, said once so every entry words it the same way. */
 const SETTINGS_TAB = "the panel's Settings tab";
+
+/** Where the Conductor agent choices live, said once for both their entries. */
+const CONDUCTOR_ROW_PATH = `the Conductor row under Cloud Agent API keys, in ${SETTINGS_TAB}`;
+
+/**
+ * The word both Conductor agent entries use for no choice at all. It is a
+ * member of their choices on purpose: saying it is how a spoken ask returns a
+ * half to Conductor's own default.
+ */
+const CONDUCTOR_DEFAULT_CHOICE = "Conductor's default";
+
+/**
+ * The provider entry's word for no default at all, the same words its row
+ * offers: while nothing is chosen, Luke asks which provider each time.
+ */
+const ASK_EACH_TIME_CHOICE = "ask each time";
 
 /**
  * The words a pace is asked for in, slowest to fastest, each paired with the
@@ -85,14 +110,22 @@ function voiceSpeedFromWord(word: string): RealtimeVoiceSpeed | undefined {
   return VOICE_SPEED_WORDS.find((candidate) => candidate.word === word)?.speed;
 }
 
+/** The name a provider is known by on its rows, falling back to its id. */
+function workspaceProviderName(providerId: ProviderId): string {
+  return isCredentialProviderId(providerId)
+    ? CREDENTIAL_PROVIDERS[providerId].displayName
+    : providerId;
+}
+
 /**
- * One guide entry per settings field, or an explicit nothing. Exhaustive over
+ * One guide entry per settings field — or several, where one stored value is
+ * spoken of as more than one choice — or an explicit nothing. Exhaustive over
  * `AppSettings` on purpose: this `Record` failing to compile is how a new
  * setting is prevented from shipping unknown to Luke.
  */
 const SETTING_GUIDE: Record<
   keyof AppSettings,
-  (settings: AppSettings) => AppGuideSetting | undefined
+  (settings: AppSettings) => AppGuideSetting | readonly AppGuideSetting[] | undefined
 > = {
   voice: (settings) => ({
     id: APP_SETTING_ID.VOICE,
@@ -183,6 +216,92 @@ const SETTING_GUIDE: Record<
     value: appToggleText(settings.showOnAllDisplays),
     defaultValue: appToggleText(APP_SETTING_DEFAULTS.showOnAllDisplays),
     adjustable: true,
+    manual: `${SETTINGS_TAB}, under Preferences`,
+  }),
+  // One stored value, spoken of as two choices: the model, and — only while a
+  // model whose agent documents levels is chosen — its effort, because a
+  // level with no model to ride has nowhere documented to go. Both are
+  // changeable by voice, but only at the developer's own naming: the standing
+  // instructions forbid asking or suggesting either, so the ask is always
+  // theirs to bring up. Conductor is the one provider the build documents a
+  // table for; a second provider growing one is the moment this generalizes.
+  workspaceAgentDefaults: (settings) => {
+    const chosen = settings.workspaceAgentDefaults?.[PROVIDER_ID.CONDUCTOR];
+    const chosenAgent = chosen
+      ? workspaceAgentModels(PROVIDER_ID.CONDUCTOR).find((entry) => entry.agent === chosen.agent)
+      : undefined;
+    return [
+      {
+        id: APP_SETTING_ID.WORKSPACE_AGENT_MODEL,
+        label: "New Conductor agents run",
+        description:
+          "Which model a Conductor workspace or agent created through Luke starts with. Unset, " +
+          "Conductor's own defaults decide.",
+        kind: APP_SETTING_KIND.CHOICE,
+        // Said by the name people know the model by, the way its row draws
+        // it; the id stays on the wire where only endpoints read it.
+        value: chosen
+          ? workspaceAgentModelLabel(PROVIDER_ID.CONDUCTOR, chosen)
+          : CONDUCTOR_DEFAULT_CHOICE,
+        choices: [
+          CONDUCTOR_DEFAULT_CHOICE,
+          ...workspaceAgentModels(PROVIDER_ID.CONDUCTOR).flatMap((entry) =>
+            entry.models.map((model) => model.label),
+          ),
+        ],
+        // The default is itself one of the choices, so an ask to restore it
+        // is an ordinary change to the value listed.
+        defaultValue: CONDUCTOR_DEFAULT_CHOICE,
+        adjustable: true,
+        manual: CONDUCTOR_ROW_PATH,
+      },
+      ...(chosen && chosenAgent && chosenAgent.efforts.length > 0
+        ? [
+            {
+              id: APP_SETTING_ID.WORKSPACE_AGENT_EFFORT,
+              label: "New Conductor agents' effort",
+              description:
+                "How hard the chosen model thinks. Unset, Conductor's own default decides.",
+              kind: APP_SETTING_KIND.CHOICE,
+              value: chosen.effort ?? CONDUCTOR_DEFAULT_CHOICE,
+              choices: [CONDUCTOR_DEFAULT_CHOICE, ...chosenAgent.efforts],
+              defaultValue: CONDUCTOR_DEFAULT_CHOICE,
+              adjustable: true,
+              manual: CONDUCTOR_ROW_PATH,
+            },
+          ]
+        : []),
+    ];
+  },
+  // Described but kept by hand: the value's own story is conversational — the
+  // first workspace created saves its provider — so a spoken "change it"
+  // would shadow the same act the setting exists to record, and the refusal
+  // Luke voices carries the by-hand path. The projects context, not this
+  // entry, is what steers a live creation ask.
+  defaultWorkspaceProvider: (settings) => ({
+    id: APP_SETTING_ID.DEFAULT_WORKSPACE_PROVIDER,
+    label: "Default workspace provider",
+    description:
+      "Which provider a conversational ask creates a new workspace in when the ask names none. " +
+      "Until one is chosen Luke asks when more than one provider could take it, and the first " +
+      "workspace created saves its provider as the default.",
+    kind: APP_SETTING_KIND.CHOICE,
+    value: settings.defaultWorkspaceProvider
+      ? workspaceProviderName(settings.defaultWorkspaceProvider)
+      : ASK_EACH_TIME_CHOICE,
+    // Descriptive, never a spoken vocabulary — the entry is by-hand-only.
+    // The two named providers are the two that document a creation endpoint,
+    // the same two the "Creating workspaces" fact names; a third gaining one
+    // updates both.
+    choices: [
+      ASK_EACH_TIME_CHOICE,
+      workspaceProviderName(PROVIDER_ID.CONDUCTOR),
+      workspaceProviderName(PROVIDER_ID.CURSOR),
+    ],
+    // Every install starts with no provider chosen: asking each time is the
+    // default, and the first creation is what ends it.
+    defaultValue: ASK_EACH_TIME_CHOICE,
+    adjustable: false,
     manual: `${SETTINGS_TAB}, under Preferences`,
   }),
   formFactor: (settings) => ({
@@ -364,7 +483,15 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "projects that provider reports, optionally under a name the developer chose, and can " +
         "hand the new agent an opening task in the developer's own words where the project takes " +
         "one. Only reported projects can be named, a project that needs a task cannot be created " +
-        "without one, and a provider that reports none takes no ask.",
+        "without one, and a provider that reports none takes no ask. An ask that names no " +
+        "provider goes to the default workspace provider; until one is chosen Luke asks when " +
+        "more than one provider could take it, and the first workspace created saves its " +
+        "provider as the default — changed or cleared by hand in the Settings tab. What a new " +
+        "Conductor agent runs — its model, and its effort where the model's agent takes one — " +
+        "follows the choice on the Conductor row under Cloud Agent API keys, or Conductor's own " +
+        "defaults while none is made. A model named in a creation ask rides that creation alone " +
+        "and is saved as the default only while none is chosen; the settings themselves change " +
+        "only when the developer asks for that, and Luke never asks or suggests a model.",
     },
     {
       label: "Adding agents to a workspace",
@@ -426,10 +553,56 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
 
   const settings = Object.values(SETTING_GUIDE).flatMap((entry) => {
     const setting = entry(input.settings);
-    return setting ? [setting] : [];
+    if (setting === undefined) return [];
+    return Array.isArray(setting) ? setting : [setting as AppGuideSetting];
   });
 
   return { facts, settings };
+}
+
+/**
+ * Composes the stored Conductor selection a spoken model or effort change
+ * asks for. A model is named by its label and carries the current effort
+ * forward only where the new model's agent documents it; an effort rides the
+ * model already chosen, which is why the effort entry only exists while one
+ * is. Naming the default returns that half to Conductor: the whole selection
+ * for a model, the effort alone otherwise.
+ */
+function spokenWorkspaceAgentSelection(
+  settingId: string,
+  value: string,
+  current: WorkspaceAgentSelection | undefined,
+): { selection: WorkspaceAgentSelection | undefined } | { refused: string } {
+  if (settingId === APP_SETTING_ID.WORKSPACE_AGENT_MODEL) {
+    if (value === CONDUCTOR_DEFAULT_CHOICE) return { selection: undefined };
+    const named = workspaceAgentModels(PROVIDER_ID.CONDUCTOR)
+      .flatMap((entry) =>
+        entry.models.map((model) => ({
+          agent: entry.agent,
+          model: model.id,
+          label: model.label,
+          efforts: entry.efforts,
+        })),
+      )
+      .find((candidate) => candidate.label === value);
+    if (!named) return { refused: "No documented Conductor model goes by that name." };
+    const effort =
+      current?.effort && named.efforts.includes(current.effort) ? current.effort : undefined;
+    return {
+      selection: { agent: named.agent, model: named.model, ...(effort ? { effort } : {}) },
+    };
+  }
+  // The effort entry only exists while a model is chosen, so an ask arriving
+  // without one is a guide ahead of the state; refuse honestly.
+  if (!current) {
+    return {
+      refused: "No model is chosen for new Conductor agents, so there is no effort to set.",
+    };
+  }
+  if (value === CONDUCTOR_DEFAULT_CHOICE) {
+    return { selection: { agent: current.agent, model: current.model } };
+  }
+  return { selection: { agent: current.agent, model: current.model, effort: value } };
 }
 
 /**
@@ -437,7 +610,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
  * settings rows use, and reports what became of it in words Luke can say.
  * The store answers with the settings it actually holds either way, and
  * `onSettings` hands that snapshot back to the panel so the switch on screen
- * and the sentence out loud never disagree.
+ * and the sentence out loud never disagree. The current settings ride along
+ * so a model or effort change composes against the selection actually stored.
  */
 export async function applySpokenSetting(
   bridge: Pick<
@@ -451,10 +625,30 @@ export async function applySpokenSetting(
     | "setShowInDock"
     | "setShowOnAllDisplays"
     | "setFormFactor"
+    | "setWorkspaceAgentDefault"
   >,
   action: { setting: AppGuideSetting; value: string },
   onSettings: (settings: AppSettings) => void,
+  current?: AppSettings,
 ): Promise<Record<string, unknown>> {
+  if (
+    action.setting.id === APP_SETTING_ID.WORKSPACE_AGENT_MODEL ||
+    action.setting.id === APP_SETTING_ID.WORKSPACE_AGENT_EFFORT
+  ) {
+    const composed = spokenWorkspaceAgentSelection(
+      action.setting.id,
+      action.value,
+      current?.workspaceAgentDefaults?.[PROVIDER_ID.CONDUCTOR],
+    );
+    if ("refused" in composed) return { status: "refused", reason: composed.refused };
+    const answered = await bridge.setWorkspaceAgentDefault(
+      PROVIDER_ID.CONDUCTOR,
+      composed.selection,
+    );
+    onSettings(answered.settings);
+    if (answered.reason) return { status: "refused", reason: answered.reason };
+    return { status: "changed", setting: action.setting.label, value: action.value };
+  }
   const enabled = action.value === APP_TOGGLE_VALUE.ON;
   const speed = voiceSpeedFromWord(action.value);
   const result =

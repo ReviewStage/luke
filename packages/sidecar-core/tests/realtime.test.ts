@@ -50,6 +50,7 @@ import {
   truncateResponseEvents,
   typedAskEvents,
   WORKSPACE_TASK_SUPPORT,
+  type WorkspaceAgentModels,
   workspaceProjectContextEvents,
   workspaceProjectContextText,
 } from "../src";
@@ -650,6 +651,162 @@ test("the projects context lists each project with the identity a call names", (
     ),
     false,
   );
+});
+
+test("the projects context says where a nameless creation ask goes", () => {
+  const cursorProject: ObservedWorkspaceProject = {
+    providerId: "cursor",
+    providerName: "Cursor",
+    providerProjectId: "https://github.com/acme/luke",
+    repository: "acme/luke",
+    taskSupport: WORKSPACE_TASK_SUPPORT.REQUIRED,
+  };
+
+  // A chosen default that is offering is named as where a nameless ask goes.
+  const chosen = workspaceProjectContextText([OFFERED_PROJECT, cursorProject], "conductor");
+  assert.match(chosen, /default provider for new workspaces is Conductor/);
+  assert.doesNotMatch(chosen, /No default provider is chosen/);
+
+  // Nothing chosen and more than one provider listed: ask first, and say that
+  // the first creation decides — that sentence is how the developer learns
+  // their answer will be remembered.
+  const open = workspaceProjectContextText([OFFERED_PROJECT, cursorProject]);
+  assert.match(open, /No default provider is chosen yet/);
+  assert.match(open, /ask which listed provider/);
+  assert.match(open, /first workspace created saves its provider/);
+
+  // One provider alone leaves nothing to ask about, but the save is still
+  // said, or the remembered choice would be a surprise.
+  const single = workspaceProjectContextText([OFFERED_PROJECT]);
+  assert.match(single, /No default provider is chosen yet/);
+  assert.doesNotMatch(single, /ask which/);
+  assert.match(single, /first workspace created saves its provider/);
+
+  // A default whose provider is not offering earns no line at all: it is not
+  // somewhere an ask can go, and a choice already made is not re-offered to
+  // the first creation.
+  const away = workspaceProjectContextText([cursorProject], "conductor");
+  assert.doesNotMatch(away, /default provider/);
+
+  // The default rides the same context event the list does.
+  const [event] = workspaceProjectContextEvents([OFFERED_PROJECT], "conductor");
+  const item = (event as { item?: { content?: { text?: string }[] } }).item;
+  assert.match(item?.content?.[0]?.text ?? "", /default provider for new workspaces is Conductor/);
+});
+
+/**
+ * A build-documented table the way the app declares one: labels for people,
+ * ids for the wire, efforts per agent.
+ */
+const AGENT_TABLE: readonly WorkspaceAgentModels[] = [
+  { agent: "claude", models: [{ id: "fable-5", label: "Fable 5" }], efforts: ["low", "max"] },
+  { agent: "cursor", models: [{ id: "auto", label: "Cursor Auto" }], efforts: [] },
+];
+
+function conductorAgentModels(providerId: string): readonly WorkspaceAgentModels[] {
+  return providerId === "conductor" ? AGENT_TABLE : [];
+}
+
+test("a creation ask may name a model, by the name the guide lists it under", () => {
+  const projects = [OFFERED_PROJECT];
+  const identity = '"provider_id":"conductor","project_id":"proj-1"';
+
+  // Named by label, carried as the wire pairing, effort beside it.
+  assert.deepEqual(
+    sessionToolAction(
+      messageCall(`{${identity},"model":"Fable 5","effort":"max"}`, REALTIME_TOOL.CREATE_WORKSPACE),
+      [],
+      projects,
+      conductorAgentModels,
+    ),
+    {
+      kind: "create-workspace",
+      providerId: "conductor",
+      providerProjectId: "proj-1",
+      agentSelection: { agent: "claude", model: "fable-5", effort: "max" },
+    },
+  );
+
+  // Every way the naming can leave the documented table is a refusal with a
+  // reason Luke can say: a model no table lists, an effort the model's agent
+  // does not document, an effort with no model beside it, and a provider the
+  // build documents no models for at all.
+  const refusals = [
+    sessionToolAction(
+      messageCall(`{${identity},"model":"GPT-9"}`, REALTIME_TOOL.CREATE_WORKSPACE),
+      [],
+      projects,
+      conductorAgentModels,
+    ),
+    sessionToolAction(
+      messageCall(
+        `{${identity},"model":"Cursor Auto","effort":"max"}`,
+        REALTIME_TOOL.CREATE_WORKSPACE,
+      ),
+      [],
+      projects,
+      conductorAgentModels,
+    ),
+    sessionToolAction(
+      messageCall(`{${identity},"effort":"max"}`, REALTIME_TOOL.CREATE_WORKSPACE),
+      [],
+      projects,
+      conductorAgentModels,
+    ),
+    sessionToolAction(
+      messageCall(`{${identity},"model":"Fable 5"}`, REALTIME_TOOL.CREATE_WORKSPACE),
+      [],
+      projects,
+    ),
+  ];
+  for (const refusal of refusals) assert.equal(refusal.kind, "refused");
+});
+
+test("an added agent may carry a model, only of the asked-for kind", () => {
+  const spawning = normalizeSession(
+    { id: "conductor", displayName: "Conductor" },
+    {
+      providerSessionId: "chat-1",
+      title: "bucharest-v1",
+      status: SESSION_STATUS.WAITING,
+      observedAt: DECIDED_AT,
+      spawnableAgents: ["claude", "cursor"],
+    },
+  );
+  const identity = '"provider_id":"conductor","provider_session_id":"chat-1"';
+
+  assert.deepEqual(
+    sessionToolAction(
+      messageCall(
+        `{${identity},"agent":"claude","model":"Fable 5","effort":"max"}`,
+        REALTIME_TOOL.ADD_WORKSPACE_AGENT,
+      ),
+      [spawning],
+      [],
+      conductorAgentModels,
+    ),
+    {
+      kind: "add-agent",
+      identity: { providerId: "conductor", providerSessionId: "chat-1" },
+      agent: "claude",
+      model: "fable-5",
+      effort: "max",
+    },
+  );
+
+  // The asked-for kind is never re-decided by the model named beside it: a
+  // claude model on a cursor agent is a refusal, not a swap.
+  const mismatched = sessionToolAction(
+    messageCall(
+      `{${identity},"agent":"cursor","model":"Fable 5"}`,
+      REALTIME_TOOL.ADD_WORKSPACE_AGENT,
+    ),
+    [spawning],
+    [],
+    conductorAgentModels,
+  );
+  assert.equal(mismatched.kind, "refused");
+  assert.match((mismatched as { reason?: string }).reason ?? "", /cursor agent runs no model/);
 });
 
 test("a creation ask can only name a project Luke was shown", () => {
