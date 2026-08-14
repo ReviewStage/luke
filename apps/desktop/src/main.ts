@@ -1704,11 +1704,15 @@ function trayMenu(): Electron.Menu {
     {
       // The same door the bottom of the settings tab offers, for whoever lives
       // in the menu bar instead: the panel comes up on the composer, already
-      // set to the kind that was asked for.
+      // set to the kind that was asked for — on the voice host's window, the
+      // same one every other app-level ask lands in.
       label: "Send Feedback…",
       click: () => {
-        setWindowMode("expanded", true);
-        panelWindow?.webContents.send(
+        const host = voiceHostWindow();
+        const displayId = host ? displayIdFor(host.webContents) : undefined;
+        if (displayId === undefined) return;
+        setWindowMode(displayId, "expanded", true);
+        host?.webContents.send(
           channels.lifecycle,
           FEEDBACK_LIFECYCLE_EVENT[FEEDBACK_KIND.FEEDBACK],
         );
@@ -1717,11 +1721,11 @@ function trayMenu(): Electron.Menu {
     {
       label: "Submit a Prompt…",
       click: () => {
-        setWindowMode("expanded", true);
-        panelWindow?.webContents.send(
-          channels.lifecycle,
-          FEEDBACK_LIFECYCLE_EVENT[FEEDBACK_KIND.PROMPT],
-        );
+        const host = voiceHostWindow();
+        const displayId = host ? displayIdFor(host.webContents) : undefined;
+        if (displayId === undefined) return;
+        setWindowMode(displayId, "expanded", true);
+        host?.webContents.send(channels.lifecycle, FEEDBACK_LIFECYCLE_EVENT[FEEDBACK_KIND.PROMPT]);
       },
     },
     { type: "separator" },
