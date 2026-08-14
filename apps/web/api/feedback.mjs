@@ -6,13 +6,15 @@
  * It forwards exactly what the user typed and attached — the app never holds a
  * mail credential, and the destination never crosses the wire.
  *
+ * Plain ESM rather than TypeScript, like every script in this repository: the
+ * function is compiled by Vercel's builder, and handing it JavaScript leaves
+ * that builder nothing to resolve, transpile, or fail on.
+ *
  * Deployment needs one secret: `RESEND_API_KEY`, a Resend key for a domain
  * verified to send as the `from` address. `FEEDBACK_FROM` may override that
  * sender. Without the key the endpoint answers 503 and the composer reports
  * the service unavailable; nothing else about the app depends on it.
  */
-
-declare const process: { env: Record<string, string | undefined> };
 
 const RESEND_URL = "https://api.resend.com/emails";
 const DESTINATION = "founders@stagereview.app";
@@ -31,16 +33,22 @@ const RATE_LIMIT = {
   MAX_PER_WINDOW: 6,
   /** The counter map is bounded; past this it forgets rather than grows. */
   MAX_TRACKED_SENDERS: 10_000,
-} as const;
+};
 
-const recentSenders = new Map<string, { windowStart: number; count: number }>();
+/** @type {Map<string, { windowStart: number; count: number }>} */
+const recentSenders = new Map();
 
-function senderAddress(request: Request): string {
+/** @param {Request} request */
+function senderAddress(request) {
   // The first hop in the forwarded chain is the caller as the platform saw it.
   return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
 }
 
-function rateLimited(sender: string, now: number): boolean {
+/**
+ * @param {string} sender
+ * @param {number} now
+ */
+function rateLimited(sender, now) {
   const held = recentSenders.get(sender);
   if (!held || now - held.windowStart >= RATE_LIMIT.WINDOW_MS) {
     if (recentSenders.size >= RATE_LIMIT.MAX_TRACKED_SENDERS) recentSenders.clear();
@@ -54,19 +62,11 @@ function rateLimited(sender: string, now: number): boolean {
 const FEEDBACK_KIND = {
   FEEDBACK: "feedback",
   PROMPT: "prompt",
-} as const;
+};
 
-type FeedbackKind = (typeof FEEDBACK_KIND)[keyof typeof FEEDBACK_KIND];
+const FEEDBACK_KINDS = Object.values(FEEDBACK_KIND);
 
-const FEEDBACK_KINDS: readonly string[] = Object.values(FEEDBACK_KIND);
-
-const FEEDBACK_IMAGE_TYPE = {
-  PNG: "image/png",
-  JPEG: "image/jpeg",
-  WEBP: "image/webp",
-} as const;
-
-const FEEDBACK_IMAGE_TYPES: readonly string[] = Object.values(FEEDBACK_IMAGE_TYPE);
+const FEEDBACK_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
 /* The same bounds the composer and the app's trust boundary enforce; keep in
    step with `apps/desktop/src/shared/feedback.ts`. */
@@ -76,37 +76,28 @@ const FEEDBACK_LIMITS = {
   EMAIL_MAX_LENGTH: 254,
   MAX_IMAGES: 3,
   IMAGE_MAX_BYTES: 900_000,
-} as const;
+};
 
-const SUBJECT_LINE: Record<FeedbackKind, string> = {
+const SUBJECT_LINE = {
   [FEEDBACK_KIND.FEEDBACK]: "Luke feedback",
   [FEEDBACK_KIND.PROMPT]: "Luke prompt",
 };
 
-interface FeedbackImage {
-  name: string;
-  mediaType: string;
-  base64: string;
-}
-
-interface FeedbackSubmission {
-  kind: FeedbackKind;
-  message: string;
-  name?: string;
-  email?: string;
-  images: readonly FeedbackImage[];
-}
-
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 
-function decodedByteLength(base64: string): number {
+/** @param {string} base64 */
+function decodedByteLength(base64) {
   const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
   return (base64.length / 4) * 3 - padding;
 }
 
-function feedbackImage(value: unknown): FeedbackImage | undefined {
+/**
+ * @param {unknown} value
+ * @returns {{ name: string; mediaType: string; base64: string } | undefined}
+ */
+function feedbackImage(value) {
   if (value === null || typeof value !== "object") return undefined;
-  const { name, mediaType, base64 } = value as Partial<FeedbackImage>;
+  const { name, mediaType, base64 } = /** @type {Record<string, unknown>} */ (value);
   if (typeof name !== "string" || name.trim().length === 0 || name.length > 255) return undefined;
   if (typeof mediaType !== "string" || !FEEDBACK_IMAGE_TYPES.includes(mediaType)) return undefined;
   if (typeof base64 !== "string" || base64.length === 0) return undefined;
@@ -115,9 +106,14 @@ function feedbackImage(value: unknown): FeedbackImage | undefined {
   return { name: name.trim(), mediaType, base64 };
 }
 
-/* A single line of credit: bounded, and never carrying a line break that could
-   reach a mail header. */
-function optionalLine(value: unknown, maxLength: number): string | undefined | null {
+/*
+ * A single line of credit: bounded, and never carrying a line break that could
+ * reach a mail header. `null` means refused, `undefined` means not given.
+ *
+ * @param {unknown} value
+ * @param {number} maxLength
+ */
+function optionalLine(value, maxLength) {
   if (value === undefined) return undefined;
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -126,9 +122,14 @@ function optionalLine(value: unknown, maxLength: number): string | undefined | n
   return trimmed;
 }
 
-function feedbackSubmission(value: unknown): FeedbackSubmission | undefined {
+/**
+ * Reads an untrusted request body into a submission, or nothing if malformed.
+ *
+ * @param {unknown} value
+ */
+function feedbackSubmission(value) {
   if (value === null || typeof value !== "object") return undefined;
-  const { kind, message, name, email, images } = value as Partial<FeedbackSubmission>;
+  const { kind, message, name, email, images } = /** @type {Record<string, unknown>} */ (value);
   if (typeof kind !== "string" || !FEEDBACK_KINDS.includes(kind)) return undefined;
   if (typeof message !== "string") return undefined;
   const messageText = message.trim();
@@ -140,14 +141,14 @@ function feedbackSubmission(value: unknown): FeedbackSubmission | undefined {
   const emailLine = optionalLine(email, FEEDBACK_LIMITS.EMAIL_MAX_LENGTH);
   if (emailLine === null) return undefined;
   if (!Array.isArray(images) || images.length > FEEDBACK_LIMITS.MAX_IMAGES) return undefined;
-  const parsedImages: FeedbackImage[] = [];
+  const parsedImages = [];
   for (const candidate of images) {
     const image = feedbackImage(candidate);
     if (!image) return undefined;
     parsedImages.push(image);
   }
   return {
-    kind: kind as FeedbackKind,
+    kind,
     message: messageText,
     ...(nameLine ? { name: nameLine } : {}),
     ...(emailLine ? { email: emailLine } : {}),
@@ -155,7 +156,8 @@ function feedbackSubmission(value: unknown): FeedbackSubmission | undefined {
   };
 }
 
-function emailBody(submission: FeedbackSubmission): string {
+/** @param {ReturnType<typeof feedbackSubmission> & object} submission */
+function emailBody(submission) {
   const credit =
     submission.name || submission.email
       ? `From: ${[submission.name, submission.email].filter(Boolean).join(" — ")}`
@@ -163,21 +165,26 @@ function emailBody(submission: FeedbackSubmission): string {
   return [submission.message, "", "—", credit, "Sent from the Luke panel."].join("\n");
 }
 
-function json(status: number, body: Record<string, unknown>): Response {
+/**
+ * @param {number} status
+ * @param {Record<string, unknown>} body
+ */
+function json(status, body) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "content-type": "application/json" },
   });
 }
 
-export async function POST(request: Request): Promise<Response> {
+/** @param {Request} request */
+export async function POST(request) {
   const apiKey = process.env.RESEND_API_KEY?.trim();
   if (!apiKey) return json(503, { reason: "The feedback service is not configured." });
   if (rateLimited(senderAddress(request), Date.now())) {
     return json(429, { reason: "Too many submissions from this address. Try again later." });
   }
 
-  let payload: unknown;
+  let payload;
   try {
     payload = await request.json();
   } catch {
@@ -191,7 +198,7 @@ export async function POST(request: Request): Promise<Response> {
     ? `${SUBJECT_LINE[submission.kind]} from ${signature}`
     : SUBJECT_LINE[submission.kind];
 
-  let response: Response;
+  let response;
   try {
     response = await fetch(RESEND_URL, {
       method: "POST",
@@ -204,8 +211,8 @@ export async function POST(request: Request): Promise<Response> {
         to: [DESTINATION],
         subject,
         text: emailBody(submission),
-        // Replying to the email answers the person who wrote it, when they said
-        // who that is.
+        // Replying to the email answers the person who wrote it, when they
+        // said who that is.
         ...(submission.email ? { reply_to: [submission.email] } : {}),
         ...(submission.images.length > 0
           ? {

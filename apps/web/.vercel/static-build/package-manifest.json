@@ -1,0 +1,1281 @@
+{
+  "version": "20260304",
+  "runtime": "node",
+  "framework": "vite",
+  "runtimeVersion": {
+    "resolved": "22",
+    "requested": "22.x",
+    "requestedSource": "package.json"
+  },
+  "dependencies": [
+    {
+      "name": "@fontsource-variable/bricolage-grotesque",
+      "type": "direct",
+      "scopes": ["prod"],
+      "requested": "5.3.0",
+      "resolved": "5.3.0"
+    },
+    {
+      "name": "@sidecar/core",
+      "type": "direct",
+      "scopes": ["prod"],
+      "requested": "workspace:*",
+      "resolved": ""
+    },
+    {
+      "name": "@types/react",
+      "type": "direct",
+      "scopes": ["dev"],
+      "requested": "19.2.18",
+      "resolved": "19.2.18"
+    },
+    {
+      "name": "@types/react-dom",
+      "type": "direct",
+      "scopes": ["dev"],
+      "requested": "19.2.4",
+      "resolved": "19.2.4"
+    },
+    {
+      "name": "@vitejs/plugin-react",
+      "type": "direct",
+      "scopes": ["dev"],
+      "requested": "5.1.2",
+      "resolved": "5.1.2"
+    },
+    {
+      "name": "react",
+      "type": "direct",
+      "scopes": ["prod"],
+      "requested": "19.2.8",
+      "resolved": "19.2.8"
+    },
+    {
+      "name": "react-dom",
+      "type": "direct",
+      "scopes": ["prod"],
+      "requested": "19.2.8",
+      "resolved": "19.2.8"
+    },
+    {
+      "name": "typescript",
+      "type": "direct",
+      "scopes": ["dev"],
+      "requested": "7.0.2",
+      "resolved": "7.0.2"
+    },
+    {
+      "name": "vite",
+      "type": "direct",
+      "scopes": ["dev"],
+      "requested": "7.3.1",
+      "resolved": "7.3.1"
+    },
+    {
+      "name": "@babel/code-frame",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.29.7"
+    },
+    {
+      "name": "@babel/compat-data",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.29.7"
+    },
+    {
+      "name": "@babel/core",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.29.7"
+    },
+    {
+      "name": "@babel/generator",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.29.8"
+    },
+    {
+      "name": "@babel/helper-compilation-targets",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.29.7"
+    },
+    {
+      "name": "@babel/helper-globals",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.29.7"
+    },
+    {
+      "name": "@babel/helper-module-imports",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.29.7"
+    },
+    {
+      "name": "@babel/helper-module-transforms",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.29.7"
+    },
+    {
+      "name": "@babel/helper-plugin-utils",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.29.7"
+    },
+    {
+      "name": "@babel/helper-string-parser",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.29.7"
+    },
+    {
+      "name": "@babel/helper-validator-identifier",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.29.7"
+    },
+    {
+      "name": "@babel/helper-validator-option",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.29.7"
+    },
+    {
+      "name": "@babel/helpers",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.29.7"
+    },
+    {
+      "name": "@babel/parser",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.29.8"
+    },
+    {
+      "name": "@babel/plugin-transform-react-jsx-self",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.29.7"
+    },
+    {
+      "name": "@babel/plugin-transform-react-jsx-source",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.29.7"
+    },
+    {
+      "name": "@babel/template",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.29.7"
+    },
+    {
+      "name": "@babel/traverse",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.29.8"
+    },
+    {
+      "name": "@babel/types",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.29.8"
+    },
+    {
+      "name": "@biomejs/biome",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.5.8"
+    },
+    {
+      "name": "@biomejs/cli-darwin-arm64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.5.8"
+    },
+    {
+      "name": "@biomejs/cli-darwin-x64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.5.8"
+    },
+    {
+      "name": "@biomejs/cli-linux-arm64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.5.8"
+    },
+    {
+      "name": "@biomejs/cli-linux-arm64-musl",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.5.8"
+    },
+    {
+      "name": "@biomejs/cli-linux-x64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.5.8"
+    },
+    {
+      "name": "@biomejs/cli-linux-x64-musl",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.5.8"
+    },
+    {
+      "name": "@biomejs/cli-win32-arm64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.5.8"
+    },
+    {
+      "name": "@biomejs/cli-win32-x64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.5.8"
+    },
+    {
+      "name": "@electron-internal/extract-zip",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "1.0.5"
+    },
+    {
+      "name": "@electron/asar",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.2.1"
+    },
+    {
+      "name": "@electron/get",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "5.1.0"
+    },
+    {
+      "name": "@electron/notarize",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "3.1.1"
+    },
+    {
+      "name": "@electron/osx-sign",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.6.0"
+    },
+    {
+      "name": "@electron/packager",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "20.2.1"
+    },
+    {
+      "name": "@electron/universal",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "3.0.6"
+    },
+    {
+      "name": "@electron/windows-sign",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.0.6"
+    },
+    {
+      "name": "@esbuild/aix-ppc64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.28.2"
+    },
+    {
+      "name": "@esbuild/android-arm",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.28.2"
+    },
+    {
+      "name": "@esbuild/android-arm64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.28.2"
+    },
+    {
+      "name": "@esbuild/android-x64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.28.2"
+    },
+    {
+      "name": "@esbuild/darwin-arm64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.28.2"
+    },
+    {
+      "name": "@esbuild/darwin-x64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.28.2"
+    },
+    {
+      "name": "@esbuild/freebsd-arm64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.28.2"
+    },
+    {
+      "name": "@esbuild/freebsd-x64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.28.2"
+    },
+    {
+      "name": "@esbuild/linux-arm",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.28.2"
+    },
+    {
+      "name": "@esbuild/linux-arm64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.28.2"
+    },
+    {
+      "name": "@esbuild/linux-ia32",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.28.2"
+    },
+    {
+      "name": "@esbuild/linux-loong64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.28.2"
+    },
+    {
+      "name": "@esbuild/linux-mips64el",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.28.2"
+    },
+    {
+      "name": "@esbuild/linux-ppc64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.28.2"
+    },
+    {
+      "name": "@esbuild/linux-riscv64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.28.2"
+    },
+    {
+      "name": "@esbuild/linux-s390x",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.28.2"
+    },
+    {
+      "name": "@esbuild/linux-x64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.28.2"
+    },
+    {
+      "name": "@esbuild/netbsd-arm64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.28.2"
+    },
+    {
+      "name": "@esbuild/netbsd-x64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.28.2"
+    },
+    {
+      "name": "@esbuild/openbsd-arm64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.28.2"
+    },
+    {
+      "name": "@esbuild/openbsd-x64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.28.2"
+    },
+    {
+      "name": "@esbuild/openharmony-arm64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.28.2"
+    },
+    {
+      "name": "@esbuild/sunos-x64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.28.2"
+    },
+    {
+      "name": "@esbuild/win32-arm64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.28.2"
+    },
+    {
+      "name": "@esbuild/win32-ia32",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.28.2"
+    },
+    {
+      "name": "@esbuild/win32-x64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.28.2"
+    },
+    {
+      "name": "@jridgewell/gen-mapping",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.3.13"
+    },
+    {
+      "name": "@jridgewell/remapping",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.3.5"
+    },
+    {
+      "name": "@jridgewell/resolve-uri",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "3.1.2"
+    },
+    {
+      "name": "@jridgewell/sourcemap-codec",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "1.5.5"
+    },
+    {
+      "name": "@jridgewell/trace-mapping",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.3.31"
+    },
+    {
+      "name": "@malept/cross-spawn-promise",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.0.0"
+    },
+    {
+      "name": "@napi-rs/lzma-linux-x64-gnu",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "1.5.1"
+    },
+    {
+      "name": "@rolldown/pluginutils",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "1.0.0-beta.53"
+    },
+    {
+      "name": "@rollup/rollup-android-arm-eabi",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.62.4"
+    },
+    {
+      "name": "@rollup/rollup-android-arm64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.62.4"
+    },
+    {
+      "name": "@rollup/rollup-darwin-arm64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.62.4"
+    },
+    {
+      "name": "@rollup/rollup-darwin-x64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.62.4"
+    },
+    {
+      "name": "@rollup/rollup-freebsd-arm64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.62.4"
+    },
+    {
+      "name": "@rollup/rollup-freebsd-x64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.62.4"
+    },
+    {
+      "name": "@rollup/rollup-linux-arm-gnueabihf",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.62.4"
+    },
+    {
+      "name": "@rollup/rollup-linux-arm-musleabihf",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.62.4"
+    },
+    {
+      "name": "@rollup/rollup-linux-arm64-gnu",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.62.4"
+    },
+    {
+      "name": "@rollup/rollup-linux-arm64-musl",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.62.4"
+    },
+    {
+      "name": "@rollup/rollup-linux-loong64-gnu",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.62.4"
+    },
+    {
+      "name": "@rollup/rollup-linux-loong64-musl",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.62.4"
+    },
+    {
+      "name": "@rollup/rollup-linux-ppc64-gnu",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.62.4"
+    },
+    {
+      "name": "@rollup/rollup-linux-ppc64-musl",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.62.4"
+    },
+    {
+      "name": "@rollup/rollup-linux-riscv64-gnu",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.62.4"
+    },
+    {
+      "name": "@rollup/rollup-linux-riscv64-musl",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.62.4"
+    },
+    {
+      "name": "@rollup/rollup-linux-s390x-gnu",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.62.4"
+    },
+    {
+      "name": "@rollup/rollup-linux-x64-gnu",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.62.4"
+    },
+    {
+      "name": "@rollup/rollup-linux-x64-musl",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.62.4"
+    },
+    {
+      "name": "@rollup/rollup-openbsd-x64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.62.4"
+    },
+    {
+      "name": "@rollup/rollup-openharmony-arm64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.62.4"
+    },
+    {
+      "name": "@rollup/rollup-win32-arm64-msvc",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.62.4"
+    },
+    {
+      "name": "@rollup/rollup-win32-ia32-msvc",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.62.4"
+    },
+    {
+      "name": "@rollup/rollup-win32-x64-gnu",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.62.4"
+    },
+    {
+      "name": "@rollup/rollup-win32-x64-msvc",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.62.4"
+    },
+    {
+      "name": "@types/babel__core",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.20.5"
+    },
+    {
+      "name": "@types/babel__generator",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.27.0"
+    },
+    {
+      "name": "@types/babel__template",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.4.4"
+    },
+    {
+      "name": "@types/babel__traverse",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.28.0"
+    },
+    {
+      "name": "@types/estree",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "1.0.9"
+    },
+    {
+      "name": "@types/node",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "26.2.0"
+    },
+    {
+      "name": "@typescript/typescript-aix-ppc64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.0.2"
+    },
+    {
+      "name": "@typescript/typescript-darwin-arm64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.0.2"
+    },
+    {
+      "name": "@typescript/typescript-darwin-x64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.0.2"
+    },
+    {
+      "name": "@typescript/typescript-freebsd-arm64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.0.2"
+    },
+    {
+      "name": "@typescript/typescript-freebsd-x64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.0.2"
+    },
+    {
+      "name": "@typescript/typescript-linux-arm",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.0.2"
+    },
+    {
+      "name": "@typescript/typescript-linux-arm64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.0.2"
+    },
+    {
+      "name": "@typescript/typescript-linux-loong64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.0.2"
+    },
+    {
+      "name": "@typescript/typescript-linux-mips64el",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.0.2"
+    },
+    {
+      "name": "@typescript/typescript-linux-ppc64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.0.2"
+    },
+    {
+      "name": "@typescript/typescript-linux-riscv64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.0.2"
+    },
+    {
+      "name": "@typescript/typescript-linux-s390x",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.0.2"
+    },
+    {
+      "name": "@typescript/typescript-linux-x64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.0.2"
+    },
+    {
+      "name": "@typescript/typescript-netbsd-arm64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.0.2"
+    },
+    {
+      "name": "@typescript/typescript-netbsd-x64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.0.2"
+    },
+    {
+      "name": "@typescript/typescript-openbsd-arm64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.0.2"
+    },
+    {
+      "name": "@typescript/typescript-openbsd-x64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.0.2"
+    },
+    {
+      "name": "@typescript/typescript-sunos-x64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.0.2"
+    },
+    {
+      "name": "@typescript/typescript-win32-arm64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.0.2"
+    },
+    {
+      "name": "@typescript/typescript-win32-x64",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.0.2"
+    },
+    {
+      "name": "@xmldom/xmldom",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.9.10"
+    },
+    {
+      "name": "balanced-match",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.0.4"
+    },
+    {
+      "name": "base64-js",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "1.5.1"
+    },
+    {
+      "name": "baseline-browser-mapping",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.11.13"
+    },
+    {
+      "name": "bplist-creator",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.0.8"
+    },
+    {
+      "name": "brace-expansion",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "5.0.9"
+    },
+    {
+      "name": "browserslist",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.28.8"
+    },
+    {
+      "name": "caniuse-lite",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "1.0.30001809"
+    },
+    {
+      "name": "commander",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "9.5.0"
+    },
+    {
+      "name": "convert-source-map",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.0.0"
+    },
+    {
+      "name": "cross-spawn",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.0.6"
+    },
+    {
+      "name": "csstype",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "3.2.3"
+    },
+    {
+      "name": "debug",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.4.3"
+    },
+    {
+      "name": "ds-store",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.1.6"
+    },
+    {
+      "name": "electron",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "43.3.0"
+    },
+    {
+      "name": "electron-to-chromium",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "1.5.404"
+    },
+    {
+      "name": "env-paths",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "3.0.0"
+    },
+    {
+      "name": "err-code",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.0.3"
+    },
+    {
+      "name": "esbuild",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.28.2"
+    },
+    {
+      "name": "escalade",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "3.2.0"
+    },
+    {
+      "name": "fdir",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "6.5.0"
+    },
+    {
+      "name": "filename-reserved-regex",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "3.0.0"
+    },
+    {
+      "name": "filenamify",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "6.0.0"
+    },
+    {
+      "name": "flora-colossus",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "3.0.2"
+    },
+    {
+      "name": "fsevents",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.3.3"
+    },
+    {
+      "name": "galactus",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.0.2"
+    },
+    {
+      "name": "gensync",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "1.0.0-beta.2"
+    },
+    {
+      "name": "glob",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "13.0.6"
+    },
+    {
+      "name": "graceful-fs",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.2.11"
+    },
+    {
+      "name": "husky",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "9.1.7"
+    },
+    {
+      "name": "isbinaryfile",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.0.10"
+    },
+    {
+      "name": "isexe",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.0.0"
+    },
+    {
+      "name": "js-tokens",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.0.0"
+    },
+    {
+      "name": "jsesc",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "3.1.0"
+    },
+    {
+      "name": "json5",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.2.3"
+    },
+    {
+      "name": "junk",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.0.1"
+    },
+    {
+      "name": "lint-staged",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "17.3.0"
+    },
+    {
+      "name": "lru-cache",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "11.5.2"
+    },
+    {
+      "name": "macos-alias",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.2.12"
+    },
+    {
+      "name": "minimatch",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "10.2.6"
+    },
+    {
+      "name": "minipass",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.1.3"
+    },
+    {
+      "name": "ms",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.1.3"
+    },
+    {
+      "name": "nan",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.28.0"
+    },
+    {
+      "name": "nanoid",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "3.3.18"
+    },
+    {
+      "name": "node-releases",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.0.53"
+    },
+    {
+      "name": "path-key",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "3.1.1"
+    },
+    {
+      "name": "path-scurry",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.0.2"
+    },
+    {
+      "name": "pe-library",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "1.0.1"
+    },
+    {
+      "name": "picocolors",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "1.1.1"
+    },
+    {
+      "name": "picomatch",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.0.5"
+    },
+    {
+      "name": "plist",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "3.1.1"
+    },
+    {
+      "name": "postcss",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "8.5.26"
+    },
+    {
+      "name": "postject",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "1.0.0-alpha.6"
+    },
+    {
+      "name": "progress",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.0.3"
+    },
+    {
+      "name": "promise-retry",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.0.1"
+    },
+    {
+      "name": "react-refresh",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.18.0"
+    },
+    {
+      "name": "resedit",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.0.3"
+    },
+    {
+      "name": "retry",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.12.0"
+    },
+    {
+      "name": "rollup",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.62.4"
+    },
+    {
+      "name": "scheduler",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.27.0"
+    },
+    {
+      "name": "semver",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.8.5"
+    },
+    {
+      "name": "shebang-command",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.0.0"
+    },
+    {
+      "name": "shebang-regex",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "3.0.0"
+    },
+    {
+      "name": "source-map-js",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "1.2.1"
+    },
+    {
+      "name": "stream-buffers",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.2.0"
+    },
+    {
+      "name": "string-argv",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.3.2"
+    },
+    {
+      "name": "sumchecker",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "3.0.1"
+    },
+    {
+      "name": "tinyexec",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "1.3.0"
+    },
+    {
+      "name": "tinyglobby",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.2.17"
+    },
+    {
+      "name": "tn1150",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "0.1.0"
+    },
+    {
+      "name": "tsx",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "4.23.12"
+    },
+    {
+      "name": "undici",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "7.29.0"
+    },
+    {
+      "name": "undici-types",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "8.3.0"
+    },
+    {
+      "name": "unorm",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "1.6.0"
+    },
+    {
+      "name": "update-browserslist-db",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "1.3.1"
+    },
+    {
+      "name": "which",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.0.2"
+    },
+    {
+      "name": "xmlbuilder",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "15.1.1"
+    },
+    {
+      "name": "yallist",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "3.1.1"
+    },
+    {
+      "name": "yaml",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "2.9.0"
+    },
+    {
+      "name": "yargs-parser",
+      "type": "transitive",
+      "scopes": ["prod"],
+      "resolved": "22.0.0"
+    }
+  ]
+}
