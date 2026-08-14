@@ -5,6 +5,7 @@ import {
   type RealtimeStatus,
   type RealtimeVoice,
   type SessionIdentity,
+  VOICE_CAPTION_MAX_HEIGHT,
 } from "@sidecar/core";
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -58,6 +59,37 @@ import { WAVEFORM_VOICE } from "./waveform";
  * into the second one.
  */
 const REMOTE_QUIET_MS = 2_500;
+
+/**
+ * What the speaking evidence run captions the reply with. A capture run never
+ * opens a call, so there are no words to draw unless the fixture supplies
+ * them — and it must, or the caption strip ships unphotographed. Synthetic,
+ * like every fixture, and long enough to wrap: a one-line fixture would leave
+ * the wrapped form of the strip unphotographed too.
+ */
+const FIXTURE_SPEAKING_CAPTION =
+  "Claude Code finished checkout-service, and Codex is still migrating the payments schema. Two sessions are waiting on you.";
+
+/**
+ * The caption block's vertical padding — 5px above the text and 9px keeping
+ * it clear of the shape's bottom edge. Mirrors `.voice-caption`'s padding in
+ * the stylesheet: the measured text plus this is what the surface grows by.
+ */
+const CAPTION_PADDING = 14;
+
+/**
+ * Sizes the caption block to the words it currently holds. The text wraps, so
+ * only a measurement can say how tall it is; the size drives the surface's
+ * growth and the clip that reveals the text, and past the reserved maximum
+ * the remainder becomes scroll, rolling the oldest lines up under the shape.
+ */
+function captionSizeStyle(textHeight: number | undefined): CSSProperties {
+  if (!textHeight) return {};
+  return {
+    "--caption-size": `${Math.min(VOICE_CAPTION_MAX_HEIGHT, textHeight + CAPTION_PADDING)}px`,
+    "--caption-scroll": `${Math.max(0, textHeight - (VOICE_CAPTION_MAX_HEIGHT - CAPTION_PADDING))}px`,
+  } as CSSProperties;
+}
 
 function usePointerPassthrough(
   onHitRegionEnter: () => void,
@@ -196,10 +228,12 @@ export function App(): React.JSX.Element {
   const [, setClock] = useState(0);
   const [panelElement, panelHeight] = useShapeHeight();
   const [slotElement, slotHeight] = useShapeHeight();
+  const [captionTextElement, captionTextHeight] = useShapeHeight();
   const [voiceStatus, setVoiceStatus] = useState<RealtimeStatus>(REALTIME_STATUS.IDLE);
   const [voiceHotkey, setVoiceHotkey] = useState<VoiceHotkeyState>();
   const [localStream, setLocalStream] = useState<MediaStream>();
   const [remoteStream, setRemoteStream] = useState<MediaStream>();
+  const [voiceCaption, setVoiceCaption] = useState<string>();
   const audioContext = useRef<AudioContext | undefined>(undefined);
   const hoverTimer = useRef<number | undefined>(undefined);
   const presentationRef = useRef<PanelPresentation>(PANEL_PRESENTATION.CAPSULE);
@@ -307,6 +341,7 @@ export function App(): React.JSX.Element {
       onLocalStream: setLocalStream,
       onRemoteStream: setRemoteStream,
       onError: setMicrophoneError,
+      onCaption: setVoiceCaption,
     });
     return voiceSession.current;
   }, []);
@@ -373,6 +408,17 @@ export function App(): React.JSX.Element {
    */
   const requestMicrophoneAccess = useCallback(async () => {
     setMicrophoneStatus(await window.sidecar.requestMicrophone());
+  }, []);
+
+  /**
+   * The switch redraws from what was actually stored rather than from the
+   * press, the same way the menu bar's does: the reply is the settings
+   * snapshot either way, and a refusal comes back as the row's own line.
+   */
+  const changeVoiceCaptions = useCallback(async (enabled: boolean) => {
+    const result = await window.sidecar.setVoiceCaptions(enabled);
+    setSettings(result.settings);
+    return result.reason;
   }, []);
 
   /**
@@ -998,6 +1044,16 @@ export function App(): React.JSX.Element {
   const shownHotkey = voiceHotkeyToShow(bootstrap, voiceHotkey);
   const fixtureSpeaking = bootstrap.profile === "speaking";
   const hasAudioSignal = fixtureSpeaking || analyser !== undefined;
+  // Luke's words, drawn only when captions are on and the reply they belong
+  // to is his turn: the preference is off by default, the session already
+  // clears the words when a reply ends or is cut off, and the turn gate keeps
+  // a caption that raced a status change from being drawn late. A capture run
+  // draws the fixture's words regardless, or the strip ships unphotographed.
+  const lukeCaption = fixtureSpeaking
+    ? FIXTURE_SPEAKING_CAPTION
+    : settings?.voiceCaptions === true && voiceTurn === WAVEFORM_VOICE.LUKE
+      ? voiceCaption
+      : undefined;
   const panelOpen = presentation === PANEL_PRESENTATION.PANEL;
   const slotOpen = presentation === PANEL_PRESENTATION.SLOT;
   // What the slot's field is for depends on what answers for that provider now,
@@ -1011,10 +1067,17 @@ export function App(): React.JSX.Element {
       // Whose turn it is, so the capsule can make room for a meter it has to
       // draw beside the face rather than in place of it.
       data-voice={voiceTurn}
+      // Whether there are words to draw under the shape, so the surface can
+      // grow the room they are drawn in.
+      data-caption={String(Boolean(lukeCaption))}
       data-presentation={presentation}
       data-notch={String(display.notch.hasNotch)}
       data-capture={String(bootstrap.captureMode)}
-      style={{ ...notchStyle(display), ...shapeHeightStyle(panelHeight, slotHeight) }}
+      style={{
+        ...notchStyle(display),
+        ...shapeHeightStyle(panelHeight, slotHeight),
+        ...captionSizeStyle(captionTextHeight),
+      }}
     >
       {/* Capsule, peek, slot and panel are all this one shape at different
           sizes, so the surface is never cross-faded — it is only ever resized. */}
@@ -1044,6 +1107,7 @@ export function App(): React.JSX.Element {
               onOpenMicrophoneSettings: () => window.sidecar.openMicrophoneSettings(),
               voiceAvailable: bootstrap.realtimeAvailable,
               settings,
+              onVoiceCaptionsChange: changeVoiceCaptions,
               credentials,
               onVoiceChange: changeVoice,
               panelOpen,
@@ -1075,6 +1139,21 @@ export function App(): React.JSX.Element {
         presentation={presentation}
         housingWidth={display.notch.housingWidth}
       />
+
+      {/* Luke's words while he says them: one element in every state, under
+          the housing while the shape is compact and carried to the panel's
+          foot when it opens, so the words travel with the morph instead of
+          jumping between two copies. Not in a wing — the wings clip at the
+          capsule's height — and always mounted, like the count's caption, so
+          both edges of its fade can run. The inner text is what is measured:
+          its wrapped height is the only honest answer to how much room the
+          words need. Hidden from readers: it duplicates what is already
+          audible. */}
+      <span className="voice-caption" aria-hidden="true">
+        <span className="voice-caption-text" ref={captionTextElement}>
+          {lukeCaption}
+        </span>
+      </span>
 
       <div className="compact-stage">
         {/* A button, not a hover target: hovering only peeks, pressing commits.

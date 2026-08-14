@@ -583,6 +583,26 @@ function registerIpc(): void {
       }
     },
   );
+  // A plain preference, validated to a boolean the way every renderer value
+  // is validated at this boundary. The reply reports what was actually
+  // stored, so the switch redraws from the settings rather than the press.
+  ipcMain.handle(
+    channels.setVoiceCaptions,
+    async (event, enabled: unknown): Promise<SettingsUpdateResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (typeof enabled !== "boolean") throw new Error("Invalid caption request");
+      try {
+        return await settingsStore.setVoiceCaptions(enabled);
+      } catch {
+        // A filesystem failure is not something the user can act on, so it is
+        // reported as one line rather than as a raw system error.
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "Could not save that setting on this system.",
+        };
+      }
+    },
+  );
 
   // Where to get a key is a question the panel cannot answer itself, so it
   // hands the question to the browser. The renderer names a provider rather

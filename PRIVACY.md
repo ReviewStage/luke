@@ -105,7 +105,10 @@ summary — so a spoken question about your sessions can be answered. No
 transcript, file content, or command output is ever included.
 
 Luke does not record the conversation, write audio to disk, or keep a
-transcript. Audio is not retained by Luke in any form.
+transcript. With captions enabled in Settings — they are off by default — the
+reply's text is drawn on screen while Luke speaks; it is discarded when the
+reply ends and is never written to disk. Audio is not retained by Luke in any
+form.
 
 The standing API key stays in Luke's main process. The renderer receives only a
 short-lived client secret minted for one call, which expires on its own.

@@ -99,12 +99,12 @@ validate_evidence() {
 # The window is a stage, not the shape: a compact window holds the peek the
 # capsule grows into, and both carry room for a spring to overshoot.
 validate_evidence "$SIDECAR_EXPANDED_EVIDENCE_PATH" 700 560
-validate_evidence "$SIDECAR_COMPACT_EVIDENCE_PATH" 538 78
-validate_evidence "$SIDECAR_PEEK_EVIDENCE_PATH" 538 78
+validate_evidence "$SIDECAR_COMPACT_EVIDENCE_PATH" 538 148
+validate_evidence "$SIDECAR_PEEK_EVIDENCE_PATH" 538 148
 # The slot is drawn in the expanded window, which is why stepping aside for a
 # browser costs no resize at all.
 validate_evidence "$SIDECAR_SLOT_EVIDENCE_PATH" 700 560
-validate_evidence "$SIDECAR_SPEAKING_EVIDENCE_PATH" 538 78
+validate_evidence "$SIDECAR_SPEAKING_EVIDENCE_PATH" 538 148
 
 printf 'Expanded visual evidence: %s\n' "$SIDECAR_EXPANDED_EVIDENCE_PATH"
 printf 'Compact visual evidence: %s\n' "$SIDECAR_COMPACT_EVIDENCE_PATH"

@@ -30,6 +30,7 @@ const SETTINGS_FIELD = {
   SHOW_IN_MENU_BAR: "showInMenuBar",
   VERSION: "version",
   VOICE: "voice",
+  VOICE_CAPTIONS: "voiceCaptions",
 } as const;
 
 const API_KEY_LENGTH = {
@@ -80,6 +81,12 @@ interface PersistedSettings {
    * than a credential, so it is stored plainly and never touches the cipher.
    */
   voice?: RealtimeVoice;
+  /**
+   * Whether Luke's speech is captioned on screen. Off unless the file says
+   * `true` outright, so a missing field, an older file, and a corrupt value
+   * all land on the default rather than switching something on.
+   */
+  voiceCaptions: boolean;
 }
 
 interface ResolvedApiKey {
@@ -162,6 +169,7 @@ function parsePersistedSettings(source: string): PersistedSettings {
     // a credential it has a default to fall back to, and honouring an unknown
     // one would mint sessions the API refuses.
     ...(isRealtimeVoice(voice) ? { voice } : {}),
+    voiceCaptions: record[SETTINGS_FIELD.VOICE_CAPTIONS] === true,
   };
 }
 
@@ -209,6 +217,7 @@ export class SettingsStore {
         (await this.#load()).voice ??
         environmentRealtimeVoice(this.#environment) ??
         REALTIME_DEFAULTS.VOICE,
+      voiceCaptions: (await this.#load()).voiceCaptions,
     };
   }
 
@@ -241,6 +250,27 @@ export class SettingsStore {
       };
       if (voice) next.voice = voice;
       else delete next.voice;
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+    });
+    return { settings: await this.snapshot() };
+  }
+
+  /**
+   * Turns the on-screen caption of Luke's speech on or off. A plain preference
+   * like the menu bar's, and the same shape of change: nothing here needs the
+   * cipher, and there is no way to enter an invalid value, so the write either
+   * lands or throws.
+   */
+  async setVoiceCaptions(enabled: boolean): Promise<SettingsUpdateResult> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (persisted.voiceCaptions === enabled) return;
+      const next: PersistedSettings = {
+        ...persisted,
+        version: SETTINGS_FILE_VERSION,
+        voiceCaptions: enabled,
+      };
       await this.#write(next);
       this.#loading = Promise.resolve(next);
     });
@@ -410,6 +440,7 @@ export class SettingsStore {
       version: SETTINGS_FILE_VERSION,
       apiKeys: {},
       showInMenuBar: true,
+      voiceCaptions: false,
     };
     if (source) {
       try {
