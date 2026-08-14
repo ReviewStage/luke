@@ -264,10 +264,13 @@ export function useFaceHover(face: RefObject<HTMLElement | null>): boolean {
   useEffect(() => {
     const moved = (event: MouseEvent) => {
       const rect = face.current?.getBoundingClientRect();
+      // No box is no reading, not a leave. The meter takes the face's place
+      // for a turn, and a pointer that never moved off the capsule must not be
+      // told it left — the trick would rearm and fire again, unasked, the
+      // moment the face returned. Only a measured miss rearms it.
+      if (rect === undefined || rect.width === 0) return;
       setHovered(
-        rect !== undefined &&
-          rect.width > 0 &&
-          event.clientX >= rect.left - HOVER_REACH_PX &&
+        event.clientX >= rect.left - HOVER_REACH_PX &&
           event.clientX <= rect.right + HOVER_REACH_PX &&
           event.clientY >= rect.top - HOVER_REACH_PX &&
           event.clientY <= rect.bottom + HOVER_REACH_PX,
