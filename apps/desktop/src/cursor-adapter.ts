@@ -373,14 +373,21 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
     if (now - this.#repositoriesAttemptedAt < this.#repositoriesRefreshMs) return;
     this.#repositoriesAttemptedAt = now;
     try {
-      const body = await this.credentialBoundRead(CURSOR_ROUTE.REPOSITORIES, undefined, {
-        timeoutMs: CLOUD_ADAPTER_DEFAULTS.SLOW_REQUEST_TIMEOUT_MS,
-      });
-      this.#repositories = recordsFromPage(body, CURSOR_FIELD.ITEMS)
-        .map((record) => textFromRecord(record, CURSOR_FIELD.URL))
-        .filter(isDefined)
-        .slice(0, maximumObservedWorkspaceProjects);
-      this.#repositoriesRefreshMs = CURSOR_REPOSITORY_REFRESH_MS;
+      // The write rides inside the read's own credential check, so a key
+      // cleared while the answer was in flight finds no gap to be overwritten
+      // in.
+      await this.credentialBoundRead(
+        CURSOR_ROUTE.REPOSITORIES,
+        undefined,
+        { timeoutMs: CLOUD_ADAPTER_DEFAULTS.SLOW_REQUEST_TIMEOUT_MS },
+        (body) => {
+          this.#repositories = recordsFromPage(body, CURSOR_FIELD.ITEMS)
+            .map((record) => textFromRecord(record, CURSOR_FIELD.URL))
+            .filter(isDefined)
+            .slice(0, maximumObservedWorkspaceProjects);
+          this.#repositoriesRefreshMs = CURSOR_REPOSITORY_REFRESH_MS;
+        },
+      );
     } catch {
       this.#repositoriesRefreshMs = CURSOR_REPOSITORY_RETRY_MS;
     }

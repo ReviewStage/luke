@@ -616,13 +616,17 @@ export abstract class CloudSessionAdapter
    * that rides beside the passes and may outlive several — the pass-scoped
    * request would discard exactly the slow answer such a read exists for.
    * Only a credential change discards it: the read refuses to land across
-   * one, so nothing read as one user is ever kept as another's.
+   * one, so nothing read as one user is ever kept as another's. What the
+   * caller does with the answer is handed in rather than returned, so the
+   * check and the write share one synchronous step and a credential cleared
+   * in the gap between them has no gap to land in.
    */
   protected async credentialBoundRead(
     segments: readonly string[],
-    query?: Readonly<Record<string, string>>,
-    options?: Readonly<{ timeoutMs?: number }>,
-  ): Promise<Record<string, unknown>> {
+    query: Readonly<Record<string, string>> | undefined,
+    options: Readonly<{ timeoutMs?: number }> | undefined,
+    apply: (body: Record<string, unknown>) => void,
+  ): Promise<void> {
     const epoch = this.#credentialEpoch;
     const apiKey = this.#credential;
     if (!apiKey) {
@@ -638,7 +642,7 @@ export abstract class CloudSessionAdapter
         `${this.provider.displayName} read outlived its credential`,
       );
     }
-    return body;
+    apply(body);
   }
 
   /**
