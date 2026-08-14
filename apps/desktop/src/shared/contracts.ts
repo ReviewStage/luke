@@ -184,9 +184,10 @@ export interface AppBootstrap {
    */
   realtimeAvailable: boolean;
   /**
-   * The talk key as the user should read it, absent when the system refused to
-   * register one — a shortcut nothing can trigger must not be shown as though
-   * it works.
+   * The accelerator the talk key was registered as, absent when the system
+   * refused to register one — a shortcut nothing can trigger must not be shown
+   * as though it works. Raw rather than labelled for the ask key's reason
+   * below: the renderer draws the keys apart and says the chord whole.
    */
   voiceHotkey?: string;
   /**
@@ -198,8 +199,8 @@ export interface AppBootstrap {
   /**
    * The accelerator that summons the ask field from any app, absent when the
    * system refused every candidate. The raw accelerator rather than a label,
-   * because the renderer needs both spellings: the keycap's ⌥L and aria's
-   * Alt+L.
+   * because the renderer needs both spellings: the keycaps' ⌥ and L, drawn as
+   * the two keys they are, and aria's Alt+L.
    */
   askHotkey?: string;
   /** Whether the panel should show the voice diagnostics block. */
@@ -215,7 +216,7 @@ export interface AppBootstrap {
 /** One validated issue act on its way to the main process. */
 export type IssueActionAsk = Extract<IssueToolAction, { kind: "issue-state" | "issue-comment" }>;
 
-/** The talk key as the panel should describe it. */
+/** The talk key as the panel should describe it, as an accelerator. */
 export interface VoiceHotkeyState {
   hotkey?: string;
   held: boolean;

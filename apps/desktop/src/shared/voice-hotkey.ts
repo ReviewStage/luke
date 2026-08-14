@@ -284,6 +284,22 @@ export function voiceHotkeyLabel(accelerator: string): string {
 }
 
 /**
+ * The same chord as the keys a hand actually presses, in the order macOS
+ * writes them: one entry per key, so a surface can draw a cap each rather than
+ * one chip for the whole chord.
+ *
+ * The label stays what a sentence, a menu item, or a screen reader gets — a
+ * chord read aloud is one thing to press, and only a drawn keyboard needs the
+ * keys apart.
+ */
+export function voiceHotkeyKeycaps(accelerator: string): readonly string[] {
+  const parts = accelerator.split("+");
+  const key = parts[parts.length - 1] ?? "";
+  const modifiers = parts.slice(0, -1).map((modifier) => MODIFIER_SYMBOLS[modifier] ?? modifier);
+  return [...modifiers, key];
+}
+
+/**
  * Why there is no talk key. Each of these is a different thing to go and do
  * about it, so a startup line that names the wrong one sends the reader after
  * a conflict that was never there.

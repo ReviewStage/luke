@@ -756,23 +756,18 @@ html[data-keyboard="true"] button.row-main:focus-visible {
   color: var(--text-tertiary);
 }
 
-/* How the reach is learned: the keycap surfaces while the pointer is over the
-   pill and stands down again once the caret is in or a draft holds the field —
-   whoever it could teach already knows. It keeps its layout box in every
-   state and only fades, so hovering re-shapes nothing, and it takes no
-   pointer: a press on it is a press on the field it names. */
+/* How the reach is learned: the keycaps surface while the pointer is over the
+   pill and stand down again once the caret is in or a draft holds the field —
+   whoever they could teach already knows. They keep their layout box in every
+   state and only fade, so hovering re-shapes nothing, and they take no
+   pointer: a press on them is a press on the field they name.
+
+   A step smaller than a settings row's caps: these ride inside the composer
+   beside its placeholder, where a full-size key would read as a control rather
+   than as the hint it is. */
 .ask-luke-hint {
-  flex: 0 0 auto;
-  padding: 2.5px 6px;
-  border: 1px solid var(--hairline);
-  border-radius: 6px;
-  background: var(--raised);
-  color: var(--text-tertiary);
-  font-family: inherit;
-  font-size: 9px;
-  font-weight: 620;
-  letter-spacing: 0.4px;
-  white-space: nowrap;
+  --keycap-size: 16px;
+  --keycap-text: 9.5px;
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--duration-hover) ease;
