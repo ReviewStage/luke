@@ -98,7 +98,7 @@ One key runs it, and it answers from whatever app is frontmost:
   is the frontmost window, and discards an open turn instead of sending it.
 
 Settings shows which keys you actually have — or an honest absence, if another
-app already owns a chord — under **Keyboard shortcuts**, one row each for the
+app already owns a chord — on its **Keyboard shortcuts** page, one row each for the
 talk, ask, and stop keys. The pencil beside a row records a chord of your own:
 hold `⌃`, `⌥` or `⌘` — `⇧` may join, but not carry a chord alone, since `⇧S`
 is how capitals are typed — and press a letter or Space, as the row itself
@@ -117,7 +117,7 @@ falls back to a press-to-start, press-to-send toggle and Settings says so.
 
 Settings lists the microphone under **Permissions**, with a green check once
 access is granted and a link to System Settings beside it. The voice Luke
-speaks with is chosen under **Preferences**; a change reaches the next
+speaks with is chosen on Settings' **Voice** page; a change reaches the next
 conversation to connect, and one already open keeps the voice it answered
 with.
 
@@ -131,7 +131,7 @@ Luke's face is the interface: it plays its listening motion while you speak and
 its talking motion while it answers, so the capsule says whose turn it is. Colour
 says the same thing again — the face and the meter beside it are green while you
 have the turn and blue while Luke has it — so a glance is enough even with the
-peek closed. Turn on captions under **Preferences** in Settings — they are off
+peek closed. Turn on captions on the **Voice** page in Settings — they are off
 by default — and Luke's words wrap along the bottom of whatever shape is up as he
 says them — capsule, peek, or panel — and leave when the reply does. Nothing is
 kept: the caption is the reply being said, not a record of it.
@@ -230,7 +230,7 @@ sentence (the session's title, provider, repository or branch, and any
 one-line error reason) is synthesized through the same voice service as the
 spoken conversation, so announcements need `OPENAI_API_KEY` and follow the
 same privacy boundary; see [PRIVACY.md](PRIVACY.md). They can be switched off
-in Settings · Preferences ("Announce when a session needs you"); the panel and
+in Settings · Voice ("Announce when a session needs you"); the panel and
 the capsule count show the same states either way.
 
 ## Optional attention review
@@ -251,8 +251,8 @@ control.
 | `LUKE_ATTENTION_MODEL` | `gpt-5.6-luna` | Selects the review model |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Selects the Responses-compatible endpoint |
 | `LUKE_REALTIME_MODEL` | `gpt-realtime-2.1` | Selects the conversation model |
-| `LUKE_REALTIME_VOICE` | `cedar` | Selects the spoken voice until one is chosen in Settings · Preferences |
-| `LUKE_REALTIME_SPEED` | `1` | Selects the speaking pace (`0.75`, `1`, `1.25`, or `1.5`) until one is chosen in Settings · Preferences |
+| `LUKE_REALTIME_VOICE` | `cedar` | Selects the spoken voice until one is chosen in Settings · Voice |
+| `LUKE_REALTIME_SPEED` | `1` | Selects the speaking pace (`0.75`, `1`, `1.25`, or `1.5`) until one is chosen in Settings · Voice |
 
 Changing `OPENAI_BASE_URL` sends attention-review data to that endpoint instead
 of OpenAI. It does not redirect the conversation, which always uses OpenAI's own

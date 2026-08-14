@@ -36,7 +36,7 @@ const GUIDE: AppGuideSnapshot = {
       kind: APP_SETTING_KIND.TOGGLE,
       value: "off",
       adjustable: true,
-      manual: "the panel's Settings tab, under Preferences",
+      manual: "the panel's Settings tab, on its Voice page",
     },
     {
       id: "voice",
@@ -46,7 +46,7 @@ const GUIDE: AppGuideSnapshot = {
       value: "cedar",
       choices: ["cedar", "marin"],
       adjustable: true,
-      manual: "the panel's Settings tab, under Preferences",
+      manual: "the panel's Settings tab, on its Voice page",
     },
     {
       id: "microphone",

@@ -1603,6 +1603,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
  * its timing from the state being entered, which is what keeps the two apart. */
 .session-row,
 .settings-section,
+.settings-header,
 .quit-button,
 .empty-state,
 .panel-header,
@@ -1632,6 +1633,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 
 .app-stage[data-presentation="panel"] .session-row,
 .app-stage[data-presentation="panel"] .settings-section,
+.app-stage[data-presentation="panel"] .settings-header,
 .app-stage[data-presentation="panel"] .quit-button,
 .app-stage[data-presentation="panel"] .empty-state,
 .app-stage[data-presentation="panel"] .panel-header,
@@ -1732,11 +1734,81 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   opacity: 1;
 }
 
+/* Every row stands at the height a label-and-subtext pair needs, whether or
+   not it carries the subtext: a list where the short rows sit shorter reads as
+   cramped rather than as calm. */
 .settings-row {
   display: flex;
+  min-height: 32px;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+/* A page's head: the way back beside the page's own name, above the sections
+   it holds. */
+.settings-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 9px;
+  padding: 0 2px;
+}
+
+.settings-header strong {
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+/* A front-page row that opens a page rather than holding a control: glyph,
+   name, what the page holds, and the chevron that promises somewhere to go.
+   The hover bleeds to the section's padding so the pill reads as the row. */
+.settings-nav {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 10px;
+  margin: 0 -8px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: none;
+  text-align: left;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.settings-nav:hover {
+  background: var(--raised);
+}
+
+.settings-nav .settings-copy {
+  flex: 1;
+}
+
+/* The page's glyph in a small plate, the way macOS marks a settings row. */
+.settings-nav-mark {
+  display: flex;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  background: var(--raised-strong);
+  color: var(--text-secondary);
+}
+
+.settings-nav-mark .settings-icon {
+  width: 13px;
+  height: 13px;
+  opacity: 1;
+}
+
+.settings-chevron {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
 }
 
 .settings-copy {

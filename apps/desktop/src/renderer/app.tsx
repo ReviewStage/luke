@@ -78,6 +78,7 @@ import {
   tallySummary,
 } from "./session-model";
 import { SESSION_OPTIONS_BUTTON_ID, SESSION_OPTIONS_ID } from "./session-parts";
+import { SETTINGS_VIEW, type SettingsView } from "./settings-views";
 import { SpokenNoticeAnnouncer } from "./spoken-notices";
 import {
   outputSilent,
@@ -283,6 +284,7 @@ export function App(): React.JSX.Element {
   const [display, setDisplay] = useState<DisplayDiagnostic>();
   const [presentation, setPresentation] = useState<PanelPresentation>(PANEL_PRESENTATION.CAPSULE);
   const [tab, setTab] = useState<PanelTab>(PANEL_TAB.SESSIONS);
+  const [settingsView, setSettingsView] = useState<SettingsView>(SETTINGS_VIEW.ROOT);
   const [sessionView, setSessionView] = useState<SessionView>(DEFAULT_SESSION_VIEW);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [settings, setSettings] = useState<AppSettings>();
@@ -448,6 +450,12 @@ export function App(): React.JSX.Element {
     // The sheet belongs to the session list, and it is drawn over the list it
     // belongs to, so leaving for Settings has to take it along.
     setOptionsOpen(false);
+    // Arriving at the tab is arriving at its front page: a page left open
+    // behind a tab switch would greet the next visit with a corner of the
+    // settings rather than the settings. The one flow that needs a deeper
+    // page — a credential entry away in the key slot — never switches tabs
+    // on its way back, so its page survives this reset by never meeting it.
+    setSettingsView(SETTINGS_VIEW.ROOT);
   }, []);
 
   // A choice made in the sheet puts the sheet away. It is drawn over the list
@@ -1515,9 +1523,10 @@ export function App(): React.JSX.Element {
         // the shape with it, as it does anywhere else.
         const [firstProvider] = CREDENTIAL_PROVIDER_LIST;
         if (value.startInSlot && value.mode === "expanded" && firstProvider) {
-          // The tab an entry begins on, so pressing the capsule from here lands
-          // where it would have in the flow this is standing in for.
+          // The tab and page an entry begins on, so pressing the capsule from
+          // here lands where it would have in the flow this is standing in for.
           changeTab(PANEL_TAB.SETTINGS);
+          setSettingsView(SETTINGS_VIEW.CONNECTIONS);
           beginEntry(firstProvider.id);
         }
       }
@@ -1802,9 +1811,12 @@ export function App(): React.JSX.Element {
       }
       if (presentation !== PANEL_PRESENTATION.PANEL) return;
       // Otherwise it closes the nearest thing that is open, one layer at a
-      // time: the options sheet, then the settings tab, then the panel itself.
+      // time: the options sheet, then a settings page back to the front page,
+      // then the settings tab, then the panel itself.
       if (optionsOpen) setOptionsOpen(false);
-      else if (tab === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.SESSIONS);
+      else if (tab === PANEL_TAB.SETTINGS && settingsView !== SETTINGS_VIEW.ROOT) {
+        setSettingsView(SETTINGS_VIEW.ROOT);
+      } else if (tab === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.SESSIONS);
       else void changeMode(false);
     };
     window.addEventListener("keydown", handleKey);
@@ -1816,6 +1828,7 @@ export function App(): React.JSX.Element {
     dismissFeedback,
     optionsOpen,
     presentation,
+    settingsView,
     tab,
     voiceStatus,
   ]);
@@ -2020,6 +2033,8 @@ export function App(): React.JSX.Element {
             tab={tab}
             onTabChange={changeTab}
             settings={{
+              view: settingsView,
+              onViewChange: setSettingsView,
               microphoneStatus,
               microphoneError,
               onRequestMicrophone: () => void requestMicrophoneAccess(),

@@ -49,8 +49,11 @@ import { microphoneAccessRow } from "./microphone-access";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import { CloudBadge, ProviderMark } from "./provider-marks";
 import {
+  BackIcon,
   CheckIcon,
+  ChevronIcon,
   CloseIcon,
+  DisplayIcon,
   ExternalIcon,
   KeyboardIcon,
   KeyIcon,
@@ -58,13 +61,28 @@ import {
   PlugIcon,
   PopUpIcon,
   PowerIcon,
-  PreferencesIcon,
   ResetIcon,
   ShieldIcon,
+  SpeakerIcon,
   TrashIcon,
 } from "./settings-icons";
+import {
+  SETTINGS_SUBVIEW_LIST,
+  SETTINGS_VIEW,
+  type SettingsSubview,
+  type SettingsView,
+  settingsNavRowId,
+} from "./settings-views";
 
 export interface SettingsPanelProps {
+  /**
+   * Which settings page is showing: the front page, or one of the pages a
+   * front-page row opens. Held by the app rather than here because Escape
+   * unwinds it and a credential entry has to survive a trip to the key slot
+   * with its page intact.
+   */
+  view: SettingsView;
+  onViewChange: (view: SettingsView) => void;
   microphoneStatus: MicrophoneStatus;
   microphoneError?: string;
   /** Asks the system for access. Using the microphone is the talk key's job. */
@@ -564,7 +582,7 @@ function CredentialsSection({
   // about storage nobody has tried to use yet would be a guess.
   const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
   return (
-    <section className="settings-section" style={{ "--row-index": 3 } as React.CSSProperties}>
+    <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
       <h2>
         <KeyIcon />
         Cloud Agent API keys
@@ -606,7 +624,7 @@ function IntegrationsSection({
 }): React.JSX.Element {
   const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
   return (
-    <section className="settings-section" style={{ "--row-index": 4 } as React.CSSProperties}>
+    <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
       <h2>
         <PlugIcon />
         Integrations
@@ -629,17 +647,108 @@ function IntegrationsSection({
 }
 
 /**
- * The user's own choices about Luke, ahead of the sections about what Luke can
- * reach. The voice he speaks with comes first — it is what Luke *is* to the
- * ear — offered the way macOS offers one value from a small fixed set: a
- * pop-up button whose closed face is drawn here and whose open menu is the
- * system's, which also lets it escape a window sized to the panel rather than
- * being clipped by it. Below it, whether Luke stands in the menu bar and in
- * the Dock as well as at the notch: switches and nothing else, because nothing
- * rides on either answer — Settings and Quit live in this panel, so each is a
- * second door rather than the only one.
+ * What each page is called on the front page and at its own head, with the
+ * line under the name that says what it holds. One table, because the row
+ * that opens a page and the header that leaves it must never disagree about
+ * its name.
  */
-function PreferencesSection({
+const SETTINGS_PAGE: Record<
+  SettingsSubview,
+  { title: string; summary: string; icon: React.JSX.Element }
+> = {
+  [SETTINGS_VIEW.VOICE]: {
+    title: "Voice",
+    summary: "How Luke sounds, captions, and announcements.",
+    icon: <SpeakerIcon />,
+  },
+  [SETTINGS_VIEW.APPEARANCE]: {
+    title: "Appearance",
+    summary: "Menu bar, Dock, displays, and form factor.",
+    icon: <DisplayIcon />,
+  },
+  [SETTINGS_VIEW.SHORTCUTS]: {
+    title: "Keyboard shortcuts",
+    summary: "The talk, ask, and stop keys.",
+    icon: <KeyboardIcon />,
+  },
+  [SETTINGS_VIEW.CONNECTIONS]: {
+    title: "Connections",
+    summary: "Cloud agent API keys and integrations.",
+    icon: <PlugIcon />,
+  },
+};
+
+/**
+ * One front-page row per page: its glyph, its name, what it holds, and the
+ * chevron that promises a page rather than a control. The row is the whole
+ * press target, the way a macOS settings row is.
+ */
+function SettingsNavRow({
+  view,
+  onOpen,
+}: {
+  view: SettingsSubview;
+  onOpen: (view: SettingsSubview) => void;
+}): React.JSX.Element {
+  const page = SETTINGS_PAGE[view];
+  return (
+    <button
+      type="button"
+      id={settingsNavRowId(view)}
+      className="settings-nav"
+      onClick={() => onOpen(view)}
+    >
+      <span className="settings-nav-mark" aria-hidden="true">
+        {page.icon}
+      </span>
+      <span className="settings-copy">
+        <strong>{page.title}</strong>
+        <small>{page.summary}</small>
+      </span>
+      <ChevronIcon />
+    </button>
+  );
+}
+
+/**
+ * A page's head: the way back beside the page's own name. The back button
+ * returns to the front page and nothing else — a page holds no unsaved state
+ * of its own, so leaving one never needs a warning.
+ */
+function SettingsPageHeader({
+  view,
+  onBack,
+  backControl,
+}: {
+  view: SettingsSubview;
+  onBack: () => void;
+  backControl: React.RefObject<HTMLButtonElement | null>;
+}): React.JSX.Element {
+  return (
+    <div className="settings-header" style={{ "--row-index": 0 } as React.CSSProperties}>
+      <button
+        type="button"
+        ref={backControl}
+        className="icon-button"
+        aria-label="Back to Settings"
+        title="Back"
+        onClick={onBack}
+      >
+        <BackIcon />
+      </button>
+      <strong>{SETTINGS_PAGE[view].title}</strong>
+    </div>
+  );
+}
+
+/**
+ * How Luke sounds and what he says unprompted. The voice he speaks with comes
+ * first — it is what Luke *is* to the ear — offered the way macOS offers one
+ * value from a small fixed set: a pop-up button whose closed face is drawn
+ * here and whose open menu is the system's, which also lets it escape a
+ * window sized to the panel rather than being clipped by it.
+ */
+function VoiceSection({
   voice,
   onVoiceChange,
   speed,
@@ -650,14 +759,6 @@ function PreferencesSection({
   onDuckOtherMediaChange,
   notifications,
   onSessionNotificationsChange,
-  shown,
-  onShowInMenuBarChange,
-  dockShown,
-  onShowInDockChange,
-  allDisplays,
-  onShowOnAllDisplaysChange,
-  formFactor,
-  onFormFactorChange,
 }: {
   voice: RealtimeVoice;
   onVoiceChange: (voice: RealtimeVoice) => void;
@@ -669,38 +770,18 @@ function PreferencesSection({
   onDuckOtherMediaChange: (enabled: boolean) => Promise<string | undefined>;
   notifications: boolean;
   onSessionNotificationsChange: (enabled: boolean) => Promise<string | undefined>;
-  shown: boolean;
-  onShowInMenuBarChange: (show: boolean) => Promise<string | undefined>;
-  dockShown: boolean;
-  onShowInDockChange: (show: boolean) => Promise<string | undefined>;
-  allDisplays: boolean;
-  onShowOnAllDisplaysChange: (show: boolean) => Promise<string | undefined>;
-  formFactor: PanelFormFactor;
-  onFormFactorChange: (formFactor: PanelFormFactor) => Promise<string | undefined>;
 }): React.JSX.Element {
-  // The change is a round trip through the settings file, so the switch rests
-  // until the store has answered rather than claiming a state it may not get.
-  const [busy, setBusy] = useState(false);
+  // Each change is a round trip through the settings file, so each switch
+  // rests on its own flag until the store has answered rather than claiming a
+  // state it may not get — one save in flight must not still another switch.
+  // The rejection line is shared: it reports the last answer, whichever row
+  // asked.
   const [rejection, setRejection] = useState<string>();
-  const toggle = async () => {
-    setBusy(true);
-    setRejection(await onShowInMenuBarChange(!shown));
-    setBusy(false);
-  };
-  // Its own rest, because it is its own round trip: one save in flight must
-  // not still the other switch. The rejection line is shared — it reports the
-  // last answer, whichever row asked.
   const [captionsBusy, setCaptionsBusy] = useState(false);
   const toggleCaptions = async () => {
     setCaptionsBusy(true);
     setRejection(await onVoiceCaptionsChange(!captions));
     setCaptionsBusy(false);
-  };
-  const [dockBusy, setDockBusy] = useState(false);
-  const toggleDock = async () => {
-    setDockBusy(true);
-    setRejection(await onShowInDockChange(!dockShown));
-    setDockBusy(false);
   };
   const [duckBusy, setDuckBusy] = useState(false);
   const toggleDucking = async () => {
@@ -714,26 +795,8 @@ function PreferencesSection({
     setRejection(await onSessionNotificationsChange(!notifications));
     setNotificationsBusy(false);
   };
-  // The display and form rows round-trip like the switches above, so each
-  // rests on its own flag and answers on the shared rejection line.
-  const [displayBusy, setDisplayBusy] = useState(false);
-  const toggleAllDisplays = async () => {
-    setDisplayBusy(true);
-    setRejection(await onShowOnAllDisplaysChange(!allDisplays));
-    setDisplayBusy(false);
-  };
-  const [formBusy, setFormBusy] = useState(false);
-  const chooseFormFactor = async (nextFormFactor: PanelFormFactor) => {
-    setFormBusy(true);
-    setRejection(await onFormFactorChange(nextFormFactor));
-    setFormBusy(false);
-  };
   return (
     <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
-      <h2>
-        <PreferencesIcon />
-        Preferences
-      </h2>
       <div className="settings-row">
         <span className="settings-copy">
           <strong>Voice</strong>
@@ -875,6 +938,67 @@ function PreferencesSection({
           <span className="switch-thumb" />
         </button>
       </div>
+      {rejection ? <p className="error-message">{rejection}</p> : null}
+    </section>
+  );
+}
+
+/**
+ * Where Luke stands and how he is drawn: the menu bar and the Dock as second
+ * doors — Settings and Quit live in this panel, so neither is the only one —
+ * every display or just the main one, and the form he takes on a display
+ * without a housing. Switches and one pop-up, because nothing rides on any
+ * answer here.
+ */
+function AppearanceSection({
+  shown,
+  onShowInMenuBarChange,
+  dockShown,
+  onShowInDockChange,
+  allDisplays,
+  onShowOnAllDisplaysChange,
+  formFactor,
+  onFormFactorChange,
+}: {
+  shown: boolean;
+  onShowInMenuBarChange: (show: boolean) => Promise<string | undefined>;
+  dockShown: boolean;
+  onShowInDockChange: (show: boolean) => Promise<string | undefined>;
+  allDisplays: boolean;
+  onShowOnAllDisplaysChange: (show: boolean) => Promise<string | undefined>;
+  formFactor: PanelFormFactor;
+  onFormFactorChange: (formFactor: PanelFormFactor) => Promise<string | undefined>;
+}): React.JSX.Element {
+  // The same resting discipline the Voice page's switches keep: each change is
+  // its own round trip, each control rests on its own flag, and the rejection
+  // line reports the last answer whichever row asked.
+  const [rejection, setRejection] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  const toggle = async () => {
+    setBusy(true);
+    setRejection(await onShowInMenuBarChange(!shown));
+    setBusy(false);
+  };
+  const [dockBusy, setDockBusy] = useState(false);
+  const toggleDock = async () => {
+    setDockBusy(true);
+    setRejection(await onShowInDockChange(!dockShown));
+    setDockBusy(false);
+  };
+  const [displayBusy, setDisplayBusy] = useState(false);
+  const toggleAllDisplays = async () => {
+    setDisplayBusy(true);
+    setRejection(await onShowOnAllDisplaysChange(!allDisplays));
+    setDisplayBusy(false);
+  };
+  const [formBusy, setFormBusy] = useState(false);
+  const chooseFormFactor = async (nextFormFactor: PanelFormFactor) => {
+    setFormBusy(true);
+    setRejection(await onFormFactorChange(nextFormFactor));
+    setFormBusy(false);
+  };
+  return (
+    <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
       <div className="settings-row">
         <span className="settings-copy">
           <strong>Show Luke in the menu bar</strong>
@@ -1150,11 +1274,7 @@ function ShortcutSection({
   onShortcutCapture: (capturing: boolean) => void;
 }): React.JSX.Element {
   return (
-    <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
-      <h2>
-        <KeyboardIcon />
-        Keyboard shortcuts
-      </h2>
+    <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
       <ShortcutRow
         title="Talk to Luke"
         // What the key actually does, which depends on whether it can report
@@ -1194,6 +1314,8 @@ function ShortcutSection({
 }
 
 export function SettingsPanel({
+  view,
+  onViewChange,
   microphoneStatus,
   microphoneError,
   onRequestMicrophone,
@@ -1223,6 +1345,25 @@ export function SettingsPanel({
   onShortcutCapture,
 }: SettingsPanelProps): React.JSX.Element {
   const microphone = microphoneAccessRow({ voiceAvailable, status: microphoneStatus });
+  // Moving between pages moves the keyboard with it: into a page, onto its
+  // back button; back out, onto the row that opened the page just left. Only
+  // while the panel is the shape on screen — a view reset behind a closed
+  // panel is housekeeping, and reaching into an inert stage would find
+  // nothing focusable anyway.
+  const backControl = useRef<HTMLButtonElement | null>(null);
+  const heldView = useRef(view);
+  useEffect(() => {
+    const previous = heldView.current;
+    heldView.current = view;
+    if (previous === view || !panelOpen) return;
+    if (view === SETTINGS_VIEW.ROOT) {
+      if (previous !== SETTINGS_VIEW.ROOT) {
+        document.getElementById(settingsNavRowId(previous))?.focus();
+      }
+      return;
+    }
+    backControl.current?.focus();
+  }, [view, panelOpen]);
   return (
     <div
       className="settings"
@@ -1230,8 +1371,27 @@ export function SettingsPanel({
       id={panelPanelId(PANEL_TAB.SETTINGS)}
       aria-labelledby={panelTabId(PANEL_TAB.SETTINGS)}
     >
-      {settings ? (
-        <PreferencesSection
+      {view !== SETTINGS_VIEW.ROOT ? (
+        <SettingsPageHeader
+          view={view}
+          onBack={() => onViewChange(SETTINGS_VIEW.ROOT)}
+          backControl={backControl}
+        />
+      ) : null}
+
+      {view === SETTINGS_VIEW.ROOT ? (
+        /* The front page: one row per page, then the sections that answer at
+           a glance — what Luke is allowed, the way to the founders, and the
+           way out. */
+        <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
+          {SETTINGS_SUBVIEW_LIST.map((subview) => (
+            <SettingsNavRow key={subview} view={subview} onOpen={onViewChange} />
+          ))}
+        </section>
+      ) : null}
+
+      {view === SETTINGS_VIEW.VOICE && settings ? (
+        <VoiceSection
           voice={settings.voice}
           onVoiceChange={onVoiceChange}
           speed={settings.voiceSpeed}
@@ -1242,6 +1402,11 @@ export function SettingsPanel({
           onDuckOtherMediaChange={onDuckOtherMediaChange}
           notifications={settings.sessionNotifications}
           onSessionNotificationsChange={onSessionNotificationsChange}
+        />
+      ) : null}
+
+      {view === SETTINGS_VIEW.APPEARANCE && settings ? (
+        <AppearanceSection
           shown={settings.showInMenuBar}
           onShowInMenuBarChange={onShowInMenuBarChange}
           dockShown={settings.showInDock}
@@ -1253,82 +1418,87 @@ export function SettingsPanel({
         />
       ) : null}
 
-      <ShortcutSection
-        {...(voiceHotkey ? { voiceHotkey } : {})}
-        voiceHotkeyHeld={voiceHotkeyHeld}
-        chosen={settings?.voiceHotkey !== undefined}
-        onVoiceHotkeyChange={onVoiceHotkeyChange}
-        {...(askHotkey ? { askHotkey } : {})}
-        askChosen={settings?.askHotkey !== undefined}
-        onAskHotkeyChange={onAskHotkeyChange}
-        {...(stopHotkey ? { stopHotkey } : {})}
-        stopChosen={settings?.stopHotkey !== undefined}
-        onStopHotkeyChange={onStopHotkeyChange}
-        onShortcutCapture={onShortcutCapture}
-      />
-
-      {settings ? (
-        <CredentialsSection settings={settings} control={credentials} panelOpen={panelOpen} />
+      {view === SETTINGS_VIEW.SHORTCUTS ? (
+        <ShortcutSection
+          {...(voiceHotkey ? { voiceHotkey } : {})}
+          voiceHotkeyHeld={voiceHotkeyHeld}
+          chosen={settings?.voiceHotkey !== undefined}
+          onVoiceHotkeyChange={onVoiceHotkeyChange}
+          {...(askHotkey ? { askHotkey } : {})}
+          askChosen={settings?.askHotkey !== undefined}
+          onAskHotkeyChange={onAskHotkeyChange}
+          {...(stopHotkey ? { stopHotkey } : {})}
+          stopChosen={settings?.stopHotkey !== undefined}
+          onStopHotkeyChange={onStopHotkeyChange}
+          onShortcutCapture={onShortcutCapture}
+        />
       ) : null}
 
-      {settings ? (
-        <IntegrationsSection settings={settings} control={credentials} panelOpen={panelOpen} />
+      {view === SETTINGS_VIEW.CONNECTIONS && settings ? (
+        <>
+          <CredentialsSection settings={settings} control={credentials} panelOpen={panelOpen} />
+          <IntegrationsSection settings={settings} control={credentials} panelOpen={panelOpen} />
+        </>
       ) : null}
 
-      <section className="settings-section" style={{ "--row-index": 5 } as React.CSSProperties}>
-        <h2>
-          <ShieldIcon />
-          Permissions
-        </h2>
-        {/* Access, not use. The talk key is what opens the microphone, so a
+      {view !== SETTINGS_VIEW.ROOT ? null : (
+        <>
+          <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
+            <h2>
+              <ShieldIcon />
+              Permissions
+            </h2>
+            {/* Access, not use. The talk key is what opens the microphone, so a
             button here could only ever repeat what the key already does — the
             line answers the one question it can: whether Luke is allowed. */}
-        {/* Named and marked like a provider, because it is the same question in
+            {/* Named and marked like a provider, because it is the same question in
             the same words: what Luke has been let at, and whether it is on.
             Access, not use — the talk key is what opens the microphone, so a
             control here could only repeat what the key already does. */}
-        <div className="settings-row">
-          <span className="settings-copy">
-            <span className="settings-name">
-              <strong>Microphone</strong>
-              {microphone.ready ? <CheckIcon /> : null}
-            </span>
-            <small>{microphone.detail}</small>
-          </span>
-          <span className="settings-actions">
-            {microphone.offerSystemSettings ? (
-              <button
-                type="button"
-                className="icon-button"
-                aria-label="Open Privacy & Security in System Settings"
-                /* The ellipsis is the promise that it opens somewhere else. */
-                title="System Settings…"
-                onClick={onOpenMicrophoneSettings}
-              >
-                <ExternalIcon />
-              </button>
-            ) : null}
-            {microphone.offerAccess ? (
-              <button type="button" className="quiet-button" onClick={onRequestMicrophone}>
-                Allow
-              </button>
-            ) : null}
-          </span>
-        </div>
-        {microphoneError ? <p className="error-message">{microphoneError}</p> : null}
-      </section>
+            <div className="settings-row">
+              <span className="settings-copy">
+                <span className="settings-name">
+                  <strong>Microphone</strong>
+                  {microphone.ready ? <CheckIcon /> : null}
+                </span>
+                <small>{microphone.detail}</small>
+              </span>
+              <span className="settings-actions">
+                {microphone.offerSystemSettings ? (
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label="Open Privacy & Security in System Settings"
+                    /* The ellipsis is the promise that it opens somewhere else. */
+                    title="System Settings…"
+                    onClick={onOpenMicrophoneSettings}
+                  >
+                    <ExternalIcon />
+                  </button>
+                ) : null}
+                {microphone.offerAccess ? (
+                  <button type="button" className="quiet-button" onClick={onRequestMicrophone}>
+                    Allow
+                  </button>
+                ) : null}
+              </span>
+            </div>
+            {microphoneError ? <p className="error-message">{microphoneError}</p> : null}
+          </section>
 
-      <FeedbackSection control={feedback} />
+          <FeedbackSection control={feedback} />
 
-      <button
-        type="button"
-        className="quit-button"
-        style={{ "--row-index": 6 } as React.CSSProperties}
-        onClick={onQuit}
-      >
-        <PowerIcon />
-        Quit Luke
-      </button>
+          <button
+            type="button"
+            className="quit-button"
+            style={{ "--row-index": 4 } as React.CSSProperties}
+            onClick={onQuit}
+          >
+            <PowerIcon />
+            Quit Luke
+          </button>
+        </>
+      )}
     </div>
   );
 }

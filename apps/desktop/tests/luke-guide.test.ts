@@ -121,10 +121,21 @@ test("the guide describes every spoken-adjustable setting with its current value
   );
 
   // Every entry says where the same change is made by hand, because guiding
-  // the developer there is half of what the guide is for.
+  // the developer there is half of what the guide is for — and the Settings
+  // tab opens into pages, so a path that stops at the tab strands them on its
+  // front page.
   for (const setting of buildLukeGuide(guideInput()).settings) {
     assert.ok(setting.manual.length > 0, `${setting.id} has a by-hand path`);
+    assert.match(setting.manual, /Settings tab, on its \w[\w ]* page/);
   }
+
+  // The pages are named by what they hold: the voice rows live on the Voice
+  // page and the standing rows on Appearance, so the words Luke says match
+  // the row the developer will find.
+  assert.match(guideSetting(APP_SETTING_ID.VOICE, guideInput()).manual, /Voice page/);
+  assert.match(guideSetting(APP_SETTING_ID.VOICE_CAPTIONS, guideInput()).manual, /Voice page/);
+  assert.match(guideSetting(APP_SETTING_ID.SHOW_IN_DOCK, guideInput()).manual, /Appearance page/);
+  assert.match(guideSetting(APP_SETTING_ID.FORM_FACTOR, guideInput()).manual, /Appearance page/);
 });
 
 test("the facts say what is connected, never what connects it", () => {

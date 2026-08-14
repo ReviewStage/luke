@@ -112,6 +112,46 @@ export function PlugIcon(): React.JSX.Element {
   );
 }
 
+/** Points into a page: the row it sits on opens one. */
+export function ChevronIcon(): React.JSX.Element {
+  return (
+    <Glyph className="settings-chevron">
+      <path d="m9.4 5.8 6.2 6.2-6.2 6.2" />
+    </Glyph>
+  );
+}
+
+/** Points back out of one: the control that returns to the front page. */
+export function BackIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="m14.6 5.8-6.2 6.2 6.2 6.2" />
+    </Glyph>
+  );
+}
+
+/** Sound leaving the machine: everything about how Luke is heard. */
+export function SpeakerIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <path d="M4 9.4h2.9L11.6 5v14L6.9 14.6H4Z" />
+      <path d="M14.8 9.3a4.1 4.1 0 0 1 0 5.4" />
+      <path d="M17.6 6.9a7.6 7.6 0 0 1 0 10.2" />
+    </Glyph>
+  );
+}
+
+/** The display Luke stands on: everything about where and how he is drawn. */
+export function DisplayIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <rect x="3.2" y="4.4" width="17.6" height="12.2" rx="2" />
+      <path d="M9.4 20.2h5.2" />
+      <path d="M12 16.6v3.6" />
+    </Glyph>
+  );
+}
+
 export function KeyboardIcon(): React.JSX.Element {
   return (
     <Glyph>
