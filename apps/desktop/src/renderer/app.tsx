@@ -1310,7 +1310,8 @@ export function App(): React.JSX.Element {
    * The spoken asks about Luke himself. A settings change goes through the
    * same bridge calls the settings rows use, and the snapshot that comes back
    * redraws the panel's switches; showing the panel is the capsule's press
-   * with a tab, and optionally a narrowing, chosen out loud; opening the
+   * with a tab — or, already open, that tab's own press — and optionally a
+   * narrowing, chosen out loud; opening the
    * composer is the tray item's press, run through the tray's own path. All
    * were validated against their fixed vocabularies before they arrive here,
    * so this only performs and reports.

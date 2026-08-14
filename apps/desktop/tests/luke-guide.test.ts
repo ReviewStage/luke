@@ -187,6 +187,20 @@ test("the facts follow the talk key, the microphone, and the storage the system 
   assert.match(JSON.stringify(unprotected.facts), /no encrypted credential storage/);
 });
 
+test("the panel fact says the tabs answer an ask as well as a press", () => {
+  const fact = buildLukeGuide(guideInput()).facts.find(
+    (candidate) => candidate.label === "The panel",
+  );
+
+  assert.ok(fact);
+  // Switching between Sessions and Settings by asking Luke is a capability,
+  // and a capability the guide does not describe is one Luke will deny.
+  assert.match(fact.detail, /switched by pressing one or by asking Luke/);
+  assert.match(fact.detail, /the panel opens on that tab/);
+  assert.match(fact.detail, /Sessions lists/);
+  assert.match(fact.detail, /Settings holds/);
+});
+
 test("the feedback fact says what a spoken open may do, and that sending stays by hand", () => {
   const fact = buildLukeGuide(guideInput()).facts.find(
     (candidate) => candidate.label === "Feedback and prompts",

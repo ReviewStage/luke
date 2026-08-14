@@ -301,7 +301,9 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "The panel",
       detail:
-        "Two tabs. Sessions lists every observed session with its state, narrowable to all, local, " +
+        "Two tabs, switched by pressing one or by asking Luke — out loud or typed — to show it; " +
+        "asked while the panel is closed, the panel opens on that tab. " +
+        "Sessions lists every observed session with its state, narrowable to all, local, " +
         "cloud, or one provider, and orderable by urgency (what needs the developer first) or " +
         "recency (what moved last first); a row can be opened, messaged, or controlled where its " +
         "provider allows. Settings holds the preferences, the talk and ask keys, the cloud " +

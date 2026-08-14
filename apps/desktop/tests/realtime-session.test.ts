@@ -1962,6 +1962,26 @@ test("a spoken panel ask is validated against the roster and carried", async () 
   assert.deepEqual(carried, [
     { kind: "panel", tab: "sessions", filter: "claude-code", sort: "recency" },
   ]);
+
+  // Switching to the settings tab is the same ask carried with a tab, not a
+  // different act — the carrier presses the tab an open panel already shows.
+  armDeveloperTurn(context);
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "show_panel",
+          call_id: "call-guide-4",
+          arguments: '{"tab":"settings"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(carried.at(-1), { kind: "panel", tab: "settings" });
 });
 
 test("a spoken composer open is validated against the fixed kinds and carried, never sent", async () => {
