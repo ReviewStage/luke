@@ -1,3 +1,4 @@
+import { ERRAND_TARGET, errandTargetProps } from "./luke-errand";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import { ProviderMark } from "./provider-marks";
 import {
@@ -146,6 +147,9 @@ export function SessionOptionsButton({
       type="button"
       id={SESSION_OPTIONS_BUTTON_ID}
       className="options-button"
+      // The button already says how the list is being shown, so it is where a
+      // narrowing or a re-ordering Luke made himself is signed.
+      {...errandTargetProps(ERRAND_TARGET.LIST_OPTIONS)}
       data-active={String(open)}
       data-narrowed={String(narrowed !== undefined)}
       aria-expanded={open}

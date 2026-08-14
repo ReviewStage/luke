@@ -19,6 +19,9 @@ export const PANEL_PRESENTATION = {
 
 export type PanelPresentation = (typeof PANEL_PRESENTATION)[keyof typeof PANEL_PRESENTATION];
 
+/** How an element says which region it is, for whoever is asking. */
+export const HIT_REGION_ATTRIBUTE = "data-hit-region";
+
 /** What takes the pointer, named so the test can tell one from another. */
 export const HIT_REGION = {
   /** The black shape itself, whatever size it is drawn at. */

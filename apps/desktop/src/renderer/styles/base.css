@@ -995,6 +995,73 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transform-origin: center;
 }
 
+/* Luke's errand ---------------------------------------------------------- */
+
+/* Luke crossing his own panel to sign a control he was asked to move, and the
+   ring he leaves on it when he gets there. Both are always mounted and both
+   rest invisible: an element that arrived with the flight would have no place
+   to set off from, and every frame of it is `transform` and `opacity` alone.
+
+   This is not a second Luke. The strip's face is held invisible for exactly as
+   long as the flight lasts, and this sets off from that face's own measured
+   box wearing the colour the face is wearing — so the same face is simply
+   somewhere else for a second.
+
+   Above everything, because the flight passes over the panel rather than
+   through it, and past every pointer: the strip's one button and the control
+   being landed on both keep every press they ever had. There is no reduced
+   motion rule to write — the flight is timed off the tokens in JavaScript, so
+   zeroed tokens are simply no flight. */
+.luke-errand-mark,
+.luke-errand-ring {
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  left: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* The size arrives from the flight, measured off the face this stands in for
+   rather than restated here. The ink is the resting one, for the stretches
+   with no turn to report — the two rules below are what answer a turn. */
+.luke-errand-mark {
+  display: flex;
+  color: var(--text-primary);
+}
+
+/* The drawing states its own ink, and would otherwise win over the wrapper's
+   — the artwork paints in `currentColor`, resolved against the svg rather than
+   against whatever holds it. Inside a flight it defers, so the wrapper below is
+   the one place the errand's colour is decided. */
+.luke-errand-mark .luke-face {
+  width: 100%;
+  height: 100%;
+  color: inherit;
+}
+
+/* Whose turn it is, on him as on the face he stands in for: blue while Luke is
+   talking, green while he is listening. Taken from the same `data-voice` the
+   face's own two rules are, rather than measured off the face and carried, so
+   the two cannot drift apart mid-flight — which is what the handover at the
+   strip depends on, since a colour fixed at launch would swap for a different
+   one the moment the face came back underneath him. */
+.app-stage[data-voice="luke"] .luke-errand-mark {
+  color: var(--voice-luke);
+}
+
+.app-stage[data-voice="developer"] .luke-errand-mark {
+  color: var(--voice-developer);
+}
+
+/* The control's own outline for a moment, so what was touched is unmistakable
+   without the control itself being restyled to say so. Its box and its corners
+   are measured off the control; only the strength and the spread are decided
+   here. */
+.luke-errand-ring {
+  border: 1.5px solid color-mix(in srgb, var(--text-primary) 62%, transparent);
+}
+
 /* Nothing to blend into on a display without a housing, so the shape stops
    pretending: it lifts off the edge and closes into a free-floating pill. The
    lift is `BUBBLE_LIFT` in packages/sidecar-core/src/geometry.ts — the two
@@ -1530,10 +1597,17 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transition: transform var(--duration-fast) var(--spring-fast);
 }
 
+/* The radius is the thumb's, not a shape of its own: the tab draws no
+   background, so this changes nothing about how it looks and everything about
+   how it is ringed. A focus ring follows the border radius of the box it is
+   drawn around, so a control that is drawn round by something behind it — and
+   declares no radius itself — takes a ring with square corners around a shape
+   that has none. */
 .tab {
   position: relative;
   flex: 1;
   padding: 6px 0;
+  border-radius: 8px;
   background: none;
   color: var(--text-secondary);
   font-size: 10.5px;
@@ -2285,11 +2359,16 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .link-button {
   display: inline;
   padding: 0;
+  /* Rounded for the ring's sake rather than its own, the way the tab is: with
+     no radius the ring is a hard rectangle around a run of text. The offset is
+     what keeps it off the glyphs, since the box hugs them. */
   border: 0;
+  border-radius: 5px;
   background: none;
   color: var(--state-working);
   font-size: inherit;
   font-weight: 640;
+  outline-offset: 3px;
   white-space: nowrap;
   transition: color var(--duration-hover) ease;
 }

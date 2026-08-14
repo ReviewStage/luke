@@ -1,9 +1,14 @@
-export const PANEL_TAB = {
-  SESSIONS: "sessions",
-  SETTINGS: "settings",
-} as const;
+import { APP_PANEL_TAB, type AppPanelTab } from "@sidecar/core";
+import { errandTargetProps, tabErrandTarget } from "./luke-errand";
 
-export type PanelTab = (typeof PANEL_TAB)[keyof typeof PANEL_TAB];
+/**
+ * The panel's two tabs, aliased from the core's set rather than declared here
+ * — the same rule the sort follows: a spoken ask names a tab in the same words
+ * this bar does, and the two must not drift into separate vocabularies.
+ */
+export const PANEL_TAB = APP_PANEL_TAB;
+
+export type PanelTab = AppPanelTab;
 
 interface PanelTabDescriptor {
   id: PanelTab;
@@ -52,6 +57,9 @@ export function TabBar({
           key={candidate.id}
           id={panelTabId(candidate.id)}
           className="tab"
+          // Where an errand lands when Luke was the one who brought this tab
+          // forward, so the press he made on your behalf is drawn as a press.
+          {...errandTargetProps(tabErrandTarget(candidate.id))}
           data-active={String(candidate.id === tab)}
           aria-selected={candidate.id === tab}
           aria-controls={panelPanelId(candidate.id)}

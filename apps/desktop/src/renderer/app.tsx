@@ -1,5 +1,4 @@
 import {
-  APP_PANEL_TAB,
   type AppGuideSnapshot,
   ATTENTION_SPEECH_SOURCE,
   EMPTY_APP_GUIDE,
@@ -58,11 +57,20 @@ import {
 import { encodeFeedbackImage } from "./feedback-images";
 import { FeedbackSlot } from "./feedback-slot";
 import { KeySlot } from "./key-slot";
-import { applySpokenSetting, buildLukeGuide } from "./luke-guide";
+import {
+  ERRAND_WAIT,
+  type Errand,
+  type ErrandTarget,
+  type ErrandWait,
+  errandTargets,
+  LukeErrand,
+} from "./luke-errand";
+import { applySpokenSetting, buildLukeGuide, isAppSettingId } from "./luke-guide";
 import { NotchWings } from "./notch-wings";
 import { PanelBody, type SessionWriteHandlers } from "./panel-body";
 import {
   HIT_REGION,
+  HIT_REGION_ATTRIBUTE,
   LEAVE_DELAY_MS,
   PANEL_PRESENTATION,
   type PanelPresentation,
@@ -84,7 +92,7 @@ import {
   tallySummary,
 } from "./session-model";
 import { SESSION_OPTIONS_BUTTON_ID, SESSION_OPTIONS_ID } from "./session-parts";
-import { SETTINGS_VIEW, type SettingsView } from "./settings-views";
+import { SETTING_PAGE, SETTINGS_VIEW, type SettingsView } from "./settings-views";
 import { SpokenNoticeAnnouncer } from "./spoken-notices";
 import {
   outputSilent,
@@ -186,8 +194,10 @@ function usePointerPassthrough(
       // forwarded move can carry. Comparing that against null read as "still
       // inside", so leaving by the edge left the panel open until some other
       // event closed it.
-      const region = document.elementFromPoint(point.x, point.y)?.closest("[data-hit-region]");
-      const kind = region?.getAttribute("data-hit-region");
+      const region = document
+        .elementFromPoint(point.x, point.y)
+        ?.closest(`[${HIT_REGION_ATTRIBUTE}]`);
+      const kind = region?.getAttribute(HIT_REGION_ATTRIBUTE);
       // The shape takes the pointer wherever it is drawn, which is the whole
       // rule: the capsule strip and the panel's body are what sit on top of it
       // and answer first. The surface is what answers in between — the panel's
@@ -297,6 +307,7 @@ export function App(): React.JSX.Element {
   const [microphoneStatus, setMicrophoneStatus] = useState<MicrophoneStatus>("not-determined");
   const [microphoneError, setMicrophoneError] = useState<string>();
   const [analyser, setAnalyser] = useState<AnalyserNode>();
+  const [errand, setErrand] = useState<Errand>();
   const [entry, setEntry] = useState<CredentialEntry>();
   const [feedback, setFeedback] = useState<FeedbackEntry>();
   const [feedbackNotice, setFeedbackNotice] = useState<string>();
@@ -455,6 +466,68 @@ export function App(): React.JSX.Element {
    * newer truth, and the bootstrap's older snapshot must not clobber it.
    */
   const settingsPushed = useRef(false);
+  /**
+   * How many errands Luke has run. Carried with each one so that asking for
+   * the same control twice flies twice, exactly as a repeated face gesture is
+   * replayed by counting its plays.
+   */
+  const errands = useRef(0);
+
+  /**
+   * What the panel is not drawing yet, because Luke has not reached it.
+   *
+   * The change itself is made the moment it is asked for — nothing here delays
+   * a write, and the spoken answer reports what actually happened. What waits
+   * is only the drawing of it: a switch that has already flipped, or a list
+   * already narrowed, by the time Luke arrives makes the act look like
+   * something he flew over to inspect, and the whole point of the errand is
+   * that he is the one doing it. Both kinds wait, because both are the same
+   * mistake — the settings snapshot the store answered with, and the narrowing
+   * or re-ordering a spoken ask chose for the list.
+   *
+   * Refs rather than state: the release runs from a callback that has to stay
+   * stable across the whole flight it is timing, and an errand carries one of
+   * these or the other, never both.
+   */
+  const heldSettings = useRef<AppSettings | undefined>(undefined);
+  const heldView = useRef<Partial<SessionView> | undefined>(undefined);
+  const releaseErrandChange = useCallback(() => {
+    const settings = heldSettings.current;
+    const view = heldView.current;
+    heldSettings.current = undefined;
+    heldView.current = undefined;
+    if (settings !== undefined) setSettings(settings);
+    // Folded into whatever the view is at the moment it lands rather than the
+    // moment it was chosen: the list corrects its own filter during render
+    // when one empties, and a snapshot taken at the ask would undo that.
+    if (view !== undefined) setSessionView((current) => ({ ...current, ...view }));
+  }, []);
+
+  /**
+   * Whether the panel on screen is one an errand stood up. Only then is it the
+   * errand's to put away again — a panel that was already open is somewhere
+   * the developer had gone themselves, and closing it would be taking it from
+   * them for having spoken.
+   */
+  const errandOpenedPanel = useRef(false);
+
+  /**
+   * Sends Luke to sign what he just did, if there is anywhere to sign it, and
+   * answers whether he actually went.
+   *
+   * Only the panel can hold a signature, so both callers stand it up first and
+   * this is the backstop rather than the decision: an act whose panel never
+   * opened, or that named a control this build does not draw, flies nowhere
+   * and the spoken answer reports it the way it always did. A caller holding
+   * something for the flight reads the answer and lets go itself.
+   */
+  const runErrand = useCallback((targets: readonly ErrandTarget[], wait: ErrandWait): boolean => {
+    if (targets.length === 0) return false;
+    if (presentationRef.current !== PANEL_PRESENTATION.PANEL) return false;
+    errands.current += 1;
+    setErrand({ targets, wait, run: errands.current });
+    return true;
+  }, []);
 
   const changeTab = useCallback((next: PanelTab) => {
     tabRef.current = next;
@@ -1480,26 +1553,111 @@ export function App(): React.JSX.Element {
   );
 
   /**
+   * The panel standing back down once an errand it stood up is over. The same
+   * rule a saved key follows, for the same reason: the shape was brought
+   * forward to show an answer, the answer has been shown, and nothing else
+   * would ever ask it to close — the pointer is not on it, because the
+   * developer was talking rather than reaching for it.
+   *
+   * Everything that holds a panel open against the pointer holds it open
+   * against this too. A key half-typed and an ask half-written are both things
+   * someone is in the middle of, and a panel someone's hands have arrived in
+   * is theirs now rather than the errand's.
+   */
+  const standDownAfterErrand = useCallback(() => {
+    if (!errandOpenedPanel.current) return;
+    errandOpenedPanel.current = false;
+    if (pointerInside.current || entryIsDrawn() || askEngaged.current) return;
+    cancelHoverTransition();
+    hoverTimer.current = window.setTimeout(() => {
+      hoverTimer.current = undefined;
+      if (presentationRef.current === PANEL_PRESENTATION.PANEL) void changeMode(false);
+    }, SETTLE_DELAY_MS);
+  }, [cancelHoverTransition, changeMode, entryIsDrawn]);
+
+  /**
    * The spoken asks about Luke himself. A settings change goes through the
    * same bridge calls the settings rows use, and the snapshot that comes back
    * redraws the panel's switches; showing the panel is the capsule's press
    * with a tab — or, already open, that tab's own press — and optionally a
-   * narrowing, chosen out loud; opening the
-   * composer is the tray item's press, run through the tray's own path. All
-   * were validated against their fixed vocabularies before they arrive here,
-   * so this only performs and reports.
+   * narrowing, chosen out loud; opening the composer is the tray item's press,
+   * run through the tray's own path. All were validated against their fixed
+   * vocabularies before they arrive here, so this only performs and reports.
+   *
+   * A settings change and a change of view are also the two acts nobody
+   * watched anyone make, so both end by showing the control that moved and
+   * sending Luke to it. A settings change stands the panel up on the Settings
+   * tab to do it: the switch is the whole report, and a switch flipped behind
+   * a closed panel is a change the developer is only ever told about. The
+   * errand is drawing over what already happened — it runs after the change,
+   * it carries nothing to the store, and a refusal takes both the showing and
+   * the flight with it. The composer is neither: it is a shape of its own
+   * standing where the panel was, so there is nothing for a mark to land on.
    */
   const carryAppAction = useCallback<AppActionCarrier>(
     async (action) => {
       if (action.kind === "setting") {
-        // The settings as this window holds them ride along so a spoken model
-        // or effort change composes against the selection actually stored.
-        return applySpokenSetting(
+        // The store's answer is caught rather than drawn: the switch is what
+        // Luke is on his way to move, so it waits for him to reach it. Every
+        // path out of here releases it, and the outcome the conversation is
+        // told is the store's own either way — what is delayed is the drawing,
+        // never the change or the report of it. The settings as this window
+        // holds them ride along so a spoken model or effort change composes
+        // against the selection actually stored.
+        const outcome = await applySpokenSetting(
           window.sidecar,
           action,
-          setSettings,
+          (next) => {
+            heldSettings.current = next;
+          },
           settings ?? bootstrap?.settings,
         );
+        // Nothing to show and nothing to sign: a refused change must not stand
+        // the panel up in front of a switch that did not move.
+        if (outcome.status !== "changed") {
+          releaseErrandChange();
+          return outcome;
+        }
+        const opening = presentationRef.current !== PANEL_PRESENTATION.PANEL;
+        // The guide's ids travel as plain text, so one that names no setting
+        // of Luke's names no page either — and nothing will fly to it.
+        const page = isAppSettingId(action.setting.id)
+          ? SETTING_PAGE[action.setting.id]
+          : undefined;
+        // What the flight has to wait out. A page already drawn under an open
+        // panel costs nothing; anything else is a page of content arriving,
+        // and a page turned under an open panel takes the leaving one's exit
+        // first. Read before any of it is asked for, because all three of
+        // these are about to stop being true.
+        const wait =
+          opening || page === undefined
+            ? ERRAND_WAIT.CONTENT
+            : tabRef.current === PANEL_TAB.SETTINGS && settingsView === page
+              ? ERRAND_WAIT.AT_ONCE
+              : ERRAND_WAIT.PAGE;
+        try {
+          // The control has to be drawn to be flown to, and a settings page
+          // that is not open is not drawn at all — so the tab comes forward
+          // and then the page the setting lives on, in that order, because
+          // arriving at the tab is arriving at its front page. This is the
+          // same move a credential entry returning from the key slot makes.
+          changeTab(PANEL_TAB.SETTINGS);
+          if (page !== undefined) setSettingsView(page);
+          await changeMode(true);
+          if (runErrand(errandTargets(action), wait)) {
+            // Only a panel this errand stood up is the errand's to put away.
+            errandOpenedPanel.current = opening;
+          } else {
+            releaseErrandChange();
+          }
+        } catch {
+          // Showing the change is not what was asked for — making it is, and it
+          // is already made. A window that refused to come forward must not be
+          // reported back as a setting that refused to change, and the switch
+          // must be drawn whether or not anyone was shown it moving.
+          releaseErrandChange();
+        }
+        return outcome;
       }
       if (action.kind === "feedback") {
         // The main process expands the window and sends the composer's
@@ -1544,21 +1702,36 @@ export function App(): React.JSX.Element {
                 }),
         };
       }
-      changeTab(action.tab === APP_PANEL_TAB.SETTINGS ? PANEL_TAB.SETTINGS : PANEL_TAB.SESSIONS);
+      // Whether this ask is what opens the panel, read before it does: an
+      // errand into a shape still growing has to trail the whole opening,
+      // and one into a panel already up does not.
+      const opening = presentationRef.current !== PANEL_PRESENTATION.PANEL;
+      changeTab(action.tab);
       const spoken = action.filter ? sessionFilterFromSpoken(action.filter) : undefined;
       // An agent this build never registered cannot narrow the list, and Luke
       // must not claim it did. The list still has to match the sentence that
       // says every session is shown, so an unmappable ask widens the view to
       // All rather than leaving whatever narrowing was already in force.
       const filter = action.filter ? (spoken ?? SESSION_FILTER.ALL) : undefined;
+      // Caught rather than applied, on the settings switch's terms: the
+      // narrowing is what Luke is on his way to the options button to do, and
+      // a list that has already re-sorted itself by the time he gets there
+      // makes the flight a report rather than the act.
       if (filter || action.sort) {
-        setSessionView((view) => ({
-          ...view,
+        heldView.current = {
           ...(filter ? { filter } : {}),
           ...(action.sort ? { sort: action.sort } : {}),
-        }));
+        };
       }
       await changeMode(true);
+      // Nothing flew, so nothing is coming to release it. The panel itself is
+      // what was asked for and it is already up, so the list must show what
+      // the answer is about to claim it shows.
+      // The tab bar and the options button are outside the settings pages, so
+      // a page reset behind this tab switch is nothing they wait for.
+      if (!runErrand(errandTargets(action), opening ? ERRAND_WAIT.CONTENT : ERRAND_WAIT.AT_ONCE)) {
+        releaseErrandChange();
+      }
       return {
         status: "shown",
         tab: action.tab,
@@ -1569,7 +1742,7 @@ export function App(): React.JSX.Element {
         ...(action.sort ? { sort: action.sort } : {}),
       };
     },
-    [changeMode, changeTab, settings, bootstrap],
+    [changeMode, changeTab, settings, settingsView, bootstrap, releaseErrandChange, runErrand],
   );
   carryAppActionRef.current = carryAppAction;
 
@@ -1700,6 +1873,10 @@ export function App(): React.JSX.Element {
     // state the store no longer holds.
     const removeSettings = window.sidecar.onSettingsChanged((pushed) => {
       settingsPushed.current = true;
+      // A push is newer than anything an errand is still carrying, so it takes
+      // the hold with it: released afterwards, a snapshot caught before this
+      // arrived would draw the store as it was rather than as it is.
+      heldSettings.current = undefined;
       setSettings(pushed);
     });
     const removeSessions = window.sidecar.onSessionsChanged(setSessions);
@@ -2230,6 +2407,18 @@ export function App(): React.JSX.Element {
         voiceOpening={talkOpening}
         presentation={presentation}
         housingWidth={display.notch.housingWidth}
+      />
+
+      {/* Luke crossing his own panel to sign a control he moved. Drawn over
+          everything, because it passes over the panel it is crossing, and
+          answering no pointer at all — the strip's one button and the control
+          it lands on both keep every press. The tap is what lets the switch
+          be seen to move, and the way home is what lets a panel stood up for
+          the errand stand back down. */}
+      <LukeErrand
+        {...(errand ? { errand } : {})}
+        onLanded={releaseErrandChange}
+        onReturned={standDownAfterErrand}
       />
 
       {/* Luke's words while he says them: one element in every state, under

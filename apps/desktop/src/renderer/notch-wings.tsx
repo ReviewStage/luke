@@ -1,5 +1,6 @@
 import { CAPSULE_SIDE_WIDTH, PANEL_WIDTH, PEEK_SIDE_GROWTH } from "@sidecar/core";
 import { useCallback, useMemo, useRef, useState } from "react";
+import { errandOriginProps } from "./luke-errand";
 import { LukeFace } from "./luke-face";
 import {
   faceYieldsToMeter,
@@ -221,7 +222,13 @@ export function NotchWings({
               hover is measured against, so it holds still across those
               remounts — and hovering it is a moment the face reacts to. */}
           {yieldToMeter ? null : (
-            <span className="wing-face" ref={faceElement}>
+            /* The wrapper is also where an errand sets off from, for the same
+               reason the hover is measured against it: it holds still while a
+               motion transforms layers inside the drawing, so a mark peeling
+               off it starts exactly where the face is drawn. It is not
+               rendered at all while the meter has this place, which is how an
+               errand knows there is no face to leave from. */
+            <span className="wing-face" ref={faceElement} {...errandOriginProps()}>
               <LukeFace key={face.play} motion={face.motion} repeat={face.repeat} />
             </span>
           )}
