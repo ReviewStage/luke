@@ -297,19 +297,13 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
     request: CloudRequest,
     now: number,
   ): Promise<readonly ProviderSessionObservation[]> {
-    // The repository list rides the pass but not its cadence: Cursor's own
-    // limits on that endpoint are far below the observation interval, so it is
-    // re-read on its own clock and a failure costs the offer, never the pass.
-    if (now - this.#repositoriesAttemptedAt >= this.#repositoriesRefreshMs) {
-      this.#repositoriesAttemptedAt = now;
-      const repositories = await this.tolerateItemFailure(() => this.#listRepositories(request));
-      if (repositories) {
-        this.#repositories = repositories;
-        this.#repositoriesRefreshMs = CURSOR_REPOSITORY_REFRESH_MS;
-      } else {
-        this.#repositoriesRefreshMs = CURSOR_REPOSITORY_RETRY_MS;
-      }
-    }
+    // The repository offer rides beside the pass, never inside it: Cursor
+    // documents this read as slow for a large organisation, so it runs on its
+    // own clock with its own wide deadline, the sessions never wait on it, and
+    // an offer that lands after the pass is announced by the next one. The
+    // pass guard inside `request` keeps a late answer from writing across a
+    // credential change.
+    void this.#refreshRepositories(request, now);
 
     const body = await request(CURSOR_ROUTE.AGENTS, {
       [CURSOR_QUERY.LIMIT]: String(CURSOR_ADAPTER_DEFAULTS.AGENT_PAGE_SIZE),
@@ -366,13 +360,28 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
     );
   }
 
-  /** Reads `GET /v1/repositories`, keeping only usable entries. */
-  async #listRepositories(request: CloudRequest): Promise<readonly string[]> {
-    const body = await request(CURSOR_ROUTE.REPOSITORIES);
-    return recordsFromPage(body, CURSOR_FIELD.ITEMS)
-      .map((record) => textFromRecord(record, CURSOR_FIELD.URL))
-      .filter(isDefined)
-      .slice(0, maximumObservedWorkspaceProjects);
+  /**
+   * Reads `GET /v1/repositories` on its own cadence, keeping only usable
+   * entries. Every failure is swallowed here — including a rejected key, which
+   * the agents read in the same pass will surface — because nothing awaits
+   * this, and an offer read must never fail a pass or escape as an unhandled
+   * rejection.
+   */
+  async #refreshRepositories(request: CloudRequest, now: number): Promise<void> {
+    if (now - this.#repositoriesAttemptedAt < this.#repositoriesRefreshMs) return;
+    this.#repositoriesAttemptedAt = now;
+    try {
+      const body = await request(CURSOR_ROUTE.REPOSITORIES, undefined, {
+        timeoutMs: CLOUD_ADAPTER_DEFAULTS.SLOW_REQUEST_TIMEOUT_MS,
+      });
+      this.#repositories = recordsFromPage(body, CURSOR_FIELD.ITEMS)
+        .map((record) => textFromRecord(record, CURSOR_FIELD.URL))
+        .filter(isDefined)
+        .slice(0, maximumObservedWorkspaceProjects);
+      this.#repositoriesRefreshMs = CURSOR_REPOSITORY_REFRESH_MS;
+    } catch {
+      this.#repositoriesRefreshMs = CURSOR_REPOSITORY_RETRY_MS;
+    }
   }
 
   /**

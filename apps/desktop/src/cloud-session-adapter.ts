@@ -86,6 +86,13 @@ export const CLOUD_ADAPTER_DEFAULTS = {
   ACTIVE_SESSION_FRESHNESS_MS: 15 * 60 * 1000,
   MINIMUM_REFRESH_INTERVAL_MS: 15 * 1000,
   REQUEST_TIMEOUT_MS: 8 * 1000,
+  /**
+   * For the rare read a provider documents as slow — Cursor's repository list
+   * can take tens of seconds for a large organisation. A read on this deadline
+   * must never hold the observation pass; it is for work that rides beside
+   * one.
+   */
+  SLOW_REQUEST_TIMEOUT_MS: 45 * 1000,
 } as const;
 
 export type CloudFetch = (url: string, init: RequestInit) => Promise<Response>;
@@ -122,10 +129,13 @@ export interface CloudAdapterProfile {
  * The only way a subclass reaches its provider while observing. It
  * authenticates, bounds, and parses the request, and it can express nothing
  * but a read, so no observation pass built on it can change provider state.
+ * The deadline can be widened only to the slow bound, and only for a read the
+ * provider itself documents as slow.
  */
 export type CloudRequest = (
   segments: readonly string[],
   query?: Readonly<Record<string, string>>,
+  options?: Readonly<{ timeoutMs?: number }>,
 ) => Promise<Record<string, unknown>>;
 
 /**
@@ -600,9 +610,9 @@ export abstract class CloudSessionAdapter
    * it over state that belongs to the new credential.
    */
   #requestForPass(pass: number, apiKey: string): CloudRequest {
-    return async (segments, query) => {
+    return async (segments, query, options) => {
       this.#assertPassCurrent(pass);
-      const body = await this.#requestJson(apiKey, segments, query);
+      const body = await this.#requestJson(apiKey, segments, query, options);
       this.#assertPassCurrent(pass);
       return body;
     };
@@ -734,8 +744,15 @@ export abstract class CloudSessionAdapter
     apiKey: string,
     segments: readonly string[],
     query: Readonly<Record<string, string>> = {},
+    options: Readonly<{ timeoutMs?: number }> = {},
   ): Promise<Record<string, unknown>> {
     const name = this.provider.displayName;
+    // A widened deadline never widens past the slow bound: the option exists
+    // for a read the provider documents as slow, not for one that never ends.
+    const timeoutMs = Math.min(
+      positiveInteger(options.timeoutMs, CLOUD_ADAPTER_DEFAULTS.REQUEST_TIMEOUT_MS),
+      CLOUD_ADAPTER_DEFAULTS.SLOW_REQUEST_TIMEOUT_MS,
+    );
     let response: Response;
     try {
       response = await this.#fetch(this.#url(segments, query), {
@@ -744,7 +761,7 @@ export abstract class CloudSessionAdapter
           ...this.requestHeaders(),
           ...this.#authorizationHeaders(apiKey),
         },
-        signal: AbortSignal.timeout(CLOUD_ADAPTER_DEFAULTS.REQUEST_TIMEOUT_MS),
+        signal: AbortSignal.timeout(timeoutMs),
       });
     } catch {
       throw new CloudRequestError(CLOUD_FAILURE.TRANSIENT, `${name} request failed`);

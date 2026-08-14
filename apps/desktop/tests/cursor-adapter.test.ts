@@ -752,6 +752,8 @@ test("offers the repositories Cursor lists, on a cadence far below the observati
 
   assert.deepEqual(adapter.workspaceProjects(), []);
   await adapter.observe();
+  // The offer rides beside the pass, so let it land before asserting on it.
+  await new Promise((resolve) => setTimeout(resolve, 0));
   assert.deepEqual(adapter.workspaceProjects(), [
     // Cursor's creation endpoint requires a prompt, so every repository needs
     // an opening task: there is no idle agent to make.
@@ -772,6 +774,8 @@ test("launches a new agent through Cursor's documented creation endpoint", async
   const api = fakeCursorApi([], { repositories: [TEST_REPOSITORY] });
   const adapter = adapterFor(api.fetch);
   await adapter.observe();
+  // The offer rides beside the pass, so let it land before asserting on it.
+  await new Promise((resolve) => setTimeout(resolve, 0));
 
   const result = await adapter.createWorkspace({
     providerProjectId: TEST_REPOSITORY,
@@ -795,6 +799,8 @@ test("refuses a creation ask Cursor cannot take before any request exists", asyn
   const api = fakeCursorApi([], { repositories: [TEST_REPOSITORY] });
   const adapter = adapterFor(api.fetch);
   await adapter.observe();
+  // The offer rides beside the pass, so let it land before asserting on it.
+  await new Promise((resolve) => setTimeout(resolve, 0));
   const requestsBefore = api.requests.length;
 
   // No task, no agent: Cursor documents no way to create one idle.
