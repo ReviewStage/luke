@@ -42,14 +42,23 @@ running on this machine are read from disk and are unaffected by whether a
 Cursor key exists.
 
 When a key is supplied, Luke sends it as a bearer credential to that provider,
-and observation issues authenticated `GET` requests only:
+and observation issues only reads: authenticated `GET` requests, plus — for
+Conductor — one fixed `SELECT` posted to its documented read-only query
+endpoint, under the same read-document boundary the Linear section below
+describes.
 
 - For Conductor, Luke reads the authenticated identity, projects, workspaces the
   authenticated user created, sessions, and session statuses. It processes
   identifiers; project, workspace, and session names; repository names derived
   from Git remotes (or the project name when no usable remote is available);
   timestamps; model configuration; archive state; status and reported errors;
-  and session deep links.
+  and session deep links. For the sessions it observed, Luke also queries
+  Conductor's transcripts view for each chat's agent kind and a bounded tail
+  of Conductor's own plain-text transcript. From that tail Luke takes only the
+  last message's words — and only while the chat is idle or closed and that
+  message is the agent's — as the session's recap. The tail is inspected in
+  memory and discarded, the transcript behind it is never requested, and
+  nothing but the bounded recap and agent kind is reported.
 - For Cursor, Luke reads agents owned by the supplied key and their latest runs,
   and — on a much slower cadence, within Cursor's documented limits — the list
   of repositories the key may launch agents in. It processes identifiers, agent
@@ -107,7 +116,8 @@ whose policies then govern the request and response data.
 ## Local display and microphone
 
 The local panel may show a session's provider-assigned title, status, current
-activity or error, provider-designated recap, repository, branch, model, and
+activity or error, recap — provider-designated, or for Conductor the agent's
+parting words read from its transcript — repository, branch, model, and
 session or change links. The links and model label are kept out of the optional
 attention-review request described below.
 
@@ -133,9 +143,11 @@ Realtime API over a direct WebRTC connection from your Mac, and plays back the
 spoken reply. OpenAI's policies govern that audio and the reply.
 
 Alongside the audio, Luke sends the same bounded session fields the attention
-review uses — provider name, session title, status, and the provider's own
-summary — so a spoken question about your sessions can be answered. No
-transcript, file content, or command output is ever included.
+review uses — provider name, session title, status, and each session's recap —
+so a spoken question about your sessions can be answered. No message history,
+file content, or command output is ever included: a recap can reflect what a
+session was asked and replied — for Conductor it is the agent's own parting
+words — but the conversation behind it never travels.
 
 Luke also sends the list of projects a new workspace could be created in —
 each project's provider, repository label, and provider-assigned identifier —
@@ -177,15 +189,16 @@ Without `OPENAI_API_KEY`, Luke does not send an attention-review request.
 With `OPENAI_API_KEY`, Luke sends the configured Responses-compatible endpoint
 the provider name, displayed session title, previous and current status, review
 trigger, repository, branch, current tool activity, reported error, and the
-provider-designated session recap. Titles and recaps can reflect task content;
-for a Conductor session, the title can contain the project-name fallback
-described above. The request also includes fixed review instructions and
-synthetic examples. The API key is sent to that endpoint as the request's bearer
-credential.
+session recap — provider-designated, or for Conductor the agent's parting
+words read from its transcript. Titles and recaps can reflect task and reply
+content; for a Conductor session, the title can contain the project-name
+fallback described above. The request also includes fixed review instructions
+and synthetic examples. The API key is sent to that endpoint as the request's
+bearer credential.
 
-Luke does not send message history, command output, file contents, full
-filesystem paths, model labels, session or change links, provider session
-identifiers, or locally observed timestamps in that request.
+Luke does not send message history beyond that recap, command output, file
+contents, full filesystem paths, model labels, session or change links,
+provider session identifiers, or locally observed timestamps in that request.
 
 Requests use `store: false`, which disables Responses application-state
 storage. This does not mean zero retention: ordinary provider abuse-monitoring

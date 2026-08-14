@@ -1,4 +1,5 @@
 import {
+  maximumSessionSummaryLength,
   maximumSessionTitleLength,
   type ProviderSessionObservation,
   SESSION_CONTROL_KIND,
@@ -48,6 +49,8 @@ const CONDUCTOR_DEFAULT_API_URL = "https://api.conductor.build";
 const CONDUCTOR_ROUTE = {
   IDENTITY: ["me"],
   PROJECTS: ["v0", "projects"],
+  /** The documented read-only query endpoint over the transcripts view. */
+  SQL: ["v0", "sql"],
 } as const;
 
 const CONDUCTOR_ROUTE_SEGMENT = {
@@ -131,6 +134,52 @@ const CONDUCTOR_FIELD = {
   USER_ID: "userId",
 } as const;
 
+/** The columns the transcripts read asks for, named as the view answers them. */
+const CONDUCTOR_SQL_FIELD = {
+  ROWS: "rows",
+  SESSION_ID: "session_id",
+  AGENT_TYPE: "agent_type",
+  TRANSCRIPT_TAIL: "transcript_tail",
+} as const;
+
+/**
+ * How much of a transcript's end is read: enough to hold the last message's
+ * header and a recap's worth of parting words, and no more of the history.
+ */
+const CONDUCTOR_TRANSCRIPT_TAIL_LENGTH = 2_000;
+
+/**
+ * The one query document this adapter ever sends, fixed by this build. The
+ * endpoint takes a read as a POSTed document rather than a GET, so the
+ * separation is held the way the Linear tracker holds it: observation only
+ * ever sends this SELECT, and nothing reaches its text but session ids the
+ * same pass reported — each validated as a UUID first, so no name, title, or
+ * message a provider controls can ever be spliced into the document.
+ *
+ * The columns ask for the agent kind and the transcript's bounded tail — the
+ * settled turn's parting words — and never the conversation behind them.
+ */
+const CONDUCTOR_READ_TRANSCRIPT_TAILS =
+  `SELECT ${CONDUCTOR_SQL_FIELD.SESSION_ID}, ${CONDUCTOR_SQL_FIELD.AGENT_TYPE}, ` +
+  `RIGHT(transcript, ${CONDUCTOR_TRANSCRIPT_TAIL_LENGTH}) AS ${CONDUCTOR_SQL_FIELD.TRANSCRIPT_TAIL} ` +
+  `FROM session_transcripts_view WHERE ${CONDUCTOR_SQL_FIELD.SESSION_ID} IN`;
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * How Conductor's plain-text transcript marks who is speaking. A line inside a
+ * message can imitate a header, so the parse can misattribute the tail of a
+ * chat whose agent wrote one — the cost is a recap dropped or drawn from the
+ * wrong words, never anything acted on.
+ */
+const CONDUCTOR_TRANSCRIPT_SPEAKER = {
+  USER: "## User",
+  ASSISTANT: "## Assistant",
+} as const;
+
+/** The view's own mark for history it left out of the concise transcript. */
+const CONDUCTOR_TRANSCRIPT_ELIDED = /^\[\d+ messages? elided\]$/;
+
 const CONDUCTOR_SESSION_STATUS = {
   IDLE: "idle",
   WORKING: "working",
@@ -182,12 +231,19 @@ const CONDUCTOR_ADAPTER_DEFAULTS = {
   MAXIMUM_OBSERVED_SESSIONS: 12,
   MAXIMUM_MODEL_LABEL_LENGTH: 60,
   MAXIMUM_ERROR_LENGTH: 120,
+  MAXIMUM_AGENT_KIND_LENGTH: 40,
 } as const;
 
 interface ConductorReportedStatus {
   status: ConductorSessionStatus | undefined;
   updatedAt: number | undefined;
   errorMessage?: string;
+}
+
+/** What the transcripts view said about one session: who runs it, and how it left off. */
+interface ConductorTranscript {
+  agentKind?: string;
+  recap?: string;
 }
 
 export const CONDUCTOR_PROVIDER: SessionProvider = {
@@ -226,7 +282,12 @@ interface ConductorSession {
  * Observes Conductor cloud sessions through the documented public API. It reads
  * only workspaces the authenticated user created, observation issues no request
  * that can change provider state, and it reports nothing at all without a
- * credential. Each workspace is reported as one session — the workspace is the
+ * credential. Beside the roster reads, one fixed query to Conductor's
+ * transcripts view names the sessions the same pass observed and takes back
+ * each chat's agent kind and the bounded tail its recap — the settled turn's
+ * parting words — is read from; the history behind that tail is never asked
+ * for, and the tail itself never leaves this adapter. Each workspace is
+ * reported as one session — the workspace is the
  * unit Conductor's own surface shows, and the one its name names — in the state
  * of whichever chat inside it most needs a person, and that chat is the one a
  * write reaches: the writes it supports are a user-typed prompt and a stop for
@@ -358,13 +419,21 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       .flat()
       .slice(0, this.#maximumObservedSessions);
 
-    const observed = await Promise.all(
-      sessions.map((session) =>
-        this.#observationFor(request, session, now).then(
-          (observation) => observation && { workspaceId: session.workspace.id, observation },
+    // The transcripts read rides beside the status reads: one bounded query
+    // for every observed session, so a failed or missing answer costs a recap
+    // and an agent kind, never the pass.
+    const [transcripts, reportedStatuses] = await Promise.all([
+      this.tolerateItemFailure(() => this.#sessionTranscripts(request, sessions)),
+      Promise.all(
+        sessions.map((session) =>
+          // An archived session is a closed chat, so its state is already
+          // settled and no status request is needed.
+          session.archived
+            ? Promise.resolve(undefined)
+            : this.tolerateItemFailure(() => this.#sessionStatus(request, session.id)),
         ),
       ),
-    );
+    ]);
 
     // One row per workspace. The workspace is the session the user knows —
     // it is what titles the row — so two chats inside it would draw as
@@ -373,12 +442,19 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     // chat is in; that chat is the one the row reports and the one a press
     // opens.
     const byWorkspace = new Map<string, ProviderSessionObservation>();
-    for (const { workspaceId, observation } of observed.filter(isDefined)) {
-      const held = byWorkspace.get(workspaceId);
+    sessions.forEach((session, index) => {
+      const observation = this.#observationFor(
+        session,
+        reportedStatuses[index],
+        transcripts?.get(session.id),
+        now,
+      );
+      if (!observation) return;
+      const held = byWorkspace.get(session.workspace.id);
       if (!held || urgencyOrder(observation, held) < 0) {
-        byWorkspace.set(workspaceId, observation);
+        byWorkspace.set(session.workspace.id, observation);
       }
-    }
+    });
     return [...byWorkspace.values()];
   }
 
@@ -548,16 +624,12 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     };
   }
 
-  async #observationFor(
-    request: CloudRequest,
+  #observationFor(
     session: ConductorSession,
+    reported: ConductorReportedStatus | undefined,
+    transcript: ConductorTranscript | undefined,
     now: number,
-  ): Promise<ProviderSessionObservation | undefined> {
-    // An archived session is a closed chat, so its state is already settled and
-    // no status request is needed.
-    const reported = session.archived
-      ? undefined
-      : await this.tolerateItemFailure(() => this.#sessionStatus(request, session.id));
+  ): ProviderSessionObservation | undefined {
     // A workspace timestamp covers every chat in that workspace, so it would
     // make chats a user left hours ago look like they just stopped. The status
     // timestamp is per-session, and a closed chat's archive time is the moment
@@ -567,6 +639,15 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     if (now - observedAt > CLOUD_ADAPTER_DEFAULTS.MAXIMUM_SESSION_AGE_MS) return undefined;
 
     const status = this.#statusFor(session, reported?.status, observedAt, now);
+    // The parting words are a recap only once the turn has actually parted:
+    // read for an idle or closed chat, they say where the agent left the work;
+    // read mid-turn they are half a sentence posing as an outcome, and read
+    // beside a failure they predate the thing the row now has to say.
+    const recap =
+      session.archived || reported?.status === CONDUCTOR_SESSION_STATUS.IDLE
+        ? transcript?.recap
+        : undefined;
+    const model = agentAndModelLabel(transcript?.agentKind, session.model);
     return {
       providerSessionId: session.id,
       // The workspace's name is the name the user knows this work by — it is
@@ -595,9 +676,10 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       ...(reported?.status === CONDUCTOR_SESSION_STATUS.WORKING
         ? { controls: [CONDUCTOR_CANCEL_CONTROL] }
         : {}),
+      ...(recap ? { summary: recap } : {}),
       detail: {
         repository: session.workspace.repositoryLabel,
-        ...(session.model ? { model: session.model } : {}),
+        ...(model ? { model } : {}),
         ...(reported?.errorMessage ? { error: reported.errorMessage } : {}),
         ...(session.deepLink ? { link: session.deepLink } : {}),
       },
@@ -656,6 +738,80 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       ...(errorMessage ? { errorMessage } : {}),
     };
   }
+
+  /**
+   * One bounded read of the transcripts view for every session this pass
+   * observed: which agent runs each chat, and the tail its recap is taken
+   * from. Only ids that are actually UUIDs may enter the fixed document — an
+   * id that is anything else is a shape this build does not know, so it is
+   * left out rather than sent — and with none there is no read at all.
+   */
+  async #sessionTranscripts(
+    request: CloudRequest,
+    sessions: readonly ConductorSession[],
+  ): Promise<ReadonlyMap<string, ConductorTranscript>> {
+    const transcripts = new Map<string, ConductorTranscript>();
+    const ids = sessions.map((session) => session.id).filter((id) => UUID_PATTERN.test(id));
+    if (ids.length === 0) return transcripts;
+
+    const document = `${CONDUCTOR_READ_TRANSCRIPT_TAILS} (${ids.map((id) => `'${id}'`).join(", ")})`;
+    const body = await request(CONDUCTOR_ROUTE.SQL, undefined, { document });
+    for (const row of recordsFromPage(body, CONDUCTOR_SQL_FIELD.ROWS)) {
+      const sessionId = textFromRecord(row, CONDUCTOR_SQL_FIELD.SESSION_ID);
+      if (!sessionId) continue;
+      const agentKind = textFromRecord(row, CONDUCTOR_SQL_FIELD.AGENT_TYPE)?.slice(
+        0,
+        CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_AGENT_KIND_LENGTH,
+      );
+      const recap = recapFromTranscriptTail(
+        textFromRecord(row, CONDUCTOR_SQL_FIELD.TRANSCRIPT_TAIL),
+      );
+      transcripts.set(sessionId, {
+        ...(agentKind ? { agentKind } : {}),
+        ...(recap ? { recap } : {}),
+      });
+    }
+    return transcripts;
+  }
+}
+
+/**
+ * The parting words of the transcript's last message, only when that message
+ * is attributably the agent's: the tail must still hold the message's own
+ * header, and a chat whose user spoke last has no parting words to report.
+ * The view's elision markers are dropped, whitespace is flattened to the one
+ * line a recap is drawn as, and everything earlier in the tail is discarded
+ * unread — the recap is what leaves this function, never the history.
+ */
+function recapFromTranscriptTail(tail: string | undefined): string | undefined {
+  if (!tail) return undefined;
+  const lines = tail.split("\n").map((line) => line.trim());
+  const lastHeader = lines.findLastIndex(
+    (line) =>
+      line === CONDUCTOR_TRANSCRIPT_SPEAKER.ASSISTANT || line === CONDUCTOR_TRANSCRIPT_SPEAKER.USER,
+  );
+  if (lastHeader < 0 || lines[lastHeader] !== CONDUCTOR_TRANSCRIPT_SPEAKER.ASSISTANT) {
+    return undefined;
+  }
+  const recap = lines
+    .slice(lastHeader + 1)
+    .filter((line) => !CONDUCTOR_TRANSCRIPT_ELIDED.test(line))
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return recap ? recap.slice(0, maximumSessionSummaryLength) : undefined;
+}
+
+/**
+ * The agent kind joins the model label — `codex · gpt-5.5 · high` — because
+ * which agent runs a chat is as much its configuration as which model does.
+ */
+function agentAndModelLabel(
+  agentKind: string | undefined,
+  model: string | undefined,
+): string | undefined {
+  const label = [agentKind, model].filter(isDefined).join(" · ");
+  return label || undefined;
 }
 
 /** Most urgent first, and between two equally urgent chats, the one that moved last. */

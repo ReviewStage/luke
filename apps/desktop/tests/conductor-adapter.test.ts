@@ -49,6 +49,8 @@ interface TestSession {
   statusUpdatedAt?: number;
   statusHttpStatus?: number;
   lastError?: string;
+  agentType?: string;
+  transcriptTail?: string;
 }
 
 interface TestApi {
@@ -58,6 +60,8 @@ interface TestApi {
   sessions: readonly TestSession[];
   /** Misbehave: answer a creation without naming the first session. */
   createWithoutSessionId?: boolean;
+  /** Misbehave: refuse the transcripts-view read. */
+  sqlHttpStatus?: number;
 }
 
 interface RecordedRequest {
@@ -125,9 +129,27 @@ function fakeConductorApi(api: TestApi): FakeConductorApi {
     });
 
     const segments = pathname.split("/").filter((segment) => segment.length > 0);
-    // The three documented writers: a prompt for one session, a cancel for the
-    // turn it is working, and a new workspace in one project.
     if (init.method === "POST") {
+      // The transcripts view: the one read that rides as a POSTed document.
+      if (segments[1] === "sql" && segments.length === 2) {
+        if (api.sqlHttpStatus) return jsonResponse({}, api.sqlHttpStatus);
+        const body = JSON.parse(typeof init.body === "string" ? init.body : "{}") as {
+          query?: string;
+        };
+        const query = body.query ?? "";
+        if (!query.startsWith("SELECT ")) return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
+        const ids = [...query.matchAll(/'([^']*)'/g)].map((match) => match[1]);
+        const rows = api.sessions
+          .filter((session) => ids.includes(session.id) && session.transcriptTail !== undefined)
+          .map((session) => ({
+            session_id: session.id,
+            agent_type: session.agentType ?? null,
+            transcript_tail: session.transcriptTail,
+          }));
+        return jsonResponse({ rows, rowCount: rows.length, truncated: false });
+      }
+      // The three documented writers: a prompt for one session, a cancel for
+      // the turn it is working, and a new workspace in one project.
       if (segments[1] === "workspaces" && segments.length === 2) {
         const body = JSON.parse(typeof init.body === "string" ? init.body : "{}") as {
           projectId?: string;
@@ -339,6 +361,266 @@ test("reports an idle session as waiting and an errored session with its reason"
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
   assert.equal(observations[1]?.status, SESSION_STATUS.ERROR);
   assert.equal(observations[1]?.detail?.error, TEST_ERROR_MESSAGE);
+});
+
+const IDLE_SESSION_UUID = "11111111-1111-4111-8111-111111111111";
+const CLOSED_SESSION_UUID = "22222222-2222-4222-8222-222222222222";
+const WORKING_SESSION_UUID = "33333333-3333-4333-8333-333333333333";
+const ERRORED_SESSION_UUID = "44444444-4444-4444-8444-444444444444";
+
+/** A tail the way the view writes one: headers, an elision mark, parting words. */
+const TEST_TRANSCRIPT_TAIL =
+  "st half of a message the tail cut into\n\n## User\n\nWire the panel.\n\n## Assistant\n\n" +
+  "[12 messages elided]\n\nAll checks pass;\nnext, say whether to ship it.";
+const TEST_RECAP = "All checks pass; next, say whether to ship it.";
+
+test("reads a settled chat's parting words from the transcripts view as its recap", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [
+      ownedWorkspace("workspace-idle", TEST_TIME - 30_000),
+      ownedWorkspace("workspace-closed", TEST_TIME - 40_000),
+    ],
+    sessions: [
+      {
+        id: IDLE_SESSION_UUID,
+        workspaceId: "workspace-idle",
+        name: TEST_SESSION_NAME,
+        resolvedModel: "gpt-5.5",
+        agentType: "codex",
+        transcriptTail: TEST_TRANSCRIPT_TAIL,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 1_000,
+      },
+      // A closed chat is settled too, so its parting words still stand.
+      {
+        id: CLOSED_SESSION_UUID,
+        workspaceId: "workspace-closed",
+        name: TEST_SESSION_NAME,
+        agentType: "claude",
+        transcriptTail: TEST_TRANSCRIPT_TAIL,
+        archivedAt: isoTimestamp(TEST_TIME - 60_000),
+      },
+    ],
+  });
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.equal(observations.length, 2);
+  const idle = observations.find((candidate) => candidate.providerSessionId === IDLE_SESSION_UUID);
+  const closed = observations.find(
+    (candidate) => candidate.providerSessionId === CLOSED_SESSION_UUID,
+  );
+  // The recap is the last message's words alone: the elision mark is dropped,
+  // the header is not part of it, and nothing earlier in the tail survives.
+  assert.equal(idle?.summary, TEST_RECAP);
+  assert.equal(closed?.summary, TEST_RECAP);
+  // The agent kind joins the model label, and stands alone when no model came.
+  assert.equal(idle?.detail?.model, "codex · gpt-5.5");
+  assert.equal(closed?.detail?.model, "claude");
+
+  // One read document for the whole pass, fixed by the build: the SELECT this
+  // build wrote, naming exactly the observed session ids and nothing else.
+  const reads = api.requests.filter((request) => request.method === "POST");
+  assert.equal(reads.length, 1);
+  assert.equal(reads[0]?.pathname, "/v0/sql");
+  assert.equal(reads[0]?.authorization, `Bearer ${TEST_API_KEY}`);
+  assert.deepEqual(JSON.parse(reads[0]?.body ?? ""), {
+    query:
+      "SELECT session_id, agent_type, RIGHT(transcript, 2000) AS transcript_tail " +
+      "FROM session_transcripts_view WHERE session_id IN " +
+      `('${IDLE_SESSION_UUID}', '${CLOSED_SESSION_UUID}')`,
+  });
+});
+
+test("keeps parting words off a chat that is still working or newly failed", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [
+      ownedWorkspace("workspace-working", TEST_TIME - 30_000),
+      ownedWorkspace("workspace-errored", TEST_TIME - 40_000),
+    ],
+    sessions: [
+      // Mid-turn the words are half a sentence, not an outcome.
+      {
+        id: WORKING_SESSION_UUID,
+        workspaceId: "workspace-working",
+        name: TEST_SESSION_NAME,
+        agentType: "cursor",
+        transcriptTail: TEST_TRANSCRIPT_TAIL,
+        status: TEST_CONDUCTOR_STATUS.WORKING,
+        statusUpdatedAt: TEST_TIME - 1_000,
+      },
+      // Beside a failure the parting words predate what the row has to say.
+      {
+        id: ERRORED_SESSION_UUID,
+        workspaceId: "workspace-errored",
+        name: TEST_SESSION_NAME,
+        transcriptTail: TEST_TRANSCRIPT_TAIL,
+        status: TEST_CONDUCTOR_STATUS.ERROR,
+        statusUpdatedAt: TEST_TIME - 1_000,
+      },
+    ],
+  });
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.equal(observations.length, 2);
+  for (const observation of observations) {
+    assert.equal(observation.summary, undefined);
+  }
+  // The agent kind is configuration, not conversation, so it rides regardless.
+  const working = observations.find(
+    (candidate) => candidate.providerSessionId === WORKING_SESSION_UUID,
+  );
+  assert.equal(working?.detail?.model, "cursor");
+});
+
+test("reports no recap for a tail it cannot attribute to the agent", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [
+      ownedWorkspace("workspace-user-last", TEST_TIME - 30_000),
+      ownedWorkspace("workspace-headerless", TEST_TIME - 40_000),
+    ],
+    sessions: [
+      // The user spoke last, so there are no parting words to report.
+      {
+        id: IDLE_SESSION_UUID,
+        workspaceId: "workspace-user-last",
+        name: TEST_SESSION_NAME,
+        transcriptTail: `${TEST_TRANSCRIPT_TAIL}\n\n## User\n\nPlease also update the docs.`,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 1_000,
+      },
+      // A tail cut inside one long message holds no header naming its speaker.
+      {
+        id: CLOSED_SESSION_UUID,
+        workspaceId: "workspace-headerless",
+        name: TEST_SESSION_NAME,
+        transcriptTail: "words with no header anywhere above them",
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 1_000,
+      },
+    ],
+  });
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.equal(observations.length, 2);
+  for (const observation of observations) {
+    assert.equal(observation.summary, undefined);
+  }
+});
+
+test("cuts a recap at the summary bound", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [ownedWorkspace("workspace-idle", TEST_TIME - 30_000)],
+    sessions: [
+      {
+        id: IDLE_SESSION_UUID,
+        workspaceId: "workspace-idle",
+        name: TEST_SESSION_NAME,
+        transcriptTail: `## Assistant\n\n${"a word ".repeat(200)}`,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 1_000,
+      },
+    ],
+  });
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.equal(observations[0]?.summary?.length, 500);
+});
+
+test("keeps a session id that is not a UUID out of the read document", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [
+      ownedWorkspace("workspace-idle", TEST_TIME - 30_000),
+      ownedWorkspace("workspace-odd", TEST_TIME - 40_000),
+    ],
+    sessions: [
+      {
+        id: IDLE_SESSION_UUID,
+        workspaceId: "workspace-idle",
+        name: TEST_SESSION_NAME,
+        transcriptTail: TEST_TRANSCRIPT_TAIL,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 1_000,
+      },
+      // An id of a shape this build does not know may not enter the document.
+      {
+        id: "session'); DROP VIEW session_transcripts_view; --",
+        workspaceId: "workspace-odd",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 1_000,
+      },
+    ],
+  });
+
+  await adapterFor(api.fetch).observe();
+
+  const reads = api.requests.filter((request) => request.pathname === "/v0/sql");
+  assert.equal(reads.length, 1);
+  assert.ok(reads[0]?.body?.includes(IDLE_SESSION_UUID));
+  assert.equal(reads[0]?.body?.includes("DROP"), false);
+
+  // With no UUID ids at all there is nothing to ask, so nothing is asked.
+  const uuidlessApi = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [ownedWorkspace("workspace-odd", TEST_TIME - 30_000)],
+    sessions: [
+      {
+        id: "session-plain",
+        workspaceId: "workspace-odd",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 1_000,
+      },
+    ],
+  });
+  await adapterFor(uuidlessApi.fetch).observe();
+  assert.equal(
+    uuidlessApi.requests.every((request) => request.method === "GET"),
+    true,
+  );
+});
+
+test("a refused transcripts read costs the recap and agent kind, never the pass", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [ownedWorkspace("workspace-idle", TEST_TIME - 30_000)],
+    sessions: [
+      {
+        id: IDLE_SESSION_UUID,
+        workspaceId: "workspace-idle",
+        name: TEST_SESSION_NAME,
+        resolvedModel: "gpt-5.5",
+        agentType: "codex",
+        transcriptTail: TEST_TRANSCRIPT_TAIL,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 1_000,
+      },
+    ],
+    sqlHttpStatus: HTTP_STATUS.SERVER_ERROR,
+  });
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
+  assert.equal(observations[0]?.summary, undefined);
+  assert.equal(observations[0]?.detail?.model, "gpt-5.5");
 });
 
 // Rows are titled by their workspace, so two chats in one workspace would draw

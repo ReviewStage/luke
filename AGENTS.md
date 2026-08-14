@@ -37,7 +37,11 @@ Trust constraints:
   composer — in a conversation the user is holding — each through the
   provider's own documented endpoint under the same user-supplied credential,
   and each validated against the observed roster before an adapter sees it.
-  Observation passes stay read-only by construction.
+  Observation passes stay read-only by construction; where a provider's
+  documented read answers only a POSTed query — Conductor's transcripts view,
+  like Linear's GraphQL — observation sends a read document fixed by the
+  build, and nothing enters that document's text but identifiers the same
+  pass reported, each validated against the shape its provider documents.
   Nothing that decides on the user's behalf may reach a write path: the
   attention evaluator above all, and every turn Luke opens himself — a
   proactive readout, the reply that voices a tool's outcome — which carries no
@@ -109,11 +113,23 @@ What Luke may show:
 - Label a session by what its provider named it, falling back to the workspace
   or repository only when there is no name yet. Do not compose a sentence in an
   adapter; report the fields and let the surface word them.
+- A recap may be the agent's own parting words. A provider that designates no
+  recap field but hands over the conversation itself — Conductor's transcripts
+  view — is read for a bounded tail of its transcript, and the last message's
+  words become the recap only when that message is attributably the agent's
+  and the chat is idle or closed: a settled turn's parting words say where the
+  work stands, where half a sentence mid-turn poses as an outcome. The tail is
+  inspected in memory and discarded — the bounded recap is all that is ever
+  reported, and the history behind it is never read at all.
 - An evaluator is the one place session material leaves the machine, so it is
   the one place with a narrower rule. It receives `AttentionContext` — what a
   provider wrote *about* a session — and never the transcript behind it: no
-  message history, file contents, or command output. Widening that set is a
-  product decision, not an implementation detail; make it deliberately.
+  message history, file contents, or command output. A recap counts as
+  *about* even when it is the agent's own parting words — the one bounded
+  line saying where the turn ended, the same standing as a recap a provider
+  designated — but the transcript it was read from never travels. Widening
+  that set is a product decision, not an implementation detail; make it
+  deliberately.
 
 Before handoff, run `./scripts/check.sh` for portable-only changes. For any
 macOS or UI change, `./scripts/verify.sh` is the completion invariant. Report
