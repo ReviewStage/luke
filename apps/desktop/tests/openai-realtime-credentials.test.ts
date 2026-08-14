@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { REALTIME_DEFAULTS, REALTIME_MINT_OUTCOME } from "@sidecar/core";
+import { REALTIME_DEFAULTS, REALTIME_MINT_OUTCOME, REALTIME_VOICE } from "@sidecar/core";
 import {
   OpenAiRealtimeCredentialMinter,
   openAiRealtimeCredentialsFromEnvironment,
@@ -99,6 +99,42 @@ test("an outstanding credential is reused until it nears expiry", async () => {
   assert.equal(requests.length, 2);
 });
 
+test("changing the voice discards the outstanding credential and mints for the new one", async () => {
+  const { minter: instance, requests } = minter([mintResponse(), mintResponse()]);
+  await instance.mint();
+
+  instance.setVoice(REALTIME_VOICE.MARIN);
+  await instance.mint();
+
+  // The first credential was minted against the old voice, so serving it after
+  // the change would answer the next conversation with the wrong one.
+  assert.equal(requests.length, 2);
+  const body = JSON.parse(String(requests[1]?.init.body)) as {
+    session: { audio: { output: { voice: string } } };
+  };
+  assert.equal(body.session.audio.output.voice, REALTIME_VOICE.MARIN);
+  assert.equal(instance.diagnostics().voice, REALTIME_VOICE.MARIN);
+});
+
+test("the same voice again keeps the outstanding credential", async () => {
+  const { minter: instance, requests } = minter([mintResponse(), mintResponse()]);
+  await instance.mint();
+
+  instance.setVoice(REALTIME_DEFAULTS.VOICE);
+  await instance.mint();
+
+  assert.equal(requests.length, 1);
+});
+
+test("clearing the voice returns to the one the minter was built with", () => {
+  const { minter: instance } = minter([mintResponse()]);
+
+  instance.setVoice(REALTIME_VOICE.MARIN);
+  instance.setVoice(undefined);
+
+  assert.equal(instance.diagnostics().voice, REALTIME_DEFAULTS.VOICE);
+});
+
 test("every failure path leaves the voice experience unavailable", async () => {
   for (const response of [
     new Response("", { status: 401 }),
@@ -149,13 +185,42 @@ test("the model and voice come from the environment when set", () => {
   try {
     process.env.OPENAI_API_KEY = API_KEY;
     process.env.LUKE_REALTIME_MODEL = "gpt-realtime-preview";
-    process.env.LUKE_REALTIME_VOICE = "cedar";
+    process.env.LUKE_REALTIME_VOICE = REALTIME_VOICE.MARIN;
 
     assert.equal(openAiRealtimeCredentialsFromEnvironment()?.model, "gpt-realtime-preview");
+    assert.equal(
+      openAiRealtimeCredentialsFromEnvironment()?.diagnostics().voice,
+      REALTIME_VOICE.MARIN,
+    );
   } finally {
     for (const [name, value] of [
       ["OPENAI_API_KEY", previous.key],
       ["LUKE_REALTIME_MODEL", previous.model],
+      ["LUKE_REALTIME_VOICE", previous.voice],
+    ] as const) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+});
+
+test("a voice from the environment that Luke does not offer is not minted", () => {
+  // The settings snapshot already refuses it, so honouring it here would have
+  // the panel mark the default while every session was minted for a name the
+  // API refuses.
+  const previous = { key: process.env.OPENAI_API_KEY, voice: process.env.LUKE_REALTIME_VOICE };
+  try {
+    process.env.OPENAI_API_KEY = API_KEY;
+    process.env.LUKE_REALTIME_VOICE = "baritone";
+
+    assert.equal(
+      openAiRealtimeCredentialsFromEnvironment()?.diagnostics().voice,
+      REALTIME_DEFAULTS.VOICE,
+    );
+    assert.equal(unavailableRealtimeDiagnostics(true).voice, REALTIME_DEFAULTS.VOICE);
+  } finally {
+    for (const [name, value] of [
+      ["OPENAI_API_KEY", previous.key],
       ["LUKE_REALTIME_VOICE", previous.voice],
     ] as const) {
       if (value === undefined) delete process.env[name];

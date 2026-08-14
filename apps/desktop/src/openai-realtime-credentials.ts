@@ -1,4 +1,5 @@
 import {
+  isRealtimeVoice,
   REALTIME_CALLS_PATH,
   REALTIME_CLIENT_SECRETS_PATH,
   REALTIME_DEFAULTS,
@@ -6,12 +7,13 @@ import {
   type RealtimeConnection,
   type RealtimeDiagnostics,
   type RealtimeMintOutcome,
+  type RealtimeVoice,
   realtimeClientSecretRequest,
   realtimeCredentialFromResponse,
   realtimeCredentialIsUsable,
 } from "@sidecar/core";
 
-const OPENAI_ENVIRONMENT = {
+export const OPENAI_ENVIRONMENT = {
   API_KEY: "OPENAI_API_KEY",
   MODEL: "LUKE_REALTIME_MODEL",
   VOICE: "LUKE_REALTIME_VOICE",
@@ -63,6 +65,18 @@ function withoutTrailingSlash(value: string): string {
 }
 
 /**
+ * The launch environment's voice, honoured only when it is one Luke offers.
+ * The one gate for every reader — the minter, its diagnostics, and the
+ * settings snapshot — so what the panel marks is always what would be minted.
+ */
+export function environmentRealtimeVoice(
+  environment: NodeJS.ProcessEnv = process.env,
+): RealtimeVoice | undefined {
+  const value = environment[OPENAI_ENVIRONMENT.VOICE]?.trim();
+  return isRealtimeVoice(value) ? value : undefined;
+}
+
+/**
  * Mints short-lived Realtime credentials from the standing OpenAI API key.
  *
  * The standing key never leaves the main process: the renderer only ever
@@ -74,7 +88,9 @@ function withoutTrailingSlash(value: string): string {
 export class OpenAiRealtimeCredentialMinter {
   readonly #apiKey: string;
   readonly #model: string;
-  readonly #voice: string;
+  /** The voice from construction, which a cleared setting falls back to. */
+  readonly #configuredVoice: string;
+  #voice: string;
   readonly #baseUrl: string;
   readonly #fetch: FetchLike;
   readonly #now: () => number;
@@ -90,7 +106,8 @@ export class OpenAiRealtimeCredentialMinter {
     if (!apiKey) throw new Error("OpenAI API key must not be empty");
     this.#apiKey = apiKey;
     this.#model = trimmedText(options.model) ?? REALTIME_DEFAULTS.MODEL;
-    this.#voice = trimmedText(options.voice) ?? REALTIME_DEFAULTS.VOICE;
+    this.#configuredVoice = trimmedText(options.voice) ?? REALTIME_DEFAULTS.VOICE;
+    this.#voice = this.#configuredVoice;
     this.#baseUrl = withoutTrailingSlash(trimmedText(options.baseUrl) ?? OPENAI_DEFAULTS.BASE_URL);
     this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
     this.#now = options.now ?? Date.now;
@@ -106,6 +123,19 @@ export class OpenAiRealtimeCredentialMinter {
 
   get model(): string {
     return this.#model;
+  }
+
+  /**
+   * Changes the voice new credentials are minted for. The outstanding
+   * credential was minted against the old voice, so it is discarded rather
+   * than served speaking the wrong one; a call already open keeps the voice it
+   * answered with, because a credential already handed out cannot be recalled.
+   */
+  setVoice(voice: string | undefined): void {
+    const next = trimmedText(voice) ?? this.#configuredVoice;
+    if (next === this.#voice) return;
+    this.#voice = next;
+    this.#credential = undefined;
   }
 
   /** Returns a usable credential, reusing the outstanding one until it nears expiry. */
@@ -228,7 +258,7 @@ export function unavailableRealtimeDiagnostics(fixtureMode: boolean): RealtimeDi
     apiKeyConfigured,
     fixtureMode,
     model: trimmedText(process.env[OPENAI_ENVIRONMENT.MODEL]) ?? REALTIME_DEFAULTS.MODEL,
-    voice: trimmedText(process.env[OPENAI_ENVIRONMENT.VOICE]) ?? REALTIME_DEFAULTS.VOICE,
+    voice: environmentRealtimeVoice() ?? REALTIME_DEFAULTS.VOICE,
     endpoint: `${OPENAI_DEFAULTS.BASE_URL}${REALTIME_CLIENT_SECRETS_PATH}`,
     lastOutcome: fixtureMode
       ? REALTIME_MINT_OUTCOME.DISABLED_BY_FIXTURE
@@ -243,7 +273,7 @@ export function openAiRealtimeCredentialsFromEnvironment(
   if (!apiKey) return undefined;
 
   const model = trimmedText(options.model) ?? trimmedText(process.env[OPENAI_ENVIRONMENT.MODEL]);
-  const voice = trimmedText(options.voice) ?? trimmedText(process.env[OPENAI_ENVIRONMENT.VOICE]);
+  const voice = trimmedText(options.voice) ?? environmentRealtimeVoice();
 
   return new OpenAiRealtimeCredentialMinter({
     ...options,

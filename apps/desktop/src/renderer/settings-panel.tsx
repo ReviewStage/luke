@@ -1,3 +1,9 @@
+import {
+  isRealtimeVoice,
+  REALTIME_DEFAULTS,
+  REALTIME_VOICE_LIST,
+  type RealtimeVoice,
+} from "@sidecar/core";
 import { useEffect, useRef, useState } from "react";
 import type { AppSettings, CredentialSource, MicrophoneStatus } from "../shared/contracts";
 import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "../shared/contracts";
@@ -27,6 +33,7 @@ import {
   KeyboardIcon,
   KeyIcon,
   PencilIcon,
+  PopUpIcon,
   PowerIcon,
   PreferencesIcon,
   ShieldIcon,
@@ -45,6 +52,8 @@ export interface SettingsPanelProps {
   settings?: AppSettings;
   /** The one credential being entered anywhere, and everything that can be done to it. */
   credentials: CredentialEntryControl;
+  /** Chooses the voice Luke speaks with, from the set fixed by this build. */
+  onVoiceChange: (voice: RealtimeVoice) => void;
   /**
    * True while the panel is the shape on screen. A field can only hold the
    * caret then: everything here sits in an inert stage the rest of the time,
@@ -425,6 +434,14 @@ function ProviderCredential({
   );
 }
 
+/* The API names its voices in lowercase; on a control they read as names. The
+   default carries its status into the menu, so returning to it never needs the
+   README or a memory of what shipped. */
+function voiceOptionLabel(voice: RealtimeVoice): string {
+  const name = voice.charAt(0).toUpperCase() + voice.slice(1);
+  return voice === REALTIME_DEFAULTS.VOICE ? `${name} (default)` : name;
+}
+
 /**
  * Every provider that can hold a key, one line each. A provider is listed
  * whether or not it has one, because the list is how you learn which services
@@ -471,17 +488,25 @@ function CredentialsSection({
 
 /**
  * The user's own choices about Luke, ahead of the sections about what Luke can
- * reach. One so far: whether the status item stands in the menu bar as well as
- * at the notch. A switch and nothing else, because nothing rides on the answer
- * — Settings and Quit live in this panel, so the item is a second door rather
- * than the only one.
+ * reach. The voice he speaks with comes first — it is what Luke *is* to the
+ * ear — offered the way macOS offers one value from a small fixed set: a
+ * pop-up button whose closed face is drawn here and whose open menu is the
+ * system's, which also lets it escape a window sized to the panel rather than
+ * being clipped by it. Below it, whether the status item stands in the menu
+ * bar as well as at the notch: a switch and nothing else, because nothing
+ * rides on the answer — Settings and Quit live in this panel, so the item is a
+ * second door rather than the only one.
  */
 function PreferencesSection({
+  voice,
+  onVoiceChange,
   shown,
-  onChange,
+  onShowInMenuBarChange,
 }: {
+  voice: RealtimeVoice;
+  onVoiceChange: (voice: RealtimeVoice) => void;
   shown: boolean;
-  onChange: (show: boolean) => Promise<string | undefined>;
+  onShowInMenuBarChange: (show: boolean) => Promise<string | undefined>;
 }): React.JSX.Element {
   // The change is a round trip through the settings file, so the switch rests
   // until the store has answered rather than claiming a state it may not get.
@@ -489,7 +514,7 @@ function PreferencesSection({
   const [rejection, setRejection] = useState<string>();
   const toggle = async () => {
     setBusy(true);
-    setRejection(await onChange(!shown));
+    setRejection(await onShowInMenuBarChange(!shown));
     setBusy(false);
   };
   return (
@@ -498,6 +523,43 @@ function PreferencesSection({
         <PreferencesIcon />
         Preferences
       </h2>
+      <div className="settings-row">
+        <span className="settings-copy">
+          <strong>Voice</strong>
+          {/* When it lands, because a control that seems not to act invites a
+              second press: the change rides the next conversation, and one
+              already open keeps the voice it answered with. */}
+          <small>How Luke sounds, from the next conversation on.</small>
+        </span>
+        <span className="voice-select">
+          <select
+            aria-label="Voice"
+            value={voice}
+            onChange={(event) => {
+              // The set is fixed by this build, so anything else arriving out
+              // of a select is a broken control rather than a choice.
+              const next = event.target.value;
+              if (isRealtimeVoice(next)) onVoiceChange(next);
+            }}
+            onFocus={() => {
+              // The panel can be showing without its window being key, and a
+              // menu opened then would drop its first choice.
+              window.sidecar.focusPanel();
+            }}
+          >
+            {REALTIME_VOICE_LIST.map((candidate) => (
+              <option key={candidate} value={candidate}>
+                {voiceOptionLabel(candidate)}
+              </option>
+            ))}
+          </select>
+          {/* Drawn over the select, the way macOS badges a pop-up button; the
+              select alone answers the pointer. */}
+          <span className="voice-select-badge" aria-hidden="true">
+            <PopUpIcon />
+          </span>
+        </span>
+      </div>
       <div className="settings-row">
         <span className="settings-copy">
           <strong>Show Luke in the menu bar</strong>
@@ -527,6 +589,7 @@ export function SettingsPanel({
   voiceAvailable,
   settings,
   credentials,
+  onVoiceChange,
   panelOpen,
   onShowInMenuBarChange,
   onQuit,
@@ -542,7 +605,12 @@ export function SettingsPanel({
       aria-labelledby={panelTabId(PANEL_TAB.SETTINGS)}
     >
       {settings ? (
-        <PreferencesSection shown={settings.showInMenuBar} onChange={onShowInMenuBarChange} />
+        <PreferencesSection
+          voice={settings.voice}
+          onVoiceChange={onVoiceChange}
+          shown={settings.showInMenuBar}
+          onShowInMenuBarChange={onShowInMenuBarChange}
+        />
       ) : null}
 
       {/* How Luke is reached rather than what he can see. Shown rather than

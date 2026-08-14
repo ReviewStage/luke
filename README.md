@@ -95,7 +95,10 @@ Accessibility or Input Monitoring grant. Where that helper cannot run, the key
 falls back to a press-to-start, press-to-send toggle and Settings says so.
 
 Settings lists the microphone under **Permissions**, with a green check once
-access is granted and a link to System Settings beside it.
+access is granted and a link to System Settings beside it. The voice Luke
+speaks with is chosen under **Preferences**; a change reaches the next
+conversation to connect, and one already open keeps the voice it answered
+with.
 
 macOS asks once, the first time Luke needs the microphone, and keeps your
 answer. No app can raise that prompt again, and only you can withdraw the
@@ -201,7 +204,7 @@ control.
 | `LUKE_ATTENTION_MODEL` | `gpt-5.6-luna` | Selects the review model |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Selects the Responses-compatible endpoint |
 | `LUKE_REALTIME_MODEL` | `gpt-realtime-2.1` | Selects the conversation model |
-| `LUKE_REALTIME_VOICE` | `cedar` | Selects the spoken voice |
+| `LUKE_REALTIME_VOICE` | `cedar` | Selects the spoken voice until one is chosen in Settings · Preferences |
 
 Changing `OPENAI_BASE_URL` sends attention-review data to that endpoint instead
 of OpenAI. It does not redirect the conversation, which always uses OpenAI's own

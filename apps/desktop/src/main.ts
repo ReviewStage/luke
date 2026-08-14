@@ -6,6 +6,7 @@ import {
   CompositeSessionProviderAdapter,
   fixtureSnapshot,
   InMemorySessionRegistry,
+  isRealtimeVoice,
   type NativeNotchGeometry,
   positionNotchWindow,
   realtimeMintExplanation,
@@ -551,6 +552,29 @@ function registerIpc(): void {
     },
   );
 
+  // The voice is a preference rather than a credential, but it travels the
+  // same road: the renderer names a value from a set fixed by this build and
+  // hears back the settings as they now stand.
+  ipcMain.handle(
+    channels.setVoice,
+    async (event, voice: unknown): Promise<SettingsUpdateResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (!isRealtimeVoice(voice)) throw new Error("Unknown voice");
+      try {
+        const result = await settingsStore.setVoice(voice);
+        // The next credential is minted for the new voice; a conversation
+        // already open keeps the one it answered with.
+        if (!result.reason) realtimeCredentials?.setVoice(voice);
+        return result;
+      } catch {
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "Could not save that voice on this system.",
+        };
+      }
+    },
+  );
+
   // Where to get a key is a question the panel cannot answer itself, so it
   // hands the question to the browser. The renderer names a provider rather
   // than an address: the pages Luke can open are the ones in the provider
@@ -851,7 +875,7 @@ if (!app.requestSingleInstanceLock()) {
     positionPanel();
     if (panelWindow && !panelWindow.isDestroyed()) panelWindow.showInactive();
   });
-  void app.whenReady().then(() => {
+  void app.whenReady().then(async () => {
     if (process.platform === "darwin") app.setActivationPolicy("accessory");
     Menu.setApplicationMenu(null);
     refreshNativeGeometry();
@@ -869,6 +893,12 @@ if (!app.requestSingleInstanceLock()) {
       (show) => applyMenuBarVisibility(show),
       () => applyMenuBarVisibility(true),
     );
+    // Awaited, so the chosen voice reaches the minter before the renderer
+    // exists to ask for a credential: the first conversation must already
+    // speak with it. A file that cannot be read means no choice was kept — it
+    // must not keep the panel, the hotkey, or observation from starting.
+    const storedVoice = await settingsStore.readVoice().catch(() => undefined);
+    if (storedVoice) realtimeCredentials?.setVoice(storedVoice);
     reportVoiceAvailability();
     // The report is not made here: the helper answers over its own stdout a
     // moment later, and a line printed now would state an absence that only

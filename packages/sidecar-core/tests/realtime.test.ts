@@ -8,6 +8,7 @@ import {
   attentionSpeechFromReviews,
   cancelResponseEvents,
   clearInputAudioEvents,
+  isRealtimeVoice,
   maximumVoiceContextSessions,
   normalizeSession,
   proactiveSpeechEvents,
@@ -15,6 +16,7 @@ import {
   REALTIME_CLIENT_EVENT,
   REALTIME_DEFAULTS,
   REALTIME_SESSION_TYPE,
+  REALTIME_VOICE_LIST,
   realtimeClientSecretRequest,
   realtimeCredentialFromResponse,
   realtimeCredentialIsUsable,
@@ -114,6 +116,17 @@ test("a mint response without a session model falls back to the requested model"
 test("a male voice is what the session is minted with", () => {
   assert.equal(REALTIME_DEFAULTS.VOICE, "cedar");
   assert.equal(realtimeSessionConfig().audio.output.voice, "cedar");
+});
+
+test("the default voice is one the settings can offer", () => {
+  assert.equal(isRealtimeVoice(REALTIME_DEFAULTS.VOICE), true);
+});
+
+test("every offered voice is recognized and anything else is refused", () => {
+  for (const voice of REALTIME_VOICE_LIST) assert.equal(isRealtimeVoice(voice), true);
+  for (const value of ["baritone", "", "  cedar  ", undefined, null, 3]) {
+    assert.equal(isRealtimeVoice(value), false);
+  }
 });
 
 test("nothing asks the API for a transcript it will not show", () => {

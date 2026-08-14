@@ -10,9 +10,37 @@ import {
   type SessionIdentity,
 } from "./session";
 
+/**
+ * Every voice the Realtime API can speak with. The set is the API's, not
+ * Luke's: a voice outside it is refused at mint time, so offering one would be
+ * a control that cannot work.
+ */
+export const REALTIME_VOICE = {
+  ALLOY: "alloy",
+  ASH: "ash",
+  BALLAD: "ballad",
+  CEDAR: "cedar",
+  CORAL: "coral",
+  ECHO: "echo",
+  MARIN: "marin",
+  SAGE: "sage",
+  SHIMMER: "shimmer",
+  VERSE: "verse",
+} as const;
+
+export type RealtimeVoice = (typeof REALTIME_VOICE)[keyof typeof REALTIME_VOICE];
+
+/** Settings offers the voices in this order. */
+export const REALTIME_VOICE_LIST: readonly RealtimeVoice[] = Object.values(REALTIME_VOICE);
+
+/** Guards a voice arriving from storage or IPC. */
+export function isRealtimeVoice(value: unknown): value is RealtimeVoice {
+  return typeof value === "string" && REALTIME_VOICE_LIST.includes(value as RealtimeVoice);
+}
+
 export const REALTIME_DEFAULTS = {
   MODEL: "gpt-realtime-2.1",
-  VOICE: "cedar",
+  VOICE: REALTIME_VOICE.CEDAR,
 } as const;
 
 /** The Realtime session shape and the endpoints that mint and open a call. */
