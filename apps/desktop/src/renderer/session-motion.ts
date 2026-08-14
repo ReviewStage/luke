@@ -254,12 +254,16 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
 
     const plan = planReorder(baseline.current, positions);
     baseline.current = positions;
-    // Whether this commit moved the container's own bound out from under the
-    // list — the wing's `--wing-bound` changing with the presentation is the
-    // one thing that does. Elements measured against the anchored edge read
-    // that as the travel it truly is, and it is a different gesture from a
-    // slot hop: the surface is what moved, so they ride the surface's spring.
-    const width = container.clientWidth;
+    // Whether this commit moved the list's bound out from under it — the
+    // wing's `--wing-bound` changing with the presentation is the one thing
+    // that does. Elements measured against the anchored edge read that as the
+    // travel it truly is, and it is a different gesture from a slot hop: the
+    // surface is what moved, so they ride the surface's spring. The bound is
+    // the box the offsets are measured against — the container's own
+    // `offsetParent`, the same node the elements report theirs from — never
+    // the container, which shrink-wraps its contents and holds its width
+    // while the bound beneath it moves.
+    const width = (container.offsetParent ?? container).clientWidth;
     const boundMoved =
       baselineWidth.current !== undefined &&
       Math.abs(width - baselineWidth.current) > TRAVEL_EPSILON;
