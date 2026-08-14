@@ -328,6 +328,13 @@ export function App(): React.JSX.Element {
   const sessionsRef = useRef<readonly NormalizedSession[]>([]);
   const workspaceProjectsRef = useRef<readonly ObservedWorkspaceProject[]>([]);
   /**
+   * Whether a live projects push has arrived. The bootstrap reply resolves
+   * whenever the main process gets to it, so a push can land first — and the
+   * bootstrap's older snapshot must then not clobber it, because the main
+   * process will not repeat a list it believes it already announced.
+   */
+  const workspaceProjectsPushed = useRef(false);
+  /**
    * The issue roster as last pushed, for a conversation that connects later.
    * Never state: no panel surface draws it — it exists to be spoken from.
    */
@@ -1055,9 +1062,10 @@ export function App(): React.JSX.Element {
     void window.sidecar.getBootstrap().then((value) => {
       setBootstrap(value);
       setSessions(value.sessions);
-      setWorkspaceProjects(value.workspaceProjects);
       // Only fill in what no push has said yet: the bootstrap snapshot is
-      // older than any roster change that raced past it.
+      // older than any change that raced past it, and the main process will
+      // not repeat a list it believes it already announced.
+      if (!workspaceProjectsPushed.current) setWorkspaceProjects(value.workspaceProjects);
       if (!issuesPushed.current) issuesRef.current = value.issues;
       setSettings(value.settings);
       setDisplay(value.display);
@@ -1093,7 +1101,10 @@ export function App(): React.JSX.Element {
     });
     const removeDisplay = window.sidecar.onDisplayChanged(setDisplay);
     const removeSessions = window.sidecar.onSessionsChanged(setSessions);
-    const removeWorkspaceProjects = window.sidecar.onWorkspaceProjectsChanged(setWorkspaceProjects);
+    const removeWorkspaceProjects = window.sidecar.onWorkspaceProjectsChanged((projects) => {
+      workspaceProjectsPushed.current = true;
+      setWorkspaceProjects(projects);
+    });
     // Straight to the conversation rather than through state: no panel
     // surface draws the issue roster, so a re-render would be work for nobody.
     const removeIssues = window.sidecar.onIssuesChanged((issues) => {
