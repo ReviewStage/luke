@@ -181,6 +181,9 @@ const SETTING_GUIDE: Record<
   // reasons: the fact carries the key that registered, and a chord is
   // recorded by typing it rather than saying it.
   askHotkey: () => undefined,
+  // Described in the stopping-a-reply fact instead, on the same terms as the
+  // other two keys' stored choices.
+  stopHotkey: () => undefined,
   // Not a switch but a set of keys, so it is described in the facts instead:
   // which providers are connected, and that a key is only ever typed by hand.
   credentialSources: () => undefined,
@@ -202,6 +205,11 @@ export interface LukeGuideInput {
   hotkey: { hotkey?: string; held: boolean };
   /** The ask key labelled on the same terms, absent when none was registered. */
   askKey?: string;
+  /**
+   * The stop key labelled on the same terms, absent when none was registered
+   * — another app owns Option-S, or another Luke key was moved onto it.
+   */
+  stopKey?: string;
 }
 
 function talkKeyFact(hotkey: LukeGuideInput["hotkey"]): AppGuideFact {
@@ -345,6 +353,19 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     { label: "Microphone access", detail: MICROPHONE_DETAIL[input.microphoneStatus] },
     ...(input.voiceAvailable
       ? [
+          {
+            label: "Stopping a reply",
+            detail:
+              (input.stopKey
+                ? `${input.stopKey}, from any app, cuts the reply off and asks for nothing in ` +
+                  "its place; Escape does the same while Luke's panel has the keyboard."
+                : "Escape while Luke is speaking cuts the reply off and asks for nothing in " +
+                  "its place. No system-wide stop key is registered right now — another app " +
+                  "may own the shortcut.") +
+              " The talk key over a reply interrupts too, but takes the turn: the microphone " +
+              `opens with the same press. A different stop chord can be recorded, or the ` +
+              `default restored, in ${SETTINGS_TAB}.`,
+          },
           {
             label: "Muted output",
             detail:

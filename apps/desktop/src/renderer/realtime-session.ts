@@ -635,9 +635,33 @@ export class RealtimeVoiceSession {
     // the current turn's: a `response.done` that matches nothing can neither
     // act with the new turn's arming nor end the new turn early.
     this.#activeResponseId = undefined;
+    // The turn the arming belonged to is over with the reply. Every caller
+    // that opens a new developer turn arms it afresh in #startResponse; left
+    // true here, the cancelled reply's late calls would find it still standing.
+    this.#toolTurnArmed = false;
     this.#generationDone = false;
     this.#remoteQuiet = false;
     this.#clearSettleTimer();
+  }
+
+  /**
+   * Cuts off the reply under way without opening anything in its place — the
+   * developer asking for quiet rather than for a turn. The cut is the same
+   * one talking or typing over Luke makes: silenced at once, cancelled, and
+   * trimmed to what was actually heard, so the next answer cannot refer back
+   * to words that never reached the room. Reports whether there was a reply
+   * to stop, so the key that asked keeps its other meanings when there was
+   * not.
+   */
+  stopSpeaking(): boolean {
+    if (this.#status !== REALTIME_STATUS.RESPONDING) return false;
+    this.#interruptReply();
+    // A stop opens no reply of its own, so the turn moves on here: a tool
+    // follow-up still awaiting its write finds an epoch that is no longer its
+    // own and stands down, rather than speaking over the quiet just asked for.
+    this.#turnEpoch += 1;
+    this.#setStatus(REALTIME_STATUS.READY);
+    return true;
   }
 
   /**
@@ -913,6 +937,12 @@ export class RealtimeVoiceSession {
       if (typeof item?.id === "string") this.#responseItemId = item.id;
     }
     if (type === REALTIME_SERVER_EVENT.RESPONSE_CREATED) {
+      // Only a reply the session is still waiting on may be adopted. A
+      // confirmation arriving after the developer stopped or took the turn is
+      // the cancelled reply's own, landing late — the stop raced the server's
+      // confirmation — and adopting it would re-open the track over the quiet
+      // just asked for, and let its finished form read as the current reply's.
+      if (this.#status !== REALTIME_STATUS.RESPONDING) return;
       // The reply being asked for is under way, so anything arriving from here
       // belongs to it rather than to the one it replaced. Its name is what a
       // `response.done` must present to be read as this reply's: the channel

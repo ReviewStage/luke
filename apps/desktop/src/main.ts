@@ -108,6 +108,8 @@ import {
   askHotkeyCandidates,
   askHotkeyReport,
   parseVoiceHotkey,
+  stopHotkeyCandidates,
+  stopHotkeyReport,
   VOICE_HOTKEY_ABSENCE,
   type VoiceHotkeyAbsence,
   voiceHotkeyCandidates,
@@ -401,17 +403,91 @@ function sendAskHotkey(): void {
   }
 }
 
+let stopHotkey: string | undefined;
+let chosenStopHotkey: string | undefined;
+
+/**
+ * Registers the key that stops a reply mid-sentence from whatever app is
+ * frontmost, on the ask key's exact terms: never during a capture run, never
+ * without a credential, and never on a chord the other two Luke keys could
+ * sit on — three keys must not compete any more than two, and the stop key
+ * is the one that yields, because it alone has Escape standing behind it.
+ * Electron's registration is enough here, because a stop has no release edge
+ * to hear. The press carries no decision of its own: the renderer's session
+ * answers whether there is a reply to stop, exactly as it answers Escape.
+ */
+function registerStopHotkey(): void {
+  // Re-runnable on the ask key's terms: moving another key registers afresh,
+  // and a chord that could not be re-taken must not still be claimed anywhere.
+  stopHotkey = undefined;
+  if (captureMode) {
+    process.stderr.write(`${stopHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.CAPTURE_RUN)}\n`);
+    return;
+  }
+  if (!realtimeCredentials) {
+    process.stderr.write(`${stopHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.NO_CREDENTIAL)}\n`);
+    return;
+  }
+  // Every chord the other two keys could sit on is taken, not just the ones
+  // they have announced: the talk key's helper falls back through its own
+  // candidates on its own clock, and the ask key re-registers behind it.
+  for (const accelerator of stopHotkeyCandidates(chosenStopHotkey, [
+    ...voiceHotkeyCandidates(chosenVoiceHotkey),
+    voiceHotkey,
+    ...askHotkeyCandidates(chosenAskHotkey, []),
+    askHotkey,
+  ])) {
+    const registered = globalShortcut.register(accelerator, () => {
+      voiceHostWindow()?.webContents.send(channels.stopHotkeyPress);
+    });
+    if (!registered) continue;
+    stopHotkey = accelerator;
+    process.stderr.write(`${stopHotkeyReport(stopHotkey, VOICE_HOTKEY_ABSENCE.ALREADY_OWNED)}\n`);
+    return;
+  }
+  process.stderr.write(`${stopHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.ALREADY_OWNED)}\n`);
+}
+
+/**
+ * Tells every renderer the stop key it should be describing, whenever that
+ * changes. An absence travels too, for the guide's sake: a chord that answers
+ * nothing must not be one Luke claims to have.
+ */
+function sendStopHotkey(): void {
+  for (const window of panelWindows.values()) {
+    window.webContents.send(channels.stopHotkeyChanged, stopHotkey);
+  }
+}
+
 /**
  * Moves the ask key to whatever `chosenAskHotkey` now says, while the app is
  * running. Only the ask key's own chord is let go of — the talk key's
  * registration must not flicker for a change that is none of its business —
  * and unlike the talk key there is no helper exit to wait for: Electron
- * releases a chord the moment it is asked to.
+ * releases a chord the moment it is asked to. The stop key is let go of and
+ * re-taken behind it, because the chord it may have is decided by where the
+ * ask key lands: an ask key moving onto Option-S must win it, and one moving
+ * off must give it back.
  */
 function applyAskHotkey(): void {
   if (askHotkey) globalShortcut.unregister(askHotkey);
+  if (stopHotkey) globalShortcut.unregister(stopHotkey);
   registerAskHotkey();
   sendAskHotkey();
+  registerStopHotkey();
+  sendStopHotkey();
+}
+
+/**
+ * Moves the stop key to whatever `chosenStopHotkey` now says, while the app
+ * is running. Only its own chord is let go of: the stop key is the bottom of
+ * the pecking order, so where it lands is decided by the other two keys and
+ * moving it can never oblige either of them to move.
+ */
+function applyStopHotkey(): void {
+  if (stopHotkey) globalShortcut.unregister(stopHotkey);
+  registerStopHotkey();
+  sendStopHotkey();
 }
 
 /**
@@ -462,6 +538,11 @@ async function applyVoiceHotkey(): Promise<void> {
   // its candidates — so it is re-taken now and the panel told what it teaches.
   registerAskHotkey();
   sendAskHotkey();
+  // The stop key went down with it and yields to both, so it goes last: a
+  // talk key moving onto Option-S must win the chord, and one moving off must
+  // give it back.
+  registerStopHotkey();
+  sendStopHotkey();
 }
 
 /** The mode every window is born in; only the dev and capture flags change it. */
@@ -932,6 +1013,7 @@ function registerIpc(): void {
       ...(voiceHotkey ? { voiceHotkey } : {}),
       voiceHotkeyHeld,
       ...(askHotkey ? { askHotkey } : {}),
+      ...(stopHotkey ? { stopHotkey } : {}),
       ...(outputAudio ? { outputAudio } : {}),
       display: displayDiagnostic(display),
       sessions: fixtureMode ? [] : sessionRegistry.snapshot().sessions,
@@ -1259,6 +1341,59 @@ function registerIpc(): void {
         if (!result.reason) {
           chosenAskHotkey = chosen;
           applyAskHotkey();
+        }
+        broadcastSettings(result.settings, event.sender);
+        return result;
+      } catch {
+        // A filesystem failure is not something the user can act on, so it is
+        // reported as one line rather than as a raw system error.
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "Could not save that shortcut on this system.",
+        };
+      }
+    },
+  );
+
+  // The stop key is the user's to move on the other two keys' exact terms,
+  // read through the same gate and registered at once. It sits at the bottom
+  // of the pecking order, so both standing rules point up: a chord the talk
+  // key or the ask key sits on — or could fall back to — is refused with
+  // words rather than stored and silently outbid.
+  ipcMain.handle(
+    channels.setStopHotkey,
+    async (event, accelerator: unknown): Promise<SettingsUpdateResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (accelerator !== undefined && typeof accelerator !== "string") {
+        throw new Error("Invalid shortcut request");
+      }
+      const chosen = accelerator === undefined ? undefined : parseVoiceHotkey(accelerator);
+      if (accelerator !== undefined && chosen === undefined) {
+        throw new Error("Invalid shortcut request");
+      }
+      if (
+        chosen &&
+        (voiceHotkeyCandidates(chosenVoiceHotkey).includes(chosen) || chosen === voiceHotkey)
+      ) {
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "That chord is reserved for the talk key.",
+        };
+      }
+      if (
+        chosen &&
+        (askHotkeyCandidates(chosenAskHotkey, []).includes(chosen) || chosen === askHotkey)
+      ) {
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "That chord is reserved for the ask key.",
+        };
+      }
+      try {
+        const result = await settingsStore.setStopHotkey(chosen);
+        if (!result.reason) {
+          chosenStopHotkey = chosen;
+          applyStopHotkey();
         }
         broadcastSettings(result.settings, event.sender);
         return result;
@@ -2204,11 +2339,13 @@ if (!app.requestSingleInstanceLock()) {
     // read means no choice was kept, and the defaults answer.
     chosenVoiceHotkey = await settingsStore.readVoiceHotkey().catch(() => undefined);
     chosenAskHotkey = await settingsStore.readAskHotkey().catch(() => undefined);
+    chosenStopHotkey = await settingsStore.readStopHotkey().catch(() => undefined);
     // The report is not made here: the helper answers over its own stdout a
     // moment later, and a line printed now would state an absence that only
     // exists because nobody has answered yet.
     registerVoiceHotkey();
     registerAskHotkey();
+    registerStopHotkey();
     // Read-only, like everything else that watches: what it learns decides
     // what the renderer draws while Luke speaks unheard, and nothing more.
     startOutputVolumeWatch();

@@ -103,6 +103,11 @@ export interface AppSettings {
    */
   askHotkey?: string;
   /**
+   * The stop-key chord the user chose, on the same terms as the other two:
+   * only whether there is a choice to reset, never the key the row shows.
+   */
+  stopHotkey?: string;
+  /**
    * Whether Music and Spotify are turned down while a spoken exchange is
    * live, and back up after. On by default: speech over music is the failure
    * everyone has had, and the duck defers to the user everywhere it can — it
@@ -217,6 +222,12 @@ export interface AppBootstrap {
    */
   askHotkey?: string;
   /**
+   * The accelerator that stops a reply mid-sentence from any app, absent when
+   * the system refused it or another Luke key sits on its chord. Raw for the
+   * same reason the other two are.
+   */
+  stopHotkey?: string;
+  /**
    * The output's switches as last read, absent until the helper's first line
    * arrives — or forever, where there is no helper to ask.
    */
@@ -307,6 +318,13 @@ export interface AppBridge {
    * stored and left to race it.
    */
   setAskHotkey(accelerator: string | undefined): Promise<SettingsUpdateResult>;
+  /**
+   * Moves the stop key the same way, or back to its default when omitted,
+   * under the same standing rule one rung further down: a chord either other
+   * Luke key holds — or could fall back to — is refused with a reason rather
+   * than stored and left to race it.
+   */
+  setStopHotkey(accelerator: string | undefined): Promise<SettingsUpdateResult>;
   /**
    * Opens an observed session where its provider keeps it. The renderer names
    * the session rather than its address, for the same reason it names a
@@ -418,6 +436,18 @@ export interface AppBridge {
    */
   onAskHotkeyChanged(callback: (accelerator: string | undefined) => void): () => void;
   /**
+   * The stop key going down, from whatever app happened to be frontmost. The
+   * press carries no decision: the renderer's session answers whether there
+   * is a reply to stop, exactly as Escape's press does.
+   */
+  onStopHotkeyPress(callback: () => void): () => void;
+  /**
+   * The stop key being re-taken, on the ask key's terms: moving another Luke
+   * key can put it up, take it down, or leave it — and an absence must reach
+   * the guide, or Luke describes a chord that answers nothing.
+   */
+  onStopHotkeyChanged(callback: (accelerator: string | undefined) => void): () => void;
+  /**
    * The output's switches changing under the user's own hand — or becoming
    * unreadable, which arrives as `undefined` and must be drawn as audible.
    */
@@ -436,6 +466,7 @@ export const channels = {
   setVoiceCaptions: "app:set-voice-captions",
   setVoiceHotkey: "app:set-voice-hotkey",
   setAskHotkey: "app:set-ask-hotkey",
+  setStopHotkey: "app:set-stop-hotkey",
   setDuckOtherMedia: "app:set-duck-other-media",
   setVoiceExchange: "app:set-voice-exchange",
   openProviderApiKeys: "app:open-provider-api-keys",
@@ -458,6 +489,8 @@ export const channels = {
   voiceHotkeyRelease: "app:voice-hotkey-release",
   voiceHotkeyChanged: "app:voice-hotkey-changed",
   askHotkeyChanged: "app:ask-hotkey-changed",
+  stopHotkeyPress: "app:stop-hotkey-press",
+  stopHotkeyChanged: "app:stop-hotkey-changed",
   outputAudioChanged: "app:output-audio-changed",
   rendererReady: "app:renderer-ready",
   lifecycle: "app:lifecycle",

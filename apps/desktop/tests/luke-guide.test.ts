@@ -48,6 +48,7 @@ function guideInput(overrides: Partial<LukeGuideInput> = {}): LukeGuideInput {
     microphoneStatus: "granted",
     hotkey: { hotkey: "⌥Space", held: true },
     askKey: "⌥L",
+    stopKey: "⌥S",
     ...overrides,
   };
 }
@@ -145,6 +146,29 @@ test("the facts describe creating a workspace, so Luke does not deny the capabil
   assert.match(rendered, /Creating workspaces/);
   // The refusal shape rides with the offer: only reported projects exist.
   assert.match(rendered, /Only reported projects/);
+});
+
+test("the facts describe stopping a reply, exactly where a reply can exist", () => {
+  const rendered = JSON.stringify(buildLukeGuide(guideInput()).facts);
+
+  assert.match(rendered, /Stopping a reply/);
+  // The registered key leads, and Escape rides with it: the stop key answers
+  // from any app, Escape only while the panel has the keyboard.
+  assert.match(rendered, /⌥S, from any app/);
+  assert.match(rendered, /Escape does the same/);
+  // Guiding the developer to the row is half of what the guide is for.
+  assert.match(rendered, /A different stop chord can be recorded/);
+
+  // No key registered — another app owns ⌥S, or a Luke key was moved onto
+  // it — leaves Escape as the whole of the capability, said honestly.
+  const keyless = JSON.stringify(buildLukeGuide(guideInput({ stopKey: undefined })).facts);
+  assert.match(keyless, /Escape while Luke is speaking/);
+  assert.match(keyless, /No system-wide stop key is registered/);
+
+  // Without a voice there is no reply to stop, so the fact would describe a
+  // key that does nothing.
+  const voiceless = JSON.stringify(buildLukeGuide(guideInput({ voiceAvailable: false })).facts);
+  assert.doesNotMatch(voiceless, /Stopping a reply/);
 });
 
 test("the facts follow the talk key, the microphone, and the storage the system offers", () => {
