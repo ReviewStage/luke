@@ -168,6 +168,7 @@ export interface SessionTally {
   idle: number;
   /** The state the count badge and the notch capsule adopt. */
   state: SessionState;
+  /** One agent each, seated where its first session reads under the sort. */
   providers: readonly ProviderTally[];
 }
 
@@ -212,6 +213,11 @@ function byUrgency(first: DisplaySession, second: DisplaySession): number {
 /** What moved last, with urgency deciding sessions observed in the same tick. */
 function byRecency(first: DisplaySession, second: DisplaySession): number {
   return second.observedAt - first.observedAt || byUrgency(first, second);
+}
+
+/** The comparator a sort names — one answer for the list and the wing's marks. */
+function bySort(sort: SessionSort): (first: DisplaySession, second: DisplaySession) => number {
+  return sort === SESSION_SORT.RECENCY ? byRecency : byUrgency;
 }
 
 export function displaySessions(
@@ -341,19 +347,29 @@ export function arrangeSessions(
       : sessions.filter((session) => matchesFilter(session, filter));
 
   return {
-    sessions: [...matching].sort(view.sort === SESSION_SORT.RECENCY ? byRecency : byUrgency),
+    sessions: [...matching].sort(bySort(view.sort)),
     total: sessions.length,
     filter,
     options,
   };
 }
 
-export function sessionTally(sessions: readonly DisplaySession[]): SessionTally {
+/**
+ * Counted across everything tracked, whatever the list is narrowed to — but
+ * read in the sort the list is read in, so the providers sit in the order
+ * their first sessions do and the wing's marks match the rows. With no view in
+ * force — the capsule, say — the sessions read by urgency, which is also the
+ * sort the panel opens on.
+ */
+export function sessionTally(
+  sessions: readonly DisplaySession[],
+  sort: SessionSort = SESSION_SORT.URGENCY,
+): SessionTally {
   const providers = new Map<string, ProviderTally>();
   const counts = { attention: 0, working: 0, complete: 0, idle: 0 };
   const attentionIds: string[] = [];
 
-  for (const session of sessions) {
+  for (const session of [...sessions].sort(bySort(sort))) {
     if (session.state === SESSION_STATE.ATTENTION) {
       counts.attention += 1;
       attentionIds.push(session.id);

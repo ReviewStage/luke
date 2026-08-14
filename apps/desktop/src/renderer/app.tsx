@@ -1010,9 +1010,10 @@ export function App(): React.JSX.Element {
   if (!bootstrap || !display) return <div />;
 
   const visibleSessions = displaySessions(bootstrap, sessions);
-  // The tally is taken before the list is narrowed: the capsule reports what
-  // Luke is watching, not what the panel is currently showing.
-  const tally = sessionTally(visibleSessions);
+  // The tally is taken before the list is narrowed — the capsule reports what
+  // Luke is watching, not what the panel is currently showing — but it reads
+  // in the list's own sort, so the wing's marks sit in the order the rows do.
+  const tally = sessionTally(visibleSessions, sessionView.sort);
   const list = arrangeSessions(visibleSessions, sessionView);
   // Dropping an emptied filter is a change of view, not a way of drawing one.
   // Left in state it would lie dormant behind an All that only looks chosen,

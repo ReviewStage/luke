@@ -231,6 +231,29 @@ test("the tally counts per state and per provider", () => {
   ]);
 });
 
+// The wing's marks and the rows are two drawings of the same order, so
+// choosing the other sort re-seats the providers with the sessions: a mark
+// that stayed put while the rows re-sorted would name the top row's agent
+// wrong. The counts are counts, and no ordering may change them.
+test("the providers re-seat with the rows when the other sort is chosen", () => {
+  const recent = sessionTally(FIXTURE_SESSIONS, SESSION_SORT.RECENCY);
+
+  assert.deepEqual(
+    recent.providers.map((provider) => provider.providerId),
+    [
+      PROVIDER_ID.CONDUCTOR,
+      PROVIDER_ID.CODEX,
+      PROVIDER_ID.CLAUDE_CODE,
+      PROVIDER_ID.CURSOR,
+      PROVIDER_ID.DEVIN,
+    ],
+  );
+  assert.deepEqual(
+    { ...recent, providers: undefined },
+    { ...sessionTally(FIXTURE_SESSIONS), providers: undefined },
+  );
+});
+
 test("the badge state follows the most urgent session", () => {
   const working = sessionTally(
     displaySessions(bootstrap(false), [liveSession(CODEX_PROVIDER, "a", SESSION_STATUS.WORKING)]),
