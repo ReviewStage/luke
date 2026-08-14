@@ -1,7 +1,13 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { isRealtimeVoice, REALTIME_DEFAULTS, type RealtimeVoice } from "@sidecar/core";
-import { environmentRealtimeVoice } from "./openai-realtime-credentials";
+import {
+  isRealtimeVoice,
+  isRealtimeVoiceSpeed,
+  REALTIME_DEFAULTS,
+  type RealtimeVoice,
+  type RealtimeVoiceSpeed,
+} from "@sidecar/core";
+import { environmentRealtimeSpeed, environmentRealtimeVoice } from "./openai-realtime-credentials";
 import {
   type AppSettings,
   CREDENTIAL_SOURCE,
@@ -32,6 +38,7 @@ const SETTINGS_FIELD = {
   VERSION: "version",
   VOICE: "voice",
   VOICE_CAPTIONS: "voiceCaptions",
+  VOICE_SPEED: "voiceSpeed",
 } as const;
 
 const API_KEY_LENGTH = {
@@ -88,6 +95,11 @@ interface PersistedSettings {
    * than a credential, so it is stored plainly and never touches the cipher.
    */
   voice?: RealtimeVoice;
+  /**
+   * The pace the user chose for Luke's speech, absent until one has been.
+   * Stored plainly like the voice, and held to the same offered set.
+   */
+  voiceSpeed?: RealtimeVoiceSpeed;
   /**
    * Whether Luke's speech is captioned on screen. Off unless the file says
    * `true` outright, so a missing field, an older file, and a corrupt value
@@ -168,6 +180,7 @@ function parsePersistedSettings(source: string): PersistedSettings {
   const version = record[SETTINGS_FIELD.VERSION];
   const showInMenuBar = record[SETTINGS_FIELD.SHOW_IN_MENU_BAR];
   const voice = record[SETTINGS_FIELD.VOICE];
+  const voiceSpeed = record[SETTINGS_FIELD.VOICE_SPEED];
   return {
     version: typeof version === "number" ? version : SETTINGS_FILE_VERSION,
     apiKeys: storedApiKeys(record),
@@ -177,6 +190,8 @@ function parsePersistedSettings(source: string): PersistedSettings {
     // a credential it has a default to fall back to, and honouring an unknown
     // one would mint sessions the API refuses.
     ...(isRealtimeVoice(voice) ? { voice } : {}),
+    // A pace outside the offered set is dropped for the same reason.
+    ...(isRealtimeVoiceSpeed(voiceSpeed) ? { voiceSpeed } : {}),
     voiceCaptions: record[SETTINGS_FIELD.VOICE_CAPTIONS] === true,
   };
 }
@@ -226,6 +241,10 @@ export class SettingsStore {
         (await this.#load()).voice ??
         environmentRealtimeVoice(this.#environment) ??
         REALTIME_DEFAULTS.VOICE,
+      voiceSpeed:
+        (await this.#load()).voiceSpeed ??
+        environmentRealtimeSpeed(this.#environment) ??
+        REALTIME_DEFAULTS.SPEED,
       voiceCaptions: (await this.#load()).voiceCaptions,
     };
   }
@@ -268,6 +287,32 @@ export class SettingsStore {
       };
       if (voice) next.voice = voice;
       else delete next.voice;
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+    });
+    return { settings: await this.snapshot() };
+  }
+
+  /**
+   * Main-process only, like the voice: the pace the user chose, for the minter
+   * at startup. Nothing chosen resolves to nothing — the minter already
+   * carries the environment's pace and the default.
+   */
+  async readVoiceSpeed(): Promise<RealtimeVoiceSpeed | undefined> {
+    return (await this.#load()).voiceSpeed;
+  }
+
+  /** Stores the chosen pace, or returns to the default when omitted. */
+  async setVoiceSpeed(speed: RealtimeVoiceSpeed | undefined): Promise<SettingsUpdateResult> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (persisted.voiceSpeed === speed) return;
+      const next: PersistedSettings = {
+        ...persisted,
+        version: SETTINGS_FILE_VERSION,
+      };
+      if (speed) next.voiceSpeed = speed;
+      else delete next.voiceSpeed;
       await this.#write(next);
       this.#loading = Promise.resolve(next);
     });

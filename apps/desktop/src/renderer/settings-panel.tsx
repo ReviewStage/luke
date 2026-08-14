@@ -1,8 +1,11 @@
 import {
   isRealtimeVoice,
+  isRealtimeVoiceSpeed,
   REALTIME_DEFAULTS,
   REALTIME_VOICE_LIST,
+  REALTIME_VOICE_SPEED_LIST,
   type RealtimeVoice,
+  type RealtimeVoiceSpeed,
 } from "@sidecar/core";
 import { useEffect, useRef, useState } from "react";
 import type { AppSettings, CredentialSource, MicrophoneStatus } from "../shared/contracts";
@@ -59,6 +62,8 @@ export interface SettingsPanelProps {
   credentials: CredentialEntryControl;
   /** Chooses the voice Luke speaks with, from the set fixed by this build. */
   onVoiceChange: (voice: RealtimeVoice) => void;
+  /** Chooses the pace Luke speaks at, from the set fixed by this build. */
+  onVoiceSpeedChange: (speed: RealtimeVoiceSpeed) => void;
   /**
    * True while the panel is the shape on screen. A field can only hold the
    * caret then: everything here sits in an inert stage the rest of the time,
@@ -452,6 +457,13 @@ function voiceOptionLabel(voice: RealtimeVoice): string {
   return voice === REALTIME_DEFAULTS.VOICE ? `${name} (default)` : name;
 }
 
+/* A pace reads as a rate multiple, the way every player writes one. The
+   natural rate carries its status into the menu for the same reason the
+   default voice does. */
+function speedOptionLabel(speed: RealtimeVoiceSpeed): string {
+  return speed === REALTIME_DEFAULTS.SPEED ? `${speed}× (default)` : `${speed}×`;
+}
+
 /**
  * Every provider that can hold a key, one line each. A provider is listed
  * whether or not it has one, because the list is how you learn which services
@@ -510,6 +522,8 @@ function CredentialsSection({
 function PreferencesSection({
   voice,
   onVoiceChange,
+  speed,
+  onVoiceSpeedChange,
   captions,
   onVoiceCaptionsChange,
   shown,
@@ -519,6 +533,8 @@ function PreferencesSection({
 }: {
   voice: RealtimeVoice;
   onVoiceChange: (voice: RealtimeVoice) => void;
+  speed: RealtimeVoiceSpeed;
+  onVoiceSpeedChange: (speed: RealtimeVoiceSpeed) => void;
   captions: boolean;
   onVoiceCaptionsChange: (enabled: boolean) => Promise<string | undefined>;
   shown: boolean;
@@ -595,6 +611,40 @@ function PreferencesSection({
       </div>
       <div className="settings-row">
         <span className="settings-copy">
+          <strong>Speed</strong>
+          {/* The same promise as the voice's line, because it lands the same
+              way: minted into the next conversation, never a live one. */}
+          <small>How fast Luke talks, from the next conversation on.</small>
+        </span>
+        <span className="voice-select">
+          <select
+            aria-label="Speed"
+            value={speed}
+            onChange={(event) => {
+              // A select serializes its value to a string, so the number is
+              // read back out and held to the set fixed by this build.
+              const next = Number(event.target.value);
+              if (isRealtimeVoiceSpeed(next)) onVoiceSpeedChange(next);
+            }}
+            onFocus={() => {
+              // The panel can be showing without its window being key, and a
+              // menu opened then would drop its first choice.
+              window.sidecar.focusPanel();
+            }}
+          >
+            {REALTIME_VOICE_SPEED_LIST.map((candidate) => (
+              <option key={candidate} value={candidate}>
+                {speedOptionLabel(candidate)}
+              </option>
+            ))}
+          </select>
+          <span className="voice-select-badge" aria-hidden="true">
+            <PopUpIcon />
+          </span>
+        </span>
+      </div>
+      <div className="settings-row">
+        <span className="settings-copy">
           <strong>Captions</strong>
           {/* Off by default: the voice experience ships as sound, so the words
               are chosen rather than discovered. What is *not* kept is the one
@@ -660,6 +710,7 @@ export function SettingsPanel({
   onVoiceCaptionsChange,
   credentials,
   onVoiceChange,
+  onVoiceSpeedChange,
   panelOpen,
   onShowInMenuBarChange,
   onShowInDockChange,
@@ -679,6 +730,8 @@ export function SettingsPanel({
         <PreferencesSection
           voice={settings.voice}
           onVoiceChange={onVoiceChange}
+          speed={settings.voiceSpeed}
+          onVoiceSpeedChange={onVoiceSpeedChange}
           captions={settings.voiceCaptions}
           onVoiceCaptionsChange={onVoiceCaptionsChange}
           shown={settings.showInMenuBar}

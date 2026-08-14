@@ -6,6 +6,7 @@ import type {
   ProviderMessageResult,
   RealtimeConnection,
   RealtimeVoice,
+  RealtimeVoiceSpeed,
   Rectangle,
   ResolvedNotchGeometry,
   SessionIdentity,
@@ -70,6 +71,11 @@ export interface AppSettings {
    * marks the voice that would actually be heard, not just a stored value.
    */
   voice: RealtimeVoice;
+  /**
+   * The pace Luke speaks at, resolved the same way as the voice: the one the
+   * user chose, else the launch environment's, else the natural rate.
+   */
+  voiceSpeed: RealtimeVoiceSpeed;
   /**
    * Whether Luke's words are captioned on screen while he speaks. Off by
    * default: the voice experience ships as sound, and words drawn under the
@@ -183,6 +189,11 @@ export interface AppBridge {
    */
   setVoice(voice: RealtimeVoice): Promise<SettingsUpdateResult>;
   /**
+   * Chooses the pace Luke speaks at, from the set fixed by this build. It
+   * reaches the next conversation the same way the voice does.
+   */
+  setVoiceSpeed(speed: RealtimeVoiceSpeed): Promise<SettingsUpdateResult>;
+  /**
    * Opens a provider's own API-key page in the default browser. The renderer
    * names the provider, not the address, so the set of pages Luke can open is
    * fixed by this build.
@@ -247,6 +258,7 @@ export const channels = {
   openMicrophoneSettings: "app:open-microphone-settings",
   setProviderApiKey: "app:set-provider-api-key",
   setVoice: "app:set-voice",
+  setVoiceSpeed: "app:set-voice-speed",
   setVoiceCaptions: "app:set-voice-captions",
   openProviderApiKeys: "app:open-provider-api-keys",
   setShowInMenuBar: "app:set-show-in-menu-bar",

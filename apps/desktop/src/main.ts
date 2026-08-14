@@ -9,6 +9,7 @@ import {
   isControllableAdapter,
   isMessageCapableAdapter,
   isRealtimeVoice,
+  isRealtimeVoiceSpeed,
   type NativeNotchGeometry,
   PROVIDER_CONTROL_RESULT_STATUS,
   PROVIDER_MESSAGE_RESULT_STATUS,
@@ -455,7 +456,9 @@ function isSessionIdentity(value: unknown): value is SessionIdentity {
 function reportVoiceAvailability(): void {
   const report = realtimeCredentials?.diagnostics() ?? unavailableRealtimeDiagnostics(fixtureMode);
   if (realtimeCredentials) {
-    process.stderr.write(`Luke voice: enabled (model ${report.model}, voice ${report.voice})\n`);
+    process.stderr.write(
+      `Luke voice: enabled (model ${report.model}, voice ${report.voice}, speed ${report.speed}×)\n`,
+    );
     return;
   }
   process.stderr.write(
@@ -602,6 +605,27 @@ function registerIpc(): void {
         return {
           settings: await settingsStore.snapshot(),
           reason: "Could not save that voice on this system.",
+        };
+      }
+    },
+  );
+  // The pace travels the voice's road exactly: a value from the set fixed by
+  // this build, stored, and handed to the minter for the next conversation.
+  ipcMain.handle(
+    channels.setVoiceSpeed,
+    async (event, speed: unknown): Promise<SettingsUpdateResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (!isRealtimeVoiceSpeed(speed)) throw new Error("Unknown voice speed");
+      try {
+        const result = await settingsStore.setVoiceSpeed(speed);
+        // The next credential is minted for the new pace; a conversation
+        // already open keeps the one it answered at.
+        if (!result.reason) realtimeCredentials?.setSpeed(speed);
+        return result;
+      } catch {
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "Could not save that speed on this system.",
         };
       }
     },
@@ -1096,6 +1120,9 @@ if (!app.requestSingleInstanceLock()) {
     // must not keep the panel, the hotkey, or observation from starting.
     const storedVoice = await settingsStore.readVoice().catch(() => undefined);
     if (storedVoice) realtimeCredentials?.setVoice(storedVoice);
+    // The chosen pace rides the same await, for the same reason.
+    const storedSpeed = await settingsStore.readVoiceSpeed().catch(() => undefined);
+    if (storedSpeed) realtimeCredentials?.setSpeed(storedSpeed);
     reportVoiceAvailability();
     // The report is not made here: the helper answers over its own stdout a
     // moment later, and a line printed now would state an absence that only

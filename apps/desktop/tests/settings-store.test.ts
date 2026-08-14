@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
-import { REALTIME_DEFAULTS, REALTIME_VOICE } from "@sidecar/core";
+import { REALTIME_DEFAULTS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/core";
 import { type SecretCipher, SettingsStore } from "../src/settings-store";
 import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "../src/shared/contracts";
 import {
@@ -716,6 +716,57 @@ test("ignores a stored or environment voice this build does not offer", async (t
 
   assert.equal(await store.readVoice(), undefined);
   assert.equal((await store.snapshot()).voice, REALTIME_DEFAULTS.VOICE);
+});
+
+test("reports the natural pace until one is chosen", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  assert.equal((await store.snapshot()).voiceSpeed, REALTIME_DEFAULTS.SPEED);
+  assert.equal(await store.readVoiceSpeed(), undefined);
+});
+
+test("stores the chosen pace plainly and reads it back from a new store instance", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+
+  const { settings, reason } = await store.setVoiceSpeed(REALTIME_VOICE_SPEED.QUICK);
+
+  assert.equal(reason, undefined);
+  assert.equal(settings.voiceSpeed, REALTIME_VOICE_SPEED.QUICK);
+  // A preference is not a credential, so choosing one never reaches the
+  // Keychain — and never raises its permission dialog.
+  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
+  assert.equal(await storeIn(directory).readVoiceSpeed(), REALTIME_VOICE_SPEED.QUICK);
+});
+
+test("prefers the chosen pace over the environment, and the environment over the default", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory, {
+    environment: { LUKE_REALTIME_SPEED: String(REALTIME_VOICE_SPEED.SLOW) },
+  });
+
+  assert.equal((await store.snapshot()).voiceSpeed, REALTIME_VOICE_SPEED.SLOW);
+  assert.equal(await store.readVoiceSpeed(), undefined);
+
+  await store.setVoiceSpeed(REALTIME_VOICE_SPEED.FAST);
+  assert.equal((await store.snapshot()).voiceSpeed, REALTIME_VOICE_SPEED.FAST);
+
+  await store.setVoiceSpeed(undefined);
+  assert.equal((await store.snapshot()).voiceSpeed, REALTIME_VOICE_SPEED.SLOW);
+});
+
+test("ignores a stored or environment pace this build does not offer", async (t) => {
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({ version: 2, apiKeys: {}, voiceSpeed: 3 }),
+  );
+  const store = storeIn(directory, { environment: { LUKE_REALTIME_SPEED: "0.1" } });
+
+  assert.equal(await store.readVoiceSpeed(), undefined);
+  assert.equal((await store.snapshot()).voiceSpeed, REALTIME_DEFAULTS.SPEED);
 });
 
 test("the voice and a stored key survive each other's writes", async (t) => {

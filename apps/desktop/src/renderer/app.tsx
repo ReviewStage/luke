@@ -4,6 +4,7 @@ import {
   REALTIME_STATUS,
   type RealtimeStatus,
   type RealtimeVoice,
+  type RealtimeVoiceSpeed,
   type SessionIdentity,
   VOICE_CAPTION_MAX_HEIGHT,
 } from "@sidecar/core";
@@ -718,6 +719,11 @@ export function App(): React.JSX.Element {
     void window.sidecar.setVoice(voice).then((result) => setSettings(result.settings));
   }, []);
 
+  // The pace, under the same rule as the voice above.
+  const changeVoiceSpeed = useCallback((speed: RealtimeVoiceSpeed) => {
+    void window.sidecar.setVoiceSpeed(speed).then((result) => setSettings(result.settings));
+  }, []);
+
   /**
    * Sends a session to its provider and gets out of the way. Luke floats above
    * every window, so a panel left open would be sitting on top of the very chat
@@ -1119,6 +1125,7 @@ export function App(): React.JSX.Element {
               onVoiceCaptionsChange: changeVoiceCaptions,
               credentials,
               onVoiceChange: changeVoice,
+              onVoiceSpeedChange: changeVoiceSpeed,
               panelOpen,
               ...(shownHotkey.hotkey ? { voiceHotkey: shownHotkey.hotkey } : {}),
               voiceHotkeyHeld: shownHotkey.held,
