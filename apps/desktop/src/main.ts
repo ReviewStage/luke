@@ -1040,6 +1040,7 @@ function registerIpc(): void {
       if (!trustedSender(event)) throw new Error("Untrusted renderer");
       if (typeof enabled !== "boolean") throw new Error("Invalid transcript request");
       const result = await settingsStore.setLocalTranscripts(enabled);
+      broadcastSettings(result.settings, event.sender);
       for (const adapter of localSessionAdapters) void sessionRegistry.refresh(adapter);
       return result;
     },

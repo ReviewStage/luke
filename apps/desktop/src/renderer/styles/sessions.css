@@ -761,8 +761,12 @@ html[data-keyboard="true"] button.row-main:focus-visible {
    so it is set apart from both lines around it and never wraps: the row is the
    same height whether or not anyone is reading along. */
 .row-copy .row-transcript {
+  display: block;
+  overflow: hidden;
   color: var(--text-secondary);
   font-style: italic;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* How the reach is learned: the keycaps surface while the pointer is over the
