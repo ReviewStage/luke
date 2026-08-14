@@ -258,8 +258,9 @@ export interface AppBridge {
   setVoiceHotkey(accelerator: string | undefined): Promise<SettingsUpdateResult>;
   /**
    * Moves the ask key the same way, or back to its defaults when omitted. The
-   * one extra rule is the standing one: a chord the talk key holds is refused
-   * with a reason rather than stored and silently outbid.
+   * one extra rule is the standing one: a chord the talk key holds — or could
+   * fall back to on a later launch — is refused with a reason rather than
+   * stored and left to race it.
    */
   setAskHotkey(accelerator: string | undefined): Promise<SettingsUpdateResult>;
   /**

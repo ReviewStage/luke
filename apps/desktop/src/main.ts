@@ -311,10 +311,12 @@ function registerAskHotkey(): void {
     process.stderr.write(`${askHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.NO_CREDENTIAL)}\n`);
     return;
   }
-  // A chord the talk key sits on — chosen by the user, or announced as
-  // registered — is not a candidate: the two Luke keys must never compete.
+  // Every chord the talk key could sit on is taken, not just the one it has
+  // announced: its helper falls back through its own candidates after this
+  // runs, so a chord it merely might take is already not the ask key's to
+  // have — the two Luke keys must never compete.
   for (const accelerator of askHotkeyCandidates(chosenAskHotkey, [
-    chosenVoiceHotkey,
+    ...voiceHotkeyCandidates(chosenVoiceHotkey),
     voiceHotkey,
   ])) {
     const registered = globalShortcut.register(accelerator, () => {
@@ -884,10 +886,16 @@ function registerIpc(): void {
       if (accelerator !== undefined && chosen === undefined) {
         throw new Error("Invalid shortcut request");
       }
-      if (chosen && (chosen === chosenVoiceHotkey || chosen === voiceHotkey)) {
+      // The talk key's whole candidate list is refused, not just the chord it
+      // holds now: its helper may fall back to any of them on a later launch,
+      // and an ask key stored on one would race it there.
+      if (
+        chosen &&
+        (voiceHotkeyCandidates(chosenVoiceHotkey).includes(chosen) || chosen === voiceHotkey)
+      ) {
         return {
           settings: await settingsStore.snapshot(),
-          reason: "That chord is the talk key's.",
+          reason: "That chord is reserved for the talk key.",
         };
       }
       try {

@@ -66,6 +66,13 @@ test("a chosen ask chord goes first, with the defaults kept behind it", () => {
     askHotkeyCandidates("Control+Alt+K", ["Control+Alt+K", undefined]),
     DEFAULT_ASK_HOTKEYS,
   );
+  // The registrar hands in the talk key's whole candidate list, so a chosen
+  // chord on a talk-key default is filtered even before the helper has said
+  // which of them it actually sits on.
+  assert.deepEqual(
+    askHotkeyCandidates("Alt+S", [...DEFAULT_VOICE_HOTKEYS, undefined]),
+    DEFAULT_ASK_HOTKEYS,
+  );
 });
 
 test("a missing ask key reports on the talk key's terms", () => {
