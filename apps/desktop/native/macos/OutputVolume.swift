@@ -52,15 +52,39 @@ private func readDefaultOutputDevice() -> AudioObjectID? {
     return device
 }
 
+/// Where a device may keep its mute: the main element where it has one, else
+/// its stereo channels. A device that only answers per channel would read as
+/// "no mute switch" off the main element alone, and a mute the user pressed
+/// would be reported as sound.
+private let MUTE_ELEMENTS: [AudioObjectPropertyElement] = [kAudioObjectPropertyElementMain, 1, 2]
+
+private func muteAddress(_ element: AudioObjectPropertyElement) -> AudioObjectPropertyAddress {
+    AudioObjectPropertyAddress(
+        mSelector: kAudioDevicePropertyMute,
+        mScope: kAudioDevicePropertyScopeOutput,
+        mElement: element
+    )
+}
+
 private func readMute(of device: AudioObjectID) -> Bool? {
-    var query = address(kAudioDevicePropertyMute, scope: kAudioDevicePropertyScopeOutput)
-    guard AudioObjectHasProperty(device, &query) else { return nil }
-    var muted = UInt32(0)
-    var size = UInt32(MemoryLayout<UInt32>.size)
-    guard AudioObjectGetPropertyData(device, &query, 0, nil, &size, &muted) == noErr else {
-        return nil
+    var answered = false
+    var allMuted = true
+    for element in MUTE_ELEMENTS {
+        var query = muteAddress(element)
+        guard AudioObjectHasProperty(device, &query) else { continue }
+        var muted = UInt32(0)
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        guard AudioObjectGetPropertyData(device, &query, 0, nil, &size, &muted) == noErr else {
+            continue
+        }
+        // The main element answers for the whole device.
+        if element == kAudioObjectPropertyElementMain { return muted != 0 }
+        // Channels answer together: a device is only silent when every channel
+        // that has a switch is off, or one live speaker is still speaking.
+        answered = true
+        allMuted = allMuted && muted != 0
     }
-    return muted != 0
+    return answered ? allMuted : nil
 }
 
 private func readVolume(of device: AudioObjectID) -> Float? {
@@ -113,9 +137,11 @@ private struct OutputVolumeCommand {
             let change: AudioObjectPropertyListenerBlock = { _, _ in
                 MainActor.assumeIsolated { report() }
             }
-            var mute = address(kAudioDevicePropertyMute, scope: kAudioDevicePropertyScopeOutput)
-            if AudioObjectHasProperty(next, &mute) {
-                AudioObjectAddPropertyListenerBlock(next, &mute, queue, change)
+            for element in MUTE_ELEMENTS {
+                var mute = muteAddress(element)
+                if AudioObjectHasProperty(next, &mute) {
+                    AudioObjectAddPropertyListenerBlock(next, &mute, queue, change)
+                }
             }
             var volume = address(VIRTUAL_MAIN_VOLUME, scope: kAudioDevicePropertyScopeOutput)
             if AudioObjectHasProperty(next, &volume) {
