@@ -23,6 +23,7 @@ import {
   type CredentialProvider,
   type CredentialProviderId,
 } from "./shared/credential-providers";
+import { parseVoiceHotkey } from "./shared/voice-hotkey";
 
 const SETTINGS_FILE_NAME = "settings.json";
 const SETTINGS_TEMPORARY_FILE_NAME = "settings.json.tmp";
@@ -39,6 +40,7 @@ const SETTINGS_FIELD = {
   VOICE: "voice",
   VOICE_CAPTIONS: "voiceCaptions",
   VOICE_SPEED: "voiceSpeed",
+  VOICE_HOTKEY: "voiceHotkey",
 } as const;
 
 const API_KEY_LENGTH = {
@@ -106,6 +108,13 @@ interface PersistedSettings {
    * all land on the default rather than switching something on.
    */
   voiceCaptions: boolean;
+  /**
+   * The talk-key chord the user chose, absent while the defaults stand. A
+   * preference like the voice, stored plainly — and like the voice, a value
+   * this build cannot register is dropped rather than carried, because
+   * honouring it would claim a system key nothing was ever told about.
+   */
+  voiceHotkey?: string;
 }
 
 interface ResolvedApiKey {
@@ -181,6 +190,10 @@ function parsePersistedSettings(source: string): PersistedSettings {
   const showInMenuBar = record[SETTINGS_FIELD.SHOW_IN_MENU_BAR];
   const voice = record[SETTINGS_FIELD.VOICE];
   const voiceSpeed = record[SETTINGS_FIELD.VOICE_SPEED];
+  const storedHotkey = record[SETTINGS_FIELD.VOICE_HOTKEY];
+  // Read through the same gate a submitted chord passes, so a hand-edited
+  // value is either the one spelling the rest of the app uses or nothing.
+  const voiceHotkey = typeof storedHotkey === "string" ? parseVoiceHotkey(storedHotkey) : undefined;
   return {
     version: typeof version === "number" ? version : SETTINGS_FILE_VERSION,
     apiKeys: storedApiKeys(record),
@@ -193,6 +206,7 @@ function parsePersistedSettings(source: string): PersistedSettings {
     // A pace outside the offered set is dropped for the same reason.
     ...(isRealtimeVoiceSpeed(voiceSpeed) ? { voiceSpeed } : {}),
     voiceCaptions: record[SETTINGS_FIELD.VOICE_CAPTIONS] === true,
+    ...(voiceHotkey ? { voiceHotkey } : {}),
   };
 }
 
@@ -246,6 +260,9 @@ export class SettingsStore {
         environmentRealtimeSpeed(this.#environment) ??
         REALTIME_DEFAULTS.SPEED,
       voiceCaptions: (await this.#load()).voiceCaptions,
+      ...((await this.#load()).voiceHotkey
+        ? { voiceHotkey: (await this.#load()).voiceHotkey }
+        : {}),
     };
   }
 
@@ -334,6 +351,37 @@ export class SettingsStore {
         version: SETTINGS_FILE_VERSION,
         voiceCaptions: enabled,
       };
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+    });
+    return { settings: await this.snapshot() };
+  }
+
+  /**
+   * Main-process only, for registration at startup: the talk-key chord the
+   * user chose, or nothing while the defaults stand — the registrar already
+   * carries those.
+   */
+  async readVoiceHotkey(): Promise<string | undefined> {
+    return (await this.#load()).voiceHotkey;
+  }
+
+  /**
+   * Stores the chosen talk-key chord, or returns to the defaults when
+   * omitted. The caller hands in a chord already read into its one canonical
+   * spelling; what arrives here is written as given, so resetting is the
+   * absence of a choice rather than a second stored value.
+   */
+  async setVoiceHotkey(accelerator: string | undefined): Promise<SettingsUpdateResult> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (persisted.voiceHotkey === accelerator) return;
+      const next: PersistedSettings = {
+        ...persisted,
+        version: SETTINGS_FILE_VERSION,
+      };
+      if (accelerator) next.voiceHotkey = accelerator;
+      else delete next.voiceHotkey;
       await this.#write(next);
       this.#loading = Promise.resolve(next);
     });

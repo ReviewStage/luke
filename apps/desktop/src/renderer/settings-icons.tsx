@@ -70,6 +70,26 @@ export function TrashIcon(): React.JSX.Element {
   );
 }
 
+/** An arrow turning back on itself: returns a setting to its default. */
+export function ResetIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M2.5 5.1v5.2h5.2" />
+      <path d="M4.6 14.6a7.8 7.8 0 1 0 1.9-8.1L2.5 10.3" />
+    </Glyph>
+  );
+}
+
+/** Stands down without choosing: the cancel a control becomes mid-act. */
+export function CloseIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M6.8 6.8 17.2 17.2" />
+      <path d="M17.2 6.8 6.8 17.2" />
+    </Glyph>
+  );
+}
+
 /** The up-and-down pair macOS badges a pop-up button with. */
 export function PopUpIcon(): React.JSX.Element {
   return (

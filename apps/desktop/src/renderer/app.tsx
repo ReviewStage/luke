@@ -752,6 +752,27 @@ export function App(): React.JSX.Element {
   }, []);
 
   /**
+   * Moves the talk key, or resets it when no chord is named. The key the row
+   * shows is not taken from this reply — the main process announces the one
+   * that actually registered, the same way it always has — so the reply
+   * carries only the stored choice and any refusal.
+   */
+  const changeVoiceHotkey = useCallback(async (accelerator: string | undefined) => {
+    const result = await window.sidecar.setVoiceHotkey(accelerator);
+    setSettings(result.settings);
+    return result.reason;
+  }, []);
+
+  // True while the settings row is recording a chord. The talk key stays
+  // registered through a recording — the recording is how it gets replaced —
+  // so a press of the current chord landing then is held here rather than
+  // opening the microphone under the field being typed into.
+  const shortcutCapture = useRef(false);
+  const changeShortcutCapture = useCallback((capturing: boolean) => {
+    shortcutCapture.current = capturing;
+  }, []);
+
+  /**
    * Sends a session to its provider and gets out of the way. Luke floats above
    * every window, so a panel left open would be sitting on top of the very chat
    * it was just asked to bring forward — the same reason fetching a key stands
@@ -1065,8 +1086,20 @@ export function App(): React.JSX.Element {
   // The talk key is registered by the main process so it answers from any app,
   // which is the whole point: no window to find, nothing to focus first. Both
   // edges arrive, because a turn you hold ends when the key does.
-  useEffect(() => window.sidecar.onVoiceHotkeyPress(() => void beginTalk()), [beginTalk]);
-  useEffect(() => window.sidecar.onVoiceHotkeyRelease(() => endTalk()), [endTalk]);
+  useEffect(
+    () =>
+      window.sidecar.onVoiceHotkeyPress(() => {
+        if (!shortcutCapture.current) void beginTalk();
+      }),
+    [beginTalk],
+  );
+  useEffect(
+    () =>
+      window.sidecar.onVoiceHotkeyRelease(() => {
+        if (!shortcutCapture.current) endTalk();
+      }),
+    [endTalk],
+  );
   useEffect(() => window.sidecar.onVoiceHotkeyChanged(setVoiceHotkey), []);
 
   // The rows say how long ago each session was seen, and a label left alone
@@ -1213,6 +1246,8 @@ export function App(): React.JSX.Element {
               panelOpen,
               ...(shownHotkey.hotkey ? { voiceHotkey: shownHotkey.hotkey } : {}),
               voiceHotkeyHeld: shownHotkey.held,
+              onVoiceHotkeyChange: changeVoiceHotkey,
+              onShortcutCapture: changeShortcutCapture,
               onShowInMenuBarChange: changeShowInMenuBar,
               onShowInDockChange: changeShowInDock,
               onQuit: () => window.sidecar.quit(),
