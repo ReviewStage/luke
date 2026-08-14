@@ -334,6 +334,12 @@ export function App(): React.JSX.Element {
    * bootstrap's older snapshot must then not clobber it.
    */
   const issuesPushed = useRef(false);
+  /**
+   * Whether another window's settings change has arrived, under the same rule
+   * as the roster above: a push that lands before the bootstrap reply is the
+   * newer truth, and the bootstrap's older snapshot must not clobber it.
+   */
+  const settingsPushed = useRef(false);
 
   const changeTab = useCallback((next: PanelTab) => {
     tabRef.current = next;
@@ -1070,7 +1076,7 @@ export function App(): React.JSX.Element {
       // Only fill in what no push has said yet: the bootstrap snapshot is
       // older than any roster change that raced past it.
       if (!issuesPushed.current) issuesRef.current = value.issues;
-      setSettings(value.settings);
+      if (!settingsPushed.current) setSettings(value.settings);
       setDisplay(value.display);
       if (modeGeneration.current === bootstrapGeneration) {
         applyAuthoritativeMode(value.mode);
@@ -1106,7 +1112,10 @@ export function App(): React.JSX.Element {
     // Another window's settings change: this window's rows and guide redraw
     // from the same snapshot its reply carried, so no window describes a
     // state the store no longer holds.
-    const removeSettings = window.sidecar.onSettingsChanged(setSettings);
+    const removeSettings = window.sidecar.onSettingsChanged((pushed) => {
+      settingsPushed.current = true;
+      setSettings(pushed);
+    });
     const removeSessions = window.sidecar.onSessionsChanged(setSessions);
     // Straight to the conversation rather than through state: no panel
     // surface draws the issue roster, so a re-render would be work for nobody.
