@@ -1,0 +1,50 @@
+/* The keys a chord is made of, drawn as keys.
+
+   One cap per key, spaced apart and each closed by its own edge, because that
+   is what the hand is being told to do: ⌥ and Space are two keys pressed
+   together, and a single chip reading "⌥Space" draws them as one word. Every
+   surface that shows a chord — the settings row, the composer's hint — draws
+   the same cap, and sizes it with `--keycap-size` and `--keycap-text` rather
+   than restyling it.
+
+   Nothing here animates: caps appear and disappear with the surface that holds
+   them, and a cap that grew on hover would re-shape text inside a pill that is
+   already the panel's most crowded row. */
+
+.keycap-chord {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  /* Wide enough to read as separate keys, tight enough to read as one chord. */
+  gap: 3px;
+}
+
+.keycap {
+  display: inline-flex;
+  min-width: var(--keycap-size);
+  height: var(--keycap-size);
+  align-items: center;
+  justify-content: center;
+  /* Derived from the two numbers above rather than fixed, because it is what
+     decides whether a lone glyph still fits inside the square: the square is
+     border-box, so a fixed inset that is comfortable at 20px leaves a 16px cap
+     with less room than a glyph is wide, and ⌥ — which is nearly as wide as
+     the type is tall, where a letter is not — would push the cap out into a
+     rectangle. At a quarter of the difference, every key that is one glyph
+     stays square at either size, and only a worded key like Space pays the
+     inset out and grows sideways. */
+  padding: 0 calc((var(--keycap-size) - var(--keycap-text)) / 4);
+  border: 1px solid var(--keycap-edge);
+  border-radius: 5px;
+  background: var(--keycap-face);
+  box-shadow: var(--keycap-relief);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--keycap-text);
+  font-weight: 600;
+  /* The glyph sits on the cap's own centre line: ⌥ and ⇧ have far more room
+     above them than a letter does, and any leading at all would stack the two
+     kinds of key differently. */
+  line-height: 1;
+  white-space: nowrap;
+}

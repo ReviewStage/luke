@@ -192,9 +192,13 @@ export interface LukeGuideInput {
   /** Whether a Realtime credential can be minted at all. */
   voiceAvailable: boolean;
   microphoneStatus: MicrophoneStatus;
-  /** The talk key as the panel shows it, absent when none was registered. */
+  /**
+   * The talk key labelled the way macOS writes it, absent when none was
+   * registered. Labelled rather than drawn as keys: the guide is spoken and
+   * read, and a chord said aloud is one thing to press.
+   */
   hotkey: { hotkey?: string; held: boolean };
-  /** The ask key as the panel shows it, absent when none was registered. */
+  /** The ask key labelled on the same terms, absent when none was registered. */
   askKey?: string;
 }
 

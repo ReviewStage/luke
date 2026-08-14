@@ -18,32 +18,47 @@
   flex-direction: column;
   align-items: flex-end;
   gap: 6px;
+  /* The size a chord reads at in a row of settings, kept here rather than on
+     the caps: what stands where the keys would be is sized by the same two
+     numbers, so the row keeps one height whichever it is drawing. */
+  --keycap-size: 20px;
+  --keycap-text: 11px;
 }
 
 .shortcut-controls .error-message {
   text-align: right;
 }
 
-/* A statement, not a control: the pencil beside it is what moves the key.
-   The chip only brightens while a recording holds it open. */
-.shortcut-key {
-  padding: 4px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+/* A statement, not a control: the pencil beside it is what moves the key. The
+   caps are the shared ones, lit the way a key the user actually has should be
+   — the composer's hint teaches a reach, this one reports a setting. */
+.shortcut-chord .keycap {
+  color: var(--text-primary);
+}
+
+/* What is said where the keys would be, when there are none to draw: the chord
+   being typed, or none having registered. Shaped like a lone cap so the row
+   keeps its height, and lettered rather than keyed because neither is
+   something to press. */
+.shortcut-state {
+  display: inline-flex;
+  height: var(--keycap-size);
+  align-items: center;
+  padding: 0 8px;
+  border: 1px solid var(--hairline);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.86);
-  font-family: "SF Mono", Menlo, monospace;
-  font-size: 11px;
+  background: var(--raised);
+  color: var(--text-tertiary);
+  font-size: var(--keycap-text);
   white-space: nowrap;
   transition:
     border-color var(--duration-hover) ease,
     color var(--duration-hover) ease;
 }
 
-/* Recording holds the chip open rather than swapping it for a field: the
-   border brightening is the whole state, and the words inside say what to
-   type. */
-.shortcut-key[data-recording="true"] {
+/* Recording brightens the words rather than swapping them for a field: the
+   edge lighting up is the whole state, and what it says is what to type. */
+.shortcut-state[data-recording="true"] {
   border-color: rgba(255, 255, 255, 0.35);
   color: var(--text-secondary);
 }

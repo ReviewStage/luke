@@ -108,7 +108,6 @@ import {
   VOICE_HOTKEY_ABSENCE,
   type VoiceHotkeyAbsence,
   voiceHotkeyCandidates,
-  voiceHotkeyLabel,
   voiceHotkeyReport,
 } from "./shared/voice-hotkey";
 import { TalkKeyWatcher } from "./talk-key";
@@ -381,11 +380,16 @@ function applyAskHotkey(): void {
   sendAskHotkey();
 }
 
-/** Tells every renderer the key it should be showing, whenever that changes. */
+/**
+ * Tells every renderer the key it should be showing, whenever that changes.
+ * The accelerator rather than its label, on the ask key's terms: the renderer
+ * draws the chord as its separate keys and says it as one word, and only the
+ * accelerator produces both.
+ */
 function sendVoiceHotkey(): void {
   for (const window of panelWindows.values()) {
     window.webContents.send(channels.voiceHotkeyChanged, {
-      ...(voiceHotkey ? { hotkey: voiceHotkeyLabel(voiceHotkey) } : {}),
+      ...(voiceHotkey ? { hotkey: voiceHotkey } : {}),
       held: voiceHotkeyHeld,
     });
   }
@@ -888,11 +892,11 @@ function registerIpc(): void {
       nodeVersion: process.versions.node,
       microphoneStatus: microphoneStatus(),
       realtimeAvailable: realtimeCredentials !== undefined,
-      ...(voiceHotkey ? { voiceHotkey: voiceHotkeyLabel(voiceHotkey) } : {}),
+      // Both keys travel as accelerators rather than labels: the renderer needs
+      // both spellings — the keycaps' ⌥ and L drawn apart, and aria's Alt+L —
+      // and only the accelerator can produce the pair.
+      ...(voiceHotkey ? { voiceHotkey } : {}),
       voiceHotkeyHeld,
-      // The accelerator rather than its label: the renderer needs both
-      // spellings — the keycap's ⌥L and aria's Alt+L — and only the
-      // accelerator can produce the pair.
       ...(askHotkey ? { askHotkey } : {}),
       display: displayDiagnostic(display),
       sessions: fixtureMode ? [] : sessionRegistry.snapshot().sessions,

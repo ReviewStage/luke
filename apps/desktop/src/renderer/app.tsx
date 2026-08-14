@@ -1535,11 +1535,18 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     if (!bootstrap) return;
     const askAccelerator = askHotkeyChange ? askHotkeyChange.accelerator : bootstrap.askHotkey;
+    // Both keys reach the guide labelled: it is spoken and read, so a chord
+    // belongs there as the one word macOS writes it as rather than as the keys
+    // the panel draws apart.
+    const talkKey = voiceHotkeyToShow(bootstrap, voiceHotkey);
     const guide = buildLukeGuide({
       settings: settings ?? bootstrap.settings,
       voiceAvailable: bootstrap.realtimeAvailable,
       microphoneStatus,
-      hotkey: voiceHotkeyToShow(bootstrap, voiceHotkey),
+      hotkey: {
+        ...(talkKey.hotkey ? { hotkey: voiceHotkeyLabel(talkKey.hotkey) } : {}),
+        held: talkKey.held,
+      },
       ...(askAccelerator ? { askKey: voiceHotkeyLabel(askAccelerator) } : {}),
     });
     guideRef.current = guide;
@@ -1790,10 +1797,9 @@ export function App(): React.JSX.Element {
               ...(shownHotkey.hotkey ? { voiceHotkey: shownHotkey.hotkey } : {}),
               voiceHotkeyHeld: shownHotkey.held,
               onVoiceHotkeyChange: changeVoiceHotkey,
-              // Labelled here because the ask key travels as an accelerator —
-              // the composer's keycap needs both spellings, but the row shows
-              // the key the way macOS writes it, as the talk key's row does.
-              ...(shownAskHotkey ? { askHotkey: voiceHotkeyLabel(shownAskHotkey) } : {}),
+              // Both rows take the accelerator: they draw the keys apart and
+              // label the chord whole for the buttons beside them.
+              ...(shownAskHotkey ? { askHotkey: shownAskHotkey } : {}),
               onAskHotkeyChange: changeAskHotkey,
               onShortcutCapture: changeShortcutCapture,
               onShowInMenuBarChange: changeShowInMenuBar,
