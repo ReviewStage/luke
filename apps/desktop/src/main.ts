@@ -38,6 +38,7 @@ import {
   ipcMain,
   Menu,
   nativeImage,
+  nativeTheme,
   powerMonitor,
   safeStorage,
   screen,
@@ -1347,6 +1348,31 @@ function applyMenuBarVisibility(show: boolean): void {
 }
 
 /**
+ * The Dock tile per theme: the porcelain tile for a light desktop, the
+ * space-black one for a dark. The bundle's `.icns` is cut from the dark tile
+ * and cannot follow the theme, and an unpackaged run has only Electron's stock
+ * icon, so the running app draws the Dock image itself from these.
+ */
+const DOCK_ICON_FILES = {
+  LIGHT: "luke-icon-light.png",
+  DARK: "luke-icon-dark.png",
+} as const;
+
+/**
+ * Draws Luke's own face in the Dock, matched to the theme. Called once at
+ * startup and again whenever the theme changes; macOS remembers the image
+ * across `dock.hide()`, so this never needs to wait for the icon to be shown.
+ * Artwork missing from a build draws nothing, leaving the bundle icon (or the
+ * stock one) in place rather than an empty tile.
+ */
+function applyDockIcon(): void {
+  if (!app.dock) return;
+  const file = nativeTheme.shouldUseDarkColors ? DOCK_ICON_FILES.DARK : DOCK_ICON_FILES.LIGHT;
+  const image = nativeImage.createFromPath(path.join(__dirname, "icon", file));
+  if (!image.isEmpty()) app.dock.setIcon(image);
+}
+
+/**
  * macOS ignores a `dock.hide()` within a second of the last Dock change, so a
  * switch pressed twice cannot be honoured call by call; the applier below
  * paces itself to this instead, which is Electron's documented floor.
@@ -1438,6 +1464,11 @@ if (!app.requestSingleInstanceLock()) {
       (show) => applyMenuBarVisibility(show),
       () => applyMenuBarVisibility(true),
     );
+    // The Dock wears Luke's own face from the start, and keeps wearing the
+    // right one as the desktop changes mode — whether the icon is shown yet
+    // is a separate question, answered by the setting below.
+    applyDockIcon();
+    nativeTheme.on("updated", applyDockIcon);
     // The Dock icon reads the same file under the opposite default: it is
     // opt-in, so a file that cannot be read leaves Luke out of the Dock — the
     // accessory app the launch just asserted. Nothing to do until it says so.

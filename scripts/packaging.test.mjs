@@ -195,16 +195,16 @@ test("the iconset maps every required macOS size to a consistent source PNG", ()
     "icon_512x512@2x.png",
   ]);
   assert.deepEqual(ICONSET_SOURCES, {
-    "icon_16x16.png": "luke-icon-16.png",
-    "icon_16x16@2x.png": "luke-icon-32.png",
-    "icon_32x32.png": "luke-icon-32.png",
-    "icon_32x32@2x.png": "luke-icon-64.png",
-    "icon_128x128.png": "luke-icon-128.png",
-    "icon_128x128@2x.png": "luke-icon-256.png",
-    "icon_256x256.png": "luke-icon-256.png",
-    "icon_256x256@2x.png": "luke-icon-512.png",
-    "icon_512x512.png": "luke-icon-512.png",
-    "icon_512x512@2x.png": "luke-icon-1024.png",
+    "icon_16x16.png": "luke-icon-dark-16.png",
+    "icon_16x16@2x.png": "luke-icon-dark-32.png",
+    "icon_32x32.png": "luke-icon-dark-32.png",
+    "icon_32x32@2x.png": "luke-icon-dark-64.png",
+    "icon_128x128.png": "luke-icon-dark-128.png",
+    "icon_128x128@2x.png": "luke-icon-dark-256.png",
+    "icon_256x256.png": "luke-icon-dark-256.png",
+    "icon_256x256@2x.png": "luke-icon-dark-512.png",
+    "icon_512x512.png": "luke-icon-dark-512.png",
+    "icon_512x512@2x.png": "luke-icon-dark-1024.png",
   });
 });
 
