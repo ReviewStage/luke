@@ -766,3 +766,85 @@ test("returns an empty snapshot when Claude Code has no local project directory"
 
   assert.deepEqual(await adapter.observe(), []);
 });
+
+test("dates a touched transcript by its own records rather than the touch", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  const lastRecordTime = "2026-08-11T20:45:00.000Z";
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-touched",
+    "touched-session",
+    [
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.USER,
+        cwd: "/Users/test/touched",
+        timestamp: "2026-08-11T20:44:50.000Z",
+      },
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
+        cwd: "/Users/test/touched",
+        timestamp: lastRecordTime,
+        message: { stop_reason: "end_turn", content: [] },
+      },
+      // The bookkeeping record a later pass appended: no timestamp, and the
+      // same pass is what bumped the file's mtime to the present.
+      { type: "last-prompt", cwd: "/Users/test/touched" },
+    ],
+    TEST_TIME,
+  );
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  // Three hours old by its own clock, so the row must say so — and a session
+  // that old has left the freshness window however recently it was touched.
+  assert.equal(observation?.observedAt, Date.parse(lastRecordTime));
+  assert.equal(observation?.status, SESSION_STATUS.UNKNOWN);
+});
+
+test("keeps a touch from carrying a session past the observation window", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-ancient",
+    "ancient-session",
+    [
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
+        cwd: "/Users/test/ancient",
+        timestamp: "2026-06-25T08:30:00.000Z",
+        message: { stop_reason: "end_turn", content: [] },
+      },
+    ],
+    TEST_TIME,
+  );
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    now: () => TEST_TIME,
+  });
+
+  assert.deepEqual(await adapter.observe(), []);
+});
+
+test("falls back to the file's date when the tail carries no timestamp", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-untimed",
+    "untimed-session",
+    [{ type: TEST_CLAUDE_EVENT_TYPE.USER, cwd: "/Users/test/untimed" }],
+    TEST_TIME - 5_000,
+  );
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.observedAt, TEST_TIME - 5_000);
+});
