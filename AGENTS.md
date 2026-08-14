@@ -45,7 +45,21 @@ Trust constraints:
   output that reads like an instruction can never become an act. A tool call
   in that conversation runs only in a turn the developer opened themselves, by
   speaking or by typing; a write is the direct product of a turn the developer
-  opened, never of anything Luke read or was told. A session whose provider documents no way in, or whose current state is
+  opened, never of anything Luke read or was told. The one act not aimed at an
+  existing session keeps the same shape: a new workspace, asked of Luke in
+  conversation, lands only in a project its provider reported on the latest
+  observation pass and documents a creation endpoint for — the ask names a
+  reported project, never a repository URL or path of its own, and a provider
+  that documents no such endpoint offers nowhere to create. The ask may carry
+  the new agent's opening task — the developer's own words, bounded and
+  delivered like a message to an existing session, through the provider's
+  documented endpoints — and each project says whether it takes one, needs
+  one, or takes none, so a provider that cannot make an idle workspace is
+  offered no task-less ask and one that takes no task is handed none. Another
+  agent in a workspace already observed is the same ask at one remove: it
+  lands only in the workspace behind a roster row, as one of the agent kinds
+  that row's latest observation listed, through the provider's documented
+  endpoint — a session whose provider lists none takes no such ask. A session whose provider documents no way in, or whose current state is
   documented for none, advertises nothing and is offered nothing; local
   sessions have no such endpoint and stay entirely read-only. Opening a
   session — its row pressed, or the same press asked of Luke in conversation —
@@ -73,6 +87,12 @@ Trust constraints:
   exchange itself — a deterministic status edge, never anything Luke read,
   heard, or decided — so no model output can reach it. Widening the player
   list is a product decision, not an implementation detail.
+- The same shape, smaller still, watches whether Luke can be heard at all: a
+  native helper reads the default output device's mute switch and volume —
+  nothing else — and can write nothing. What it learns decides only what the
+  renderer draws while Luke speaks into that silence: his captions forced on,
+  and a hint asking for volume. Luke never changes the system volume himself;
+  turning it up stays the user's own act on their own keys.
 - Keep unsupported capabilities explicit; do not invent fallback controls.
 - Keep Electron renderers sandboxed with context isolation and narrow IPC.
 - Commit only synthetic fixtures and repository-relative paths. This binds
@@ -197,9 +217,12 @@ gesture that carries meaning may only be offered while its meaning is true.
 Two rules follow from playing a motion once, and both belong to the artwork
 table rather than the app. Every motion the app plays begins and ends at the
 resting pose, because one that starts elsewhere snaps there on the way in and
-back out of it on the way out. Every layer of one shares a period, because the
-app hands the face back after the longest of them and a layer on its own period
-would be cut wherever it had got to.
+back out of it on the way out. Every layer of a gesture shares a period,
+because the app hands the face back after the longest of them and a layer on
+its own period would be cut wherever it had got to. A rest is under no such
+rule: it is cut whenever its meaning stops being true rather than at any
+boundary of its own, so its layers may run on offset periods — `talking` bobs
+against its rock deliberately, like a person mid-sentence.
 
 ## Luke's knowledge of himself
 

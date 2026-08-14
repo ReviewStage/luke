@@ -3,9 +3,11 @@ import type {
   FixtureSnapshot,
   IssueToolAction,
   NormalizedSession,
+  ObservedWorkspaceProject,
   PanelFormFactor,
   ProviderControlResult,
   ProviderMessageResult,
+  ProviderWorkspaceResult,
   RealtimeConnection,
   RealtimeVoice,
   RealtimeVoiceSpeed,
@@ -122,6 +124,19 @@ export interface AppSettings {
   formFactor: PanelFormFactor;
 }
 
+/**
+ * Whether the Mac's output would let Luke be heard: the default output
+ * device's mute switch and its volume, read by a helper that reads nothing
+ * else. Absent wherever it cannot be read — another platform, no output
+ * device, a device with no controls — and absence must always be taken as
+ * audible: the hint this feeds exists to explain silence, never to guess it.
+ */
+export interface OutputAudioState {
+  muted: boolean;
+  /** The output volume as macOS reports it, 0–1. */
+  volume: number;
+}
+
 /** A rejected update reports why without echoing the submitted value. */
 export interface SettingsUpdateResult {
   settings: AppSettings;
@@ -182,9 +197,10 @@ export interface AppBootstrap {
    */
   realtimeAvailable: boolean;
   /**
-   * The talk key as the user should read it, absent when the system refused to
-   * register one — a shortcut nothing can trigger must not be shown as though
-   * it works.
+   * The accelerator the talk key was registered as, absent when the system
+   * refused to register one — a shortcut nothing can trigger must not be shown
+   * as though it works. Raw rather than labelled for the ask key's reason
+   * below: the renderer draws the keys apart and says the chord whole.
    */
   voiceHotkey?: string;
   /**
@@ -196,13 +212,20 @@ export interface AppBootstrap {
   /**
    * The accelerator that summons the ask field from any app, absent when the
    * system refused every candidate. The raw accelerator rather than a label,
-   * because the renderer needs both spellings: the keycap's ⌥L and aria's
-   * Alt+L.
+   * because the renderer needs both spellings: the keycaps' ⌥ and L, drawn as
+   * the two keys they are, and aria's Alt+L.
    */
   askHotkey?: string;
+  /**
+   * The output's switches as last read, absent until the helper's first line
+   * arrives — or forever, where there is no helper to ask.
+   */
+  outputAudio?: OutputAudioState;
   /** Whether the panel should show the voice diagnostics block. */
   display: DisplayDiagnostic;
   sessions: readonly NormalizedSession[];
+  /** Where a new workspace can be created, as the adapters currently offer it. */
+  workspaceProjects: readonly ObservedWorkspaceProject[];
   /** Absent while no issue tracker is connected, which is its own answer. */
   issues?: readonly TrackedIssue[];
   settings: AppSettings;
@@ -211,7 +234,7 @@ export interface AppBootstrap {
 /** One validated issue act on its way to the main process. */
 export type IssueActionAsk = Extract<IssueToolAction, { kind: "issue-state" | "issue-comment" }>;
 
-/** The talk key as the panel should describe it. */
+/** The talk key as the panel should describe it, as an accelerator. */
 export interface VoiceHotkeyState {
   hotkey?: string;
   held: boolean;
@@ -309,6 +332,32 @@ export interface AppBridge {
     controlId: string,
   ): Promise<ProviderControlResult>;
   /**
+   * Creates one workspace the user just asked for, in a project its provider
+   * reported — carrying, where that project takes one, the opening task the
+   * user gave its agent in their own words. The renderer names a project it
+   * was shown, never a repository URL or path of its own, and the main
+   * process validates the ask again against what its adapters actually
+   * offered before the provider's documented creation endpoint is called.
+   */
+  createSessionWorkspace(
+    providerId: string,
+    providerProjectId: string,
+    name?: string,
+    task?: string,
+  ): Promise<ProviderWorkspaceResult>;
+  /**
+   * Starts another agent in the workspace an observed session runs in. The
+   * renderer names a session it is already drawing and an agent kind that
+   * session's roster entry listed; the main process validates both again
+   * against its registry before the adapter sees anything.
+   */
+  addWorkspaceAgent(
+    identity: SessionIdentity,
+    agent: string,
+    name?: string,
+    task?: string,
+  ): Promise<ProviderWorkspaceResult>;
+  /**
    * Carries one spoken issue act to the tracker that can take it. The renderer
    * names an issue and a transition it was shown; the main process resolves
    * both against its own latest observation before the tracker client sees
@@ -337,6 +386,10 @@ export interface AppBridge {
    */
   onSettingsChanged(callback: (settings: AppSettings) => void): () => void;
   onSessionsChanged(callback: (sessions: readonly NormalizedSession[]) => void): () => void;
+  /** The projects a workspace can be created in, whenever the set changes. */
+  onWorkspaceProjectsChanged(
+    callback: (projects: readonly ObservedWorkspaceProject[]) => void,
+  ): () => void;
   /** The issue roster as last observed; `undefined` says no tracker is connected. */
   onIssuesChanged(callback: (issues: readonly TrackedIssue[] | undefined) => void): () => void;
   onAttentionSpeech(callback: (speech: readonly AttentionSpeech[]) => void): () => void;
@@ -355,6 +408,11 @@ export interface AppBridge {
    * hint comes down: a keycap must not teach a chord that answers nothing.
    */
   onAskHotkeyChanged(callback: (accelerator: string | undefined) => void): () => void;
+  /**
+   * The output's switches changing under the user's own hand — or becoming
+   * unreadable, which arrives as `undefined` and must be drawn as audible.
+   */
+  onOutputAudioChanged(callback: (state: OutputAudioState | undefined) => void): () => void;
 }
 
 export const channels = {
@@ -379,6 +437,8 @@ export const channels = {
   openSession: "app:open-session",
   sendSessionMessage: "app:send-session-message",
   executeSessionControl: "app:execute-session-control",
+  createSessionWorkspace: "app:create-session-workspace",
+  addWorkspaceAgent: "app:add-workspace-agent",
   executeIssueAction: "app:execute-issue-action",
   sendFeedback: "app:send-feedback",
   focusPanel: "app:focus-panel",
@@ -388,11 +448,13 @@ export const channels = {
   voiceHotkeyRelease: "app:voice-hotkey-release",
   voiceHotkeyChanged: "app:voice-hotkey-changed",
   askHotkeyChanged: "app:ask-hotkey-changed",
+  outputAudioChanged: "app:output-audio-changed",
   rendererReady: "app:renderer-ready",
   lifecycle: "app:lifecycle",
   displayChanged: "app:display-changed",
   settingsChanged: "app:settings-changed",
   sessionsChanged: "app:sessions-changed",
+  workspaceProjectsChanged: "app:workspace-projects-changed",
   issuesChanged: "app:issues-changed",
   quit: "app:quit",
 } as const;

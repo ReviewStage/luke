@@ -14,13 +14,18 @@ import {
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
   issueCommentText,
+  isWorkspaceAgentCapableAdapter,
+  isWorkspaceCapableAdapter,
   type NativeNotchGeometry,
+  normalizeObservedWorkspaceProjects,
   normalizeTrackedIssue,
+  type ObservedWorkspaceProject,
   type PanelFormFactor,
   PROVIDER_CONTROL_RESULT_STATUS,
   PROVIDER_MESSAGE_RESULT_STATUS,
   type ProviderControlResult,
   type ProviderMessageResult,
+  type ProviderWorkspaceResult,
   positionNotchWindow,
   realtimeMintExplanation,
   resolveNotchGeometry,
@@ -31,7 +36,9 @@ import {
   TRACKER_ACTION_RESULT_STATUS,
   type TrackedIssue,
   type TrackerActionResult,
+  workspaceNameText,
 } from "@sidecar/core";
+
 import {
   app,
   BrowserWindow,
@@ -70,6 +77,7 @@ import {
   unavailableRealtimeDiagnostics,
 } from "./openai-realtime-credentials";
 import { OpenCodeSessionAdapter } from "./opencode-adapter";
+import { OutputVolumeWatcher } from "./output-volume";
 import { SettingsStore } from "./settings-store";
 import {
   type AppBootstrap,
@@ -77,6 +85,7 @@ import {
   channels,
   type DisplayDiagnostic,
   type MicrophoneStatus,
+  type OutputAudioState,
   SESSION_OPEN_RESULT_STATUS,
   type SessionOpenResult,
   type SettingsUpdateResult,
@@ -101,7 +110,6 @@ import {
   VOICE_HOTKEY_ABSENCE,
   type VoiceHotkeyAbsence,
   voiceHotkeyCandidates,
-  voiceHotkeyLabel,
   voiceHotkeyReport,
 } from "./shared/voice-hotkey";
 import { TalkKeyWatcher } from "./talk-key";
@@ -214,6 +222,37 @@ const realtimeCredentials = fixtureMode ? undefined : openAiRealtimeCredentialsF
 // anything the renderer does — and only this process may run a helper.
 const mediaDuck = new MediaDuckController();
 const feedbackDelivery = feedbackDeliveryFromEnvironment();
+/**
+ * The output's switches as last read, and the helper that reads them. The
+ * state lives here rather than in the renderer so bootstrap can carry the
+ * answer a push has already delivered; `undefined` is "cannot be read", which
+ * the renderer must draw as audible.
+ */
+let outputAudio: OutputAudioState | undefined;
+let outputVolumeWatcher: OutputVolumeWatcher | undefined;
+
+/**
+ * Starts watching whether the Mac's output would let Luke be heard. Not in a
+ * fixture or capture run: evidence must not read the machine it happens to
+ * run on, and a fixture run has no voice to go unheard — the muted evidence
+ * profile asks the renderer for the state directly instead.
+ */
+function startOutputVolumeWatch(): void {
+  if (fixtureMode) return;
+  const send = (state: OutputAudioState | undefined) => {
+    outputAudio = state;
+    // Every display's panel captions the same voice, so every one is told.
+    for (const window of panelWindows.values()) {
+      window.webContents.send(channels.outputAudioChanged, state);
+    }
+  };
+  outputVolumeWatcher = new OutputVolumeWatcher({
+    onState: send,
+    onUnavailable: () => send(undefined),
+  });
+  if (!outputVolumeWatcher.start()) outputVolumeWatcher = undefined;
+}
+
 let voiceHotkey: string | undefined;
 /**
  * The chord the user chose over the defaults, if any. Read from the settings
@@ -374,11 +413,16 @@ function applyAskHotkey(): void {
   sendAskHotkey();
 }
 
-/** Tells every renderer the key it should be showing, whenever that changes. */
+/**
+ * Tells every renderer the key it should be showing, whenever that changes.
+ * The accelerator rather than its label, on the ask key's terms: the renderer
+ * draws the chord as its separate keys and says it as one word, and only the
+ * accelerator produces both.
+ */
 function sendVoiceHotkey(): void {
   for (const window of panelWindows.values()) {
     window.webContents.send(channels.voiceHotkeyChanged, {
-      ...(voiceHotkey ? { hotkey: voiceHotkeyLabel(voiceHotkey) } : {}),
+      ...(voiceHotkey ? { hotkey: voiceHotkey } : {}),
       held: voiceHotkeyHeld,
     });
   }
@@ -450,6 +494,29 @@ let nativeScreens = new Map<number, NativeNotchGeometry>();
 let sessionRefreshTimer: NodeJS.Timeout | undefined;
 let sessionRefreshRunning = false;
 let attentionReviewRunning = false;
+/**
+ * The projects last announced to the renderer, serialized for comparison.
+ * Undefined until the first announcement decides what there is to compare.
+ */
+let lastWorkspaceProjects: string | undefined;
+
+/**
+ * Announces where a workspace can be created whenever the offer changes. This
+ * cannot ride the registry's own notifications alone: the registry only speaks
+ * when the session snapshot changes, and a pass can change the project list
+ * while leaving the sessions exactly as they were — a key just added with no
+ * workspaces yet, a project connected but not yet worked in — so the check
+ * runs on the observation cadence as well as on every commit.
+ */
+function broadcastWorkspaceProjects(): void {
+  const projects = observedWorkspaceProjects();
+  const serialized = JSON.stringify(projects);
+  if (serialized === lastWorkspaceProjects) return;
+  lastWorkspaceProjects = serialized;
+  for (const window of panelWindows.values()) {
+    window.webContents.send(channels.workspaceProjectsChanged, projects);
+  }
+}
 
 function argumentValue(name: string): string | undefined {
   const index = process.argv.indexOf(name);
@@ -858,14 +925,16 @@ function registerIpc(): void {
       nodeVersion: process.versions.node,
       microphoneStatus: microphoneStatus(),
       realtimeAvailable: realtimeCredentials !== undefined,
-      ...(voiceHotkey ? { voiceHotkey: voiceHotkeyLabel(voiceHotkey) } : {}),
+      // Both keys travel as accelerators rather than labels: the renderer needs
+      // both spellings — the keycaps' ⌥ and L drawn apart, and aria's Alt+L —
+      // and only the accelerator can produce the pair.
+      ...(voiceHotkey ? { voiceHotkey } : {}),
       voiceHotkeyHeld,
-      // The accelerator rather than its label: the renderer needs both
-      // spellings — the keycap's ⌥L and aria's Alt+L — and only the
-      // accelerator can produce the pair.
       ...(askHotkey ? { askHotkey } : {}),
+      ...(outputAudio ? { outputAudio } : {}),
       display: displayDiagnostic(display),
       sessions: fixtureMode ? [] : sessionRegistry.snapshot().sessions,
+      workspaceProjects: observedWorkspaceProjects(),
       ...(trackedIssues && !fixtureMode ? { issues: trackedIssues } : {}),
       settings: await settingsStore.snapshot(),
     };
@@ -1349,6 +1418,74 @@ function registerIpc(): void {
     },
   );
 
+  // A new workspace runs the same gauntlet a message does, against the list
+  // that offered it: the renderer names a project rather than a repository, and
+  // only a project an adapter reported on its latest pass — read back here from
+  // the adapter itself, never from the request — reaches the provider's
+  // documented creation endpoint. A fixture run offers no projects at all, so
+  // it refuses every ask without touching a network.
+  ipcMain.handle(
+    channels.createSessionWorkspace,
+    async (
+      event,
+      providerId: unknown,
+      providerProjectId: unknown,
+      name: unknown,
+      task: unknown,
+    ): Promise<ProviderWorkspaceResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (
+        typeof providerId !== "string" ||
+        !providerId.trim() ||
+        typeof providerProjectId !== "string" ||
+        !providerProjectId.trim() ||
+        (name !== undefined && typeof name !== "string") ||
+        (task !== undefined && typeof task !== "string")
+      ) {
+        throw new Error("Invalid workspace creation request");
+      }
+      if (fixtureMode) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+      const adapter = sessionAdapters.find((candidate) => candidate.provider.id === providerId);
+      if (!adapter || !isWorkspaceCapableAdapter(adapter)) {
+        return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+      }
+      const offered = adapter
+        .workspaceProjects()
+        .some((project) => project.providerProjectId === providerProjectId);
+      if (!offered) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+      const workspaceName = name === undefined ? undefined : workspaceNameText(name);
+      if (name !== undefined && workspaceName === undefined) {
+        return {
+          status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+          reason: "A workspace name has to be short enough to say and longer than nothing.",
+        };
+      }
+      // The task's own bound, and its fit to the project, are answered by the
+      // adapter, which validates both against the projects it actually offers.
+      const openingTask = task === undefined ? undefined : sessionMessageText(task);
+      if (task !== undefined && openingTask === undefined) {
+        return {
+          status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+          reason: "A task has to be shorter than a document and longer than nothing.",
+        };
+      }
+      const result = await adapter.createWorkspace({
+        providerProjectId,
+        ...(workspaceName ? { name: workspaceName } : {}),
+        ...(openingTask ? { task: openingTask } : {}),
+      });
+      // A workspace that landed is a session the panel should be showing, so
+      // the next look must actually ask rather than serve the cache. A
+      // rejection refreshes too: a workspace can stand with its opening task
+      // undelivered, and the adapter answers a rejection that never reached
+      // the network from its cache anyway.
+      if (result.status !== PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED) {
+        void sessionRegistry.refresh(adapter);
+      }
+      return result;
+    },
+  );
+
   // A spoken issue act runs the same gauntlet a session act does, in the same
   // two halves: the renderer refused anything its roster did not advertise,
   // and here every named thing is resolved again from the latest observation —
@@ -1401,6 +1538,70 @@ function registerIpc(): void {
       // as soon as Linear will say.
       if (result.status === TRACKER_ACTION_RESULT_STATUS.ACCEPTED) {
         void refreshTrackedIssues();
+      }
+      return result;
+    },
+  );
+
+  // Another agent in an observed workspace runs the gauntlet a control does,
+  // and one more: the agent kind the renderer names must be one the session's
+  // latest observation actually listed. The registry is what advertised it, so
+  // the registry is what answers whether it stands; the adapter then reads the
+  // workspace back from its own last pass.
+  ipcMain.handle(
+    channels.addWorkspaceAgent,
+    async (
+      event,
+      identity: unknown,
+      agent: unknown,
+      name: unknown,
+      task: unknown,
+    ): Promise<ProviderWorkspaceResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (
+        !isSessionIdentity(identity) ||
+        typeof agent !== "string" ||
+        !agent.trim() ||
+        (name !== undefined && typeof name !== "string") ||
+        (task !== undefined && typeof task !== "string")
+      ) {
+        throw new Error("Invalid workspace agent request");
+      }
+      // A fixture run has an empty registry, so it refuses every ask.
+      const session = sessionRegistry.get(identity);
+      const advertised = session?.spawnableAgents.find((candidate) => candidate === agent.trim());
+      if (!advertised) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+      const adapter = sessionAdapters.find(
+        (candidate) => candidate.provider.id === identity.providerId,
+      );
+      if (!adapter || !isWorkspaceAgentCapableAdapter(adapter)) {
+        return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+      }
+      const sessionName = name === undefined ? undefined : workspaceNameText(name);
+      if (name !== undefined && sessionName === undefined) {
+        return {
+          status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+          reason: "A session name has to be short enough to say and longer than nothing.",
+        };
+      }
+      const openingTask = task === undefined ? undefined : sessionMessageText(task);
+      if (task !== undefined && openingTask === undefined) {
+        return {
+          status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+          reason: "A task has to be shorter than a document and longer than nothing.",
+        };
+      }
+      const result = await adapter.spawnWorkspaceAgent({
+        providerSessionId: identity.providerSessionId,
+        agent: advertised,
+        ...(sessionName ? { name: sessionName } : {}),
+        ...(openingTask ? { task: openingTask } : {}),
+      });
+      // A new agent is a session the panel should be showing, so the next
+      // look must actually ask rather than serve the cache — on a rejection
+      // too, for the same reason a partial workspace creation refreshes.
+      if (result.status !== PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED) {
+        void sessionRegistry.refresh(adapter);
       }
       return result;
     },
@@ -1466,6 +1667,27 @@ function registerIpc(): void {
   });
 }
 
+/**
+ * Where a workspace can be created right now, as the adapters offer it: each
+ * capable adapter's latest project list, stamped with its provider and bounded
+ * once here so the panel and the conversation are handed the same list. A
+ * fixture run offers nothing, for the same reason it observes nothing.
+ */
+function observedWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
+  if (fixtureMode) return [];
+  return normalizeObservedWorkspaceProjects(
+    sessionAdapters.flatMap((adapter) =>
+      isWorkspaceCapableAdapter(adapter)
+        ? adapter.workspaceProjects().map((project) => ({
+            ...project,
+            providerId: adapter.provider.id,
+            providerName: adapter.provider.displayName,
+          }))
+        : [],
+    ),
+  );
+}
+
 async function refreshProviderSessions(): Promise<void> {
   if (fixtureMode || sessionRefreshRunning) return;
   sessionRefreshRunning = true;
@@ -1487,6 +1709,9 @@ async function refreshProviderSessions(): Promise<void> {
   } finally {
     sessionRefreshRunning = false;
   }
+  // The registry only spoke if the sessions themselves changed, and a pass can
+  // change the project list while leaving them exactly as they were.
+  broadcastWorkspaceProjects();
   // Attention review runs outside the observation guard so a slow model call
   // never delays the next provider snapshot.
   void reviewSessionAttention();
@@ -1522,6 +1747,9 @@ function startSessionObservation(): void {
     for (const window of panelWindows.values()) {
       window.webContents.send(channels.sessionsChanged, snapshot.sessions);
     }
+    // A commit is the earliest a write-triggered refresh can have changed the
+    // offer, so the announcement rides it rather than waiting for the timer.
+    broadcastWorkspaceProjects();
   });
   void refreshProviderSessions();
   sessionRefreshTimer = setInterval(() => {
@@ -1963,6 +2191,9 @@ if (!app.requestSingleInstanceLock()) {
     // exists because nobody has answered yet.
     registerVoiceHotkey();
     registerAskHotkey();
+    // Read-only, like everything else that watches: what it learns decides
+    // what the renderer draws while Luke speaks unheard, and nothing more.
+    startOutputVolumeWatch();
     reconcilePanels();
     configurePermissions();
     startSessionObservation();
@@ -1996,6 +2227,9 @@ app.on("will-quit", () => {
   // during quit, so its exit is not waited on.
   void talkKeyWatcher?.stop();
   talkKeyWatcher = undefined;
+  // The same rule: a process of Luke's own does not outlive the app.
+  outputVolumeWatcher?.stop();
+  outputVolumeWatcher = undefined;
   // The duck helper outlives this by one fade: closing its stdin is what asks
   // it to bring the players back up, so quitting mid-sentence costs the user
   // nothing.

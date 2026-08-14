@@ -10,6 +10,7 @@ import {
 } from "./feedback-entry";
 import { imageFiles } from "./feedback-images";
 import { HIT_REGION } from "./panel-state";
+import { parseMilliseconds, STILL_MS } from "./session-motion";
 import { ImageIcon, RemoveIcon } from "./settings-icons";
 
 const MESSAGE_FIELD_ID = "feedback-message";
@@ -102,6 +103,26 @@ export function FeedbackSlot({
     report();
     return () => observer.disconnect();
   }, [previewMounted]);
+
+  // Whether a mounted preview has been asked away: the fade below normally
+  // reports its own end, and that end is what gives the room back.
+  const previewClosing =
+    previewMounted && (preview === undefined || entry?.images[preview] === undefined);
+
+  // A zero-duration property change runs no transition and fires no end event,
+  // so under capture the fade's end would never come and the shape would stay
+  // tall around an invisible image. Read the fade's own token the way
+  // session-motion reads every duration: below STILL_MS the close is a request
+  // for stillness, and the room goes back before the next frame paints.
+  useLayoutEffect(() => {
+    if (!previewClosing) return;
+    const fading = previewButton.current;
+    if (!fading) return;
+    const exit = parseMilliseconds(getComputedStyle(fading).getPropertyValue("--duration-exit"));
+    if (exit >= STILL_MS) return;
+    setPreviewMounted(false);
+    heldPreview.current = undefined;
+  }, [previewClosing]);
 
   if (!entry) return null;
 

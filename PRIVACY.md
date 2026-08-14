@@ -41,8 +41,8 @@ provider no request and reports none of its sessions; the Cursor sessions
 running on this machine are read from disk and are unaffected by whether a
 Cursor key exists.
 
-When a key is supplied, Luke sends it as a bearer credential to that provider
-and issues authenticated `GET` requests only:
+When a key is supplied, Luke sends it as a bearer credential to that provider,
+and observation issues authenticated `GET` requests only:
 
 - For Conductor, Luke reads the authenticated identity, projects, workspaces the
   authenticated user created, sessions, and session statuses. It processes
@@ -50,12 +50,24 @@ and issues authenticated `GET` requests only:
   from Git remotes (or the project name when no usable remote is available);
   timestamps; model configuration; archive state; status and reported errors;
   and session deep links.
-- For Cursor, Luke reads agents owned by the supplied key and their latest runs.
-  It processes identifiers, agent names and links, repository URLs, starting
-  refs and run branches, timestamps, archive and run status, provider-designated
-  run results, and pull-request links.
+- For Cursor, Luke reads agents owned by the supplied key and their latest runs,
+  and — on a much slower cadence, within Cursor's documented limits — the list
+  of repositories the key may launch agents in. It processes identifiers, agent
+  names and links, repository URLs, starting refs and run branches, timestamps,
+  archive and run status, provider-designated run results, and pull-request
+  links.
 
-Luke does not call provider write routes. Provider-assigned names and results
+Observation never calls a provider write route. Luke calls one only when you
+ask for the act it performs — a message typed on a session's row or asked for
+out loud, a control a session's provider advertised (such as cancelling a
+Conductor turn), a new workspace: a Conductor workspace in one of the
+projects Conductor reports, or a Cursor agent in a repository Cursor lists —
+or another agent started in the workspace an observed Conductor session runs
+in — each through the provider's own documented endpoint under the same key,
+and each validated against what the latest observation actually reported. A new
+workspace can carry the opening task you gave its agent, in your words; that
+text goes to the provider the same way a message to an existing session does,
+and nowhere else. Nothing automatic reaches a write route. Provider-assigned names and results
 can reflect task or prompt content; Luke uses their bounded values to distinguish
 sessions and describe outcomes. Returned metadata is held in memory for display;
 response bodies are not persisted.
@@ -125,6 +137,11 @@ review uses — provider name, session title, status, and the provider's own
 summary — so a spoken question about your sessions can be answered. No
 transcript, file content, or command output is ever included.
 
+Luke also sends the list of projects a new workspace could be created in —
+each project's provider, repository label, and provider-assigned identifier —
+so an ask to create one can be validated against what the provider actually
+offers.
+
 Luke also sends an app guide describing itself — its features, each setting's
 current value, the talk key, and whether each cloud provider is connected — so
 a spoken question about Luke can be answered and a spoken ask can change a
@@ -142,6 +159,13 @@ transcript. With captions enabled in Settings — they are off by default — th
 reply's text is drawn on screen while Luke speaks; it is discarded when the
 reply ends and is never written to disk. Audio is not retained by Luke in any
 form.
+
+While the Mac's output is muted or its volume is at zero, the same captions are
+drawn even with the setting off, so a reply the speakers would swallow can
+still be read. To know when, Luke reads exactly two things from the default
+output device — its mute switch and its volume level — through a helper that
+can write nothing. That reading never leaves your Mac, is not logged, and Luke
+never changes the system volume.
 
 The standing API key stays in Luke's main process. The renderer receives only a
 short-lived client secret minted for one call, which expires on its own.

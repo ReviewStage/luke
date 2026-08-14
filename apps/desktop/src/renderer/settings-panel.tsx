@@ -43,6 +43,7 @@ import {
 } from "./credential-removal";
 import type { FeedbackEntryControl } from "./feedback-entry";
 import { FeedbackSection } from "./feedback-panel";
+import { Keycaps } from "./keycaps";
 import { microphoneAccessRow } from "./microphone-access";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import { CloudBadge, ProviderMark } from "./provider-marks";
@@ -112,7 +113,10 @@ export interface SettingsPanelProps {
   /** Chooses how Luke stands on a display without a camera housing. */
   onFormFactorChange: (formFactor: PanelFormFactor) => Promise<string | undefined>;
   onQuit: () => void;
-  /** The talk key as registered, shown so it can be learned — and pressed to be changed. */
+  /**
+   * The talk key as registered, as an accelerator: the row draws it as its
+   * separate keys and says it whole in the labels its buttons carry.
+   */
   voiceHotkey?: string;
   /** Whether that key can be held, which is what the row has to describe. */
   voiceHotkeyHeld: boolean;
@@ -122,7 +126,7 @@ export interface SettingsPanelProps {
    * that answer belongs.
    */
   onVoiceHotkeyChange: (accelerator: string | undefined) => Promise<string | undefined>;
-  /** The ask key as registered, shown so it can be learned — and pressed to be changed. */
+  /** The ask key as registered, an accelerator on the talk key's terms. */
   askHotkey?: string;
   /**
    * Moves the ask key to a recorded chord, or back to the defaults when
@@ -785,8 +789,13 @@ function PreferencesSection({
           <strong>Captions</strong>
           {/* Off by default: the voice experience ships as sound, so the words
               are chosen rather than discovered. What is *not* kept is the one
-              thing worth a line — the caption is the reply being said. */}
-          <small>Luke&rsquo;s words on screen as he speaks. Nothing is kept.</small>
+              thing worth a line — the caption is the reply being said. The
+              muted exception is stated because it overrides this very switch:
+              a reply the Mac would swallow is captioned whatever it says. */}
+          <small>
+            Luke&rsquo;s words on screen as he speaks, and on their own while your Mac is muted.
+            Nothing is kept.
+          </small>
         </span>
         <button
           type="button"
@@ -914,8 +923,9 @@ function PreferencesSection({
 const SHORTCUT_HINT = "Hold ⌃, ⌥ or ⌘ — ⇧ may join — and press a letter or Space.";
 
 /**
- * How Luke is reached rather than what he can see. The chord stays the plain
- * key chip it always was; the pencil beside it is the control. Pressing it
+ * How Luke is reached rather than what he can see. The chord is drawn as the
+ * keys it is — one cap each, the way a keyboard has them — and is a statement
+ * rather than a control; the pencil beside it is what moves it. Pressing it
  * starts a recording — what a chord may be is shown under the controls at
  * once, the next whole chord is stored and registered at once, and Escape (or
  * the pencil, now a cross) keeps the key that was already there. Recording
@@ -942,7 +952,7 @@ function ShortcutRow({
 }: {
   title: string;
   detail: string;
-  /** The key as registered, already labelled, absent when none answered. */
+  /** The accelerator as registered, absent when no candidate answered. */
   shown?: string | undefined;
   /** Whether a chosen chord is stored, which is what Reset has to undo. */
   chosen: boolean;
@@ -983,9 +993,18 @@ function ShortcutRow({
       </span>
       <span className="shortcut-controls">
         <span className="settings-actions">
-          <span className="shortcut-key" data-recording={String(recording)}>
-            {recording ? "Type a shortcut…" : (shown ?? "Unavailable")}
-          </span>
+          {/* The chord as its own keys while there is one to press, and a
+              sentence when there is not: "Type a shortcut…" and "Unavailable"
+              are things being said about the key, not keys to draw. */}
+          {recording ? (
+            <span className="shortcut-state" data-recording="true">
+              Type a shortcut…
+            </span>
+          ) : shown ? (
+            <Keycaps className="shortcut-chord" accelerator={shown} />
+          ) : (
+            <span className="shortcut-state">Unavailable</span>
+          )}
           {chosen && !recording ? (
             <button
               type="button"

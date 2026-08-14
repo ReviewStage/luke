@@ -1399,6 +1399,159 @@ test("a spoken ask to open a session is carried, and one with no address is refu
   assert.deepEqual(statuses, ["opened", "refused"]);
 });
 
+test("a spoken ask for a new workspace is carried, and an unlisted project is refused", async () => {
+  const carried: unknown[] = [];
+  const context = harness({
+    carryAction: async (action) => {
+      carried.push(action);
+      return { status: "accepted" };
+    },
+  });
+  await context.session.connect();
+  const sentBeforeContext = context.sent.length;
+  context.session.updateWorkspaceProjects([
+    {
+      providerId: "conductor",
+      providerName: "Conductor",
+      providerProjectId: "proj-1",
+      repository: "luke",
+      taskSupport: "optional",
+    },
+  ]);
+  // The projects travel as context the way the roster does, and an identical
+  // list is not resent.
+  const contextEvent = context.sent.slice(sentBeforeContext).at(0);
+  assert.match(
+    ((contextEvent?.item as { content?: { text?: string }[] } | undefined)?.content?.[0]?.text ??
+      "") as string,
+    /^\[workspace projects, sent automatically\]/,
+  );
+  context.session.updateWorkspaceProjects([
+    {
+      providerId: "conductor",
+      providerName: "Conductor",
+      providerProjectId: "proj-1",
+      repository: "luke",
+      taskSupport: "optional",
+    },
+  ]);
+  assert.equal(context.sent.length, sentBeforeContext + 1);
+
+  armDeveloperTurn(context);
+  const sentBefore = context.sent.length;
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "create_workspace",
+          call_id: "call-1",
+          arguments:
+            '{"provider_id":"conductor","project_id":"proj-1","name":"fix the panel","task":"wire the XYZ feature"}',
+        },
+        {
+          type: "function_call",
+          name: "create_workspace",
+          call_id: "call-2",
+          arguments: '{"provider_id":"conductor","project_id":"proj-unlisted"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  // Only the listed project reaches the carrier; the unlisted one is refused
+  // before any bridge call exists.
+  assert.deepEqual(carried, [
+    {
+      kind: "create-workspace",
+      providerId: "conductor",
+      providerProjectId: "proj-1",
+      name: "fix the panel",
+      task: "wire the XYZ feature",
+    },
+  ]);
+  const outputs = context.sent
+    .slice(sentBefore)
+    .filter(
+      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+    );
+  const statuses = outputs.map(
+    (event) =>
+      (
+        JSON.parse((event.item as { output?: string } | undefined)?.output ?? "{}") as {
+          status?: string;
+        }
+      ).status,
+  );
+  assert.deepEqual(statuses, ["accepted", "refused"]);
+});
+
+test("a spoken ask to add an agent is carried, and an unlisted kind is refused", async () => {
+  const carried: unknown[] = [];
+  const context = harness({
+    carryAction: async (action) => {
+      carried.push(action);
+      return { status: "accepted" };
+    },
+  });
+  await context.session.connect();
+  context.session.updateSessions([
+    observedSession("chat-1", { spawnableAgents: ["claude", "codex", "cursor"] }),
+  ]);
+  armDeveloperTurn(context);
+  const sentBefore = context.sent.length;
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "add_workspace_agent",
+          call_id: "call-1",
+          arguments:
+            '{"provider_id":"claude-code","provider_session_id":"chat-1","agent":"codex","task":"Build the XYZ feature"}',
+        },
+        {
+          type: "function_call",
+          name: "add_workspace_agent",
+          call_id: "call-2",
+          arguments: '{"provider_id":"claude-code","provider_session_id":"chat-1","agent":"devin"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  // Only a kind the roster entry listed reaches the carrier; the other is
+  // refused before any bridge call exists.
+  assert.deepEqual(carried, [
+    {
+      kind: "add-agent",
+      identity: { providerId: "claude-code", providerSessionId: "chat-1" },
+      agent: "codex",
+      task: "Build the XYZ feature",
+    },
+  ]);
+  const outputs = context.sent
+    .slice(sentBefore)
+    .filter(
+      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+    );
+  const statuses = outputs.map(
+    (event) =>
+      (
+        JSON.parse((event.item as { output?: string } | undefined)?.output ?? "{}") as {
+          status?: string;
+        }
+      ).status,
+  );
+  assert.deepEqual(statuses, ["accepted", "refused"]);
+});
+
 test("a tool call outside the roster is refused before any carrier runs", async () => {
   const carried: unknown[] = [];
   const context = harness({

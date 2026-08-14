@@ -114,7 +114,9 @@ const SETTING_GUIDE: Record<
   voiceCaptions: (settings) => ({
     id: APP_SETTING_ID.VOICE_CAPTIONS,
     label: "Captions",
-    description: "Luke's words on screen while he speaks; nothing is kept.",
+    description:
+      "Luke's words on screen while he speaks; nothing is kept. They also appear on their own, " +
+      "whatever this says, while the Mac's output is muted or at zero.",
     kind: APP_SETTING_KIND.TOGGLE,
     value: appToggleText(settings.voiceCaptions),
     adjustable: true,
@@ -192,9 +194,13 @@ export interface LukeGuideInput {
   /** Whether a Realtime credential can be minted at all. */
   voiceAvailable: boolean;
   microphoneStatus: MicrophoneStatus;
-  /** The talk key as the panel shows it, absent when none was registered. */
+  /**
+   * The talk key labelled the way macOS writes it, absent when none was
+   * registered. Labelled rather than drawn as keys: the guide is spoken and
+   * read, and a chord said aloud is one thing to press.
+   */
   hotkey: { hotkey?: string; held: boolean };
-  /** The ask key as the panel shows it, absent when none was registered. */
+  /** The ask key labelled on the same terms, absent when none was registered. */
   askKey?: string;
 }
 
@@ -314,11 +320,37 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "overwritten, and sending is always the Send button's own press, by hand: no spoken ask " +
         "can send one.",
     },
+    {
+      label: "Creating workspaces",
+      detail:
+        "Where a connected provider documents a creation endpoint — Conductor and Cursor today — " +
+        "an ask in conversation, spoken or typed, can create a new workspace in one of the " +
+        "projects that provider reports, optionally under a name the developer chose, and can " +
+        "hand the new agent an opening task in the developer's own words where the project takes " +
+        "one. Only reported projects can be named, a project that needs a task cannot be created " +
+        "without one, and a provider that reports none takes no ask.",
+    },
+    {
+      label: "Adding agents to a workspace",
+      detail:
+        "Where a session's provider documents it — Conductor today — the same kind of ask can " +
+        "start another agent in the workspace an observed session runs in, as one of the agent " +
+        "kinds that session's roster entry lists, optionally named and optionally with an " +
+        "opening task. A session whose entry lists no new agents takes no such ask.",
+    },
     talkKeyFact(input.hotkey),
     askKeyFact(input.askKey),
     { label: "Microphone access", detail: MICROPHONE_DETAIL[input.microphoneStatus] },
     ...(input.voiceAvailable
-      ? []
+      ? [
+          {
+            label: "Muted output",
+            detail:
+              "While the Mac is muted or its volume is at zero, Luke's replies are captioned on " +
+              "screen even with Captions off, and a hint under the words asks for volume. The " +
+              "hint's Got it button rests it for that stretch of silence; the captions stay.",
+          },
+        ]
       : [
           {
             label: "Voice",

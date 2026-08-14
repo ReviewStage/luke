@@ -65,6 +65,21 @@
   --selected-edge: rgba(255, 255, 255, 0.32);
   --hairline: rgba(255, 255, 255, 0.08);
 
+  /* A key drawn on screen is a physical thing quoted, so it gets what the
+     hairline deliberately withholds: an edge bright enough to close the shape
+     on its own, a face lifted off the surface, and a lit top and dark underside
+     that put a couple of pixels of depth under it. The edge is the load-bearing
+     one — the caps of a chord sit a few pixels apart, and it is the edge rather
+     than the gap that says where one key ends and the next begins. */
+  --keycap-face: rgba(255, 255, 255, 0.07);
+  --keycap-edge: rgba(255, 255, 255, 0.17);
+  --keycap-relief: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 1px 1px rgba(0, 0, 0, 0.4);
+  /* Squares a lone glyph and lets a word key ride out past it on the padding.
+     Both are set per surface: the settings row draws the chord full size, the
+     composer's hint draws the same keys smaller than the words beside it. */
+  --keycap-size: 18px;
+  --keycap-text: 10.5px;
+
   /* One motion vocabulary. The black surface is the only thing that changes
      size; everything layered on it moves with `transform` and `opacity` alone,
      so a frame costs a composite rather than a relayout and a text re-shape.
@@ -149,7 +164,6 @@
     1
   );
   --duration-fast: 280ms;
-  --motion-morph: cubic-bezier(0.32, 0.86, 0.28, 1);
   --motion-exit: cubic-bezier(0.4, 0, 0.6, 1);
   --duration-shape: 460ms;
   --duration-exit: 90ms;
@@ -1259,6 +1273,84 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transition: transform var(--duration-fast) var(--spring-fast);
 }
 
+/* Volume hint ------------------------------------------------------------- */
+
+/* Why the words above are the only part of Luke arriving: the Mac's output is
+   muted or at zero. It sits on the caption block's bottom edge — the height
+   here mirrors VOLUME_HINT_HEIGHT in app.tsx, and the renderer adds that row
+   to `--caption-size` while the hint is drawn, so it rides inside the same
+   reserved room the caption does and the words scroll a row sooner. The
+   travel is the caption's own transform plus the block's current size, so the
+   row springs down the shape's edge exactly as the shape grows for new lines.
+   Above the hover strip (z-index 4) because it holds the one button on the
+   compact shape that is not the strip: Got it has to answer the press. */
+.volume-hint {
+  position: absolute;
+  z-index: 5;
+  top: var(--capsule-height);
+  left: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: calc(var(--peek-width) - var(--notch-convex-radius) * 2);
+  height: 22px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(
+    -50%,
+    calc(var(--caption-rest, 0px) - var(--shape-top, 0px) + var(--caption-size, 28px) - 31px)
+  );
+  /* The transform waits out `--duration-exit` like the caption's does, so
+     leaving a state the row travels with the shape rather than ahead of it. */
+  transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-shape) var(--spring) var(--duration-exit);
+}
+
+/* Arrives the way the caption's first words do — crossing the last of the
+   shape's travel — and takes the pointer only while it is drawn: a hidden
+   button must stay click-through, because everything it covers is desktop. */
+.app-stage[data-volume-hint="true"][data-caption="true"][data-presentation="capsule"] .volume-hint,
+.app-stage[data-volume-hint="true"][data-caption="true"][data-presentation="peek"] .volume-hint,
+.app-stage[data-volume-hint="true"][data-caption="true"][data-presentation="panel"] .volume-hint {
+  opacity: 1;
+  pointer-events: auto;
+  transition:
+    opacity var(--duration-quick) var(--motion-exit)
+    calc(var(--duration-shape) - var(--duration-quick)),
+    transform var(--duration-shape) var(--spring);
+}
+
+/* Attention's own orange, because this is the one line on the shape that asks
+   the user to do something; the caption above it keeps the secondary grey. */
+.volume-hint-text {
+  overflow: hidden;
+  color: var(--state-attention);
+  font-size: 9.5px;
+  font-weight: 640;
+  letter-spacing: 0.2px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Shaped like the quiet buttons, scaled to a 22px row. */
+.volume-hint-dismiss {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border-radius: 7px;
+  background: var(--raised);
+  color: var(--text-primary);
+  font-size: 9.5px;
+  font-weight: 640;
+  transition: background-color var(--duration-hover) ease;
+  white-space: nowrap;
+}
+
+.volume-hint-dismiss:hover {
+  background: var(--raised-strong);
+}
+
 /* Waveform --------------------------------------------------------------- */
 
 /* The meter replaces the marks while the microphone is live and stays drawn for
@@ -1282,8 +1374,8 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   opacity: 0.5;
   transform: scale(0.86);
   transition:
-    opacity 120ms ease,
-    transform 160ms ease;
+    opacity var(--duration-quick) var(--motion-exit),
+    transform var(--duration-fast) var(--spring-fast);
 }
 
 .waveform[data-speaking="true"] {
@@ -1308,7 +1400,10 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   background: var(--state-working);
   transform: scaleY(0.2);
   transform-origin: center;
-  transition: transform 90ms linear;
+  /* Linear rather than a spring, because the bars are smoothing between
+     analyser samples rather than travelling anywhere: each frame's level is
+     data, and an overshoot would report a louder voice than was heard. */
+  transition: transform var(--duration-exit) linear;
 }
 
 .waveform-bar:nth-child(1),
@@ -2650,6 +2745,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   --duration-quick: 0s;
   --duration-fast: 0s;
   --expand-delay: 0s;
+  --peek-delay: 0s;
   --row-stagger: 0s;
   /* Luke blinks and sways on a loop with no end to wait for, so a capture would
      otherwise land wherever in it the shutter happened to fall. Held on its
@@ -2659,8 +2755,9 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   --loop-motion: paused;
 }
 
-/* COLLAPSE_ANIMATION_MS in app.tsx drops to zero under the same query, so the
-   window still waits for the capsule rather than shrinking under the panel. */
+/* COLLAPSE_ANIMATION_MS in main.ts drops to zero too — collapseDelay() checks
+   capture mode and the OS's reduced-motion setting itself — so the window
+   still waits for the capsule rather than shrinking under the panel. */
 /* Reduced motion is answered at the tokens rather than element by element. A
    list of selectors misses whatever is added later, and it loses outright to the
    staggered rules, which carry a `.app-stage[data-presentation]` prefix a media
@@ -2696,7 +2793,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   .count-badge,
   .count-caption,
   .tab-thumb,
-  .waveform,
   .session-row {
     transition-duration: 1ms;
     transition-delay: 0ms;

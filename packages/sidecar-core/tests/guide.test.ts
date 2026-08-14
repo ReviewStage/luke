@@ -116,6 +116,8 @@ test("the standing instructions promise the guide the context actually delivers"
   assert.match(instructions, /change_app_setting/);
   assert.match(instructions, /show_panel/);
   assert.match(instructions, /open_feedback_composer/);
+  assert.match(instructions, /create_workspace/);
+  assert.match(instructions, /\[workspace projects\]/);
 });
 
 test("the instructions bound the refusal offer: once, on a clear yes, never a send", () => {

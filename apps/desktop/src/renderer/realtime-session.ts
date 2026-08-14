@@ -19,6 +19,7 @@ import {
   issueToolAction,
   issueTrackerDisconnectedEvents,
   type NormalizedSession,
+  type ObservedWorkspaceProject,
   proactiveSpeechEvents,
   pushToTalkCommitEvents,
   REALTIME_DATA_CHANNEL,
@@ -35,6 +36,8 @@ import {
   type TrackedIssue,
   truncateResponseEvents,
   typedAskEvents,
+  workspaceProjectContextEvents,
+  workspaceProjectContextText,
 } from "@sidecar/core";
 
 const SDP_CONTENT_TYPE = "application/sdp";
@@ -56,7 +59,10 @@ const REALTIME_SETTLE_TIMEOUT_MS = 20_000;
  * again against its registry — the carrier is a courier, not a gate.
  */
 export type SessionActionCarrier = (
-  action: Extract<SessionToolAction, { kind: "message" | "control" | "open" }>,
+  action: Extract<
+    SessionToolAction,
+    { kind: "message" | "control" | "open" | "create-workspace" | "add-agent" }
+  >,
 ) => Promise<Record<string, unknown>>;
 
 /**
@@ -168,6 +174,13 @@ export class RealtimeVoiceSession {
    */
   #guide: AppGuideSnapshot = EMPTY_APP_GUIDE;
   #guideContext: string | undefined;
+  /**
+   * The projects a workspace can be created in, as last reported — kept whole
+   * for the same reason the roster is: a spoken creation ask may only name a
+   * project Luke was actually shown.
+   */
+  #workspaceProjects: readonly ObservedWorkspaceProject[] = [];
+  #workspaceProjectContext: string | undefined;
   /**
    * The issue roster, held to the same rule — and `undefined` while no
    * tracker is connected, so an issue call then has nothing to be validated
@@ -684,6 +697,8 @@ export class RealtimeVoiceSession {
     this.#sessions = [];
     this.#guide = EMPTY_APP_GUIDE;
     this.#guideContext = undefined;
+    this.#workspaceProjects = [];
+    this.#workspaceProjectContext = undefined;
     this.#issues = undefined;
     this.#issueContext = undefined;
     this.#generationDone = false;
@@ -825,6 +840,21 @@ export class RealtimeVoiceSession {
     if (context === this.#sessionContext) return;
     this.#sessionContext = context;
     this.#send(sessionContextEvents(sessions));
+  }
+
+  /**
+   * Tells the conversation where a workspace can be created, the same way the
+   * roster travels: context that must never open Luke's mouth, kept whole
+   * because it is what a spoken creation ask is validated against. Identical
+   * lists are not resent.
+   */
+  updateWorkspaceProjects(projects: readonly ObservedWorkspaceProject[]): void {
+    this.#workspaceProjects = projects;
+    if (!this.isConnected) return;
+    const context = workspaceProjectContextText(projects);
+    if (context === this.#workspaceProjectContext) return;
+    this.#workspaceProjectContext = context;
+    this.#send(workspaceProjectContextEvents(projects));
   }
 
   /**
@@ -1040,7 +1070,7 @@ export class RealtimeVoiceSession {
     if (!isSessionToolName(call.name)) {
       return { status: "refused", reason: "No such tool exists." };
     }
-    const action = sessionToolAction(call, this.#sessions);
+    const action = sessionToolAction(call, this.#sessions, this.#workspaceProjects);
     if (action.kind === "refused") return { status: "refused", reason: action.reason };
     if (!this.#options.carryAction) {
       return { status: "refused", reason: "Acting on sessions is not available." };

@@ -1,9 +1,11 @@
 import type {
   AttentionSpeech,
   NormalizedSession,
+  ObservedWorkspaceProject,
   PanelFormFactor,
   ProviderControlResult,
   ProviderMessageResult,
+  ProviderWorkspaceResult,
   RealtimeConnection,
   RealtimeVoice,
   RealtimeVoiceSpeed,
@@ -19,6 +21,7 @@ import type {
   DisplayDiagnostic,
   IssueActionAsk,
   MicrophoneStatus,
+  OutputAudioState,
   SessionOpenResult,
   SettingsUpdateResult,
   VoiceHotkeyState,
@@ -84,6 +87,27 @@ const bridge: AppBridge = {
       identity,
       controlId,
     ) as Promise<ProviderControlResult>,
+  createSessionWorkspace: (
+    providerId: string,
+    providerProjectId: string,
+    name?: string,
+    task?: string,
+  ) =>
+    ipcRenderer.invoke(
+      channels.createSessionWorkspace,
+      providerId,
+      providerProjectId,
+      name,
+      task,
+    ) as Promise<ProviderWorkspaceResult>,
+  addWorkspaceAgent: (identity: SessionIdentity, agent: string, name?: string, task?: string) =>
+    ipcRenderer.invoke(
+      channels.addWorkspaceAgent,
+      identity,
+      agent,
+      name,
+      task,
+    ) as Promise<ProviderWorkspaceResult>,
   executeIssueAction: (action: IssueActionAsk) =>
     ipcRenderer.invoke(channels.executeIssueAction, action) as Promise<TrackerActionResult>,
   sendFeedback: (submission: FeedbackSubmission) =>
@@ -118,6 +142,16 @@ const bridge: AppBridge = {
     ipcRenderer.on(channels.sessionsChanged, listener);
     return () => ipcRenderer.removeListener(channels.sessionsChanged, listener);
   },
+  onWorkspaceProjectsChanged: (
+    callback: (projects: readonly ObservedWorkspaceProject[]) => void,
+  ) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      projects: readonly ObservedWorkspaceProject[],
+    ) => callback(projects);
+    ipcRenderer.on(channels.workspaceProjectsChanged, listener);
+    return () => ipcRenderer.removeListener(channels.workspaceProjectsChanged, listener);
+  },
   onIssuesChanged: (callback: (issues: readonly TrackedIssue[] | undefined) => void) => {
     const listener = (
       _event: Electron.IpcRendererEvent,
@@ -147,6 +181,12 @@ const bridge: AppBridge = {
       callback(accelerator);
     ipcRenderer.on(channels.askHotkeyChanged, listener);
     return () => ipcRenderer.removeListener(channels.askHotkeyChanged, listener);
+  },
+  onOutputAudioChanged: (callback: (state: OutputAudioState | undefined) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, state: OutputAudioState | undefined) =>
+      callback(state);
+    ipcRenderer.on(channels.outputAudioChanged, listener);
+    return () => ipcRenderer.removeListener(channels.outputAudioChanged, listener);
   },
   onAttentionSpeech: (callback: (speech: readonly AttentionSpeech[]) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, speech: readonly AttentionSpeech[]) =>
