@@ -85,6 +85,7 @@ import { OutputVolumeWatcher } from "./output-volume";
 import { sessionNoticeSpeech } from "./session-notifications";
 import { SettingsStore } from "./settings-store";
 import {
+  APP_SETTING_DEFAULTS,
   type AppBootstrap,
   type AppSettings,
   channels,
@@ -999,6 +1000,72 @@ function reportVoiceAvailability(): void {
   );
 }
 
+/**
+ * One write path for every settings change the renderer can ask for. Trust,
+ * catch, snapshot, and broadcast are identical on every channel — only what
+ * is valid, what is stored, and what the write sets in motion differ. A
+ * malformed request still throws: that is a broken caller, not a choice the
+ * user can correct.
+ */
+function registerSettingHandler<Value>(
+  channel: string,
+  {
+    validate,
+    save,
+    apply,
+    refusal,
+  }: {
+    validate: (
+      ...args: unknown[]
+    ) => Value | SettingsUpdateResult | Promise<Value | SettingsUpdateResult>;
+    save: (value: Value) => Promise<SettingsUpdateResult>;
+    apply?: (
+      result: SettingsUpdateResult,
+      value: Value,
+      event: IpcMainInvokeEvent,
+    ) => void | Promise<void>;
+    refusal: string;
+  },
+): void {
+  ipcMain.handle(channel, async (event, ...args: unknown[]): Promise<SettingsUpdateResult> => {
+    if (!trustedSender(event)) throw new Error("Untrusted renderer");
+    const value = await validate(...args);
+    // A validate step that already answered — a chord spoken for, refused with
+    // words — leaves without a write, a side effect, or a broadcast.
+    if (typeof value === "object" && value !== null && "settings" in value) {
+      return value;
+    }
+    try {
+      const result = await save(value);
+      await apply?.(result, value, event);
+      broadcastSettings(result.settings, event.sender);
+      return result;
+    } catch {
+      // A filesystem failure is not something the user can act on, so it is
+      // reported as one line rather than as a raw system error.
+      return {
+        settings: await settingsStore.snapshot(),
+        reason: refusal,
+      };
+    }
+  });
+}
+
+/**
+ * The renderer records chords through the same reader, so one that does
+ * not parse is a malformed request rather than a choice to answer.
+ */
+function parsedVoiceHotkey(accelerator: unknown): string | undefined {
+  if (accelerator !== undefined && typeof accelerator !== "string") {
+    throw new Error("Invalid shortcut request");
+  }
+  const chosen = accelerator === undefined ? undefined : parseVoiceHotkey(accelerator);
+  if (accelerator !== undefined && chosen === undefined) {
+    throw new Error("Invalid shortcut request");
+  }
+  return chosen;
+}
+
 function registerIpc(): void {
   ipcMain.handle(channels.bootstrap, async (event): Promise<AppBootstrap> => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
@@ -1083,263 +1150,172 @@ function registerIpc(): void {
 
   // The renderer can replace or clear a provider's credential but never reads
   // it back; the reply reports only where each key now comes from.
-  ipcMain.handle(
-    channels.setProviderApiKey,
-    async (event, providerId: unknown, apiKey: unknown): Promise<SettingsUpdateResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+  registerSettingHandler(channels.setProviderApiKey, {
+    validate(providerId: unknown, apiKey: unknown) {
       // The provider list is fixed by this build, so an id outside it is a
       // malformed request rather than something the user can correct.
       if (!isCredentialProviderId(providerId)) throw new Error("Unknown credential provider");
       if (apiKey !== undefined && typeof apiKey !== "string") {
         throw new Error("Invalid API key request");
       }
-      try {
-        const result = await settingsStore.setApiKey(providerId, apiKey);
-        // Only the provider whose key changed is affected, so the local
-        // observers are left alone rather than re-crawling the filesystem on
-        // every save.
-        const adapter = adapterByCredentialProvider.get(providerId);
-        if (!result.reason && adapter) void sessionRegistry.refresh(adapter);
-        // The tracker's key connects the tracker, not a session provider, so
-        // its save refreshes the roster instead of the registry.
-        if (!result.reason && providerId === CREDENTIAL_PROVIDER_ID.LINEAR) {
-          void refreshTrackedIssues();
-        }
-        broadcastSettings(result.settings, event.sender);
-        return result;
-      } catch {
-        // A filesystem failure is not something the user can act on, so it is
-        // reported as one line rather than as a raw system error.
-        return {
-          settings: await settingsStore.snapshot(),
-          reason: "Could not save that API key on this system.",
-        };
+      return { providerId, apiKey: typeof apiKey === "string" ? apiKey : undefined };
+    },
+    save: ({ providerId, apiKey }) => settingsStore.setApiKey(providerId, apiKey),
+    apply(result, { providerId }) {
+      // Only the provider whose key changed is affected, so the local
+      // observers are left alone rather than re-crawling the filesystem on
+      // every save.
+      const adapter = adapterByCredentialProvider.get(providerId);
+      if (!result.reason && adapter) void sessionRegistry.refresh(adapter);
+      // The tracker's key connects the tracker, not a session provider, so
+      // its save refreshes the roster instead of the registry.
+      if (!result.reason && providerId === CREDENTIAL_PROVIDER_ID.LINEAR) {
+        void refreshTrackedIssues();
       }
     },
-  );
+    refusal: "Could not save that API key on this system.",
+  });
 
   // The status item follows the stored answer at once: a setting that only
   // took effect on the next launch would read as a toggle that does nothing.
-  ipcMain.handle(
-    channels.setShowInMenuBar,
-    async (event, show: unknown): Promise<SettingsUpdateResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+  registerSettingHandler(channels.setShowInMenuBar, {
+    validate(show: unknown) {
       if (typeof show !== "boolean") throw new Error("Invalid menu bar request");
-      try {
-        const result = await settingsStore.setShowInMenuBar(show);
-        applyMenuBarVisibility(result.settings.showInMenuBar);
-        broadcastSettings(result.settings, event.sender);
-        return result;
-      } catch {
-        // A filesystem failure is not something the user can act on, so it is
-        // reported as one line rather than as a raw system error.
-        return {
-          settings: await settingsStore.snapshot(),
-          reason: "Could not save that setting on this system.",
-        };
-      }
+      return show;
     },
-  );
+    save: (show) => settingsStore.setShowInMenuBar(show),
+    apply: (result) => applyMenuBarVisibility(result.settings.showInMenuBar),
+    refusal: "Could not save that setting on this system.",
+  });
 
   // The Dock icon follows the stored answer at once, like the status item: a
   // setting that only took effect on the next launch would read as a toggle
   // that does nothing.
-  ipcMain.handle(
-    channels.setShowInDock,
-    async (event, show: unknown): Promise<SettingsUpdateResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+  registerSettingHandler(channels.setShowInDock, {
+    validate(show: unknown) {
       if (typeof show !== "boolean") throw new Error("Invalid Dock request");
-      try {
-        const result = await settingsStore.setShowInDock(show);
-        applyDockVisibility(result.settings.showInDock, displayIdFor(event.sender));
-        broadcastSettings(result.settings, event.sender);
-        return result;
-      } catch {
-        // A filesystem failure is not something the user can act on, so it is
-        // reported as one line rather than as a raw system error.
-        return {
-          settings: await settingsStore.snapshot(),
-          reason: "Could not save that setting on this system.",
-        };
-      }
+      return show;
     },
-  );
+    save: (show) => settingsStore.setShowInDock(show),
+    apply: (result, _show, event) =>
+      applyDockVisibility(result.settings.showInDock, displayIdFor(event.sender)),
+    refusal: "Could not save that setting on this system.",
+  });
 
   // The windows follow the stored answer at once, like the status item: on
   // raises a panel on every connected display, off brings Luke back to the
   // main one alone.
-  ipcMain.handle(
-    channels.setShowOnAllDisplays,
-    async (event, show: unknown): Promise<SettingsUpdateResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+  registerSettingHandler(channels.setShowOnAllDisplays, {
+    validate(show: unknown) {
       if (typeof show !== "boolean") throw new Error("Invalid display request");
-      try {
-        const result = await settingsStore.setShowOnAllDisplays(show);
-        showOnAllDisplays = result.settings.showOnAllDisplays;
-        reconcilePanels();
-        broadcastSettings(result.settings, event.sender);
-        return result;
-      } catch {
-        // A filesystem failure is not something the user can act on, so it is
-        // reported as one line rather than as a raw system error.
-        return {
-          settings: await settingsStore.snapshot(),
-          reason: "Could not save that setting on this system.",
-        };
-      }
+      return show;
     },
-  );
+    save: (show) => settingsStore.setShowOnAllDisplays(show),
+    apply(result) {
+      showOnAllDisplays = result.settings.showOnAllDisplays;
+      reconcilePanels();
+    },
+    refusal: "Could not save that setting on this system.",
+  });
 
   // The form follows the stored answer at once, for the same reason: every
   // window resizes around the housing the shape is about to draw or drop.
-  ipcMain.handle(
-    channels.setFormFactor,
-    async (event, formFactor: unknown): Promise<SettingsUpdateResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+  registerSettingHandler(channels.setFormFactor, {
+    validate(formFactor: unknown) {
       if (!isPanelFormFactor(formFactor)) throw new Error("Invalid form factor request");
-      try {
-        const result = await settingsStore.setFormFactor(formFactor);
-        panelFormFactor = result.settings.formFactor;
-        positionPanels();
-        broadcastSettings(result.settings, event.sender);
-        return result;
-      } catch {
-        // A filesystem failure is not something the user can act on, so it is
-        // reported as one line rather than as a raw system error.
-        return {
-          settings: await settingsStore.snapshot(),
-          reason: "Could not save that setting on this system.",
-        };
-      }
+      return formFactor;
     },
-  );
+    save: (formFactor) => settingsStore.setFormFactor(formFactor),
+    apply(result) {
+      panelFormFactor = result.settings.formFactor;
+      positionPanels();
+    },
+    refusal: "Could not save that setting on this system.",
+  });
 
   // The default workspace provider is a preference about where a nameless
   // creation ask goes, never a wider write path: it steers which project list
   // the conversation is told to prefer, and every creation is still validated
   // against what the adapters actually offer.
-  ipcMain.handle(
-    channels.setDefaultWorkspaceProvider,
-    async (event, providerId: unknown): Promise<SettingsUpdateResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+  registerSettingHandler(channels.setDefaultWorkspaceProvider, {
+    validate(providerId: unknown) {
       if (
         providerId !== undefined &&
         (typeof providerId !== "string" || !isProviderId(providerId))
       ) {
         throw new Error("Unknown workspace provider");
       }
-      try {
-        const result = await settingsStore.setDefaultWorkspaceProvider(providerId);
-        broadcastSettings(result.settings, event.sender);
-        return result;
-      } catch {
-        // A filesystem failure is not something the user can act on, so it is
-        // reported as one line rather than as a raw system error.
-        return {
-          settings: await settingsStore.snapshot(),
-          reason: "Could not save that setting on this system.",
-        };
-      }
+      return typeof providerId === "string" ? providerId : undefined;
     },
-  );
+    save: (providerId) => settingsStore.setDefaultWorkspaceProvider(providerId),
+    refusal: "Could not save that setting on this system.",
+  });
 
   // The agent and model new workspaces start with, per provider. The pairing
   // travels the form factor's road — a value from a set fixed by this build —
   // it is just a documented table per provider rather than one enum: anything
   // outside the table is refused here, so the store never holds a value no
   // endpoint takes.
-  ipcMain.handle(
-    channels.setWorkspaceAgentDefault,
-    async (event, providerId: unknown, selection: unknown): Promise<SettingsUpdateResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+  registerSettingHandler(channels.setWorkspaceAgentDefault, {
+    validate(providerId: unknown, selection: unknown) {
       if (typeof providerId !== "string" || !isProviderId(providerId)) {
         throw new Error("Unknown workspace provider");
       }
       if (selection !== undefined && !isWorkspaceAgentSelection(providerId, selection)) {
         throw new Error("Unknown workspace agent");
       }
-      try {
-        const result = await settingsStore.setWorkspaceAgentDefault(providerId, selection);
-        broadcastSettings(result.settings, event.sender);
-        return result;
-      } catch {
-        // A filesystem failure is not something the user can act on, so it is
-        // reported as one line rather than as a raw system error.
-        return {
-          settings: await settingsStore.snapshot(),
-          reason: "Could not save that setting on this system.",
-        };
-      }
+      return {
+        providerId,
+        selection: selection === undefined ? undefined : selection,
+      };
     },
-  );
+    save: ({ providerId, selection }) =>
+      settingsStore.setWorkspaceAgentDefault(providerId, selection),
+    refusal: "Could not save that setting on this system.",
+  });
 
   // The voice is a preference rather than a credential, but it travels the
   // same road: the renderer names a value from a set fixed by this build and
   // hears back the settings as they now stand.
-  ipcMain.handle(
-    channels.setVoice,
-    async (event, voice: unknown): Promise<SettingsUpdateResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+  registerSettingHandler(channels.setVoice, {
+    validate(voice: unknown) {
       if (!isRealtimeVoice(voice)) throw new Error("Unknown voice");
-      try {
-        const result = await settingsStore.setVoice(voice);
-        // The next credential is minted for the new voice; the renderer makes
-        // the change heard now by reopening any conversation already up.
-        if (!result.reason) realtimeCredentials?.setVoice(voice);
-        broadcastSettings(result.settings, event.sender);
-        return result;
-      } catch {
-        return {
-          settings: await settingsStore.snapshot(),
-          reason: "Could not save that voice on this system.",
-        };
-      }
+      return voice;
     },
-  );
+    save: (voice) => settingsStore.setVoice(voice),
+    apply(result, voice) {
+      // The next credential is minted for the new voice; the renderer makes
+      // the change heard now by reopening any conversation already up.
+      if (!result.reason) realtimeCredentials?.setVoice(voice);
+    },
+    refusal: "Could not save that voice on this system.",
+  });
   // The pace travels the voice's road: a value from the set fixed by this
   // build, stored, and handed to the minter for the next conversation.
-  ipcMain.handle(
-    channels.setVoiceSpeed,
-    async (event, speed: unknown): Promise<SettingsUpdateResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+  registerSettingHandler(channels.setVoiceSpeed, {
+    validate(speed: unknown) {
       if (!isRealtimeVoiceSpeed(speed)) throw new Error("Unknown voice speed");
-      try {
-        const result = await settingsStore.setVoiceSpeed(speed);
-        // The next credential is minted for the new pace; the renderer
-        // carries the change onto a conversation already open itself.
-        if (!result.reason) realtimeCredentials?.setSpeed(speed);
-        broadcastSettings(result.settings, event.sender);
-        return result;
-      } catch {
-        return {
-          settings: await settingsStore.snapshot(),
-          reason: "Could not save that speed on this system.",
-        };
-      }
+      return speed;
     },
-  );
+    save: (speed) => settingsStore.setVoiceSpeed(speed),
+    apply(result, speed) {
+      // The next credential is minted for the new pace; the renderer
+      // carries the change onto a conversation already open itself.
+      if (!result.reason) realtimeCredentials?.setSpeed(speed);
+    },
+    refusal: "Could not save that speed on this system.",
+  });
   // A plain preference, validated to a boolean the way every renderer value
   // is validated at this boundary. The reply reports what was actually
   // stored, so the switch redraws from the settings rather than the press.
-  ipcMain.handle(
-    channels.setVoiceCaptions,
-    async (event, enabled: unknown): Promise<SettingsUpdateResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+  registerSettingHandler(channels.setVoiceCaptions, {
+    validate(enabled: unknown) {
       if (typeof enabled !== "boolean") throw new Error("Invalid caption request");
-      try {
-        const result = await settingsStore.setVoiceCaptions(enabled);
-        broadcastSettings(result.settings, event.sender);
-        return result;
-      } catch {
-        // A filesystem failure is not something the user can act on, so it is
-        // reported as one line rather than as a raw system error.
-        return {
-          settings: await settingsStore.snapshot(),
-          reason: "Could not save that setting on this system.",
-        };
-      }
+      return enabled;
     },
-  );
+    save: (enabled) => settingsStore.setVoiceCaptions(enabled),
+    refusal: "Could not save that setting on this system.",
+  });
 
   // The talk key is the user's to move — a chord another tool already holds,
   // or a hand that does not reach ⌥Space. What arrives is read through the
@@ -1348,56 +1324,28 @@ function registerIpc(): void {
   // reset the absence of a choice rather than a second stored value. The new
   // chord is registered at once — a shortcut that only moved on the next
   // launch would read as a control that does nothing.
-  ipcMain.handle(
-    channels.setVoiceHotkey,
-    async (event, accelerator: unknown): Promise<SettingsUpdateResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      if (accelerator !== undefined && typeof accelerator !== "string") {
-        throw new Error("Invalid shortcut request");
-      }
-      const chosen = accelerator === undefined ? undefined : parseVoiceHotkey(accelerator);
-      // The renderer records chords through the same reader, so one that does
-      // not parse is a malformed request rather than a choice to answer.
-      if (accelerator !== undefined && chosen === undefined) {
-        throw new Error("Invalid shortcut request");
-      }
-      try {
-        const result = await settingsStore.setVoiceHotkey(chosen);
-        if (!result.reason) {
-          chosenVoiceHotkey = chosen;
-          // Awaited so the renderer's controls stay at rest until the swap has
-          // finished and the helper's own registration line can say the truth.
-          await applyVoiceHotkey();
-        }
-        broadcastSettings(result.settings, event.sender);
-        return result;
-      } catch {
-        // A filesystem failure is not something the user can act on, so it is
-        // reported as one line rather than as a raw system error.
-        return {
-          settings: await settingsStore.snapshot(),
-          reason: "Could not save that shortcut on this system.",
-        };
+  registerSettingHandler(channels.setVoiceHotkey, {
+    validate: parsedVoiceHotkey,
+    save: (chosen) => settingsStore.setVoiceHotkey(chosen),
+    async apply(result, chosen) {
+      if (!result.reason) {
+        chosenVoiceHotkey = chosen;
+        // Awaited so the renderer's controls stay at rest until the swap has
+        // finished and the helper's own registration line can say the truth.
+        await applyVoiceHotkey();
       }
     },
-  );
+    refusal: "Could not save that shortcut on this system.",
+  });
 
   // The ask key is the user's to move on the talk key's exact terms, read
   // through the same gate and registered at once. The one extra rule is the
   // standing one — the two Luke keys must never compete for a chord — so a
   // chord the talk key sits on is refused with words rather than stored and
   // silently outbid.
-  ipcMain.handle(
-    channels.setAskHotkey,
-    async (event, accelerator: unknown): Promise<SettingsUpdateResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      if (accelerator !== undefined && typeof accelerator !== "string") {
-        throw new Error("Invalid shortcut request");
-      }
-      const chosen = accelerator === undefined ? undefined : parseVoiceHotkey(accelerator);
-      if (accelerator !== undefined && chosen === undefined) {
-        throw new Error("Invalid shortcut request");
-      }
+  registerSettingHandler<string | undefined>(channels.setAskHotkey, {
+    async validate(accelerator: unknown) {
+      const chosen = parsedVoiceHotkey(accelerator);
       // The talk key's whole candidate list is refused, not just the chord it
       // holds now: its helper may fall back to any of them on a later launch,
       // and an ask key stored on one would race it there.
@@ -1410,41 +1358,26 @@ function registerIpc(): void {
           reason: "That chord is reserved for the talk key.",
         };
       }
-      try {
-        const result = await settingsStore.setAskHotkey(chosen);
-        if (!result.reason) {
-          chosenAskHotkey = chosen;
-          applyAskHotkey();
-        }
-        broadcastSettings(result.settings, event.sender);
-        return result;
-      } catch {
-        // A filesystem failure is not something the user can act on, so it is
-        // reported as one line rather than as a raw system error.
-        return {
-          settings: await settingsStore.snapshot(),
-          reason: "Could not save that shortcut on this system.",
-        };
+      return chosen;
+    },
+    save: (chosen) => settingsStore.setAskHotkey(chosen),
+    apply(result, chosen) {
+      if (!result.reason) {
+        chosenAskHotkey = chosen;
+        applyAskHotkey();
       }
     },
-  );
+    refusal: "Could not save that shortcut on this system.",
+  });
 
   // The stop key is the user's to move on the other two keys' exact terms,
   // read through the same gate and registered at once. It sits at the bottom
   // of the pecking order, so both standing rules point up: a chord the talk
   // key or the ask key sits on — or could fall back to — is refused with
   // words rather than stored and silently outbid.
-  ipcMain.handle(
-    channels.setStopHotkey,
-    async (event, accelerator: unknown): Promise<SettingsUpdateResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      if (accelerator !== undefined && typeof accelerator !== "string") {
-        throw new Error("Invalid shortcut request");
-      }
-      const chosen = accelerator === undefined ? undefined : parseVoiceHotkey(accelerator);
-      if (accelerator !== undefined && chosen === undefined) {
-        throw new Error("Invalid shortcut request");
-      }
+  registerSettingHandler<string | undefined>(channels.setStopHotkey, {
+    async validate(accelerator: unknown) {
+      const chosen = parsedVoiceHotkey(accelerator);
       if (
         chosen &&
         (voiceHotkeyCandidates(chosenVoiceHotkey).includes(chosen) || chosen === voiceHotkey)
@@ -1463,68 +1396,43 @@ function registerIpc(): void {
           reason: "That chord is reserved for the ask key.",
         };
       }
-      try {
-        const result = await settingsStore.setStopHotkey(chosen);
-        if (!result.reason) {
-          chosenStopHotkey = chosen;
-          applyStopHotkey();
-        }
-        broadcastSettings(result.settings, event.sender);
-        return result;
-      } catch {
-        // A filesystem failure is not something the user can act on, so it is
-        // reported as one line rather than as a raw system error.
-        return {
-          settings: await settingsStore.snapshot(),
-          reason: "Could not save that shortcut on this system.",
-        };
+      return chosen;
+    },
+    save: (chosen) => settingsStore.setStopHotkey(chosen),
+    apply(result, chosen) {
+      if (!result.reason) {
+        chosenStopHotkey = chosen;
+        applyStopHotkey();
       }
     },
-  );
+    refusal: "Could not save that shortcut on this system.",
+  });
 
   // The duck follows the stored answer at once, like the menu bar item: off
   // must let a duck currently held go rather than waiting for the next launch.
-  ipcMain.handle(
-    channels.setDuckOtherMedia,
-    async (event, enabled: unknown): Promise<SettingsUpdateResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+  registerSettingHandler(channels.setDuckOtherMedia, {
+    validate(enabled: unknown) {
       if (typeof enabled !== "boolean") throw new Error("Invalid media duck request");
-      try {
-        const result = await settingsStore.setDuckOtherMedia(enabled);
-        mediaDuck.setEnabled(result.settings.duckOtherMedia);
-        broadcastSettings(result.settings, event.sender);
-        return result;
-      } catch {
-        // A filesystem failure is not something the user can act on, so it is
-        // reported as one line rather than as a raw system error.
-        return {
-          settings: await settingsStore.snapshot(),
-          reason: "Could not save that setting on this system.",
-        };
-      }
+      return enabled;
     },
-  );
+    save: (enabled) => settingsStore.setDuckOtherMedia(enabled),
+    apply: (result) => mediaDuck.setEnabled(result.settings.duckOtherMedia),
+    refusal: "Could not save that setting on this system.",
+  });
 
   // The announcer follows the stored answer at once, like the duck: off must
   // silence the very next pass, not the next launch.
-  ipcMain.handle(
-    channels.setSessionNotifications,
-    async (event, enabled: unknown): Promise<SettingsUpdateResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+  registerSettingHandler(channels.setSessionNotifications, {
+    validate(enabled: unknown) {
       if (typeof enabled !== "boolean") throw new Error("Invalid notification request");
-      try {
-        const result = await settingsStore.setSessionNotifications(enabled);
-        sessionNotificationsEnabled = result.settings.sessionNotifications;
-        broadcastSettings(result.settings, event.sender);
-        return result;
-      } catch {
-        return {
-          settings: await settingsStore.snapshot(),
-          reason: "Could not save that setting on this system.",
-        };
-      }
+      return enabled;
     },
-  );
+    save: (enabled) => settingsStore.setSessionNotifications(enabled),
+    apply(result) {
+      sessionNotificationsEnabled = result.settings.sessionNotifications;
+    },
+    refusal: "Could not save that setting on this system.",
+  });
 
   // A statement of state, not a request: the renderer says whether a spoken
   // exchange is live, and the duck holds every other decision — the setting,
@@ -2497,7 +2405,7 @@ if (!app.requestSingleInstanceLock()) {
     // leaves the item shown, the same answer a file that has never said gives.
     void settingsStore.showInMenuBar().then(
       (show) => applyMenuBarVisibility(show),
-      () => applyMenuBarVisibility(true),
+      () => applyMenuBarVisibility(APP_SETTING_DEFAULTS.showInMenuBar),
     );
     // The Dock wears Luke's own face from the start, and keeps wearing the
     // right one as the desktop changes mode — whether the icon is shown yet
@@ -2518,7 +2426,7 @@ if (!app.requestSingleInstanceLock()) {
     // answer a file that has never said gives.
     void settingsStore.duckOtherMedia().then(
       (enabled) => mediaDuck.setEnabled(enabled),
-      () => mediaDuck.setEnabled(true),
+      () => mediaDuck.setEnabled(APP_SETTING_DEFAULTS.duckOtherMedia),
     );
     // The announcer arms the same way, under the same default: a file that
     // cannot be read leaves the announcements on.
@@ -2527,7 +2435,7 @@ if (!app.requestSingleInstanceLock()) {
         sessionNotificationsEnabled = enabled;
       },
       () => {
-        sessionNotificationsEnabled = true;
+        sessionNotificationsEnabled = APP_SETTING_DEFAULTS.sessionNotifications;
       },
     );
     // Awaited, so the chosen voice reaches the minter before the renderer
@@ -2543,7 +2451,9 @@ if (!app.requestSingleInstanceLock()) {
     // chosen form, rather than appearing on the main display and jumping. A
     // file that cannot be read means no choice was kept — the main display,
     // the default form — and must not keep the panels from starting.
-    showOnAllDisplays = await settingsStore.readShowOnAllDisplays().catch(() => false);
+    showOnAllDisplays = await settingsStore
+      .readShowOnAllDisplays()
+      .catch(() => APP_SETTING_DEFAULTS.showOnAllDisplays);
     panelFormFactor =
       (await settingsStore.readFormFactor().catch(() => undefined)) ?? DEFAULT_PANEL_FORM_FACTOR;
     reportVoiceAvailability();
