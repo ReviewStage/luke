@@ -281,9 +281,13 @@ export function NotchMock(): React.JSX.Element {
     const update = () => {
       frame = undefined;
       // The sticky offset is written in svh, so its used value only moves on
-      // a real viewport change — orientation, not browser chrome.
+      // a real viewport change — orientation, not browser chrome. It is the
+      // zero point and nothing else: the pin catches at `top = pinTop` and
+      // the section lets go at `top = pinTop + pin - section`, so the travel
+      // between the two is their difference alone, with the offset already
+      // spent anchoring the start.
       const pinTop = Number.parseFloat(getComputedStyle(pinned).top) || 0;
-      const travel = section.offsetHeight - pinned.offsetHeight - pinTop;
+      const travel = section.offsetHeight - pinned.offsetHeight;
       if (travel <= 0) {
         applyMode(MOCK_MODE.PANEL);
         return;
