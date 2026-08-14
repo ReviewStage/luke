@@ -1,5 +1,6 @@
 import {
   ATTENTION_DISPOSITION,
+  compareSessionsByUrgency,
   isProviderId,
   type NormalizedSession,
   PROVIDER_ID_LIST,
@@ -12,23 +13,9 @@ import {
   type SessionListSort,
   type SessionLocation,
   type SessionState,
+  STATE_LABEL,
 } from "@sidecar/core";
 import type { AppBootstrap } from "../shared/contracts";
-
-export const STATE_LABEL: Record<SessionState, string> = {
-  [SESSION_STATE.WORKING]: "Working",
-  [SESSION_STATE.ATTENTION]: "Needs you",
-  [SESSION_STATE.COMPLETE]: "Complete",
-  [SESSION_STATE.UNKNOWN]: "Idle",
-};
-
-/** The state order the surface reads top-down and the badge collapses to. */
-const STATE_PRIORITY: readonly SessionState[] = [
-  SESSION_STATE.ATTENTION,
-  SESSION_STATE.WORKING,
-  SESSION_STATE.COMPLETE,
-  SESSION_STATE.UNKNOWN,
-];
 
 /**
  * Which sessions the list draws: everything, everything running in one place,
@@ -236,12 +223,7 @@ function sessionState(session: NormalizedSession): SessionState {
 }
 
 /** Most urgent first, and within one state the one that moved most recently. */
-function byUrgency(first: DisplaySession, second: DisplaySession): number {
-  return (
-    STATE_PRIORITY.indexOf(first.state) - STATE_PRIORITY.indexOf(second.state) ||
-    second.observedAt - first.observedAt
-  );
-}
+const byUrgency = compareSessionsByUrgency;
 
 /** What moved last, with urgency deciding sessions observed in the same tick. */
 function byRecency(first: DisplaySession, second: DisplaySession): number {

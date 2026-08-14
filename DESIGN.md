@@ -11,7 +11,8 @@ that review is to build from them.
 One spring drives everything: `--spring` for the surface and anything that
 travels with it, `--spring-fast` — the same damping ratio at a higher
 frequency — for small elements like the tab thumb and switch thumbs. Durations
-and delays come only from the tokens in `base.css` (`--duration-shape`,
+and delays come only from the tokens in
+`packages/sidecar-core/src/motion-tokens.css` (`--duration-shape`,
 `--duration-exit`, `--duration-quick`, `--duration-fast`, `--expand-delay`,
 `--peek-delay`, `--slot-delay`, `--row-stagger`). Never write a literal
 millisecond into a rule: reduced motion and capture runs zero the tokens, and
@@ -20,8 +21,8 @@ an endless loop — a spinner, a breathing idle, the face's own motions — whos
 `animation-play-state` answers `--loop-motion` or `--face-motion`: those runs
 stop it by pausing rather than by zeroing, so its duration may be a literal,
 and a loop that carries one must answer a play-state token. A main-process
-constant that mirrors a CSS total (`COLLAPSE_ANIMATION_MS`) names the tokens
-it mirrors.
+constant that mirrors a CSS total (`COLLAPSE_ANIMATION_MS`) names the
+`MOTION_DURATION_MS` tokens it mirrors.
 
 ## The surface owns size; everything else owns transform and opacity
 

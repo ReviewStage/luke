@@ -1,0 +1,273 @@
+#!/usr/bin/env node
+// Shared surface vocabulary — the single source for the tokens, marks, and
+// labels both the desktop renderer and the marketing mock draw from.
+//
+//   node design/generate-surface-shared.mjs
+//
+// It writes four committed outputs into packages/sidecar-core, all from the
+// tables further down:
+//
+//   src/motion-tokens.css       --spring, --spring-fast, and the duration set
+//   src/motion-tokens.ts        the same durations, as milliseconds
+//   src/provider-mark-paths.ts  SVG path data for every provider mark
+//   src/session-display.ts      state labels and the urgency order
+//
+// The React that traces the marks, and the rules that consume the tokens, stay
+// in each app: a shared component would pull desktop-only marks into the web
+// bundle. Emitting the data from here keeps the second copy from being a
+// second source. `repository-checks.sh` runs this with `--check`.
+
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const CORE = join(HERE, "..", "packages", "sidecar-core", "src");
+
+// ---------- Motion tokens ----------
+// Sampled damped springs, one duration. A real spring's motion is a property
+// of the spring, not of how far it is asked to travel, which is why the same
+// samples serve a 176px peek and a 482px panel.
+const SPRING = [
+  0, 0.0285, 0.0993, 0.1943, 0.3005, 0.4083, 0.5115, 0.6061, 0.69, 0.7623, 0.8229, 0.8727, 0.9125,
+  0.9437, 0.9674, 0.9848, 0.9972, 1.0056, 1.0109, 1.0138, 1.015, 1.015, 1.0142, 1.0129, 1.0114,
+  1.0098, 1,
+];
+// The same damping ratio; only the frequency changes, which is what a smaller
+// and lighter element wants.
+const SPRING_FAST = [
+  0, 0.0288, 0.1002, 0.1961, 0.3029, 0.4113, 0.5149, 0.6097, 0.6935, 0.7656, 0.826, 0.8755, 0.9149,
+  0.9457, 0.969, 0.9861, 0.9982, 1.0063, 1.0113, 1.014, 1.0151, 1.015, 1.0141, 1.0127, 1.0112,
+  1.0095, 1,
+];
+
+const MOTION_DURATION_MS = {
+  FAST: 280,
+  SHAPE: 460,
+  EXIT: 90,
+  QUICK: 140,
+  HOVER: 70,
+};
+const MOTION_DELAY_MS = {
+  EXPAND: 200,
+  PEEK: 60,
+  ROW_STAGGER: 32,
+};
+const MOTION_EXIT = "cubic-bezier(0.4, 0, 0.6, 1)";
+const ROW_FAN_PX = 7;
+const ROW_FAN_LIMIT = 5;
+
+// ---------- Session display ----------
+const STATE_LABEL = {
+  WORKING: "Working",
+  ATTENTION: "Needs you",
+  COMPLETE: "Complete",
+  UNKNOWN: "Idle",
+};
+const STATE_PRIORITY = ["ATTENTION", "WORKING", "COMPLETE", "UNKNOWN"];
+
+// ---------- Provider mark paths ----------
+// Each is the provider's own mark, reproduced rather than redrawn. Attribution
+// lives with the React that traces them; this table is only the geometry.
+const MARK_PATHS = {
+  CLAUDE_CODE:
+    "M21 10.5h3v3h-3v3h-1.5v3H18v-3h-1.5v3H15v-3H9v3H7.5v-3H6v3H4.5v-3H3v-3H0v-3h3v-6h18Zm-15 0h1.5v-3H6Zm10.5 0H18v-3h-1.5z",
+  CODEX:
+    "M8.086.457a6.105 6.105 0 013.046-.415c1.333.153 2.521.72 3.564 1.7a.117.117 0 00.107.029c1.408-.346 2.762-.224 4.061.366l.063.03.154.076c1.357.703 2.33 1.77 2.918 3.198.278.679.418 1.388.421 2.126a5.655 5.655 0 01-.18 1.631.167.167 0 00.04.155 5.982 5.982 0 011.578 2.891c.385 1.901-.01 3.615-1.183 5.14l-.182.22a6.063 6.063 0 01-2.934 1.851.162.162 0 00-.108.102c-.255.736-.511 1.364-.987 1.992-1.199 1.582-2.962 2.462-4.948 2.451-1.583-.008-2.986-.587-4.21-1.736a.145.145 0 00-.14-.032c-.518.167-1.04.191-1.604.185a5.924 5.924 0 01-2.595-.622 6.058 6.058 0 01-2.146-1.781c-.203-.269-.404-.522-.551-.821a7.74 7.74 0 01-.495-1.283 6.11 6.11 0 01-.017-3.064.166.166 0 00.008-.074.115.115 0 00-.037-.064 5.958 5.958 0 01-1.38-2.202 5.196 5.196 0 01-.333-1.589 6.915 6.915 0 01.188-2.132c.45-1.484 1.309-2.648 2.577-3.493.282-.188.55-.334.802-.438.286-.12.573-.22.861-.304a.129.129 0 00.087-.087A6.016 6.016 0 015.635 2.31C6.315 1.464 7.132.846 8.086.457zm-.804 7.85a.848.848 0 00-1.473.842l1.694 2.965-1.688 2.848a.849.849 0 001.46.864l1.94-3.272a.849.849 0 00.007-.854l-1.94-3.393zm5.446 6.24a.849.849 0 000 1.695h4.848a.849.849 0 000-1.696h-4.848z",
+  COPILOT:
+    "M23.922 16.997C23.061 18.492 18.063 22.02 12 22.02 5.937 22.02.939 18.492.078 16.997A.641.641 0 0 1 0 16.741v-2.869a.883.883 0 0 1 .053-.22c.372-.935 1.347-2.292 2.605-2.656.167-.429.414-1.055.644-1.517a10.098 10.098 0 0 1-.052-1.086c0-1.331.282-2.499 1.132-3.368.397-.406.89-.717 1.474-.952C7.255 2.937 9.248 1.98 11.978 1.98c2.731 0 4.767.957 6.166 2.093.584.235 1.077.546 1.474.952.85.869 1.132 2.037 1.132 3.368 0 .368-.014.733-.052 1.086.23.462.477 1.088.644 1.517 1.258.364 2.233 1.721 2.605 2.656a.841.841 0 0 1 .053.22v2.869a.641.641 0 0 1-.078.256Zm-11.75-5.992h-.344a4.359 4.359 0 0 1-.355.508c-.77.947-1.918 1.492-3.508 1.492-1.725 0-2.989-.359-3.782-1.259a2.137 2.137 0 0 1-.085-.104L4 11.746v6.585c1.435.779 4.514 2.179 8 2.179 3.486 0 6.565-1.4 8-2.179v-6.585l-.098-.104s-.033.045-.085.104c-.793.9-2.057 1.259-3.782 1.259-1.59 0-2.738-.545-3.508-1.492a4.359 4.359 0 0 1-.355-.508Zm2.328 3.25c.549 0 1 .451 1 1v2c0 .549-.451 1-1 1-.549 0-1-.451-1-1v-2c0-.549.451-1 1-1Zm-5 0c.549 0 1 .451 1 1v2c0 .549-.451 1-1 1-.549 0-1-.451-1-1v-2c0-.549.451-1 1-1Zm3.313-6.185c.136 1.057.403 1.913.878 2.497.442.544 1.134.938 2.344.938 1.573 0 2.292-.337 2.657-.751.384-.435.558-1.15.558-2.361 0-1.14-.243-1.847-.705-2.319-.477-.488-1.319-.862-2.824-1.025-1.487-.161-2.192.138-2.533.529-.269.307-.437.808-.438 1.578v.021c0 .265.021.562.063.893Zm-1.626 0c.042-.331.063-.628.063-.894v-.02c-.001-.77-.169-1.271-.438-1.578-.341-.391-1.046-.69-2.533-.529-1.505.163-2.347.537-2.824 1.025-.462.472-.705 1.179-.705 2.319 0 1.211.175 1.926.558 2.361.365.414 1.084.751 2.657.751 1.21 0 1.902-.394 2.344-.938.475-.584.742-1.44.878-2.497Z",
+  CURSOR:
+    "M11.503.131 1.891 5.678a.84.84 0 0 0-.42.726v11.188c0 .3.162.575.42.724l9.609 5.55a1 1 0 0 0 .998 0l9.61-5.55a.84.84 0 0 0 .42-.724V6.404a.84.84 0 0 0-.42-.726L12.497.131a1.01 1.01 0 0 0-.996 0M2.657 6.338h18.55c.263 0 .43.287.297.515L12.23 22.918c-.062.107-.229.064-.229-.06V12.335a.59.59 0 0 0-.295-.51l-9.11-5.257c-.109-.063-.064-.23.061-.23",
+  DEVIN:
+    "M70 159.333V91.3471C70 88.3592 71.594 85.5983 74.1816 84.1044L133.043 50.1205C135.631 48.6265 138.819 48.6265 141.407 50.1205L200.269 84.1044C202.856 85.5983 204.45 88.3592 204.45 91.3471V126.068C204.708 137.606 210.806 148.734 221.531 154.926C232.256 161.117 244.942 160.834 255.063 155.289L285.132 137.929C287.719 136.435 290.907 136.435 293.495 137.929L352.357 171.913C354.944 173.406 356.538 176.167 356.538 179.155V247.123C356.538 250.111 354.944 252.872 352.357 254.366L293.495 288.35C290.907 289.844 287.719 289.844 285.132 288.35L255.306 271.13C245.146 265.456 232.344 265.117 221.534 271.358C210.809 277.55 204.711 288.678 204.453 300.215V334.926C204.453 337.914 202.859 340.675 200.271 342.169L141.41 376.153C138.822 377.647 135.634 377.647 133.046 376.153L74.1845 342.169C71.5969 340.675 70.0028 337.914 70.0028 334.926V266.959C70.0029 263.971 71.5969 261.21 74.1845 259.716L133.046 225.732C135.634 224.238 138.822 224.238 141.41 225.732L171.547 243.132C181.656 248.638 194.306 248.906 205.005 242.729C215.815 236.488 221.922 225.231 222.088 213.595C221.83 202.057 215.732 189.737 205.008 183.545C194.283 177.353 181.597 177.636 171.476 183.181L141.269 200.72C138.67 202.229 135.461 202.228 132.864 200.716L74.1576 166.562C71.5835 165.065 70 162.311 70 159.333Z",
+  LINEAR:
+    "M2.886 4.18A11.982 11.982 0 0 1 11.99 0C18.624 0 24 5.376 24 12.009c0 3.64-1.62 6.903-4.18 9.105L2.887 4.18ZM1.817 5.626l16.556 16.556c-.524.33-1.075.62-1.65.866L.951 7.277c.247-.575.537-1.126.866-1.65ZM.322 9.163l14.515 14.515c-.71.172-1.443.282-2.195.322L0 11.358a12 12 0 0 1 .322-2.195Zm-.17 4.862 9.823 9.824a12.02 12.02 0 0 1-9.824-9.824Z",
+  JULES:
+    "M4.2 24q-1.26 0-2.13-.87T1.2 21v-.6q0-.51.345-.855T2.4 19.2t.855.345.345.855v.6q0 .24.18.42t.42.18.42-.18.18-.42V7.2q0-3 2.1-5.1T12 0t5.1 2.1 2.1 5.1V21q0 .24.18.42t.42.18.42-.18.18-.42v-.6q0-.51.345-.855t.855-.345.855.345.345.855v.6q0 1.26-.87 2.13T19.8 24t-2.13-.87T16.8 21v-5.4h-1.62v4.8q0 .51-.345.855t-.855.345-.855-.345-.345-.855v-4.8h-1.59v4.8q0 .51-.345.855t-.855.345-.855-.345-.345-.855v-4.8H7.2V21q0 1.26-.87 2.13T4.2 24m4.2-11.4q.54 0 .87-.45t.33-1.05-.33-1.05-.87-.45-.87.45-.33 1.05.33 1.05.87.45m7.2 0q.54 0 .87-.45t.33-1.05-.33-1.05-.87-.45-.87.45-.33 1.05.33 1.05.87.45",
+  OPENCODE_FRAME: "M384 416H128V96H384V416ZM320 160H192V352H320V160Z",
+  OPENCODE_BLOCK: "M320 224V352H192V224H320Z",
+};
+
+const CONDUCTOR_MARK_PATHS = [
+  "M4.57422 63.6992H22.373V37.251H4.57422C3.58785 37.2511 2.78711 38.0517 2.78711 39.0381V61.9121C2.78725 62.8984 3.58794 63.6991 4.57422 63.6992Z",
+  "M36.5977 63.6992H18.7988V37.251H36.5977C37.584 37.2511 38.3848 38.0517 38.3848 39.0381V61.9121C38.3846 62.8984 37.5839 63.6991 36.5977 63.6992Z",
+  "M4.57422 100.297H22.373V73.8486H4.57422C3.58785 73.8488 2.78711 74.6493 2.78711 75.6357V98.5098C2.78725 99.496 3.58794 100.297 4.57422 100.297Z",
+  "M36.5977 100.297H18.7988V73.8486H36.5977C37.584 73.8488 38.3848 74.6493 38.3848 75.6357V98.5098C38.3846 99.496 37.5839 100.297 36.5977 100.297Z",
+  "M4.57422 136.896H22.373V110.447H4.57422C3.58785 110.447 2.78711 111.248 2.78711 112.234V135.108C2.78725 136.095 3.58794 136.895 4.57422 136.896Z",
+  "M36.5977 136.896H18.7988V110.447H36.5977C37.584 110.447 38.3848 111.248 38.3848 112.234V135.108C38.3846 136.095 37.5839 136.895 36.5977 136.896Z",
+  "M22.873 173.493H40.6719V147.045H22.873C21.8867 147.045 21.0859 147.846 21.0859 148.832V171.706C21.0861 172.692 21.8868 173.493 22.873 173.493Z",
+  "M37.0967 173.493V147.045H58.9707V173.493H37.0967Z",
+  "M55.3955 173.493V147.045H77.2695V173.493H55.3955Z",
+  "M91.4941 173.493H73.6953V147.045H91.4941C92.4805 147.045 93.2812 147.846 93.2812 148.832V171.706C93.2811 172.692 92.4804 173.493 91.4941 173.493Z",
+  "M77.7695 136.896H95.5684V110.447H77.7695C76.7832 110.447 75.9824 111.248 75.9824 112.234V135.108C75.9826 136.095 76.7833 136.895 77.7695 136.896Z",
+  "M109.793 136.896H91.9941V110.447H109.793C110.779 110.447 111.58 111.248 111.58 112.234V135.108C111.58 136.095 110.779 136.895 109.793 136.896Z",
+  "M22.873 27.1006H40.6719V0.652344H22.873C21.8867 0.652488 21.0859 1.45305 21.0859 2.43945V25.3135C21.0861 26.2998 21.8868 27.1004 22.873 27.1006Z",
+  "M37.0967 27.1006V0.652344H58.9707V27.1006H37.0967Z",
+  "M55.3955 27.1006V0.652344H77.2695V27.1006H55.3955Z",
+  "M73.6963 27.1006V0.652344H95.5703V27.1006H73.6963Z",
+  "M109.793 27.1006H91.9941V0.652344H109.793C110.779 0.652488 111.58 1.45305 111.58 2.43945V25.3135C111.58 26.2998 110.779 27.1004 109.793 27.1006Z",
+  "M77.7695 63.6992H95.5684V37.251H77.7695C76.7832 37.2511 75.9824 38.0517 75.9824 39.0381V61.9121C75.9826 62.8984 76.7833 63.6991 77.7695 63.6992Z",
+  "M109.793 63.6992H91.9941V37.251H109.793C110.779 37.2511 111.58 38.0517 111.58 39.0381V61.9121C111.58 62.8984 110.779 63.6991 109.793 63.6992Z",
+];
+
+const CLOUD_BADGE_PATH =
+  "M4.5 14a4.5 4.5 0 0 1-1.259-8.82 7 7 0 0 1 13.518 0A4.5 4.5 0 0 1 15.5 14z";
+
+// ---------- Emission ----------
+const CHECK_ONLY = process.argv.includes("--check");
+const written = [];
+const stale = [];
+
+function put(path, content) {
+  if (CHECK_ONLY) {
+    const current = existsSync(path) ? readFileSync(path, "utf8") : undefined;
+    if (current !== content) stale.push(path);
+    return;
+  }
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, content);
+}
+
+function linearCss(samples) {
+  return `linear(\n    ${samples.join(",\n    ")}\n  )`;
+}
+
+function ms(value) {
+  return `${value}ms`;
+}
+
+function motionTokensCss() {
+  return `/* Generated by design/generate-surface-shared.mjs. Do not edit by hand: change
+   the tables in that script and re-run it.
+
+   One motion vocabulary for both surfaces. The desktop renderer and the
+   marketing mock import this file so a spring or a duration cannot drift
+   between the product and the page that advertises it. */
+
+:root {
+  --spring: ${linearCss(SPRING)};
+  --spring-fast: ${linearCss(SPRING_FAST)};
+  --duration-fast: ${ms(MOTION_DURATION_MS.FAST)};
+  --motion-exit: ${MOTION_EXIT};
+  --duration-shape: ${ms(MOTION_DURATION_MS.SHAPE)};
+  --duration-exit: ${ms(MOTION_DURATION_MS.EXIT)};
+  --duration-quick: ${ms(MOTION_DURATION_MS.QUICK)};
+  --duration-hover: ${ms(MOTION_DURATION_MS.HOVER)};
+  --expand-delay: ${ms(MOTION_DELAY_MS.EXPAND)};
+  --peek-delay: ${ms(MOTION_DELAY_MS.PEEK)};
+  --row-stagger: ${ms(MOTION_DELAY_MS.ROW_STAGGER)};
+  --row-fan: ${ROW_FAN_PX}px;
+  --row-fan-limit: ${ROW_FAN_LIMIT};
+  --slot-delay: calc(var(--duration-exit) + var(--peek-delay));
+}
+`;
+}
+
+function tsRecord(entries, indent = "  ") {
+  return entries.map(([key, value]) => `${indent}${key}: ${value},`).join("\n");
+}
+
+function motionTokensTs() {
+  return `// Generated by design/generate-surface-shared.mjs. Do not edit by hand: change
+// the tables in that script and re-run it.
+//
+// Millisecond mirrors of the CSS duration tokens in motion-tokens.css, from the
+// same table. A main-process constant that waits on a CSS total names these
+// rather than restating the numbers.
+
+export const MOTION_DURATION_MS = {
+${tsRecord(Object.entries(MOTION_DURATION_MS).map(([key, value]) => [key, value]))}
+} as const;
+
+export const MOTION_DELAY_MS = {
+${tsRecord(Object.entries(MOTION_DELAY_MS).map(([key, value]) => [key, value]))}
+} as const;
+`;
+}
+
+function tsStringConst(name, value) {
+  const single = `export const ${name} = "${value}";`;
+  return single.length <= 100 ? single : `export const ${name} =\n  "${value}";`;
+}
+
+function providerMarkPathsTs() {
+  const pathConsts = Object.entries(MARK_PATHS)
+    .map(([name, path]) => tsStringConst(`${name}_PATH`, path))
+    .join("\n\n");
+  const conductor = CONDUCTOR_MARK_PATHS.map((path) => `  "${path}",`).join("\n");
+  return `// Generated by design/generate-surface-shared.mjs. Do not edit by hand: change
+// the tables in that script and re-run it.
+//
+// SVG path data for every provider mark both surfaces draw. The React that
+// traces them stays in each app, because the desktop ships marks the marketing
+// mock does not, and a shared component would pull that into the web bundle.
+
+${pathConsts}
+
+export const CONDUCTOR_MARK_PATHS = [
+${conductor}
+] as const;
+
+${tsStringConst("CLOUD_BADGE_PATH", CLOUD_BADGE_PATH)}
+`;
+}
+
+function sessionDisplayTs() {
+  const labels = Object.entries(STATE_LABEL)
+    .map(([key, label]) => `  [SESSION_STATE.${key}]: "${label}",`)
+    .join("\n");
+  const priority = STATE_PRIORITY.map((key) => `  SESSION_STATE.${key},`).join("\n");
+  return `// Generated by design/generate-surface-shared.mjs. Do not edit by hand: change
+// the tables in that script and re-run it.
+//
+// Labels and urgency order for a session's display state. Both surfaces read
+// these so the marketing mock cannot advertise a different sentence or a
+// different top row than the product draws.
+
+import { SESSION_STATE, type SessionState } from "./fixtures";
+
+export const STATE_LABEL: Record<SessionState, string> = {
+${labels}
+};
+
+/** The state order the surface reads top-down and the badge collapses to. */
+export const STATE_PRIORITY: readonly SessionState[] = [
+${priority}
+];
+
+/** Most urgent first, and within one state the one that moved most recently. */
+export function compareSessionsByUrgency(
+  left: { state: SessionState; observedAt: number },
+  right: { state: SessionState; observedAt: number },
+): number {
+  return (
+    STATE_PRIORITY.indexOf(left.state) - STATE_PRIORITY.indexOf(right.state) ||
+    right.observedAt - left.observedAt
+  );
+}
+`;
+}
+
+const outputs = [
+  ["motion-tokens.css", motionTokensCss()],
+  ["motion-tokens.ts", motionTokensTs()],
+  ["provider-mark-paths.ts", providerMarkPathsTs()],
+  ["session-display.ts", sessionDisplayTs()],
+];
+
+for (const [name, content] of outputs) {
+  put(join(CORE, name), content);
+  written.push(name);
+}
+
+if (!CHECK_ONLY) {
+  process.stdout.write(`${written.length} files written to packages/sidecar-core/src/\n`);
+} else if (stale.length > 0) {
+  process.stderr.write(
+    `${stale.length} generated file(s) no longer match this script:\n${stale.join("\n")}\n` +
+      "Run: node design/generate-surface-shared.mjs\n",
+  );
+  process.exit(1);
+} else {
+  process.stdout.write(`${written.length} generated files are up to date\n`);
+}
