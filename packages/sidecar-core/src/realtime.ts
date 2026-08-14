@@ -125,6 +125,7 @@ export const REALTIME_STATUS = {
 export type RealtimeStatus = (typeof REALTIME_STATUS)[keyof typeof REALTIME_STATUS];
 
 export const REALTIME_CLIENT_EVENT = {
+  SESSION_UPDATE: "session.update",
   INPUT_AUDIO_BUFFER_COMMIT: "input_audio_buffer.commit",
   INPUT_AUDIO_BUFFER_CLEAR: "input_audio_buffer.clear",
   CONVERSATION_ITEM_CREATE: "conversation.item.create",
@@ -1085,6 +1086,27 @@ export function pushToTalkCommitEvents(): readonly Record<string, unknown>[] {
  */
 export function clearInputAudioEvents(): readonly Record<string, unknown>[] {
   return [{ type: REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_CLEAR }];
+}
+
+/**
+ * Builds the event that changes how fast a live call speaks, from its next
+ * reply on.
+ *
+ * The pace is the one output setting the API lets a running session change —
+ * a session's voice locks the moment the model first speaks, so a changed
+ * voice is heard by opening a new call rather than by any event this module
+ * could build. The API applies a pace only between turns, which the caller is
+ * left to time; a pace that is not a usable number builds nothing rather than
+ * an update the API would refuse.
+ */
+export function outputSpeedUpdateEvents(speed: number): readonly Record<string, unknown>[] {
+  if (!Number.isFinite(speed) || speed <= 0) return [];
+  return [
+    {
+      type: REALTIME_CLIENT_EVENT.SESSION_UPDATE,
+      session: { type: REALTIME_SESSION_TYPE, audio: { output: { speed } } },
+    },
+  ];
 }
 
 /**

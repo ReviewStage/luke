@@ -94,7 +94,8 @@ const SETTING_GUIDE: Record<
   voice: (settings) => ({
     id: APP_SETTING_ID.VOICE,
     label: "Voice",
-    description: "Which voice Luke speaks with; a change is heard from the next conversation on.",
+    description:
+      "Which voice Luke speaks with; a change is heard right away — a conversation under way starts afresh in the new voice.",
     kind: APP_SETTING_KIND.CHOICE,
     value: settings.voice,
     choices: REALTIME_VOICE_LIST,
@@ -105,7 +106,7 @@ const SETTING_GUIDE: Record<
     id: APP_SETTING_ID.VOICE_SPEED,
     label: "Speed",
     description:
-      "How fast Luke talks — slow is 0.75×, normal 1×, quick 1.25×, fast 1.5× the voice's natural rate; a change is heard from the next conversation on.",
+      "How fast Luke talks — slow is 0.75×, normal 1×, quick 1.25×, fast 1.5× the voice's natural rate; a change is heard from the next reply on.",
     kind: APP_SETTING_KIND.CHOICE,
     value: voiceSpeedWord(settings.voiceSpeed),
     choices: VOICE_SPEED_WORDS.map((candidate) => candidate.word),
@@ -476,11 +477,16 @@ export async function applySpokenSetting(
     status: "changed",
     setting: action.setting.label,
     value: action.value,
-    // The two rides on the minted session say so, the same promise their rows
-    // make: the change lands in the next conversation, never a live one.
-    ...(action.setting.id === APP_SETTING_ID.VOICE ||
-    action.setting.id === APP_SETTING_ID.VOICE_SPEED
-      ? { note: "The change is heard from the next conversation on." }
-      : {}),
+    // What each change means for the call now open, so the outcome Luke
+    // voices matches what actually happens. The API locks a session's voice
+    // once the model has spoken, so a changed voice is heard by starting the
+    // conversation afresh; a pace rides a session update and needs no restart.
+    ...(action.setting.id === APP_SETTING_ID.VOICE
+      ? {
+          note: "The new voice takes over as soon as this reply ends, and the conversation starts afresh in it.",
+        }
+      : action.setting.id === APP_SETTING_ID.VOICE_SPEED
+        ? { note: "The new pace is heard from the next reply on." }
+        : {}),
   };
 }

@@ -1220,8 +1220,8 @@ function registerIpc(): void {
       if (!isRealtimeVoice(voice)) throw new Error("Unknown voice");
       try {
         const result = await settingsStore.setVoice(voice);
-        // The next credential is minted for the new voice; a conversation
-        // already open keeps the one it answered with.
+        // The next credential is minted for the new voice; the renderer makes
+        // the change heard now by reopening any conversation already up.
         if (!result.reason) realtimeCredentials?.setVoice(voice);
         broadcastSettings(result.settings, event.sender);
         return result;
@@ -1233,8 +1233,8 @@ function registerIpc(): void {
       }
     },
   );
-  // The pace travels the voice's road exactly: a value from the set fixed by
-  // this build, stored, and handed to the minter for the next conversation.
+  // The pace travels the voice's road: a value from the set fixed by this
+  // build, stored, and handed to the minter for the next conversation.
   ipcMain.handle(
     channels.setVoiceSpeed,
     async (event, speed: unknown): Promise<SettingsUpdateResult> => {
@@ -1242,8 +1242,8 @@ function registerIpc(): void {
       if (!isRealtimeVoiceSpeed(speed)) throw new Error("Unknown voice speed");
       try {
         const result = await settingsStore.setVoiceSpeed(speed);
-        // The next credential is minted for the new pace; a conversation
-        // already open keeps the one it answered at.
+        // The next credential is minted for the new pace; the renderer
+        // carries the change onto a conversation already open itself.
         if (!result.reason) realtimeCredentials?.setSpeed(speed);
         broadcastSettings(result.settings, event.sender);
         return result;

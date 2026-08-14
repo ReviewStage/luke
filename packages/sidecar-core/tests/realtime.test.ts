@@ -27,6 +27,7 @@ import {
   normalizeSession,
   normalizeTrackedIssue,
   type ObservedWorkspaceProject,
+  outputSpeedUpdateEvents,
   proactiveSpeechEvents,
   pushToTalkCommitEvents,
   REALTIME_CLIENT_EVENT,
@@ -231,6 +232,23 @@ test("push-to-talk commits a turn and cancelling discards it", () => {
     clearInputAudioEvents().map((event) => event.type),
     [REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_CLEAR],
   );
+});
+
+test("a changed pace reaches the live session as a session update", () => {
+  const events = outputSpeedUpdateEvents(1.25);
+
+  assert.deepEqual(events, [
+    {
+      type: REALTIME_CLIENT_EVENT.SESSION_UPDATE,
+      session: { type: "realtime", audio: { output: { speed: 1.25 } } },
+    },
+  ]);
+});
+
+test("an unusable pace builds no update rather than one the API refuses", () => {
+  for (const speed of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.deepEqual(outputSpeedUpdateEvents(speed), []);
+  }
 });
 
 test("a typed ask travels as the developer's own words and asks for a reply", () => {

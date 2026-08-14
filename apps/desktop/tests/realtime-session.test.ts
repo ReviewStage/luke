@@ -599,6 +599,64 @@ test("a finished response returns the session to ready", async () => {
   assert.equal(context.session.status, REALTIME_STATUS.READY);
 });
 
+test("a changed pace reaches the live call without waiting for the next one", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  context.session.applySpeed(1.25);
+
+  const update = context.sent.find((event) => event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE);
+  assert.deepEqual(update, {
+    type: REALTIME_CLIENT_EVENT.SESSION_UPDATE,
+    session: { type: "realtime", audio: { output: { speed: 1.25 } } },
+  });
+});
+
+test("a pace changed mid-reply waits for the reply to end", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.session.beginTurn();
+  context.session.endTurn(true);
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+
+  // The API applies a pace only between turns, so nothing may be sent while
+  // Luke is still speaking.
+  context.session.applySpeed(0.75);
+  assert.equal(
+    context.sent.some((event) => event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE),
+    false,
+  );
+
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
+  context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
+
+  const update = context.sent.find((event) => event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE);
+  assert.deepEqual(update?.session, { type: "realtime", audio: { output: { speed: 0.75 } } });
+});
+
+test("a pace changed during the handshake reaches the call it was opening", async () => {
+  const context = harness({ connectionDelayMs: 5 });
+  const opening = context.session.connect();
+
+  // The credential this call answers with may have been minted before the
+  // change reached the minter, so dropping it would leave the live call at
+  // the old pace with the row already showing the new one.
+  context.session.applySpeed(1.25);
+  await opening;
+
+  const update = context.sent.find((event) => event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE);
+  assert.deepEqual(update?.session, { type: "realtime", audio: { output: { speed: 1.25 } } });
+});
+
+test("a pace change with no call open sends nothing", () => {
+  // Not a loss: the next call is minted at the stored pace already.
+  const context = harness();
+
+  context.session.applySpeed(1.5);
+
+  assert.deepEqual(context.sent, []);
+});
+
 test("a service error is surfaced rather than swallowed", async () => {
   const context = harness();
   await context.session.connect();

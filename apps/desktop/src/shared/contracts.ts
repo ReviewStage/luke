@@ -277,13 +277,15 @@ export interface AppBridge {
   ): Promise<SettingsUpdateResult>;
   /**
    * Chooses the voice Luke speaks with, from the set fixed by this build. It
-   * reaches the next conversation to connect; one already open keeps the
-   * voice it answered with.
+   * reaches the next conversation to connect; the renderer makes it heard now
+   * by reopening a call already up, because the API locks a session's voice
+   * once the model has spoken.
    */
   setVoice(voice: RealtimeVoice): Promise<SettingsUpdateResult>;
   /**
    * Chooses the pace Luke speaks at, from the set fixed by this build. It
-   * reaches the next conversation the same way the voice does.
+   * reaches the next conversation the way the voice does, and the renderer
+   * carries it onto a call already open as a session update.
    */
   setVoiceSpeed(speed: RealtimeVoiceSpeed): Promise<SettingsUpdateResult>;
   /**
