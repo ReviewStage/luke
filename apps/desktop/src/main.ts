@@ -73,8 +73,8 @@ import {
   isCredentialProviderId,
 } from "./shared/credential-providers";
 import {
+  askHotkeyCandidates,
   askHotkeyReport,
-  DEFAULT_ASK_HOTKEYS,
   parseVoiceHotkey,
   VOICE_HOTKEY_ABSENCE,
   type VoiceHotkeyAbsence,
@@ -266,6 +266,9 @@ let askHotkey: string | undefined;
  * summons and puts away like every launcher does.
  */
 function registerAskHotkey(): void {
+  // Re-runnable: moving the talk key lets everything go and registers afresh,
+  // and a key that could not be re-taken must not still be claimed anywhere.
+  askHotkey = undefined;
   if (captureMode) {
     process.stderr.write(`${askHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.CAPTURE_RUN)}\n`);
     return;
@@ -274,7 +277,9 @@ function registerAskHotkey(): void {
     process.stderr.write(`${askHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.NO_CREDENTIAL)}\n`);
     return;
   }
-  for (const accelerator of DEFAULT_ASK_HOTKEYS) {
+  // A chord the talk key sits on — chosen by the user, or announced as
+  // registered — is not a candidate: the two Luke keys must never compete.
+  for (const accelerator of askHotkeyCandidates([chosenVoiceHotkey, voiceHotkey])) {
     const registered = globalShortcut.register(accelerator, () => {
       setWindowMode("expanded", true);
       panelWindow?.webContents.send(channels.lifecycle, "ask:focus");
@@ -285,6 +290,16 @@ function registerAskHotkey(): void {
     return;
   }
   process.stderr.write(`${askHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.ALREADY_OWNED)}\n`);
+}
+
+/**
+ * Tells a renderer the ask key it should be teaching, whenever that changes.
+ * The raw accelerator travels, as in bootstrap: the renderer needs both its
+ * spellings, and an absent key clears the hint rather than leaving a keycap
+ * up for a chord that answers nothing.
+ */
+function sendAskHotkey(): void {
+  panelWindow?.webContents.send(channels.askHotkeyChanged, askHotkey);
 }
 
 /** Tells a renderer the key it should be showing, whenever that changes. */
@@ -303,14 +318,15 @@ function reportVoiceHotkey(): void {
  * Moves the talk key to whatever `chosenVoiceHotkey` now says, while the app
  * is running. The old key is let go of in full before the new one is asked
  * for, so the two can never race for the same chord — and letting everything
- * go is exact rather than broad, because the talk key candidates are the only
- * global accelerators Luke ever registers. Letting go means waiting: the
- * system releases the old helper's chord when its process exits, not when the
- * kill is asked for, and the defaults sit in both helpers' candidate lists —
- * a successor that starts too early is refused the very fallback it was
- * promised. The panel keeps showing the old key until the new one actually
- * answers: the helper announces its own registration over stdout, and every
- * path without a helper is decided by the time `registerVoiceHotkey` returns.
+ * go takes the ask key down with it, because `unregisterAll` is exactly that,
+ * so the ask key is registered afresh once the talk key has settled. Letting
+ * go means waiting: the system releases the old helper's chord when its
+ * process exits, not when the kill is asked for, and the defaults sit in both
+ * helpers' candidate lists — a successor that starts too early is refused the
+ * very fallback it was promised. The panel keeps showing the old key until
+ * the new one actually answers: the helper announces its own registration
+ * over stdout, and every path without a helper is decided by the time
+ * `registerVoiceHotkey` returns.
  */
 async function applyVoiceHotkey(): Promise<void> {
   const released = talkKeyWatcher?.stop();
@@ -322,6 +338,11 @@ async function applyVoiceHotkey(): Promise<void> {
   voiceHotkeyAbsence = VOICE_HOTKEY_ABSENCE.ALREADY_OWNED;
   registerVoiceHotkey();
   if (!talkKeyWatcher) sendVoiceHotkey();
+  // The ask key went down with `unregisterAll`, and the chord it can have may
+  // itself have changed — the talk key may have moved onto or off of one of
+  // its candidates — so it is re-taken now and the panel told what it teaches.
+  registerAskHotkey();
+  sendAskHotkey();
 }
 
 let windowMode: WindowMode = captureMode

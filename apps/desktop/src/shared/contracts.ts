@@ -268,6 +268,12 @@ export interface AppBridge {
    * it means asking a helper, and it can change if that helper stops answering.
    */
   onVoiceHotkeyChanged(callback: (state: VoiceHotkeyState) => void): () => void;
+  /**
+   * The ask key being re-taken — moving the talk key lets every global chord
+   * go, so the ask key can land somewhere new or nowhere. Absent means the
+   * hint comes down: a keycap must not teach a chord that answers nothing.
+   */
+  onAskHotkeyChanged(callback: (accelerator: string | undefined) => void): () => void;
 }
 
 export const channels = {
@@ -293,6 +299,7 @@ export const channels = {
   voiceHotkeyPress: "app:voice-hotkey-press",
   voiceHotkeyRelease: "app:voice-hotkey-release",
   voiceHotkeyChanged: "app:voice-hotkey-changed",
+  askHotkeyChanged: "app:ask-hotkey-changed",
   rendererReady: "app:renderer-ready",
   lifecycle: "app:lifecycle",
   displayChanged: "app:display-changed",

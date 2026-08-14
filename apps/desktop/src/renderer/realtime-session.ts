@@ -187,6 +187,17 @@ export class RealtimeVoiceSession {
    * message to cut, and how much of it reached the room.
    */
   #responseItemId: string | undefined;
+  /**
+   * The response now under way, as the server named it when it confirmed the
+   * reply had started — or nothing between asking for a reply and that
+   * confirmation. It is what tells the current reply's `response.done` from a
+   * cancelled one's: the server had finished composing the old reply before
+   * the cancel landed, so its `done` still arrives, and it can carry tool
+   * calls. Matching the id is what keeps those calls from being answered with
+   * the new turn's arming — the turn that superseded them, not the one that
+   * asked.
+   */
+  #activeResponseId: string | undefined;
   #audibleSince: number | undefined;
   /**
    * The words of the reply being spoken, as far as they have arrived. Kept
@@ -582,6 +593,11 @@ export class RealtimeVoiceSession {
     // stops the transcript still trailing in — the server had produced it
     // before the cancel landed — from ever matching the caption again.
     this.#responseItemId = undefined;
+    // And forgetting its response is what stops its finished form — cancelled
+    // or not, the server may already have completed it — from being read as
+    // the current turn's: a `response.done` that matches nothing can neither
+    // act with the new turn's arming nor end the new turn early.
+    this.#activeResponseId = undefined;
     this.#generationDone = false;
     this.#remoteQuiet = false;
     this.#clearSettleTimer();
@@ -648,6 +664,7 @@ export class RealtimeVoiceSession {
     this.#remoteQuiet = false;
     this.#pendingTurn = false;
     this.#responseItemId = undefined;
+    this.#activeResponseId = undefined;
     this.#audibleSince = undefined;
     this.#setCaption(undefined);
     // Learned about this call, so it does not outlive it.
@@ -668,6 +685,10 @@ export class RealtimeVoiceSession {
     this.#generationDone = false;
     this.#remoteQuiet = false;
     this.#responseItemId = undefined;
+    // Nothing has been confirmed for this turn yet: whatever `response.done`
+    // arrives before the server confirms this reply belongs to a superseded
+    // one, and must find no active response to match.
+    this.#activeResponseId = undefined;
     this.#audibleSince = undefined;
     // A new turn: only a developer-opened one may run a tool, and any tool
     // follow-up still awaiting from the last turn will see this and stand down.
@@ -813,7 +834,12 @@ export class RealtimeVoiceSession {
     }
     if (type === REALTIME_SERVER_EVENT.RESPONSE_CREATED) {
       // The reply being asked for is under way, so anything arriving from here
-      // belongs to it rather than to the one it replaced.
+      // belongs to it rather than to the one it replaced. Its name is what a
+      // `response.done` must present to be read as this reply's: the channel
+      // is ordered, so a cancelled reply's `done` lands before this
+      // confirmation and finds nothing to match.
+      const response = (event as { response?: { id?: unknown } }).response;
+      if (typeof response?.id === "string") this.#activeResponseId = response.id;
       this.#unsilenceLuke();
     }
     if (type === REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA) {
@@ -848,14 +874,24 @@ export class RealtimeVoiceSession {
       return;
     }
     if (type === REALTIME_SERVER_EVENT.RESPONSE_DONE) {
+      // Whether this is the reply now under way, or the finished form of one
+      // the developer already talked or typed over. The server had completed
+      // the old reply before the cancel landed — it generates ahead of the
+      // room — so its `done` still arrives, after the interrupt has already
+      // opened a new turn. Nothing of it may act with that turn's arming or
+      // end that turn early: its calls are answered refused so the model is
+      // not left waiting, and everything else about it is ignored.
+      const doneId = (event as { response?: { id?: unknown } }).response?.id;
+      const fresh = (typeof doneId === "string" ? doneId : undefined) === this.#activeResponseId;
       // A reply that asked for tools has not finished talking: the calls are
       // answered and the reply resumes over their outcomes, so the turn stays
       // open rather than ending on a reply that was only half made.
       const calls = realtimeFunctionCalls(event);
       if (calls.length > 0) {
-        void this.#answerToolCalls(calls);
+        void this.#answerToolCalls(calls, fresh && this.#toolTurnArmed);
         return;
       }
+      if (!fresh) return;
       // Generation is done; the reply is not. The turn ends when Luke stops
       // being audible, which the caller reports from the audio itself rather
       // than from an event — the one that would say so is undocumented.
@@ -893,15 +929,16 @@ export class RealtimeVoiceSession {
    * carrier's own failure is an outcome rather than an exception: the developer
    * asked for something, and what became of it has to be said.
    */
-  async #answerToolCalls(calls: readonly RealtimeFunctionCall[]): Promise<void> {
-    // The hard gate: a write runs only in a turn the developer opened — by
-    // speaking, or by typing. A call on any other turn — one Luke opened to
-    // read a notice or to voice an outcome — is refused whatever it names, so a
-    // session summary or a tool output that reads like an instruction can never
-    // make Luke act.
-    // The turn's tools are also withheld at the API, so this is belt to that
-    // suspenders rather than the only thing holding.
-    const armed = this.#toolTurnArmed;
+  async #answerToolCalls(calls: readonly RealtimeFunctionCall[], armed: boolean): Promise<void> {
+    // `armed` is the hard gate, decided by the caller from two facts together:
+    // a write runs only in a turn the developer opened — by speaking, or by
+    // typing — and only out of the reply that turn actually asked for, never
+    // the finished form of one the developer already interrupted. A call
+    // failing either test is refused whatever it names, so a session summary
+    // or a tool output that reads like an instruction can never make Luke act.
+    // The turn's tools are also withheld at the API on every turn Luke opens
+    // himself, so this is belt to that suspenders rather than the only thing
+    // holding.
     // The turn these calls belong to. If it is no longer the current turn by
     // the time the writes finish, the developer has moved on and the outcome
     // must not be spoken over whatever they are now saying or hearing.

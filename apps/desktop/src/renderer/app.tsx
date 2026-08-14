@@ -247,6 +247,14 @@ export function App(): React.JSX.Element {
    */
   const [talkOpening, setTalkOpening] = useState(false);
   const [voiceHotkey, setVoiceHotkey] = useState<VoiceHotkeyState>();
+  /**
+   * The ask key as last re-taken, superseding bootstrap's once it has changed
+   * at all: moving the talk key re-registers every global chord, and the ask
+   * key can land somewhere new or nowhere. Wrapped so "changed to none" is
+   * told apart from "never changed" — the same reading order the talk key's
+   * own state follows.
+   */
+  const [askHotkeyChange, setAskHotkeyChange] = useState<{ accelerator?: string }>();
   const [localStream, setLocalStream] = useState<MediaStream>();
   const [remoteStream, setRemoteStream] = useState<MediaStream>();
   const [voiceCaption, setVoiceCaption] = useState<string>();
@@ -1212,6 +1220,13 @@ export function App(): React.JSX.Element {
   );
   useEffect(() => window.sidecar.onVoiceHotkeyRelease(endTalk), [endTalk]);
   useEffect(() => window.sidecar.onVoiceHotkeyChanged(setVoiceHotkey), []);
+  useEffect(
+    () =>
+      window.sidecar.onAskHotkeyChanged((accelerator) =>
+        setAskHotkeyChange(accelerator ? { accelerator } : {}),
+      ),
+    [],
+  );
 
   // The rows say how long ago each session was seen, and a label left alone
   // goes stale the moment a minute passes with no session changing — the very
@@ -1285,6 +1300,7 @@ export function App(): React.JSX.Element {
         ? WAVEFORM_VOICE.DEVELOPER
         : undefined;
   const shownHotkey = voiceHotkeyToShow(bootstrap, voiceHotkey);
+  const shownAskHotkey = askHotkeyChange ? askHotkeyChange.accelerator : bootstrap.askHotkey;
   const fixtureSpeaking = bootstrap.profile === "speaking";
   const hasAudioSignal = fixtureSpeaking || analyser !== undefined;
   // Luke's words, drawn only when there is a reason to read them and the reply
@@ -1342,7 +1358,7 @@ export function App(): React.JSX.Element {
             writes={sessionWrites}
             ask={askLuke}
             onAskEngaged={changeAskEngagement}
-            {...(bootstrap.askHotkey ? { askShortcut: bootstrap.askHotkey } : {})}
+            {...(shownAskHotkey ? { askShortcut: shownAskHotkey } : {})}
             offerOptions={offerOptions}
             optionsOpen={optionsOpen}
             onOptionsToggle={() => setOptionsOpen((open) => !open)}

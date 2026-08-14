@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  askHotkeyCandidates,
   askHotkeyReport,
   capturedVoiceHotkey,
   DEFAULT_ASK_HOTKEYS,
@@ -37,6 +38,15 @@ test("the ask key is the talk key's sibling, never its rival", () => {
   for (const accelerator of DEFAULT_ASK_HOTKEYS) {
     assert.ok(!DEFAULT_VOICE_HOTKEYS.includes(accelerator));
   }
+});
+
+test("an ask candidate the talk key holds is not asked for", () => {
+  // The talk key is configurable, so it can be moved onto an ask default; the
+  // chord it holds simply stops being a candidate rather than being fought over.
+  assert.deepEqual(askHotkeyCandidates([undefined, undefined]), DEFAULT_ASK_HOTKEYS);
+  assert.deepEqual(askHotkeyCandidates(["Alt+L", undefined]), ["Alt+Shift+L"]);
+  // The talk key's own defaults hold nothing the ask key wants.
+  assert.deepEqual(askHotkeyCandidates(["Alt+Space", "Alt+S"]), DEFAULT_ASK_HOTKEYS);
 });
 
 test("a missing ask key reports on the talk key's terms", () => {

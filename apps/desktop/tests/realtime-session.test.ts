@@ -1156,6 +1156,101 @@ test("a typed ask interrupts the reply it arrives over", async () => {
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
 });
 
+test("a cancelled reply's late finish cannot act in the turn that replaced it", async () => {
+  const carried: unknown[] = [];
+  const context = harness({
+    carryAction: async (action) => {
+      carried.push(action);
+      return { status: "accepted" };
+    },
+  });
+  await context.session.connect();
+  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
+  // A spoken turn opens reply A, and the server confirms it by name.
+  armDeveloperTurn(context);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-a" } });
+  // The developer types over it, opening a new armed turn.
+  assert.equal(context.session.sendText("never mind — what needs me?"), true);
+  const sentBefore = context.sent.length;
+
+  // Reply A's finished form arrives late — the server had completed it before
+  // the cancel landed — carrying the very call the developer interrupted.
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      id: "resp-a",
+      output: [
+        {
+          type: "function_call",
+          name: "send_session_message",
+          call_id: "call-stale",
+          arguments:
+            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"do it anyway"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  // Nothing was carried: the session takes messages and the identity is real,
+  // so only the freshness of the reply stands between the call and the write —
+  // and it holds, however armed the turn that superseded it is.
+  assert.deepEqual(carried, []);
+  const events = context.sent.slice(sentBefore);
+  const output = events.find(
+    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+  );
+  assert.equal(
+    (
+      JSON.parse((output?.item as { output?: string } | undefined)?.output ?? "{}") as {
+        status?: string;
+      }
+    ).status,
+    "refused",
+  );
+  // No reply was opened to voice the refusal, and the new turn is still under way.
+  assert.ok(!events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE));
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+
+  // The reply the typed ask actually asked for still acts in full.
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-b" } });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      id: "resp-b",
+      output: [
+        {
+          type: "function_call",
+          name: "send_session_message",
+          call_id: "call-fresh",
+          arguments:
+            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"status?"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(carried.length, 1);
+});
+
+test("a cancelled reply's late finish does not end the turn that replaced it", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.deliverRemoteTrack();
+  armDeveloperTurn(context);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-a" } });
+  context.session.sendText("actually, open the codex session");
+
+  // Reply A finishes late with nothing to say, while reply B is still in the
+  // quiet gap before its first word.
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE, response: { id: "resp-a" } });
+  context.session.reportRemoteAudioIdle();
+
+  // A stale finish must not mark generation done: paired with that gap's
+  // quiet, it would end a reply that has not begun to be heard.
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+});
+
 test("a typed ask does not interrupt the developer's own open microphone", async () => {
   const context = harness();
   await context.session.connect();

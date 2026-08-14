@@ -30,6 +30,17 @@ export const DEFAULT_VOICE_HOTKEYS: readonly string[] = ["Alt+Space", "Alt+S"];
 export const DEFAULT_ASK_HOTKEYS: readonly string[] = ["Alt+L", "Alt+Shift+L"];
 
 /**
+ * The ask chords worth asking the system for, with any the talk key holds
+ * left out. The talk key is configurable now, so a user can move it onto an
+ * ask default — and the two Luke keys must never compete for one chord:
+ * whichever registered first would silently cost the other its whole feature,
+ * with nothing on screen saying why.
+ */
+export function askHotkeyCandidates(taken: readonly (string | undefined)[]): readonly string[] {
+  return DEFAULT_ASK_HOTKEYS.filter((candidate) => !taken.includes(candidate));
+}
+
+/**
  * The modifiers a talk key may carry, written the way Electron accelerators
  * name them. Their order here is the order macOS writes a chord in — ⌃⌥⇧⌘ —
  * so every accelerator this module produces reads the way the menu bar would
