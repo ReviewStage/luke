@@ -1,5 +1,6 @@
 import {
   isRealtimeVoice,
+  isRealtimeVoiceSpeed,
   REALTIME_CALLS_PATH,
   REALTIME_CLIENT_SECRETS_PATH,
   REALTIME_DEFAULTS,
@@ -8,6 +9,7 @@ import {
   type RealtimeDiagnostics,
   type RealtimeMintOutcome,
   type RealtimeVoice,
+  type RealtimeVoiceSpeed,
   realtimeClientSecretRequest,
   realtimeCredentialFromResponse,
   realtimeCredentialIsUsable,
@@ -17,6 +19,7 @@ export const OPENAI_ENVIRONMENT = {
   API_KEY: "OPENAI_API_KEY",
   MODEL: "LUKE_REALTIME_MODEL",
   VOICE: "LUKE_REALTIME_VOICE",
+  SPEED: "LUKE_REALTIME_SPEED",
 } as const;
 
 const OPENAI_DEFAULTS = {
@@ -36,6 +39,7 @@ export interface OpenAiRealtimeCredentialOptions {
   apiKey: string;
   model?: string;
   voice?: string;
+  speed?: number;
   baseUrl?: string;
   fetch?: FetchLike;
   now?: () => number;
@@ -76,6 +80,20 @@ export function environmentRealtimeVoice(
   return isRealtimeVoice(value) ? value : undefined;
 }
 
+/** The launch environment's speaking pace, gated the same way as the voice. */
+export function environmentRealtimeSpeed(
+  environment: NodeJS.ProcessEnv = process.env,
+): RealtimeVoiceSpeed | undefined {
+  const value = environment[OPENAI_ENVIRONMENT.SPEED]?.trim();
+  if (!value) return undefined;
+  const speed = Number(value);
+  return isRealtimeVoiceSpeed(speed) ? speed : undefined;
+}
+
+function positiveSpeed(value: number | undefined): number | undefined {
+  return value !== undefined && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
 /**
  * Mints short-lived Realtime credentials from the standing OpenAI API key.
  *
@@ -91,6 +109,9 @@ export class OpenAiRealtimeCredentialMinter {
   /** The voice from construction, which a cleared setting falls back to. */
   readonly #configuredVoice: string;
   #voice: string;
+  /** The pace from construction, which a cleared setting falls back to. */
+  readonly #configuredSpeed: number;
+  #speed: number;
   readonly #baseUrl: string;
   readonly #fetch: FetchLike;
   readonly #now: () => number;
@@ -108,6 +129,8 @@ export class OpenAiRealtimeCredentialMinter {
     this.#model = trimmedText(options.model) ?? REALTIME_DEFAULTS.MODEL;
     this.#configuredVoice = trimmedText(options.voice) ?? REALTIME_DEFAULTS.VOICE;
     this.#voice = this.#configuredVoice;
+    this.#configuredSpeed = positiveSpeed(options.speed) ?? REALTIME_DEFAULTS.SPEED;
+    this.#speed = this.#configuredSpeed;
     this.#baseUrl = withoutTrailingSlash(trimmedText(options.baseUrl) ?? OPENAI_DEFAULTS.BASE_URL);
     this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
     this.#now = options.now ?? Date.now;
@@ -135,6 +158,18 @@ export class OpenAiRealtimeCredentialMinter {
     const next = trimmedText(voice) ?? this.#configuredVoice;
     if (next === this.#voice) return;
     this.#voice = next;
+    this.#credential = undefined;
+  }
+
+  /**
+   * Changes the pace new credentials are minted for, under the same rule as
+   * the voice: the outstanding credential is discarded, and a call already
+   * open keeps the pace it answered at.
+   */
+  setSpeed(speed: number | undefined): void {
+    const next = positiveSpeed(speed) ?? this.#configuredSpeed;
+    if (next === this.#speed) return;
+    this.#speed = next;
     this.#credential = undefined;
   }
 
@@ -195,6 +230,7 @@ export class OpenAiRealtimeCredentialMinter {
       fixtureMode: false,
       model: this.#model,
       voice: this.#voice,
+      speed: this.#speed,
       endpoint: `${this.#baseUrl}${REALTIME_CLIENT_SECRETS_PATH}`,
       lastOutcome: this.#lastOutcome,
       ...(this.#lastDetail ? { lastDetail: this.#lastDetail } : {}),
@@ -211,7 +247,11 @@ export class OpenAiRealtimeCredentialMinter {
           "content-type": "application/json",
         },
         body: JSON.stringify(
-          realtimeClientSecretRequest({ model: this.#model, voice: this.#voice }),
+          realtimeClientSecretRequest({
+            model: this.#model,
+            voice: this.#voice,
+            speed: this.#speed,
+          }),
         ),
         signal: AbortSignal.timeout(this.#requestTimeoutMs),
       });
@@ -259,6 +299,7 @@ export function unavailableRealtimeDiagnostics(fixtureMode: boolean): RealtimeDi
     fixtureMode,
     model: trimmedText(process.env[OPENAI_ENVIRONMENT.MODEL]) ?? REALTIME_DEFAULTS.MODEL,
     voice: environmentRealtimeVoice() ?? REALTIME_DEFAULTS.VOICE,
+    speed: environmentRealtimeSpeed() ?? REALTIME_DEFAULTS.SPEED,
     endpoint: `${OPENAI_DEFAULTS.BASE_URL}${REALTIME_CLIENT_SECRETS_PATH}`,
     lastOutcome: fixtureMode
       ? REALTIME_MINT_OUTCOME.DISABLED_BY_FIXTURE
@@ -274,11 +315,13 @@ export function openAiRealtimeCredentialsFromEnvironment(
 
   const model = trimmedText(options.model) ?? trimmedText(process.env[OPENAI_ENVIRONMENT.MODEL]);
   const voice = trimmedText(options.voice) ?? environmentRealtimeVoice();
+  const speed = positiveSpeed(options.speed) ?? environmentRealtimeSpeed();
 
   return new OpenAiRealtimeCredentialMinter({
     ...options,
     apiKey,
     ...(model ? { model } : {}),
     ...(voice ? { voice } : {}),
+    ...(speed ? { speed } : {}),
   });
 }

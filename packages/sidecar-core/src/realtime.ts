@@ -41,9 +41,35 @@ export function isRealtimeVoice(value: unknown): value is RealtimeVoice {
   return typeof value === "string" && REALTIME_VOICE_LIST.includes(value as RealtimeVoice);
 }
 
+/**
+ * Every pace Luke can speak at, as a multiple of the voice's natural rate.
+ * The API accepts anything from 0.25 to 1.5; the offered steps are the ones
+ * that stay intelligible, spaced widely enough to be told apart by ear.
+ */
+export const REALTIME_VOICE_SPEED = {
+  SLOW: 0.75,
+  NORMAL: 1,
+  QUICK: 1.25,
+  FAST: 1.5,
+} as const;
+
+export type RealtimeVoiceSpeed = (typeof REALTIME_VOICE_SPEED)[keyof typeof REALTIME_VOICE_SPEED];
+
+/** Settings offers the speeds in this order, slowest to fastest. */
+export const REALTIME_VOICE_SPEED_LIST: readonly RealtimeVoiceSpeed[] =
+  Object.values(REALTIME_VOICE_SPEED);
+
+/** Guards a speed arriving from storage or IPC. */
+export function isRealtimeVoiceSpeed(value: unknown): value is RealtimeVoiceSpeed {
+  return (
+    typeof value === "number" && REALTIME_VOICE_SPEED_LIST.includes(value as RealtimeVoiceSpeed)
+  );
+}
+
 export const REALTIME_DEFAULTS = {
   MODEL: "gpt-realtime-2.1",
   VOICE: REALTIME_VOICE.CEDAR,
+  SPEED: REALTIME_VOICE_SPEED.NORMAL,
 } as const;
 
 /** The Realtime session shape and the endpoints that mint and open a call. */
@@ -141,6 +167,8 @@ export interface RealtimeConnection extends RealtimeCredential {
 export interface RealtimeSessionOptions {
   model?: string;
   voice?: string;
+  /** A multiple of the voice's natural rate, within the API's 0.25–1.5. */
+  speed?: number;
   instructions?: string;
 }
 
@@ -284,6 +312,12 @@ export function realtimeSessionConfig(options: RealtimeSessionOptions = {}) {
       },
       output: {
         voice: trimmedText(options.voice) ?? REALTIME_DEFAULTS.VOICE,
+        // A pace that is not a usable number falls back rather than minting a
+        // session the API would refuse, the same posture as an unknown voice.
+        speed:
+          options.speed !== undefined && Number.isFinite(options.speed) && options.speed > 0
+            ? options.speed
+            : REALTIME_DEFAULTS.SPEED,
       },
     },
   };
@@ -362,6 +396,8 @@ export interface RealtimeDiagnostics {
   fixtureMode: boolean;
   model: string;
   voice: string;
+  /** The pace new credentials would be minted for, as a rate multiple. */
+  speed: number;
   endpoint: string;
   lastOutcome: RealtimeMintOutcome;
   /** A status code or error name; never a request body or credential. */
