@@ -219,6 +219,12 @@ export interface VoiceConversationOptions {
   voice: RealtimeVoice | undefined;
   voiceSpeed: RealtimeVoiceSpeed | undefined;
   voiceCaptions: boolean;
+  /**
+   * Whether a Realtime credential can be minted. Undefined until settings have
+   * arrived, so the first frames of a launch do not draw the unavailable
+   * state over a working key.
+   */
+  voiceAvailable: boolean | undefined;
   outputSilent: boolean;
   fixtureSpeaking: boolean;
   /**
@@ -387,6 +393,35 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   const stopMicrophone = useCallback(async () => {
     await voiceSession.current?.close();
   }, []);
+
+  // Voice arriving and voice going away. It is not read from bootstrap, because
+  // it is no longer only true of a launch: a key entered in the panel turns a
+  // session that reported itself unavailable into one that can connect, without a
+  // relaunch — and deleting that key has to close whatever call is open rather
+  // than leave a live microphone answering a talk key the main process has
+  // already given back.
+  useEffect(() => {
+    const voiceAvailable = options.voiceAvailable;
+    // Not yet known. Saying "off" before the answer arrives would draw the
+    // unavailable state over a working key for the first frames of every launch.
+    if (voiceAvailable === undefined) return;
+    if (!voiceAvailable) {
+      void stopMicrophone().then(() => {
+        // The close is async. A key deleted and reconnected while it was in
+        // flight has already rebuilt a minter; forcing unavailable then would
+        // leave the talk key looking dead over a live credential.
+        if (optionsRef.current.voiceAvailable === false) {
+          setVoiceStatus(REALTIME_STATUS.UNAVAILABLE);
+        }
+      });
+      return;
+    }
+    // Only the status voice being off put there is lifted. Anything else — a
+    // failure, a call already open — is the session's own to report.
+    if (voiceStatusNow() === REALTIME_STATUS.UNAVAILABLE) {
+      setVoiceStatus(REALTIME_STATUS.IDLE);
+    }
+  }, [options.voiceAvailable, setVoiceStatus, stopMicrophone, voiceStatusNow]);
 
   /**
    * Opens the call, answering with what the system said about the microphone —

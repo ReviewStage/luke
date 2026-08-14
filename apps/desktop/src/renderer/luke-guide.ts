@@ -352,6 +352,11 @@ const SETTING_GUIDE: Record<
   credentialSources: () => undefined,
   // Only worth a word when it has refused a key, which the facts carry.
   secretStorage: () => undefined,
+  /* Not a setting: it is whether the OpenAI key resolved, which the credential
+     row is where anyone changes. Luke is told whether he can speak at all
+     through `voiceAvailable` on the guide itself, so a spoken ask about it is
+     already answered without a settings entry to adjust. */
+  voiceAvailable: () => undefined,
 };
 
 /** What the guide needs from the app to describe the current state of it. */

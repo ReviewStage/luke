@@ -12,8 +12,9 @@ import {
   text,
 } from "@sidecar/core";
 
+/* The key is not read here: it is the stored credential the settings store
+   resolves, which reads `OPENAI_API_KEY` as its own fallback. */
 const OPENAI_ENVIRONMENT = {
-  API_KEY: "OPENAI_API_KEY",
   BASE_URL: "OPENAI_BASE_URL",
   MODEL: "LUKE_ATTENTION_MODEL",
 } as const;
@@ -48,7 +49,7 @@ export interface OpenAiAttentionEvaluatorOptions {
   maximumOutputTokens?: number;
 }
 
-export type OpenAiAttentionEnvironmentOptions = Omit<OpenAiAttentionEvaluatorOptions, "apiKey">;
+export type OpenAiAttentionOptions = Omit<OpenAiAttentionEvaluatorOptions, "apiKey">;
 
 function withoutTrailingSlash(value: string): string {
   return value.endsWith("/") ? value.slice(0, -1) : value;
@@ -215,22 +216,24 @@ export class OpenAiAttentionEvaluator implements AttentionEvaluator {
 }
 
 /**
- * Builds an evaluator only when an API key is configured. Luke observes
- * sessions and stays silent without one, so no part of the app requires
- * credentials.
+ * Builds an evaluator only when there is a key to build one from, and a key
+ * entered later builds one then rather than leaving review off until the next
+ * launch. It is the same stored key the spoken conversation runs on, so one key
+ * means one thing wherever it was entered.
  */
-export function openAiAttentionEvaluatorFromEnvironment(
-  options: OpenAiAttentionEnvironmentOptions = {},
+export function openAiAttentionEvaluator(
+  apiKey: string | undefined,
+  options: OpenAiAttentionOptions = {},
 ): OpenAiAttentionEvaluator | undefined {
-  const apiKey = text(process.env[OPENAI_ENVIRONMENT.API_KEY]);
-  if (!apiKey) return undefined;
+  const resolved = text(apiKey);
+  if (!resolved) return undefined;
 
   const model = text(options.model) ?? text(process.env[OPENAI_ENVIRONMENT.MODEL]);
   const baseUrl = text(options.baseUrl) ?? text(process.env[OPENAI_ENVIRONMENT.BASE_URL]);
 
   return new OpenAiAttentionEvaluator({
     ...options,
-    apiKey,
+    apiKey: resolved,
     ...(model ? { model } : {}),
     ...(baseUrl ? { baseUrl } : {}),
   });
