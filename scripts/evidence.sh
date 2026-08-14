@@ -60,6 +60,18 @@ SPEAKING_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-speaking.XXXXXX")
     --compact \
     --peek \
     --capture-evidence "$SIDECAR_SPEAKING_EVIDENCE_PATH"
+MUTED_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-muted.XXXXXX")
+# The speaking run with the Mac's output off: the captions are forced on and
+# the volume hint sits on the caption block's bottom edge with its Got it
+# button. The state is the profile's own — a capture run reads no system
+# volume — so the frame is deterministic like every other.
+"$APP_EXECUTABLE" \
+    --user-data-dir="$MUTED_PROFILE" \
+    --fixture "$SIDECAR_FIXTURE_SCENARIO" \
+    --profile muted \
+    --compact \
+    --peek \
+    --capture-evidence "$SIDECAR_MUTED_EVIDENCE_PATH"
 
 validate_evidence() {
     local evidence_path=$1
@@ -105,9 +117,11 @@ validate_evidence "$SIDECAR_PEEK_EVIDENCE_PATH" 538 148
 # browser costs no resize at all.
 validate_evidence "$SIDECAR_SLOT_EVIDENCE_PATH" 700 560
 validate_evidence "$SIDECAR_SPEAKING_EVIDENCE_PATH" 538 148
+validate_evidence "$SIDECAR_MUTED_EVIDENCE_PATH" 538 148
 
 printf 'Expanded visual evidence: %s\n' "$SIDECAR_EXPANDED_EVIDENCE_PATH"
 printf 'Compact visual evidence: %s\n' "$SIDECAR_COMPACT_EVIDENCE_PATH"
 printf 'Peek visual evidence: %s\n' "$SIDECAR_PEEK_EVIDENCE_PATH"
 printf 'Key slot visual evidence: %s\n' "$SIDECAR_SLOT_EVIDENCE_PATH"
 printf 'Speaking visual evidence: %s\n' "$SIDECAR_SPEAKING_EVIDENCE_PATH"
+printf 'Muted visual evidence: %s\n' "$SIDECAR_MUTED_EVIDENCE_PATH"

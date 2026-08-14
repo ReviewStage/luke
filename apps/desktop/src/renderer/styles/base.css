@@ -1273,6 +1273,84 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transition: transform var(--duration-fast) var(--spring-fast);
 }
 
+/* Volume hint ------------------------------------------------------------- */
+
+/* Why the words above are the only part of Luke arriving: the Mac's output is
+   muted or at zero. It sits on the caption block's bottom edge — the height
+   here mirrors VOLUME_HINT_HEIGHT in app.tsx, and the renderer adds that row
+   to `--caption-size` while the hint is drawn, so it rides inside the same
+   reserved room the caption does and the words scroll a row sooner. The
+   travel is the caption's own transform plus the block's current size, so the
+   row springs down the shape's edge exactly as the shape grows for new lines.
+   Above the hover strip (z-index 4) because it holds the one button on the
+   compact shape that is not the strip: Got it has to answer the press. */
+.volume-hint {
+  position: absolute;
+  z-index: 5;
+  top: var(--capsule-height);
+  left: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: calc(var(--peek-width) - var(--notch-convex-radius) * 2);
+  height: 22px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(
+    -50%,
+    calc(var(--caption-rest, 0px) - var(--shape-top, 0px) + var(--caption-size, 28px) - 31px)
+  );
+  /* The transform waits out `--duration-exit` like the caption's does, so
+     leaving a state the row travels with the shape rather than ahead of it. */
+  transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-shape) var(--spring) var(--duration-exit);
+}
+
+/* Arrives the way the caption's first words do — crossing the last of the
+   shape's travel — and takes the pointer only while it is drawn: a hidden
+   button must stay click-through, because everything it covers is desktop. */
+.app-stage[data-volume-hint="true"][data-caption="true"][data-presentation="capsule"] .volume-hint,
+.app-stage[data-volume-hint="true"][data-caption="true"][data-presentation="peek"] .volume-hint,
+.app-stage[data-volume-hint="true"][data-caption="true"][data-presentation="panel"] .volume-hint {
+  opacity: 1;
+  pointer-events: auto;
+  transition:
+    opacity var(--duration-quick) var(--motion-exit)
+    calc(var(--duration-shape) - var(--duration-quick)),
+    transform var(--duration-shape) var(--spring);
+}
+
+/* Attention's own orange, because this is the one line on the shape that asks
+   the user to do something; the caption above it keeps the secondary grey. */
+.volume-hint-text {
+  overflow: hidden;
+  color: var(--state-attention);
+  font-size: 9.5px;
+  font-weight: 640;
+  letter-spacing: 0.2px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Shaped like the quiet buttons, scaled to a 22px row. */
+.volume-hint-dismiss {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border-radius: 7px;
+  background: var(--raised);
+  color: var(--text-primary);
+  font-size: 9.5px;
+  font-weight: 640;
+  transition: background-color var(--duration-hover) ease;
+  white-space: nowrap;
+}
+
+.volume-hint-dismiss:hover {
+  background: var(--raised-strong);
+}
+
 /* Waveform --------------------------------------------------------------- */
 
 /* The meter replaces the marks while the microphone is live and stays drawn for

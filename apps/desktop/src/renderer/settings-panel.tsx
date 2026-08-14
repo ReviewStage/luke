@@ -789,8 +789,13 @@ function PreferencesSection({
           <strong>Captions</strong>
           {/* Off by default: the voice experience ships as sound, so the words
               are chosen rather than discovered. What is *not* kept is the one
-              thing worth a line — the caption is the reply being said. */}
-          <small>Luke&rsquo;s words on screen as he speaks. Nothing is kept.</small>
+              thing worth a line — the caption is the reply being said. The
+              muted exception is stated because it overrides this very switch:
+              a reply the Mac would swallow is captioned whatever it says. */}
+          <small>
+            Luke&rsquo;s words on screen as he speaks, and on their own while your Mac is muted.
+            Nothing is kept.
+          </small>
         </span>
         <button
           type="button"

@@ -160,6 +160,13 @@ reply's text is drawn on screen while Luke speaks; it is discarded when the
 reply ends and is never written to disk. Audio is not retained by Luke in any
 form.
 
+While the Mac's output is muted or its volume is at zero, the same captions are
+drawn even with the setting off, so a reply the speakers would swallow can
+still be read. To know when, Luke reads exactly two things from the default
+output device — its mute switch and its volume level — through a helper that
+can write nothing. That reading never leaves your Mac, is not logged, and Luke
+never changes the system volume.
+
 The standing API key stays in Luke's main process. The renderer receives only a
 short-lived client secret minted for one call, which expires on its own.
 

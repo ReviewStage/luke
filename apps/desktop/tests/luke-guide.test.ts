@@ -175,6 +175,11 @@ test("the facts follow the talk key, the microphone, and the storage the system 
 
   const voiceless = buildLukeGuide(guideInput({ voiceAvailable: false }));
   assert.match(JSON.stringify(voiceless.facts), /OPENAI_API_KEY/);
+  // The muted-output behavior belongs to speech, so it is described exactly
+  // where speech exists: with a voice it is a fact, without one it would
+  // describe captions no reply will ever draw.
+  assert.match(held, /muted or its volume is at zero/);
+  assert.doesNotMatch(JSON.stringify(voiceless.facts), /muted or its volume/);
 
   const unprotected = buildLukeGuide(
     guideInput({ settings: settings({ secretStorage: SECRET_STORAGE.UNAVAILABLE }) }),

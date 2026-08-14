@@ -132,6 +132,13 @@ by default — and Luke's words wrap along the bottom of whatever shape is up as
 says them — capsule, peek, or panel — and leave when the reply does. Nothing is
 kept: the caption is the reply being said, not a record of it.
 
+When the Mac itself would swallow the reply — output muted, or the volume at
+zero — the captions appear on their own, whatever the switch says, and a short
+hint under the words asks for volume. Its **Got it** button rests the hint for
+that stretch of silence (the captions stay); once sound has been back for a
+while, a fresh mute earns the hint again. Luke only reads the output's mute
+switch and volume, and never changes either.
+
 ## Privacy
 
 Luke observes provider state read-only. Without `OPENAI_API_KEY` it never opens
