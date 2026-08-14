@@ -381,6 +381,10 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
         undefined,
         { timeoutMs: CLOUD_ADAPTER_DEFAULTS.SLOW_REQUEST_TIMEOUT_MS },
         (body) => {
+          // Only the newest attempt may land: an answer outlasted by a fresher
+          // read — or by a credential coming back — is an older offer, not a
+          // newer one.
+          if (this.#repositoriesAttemptedAt !== now) return;
           this.#repositories = recordsFromPage(body, CURSOR_FIELD.ITEMS)
             .map((record) => textFromRecord(record, CURSOR_FIELD.URL))
             .filter(isDefined)
@@ -389,7 +393,12 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
         },
       );
     } catch {
-      this.#repositoriesRefreshMs = CURSOR_REPOSITORY_RETRY_MS;
+      // Only this attempt's own failure sets the retry cadence: a stale read —
+      // discarded because the credential moved on, or outlasted by a newer
+      // attempt — must not clobber what that newer attempt decided.
+      if (this.#repositoriesAttemptedAt === now) {
+        this.#repositoriesRefreshMs = CURSOR_REPOSITORY_RETRY_MS;
+      }
     }
   }
 

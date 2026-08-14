@@ -1437,8 +1437,11 @@ function registerIpc(): void {
         ...(openingTask ? { task: openingTask } : {}),
       });
       // A workspace that landed is a session the panel should be showing, so
-      // the next look must actually ask rather than serve the cache.
-      if (result.status === PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED) {
+      // the next look must actually ask rather than serve the cache. A
+      // rejection refreshes too: a workspace can stand with its opening task
+      // undelivered, and the adapter answers a rejection that never reached
+      // the network from its cache anyway.
+      if (result.status !== PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED) {
         void sessionRegistry.refresh(adapter);
       }
       return result;
@@ -1557,8 +1560,9 @@ function registerIpc(): void {
         ...(openingTask ? { task: openingTask } : {}),
       });
       // A new agent is a session the panel should be showing, so the next
-      // look must actually ask rather than serve the cache.
-      if (result.status === PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED) {
+      // look must actually ask rather than serve the cache — on a rejection
+      // too, for the same reason a partial workspace creation refreshes.
+      if (result.status !== PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED) {
         void sessionRegistry.refresh(adapter);
       }
       return result;
