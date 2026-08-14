@@ -157,6 +157,14 @@ export class RealtimeVoiceSession {
   #channel: RTCDataChannel | undefined;
   #microphone: MediaStreamTrack | undefined;
   #stream: MediaStream | undefined;
+  /**
+   * Whether the current connect attempt — and the call it opens — includes the
+   * microphone. A developer's call does; one Luke opens for himself, to read a
+   * notice out, must not: no capture device is held, no permission is asked,
+   * and the macOS microphone indicator stays honest by never lighting for a
+   * call nobody spoke into.
+   */
+  #withMicrophone = true;
   #status: RealtimeStatus = REALTIME_STATUS.IDLE;
   #connecting: Promise<boolean> | undefined;
   #closed = false;
@@ -285,10 +293,40 @@ export class RealtimeVoiceSession {
     return this.#channel?.readyState === "open";
   }
 
-  /** Opens the call, reusing an in-flight attempt rather than racing a second one. */
-  async connect(): Promise<boolean> {
-    if (this.isConnected) return true;
-    this.#connecting ??= this.#connect()
+  /**
+   * Whether the call that is up — or coming up — is one the developer can take
+   * a turn on. A call Luke opened to read a notice out has no microphone and
+   * answers false, which is how a talk-key press knows it still has a call of
+   * its own to open.
+   */
+  get microphoneCall(): boolean {
+    if (this.isConnected) return this.#microphone !== undefined;
+    if (this.isConnecting) return this.#withMicrophone;
+    return false;
+  }
+
+  /**
+   * Opens the call, reusing an in-flight attempt rather than racing a second
+   * one. Without the microphone it is a call Luke opens for himself — audio
+   * out only, nothing captured, nothing to consent to — and it always stands
+   * down for the developer's own: asking for a microphone call while a
+   * speak-only one is up replaces it rather than sharing it.
+   */
+  async connect(options?: { microphone?: boolean }): Promise<boolean> {
+    const withMicrophone = options?.microphone !== false;
+    // Wait out whatever attempt is already in flight rather than racing it.
+    // A loop, because another caller can start a new attempt in the gap.
+    while (this.#connecting) await this.#connecting;
+    if (this.isConnected) {
+      if (!withMicrophone || this.#microphone) return true;
+      // The developer's call replaces Luke's own — but the press that asked
+      // for it must survive the teardown, or the turn it opens would be lost.
+      const pendingTurn = this.#pendingTurn;
+      this.#teardown();
+      this.#pendingTurn = pendingTurn;
+    }
+    this.#withMicrophone = withMicrophone;
+    this.#connecting = this.#connect()
       .then((opened) => {
         // A press does not outlive the attempt it started. Every way a connect
         // ends without a call passes through here — no credential, a refused
@@ -312,14 +350,18 @@ export class RealtimeVoiceSession {
     // needs the other: the credential is minted over the network while the
     // capture device opens. `allSettled` rather than `all`, because whichever
     // one loses still has to be dealt with — a device that opened after a
-    // failed mint would be held with nobody left to release it.
+    // failed mint would be held with nobody left to release it. A speak-only
+    // call never asks for the device at all: nothing is captured, so there is
+    // nothing to consent to and nothing to hold.
     const [connectionResult, streamResult] = await Promise.allSettled([
       this.#options.requestConnection(),
-      this.#options.requestMicrophoneStream?.() ??
-        navigator.mediaDevices.getUserMedia({
-          audio: { autoGainControl: true, echoCancellation: true, noiseSuppression: true },
-          video: false,
-        }),
+      this.#withMicrophone
+        ? (this.#options.requestMicrophoneStream?.() ??
+          navigator.mediaDevices.getUserMedia({
+            audio: { autoGainControl: true, echoCancellation: true, noiseSuppression: true },
+            video: false,
+          }))
+        : Promise.resolve(undefined),
     ]);
     // Adopt the device before deciding anything, so every exit from here — a
     // stop that landed mid-mint, a failed mint, no credential at all — releases
@@ -346,17 +388,23 @@ export class RealtimeVoiceSession {
     }
 
     try {
-      const stream = streamResult.value;
-      const [microphone] = stream.getAudioTracks();
-      if (!microphone) throw new Error("No microphone track was available");
-      // Push-to-talk starts closed. Nothing is sent until the developer asks.
-      microphone.enabled = false;
-      this.#microphone = microphone;
-      this.#options.onLocalStream(stream);
-
       const peer = this.#options.createPeerConnection?.() ?? new RTCPeerConnection();
       this.#peer = peer;
-      peer.addTrack(microphone, stream);
+      const stream = streamResult.value;
+      if (this.#withMicrophone) {
+        const [microphone] = stream?.getAudioTracks() ?? [];
+        if (!microphone || !stream) throw new Error("No microphone track was available");
+        // Push-to-talk starts closed. Nothing is sent until the developer asks.
+        microphone.enabled = false;
+        this.#microphone = microphone;
+        this.#options.onLocalStream(stream);
+        peer.addTrack(microphone, stream);
+      } else {
+        // Luke's own call receives audio and offers none: the transceiver says
+        // so up front, so the connection is speak-only by shape rather than by
+        // a track that merely happens to be missing.
+        peer.addTransceiver("audio", { direction: "recvonly" });
+      }
       peer.ontrack = (event) => {
         this.#remoteTrack = event.track;
         this.#options.onRemoteStream(event.streams[0]);
@@ -400,8 +448,10 @@ export class RealtimeVoiceSession {
       if (this.#closed) return this.#abandonConnect();
       this.#setStatus(REALTIME_STATUS.READY);
       // Whoever pressed the talk key to get here has been waiting through the
-      // handshake for their turn to open.
-      if (this.#pendingTurn) {
+      // handshake for their turn to open. A speak-only call leaves the press
+      // pending instead — it has no microphone to open a turn with, and the
+      // developer's own call is already replacing it.
+      if (this.#pendingTurn && this.#microphone) {
         this.#pendingTurn = false;
         this.startListening();
       }
@@ -480,7 +530,10 @@ export class RealtimeVoiceSession {
    * key is held cannot be left open by forgetting to press again.
    */
   beginTurn(): void {
-    if (!this.isConnected) {
+    // A call without a microphone cannot take the turn, however open it is:
+    // the press waits as an intention while the developer's own call — the
+    // one that will replace Luke's — comes up.
+    if (!this.isConnected || !this.#microphone) {
       this.#pendingTurn = true;
       return;
     }
@@ -506,8 +559,10 @@ export class RealtimeVoiceSession {
     // anything. It is remembered and applied when the call opens — and a second
     // press cancels the first rather than queueing another, because two presses
     // have always meant a turn opened and closed, and one that held nothing is
-    // one with nothing to send.
-    if (!this.isConnected) {
+    // one with nothing to send. A connected call without a microphone is the
+    // same case: Luke's own call cannot take a turn, so the press waits for
+    // the one that can.
+    if (!this.isConnected || !this.#microphone) {
       this.#pendingTurn = !this.#pendingTurn;
       return;
     }
@@ -600,7 +655,11 @@ export class RealtimeVoiceSession {
    * and a keystroke is no reason to discard it.
    */
   sendText(text: string): boolean {
-    if (!this.isConnected) return false;
+    // A typed ask runs only on the developer's own call. Luke's speak-only
+    // call has been sent no roster, no guide, and no issues, so a turn armed
+    // for tools has nothing real to validate against there — the caller
+    // stands that call down and opens the full one before asking.
+    if (!this.isConnected || !this.#microphone) return false;
     if (this.#status === REALTIME_STATUS.LISTENING) return false;
     const events = typedAskEvents(text);
     if (events.length === 0) return false;
@@ -835,7 +894,7 @@ export class RealtimeVoiceSession {
    */
   updateSessions(sessions: readonly NormalizedSession[]): void {
     this.#sessions = sessions;
-    if (!this.isConnected) return;
+    if (!this.#carriesContext()) return;
     const context = sessionContextText(sessions);
     if (context === this.#sessionContext) return;
     this.#sessionContext = context;
@@ -850,7 +909,7 @@ export class RealtimeVoiceSession {
    */
   updateWorkspaceProjects(projects: readonly ObservedWorkspaceProject[]): void {
     this.#workspaceProjects = projects;
-    if (!this.isConnected) return;
+    if (!this.#carriesContext()) return;
     const context = workspaceProjectContextText(projects);
     if (context === this.#workspaceProjectContext) return;
     this.#workspaceProjectContext = context;
@@ -866,7 +925,7 @@ export class RealtimeVoiceSession {
    */
   updateGuide(guide: AppGuideSnapshot): void {
     this.#guide = guide;
-    if (!this.isConnected) return;
+    if (!this.#carriesContext()) return;
     const context = appGuideContextText(guide);
     if (context === this.#guideContext) return;
     this.#guideContext = context;
@@ -881,7 +940,7 @@ export class RealtimeVoiceSession {
    */
   updateIssues(issues: readonly TrackedIssue[] | undefined): void {
     this.#issues = issues;
-    if (!this.isConnected) return;
+    if (!this.#carriesContext()) return;
     if (!issues) {
       // A conversation that was never told about a board has nothing to
       // withdraw; one that was must be told the board is gone, or Luke keeps
@@ -895,6 +954,18 @@ export class RealtimeVoiceSession {
     if (context === this.#issueContext) return;
     this.#issueContext = context;
     this.#send(issueContextEvents(issues));
+  }
+
+  /**
+   * Whether this call is one the rosters and the guide travel on. Only the
+   * developer's own call is: one Luke opened for himself exists to read a
+   * sentence out, so it is sent that sentence and nothing else — the narrowest
+   * thing that can leave the machine in a conversation nobody opened by hand.
+   * The stores above still update either way, so the developer's next call
+   * starts current.
+   */
+  #carriesContext(): boolean {
+    return this.isConnected && this.#microphone !== undefined;
   }
 
   #handleServerEvent(data: unknown): void {

@@ -213,14 +213,21 @@ account, open it, drag Luke to Applications, and confirm the first launch passes
 Gatekeeper without an override. You can also assess the installed app with
 `spctl --assess --type execute -vv /Applications/Luke.app`.
 
-## Session notifications
+## Spoken announcements
 
-Luke posts a macOS notification when an observed session starts waiting on
-you, stops on an error, or finishes. The trigger is the status change itself,
-observed locally — no credential, evaluator, or network is involved, and
-nothing leaves the machine. Pressing a notification opens the panel. The
-banners can be switched off in Settings · Preferences ("Notify when a session
-needs you"); the panel and the capsule count show the same states either way.
+Luke says it out loud when an observed session starts waiting on you, stops on
+an error, or finishes — whether or not a conversation is open. The trigger is
+the status change itself, observed locally and never decided by a model. When
+no conversation is up, Luke opens a speak-only call for the sentence: no
+microphone is captured, no permission is asked, and the call carries only the
+worded announcement — never the session roster, the app guide, or the issue
+list, which travel only on conversations you open yourself. The announcement
+sentence (the session's title, provider, repository or branch, and any
+one-line error reason) is synthesized through the same voice service as the
+spoken conversation, so announcements need `OPENAI_API_KEY` and follow the
+same privacy boundary; see [PRIVACY.md](PRIVACY.md). They can be switched off
+in Settings · Preferences ("Announce when a session needs you"); the panel and
+the capsule count show the same states either way.
 
 ## Optional attention review
 

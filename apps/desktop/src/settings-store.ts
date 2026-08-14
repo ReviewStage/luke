@@ -137,7 +137,7 @@ interface PersistedSettings {
    */
   duckOtherMedia: boolean;
   /**
-   * Whether a session that wants the user posts a macOS notification. On
+   * Whether a session that wants the user is announced in Luke's voice. On
    * unless the file says `false` outright, like the media duck: being told an
    * agent finished is what Luke does until the user asks otherwise, so a
    * missing field and a corrupt value both land on doing it.
@@ -502,7 +502,7 @@ export class SettingsStore {
   }
 
   /**
-   * Shallow for the same reason as `duckOtherMedia()`: the notifier arms at
+   * Shallow for the same reason as `duckOtherMedia()`: the announcer arms at
    * startup, and arming it must never be what wakes the OS keychain.
    */
   async readSessionNotifications(): Promise<boolean> {
@@ -510,7 +510,7 @@ export class SettingsStore {
   }
 
   /**
-   * Turns the macOS notification about a session that wants the user on or
+   * Turns the spoken announcement about a session that wants the user on or
    * off. A plain preference like the media duck's: no cipher, no invalid
    * value, so the write either lands or throws.
    */

@@ -844,19 +844,21 @@ function PreferencesSection({
       </div>
       <div className="settings-row">
         <span className="settings-copy">
-          <strong>Notify when a session needs you</strong>
+          <strong>Announce when a session needs you</strong>
           {/* The three edges by name, because the switch governs exactly these
-              and the panel already shows everything else: a banner is for the
-              developer whose eyes are on another screen entirely. */}
+              and the panel already shows everything else: the voice is for the
+              developer whose eyes are on another screen entirely. No
+              conversation needs to be open — Luke opens a speak-only call for
+              the sentence, and the microphone stays untouched. */}
           <small>
-            A macOS notification when an agent starts waiting on you, hits an error, or finishes.
+            Luke says it out loud when an agent starts waiting on you, hits an error, or finishes.
           </small>
         </span>
         <button
           type="button"
           role="switch"
           aria-checked={notifications}
-          aria-label="Notify when a session needs you"
+          aria-label="Announce when a session needs you"
           className="switch"
           disabled={notificationsBusy}
           onClick={() => void toggleNotifications()}

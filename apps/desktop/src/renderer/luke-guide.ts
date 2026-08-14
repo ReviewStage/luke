@@ -135,10 +135,11 @@ const SETTING_GUIDE: Record<
   }),
   sessionNotifications: (settings) => ({
     id: APP_SETTING_ID.SESSION_NOTIFICATIONS,
-    label: "Notify when a session needs you",
+    label: "Announce when a session needs you",
     description:
-      "A macOS notification when an observed session starts waiting on the developer, stops on " +
-      "an error, or finishes. The panel and the capsule count show the same states either way.",
+      "Luke says it out loud when an observed session starts waiting on the developer, stops on " +
+      "an error, or finishes — no conversation needs to be open, and the microphone stays off. " +
+      "Needs voice to be available; the panel and the capsule count show the same states either way.",
     kind: APP_SETTING_KIND.TOGGLE,
     value: appToggleText(settings.sessionNotifications),
     adjustable: true,

@@ -50,7 +50,6 @@ import {
   type IpcMainInvokeEvent,
   ipcMain,
   Menu,
-  Notification,
   nativeImage,
   nativeTheme,
   powerMonitor,
@@ -81,7 +80,7 @@ import {
 } from "./openai-realtime-credentials";
 import { OpenCodeSessionAdapter } from "./opencode-adapter";
 import { OutputVolumeWatcher } from "./output-volume";
-import { sessionNotificationContent } from "./session-notifications";
+import { sessionNoticeSpeech } from "./session-notifications";
 import { SettingsStore } from "./settings-store";
 import {
   type AppBootstrap,
@@ -1308,7 +1307,7 @@ function registerIpc(): void {
     },
   );
 
-  // The notifier follows the stored answer at once, like the duck: off must
+  // The announcer follows the stored answer at once, like the duck: off must
   // silence the very next pass, not the next launch.
   ipcMain.handle(
     channels.setSessionNotifications,
@@ -1793,34 +1792,26 @@ async function reviewSessionAttention(): Promise<void> {
 }
 
 /**
- * Posts a macOS notification for each session that just arrived somewhere the
- * user may be waiting on — an answer wanted, an error, a finish. The trigger
- * is a status edge the registry observed, a deterministic fact like the media
- * duck's, so nothing Luke read or decided can reach it; and a banner is pure
- * display of the user's own session data, on the user's own machine.
+ * Speaks each session that just arrived somewhere the user may be waiting on —
+ * an answer wanted, an error, a finish. The trigger is a status edge the
+ * registry observed, a deterministic fact like the media duck's, so nothing
+ * Luke read or decided can reach it. The sentence travels the same channel the
+ * evaluator's readouts do, to the one window that holds the voice; the
+ * announcer there opens a speak-only call when no conversation is up, so
+ * being heard needs no talk-key press first.
  */
 function announceSessionNotices(sessions: readonly NormalizedSession[]): void {
-  // The tracker is fed on every commit whether or not banners are on: feeding
-  // is what keeps its picture current, so switching them on never replays
-  // edges that happened while they were off.
-  const notices = sessionNoticeTracker.notices(sessions, Date.now());
-  if (notices.length === 0 || !sessionNotificationsEnabled || !Notification.isSupported()) return;
-  for (const notice of notices) {
-    const content = sessionNotificationContent(notice);
-    const notification = new Notification({
-      title: content.title,
-      ...(content.subtitle ? { subtitle: content.subtitle } : {}),
-      body: content.body,
-    });
-    // A banner is a door as well as a line: pressing it brings the panel up,
-    // the same press the capsule answers. Nothing reaches any provider.
-    notification.on("click", () => {
-      const host = voiceHostWindow();
-      const displayId = host ? displayIdFor(host.webContents) : undefined;
-      if (displayId !== undefined) setWindowMode(displayId, "expanded", true);
-    });
-    notification.show();
-  }
+  // The tracker is fed on every commit whether or not announcements are on:
+  // feeding is what keeps its picture current, so switching them on never
+  // replays edges that happened while they were off.
+  const now = Date.now();
+  const notices = sessionNoticeTracker.notices(sessions, now);
+  if (notices.length === 0 || !sessionNotificationsEnabled) return;
+  // No voice, nothing to say it with: without a Realtime credential the
+  // renderer cannot open a call, and the panel still shows every state.
+  if (!realtimeCredentials) return;
+  const speech = notices.map((notice) => sessionNoticeSpeech(notice, now));
+  voiceHostWindow()?.webContents.send(channels.attentionSpeech, speech);
 }
 
 function startSessionObservation(): void {
@@ -2248,8 +2239,8 @@ if (!app.requestSingleInstanceLock()) {
       (enabled) => mediaDuck.setEnabled(enabled),
       () => mediaDuck.setEnabled(true),
     );
-    // The notifier arms the same way, under the same default: a file that
-    // cannot be read leaves the banners on.
+    // The announcer arms the same way, under the same default: a file that
+    // cannot be read leaves the announcements on.
     void settingsStore.readSessionNotifications().then(
       (enabled) => {
         sessionNotificationsEnabled = enabled;

@@ -15,6 +15,7 @@ import {
   type RealtimeConnection,
   SESSION_STATUS,
   type TrackedIssue,
+  WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/core";
 import {
   type AppActionCarrier,
@@ -47,6 +48,8 @@ interface Harness {
   requests: { url: string; init: RequestInit }[];
   /** The order the credential and the device were asked for and answered in. */
   calls: string[];
+  /** The transceivers declared instead of tracks, as a speak-only call does. */
+  transceivers: { kind: string; direction?: string }[];
 }
 
 function observedSession(
@@ -115,11 +118,20 @@ function harness(
   };
 
   const remoteTrack = { enabled: true };
+  const transceivers: { kind: string; direction?: string }[] = [];
   const peer: Record<string, unknown> = {
     localDescription: { type: "offer", sdp: "v=0 local" },
     connectionState: "connected",
     addTrack: () => undefined,
-    createDataChannel: () => channel,
+    addTransceiver: (kind: string, init?: { direction?: string }) => {
+      transceivers.push({ kind, ...(init?.direction ? { direction: init.direction } : {}) });
+    },
+    createDataChannel: () => {
+      // A fresh channel per connect, so a call opened after another was torn
+      // down — the developer's replacing Luke's own — can open too.
+      channel.readyState = options.channelOpensImmediately === false ? "connecting" : "open";
+      return channel;
+    },
     createOffer: async () => ({ type: "offer", sdp: "v=0 local" }),
     setLocalDescription: async () => undefined,
     setRemoteDescription: async () => undefined,
@@ -200,6 +212,7 @@ function harness(
     },
     requests,
     calls,
+    transceivers,
   };
 }
 
@@ -2268,4 +2281,87 @@ test("a tracker that disconnects withdraws the roster, and a reconnect resends i
   const freshBefore = fresh.sent.length;
   fresh.session.updateIssues(undefined);
   assert.equal(fresh.sent.length, freshBefore);
+});
+
+test("a speak-only connect never asks for the microphone", async () => {
+  const context = harness();
+
+  assert.equal(await context.session.connect({ microphone: false }), true);
+
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+  // The device was never requested, so there is no permission to ask and no
+  // indicator to light.
+  assert.ok(!context.calls.includes("microphone-requested"));
+  // The call is speak-only by shape: audio is received and none is offered.
+  assert.deepEqual(context.transceivers, [{ kind: "audio", direction: "recvonly" }]);
+  assert.equal(context.session.microphoneCall, false);
+});
+
+test("a speak-only call reads a notice out but refuses a typed ask", async () => {
+  const context = harness();
+  await context.session.connect({ microphone: false });
+
+  assert.equal(
+    context.session.speak({
+      providerId: "claude-code",
+      providerSessionId: "session-a",
+      disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
+      summary: "Claude Code finished checkout-service.",
+      decidedAt: 1_800_000_000_000,
+    }),
+    true,
+  );
+  assert.deepEqual(
+    context.sent.map((event) => event.type),
+    [REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE, REALTIME_CLIENT_EVENT.RESPONSE_CREATE],
+  );
+
+  // A typed ask arms tools, and this call was sent nothing to validate one
+  // against: the caller stands the call down and opens the developer's own.
+  assert.equal(context.session.sendText("stop the deploy"), false);
+});
+
+test("the rosters and the guide never travel on Luke's own call", async () => {
+  const context = harness();
+  await context.session.connect({ microphone: false });
+  const before = context.sent.length;
+
+  context.session.updateSessions([observedSession("session-a")]);
+  context.session.updateGuide({
+    facts: [{ label: "What Luke is", detail: "A sidecar." }],
+    settings: [],
+  });
+  context.session.updateWorkspaceProjects([
+    {
+      providerId: "conductor",
+      providerName: "Conductor",
+      providerProjectId: "project-1",
+      repository: "luke",
+      taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
+    },
+  ]);
+  context.session.updateIssues([]);
+
+  // The stores still updated — the developer's next call starts current — but
+  // nothing left on this one beyond the sentence it exists to say.
+  assert.equal(context.sent.length, before);
+});
+
+test("the developer's call replaces Luke's own and keeps the waiting press", async () => {
+  const context = harness();
+  await context.session.connect({ microphone: false });
+
+  // The press lands while Luke's call is up: it cannot take a turn there, so
+  // it waits as an intention rather than being lost.
+  context.session.beginTurn();
+  assert.equal(context.microphoneEnabled(), false);
+
+  assert.equal(await context.session.connect(), true);
+
+  // The replacement call has the microphone, and the waiting press opened its
+  // turn the moment the call could take one.
+  assert.equal(context.session.microphoneCall, true);
+  assert.ok(context.calls.includes("microphone-requested"));
+  assert.equal(context.microphoneEnabled(), true);
+  assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
 });

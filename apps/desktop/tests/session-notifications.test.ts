@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SESSION_NOTICE_STATUS, SESSION_STATUS, type SessionNotice } from "@sidecar/core";
-import { sessionNotificationContent } from "../src/session-notifications";
+import {
+  ATTENTION_DISPOSITION,
+  SESSION_NOTICE_STATUS,
+  SESSION_STATUS,
+  type SessionNotice,
+} from "@sidecar/core";
+import { sessionNoticeSpeech } from "../src/session-notifications";
 
 function notice(overrides: Partial<SessionNotice> = {}): SessionNotice {
   return {
@@ -16,35 +21,38 @@ function notice(overrides: Partial<SessionNotice> = {}): SessionNotice {
   };
 }
 
-test("a notice is worded in the shape macOS shows: name, place, what happened", () => {
-  assert.deepEqual(
-    sessionNotificationContent(notice({ repository: "luke", branch: "conductor/algiers" })),
-    {
-      title: "Implement better notifications",
-      subtitle: "luke · conductor/algiers",
-      body: "Claude Code finished.",
-    },
-  );
-  // Half a place is still a place; none leaves the line off entirely.
-  assert.equal(sessionNotificationContent(notice({ branch: "algiers" })).subtitle, "algiers");
-  assert.equal(sessionNotificationContent(notice()).subtitle, undefined);
+test("a notice becomes one sentence in the shape attention speech travels in", () => {
+  assert.deepEqual(sessionNoticeSpeech(notice({ repository: "luke" }), 5_000), {
+    providerId: "claude-code",
+    providerSessionId: "run:1",
+    disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
+    summary: 'Claude Code finished "Implement better notifications" on luke.',
+    // When the announcement was decided on, not when the provider observed
+    // the session: it is what staleness is measured against.
+    decidedAt: 5_000,
+  });
 });
 
-test("each status says what it asks of the developer", () => {
+test("each status says what it asks of the developer, with its place when known", () => {
   assert.equal(
-    sessionNotificationContent(notice({ status: SESSION_NOTICE_STATUS.WAITING })).body,
-    "Claude Code is waiting on you.",
+    sessionNoticeSpeech(notice({ status: SESSION_NOTICE_STATUS.WAITING, branch: "algiers" }), 0)
+      .summary,
+    'Claude Code is waiting on you in "Implement better notifications" on algiers.',
   );
   assert.equal(
-    sessionNotificationContent(notice({ status: SESSION_NOTICE_STATUS.ERROR })).body,
-    "Claude Code stopped on an error.",
+    sessionNoticeSpeech(notice({ status: SESSION_NOTICE_STATUS.ERROR }), 0).summary,
+    'Claude Code stopped on an error in "Implement better notifications".',
   );
   // The provider's own reason rides along when it gave one — already bounded
   // by normalization, never a transcript.
   assert.equal(
-    sessionNotificationContent(
-      notice({ status: SESSION_NOTICE_STATUS.ERROR, error: "API rate limit" }),
-    ).body,
-    "Claude Code stopped: API rate limit",
+    sessionNoticeSpeech(notice({ status: SESSION_NOTICE_STATUS.ERROR, error: "API rate limit" }), 0)
+      .summary,
+    'Claude Code stopped in "Implement better notifications": API rate limit',
+  );
+  // No place reported leaves the sentence whole rather than trailing a stub.
+  assert.equal(
+    sessionNoticeSpeech(notice(), 0).summary,
+    'Claude Code finished "Implement better notifications".',
   );
 });
