@@ -1,8 +1,11 @@
 import {
   isRealtimeVoice,
+  isRealtimeVoiceSpeed,
   REALTIME_DEFAULTS,
   REALTIME_VOICE_LIST,
+  REALTIME_VOICE_SPEED_LIST,
   type RealtimeVoice,
+  type RealtimeVoiceSpeed,
 } from "@sidecar/core";
 import { useEffect, useRef, useState } from "react";
 import type { AppSettings, CredentialSource, MicrophoneStatus } from "../shared/contracts";
@@ -59,6 +62,8 @@ export interface SettingsPanelProps {
   credentials: CredentialEntryControl;
   /** Chooses the voice Luke speaks with, from the set fixed by this build. */
   onVoiceChange: (voice: RealtimeVoice) => void;
+  /** Chooses the pace Luke speaks at, from the set fixed by this build. */
+  onVoiceSpeedChange: (speed: RealtimeVoiceSpeed) => void;
   /**
    * True while the panel is the shape on screen. A field can only hold the
    * caret then: everything here sits in an inert stage the rest of the time,
@@ -70,6 +75,11 @@ export interface SettingsPanelProps {
    * refuses, and the row is where that answer belongs.
    */
   onShowInMenuBarChange: (show: boolean) => Promise<string | undefined>;
+  /**
+   * Shows or hides the Dock icon. The store answers with why when it refuses,
+   * and the row is where that answer belongs.
+   */
+  onShowInDockChange: (show: boolean) => Promise<string | undefined>;
   onQuit: () => void;
   /** The talk key, shown so it can be learned. It is not editable yet. */
   voiceHotkey?: string;
@@ -447,6 +457,13 @@ function voiceOptionLabel(voice: RealtimeVoice): string {
   return voice === REALTIME_DEFAULTS.VOICE ? `${name} (default)` : name;
 }
 
+/* A pace reads as a rate multiple, the way every player writes one. The
+   natural rate carries its status into the menu for the same reason the
+   default voice does. */
+function speedOptionLabel(speed: RealtimeVoiceSpeed): string {
+  return speed === REALTIME_DEFAULTS.SPEED ? `${speed}× (default)` : `${speed}×`;
+}
+
 /**
  * Every provider that can hold a key, one line each. A provider is listed
  * whether or not it has one, because the list is how you learn which services
@@ -497,25 +514,33 @@ function CredentialsSection({
  * ear — offered the way macOS offers one value from a small fixed set: a
  * pop-up button whose closed face is drawn here and whose open menu is the
  * system's, which also lets it escape a window sized to the panel rather than
- * being clipped by it. Below it, whether the status item stands in the menu
- * bar as well as at the notch: a switch and nothing else, because nothing
- * rides on the answer — Settings and Quit live in this panel, so the item is a
+ * being clipped by it. Below it, whether Luke stands in the menu bar and in
+ * the Dock as well as at the notch: switches and nothing else, because nothing
+ * rides on either answer — Settings and Quit live in this panel, so each is a
  * second door rather than the only one.
  */
 function PreferencesSection({
   voice,
   onVoiceChange,
+  speed,
+  onVoiceSpeedChange,
   captions,
   onVoiceCaptionsChange,
   shown,
   onShowInMenuBarChange,
+  dockShown,
+  onShowInDockChange,
 }: {
   voice: RealtimeVoice;
   onVoiceChange: (voice: RealtimeVoice) => void;
+  speed: RealtimeVoiceSpeed;
+  onVoiceSpeedChange: (speed: RealtimeVoiceSpeed) => void;
   captions: boolean;
   onVoiceCaptionsChange: (enabled: boolean) => Promise<string | undefined>;
   shown: boolean;
   onShowInMenuBarChange: (show: boolean) => Promise<string | undefined>;
+  dockShown: boolean;
+  onShowInDockChange: (show: boolean) => Promise<string | undefined>;
 }): React.JSX.Element {
   // The change is a round trip through the settings file, so the switch rests
   // until the store has answered rather than claiming a state it may not get.
@@ -534,6 +559,12 @@ function PreferencesSection({
     setCaptionsBusy(true);
     setRejection(await onVoiceCaptionsChange(!captions));
     setCaptionsBusy(false);
+  };
+  const [dockBusy, setDockBusy] = useState(false);
+  const toggleDock = async () => {
+    setDockBusy(true);
+    setRejection(await onShowInDockChange(!dockShown));
+    setDockBusy(false);
   };
   return (
     <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
@@ -580,6 +611,40 @@ function PreferencesSection({
       </div>
       <div className="settings-row">
         <span className="settings-copy">
+          <strong>Speed</strong>
+          {/* The same promise as the voice's line, because it lands the same
+              way: minted into the next conversation, never a live one. */}
+          <small>How fast Luke talks, from the next conversation on.</small>
+        </span>
+        <span className="voice-select">
+          <select
+            aria-label="Speed"
+            value={speed}
+            onChange={(event) => {
+              // A select serializes its value to a string, so the number is
+              // read back out and held to the set fixed by this build.
+              const next = Number(event.target.value);
+              if (isRealtimeVoiceSpeed(next)) onVoiceSpeedChange(next);
+            }}
+            onFocus={() => {
+              // The panel can be showing without its window being key, and a
+              // menu opened then would drop its first choice.
+              window.sidecar.focusPanel();
+            }}
+          >
+            {REALTIME_VOICE_SPEED_LIST.map((candidate) => (
+              <option key={candidate} value={candidate}>
+                {speedOptionLabel(candidate)}
+              </option>
+            ))}
+          </select>
+          <span className="voice-select-badge" aria-hidden="true">
+            <PopUpIcon />
+          </span>
+        </span>
+      </div>
+      <div className="settings-row">
+        <span className="settings-copy">
           <strong>Captions</strong>
           {/* Off by default: the voice experience ships as sound, so the words
               are chosen rather than discovered. What is *not* kept is the one
@@ -614,6 +679,22 @@ function PreferencesSection({
           <span className="switch-thumb" />
         </button>
       </div>
+      <div className="settings-row">
+        <span className="settings-copy">
+          <strong>Show Luke in the Dock</strong>
+        </span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={dockShown}
+          aria-label="Show Luke in the Dock"
+          className="switch"
+          disabled={dockBusy}
+          onClick={() => void toggleDock()}
+        >
+          <span className="switch-thumb" />
+        </button>
+      </div>
       {rejection ? <p className="error-message">{rejection}</p> : null}
     </section>
   );
@@ -629,8 +710,10 @@ export function SettingsPanel({
   onVoiceCaptionsChange,
   credentials,
   onVoiceChange,
+  onVoiceSpeedChange,
   panelOpen,
   onShowInMenuBarChange,
+  onShowInDockChange,
   onQuit,
   voiceHotkey,
   voiceHotkeyHeld,
@@ -647,10 +730,14 @@ export function SettingsPanel({
         <PreferencesSection
           voice={settings.voice}
           onVoiceChange={onVoiceChange}
+          speed={settings.voiceSpeed}
+          onVoiceSpeedChange={onVoiceSpeedChange}
           captions={settings.voiceCaptions}
           onVoiceCaptionsChange={onVoiceCaptionsChange}
           shown={settings.showInMenuBar}
           onShowInMenuBarChange={onShowInMenuBarChange}
+          dockShown={settings.showInDock}
+          onShowInDockChange={onShowInDockChange}
         />
       ) : null}
 

@@ -208,6 +208,7 @@ control.
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Selects the Responses-compatible endpoint |
 | `LUKE_REALTIME_MODEL` | `gpt-realtime-2.1` | Selects the conversation model |
 | `LUKE_REALTIME_VOICE` | `cedar` | Selects the spoken voice until one is chosen in Settings · Preferences |
+| `LUKE_REALTIME_SPEED` | `1` | Selects the speaking pace (`0.75`, `1`, `1.25`, or `1.5`) until one is chosen in Settings · Preferences |
 
 Changing `OPENAI_BASE_URL` sends attention-review data to that endpoint instead
 of OpenAI. It does not redirect the conversation, which always uses OpenAI's own

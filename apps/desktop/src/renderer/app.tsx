@@ -7,6 +7,7 @@ import {
   REALTIME_STATUS,
   type RealtimeStatus,
   type RealtimeVoice,
+  type RealtimeVoiceSpeed,
   type SessionIdentity,
   VOICE_CAPTION_MAX_HEIGHT,
 } from "@sidecar/core";
@@ -720,6 +721,14 @@ export function App(): React.JSX.Element {
     return result.reason;
   }, []);
 
+  // The Dock icon, on the same round trip: the row reads the state the store
+  // actually holds rather than the one the press hoped for.
+  const changeShowInDock = useCallback(async (show: boolean) => {
+    const result = await window.sidecar.setShowInDock(show);
+    setSettings(result.settings);
+    return result.reason;
+  }, []);
+
   const credentials: CredentialEntryControl = {
     entry,
     begin: beginEntry,
@@ -734,6 +743,11 @@ export function App(): React.JSX.Element {
   // pressed, so what is shown as chosen is always what was actually saved.
   const changeVoice = useCallback((voice: RealtimeVoice) => {
     void window.sidecar.setVoice(voice).then((result) => setSettings(result.settings));
+  }, []);
+
+  // The pace, under the same rule as the voice above.
+  const changeVoiceSpeed = useCallback((speed: RealtimeVoiceSpeed) => {
+    void window.sidecar.setVoiceSpeed(speed).then((result) => setSettings(result.settings));
   }, []);
 
   /**
@@ -1192,10 +1206,12 @@ export function App(): React.JSX.Element {
               onVoiceCaptionsChange: changeVoiceCaptions,
               credentials,
               onVoiceChange: changeVoice,
+              onVoiceSpeedChange: changeVoiceSpeed,
               panelOpen,
               ...(shownHotkey.hotkey ? { voiceHotkey: shownHotkey.hotkey } : {}),
               voiceHotkeyHeld: shownHotkey.held,
               onShowInMenuBarChange: changeShowInMenuBar,
+              onShowInDockChange: changeShowInDock,
               onQuit: () => window.sidecar.quit(),
             }}
           />

@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
-import { REALTIME_DEFAULTS, REALTIME_VOICE } from "@sidecar/core";
+import { REALTIME_DEFAULTS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/core";
 import { type SecretCipher, SettingsStore } from "../src/settings-store";
 import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "../src/shared/contracts";
 import {
@@ -293,8 +293,9 @@ test("keeps both keys when two providers are saved at once", async (t) => {
       [FIRST_CLOUD]: sealed("first-cloud-key"),
       [SECOND_CLOUD]: sealed("second-cloud-key"),
     },
-    // Written even at its default, so the file states what it is rather than
-    // leaving it to be inferred from an absence.
+    // Written even at their defaults, so the file states what they are rather
+    // than leaving them to be inferred from an absence.
+    showInDock: false,
     showInMenuBar: true,
     voiceCaptions: false,
   });
@@ -492,6 +493,7 @@ test("keeps a Conductor key stored by an earlier version working", async (t) => 
   assert.deepEqual(persisted, {
     version: 2,
     apiKeys: { [CONDUCTOR]: sealed("conductor-replacement-key") },
+    showInDock: false,
     showInMenuBar: true,
     voiceCaptions: false,
   });
@@ -512,6 +514,7 @@ test("carries a key belonging to a provider this build does not know", async (t)
   assert.deepEqual(persisted, {
     version: 2,
     apiKeys: { "later-cloud": sealed("later-cloud-key"), [CONDUCTOR]: sealed(TEST_API_KEY) },
+    showInDock: false,
     showInMenuBar: true,
     voiceCaptions: false,
   });
@@ -530,6 +533,7 @@ test("shows the menu bar item until asked otherwise, and remembers the answer", 
   assert.deepEqual(JSON.parse(await readSettingsFile(directory)), {
     version: 2,
     apiKeys: {},
+    showInDock: false,
     showInMenuBar: false,
     voiceCaptions: false,
   });
@@ -596,6 +600,71 @@ test("shows the menu bar item when the file says something a boolean is not", as
   assert.equal((await storeIn(directory).snapshot()).showInMenuBar, true);
 });
 
+test("keeps Luke out of the Dock until asked, and remembers the answer", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  assert.equal((await store.snapshot()).showInDock, false);
+
+  const { settings, reason } = await store.setShowInDock(true);
+
+  assert.equal(reason, undefined);
+  assert.equal(settings.showInDock, true);
+  assert.deepEqual(JSON.parse(await readSettingsFile(directory)), {
+    version: 2,
+    apiKeys: {},
+    showInDock: true,
+    showInMenuBar: true,
+    voiceCaptions: false,
+  });
+  // The choice outlives the run that heard it.
+  assert.equal((await storeIn(directory).snapshot()).showInDock, true);
+});
+
+test("changes the Dock preference without touching the cipher", async (t) => {
+  // A preference is not a credential, so storing one must never be the reason
+  // the Keychain dialog appears.
+  const directory = await temporaryDirectory(t);
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+
+  const { settings } = await store.setShowInDock(true);
+
+  assert.equal(settings.showInDock, true);
+  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
+  assert.equal(settings.secretStorage, SECRET_STORAGE.UNKNOWN);
+});
+
+test("decides the Dock icon from the file alone, never the keychain", async (t) => {
+  // The icon is drawn at launch from this answer, so a locked or slow
+  // Keychain — which decrypting a stored key can wait on — must not be able to
+  // delay it.
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({
+      version: 2,
+      apiKeys: { [CONDUCTOR]: sealed(TEST_API_KEY) },
+      showInDock: true,
+    }),
+  );
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+
+  assert.equal(await store.showInDock(), true);
+  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
+});
+
+test("keeps Luke out of the Dock when the file says something a boolean is not", async (t) => {
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({ version: 2, apiKeys: {}, showInDock: "always" }),
+  );
+
+  assert.equal((await storeIn(directory).snapshot()).showInDock, false);
+});
+
 test("reports the default voice until one is chosen", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
@@ -647,6 +716,57 @@ test("ignores a stored or environment voice this build does not offer", async (t
 
   assert.equal(await store.readVoice(), undefined);
   assert.equal((await store.snapshot()).voice, REALTIME_DEFAULTS.VOICE);
+});
+
+test("reports the natural pace until one is chosen", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  assert.equal((await store.snapshot()).voiceSpeed, REALTIME_DEFAULTS.SPEED);
+  assert.equal(await store.readVoiceSpeed(), undefined);
+});
+
+test("stores the chosen pace plainly and reads it back from a new store instance", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+
+  const { settings, reason } = await store.setVoiceSpeed(REALTIME_VOICE_SPEED.QUICK);
+
+  assert.equal(reason, undefined);
+  assert.equal(settings.voiceSpeed, REALTIME_VOICE_SPEED.QUICK);
+  // A preference is not a credential, so choosing one never reaches the
+  // Keychain — and never raises its permission dialog.
+  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
+  assert.equal(await storeIn(directory).readVoiceSpeed(), REALTIME_VOICE_SPEED.QUICK);
+});
+
+test("prefers the chosen pace over the environment, and the environment over the default", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory, {
+    environment: { LUKE_REALTIME_SPEED: String(REALTIME_VOICE_SPEED.SLOW) },
+  });
+
+  assert.equal((await store.snapshot()).voiceSpeed, REALTIME_VOICE_SPEED.SLOW);
+  assert.equal(await store.readVoiceSpeed(), undefined);
+
+  await store.setVoiceSpeed(REALTIME_VOICE_SPEED.FAST);
+  assert.equal((await store.snapshot()).voiceSpeed, REALTIME_VOICE_SPEED.FAST);
+
+  await store.setVoiceSpeed(undefined);
+  assert.equal((await store.snapshot()).voiceSpeed, REALTIME_VOICE_SPEED.SLOW);
+});
+
+test("ignores a stored or environment pace this build does not offer", async (t) => {
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({ version: 2, apiKeys: {}, voiceSpeed: 3 }),
+  );
+  const store = storeIn(directory, { environment: { LUKE_REALTIME_SPEED: "0.1" } });
+
+  assert.equal(await store.readVoiceSpeed(), undefined);
+  assert.equal((await store.snapshot()).voiceSpeed, REALTIME_DEFAULTS.SPEED);
 });
 
 test("the voice and a stored key survive each other's writes", async (t) => {

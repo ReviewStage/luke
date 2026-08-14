@@ -6,6 +6,7 @@ import type {
   ProviderMessageResult,
   RealtimeConnection,
   RealtimeVoice,
+  RealtimeVoiceSpeed,
   Rectangle,
   ResolvedNotchGeometry,
   SessionIdentity,
@@ -53,6 +54,12 @@ export interface AppSettings {
    */
   secretStorage: SecretStorage;
   /**
+   * Whether Luke stands in the Dock as well as at the notch. Off by default:
+   * an accessory app is what Luke ships as, so an icon among the user's apps
+   * is opted into rather than discovered.
+   */
+  showInDock: boolean;
+  /**
    * Whether Luke stands in the menu bar as well as at the notch. Hiding the
    * status item costs nothing it alone provides — Settings and Quit are both in
    * the panel — so the choice is the user's to make and to keep.
@@ -64,6 +71,11 @@ export interface AppSettings {
    * marks the voice that would actually be heard, not just a stored value.
    */
   voice: RealtimeVoice;
+  /**
+   * The pace Luke speaks at, resolved the same way as the voice: the one the
+   * user chose, else the launch environment's, else the natural rate.
+   */
+  voiceSpeed: RealtimeVoiceSpeed;
   /**
    * Whether Luke's words are captioned on screen while he speaks. Off by
    * default: the voice experience ships as sound, and words drawn under the
@@ -177,6 +189,11 @@ export interface AppBridge {
    */
   setVoice(voice: RealtimeVoice): Promise<SettingsUpdateResult>;
   /**
+   * Chooses the pace Luke speaks at, from the set fixed by this build. It
+   * reaches the next conversation the same way the voice does.
+   */
+  setVoiceSpeed(speed: RealtimeVoiceSpeed): Promise<SettingsUpdateResult>;
+  /**
    * Opens a provider's own API-key page in the default browser. The renderer
    * names the provider, not the address, so the set of pages Luke can open is
    * fixed by this build.
@@ -184,6 +201,8 @@ export interface AppBridge {
   openProviderApiKeys(providerId: CredentialProviderId): void;
   /** Shows or hides the menu bar status item, and remembers the choice. */
   setShowInMenuBar(show: boolean): Promise<SettingsUpdateResult>;
+  /** Shows or hides the Dock icon, and remembers the choice. */
+  setShowInDock(show: boolean): Promise<SettingsUpdateResult>;
   /** Turns the on-screen caption of Luke's speech on or off. */
   setVoiceCaptions(enabled: boolean): Promise<SettingsUpdateResult>;
   /**
@@ -239,9 +258,11 @@ export const channels = {
   openMicrophoneSettings: "app:open-microphone-settings",
   setProviderApiKey: "app:set-provider-api-key",
   setVoice: "app:set-voice",
+  setVoiceSpeed: "app:set-voice-speed",
   setVoiceCaptions: "app:set-voice-captions",
   openProviderApiKeys: "app:open-provider-api-keys",
   setShowInMenuBar: "app:set-show-in-menu-bar",
+  setShowInDock: "app:set-show-in-dock",
   openSession: "app:open-session",
   sendSessionMessage: "app:send-session-message",
   executeSessionControl: "app:execute-session-control",

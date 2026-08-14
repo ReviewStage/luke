@@ -11,6 +11,7 @@ import {
   functionCallFollowUpEvents,
   functionCallOutputEvents,
   isRealtimeVoice,
+  isRealtimeVoiceSpeed,
   maximumVoiceContextSessions,
   normalizeSession,
   proactiveSpeechEvents,
@@ -21,6 +22,7 @@ import {
   REALTIME_SESSION_TYPE,
   REALTIME_TOOL,
   REALTIME_VOICE_LIST,
+  REALTIME_VOICE_SPEED_LIST,
   realtimeClientSecretRequest,
   realtimeCredentialFromResponse,
   realtimeCredentialIsUsable,
@@ -136,6 +138,26 @@ test("every offered voice is recognized and anything else is refused", () => {
   for (const voice of REALTIME_VOICE_LIST) assert.equal(isRealtimeVoice(voice), true);
   for (const value of ["baritone", "", "  cedar  ", undefined, null, 3]) {
     assert.equal(isRealtimeVoice(value), false);
+  }
+});
+
+test("the session is minted at the voice's natural pace unless asked otherwise", () => {
+  assert.equal(REALTIME_DEFAULTS.SPEED, 1);
+  assert.equal(realtimeSessionConfig().audio.output.speed, 1);
+  assert.equal(realtimeSessionConfig({ speed: 1.25 }).audio.output.speed, 1.25);
+});
+
+test("a pace that is not a usable number falls back rather than minting a refusal", () => {
+  for (const speed of [Number.NaN, Number.POSITIVE_INFINITY, 0, -1]) {
+    assert.equal(realtimeSessionConfig({ speed }).audio.output.speed, REALTIME_DEFAULTS.SPEED);
+  }
+});
+
+test("every offered pace is recognized and anything else is refused", () => {
+  assert.equal(isRealtimeVoiceSpeed(REALTIME_DEFAULTS.SPEED), true);
+  for (const speed of REALTIME_VOICE_SPEED_LIST) assert.equal(isRealtimeVoiceSpeed(speed), true);
+  for (const value of [0.5, 2, 0, -1, "1", "", undefined, null]) {
+    assert.equal(isRealtimeVoiceSpeed(value), false);
   }
 });
 
