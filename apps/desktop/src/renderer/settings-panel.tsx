@@ -49,6 +49,8 @@ import {
 import type { FeedbackEntryControl } from "./feedback-entry";
 import { FeedbackSection } from "./feedback-panel";
 import { Keycaps } from "./keycaps";
+import { errandTargetProps } from "./luke-errand";
+import { APP_SETTING_ID } from "./luke-guide";
 import { microphoneAccessRow } from "./microphone-access";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import { CloudBadge, ProviderMark } from "./provider-marks";
@@ -1035,8 +1037,16 @@ function VoiceSection({
               starting afresh. */}
           <small>How Luke sounds; a conversation under way starts afresh.</small>
         </span>
+        {/* Every control a spoken change can reach carries the id that change
+            names it by, so an errand lands on the control itself rather than
+            somewhere near it. The control is marked rather than the row — the
+            switch is what moved, and the row is only what explains it — and,
+            here, the `select` rather than the box positioning it: the errand
+            outlines what it lands on, and only the `select` is drawn with the
+            corners that outline has to take. */}
         <span className="voice-select">
           <select
+            {...errandTargetProps(APP_SETTING_ID.VOICE)}
             aria-label="Voice"
             value={voice}
             onChange={(event) => {
@@ -1073,6 +1083,7 @@ function VoiceSection({
         </span>
         <span className="voice-select">
           <select
+            {...errandTargetProps(APP_SETTING_ID.VOICE_SPEED)}
             aria-label="Speed"
             value={speed}
             onChange={(event) => {
@@ -1117,6 +1128,7 @@ function VoiceSection({
           aria-checked={captions}
           aria-label="Caption Luke's speech on screen"
           className="switch"
+          {...errandTargetProps(APP_SETTING_ID.VOICE_CAPTIONS)}
           disabled={captionsBusy}
           onClick={() => void toggleCaptions()}
         >
@@ -1138,6 +1150,7 @@ function VoiceSection({
           aria-checked={ducking}
           aria-label="Quiet Music and Spotify while talking with Luke"
           className="switch"
+          {...errandTargetProps(APP_SETTING_ID.DUCK_OTHER_MEDIA)}
           disabled={duckBusy}
           onClick={() => void toggleDucking()}
         >
@@ -1162,6 +1175,7 @@ function VoiceSection({
           aria-checked={notifications}
           aria-label="Announce when a session needs you"
           className="switch"
+          {...errandTargetProps(APP_SETTING_ID.SESSION_NOTIFICATIONS)}
           disabled={notificationsBusy}
           onClick={() => void toggleNotifications()}
         >
@@ -1242,6 +1256,7 @@ function AppearanceSection({
           aria-checked={shown}
           aria-label="Show Luke in the menu bar"
           className="switch"
+          {...errandTargetProps(APP_SETTING_ID.SHOW_IN_MENU_BAR)}
           disabled={busy}
           onClick={() => void toggle()}
         >
@@ -1258,6 +1273,7 @@ function AppearanceSection({
           aria-checked={dockShown}
           aria-label="Show Luke in the Dock"
           className="switch"
+          {...errandTargetProps(APP_SETTING_ID.SHOW_IN_DOCK)}
           disabled={dockBusy}
           onClick={() => void toggleDock()}
         >
@@ -1274,6 +1290,7 @@ function AppearanceSection({
           aria-checked={allDisplays}
           aria-label="Show Luke on all displays"
           className="switch"
+          {...errandTargetProps(APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS)}
           disabled={displayBusy}
           onClick={() => void toggleAllDisplays()}
         >
@@ -1289,6 +1306,7 @@ function AppearanceSection({
         </span>
         <span className="voice-select">
           <select
+            {...errandTargetProps(APP_SETTING_ID.FORM_FACTOR)}
             aria-label="Form factor"
             value={formFactor}
             disabled={formBusy}

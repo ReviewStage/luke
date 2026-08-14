@@ -71,6 +71,17 @@ export const APP_SETTING_ID = {
 
 export type AppSettingId = (typeof APP_SETTING_ID)[keyof typeof APP_SETTING_ID];
 
+const APP_SETTING_ID_LIST: readonly AppSettingId[] = Object.values(APP_SETTING_ID);
+
+/**
+ * Whether an id read back off a guide entry is one of Luke's own settings. A
+ * guide entry carries its id as plain text — the snapshot is data on its way
+ * out to a conversation — so anything reading one back has to ask.
+ */
+export function isAppSettingId(value: string): value is AppSettingId {
+  return APP_SETTING_ID_LIST.includes(value as AppSettingId);
+}
+
 /** Where the switches live, said once so every entry words it the same way. */
 const SETTINGS_TAB = "the panel's Settings tab";
 
@@ -469,7 +480,9 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "provider allows. Settings holds a front page whose rows open its Voice, Appearance, " +
         "Keyboard shortcuts, and Connections pages — each led back out by its back button or " +
         "Escape — and keeps the microphone permission, the Feedback section, and Quit on the " +
-        "front page itself.",
+        "front page itself. A change Luke makes himself is shown as it is made: the panel " +
+        "comes forward on the tab, and the page, the change belongs to, and his face leaves " +
+        "the strip under the housing, dives to the control that moved, and floats back.",
     },
     {
       label: "Feedback and prompts",

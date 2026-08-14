@@ -1,0 +1,702 @@
+import { APP_PANEL_TAB, type AppPanelTab, type AppToolAction } from "@sidecar/core";
+import { useEffect, useRef } from "react";
+import { flushSync } from "react-dom";
+import { LukeFace } from "./luke-face";
+import { type AppSettingId, isAppSettingId } from "./luke-guide";
+import { HIT_REGION, HIT_REGION_ATTRIBUTE, PANEL_PRESENTATION } from "./panel-state";
+import { parseMilliseconds, parsePixels, STILL_MS } from "./session-motion";
+
+/**
+ * Luke signing his own work.
+ *
+ * A setting or a view changes two ways: a hand on the control, or Luke acting
+ * on something asked of him. The control answers identically either way — and
+ * a switch that flips with nobody near it reads as a glitch rather than as an
+ * answer. So Luke goes and does it in the open: he leaves the strip under the
+ * housing, dives to the very control that changed, taps it, and floats back.
+ *
+ * The dive and the tap are the whole of the emphasis. The way home is the
+ * quietest motion that still reads as something moving under its own power,
+ * because by then the point has been made and all that is left is to get out
+ * of the way of the control he was pointing at.
+ *
+ * **There is only ever one Luke on screen.** The strip's own face is held
+ * invisible for exactly as long as the flight lasts, so what crosses the panel
+ * reads as the face itself having left its post rather than as a second copy
+ * of it. The flying element is a stand-in — the strip's face is remounted
+ * whenever a gesture plays, and an animation running on a node React is about
+ * to replace would die mid-air — but it is an exact one: it sets off from the
+ * face's own measured box, at the face's own measured size, wearing the colour
+ * the face is wearing that moment, and it is parked back on top of the face
+ * before the face fades back in underneath it. Neither handover has a frame
+ * where two are drawn or none is.
+ *
+ * The colour is answered in the stylesheet off the same `data-voice` the face
+ * takes its own from, rather than measured here and carried: it is the one
+ * report the capsule makes of whose turn it is — blue while Luke is talking,
+ * green while he is listening — and an errand flies out of a reply, so it
+ * would be the wrong moment of all moments to drop it. Keyed off the one
+ * attribute, the two cannot disagree even mid-flight, which is what the
+ * handover needs: a colour snapshotted at launch would swap to a different one
+ * the instant the face came back underneath.
+ *
+ * The errand is drawing and nothing else. It is armed by the tool-call carrier
+ * alone — a row someone pressed themselves needs no attribution, and an act
+ * that was refused has nothing to sign — and it decides nothing: it reads
+ * where two elements are and moves between them. An act made while the panel
+ * is away flies nowhere at all, because attribution is only worth anything to
+ * someone who can see what was attributed.
+ *
+ * Everything moves with `transform` and `opacity` alone; the control it lands
+ * on is read for its box and never restyled, so nothing about a settings row
+ * changes because an errand happened to visit it. The beats come from the
+ * motion tokens, which is what makes a capture run and reduced motion — both
+ * of which zero them — get no errand rather than an instant one.
+ */
+
+/** How a control says an errand may land on it, and which one it answers to. */
+export const ERRAND_TARGET_ATTRIBUTE = "data-errand-target";
+
+/** How Luke's own face says an errand sets off from it. */
+export const ERRAND_ORIGIN_ATTRIBUTE = "data-errand-origin";
+
+/**
+ * The landing places that are not a setting's own control. A setting is named
+ * by the very id a spoken change names it by, so it needs no entry here; these
+ * are the parts of the panel that say what you are looking at rather than what
+ * it is set to.
+ */
+export const ERRAND_TARGET = {
+  SESSIONS_TAB: "tab-sessions",
+  SETTINGS_TAB: "tab-settings",
+  LIST_OPTIONS: "list-options",
+} as const;
+
+export type ErrandTarget = AppSettingId | (typeof ERRAND_TARGET)[keyof typeof ERRAND_TARGET];
+
+const TAB_ERRAND_TARGET: Record<AppPanelTab, ErrandTarget> = {
+  [APP_PANEL_TAB.SESSIONS]: ERRAND_TARGET.SESSIONS_TAB,
+  [APP_PANEL_TAB.SETTINGS]: ERRAND_TARGET.SETTINGS_TAB,
+};
+
+/** Which landing place a tab is. Exhaustive over the tabs a spoken ask names. */
+export function tabErrandTarget(tab: AppPanelTab): ErrandTarget {
+  return TAB_ERRAND_TARGET[tab];
+}
+
+/**
+ * What a control spreads onto itself to be somewhere an errand can land.
+ *
+ * Mark the element that is *drawn* as the control, not a box that happens to
+ * hold it. The errand measures what it marks and outlines it in the element's
+ * own corners, so a wrapper positioning something rounded — with no radius of
+ * its own, because it draws nothing — earns a ring with square corners around
+ * a control that has none. A control whose roundness lives on a child, or
+ * behind it, either declares that radius itself or hands the mark down.
+ */
+export function errandTargetProps(target: ErrandTarget): Record<string, string> {
+  return { [ERRAND_TARGET_ATTRIBUTE]: target };
+}
+
+/** What Luke's own face spreads onto itself to be where one sets off from. */
+export function errandOriginProps(): Record<string, string> {
+  return { [ERRAND_ORIGIN_ATTRIBUTE]: "true" };
+}
+
+/**
+ * Where an act should be signed, best first. More than one because the panel
+ * does not always draw the best answer: the options button carries both the
+ * narrowing and the ordering, but it is only offered beside a list with
+ * something to choose between, so the tab stands behind it. The flight takes
+ * the first candidate actually drawn, and an act with none flies nowhere.
+ */
+export function errandTargets(action: AppToolAction): readonly ErrandTarget[] {
+  if (action.kind === "setting") {
+    // The guide's ids travel as plain text, so one that names no setting of
+    // Luke's is no landing place either.
+    return isAppSettingId(action.setting.id) ? [action.setting.id] : [];
+  }
+  if (action.kind !== "panel") return [];
+  const tab = tabErrandTarget(action.tab);
+  // A narrowing or a re-ordering is the news; the tab is only where it
+  // happened, and it may not have changed at all.
+  if (action.filter !== undefined || action.sort !== undefined) {
+    return [ERRAND_TARGET.LIST_OPTIONS, tab];
+  }
+  return [tab];
+}
+
+/**
+ * What has to have finished happening before an errand can measure anything.
+ *
+ * Everything the flight reads — where the face is, where the control is, how
+ * wide the shape is — is read off elements that may still be arriving, and a
+ * measurement taken mid-arrival lands the mark where a row was passing rather
+ * than where it came to rest. So the errand waits out whatever the act it is
+ * signing has set in motion.
+ */
+export const ERRAND_WAIT = {
+  /** The panel is up and already showing the control: a beat, and go. */
+  AT_ONCE: "at-once",
+  /** The panel opened for this, so a whole page of content is arriving. */
+  CONTENT: "content",
+  /** A settings page is being turned too, and one leaves before the next arrives. */
+  PAGE: "page",
+} as const;
+
+export type ErrandWait = (typeof ERRAND_WAIT)[keyof typeof ERRAND_WAIT];
+
+/** One errand, as the app asks for it. */
+export interface Errand {
+  targets: readonly ErrandTarget[];
+  wait: ErrandWait;
+  /** Which run this is, so asking twice for one control flies twice. */
+  run: number;
+}
+
+/** A box, as either a `DOMRect` or a plain reading of one. */
+export interface ErrandBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/** Where a flight starts, where it lands, and what it lands on. */
+export interface ErrandJourney {
+  /** The mark's top-left at the strip, in the stage's own coordinates. */
+  from: { x: number; y: number };
+  /** The mark's top-left once centred on the control. */
+  to: { x: number; y: number };
+  /** The mark's size, taken from the face it peels off rather than chosen. */
+  size: { width: number; height: number };
+}
+
+/**
+ * One measured box in the stage's own coordinates. Everything is read against
+ * the stage rather than the viewport because that is what the flight is drawn
+ * in: the strip, the panel, the black itself, and both drawn elements share
+ * one containing box, so a single subtraction puts every reading in one frame.
+ */
+export function errandBound(stage: ErrandBox, box: ErrandBox): ErrandBox {
+  return {
+    left: box.left - stage.left,
+    top: box.top - stage.top,
+    width: box.width,
+    height: box.height,
+  };
+}
+
+/** The flight, in the stage's coordinates. */
+export function errandJourney(stage: ErrandBox, face: ErrandBox, target: ErrandBox): ErrandJourney {
+  const landing = errandBound(stage, target);
+  const home = errandBound(stage, face);
+  return {
+    from: { x: home.left, y: home.top },
+    // Centred on the control, so a wide switch and a narrow tab are both
+    // landed on rather than beside.
+    to: {
+      x: landing.left + (landing.width - home.width) / 2,
+      y: landing.top + (landing.height - home.height) / 2,
+    },
+    size: { width: home.width, height: home.height },
+  };
+}
+
+/** The motion tokens a flight is timed by, already read as milliseconds. */
+export interface ErrandTokens {
+  shape: number;
+  quick: number;
+  exit: number;
+  expand: number;
+  stagger: number;
+  /** How many rows the stack still staggers before it stops accumulating. */
+  fanLimit: number;
+}
+
+/** When a flight sets off, how long it lasts, and where its moments fall in it. */
+export interface ErrandBeats {
+  delay: number;
+  duration: number;
+  /** The fraction of the flight at which the mark reaches the control. */
+  arrival: number;
+  /** The fraction at which it sets off home again. */
+  departure: number;
+  /**
+   * The fraction at which it is back on the face's own box. It is parked there
+   * for what is left, which is the window the strip's face fades back in
+   * underneath it — so the handover has no frame with two Lukes drawn, and
+   * none with neither.
+   */
+  home: number;
+}
+
+/**
+ * Whether there is a flight to run at all. Read off the shape token itself
+ * rather than off the total the beats add up to: a capture run zeroes the
+ * tokens and reduced motion leaves each of them a millisecond, and three of
+ * those summed would clear a floor that every one of them individually asked
+ * to stay under. Neither wants a face crossing the panel at any speed.
+ */
+export function errandFlies(tokens: ErrandTokens): boolean {
+  return tokens.shape >= STILL_MS;
+}
+
+/**
+ * The flight's shape in time: out on the surface's own spring, a beat on the
+ * control, and the same journey back. Nothing is written in milliseconds here
+ * — every number is derived from a token — which is how a capture run and
+ * reduced motion silence the errand without knowing it exists.
+ *
+ * The wait before setting off is the whole of what the act it signs has set in
+ * motion. A panel that had to open costs the shape's travel plus the delay and
+ * stagger its content arrives on; a settings page turned as well costs that
+ * again — the pages arrive on the very same fan — behind the exit the leaving
+ * page takes first. An errand that set off inside either would be crossing a
+ * surface still growing and landing where a row had not finished arriving.
+ */
+export function errandBeats(tokens: ErrandTokens, wait: ErrandWait): ErrandBeats {
+  const duration = tokens.shape * 2 + tokens.quick;
+  const arrival = tokens.shape / duration;
+  const arriving = tokens.expand + tokens.stagger * tokens.fanLimit + tokens.shape;
+  return {
+    delay:
+      wait === ERRAND_WAIT.AT_ONCE
+        ? tokens.quick
+        : wait === ERRAND_WAIT.PAGE
+          ? tokens.exit + arriving
+          : arriving,
+    duration,
+    arrival,
+    departure: (tokens.shape + tokens.quick) / duration,
+    home: (duration - tokens.exit) / duration,
+  };
+}
+
+/** How many points the drift is drawn with. Enough that the bow reads as curved. */
+const DRIFT_SAMPLES = 8;
+
+/**
+ * How far off the straight run the drift bows, as a share of the way home.
+ * Proportional, so a short hop and a long climb bow alike — and small, because
+ * this is a drift rather than a manoeuvre: it is there to keep the way home
+ * from being a ruled line, not to be noticed as a shape of its own.
+ */
+const DRIFT_SWAY_SHARE = 0.09;
+
+/** No smaller than he is, or a short hop would bow invisibly. */
+const DRIFT_SWAY_MIN_MARKS = 1;
+
+/** One sampled point of the way home. */
+export interface ErrandDriftStep {
+  /** Where in the whole flight this point falls. */
+  offset: number;
+  point: { x: number; y: number };
+}
+
+/**
+ * How far along the way home he is at a given moment of it. Smoothstep: level
+ * at both ends and quickest in the middle, so he lifts off the control rather
+ * than snapping away from it and settles onto the strip rather than arriving
+ * at it. The speed is carried here rather than in the keyframes' easing
+ * because the path is sampled — an easing per segment would ease at every
+ * sample and read as a series of small hesitations.
+ */
+function driftEase(progress: number): number {
+  return progress * progress * (3 - 2 * progress);
+}
+
+/** The largest sway that keeps `base + sway * direction` between two edges. */
+function roomFor(base: number, direction: number, low: number, high: number): number {
+  if (direction > 0) return (high - base) / direction;
+  if (direction < 0) return (low - base) / direction;
+  return Number.POSITIVE_INFINITY;
+}
+
+/**
+ * The way home, as a float rather than a line.
+ *
+ * The job on the way down is to be seen arriving at one control; the job on
+ * the way back is only to get out of the way, so it is the quietest motion
+ * that still reads as a thing moving under its own power. He eases off the
+ * control, bows gently to one side, and settles onto the strip — one half of a
+ * sine's worth of sway, zero at both ends, so the drift joins the straight run
+ * without a corner at either.
+ *
+ * Which side he leans is chosen rather than fixed: toward the side the strip
+ * is on rather than the side the desktop is on. `bound` is the drawn shape,
+ * and it decides how far he may lean at all — the run itself is between two
+ * points already on the black, so only the sway can leave it, and each sampled
+ * point moves off the run by the sway times a fixed direction. The widest
+ * drift the shape will hold is therefore just the tightest of those limits,
+ * solved rather than guessed at.
+ */
+export function errandDrift(
+  journey: ErrandJourney,
+  beats: ErrandBeats,
+  bound: ErrandBox,
+): readonly ErrandDriftStep[] {
+  const away = { x: journey.from.x - journey.to.x, y: journey.from.y - journey.to.y };
+  const distance = Math.hypot(away.x, away.y);
+  // Nowhere to go is no drift, and no flight: every step would be one point.
+  if (distance === 0) return [];
+  const along = { x: away.x / distance, y: away.y / distance };
+  // A quarter turn off the run, taken on whichever side leans toward the strip.
+  const acrossX = -along.y;
+  const facing = away.x !== 0 && acrossX !== 0 && Math.sign(acrossX) !== Math.sign(away.x) ? -1 : 1;
+  const across = { x: acrossX * facing, y: along.x * facing };
+
+  const baseAt = (travelled: number) => ({
+    x: journey.to.x + away.x * travelled,
+    y: journey.to.y + away.y * travelled,
+  });
+  // Half a sine, so the bow is widest at the middle of the run and nothing at
+  // either end of it.
+  const leanAt = (travelled: number) => Math.sin(Math.PI * travelled);
+
+  let sway = Math.max(distance * DRIFT_SWAY_SHARE, journey.size.width * DRIFT_SWAY_MIN_MARKS);
+  for (let index = 0; index <= DRIFT_SAMPLES; index += 1) {
+    const travelled = driftEase(index / DRIFT_SAMPLES);
+    const base = baseAt(travelled);
+    const lean = leanAt(travelled);
+    sway = Math.min(
+      sway,
+      roomFor(base.x, across.x * lean, bound.left, bound.left + bound.width - journey.size.width),
+      roomFor(base.y, across.y * lean, bound.top, bound.top + bound.height - journey.size.height),
+    );
+  }
+  // A run whose own ends are outside the shape can ask for a negative sway.
+  // Nothing is the right answer there: the drift collapses onto the run, which
+  // is the one path already known to be on the black.
+  sway = Math.max(0, sway);
+
+  const steps: ErrandDriftStep[] = [];
+  for (let index = 0; index <= DRIFT_SAMPLES; index += 1) {
+    const progress = index / DRIFT_SAMPLES;
+    const travelled = driftEase(progress);
+    const base = baseAt(travelled);
+    const lean = leanAt(travelled) * sway;
+    steps.push({
+      offset: beats.departure + (beats.home - beats.departure) * progress,
+      point: { x: base.x + across.x * lean, y: base.y + across.y * lean },
+    });
+  }
+  return steps;
+}
+
+const MOTION_TOKEN = {
+  SPRING: "--spring",
+  SPRING_FAST: "--spring-fast",
+  SHAPE_DURATION: "--duration-shape",
+  QUICK_DURATION: "--duration-quick",
+  EXIT_DURATION: "--duration-exit",
+  EXIT_EASING: "--motion-exit",
+  EXPAND_DELAY: "--expand-delay",
+  ROW_STAGGER: "--row-stagger",
+  ROW_FAN_LIMIT: "--row-fan-limit",
+} as const;
+
+type MotionToken = (typeof MOTION_TOKEN)[keyof typeof MOTION_TOKEN];
+
+/**
+ * How far past its own size the mark swells as it lands. The tap is the whole
+ * point of the landing, and a mark that only stopped would read as having
+ * drifted there.
+ */
+const LANDING_SCALE = 1.32;
+
+/** How far into its own life the ring is at full strength, as a fraction. */
+const RING_BLOOM = 0.26;
+
+/** How far past the control the ring has spread by the time it is gone. */
+const RING_SPREAD = 1.16;
+
+/** Only a control a reader can actually see is worth flying to. */
+function drawn(element: HTMLElement): boolean {
+  return element.checkVisibility({ opacityProperty: true });
+}
+
+/**
+ * The first candidate the panel is actually drawing. Read as one pass over the
+ * marked elements rather than a selector per candidate, so the document is
+ * queried once and the candidates are matched by their own ids.
+ */
+function landingPlace(
+  stage: HTMLElement,
+  targets: readonly ErrandTarget[],
+): HTMLElement | undefined {
+  const marked = new Map<string, HTMLElement>();
+  for (const element of stage.querySelectorAll<HTMLElement>(`[${ERRAND_TARGET_ATTRIBUTE}]`)) {
+    const target = element.getAttribute(ERRAND_TARGET_ATTRIBUTE);
+    if (target !== null && !marked.has(target) && drawn(element)) marked.set(target, element);
+  }
+  for (const target of targets) {
+    const element = marked.get(target);
+    if (element !== undefined) return element;
+  }
+  return undefined;
+}
+
+export interface LukeErrandProps {
+  errand?: Errand;
+  /**
+   * The tap has landed, which is the moment the control it flew to should be
+   * seen to move. Called once per errand and always — at once when there is
+   * no flight to make — so whatever is waiting on it is never left held.
+   */
+  onLanded?: () => void;
+  /**
+   * The flight is over, or was abandoned. Called once per errand and always,
+   * on the same terms, so a panel that was stood up for an errand knows when
+   * it may stand back down.
+   */
+  onReturned?: () => void;
+}
+
+/**
+ * Luke on his way to a control, and the ring he leaves when he gets there.
+ * Both are always mounted and both rest invisible: an element that arrived
+ * with the flight would have no size or place to set off from, and mounting
+ * one is a commit the panel does not need in the middle of a spoken answer.
+ * Neither is a second Luke — the strip's own face is held invisible for
+ * exactly as long as this one is drawn.
+ *
+ * The two callbacks are what let the act look like Luke's doing rather than
+ * something he arrived to inspect. Both fire exactly once per errand, on every
+ * path out — the flight running its course, a target that was never drawn,
+ * tokens held still, a panel closing underneath it — because each of them
+ * releases something the app is holding, and a hold nobody releases is worse
+ * than a beat landing early.
+ */
+export function LukeErrand({ errand, onLanded, onReturned }: LukeErrandProps): React.JSX.Element {
+  const mark = useRef<HTMLSpanElement>(null);
+  const ring = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    // Each beat is released once and only once, however this effect leaves —
+    // and releasing one that never came due is better than leaving the app
+    // holding a switch that will never be allowed to move.
+    let landed = false;
+    let returned = false;
+    const land = () => {
+      if (landed) return;
+      landed = true;
+      onLanded?.();
+    };
+    const returnHome = () => {
+      land();
+      if (returned) return;
+      returned = true;
+      onReturned?.();
+    };
+
+    const markElement = mark.current;
+    const ringElement = ring.current;
+    if (errand === undefined) return;
+    if (markElement === null || ringElement === null) return returnHome();
+    // The stage is the mark's own containing box, so it is found rather than
+    // handed down: the two are the same element by construction.
+    const stage = markElement.offsetParent;
+    if (!(stage instanceof HTMLElement)) return returnHome();
+
+    const style = getComputedStyle(stage);
+    const token = (name: MotionToken) => style.getPropertyValue(name);
+    const tokens: ErrandTokens = {
+      shape: parseMilliseconds(token(MOTION_TOKEN.SHAPE_DURATION)),
+      quick: parseMilliseconds(token(MOTION_TOKEN.QUICK_DURATION)),
+      exit: parseMilliseconds(token(MOTION_TOKEN.EXIT_DURATION)),
+      expand: parseMilliseconds(token(MOTION_TOKEN.EXPAND_DELAY)),
+      stagger: parseMilliseconds(token(MOTION_TOKEN.ROW_STAGGER)),
+      // A count rather than a length, but the same reading of a number off a
+      // token, so it shares the reader.
+      fanLimit: parsePixels(token(MOTION_TOKEN.ROW_FAN_LIMIT)),
+    };
+    if (!errandFlies(tokens)) return returnHome();
+    const beats = errandBeats(tokens, errand.wait);
+    const spring = token(MOTION_TOKEN.SPRING).trim() || "ease";
+    const springFast = token(MOTION_TOKEN.SPRING_FAST).trim() || "ease";
+    const exitEasing = token(MOTION_TOKEN.EXIT_EASING).trim() || "ease";
+
+    const flight: Animation[] = [];
+    let beat: number | undefined;
+    let settle: number | undefined;
+    const launch = window.setTimeout(() => {
+      // Read at the launch rather than when the errand was armed: the panel may
+      // have closed behind the answer, and everything below is measured off a
+      // shape that has finished moving.
+      if (stage.dataset.presentation !== PANEL_PRESENTATION.PANEL) return returnHome();
+      const face = stage.querySelector<HTMLElement>(`[${ERRAND_ORIGIN_ATTRIBUTE}]`);
+      const target = landingPlace(stage, errand.targets);
+      // No face is the meter standing in Luke's place, and no target is a
+      // control this build does not draw. Either way there is no journey.
+      if (face === null || !drawn(face) || target === undefined) return returnHome();
+      // A control below the fold of the settings tab is scrolled to first, so
+      // the flight lands somewhere a reader is looking. `nearest` leaves an
+      // already-visible control exactly where it is, which is the usual case.
+      target.scrollIntoView({ block: "nearest", behavior: "instant" });
+
+      const stageBox = stage.getBoundingClientRect();
+      const journey = errandJourney(
+        stageBox,
+        face.getBoundingClientRect(),
+        target.getBoundingClientRect(),
+      );
+      // The black itself, which is what the loop may not be drawn past. The
+      // surface is the one element that is the shape at whatever size it is
+      // currently drawn, and it already names itself for the pointer, so the
+      // flight asks the same element the same question.
+      const surface = stage.querySelector<HTMLElement>(
+        `[${HIT_REGION_ATTRIBUTE}="${HIT_REGION.SURFACE}"]`,
+      );
+      const bound = errandBound(stageBox, (surface ?? stage).getBoundingClientRect());
+      const drift = errandDrift(journey, beats, bound);
+      // A control drawn exactly where the face is has no journey to make.
+      if (drift.length === 0) return returnHome();
+
+      markElement.style.width = `${journey.size.width}px`;
+      markElement.style.height = `${journey.size.height}px`;
+
+      // Translate, then swell: the origin is the mark's own centre, so the tap
+      // happens about the middle of the face rather than dragging it off
+      // wherever it has travelled to.
+      const at = (point: { x: number; y: number }, scale: number) =>
+        `translate3d(${point.x}px, ${point.y}px, 0) scale(${scale})`;
+
+      // Kept one at a time, so a malformed token throwing out of a later
+      // `animate` still leaves nothing running: a half-built flight would send
+      // the mark across the panel over a face that never went invisible.
+      const play = (
+        element: HTMLElement,
+        keyframes: Keyframe[],
+        options: KeyframeAnimationOptions,
+      ) => {
+        flight.push(element.animate(keyframes, options));
+      };
+
+      // Nothing moving is the better failure, and there is nothing else to
+      // unwind because both of these elements rest invisible.
+      try {
+        play(
+          markElement,
+          [
+            // Out on the surface's own spring, which is what makes the dive
+            // read as part of the same object as the panel.
+            { offset: 0, transform: at(journey.from, 1), easing: spring },
+            // The tap: he overshoots his own size on landing and settles out
+            // of it over the beat, so the arrival is a press rather than a
+            // drift to a halt. This is the moment that carries the meaning,
+            // and it is the only emphatic one in the flight.
+            { offset: beats.arrival, transform: at(journey.to, LANDING_SCALE), easing: springFast },
+            // The float home. Linear between the drift's own steps, because
+            // its speed is already in where those steps fall — an easing per
+            // segment would ease at every sample and read as a series of small
+            // hesitations rather than as one unhurried drift.
+            ...drift.map((step) => ({
+              offset: step.offset,
+              transform: at(step.point, 1),
+              easing: "linear",
+            })),
+            // Parked on the face's own box for what is left, while the face
+            // fades back in under him.
+            { offset: 1, transform: at(journey.from, 1) },
+          ],
+          { duration: beats.duration },
+        );
+        // Drawn for exactly as long as the flight lasts and cut on the frame
+        // it ends, rather than faded out: by then he is parked on a face that
+        // is already fully drawn underneath him, so there is nothing for a
+        // fade to cover and a fade would only make two of him visible.
+        play(markElement, [{ opacity: 1 }, { opacity: 1 }], { duration: beats.duration });
+        // The other half of the same trick, and the reason there is only ever
+        // one Luke: the strip's face is held invisible for the flight and
+        // brought back over the window he spends parked on top of it. The
+        // wrapper rather than the drawing, because the drawing is remounted
+        // for every gesture and an animation on it would die with the node.
+        play(
+          face,
+          [
+            { offset: 0, opacity: 0 },
+            { offset: beats.home, opacity: 0, easing: exitEasing },
+            { offset: 1, opacity: 1 },
+          ],
+          { duration: beats.duration },
+        );
+      } catch {
+        for (const animation of flight) animation.cancel();
+        returnHome();
+        return;
+      }
+
+      // The two beats the app is waiting on, timed off the same flight rather
+      // than guessed at alongside it. The tap is where the control is allowed
+      // to move — before it, the change has been made and is simply not drawn
+      // yet — and the end of the flight is where a panel stood up for this
+      // errand may stand back down.
+      beat = window.setTimeout(() => {
+        // The control changes shape at the tap and not before: the options
+        // button grows a label as the list narrows — by a provider's whole
+        // name and mark, which is the widest it gets — and a pop-up is as wide
+        // as the value it is showing. So the ring is measured after the change
+        // is in the DOM rather than at the launch, when it would be the
+        // outline of a control that is about to stop existing.
+        //
+        // Flushed rather than waited a frame for. The release is a React state
+        // change made from a timer, which React is free to commit on its own
+        // schedule — and a frame is not that schedule, so a ring drawn in the
+        // next one measured the button as it was. This is the one place the
+        // errand needs the DOM to have caught up before it reads it, so it is
+        // the one place that says so outright.
+        flushSync(land);
+        const landing = errandBound(stage.getBoundingClientRect(), target.getBoundingClientRect());
+        // A control the change took off the panel has no outline worth
+        // drawing, and a zero box would draw a ring at the stage's corner.
+        if (landing.width === 0 || landing.height === 0) return;
+        ringElement.style.left = `${landing.left}px`;
+        ringElement.style.top = `${landing.top}px`;
+        ringElement.style.width = `${landing.width}px`;
+        ringElement.style.height = `${landing.height}px`;
+        // The ring is the control's own outline, so it takes the control's own
+        // corners rather than a radius of its own.
+        ringElement.style.borderRadius = getComputedStyle(target).borderRadius;
+        try {
+          play(
+            ringElement,
+            [
+              { offset: 0, opacity: 0, transform: "scale(0.84)", easing: springFast },
+              { offset: RING_BLOOM, opacity: 1, transform: "scale(1)", easing: exitEasing },
+              { offset: 1, opacity: 0, transform: `scale(${RING_SPREAD})` },
+            ],
+            { duration: beats.duration * (1 - beats.arrival) },
+          );
+        } catch {
+          // The mark is already home and dry without it; a ring that cannot be
+          // drawn is not worth taking the rest of the flight down for.
+        }
+      }, beats.duration * beats.arrival);
+      settle = window.setTimeout(returnHome, beats.duration);
+    }, beats.delay);
+
+    return () => {
+      window.clearTimeout(launch);
+      if (beat !== undefined) window.clearTimeout(beat);
+      if (settle !== undefined) window.clearTimeout(settle);
+      // A flight the panel closed under, or that a second errand overtook, is
+      // over rather than paused: both elements rest invisible, so cancelling is
+      // the whole of putting them away. Its beats are still released, because
+      // the change it was carrying has to be drawn whether or not anyone got to
+      // watch it arrive.
+      for (const animation of flight) animation.cancel();
+      returnHome();
+    };
+  }, [errand, onLanded, onReturned]);
+
+  return (
+    <>
+      {/* Under him, so the tap is drawn over the ring it makes. */}
+      <span className="luke-errand-ring" ref={ring} aria-hidden="true" />
+      <span className="luke-errand-mark" ref={mark} aria-hidden="true">
+        <LukeFace />
+      </span>
+    </>
+  );
+}
