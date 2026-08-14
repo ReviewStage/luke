@@ -1,4 +1,3 @@
-import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -12,6 +11,15 @@ import {
   type SessionProviderAdapter,
 } from "@sidecar/core";
 import {
+  nonNegativeNumber,
+  positiveInteger,
+  readTail,
+  readTextFile,
+  recordFromJsonLine,
+  uniquePaths,
+  workspaceLabel,
+} from "./local-session-adapter";
+import {
   canIgnoreSqliteError,
   defaultSqliteModule,
   openReadOnlyDatabase,
@@ -20,7 +28,6 @@ import {
 
 const CODEX_PROVIDER_ID = PROVIDER_ID.CODEX;
 const CODEX_PROVIDER_NAME = "Codex";
-const UNKNOWN_WORKSPACE_LABEL = "workspace";
 
 const CODEX_ENVIRONMENT = {
   CONFIG_DIRECTORY: "CODEX_HOME",
@@ -147,57 +154,6 @@ export interface CodexAdapterOptions {
   sqlite?: SqliteModuleLoader;
 }
 
-function positiveInteger(value: number | undefined, fallback: number): number {
-  if (value === undefined || !Number.isFinite(value) || value <= 0) return fallback;
-  return Math.floor(value);
-}
-
-function nonNegativeNumber(value: number | undefined, fallback: number): number {
-  if (value === undefined || !Number.isFinite(value) || value < 0) return fallback;
-  return value;
-}
-
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error;
-}
-
-function canIgnoreFilesystemError(error: unknown): boolean {
-  return (
-    isNodeError(error) &&
-    (error.code === "ENOENT" ||
-      error.code === "ENOTDIR" ||
-      error.code === "EACCES" ||
-      error.code === "EPERM")
-  );
-}
-
-async function readTextFile(filePath: string): Promise<string | undefined> {
-  try {
-    return await fs.readFile(filePath, "utf8");
-  } catch (error) {
-    if (canIgnoreFilesystemError(error)) return undefined;
-    throw error;
-  }
-}
-
-async function readTail(filePath: string, maximumBytes: number): Promise<string> {
-  let handle: fs.FileHandle | undefined;
-  try {
-    handle = await fs.open(filePath, "r");
-    const stats = await handle.stat();
-    if (!stats.isFile() || stats.size <= 0) return "";
-    const length = Math.min(stats.size, maximumBytes);
-    const buffer = Buffer.alloc(length);
-    await handle.read(buffer, 0, length, stats.size - length);
-    return buffer.toString("utf8");
-  } catch (error) {
-    if (canIgnoreFilesystemError(error)) return "";
-    throw error;
-  } finally {
-    await handle?.close();
-  }
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -213,15 +169,6 @@ function oneLine(value: string | undefined, maximumLength: number): string | und
   return normalized.length > maximumLength
     ? `${normalized.slice(0, maximumLength - 1).trimEnd()}…`
     : normalized;
-}
-
-function recordFromJsonLine(line: string): Record<string, unknown> | undefined {
-  try {
-    const parsed = JSON.parse(line) as unknown;
-    return isRecord(parsed) ? parsed : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 /**
@@ -326,12 +273,6 @@ function timestampFromRow(row: CodexThreadRow): number {
   );
 }
 
-function workspaceLabel(cwd: string | undefined): string {
-  if (!cwd) return UNKNOWN_WORKSPACE_LABEL;
-  const label = path.basename(cwd.trim());
-  return label || UNKNOWN_WORKSPACE_LABEL;
-}
-
 function normalizeDirectory(value: string | undefined, baseDirectory: string): string | undefined {
   const normalized = value?.trim();
   if (!normalized) return undefined;
@@ -387,10 +328,6 @@ async function sqliteHomeFromConfig(codexHome: string): Promise<string | undefin
   return config
     ? normalizeDirectory(topLevelTomlString(config, CODEX_CONFIG_KEY.SQLITE_DIRECTORY), codexHome)
     : undefined;
-}
-
-function uniquePaths(paths: readonly string[]): string[] {
-  return [...new Set(paths)];
 }
 
 async function stateDatabasePaths(

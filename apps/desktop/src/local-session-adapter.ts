@@ -193,6 +193,11 @@ export function workspaceLabel(directoryPath: string | undefined): string {
   return label || UNKNOWN_WORKSPACE_LABEL;
 }
 
+/** Drops duplicate paths while keeping first-seen order. */
+export function uniquePaths(paths: readonly string[]): string[] {
+  return [...new Set(paths)];
+}
+
 /**
  * Places a project in time by the directory its sessions land in, which is the
  * one a new session moves. A project directory's own mtime stops moving the

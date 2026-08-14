@@ -20,6 +20,7 @@ import {
   recordFromJsonLine,
   type SessionFileCandidate,
   statDirectoryEntry,
+  uniquePaths,
   workspaceLabel,
 } from "./local-session-adapter";
 import {
@@ -428,10 +429,6 @@ function defaultDataDirectory(): string {
   const dataHome = process.env[OPENCODE_ENVIRONMENT.DATA_HOME]?.trim();
   if (dataHome) return path.join(dataHome, OPENCODE_DATA_DIRECTORY_NAME);
   return path.join(os.homedir(), ...OPENCODE_DATA_HOME_SEGMENTS, OPENCODE_DATA_DIRECTORY_NAME);
-}
-
-function uniquePaths(paths: readonly string[]): string[] {
-  return [...new Set(paths)];
 }
 
 /**
