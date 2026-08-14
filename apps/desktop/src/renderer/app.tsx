@@ -1190,6 +1190,67 @@ export function App(): React.JSX.Element {
   }, []);
 
   /**
+   * Carries a changed pace onto the call now open, whichever hand changed it:
+   * the settings row and a spoken ask both land in the stored snapshot, so
+   * watching the snapshot covers them equally. The first snapshot is the
+   * stored value rather than a change, and with no call open there is nothing
+   * to do — the next call is minted at the stored pace.
+   */
+  const heardSpeed = useRef<RealtimeVoiceSpeed | undefined>(undefined);
+  useEffect(() => {
+    const speed = settings?.voiceSpeed;
+    if (speed === undefined) return;
+    const previous = heardSpeed.current;
+    heardSpeed.current = speed;
+    if (previous === undefined || previous === speed) return;
+    voiceSession.current?.applySpeed(speed);
+  }, [settings?.voiceSpeed]);
+
+  /**
+   * Makes a changed voice heard now rather than from the next conversation on.
+   * The API locks a session's voice the moment the model first speaks, so the
+   * one way to change it on a live call is to open a new one. The restart
+   * waits for the turn under way to end — a spoken "change your voice" is
+   * confirmed in the old voice before the new one takes over — and the
+   * conversation starts afresh, because the call is the conversation. A call
+   * that ended on its own owes nothing: the next one is minted in the new
+   * voice already.
+   */
+  const heardVoice = useRef<RealtimeVoice | undefined>(undefined);
+  const voiceRestartDue = useRef(false);
+  useEffect(() => {
+    const voice = settings?.voice;
+    if (!voice) return;
+    const previous = heardVoice.current;
+    heardVoice.current = voice;
+    // A call being opened counts as one to reopen: its credential may already
+    // have been minted in the old voice, and a restart is the only answer the
+    // renderer can be sure of from here.
+    if (
+      previous !== undefined &&
+      previous !== voice &&
+      (voiceSession.current?.isConnected || voiceSession.current?.isConnecting)
+    ) {
+      voiceRestartDue.current = true;
+    }
+    if (!voiceRestartDue.current) return;
+    if (
+      voiceStatus === REALTIME_STATUS.IDLE ||
+      voiceStatus === REALTIME_STATUS.FAILED ||
+      voiceStatus === REALTIME_STATUS.UNAVAILABLE
+    ) {
+      voiceRestartDue.current = false;
+      return;
+    }
+    if (voiceStatus !== REALTIME_STATUS.READY) return;
+    voiceRestartDue.current = false;
+    void (async () => {
+      await voiceSession.current?.close();
+      await startMicrophoneRef.current?.();
+    })();
+  }, [settings?.voice, voiceStatus]);
+
+  /**
    * Moves the talk key, or resets it when no chord is named. The key the row
    * shows is not taken from this reply — the main process announces the one
    * that actually registered, the same way it always has — so the reply

@@ -717,9 +717,11 @@ function PreferencesSection({
         <span className="settings-copy">
           <strong>Voice</strong>
           {/* When it lands, because a control that seems not to act invites a
-              second press: the change rides the next conversation, and one
-              already open keeps the voice it answered with. */}
-          <small>How Luke sounds, from the next conversation on.</small>
+              second press. The API locks a session's voice once the model has
+              spoken, so a call already open is quietly reopened in the new
+              voice — heard right away, at the price of the conversation
+              starting afresh. */}
+          <small>How Luke sounds; a conversation under way starts afresh.</small>
         </span>
         <span className="voice-select">
           <select
@@ -753,9 +755,9 @@ function PreferencesSection({
       <div className="settings-row">
         <span className="settings-copy">
           <strong>Speed</strong>
-          {/* The same promise as the voice's line, because it lands the same
-              way: minted into the next conversation, never a live one. */}
-          <small>How fast Luke talks, from the next conversation on.</small>
+          {/* Unlike the voice, a pace change rides a session update onto the
+              call already open, so nothing starts over. */}
+          <small>How fast Luke talks, from his next reply on.</small>
         </span>
         <span className="voice-select">
           <select

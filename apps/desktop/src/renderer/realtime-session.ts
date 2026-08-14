@@ -20,6 +20,7 @@ import {
   issueTrackerDisconnectedEvents,
   type NormalizedSession,
   type ObservedWorkspaceProject,
+  outputSpeedUpdateEvents,
   proactiveSpeechEvents,
   pushToTalkCommitEvents,
   REALTIME_DATA_CHANNEL,
@@ -272,6 +273,12 @@ export class RealtimeVoiceSession {
    * a reply the developer is already hearing.
    */
   #turnEpoch = 0;
+  /**
+   * A pace change that arrived mid-reply, waiting for the reply to end. The
+   * API applies a speed only between model turns, so one landing while Luke is
+   * speaking is held here and sent ahead of whatever the call does next.
+   */
+  #pendingSpeed: number | undefined;
 
   constructor(options: RealtimeVoiceSessionOptions) {
     this.#options = options;
@@ -704,6 +711,8 @@ export class RealtimeVoiceSession {
     this.#generationDone = false;
     this.#remoteQuiet = false;
     this.#pendingTurn = false;
+    // The next call is minted at the stored pace, so nothing is owed to it.
+    this.#pendingSpeed = undefined;
     this.#responseItemId = undefined;
     this.#activeResponseId = undefined;
     this.#audibleSince = undefined;
@@ -716,6 +725,11 @@ export class RealtimeVoiceSession {
   }
 
   #startResponse(events: readonly Record<string, unknown>[], toolsArmed = false): void {
+    // A pace still waiting from the last reply lands here, ahead of the
+    // request: the channel is ordered and no response is in progress — a
+    // cancel for the reply being talked over was sent before this — so the
+    // reply about to be asked for is already spoken at the new pace.
+    this.#flushPendingSpeed();
     // The track is deliberately left as it is. A reply that was cut off left it
     // disabled, and re-opening it here would let the tail of that reply — still
     // arriving, because the server sent it before it was told to stop — be
@@ -822,7 +836,36 @@ export class RealtimeVoiceSession {
     // un-silence him.
     this.#unsilenceLuke();
     this.#clearSettleTimer();
+    // The reply is over, so the API is between turns — the one moment it
+    // accepts a pace change that arrived while Luke was speaking.
+    this.#flushPendingSpeed();
     if (this.#status === REALTIME_STATUS.RESPONDING) this.#setStatus(REALTIME_STATUS.READY);
+  }
+
+  /**
+   * Changes how fast Luke speaks on the call now open, from his next reply on.
+   * A call minted at one pace stays a live session, so the change travels as a
+   * session update rather than waiting for the next conversation. The API
+   * applies a pace only between model turns: a change landing mid-reply is
+   * held and sent when the reply ends. With no call open there is nothing to
+   * update — the next one is minted at the stored pace already.
+   */
+  applySpeed(speed: number): void {
+    if (!this.isConnected) return;
+    if (this.#status === REALTIME_STATUS.RESPONDING) {
+      this.#pendingSpeed = speed;
+      return;
+    }
+    this.#pendingSpeed = undefined;
+    this.#send(outputSpeedUpdateEvents(speed));
+  }
+
+  /** Sends the pace change that waited out a reply, once nothing is speaking. */
+  #flushPendingSpeed(): void {
+    const speed = this.#pendingSpeed;
+    if (speed === undefined) return;
+    this.#pendingSpeed = undefined;
+    this.#send(outputSpeedUpdateEvents(speed));
   }
 
   /**
