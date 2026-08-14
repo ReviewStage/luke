@@ -1762,23 +1762,24 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 }
 
 /* The front page's list of pages. Its rows carry their own padding for the
-   hover pill, so the card keeps less of its own vertically: the pill's inset
-   already stands the first and last names off the card's edges, and the two
-   paddings stacked read as blank space rather than as calm. */
+   hover pill, so the card keeps less of its own vertically — the pill's inset
+   already stands the first and last names off the card's edges — and the rows
+   sit at a menu's spacing rather than a form's: each is one name, so the 9px
+   a section keeps between rows of copy would read as gaps, not as calm. */
 .settings-index {
-  padding-top: 7px;
-  padding-bottom: 7px;
+  gap: 3px;
+  padding-top: 5px;
+  padding-bottom: 5px;
 }
 
 /* A page that is one nameless group is no group at all: its rows stand on the
    page itself, under the header that already names it, and a card around them
-   would be a border around nothing. The border goes transparent rather than
-   away and the horizontal padding stays, so the rows sit exactly where the
-   carded pages draw theirs and a page turn moves nothing sideways. */
+   would be a border around nothing. With no card there is no card inset
+   either: the rows keep the header's own 2px, flush with the page's left
+   edge, rather than hanging indented where a border used to be. */
 .settings-plain {
-  padding-top: 2px;
-  padding-bottom: 2px;
-  border-color: transparent;
+  padding: 2px;
+  border: 0;
   background: none;
 }
 
@@ -1833,7 +1834,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   align-items: center;
   gap: 10px;
   margin: 0 -8px;
-  padding: 6px 8px;
+  padding: 4px 8px;
   border-radius: 10px;
   background: none;
   text-align: left;

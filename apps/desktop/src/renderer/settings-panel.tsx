@@ -648,41 +648,35 @@ function IntegrationsSection({
 }
 
 /**
- * What each page is called on the front page and at its own head, with the
- * line under the name that says what it holds. One table, because the row
- * that opens a page and the header that leaves it must never disagree about
- * its name.
+ * What each page is called on the front page and at its own head. One table,
+ * because the row that opens a page and the header that leaves it must never
+ * disagree about its name. The name and the glyph are the whole row: what a
+ * page holds is one press away, and a sentence under every name made the
+ * front page read as prose rather than as places to go.
  */
-const SETTINGS_PAGE: Record<
-  SettingsSubview,
-  { title: string; summary: string; icon: React.JSX.Element }
-> = {
+const SETTINGS_PAGE: Record<SettingsSubview, { title: string; icon: React.JSX.Element }> = {
   [SETTINGS_VIEW.VOICE]: {
     title: "Voice",
-    summary: "How Luke sounds, captions, and announcements.",
     icon: <SpeakerIcon />,
   },
   [SETTINGS_VIEW.APPEARANCE]: {
     title: "Appearance",
-    summary: "Menu bar, Dock, displays, and form factor.",
     icon: <DisplayIcon />,
   },
   [SETTINGS_VIEW.SHORTCUTS]: {
     title: "Keyboard shortcuts",
-    summary: "The talk, ask, and stop keys.",
     icon: <KeyboardIcon />,
   },
   [SETTINGS_VIEW.CONNECTIONS]: {
     title: "Connections",
-    summary: "Cloud agent API keys and integrations.",
     icon: <PlugIcon />,
   },
 };
 
 /**
- * One front-page row per page: its glyph, its name, what it holds, and the
- * chevron that promises a page rather than a control. The row is the whole
- * press target, the way a macOS settings row is.
+ * One front-page row per page: its glyph, its name, and the chevron that
+ * promises a page rather than a control. The row is the whole press target,
+ * the way a macOS settings row is.
  */
 function SettingsNavRow({
   view,
@@ -704,7 +698,6 @@ function SettingsNavRow({
       </span>
       <span className="settings-copy">
         <strong>{page.title}</strong>
-        <small>{page.summary}</small>
       </span>
       <ChevronIcon />
     </button>
