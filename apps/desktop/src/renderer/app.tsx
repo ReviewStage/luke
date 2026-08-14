@@ -452,9 +452,9 @@ export function App(): React.JSX.Element {
     setOptionsOpen(false);
     // Arriving at the tab is arriving at its front page: a page left open
     // behind a tab switch would greet the next visit with a corner of the
-    // settings rather than the settings. The one flow that needs a deeper
-    // page — a credential entry away in the key slot — never switches tabs
-    // on its way back, so its page survives this reset by never meeting it.
+    // settings rather than the settings. The flows that need a deeper page —
+    // a credential entry returning from the key slot, the evidence run that
+    // starts in it — set their page right after this reset.
     setSettingsView(SETTINGS_VIEW.ROOT);
   }, []);
 
@@ -843,6 +843,11 @@ export function App(): React.JSX.Element {
    */
   const restorePanel = useCallback(() => {
     changeTab(PANEL_TAB.SETTINGS);
+    // The line the entry belongs to lives on the Connections page, and
+    // changeTab has just reset the tab to its front page: without this, the
+    // check appearing beside the provider — the answer to what was just done
+    // — would land on a page nobody is looking at.
+    setSettingsView(SETTINGS_VIEW.CONNECTIONS);
     void changeMode(true);
   }, [changeMode, changeTab]);
 
