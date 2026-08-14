@@ -701,6 +701,7 @@ function SelectRow<Value extends string | number>({
   parse,
   ariaLabel,
   errand,
+  busy: restBusy,
   onChange,
 }: {
   label: string;
@@ -716,6 +717,11 @@ function SelectRow<Value extends string | number>({
    * and only the `select` is drawn with the corners that outline has to take.
    */
   errand?: ErrandTarget;
+  /**
+   * A sibling write in flight. Two pop-ups that store one setting share a
+   * rest so one save cannot finish behind the other.
+   */
+  busy?: boolean;
   // biome-ignore lint/suspicious/noConfusingVoidType: the voice and pace cannot be refused, so those writes answer void
   onChange: (value: Value) => void | Promise<string | undefined>;
 }): React.JSX.Element {
@@ -732,7 +738,7 @@ function SelectRow<Value extends string | number>({
             {...(errand ? errandTargetProps(errand) : {})}
             aria-label={ariaLabel ?? label}
             value={value}
-            disabled={busy}
+            disabled={busy || Boolean(restBusy)}
             onChange={(event) => {
               const next = parse(event.target.value);
               if (next !== undefined) run(next);
@@ -806,6 +812,12 @@ function WorkspaceAgentRow({
   );
   const chosen = chosenIndex >= 0 ? choices[chosenIndex] : undefined;
   const providerDefault = `${provider.displayName}'s default`;
+  // One rest for both pop-ups: they write the same stored pairing, so a model
+  // change in flight must still the effort row and the other way around —
+  // otherwise two saves can finish out of order and keep whichever answered last.
+  const write = useSettingWrite((next: WorkspaceAgentSelection | undefined) =>
+    onChange(providerId, next),
+  );
   return (
     <>
       <SelectRow
@@ -833,8 +845,12 @@ function WorkspaceAgentRow({
           // out of the select is a broken control rather than a choice.
           return choices[Number(raw)] ? raw : undefined;
         }}
+        busy={write.busy}
         onChange={(next) => {
-          if (next === PROVIDER_DEFAULT_VALUE) return onChange(providerId, undefined);
+          if (next === PROVIDER_DEFAULT_VALUE) {
+            write.run(undefined);
+            return;
+          }
           const choice = choices[Number(next)];
           if (!choice) return;
           // A chosen effort survives a model change only where the new
@@ -844,7 +860,7 @@ function WorkspaceAgentRow({
             selection?.effort && choice.efforts.includes(selection.effort)
               ? selection.effort
               : undefined;
-          return onChange(providerId, {
+          write.run({
             agent: choice.agent,
             model: choice.model,
             ...(effort ? { effort } : {}),
@@ -871,9 +887,10 @@ function WorkspaceAgentRow({
             // stored selection is always one whole the table lists.
             return chosen.efforts.includes(raw) ? raw : undefined;
           }}
+          busy={write.busy}
           onChange={(next) => {
             const effort = next !== PROVIDER_DEFAULT_VALUE ? next : undefined;
-            return onChange(providerId, {
+            write.run({
               agent: chosen.agent,
               model: chosen.model,
               ...(effort ? { effort } : {}),
@@ -881,6 +898,7 @@ function WorkspaceAgentRow({
           }}
         />
       ) : null}
+      {write.rejection ? <p className="error-message">{write.rejection}</p> : null}
     </>
   );
 }
