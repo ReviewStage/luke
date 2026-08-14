@@ -21,7 +21,6 @@ import type {
   OutputAudioState,
   SessionOpenResult,
   SettingsUpdateResult,
-  WindowMode,
 } from "../shared/contracts";
 import { CREDENTIAL_SOURCE, SESSION_OPEN_RESULT_STATUS } from "../shared/contracts";
 import type { CredentialProviderId } from "../shared/credential-providers";
@@ -57,16 +56,7 @@ import {
 import { applySpokenSetting, buildLukeGuide, isAppSettingId } from "./luke-guide";
 import { NotchWings } from "./notch-wings";
 import { PanelBody, type SessionWriteHandlers } from "./panel-body";
-import {
-  HIT_REGION,
-  HIT_REGION_ATTRIBUTE,
-  LEAVE_DELAY_MS,
-  PANEL_PRESENTATION,
-  type PanelPresentation,
-  PEEK_ENTER_DELAY_MS,
-  presentationForMode,
-  SETTLE_DELAY_MS,
-} from "./panel-state";
+import { HIT_REGION, PANEL_PRESENTATION } from "./panel-state";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import type { AppActionCarrier } from "./realtime-session";
 import {
@@ -83,6 +73,7 @@ import {
 import { SESSION_OPTIONS_BUTTON_ID, SESSION_OPTIONS_ID } from "./session-parts";
 import { SETTING_PAGE, SETTINGS_VIEW, type SettingsView } from "./settings-views";
 import { panelEntryOpen, usePanelEntry } from "./use-panel-entry";
+import { usePanelPresentation } from "./use-panel-presentation";
 import { useVoiceConversation } from "./use-voice-conversation";
 import {
   outputSilent,
@@ -133,81 +124,6 @@ function captionSizeStyle(textHeight: number | undefined, volumeHint: boolean): 
     "--caption-size": `${Math.min(VOICE_CAPTION_MAX_HEIGHT, textHeight + hintHeight + CAPTION_PADDING)}px`,
     "--caption-scroll": `${Math.max(0, textHeight - (VOICE_CAPTION_MAX_HEIGHT - CAPTION_PADDING - hintHeight))}px`,
   } as CSSProperties;
-}
-
-function usePointerPassthrough(
-  onHitRegionEnter: () => void,
-  onHitRegionLeave: () => void,
-  presentation: PanelPresentation,
-): void {
-  const lastValue = useRef<boolean | undefined>(undefined);
-  const lastPoint = useRef<{ x: number; y: number } | undefined>(undefined);
-
-  const update = useCallback(
-    (interceptsPointer: boolean) => {
-      if (lastValue.current === interceptsPointer) return;
-      lastValue.current = interceptsPointer;
-      window.sidecar.setPointerInterception(interceptsPointer);
-      if (interceptsPointer) onHitRegionEnter();
-      else onHitRegionLeave();
-    },
-    [onHitRegionEnter, onHitRegionLeave],
-  );
-
-  const testLastPoint = useCallback(
-    (drawn: PanelPresentation) => {
-      const point = lastPoint.current;
-      if (!point) return;
-      // `elementFromPoint` answers null for a point outside the viewport, which a
-      // forwarded move can carry. Comparing that against null read as "still
-      // inside", so leaving by the edge left the panel open until some other
-      // event closed it.
-      const region = document
-        .elementFromPoint(point.x, point.y)
-        ?.closest(`[${HIT_REGION_ATTRIBUTE}]`);
-      const kind = region?.getAttribute(HIT_REGION_ATTRIBUTE);
-      // The shape takes the pointer wherever it is drawn, which is the whole
-      // rule: the capsule strip and the panel's body are what sit on top of it
-      // and answer first. The surface is what answers in between — the panel's
-      // body is not a target for the first `--expand-delay` of an opening, and
-      // by then the strip has already narrowed from the peek's width back to
-      // the capsule's, so a press out where the marks unfold would otherwise
-      // land on nothing and read as the pointer leaving.
-      update(
-        kind === HIT_REGION.SURFACE ||
-          kind === HIT_REGION.CAPSULE ||
-          (kind === HIT_REGION.PANEL && drawn === PANEL_PRESENTATION.PANEL) ||
-          (kind === HIT_REGION.SLOT && drawn === PANEL_PRESENTATION.SLOT) ||
-          (kind === HIT_REGION.FEEDBACK && drawn === PANEL_PRESENTATION.FEEDBACK),
-      );
-    },
-    [update],
-  );
-
-  useEffect(() => {
-    const handleMove = (event: MouseEvent) => {
-      lastPoint.current = { x: event.clientX, y: event.clientY };
-      testLastPoint(presentation);
-    };
-    const handleLeave = () => {
-      lastPoint.current = undefined;
-      update(false);
-    };
-    window.addEventListener("mousemove", handleMove, { passive: true });
-    document.documentElement.addEventListener("mouseleave", handleLeave);
-    return () => {
-      window.removeEventListener("mousemove", handleMove);
-      document.documentElement.removeEventListener("mouseleave", handleLeave);
-    };
-  }, [presentation, testLastPoint, update]);
-
-  // The shape can change under a pointer that never moves — Escape closes the
-  // panel, and the tray opens it — and what the pointer is over changes with it.
-  // Without this the window keeps intercepting clicks for a shape that is no
-  // longer drawn, and the window is always larger than the shape.
-  useEffect(() => {
-    testLastPoint(presentation);
-  }, [presentation, testLastPoint]);
 }
 
 function notchStyle(display: DisplayDiagnostic): CSSProperties {
@@ -266,7 +182,6 @@ export function App(): React.JSX.Element {
     [],
   );
   const [display, setDisplay] = useState<DisplayDiagnostic>();
-  const [presentation, setPresentation] = useState<PanelPresentation>(PANEL_PRESENTATION.CAPSULE);
   const [tab, setTab] = useState<PanelTab>(PANEL_TAB.SESSIONS);
   const [settingsView, setSettingsView] = useState<SettingsView>(SETTINGS_VIEW.ROOT);
   const [sessionView, setSessionView] = useState<SessionView>(DEFAULT_SESSION_VIEW);
@@ -312,8 +227,6 @@ export function App(): React.JSX.Element {
   const [silenceStretch, setSilenceStretch] = useState(0);
   const wasSilent = useRef(false);
   const [hintDismissal, setHintDismissal] = useState<VolumeHintDismissal>();
-  const hoverTimer = useRef<number | undefined>(undefined);
-  const presentationRef = useRef<PanelPresentation>(PANEL_PRESENTATION.CAPSULE);
   const tabRef = useRef<PanelTab>(PANEL_TAB.SESSIONS);
   /**
    * Whether a composer is held, mirrored for the presentation cluster: a
@@ -322,13 +235,6 @@ export function App(): React.JSX.Element {
    */
   const credentialHeld = useRef(false);
   const feedbackHeld = useRef(false);
-  /**
-   * Whether the caret is in the ask field. It holds the panel open against the
-   * pointer the way a credential entry does, and for the same reason: the
-   * pointer wandering off is not a decision about the thing someone is in the
-   * middle of typing.
-   */
-  const askEngaged = useRef(false);
   const feedbackNoticeTimer = useRef<number | undefined>(undefined);
   /**
    * The words a spoken open asked to start the note with, waiting for the
@@ -337,8 +243,6 @@ export function App(): React.JSX.Element {
    * the developer's own words, under the spoken tool's contract.
    */
   const spokenFeedbackDraft = useRef<string | undefined>(undefined);
-  const pointerInside = useRef(false);
-  const modeGeneration = useRef(0);
   /**
    * Whether a live projects push has arrived. The bootstrap reply resolves
    * whenever the main process gets to it, so a push can land first — and the
@@ -398,24 +302,6 @@ export function App(): React.JSX.Element {
    */
   const errandOpenedPanel = useRef(false);
 
-  /**
-   * Sends Luke to sign what he just did, if there is anywhere to sign it, and
-   * answers whether he actually went.
-   *
-   * Only the panel can hold a signature, so both callers stand it up first and
-   * this is the backstop rather than the decision: an act whose panel never
-   * opened, or that named a control this build does not draw, flies nowhere
-   * and the spoken answer reports it the way it always did. A caller holding
-   * something for the flight reads the answer and lets go itself.
-   */
-  const runErrand = useCallback((targets: readonly ErrandTarget[], wait: ErrandWait): boolean => {
-    if (targets.length === 0) return false;
-    if (presentationRef.current !== PANEL_PRESENTATION.PANEL) return false;
-    errands.current += 1;
-    setErrand({ targets, wait, run: errands.current });
-    return true;
-  }, []);
-
   const changeTab = useCallback((next: PanelTab) => {
     tabRef.current = next;
     setTab(next);
@@ -441,45 +327,68 @@ export function App(): React.JSX.Element {
     setOptionsOpen(false);
   }, []);
 
-  const applyPresentation = useCallback(
-    (next: PanelPresentation) => {
-      presentationRef.current = next;
-      setPresentation(next);
-      // The sheet is only ever drawn inside the panel, so any other shape puts
-      // it away. Left set behind a shape that cannot draw it, it would be over
-      // the list again the next time the panel came forward with nothing having
-      // been pressed — and a key half-entered is the one thing that survives a
-      // close, which the sheet is not.
-      if (next !== PANEL_PRESENTATION.PANEL) setOptionsOpen(false);
-      // A panel that has closed reopens on the session list, showing every
-      // session with whatever needs a person first: settings are somewhere you
-      // go, not a state the capsule remembers, and a filter left in place would
-      // let the panel hide a session the capsule is still counting.
-      //
-      // Something half-written is the one exception, and only to the tab — a
-      // key being entered or a note to the founders alike: it is what someone
-      // is in the middle of, so however the panel closed, it opens again where
-      // they left it. The list is not something anyone is in the middle of, so
-      // it resets either way.
-      if (next === PANEL_PRESENTATION.CAPSULE) {
-        setSessionView(DEFAULT_SESSION_VIEW);
-        if (!credentialHeld.current && !feedbackHeld.current) {
-          changeTab(PANEL_TAB.SESSIONS);
-        }
-      }
+  const {
+    presentation,
+    current: presentationOf,
+    generation: modeGenerationOf,
+    pointerInside: pointerIsInside,
+    heldAgainstPointer,
+    applyPresentation,
+    applyAuthoritativeMode,
+    changeMode,
+    cancelHover,
+    onHitRegionLeave,
+    changeAskEngagement,
+    settle,
+    leave,
+    expand,
+  } = usePanelPresentation({
+    // True while a field someone could be part-way through is actually on
+    // screen. An entry outlives the tab it was started on now, so holding the
+    // panel open for one that is not drawn would leave the pointer unable to
+    // close a panel showing nothing but sessions.
+    entryDrawn: () => credentialHeld.current && tabRef.current === PANEL_TAB.SETTINGS,
+    composerHeld: () => credentialHeld.current || feedbackHeld.current,
+    onNotPanel: () => setOptionsOpen(false),
+    onCapsuleList: () => setSessionView(DEFAULT_SESSION_VIEW),
+    onCapsuleTab: () => changeTab(PANEL_TAB.SESSIONS),
+  });
+
+  /**
+   * Sends Luke to sign what he just did, if there is anywhere to sign it, and
+   * answers whether he actually went.
+   *
+   * Only the panel can hold a signature, so both callers stand it up first and
+   * this is the backstop rather than the decision: an act whose panel never
+   * opened, or that named a control this build does not draw, flies nowhere
+   * and the spoken answer reports it the way it always did. A caller holding
+   * something for the flight reads the answer and lets go itself.
+   */
+  const runErrand = useCallback(
+    (targets: readonly ErrandTarget[], wait: ErrandWait): boolean => {
+      if (targets.length === 0) return false;
+      if (presentationOf() !== PANEL_PRESENTATION.PANEL) return false;
+      errands.current += 1;
+      setErrand({ targets, wait, run: errands.current });
+      return true;
     },
-    [changeTab],
+    [presentationOf],
   );
 
-  const applyAuthoritativeMode = useCallback(
-    (nextMode: WindowMode) => {
-      // A lifecycle notification can originate outside this renderer (for
-      // example from the tray). Ignore an older IPC result that arrives later.
-      modeGeneration.current += 1;
-      applyPresentation(presentationForMode(nextMode));
-    },
-    [applyPresentation],
-  );
+  /**
+   * Brings the panel back around the line the entry belongs to, and leaves it
+   * open the way every other way of opening it does — the pointer closes it by
+   * visiting and leaving.
+   */
+  const restorePanel = useCallback(() => {
+    changeTab(PANEL_TAB.SETTINGS);
+    // The line the entry belongs to lives on the Connections page, and
+    // changeTab has just reset the tab to its front page: without this, the
+    // check appearing beside the provider — the answer to what was just done
+    // — would land on a page nobody is looking at.
+    setSettingsView(SETTINGS_VIEW.CONNECTIONS);
+    expand();
+  }, [changeTab, expand]);
 
   /**
    * Applies a settings write's reply: the snapshot the store actually holds,
@@ -507,134 +416,6 @@ export function App(): React.JSX.Element {
     [applySettingsReply],
   );
 
-  const cancelHoverTransition = useCallback(() => {
-    if (hoverTimer.current === undefined) return;
-    window.clearTimeout(hoverTimer.current);
-    hoverTimer.current = undefined;
-  }, []);
-
-  /**
-   * Only the panel needs the main process. The capsule and the peek share a
-   * window, so hovering never leaves the renderer — which is what lets the peek
-   * answer the pointer immediately.
-   */
-
-  const changeMode = useCallback(
-    async (expanded: boolean) => {
-      const previous = presentationRef.current;
-      const generation = modeGeneration.current + 1;
-      modeGeneration.current = generation;
-      presentationRef.current = expanded ? PANEL_PRESENTATION.PANEL : PANEL_PRESENTATION.CAPSULE;
-      try {
-        // Asking for focus is what makes Escape reach the panel someone opened.
-        const confirmedMode = await window.sidecar.setExpanded(expanded, expanded);
-        if (modeGeneration.current === generation) {
-          applyPresentation(presentationForMode(confirmedMode));
-        }
-      } catch (error) {
-        if (modeGeneration.current === generation) presentationRef.current = previous;
-        throw error;
-      }
-    },
-    [applyPresentation],
-  );
-
-  const handleHitRegionEnter = useCallback(() => {
-    cancelHoverTransition();
-    pointerInside.current = true;
-    if (presentationRef.current !== PANEL_PRESENTATION.CAPSULE) return;
-    hoverTimer.current = window.setTimeout(() => {
-      hoverTimer.current = undefined;
-      if (presentationRef.current === PANEL_PRESENTATION.CAPSULE) {
-        applyPresentation(PANEL_PRESENTATION.PEEK);
-      }
-    }, PEEK_ENTER_DELAY_MS);
-  }, [applyPresentation, cancelHoverTransition]);
-
-  /**
-   * True while a field someone could be part-way through is actually on screen.
-   * An entry outlives the tab it was started on now, so holding the panel open
-   * for one that is not drawn would leave the pointer unable to close a panel
-   * showing nothing but sessions.
-   */
-  const entryIsDrawn = useCallback(
-    () => credentialHeld.current && tabRef.current === PANEL_TAB.SETTINGS,
-    [],
-  );
-
-  const handleHitRegionLeave = useCallback(() => {
-    cancelHoverTransition();
-    pointerInside.current = false;
-    const current = presentationRef.current;
-    if (current === PANEL_PRESENTATION.CAPSULE) return;
-    // The slot is drawn for someone who is somewhere else entirely — in a
-    // browser, fetching the key it is waiting for — so the pointer being away
-    // from it is the normal case rather than a dismissal.
-    if (current === PANEL_PRESENTATION.SLOT) return;
-    // The composer holds words someone is in the middle of, which the pointer
-    // must not be allowed to discard: like the slot, it stays put until it is
-    // dismissed, cancelled, or sent.
-    if (current === PANEL_PRESENTATION.FEEDBACK) return;
-    // A key half-typed is one thing the pointer must not be allowed to
-    // discard; an ask being typed to Luke is the other. Everything else on
-    // the settings tab closes like the sessions tab does.
-    if (current === PANEL_PRESENTATION.PANEL && (entryIsDrawn() || askEngaged.current)) return;
-    hoverTimer.current = window.setTimeout(() => {
-      hoverTimer.current = undefined;
-      if (presentationRef.current === PANEL_PRESENTATION.PEEK) {
-        applyPresentation(PANEL_PRESENTATION.CAPSULE);
-      } else if (presentationRef.current === PANEL_PRESENTATION.PANEL) {
-        // Read again rather than trusting the answer from when this was
-        // scheduled: an entry can begin inside the delay — pressing Connect and
-        // reaching for the keyboard does exactly that — and a close decided
-        // before it began would discard it.
-        if (entryIsDrawn() || askEngaged.current) return;
-        void changeMode(false);
-      }
-    }, LEAVE_DELAY_MS);
-  }, [applyPresentation, cancelHoverTransition, changeMode, entryIsDrawn]);
-
-  /**
-   * The ask field taking or letting go of the caret. Letting go while the
-   * pointer is already away has to release the hold the caret had on the
-   * panel — the pointer cannot leave a second time — which is the same rule
-   * ending a credential entry follows.
-   */
-  const changeAskEngagement = useCallback(
-    (engaged: boolean) => {
-      const released = askEngaged.current && !engaged;
-      askEngaged.current = engaged;
-      if (released && !pointerInside.current) handleHitRegionLeave();
-    },
-    [handleHitRegionLeave],
-  );
-
-  /**
-   * Brings the panel back around the line the entry belongs to, and leaves it
-   * open the way every other way of opening it does — the pointer closes it by
-   * visiting and leaving.
-   */
-  const restorePanel = useCallback(() => {
-    changeTab(PANEL_TAB.SETTINGS);
-    // The line the entry belongs to lives on the Connections page, and
-    // changeTab has just reset the tab to its front page: without this, the
-    // check appearing beside the provider — the answer to what was just done
-    // — would land on a page nobody is looking at.
-    setSettingsView(SETTINGS_VIEW.CONNECTIONS);
-    void changeMode(true);
-  }, [changeMode, changeTab]);
-
-  const settlePanel = useCallback(() => {
-    hoverTimer.current = window.setTimeout(() => {
-      hoverTimer.current = undefined;
-      if (presentationRef.current === PANEL_PRESENTATION.PANEL) void changeMode(false);
-    }, SETTLE_DELAY_MS);
-  }, [changeMode]);
-
-  const leavePanel = useCallback(() => {
-    void changeMode(false);
-  }, [changeMode]);
-
   /**
    * Asking to write a key is asking for one thing, so the panel gets out of the
    * way of it: the shape goes down to the slot, which is the field and nothing
@@ -651,14 +432,14 @@ export function App(): React.JSX.Element {
       setSettings(result.settings);
       return result.reason ? { rejection: result.reason } : {};
     },
-    pointerInside: () => pointerInside.current,
-    presentation: () => presentationRef.current,
-    onReleasedWhileAway: handleHitRegionLeave,
-    cancelHover: cancelHoverTransition,
+    pointerInside: pointerIsInside,
+    presentation: presentationOf,
+    onReleasedWhileAway: onHitRegionLeave,
+    cancelHover,
     applyPresentation,
     restorePanel,
-    leave: leavePanel,
-    settle: settlePanel,
+    leave,
+    settle,
     heldRef: credentialHeld,
   });
 
@@ -685,9 +466,9 @@ export function App(): React.JSX.Element {
     if (!panelEntryOpen(current)) return;
     window.sidecar.openProviderApiKeys(current.providerId);
     credentialsEntry.apply({ ...current, away: true });
-    if (presentationRef.current === PANEL_PRESENTATION.SLOT) return;
+    if (presentationOf() === PANEL_PRESENTATION.SLOT) return;
     credentialsEntry.standDown();
-  }, [credentialsEntry.apply, credentialsEntry.latest, credentialsEntry.standDown]);
+  }, [credentialsEntry.apply, credentialsEntry.latest, credentialsEntry.standDown, presentationOf]);
 
   const removeProviderApiKey = useCallback(
     async (providerId: CredentialProviderId) => {
@@ -814,14 +595,14 @@ export function App(): React.JSX.Element {
       }
     },
     onDelivered: () => showFeedbackNotice("Sent — thank you."),
-    pointerInside: () => pointerInside.current,
-    presentation: () => presentationRef.current,
-    onReleasedWhileAway: handleHitRegionLeave,
-    cancelHover: cancelHoverTransition,
+    pointerInside: pointerIsInside,
+    presentation: presentationOf,
+    onReleasedWhileAway: onHitRegionLeave,
+    cancelHover,
     applyPresentation,
     restorePanel,
-    leave: leavePanel,
-    settle: settlePanel,
+    leave,
+    settle,
     heldRef: feedbackHeld,
   });
 
@@ -859,10 +640,10 @@ export function App(): React.JSX.Element {
    * panel, or — from the tray — nothing at all.
    */
   const dismissFeedback = useCallback(() => {
-    if (presentationRef.current !== PANEL_PRESENTATION.FEEDBACK) return;
+    if (presentationOf() !== PANEL_PRESENTATION.FEEDBACK) return;
     if (feedbackEntry.latest()?.fromPanel === true) restorePanel();
-    else leavePanel();
-  }, [feedbackEntry.latest, leavePanel, restorePanel]);
+    else leave();
+  }, [feedbackEntry.latest, leave, presentationOf, restorePanel]);
 
   /**
    * Takes picked or pasted files aboard. Encoding happens here on the user's
@@ -991,10 +772,10 @@ export function App(): React.JSX.Element {
         providerId: session.providerId,
         providerSessionId: session.id,
       });
-      cancelHoverTransition();
+      cancelHover();
       void changeMode(false);
     },
-    [cancelHoverTransition, changeMode],
+    [cancelHover, changeMode],
   );
 
   /**
@@ -1008,14 +789,14 @@ export function App(): React.JSX.Element {
       const result = await window.sidecar.openSession(identity);
       if (
         result.status === SESSION_OPEN_RESULT_STATUS.OPENED &&
-        presentationRef.current === PANEL_PRESENTATION.PANEL
+        presentationOf() === PANEL_PRESENTATION.PANEL
       ) {
-        cancelHoverTransition();
+        cancelHover();
         void changeMode(false);
       }
       return result;
     },
-    [cancelHoverTransition, changeMode],
+    [cancelHover, changeMode, presentationOf],
   );
 
   /**
@@ -1027,17 +808,17 @@ export function App(): React.JSX.Element {
   const summonAsk = useCallback(() => {
     const field = document.getElementById(ASK_LUKE_INPUT_ID);
     if (
-      presentationRef.current === PANEL_PRESENTATION.PANEL &&
+      presentationOf() === PANEL_PRESENTATION.PANEL &&
       field !== null &&
       document.activeElement === field
     ) {
-      cancelHoverTransition();
+      cancelHover();
       void changeMode(false);
       return;
     }
     changeTab(PANEL_TAB.SESSIONS);
     focusAskField();
-  }, [cancelHoverTransition, changeMode, changeTab]);
+  }, [cancelHover, changeMode, changeTab, presentationOf]);
 
   /**
    * The panel standing back down once an errand it stood up is over. The same
@@ -1054,13 +835,10 @@ export function App(): React.JSX.Element {
   const standDownAfterErrand = useCallback(() => {
     if (!errandOpenedPanel.current) return;
     errandOpenedPanel.current = false;
-    if (pointerInside.current || entryIsDrawn() || askEngaged.current) return;
-    cancelHoverTransition();
-    hoverTimer.current = window.setTimeout(() => {
-      hoverTimer.current = undefined;
-      if (presentationRef.current === PANEL_PRESENTATION.PANEL) void changeMode(false);
-    }, SETTLE_DELAY_MS);
-  }, [cancelHoverTransition, changeMode, entryIsDrawn]);
+    if (pointerIsInside() || heldAgainstPointer()) return;
+    cancelHover();
+    settle();
+  }, [cancelHover, heldAgainstPointer, pointerIsInside, settle]);
 
   /**
    * The spoken asks about Luke himself. A settings change goes through the
@@ -1105,7 +883,7 @@ export function App(): React.JSX.Element {
           releaseErrandChange();
           return outcome;
         }
-        const opening = presentationRef.current !== PANEL_PRESENTATION.PANEL;
+        const opening = presentationOf() !== PANEL_PRESENTATION.PANEL;
         // The guide's ids travel as plain text, so one that names no setting
         // of Luke's names no page either — and nothing will fly to it.
         const page = isAppSettingId(action.setting.id)
@@ -1192,7 +970,7 @@ export function App(): React.JSX.Element {
       // Whether this ask is what opens the panel, read before it does: an
       // errand into a shape still growing has to trail the whole opening,
       // and one into a panel already up does not.
-      const opening = presentationRef.current !== PANEL_PRESENTATION.PANEL;
+      const opening = presentationOf() !== PANEL_PRESENTATION.PANEL;
       changeTab(action.tab);
       const spoken = action.filter ? sessionFilterFromSpoken(action.filter) : undefined;
       // An agent this build never registered cannot narrow the list, and Luke
@@ -1238,6 +1016,7 @@ export function App(): React.JSX.Element {
       releaseErrandChange,
       runErrand,
       feedbackEntry.latest,
+      presentationOf,
     ],
   );
 
@@ -1305,13 +1084,11 @@ export function App(): React.JSX.Element {
       // back. `detail` is 0 when the keyboard activated the button, and there
       // the focus is the point and stays where the keyboard put it.
       if (event.detail > 0) event.currentTarget.blur();
-      cancelHoverTransition();
-      void changeMode(presentationRef.current !== PANEL_PRESENTATION.PANEL);
+      cancelHover();
+      void changeMode(presentationOf() !== PANEL_PRESENTATION.PANEL);
     },
-    [cancelHoverTransition, changeMode],
+    [cancelHover, changeMode, presentationOf],
   );
-
-  usePointerPassthrough(handleHitRegionEnter, handleHitRegionLeave, presentation);
 
   // `:focus-visible` is a heuristic about how focus arrived, and here it guesses
   // wrong: the panel takes focus programmatically when it opens, which the
@@ -1337,7 +1114,7 @@ export function App(): React.JSX.Element {
   }, []);
 
   useEffect(() => {
-    const bootstrapGeneration = modeGeneration.current;
+    const bootstrapGeneration = modeGenerationOf();
     void window.sidecar.getBootstrap().then((value) => {
       setBootstrap(value);
       setSessions(value.sessions);
@@ -1348,7 +1125,7 @@ export function App(): React.JSX.Element {
       if (!issuesPushed.current) syncIssues(value.issues);
       if (!settingsPushed.current) setSettings(value.settings);
       setDisplay(value.display);
-      if (modeGeneration.current === bootstrapGeneration) {
+      if (modeGenerationOf() === bootstrapGeneration) {
         applyAuthoritativeMode(value.mode);
         if (value.startPeeked && value.mode === "compact") {
           applyPresentation(PANEL_PRESENTATION.PEEK);
@@ -1426,7 +1203,7 @@ export function App(): React.JSX.Element {
       syncIssues(issues);
     });
     return () => {
-      cancelHoverTransition();
+      cancelHover();
       removeLifecycle();
       removeDisplay();
       removeSettings();
@@ -1441,7 +1218,7 @@ export function App(): React.JSX.Element {
     applyPresentation,
     beginEntry,
     beginFeedback,
-    cancelHoverTransition,
+    cancelHover,
     changeTab,
     setMicrophoneStatus,
     setVoiceStatus,
@@ -1449,6 +1226,7 @@ export function App(): React.JSX.Element {
     stopMicrophone,
     summonAsk,
     syncIssues,
+    modeGenerationOf,
   ]);
 
   // Silence is counted in stretches — one per unbroken run of muted-or-zero —
