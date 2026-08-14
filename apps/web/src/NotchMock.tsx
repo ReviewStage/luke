@@ -9,13 +9,20 @@ import {
   type SessionState,
 } from "@sidecar/core";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
+import { CloudBadge, ProviderMark } from "./provider-marks";
 
 /**
  * The hero visual: a CSS recreation of Luke's real surface, ported from
  * `apps/desktop/src/renderer`. It draws the product's smoke fixture and moves
- * through the product's own presentations — the capsule at rest, the peek
- * under the pointer, the panel on a press — on the same sampled spring, so the
- * page and the app read as one piece of software.
+ * through the product's own presentations — the capsule at rest, the peek,
+ * the panel — on the same sampled spring, so the page and the app read as one
+ * piece of software.
+ *
+ * In the product the pointer drives those presentations. On the page the
+ * scroll does: the mock pins while the visitor scrolls through its section
+ * and steps capsule → peek → panel as they go, so the motion is seen by
+ * everyone who reaches the hero — including everyone on a phone — instead of
+ * only by whoever thought to hover an unlabelled strip.
  */
 const MOCK_MODE = {
   CAPSULE: "capsule",
@@ -25,17 +32,15 @@ const MOCK_MODE = {
 
 type MockMode = (typeof MOCK_MODE)[keyof typeof MOCK_MODE];
 
-/** `PEEK_ENTER_DELAY_MS` and `LEAVE_DELAY_MS` in the renderer's panel-state.ts. */
-const PEEK_ENTER_DELAY_MS = 60;
-const LEAVE_DELAY_MS = 110;
-
 /**
- * The attract pass: one peek shortly after load, put away again a beat later,
- * so a visitor who never reaches for the art still sees the capsule answer.
- * The product does the same on first launch with `startPeeked`.
+ * Where in the pinned section each presentation begins, as a share of the
+ * scroll runway. The capsule keeps a beat at the start so arriving at the
+ * section shows the product at rest before it answers; the panel takes the
+ * back half, so it is open for the whole of the pin's tail and is what the
+ * section leaves the visitor looking at.
  */
-const ATTRACT_ENTER_MS = 1_200;
-const ATTRACT_HOLD_MS = 2_600;
+const PEEK_AT = 0.14;
+const PANEL_AT = 0.46;
 
 /** The values a MacBook's notch reports, matching the renderer's fixture. */
 const HOUSING_WIDTH = 210;
@@ -82,8 +87,6 @@ const TALLY_STATE: SessionState =
 const TALLY_CAPTION =
   ATTENTION_COUNT > 0 ? `${ATTENTION_COUNT} ${ATTENTION_COUNT === 1 ? "needs" : "need"} you` : "";
 
-const TALLY_SUMMARY = `${MOCK_SESSIONS.length} sessions tracked, ${ATTENTION_COUNT} needing you`;
-
 /** Providers in the order the wing draws them: first to need a person first. */
 const WING_PROVIDERS = MOCK_SESSIONS.map((session) => session.providerId).filter(
   (providerId, index, all) => all.indexOf(providerId) === index,
@@ -125,47 +128,10 @@ function observedAgoLabel(observedAt: number): string {
   return `${Math.floor(elapsedHours / 24)}d`;
 }
 
-const MOCK_LABEL = `Luke's session panel, listing ${MOCK_SESSIONS.map(
+const MOCK_LABEL = `Luke's notch capsule expanding into its session panel, listing ${MOCK_SESSIONS.map(
   (session) =>
     `${session.title} on ${session.provider}, ${STATE_LABEL[session.state].toLowerCase()}`,
 ).join("; ")}.`;
-
-/**
- * Where the product draws a licensed provider mark, the public mock draws a
- * quiet geometric sigil instead, so the page republishes nobody's brand. One
- * shape per fixture provider, stroked on the same 24-box and weight as the
- * renderer's own glyphs, so the wings and the rows still tell one story.
- */
-const AGENT_SIGILS: readonly React.JSX.Element[] = [
-  <circle key="ring" cx="12" cy="12" r="7.6" />,
-  <rect key="tile" x="5.2" y="5.2" width="13.6" height="13.6" rx="3.4" />,
-  <path key="delta" d="M12 4.8 20 18.9H4z" />,
-  <path key="lozenge" d="M12 4.2 19.8 12 12 19.8 4.2 12z" />,
-  <path key="hex" d="M12 4.4l6.6 3.8v7.6L12 19.6l-6.6-3.8V8.2z" />,
-];
-
-function AgentSigil({
-  providerId,
-}: {
-  providerId: (typeof WING_PROVIDERS)[number];
-}): React.JSX.Element {
-  const sigil = AGENT_SIGILS[WING_PROVIDERS.indexOf(providerId) % AGENT_SIGILS.length];
-  return (
-    <svg
-      className="provider-mark"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.9"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      focusable="false"
-    >
-      {sigil}
-    </svg>
-  );
-}
 
 /**
  * Luke's face at rest, traced from `design/brand/` like the nav's mark but on
@@ -189,17 +155,6 @@ function WingFace(): React.JSX.Element {
         <circle cx="162" cy="92" r="12" fill="currentColor" />
       </g>
     </svg>
-  );
-}
-
-/** The renderer's own cloud badge: ours rather than a brand, drawn filled. */
-function CloudBadge(): React.JSX.Element {
-  return (
-    <span className="cloud-badge">
-      <svg viewBox="0 0 20 14" fill="currentColor" aria-hidden="true" focusable="false">
-        <path d="M4.5 14a4.5 4.5 0 0 1-1.259-8.82 7 7 0 0 1 13.518 0A4.5 4.5 0 0 1 15.5 14z" />
-      </svg>
-    </span>
   );
 }
 
@@ -271,7 +226,7 @@ function MockSessionRow({
       style={{ "--row-index": index + 1 } as CSSProperties}
     >
       <span className="row-mark">
-        <AgentSigil providerId={session.providerId} />
+        <ProviderMark providerId={session.providerId} />
         {session.location === SESSION_LOCATION.CLOUD ? <CloudBadge /> : null}
       </span>
       <span className="row-copy">
@@ -299,91 +254,51 @@ export function NotchMock(): React.JSX.Element {
   const [mode, setMode] = useState<MockMode>(MOCK_MODE.CAPSULE);
   const [panelHeight, setPanelHeight] = useState<number>();
   const modeRef = useRef<MockMode>(MOCK_MODE.CAPSULE);
-  const hoverTimer = useRef<number>(undefined);
-  const interacted = useRef(false);
+  const scrollSection = useRef<HTMLDivElement>(null);
 
   const applyMode = useCallback((next: MockMode) => {
+    if (modeRef.current === next) return;
     modeRef.current = next;
     setMode(next);
   }, []);
 
-  const cancelHoverTransition = useCallback(() => {
-    if (hoverTimer.current === undefined) return;
-    window.clearTimeout(hoverTimer.current);
-    hoverTimer.current = undefined;
-  }, []);
-
-  /** The pointer arriving: the capsule peeks after the product's own delay. */
-  const enterShape = useCallback(
-    (event: React.PointerEvent) => {
-      if (event.pointerType === "touch") return;
-      interacted.current = true;
-      cancelHoverTransition();
-      if (modeRef.current !== MOCK_MODE.CAPSULE) return;
-      hoverTimer.current = window.setTimeout(() => {
-        hoverTimer.current = undefined;
-        if (modeRef.current === MOCK_MODE.CAPSULE) applyMode(MOCK_MODE.PEEK);
-      }, PEEK_ENTER_DELAY_MS);
-    },
-    [applyMode, cancelHoverTransition],
-  );
-
-  /** The pointer leaving: peek and panel close on the same short delay. */
-  const leaveShape = useCallback(
-    (event: React.PointerEvent) => {
-      if (event.pointerType === "touch") return;
-      cancelHoverTransition();
-      hoverTimer.current = window.setTimeout(() => {
-        hoverTimer.current = undefined;
-        if (modeRef.current !== MOCK_MODE.CAPSULE) applyMode(MOCK_MODE.CAPSULE);
-      }, LEAVE_DELAY_MS);
-    },
-    [applyMode, cancelHoverTransition],
-  );
-
-  /** The strip is a button: pressing it opens the panel, or closes it again. */
-  const pressStrip = useCallback(
-    (event: React.MouseEvent<HTMLButtonElement>) => {
-      if (event.detail > 0) event.currentTarget.blur();
-      interacted.current = true;
-      cancelHoverTransition();
-      applyMode(modeRef.current === MOCK_MODE.PANEL ? MOCK_MODE.CAPSULE : MOCK_MODE.PANEL);
-    },
-    [applyMode, cancelHoverTransition],
-  );
-
-  // One unprompted peek after load, exactly once, and never over a visitor
-  // who has already taken the pointer to it. Reduced motion skips the theater:
-  // with every transition at 1ms an unasked-for state change is just a blink.
+  // The scroll is the whole interaction. Progress through the pinned section
+  // is read off the section's own box — no thresholds in pixels, so the same
+  // arc plays on a phone and on a desktop — and each presentation holds its
+  // share of the runway in either direction: scrolling back up folds the
+  // panel down to the peek and the peek back into the capsule.
   useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const enter = window.setTimeout(() => {
-      if (!interacted.current && modeRef.current === MOCK_MODE.CAPSULE) {
-        applyMode(MOCK_MODE.PEEK);
+    const section = scrollSection.current;
+    if (!section) return;
+    let frame: number | undefined;
+    const update = () => {
+      frame = undefined;
+      const runway = section.offsetHeight - window.innerHeight;
+      if (runway <= 0) {
+        applyMode(MOCK_MODE.PANEL);
+        return;
       }
-    }, ATTRACT_ENTER_MS);
-    const leave = window.setTimeout(() => {
-      if (!interacted.current && modeRef.current === MOCK_MODE.PEEK) {
-        applyMode(MOCK_MODE.CAPSULE);
-      }
-    }, ATTRACT_ENTER_MS + ATTRACT_HOLD_MS);
+      const progress = -section.getBoundingClientRect().top / runway;
+      applyMode(
+        progress >= PANEL_AT
+          ? MOCK_MODE.PANEL
+          : progress >= PEEK_AT
+            ? MOCK_MODE.PEEK
+            : MOCK_MODE.CAPSULE,
+      );
+    };
+    const schedule = () => {
+      frame ??= window.requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
     return () => {
-      window.clearTimeout(enter);
-      window.clearTimeout(leave);
+      if (frame !== undefined) window.cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
     };
   }, [applyMode]);
-
-  // Escape closes an open panel, as it does in the product.
-  useEffect(() => {
-    if (mode !== MOCK_MODE.PANEL) return;
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      cancelHoverTransition();
-      applyMode(MOCK_MODE.CAPSULE);
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [applyMode, cancelHoverTransition, mode]);
 
   // `useShapeHeight` in the renderer: the black surface ends where the content
   // does, so the panel's height is measured rather than guessed.
@@ -416,101 +331,84 @@ export function NotchMock(): React.JSX.Element {
   const providers = WING_PROVIDERS.slice(0, overflowing ? drawnCapacity - 1 : drawnCapacity);
   const unshown = WING_PROVIDERS.length - providers.length;
 
-  const panelOpen = mode === MOCK_MODE.PANEL;
-
   return (
-    <div className="mock-wrapper">
-      <div
-        className="mock"
-        data-mode={mode}
-        style={
-          {
-            ...(panelHeight === undefined ? {} : { "--panel-height": `${panelHeight}px` }),
-          } as CSSProperties
-        }
-      >
-        <span className="mock-frame" />
+    <div className="mock-scroll" ref={scrollSection}>
+      <div className="mock-pin">
+        {/* One labelled image, like the old mock: nothing inside is a control,
+            so the whole recreation reads as a single illustration. The hidden
+            stage stays inert so find-in-page cannot match invisible titles and
+            a drag cannot select text nobody can see. */}
+        <div
+          className="mock"
+          data-mode={mode}
+          role="img"
+          aria-label={MOCK_LABEL}
+          style={
+            {
+              ...(panelHeight === undefined ? {} : { "--panel-height": `${panelHeight}px` }),
+            } as CSSProperties
+          }
+        >
+          <span className="mock-frame" />
 
-        {/* Capsule, peek and panel are all this one shape at different sizes,
-            so the surface is never cross-faded — it is only ever resized. */}
-        <span className="panel-surface" aria-hidden="true" />
+          {/* Capsule, peek and panel are all this one shape at different sizes,
+              so the surface is never cross-faded — it is only ever resized. */}
+          <span className="panel-surface" />
 
-        {/* Inert while hidden, as in the product: the panel keeps its full
-            layout box behind `opacity: 0`, so find-in-page and focus must not
-            reach into it. */}
-        <div className="expanded-stage" aria-hidden={!panelOpen} inert={!panelOpen}>
-          <section
-            className="expanded-panel"
-            ref={measurePanel}
-            role="img"
-            aria-label={MOCK_LABEL}
-            onPointerEnter={enterShape}
-            onPointerLeave={leaveShape}
-          >
-            <div className="body">
-              <div className="panel-header" style={{ "--row-index": 0 } as CSSProperties}>
-                <div
-                  className="tab-bar"
-                  style={{ "--tab-count": 2, "--tab-index": 0 } as CSSProperties}
-                >
-                  <span className="tab-thumb" />
-                  <span className="tab" data-active="true">
-                    Sessions
-                  </span>
-                  <span className="tab" data-active="false">
-                    Settings
+          <div className="expanded-stage" inert>
+            <section className="expanded-panel" ref={measurePanel}>
+              <div className="body">
+                <div className="panel-header" style={{ "--row-index": 0 } as CSSProperties}>
+                  <div
+                    className="tab-bar"
+                    style={{ "--tab-count": 2, "--tab-index": 0 } as CSSProperties}
+                  >
+                    <span className="tab-thumb" />
+                    <span className="tab" data-active="true">
+                      Sessions
+                    </span>
+                    <span className="tab" data-active="false">
+                      Settings
+                    </span>
+                  </div>
+                  <span className="options-button">
+                    <OptionsIcon />
                   </span>
                 </div>
-                <span className="options-button">
-                  <OptionsIcon />
-                </span>
+                <div className="session-list">
+                  {MOCK_SESSIONS.map((session, index) => (
+                    <MockSessionRow key={session.id} session={session} index={index} />
+                  ))}
+                </div>
               </div>
-              <div className="session-list">
-                {MOCK_SESSIONS.map((session, index) => (
-                  <MockSessionRow key={session.id} session={session} index={index} />
+            </section>
+          </div>
+
+          {/* The wings: Luke nearest the housing, what he is watching unfolding
+              outward on one side, the count and its caption on the other. */}
+          <div className="wing wing-left">
+            <div className="wing-inner">
+              <span className="wing-marks">
+                {providers.map((providerId) => (
+                  <span className="wing-mark" key={providerId}>
+                    <ProviderMark providerId={providerId} />
+                  </span>
                 ))}
-              </div>
+                {unshown > 0 ? <span className="wing-more">+{unshown}</span> : null}
+              </span>
+              <WingFace />
             </div>
-          </section>
-        </div>
+          </div>
 
-        {/* The wings: Luke nearest the housing, what he is watching unfolding
-            outward on one side, the count and its caption on the other. */}
-        <div className="wing wing-left" aria-hidden="true">
-          <div className="wing-inner">
-            <span className="wing-marks">
-              {providers.map((providerId) => (
-                <span className="wing-mark" key={providerId}>
-                  <AgentSigil providerId={providerId} />
-                </span>
-              ))}
-              {unshown > 0 ? <span className="wing-more">+{unshown}</span> : null}
-            </span>
-            <WingFace />
+          <div className="wing wing-right">
+            <div className="wing-inner">
+              <span className="count-badge" data-state={TALLY_STATE}>
+                <span className="count-value">{MOCK_SESSIONS.length}</span>
+                <span className="count-caption">{TALLY_CAPTION}</span>
+              </span>
+            </div>
           </div>
         </div>
-
-        <div className="wing wing-right" aria-hidden="true">
-          <div className="wing-inner">
-            <span className="count-badge" data-state={TALLY_STATE}>
-              <span className="count-value">{MOCK_SESSIONS.length}</span>
-              <span className="count-caption">{TALLY_CAPTION}</span>
-            </span>
-          </div>
-        </div>
-
-        {/* The press target tracks the drawn shape, snapping rather than
-            animating, exactly like the renderer's compact-hover-target. */}
-        <button
-          type="button"
-          className="compact-hover-target"
-          aria-expanded={panelOpen}
-          aria-label={`${TALLY_SUMMARY}. ${panelOpen ? "Close" : "Open"} the panel`}
-          onMouseDown={(event) => event.preventDefault()}
-          onPointerEnter={enterShape}
-          onPointerLeave={leaveShape}
-          onClick={pressStrip}
-        />
       </div>
     </div>
   );

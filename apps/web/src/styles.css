@@ -241,20 +241,36 @@ button {
 /* Notch mock
    Ported from apps/desktop/src/renderer/styles/base.css and styles/sessions.css.
    The class names are the renderer's own so the two sheets stay diffable; the
-   `.mock` scope, the display frame, and the attract pass are the only page-side
+   `.mock` scope, the display frame, and the scroll pin are the only page-side
    inventions. `data-mode` here is `data-presentation` there, with the slot —
    a credential entry the page has no story for — left out.
    ------------------------------------------------------------------------- */
 
-.mock-wrapper {
+/* The runway the mock plays through. In the product the pointer drives the
+   presentations; here the scroll does: the art pins while its section scrolls
+   past, and progress through the section steps capsule → peek → panel. The
+   one gesture every visitor already makes is what plays the motion, on a
+   phone as well as under a pointer. */
+.mock-scroll {
+  /* Small-viewport units, so a collapsing mobile URL bar neither stretches
+     the runway nor bounces the thresholds while the visitor is mid-scroll. */
+  height: 165svh;
+  margin-top: var(--space-7);
+}
+
+.mock-pin {
+  position: sticky;
+  /* High enough that the open panel sits comfortably on screen, low enough
+     that the capsule clears a phone browser's own chrome. */
+  top: max(72px, 14svh);
   display: flex;
   justify-content: center;
-  /* `transform: scale()` leaves the layout box at full size, so the wrapper has
-     to track the scale itself or a phone renders 560px of empty space under a
-     290px-tall visual. `clip` keeps the untransformed 700px width from opening
-     a horizontal scrollbar. */
+  /* `transform: scale()` leaves the layout box at full size, so the pin
+     tracks the scale itself or a phone reserves 560px for a 270px visual.
+     `clip` keeps the untransformed 700px width from opening a horizontal
+     scrollbar — and it must be `clip`, not `hidden`: a scroll container
+     ancestor is exactly what stops `position: sticky` from sticking. */
   height: calc(var(--mock-height) * var(--mock-scale));
-  margin-top: var(--space-7);
   overflow: clip;
 }
 
@@ -272,6 +288,18 @@ button {
   --state-idle: rgba(255, 255, 255, 0.44);
   --text-primary: rgba(255, 255, 255, 0.95);
   --text-tertiary: rgba(255, 255, 255, 0.34);
+
+  /* Provider brand colours, used only by the marks and ported with them:
+     Claude Code's published coral, the vertical gradient Codex draws its mark
+     with, the light half of Conductor's two-colour palette, and the light
+     silhouettes Cursor and Devin publish for dark surfaces. */
+  --mark-claude-code: #d97757;
+  --mark-codex-top: #b1a7ff;
+  --mark-codex-middle: #7a9dff;
+  --mark-codex-bottom: #3941ff;
+  --mark-conductor: #eae8e6;
+  --mark-cursor: #ffffff;
+  --mark-devin: #ffffff;
 
   /* One sampled damped spring drives every resize, at one duration. A real
      spring's motion is a property of the spring, not of how far it is asked
@@ -521,46 +549,6 @@ button {
   transition-delay: 0s, 0s, 0s, 0s, var(--duration-shape), 0s;
 }
 
-/* Tracks the drawn shape rather than the art's box: everything the shape does
-   not cover belongs to the page. It snaps rather than animating, so the wider
-   peek is live from the first frame. */
-.mock .compact-hover-target {
-  position: absolute;
-  z-index: 4;
-  top: 0;
-  left: 50%;
-  width: var(--capsule-width);
-  height: var(--capsule-height);
-  padding: 0;
-  border: 0;
-  border-radius: 0 0 var(--notch-convex-radius) var(--notch-convex-radius);
-  background: none;
-  cursor: default;
-  transform: translateX(-50%);
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* Inset, like the product's: an outline outside this box would be drawn on
-   the display glass past the edge of the shape. */
-.mock .compact-hover-target:focus-visible {
-  outline: 2px solid var(--state-working);
-  outline-offset: -4px;
-}
-
-.mock[data-mode="peek"] .compact-hover-target {
-  width: var(--peek-width);
-  cursor: pointer;
-}
-
-/* The strip keeps taking clicks over an open panel: pressing it is how the
-   panel closes again. It spans the shape rather than the capsule it grew
-   from. */
-.mock[data-mode="panel"] .compact-hover-target {
-  width: var(--panel-width);
-  border-radius: 0;
-  cursor: pointer;
-}
-
 /* Notch wings. Bounded by the shape the wing's state draws, never by the
    art's box, so nothing that unfolds can be drawn past the black. */
 .mock .wing {
@@ -662,6 +650,37 @@ button {
   width: 14px;
   height: 14px;
   flex: 0 0 auto;
+}
+
+/* The marks fill their box very differently — the Claude Code glyph is wide
+   and short, the Codex and Cursor marks are full-bleed, and Conductor's
+   letter mark is taller than it is wide — so each gets a uniform scale to sit
+   at the same optical weight. Proportions are untouched, as the renderer's
+   own sheet insists. */
+.mock .provider-mark[data-mark="claude-code"] {
+  color: var(--mark-claude-code);
+  transform: scale(1.12);
+}
+
+.mock .provider-mark[data-mark="codex"] {
+  transform: scale(0.94);
+}
+
+.mock .provider-mark[data-mark="conductor"] {
+  color: var(--mark-conductor);
+  transform: scale(0.93);
+}
+
+.mock .provider-mark[data-mark="cursor"] {
+  color: var(--mark-cursor);
+  transform: scale(0.94);
+}
+
+/* Devin's published mark leaves roughly a fifth of its box empty on every
+   side, so it is scaled up to the height the full-bleed marks reach. */
+.mock .provider-mark[data-mark="devin"] {
+  color: var(--mark-devin);
+  transform: scale(1.22);
 }
 
 /* Luke holds the place nearest the housing in every state: the marks and the
@@ -775,10 +794,6 @@ button {
   /* The hero centers its own copy; the panel is a recreation of a real
      left-aligned product surface and must not inherit that. */
   text-align: left;
-}
-
-.mock[data-mode="panel"] .expanded-panel {
-  pointer-events: auto;
 }
 
 .mock .body {
@@ -919,7 +934,6 @@ button {
   width: 30px;
   height: 30px;
   flex: 0 0 auto;
-  color: var(--text-secondary);
   place-items: center;
 }
 
@@ -1102,7 +1116,9 @@ button {
 
 @media (max-width: 520px) {
   :root {
-    --mock-scale: 0.52;
+    /* Sized so the scaled 700px art clears the shell's padding on a 360px
+       display instead of losing its frame edges to the pin's clip. */
+    --mock-scale: 0.46;
   }
 
   .shell {
@@ -1113,7 +1129,7 @@ button {
     padding: var(--space-6) 0 0;
   }
 
-  .mock-wrapper {
+  .mock-scroll {
     margin-top: var(--space-7);
   }
 }
