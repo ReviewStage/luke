@@ -9,6 +9,7 @@ import {
   type NormalizedSession,
   type ObservedWorkspaceProject,
   type PanelFormFactor,
+  type ProviderId,
   REALTIME_STATUS,
   type RealtimeStatus,
   type RealtimeVoice,
@@ -16,6 +17,7 @@ import {
   type SessionIdentity,
   type TrackedIssue,
   VOICE_CAPTION_MAX_HEIGHT,
+  type WorkspaceAgentSelection,
 } from "@sidecar/core";
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -30,7 +32,11 @@ import type {
 } from "../shared/contracts";
 import { CREDENTIAL_SOURCE, SESSION_OPEN_RESULT_STATUS } from "../shared/contracts";
 import type { CredentialProviderId } from "../shared/credential-providers";
-import { CREDENTIAL_PROVIDER_LIST } from "../shared/credential-providers";
+import {
+  CREDENTIAL_PROVIDER_LIST,
+  CREDENTIAL_PROVIDERS,
+  isCredentialProviderId,
+} from "../shared/credential-providers";
 import type { FeedbackImage, FeedbackKind } from "../shared/feedback";
 import { FEEDBACK_KIND, FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from "../shared/feedback";
 import {
@@ -420,6 +426,12 @@ export function App(): React.JSX.Element {
   const sessionsRef = useRef<readonly NormalizedSession[]>([]);
   const workspaceProjectsRef = useRef<readonly ObservedWorkspaceProject[]>([]);
   /**
+   * The default provider as last pushed beside the projects, for a
+   * conversation that connects later: the two travel as one context, so the
+   * connect-time push has to carry both.
+   */
+  const defaultWorkspaceProviderRef = useRef<string | undefined>(undefined);
+  /**
    * Whether a live projects push has arrived. The bootstrap reply resolves
    * whenever the main process gets to it, so a push can land first — and the
    * bootstrap's older snapshot must then not clobber it, because the main
@@ -526,6 +538,7 @@ export function App(): React.JSX.Element {
                   action.providerProjectId,
                   action.name,
                   action.task,
+                  action.agentSelection,
                 )
               : action.kind === "add-agent"
                 ? window.sidecar.addWorkspaceAgent(
@@ -533,6 +546,8 @@ export function App(): React.JSX.Element {
                     action.agent,
                     action.name,
                     action.task,
+                    action.model,
+                    action.effort,
                   )
                 : openSessionAloudRef.current(action.identity),
       // The asks about Luke himself — a settings change, the panel shown —
@@ -590,7 +605,10 @@ export function App(): React.JSX.Element {
     }
     if (await session.connect()) {
       session.updateSessions(sessionsRef.current);
-      session.updateWorkspaceProjects(workspaceProjectsRef.current);
+      session.updateWorkspaceProjects(
+        workspaceProjectsRef.current,
+        defaultWorkspaceProviderRef.current,
+      );
       session.updateGuide(guideRef.current);
       session.updateIssues(issuesRef.current);
     }
@@ -998,6 +1016,47 @@ export function App(): React.JSX.Element {
     return result.reason;
   }, []);
 
+  // Where a nameless creation ask goes, under the same rule — the same store
+  // write the first creation makes on its own, offered by hand so the choice
+  // can be changed or returned to asking each time.
+  const changeDefaultWorkspaceProvider = useCallback(async (providerId: ProviderId | undefined) => {
+    const result = await window.sidecar.setDefaultWorkspaceProvider(providerId);
+    setSettings(result.settings);
+    return result.reason;
+  }, []);
+
+  // The agent and model one provider starts new workspaces with, under the
+  // same rule: the row reads the state the store actually holds.
+  const changeWorkspaceAgentDefault = useCallback(
+    async (providerId: ProviderId, selection: WorkspaceAgentSelection | undefined) => {
+      const result = await window.sidecar.setWorkspaceAgentDefault(providerId, selection);
+      setSettings(result.settings);
+      return result.reason;
+    },
+    [],
+  );
+
+  /**
+   * The providers the default-workspace row can offer: every provider
+   * currently offering projects, named the way its adapter names itself, plus
+   * a stored default that is not offering right now — the row must show the
+   * choice it holds, or it could be neither seen nor cleared.
+   */
+  const storedWorkspaceProvider = settings?.defaultWorkspaceProvider;
+  const workspaceProviderOptions = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const project of workspaceProjects) names.set(project.providerId, project.providerName);
+    if (storedWorkspaceProvider && !names.has(storedWorkspaceProvider)) {
+      names.set(
+        storedWorkspaceProvider,
+        isCredentialProviderId(storedWorkspaceProvider)
+          ? CREDENTIAL_PROVIDERS[storedWorkspaceProvider].displayName
+          : storedWorkspaceProvider,
+      );
+    }
+    return [...names.entries()].map(([id, name]) => ({ id, name }));
+  }, [workspaceProjects, storedWorkspaceProvider]);
+
   const credentials: CredentialEntryControl = {
     entry,
     begin: beginEntry,
@@ -1232,6 +1291,67 @@ export function App(): React.JSX.Element {
   }, []);
 
   /**
+   * Carries a changed pace onto the call now open, whichever hand changed it:
+   * the settings row and a spoken ask both land in the stored snapshot, so
+   * watching the snapshot covers them equally. The first snapshot is the
+   * stored value rather than a change, and with no call open there is nothing
+   * to do — the next call is minted at the stored pace.
+   */
+  const heardSpeed = useRef<RealtimeVoiceSpeed | undefined>(undefined);
+  useEffect(() => {
+    const speed = settings?.voiceSpeed;
+    if (speed === undefined) return;
+    const previous = heardSpeed.current;
+    heardSpeed.current = speed;
+    if (previous === undefined || previous === speed) return;
+    voiceSession.current?.applySpeed(speed);
+  }, [settings?.voiceSpeed]);
+
+  /**
+   * Makes a changed voice heard now rather than from the next conversation on.
+   * The API locks a session's voice the moment the model first speaks, so the
+   * one way to change it on a live call is to open a new one. The restart
+   * waits for the turn under way to end — a spoken "change your voice" is
+   * confirmed in the old voice before the new one takes over — and the
+   * conversation starts afresh, because the call is the conversation. A call
+   * that ended on its own owes nothing: the next one is minted in the new
+   * voice already.
+   */
+  const heardVoice = useRef<RealtimeVoice | undefined>(undefined);
+  const voiceRestartDue = useRef(false);
+  useEffect(() => {
+    const voice = settings?.voice;
+    if (!voice) return;
+    const previous = heardVoice.current;
+    heardVoice.current = voice;
+    // A call being opened counts as one to reopen: its credential may already
+    // have been minted in the old voice, and a restart is the only answer the
+    // renderer can be sure of from here.
+    if (
+      previous !== undefined &&
+      previous !== voice &&
+      (voiceSession.current?.isConnected || voiceSession.current?.isConnecting)
+    ) {
+      voiceRestartDue.current = true;
+    }
+    if (!voiceRestartDue.current) return;
+    if (
+      voiceStatus === REALTIME_STATUS.IDLE ||
+      voiceStatus === REALTIME_STATUS.FAILED ||
+      voiceStatus === REALTIME_STATUS.UNAVAILABLE
+    ) {
+      voiceRestartDue.current = false;
+      return;
+    }
+    if (voiceStatus !== REALTIME_STATUS.READY) return;
+    voiceRestartDue.current = false;
+    void (async () => {
+      await voiceSession.current?.close();
+      await startMicrophoneRef.current?.();
+    })();
+  }, [settings?.voice, voiceStatus]);
+
+  /**
    * Moves the talk key, or resets it when no chord is named. The key the row
    * shows is not taken from this reply — the main process announces the one
    * that actually registered, the same way it always has — so the reply
@@ -1372,7 +1492,14 @@ export function App(): React.JSX.Element {
   const carryAppAction = useCallback<AppActionCarrier>(
     async (action) => {
       if (action.kind === "setting") {
-        return applySpokenSetting(window.sidecar, action, setSettings);
+        // The settings as this window holds them ride along so a spoken model
+        // or effort change composes against the selection actually stored.
+        return applySpokenSetting(
+          window.sidecar,
+          action,
+          setSettings,
+          settings ?? bootstrap?.settings,
+        );
       }
       if (action.kind === "feedback") {
         // The main process expands the window and sends the composer's
@@ -1442,7 +1569,7 @@ export function App(): React.JSX.Element {
         ...(action.sort ? { sort: action.sort } : {}),
       };
     },
-    [changeMode, changeTab],
+    [changeMode, changeTab, settings, bootstrap],
   );
   carryAppActionRef.current = carryAppAction;
 
@@ -1712,10 +1839,15 @@ export function App(): React.JSX.Element {
   // Keep the conversation's view of where a workspace can be created current,
   // for the same reason the roster is: a spoken creation ask is validated
   // against this list, so it has to be the list the adapters actually offer.
+  // The default provider travels with it — where a nameless ask goes is part
+  // of the same answer — resolved the way the guide resolves settings, so a
+  // default saved before this window's own settings arrived still steers.
+  const defaultWorkspaceProvider = (settings ?? bootstrap?.settings)?.defaultWorkspaceProvider;
   useEffect(() => {
     workspaceProjectsRef.current = workspaceProjects;
-    voiceSession.current?.updateWorkspaceProjects(workspaceProjects);
-  }, [workspaceProjects]);
+    defaultWorkspaceProviderRef.current = defaultWorkspaceProvider;
+    voiceSession.current?.updateWorkspaceProjects(workspaceProjects, defaultWorkspaceProvider);
+  }, [workspaceProjects, defaultWorkspaceProvider]);
 
   // Keep the conversation's view of Luke himself current, so a spoken question
   // about a setting is answered from the value the store actually holds, and a
@@ -2068,6 +2200,9 @@ export function App(): React.JSX.Element {
               onShowInDockChange: changeShowInDock,
               onShowOnAllDisplaysChange: changeShowOnAllDisplays,
               onFormFactorChange: changeFormFactor,
+              workspaceProviders: workspaceProviderOptions,
+              onDefaultWorkspaceProviderChange: changeDefaultWorkspaceProvider,
+              onWorkspaceAgentDefaultChange: changeWorkspaceAgentDefault,
               onQuit: () => window.sidecar.quit(),
             }}
           />

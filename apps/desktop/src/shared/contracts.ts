@@ -6,6 +6,7 @@ import type {
   ObservedWorkspaceProject,
   PanelFormFactor,
   ProviderControlResult,
+  ProviderId,
   ProviderMessageResult,
   ProviderWorkspaceResult,
   RealtimeConnection,
@@ -17,6 +18,7 @@ import type {
   TrackedIssue,
   TrackerActionResult,
   WindowMode,
+  WorkspaceAgentSelection,
 } from "@sidecar/core";
 import type { CredentialProviderId } from "./credential-providers";
 import type { FeedbackKind, FeedbackResult, FeedbackSubmission } from "./feedback";
@@ -49,6 +51,23 @@ export const SECRET_STORAGE = {
 } as const;
 
 export type SecretStorage = (typeof SECRET_STORAGE)[keyof typeof SECRET_STORAGE];
+
+/**
+ * What each plain preference is until the user chooses otherwise. The store
+ * falls back to these when the settings file has never said, and the app
+ * guide carries the same values so a spoken ask for "the default" names a
+ * real one — stated once so the two can never drift. The voice, pace, and
+ * form factor keep their defaults beside their own types in `@sidecar/core`,
+ * and the three keys' defaults live with the registrar that owns them.
+ */
+export const APP_SETTING_DEFAULTS = {
+  showInDock: false,
+  showInMenuBar: true,
+  voiceCaptions: false,
+  duckOtherMedia: true,
+  sessionNotifications: true,
+  showOnAllDisplays: false,
+} as const satisfies Partial<Record<keyof AppSettings, boolean>>;
 
 /** Renderer-safe settings. Credentials are never sent to a renderer. */
 export interface AppSettings {
@@ -136,6 +155,21 @@ export interface AppSettings {
    * gets by default. A display with a real notch answers to neither.
    */
   formFactor: PanelFormFactor;
+  /**
+   * The provider a conversational ask creates a new workspace in when the ask
+   * names none, absent until one has been chosen. It starts unset on purpose:
+   * the first workspace the user actually creates saves its provider here, so
+   * the default is always a choice they made rather than one made for them.
+   */
+  defaultWorkspaceProvider?: ProviderId;
+  /**
+   * The agent kind and model new workspaces start with, per provider, each
+   * entry absent while that provider's own defaults stand. Keyed by provider
+   * id and held to the build's documented table for that provider — a pairing
+   * outside it is dropped rather than honoured, because it names nothing the
+   * provider's endpoints take.
+   */
+  workspaceAgentDefaults?: Readonly<Partial<Record<ProviderId, WorkspaceAgentSelection>>>;
 }
 
 /**
@@ -277,13 +311,15 @@ export interface AppBridge {
   ): Promise<SettingsUpdateResult>;
   /**
    * Chooses the voice Luke speaks with, from the set fixed by this build. It
-   * reaches the next conversation to connect; one already open keeps the
-   * voice it answered with.
+   * reaches the next conversation to connect; the renderer makes it heard now
+   * by reopening a call already up, because the API locks a session's voice
+   * once the model has spoken.
    */
   setVoice(voice: RealtimeVoice): Promise<SettingsUpdateResult>;
   /**
    * Chooses the pace Luke speaks at, from the set fixed by this build. It
-   * reaches the next conversation the same way the voice does.
+   * reaches the next conversation the way the voice does, and the renderer
+   * carries it onto a call already open as a session update.
    */
   setVoiceSpeed(speed: RealtimeVoiceSpeed): Promise<SettingsUpdateResult>;
   /**
@@ -303,6 +339,23 @@ export interface AppBridge {
   setShowOnAllDisplays(show: boolean): Promise<SettingsUpdateResult>;
   /** Chooses how Luke stands on a display without a housing, and remembers it. */
   setFormFactor(formFactor: PanelFormFactor): Promise<SettingsUpdateResult>;
+  /**
+   * Chooses the provider a conversational ask creates a workspace in when the
+   * ask names none, or returns to asking each time when omitted. The same
+   * store write the main process makes on the first creation, offered to the
+   * settings row so the choice can be changed or cleared by hand.
+   */
+  setDefaultWorkspaceProvider(providerId: ProviderId | undefined): Promise<SettingsUpdateResult>;
+  /**
+   * Chooses the agent kind and model one provider starts new workspaces with,
+   * or returns to that provider's own defaults when omitted. The pairing must
+   * be one the build's documented table lists for the provider; the main
+   * process validates it again before the store keeps it.
+   */
+  setWorkspaceAgentDefault(
+    providerId: ProviderId,
+    selection: WorkspaceAgentSelection | undefined,
+  ): Promise<SettingsUpdateResult>;
   /** Turns the on-screen caption of Luke's speech on or off. */
   setVoiceCaptions(enabled: boolean): Promise<SettingsUpdateResult>;
   /** Turns the quieting of Music and Spotify during a spoken exchange on or off. */
@@ -373,6 +426,13 @@ export interface AppBridge {
     providerProjectId: string,
     name?: string,
     task?: string,
+    /**
+     * The model the user named for this one creation, resolved to the wire
+     * pairing the build's table documents. It overrides the stored default
+     * for this act alone; the main process saves it as the default only
+     * while none is chosen, and validates it again either way.
+     */
+    agentSelection?: WorkspaceAgentSelection,
   ): Promise<ProviderWorkspaceResult>;
   /**
    * Starts another agent in the workspace an observed session runs in. The
@@ -385,6 +445,14 @@ export interface AppBridge {
     agent: string,
     name?: string,
     task?: string,
+    /**
+     * The model the user named for this one agent, as its wire id — always of
+     * the asked-for agent kind, which the main process validates again. It
+     * never touches the stored default.
+     */
+    model?: string,
+    /** The effort riding that model, when the user named both. */
+    effort?: string,
   ): Promise<ProviderWorkspaceResult>;
   /**
    * Carries one spoken issue act to the tracker that can take it. The renderer
@@ -486,6 +554,8 @@ export const channels = {
   setShowInDock: "app:set-show-in-dock",
   setShowOnAllDisplays: "app:set-show-on-all-displays",
   setFormFactor: "app:set-form-factor",
+  setDefaultWorkspaceProvider: "app:set-default-workspace-provider",
+  setWorkspaceAgentDefault: "app:set-workspace-agent-default",
   openSession: "app:open-session",
   sendSessionMessage: "app:send-session-message",
   executeSessionControl: "app:execute-session-control",

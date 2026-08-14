@@ -130,6 +130,15 @@ export function BackIcon(): React.JSX.Element {
   );
 }
 
+/** A project's folder: where a conversational ask creates new workspaces. */
+export function FolderIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <path d="M3.4 6.2a1.8 1.8 0 0 1 1.8-1.8h4l2 2.4h7.6a1.8 1.8 0 0 1 1.8 1.8v9.2a1.8 1.8 0 0 1-1.8 1.8H5.2a1.8 1.8 0 0 1-1.8-1.8Z" />
+    </Glyph>
+  );
+}
+
 /** Sound leaving the machine: everything about how Luke is heard. */
 export function SpeakerIcon(): React.JSX.Element {
   return (

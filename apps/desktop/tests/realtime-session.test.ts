@@ -599,6 +599,64 @@ test("a finished response returns the session to ready", async () => {
   assert.equal(context.session.status, REALTIME_STATUS.READY);
 });
 
+test("a changed pace reaches the live call without waiting for the next one", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  context.session.applySpeed(1.25);
+
+  const update = context.sent.find((event) => event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE);
+  assert.deepEqual(update, {
+    type: REALTIME_CLIENT_EVENT.SESSION_UPDATE,
+    session: { type: "realtime", audio: { output: { speed: 1.25 } } },
+  });
+});
+
+test("a pace changed mid-reply waits for the reply to end", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.session.beginTurn();
+  context.session.endTurn(true);
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+
+  // The API applies a pace only between turns, so nothing may be sent while
+  // Luke is still speaking.
+  context.session.applySpeed(0.75);
+  assert.equal(
+    context.sent.some((event) => event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE),
+    false,
+  );
+
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
+  context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
+
+  const update = context.sent.find((event) => event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE);
+  assert.deepEqual(update?.session, { type: "realtime", audio: { output: { speed: 0.75 } } });
+});
+
+test("a pace changed during the handshake reaches the call it was opening", async () => {
+  const context = harness({ connectionDelayMs: 5 });
+  const opening = context.session.connect();
+
+  // The credential this call answers with may have been minted before the
+  // change reached the minter, so dropping it would leave the live call at
+  // the old pace with the row already showing the new one.
+  context.session.applySpeed(1.25);
+  await opening;
+
+  const update = context.sent.find((event) => event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE);
+  assert.deepEqual(update?.session, { type: "realtime", audio: { output: { speed: 1.25 } } });
+});
+
+test("a pace change with no call open sends nothing", () => {
+  // Not a loss: the next call is minted at the stored pace already.
+  const context = harness();
+
+  context.session.applySpeed(1.5);
+
+  assert.deepEqual(context.sent, []);
+});
+
 test("a service error is surfaced rather than swallowed", async () => {
   const context = harness();
   await context.session.connect();
@@ -1630,6 +1688,26 @@ test("a spoken ask for a new workspace is carried, and an unlisted project is re
     },
   ]);
   assert.equal(context.sent.length, sentBeforeContext + 1);
+  // The default provider is part of the same answer, so choosing one is news
+  // even while the list itself has not moved.
+  context.session.updateWorkspaceProjects(
+    [
+      {
+        providerId: "conductor",
+        providerName: "Conductor",
+        providerProjectId: "proj-1",
+        repository: "luke",
+        taskSupport: "optional",
+      },
+    ],
+    "conductor",
+  );
+  assert.equal(context.sent.length, sentBeforeContext + 2);
+  assert.match(
+    ((context.sent.at(-1)?.item as { content?: { text?: string }[] } | undefined)?.content?.[0]
+      ?.text ?? "") as string,
+    /default provider for new workspaces is Conductor/,
+  );
 
   armDeveloperTurn(context);
   const sentBefore = context.sent.length;
@@ -1651,13 +1729,21 @@ test("a spoken ask for a new workspace is carried, and an unlisted project is re
           call_id: "call-2",
           arguments: '{"provider_id":"conductor","project_id":"proj-unlisted"}',
         },
+        {
+          type: "function_call",
+          name: "create_workspace",
+          call_id: "call-3",
+          arguments:
+            '{"provider_id":"conductor","project_id":"proj-1","model":"Fable 5","effort":"max"}',
+        },
       ],
     },
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   // Only the listed project reaches the carrier; the unlisted one is refused
-  // before any bridge call exists.
+  // before any bridge call exists. A model named for one creation arrives
+  // resolved to the wire pairing the build's own table documents.
   assert.deepEqual(carried, [
     {
       kind: "create-workspace",
@@ -1665,6 +1751,12 @@ test("a spoken ask for a new workspace is carried, and an unlisted project is re
       providerProjectId: "proj-1",
       name: "fix the panel",
       task: "wire the XYZ feature",
+    },
+    {
+      kind: "create-workspace",
+      providerId: "conductor",
+      providerProjectId: "proj-1",
+      agentSelection: { agent: "claude", model: "fable-5", effort: "max" },
     },
   ]);
   const outputs = context.sent
@@ -1680,7 +1772,7 @@ test("a spoken ask for a new workspace is carried, and an unlisted project is re
         }
       ).status,
   );
-  assert.deepEqual(statuses, ["accepted", "refused"]);
+  assert.deepEqual(statuses, ["accepted", "refused", "accepted"]);
 });
 
 test("a spoken ask to add an agent is carried, and an unlisted kind is refused", async () => {

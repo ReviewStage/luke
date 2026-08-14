@@ -18,6 +18,7 @@ import {
   sessionMessageText,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceAgentCapableSessionProviderAdapter,
+  type WorkspaceAgentSelection,
   type WorkspaceCapableSessionProviderAdapter,
   type WorkspaceProject,
   workspaceNameText,
@@ -63,6 +64,13 @@ const AUTHORIZATION_HEADERS: Readonly<
 const DEFAULT_REQUEST_HEADERS: Readonly<Record<string, string>> = {
   Accept: "application/json",
 };
+
+/**
+ * The one body key a POSTed read document rides under. Linear's GraphQL and
+ * Conductor's transcripts view both name it `query`, and a provider that names
+ * it something else is asking for its own client rather than an option here.
+ */
+const READ_DOCUMENT_FIELD = "query";
 
 export const CLOUD_FAILURE = {
   UNAUTHORIZED: "unauthorized",
@@ -133,11 +141,18 @@ export interface CloudAdapterProfile {
  * but a read, so no observation pass built on it can change provider state.
  * The deadline can be widened only to the slow bound, and only for a read the
  * provider itself documents as slow.
+ *
+ * A read the provider answers only at a POSTed query endpoint — Conductor's
+ * transcripts view — names its document here, and the separation a GET gives
+ * for free is held the way the Linear tracker holds it: the document's text is
+ * fixed by the build, observation only ever sends a read, and an adapter
+ * interpolates nothing into it beyond identifiers the same pass reported, each
+ * validated against the shape its provider documents.
  */
 export type CloudRequest = (
   segments: readonly string[],
   query?: Readonly<Record<string, string>>,
-  options?: Readonly<{ timeoutMs?: number }>,
+  options?: Readonly<{ timeoutMs?: number; document?: string }>,
 ) => Promise<Record<string, unknown>>;
 
 /**
@@ -456,6 +471,8 @@ export abstract class CloudSessionAdapter
       agent,
       name,
       task,
+      request.model,
+      request.effort,
     );
     if (!route) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
 
@@ -477,6 +494,8 @@ export abstract class CloudSessionAdapter
     _agent: string,
     _name: string | undefined,
     _task: string | undefined,
+    _model: string | undefined,
+    _effort: string | undefined,
   ): CloudWriteRoute | undefined {
     return undefined;
   }
@@ -531,7 +550,7 @@ export abstract class CloudSessionAdapter
     const apiKey = await this.#readApiKey().catch(() => undefined);
     if (!apiKey) return this.#missingKeyRejection();
 
-    const route = this.workspaceCreationRoute(project, name, task);
+    const route = this.workspaceCreationRoute(project, name, task, request.agentSelection);
     if (!route) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
     const created = await this.#postWriteDetailed(apiKey, route, WRITE_SUBJECT.PROJECT);
     if (created.outcome.status !== PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED || !task) {
@@ -576,6 +595,7 @@ export abstract class CloudSessionAdapter
     _project: WorkspaceProject,
     _name: string | undefined,
     _task: string | undefined,
+    _agentSelection: WorkspaceAgentSelection | undefined,
   ): CloudWriteRoute | undefined {
     return undefined;
   }
@@ -856,7 +876,7 @@ export abstract class CloudSessionAdapter
     apiKey: string,
     segments: readonly string[],
     query: Readonly<Record<string, string>> = {},
-    options: Readonly<{ timeoutMs?: number }> = {},
+    options: Readonly<{ timeoutMs?: number; document?: string }> = {},
   ): Promise<Record<string, unknown>> {
     const name = this.provider.displayName;
     // A widened deadline never widens past the slow bound: the option exists
@@ -865,14 +885,22 @@ export abstract class CloudSessionAdapter
       positiveInteger(options.timeoutMs, CLOUD_ADAPTER_DEFAULTS.REQUEST_TIMEOUT_MS),
       CLOUD_ADAPTER_DEFAULTS.SLOW_REQUEST_TIMEOUT_MS,
     );
+    // A read document rides as a POST because that is how its endpoint is
+    // documented, not because it writes: the body carries the document and
+    // nothing else, so the request can still express nothing but a read.
+    const document = options.document;
     let response: Response;
     try {
       response = await this.#fetch(this.#url(segments, query), {
-        method: HTTP_METHOD.GET,
+        method: document === undefined ? HTTP_METHOD.GET : HTTP_METHOD.POST,
         headers: {
           ...this.requestHeaders(),
           ...this.#authorizationHeaders(apiKey),
+          ...(document === undefined ? {} : { "Content-Type": "application/json" }),
         },
+        ...(document === undefined
+          ? {}
+          : { body: JSON.stringify({ [READ_DOCUMENT_FIELD]: document }) }),
         signal: AbortSignal.timeout(timeoutMs),
       });
     } catch {

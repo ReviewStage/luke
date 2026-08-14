@@ -20,6 +20,7 @@ import {
   issueTrackerDisconnectedEvents,
   type NormalizedSession,
   type ObservedWorkspaceProject,
+  outputSpeedUpdateEvents,
   proactiveSpeechEvents,
   pushToTalkCommitEvents,
   REALTIME_DATA_CHANNEL,
@@ -39,6 +40,7 @@ import {
   workspaceProjectContextEvents,
   workspaceProjectContextText,
 } from "@sidecar/core";
+import { workspaceAgentModels } from "../shared/workspace-agents";
 
 const SDP_CONTENT_TYPE = "application/sdp";
 
@@ -280,6 +282,12 @@ export class RealtimeVoiceSession {
    * a reply the developer is already hearing.
    */
   #turnEpoch = 0;
+  /**
+   * A pace change that arrived mid-reply, waiting for the reply to end. The
+   * API applies a speed only between model turns, so one landing while Luke is
+   * speaking is held here and sent ahead of whatever the call does next.
+   */
+  #pendingSpeed: number | undefined;
 
   constructor(options: RealtimeVoiceSessionOptions) {
     this.#options = options;
@@ -447,6 +455,9 @@ export class RealtimeVoiceSession {
       await this.#waitForChannel(channel, deadline);
       if (this.#closed) return this.#abandonConnect();
       this.#setStatus(REALTIME_STATUS.READY);
+      // A pace changed during the handshake could not be sent then, and the
+      // credential this call answered may have been minted before the change.
+      this.#flushPendingSpeed();
       // Whoever pressed the talk key to get here has been waiting through the
       // handshake for their turn to open. A speak-only call leaves the press
       // pending instead — it has no microphone to open a turn with, and the
@@ -797,6 +808,8 @@ export class RealtimeVoiceSession {
     this.#generationDone = false;
     this.#remoteQuiet = false;
     this.#pendingTurn = false;
+    // The next call is minted at the stored pace, so nothing is owed to it.
+    this.#pendingSpeed = undefined;
     this.#responseItemId = undefined;
     this.#activeResponseId = undefined;
     this.#audibleSince = undefined;
@@ -809,6 +822,11 @@ export class RealtimeVoiceSession {
   }
 
   #startResponse(events: readonly Record<string, unknown>[], toolsArmed = false): void {
+    // A pace still waiting from the last reply lands here, ahead of the
+    // request: the channel is ordered and no response is in progress — a
+    // cancel for the reply being talked over was sent before this — so the
+    // reply about to be asked for is already spoken at the new pace.
+    this.#flushPendingSpeed();
     // The track is deliberately left as it is. A reply that was cut off left it
     // disabled, and re-opening it here would let the tail of that reply — still
     // arriving, because the server sent it before it was told to stop — be
@@ -915,7 +933,43 @@ export class RealtimeVoiceSession {
     // un-silence him.
     this.#unsilenceLuke();
     this.#clearSettleTimer();
+    // The reply is over, so the API is between turns — the one moment it
+    // accepts a pace change that arrived while Luke was speaking.
+    this.#flushPendingSpeed();
     if (this.#status === REALTIME_STATUS.RESPONDING) this.#setStatus(REALTIME_STATUS.READY);
+  }
+
+  /**
+   * Changes how fast Luke speaks on the call now open, from his next reply on.
+   * A call minted at one pace stays a live session, so the change travels as a
+   * session update rather than waiting for the next conversation. The API
+   * applies a pace only between model turns: a change landing mid-reply is
+   * held and sent when the reply ends. With no call open there is nothing to
+   * update — the next one is minted at the stored pace already.
+   */
+  applySpeed(speed: number): void {
+    if (!this.isConnected) {
+      // A call being opened was minted at whatever pace stood when its
+      // credential was asked for, which this change may already have
+      // overtaken: hold it and send it once the channel opens. Sent to a
+      // call that was minted at the new pace after all, it is a no-op.
+      if (this.isConnecting) this.#pendingSpeed = speed;
+      return;
+    }
+    if (this.#status === REALTIME_STATUS.RESPONDING) {
+      this.#pendingSpeed = speed;
+      return;
+    }
+    this.#pendingSpeed = undefined;
+    this.#send(outputSpeedUpdateEvents(speed));
+  }
+
+  /** Sends the pace change that waited out a reply, once nothing is speaking. */
+  #flushPendingSpeed(): void {
+    const speed = this.#pendingSpeed;
+    if (speed === undefined) return;
+    this.#pendingSpeed = undefined;
+    this.#send(outputSpeedUpdateEvents(speed));
   }
 
   /**
@@ -938,16 +992,21 @@ export class RealtimeVoiceSession {
   /**
    * Tells the conversation where a workspace can be created, the same way the
    * roster travels: context that must never open Luke's mouth, kept whole
-   * because it is what a spoken creation ask is validated against. Identical
-   * lists are not resent.
+   * because it is what a spoken creation ask is validated against. The default
+   * provider rides along because it is part of the same answer — where a
+   * nameless ask goes — and a changed default is news the way a changed list
+   * is. Identical lists under identical defaults are not resent.
    */
-  updateWorkspaceProjects(projects: readonly ObservedWorkspaceProject[]): void {
+  updateWorkspaceProjects(
+    projects: readonly ObservedWorkspaceProject[],
+    defaultProviderId?: string,
+  ): void {
     this.#workspaceProjects = projects;
     if (!this.#carriesContext()) return;
-    const context = workspaceProjectContextText(projects);
+    const context = workspaceProjectContextText(projects, defaultProviderId);
     if (context === this.#workspaceProjectContext) return;
     this.#workspaceProjectContext = context;
-    this.#send(workspaceProjectContextEvents(projects));
+    this.#send(workspaceProjectContextEvents(projects, defaultProviderId));
   }
 
   /**
@@ -1181,7 +1240,14 @@ export class RealtimeVoiceSession {
     if (!isSessionToolName(call.name)) {
       return { status: "refused", reason: "No such tool exists." };
     }
-    const action = sessionToolAction(call, this.#sessions, this.#workspaceProjects);
+    // The build's own model tables ride into validation, so a creation ask
+    // that names a model is held to the same set the settings rows offer.
+    const action = sessionToolAction(
+      call,
+      this.#sessions,
+      this.#workspaceProjects,
+      workspaceAgentModels,
+    );
     if (action.kind === "refused") return { status: "refused", reason: action.reason };
     if (!this.#options.carryAction) {
       return { status: "refused", reason: "Acting on sessions is not available." };

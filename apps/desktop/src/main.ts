@@ -11,6 +11,7 @@ import {
   isControllableAdapter,
   isMessageCapableAdapter,
   isPanelFormFactor,
+  isProviderId,
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
   issueCommentText,
@@ -38,6 +39,7 @@ import {
   TRACKER_ACTION_RESULT_STATUS,
   type TrackedIssue,
   type TrackerActionResult,
+  type WorkspaceAgentSelection,
   workspaceNameText,
 } from "@sidecar/core";
 
@@ -118,6 +120,7 @@ import {
   voiceHotkeyCandidates,
   voiceHotkeyReport,
 } from "./shared/voice-hotkey";
+import { isWorkspaceAgentSelection } from "./shared/workspace-agents";
 import { TalkKeyWatcher } from "./talk-key";
 
 const captureOutput = argumentValue("--capture-evidence");
@@ -723,9 +726,10 @@ function positionPanels(): void {
  * that one already holds it in its reply, and must redraw from the reply
  * rather than race a broadcast. One window's change would otherwise leave
  * every other window's rows and guide describing a state the store no longer
- * holds.
+ * holds. A change with no asking window — the first workspace creation saving
+ * its provider as the default — names no exception and reaches them all.
  */
-function broadcastSettings(settings: AppSettings, except: Electron.WebContents): void {
+function broadcastSettings(settings: AppSettings, except?: Electron.WebContents): void {
   for (const window of panelWindows.values()) {
     if (window.isDestroyed() || window.webContents === except) continue;
     window.webContents.send(channels.settingsChanged, settings);
@@ -1210,6 +1214,65 @@ function registerIpc(): void {
     },
   );
 
+  // The default workspace provider is a preference about where a nameless
+  // creation ask goes, never a wider write path: it steers which project list
+  // the conversation is told to prefer, and every creation is still validated
+  // against what the adapters actually offer.
+  ipcMain.handle(
+    channels.setDefaultWorkspaceProvider,
+    async (event, providerId: unknown): Promise<SettingsUpdateResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (
+        providerId !== undefined &&
+        (typeof providerId !== "string" || !isProviderId(providerId))
+      ) {
+        throw new Error("Unknown workspace provider");
+      }
+      try {
+        const result = await settingsStore.setDefaultWorkspaceProvider(providerId);
+        broadcastSettings(result.settings, event.sender);
+        return result;
+      } catch {
+        // A filesystem failure is not something the user can act on, so it is
+        // reported as one line rather than as a raw system error.
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "Could not save that setting on this system.",
+        };
+      }
+    },
+  );
+
+  // The agent and model new workspaces start with, per provider. The pairing
+  // travels the form factor's road — a value from a set fixed by this build —
+  // it is just a documented table per provider rather than one enum: anything
+  // outside the table is refused here, so the store never holds a value no
+  // endpoint takes.
+  ipcMain.handle(
+    channels.setWorkspaceAgentDefault,
+    async (event, providerId: unknown, selection: unknown): Promise<SettingsUpdateResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (typeof providerId !== "string" || !isProviderId(providerId)) {
+        throw new Error("Unknown workspace provider");
+      }
+      if (selection !== undefined && !isWorkspaceAgentSelection(providerId, selection)) {
+        throw new Error("Unknown workspace agent");
+      }
+      try {
+        const result = await settingsStore.setWorkspaceAgentDefault(providerId, selection);
+        broadcastSettings(result.settings, event.sender);
+        return result;
+      } catch {
+        // A filesystem failure is not something the user can act on, so it is
+        // reported as one line rather than as a raw system error.
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "Could not save that setting on this system.",
+        };
+      }
+    },
+  );
+
   // The voice is a preference rather than a credential, but it travels the
   // same road: the renderer names a value from a set fixed by this build and
   // hears back the settings as they now stand.
@@ -1220,8 +1283,8 @@ function registerIpc(): void {
       if (!isRealtimeVoice(voice)) throw new Error("Unknown voice");
       try {
         const result = await settingsStore.setVoice(voice);
-        // The next credential is minted for the new voice; a conversation
-        // already open keeps the one it answered with.
+        // The next credential is minted for the new voice; the renderer makes
+        // the change heard now by reopening any conversation already up.
         if (!result.reason) realtimeCredentials?.setVoice(voice);
         broadcastSettings(result.settings, event.sender);
         return result;
@@ -1233,8 +1296,8 @@ function registerIpc(): void {
       }
     },
   );
-  // The pace travels the voice's road exactly: a value from the set fixed by
-  // this build, stored, and handed to the minter for the next conversation.
+  // The pace travels the voice's road: a value from the set fixed by this
+  // build, stored, and handed to the minter for the next conversation.
   ipcMain.handle(
     channels.setVoiceSpeed,
     async (event, speed: unknown): Promise<SettingsUpdateResult> => {
@@ -1242,8 +1305,8 @@ function registerIpc(): void {
       if (!isRealtimeVoiceSpeed(speed)) throw new Error("Unknown voice speed");
       try {
         const result = await settingsStore.setVoiceSpeed(speed);
-        // The next credential is minted for the new pace; a conversation
-        // already open keeps the one it answered at.
+        // The next credential is minted for the new pace; the renderer
+        // carries the change onto a conversation already open itself.
         if (!result.reason) realtimeCredentials?.setSpeed(speed);
         broadcastSettings(result.settings, event.sender);
         return result;
@@ -1617,6 +1680,7 @@ function registerIpc(): void {
       providerProjectId: unknown,
       name: unknown,
       task: unknown,
+      namedSelection: unknown,
     ): Promise<ProviderWorkspaceResult> => {
       if (!trustedSender(event)) throw new Error("Untrusted renderer");
       if (
@@ -1627,6 +1691,11 @@ function registerIpc(): void {
         (name !== undefined && typeof name !== "string") ||
         (task !== undefined && typeof task !== "string")
       ) {
+        throw new Error("Invalid workspace creation request");
+      }
+      // Its own statement so the guard's narrowing survives: past here the
+      // named selection is a documented pairing or nothing at all.
+      if (namedSelection !== undefined && !isWorkspaceAgentSelection(providerId, namedSelection)) {
         throw new Error("Invalid workspace creation request");
       }
       if (fixtureMode) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
@@ -1654,10 +1723,20 @@ function registerIpc(): void {
           reason: "A task has to be shorter than a document and longer than nothing.",
         };
       }
+      // A model the user named for this one creation outranks the stored
+      // choice for this act alone; the stored choice stands otherwise. Both
+      // are held to the build's documented table — the named one just above,
+      // the stored one when it was written — and the adapter holds whichever
+      // rides to its own table again before anything reaches the network.
+      const stored = isProviderId(providerId)
+        ? await settingsStore.readWorkspaceAgentDefault(providerId)
+        : undefined;
+      const agentSelection = namedSelection ?? stored;
       const result = await adapter.createWorkspace({
         providerProjectId,
         ...(workspaceName ? { name: workspaceName } : {}),
         ...(openingTask ? { task: openingTask } : {}),
+        ...(agentSelection ? { agentSelection } : {}),
       });
       // A workspace that landed is a session the panel should be showing, so
       // the next look must actually ask rather than serve the cache. A
@@ -1666,6 +1745,42 @@ function registerIpc(): void {
       // the network from its cache anyway.
       if (result.status !== PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED) {
         void sessionRegistry.refresh(adapter);
+      }
+      // The first workspace that actually lands chooses the default provider,
+      // so a later ask that names none has somewhere unsurprising to go. Only
+      // while nothing is chosen: a default the user holds is theirs to change,
+      // never a creation's. Deterministic on the validated act — nothing a
+      // model composed decides this — and losing the save loses only the
+      // remembered default, never the workspace that just landed.
+      if (
+        result.status === PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED &&
+        isProviderId(adapter.provider.id)
+      ) {
+        try {
+          if ((await settingsStore.readDefaultWorkspaceProvider()) === undefined) {
+            const saved = await settingsStore.setDefaultWorkspaceProvider(adapter.provider.id);
+            broadcastSettings(saved.settings);
+          }
+          // A model named for this creation becomes the default on the same
+          // first-choice terms as the provider: only while nothing is chosen.
+          // A default already held is the user's, changed by asking for the
+          // setting itself — never as a side effect of one creation. Read
+          // again here rather than trusting the pre-creation snapshot: a
+          // choice made by hand while the provider was answering is already
+          // held, and must not lose to the request it overlapped.
+          if (
+            namedSelection !== undefined &&
+            (await settingsStore.readWorkspaceAgentDefault(adapter.provider.id)) === undefined
+          ) {
+            const saved = await settingsStore.setWorkspaceAgentDefault(
+              adapter.provider.id,
+              namedSelection,
+            );
+            broadcastSettings(saved.settings);
+          }
+        } catch {
+          // The reply is the creation's; a failed remember has no line in it.
+        }
       }
       return result;
     },
@@ -1741,6 +1856,8 @@ function registerIpc(): void {
       agent: unknown,
       name: unknown,
       task: unknown,
+      namedModel: unknown,
+      namedEffort: unknown,
     ): Promise<ProviderWorkspaceResult> => {
       if (!trustedSender(event)) throw new Error("Untrusted renderer");
       if (
@@ -1748,7 +1865,9 @@ function registerIpc(): void {
         typeof agent !== "string" ||
         !agent.trim() ||
         (name !== undefined && typeof name !== "string") ||
-        (task !== undefined && typeof task !== "string")
+        (task !== undefined && typeof task !== "string") ||
+        (namedModel !== undefined && typeof namedModel !== "string") ||
+        (namedEffort !== undefined && (typeof namedEffort !== "string" || namedModel === undefined))
       ) {
         throw new Error("Invalid workspace agent request");
       }
@@ -1756,6 +1875,19 @@ function registerIpc(): void {
       const session = sessionRegistry.get(identity);
       const advertised = session?.spawnableAgents.find((candidate) => candidate === agent.trim());
       if (!advertised) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+      // A model named for this one agent must be a documented pairing of
+      // exactly the asked-for kind: the user's chosen agent is never
+      // re-decided by the model named beside it.
+      if (
+        namedModel !== undefined &&
+        !isWorkspaceAgentSelection(identity.providerId, {
+          agent: advertised,
+          model: namedModel,
+          ...(namedEffort !== undefined ? { effort: namedEffort } : {}),
+        })
+      ) {
+        throw new Error("Invalid workspace agent request");
+      }
       const adapter = sessionAdapters.find(
         (candidate) => candidate.provider.id === identity.providerId,
       );
@@ -1776,11 +1908,25 @@ function registerIpc(): void {
           reason: "A task has to be shorter than a document and longer than nothing.",
         };
       }
+      // A model named for this one agent outranks the stored choice for this
+      // act alone and never touches it. The stored model and effort otherwise
+      // ride along only when the asked-for agent kind is the very kind the
+      // stored selection names: the user's ask always wins over their
+      // preference, so "add a codex agent" is never quietly re-modelled by a
+      // choice made about claude.
+      const stored: WorkspaceAgentSelection | undefined = isProviderId(identity.providerId)
+        ? await settingsStore.readWorkspaceAgentDefault(identity.providerId)
+        : undefined;
+      const fallback = stored?.agent === advertised ? stored : undefined;
+      const model = namedModel ?? fallback?.model;
+      const effort = namedModel !== undefined ? namedEffort : fallback?.effort;
       const result = await adapter.spawnWorkspaceAgent({
         providerSessionId: identity.providerSessionId,
         agent: advertised,
         ...(sessionName ? { name: sessionName } : {}),
         ...(openingTask ? { task: openingTask } : {}),
+        ...(model ? { model } : {}),
+        ...(effort ? { effort } : {}),
       });
       // A new agent is a session the panel should be showing, so the next
       // look must actually ask rather than serve the cache — on a rejection

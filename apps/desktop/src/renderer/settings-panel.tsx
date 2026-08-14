@@ -1,17 +1,20 @@
 import {
   DEFAULT_PANEL_FORM_FACTOR,
   isPanelFormFactor,
+  isProviderId,
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
   PANEL_FORM_FACTOR_LIST,
   type PanelFormFactor,
+  type ProviderId,
   REALTIME_DEFAULTS,
   REALTIME_VOICE_LIST,
   REALTIME_VOICE_SPEED_LIST,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
+  type WorkspaceAgentSelection,
 } from "@sidecar/core";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import type { AppSettings, CredentialSource, MicrophoneStatus } from "../shared/contracts";
 import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "../shared/contracts";
 import type { CredentialProvider } from "../shared/credential-providers";
@@ -27,6 +30,7 @@ import {
   VOICE_HOTKEY_CAPTURE,
   voiceHotkeyLabel,
 } from "../shared/voice-hotkey";
+import { workspaceAgentModels } from "../shared/workspace-agents";
 import {
   CREDENTIAL_PLACEHOLDER,
   type CredentialEntryControl,
@@ -55,6 +59,7 @@ import {
   CloseIcon,
   DisplayIcon,
   ExternalIcon,
+  FolderIcon,
   KeyboardIcon,
   KeyIcon,
   PencilIcon,
@@ -74,6 +79,12 @@ import {
   type SettingsView,
   settingsNavRowId,
 } from "./settings-views";
+
+/** One provider the default-workspace row can offer, by id and display name. */
+export interface WorkspaceProviderOption {
+  id: string;
+  name: string;
+}
 
 export interface SettingsPanelProps {
   /**
@@ -134,6 +145,31 @@ export interface SettingsPanelProps {
   onShowOnAllDisplaysChange: (show: boolean) => Promise<string | undefined>;
   /** Chooses how Luke stands on a display without a camera housing. */
   onFormFactorChange: (formFactor: PanelFormFactor) => Promise<string | undefined>;
+  /**
+   * The providers the default-workspace row may offer: the ones currently
+   * offering projects, plus a stored default that is not — a choice the row
+   * cannot show is one that can be neither seen nor cleared.
+   */
+  workspaceProviders: readonly WorkspaceProviderOption[];
+  /**
+   * Chooses the provider a conversational ask creates a workspace in when the
+   * ask names none, or returns to asking each time when omitted. The store
+   * answers with why when it refuses, and the row is where that answer
+   * belongs.
+   */
+  onDefaultWorkspaceProviderChange: (
+    providerId: ProviderId | undefined,
+  ) => Promise<string | undefined>;
+  /**
+   * Chooses the agent kind and model one provider starts new workspaces with,
+   * or returns to that provider's own defaults when omitted. The store
+   * answers with why when it refuses, and the row is where that answer
+   * belongs.
+   */
+  onWorkspaceAgentDefaultChange: (
+    providerId: ProviderId,
+    selection: WorkspaceAgentSelection | undefined,
+  ) => Promise<string | undefined>;
   onQuit: () => void;
   /**
    * The talk key as registered, as an accelerator: the row draws it as its
@@ -180,6 +216,14 @@ const CREDENTIAL_STATUS: Partial<Record<CredentialSource, string>> = {
 
 /* Why a row that could otherwise be connected is not offering to be. */
 const HELD_TITLE = "Finish the one you are entering first";
+
+/* The default-workspace row's word for no default at all. An empty value
+   rather than a member of the provider set, so no provider id can collide
+   with it. */
+const ASK_EACH_TIME = "";
+
+/* The agent row's word for no choice at all: the provider's own default. */
+const PROVIDER_DEFAULT_VALUE = "";
 
 /* The safe answer arrives first and the one that cannot be taken back lands a
    beat behind it, on the same stagger the panel's rows fan open with. Their
@@ -565,6 +609,166 @@ const STORAGE_UNAVAILABLE_NOTE =
   "This system offers no encrypted credential storage, so Luke will not store a key here.";
 
 /**
+ * Which model — and, where its agent takes one, which effort — this provider
+ * starts new workspaces with, drawn as sub-rows of its credential line
+ * because the choice means nothing until the key above it connects. The
+ * options are the build's documented table for the provider, worded as the
+ * names people know the models by; the first is no choice at all — the
+ * provider's own default, which is the state every install begins in. The
+ * effort row exists only while a model whose agent documents effort levels is
+ * chosen, so nothing offers a level nowhere can honour.
+ */
+function WorkspaceAgentRow({
+  provider,
+  providerId,
+  selection,
+  onChange,
+}: {
+  provider: CredentialProvider;
+  providerId: ProviderId;
+  selection?: WorkspaceAgentSelection;
+  onChange: (
+    providerId: ProviderId,
+    selection: WorkspaceAgentSelection | undefined,
+  ) => Promise<string | undefined>;
+}): React.JSX.Element {
+  // The change is a round trip through the settings file, so the selects rest
+  // until the store has answered rather than claiming a state it may not get.
+  const [busy, setBusy] = useState(false);
+  const [rejection, setRejection] = useState<string>();
+  // The table's models flattened in its own order, each remembering its
+  // agent's effort levels, so the select's indices are as stable as the build
+  // that documents them.
+  const choices = workspaceAgentModels(providerId).flatMap((entry) =>
+    entry.models.map((model) => ({
+      agent: entry.agent,
+      model: model.id,
+      label: model.label,
+      efforts: entry.efforts,
+    })),
+  );
+  const chosenIndex = choices.findIndex(
+    (choice) => choice.agent === selection?.agent && choice.model === selection?.model,
+  );
+  const chosen = chosenIndex >= 0 ? choices[chosenIndex] : undefined;
+  const choose = async (next: WorkspaceAgentSelection | undefined) => {
+    setBusy(true);
+    setRejection(await onChange(providerId, next));
+    setBusy(false);
+  };
+  return (
+    <>
+      <div className="settings-row">
+        <span className="settings-copy">
+          <strong>New agents run</strong>
+          {/* Scope, because this row must not claim the provider's own app:
+              only what Luke itself creates — a workspace, or another agent in
+              one — starts on this choice. */}
+          <small>For workspaces and agents created through Luke.</small>
+        </span>
+        <span className="voice-select">
+          <select
+            aria-label={`The model new ${provider.displayName} workspaces run`}
+            value={chosenIndex >= 0 ? String(chosenIndex) : PROVIDER_DEFAULT_VALUE}
+            disabled={busy}
+            onChange={(event) => {
+              const next = event.target.value;
+              if (next === PROVIDER_DEFAULT_VALUE) {
+                void choose(undefined);
+                return;
+              }
+              // The set is the one this row offered, so anything else arriving
+              // out of the select is a broken control rather than a choice.
+              const choice = choices[Number(next)];
+              if (!choice) return;
+              // A chosen effort survives a model change only where the new
+              // agent documents the same level; anywhere else it returns to
+              // the provider's default rather than riding somewhere unlisted.
+              const effort =
+                selection?.effort && choice.efforts.includes(selection.effort)
+                  ? selection.effort
+                  : undefined;
+              void choose({
+                agent: choice.agent,
+                model: choice.model,
+                ...(effort ? { effort } : {}),
+              });
+            }}
+            onFocus={() => {
+              // The panel can be showing without its window being key, and a
+              // menu opened then would drop its first choice.
+              window.sidecar.focusPanel();
+            }}
+          >
+            <option value={PROVIDER_DEFAULT_VALUE}>{`${provider.displayName}'s default`}</option>
+            {choices.map((choice, index) => (
+              // Indexed on purpose: the list is fixed by the build, and the
+              // index is the same word the select's value speaks.
+              // biome-ignore lint/suspicious/noArrayIndexKey: the list is build-fixed
+              <option key={index} value={String(index)}>
+                {choice.label}
+              </option>
+            ))}
+          </select>
+          <span className="voice-select-badge" aria-hidden="true">
+            <PopUpIcon />
+          </span>
+        </span>
+      </div>
+      {chosen && chosen.efforts.length > 0 ? (
+        <div className="settings-row">
+          <span className="settings-copy">
+            <strong>Effort</strong>
+            <small>How hard the chosen model thinks.</small>
+          </span>
+          <span className="voice-select">
+            <select
+              aria-label={`The effort new ${provider.displayName} agents think at`}
+              value={
+                selection?.effort && chosen.efforts.includes(selection.effort)
+                  ? selection.effort
+                  : PROVIDER_DEFAULT_VALUE
+              }
+              disabled={busy}
+              onChange={(event) => {
+                const next = event.target.value;
+                // Held to the chosen agent's own documented levels, so the
+                // stored selection is always one whole the table lists.
+                const effort =
+                  next !== PROVIDER_DEFAULT_VALUE && chosen.efforts.includes(next)
+                    ? next
+                    : undefined;
+                void choose({
+                  agent: chosen.agent,
+                  model: chosen.model,
+                  ...(effort ? { effort } : {}),
+                });
+              }}
+              onFocus={() => {
+                // The panel can be showing without its window being key, and
+                // a menu opened then would drop its first choice.
+                window.sidecar.focusPanel();
+              }}
+            >
+              <option value={PROVIDER_DEFAULT_VALUE}>{`${provider.displayName}'s default`}</option>
+              {chosen.efforts.map((effort) => (
+                <option key={effort} value={effort}>
+                  {effort}
+                </option>
+              ))}
+            </select>
+            <span className="voice-select-badge" aria-hidden="true">
+              <PopUpIcon />
+            </span>
+          </span>
+        </div>
+      ) : null}
+      {rejection ? <p className="error-message">{rejection}</p> : null}
+    </>
+  );
+}
+
+/**
  * Every agent provider that can hold a key, one line each. A provider is
  * listed whether or not it has one, because the list is how you learn which
  * services Luke can watch at all.
@@ -573,10 +777,15 @@ function CredentialsSection({
   settings,
   control,
   panelOpen,
+  onWorkspaceAgentDefaultChange,
 }: {
   settings: AppSettings;
   control: CredentialEntryControl;
   panelOpen: boolean;
+  onWorkspaceAgentDefaultChange: (
+    providerId: ProviderId,
+    selection: WorkspaceAgentSelection | undefined,
+  ) => Promise<string | undefined>;
 }): React.JSX.Element {
   // Only a system Luke has actually asked, and been refused by, is reported as
   // one that cannot hold a key. Until then the rows stand as usual: a warning
@@ -588,16 +797,38 @@ function CredentialsSection({
         <KeyIcon />
         Cloud Agent API keys
       </h2>
-      {CLOUD_AGENT_PROVIDER_LIST.map((provider) => (
-        <ProviderCredential
-          key={provider.id}
-          provider={provider}
-          source={settings.credentialSources[provider.id]}
-          storageUnavailable={storageUnavailable}
-          control={control}
-          panelOpen={panelOpen}
-        />
-      ))}
+      {CLOUD_AGENT_PROVIDER_LIST.map((provider) => {
+        // The agent row belongs to providers the build documents a table for,
+        // and only while connected: disconnected, there is nothing the choice
+        // could apply to, and the line above already says what to do first.
+        const agentRow =
+          isProviderId(provider.id) &&
+          settings.credentialSources[provider.id] !== CREDENTIAL_SOURCE.NONE &&
+          workspaceAgentModels(provider.id).length > 0
+            ? provider.id
+            : undefined;
+        return (
+          <Fragment key={provider.id}>
+            <ProviderCredential
+              provider={provider}
+              source={settings.credentialSources[provider.id]}
+              storageUnavailable={storageUnavailable}
+              control={control}
+              panelOpen={panelOpen}
+            />
+            {agentRow ? (
+              <WorkspaceAgentRow
+                provider={provider}
+                providerId={agentRow}
+                {...(settings.workspaceAgentDefaults?.[agentRow]
+                  ? { selection: settings.workspaceAgentDefaults[agentRow] }
+                  : {})}
+                onChange={onWorkspaceAgentDefaultChange}
+              />
+            ) : null}
+          </Fragment>
+        );
+      })}
       {/* True of every key here, so it is said once rather than per provider. */}
       <p className="settings-note">
         {storageUnavailable
@@ -798,9 +1029,11 @@ function VoiceSection({
         <span className="settings-copy">
           <strong>Voice</strong>
           {/* When it lands, because a control that seems not to act invites a
-              second press: the change rides the next conversation, and one
-              already open keeps the voice it answered with. */}
-          <small>How Luke sounds, from the next conversation on.</small>
+              second press. The API locks a session's voice once the model has
+              spoken, so a call already open is quietly reopened in the new
+              voice — heard right away, at the price of the conversation
+              starting afresh. */}
+          <small>How Luke sounds; a conversation under way starts afresh.</small>
         </span>
         <span className="voice-select">
           <select
@@ -834,9 +1067,9 @@ function VoiceSection({
       <div className="settings-row">
         <span className="settings-copy">
           <strong>Speed</strong>
-          {/* The same promise as the voice's line, because it lands the same
-              way: minted into the next conversation, never a live one. */}
-          <small>How fast Luke talks, from the next conversation on.</small>
+          {/* Unlike the voice, a pace change rides a session update onto the
+              call already open, so nothing starts over. */}
+          <small>How fast Luke talks, from his next reply on.</small>
         </span>
         <span className="voice-select">
           <select
@@ -1074,6 +1307,89 @@ function AppearanceSection({
             {PANEL_FORM_FACTOR_LIST.map((candidate) => (
               <option key={candidate} value={candidate}>
                 {formFactorOptionLabel(candidate)}
+              </option>
+            ))}
+          </select>
+          <span className="voice-select-badge" aria-hidden="true">
+            <PopUpIcon />
+          </span>
+        </span>
+      </div>
+      {rejection ? <p className="error-message">{rejection}</p> : null}
+    </section>
+  );
+}
+
+/**
+ * What a conversational ask creates and where, beside the connections it
+ * creates through: its own named group on the Connections page, because the
+ * default is about every provider at once rather than any one row.
+ */
+function WorkspacesSection({
+  defaultWorkspaceProvider,
+  workspaceProviders,
+  onDefaultWorkspaceProviderChange,
+}: {
+  defaultWorkspaceProvider?: ProviderId;
+  workspaceProviders: readonly WorkspaceProviderOption[];
+  onDefaultWorkspaceProviderChange: (
+    providerId: ProviderId | undefined,
+  ) => Promise<string | undefined>;
+}): React.JSX.Element {
+  // The same resting discipline every settings control keeps: the change is a
+  // round trip through the settings file, so the select rests until the store
+  // has answered rather than claiming a choice it may not get.
+  const [rejection, setRejection] = useState<string>();
+  const [defaultProviderBusy, setDefaultProviderBusy] = useState(false);
+  const chooseDefaultProvider = async (providerId: ProviderId | undefined) => {
+    setDefaultProviderBusy(true);
+    setRejection(await onDefaultWorkspaceProviderChange(providerId));
+    setDefaultProviderBusy(false);
+  };
+  return (
+    <section className="settings-section" style={{ "--row-index": 3 } as React.CSSProperties}>
+      <h2>
+        <FolderIcon />
+        Workspaces
+      </h2>
+      <div className="settings-row">
+        <span className="settings-copy">
+          <strong>Default workspace provider</strong>
+          {/* How the default comes to exist, because the row is most often
+              read before any choice was made here: the first workspace
+              created in conversation fills it in, and this select is where
+              that choice is seen, changed, or returned to asking. */}
+          <small>
+            Where an ask that names no provider creates a workspace. Your first creation sets it.
+          </small>
+        </span>
+        <span className="voice-select">
+          <select
+            aria-label="Default workspace provider"
+            value={defaultWorkspaceProvider ?? ASK_EACH_TIME}
+            disabled={defaultProviderBusy}
+            onChange={(event) => {
+              const next = event.target.value;
+              if (next === ASK_EACH_TIME) {
+                void chooseDefaultProvider(undefined);
+                return;
+              }
+              // The set is the one this row offered, so anything else arriving
+              // out of the select is a broken control rather than a choice.
+              if (isProviderId(next) && workspaceProviders.some((option) => option.id === next)) {
+                void chooseDefaultProvider(next);
+              }
+            }}
+            onFocus={() => {
+              // The panel can be showing without its window being key, and a
+              // menu opened then would drop its first choice.
+              window.sidecar.focusPanel();
+            }}
+          >
+            <option value={ASK_EACH_TIME}>Ask each time</option>
+            {workspaceProviders.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.name}
               </option>
             ))}
           </select>
@@ -1337,6 +1653,9 @@ export function SettingsPanel({
   onShowInDockChange,
   onShowOnAllDisplaysChange,
   onFormFactorChange,
+  workspaceProviders,
+  onDefaultWorkspaceProviderChange,
+  onWorkspaceAgentDefaultChange,
   onQuit,
   voiceHotkey,
   voiceHotkeyHeld,
@@ -1467,8 +1786,20 @@ export function SettingsPanel({
 
       {drawnView === SETTINGS_VIEW.CONNECTIONS && settings ? (
         <>
-          <CredentialsSection settings={settings} control={credentials} panelOpen={panelOpen} />
+          <CredentialsSection
+            settings={settings}
+            control={credentials}
+            panelOpen={panelOpen}
+            onWorkspaceAgentDefaultChange={onWorkspaceAgentDefaultChange}
+          />
           <IntegrationsSection settings={settings} control={credentials} panelOpen={panelOpen} />
+          <WorkspacesSection
+            {...(settings.defaultWorkspaceProvider
+              ? { defaultWorkspaceProvider: settings.defaultWorkspaceProvider }
+              : {})}
+            workspaceProviders={workspaceProviders}
+            onDefaultWorkspaceProviderChange={onDefaultWorkspaceProviderChange}
+          />
         </>
       ) : null}
 
