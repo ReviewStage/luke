@@ -47,6 +47,7 @@ import {
   DEFAULT_SESSION_VIEW,
   type DisplaySession,
   displaySessions,
+  SESSION_FILTER,
   type SessionView,
   sessionFilterFromSpoken,
   sessionTally,
@@ -806,7 +807,12 @@ export function App(): React.JSX.Element {
         return applySpokenSetting(window.sidecar, action, setSettings);
       }
       changeTab(action.tab === APP_PANEL_TAB.SETTINGS ? PANEL_TAB.SETTINGS : PANEL_TAB.SESSIONS);
-      const filter = action.filter ? sessionFilterFromSpoken(action.filter) : undefined;
+      const spoken = action.filter ? sessionFilterFromSpoken(action.filter) : undefined;
+      // An agent this build never registered cannot narrow the list, and Luke
+      // must not claim it did. The list still has to match the sentence that
+      // says every session is shown, so an unmappable ask widens the view to
+      // All rather than leaving whatever narrowing was already in force.
+      const filter = action.filter ? (spoken ?? SESSION_FILTER.ALL) : undefined;
       if (filter || action.sort) {
         setSessionView((view) => ({
           ...view,
@@ -815,14 +821,11 @@ export function App(): React.JSX.Element {
         }));
       }
       await changeMode(true);
-      // Reported as it was applied, not as it was asked: an agent this build
-      // has no chip for — an unknown provider observed but never registered —
-      // cannot narrow the list, and Luke must not claim it did.
       return {
         status: "shown",
         tab: action.tab,
-        ...(filter ? { filter: action.filter } : {}),
-        ...(action.filter && !filter
+        ...(spoken ? { filter: action.filter } : {}),
+        ...(action.filter && !spoken
           ? { note: "That agent has no filter of its own here, so every session is shown." }
           : {}),
         ...(action.sort ? { sort: action.sort } : {}),
