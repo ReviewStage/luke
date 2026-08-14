@@ -17,6 +17,7 @@ import {
   isWorkspaceAgentCapableAdapter,
   isWorkspaceCapableAdapter,
   type NativeNotchGeometry,
+  type NormalizedSession,
   normalizeObservedWorkspaceProjects,
   normalizeTrackedIssue,
   type ObservedWorkspaceProject,
@@ -31,6 +32,7 @@ import {
   resolveNotchGeometry,
   SessionAttentionReviewer,
   type SessionIdentity,
+  SessionNoticeTracker,
   type SessionProviderAdapter,
   sessionMessageText,
   TRACKER_ACTION_RESULT_STATUS,
@@ -78,6 +80,7 @@ import {
 } from "./openai-realtime-credentials";
 import { OpenCodeSessionAdapter } from "./opencode-adapter";
 import { OutputVolumeWatcher } from "./output-volume";
+import { sessionNoticeSpeech } from "./session-notifications";
 import { SettingsStore } from "./settings-store";
 import {
   type AppBootstrap,
@@ -208,6 +211,14 @@ let issueRefreshRunning = false;
  * of dropping.
  */
 let issueRefreshQueued = false;
+// Notices come from status edges the registry observed, never from anything a
+// model decided, so they work — and matter most — with no evaluator configured.
+const sessionNoticeTracker = new SessionNoticeTracker();
+/**
+ * Follows the stored answer: read at startup, updated by its own handler. On
+ * until the file says otherwise, matching the store's default.
+ */
+let sessionNotificationsEnabled = true;
 // A fixture run must stay deterministic and credential-free, so it never builds
 // an evaluator — not just capture runs.
 const attentionEvaluator = fixtureMode ? undefined : openAiAttentionEvaluatorFromEnvironment();
@@ -1431,6 +1442,27 @@ function registerIpc(): void {
     },
   );
 
+  // The announcer follows the stored answer at once, like the duck: off must
+  // silence the very next pass, not the next launch.
+  ipcMain.handle(
+    channels.setSessionNotifications,
+    async (event, enabled: unknown): Promise<SettingsUpdateResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (typeof enabled !== "boolean") throw new Error("Invalid notification request");
+      try {
+        const result = await settingsStore.setSessionNotifications(enabled);
+        sessionNotificationsEnabled = result.settings.sessionNotifications;
+        broadcastSettings(result.settings, event.sender);
+        return result;
+      } catch {
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "Could not save that setting on this system.",
+        };
+      }
+    },
+  );
+
   // A statement of state, not a request: the renderer says whether a spoken
   // exchange is live, and the duck holds every other decision — the setting,
   // the hangover after an exchange, which players are playing at all. Each
@@ -1894,12 +1926,38 @@ async function reviewSessionAttention(): Promise<void> {
   }
 }
 
+/**
+ * Speaks each session that just arrived somewhere the user may be waiting on —
+ * an answer wanted, an error, a finish. The trigger is a status edge the
+ * registry observed, a deterministic fact like the media duck's, so nothing
+ * Luke read or decided can reach it. The sentence travels the same channel the
+ * evaluator's readouts do, to the one window that holds the voice; the
+ * announcer there opens a speak-only call when no conversation is up, so
+ * being heard needs no talk-key press first.
+ */
+function announceSessionNotices(sessions: readonly NormalizedSession[]): void {
+  // The tracker is fed on every commit whether or not announcements are on:
+  // feeding is what keeps its picture current, so switching them on never
+  // replays edges that happened while they were off.
+  const now = Date.now();
+  const notices = sessionNoticeTracker.notices(sessions, now);
+  if (notices.length === 0 || !sessionNotificationsEnabled) return;
+  // No voice, nothing to say it with: without a Realtime credential the
+  // renderer cannot open a call, and the panel still shows every state.
+  if (!realtimeCredentials) return;
+  const speech = notices.map((notice) => sessionNoticeSpeech(notice, now));
+  voiceHostWindow()?.webContents.send(channels.attentionSpeech, speech);
+}
+
 function startSessionObservation(): void {
   if (fixtureMode) return;
   sessionRegistry.subscribe((snapshot) => {
     for (const window of panelWindows.values()) {
       window.webContents.send(channels.sessionsChanged, snapshot.sessions);
     }
+    // The registry only speaks on an effective change, which is exactly when
+    // a status edge can exist to announce.
+    announceSessionNotices(snapshot.sessions);
     // A commit is the earliest a write-triggered refresh can have changed the
     // offer, so the announcement rides it rather than waiting for the timer.
     broadcastWorkspaceProjects();
@@ -2315,6 +2373,16 @@ if (!app.requestSingleInstanceLock()) {
     void settingsStore.duckOtherMedia().then(
       (enabled) => mediaDuck.setEnabled(enabled),
       () => mediaDuck.setEnabled(true),
+    );
+    // The announcer arms the same way, under the same default: a file that
+    // cannot be read leaves the announcements on.
+    void settingsStore.readSessionNotifications().then(
+      (enabled) => {
+        sessionNotificationsEnabled = enabled;
+      },
+      () => {
+        sessionNotificationsEnabled = true;
+      },
     );
     // Awaited, so the chosen voice reaches the minter before the renderer
     // exists to ask for a credential: the first conversation must already

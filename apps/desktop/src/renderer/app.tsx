@@ -1,6 +1,7 @@
 import {
   APP_PANEL_TAB,
   type AppGuideSnapshot,
+  ATTENTION_SPEECH_SOURCE,
   EMPTY_APP_GUIDE,
   FEEDBACK_COMPOSER_KIND,
   type FeedbackComposerKind,
@@ -77,6 +78,7 @@ import {
   tallySummary,
 } from "./session-model";
 import { SESSION_OPTIONS_BUTTON_ID, SESSION_OPTIONS_ID } from "./session-parts";
+import { SpokenNoticeAnnouncer } from "./spoken-notices";
 import {
   outputSilent,
   VOLUME_HINT_HEIGHT,
@@ -374,6 +376,7 @@ export function App(): React.JSX.Element {
   const modeGeneration = useRef(0);
   const remoteAudio = useRef<HTMLAudioElement | null>(null);
   const voiceSession = useRef<RealtimeVoiceSession | undefined>(undefined);
+  const announcer = useRef<SpokenNoticeAnnouncer | undefined>(undefined);
   const talking = useRef(false);
   const quietTimer = useRef<number | undefined>(undefined);
   const voiceStatusRef = useRef<RealtimeStatus>(REALTIME_STATUS.IDLE);
@@ -541,6 +544,19 @@ export function App(): React.JSX.Element {
     return voiceSession.current;
   }, []);
 
+  /**
+   * The announcer that lets Luke speak into silence: it queues the notices the
+   * main process decided to voice and, when no conversation is open, opens a
+   * speak-only call of Luke's own to say them through — then closes it. Built
+   * beside the session because it drives nothing else.
+   */
+  const ensureAnnouncer = useCallback((): SpokenNoticeAnnouncer => {
+    announcer.current ??= new SpokenNoticeAnnouncer({
+      session: () => ensureVoiceSession(),
+    });
+    return announcer.current;
+  }, [ensureVoiceSession]);
+
   const stopMicrophone = useCallback(async () => {
     talking.current = false;
     await voiceSession.current?.close();
@@ -636,6 +652,13 @@ export function App(): React.JSX.Element {
     return result.reason;
   }, []);
 
+  /** And again for the notification banners. */
+  const changeSessionNotifications = useCallback(async (enabled: boolean) => {
+    const result = await window.sidecar.setSessionNotifications(enabled);
+    setSettings(result.settings);
+    return result.reason;
+  }, []);
+
   /**
    * The talk key going down. Every press goes to the session, including the one
    * that has no call to press against yet: the microphone opens with the call,
@@ -648,10 +671,14 @@ export function App(): React.JSX.Element {
     if (talkLatched.current) return;
     const session = ensureVoiceSession();
     session.beginTurn();
-    // A press against no call has seconds of handshake ahead of it, and the
-    // meter has to answer the press, not the handshake.
-    if (!session.isConnected) setTalkOpening(true);
-    if (session.isConnected || session.isConnecting) return;
+    // A press against no call — or against Luke's own speak-only call, which
+    // has no microphone to offer — has seconds of handshake ahead of it, and
+    // the meter has to answer the press, not the handshake.
+    if (!session.microphoneCall) setTalkOpening(true);
+    // The developer's call is up or already coming; the press waits its turn.
+    if (session.microphoneCall) return;
+    // `connect` inside stands Luke's own call down if one is open: the
+    // developer pressing the key always gets the developer's call.
     await startMicrophoneRef.current?.();
   }, [ensureVoiceSession]);
 
@@ -1303,7 +1330,11 @@ export function App(): React.JSX.Element {
     async (text: string): Promise<string | undefined> => {
       const session = ensureVoiceSession();
       let microphone: MicrophoneStatus = "granted";
-      if (!session.isConnected) {
+      // Luke's own speak-only call cannot carry a typed ask — it was sent no
+      // roster to validate one against — so it counts as no call here, and
+      // `connect` inside stands it down for the developer's own. A microphone
+      // call still connecting is awaited exactly as before.
+      if (!session.isConnected || !session.microphoneCall) {
         microphone = (await startMicrophoneRef.current?.()) ?? microphone;
       }
       if (session.sendText(text)) {
@@ -1612,8 +1643,12 @@ export function App(): React.JSX.Element {
     }
     // Any settled status ends the wait the press started, however it ended:
     // listening takes the meter live, ready means the turn was dropped
-    // mid-handshake, and a failure has its own message to show.
-    if (voiceStatus !== REALTIME_STATUS.CONNECTING) setTalkOpening(false);
+    // mid-handshake, and a failure has its own message to show. Unless the
+    // press is still owed a turn — a takeover passes through Luke's own call
+    // settling on its way to the developer's, and the meter must ride across.
+    if (voiceStatus !== REALTIME_STATUS.CONNECTING && !voiceSession.current?.turnPending) {
+      setTalkOpening(false);
+    }
   }, [voiceStatus]);
 
   // The exchange is live from the press to the end of the reply — the call
@@ -1695,13 +1730,31 @@ export function App(): React.JSX.Element {
   }, [bootstrap, settings, microphoneStatus, voiceHotkey, askHotkeyChange, stopHotkeyChange]);
 
   useEffect(() => {
-    // An update Luke cannot voice — no call open, or a turn already under way —
-    // is not lost: the session it belongs to still reads as needing attention
-    // in the panel and in the capsule count.
+    // Two kinds of sentence share this channel, and their standing differs.
+    // A status-edge notice — deterministic, worded on this machine — goes to
+    // the announcer, which may open a speak-only call of Luke's own to say
+    // it. An evaluator summary is a model's words, so it keeps its original
+    // bound: spoken only on a call the developer opened themselves, and
+    // dropped otherwise. Either way an unvoiced update is not lost: the
+    // session it belongs to still reads as needing attention in the panel
+    // and in the capsule count.
     return window.sidecar.onAttentionSpeech((speech) => {
-      for (const item of speech) voiceSession.current?.speak(item);
+      const notices = speech.filter((item) => item.source === ATTENTION_SPEECH_SOURCE.STATUS_EDGE);
+      if (notices.length > 0) ensureAnnouncer().enqueue(notices);
+      const session = voiceSession.current;
+      if (!session?.microphoneCall) return;
+      for (const item of speech) {
+        if (item.source !== ATTENTION_SPEECH_SOURCE.STATUS_EDGE) session.speak(item);
+      }
     });
-  }, []);
+  }, [ensureAnnouncer]);
+
+  // The announcer paces itself by the session's status: READY is when a queued
+  // sentence can speak and when an empty queue starts the walk toward closing
+  // the call Luke opened for himself.
+  useEffect(() => {
+    announcer.current?.onStatus(voiceStatus);
+  }, [voiceStatus]);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -1975,6 +2028,7 @@ export function App(): React.JSX.Element {
               settings,
               onVoiceCaptionsChange: changeVoiceCaptions,
               onDuckOtherMediaChange: changeDuckOtherMedia,
+              onSessionNotificationsChange: changeSessionNotifications,
               credentials,
               feedback: feedbackControl,
               onVoiceChange: changeVoice,

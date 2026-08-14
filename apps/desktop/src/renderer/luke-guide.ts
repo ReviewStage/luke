@@ -50,6 +50,7 @@ export const APP_SETTING_ID = {
   VOICE_SPEED: "voice_speed",
   VOICE_CAPTIONS: "voice_captions",
   DUCK_OTHER_MEDIA: "duck_other_media",
+  SESSION_NOTIFICATIONS: "session_notifications",
   SHOW_IN_MENU_BAR: "show_in_menu_bar",
   SHOW_IN_DOCK: "show_in_dock",
   SHOW_ON_ALL_DISPLAYS: "show_on_all_displays",
@@ -129,6 +130,18 @@ const SETTING_GUIDE: Record<
       "Whether Music and Spotify are turned down while a spoken exchange is live, and back up after.",
     kind: APP_SETTING_KIND.TOGGLE,
     value: appToggleText(settings.duckOtherMedia),
+    adjustable: true,
+    manual: `${SETTINGS_TAB}, under Preferences`,
+  }),
+  sessionNotifications: (settings) => ({
+    id: APP_SETTING_ID.SESSION_NOTIFICATIONS,
+    label: "Announce when a session needs you",
+    description:
+      "Luke says it out loud when an observed session starts waiting on the developer, stops on " +
+      "an error, or finishes — no conversation needs to be open, and the microphone stays off. " +
+      "Needs voice to be available; the panel and the capsule count show the same states either way.",
+    kind: APP_SETTING_KIND.TOGGLE,
+    value: appToggleText(settings.sessionNotifications),
     adjustable: true,
     manual: `${SETTINGS_TAB}, under Preferences`,
   }),
@@ -420,6 +433,7 @@ export async function applySpokenSetting(
     | "setVoiceSpeed"
     | "setVoiceCaptions"
     | "setDuckOtherMedia"
+    | "setSessionNotifications"
     | "setShowInMenuBar"
     | "setShowInDock"
     | "setShowOnAllDisplays"
@@ -435,20 +449,22 @@ export async function applySpokenSetting(
       ? await bridge.setVoiceCaptions(enabled)
       : action.setting.id === APP_SETTING_ID.DUCK_OTHER_MEDIA
         ? await bridge.setDuckOtherMedia(enabled)
-        : action.setting.id === APP_SETTING_ID.SHOW_IN_MENU_BAR
-          ? await bridge.setShowInMenuBar(enabled)
-          : action.setting.id === APP_SETTING_ID.SHOW_IN_DOCK
-            ? await bridge.setShowInDock(enabled)
-            : action.setting.id === APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS
-              ? await bridge.setShowOnAllDisplays(enabled)
-              : action.setting.id === APP_SETTING_ID.VOICE_SPEED && speed !== undefined
-                ? await bridge.setVoiceSpeed(speed)
-                : action.setting.id === APP_SETTING_ID.VOICE && isRealtimeVoice(action.value)
-                  ? await bridge.setVoice(action.value)
-                  : action.setting.id === APP_SETTING_ID.FORM_FACTOR &&
-                      isPanelFormFactor(action.value)
-                    ? await bridge.setFormFactor(action.value)
-                    : undefined;
+        : action.setting.id === APP_SETTING_ID.SESSION_NOTIFICATIONS
+          ? await bridge.setSessionNotifications(enabled)
+          : action.setting.id === APP_SETTING_ID.SHOW_IN_MENU_BAR
+            ? await bridge.setShowInMenuBar(enabled)
+            : action.setting.id === APP_SETTING_ID.SHOW_IN_DOCK
+              ? await bridge.setShowInDock(enabled)
+              : action.setting.id === APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS
+                ? await bridge.setShowOnAllDisplays(enabled)
+                : action.setting.id === APP_SETTING_ID.VOICE_SPEED && speed !== undefined
+                  ? await bridge.setVoiceSpeed(speed)
+                  : action.setting.id === APP_SETTING_ID.VOICE && isRealtimeVoice(action.value)
+                    ? await bridge.setVoice(action.value)
+                    : action.setting.id === APP_SETTING_ID.FORM_FACTOR &&
+                        isPanelFormFactor(action.value)
+                      ? await bridge.setFormFactor(action.value)
+                      : undefined;
   if (!result) {
     // An adjustable entry with no carrier is a guide ahead of its wiring;
     // refuse honestly rather than claim a change that never happened.
