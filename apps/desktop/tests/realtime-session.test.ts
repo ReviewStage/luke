@@ -41,6 +41,8 @@ interface Harness {
   setConnectionState: (state: RTCPeerConnectionState) => void;
   closeChannel: () => void;
   requests: { url: string; init: RequestInit }[];
+  /** The order the credential and the device were asked for and answered in. */
+  calls: string[];
 }
 
 function observedSession(
@@ -78,6 +80,7 @@ function harness(
   const errors: (string | undefined)[] = [];
   const captions: (string | undefined)[] = [];
   const requests: { url: string; init: RequestInit }[] = [];
+  const calls: string[] = [];
   let enabled = false;
   let stopped = false;
 
@@ -126,13 +129,16 @@ function harness(
   let connection = "connection" in options ? options.connection : CONNECTION;
   const session = new RealtimeVoiceSession({
     requestConnection: async () => {
+      calls.push("credential-requested");
       if (options.connectionDelayMs) {
         await new Promise((resolve) => setTimeout(resolve, options.connectionDelayMs));
       }
       if (options.connectionError) throw options.connectionError;
+      calls.push("credential-resolved");
       return connection;
     },
     requestMicrophoneStream: async () => {
+      calls.push("microphone-requested");
       if (options.microphoneError) throw options.microphoneError;
       return stream as unknown as MediaStream;
     },
@@ -187,6 +193,7 @@ function harness(
       (channel.onclose as (() => void) | undefined)?.();
     },
     requests,
+    calls,
   };
 }
 
@@ -212,6 +219,23 @@ test("no credential leaves the voice experience explicitly unavailable", async (
   assert.equal(await context.session.connect(), false);
   assert.equal(context.session.status, REALTIME_STATUS.UNAVAILABLE);
   assert.deepEqual(context.sent, []);
+  // The device was opened alongside the mint that came back empty, and nothing
+  // else is left to let go of it.
+  assert.equal(context.microphoneStopped(), true);
+});
+
+test("the credential and the device are asked for together, not in turn", async () => {
+  // The mint is a network round trip and the device open is a hardware one.
+  // The press that started the connect is waiting on both, so the device must
+  // not queue behind the mint.
+  const context = harness({ connectionDelayMs: 20 });
+
+  assert.equal(await context.session.connect(), true);
+  assert.deepEqual(context.calls, [
+    "credential-requested",
+    "microphone-requested",
+    "credential-resolved",
+  ]);
 });
 
 test("a refused call fails without leaking the ephemeral secret", async () => {

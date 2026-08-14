@@ -1182,6 +1182,16 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transform: scale(1);
 }
 
+/* Your own meter is fully drawn from its first frame. It stands where the face
+   stood as the answer to "am I being heard", and a half-faded answer reads as
+   no — the quiet-versus-speaking distinction stays with the bars, which move
+   to the voice. Luke's meter keeps the fade: it sits beside the face, and dim
+   at rest is how a pause mid-reply should read. */
+.wing-meter[data-turn="developer"] .waveform {
+  opacity: 1;
+  transform: scale(1);
+}
+
 .waveform-bar {
   width: 2px;
   height: var(--bar-height, 19px);
@@ -1202,6 +1212,37 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 }
 .waveform-bar:nth-child(3) {
   --bar-height: 23px;
+}
+
+/* The press answered before the call is: while the handshake runs the bars
+   pulse on their own clock — they cannot yet hear anything and must not
+   pretend to — and the pulse hands over to the analyser the moment the turn
+   opens. Negative delays start every bar mid-cycle, so the meter arrives
+   already breathing instead of standing up bar by bar. */
+.waveform[data-connecting="true"] .waveform-bar {
+  animation: waveform-opening 1100ms ease-in-out infinite;
+  animation-play-state: var(--loop-motion);
+}
+
+.waveform[data-connecting="true"] .waveform-bar:nth-child(2),
+.waveform[data-connecting="true"] .waveform-bar:nth-child(4) {
+  animation-delay: -140ms;
+}
+
+.waveform[data-connecting="true"] .waveform-bar:nth-child(1),
+.waveform[data-connecting="true"] .waveform-bar:nth-child(5) {
+  animation-delay: -280ms;
+}
+
+@keyframes waveform-opening {
+  0%,
+  100% {
+    transform: scaleY(0.2);
+  }
+
+  50% {
+    transform: scaleY(0.55);
+  }
 }
 
 /* Expanded panel --------------------------------------------------------- */

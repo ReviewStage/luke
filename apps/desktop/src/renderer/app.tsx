@@ -237,6 +237,14 @@ export function App(): React.JSX.Element {
   const [slotElement, slotHeight] = useShapeHeight();
   const [captionTextElement, captionTextHeight] = useShapeHeight();
   const [voiceStatus, setVoiceStatus] = useState<RealtimeStatus>(REALTIME_STATUS.IDLE);
+  /**
+   * A pressed talk key still waiting for the call it asked to open. The meter
+   * is drawn from this rather than from the connection, because the press is
+   * the moment the developer needs answering: the handshake behind it takes
+   * seconds, and a key that visibly does nothing for that long reads as a key
+   * that did nothing.
+   */
+  const [talkOpening, setTalkOpening] = useState(false);
   const [voiceHotkey, setVoiceHotkey] = useState<VoiceHotkeyState>();
   const [localStream, setLocalStream] = useState<MediaStream>();
   const [remoteStream, setRemoteStream] = useState<MediaStream>();
@@ -383,8 +391,10 @@ export function App(): React.JSX.Element {
     setMicrophoneStatus(permission);
     if (permission !== "granted") {
       // The press that asked for this is still waiting for a call that is now
-      // not coming.
+      // not coming. The status never changes on this path, so the meter the
+      // press put up is taken down here rather than by a status settling.
       session.dropPendingTurn();
+      setTalkOpening(false);
       return;
     }
     if (await session.connect()) {
@@ -461,6 +471,9 @@ export function App(): React.JSX.Element {
     if (talkLatched.current) return;
     const session = ensureVoiceSession();
     session.beginTurn();
+    // A press against no call has seconds of handshake ahead of it, and the
+    // meter has to answer the press, not the handshake.
+    if (!session.isConnected) setTalkOpening(true);
     if (session.isConnected || session.isConnecting) return;
     await startMicrophoneRef.current?.();
   }, [ensureVoiceSession]);
@@ -486,6 +499,9 @@ export function App(): React.JSX.Element {
       return;
     }
     talkLatched.current = false;
+    // A held press let go of before the call opened is dropped, not sent —
+    // nothing was captured to send — and the meter it put up leaves with it.
+    if (voiceSession.current && !voiceSession.current.isConnected) setTalkOpening(false);
     voiceSession.current?.endTurn(true);
   }, []);
 
@@ -965,6 +981,10 @@ export function App(): React.JSX.Element {
     }
     const context = audioContext.current ?? new AudioContext({ latencyHint: "interactive" });
     audioContext.current = context;
+    // A suspended context reads a flatline whatever the microphone hears, and
+    // the talk key is a system shortcut, so no user gesture in this window has
+    // ever vouched for the context. Resuming is a no-op when it is running.
+    if (context.state === "suspended") void context.resume();
     const source = context.createMediaStreamSource(activeStream);
     const nextAnalyser = context.createAnalyser();
     nextAnalyser.fftSize = 256;
@@ -981,6 +1001,10 @@ export function App(): React.JSX.Element {
     voiceStatusRef.current = voiceStatus;
     // Each reply is heard from scratch, so the previous one cannot vouch for it.
     if (voiceStatus !== REALTIME_STATUS.RESPONDING) heardLuke.current = false;
+    // Any settled status ends the wait the press started, however it ended:
+    // listening takes the meter live, ready means the turn was dropped
+    // mid-handshake, and a failure has its own message to show.
+    if (voiceStatus !== REALTIME_STATUS.CONNECTING) setTalkOpening(false);
   }, [voiceStatus]);
 
   useEffect(() => {
@@ -1237,6 +1261,7 @@ export function App(): React.JSX.Element {
         {...(voiceTurn ? { voice: voiceTurn } : {})}
         fixtureSpeaking={fixtureSpeaking}
         hasAudioSignal={hasAudioSignal}
+        voiceOpening={talkOpening}
         presentation={presentation}
         housingWidth={display.notch.housingWidth}
       />
