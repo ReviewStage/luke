@@ -18,6 +18,7 @@ import type {
   AppSettings,
   DisplayDiagnostic,
   MicrophoneStatus,
+  OutputAudioState,
   SessionOpenResult,
   VoiceHotkeyState,
   WindowMode,
@@ -56,6 +57,13 @@ import {
   tallySummary,
 } from "./session-model";
 import { SESSION_OPTIONS_BUTTON_ID, SESSION_OPTIONS_ID } from "./session-parts";
+import {
+  outputSilent,
+  VOLUME_HINT_HEIGHT,
+  type VolumeHintDismissal,
+  volumeHintDismissed,
+  volumeHintText,
+} from "./volume-hint";
 import { WAVEFORM_VOICE } from "./waveform";
 
 /**
@@ -91,12 +99,16 @@ const CAPTION_PADDING = 14;
  * only a measurement can say how tall it is; the size drives the surface's
  * growth and the clip that reveals the text, and past the reserved maximum
  * the remainder becomes scroll, rolling the oldest lines up under the shape.
+ * The volume hint shares the block's reserved room: while it is drawn, its
+ * row is added to the size and taken from the words' budget, so the block
+ * never asks for more height than the window holds.
  */
-function captionSizeStyle(textHeight: number | undefined): CSSProperties {
+function captionSizeStyle(textHeight: number | undefined, volumeHint: boolean): CSSProperties {
   if (!textHeight) return {};
+  const hintHeight = volumeHint ? VOLUME_HINT_HEIGHT : 0;
   return {
-    "--caption-size": `${Math.min(VOICE_CAPTION_MAX_HEIGHT, textHeight + CAPTION_PADDING)}px`,
-    "--caption-scroll": `${Math.max(0, textHeight - (VOICE_CAPTION_MAX_HEIGHT - CAPTION_PADDING))}px`,
+    "--caption-size": `${Math.min(VOICE_CAPTION_MAX_HEIGHT, textHeight + hintHeight + CAPTION_PADDING)}px`,
+    "--caption-scroll": `${Math.max(0, textHeight - (VOICE_CAPTION_MAX_HEIGHT - CAPTION_PADDING - hintHeight))}px`,
   } as CSSProperties;
 }
 
@@ -267,6 +279,27 @@ export function App(): React.JSX.Element {
    * developer chose. Cleared the moment the turn moves on.
    */
   const [typedAsk, setTypedAsk] = useState(false);
+  /**
+   * The Mac's output as last read — its mute switch and volume — absent
+   * wherever it cannot be read, which is drawn as audible. While it says
+   * Luke's voice would land on silence, his words are captioned whatever the
+   * preference says, and a hint under them asks for volume.
+   */
+  const [outputAudio, setOutputAudio] = useState<OutputAudioState>();
+  /**
+   * Whether a live push has arrived, so the bootstrap's older snapshot does
+   * not clobber one that raced past it — the same reading order the issue
+   * roster follows.
+   */
+  const outputAudioPushed = useRef(false);
+  /**
+   * Which stretch of unbroken silence is on screen, advanced each time one
+   * begins. A "Got it" is remembered against the stretch it answered, so it
+   * holds for that whole mute and lapses naturally with it.
+   */
+  const [silenceStretch, setSilenceStretch] = useState(0);
+  const wasSilent = useRef(false);
+  const [hintDismissal, setHintDismissal] = useState<VolumeHintDismissal>();
   const audioContext = useRef<AudioContext | undefined>(undefined);
   const hoverTimer = useRef<number | undefined>(undefined);
   const presentationRef = useRef<PanelPresentation>(PANEL_PRESENTATION.CAPSULE);
@@ -1073,6 +1106,9 @@ export function App(): React.JSX.Element {
         }
       }
       setMicrophoneStatus(value.microphoneStatus);
+      // Only fill in what no push has said yet, like the issue roster: the
+      // bootstrap snapshot is older than any change that raced past it.
+      if (!outputAudioPushed.current && value.outputAudio) setOutputAudio(value.outputAudio);
       if (!value.realtimeAvailable) setVoiceStatus(REALTIME_STATUS.UNAVAILABLE);
       if (value.profile === "microphone") {
         window.setTimeout(() => void startMicrophone(), 500);
@@ -1087,6 +1123,10 @@ export function App(): React.JSX.Element {
     });
     const removeDisplay = window.sidecar.onDisplayChanged(setDisplay);
     const removeSessions = window.sidecar.onSessionsChanged(setSessions);
+    const removeOutputAudio = window.sidecar.onOutputAudioChanged((state) => {
+      outputAudioPushed.current = true;
+      setOutputAudio(state);
+    });
     // Straight to the conversation rather than through state: no panel
     // surface draws the issue roster, so a re-render would be work for nobody.
     const removeIssues = window.sidecar.onIssuesChanged((issues) => {
@@ -1099,6 +1139,7 @@ export function App(): React.JSX.Element {
       removeLifecycle();
       removeDisplay();
       removeSessions();
+      removeOutputAudio();
       removeIssues();
       void stopMicrophone();
     };
@@ -1171,6 +1212,24 @@ export function App(): React.JSX.Element {
         voiceStatus === REALTIME_STATUS.RESPONDING,
     );
   }, [voiceStatus]);
+
+  // Silence is counted in stretches — one per unbroken run of muted-or-zero —
+  // because that is the unit a "Got it" answers. The edge into silence is the
+  // only thing counted; every reading inside one stretch leaves it alone.
+  useEffect(() => {
+    const silent = outputSilent(outputAudio);
+    if (silent && !wasSilent.current) setSilenceStretch((stretch) => stretch + 1);
+    wasSilent.current = silent;
+  }, [outputAudio]);
+
+  /**
+   * The hint's own button. It quiets the hint, never the captions: the words
+   * stay for as long as the silence does, because they are what "got it"
+   * leaves the user reading Luke by.
+   */
+  const dismissVolumeHint = useCallback(() => {
+    setHintDismissal({ at: Date.now(), stretch: silenceStretch });
+  }, [silenceStretch]);
 
   useEffect(() => {
     const element = remoteAudio.current;
@@ -1348,20 +1407,35 @@ export function App(): React.JSX.Element {
         : undefined;
   const shownHotkey = voiceHotkeyToShow(bootstrap, voiceHotkey);
   const shownAskHotkey = askHotkeyChange ? askHotkeyChange.accelerator : bootstrap.askHotkey;
-  const fixtureSpeaking = bootstrap.profile === "speaking";
+  // The muted evidence run is the speaking run with the hint drawn over it: a
+  // capture has no system output to read, so the state is asked for directly.
+  const fixtureMuted = bootstrap.profile === "muted";
+  const fixtureSpeaking = bootstrap.profile === "speaking" || fixtureMuted;
   const hasAudioSignal = fixtureSpeaking || analyser !== undefined;
+  const outputIsSilent = outputSilent(outputAudio);
   // Luke's words, drawn only when there is a reason to read them and the reply
-  // they belong to is his turn: the captions preference, or the reply
-  // answering an ask the developer typed — a typed conversation's answer must
-  // be readable whatever the preference says. The session already clears the
-  // words when a reply ends or is cut off, and the turn gate keeps a caption
-  // that raced a status change from being drawn late. A capture run draws the
-  // fixture's words regardless, or the strip ships unphotographed.
+  // they belong to is his turn: the captions preference, the reply answering
+  // an ask the developer typed — a typed conversation's answer must be
+  // readable whatever the preference says — or an output that would swallow
+  // the reply, where the words are the only part of Luke arriving at all. The
+  // session already clears the words when a reply ends or is cut off, and the
+  // turn gate keeps a caption that raced a status change from being drawn
+  // late. A capture run draws the fixture's words regardless, or the strip
+  // ships unphotographed.
   const lukeCaption = fixtureSpeaking
     ? FIXTURE_SPEAKING_CAPTION
-    : (settings?.voiceCaptions === true || typedAsk) && voiceTurn === WAVEFORM_VOICE.LUKE
+    : (settings?.voiceCaptions === true || typedAsk || outputIsSilent) &&
+        voiceTurn === WAVEFORM_VOICE.LUKE
       ? voiceCaption
       : undefined;
+  // The hint rides the caption it explains, and only over a silence the
+  // helper actually reported. "Got it" quiets it for this stretch of silence
+  // and any that follows too soon; the captions above it stay either way.
+  const volumeHint =
+    fixtureMuted ||
+    (outputIsSilent &&
+      lukeCaption !== undefined &&
+      !volumeHintDismissed(hintDismissal, silenceStretch, Date.now()));
   const panelOpen = presentation === PANEL_PRESENTATION.PANEL;
   const slotOpen = presentation === PANEL_PRESENTATION.SLOT;
   // What the slot's field is for depends on what answers for that provider now,
@@ -1378,13 +1452,16 @@ export function App(): React.JSX.Element {
       // Whether there are words to draw under the shape, so the surface can
       // grow the room they are drawn in.
       data-caption={String(Boolean(lukeCaption))}
+      // Whether those words need the volume hint under them, which shares the
+      // caption block's room.
+      data-volume-hint={String(volumeHint)}
       data-presentation={presentation}
       data-notch={String(display.notch.hasNotch)}
       data-capture={String(bootstrap.captureMode)}
       style={{
         ...notchStyle(display),
         ...shapeHeightStyle(panelHeight, slotHeight),
-        ...captionSizeStyle(captionTextHeight),
+        ...captionSizeStyle(captionTextHeight, volumeHint),
       }}
     >
       {/* Capsule, peek, slot and panel are all this one shape at different
@@ -1470,6 +1547,26 @@ export function App(): React.JSX.Element {
         <span className="voice-caption-text" ref={captionTextElement}>
           {lukeCaption}
         </span>
+      </span>
+
+      {/* The one reason the words above might be the only part of Luke
+          arriving: the Mac's own output is off. It sits on the caption
+          block's bottom edge, inside the same reserved room, and is drawn
+          only while Luke speaks into a silence the helper reported. Always
+          mounted, like the caption, so both edges of its fade can run, and
+          inert while hidden so its button cannot be tabbed to. It carries a
+          hit region of its own and sits above the hover strip, so Got it
+          answers the press instead of the panel opening under it. */}
+      <span
+        className="volume-hint"
+        role="status"
+        inert={!volumeHint}
+        data-hit-region={HIT_REGION.CAPSULE}
+      >
+        <span className="volume-hint-text">{volumeHintText(outputAudio)}</span>
+        <button type="button" className="volume-hint-dismiss" onClick={dismissVolumeHint}>
+          Got it
+        </button>
       </span>
 
       <div className="compact-stage">

@@ -37,6 +37,7 @@ function packagerOptions(signing = resolveSigningMode({})) {
     outputRoot: "/repo/apps/desktop/out",
     helperPaths: [
       "/repo/apps/desktop/.build/native/mac-media-duck",
+      "/repo/apps/desktop/.build/native/mac-output-volume",
       "/repo/apps/desktop/.build/native/mac-screen-geometry",
       "/repo/apps/desktop/.build/native/mac-talk-key",
     ],

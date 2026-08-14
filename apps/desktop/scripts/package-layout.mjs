@@ -9,6 +9,7 @@ export const PACKAGED_ARCHITECTURE = "arm64";
  */
 export const NATIVE_HELPERS = [
   { source: "MediaDuck.swift", binary: "mac-media-duck", frameworks: ["AppKit"] },
+  { source: "OutputVolume.swift", binary: "mac-output-volume", frameworks: ["CoreAudio"] },
   { source: "ScreenGeometry.swift", binary: "mac-screen-geometry", frameworks: ["AppKit"] },
   {
     source: "TalkKey.swift",

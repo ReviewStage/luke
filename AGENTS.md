@@ -73,6 +73,12 @@ Trust constraints:
   exchange itself — a deterministic status edge, never anything Luke read,
   heard, or decided — so no model output can reach it. Widening the player
   list is a product decision, not an implementation detail.
+- The same shape, smaller still, watches whether Luke can be heard at all: a
+  native helper reads the default output device's mute switch and volume —
+  nothing else — and can write nothing. What it learns decides only what the
+  renderer draws while Luke speaks into that silence: his captions forced on,
+  and a hint asking for volume. Luke never changes the system volume himself;
+  turning it up stays the user's own act on their own keys.
 - Keep unsupported capabilities explicit; do not invent fallback controls.
 - Keep Electron renderers sandboxed with context isolation and narrow IPC.
 - Commit only synthetic fixtures and repository-relative paths. This binds

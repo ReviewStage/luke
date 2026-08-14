@@ -64,12 +64,14 @@ import {
   unavailableRealtimeDiagnostics,
 } from "./openai-realtime-credentials";
 import { OpenCodeSessionAdapter } from "./opencode-adapter";
+import { OutputVolumeWatcher } from "./output-volume";
 import { SettingsStore } from "./settings-store";
 import {
   type AppBootstrap,
   channels,
   type DisplayDiagnostic,
   type MicrophoneStatus,
+  type OutputAudioState,
   SESSION_OPEN_RESULT_STATUS,
   type SessionOpenResult,
   type SettingsUpdateResult,
@@ -200,6 +202,34 @@ const realtimeCredentials = fixtureMode ? undefined : openAiRealtimeCredentialsF
 // rather than in the renderer because letting the players back up must survive
 // anything the renderer does — and only this process may run a helper.
 const mediaDuck = new MediaDuckController();
+/**
+ * The output's switches as last read, and the helper that reads them. The
+ * state lives here rather than in the renderer so bootstrap can carry the
+ * answer a push has already delivered; `undefined` is "cannot be read", which
+ * the renderer must draw as audible.
+ */
+let outputAudio: OutputAudioState | undefined;
+let outputVolumeWatcher: OutputVolumeWatcher | undefined;
+
+/**
+ * Starts watching whether the Mac's output would let Luke be heard. Not in a
+ * fixture or capture run: evidence must not read the machine it happens to
+ * run on, and a fixture run has no voice to go unheard — the muted evidence
+ * profile asks the renderer for the state directly instead.
+ */
+function startOutputVolumeWatch(): void {
+  if (fixtureMode) return;
+  const send = (state: OutputAudioState | undefined) => {
+    outputAudio = state;
+    panelWindow?.webContents.send(channels.outputAudioChanged, state);
+  };
+  outputVolumeWatcher = new OutputVolumeWatcher({
+    onState: send,
+    onUnavailable: () => send(undefined),
+  });
+  if (!outputVolumeWatcher.start()) outputVolumeWatcher = undefined;
+}
+
 let voiceHotkey: string | undefined;
 /**
  * The chord the user chose over the defaults, if any. Read from the settings
@@ -640,6 +670,7 @@ function registerIpc(): void {
       // spellings — the keycap's ⌥L and aria's Alt+L — and only the
       // accelerator can produce the pair.
       ...(askHotkey ? { askHotkey } : {}),
+      ...(outputAudio ? { outputAudio } : {}),
       display: displayDiagnostic(),
       sessions: fixtureMode ? [] : sessionRegistry.snapshot().sessions,
       ...(trackedIssues && !fixtureMode ? { issues: trackedIssues } : {}),
@@ -1505,6 +1536,9 @@ if (!app.requestSingleInstanceLock()) {
     // exists because nobody has answered yet.
     registerVoiceHotkey();
     registerAskHotkey();
+    // Read-only, like everything else that watches: what it learns decides
+    // what the renderer draws while Luke speaks unheard, and nothing more.
+    startOutputVolumeWatch();
     createPanel();
     configurePermissions();
     startSessionObservation();
@@ -1536,6 +1570,9 @@ app.on("will-quit", () => {
   // during quit, so its exit is not waited on.
   void talkKeyWatcher?.stop();
   talkKeyWatcher = undefined;
+  // The same rule: a process of Luke's own does not outlive the app.
+  outputVolumeWatcher?.stop();
+  outputVolumeWatcher = undefined;
   // The duck helper outlives this by one fade: closing its stdin is what asks
   // it to bring the players back up, so quitting mid-sentence costs the user
   // nothing.

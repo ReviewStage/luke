@@ -102,6 +102,19 @@ export interface AppSettings {
   duckOtherMedia: boolean;
 }
 
+/**
+ * Whether the Mac's output would let Luke be heard: the default output
+ * device's mute switch and its volume, read by a helper that reads nothing
+ * else. Absent wherever it cannot be read — another platform, no output
+ * device, a device with no controls — and absence must always be taken as
+ * audible: the hint this feeds exists to explain silence, never to guess it.
+ */
+export interface OutputAudioState {
+  muted: boolean;
+  /** The output volume as macOS reports it, 0–1. */
+  volume: number;
+}
+
 /** A rejected update reports why without echoing the submitted value. */
 export interface SettingsUpdateResult {
   settings: AppSettings;
@@ -180,6 +193,11 @@ export interface AppBootstrap {
    * Alt+L.
    */
   askHotkey?: string;
+  /**
+   * The output's switches as last read, absent until the helper's first line
+   * arrives — or forever, where there is no helper to ask.
+   */
+  outputAudio?: OutputAudioState;
   /** Whether the panel should show the voice diagnostics block. */
   display: DisplayDiagnostic;
   sessions: readonly NormalizedSession[];
@@ -308,6 +326,11 @@ export interface AppBridge {
    * hint comes down: a keycap must not teach a chord that answers nothing.
    */
   onAskHotkeyChanged(callback: (accelerator: string | undefined) => void): () => void;
+  /**
+   * The output's switches changing under the user's own hand — or becoming
+   * unreadable, which arrives as `undefined` and must be drawn as audible.
+   */
+  onOutputAudioChanged(callback: (state: OutputAudioState | undefined) => void): () => void;
 }
 
 export const channels = {
@@ -337,6 +360,7 @@ export const channels = {
   voiceHotkeyRelease: "app:voice-hotkey-release",
   voiceHotkeyChanged: "app:voice-hotkey-changed",
   askHotkeyChanged: "app:ask-hotkey-changed",
+  outputAudioChanged: "app:output-audio-changed",
   rendererReady: "app:renderer-ready",
   lifecycle: "app:lifecycle",
   displayChanged: "app:display-changed",

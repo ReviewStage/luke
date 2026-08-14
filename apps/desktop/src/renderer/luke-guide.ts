@@ -102,7 +102,9 @@ const SETTING_GUIDE: Record<
   voiceCaptions: (settings) => ({
     id: APP_SETTING_ID.VOICE_CAPTIONS,
     label: "Captions",
-    description: "Luke's words on screen while he speaks; nothing is kept.",
+    description:
+      "Luke's words on screen while he speaks; nothing is kept. They also appear on their own, " +
+      "whatever this says, while the Mac's output is muted or at zero.",
     kind: APP_SETTING_KIND.TOGGLE,
     value: appToggleText(settings.voiceCaptions),
     adjustable: true,
@@ -232,7 +234,15 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     talkKeyFact(input.hotkey),
     { label: "Microphone access", detail: MICROPHONE_DETAIL[input.microphoneStatus] },
     ...(input.voiceAvailable
-      ? []
+      ? [
+          {
+            label: "Muted output",
+            detail:
+              "While the Mac is muted or its volume is at zero, Luke's replies are captioned on " +
+              "screen even with Captions off, and a hint under the words asks for volume. The " +
+              "hint's Got it button rests it for that stretch of silence; the captions stay.",
+          },
+        ]
       : [
           {
             label: "Voice",
