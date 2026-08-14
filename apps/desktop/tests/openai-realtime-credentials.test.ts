@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { REALTIME_DEFAULTS, REALTIME_MINT_OUTCOME, REALTIME_VOICE } from "@sidecar/core";
+import {
+  REALTIME_DEFAULTS,
+  REALTIME_MINT_OUTCOME,
+  REALTIME_VOICE,
+  REALTIME_VOICE_SPEED,
+} from "@sidecar/core";
 import {
   OpenAiRealtimeCredentialMinter,
   openAiRealtimeCredentialsFromEnvironment,
@@ -63,11 +68,12 @@ test("minting posts the realtime session to the client-secrets endpoint", async 
   const body = JSON.parse(String(requests[0]?.init.body)) as {
     session: {
       model: string;
-      audio: { input: { turn_detection: unknown }; output: { voice: string } };
+      audio: { input: { turn_detection: unknown }; output: { voice: string; speed: number } };
     };
   };
   assert.equal(body.session.model, REALTIME_DEFAULTS.MODEL);
   assert.equal(body.session.audio.output.voice, REALTIME_DEFAULTS.VOICE);
+  assert.equal(body.session.audio.output.speed, REALTIME_DEFAULTS.SPEED);
   assert.equal(body.session.audio.input.turn_detection, null);
 });
 
@@ -135,6 +141,42 @@ test("clearing the voice returns to the one the minter was built with", () => {
   assert.equal(instance.diagnostics().voice, REALTIME_DEFAULTS.VOICE);
 });
 
+test("changing the pace discards the outstanding credential and mints for the new one", async () => {
+  const { minter: instance, requests } = minter([mintResponse(), mintResponse()]);
+  await instance.mint();
+
+  instance.setSpeed(REALTIME_VOICE_SPEED.FAST);
+  await instance.mint();
+
+  // The first credential was minted at the old pace, so serving it after the
+  // change would answer the next conversation at the wrong one.
+  assert.equal(requests.length, 2);
+  const body = JSON.parse(String(requests[1]?.init.body)) as {
+    session: { audio: { output: { speed: number } } };
+  };
+  assert.equal(body.session.audio.output.speed, REALTIME_VOICE_SPEED.FAST);
+  assert.equal(instance.diagnostics().speed, REALTIME_VOICE_SPEED.FAST);
+});
+
+test("the same pace again keeps the outstanding credential", async () => {
+  const { minter: instance, requests } = minter([mintResponse(), mintResponse()]);
+  await instance.mint();
+
+  instance.setSpeed(REALTIME_DEFAULTS.SPEED);
+  await instance.mint();
+
+  assert.equal(requests.length, 1);
+});
+
+test("clearing the pace returns to the one the minter was built with", () => {
+  const { minter: instance } = minter([mintResponse()]);
+
+  instance.setSpeed(REALTIME_VOICE_SPEED.FAST);
+  instance.setSpeed(undefined);
+
+  assert.equal(instance.diagnostics().speed, REALTIME_DEFAULTS.SPEED);
+});
+
 test("every failure path leaves the voice experience unavailable", async () => {
   for (const response of [
     new Response("", { status: 401 }),
@@ -197,6 +239,35 @@ test("the model and voice come from the environment when set", () => {
       ["OPENAI_API_KEY", previous.key],
       ["LUKE_REALTIME_MODEL", previous.model],
       ["LUKE_REALTIME_VOICE", previous.voice],
+    ] as const) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+});
+
+test("the pace comes from the environment when set, and an unoffered one is refused", () => {
+  const previous = { key: process.env.OPENAI_API_KEY, speed: process.env.LUKE_REALTIME_SPEED };
+  try {
+    process.env.OPENAI_API_KEY = API_KEY;
+    process.env.LUKE_REALTIME_SPEED = String(REALTIME_VOICE_SPEED.QUICK);
+    assert.equal(
+      openAiRealtimeCredentialsFromEnvironment()?.diagnostics().speed,
+      REALTIME_VOICE_SPEED.QUICK,
+    );
+
+    // The settings snapshot already refuses it, so honouring it here would
+    // have the panel mark the default while minting at something else.
+    process.env.LUKE_REALTIME_SPEED = "3";
+    assert.equal(
+      openAiRealtimeCredentialsFromEnvironment()?.diagnostics().speed,
+      REALTIME_DEFAULTS.SPEED,
+    );
+    assert.equal(unavailableRealtimeDiagnostics(true).speed, REALTIME_DEFAULTS.SPEED);
+  } finally {
+    for (const [name, value] of [
+      ["OPENAI_API_KEY", previous.key],
+      ["LUKE_REALTIME_SPEED", previous.speed],
     ] as const) {
       if (value === undefined) delete process.env[name];
       else process.env[name] = value;

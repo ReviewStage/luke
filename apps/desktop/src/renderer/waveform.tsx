@@ -26,6 +26,7 @@ export function Waveform({
   speaking = false,
   voice,
   voiceActive = false,
+  connecting = false,
   onVoiceActivity,
 }: {
   analyser?: AnalyserNode;
@@ -33,6 +34,13 @@ export function Waveform({
   /** Whose turn the bars are drawing, which is what colours them. */
   voice?: WaveformVoice;
   voiceActive?: boolean;
+  /**
+   * The press has landed but the call is still opening, so there is nothing to
+   * hear yet. The bars pulse on their own clock rather than sit at the floor —
+   * a press that changes nothing on screen reads as a press that did nothing —
+   * and stop pretending the moment an analyser takes over.
+   */
+  connecting?: boolean;
   onVoiceActivity?: (active: boolean) => void;
 }): React.JSX.Element {
   const bars = useRef<Array<HTMLSpanElement | null>>([]);
@@ -88,9 +96,16 @@ export function Waveform({
     <span
       className="waveform"
       role="img"
-      aria-label={voice === WAVEFORM_VOICE.LUKE ? "Luke is speaking" : "Live speech activity"}
-      aria-hidden={!isSpeaking}
+      aria-label={
+        connecting
+          ? "Voice is connecting"
+          : voice === WAVEFORM_VOICE.LUKE
+            ? "Luke is speaking"
+            : "Live speech activity"
+      }
+      aria-hidden={!isSpeaking && !connecting}
       data-speaking={String(isSpeaking)}
+      data-connecting={String(connecting)}
       data-voice={voice}
     >
       {BAR_INDEXES.map((index) => (

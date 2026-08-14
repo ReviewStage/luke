@@ -115,11 +115,44 @@ test("stopping is the app's own doing and is not a key becoming unavailable", ()
   const context = harness();
   context.watcher.start(["Alt+Space"]);
   context.emit("registered Alt+Space\n");
-  context.watcher.stop();
+  void context.watcher.stop();
   context.die();
 
   assert.equal(context.killed(), true);
   // Falling back to another key during shutdown would register a global
   // shortcut on the way out of the app.
   assert.deepEqual(context.edges, ["registered:Alt+Space"]);
+});
+
+test("a line the dying helper got out after a stop is dropped, not acted on", () => {
+  const context = harness();
+  context.watcher.start(["Alt+Space"]);
+  context.emit("registered Alt+Space\n");
+  void context.watcher.stop();
+  // The pipe outlives the kill by however long the process takes to die, so a
+  // press in that window still arrives here. Acting on it would open the
+  // microphone under a chord the app has already let go of.
+  context.emit("down\nregistered Alt+Space\n");
+
+  assert.deepEqual(context.edges, ["registered:Alt+Space"]);
+});
+
+test("stopping reports when the helper's process is actually gone", async () => {
+  const context = harness();
+  context.watcher.start(["Alt+Space"]);
+  context.emit("registered Alt+Space\n");
+
+  let gone = false;
+  const stopped = context.watcher.stop().then(() => {
+    gone = true;
+  });
+  // The kill is asked for at once, but the chord is only released when the
+  // process exits — which is what a successor has to wait for.
+  assert.equal(context.killed(), true);
+  await Promise.resolve();
+  assert.equal(gone, false);
+
+  context.die();
+  await stopped;
+  assert.equal(gone, true);
 });

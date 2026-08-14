@@ -231,6 +231,29 @@ test("the tally counts per state and per provider", () => {
   ]);
 });
 
+// The wing's marks and the rows are two drawings of the same order, so
+// choosing the other sort re-seats the providers with the sessions: a mark
+// that stayed put while the rows re-sorted would name the top row's agent
+// wrong. The counts are counts, and no ordering may change them.
+test("the providers re-seat with the rows when the other sort is chosen", () => {
+  const recent = sessionTally(FIXTURE_SESSIONS, SESSION_SORT.RECENCY);
+
+  assert.deepEqual(
+    recent.providers.map((provider) => provider.providerId),
+    [
+      PROVIDER_ID.CONDUCTOR,
+      PROVIDER_ID.CODEX,
+      PROVIDER_ID.CLAUDE_CODE,
+      PROVIDER_ID.CURSOR,
+      PROVIDER_ID.DEVIN,
+    ],
+  );
+  assert.deepEqual(
+    { ...recent, providers: undefined },
+    { ...sessionTally(FIXTURE_SESSIONS), providers: undefined },
+  );
+});
+
 test("the badge state follows the most urgent session", () => {
   const working = sessionTally(
     displaySessions(bootstrap(false), [liveSession(CODEX_PROVIDER, "a", SESSION_STATUS.WORKING)]),
@@ -377,6 +400,46 @@ test("a filter whose last session has left falls back to showing everything", ()
     assert.equal(list.filter, SESSION_FILTER.ALL);
     assert.equal(list.sessions.length, 2);
   }
+});
+
+// A spoken ask can narrow to the only agent there is, which no chip offers —
+// chips appear only once there is a second value to tell apart. The narrowing
+// must survive anyway: it hides nothing while it is the only agent, and the
+// moment another appears the list stays on what the developer asked to watch
+// rather than widening out from under them.
+test("a filter that still matches survives even when no chip offers it", () => {
+  const codexOnly = displaySessions(bootstrap(false), [
+    liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.WORKING),
+    liveSession(CODEX_PROVIDER, "codex-2", SESSION_STATUS.COMPLETE),
+  ]);
+  const narrowed = arrangeSessions(codexOnly, {
+    ...DEFAULT_SESSION_VIEW,
+    filter: PROVIDER_ID.CODEX,
+  });
+
+  assert.equal(narrowed.filter, PROVIDER_ID.CODEX);
+  assert.equal(narrowed.sessions.length, 2);
+  // No second agent yet, so no chips are offered — the filter outlives them.
+  assert.deepEqual(
+    narrowed.options.map((option) => option.filter),
+    [SESSION_FILTER.ALL],
+  );
+
+  const withClaude = displaySessions(bootstrap(false), [
+    liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.WORKING),
+    liveSession(CODEX_PROVIDER, "codex-2", SESSION_STATUS.COMPLETE),
+    liveSession(CLAUDE_PROVIDER, "claude-1", SESSION_STATUS.WORKING),
+  ]);
+  const still = arrangeSessions(withClaude, {
+    ...DEFAULT_SESSION_VIEW,
+    filter: PROVIDER_ID.CODEX,
+  });
+
+  assert.equal(still.filter, PROVIDER_ID.CODEX);
+  assert.deepEqual(
+    still.sessions.map((session) => session.providerId),
+    [PROVIDER_ID.CODEX, PROVIDER_ID.CODEX],
+  );
 });
 
 // The panel stores the filter this returns rather than only drawing it, so a

@@ -49,6 +49,13 @@ function helperPath(): string {
 }
 
 /**
+ * Longer than a SIGTERM takes to land, far shorter than a user notices. The
+ * wait for a stopped helper's exit is capped so a process that ignores the
+ * signal cannot wedge every later change of the talk key.
+ */
+const EXIT_WAIT_MS = 1000;
+
+/**
  * Watches the talk key being held down and let go of, from whatever app is
  * frontmost.
  *
@@ -95,18 +102,34 @@ export class TalkKeyWatcher {
     }
   }
 
-  stop(): void {
-    // Detached before killing: this exit is the app's own doing, and reporting
-    // it as the key becoming unavailable would stand up a fallback during
-    // shutdown.
+  /**
+   * Stops the helper, reporting when its process is actually gone. Detached
+   * before killing: this exit is the app's own doing, and reporting it as the
+   * key becoming unavailable would stand up a fallback during shutdown. The
+   * answer matters to a successor — the system releases the chord with the
+   * process, not with the kill that asked for it, so a new helper that claims
+   * a chord this one still holds would be refused.
+   */
+  stop(): Promise<void> {
     const child = this.#child;
     this.#child = undefined;
     this.#done = true;
-    child?.removeAllListeners();
-    child?.kill();
+    if (!child) return Promise.resolve();
+    child.removeAllListeners();
+    const gone = new Promise<void>((resolve) => {
+      child.on("exit", resolve);
+      setTimeout(resolve, EXIT_WAIT_MS).unref();
+    });
+    child.kill();
+    return gone;
   }
 
   #read(chunk: string): void {
+    // Stopping leaves the pipe's listener attached, so a line the dying helper
+    // got out — a late press, its own registration — still lands here. Acting
+    // on it would open the microphone, or redraw the shown key, under a chord
+    // the app has already let go of; a stopped reader drops everything.
+    if (this.#done) return;
     this.#buffer += chunk;
     const lines = this.#buffer.split("\n");
     // Whatever follows the last newline is the start of a line still arriving.

@@ -176,6 +176,42 @@ back out of it on the way out. Every layer of one shares a period, because the
 app hands the face back after the longest of them and a layer on its own period
 would be cut wherever it had got to.
 
+## Luke's knowledge of himself
+
+`apps/desktop/src/renderer/luke-guide.ts` is the one place Luke's
+self-knowledge is described: what Luke is on screen, every user-facing setting
+with its current value, and where each is changed by hand. The renderer builds
+an `AppGuideSnapshot` from it and sends it into the voice conversation as
+`[app guide]` context, the same way the session roster travels; the spoken
+`change_app_setting` and `show_panel` tools are validated against that
+snapshot, so the guide is simultaneously what Luke can say about himself and
+the outer bound of what a spoken ask can do to him.
+
+**When you add a feature or a setting, teach the guide about it in the same
+change.** The settings half is compile-enforced: `SETTING_GUIDE` is a `Record`
+over every key of `AppSettings`, so a new settings field does not build until
+you either write its guide entry or return `undefined` with a comment saying
+how the guide covers it instead. The facts half has no such lever, so the rule
+is stated here: a capability, surface, or shortcut the guide does not describe
+is one Luke will deny having, and a stale entry is one he will misdescribe.
+Update the facts whenever you change what the panel holds, what a key does, or
+what a provider connection means.
+
+Rules the guide must keep:
+
+- A spoken settings change runs only in a turn the developer opened by
+  speaking, is validated against the guide before any carrier runs, and goes
+  through the same bridge call the setting's own row uses — never a new write
+  path.
+- Mark a setting `adjustable` only after wiring its id into
+  `applySpokenSetting`; the test suite refuses an adjustable entry the bridge
+  cannot carry. A setting only a hand may change stays in the guide with
+  `adjustable: false` and a `manual` path, because the refusal Luke voices is
+  itself the guidance.
+- Credentials are never adjustable, never spoken, and never described beyond
+  whether a provider is connected. The guide leaves the machine, so nothing in
+  it may carry a key, a key's shape, or an environment variable's value.
+
 ## TypeScript value sets and keys
 
 - Do not use stringly typed fixed value sets. Define `as const`

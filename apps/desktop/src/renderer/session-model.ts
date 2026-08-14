@@ -4,10 +4,12 @@ import {
   type NormalizedSession,
   PROVIDER_ID_LIST,
   type ProviderId,
+  SESSION_LIST_SORT,
   SESSION_LOCATION,
   SESSION_STATE,
   SESSION_STATUS,
   type SessionControlKind,
+  type SessionListSort,
   type SessionLocation,
   type SessionState,
 } from "@sidecar/core";
@@ -55,13 +57,31 @@ function matchesFilter(session: DisplaySession, filter: SessionFilter): boolean 
   return session.providerId === filter;
 }
 
-/** The two questions a list of agent sessions is read to answer. */
-export const SESSION_SORT = {
-  URGENCY: "urgency",
-  RECENCY: "recency",
-} as const;
+/**
+ * Reads a spoken filter into the list's own vocabulary. The values are the
+ * same strings the chips use — the coarse scopes and the provider ids — so a
+ * validated spoken ask maps one-to-one; anything else is nothing rather than
+ * a guess, and the list is left as it was.
+ */
+export function sessionFilterFromSpoken(value: string): SessionFilter | undefined {
+  if (
+    value === SESSION_FILTER.ALL ||
+    value === SESSION_FILTER.LOCAL ||
+    value === SESSION_FILTER.CLOUD
+  ) {
+    return value;
+  }
+  return isProviderId(value) ? value : undefined;
+}
 
-export type SessionSort = (typeof SESSION_SORT)[keyof typeof SESSION_SORT];
+/**
+ * The two questions a list of agent sessions is read to answer. The set is
+ * core's, because a spoken ask names an order in the same words this control
+ * does and the two must not drift into separate vocabularies.
+ */
+export const SESSION_SORT = SESSION_LIST_SORT;
+
+export type SessionSort = SessionListSort;
 
 export interface SessionView {
   filter: SessionFilter;
@@ -168,6 +188,7 @@ export interface SessionTally {
   idle: number;
   /** The state the count badge and the notch capsule adopt. */
   state: SessionState;
+  /** One agent each, seated where its first session reads under the sort. */
   providers: readonly ProviderTally[];
 }
 
@@ -212,6 +233,11 @@ function byUrgency(first: DisplaySession, second: DisplaySession): number {
 /** What moved last, with urgency deciding sessions observed in the same tick. */
 function byRecency(first: DisplaySession, second: DisplaySession): number {
   return second.observedAt - first.observedAt || byUrgency(first, second);
+}
+
+/** The comparator a sort names — one answer for the list and the wing's marks. */
+function bySort(sort: SessionSort): (first: DisplaySession, second: DisplaySession) => number {
+  return sort === SESSION_SORT.RECENCY ? byRecency : byUrgency;
 }
 
 export function displaySessions(
@@ -326,34 +352,52 @@ function filterOptions(sessions: readonly DisplaySession[]): readonly SessionFil
  * an agent's only session finished, say — falls back to All rather than leaving
  * an empty panel, because the one thing this list may never do is hide a
  * session the capsule is still counting.
+ *
+ * Showing something is the whole of the test: a filter still matching sessions
+ * survives even while no chip offers it, which happens when a spoken ask names
+ * the only provider or location there is. Collapsing it then would be quietly
+ * wrong twice over — Luke has just said the list was narrowed, and the moment
+ * a second agent appeared the list would widen out from under a developer who
+ * asked to watch one. While the filter is chipless it hides nothing (every
+ * session matches), and as soon as another value exists its chip and the
+ * options button's "showing X only" badge both appear.
  */
 export function arrangeSessions(
   sessions: readonly DisplaySession[],
   view: SessionView,
 ): ArrangedSessions {
   const options = filterOptions(sessions);
-  const filter = options.some((option) => option.filter === view.filter)
-    ? view.filter
-    : SESSION_FILTER.ALL;
-  const matching =
-    filter === SESSION_FILTER.ALL
+  const chosen =
+    view.filter === SESSION_FILTER.ALL
       ? sessions
-      : sessions.filter((session) => matchesFilter(session, filter));
+      : sessions.filter((session) => matchesFilter(session, view.filter));
+  const filter = chosen.length > 0 ? view.filter : SESSION_FILTER.ALL;
+  const matching = filter === view.filter ? chosen : sessions;
 
   return {
-    sessions: [...matching].sort(view.sort === SESSION_SORT.RECENCY ? byRecency : byUrgency),
+    sessions: [...matching].sort(bySort(view.sort)),
     total: sessions.length,
     filter,
     options,
   };
 }
 
-export function sessionTally(sessions: readonly DisplaySession[]): SessionTally {
+/**
+ * Counted across everything tracked, whatever the list is narrowed to — but
+ * read in the sort the list is read in, so the providers sit in the order
+ * their first sessions do and the wing's marks match the rows. With no view in
+ * force — the capsule, say — the sessions read by urgency, which is also the
+ * sort the panel opens on.
+ */
+export function sessionTally(
+  sessions: readonly DisplaySession[],
+  sort: SessionSort = SESSION_SORT.URGENCY,
+): SessionTally {
   const providers = new Map<string, ProviderTally>();
   const counts = { attention: 0, working: 0, complete: 0, idle: 0 };
   const attentionIds: string[] = [];
 
-  for (const session of sessions) {
+  for (const session of [...sessions].sort(bySort(sort))) {
     if (session.state === SESSION_STATE.ATTENTION) {
       counts.attention += 1;
       attentionIds.push(session.id);

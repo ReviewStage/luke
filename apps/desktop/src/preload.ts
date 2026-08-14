@@ -5,6 +5,7 @@ import type {
   ProviderMessageResult,
   RealtimeConnection,
   RealtimeVoice,
+  RealtimeVoiceSpeed,
   SessionIdentity,
 } from "@sidecar/core";
 import { contextBridge, ipcRenderer } from "electron";
@@ -39,13 +40,19 @@ const bridge: AppBridge = {
     ) as Promise<SettingsUpdateResult>,
   setVoice: (voice: RealtimeVoice) =>
     ipcRenderer.invoke(channels.setVoice, voice) as Promise<SettingsUpdateResult>,
+  setVoiceSpeed: (speed: RealtimeVoiceSpeed) =>
+    ipcRenderer.invoke(channels.setVoiceSpeed, speed) as Promise<SettingsUpdateResult>,
   openProviderApiKeys: (providerId: CredentialProviderId) => {
     ipcRenderer.send(channels.openProviderApiKeys, providerId);
   },
   setShowInMenuBar: (show: boolean) =>
     ipcRenderer.invoke(channels.setShowInMenuBar, show) as Promise<SettingsUpdateResult>,
+  setShowInDock: (show: boolean) =>
+    ipcRenderer.invoke(channels.setShowInDock, show) as Promise<SettingsUpdateResult>,
   setVoiceCaptions: (enabled: boolean) =>
     ipcRenderer.invoke(channels.setVoiceCaptions, enabled) as Promise<SettingsUpdateResult>,
+  setVoiceHotkey: (accelerator: string | undefined) =>
+    ipcRenderer.invoke(channels.setVoiceHotkey, accelerator) as Promise<SettingsUpdateResult>,
   openSession: (identity: SessionIdentity) =>
     ipcRenderer.invoke(channels.openSession, identity) as Promise<SessionOpenResult>,
   sendSessionMessage: (identity: SessionIdentity, text: string) =>

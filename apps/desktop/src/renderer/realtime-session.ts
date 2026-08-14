@@ -1,9 +1,16 @@
 import {
+  type AppGuideSnapshot,
+  type AppToolAction,
   type AttentionSpeech,
+  appGuideContextEvents,
+  appGuideContextText,
+  appToolAction,
   cancelResponseEvents,
   clearInputAudioEvents,
+  EMPTY_APP_GUIDE,
   functionCallFollowUpEvents,
   functionCallOutputEvents,
+  isAppToolCall,
   type NormalizedSession,
   proactiveSpeechEvents,
   pushToTalkCommitEvents,
@@ -44,6 +51,16 @@ export type SessionActionCarrier = (
   action: Extract<SessionToolAction, { kind: "message" | "control" | "open" }>,
 ) => Promise<Record<string, unknown>>;
 
+/**
+ * Carries one validated app-level act — a settings change, or the panel being
+ * shown — to the renderer that can perform it. The same posture as the session
+ * carrier: validation happened against the guide before this is called, and
+ * the carrier only performs and reports.
+ */
+export type AppActionCarrier = (
+  action: Extract<AppToolAction, { kind: "setting" | "panel" }>,
+) => Promise<Record<string, unknown>>;
+
 export interface RealtimeVoiceSessionCallbacks {
   onStatus(status: RealtimeStatus): void;
   onLocalStream(stream: MediaStream | undefined): void;
@@ -62,6 +79,8 @@ export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbac
   requestConnection(): Promise<RealtimeConnection | undefined>;
   /** Absent means Luke can only speak: every tool call is refused with a reason. */
   carryAction?: SessionActionCarrier;
+  /** Absent means spoken asks about Luke himself are refused with a reason. */
+  carryAppAction?: AppActionCarrier;
   /**
    * The browser pieces, injectable so the microphone state machine can be
    * exercised without a real device or peer connection. Push-to-talk decides
@@ -125,6 +144,13 @@ export class RealtimeVoiceSession {
    * session Luke was actually shown.
    */
   #sessions: readonly NormalizedSession[] = [];
+  /**
+   * The app guide as last provided, kept whole for the same reason the roster
+   * is: it is what a spoken ask about Luke himself is validated against, and a
+   * call may only name a setting Luke was actually described as having.
+   */
+  #guide: AppGuideSnapshot = EMPTY_APP_GUIDE;
+  #guideContext: string | undefined;
   /**
    * Luke's own audio track. Cancelling stops the model producing more, but what
    * it already produced is on its way down the connection and keeps playing —
@@ -234,39 +260,51 @@ export class RealtimeVoiceSession {
     this.#setStatus(REALTIME_STATUS.CONNECTING);
     this.#options.onError(undefined);
 
-    let connection: RealtimeConnection | undefined;
-    try {
-      connection = await this.#options.requestConnection();
-    } catch (error) {
-      // A stop that lands while the credential is being minted is not a fault
-      // to report. Every exit from here has to ask, not just the ones after the
-      // device exists.
-      if (this.#closed) return this.#abandonConnect();
-      return this.#fail(`Could not reach the main process: ${errorMessage(error)}`);
-    }
-    if (this.#closed) return this.#abandonConnect();
-    if (!connection) {
-      this.#setStatus(REALTIME_STATUS.UNAVAILABLE);
-      return false;
-    }
-
-    try {
-      const stream = await (this.#options.requestMicrophoneStream?.() ??
+    // The whole of the wait before the handshake is these two, and neither
+    // needs the other: the credential is minted over the network while the
+    // capture device opens. `allSettled` rather than `all`, because whichever
+    // one loses still has to be dealt with — a device that opened after a
+    // failed mint would be held with nobody left to release it.
+    const [connectionResult, streamResult] = await Promise.allSettled([
+      this.#options.requestConnection(),
+      this.#options.requestMicrophoneStream?.() ??
         navigator.mediaDevices.getUserMedia({
           audio: { autoGainControl: true, echoCancellation: true, noiseSuppression: true },
           video: false,
-        }));
-      this.#stream = stream;
+        }),
+    ]);
+    // Adopt the device before deciding anything, so every exit from here — a
+    // stop that landed mid-mint, a failed mint, no credential at all — releases
+    // it through the same teardown as the rest.
+    if (streamResult.status === "fulfilled") this.#stream = streamResult.value;
+
+    // A stop that lands while the credential is being minted is not a fault
+    // to report. Every exit from here has to ask, not just the ones after the
+    // handshake starts.
+    if (this.#closed) return this.#abandonConnect();
+    if (connectionResult.status === "rejected") {
+      return this.#fail(
+        `Could not reach the main process: ${errorMessage(connectionResult.reason)}`,
+      );
+    }
+    const connection = connectionResult.value;
+    if (!connection) {
+      this.#teardown();
+      this.#setStatus(REALTIME_STATUS.UNAVAILABLE);
+      return false;
+    }
+    if (streamResult.status === "rejected") {
+      return this.#fail(errorMessage(streamResult.reason));
+    }
+
+    try {
+      const stream = streamResult.value;
       const [microphone] = stream.getAudioTracks();
       if (!microphone) throw new Error("No microphone track was available");
       // Push-to-talk starts closed. Nothing is sent until the developer asks.
       microphone.enabled = false;
       this.#microphone = microphone;
       this.#options.onLocalStream(stream);
-      // `close()` can land while this is still awaiting. The device now exists,
-      // so bailing out without releasing it would leave the microphone held by
-      // a session the caller already stopped.
-      if (this.#closed) return this.#abandonConnect();
 
       const peer = this.#options.createPeerConnection?.() ?? new RTCPeerConnection();
       this.#peer = peer;
@@ -604,6 +642,8 @@ export class RealtimeVoiceSession {
     this.#stream = undefined;
     this.#sessionContext = undefined;
     this.#sessions = [];
+    this.#guide = EMPTY_APP_GUIDE;
+    this.#guideContext = undefined;
     this.#generationDone = false;
     this.#remoteQuiet = false;
     this.#pendingTurn = false;
@@ -738,6 +778,22 @@ export class RealtimeVoiceSession {
     if (context === this.#sessionContext) return;
     this.#sessionContext = context;
     this.#send(sessionContextEvents(sessions));
+  }
+
+  /**
+   * Tells the conversation what Luke currently knows about himself, the same
+   * way the roster does: the standing instructions promise an app guide, so
+   * one has to arrive before a question about Luke can be answered from real
+   * state. Identical guides are not resent, and the snapshot is kept whole for
+   * validating the spoken asks it advertises.
+   */
+  updateGuide(guide: AppGuideSnapshot): void {
+    this.#guide = guide;
+    if (!this.isConnected) return;
+    const context = appGuideContextText(guide);
+    if (context === this.#guideContext) return;
+    this.#guideContext = context;
+    this.#send(appGuideContextEvents(guide));
   }
 
   #handleServerEvent(data: unknown): void {
@@ -877,6 +933,21 @@ export class RealtimeVoiceSession {
         status: "refused",
         reason: "Only a request you make yourself can act on a session.",
       };
+    }
+    // An ask about Luke himself is validated against the guide the app
+    // actually provided, then carried by the renderer the same way a session
+    // act is: perform, and answer with what became of it.
+    if (isAppToolCall(call)) {
+      const appAction = appToolAction(call, this.#guide, this.#sessions);
+      if (appAction.kind === "refused") return { status: "refused", reason: appAction.reason };
+      if (!this.#options.carryAppAction) {
+        return { status: "refused", reason: "Acting on Luke's own settings is not available." };
+      }
+      try {
+        return await this.#options.carryAppAction(appAction);
+      } catch {
+        return { status: "refused", reason: "The change could not be made." };
+      }
     }
     const action = sessionToolAction(call, this.#sessions);
     if (action.kind === "refused") return { status: "refused", reason: action.reason };

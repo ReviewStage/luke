@@ -30,6 +30,161 @@ export const DEFAULT_VOICE_HOTKEYS: readonly string[] = ["Alt+Space", "Alt+S"];
 export const DEFAULT_ASK_HOTKEYS: readonly string[] = ["Alt+L", "Alt+Shift+L"];
 
 /**
+ * The modifiers a talk key may carry, written the way Electron accelerators
+ * name them. Their order here is the order macOS writes a chord in — ⌃⌥⇧⌘ —
+ * so every accelerator this module produces reads the way the menu bar would
+ * print it.
+ */
+export const VOICE_HOTKEY_MODIFIER = {
+  CONTROL: "Control",
+  ALT: "Alt",
+  SHIFT: "Shift",
+  COMMAND: "Command",
+} as const;
+
+export type VoiceHotkeyModifier =
+  (typeof VOICE_HOTKEY_MODIFIER)[keyof typeof VOICE_HOTKEY_MODIFIER];
+
+const MODIFIER_ORDER: readonly VoiceHotkeyModifier[] = [
+  VOICE_HOTKEY_MODIFIER.CONTROL,
+  VOICE_HOTKEY_MODIFIER.ALT,
+  VOICE_HOTKEY_MODIFIER.SHIFT,
+  VOICE_HOTKEY_MODIFIER.COMMAND,
+];
+
+/** Every name the native helper's own table answers to, folded to one each. */
+const MODIFIER_ALIASES: Readonly<Record<string, VoiceHotkeyModifier>> = {
+  control: VOICE_HOTKEY_MODIFIER.CONTROL,
+  ctrl: VOICE_HOTKEY_MODIFIER.CONTROL,
+  alt: VOICE_HOTKEY_MODIFIER.ALT,
+  option: VOICE_HOTKEY_MODIFIER.ALT,
+  shift: VOICE_HOTKEY_MODIFIER.SHIFT,
+  command: VOICE_HOTKEY_MODIFIER.COMMAND,
+  cmd: VOICE_HOTKEY_MODIFIER.COMMAND,
+  commandorcontrol: VOICE_HOTKEY_MODIFIER.COMMAND,
+  cmdorctrl: VOICE_HOTKEY_MODIFIER.COMMAND,
+};
+
+/**
+ * The keys a talk key may end in: Space or a letter, because that is the whole
+ * of the native helper's table. Anything wider stored here would register
+ * through the helper as nothing and silently fall back to the defaults, so the
+ * limit is enforced where the chord is chosen rather than discovered where it
+ * fails.
+ */
+function voiceHotkeyKey(name: string): string | undefined {
+  if (name === "space") return "Space";
+  return /^[a-z]$/.test(name) ? name.toUpperCase() : undefined;
+}
+
+function joinVoiceHotkey(held: ReadonlySet<VoiceHotkeyModifier>, key: string): string {
+  return [...MODIFIER_ORDER.filter((modifier) => held.has(modifier)), key].join("+");
+}
+
+/**
+ * Whether the modifiers held cannot anchor a talk key: none at all, or Shift
+ * alone. Shift-and-a-letter is how every app types a capital, and
+ * Shift-and-Space is typed mid-sentence, so a chord Shift carries by itself
+ * takes plain typing away exactly as a bare key would. Shift may still join a
+ * chord another modifier anchors.
+ */
+function tooLightToHold(held: ReadonlySet<VoiceHotkeyModifier>): boolean {
+  return held.size === 0 || (held.size === 1 && held.has(VOICE_HOTKEY_MODIFIER.SHIFT));
+}
+
+/**
+ * Reads an accelerator into the one spelling the rest of the app uses, or
+ * refuses it. This is the gate a stored or submitted chord passes on its way to
+ * the system: one key from the helper's table behind at least one modifier
+ * heavier than Shift — a bare key, or a Shift-only chord, would take plain
+ * typing away from every app on the machine.
+ */
+export function parseVoiceHotkey(value: string): string | undefined {
+  const held = new Set<VoiceHotkeyModifier>();
+  let key: string | undefined;
+  for (const part of value.split("+")) {
+    const name = part.trim().toLowerCase();
+    const modifier = MODIFIER_ALIASES[name];
+    if (modifier) {
+      held.add(modifier);
+      continue;
+    }
+    // A second key in one chord is not a chord anything here can register.
+    const candidate = voiceHotkeyKey(name);
+    if (!candidate || key !== undefined) return undefined;
+    key = candidate;
+  }
+  if (!key || tooLightToHold(held)) return undefined;
+  return joinVoiceHotkey(held, key);
+}
+
+/**
+ * The chords to try, in order. A chosen key goes first — it is what the user
+ * asked for — and the defaults stay behind it, so a chord another app claims
+ * while Luke is closed costs the user a different talk key rather than none.
+ * The panel shows whichever one actually registered.
+ */
+export function voiceHotkeyCandidates(chosen: string | undefined): readonly string[] {
+  if (!chosen) return DEFAULT_VOICE_HOTKEYS;
+  return [chosen, ...DEFAULT_VOICE_HOTKEYS.filter((candidate) => candidate !== chosen)];
+}
+
+/** What became of one keystroke offered to the recording control. */
+export const VOICE_HOTKEY_CAPTURE = {
+  /** A whole chord: modifiers held and a key from the table pressed. */
+  CAPTURED: "captured",
+  /** Only modifiers so far — the chord is still being formed, not refused. */
+  PENDING: "pending",
+  /** A key the talk key cannot be, or one held by nothing heavier than Shift. */
+  REFUSED: "refused",
+} as const;
+
+export type VoiceHotkeyCaptureOutcome =
+  (typeof VOICE_HOTKEY_CAPTURE)[keyof typeof VOICE_HOTKEY_CAPTURE];
+
+export type VoiceHotkeyCaptureResult =
+  | { outcome: typeof VOICE_HOTKEY_CAPTURE.CAPTURED; accelerator: string }
+  | { outcome: typeof VOICE_HOTKEY_CAPTURE.PENDING }
+  | { outcome: typeof VOICE_HOTKEY_CAPTURE.REFUSED };
+
+/** The fields of a `KeyboardEvent` a chord is read from, so a test needs no DOM. */
+export interface VoiceHotkeyChord {
+  /** `KeyboardEvent.code`: the physical key, unmoved by the modifiers held. */
+  code: string;
+  altKey: boolean;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  shiftKey: boolean;
+}
+
+const MODIFIER_CODE_PREFIXES = ["Alt", "Control", "Meta", "Shift"] as const;
+
+/**
+ * Reads one keystroke as a talk-key chord. `code` rather than `key`, because
+ * on macOS Option moves letters — Option-S arrives as `ß` — and the chord
+ * being recorded is the physical one the helper will watch for.
+ */
+export function capturedVoiceHotkey(chord: VoiceHotkeyChord): VoiceHotkeyCaptureResult {
+  // A modifier going down on its own is a chord being formed, not an answer.
+  if (MODIFIER_CODE_PREFIXES.some((prefix) => chord.code.startsWith(prefix))) {
+    return { outcome: VOICE_HOTKEY_CAPTURE.PENDING };
+  }
+  const key =
+    chord.code === "Space"
+      ? "Space"
+      : /^Key[A-Z]$/.test(chord.code)
+        ? chord.code.slice("Key".length)
+        : undefined;
+  const held = new Set<VoiceHotkeyModifier>();
+  if (chord.ctrlKey) held.add(VOICE_HOTKEY_MODIFIER.CONTROL);
+  if (chord.altKey) held.add(VOICE_HOTKEY_MODIFIER.ALT);
+  if (chord.shiftKey) held.add(VOICE_HOTKEY_MODIFIER.SHIFT);
+  if (chord.metaKey) held.add(VOICE_HOTKEY_MODIFIER.COMMAND);
+  if (!key || tooLightToHold(held)) return { outcome: VOICE_HOTKEY_CAPTURE.REFUSED };
+  return { outcome: VOICE_HOTKEY_CAPTURE.CAPTURED, accelerator: joinVoiceHotkey(held, key) };
+}
+
+/**
  * The talk key a panel should show.
  *
  * Two things can say what the key is, and neither is reliably first. The helper

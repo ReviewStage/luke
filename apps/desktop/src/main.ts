@@ -9,6 +9,7 @@ import {
   isControllableAdapter,
   isMessageCapableAdapter,
   isRealtimeVoice,
+  isRealtimeVoiceSpeed,
   type NativeNotchGeometry,
   PROVIDER_CONTROL_RESULT_STATUS,
   PROVIDER_MESSAGE_RESULT_STATUS,
@@ -74,9 +75,10 @@ import {
 import {
   askHotkeyReport,
   DEFAULT_ASK_HOTKEYS,
-  DEFAULT_VOICE_HOTKEYS,
+  parseVoiceHotkey,
   VOICE_HOTKEY_ABSENCE,
   type VoiceHotkeyAbsence,
+  voiceHotkeyCandidates,
   voiceHotkeyLabel,
   voiceHotkeyReport,
 } from "./shared/voice-hotkey";
@@ -166,6 +168,12 @@ const attentionReviewer = attentionEvaluator
 // does: evidence must be reproducible without a key and without a network.
 const realtimeCredentials = fixtureMode ? undefined : openAiRealtimeCredentialsFromEnvironment();
 let voiceHotkey: string | undefined;
+/**
+ * The chord the user chose over the defaults, if any. Read from the settings
+ * file before the key is first registered, and moved by the settings panel
+ * afterwards; the defaults stay behind it as fallbacks either way.
+ */
+let chosenVoiceHotkey: string | undefined;
 let talkKeyWatcher: TalkKeyWatcher | undefined;
 /**
  * Whether the key reports being let go of. The helper does and the Electron
@@ -214,7 +222,7 @@ function registerVoiceHotkey(): void {
       sendVoiceHotkey();
     },
   });
-  if (talkKeyWatcher.start(DEFAULT_VOICE_HOTKEYS)) return;
+  if (talkKeyWatcher.start(voiceHotkeyCandidates(chosenVoiceHotkey))) return;
   talkKeyWatcher = undefined;
   registerToggleHotkey();
   reportVoiceHotkey();
@@ -227,7 +235,7 @@ function registerVoiceHotkey(): void {
  * worth standing up rather than leaving the user with no key at all.
  */
 function registerToggleHotkey(): void {
-  for (const accelerator of DEFAULT_VOICE_HOTKEYS) {
+  for (const accelerator of voiceHotkeyCandidates(chosenVoiceHotkey)) {
     const registered = globalShortcut.register(accelerator, () => {
       panelWindow?.webContents.send(channels.voiceHotkeyPress);
       // A toggle has only the one edge, so it reports a release immediately and
@@ -289,6 +297,31 @@ function sendVoiceHotkey(): void {
 
 function reportVoiceHotkey(): void {
   process.stderr.write(`${voiceHotkeyReport(voiceHotkey, voiceHotkeyAbsence)}\n`);
+}
+
+/**
+ * Moves the talk key to whatever `chosenVoiceHotkey` now says, while the app
+ * is running. The old key is let go of in full before the new one is asked
+ * for, so the two can never race for the same chord — and letting everything
+ * go is exact rather than broad, because the talk key candidates are the only
+ * global accelerators Luke ever registers. Letting go means waiting: the
+ * system releases the old helper's chord when its process exits, not when the
+ * kill is asked for, and the defaults sit in both helpers' candidate lists —
+ * a successor that starts too early is refused the very fallback it was
+ * promised. The panel keeps showing the old key until the new one actually
+ * answers: the helper announces its own registration over stdout, and every
+ * path without a helper is decided by the time `registerVoiceHotkey` returns.
+ */
+async function applyVoiceHotkey(): Promise<void> {
+  const released = talkKeyWatcher?.stop();
+  talkKeyWatcher = undefined;
+  globalShortcut.unregisterAll();
+  await released;
+  voiceHotkey = undefined;
+  voiceHotkeyHeld = true;
+  voiceHotkeyAbsence = VOICE_HOTKEY_ABSENCE.ALREADY_OWNED;
+  registerVoiceHotkey();
+  if (!talkKeyWatcher) sendVoiceHotkey();
 }
 
 let windowMode: WindowMode = captureMode
@@ -493,7 +526,9 @@ function isSessionIdentity(value: unknown): value is SessionIdentity {
 function reportVoiceAvailability(): void {
   const report = realtimeCredentials?.diagnostics() ?? unavailableRealtimeDiagnostics(fixtureMode);
   if (realtimeCredentials) {
-    process.stderr.write(`Luke voice: enabled (model ${report.model}, voice ${report.voice})\n`);
+    process.stderr.write(
+      `Luke voice: enabled (model ${report.model}, voice ${report.voice}, speed ${report.speed}×)\n`,
+    );
     return;
   }
   process.stderr.write(
@@ -603,6 +638,29 @@ function registerIpc(): void {
     },
   );
 
+  // The Dock icon follows the stored answer at once, like the status item: a
+  // setting that only took effect on the next launch would read as a toggle
+  // that does nothing.
+  ipcMain.handle(
+    channels.setShowInDock,
+    async (event, show: unknown): Promise<SettingsUpdateResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (typeof show !== "boolean") throw new Error("Invalid Dock request");
+      try {
+        const result = await settingsStore.setShowInDock(show);
+        applyDockVisibility(result.settings.showInDock);
+        return result;
+      } catch {
+        // A filesystem failure is not something the user can act on, so it is
+        // reported as one line rather than as a raw system error.
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "Could not save that setting on this system.",
+        };
+      }
+    },
+  );
+
   // The voice is a preference rather than a credential, but it travels the
   // same road: the renderer names a value from a set fixed by this build and
   // hears back the settings as they now stand.
@@ -625,6 +683,27 @@ function registerIpc(): void {
       }
     },
   );
+  // The pace travels the voice's road exactly: a value from the set fixed by
+  // this build, stored, and handed to the minter for the next conversation.
+  ipcMain.handle(
+    channels.setVoiceSpeed,
+    async (event, speed: unknown): Promise<SettingsUpdateResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (!isRealtimeVoiceSpeed(speed)) throw new Error("Unknown voice speed");
+      try {
+        const result = await settingsStore.setVoiceSpeed(speed);
+        // The next credential is minted for the new pace; a conversation
+        // already open keeps the one it answered at.
+        if (!result.reason) realtimeCredentials?.setSpeed(speed);
+        return result;
+      } catch {
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "Could not save that speed on this system.",
+        };
+      }
+    },
+  );
   // A plain preference, validated to a boolean the way every renderer value
   // is validated at this boundary. The reply reports what was actually
   // stored, so the switch redraws from the settings rather than the press.
@@ -641,6 +720,46 @@ function registerIpc(): void {
         return {
           settings: await settingsStore.snapshot(),
           reason: "Could not save that setting on this system.",
+        };
+      }
+    },
+  );
+
+  // The talk key is the user's to move — a chord another tool already holds,
+  // or a hand that does not reach ⌥Space. What arrives is read through the
+  // same gate the stored value passes, so only a chord the registrars can
+  // actually take is ever stored; omitting one returns the defaults, making
+  // reset the absence of a choice rather than a second stored value. The new
+  // chord is registered at once — a shortcut that only moved on the next
+  // launch would read as a control that does nothing.
+  ipcMain.handle(
+    channels.setVoiceHotkey,
+    async (event, accelerator: unknown): Promise<SettingsUpdateResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (accelerator !== undefined && typeof accelerator !== "string") {
+        throw new Error("Invalid shortcut request");
+      }
+      const chosen = accelerator === undefined ? undefined : parseVoiceHotkey(accelerator);
+      // The renderer records chords through the same reader, so one that does
+      // not parse is a malformed request rather than a choice to answer.
+      if (accelerator !== undefined && chosen === undefined) {
+        throw new Error("Invalid shortcut request");
+      }
+      try {
+        const result = await settingsStore.setVoiceHotkey(chosen);
+        if (!result.reason) {
+          chosenVoiceHotkey = chosen;
+          // Awaited so the renderer's controls stay at rest until the swap has
+          // finished and the helper's own registration line can say the truth.
+          await applyVoiceHotkey();
+        }
+        return result;
+      } catch {
+        // A filesystem failure is not something the user can act on, so it is
+        // reported as one line rather than as a raw system error.
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "Could not save that shortcut on this system.",
         };
       }
     },
@@ -1008,6 +1127,52 @@ function applyMenuBarVisibility(show: boolean): void {
   destroyTray();
 }
 
+/**
+ * macOS ignores a `dock.hide()` within a second of the last Dock change, so a
+ * switch pressed twice cannot be honoured call by call; the applier below
+ * paces itself to this instead, which is Electron's documented floor.
+ */
+const DOCK_SETTLE_MS = 1100;
+
+/** The Dock state last asked for, and whether the applier is chasing it. */
+let dockDesired = false;
+let dockSettling = false;
+
+/**
+ * Puts Luke in the Dock or takes him back out, to match the setting. He ships
+ * as an accessory app — the notch is his fixed point — so the icon is a second
+ * door like the status item, losing nothing when it is hidden.
+ */
+function applyDockVisibility(show: boolean): void {
+  if (process.platform !== "darwin") return;
+  dockDesired = show;
+  void settleDock();
+}
+
+/**
+ * Chases the desired state rather than relaying each press: a hide within a
+ * second of the last Dock change is silently ignored by macOS, so the icon is
+ * re-checked after every change and asked again until it matches — the switch
+ * and the file must not end a quick on-and-off disagreeing with the Dock.
+ */
+async function settleDock(): Promise<void> {
+  if (dockSettling || !app.dock) return;
+  dockSettling = true;
+  try {
+    while (app.dock.isVisible() !== dockDesired) {
+      if (dockDesired) await app.dock.show();
+      else app.dock.hide();
+      // Either direction transforms the process type, which can deactivate
+      // the app; the panel the switch was pressed in is brought back forward
+      // rather than left to lose its caret.
+      if (windowMode === "expanded") focusPanelWindow();
+      await new Promise((resolve) => setTimeout(resolve, DOCK_SETTLE_MS));
+    }
+  } finally {
+    dockSettling = false;
+  }
+}
+
 function handleDisplayChange(): void {
   setTimeout(() => {
     refreshNativeGeometry();
@@ -1054,13 +1219,30 @@ if (!app.requestSingleInstanceLock()) {
       (show) => applyMenuBarVisibility(show),
       () => applyMenuBarVisibility(true),
     );
+    // The Dock icon reads the same file under the opposite default: it is
+    // opt-in, so a file that cannot be read leaves Luke out of the Dock — the
+    // accessory app the launch just asserted. Nothing to do until it says so.
+    void settingsStore.showInDock().then(
+      (show) => {
+        if (show) applyDockVisibility(true);
+      },
+      () => undefined,
+    );
     // Awaited, so the chosen voice reaches the minter before the renderer
     // exists to ask for a credential: the first conversation must already
     // speak with it. A file that cannot be read means no choice was kept — it
     // must not keep the panel, the hotkey, or observation from starting.
     const storedVoice = await settingsStore.readVoice().catch(() => undefined);
     if (storedVoice) realtimeCredentials?.setVoice(storedVoice);
+    // The chosen pace rides the same await, for the same reason.
+    const storedSpeed = await settingsStore.readVoiceSpeed().catch(() => undefined);
+    if (storedSpeed) realtimeCredentials?.setSpeed(storedSpeed);
     reportVoiceAvailability();
+    // Awaited for the same reason the voice is: the chosen chord has to be in
+    // hand before the key is registered, or the first registration would take
+    // the default away from the user who moved off it. A file that cannot be
+    // read means no choice was kept, and the defaults answer.
+    chosenVoiceHotkey = await settingsStore.readVoiceHotkey().catch(() => undefined);
     // The report is not made here: the helper answers over its own stdout a
     // moment later, and a line printed now would state an absence that only
     // exists because nobody has answered yet.
@@ -1092,8 +1274,9 @@ if (!app.requestSingleInstanceLock()) {
 app.on("will-quit", () => {
   globalShortcut.unregisterAll();
   // The helper is a process of Luke's own, so it does not outlive the app that
-  // spawned it and leave a key registered against nothing.
-  talkKeyWatcher?.stop();
+  // spawned it and leave a key registered against nothing. Nothing succeeds it
+  // during quit, so its exit is not waited on.
+  void talkKeyWatcher?.stop();
   talkKeyWatcher = undefined;
 });
 

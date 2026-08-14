@@ -16,7 +16,7 @@ import {
   useWingReorderMotion,
   WING_SLOT_ID_ATTRIBUTE,
 } from "./session-motion";
-import { Waveform, type WaveformVoice } from "./waveform";
+import { WAVEFORM_VOICE, Waveform, type WaveformVoice } from "./waveform";
 
 /**
  * The strips beside the camera housing. They are rendered once for both window
@@ -32,6 +32,8 @@ interface NotchWingsProps {
   onVoiceActivity?: (active: boolean) => void;
   fixtureSpeaking: boolean;
   hasAudioSignal: boolean;
+  /** A pressed talk key still waiting for the call it asked to open. */
+  voiceOpening: boolean;
   presentation: PanelPresentation;
   housingWidth: number;
 }
@@ -102,6 +104,7 @@ export function NotchWings({
   onVoiceActivity,
   fixtureSpeaking,
   hasAudioSignal,
+  voiceOpening,
   presentation,
   housingWidth,
 }: NotchWingsProps): React.JSX.Element {
@@ -113,9 +116,20 @@ export function NotchWings({
     },
     [onVoiceActivity],
   );
+  // The meter is the developer's from the press, not from the handshake: while
+  // the call is opening it already stands where it will stand once live, so the
+  // key answers on the frame it lands rather than when the network does. It
+  // also holds through the turn itself rather than following the analyser,
+  // which arrives an effect-tick after the turn opens and would blink the
+  // meter out for that frame.
+  const meterVoice = voice ?? (voiceOpening ? WAVEFORM_VOICE.DEVELOPER : undefined);
+  const meterShown = hasAudioSignal || voiceOpening || meterVoice === WAVEFORM_VOICE.DEVELOPER;
   // While the developer holds the turn the meter takes the face's place, which
   // is the only place the capsule has.
-  const yieldToMeter = faceYieldsToMeter({ ...(voice ? { turn: voice } : {}), hasAudioSignal });
+  const yieldToMeter = faceYieldsToMeter({
+    ...(meterVoice ? { turn: meterVoice } : {}),
+    hasAudioSignal: meterShown,
+  });
   const face = useFaceMotion(
     {
       ...speechFaceInputs({
@@ -152,17 +166,18 @@ export function NotchWings({
 
   return (
     <>
-      <div className="wing wing-left" data-audio={String(hasAudioSignal)}>
+      <div className="wing wing-left" data-audio={String(meterShown)}>
         {/* Ordered so the element nearest the notch is the one the capsule
             keeps: the rest unfold outward and never displace it. */}
         <div className="wing-inner">
-          {hasAudioSignal ? (
-            <span className="wing-meter" data-turn={voice}>
+          {meterShown ? (
+            <span className="wing-meter" data-turn={meterVoice}>
               <Waveform
                 analyser={analyser}
                 speaking={fixtureSpeaking}
-                voice={voice}
+                voice={meterVoice}
                 voiceActive={voiceActive}
+                connecting={voiceOpening && !analyser}
                 onVoiceActivity={reportVoiceActivity}
               />
             </span>
