@@ -4,6 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
+  addonCompilerArguments,
   APPLE_EVENTS_USAGE_DESCRIPTION,
   createPackagerOptions,
   ICONSET_SOURCES,
@@ -39,6 +40,7 @@ function packagerOptions(signing = resolveSigningMode({})) {
       "/repo/apps/desktop/.build/native/mac-media-duck",
       "/repo/apps/desktop/.build/native/mac-screen-geometry",
       "/repo/apps/desktop/.build/native/mac-talk-key",
+      "/repo/apps/desktop/.build/native/mac-stationary-window.node",
     ],
     iconPath,
     licensePath: `/repo/apps/desktop/.build/${LICENSE_RESOURCE_NAME}`,
@@ -132,9 +134,28 @@ test("every native helper is built and shipped, or neither happens", () => {
       // and is simply absent from the app someone downloads.
       `${helper.binary} reaches the bundle`,
     );
-    assert.ok(helper.source.endsWith(".swift"));
+    // A spawned helper is a Swift executable; an in-process addon is
+    // Objective-C, loaded through Node-API, and named so the loader can tell.
+    assert.ok(helper.source.endsWith(".swift") || helper.source.endsWith(".m"));
+    assert.equal(helper.binary.endsWith(".node"), helper.source.endsWith(".m"));
     assert.ok(helper.frameworks.length > 0);
   }
+});
+
+test("the stationary window addon is compiled as a loadable Node-API module", () => {
+  const stationary = NATIVE_HELPERS.find(
+    (helper) => helper.binary === "mac-stationary-window.node",
+  );
+
+  assert.ok(stationary, "the stationary window addon is declared");
+  const compilerArguments = addonCompilerArguments("s", "o", stationary.frameworks);
+  assert.deepEqual(compilerArguments.slice(0, 3), ["clang", "-target", SWIFT_TARGET_TRIPLE]);
+  assert.ok(compilerArguments.includes("-dynamiclib"));
+  // Node-API symbols resolve from the Electron binary at load time, so the
+  // link must be allowed to leave them undefined.
+  assert.ok(compilerArguments.includes("-Wl,-undefined,dynamic_lookup"));
+  // NSWindowCollectionBehaviorStationary is the whole reason the addon exists.
+  assert.ok(compilerArguments.includes("AppKit"));
 });
 
 test("the talk key is compiled against the framework that reads it", () => {

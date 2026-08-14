@@ -57,6 +57,7 @@ import { DevinSessionAdapter } from "./devin-adapter";
 import { JulesSessionAdapter } from "./jules-adapter";
 import { LinearIssueTracker } from "./linear-tracker";
 import { readMacScreenGeometry } from "./macos-screen-geometry";
+import { keepWindowStationary } from "./macos-stationary-window";
 import { MediaDuckController } from "./media-duck";
 import { openAiAttentionEvaluatorFromEnvironment } from "./openai-attention-evaluator";
 import {
@@ -465,6 +466,7 @@ function configurePanelBehavior(window: BrowserWindow): void {
     });
     window.setHiddenInMissionControl(true);
     window.setWindowButtonVisibility(false);
+    keepWindowStationary(window);
   }
 }
 
