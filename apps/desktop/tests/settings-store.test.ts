@@ -865,6 +865,63 @@ test("ignores a stored talk-key chord this build cannot register", async (t) => 
   assert.equal((await store.snapshot()).voiceHotkey, undefined);
 });
 
+test("stores the chosen ask-key chord on the talk key's terms and reads it back", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+
+  assert.equal(await store.readAskHotkey(), undefined);
+  assert.equal((await store.snapshot()).askHotkey, undefined);
+
+  const { settings, reason } = await store.setAskHotkey("Control+Alt+K");
+
+  assert.equal(reason, undefined);
+  assert.equal(settings.askHotkey, "Control+Alt+K");
+  // A preference is not a credential, so choosing one never reaches the
+  // Keychain — and never raises its permission dialog.
+  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
+  assert.equal(await storeIn(directory).readAskHotkey(), "Control+Alt+K");
+});
+
+test("clearing the ask-key chord returns to no choice at all", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  await store.setAskHotkey("Control+Alt+K");
+  const { settings } = await store.setAskHotkey(undefined);
+
+  assert.equal(settings.askHotkey, undefined);
+  // Absent from the file rather than stored as an empty value: reset is the
+  // absence of a choice, and a reopened store must read it the same way.
+  assert.equal(await storeIn(directory).readAskHotkey(), undefined);
+});
+
+test("ignores a stored ask-key chord this build cannot register", async (t) => {
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({ version: 2, apiKeys: {}, askHotkey: "F13" }),
+  );
+  const store = storeIn(directory);
+
+  // A hand-edited chord the registrar would refuse is dropped rather than
+  // carried: honouring it would claim a key nothing was ever told about.
+  assert.equal(await store.readAskHotkey(), undefined);
+  assert.equal((await store.snapshot()).askHotkey, undefined);
+});
+
+test("the two Luke keys survive each other's writes", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  await store.setVoiceHotkey("Control+Alt+Space");
+  await store.setAskHotkey("Control+Alt+K");
+
+  const reopened = storeIn(directory);
+  assert.equal(await reopened.readVoiceHotkey(), "Control+Alt+Space");
+  assert.equal(await reopened.readAskHotkey(), "Control+Alt+K");
+});
+
 test("the talk-key chord and a stored key survive each other's writes", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);

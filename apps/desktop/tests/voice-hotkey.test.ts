@@ -43,10 +43,36 @@ test("the ask key is the talk key's sibling, never its rival", () => {
 test("an ask candidate the talk key holds is not asked for", () => {
   // The talk key is configurable, so it can be moved onto an ask default; the
   // chord it holds simply stops being a candidate rather than being fought over.
-  assert.deepEqual(askHotkeyCandidates([undefined, undefined]), DEFAULT_ASK_HOTKEYS);
-  assert.deepEqual(askHotkeyCandidates(["Alt+L", undefined]), ["Alt+Shift+L"]);
+  assert.deepEqual(askHotkeyCandidates(undefined, [undefined, undefined]), DEFAULT_ASK_HOTKEYS);
+  assert.deepEqual(askHotkeyCandidates(undefined, ["Alt+L", undefined]), ["Alt+Shift+L"]);
   // The talk key's own defaults hold nothing the ask key wants.
-  assert.deepEqual(askHotkeyCandidates(["Alt+Space", "Alt+S"]), DEFAULT_ASK_HOTKEYS);
+  assert.deepEqual(askHotkeyCandidates(undefined, ["Alt+Space", "Alt+S"]), DEFAULT_ASK_HOTKEYS);
+});
+
+test("a chosen ask chord goes first, with the defaults kept behind it", () => {
+  // Like the talk key's candidates: a chord another app claims while Luke is
+  // closed costs the user a different ask key rather than none.
+  assert.deepEqual(askHotkeyCandidates("Control+Alt+K", [undefined, undefined]), [
+    "Control+Alt+K",
+    ...DEFAULT_ASK_HOTKEYS,
+  ]);
+  // A chosen chord that is itself a default is not offered twice.
+  assert.deepEqual(askHotkeyCandidates("Alt+Shift+L", [undefined, undefined]), [
+    "Alt+Shift+L",
+    "Alt+L",
+  ]);
+  // The talk key outranks even a chosen chord: two Luke keys never compete.
+  assert.deepEqual(
+    askHotkeyCandidates("Control+Alt+K", ["Control+Alt+K", undefined]),
+    DEFAULT_ASK_HOTKEYS,
+  );
+  // The registrar hands in the talk key's whole candidate list, so a chosen
+  // chord on a talk-key default is filtered even before the helper has said
+  // which of them it actually sits on.
+  assert.deepEqual(
+    askHotkeyCandidates("Alt+S", [...DEFAULT_VOICE_HOTKEYS, undefined]),
+    DEFAULT_ASK_HOTKEYS,
+  );
 });
 
 test("a missing ask key reports on the talk key's terms", () => {
