@@ -454,7 +454,8 @@ function integrationsFact(settings: AppSettings): AppGuideFact {
     label: "Integrations",
     detail:
       `${roster.join(", ")}. Connecting Linear lets Luke read the developer's issues and, only ` +
-      `when asked in a turn the developer opened, move or comment on one. Its key is typed by ` +
+      `when asked in a turn the developer opened, move or comment on one. Connecting OpenAI is ` +
+      `what lets Luke speak, and review which sessions need a person. Each key is typed by ` +
       `hand into ${CONNECTIONS_PAGE}, under Integrations — never spoken, and never repeated back.`,
   };
 }
