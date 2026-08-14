@@ -166,7 +166,6 @@ export class RealtimeVoiceSession {
   #status: RealtimeStatus = REALTIME_STATUS.IDLE;
   #connecting: Promise<boolean> | undefined;
   #closed = false;
-  #sessionContext: string | undefined;
   /**
    * The roster as last reported, kept whole rather than as its rendered text:
    * it is what a tool call is validated against, and a call may only name a
@@ -179,21 +178,24 @@ export class RealtimeVoiceSession {
    * call may only name a setting Luke was actually described as having.
    */
   #guide: AppGuideSnapshot = EMPTY_APP_GUIDE;
-  #guideContext: string | undefined;
   /**
    * The projects a workspace can be created in, as last reported — kept whole
    * for the same reason the roster is: a spoken creation ask may only name a
    * project Luke was actually shown.
    */
   #workspaceProjects: readonly ObservedWorkspaceProject[] = [];
-  #workspaceProjectContext: string | undefined;
   /**
    * The issue roster, held to the same rule — and `undefined` while no
    * tracker is connected, so an issue call then has nothing to be validated
    * against and is refused as such.
    */
   #issues: readonly TrackedIssue[] | undefined;
-  #issueContext: string | undefined;
+  /**
+   * The last rendered context sent on this call, keyed by label. Identical
+   * text is not resent; teardown clears the map so the next call starts
+   * current rather than believing the last call already told it.
+   */
+  #contextCache = new Map<string, string>();
   /**
    * Luke's own audio track. Cancelling stops the model producing more, but what
    * it already produced is on its way down the connection and keeps playing —
@@ -788,14 +790,11 @@ export class RealtimeVoiceSession {
       track.stop();
     });
     this.#stream = undefined;
-    this.#sessionContext = undefined;
     this.#sessions = [];
     this.#guide = EMPTY_APP_GUIDE;
-    this.#guideContext = undefined;
     this.#workspaceProjects = [];
-    this.#workspaceProjectContext = undefined;
     this.#issues = undefined;
-    this.#issueContext = undefined;
+    this.#contextCache.clear();
     this.#generationDone = false;
     this.#remoteQuiet = false;
     this.#pendingTurn = false;
@@ -973,11 +972,10 @@ export class RealtimeVoiceSession {
    */
   updateSessions(sessions: readonly NormalizedSession[]): void {
     this.#sessions = sessions;
-    if (!this.#carriesContext()) return;
-    const context = sessionContextText(sessions);
-    if (context === this.#sessionContext) return;
-    this.#sessionContext = context;
-    this.#send(sessionContextEvents(sessions));
+    this.#sendContext("sessions", () => ({
+      text: sessionContextText(sessions),
+      events: sessionContextEvents(sessions),
+    }));
   }
 
   /**
@@ -993,11 +991,10 @@ export class RealtimeVoiceSession {
     defaultProviderId?: string,
   ): void {
     this.#workspaceProjects = projects;
-    if (!this.#carriesContext()) return;
-    const context = workspaceProjectContextText(projects, defaultProviderId);
-    if (context === this.#workspaceProjectContext) return;
-    this.#workspaceProjectContext = context;
-    this.#send(workspaceProjectContextEvents(projects, defaultProviderId));
+    this.#sendContext("workspace-projects", () => ({
+      text: workspaceProjectContextText(projects, defaultProviderId),
+      events: workspaceProjectContextEvents(projects, defaultProviderId),
+    }));
   }
 
   /**
@@ -1009,11 +1006,10 @@ export class RealtimeVoiceSession {
    */
   updateGuide(guide: AppGuideSnapshot): void {
     this.#guide = guide;
-    if (!this.#carriesContext()) return;
-    const context = appGuideContextText(guide);
-    if (context === this.#guideContext) return;
-    this.#guideContext = context;
-    this.#send(appGuideContextEvents(guide));
+    this.#sendContext("guide", () => ({
+      text: appGuideContextText(guide),
+      events: appGuideContextEvents(guide),
+    }));
   }
 
   /**
@@ -1024,20 +1020,37 @@ export class RealtimeVoiceSession {
    */
   updateIssues(issues: readonly TrackedIssue[] | undefined): void {
     this.#issues = issues;
-    if (!this.#carriesContext()) return;
     if (!issues) {
       // A conversation that was never told about a board has nothing to
       // withdraw; one that was must be told the board is gone, or Luke keeps
       // answering from a tracker nobody is observing.
-      if (this.#issueContext === undefined) return;
-      this.#issueContext = undefined;
+      if (!this.#carriesContext()) return;
+      if (!this.#contextCache.has("issues")) return;
+      this.#contextCache.delete("issues");
       this.#send(issueTrackerDisconnectedEvents());
       return;
     }
-    const context = issueContextText(issues);
-    if (context === this.#issueContext) return;
-    this.#issueContext = context;
-    this.#send(issueContextEvents(issues));
+    this.#sendContext("issues", () => ({
+      text: issueContextText(issues),
+      events: issueContextEvents(issues),
+    }));
+  }
+
+  /**
+   * Diffs one labelled context against what this call was last told and sends
+   * it only when the text changed. The stores above still update either way,
+   * so the developer's next call starts current even when this one is
+   * speak-only and carries nothing.
+   */
+  #sendContext(
+    label: string,
+    render: () => { text: string; events: readonly Record<string, unknown>[] },
+  ): void {
+    if (!this.#carriesContext()) return;
+    const { text, events } = render();
+    if (text === this.#contextCache.get(label)) return;
+    this.#contextCache.set(label, text);
+    this.#send(events);
   }
 
   /**
