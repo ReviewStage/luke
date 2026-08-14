@@ -166,6 +166,17 @@ allows — so a question about your board can be answered and an ask validated
 against what Linear actually listed. No issue description or comment thread is
 ever included, because Luke never reads one.
 
+With "Announce when a session needs you" on — it is on by default, and does
+nothing without `OPENAI_API_KEY` — Luke also opens a call of his own to speak
+a session announcement when no conversation is up. That call is narrower in
+every direction: it receives audio and sends none (no microphone track exists
+on it, so nothing can be captured), it carries no tools, and the only thing
+sent up it is the announcement sentence itself — the session's provider name,
+title, repository or branch, and the provider's one-line error reason when
+there is one. The session roster, workspace projects, app guide, and issue
+roster named above travel only on conversations you open yourself. The call
+closes itself shortly after the announcement is spoken.
+
 Luke does not record the conversation, write audio to disk, or keep a
 transcript. With captions enabled in Settings — they are off by default — the
 reply's text is drawn on screen while Luke speaks; it is discarded when the

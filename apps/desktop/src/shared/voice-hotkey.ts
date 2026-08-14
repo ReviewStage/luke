@@ -10,11 +10,41 @@
  * Tried in order when the user has not chosen one.
  *
  * Option-Space is where a macOS user reaches for a voice assistant —
- * Superwhisper, the ChatGPT desktop app and Alfred all sit there. Option-S is
- * Wispr Flow's default, and is the fallback for a machine where something
- * already owns Option-Space.
+ * Superwhisper, the ChatGPT desktop app and Alfred all sit there. It stands
+ * alone: Option-S used to be its fallback, and was given to the stop key
+ * instead — S is for stop, and a talk key that sometimes lands on the stop
+ * key's chord would make which key does what depend on what else is
+ * installed.
  */
-export const DEFAULT_VOICE_HOTKEYS: readonly string[] = ["Alt+Space", "Alt+S"];
+export const DEFAULT_VOICE_HOTKEYS: readonly string[] = ["Alt+Space"];
+
+/**
+ * The key that cuts off a reply being spoken, from whatever app is frontmost.
+ *
+ * Option-S because S is for stop, and Option-letter is the family the other
+ * Luke keys already live in. A sibling of Escape rather than of the talk key:
+ * it asks for quiet and nothing in its place, where the talk key over a reply
+ * interrupts by taking the turn.
+ */
+export const DEFAULT_STOP_HOTKEYS: readonly string[] = ["Alt+S"];
+
+/**
+ * The stop chords worth asking the system for, in order, on the ask key's
+ * exact terms: a chosen chord goes first — it is what the user asked for —
+ * with the default kept behind it, and any chord the other Luke keys could
+ * sit on is left out, because the keys must never compete for one chord —
+ * whichever registered first would silently cost the other its whole
+ * feature, with nothing on screen saying why.
+ */
+export function stopHotkeyCandidates(
+  chosen: string | undefined,
+  taken: readonly (string | undefined)[],
+): readonly string[] {
+  const candidates = chosen
+    ? [chosen, ...DEFAULT_STOP_HOTKEYS.filter((candidate) => candidate !== chosen)]
+    : DEFAULT_STOP_HOTKEYS;
+  return candidates.filter((candidate) => !taken.includes(candidate));
+}
 
 /**
  * The key that summons the ask field from whatever app is frontmost, tried in
@@ -335,4 +365,13 @@ export function voiceHotkeyReport(hotkey: string | undefined, absence: VoiceHotk
 export function askHotkeyReport(hotkey: string | undefined, absence: VoiceHotkeyAbsence): string {
   if (hotkey) return `Luke ask key: ${voiceHotkeyLabel(hotkey)}`;
   return `Luke ask key: unavailable — ${ABSENCE_REASONS[absence]}`;
+}
+
+/**
+ * The startup line for the stop key, completing the set: three keys, three
+ * lines, the same three causes of absence.
+ */
+export function stopHotkeyReport(hotkey: string | undefined, absence: VoiceHotkeyAbsence): string {
+  if (hotkey) return `Luke stop key: ${voiceHotkeyLabel(hotkey)}`;
+  return `Luke stop key: unavailable — ${ABSENCE_REASONS[absence]}`;
 }

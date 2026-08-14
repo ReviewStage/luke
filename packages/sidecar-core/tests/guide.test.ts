@@ -35,6 +35,7 @@ const GUIDE: AppGuideSnapshot = {
       description: "Luke's words on screen while he speaks.",
       kind: APP_SETTING_KIND.TOGGLE,
       value: "off",
+      defaultValue: "off",
       adjustable: true,
       manual: "the panel's Settings tab, under Preferences",
     },
@@ -43,7 +44,8 @@ const GUIDE: AppGuideSnapshot = {
       label: "Voice",
       description: "Which voice Luke speaks with.",
       kind: APP_SETTING_KIND.CHOICE,
-      value: "cedar",
+      value: "marin",
+      defaultValue: "cedar",
       choices: ["cedar", "marin"],
       adjustable: true,
       manual: "the panel's Settings tab, under Preferences",
@@ -83,6 +85,10 @@ test("the guide's text carries the facts and every setting's id, value, and by-h
   assert.match(text, /What Luke is: A macOS sidecar/);
   assert.match(text, /Captions — Luke's words on screen while he speaks\./);
   assert.match(text, /currently off/);
+  // The default is printed beside the value, because "back to the default" is
+  // an ask the guide must be able to ground in a real value.
+  assert.match(text, /currently off; default: off/);
+  assert.match(text, /currently marin; default: cedar/);
   // The id is printed where the value is, because it is what a spoken change
   // names the setting by — the same rule the session roster follows.
   assert.match(text, /setting_id=voice_captions/);
@@ -90,6 +96,9 @@ test("the guide's text carries the facts and every setting's id, value, and by-h
   // A setting a spoken ask cannot touch still says where the hand can.
   assert.match(text, /not changeable by voice/);
   assert.match(text, /System Settings, under Privacy & Security/);
+  // A system permission has no default of the app's own, so its line honestly
+  // carries none rather than inventing one.
+  assert.match(text, /Microphone access[^\n]*currently on; not changeable/);
 });
 
 test("an empty guide says so rather than describing an app it was never told about", () => {
@@ -114,7 +123,14 @@ test("the standing instructions promise the guide the context actually delivers"
   const instructions = realtimeInstructions();
   assert.match(instructions, /\[app guide\]/);
   assert.match(instructions, /change_app_setting/);
+  // The guide now carries each setting's default, and the instructions must
+  // say what it is for: an ask for the default is a change to that value.
+  assert.match(instructions, /its current value, its default/);
+  assert.match(instructions, /a change to the default the guide lists/);
   assert.match(instructions, /show_panel/);
+  // Switching an open panel between its tabs is the same ask, and the
+  // instructions must say so or Luke will deny a capability he has.
+  assert.match(instructions, /switches a panel already open/);
   assert.match(instructions, /open_feedback_composer/);
   assert.match(instructions, /create_workspace/);
   assert.match(instructions, /\[workspace projects\]/);

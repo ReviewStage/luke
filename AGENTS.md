@@ -121,15 +121,22 @@ What Luke may show:
   work stands, where half a sentence mid-turn poses as an outcome. The tail is
   inspected in memory and discarded — the bounded recap is all that is ever
   reported, and the history behind it is never read at all.
-- An evaluator is the one place session material leaves the machine, so it is
-  the one place with a narrower rule. It receives `AttentionContext` — what a
-  provider wrote *about* a session — and never the transcript behind it: no
-  message history, file contents, or command output. A recap counts as
-  *about* even when it is the agent's own parting words — the one bounded
-  line saying where the turn ended, the same standing as a recap a provider
-  designated — but the transcript it was read from never travels. Widening
-  that set is a product decision, not an implementation detail; make it
-  deliberately.
+- Session material leaves the machine unbidden in exactly two places, each
+  with its own narrower rule. An evaluator receives `AttentionContext` — what
+  a provider wrote *about* a session — and never the transcript behind it: no
+  message history, file contents, or command output. A recap counts as *about*
+  even when it is the agent's own parting words — the one bounded line saying
+  where the turn ended, the same standing as a recap a provider designated —
+  but the transcript it was read from never travels. A spoken announcement — a
+  session that started waiting, stopped on an error, or finished, worded on
+  this machine — reaches the voice service so it can be said aloud; when no
+  conversation is open, Luke opens a call of his own to say it, and that call
+  is speak-only by construction: it offers no microphone track, carries no
+  tools, and is sent the announcement sentence alone — never the roster, the
+  guide, or the issues, which travel only on conversations the developer
+  opens. Its trigger is a deterministic status edge, never anything a model
+  decided, and the whole behavior is a setting. Widening either set is a
+  product decision, not an implementation detail; make it deliberately.
 
 Before handoff, run `./scripts/check.sh` for portable-only changes. For any
 macOS or UI change, `./scripts/verify.sh` is the completion invariant. Report

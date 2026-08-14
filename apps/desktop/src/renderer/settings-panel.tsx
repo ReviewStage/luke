@@ -22,6 +22,7 @@ import {
 import {
   capturedVoiceHotkey,
   DEFAULT_ASK_HOTKEYS,
+  DEFAULT_STOP_HOTKEYS,
   DEFAULT_VOICE_HOTKEYS,
   VOICE_HOTKEY_CAPTURE,
   voiceHotkeyLabel,
@@ -80,6 +81,8 @@ export interface SettingsPanelProps {
   onVoiceCaptionsChange: (enabled: boolean) => Promise<string | undefined>;
   /** Turns the quieting of Music and Spotify during a spoken exchange on or off. */
   onDuckOtherMediaChange: (enabled: boolean) => Promise<string | undefined>;
+  /** Turns the macOS notification about a session that wants the user on or off. */
+  onSessionNotificationsChange: (enabled: boolean) => Promise<string | undefined>;
   /** The one credential being entered anywhere, and everything that can be done to it. */
   credentials: CredentialEntryControl;
   /** The one note to the founders being written, and everything that can be done to it. */
@@ -134,8 +137,16 @@ export interface SettingsPanelProps {
    * refuses, and the row is where that answer belongs.
    */
   onAskHotkeyChange: (accelerator: string | undefined) => Promise<string | undefined>;
+  /** The stop key as registered, an accelerator on the talk key's terms. */
+  stopHotkey?: string;
   /**
-   * Whether a recording control has the keyboard. While one does, neither Luke
+   * Moves the stop key to a recorded chord, or back to the default when
+   * omitted, on the other rows' terms: the store answers with why when it
+   * refuses, and the row is where that answer belongs.
+   */
+  onStopHotkeyChange: (accelerator: string | undefined) => Promise<string | undefined>;
+  /**
+   * Whether a recording control has the keyboard. While one does, no Luke
    * key may act on its own press: the chord arriving is an entry, not an ask.
    */
   onShortcutCapture: (capturing: boolean) => void;
@@ -637,6 +648,8 @@ function PreferencesSection({
   onVoiceCaptionsChange,
   ducking,
   onDuckOtherMediaChange,
+  notifications,
+  onSessionNotificationsChange,
   shown,
   onShowInMenuBarChange,
   dockShown,
@@ -654,6 +667,8 @@ function PreferencesSection({
   onVoiceCaptionsChange: (enabled: boolean) => Promise<string | undefined>;
   ducking: boolean;
   onDuckOtherMediaChange: (enabled: boolean) => Promise<string | undefined>;
+  notifications: boolean;
+  onSessionNotificationsChange: (enabled: boolean) => Promise<string | undefined>;
   shown: boolean;
   onShowInMenuBarChange: (show: boolean) => Promise<string | undefined>;
   dockShown: boolean;
@@ -693,6 +708,12 @@ function PreferencesSection({
     setRejection(await onDuckOtherMediaChange(!ducking));
     setDuckBusy(false);
   };
+  const [notificationsBusy, setNotificationsBusy] = useState(false);
+  const toggleNotifications = async () => {
+    setNotificationsBusy(true);
+    setRejection(await onSessionNotificationsChange(!notifications));
+    setNotificationsBusy(false);
+  };
   // The display and form rows round-trip like the switches above, so each
   // rests on its own flag and answers on the shared rejection line.
   const [displayBusy, setDisplayBusy] = useState(false);
@@ -717,9 +738,11 @@ function PreferencesSection({
         <span className="settings-copy">
           <strong>Voice</strong>
           {/* When it lands, because a control that seems not to act invites a
-              second press: the change rides the next conversation, and one
-              already open keeps the voice it answered with. */}
-          <small>How Luke sounds, from the next conversation on.</small>
+              second press. The API locks a session's voice once the model has
+              spoken, so a call already open is quietly reopened in the new
+              voice — heard right away, at the price of the conversation
+              starting afresh. */}
+          <small>How Luke sounds; a conversation under way starts afresh.</small>
         </span>
         <span className="voice-select">
           <select
@@ -753,9 +776,9 @@ function PreferencesSection({
       <div className="settings-row">
         <span className="settings-copy">
           <strong>Speed</strong>
-          {/* The same promise as the voice's line, because it lands the same
-              way: minted into the next conversation, never a live one. */}
-          <small>How fast Luke talks, from the next conversation on.</small>
+          {/* Unlike the voice, a pace change rides a session update onto the
+              call already open, so nothing starts over. */}
+          <small>How fast Luke talks, from his next reply on.</small>
         </span>
         <span className="voice-select">
           <select
@@ -826,6 +849,30 @@ function PreferencesSection({
           className="switch"
           disabled={duckBusy}
           onClick={() => void toggleDucking()}
+        >
+          <span className="switch-thumb" />
+        </button>
+      </div>
+      <div className="settings-row">
+        <span className="settings-copy">
+          <strong>Announce when a session needs you</strong>
+          {/* The three edges by name, because the switch governs exactly these
+              and the panel already shows everything else: the voice is for the
+              developer whose eyes are on another screen entirely. No
+              conversation needs to be open — Luke opens a speak-only call for
+              the sentence, and the microphone stays untouched. */}
+          <small>
+            Luke says it out loud when an agent starts waiting on you, hits an error, or finishes.
+          </small>
+        </span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={notifications}
+          aria-label="Announce when a session needs you"
+          className="switch"
+          disabled={notificationsBusy}
+          onClick={() => void toggleNotifications()}
         >
           <span className="switch-thumb" />
         </button>
@@ -1087,6 +1134,9 @@ function ShortcutSection({
   askHotkey,
   askChosen,
   onAskHotkeyChange,
+  stopHotkey,
+  stopChosen,
+  onStopHotkeyChange,
   onShortcutCapture,
 }: {
   voiceHotkey?: string | undefined;
@@ -1096,6 +1146,9 @@ function ShortcutSection({
   askHotkey?: string | undefined;
   askChosen: boolean;
   onAskHotkeyChange: (accelerator: string | undefined) => Promise<string | undefined>;
+  stopHotkey?: string | undefined;
+  stopChosen: boolean;
+  onStopHotkeyChange: (accelerator: string | undefined) => Promise<string | undefined>;
   onShortcutCapture: (capturing: boolean) => void;
 }): React.JSX.Element {
   return (
@@ -1129,6 +1182,15 @@ function ShortcutSection({
         onChange={onAskHotkeyChange}
         onCapture={onShortcutCapture}
       />
+      <ShortcutRow
+        title="Stop Luke"
+        detail="Press to cut off a reply mid-sentence, from any app. Escape does the same here."
+        {...(stopHotkey ? { shown: stopHotkey } : {})}
+        chosen={stopChosen}
+        defaultKey={DEFAULT_STOP_HOTKEYS[0] ?? ""}
+        onChange={onStopHotkeyChange}
+        onCapture={onShortcutCapture}
+      />
     </section>
   );
 }
@@ -1142,6 +1204,7 @@ export function SettingsPanel({
   settings,
   onVoiceCaptionsChange,
   onDuckOtherMediaChange,
+  onSessionNotificationsChange,
   credentials,
   feedback,
   onVoiceChange,
@@ -1157,6 +1220,8 @@ export function SettingsPanel({
   onVoiceHotkeyChange,
   askHotkey,
   onAskHotkeyChange,
+  stopHotkey,
+  onStopHotkeyChange,
   onShortcutCapture,
 }: SettingsPanelProps): React.JSX.Element {
   const microphone = microphoneAccessRow({ voiceAvailable, status: microphoneStatus });
@@ -1177,6 +1242,8 @@ export function SettingsPanel({
           onVoiceCaptionsChange={onVoiceCaptionsChange}
           ducking={settings.duckOtherMedia}
           onDuckOtherMediaChange={onDuckOtherMediaChange}
+          notifications={settings.sessionNotifications}
+          onSessionNotificationsChange={onSessionNotificationsChange}
           shown={settings.showInMenuBar}
           onShowInMenuBarChange={onShowInMenuBarChange}
           dockShown={settings.showInDock}
@@ -1196,6 +1263,9 @@ export function SettingsPanel({
         {...(askHotkey ? { askHotkey } : {})}
         askChosen={settings?.askHotkey !== undefined}
         onAskHotkeyChange={onAskHotkeyChange}
+        {...(stopHotkey ? { stopHotkey } : {})}
+        stopChosen={settings?.stopHotkey !== undefined}
+        onStopHotkeyChange={onStopHotkeyChange}
         onShortcutCapture={onShortcutCapture}
       />
 

@@ -5,8 +5,11 @@ import {
   askHotkeyReport,
   capturedVoiceHotkey,
   DEFAULT_ASK_HOTKEYS,
+  DEFAULT_STOP_HOTKEYS,
   DEFAULT_VOICE_HOTKEYS,
   parseVoiceHotkey,
+  stopHotkeyCandidates,
+  stopHotkeyReport,
   TALK_KEY_RELEASE,
   TALK_KEY_TAP_MS,
   talkKeyRelease,
@@ -20,9 +23,47 @@ import {
 } from "../src/shared/voice-hotkey";
 
 test("the default is the chord a macOS voice assistant is reached for", () => {
-  // Option-Space is where Superwhisper, the ChatGPT desktop app and Alfred sit;
-  // Option-S is Wispr Flow's default, for a machine where the first is taken.
-  assert.deepEqual(DEFAULT_VOICE_HOTKEYS, ["Alt+Space", "Alt+S"]);
+  // Option-Space is where Superwhisper, the ChatGPT desktop app and Alfred
+  // sit. It stands alone: Option-S belongs to the stop key now, and a talk
+  // key that sometimes fell back onto it would make which key does what
+  // depend on what else is installed.
+  assert.deepEqual(DEFAULT_VOICE_HOTKEYS, ["Alt+Space"]);
+});
+
+test("the stop key is Option-S, and yields any chord another Luke key could hold", () => {
+  // S is for stop, in the Option-letter family the other Luke keys live in —
+  // and never a chord they could sit on: three keys must not compete any more
+  // than two.
+  assert.deepEqual(DEFAULT_STOP_HOTKEYS, ["Alt+S"]);
+  for (const accelerator of DEFAULT_STOP_HOTKEYS) {
+    assert.ok(!DEFAULT_VOICE_HOTKEYS.includes(accelerator));
+    assert.ok(!DEFAULT_ASK_HOTKEYS.includes(accelerator));
+  }
+  assert.deepEqual(stopHotkeyCandidates(undefined, [undefined, undefined]), DEFAULT_STOP_HOTKEYS);
+  // A talk or ask key moved onto Option-S wins it; the stop key stands down
+  // rather than racing, because it alone has Escape standing behind it.
+  assert.deepEqual(stopHotkeyCandidates(undefined, ["Alt+Space", "Alt+S"]), []);
+});
+
+test("a chosen stop chord goes first, with the default kept behind it", () => {
+  assert.deepEqual(stopHotkeyCandidates("Control+Alt+X", [undefined]), [
+    "Control+Alt+X",
+    ...DEFAULT_STOP_HOTKEYS,
+  ]);
+  // A chosen chord that is itself the default is not offered twice.
+  assert.deepEqual(stopHotkeyCandidates("Alt+S", [undefined]), DEFAULT_STOP_HOTKEYS);
+  // The other keys outrank even a chosen chord: no two Luke keys compete.
+  assert.deepEqual(stopHotkeyCandidates("Control+Alt+X", ["Control+Alt+X"]), DEFAULT_STOP_HOTKEYS);
+});
+
+test("a missing stop key reports on the talk key's terms", () => {
+  assert.equal(stopHotkeyReport("Alt+S", VOICE_HOTKEY_ABSENCE.ALREADY_OWNED), "Luke stop key: ⌥S");
+  assert.match(
+    stopHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.ALREADY_OWNED),
+    /another app already owns it/,
+  );
+  assert.match(stopHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.CAPTURE_RUN), /capture run/);
+  assert.match(stopHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.NO_CREDENTIAL), /voice is off/);
 });
 
 test("the ask key is the talk key's sibling, never its rival", () => {
@@ -46,8 +87,11 @@ test("an ask candidate the talk key holds is not asked for", () => {
   // chord it holds simply stops being a candidate rather than being fought over.
   assert.deepEqual(askHotkeyCandidates(undefined, [undefined, undefined]), DEFAULT_ASK_HOTKEYS);
   assert.deepEqual(askHotkeyCandidates(undefined, ["Alt+L", undefined]), ["Alt+Shift+L"]);
-  // The talk key's own defaults hold nothing the ask key wants.
-  assert.deepEqual(askHotkeyCandidates(undefined, ["Alt+Space", "Alt+S"]), DEFAULT_ASK_HOTKEYS);
+  // The talk and stop keys' own defaults hold nothing the ask key wants.
+  assert.deepEqual(
+    askHotkeyCandidates(undefined, [...DEFAULT_VOICE_HOTKEYS, ...DEFAULT_STOP_HOTKEYS]),
+    DEFAULT_ASK_HOTKEYS,
+  );
 });
 
 test("a chosen ask chord goes first, with the defaults kept behind it", () => {
@@ -71,7 +115,7 @@ test("a chosen ask chord goes first, with the defaults kept behind it", () => {
   // chord on a talk-key default is filtered even before the helper has said
   // which of them it actually sits on.
   assert.deepEqual(
-    askHotkeyCandidates("Alt+S", [...DEFAULT_VOICE_HOTKEYS, undefined]),
+    askHotkeyCandidates("Alt+Space", [...DEFAULT_VOICE_HOTKEYS, undefined]),
     DEFAULT_ASK_HOTKEYS,
   );
 });
@@ -160,9 +204,9 @@ test("a chord the helper cannot register is refused rather than guessed at", () 
 
 test("a chosen chord is tried first and the defaults stay behind it", () => {
   assert.deepEqual(voiceHotkeyCandidates(undefined), DEFAULT_VOICE_HOTKEYS);
-  assert.deepEqual(voiceHotkeyCandidates("Command+L"), ["Command+L", "Alt+Space", "Alt+S"]);
+  assert.deepEqual(voiceHotkeyCandidates("Command+L"), ["Command+L", "Alt+Space"]);
   // Choosing a default outright must not ask the system for it twice.
-  assert.deepEqual(voiceHotkeyCandidates("Alt+S"), ["Alt+S", "Alt+Space"]);
+  assert.deepEqual(voiceHotkeyCandidates("Alt+Space"), ["Alt+Space"]);
 });
 
 test("a keystroke is read as a chord from the physical key", () => {

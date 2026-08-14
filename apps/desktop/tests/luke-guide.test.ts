@@ -4,6 +4,7 @@ import {
   APP_SETTING_KIND,
   type AppGuideSetting,
   PANEL_FORM_FACTOR,
+  REALTIME_DEFAULTS,
   REALTIME_VOICE,
   REALTIME_VOICE_LIST,
   REALTIME_VOICE_SPEED,
@@ -35,6 +36,7 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
     voiceSpeed: REALTIME_VOICE_SPEED.NORMAL,
     voiceCaptions: false,
     duckOtherMedia: true,
+    sessionNotifications: true,
     showOnAllDisplays: false,
     formFactor: PANEL_FORM_FACTOR.BUBBLE,
     ...overrides,
@@ -48,6 +50,7 @@ function guideInput(overrides: Partial<LukeGuideInput> = {}): LukeGuideInput {
     microphoneStatus: "granted",
     hotkey: { hotkey: "⌥Space", held: true },
     askKey: "⌥L",
+    stopKey: "⌥S",
     ...overrides,
   };
 }
@@ -63,6 +66,7 @@ test("the guide describes every spoken-adjustable setting with its current value
   assert.equal(captionsOff.kind, APP_SETTING_KIND.TOGGLE);
   assert.equal(captionsOff.value, "off");
   assert.equal(captionsOff.adjustable, true);
+  assert.equal(captionsOff.defaultValue, "off");
 
   const captionsOn = guideSetting(
     APP_SETTING_ID.VOICE_CAPTIONS,
@@ -74,17 +78,23 @@ test("the guide describes every spoken-adjustable setting with its current value
   assert.equal(voice.kind, APP_SETTING_KIND.CHOICE);
   assert.equal(voice.value, REALTIME_VOICE.CEDAR);
   assert.deepEqual(voice.choices, REALTIME_VOICE_LIST);
+  // The guide states the same default the settings row marks, so a spoken
+  // "back to the default voice" names the value the row calls (default).
+  assert.equal(voice.defaultValue, REALTIME_DEFAULTS.VOICE);
 
   const menuBar = guideSetting(APP_SETTING_ID.SHOW_IN_MENU_BAR);
   assert.equal(menuBar.value, "on");
+  assert.equal(menuBar.defaultValue, "on");
 
   const dock = guideSetting(APP_SETTING_ID.SHOW_IN_DOCK);
   assert.equal(dock.value, "off");
+  assert.equal(dock.defaultValue, "off");
 
   // The pace is offered in words a voice can carry, current value included.
   const speed = guideSetting(APP_SETTING_ID.VOICE_SPEED);
   assert.equal(speed.kind, APP_SETTING_KIND.CHOICE);
   assert.equal(speed.value, "normal");
+  assert.equal(speed.defaultValue, "normal");
   assert.deepEqual(speed.choices, ["slow", "normal", "quick", "fast"]);
   assert.equal(
     guideSetting(
@@ -109,6 +119,7 @@ test("the guide describes every spoken-adjustable setting with its current value
   const formFactor = guideSetting(APP_SETTING_ID.FORM_FACTOR);
   assert.equal(formFactor.kind, APP_SETTING_KIND.CHOICE);
   assert.equal(formFactor.value, PANEL_FORM_FACTOR.BUBBLE);
+  assert.equal(formFactor.defaultValue, PANEL_FORM_FACTOR.BUBBLE);
   assert.deepEqual(formFactor.choices, [PANEL_FORM_FACTOR.NOTCH, PANEL_FORM_FACTOR.BUBBLE]);
   assert.equal(
     guideSetting(
@@ -119,9 +130,19 @@ test("the guide describes every spoken-adjustable setting with its current value
   );
 
   // Every entry says where the same change is made by hand, because guiding
-  // the developer there is half of what the guide is for.
+  // the developer there is half of what the guide is for — and every one of
+  // Luke's own settings states its default, so "back to the default" is an
+  // ask the guide can always ground. A toggle's default is one of its two
+  // words; a choice's default is one of its offered choices.
   for (const setting of buildLukeGuide(guideInput()).settings) {
     assert.ok(setting.manual.length > 0, `${setting.id} has a by-hand path`);
+    assert.ok(setting.defaultValue, `${setting.id} states its default`);
+    const accepted =
+      setting.kind === APP_SETTING_KIND.TOGGLE ? ["on", "off"] : (setting.choices ?? []);
+    assert.ok(
+      accepted.includes(setting.defaultValue),
+      `${setting.id}'s default is a value a spoken change can set`,
+    );
   }
 });
 
@@ -145,6 +166,29 @@ test("the facts describe creating a workspace, so Luke does not deny the capabil
   assert.match(rendered, /Creating workspaces/);
   // The refusal shape rides with the offer: only reported projects exist.
   assert.match(rendered, /Only reported projects/);
+});
+
+test("the facts describe stopping a reply, exactly where a reply can exist", () => {
+  const rendered = JSON.stringify(buildLukeGuide(guideInput()).facts);
+
+  assert.match(rendered, /Stopping a reply/);
+  // The registered key leads, and Escape rides with it: the stop key answers
+  // from any app, Escape only while the panel has the keyboard.
+  assert.match(rendered, /⌥S, from any app/);
+  assert.match(rendered, /Escape does the same/);
+  // Guiding the developer to the row is half of what the guide is for.
+  assert.match(rendered, /A different stop chord can be recorded/);
+
+  // No key registered — another app owns ⌥S, or a Luke key was moved onto
+  // it — leaves Escape as the whole of the capability, said honestly.
+  const keyless = JSON.stringify(buildLukeGuide(guideInput({ stopKey: undefined })).facts);
+  assert.match(keyless, /Escape while Luke is speaking/);
+  assert.match(keyless, /No system-wide stop key is registered/);
+
+  // Without a voice there is no reply to stop, so the fact would describe a
+  // key that does nothing.
+  const voiceless = JSON.stringify(buildLukeGuide(guideInput({ voiceAvailable: false })).facts);
+  assert.doesNotMatch(voiceless, /Stopping a reply/);
 });
 
 test("the facts follow the talk key, the microphone, and the storage the system offers", () => {
@@ -187,6 +231,20 @@ test("the facts follow the talk key, the microphone, and the storage the system 
   assert.match(JSON.stringify(unprotected.facts), /no encrypted credential storage/);
 });
 
+test("the panel fact says the tabs answer an ask as well as a press", () => {
+  const fact = buildLukeGuide(guideInput()).facts.find(
+    (candidate) => candidate.label === "The panel",
+  );
+
+  assert.ok(fact);
+  // Switching between Sessions and Settings by asking Luke is a capability,
+  // and a capability the guide does not describe is one Luke will deny.
+  assert.match(fact.detail, /switched by pressing one or by asking Luke/);
+  assert.match(fact.detail, /the panel opens on that tab/);
+  assert.match(fact.detail, /Sessions lists/);
+  assert.match(fact.detail, /Settings holds/);
+});
+
 test("the feedback fact says what a spoken open may do, and that sending stays by hand", () => {
   const fact = buildLukeGuide(guideInput()).facts.find(
     (candidate) => candidate.label === "Feedback and prompts",
@@ -223,6 +281,10 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
       calls.push(`setDuckOtherMedia:${enabled}`);
       return answered;
     },
+    setSessionNotifications: async (enabled: boolean) => {
+      calls.push(`setSessionNotifications:${enabled}`);
+      return answered;
+    },
     setShowInMenuBar: async (show: boolean) => {
       calls.push(`setShowInMenuBar:${show}`);
       return answered;
@@ -254,6 +316,7 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
   assert.deepEqual(calls.sort(), [
     "setDuckOtherMedia:true",
     "setFormFactor:notch",
+    "setSessionNotifications:true",
     "setShowInDock:true",
     "setShowInMenuBar:true",
     "setShowOnAllDisplays:true",

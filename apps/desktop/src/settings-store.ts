@@ -12,6 +12,7 @@ import {
 } from "@sidecar/core";
 import { environmentRealtimeSpeed, environmentRealtimeVoice } from "./openai-realtime-credentials";
 import {
+  APP_SETTING_DEFAULTS,
   type AppSettings,
   CREDENTIAL_SOURCE,
   type CredentialSource,
@@ -40,9 +41,11 @@ const SETTINGS_FIELD = {
   DUCK_OTHER_MEDIA: "duckOtherMedia",
   FORM_FACTOR: "formFactor",
   LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
+  SESSION_NOTIFICATIONS: "sessionNotifications",
   SHOW_IN_DOCK: "showInDock",
   SHOW_IN_MENU_BAR: "showInMenuBar",
   SHOW_ON_ALL_DISPLAYS: "showOnAllDisplays",
+  STOP_HOTKEY: "stopHotkey",
   VERSION: "version",
   VOICE: "voice",
   VOICE_CAPTIONS: "voiceCaptions",
@@ -129,12 +132,24 @@ interface PersistedSettings {
    */
   askHotkey?: string;
   /**
+   * The stop-key chord the user chose, held to the same terms as the other
+   * two keys' choices.
+   */
+  stopHotkey?: string;
+  /**
    * Whether Music and Spotify are turned down while a spoken exchange is
    * live. On unless the file says `false` outright — like the menu bar item,
    * this is what Luke does until the user asks otherwise, so a missing field
    * and a corrupt value both land on doing it.
    */
   duckOtherMedia: boolean;
+  /**
+   * Whether a session that wants the user is announced in Luke's voice. On
+   * unless the file says `false` outright, like the media duck: being told an
+   * agent finished is what Luke does until the user asks otherwise, so a
+   * missing field and a corrupt value both land on doing it.
+   */
+  sessionNotifications: boolean;
   /**
    * Whether Luke stands on every connected display. Off unless the file says
    * `true` outright, like the Dock: a missing field, an older file, and a
@@ -153,6 +168,15 @@ interface PersistedSettings {
 interface ResolvedApiKey {
   apiKey?: string;
   source: CredentialSource;
+}
+
+/**
+ * Reads a stored switch: a boolean is honoured, and anything else — a missing
+ * field, an older file, a corrupt value — lands on the stated default rather
+ * than switching anything on or off by accident.
+ */
+function booleanSetting(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
@@ -220,7 +244,6 @@ function parsePersistedSettings(source: string): PersistedSettings {
   }
   const record = parsed as Record<string, unknown>;
   const version = record[SETTINGS_FIELD.VERSION];
-  const showInMenuBar = record[SETTINGS_FIELD.SHOW_IN_MENU_BAR];
   const voice = record[SETTINGS_FIELD.VOICE];
   const voiceSpeed = record[SETTINGS_FIELD.VOICE_SPEED];
   const formFactor = record[SETTINGS_FIELD.FORM_FACTOR];
@@ -231,22 +254,45 @@ function parsePersistedSettings(source: string): PersistedSettings {
   const storedAskHotkey = record[SETTINGS_FIELD.ASK_HOTKEY];
   const askHotkey =
     typeof storedAskHotkey === "string" ? parseVoiceHotkey(storedAskHotkey) : undefined;
+  const storedStopHotkey = record[SETTINGS_FIELD.STOP_HOTKEY];
+  const stopHotkey =
+    typeof storedStopHotkey === "string" ? parseVoiceHotkey(storedStopHotkey) : undefined;
   return {
     version: typeof version === "number" ? version : SETTINGS_FILE_VERSION,
     apiKeys: storedApiKeys(record),
-    showInDock: record[SETTINGS_FIELD.SHOW_IN_DOCK] === true,
-    showInMenuBar: typeof showInMenuBar === "boolean" ? showInMenuBar : true,
+    showInDock: booleanSetting(
+      record[SETTINGS_FIELD.SHOW_IN_DOCK],
+      APP_SETTING_DEFAULTS.showInDock,
+    ),
+    showInMenuBar: booleanSetting(
+      record[SETTINGS_FIELD.SHOW_IN_MENU_BAR],
+      APP_SETTING_DEFAULTS.showInMenuBar,
+    ),
     // A voice this build does not offer is dropped rather than carried: unlike
     // a credential it has a default to fall back to, and honouring an unknown
     // one would mint sessions the API refuses.
     ...(isRealtimeVoice(voice) ? { voice } : {}),
     // A pace outside the offered set is dropped for the same reason.
     ...(isRealtimeVoiceSpeed(voiceSpeed) ? { voiceSpeed } : {}),
-    voiceCaptions: record[SETTINGS_FIELD.VOICE_CAPTIONS] === true,
+    voiceCaptions: booleanSetting(
+      record[SETTINGS_FIELD.VOICE_CAPTIONS],
+      APP_SETTING_DEFAULTS.voiceCaptions,
+    ),
     ...(voiceHotkey ? { voiceHotkey } : {}),
     ...(askHotkey ? { askHotkey } : {}),
-    duckOtherMedia: record[SETTINGS_FIELD.DUCK_OTHER_MEDIA] !== false,
-    showOnAllDisplays: record[SETTINGS_FIELD.SHOW_ON_ALL_DISPLAYS] === true,
+    ...(stopHotkey ? { stopHotkey } : {}),
+    duckOtherMedia: booleanSetting(
+      record[SETTINGS_FIELD.DUCK_OTHER_MEDIA],
+      APP_SETTING_DEFAULTS.duckOtherMedia,
+    ),
+    sessionNotifications: booleanSetting(
+      record[SETTINGS_FIELD.SESSION_NOTIFICATIONS],
+      APP_SETTING_DEFAULTS.sessionNotifications,
+    ),
+    showOnAllDisplays: booleanSetting(
+      record[SETTINGS_FIELD.SHOW_ON_ALL_DISPLAYS],
+      APP_SETTING_DEFAULTS.showOnAllDisplays,
+    ),
     // A form this build does not draw is dropped like an unknown voice.
     ...(isPanelFormFactor(formFactor) ? { formFactor } : {}),
   };
@@ -306,7 +352,9 @@ export class SettingsStore {
         ? { voiceHotkey: (await this.#load()).voiceHotkey }
         : {}),
       ...((await this.#load()).askHotkey ? { askHotkey: (await this.#load()).askHotkey } : {}),
+      ...((await this.#load()).stopHotkey ? { stopHotkey: (await this.#load()).stopHotkey } : {}),
       duckOtherMedia: (await this.#load()).duckOtherMedia,
+      sessionNotifications: (await this.#load()).sessionNotifications,
       showOnAllDisplays: (await this.#load()).showOnAllDisplays,
       formFactor: (await this.#load()).formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
     };
@@ -472,6 +520,35 @@ export class SettingsStore {
   }
 
   /**
+   * Main-process only, like the other two keys': the stop-key chord the user
+   * chose, for registration at startup, or nothing while the default stands.
+   */
+  async readStopHotkey(): Promise<string | undefined> {
+    return (await this.#load()).stopHotkey;
+  }
+
+  /**
+   * Stores the chosen stop-key chord, or returns to the default when omitted,
+   * on the other two keys' exact terms: the chord arrives already read into
+   * its one canonical spelling, and resetting is the absence of a choice.
+   */
+  async setStopHotkey(accelerator: string | undefined): Promise<SettingsUpdateResult> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (persisted.stopHotkey === accelerator) return;
+      const next: PersistedSettings = {
+        ...persisted,
+        version: SETTINGS_FILE_VERSION,
+      };
+      if (accelerator) next.stopHotkey = accelerator;
+      else delete next.stopHotkey;
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+    });
+    return { settings: await this.snapshot() };
+  }
+
+  /**
    * Turns the quieting of Music and Spotify during a spoken exchange on or
    * off. A plain preference like the caption's: no cipher, no invalid value,
    * so the write either lands or throws.
@@ -484,6 +561,34 @@ export class SettingsStore {
         ...persisted,
         version: SETTINGS_FILE_VERSION,
         duckOtherMedia: enabled,
+      };
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+    });
+    return { settings: await this.snapshot() };
+  }
+
+  /**
+   * Shallow for the same reason as `duckOtherMedia()`: the announcer arms at
+   * startup, and arming it must never be what wakes the OS keychain.
+   */
+  async readSessionNotifications(): Promise<boolean> {
+    return (await this.#load()).sessionNotifications;
+  }
+
+  /**
+   * Turns the spoken announcement about a session that wants the user on or
+   * off. A plain preference like the media duck's: no cipher, no invalid
+   * value, so the write either lands or throws.
+   */
+  async setSessionNotifications(enabled: boolean): Promise<SettingsUpdateResult> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (persisted.sessionNotifications === enabled) return;
+      const next: PersistedSettings = {
+        ...persisted,
+        version: SETTINGS_FILE_VERSION,
+        sessionNotifications: enabled,
       };
       await this.#write(next);
       this.#loading = Promise.resolve(next);
@@ -725,11 +830,7 @@ export class SettingsStore {
     let persisted: PersistedSettings = {
       version: SETTINGS_FILE_VERSION,
       apiKeys: {},
-      showInDock: false,
-      showInMenuBar: true,
-      voiceCaptions: false,
-      duckOtherMedia: true,
-      showOnAllDisplays: false,
+      ...APP_SETTING_DEFAULTS,
     };
     if (source) {
       try {

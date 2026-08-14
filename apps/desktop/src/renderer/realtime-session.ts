@@ -20,6 +20,7 @@ import {
   issueTrackerDisconnectedEvents,
   type NormalizedSession,
   type ObservedWorkspaceProject,
+  outputSpeedUpdateEvents,
   proactiveSpeechEvents,
   pushToTalkCommitEvents,
   REALTIME_DATA_CHANNEL,
@@ -157,6 +158,14 @@ export class RealtimeVoiceSession {
   #channel: RTCDataChannel | undefined;
   #microphone: MediaStreamTrack | undefined;
   #stream: MediaStream | undefined;
+  /**
+   * Whether the current connect attempt — and the call it opens — includes the
+   * microphone. A developer's call does; one Luke opens for himself, to read a
+   * notice out, must not: no capture device is held, no permission is asked,
+   * and the macOS microphone indicator stays honest by never lighting for a
+   * call nobody spoke into.
+   */
+  #withMicrophone = true;
   #status: RealtimeStatus = REALTIME_STATUS.IDLE;
   #connecting: Promise<boolean> | undefined;
   #closed = false;
@@ -272,6 +281,12 @@ export class RealtimeVoiceSession {
    * a reply the developer is already hearing.
    */
   #turnEpoch = 0;
+  /**
+   * A pace change that arrived mid-reply, waiting for the reply to end. The
+   * API applies a speed only between model turns, so one landing while Luke is
+   * speaking is held here and sent ahead of whatever the call does next.
+   */
+  #pendingSpeed: number | undefined;
 
   constructor(options: RealtimeVoiceSessionOptions) {
     this.#options = options;
@@ -285,10 +300,40 @@ export class RealtimeVoiceSession {
     return this.#channel?.readyState === "open";
   }
 
-  /** Opens the call, reusing an in-flight attempt rather than racing a second one. */
-  async connect(): Promise<boolean> {
-    if (this.isConnected) return true;
-    this.#connecting ??= this.#connect()
+  /**
+   * Whether the call that is up — or coming up — is one the developer can take
+   * a turn on. A call Luke opened to read a notice out has no microphone and
+   * answers false, which is how a talk-key press knows it still has a call of
+   * its own to open.
+   */
+  get microphoneCall(): boolean {
+    if (this.isConnected) return this.#microphone !== undefined;
+    if (this.isConnecting) return this.#withMicrophone;
+    return false;
+  }
+
+  /**
+   * Opens the call, reusing an in-flight attempt rather than racing a second
+   * one. Without the microphone it is a call Luke opens for himself — audio
+   * out only, nothing captured, nothing to consent to — and it always stands
+   * down for the developer's own: asking for a microphone call while a
+   * speak-only one is up replaces it rather than sharing it.
+   */
+  async connect(options?: { microphone?: boolean }): Promise<boolean> {
+    const withMicrophone = options?.microphone !== false;
+    // Wait out whatever attempt is already in flight rather than racing it.
+    // A loop, because another caller can start a new attempt in the gap.
+    while (this.#connecting) await this.#connecting;
+    if (this.isConnected) {
+      if (!withMicrophone || this.#microphone) return true;
+      // The developer's call replaces Luke's own — but the press that asked
+      // for it must survive the teardown, or the turn it opens would be lost.
+      const pendingTurn = this.#pendingTurn;
+      this.#teardown();
+      this.#pendingTurn = pendingTurn;
+    }
+    this.#withMicrophone = withMicrophone;
+    this.#connecting = this.#connect()
       .then((opened) => {
         // A press does not outlive the attempt it started. Every way a connect
         // ends without a call passes through here — no credential, a refused
@@ -312,14 +357,18 @@ export class RealtimeVoiceSession {
     // needs the other: the credential is minted over the network while the
     // capture device opens. `allSettled` rather than `all`, because whichever
     // one loses still has to be dealt with — a device that opened after a
-    // failed mint would be held with nobody left to release it.
+    // failed mint would be held with nobody left to release it. A speak-only
+    // call never asks for the device at all: nothing is captured, so there is
+    // nothing to consent to and nothing to hold.
     const [connectionResult, streamResult] = await Promise.allSettled([
       this.#options.requestConnection(),
-      this.#options.requestMicrophoneStream?.() ??
-        navigator.mediaDevices.getUserMedia({
-          audio: { autoGainControl: true, echoCancellation: true, noiseSuppression: true },
-          video: false,
-        }),
+      this.#withMicrophone
+        ? (this.#options.requestMicrophoneStream?.() ??
+          navigator.mediaDevices.getUserMedia({
+            audio: { autoGainControl: true, echoCancellation: true, noiseSuppression: true },
+            video: false,
+          }))
+        : Promise.resolve(undefined),
     ]);
     // Adopt the device before deciding anything, so every exit from here — a
     // stop that landed mid-mint, a failed mint, no credential at all — releases
@@ -346,17 +395,23 @@ export class RealtimeVoiceSession {
     }
 
     try {
-      const stream = streamResult.value;
-      const [microphone] = stream.getAudioTracks();
-      if (!microphone) throw new Error("No microphone track was available");
-      // Push-to-talk starts closed. Nothing is sent until the developer asks.
-      microphone.enabled = false;
-      this.#microphone = microphone;
-      this.#options.onLocalStream(stream);
-
       const peer = this.#options.createPeerConnection?.() ?? new RTCPeerConnection();
       this.#peer = peer;
-      peer.addTrack(microphone, stream);
+      const stream = streamResult.value;
+      if (this.#withMicrophone) {
+        const [microphone] = stream?.getAudioTracks() ?? [];
+        if (!microphone || !stream) throw new Error("No microphone track was available");
+        // Push-to-talk starts closed. Nothing is sent until the developer asks.
+        microphone.enabled = false;
+        this.#microphone = microphone;
+        this.#options.onLocalStream(stream);
+        peer.addTrack(microphone, stream);
+      } else {
+        // Luke's own call receives audio and offers none: the transceiver says
+        // so up front, so the connection is speak-only by shape rather than by
+        // a track that merely happens to be missing.
+        peer.addTransceiver("audio", { direction: "recvonly" });
+      }
       peer.ontrack = (event) => {
         this.#remoteTrack = event.track;
         this.#options.onRemoteStream(event.streams[0]);
@@ -399,9 +454,14 @@ export class RealtimeVoiceSession {
       await this.#waitForChannel(channel, deadline);
       if (this.#closed) return this.#abandonConnect();
       this.#setStatus(REALTIME_STATUS.READY);
+      // A pace changed during the handshake could not be sent then, and the
+      // credential this call answered may have been minted before the change.
+      this.#flushPendingSpeed();
       // Whoever pressed the talk key to get here has been waiting through the
-      // handshake for their turn to open.
-      if (this.#pendingTurn) {
+      // handshake for their turn to open. A speak-only call leaves the press
+      // pending instead — it has no microphone to open a turn with, and the
+      // developer's own call is already replacing it.
+      if (this.#pendingTurn && this.#microphone) {
         this.#pendingTurn = false;
         this.startListening();
       }
@@ -480,7 +540,10 @@ export class RealtimeVoiceSession {
    * key is held cannot be left open by forgetting to press again.
    */
   beginTurn(): void {
-    if (!this.isConnected) {
+    // A call without a microphone cannot take the turn, however open it is:
+    // the press waits as an intention while the developer's own call — the
+    // one that will replace Luke's — comes up.
+    if (!this.isConnected || !this.#microphone) {
       this.#pendingTurn = true;
       return;
     }
@@ -506,8 +569,10 @@ export class RealtimeVoiceSession {
     // anything. It is remembered and applied when the call opens — and a second
     // press cancels the first rather than queueing another, because two presses
     // have always meant a turn opened and closed, and one that held nothing is
-    // one with nothing to send.
-    if (!this.isConnected) {
+    // one with nothing to send. A connected call without a microphone is the
+    // same case: Luke's own call cannot take a turn, so the press waits for
+    // the one that can.
+    if (!this.isConnected || !this.#microphone) {
       this.#pendingTurn = !this.#pendingTurn;
       return;
     }
@@ -521,6 +586,16 @@ export class RealtimeVoiceSession {
   /** Whether a call is being opened, so a press has something to wait for. */
   get isConnecting(): boolean {
     return this.#connecting !== undefined;
+  }
+
+  /**
+   * Whether a press is still waiting for a call that can take its turn. The
+   * opening meter reads this: a takeover — the developer's call replacing
+   * Luke's own — passes through a settled status on the way, and the meter
+   * must not come down while the press that started it is still owed a turn.
+   */
+  get turnPending(): boolean {
+    return this.#pendingTurn;
   }
 
   /**
@@ -600,7 +675,11 @@ export class RealtimeVoiceSession {
    * and a keystroke is no reason to discard it.
    */
   sendText(text: string): boolean {
-    if (!this.isConnected) return false;
+    // A typed ask runs only on the developer's own call. Luke's speak-only
+    // call has been sent no roster, no guide, and no issues, so a turn armed
+    // for tools has nothing real to validate against there — the caller
+    // stands that call down and opens the full one before asking.
+    if (!this.isConnected || !this.#microphone) return false;
     if (this.#status === REALTIME_STATUS.LISTENING) return false;
     const events = typedAskEvents(text);
     if (events.length === 0) return false;
@@ -635,9 +714,33 @@ export class RealtimeVoiceSession {
     // the current turn's: a `response.done` that matches nothing can neither
     // act with the new turn's arming nor end the new turn early.
     this.#activeResponseId = undefined;
+    // The turn the arming belonged to is over with the reply. Every caller
+    // that opens a new developer turn arms it afresh in #startResponse; left
+    // true here, the cancelled reply's late calls would find it still standing.
+    this.#toolTurnArmed = false;
     this.#generationDone = false;
     this.#remoteQuiet = false;
     this.#clearSettleTimer();
+  }
+
+  /**
+   * Cuts off the reply under way without opening anything in its place — the
+   * developer asking for quiet rather than for a turn. The cut is the same
+   * one talking or typing over Luke makes: silenced at once, cancelled, and
+   * trimmed to what was actually heard, so the next answer cannot refer back
+   * to words that never reached the room. Reports whether there was a reply
+   * to stop, so the key that asked keeps its other meanings when there was
+   * not.
+   */
+  stopSpeaking(): boolean {
+    if (this.#status !== REALTIME_STATUS.RESPONDING) return false;
+    this.#interruptReply();
+    // A stop opens no reply of its own, so the turn moves on here: a tool
+    // follow-up still awaiting its write finds an epoch that is no longer its
+    // own and stands down, rather than speaking over the quiet just asked for.
+    this.#turnEpoch += 1;
+    this.#setStatus(REALTIME_STATUS.READY);
+    return true;
   }
 
   /**
@@ -704,6 +807,8 @@ export class RealtimeVoiceSession {
     this.#generationDone = false;
     this.#remoteQuiet = false;
     this.#pendingTurn = false;
+    // The next call is minted at the stored pace, so nothing is owed to it.
+    this.#pendingSpeed = undefined;
     this.#responseItemId = undefined;
     this.#activeResponseId = undefined;
     this.#audibleSince = undefined;
@@ -716,6 +821,11 @@ export class RealtimeVoiceSession {
   }
 
   #startResponse(events: readonly Record<string, unknown>[], toolsArmed = false): void {
+    // A pace still waiting from the last reply lands here, ahead of the
+    // request: the channel is ordered and no response is in progress — a
+    // cancel for the reply being talked over was sent before this — so the
+    // reply about to be asked for is already spoken at the new pace.
+    this.#flushPendingSpeed();
     // The track is deliberately left as it is. A reply that was cut off left it
     // disabled, and re-opening it here would let the tail of that reply — still
     // arriving, because the server sent it before it was told to stop — be
@@ -822,7 +932,43 @@ export class RealtimeVoiceSession {
     // un-silence him.
     this.#unsilenceLuke();
     this.#clearSettleTimer();
+    // The reply is over, so the API is between turns — the one moment it
+    // accepts a pace change that arrived while Luke was speaking.
+    this.#flushPendingSpeed();
     if (this.#status === REALTIME_STATUS.RESPONDING) this.#setStatus(REALTIME_STATUS.READY);
+  }
+
+  /**
+   * Changes how fast Luke speaks on the call now open, from his next reply on.
+   * A call minted at one pace stays a live session, so the change travels as a
+   * session update rather than waiting for the next conversation. The API
+   * applies a pace only between model turns: a change landing mid-reply is
+   * held and sent when the reply ends. With no call open there is nothing to
+   * update — the next one is minted at the stored pace already.
+   */
+  applySpeed(speed: number): void {
+    if (!this.isConnected) {
+      // A call being opened was minted at whatever pace stood when its
+      // credential was asked for, which this change may already have
+      // overtaken: hold it and send it once the channel opens. Sent to a
+      // call that was minted at the new pace after all, it is a no-op.
+      if (this.isConnecting) this.#pendingSpeed = speed;
+      return;
+    }
+    if (this.#status === REALTIME_STATUS.RESPONDING) {
+      this.#pendingSpeed = speed;
+      return;
+    }
+    this.#pendingSpeed = undefined;
+    this.#send(outputSpeedUpdateEvents(speed));
+  }
+
+  /** Sends the pace change that waited out a reply, once nothing is speaking. */
+  #flushPendingSpeed(): void {
+    const speed = this.#pendingSpeed;
+    if (speed === undefined) return;
+    this.#pendingSpeed = undefined;
+    this.#send(outputSpeedUpdateEvents(speed));
   }
 
   /**
@@ -835,7 +981,7 @@ export class RealtimeVoiceSession {
    */
   updateSessions(sessions: readonly NormalizedSession[]): void {
     this.#sessions = sessions;
-    if (!this.isConnected) return;
+    if (!this.#carriesContext()) return;
     const context = sessionContextText(sessions);
     if (context === this.#sessionContext) return;
     this.#sessionContext = context;
@@ -850,7 +996,7 @@ export class RealtimeVoiceSession {
    */
   updateWorkspaceProjects(projects: readonly ObservedWorkspaceProject[]): void {
     this.#workspaceProjects = projects;
-    if (!this.isConnected) return;
+    if (!this.#carriesContext()) return;
     const context = workspaceProjectContextText(projects);
     if (context === this.#workspaceProjectContext) return;
     this.#workspaceProjectContext = context;
@@ -866,7 +1012,7 @@ export class RealtimeVoiceSession {
    */
   updateGuide(guide: AppGuideSnapshot): void {
     this.#guide = guide;
-    if (!this.isConnected) return;
+    if (!this.#carriesContext()) return;
     const context = appGuideContextText(guide);
     if (context === this.#guideContext) return;
     this.#guideContext = context;
@@ -881,7 +1027,7 @@ export class RealtimeVoiceSession {
    */
   updateIssues(issues: readonly TrackedIssue[] | undefined): void {
     this.#issues = issues;
-    if (!this.isConnected) return;
+    if (!this.#carriesContext()) return;
     if (!issues) {
       // A conversation that was never told about a board has nothing to
       // withdraw; one that was must be told the board is gone, or Luke keeps
@@ -895,6 +1041,18 @@ export class RealtimeVoiceSession {
     if (context === this.#issueContext) return;
     this.#issueContext = context;
     this.#send(issueContextEvents(issues));
+  }
+
+  /**
+   * Whether this call is one the rosters and the guide travel on. Only the
+   * developer's own call is: one Luke opened for himself exists to read a
+   * sentence out, so it is sent that sentence and nothing else — the narrowest
+   * thing that can leave the machine in a conversation nobody opened by hand.
+   * The stores above still update either way, so the developer's next call
+   * starts current.
+   */
+  #carriesContext(): boolean {
+    return this.isConnected && this.#microphone !== undefined;
   }
 
   #handleServerEvent(data: unknown): void {
@@ -913,6 +1071,12 @@ export class RealtimeVoiceSession {
       if (typeof item?.id === "string") this.#responseItemId = item.id;
     }
     if (type === REALTIME_SERVER_EVENT.RESPONSE_CREATED) {
+      // Only a reply the session is still waiting on may be adopted. A
+      // confirmation arriving after the developer stopped or took the turn is
+      // the cancelled reply's own, landing late — the stop raced the server's
+      // confirmation — and adopting it would re-open the track over the quiet
+      // just asked for, and let its finished form read as the current reply's.
+      if (this.#status !== REALTIME_STATUS.RESPONDING) return;
       // The reply being asked for is under way, so anything arriving from here
       // belongs to it rather than to the one it replaced. Its name is what a
       // `response.done` must present to be read as this reply's: the channel
