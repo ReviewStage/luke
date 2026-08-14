@@ -72,6 +72,7 @@ import {
 } from "./session-model";
 import { SESSION_OPTIONS_BUTTON_ID, SESSION_OPTIONS_ID } from "./session-parts";
 import { SETTING_PAGE, SETTINGS_VIEW, type SettingsView } from "./settings-views";
+import { useBootstrapRacedChannel } from "./use-bootstrap-raced-channel";
 import { panelEntryOpen, usePanelEntry } from "./use-panel-entry";
 import { usePanelPresentation } from "./use-panel-presentation";
 import { useStateWithRef } from "./use-state-with-ref";
@@ -215,12 +216,6 @@ export function App(): React.JSX.Element {
    */
   const [outputAudio, setOutputAudio] = useState<OutputAudioState>();
   /**
-   * Whether a live push has arrived, so the bootstrap's older snapshot does
-   * not clobber one that raced past it — the same reading order the issue
-   * roster follows.
-   */
-  const outputAudioPushed = useRef(false);
-  /**
    * Which stretch of unbroken silence is on screen, advanced each time one
    * begins. A "Got it" is remembered against the stretch it answered, so it
    * holds for that whole mute and lapses naturally with it.
@@ -243,20 +238,6 @@ export function App(): React.JSX.Element {
    * the developer's own words, under the spoken tool's contract.
    */
   const spokenFeedbackDraft = useRef<string | undefined>(undefined);
-  /**
-   * Whether a live projects push has arrived. The bootstrap reply resolves
-   * whenever the main process gets to it, so a push can land first — and the
-   * bootstrap's older snapshot must then not clobber it, because the main
-   * process will not repeat a list it believes it already announced.
-   */
-  const workspaceProjectsPushed = useRef(false);
-  const issuesPushed = useRef(false);
-  /**
-   * Whether another window's settings change has arrived, under the same rule
-   * as the roster above: a push that lands before the bootstrap reply is the
-   * newer truth, and the bootstrap's older snapshot must not clobber it.
-   */
-  const settingsPushed = useRef(false);
   /**
    * How many errands Luke has run. Carried with each one so that asking for
    * the same control twice flies twice, exactly as a repeated face gesture is
@@ -1060,6 +1041,40 @@ export function App(): React.JSX.Element {
   });
 
   /**
+   * A live push beats a bootstrap snapshot still in flight. The main process
+   * will not repeat a list it believes it already announced, so the older
+   * snapshot must not clobber one that raced past it.
+   */
+  const acceptProjectsBootstrap = useBootstrapRacedChannel(
+    (onChange) => window.sidecar.onWorkspaceProjectsChanged(onChange),
+    setWorkspaceProjects,
+  );
+  // Straight to the conversation rather than through state: no panel
+  // surface draws the issue roster, so a re-render would be work for nobody.
+  const acceptIssuesBootstrap = useBootstrapRacedChannel(
+    (onChange) => window.sidecar.onIssuesChanged(onChange),
+    syncIssues,
+  );
+  // Another window's settings change: this window's rows and guide redraw
+  // from the same snapshot its reply carried, so no window describes a
+  // state the store no longer holds.
+  const acceptSettingsBootstrap = useBootstrapRacedChannel(
+    (onChange) =>
+      window.sidecar.onSettingsChanged((pushed) => {
+        // A push is newer than anything an errand is still carrying, so it takes
+        // the hold with it: released afterwards, a snapshot caught before this
+        // arrived would draw the store as it was rather than as it is.
+        heldSettings.current = undefined;
+        onChange(pushed);
+      }),
+    setSettings,
+  );
+  const acceptOutputAudioBootstrap = useBootstrapRacedChannel(
+    (onChange) => window.sidecar.onOutputAudioChanged(onChange),
+    setOutputAudio,
+  );
+
+  /**
    * The two writes a row can ask for, handed to the main process by session
    * identity. Unlike opening, neither closes the panel: the answer lands back
    * on the row that asked, and the user is mid-conversation with it.
@@ -1124,9 +1139,9 @@ export function App(): React.JSX.Element {
       // Only fill in what no push has said yet: the bootstrap snapshot is
       // older than any change that raced past it, and the main process will
       // not repeat a list it believes it already announced.
-      if (!workspaceProjectsPushed.current) setWorkspaceProjects(value.workspaceProjects);
-      if (!issuesPushed.current) syncIssues(value.issues);
-      if (!settingsPushed.current) setSettings(value.settings);
+      acceptProjectsBootstrap(value.workspaceProjects);
+      acceptIssuesBootstrap(value.issues);
+      acceptSettingsBootstrap(value.settings);
       setDisplay(value.display);
       if (modeGenerationOf() === bootstrapGeneration) {
         applyAuthoritativeMode(value.mode);
@@ -1149,7 +1164,7 @@ export function App(): React.JSX.Element {
       setMicrophoneStatus(value.microphoneStatus);
       // Only fill in what no push has said yet, like the issue roster: the
       // bootstrap snapshot is older than any change that raced past it.
-      if (!outputAudioPushed.current && value.outputAudio) setOutputAudio(value.outputAudio);
+      if (value.outputAudio) acceptOutputAudioBootstrap(value.outputAudio);
       if (!value.realtimeAvailable) setVoiceStatus(REALTIME_STATUS.UNAVAILABLE);
       if (value.profile === "microphone") {
         window.setTimeout(() => void startMicrophone(), 500);
@@ -1179,44 +1194,19 @@ export function App(): React.JSX.Element {
       }
     });
     const removeDisplay = window.sidecar.onDisplayChanged(setDisplay);
-    // Another window's settings change: this window's rows and guide redraw
-    // from the same snapshot its reply carried, so no window describes a
-    // state the store no longer holds.
-    const removeSettings = window.sidecar.onSettingsChanged((pushed) => {
-      settingsPushed.current = true;
-      // A push is newer than anything an errand is still carrying, so it takes
-      // the hold with it: released afterwards, a snapshot caught before this
-      // arrived would draw the store as it was rather than as it is.
-      heldSettings.current = undefined;
-      setSettings(pushed);
-    });
     const removeSessions = window.sidecar.onSessionsChanged(setSessions);
-    const removeWorkspaceProjects = window.sidecar.onWorkspaceProjectsChanged((projects) => {
-      workspaceProjectsPushed.current = true;
-      setWorkspaceProjects(projects);
-    });
-    const removeOutputAudio = window.sidecar.onOutputAudioChanged((state) => {
-      outputAudioPushed.current = true;
-      setOutputAudio(state);
-    });
-    // Straight to the conversation rather than through state: no panel
-    // surface draws the issue roster, so a re-render would be work for nobody.
-    const removeIssues = window.sidecar.onIssuesChanged((issues) => {
-      issuesPushed.current = true;
-      syncIssues(issues);
-    });
     return () => {
       cancelHover();
       removeLifecycle();
       removeDisplay();
-      removeSettings();
       removeSessions();
-      removeWorkspaceProjects();
-      removeOutputAudio();
-      removeIssues();
       void stopMicrophone();
     };
   }, [
+    acceptIssuesBootstrap,
+    acceptOutputAudioBootstrap,
+    acceptProjectsBootstrap,
+    acceptSettingsBootstrap,
     applyAuthoritativeMode,
     applyPresentation,
     beginEntry,
@@ -1228,7 +1218,6 @@ export function App(): React.JSX.Element {
     startMicrophone,
     stopMicrophone,
     summonAsk,
-    syncIssues,
     modeGenerationOf,
   ]);
 
