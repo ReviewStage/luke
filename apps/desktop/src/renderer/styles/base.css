@@ -994,6 +994,26 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   border-radius: var(--slot-radius);
 }
 
+/* The content rides the lift the chrome takes, arriving and leaving on the
+   same motion it always had — the offsets below are the stages' own resting
+   and drawn transforms with the lift added, so the spring covers the same
+   distance and only the destination moves. */
+.app-stage[data-notch="false"] .expanded-stage {
+  transform: translateX(-50%) translateY(calc(var(--shape-top) - 10px));
+}
+
+.app-stage[data-notch="false"][data-presentation="panel"] .expanded-stage {
+  transform: translateX(-50%) translateY(var(--shape-top));
+}
+
+.app-stage[data-notch="false"] .slot-stage {
+  transform: translateX(-50%) translateY(calc(var(--shape-top) - 6px));
+}
+
+.app-stage[data-notch="false"][data-presentation="slot"] .slot-stage {
+  transform: translateX(-50%) translateY(var(--shape-top));
+}
+
 .app-stage[data-notch="false"] .wing,
 .app-stage[data-notch="false"] .compact-hover-target {
   top: var(--shape-top);

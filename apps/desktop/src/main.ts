@@ -565,20 +565,30 @@ function broadcastSettings(settings: AppSettings, except: Electron.WebContents):
 
 /**
  * Makes the windows match the chosen displays: one raised on every chosen
- * display that is connected, none anywhere else. Raising before razing is
- * load-bearing — a swap from one display to another must never pass through
- * zero windows, because all windows closed is how this process decides it is
- * done. Everything that changes what the set should be lands here: a switch
+ * display that is connected, none anywhere else. A window whose display went
+ * away is moved to a display that needs one rather than destroyed beside a
+ * fresh create — a swap of the main display must carry the conversation and
+ * the panel's state across, not drop them on the floor. Raising before razing
+ * is load-bearing for what remains — a swap must never pass through zero
+ * windows, because all windows closed is how this process decides it is done.
+ * Everything that changes what the set should be lands here: a switch
  * pressed, a display plugged or unplugged, the stored choice read at launch.
  */
 function reconcilePanels(): void {
   const wanted = effectiveDisplayIds();
-  for (const displayId of wanted) {
-    if (!panelWindows.has(displayId)) createPanel(displayId);
-  }
   const wantedSet = new Set(wanted);
-  for (const [displayId, window] of [...panelWindows]) {
-    if (wantedSet.has(displayId)) continue;
+  const missing = wanted.filter((displayId) => !panelWindows.has(displayId));
+  const excess = [...panelWindows.keys()].filter((displayId) => !wantedSet.has(displayId));
+  // Pair each display that needs a window with a window that lost its display.
+  while (missing.length > 0 && excess.length > 0) {
+    const toDisplayId = missing.shift();
+    const fromDisplayId = excess.shift();
+    if (toDisplayId === undefined || fromDisplayId === undefined) break;
+    rebindPanel(fromDisplayId, toDisplayId);
+  }
+  for (const displayId of missing) createPanel(displayId);
+  for (const displayId of excess) {
+    const window = panelWindows.get(displayId);
     panelWindows.delete(displayId);
     windowModes.delete(displayId);
     clearCollapseTimer(displayId);
@@ -586,9 +596,31 @@ function reconcilePanels(): void {
     // goes mid-conversation releases the duck rather than pinning it forever.
     voiceExchanges.delete(displayId);
     applyVoiceExchanges();
-    window.destroy();
+    window?.destroy();
   }
   positionPanels();
+}
+
+/**
+ * Moves a living window to another display, state and all: its mode, its
+ * collapse-in-flight, its exchange report, and the renderer behind it — which
+ * learns its new ground from the `displayChanged` the repositioning sends,
+ * exactly as it would for a geometry change in place.
+ */
+function rebindPanel(fromDisplayId: number, toDisplayId: number): void {
+  const window = panelWindows.get(fromDisplayId);
+  if (!window) return;
+  panelWindows.delete(fromDisplayId);
+  panelWindows.set(toDisplayId, window);
+  windowModes.set(toDisplayId, windowModeFor(fromDisplayId));
+  windowModes.delete(fromDisplayId);
+  // The timer's closure names the old display; the reposition below redraws
+  // whatever a cancelled collapse would have.
+  clearCollapseTimer(fromDisplayId);
+  const exchange = voiceExchanges.get(fromDisplayId);
+  voiceExchanges.delete(fromDisplayId);
+  if (exchange !== undefined) voiceExchanges.set(toDisplayId, exchange);
+  applyVoiceExchanges();
 }
 
 function clearCollapseTimer(displayId: number): void {
@@ -1596,13 +1628,15 @@ function createPanel(displayId: number): void {
   });
   // The reconciler deletes before it destroys, so this answers only a window
   // that went down some other way — and it must not leave a ghost in the map,
-  // nor a phantom exchange holding the duck down.
+  // nor a phantom exchange holding the duck down. Found by the window rather
+  // than the id it was born under, because a rebind may have moved it.
   window.on("closed", () => {
-    if (panelWindows.get(displayId) === window) {
-      panelWindows.delete(displayId);
-      windowModes.delete(displayId);
-      clearCollapseTimer(displayId);
-      voiceExchanges.delete(displayId);
+    for (const [id, candidate] of [...panelWindows]) {
+      if (candidate !== window) continue;
+      panelWindows.delete(id);
+      windowModes.delete(id);
+      clearCollapseTimer(id);
+      voiceExchanges.delete(id);
       applyVoiceExchanges();
     }
   });
