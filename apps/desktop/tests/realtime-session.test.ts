@@ -619,6 +619,20 @@ test("a pace changed mid-reply waits for the reply to end", async () => {
   assert.deepEqual(update?.session, { type: "realtime", audio: { output: { speed: 0.75 } } });
 });
 
+test("a pace changed during the handshake reaches the call it was opening", async () => {
+  const context = harness({ connectionDelayMs: 5 });
+  const opening = context.session.connect();
+
+  // The credential this call answers with may have been minted before the
+  // change reached the minter, so dropping it would leave the live call at
+  // the old pace with the row already showing the new one.
+  context.session.applySpeed(1.25);
+  await opening;
+
+  const update = context.sent.find((event) => event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE);
+  assert.deepEqual(update?.session, { type: "realtime", audio: { output: { speed: 1.25 } } });
+});
+
 test("a pace change with no call open sends nothing", () => {
   // Not a loss: the next call is minted at the stored pace already.
   const context = harness();

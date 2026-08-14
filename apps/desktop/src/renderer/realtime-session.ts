@@ -406,6 +406,9 @@ export class RealtimeVoiceSession {
       await this.#waitForChannel(channel, deadline);
       if (this.#closed) return this.#abandonConnect();
       this.#setStatus(REALTIME_STATUS.READY);
+      // A pace changed during the handshake could not be sent then, and the
+      // credential this call answered may have been minted before the change.
+      this.#flushPendingSpeed();
       // Whoever pressed the talk key to get here has been waiting through the
       // handshake for their turn to open.
       if (this.#pendingTurn) {
@@ -851,7 +854,14 @@ export class RealtimeVoiceSession {
    * update — the next one is minted at the stored pace already.
    */
   applySpeed(speed: number): void {
-    if (!this.isConnected) return;
+    if (!this.isConnected) {
+      // A call being opened was minted at whatever pace stood when its
+      // credential was asked for, which this change may already have
+      // overtaken: hold it and send it once the channel opens. Sent to a
+      // call that was minted at the new pace after all, it is a no-op.
+      if (this.isConnecting) this.#pendingSpeed = speed;
+      return;
+    }
     if (this.#status === REALTIME_STATUS.RESPONDING) {
       this.#pendingSpeed = speed;
       return;
