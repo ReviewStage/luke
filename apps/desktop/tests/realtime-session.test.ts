@@ -22,6 +22,7 @@ import {
   type AppActionCarrier,
   type IssueActionCarrier,
   quietIsLukesOwn,
+  REMOTE_QUIET_MS,
   RealtimeVoiceSession,
   type SessionActionCarrier,
 } from "../src/renderer/realtime-session";
@@ -539,6 +540,35 @@ test("a pause mid-reply is not the reply running out", async () => {
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
 
   context.session.reportRemoteAudioIdle();
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+});
+
+test("a sentence pause is not the reply running out", async (t) => {
+  const context = harness();
+  await context.session.connect();
+  context.deliverRemoteTrack();
+  context.session.beginTurn();
+  context.session.endTurn(true);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED });
+  context.session.reportRemoteAudioLevel(true);
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+
+  // The meter calls quiet after a fifth of a second, which is shorter than the
+  // pause between two sentences. Ending a turn on that would take the meter
+  // down mid-reply — the very thing the debounce is here to stop.
+  context.session.reportRemoteAudioLevel(false);
+  t.mock.timers.tick(220);
+  assert.equal(
+    context.session.status,
+    REALTIME_STATUS.RESPONDING,
+    "the pause between two sentences",
+  );
+
+  context.session.reportRemoteAudioLevel(true);
+  context.session.reportRemoteAudioLevel(false);
+  t.mock.timers.tick(REMOTE_QUIET_MS);
   assert.equal(context.session.status, REALTIME_STATUS.READY);
 });
 

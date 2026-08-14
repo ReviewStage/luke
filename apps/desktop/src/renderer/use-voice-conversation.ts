@@ -16,21 +16,9 @@ import { type RefObject, useCallback, useEffect, useRef, useState } from "react"
 import type { MicrophoneStatus, SessionOpenResult, VoiceHotkeyState } from "../shared/contracts";
 import { TALK_KEY_RELEASE, talkKeyRelease } from "../shared/voice-hotkey";
 import { askRefusal } from "./ask-luke";
-import { type AppActionCarrier, quietIsLukesOwn, RealtimeVoiceSession } from "./realtime-session";
+import { type AppActionCarrier, RealtimeVoiceSession } from "./realtime-session";
 import { SpokenNoticeAnnouncer } from "./spoken-notices";
-import { useStateWithRef } from "./use-state-with-ref";
 import { WAVEFORM_VOICE, type WaveformVoice } from "./waveform";
-
-/**
- * The backstop for a reply whose ending never arrives.
- *
- * `output_audio_buffer.stopped` is what actually ends a reply now, so this only
- * has to catch a call where that never came. It is long because the thing it
- * must not mistake for an ending is a pause between two sentences: at 700ms it
- * did exactly that, taking the meter and the face down while Luke talked on
- * into the second one.
- */
-export const REMOTE_QUIET_MS = 2_500;
 
 /**
  * What the speaking evidence run captions the reply with. A capture run never
@@ -284,9 +272,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   const [analyser, setAnalyser] = useState<AnalyserNode>();
   const [microphoneStatus, setMicrophoneStatus] = useState<MicrophoneStatus>("not-determined");
   const [microphoneError, setMicrophoneError] = useState<string>();
-  const [voiceStatus, setVoiceStatus, voiceStatusNow] = useStateWithRef<RealtimeStatus>(
-    REALTIME_STATUS.IDLE,
-  );
+  const [voiceStatus, setVoiceStatus] = useState<RealtimeStatus>(REALTIME_STATUS.IDLE);
   /**
    * A pressed talk key still waiting for the call it asked to open. The meter
    * is drawn from this rather than from the connection, because the press is
@@ -312,15 +298,6 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   const remoteAudio = useRef<HTMLAudioElement | null>(null);
   const voiceSession = useRef<RealtimeVoiceSession | undefined>(undefined);
   const announcer = useRef<SpokenNoticeAnnouncer | undefined>(undefined);
-  const quietTimer = useRef<number | undefined>(undefined);
-  /**
-   * Whether Luke has actually been heard during this reply. Committing a turn
-   * swaps the meter from the microphone to Luke, and the meter reports quiet as
-   * it lets go of the old stream — a silence that belongs to the developer, not
-   * to Luke, and one that would otherwise end his turn before he had said
-   * anything.
-   */
-  const heardLuke = useRef(false);
   /** When the talk key went down, which is what tells a hold from a tap. */
   const talkPressedAt = useRef<number | undefined>(undefined);
   /** Whether a tap has left a turn open for a later press to end. */
@@ -375,7 +352,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       onCaption: setVoiceCaption,
     });
     return voiceSession.current;
-  }, [setVoiceStatus]);
+  }, []);
 
   /**
    * The announcer that lets Luke speak into silence: it queues the notices the
@@ -461,35 +438,12 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   /**
    * Luke's reply is over when it stops being audible, not when the model stops
    * producing it. The meter is already measuring the stream, so the quiet it
-   * reports is what ends the turn.
+   * reports is what ends the turn — and the session is what decides that a
+   * pause between two sentences is not an ending.
    */
-  const handleVoiceActivity = useCallback(
-    (active: boolean) => {
-      if (voiceStatusNow() !== REALTIME_STATUS.RESPONDING) return;
-      if (active) {
-        heardLuke.current = true;
-        voiceSession.current?.reportRemoteAudioActive();
-      }
-      if (quietTimer.current !== undefined) {
-        window.clearTimeout(quietTimer.current);
-        quietTimer.current = undefined;
-      }
-      if (active) return;
-      // The meter calls quiet after a fifth of a second, which is shorter than the
-      // pause between two sentences. Ending a turn on that would take the meter
-      // down mid-reply — the very thing this is here to stop — so the turn waits
-      // for a silence longer than speech leaves behind.
-      quietTimer.current = window.setTimeout(() => {
-        quietTimer.current = undefined;
-        // Only Luke's own silence ends Luke's turn.
-        if (!quietIsLukesOwn({ status: voiceStatusNow(), heardLuke: heardLuke.current })) {
-          return;
-        }
-        voiceSession.current?.reportRemoteAudioIdle();
-      }, REMOTE_QUIET_MS);
-    },
-    [voiceStatusNow],
-  );
+  const handleVoiceActivity = useCallback((active: boolean) => {
+    voiceSession.current?.reportRemoteAudioLevel(active);
+  }, []);
 
   /**
    * Asks the system for access and nothing else. Opening a call here would hold
@@ -657,11 +611,9 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   }, [activeStream]);
 
   useEffect(() => {
-    // Each reply is heard from scratch, so the previous one cannot vouch for it.
+    // The reply that answered the typed ask is over, so the caption goes
+    // back to being the preference's to grant.
     if (!typedAskHolds(voiceStatus)) {
-      heardLuke.current = false;
-      // The reply that answered the typed ask is over, so the caption goes
-      // back to being the preference's to grant.
       setTypedAsk(false);
     }
     // Any settled status ends the wait the press started, however it ended:
@@ -752,7 +704,6 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
 
   useEffect(
     () => () => {
-      if (quietTimer.current !== undefined) window.clearTimeout(quietTimer.current);
       void voiceSession.current?.close();
     },
     [],

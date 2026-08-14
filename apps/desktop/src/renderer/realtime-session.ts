@@ -56,6 +56,19 @@ const CONNECT_TIMEOUT_MS = 15_000;
 const REALTIME_SETTLE_TIMEOUT_MS = 20_000;
 
 /**
+ * The backstop for a reply whose ending never arrives.
+ *
+ * `output_audio_buffer.stopped` is what actually ends a reply now, so this only
+ * has to catch a call where that never came. It is long because the thing it
+ * must not mistake for an ending is a pause between two sentences: at 700ms it
+ * did exactly that, taking the meter and the face down while Luke talked on
+ * into the second one. The meter itself calls quiet after a fifth of a second,
+ * which is shorter still, so a turn that ended on the meter's edge would do
+ * the same.
+ */
+export const REMOTE_QUIET_MS = 2_500;
+
+/**
  * Carries one validated action to the process that can perform it, answering
  * with what became of it. The renderer validates a tool call against the
  * observed roster before this is called, and the main process validates it
@@ -218,6 +231,19 @@ export class RealtimeVoiceSession {
    * be.
    */
   #remoteQuiet = false;
+  /**
+   * Whether Luke has actually been heard during this reply. Committing a turn
+   * swaps the meter from the microphone to Luke, and the meter reports quiet as
+   * it lets go of the old stream — a silence that belongs to the developer, not
+   * to Luke, and one that would otherwise end his turn before he had said
+   * anything.
+   */
+  #heardLuke = false;
+  /**
+   * The pause between two sentences is longer than the meter's idea of quiet.
+   * This holds that pause until it has lasted longer than speech leaves behind.
+   */
+  #quietTimer: ReturnType<typeof setTimeout> | undefined;
   /**
    * A press of the talk key that arrived before there was a call to press
    * against. The microphone opens only once the call is up, so such a press is
@@ -717,6 +743,8 @@ export class RealtimeVoiceSession {
     this.#toolTurnArmed = false;
     this.#generationDone = false;
     this.#remoteQuiet = false;
+    this.#heardLuke = false;
+    this.#clearQuietTimer();
     this.#clearSettleTimer();
   }
 
@@ -803,6 +831,8 @@ export class RealtimeVoiceSession {
     this.#issueContext = undefined;
     this.#generationDone = false;
     this.#remoteQuiet = false;
+    this.#heardLuke = false;
+    this.#clearQuietTimer();
     this.#pendingTurn = false;
     // The next call is minted at the stored pace, so nothing is owed to it.
     this.#pendingSpeed = undefined;
@@ -832,6 +862,8 @@ export class RealtimeVoiceSession {
     // was handled before the request for this one.
     this.#generationDone = false;
     this.#remoteQuiet = false;
+    this.#heardLuke = false;
+    this.#clearQuietTimer();
     this.#responseItemId = undefined;
     // Nothing has been confirmed for this turn yet: whatever `response.done`
     // arrives before the server confirms this reply belongs to a superseded
@@ -849,11 +881,31 @@ export class RealtimeVoiceSession {
   }
 
   /**
-   * Reports that Luke's audio has gone quiet. Called from wherever the remote
-   * stream is already being measured, so nothing has to analyse it twice.
-   *
-   * Whether a stretch of quiet is Luke's to answer for is decided by
-   * {@link quietIsLukesOwn} before this is called at all.
+   * The meter's report of whether Luke is audible. The meter calls quiet after
+   * a fifth of a second, which is shorter than the pause between two sentences,
+   * so a turn that ended on that edge would take the meter down mid-reply. The
+   * session waits for a silence longer than speech leaves behind, and ignores
+   * quiet that is not Luke's to answer for.
+   */
+  reportRemoteAudioLevel(active: boolean): void {
+    this.#clearQuietTimer();
+    if (this.#status !== REALTIME_STATUS.RESPONDING) return;
+    if (active) {
+      this.#heardLuke = true;
+      this.reportRemoteAudioActive();
+      return;
+    }
+    this.#quietTimer = setTimeout(() => {
+      this.#quietTimer = undefined;
+      // Only Luke's own silence ends Luke's turn.
+      if (!quietIsLukesOwn({ status: this.#status, heardLuke: this.#heardLuke })) return;
+      this.reportRemoteAudioIdle();
+    }, REMOTE_QUIET_MS);
+  }
+
+  /**
+   * Reports that Luke's audio has gone quiet, after the caller has already
+   * decided the silence is his and has lasted long enough to be an ending.
    */
   reportRemoteAudioIdle(): void {
     // Remembered rather than acted on and forgotten: if generation has not
@@ -910,6 +962,12 @@ export class RealtimeVoiceSession {
     this.#settleTimer = undefined;
   }
 
+  #clearQuietTimer(): void {
+    if (this.#quietTimer === undefined) return;
+    clearTimeout(this.#quietTimer);
+    this.#quietTimer = undefined;
+  }
+
   #setCaption(text: string | undefined): void {
     if (this.#caption === text) return;
     this.#caption = text;
@@ -928,7 +986,9 @@ export class RealtimeVoiceSession {
     // failed before it started would leave Luke silenced with nothing to
     // un-silence him.
     this.#unsilenceLuke();
+    this.#clearQuietTimer();
     this.#clearSettleTimer();
+    this.#heardLuke = false;
     // The reply is over, so the API is between turns — the one moment it
     // accepts a pace change that arrived while Luke was speaking.
     this.#flushPendingSpeed();
