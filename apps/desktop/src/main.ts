@@ -290,6 +290,7 @@ function registerToggleHotkey(): void {
 }
 
 let askHotkey: string | undefined;
+let chosenAskHotkey: string | undefined;
 
 /**
  * Registers the key that summons the ask field from whatever app is frontmost,
@@ -316,9 +317,14 @@ function registerAskHotkey(): void {
     process.stderr.write(`${askHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.NO_CREDENTIAL)}\n`);
     return;
   }
-  // A chord the talk key sits on — chosen by the user, or announced as
-  // registered — is not a candidate: the two Luke keys must never compete.
-  for (const accelerator of askHotkeyCandidates([chosenVoiceHotkey, voiceHotkey])) {
+  // Every chord the talk key could sit on is taken, not just the one it has
+  // announced: its helper falls back through its own candidates after this
+  // runs, so a chord it merely might take is already not the ask key's to
+  // have — the two Luke keys must never compete.
+  for (const accelerator of askHotkeyCandidates(chosenAskHotkey, [
+    ...voiceHotkeyCandidates(chosenVoiceHotkey),
+    voiceHotkey,
+  ])) {
     const registered = globalShortcut.register(accelerator, () => {
       const host = voiceHostWindow();
       const displayId = host ? displayIdFor(host.webContents) : undefined;
@@ -344,6 +350,19 @@ function sendAskHotkey(): void {
   for (const window of panelWindows.values()) {
     window.webContents.send(channels.askHotkeyChanged, askHotkey);
   }
+}
+
+/**
+ * Moves the ask key to whatever `chosenAskHotkey` now says, while the app is
+ * running. Only the ask key's own chord is let go of — the talk key's
+ * registration must not flicker for a change that is none of its business —
+ * and unlike the talk key there is no helper exit to wait for: Electron
+ * releases a chord the moment it is asked to.
+ */
+function applyAskHotkey(): void {
+  if (askHotkey) globalShortcut.unregister(askHotkey);
+  registerAskHotkey();
+  sendAskHotkey();
 }
 
 /** Tells every renderer the key it should be showing, whenever that changes. */
@@ -1078,6 +1097,53 @@ function registerIpc(): void {
     },
   );
 
+  // The ask key is the user's to move on the talk key's exact terms, read
+  // through the same gate and registered at once. The one extra rule is the
+  // standing one — the two Luke keys must never compete for a chord — so a
+  // chord the talk key sits on is refused with words rather than stored and
+  // silently outbid.
+  ipcMain.handle(
+    channels.setAskHotkey,
+    async (event, accelerator: unknown): Promise<SettingsUpdateResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (accelerator !== undefined && typeof accelerator !== "string") {
+        throw new Error("Invalid shortcut request");
+      }
+      const chosen = accelerator === undefined ? undefined : parseVoiceHotkey(accelerator);
+      if (accelerator !== undefined && chosen === undefined) {
+        throw new Error("Invalid shortcut request");
+      }
+      // The talk key's whole candidate list is refused, not just the chord it
+      // holds now: its helper may fall back to any of them on a later launch,
+      // and an ask key stored on one would race it there.
+      if (
+        chosen &&
+        (voiceHotkeyCandidates(chosenVoiceHotkey).includes(chosen) || chosen === voiceHotkey)
+      ) {
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "That chord is reserved for the talk key.",
+        };
+      }
+      try {
+        const result = await settingsStore.setAskHotkey(chosen);
+        if (!result.reason) {
+          chosenAskHotkey = chosen;
+          applyAskHotkey();
+        }
+        broadcastSettings(result.settings, event.sender);
+        return result;
+      } catch {
+        // A filesystem failure is not something the user can act on, so it is
+        // reported as one line rather than as a raw system error.
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "Could not save that shortcut on this system.",
+        };
+      }
+    },
+  );
+
   // The duck follows the stored answer at once, like the menu bar item: off
   // must let a duck currently held go rather than waiting for the next launch.
   ipcMain.handle(
@@ -1631,11 +1697,13 @@ const DOCK_ICON_FILES = {
 } as const;
 
 /**
- * Draws Luke's own face in the Dock, matched to the theme. Called once at
- * startup and again whenever the theme changes; macOS remembers the image
- * across `dock.hide()`, so this never needs to wait for the icon to be shown.
- * Artwork missing from a build draws nothing, leaving the bundle icon (or the
- * stock one) in place rather than an empty tile.
+ * Draws Luke's own face in the Dock, matched to the theme. Called at startup,
+ * on every theme change, and after every `dock.show()` — showing the icon
+ * transforms the process, and macOS draws the fresh tile from the bundle's
+ * icon (in a dev run, Electron's stock one), forgetting any image set while
+ * there was no tile to wear it. Artwork missing from a build draws nothing,
+ * leaving the bundle icon (or the stock one) in place rather than an empty
+ * tile.
  */
 function applyDockIcon(): void {
   if (!app.dock) return;
@@ -1682,8 +1750,14 @@ async function settleDock(): Promise<void> {
   dockSettling = true;
   try {
     while (app.dock.isVisible() !== dockDesired) {
-      if (dockDesired) await app.dock.show();
-      else app.dock.hide();
+      if (dockDesired) {
+        await app.dock.show();
+        // The show rebuilt the tile from the bundle icon; put Luke's face
+        // back on it.
+        applyDockIcon();
+      } else {
+        app.dock.hide();
+      }
       // Either direction transforms the process type, which can deactivate
       // the app; the panel the switch was pressed in is brought back forward
       // rather than left to lose its caret.
@@ -1790,6 +1864,7 @@ if (!app.requestSingleInstanceLock()) {
     // the default away from the user who moved off it. A file that cannot be
     // read means no choice was kept, and the defaults answer.
     chosenVoiceHotkey = await settingsStore.readVoiceHotkey().catch(() => undefined);
+    chosenAskHotkey = await settingsStore.readAskHotkey().catch(() => undefined);
     // The report is not made here: the helper answers over its own stdout a
     // moment later, and a line printed now would state an absence that only
     // exists because nobody has answered yet.

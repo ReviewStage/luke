@@ -36,6 +36,7 @@ const SETTINGS_FILE_MODE = 0o600;
 
 const SETTINGS_FIELD = {
   API_KEYS: "apiKeys",
+  ASK_HOTKEY: "askHotkey",
   DUCK_OTHER_MEDIA: "duckOtherMedia",
   FORM_FACTOR: "formFactor",
   LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
@@ -121,6 +122,12 @@ interface PersistedSettings {
    * honouring it would claim a system key nothing was ever told about.
    */
   voiceHotkey?: string;
+  /**
+   * The ask-key chord the user chose, held to everything the talk key's is:
+   * stored plainly, absent while the defaults stand, and dropped rather than
+   * carried when this build cannot register it.
+   */
+  askHotkey?: string;
   /**
    * Whether Music and Spotify are turned down while a spoken exchange is
    * live. On unless the file says `false` outright — like the menu bar item,
@@ -221,6 +228,9 @@ function parsePersistedSettings(source: string): PersistedSettings {
   // Read through the same gate a submitted chord passes, so a hand-edited
   // value is either the one spelling the rest of the app uses or nothing.
   const voiceHotkey = typeof storedHotkey === "string" ? parseVoiceHotkey(storedHotkey) : undefined;
+  const storedAskHotkey = record[SETTINGS_FIELD.ASK_HOTKEY];
+  const askHotkey =
+    typeof storedAskHotkey === "string" ? parseVoiceHotkey(storedAskHotkey) : undefined;
   return {
     version: typeof version === "number" ? version : SETTINGS_FILE_VERSION,
     apiKeys: storedApiKeys(record),
@@ -234,6 +244,7 @@ function parsePersistedSettings(source: string): PersistedSettings {
     ...(isRealtimeVoiceSpeed(voiceSpeed) ? { voiceSpeed } : {}),
     voiceCaptions: record[SETTINGS_FIELD.VOICE_CAPTIONS] === true,
     ...(voiceHotkey ? { voiceHotkey } : {}),
+    ...(askHotkey ? { askHotkey } : {}),
     duckOtherMedia: record[SETTINGS_FIELD.DUCK_OTHER_MEDIA] !== false,
     showOnAllDisplays: record[SETTINGS_FIELD.SHOW_ON_ALL_DISPLAYS] === true,
     // A form this build does not draw is dropped like an unknown voice.
@@ -294,6 +305,7 @@ export class SettingsStore {
       ...((await this.#load()).voiceHotkey
         ? { voiceHotkey: (await this.#load()).voiceHotkey }
         : {}),
+      ...((await this.#load()).askHotkey ? { askHotkey: (await this.#load()).askHotkey } : {}),
       duckOtherMedia: (await this.#load()).duckOtherMedia,
       showOnAllDisplays: (await this.#load()).showOnAllDisplays,
       formFactor: (await this.#load()).formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
@@ -424,6 +436,35 @@ export class SettingsStore {
       };
       if (accelerator) next.voiceHotkey = accelerator;
       else delete next.voiceHotkey;
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+    });
+    return { settings: await this.snapshot() };
+  }
+
+  /**
+   * Main-process only, like the talk key's: the ask-key chord the user chose,
+   * for registration at startup, or nothing while the defaults stand.
+   */
+  async readAskHotkey(): Promise<string | undefined> {
+    return (await this.#load()).askHotkey;
+  }
+
+  /**
+   * Stores the chosen ask-key chord, or returns to the defaults when omitted,
+   * on the talk key's exact terms: the chord arrives already read into its one
+   * canonical spelling, and resetting is the absence of a choice.
+   */
+  async setAskHotkey(accelerator: string | undefined): Promise<SettingsUpdateResult> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (persisted.askHotkey === accelerator) return;
+      const next: PersistedSettings = {
+        ...persisted,
+        version: SETTINGS_FILE_VERSION,
+      };
+      if (accelerator) next.askHotkey = accelerator;
+      else delete next.askHotkey;
       await this.#write(next);
       this.#loading = Promise.resolve(next);
     });

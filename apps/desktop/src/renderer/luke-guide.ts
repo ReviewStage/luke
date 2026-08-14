@@ -167,6 +167,10 @@ const SETTING_GUIDE: Record<
   // changeable either way: a chord is recorded by typing it, so the fact says
   // where.
   voiceHotkey: () => undefined,
+  // Described in the ask-key fact instead, for exactly the talk key's
+  // reasons: the fact carries the key that registered, and a chord is
+  // recorded by typing it rather than saying it.
+  askHotkey: () => undefined,
   // Not a switch but a set of keys, so it is described in the facts instead:
   // which providers are connected, and that a key is only ever typed by hand.
   credentialSources: () => undefined,
@@ -182,6 +186,8 @@ export interface LukeGuideInput {
   microphoneStatus: MicrophoneStatus;
   /** The talk key as the panel shows it, absent when none was registered. */
   hotkey: { hotkey?: string; held: boolean };
+  /** The ask key as the panel shows it, absent when none was registered. */
+  askKey?: string;
 }
 
 function talkKeyFact(hotkey: LukeGuideInput["hotkey"]): AppGuideFact {
@@ -198,6 +204,22 @@ function talkKeyFact(hotkey: LukeGuideInput["hotkey"]): AppGuideFact {
   return {
     label: "Talk key",
     detail: `${hotkey.hotkey}, from any app: ${use}. A different chord can be recorded, or the default restored, in ${SETTINGS_TAB}.`,
+  };
+}
+
+function askKeyFact(askKey: string | undefined): AppGuideFact {
+  if (!askKey) {
+    return {
+      label: "Ask key",
+      detail:
+        "None is registered right now — another app may own the shortcut, or voice is off. The Settings tab shows its state.",
+    };
+  }
+  return {
+    label: "Ask key",
+    detail:
+      `${askKey}, from any app: summons the panel with the caret in the typed composer, and the ` +
+      `same press puts it away. A different chord can be recorded, or the default restored, in ${SETTINGS_TAB}.`,
   };
 }
 
@@ -251,10 +273,11 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "Two tabs. Sessions lists every observed session with its state, narrowable to all, local, " +
         "cloud, or one provider, and orderable by urgency (what needs the developer first) or " +
         "recency (what moved last first); a row can be opened, messaged, or controlled where its " +
-        "provider allows. Settings holds the preferences, the talk key, the cloud API keys, " +
-        "permissions, and Quit.",
+        "provider allows. Settings holds the preferences, the talk and ask keys, the cloud API " +
+        "keys, permissions, and Quit.",
     },
     talkKeyFact(input.hotkey),
+    askKeyFact(input.askKey),
     { label: "Microphone access", detail: MICROPHONE_DETAIL[input.microphoneStatus] },
     ...(input.voiceAvailable
       ? []

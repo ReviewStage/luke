@@ -18,6 +18,7 @@ import type { CredentialProvider } from "../shared/credential-providers";
 import { CREDENTIAL_PROVIDER_LIST } from "../shared/credential-providers";
 import {
   capturedVoiceHotkey,
+  DEFAULT_ASK_HOTKEYS,
   DEFAULT_VOICE_HOTKEYS,
   VOICE_HOTKEY_CAPTURE,
   voiceHotkeyLabel,
@@ -113,9 +114,17 @@ export interface SettingsPanelProps {
    * that answer belongs.
    */
   onVoiceHotkeyChange: (accelerator: string | undefined) => Promise<string | undefined>;
+  /** The ask key as registered, shown so it can be learned — and pressed to be changed. */
+  askHotkey?: string;
   /**
-   * Whether the recording control has the keyboard. While it does, the talk
-   * key must not open a turn: the chord arriving is an entry, not an ask.
+   * Moves the ask key to a recorded chord, or back to the defaults when
+   * omitted, on the talk key's terms: the store answers with why when it
+   * refuses, and the row is where that answer belongs.
+   */
+  onAskHotkeyChange: (accelerator: string | undefined) => Promise<string | undefined>;
+  /**
+   * Whether a recording control has the keyboard. While one does, neither Luke
+   * key may act on its own press: the chord arriving is an entry, not an ask.
    */
   onShortcutCapture: (capturing: boolean) => void;
 }
@@ -866,19 +875,25 @@ const SHORTCUT_HINT = "Hold ⌃, ⌥ or ⌘ — ⇧ may join — and press a let
  * chosen chord, and a row that showed the stored one would name a key that
  * answers nothing.
  */
-function ShortcutSection({
-  voiceHotkey,
-  voiceHotkeyHeld,
+function ShortcutRow({
+  title,
+  detail,
+  shown,
   chosen,
-  onVoiceHotkeyChange,
-  onShortcutCapture,
+  defaultKey,
+  onChange,
+  onCapture,
 }: {
-  voiceHotkey?: string | undefined;
-  voiceHotkeyHeld: boolean;
+  title: string;
+  detail: string;
+  /** The key as registered, already labelled, absent when none answered. */
+  shown?: string | undefined;
   /** Whether a chosen chord is stored, which is what Reset has to undo. */
   chosen: boolean;
-  onVoiceHotkeyChange: (accelerator: string | undefined) => Promise<string | undefined>;
-  onShortcutCapture: (capturing: boolean) => void;
+  /** The first default, which is what the reset offers to return to. */
+  defaultKey: string;
+  onChange: (accelerator: string | undefined) => Promise<string | undefined>;
+  onCapture: (capturing: boolean) => void;
 }): React.JSX.Element {
   const [recording, setRecording] = useState(false);
   // The change is a round trip through the settings file and the system's
@@ -887,116 +902,158 @@ function ShortcutSection({
   const [busy, setBusy] = useState(false);
   const [rejection, setRejection] = useState<string>();
 
-  // The talk key stays registered while a chord is recorded — the recording
-  // ends by replacing it — so pressing the current chord mid-recording would
-  // open the microphone under the very field being typed into. The app is
-  // told when the field has the keyboard so it can hold that press, and the
-  // unmount arm covers the panel closing over an open recording.
+  // Both Luke keys stay registered while a chord is recorded — the recording
+  // ends by replacing one — so pressing a current chord mid-recording would
+  // open the microphone, or summon the composer, under the very field being
+  // typed into. The app is told when a field has the keyboard so it can hold
+  // that press, and the unmount arm covers the panel closing over an open
+  // recording.
   useEffect(() => {
-    onShortcutCapture(recording);
-    return () => onShortcutCapture(false);
-  }, [recording, onShortcutCapture]);
+    onCapture(recording);
+    return () => onCapture(false);
+  }, [recording, onCapture]);
 
   const apply = async (accelerator: string | undefined) => {
     setBusy(true);
-    setRejection(await onVoiceHotkeyChange(accelerator));
+    setRejection(await onChange(accelerator));
     setBusy(false);
   };
 
+  return (
+    <div className="settings-row">
+      <span className="settings-copy">
+        <strong>{title}</strong>
+        <small>{detail}</small>
+      </span>
+      <span className="shortcut-controls">
+        <span className="settings-actions">
+          <span className="shortcut-key" data-recording={String(recording)}>
+            {recording ? "Type a shortcut…" : (shown ?? "Unavailable")}
+          </span>
+          {chosen && !recording ? (
+            <button
+              type="button"
+              className="icon-button"
+              disabled={busy}
+              aria-label={`Reset the shortcut to ${voiceHotkeyLabel(defaultKey)}`}
+              title={`Back to ${voiceHotkeyLabel(defaultKey)}`}
+              onClick={() => void apply(undefined)}
+            >
+              <ResetIcon />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="icon-button"
+            disabled={busy}
+            aria-label={
+              recording
+                ? "Type the new shortcut, or press Escape to keep this one"
+                : `Change the shortcut for ${title}`
+            }
+            title={recording ? "Cancel" : "Change…"}
+            onClick={() => {
+              if (recording) {
+                setRecording(false);
+                return;
+              }
+              setRejection(undefined);
+              setRecording(true);
+            }}
+            onFocus={() => {
+              // The panel can be showing without its window being key, and a
+              // recording no keystroke can reach would read as a dead control.
+              window.sidecar.focusPanel();
+            }}
+            // Focus leaving takes the recording with it: whatever was pressed
+            // instead is its own act, not a half-formed chord left armed.
+            onBlur={() => setRecording(false)}
+            onKeyDown={(event) => {
+              // A key that repeats is being held through the chord, not
+              // pressed as one; only its first arrival is read.
+              if (!recording || event.repeat) return;
+              // Nothing typed here is typing: not a Space press on the button,
+              // and not the panel's own Escape-to-close behind it.
+              event.preventDefault();
+              event.stopPropagation();
+              if (event.key === "Escape") {
+                setRecording(false);
+                return;
+              }
+              const read = capturedVoiceHotkey(event);
+              if (read.outcome === VOICE_HOTKEY_CAPTURE.PENDING) return;
+              if (read.outcome === VOICE_HOTKEY_CAPTURE.REFUSED) {
+                setRejection(SHORTCUT_HINT);
+                return;
+              }
+              setRejection(undefined);
+              setRecording(false);
+              void apply(read.accelerator);
+            }}
+          >
+            {recording ? <CloseIcon /> : <PencilIcon />}
+          </button>
+        </span>
+        {rejection ? (
+          <p className="error-message">{rejection}</p>
+        ) : recording ? (
+          <p className="shortcut-hint">{SHORTCUT_HINT}</p>
+        ) : null}
+      </span>
+    </div>
+  );
+}
+
+function ShortcutSection({
+  voiceHotkey,
+  voiceHotkeyHeld,
+  chosen,
+  onVoiceHotkeyChange,
+  askHotkey,
+  askChosen,
+  onAskHotkeyChange,
+  onShortcutCapture,
+}: {
+  voiceHotkey?: string | undefined;
+  voiceHotkeyHeld: boolean;
+  chosen: boolean;
+  onVoiceHotkeyChange: (accelerator: string | undefined) => Promise<string | undefined>;
+  askHotkey?: string | undefined;
+  askChosen: boolean;
+  onAskHotkeyChange: (accelerator: string | undefined) => Promise<string | undefined>;
+  onShortcutCapture: (capturing: boolean) => void;
+}): React.JSX.Element {
   return (
     <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
       <h2>
         <KeyboardIcon />
         Keyboard shortcuts
       </h2>
-      <div className="settings-row">
-        <span className="settings-copy">
-          <strong>Talk to Luke</strong>
-          {/* What the key actually does, which depends on whether it can
-              report being let go of. Describing a hold to someone whose key
-              can only toggle would leave them holding it and wondering. */}
-          <small>
-            {voiceHotkeyHeld
-              ? "Hold to talk, let go to send. Tap instead to keep it open."
-              : "Press to talk, again to send, again to interrupt."}
-          </small>
-        </span>
-        <span className="shortcut-controls">
-          <span className="settings-actions">
-            <span className="shortcut-key" data-recording={String(recording)}>
-              {recording ? "Type a shortcut…" : (voiceHotkey ?? "Unavailable")}
-            </span>
-            {chosen && !recording ? (
-              <button
-                type="button"
-                className="icon-button"
-                disabled={busy}
-                aria-label={`Reset the shortcut to ${voiceHotkeyLabel(DEFAULT_VOICE_HOTKEYS[0] ?? "")}`}
-                title={`Back to ${voiceHotkeyLabel(DEFAULT_VOICE_HOTKEYS[0] ?? "")}`}
-                onClick={() => void apply(undefined)}
-              >
-                <ResetIcon />
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className="icon-button"
-              disabled={busy}
-              aria-label={
-                recording
-                  ? "Type the new shortcut, or press Escape to keep this one"
-                  : "Change the shortcut for talking to Luke"
-              }
-              title={recording ? "Cancel" : "Change…"}
-              onClick={() => {
-                if (recording) {
-                  setRecording(false);
-                  return;
-                }
-                setRejection(undefined);
-                setRecording(true);
-              }}
-              onFocus={() => {
-                // The panel can be showing without its window being key, and a
-                // recording no keystroke can reach would read as a dead control.
-                window.sidecar.focusPanel();
-              }}
-              // Focus leaving takes the recording with it: whatever was pressed
-              // instead is its own act, not a half-formed chord left armed.
-              onBlur={() => setRecording(false)}
-              onKeyDown={(event) => {
-                // A key that repeats is being held through the chord, not
-                // pressed as one; only its first arrival is read.
-                if (!recording || event.repeat) return;
-                // Nothing typed here is typing: not a Space press on the button,
-                // and not the panel's own Escape-to-close behind it.
-                event.preventDefault();
-                event.stopPropagation();
-                if (event.key === "Escape") {
-                  setRecording(false);
-                  return;
-                }
-                const read = capturedVoiceHotkey(event);
-                if (read.outcome === VOICE_HOTKEY_CAPTURE.PENDING) return;
-                if (read.outcome === VOICE_HOTKEY_CAPTURE.REFUSED) {
-                  setRejection(SHORTCUT_HINT);
-                  return;
-                }
-                setRejection(undefined);
-                setRecording(false);
-                void apply(read.accelerator);
-              }}
-            >
-              {recording ? <CloseIcon /> : <PencilIcon />}
-            </button>
-          </span>
-          {rejection ? (
-            <p className="error-message">{rejection}</p>
-          ) : recording ? (
-            <p className="shortcut-hint">{SHORTCUT_HINT}</p>
-          ) : null}
-        </span>
-      </div>
+      <ShortcutRow
+        title="Talk to Luke"
+        // What the key actually does, which depends on whether it can report
+        // being let go of. Describing a hold to someone whose key can only
+        // toggle would leave them holding it and wondering.
+        detail={
+          voiceHotkeyHeld
+            ? "Hold to talk, let go to send. Tap instead to keep it open."
+            : "Press to talk, again to send, again to interrupt."
+        }
+        {...(voiceHotkey ? { shown: voiceHotkey } : {})}
+        chosen={chosen}
+        defaultKey={DEFAULT_VOICE_HOTKEYS[0] ?? ""}
+        onChange={onVoiceHotkeyChange}
+        onCapture={onShortcutCapture}
+      />
+      <ShortcutRow
+        title="Ask Luke"
+        detail="Press to type to Luke from any app. The same key puts it away."
+        {...(askHotkey ? { shown: askHotkey } : {})}
+        chosen={askChosen}
+        defaultKey={DEFAULT_ASK_HOTKEYS[0] ?? ""}
+        onChange={onAskHotkeyChange}
+        onCapture={onShortcutCapture}
+      />
     </section>
   );
 }
@@ -1022,6 +1079,8 @@ export function SettingsPanel({
   voiceHotkey,
   voiceHotkeyHeld,
   onVoiceHotkeyChange,
+  askHotkey,
+  onAskHotkeyChange,
   onShortcutCapture,
 }: SettingsPanelProps): React.JSX.Element {
   const microphone = microphoneAccessRow({ voiceAvailable, status: microphoneStatus });
@@ -1058,6 +1117,9 @@ export function SettingsPanel({
         voiceHotkeyHeld={voiceHotkeyHeld}
         chosen={settings?.voiceHotkey !== undefined}
         onVoiceHotkeyChange={onVoiceHotkeyChange}
+        {...(askHotkey ? { askHotkey } : {})}
+        askChosen={settings?.askHotkey !== undefined}
+        onAskHotkeyChange={onAskHotkeyChange}
         onShortcutCapture={onShortcutCapture}
       />
 
