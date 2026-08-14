@@ -213,6 +213,15 @@ account, open it, drag Luke to Applications, and confirm the first launch passes
 Gatekeeper without an override. You can also assess the installed app with
 `spctl --assess --type execute -vv /Applications/Luke.app`.
 
+## Session notifications
+
+Luke posts a macOS notification when an observed session starts waiting on
+you, stops on an error, or finishes. The trigger is the status change itself,
+observed locally — no credential, evaluator, or network is involved, and
+nothing leaves the machine. Pressing a notification opens the panel. The
+banners can be switched off in Settings · Preferences ("Notify when a session
+needs you"); the panel and the capsule count show the same states either way.
+
 ## Optional attention review
 
 Session monitoring does not require `OPENAI_API_KEY`: Claude Code, Codex, and

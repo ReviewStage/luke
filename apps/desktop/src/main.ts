@@ -17,6 +17,7 @@ import {
   isWorkspaceAgentCapableAdapter,
   isWorkspaceCapableAdapter,
   type NativeNotchGeometry,
+  type NormalizedSession,
   normalizeObservedWorkspaceProjects,
   normalizeTrackedIssue,
   type ObservedWorkspaceProject,
@@ -31,6 +32,7 @@ import {
   resolveNotchGeometry,
   SessionAttentionReviewer,
   type SessionIdentity,
+  SessionNoticeTracker,
   type SessionProviderAdapter,
   sessionMessageText,
   TRACKER_ACTION_RESULT_STATUS,
@@ -48,6 +50,7 @@ import {
   type IpcMainInvokeEvent,
   ipcMain,
   Menu,
+  Notification,
   nativeImage,
   nativeTheme,
   powerMonitor,
@@ -78,6 +81,7 @@ import {
 } from "./openai-realtime-credentials";
 import { OpenCodeSessionAdapter } from "./opencode-adapter";
 import { OutputVolumeWatcher } from "./output-volume";
+import { sessionNotificationContent } from "./session-notifications";
 import { SettingsStore } from "./settings-store";
 import {
   type AppBootstrap,
@@ -206,6 +210,14 @@ let issueRefreshRunning = false;
  * of dropping.
  */
 let issueRefreshQueued = false;
+// Notices come from status edges the registry observed, never from anything a
+// model decided, so they work — and matter most — with no evaluator configured.
+const sessionNoticeTracker = new SessionNoticeTracker();
+/**
+ * Follows the stored answer: read at startup, updated by its own handler. On
+ * until the file says otherwise, matching the store's default.
+ */
+let sessionNotificationsEnabled = true;
 // A fixture run must stay deterministic and credential-free, so it never builds
 // an evaluator — not just capture runs.
 const attentionEvaluator = fixtureMode ? undefined : openAiAttentionEvaluatorFromEnvironment();
@@ -1296,6 +1308,27 @@ function registerIpc(): void {
     },
   );
 
+  // The notifier follows the stored answer at once, like the duck: off must
+  // silence the very next pass, not the next launch.
+  ipcMain.handle(
+    channels.setSessionNotifications,
+    async (event, enabled: unknown): Promise<SettingsUpdateResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (typeof enabled !== "boolean") throw new Error("Invalid notification request");
+      try {
+        const result = await settingsStore.setSessionNotifications(enabled);
+        sessionNotificationsEnabled = result.settings.sessionNotifications;
+        broadcastSettings(result.settings, event.sender);
+        return result;
+      } catch {
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "Could not save that setting on this system.",
+        };
+      }
+    },
+  );
+
   // A statement of state, not a request: the renderer says whether a spoken
   // exchange is live, and the duck holds every other decision — the setting,
   // the hangover after an exchange, which players are playing at all. Each
@@ -1759,12 +1792,46 @@ async function reviewSessionAttention(): Promise<void> {
   }
 }
 
+/**
+ * Posts a macOS notification for each session that just arrived somewhere the
+ * user may be waiting on — an answer wanted, an error, a finish. The trigger
+ * is a status edge the registry observed, a deterministic fact like the media
+ * duck's, so nothing Luke read or decided can reach it; and a banner is pure
+ * display of the user's own session data, on the user's own machine.
+ */
+function announceSessionNotices(sessions: readonly NormalizedSession[]): void {
+  // The tracker is fed on every commit whether or not banners are on: feeding
+  // is what keeps its picture current, so switching them on never replays
+  // edges that happened while they were off.
+  const notices = sessionNoticeTracker.notices(sessions, Date.now());
+  if (notices.length === 0 || !sessionNotificationsEnabled || !Notification.isSupported()) return;
+  for (const notice of notices) {
+    const content = sessionNotificationContent(notice);
+    const notification = new Notification({
+      title: content.title,
+      ...(content.subtitle ? { subtitle: content.subtitle } : {}),
+      body: content.body,
+    });
+    // A banner is a door as well as a line: pressing it brings the panel up,
+    // the same press the capsule answers. Nothing reaches any provider.
+    notification.on("click", () => {
+      const host = voiceHostWindow();
+      const displayId = host ? displayIdFor(host.webContents) : undefined;
+      if (displayId !== undefined) setWindowMode(displayId, "expanded", true);
+    });
+    notification.show();
+  }
+}
+
 function startSessionObservation(): void {
   if (fixtureMode) return;
   sessionRegistry.subscribe((snapshot) => {
     for (const window of panelWindows.values()) {
       window.webContents.send(channels.sessionsChanged, snapshot.sessions);
     }
+    // The registry only speaks on an effective change, which is exactly when
+    // a status edge can exist to announce.
+    announceSessionNotices(snapshot.sessions);
     // A commit is the earliest a write-triggered refresh can have changed the
     // offer, so the announcement rides it rather than waiting for the timer.
     broadcastWorkspaceProjects();
@@ -2180,6 +2247,16 @@ if (!app.requestSingleInstanceLock()) {
     void settingsStore.duckOtherMedia().then(
       (enabled) => mediaDuck.setEnabled(enabled),
       () => mediaDuck.setEnabled(true),
+    );
+    // The notifier arms the same way, under the same default: a file that
+    // cannot be read leaves the banners on.
+    void settingsStore.readSessionNotifications().then(
+      (enabled) => {
+        sessionNotificationsEnabled = enabled;
+      },
+      () => {
+        sessionNotificationsEnabled = true;
+      },
     );
     // Awaited, so the chosen voice reaches the minter before the renderer
     // exists to ask for a credential: the first conversation must already

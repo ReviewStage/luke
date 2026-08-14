@@ -1,0 +1,158 @@
+import type { NormalizedSession, SessionStatus } from "./session";
+import { SESSION_STATUS } from "./session";
+
+/**
+ * The statuses worth telling the user about when a session arrives at one.
+ * `working` is the quiet default and `unknown` is an adapter losing sight of a
+ * session, so neither is news; the three that remain are the three things a
+ * developer steps away from an agent to wait for.
+ */
+export const SESSION_NOTICE_STATUS = {
+  WAITING: SESSION_STATUS.WAITING,
+  ERROR: SESSION_STATUS.ERROR,
+  COMPLETE: SESSION_STATUS.COMPLETE,
+} as const;
+
+export type SessionNoticeStatus =
+  (typeof SESSION_NOTICE_STATUS)[keyof typeof SESSION_NOTICE_STATUS];
+
+/**
+ * When a pass produces more notices than the cap, the ones most in need of a
+ * hand survive the trim: a stopped session over one with a question, and a
+ * question over a finish that will keep.
+ */
+const NOTICE_PRIORITY: readonly SessionNoticeStatus[] = [
+  SESSION_NOTICE_STATUS.ERROR,
+  SESSION_NOTICE_STATUS.WAITING,
+  SESSION_NOTICE_STATUS.COMPLETE,
+];
+
+/**
+ * How long the same session stays quiet about the same status once it has been
+ * noticed. An adapter that flaps between two readings must not turn each flap
+ * into a banner; a session genuinely stopping twice in an afternoon still gets
+ * its second notice.
+ */
+export const SESSION_NOTICE_REPEAT_WINDOW_MS = 5 * 60_000;
+
+/**
+ * The most notices one pass may produce. A burst larger than this is a
+ * provider reconnecting or re-reading its world, not six agents finishing in
+ * the same five seconds, and the panel still shows every session either way.
+ */
+export const MAXIMUM_NOTICES_PER_PASS = 6;
+
+/**
+ * One session arriving at a status the user may want to know about. Fields,
+ * not sentences: the surface that shows a notice words it, the way it words a
+ * row. Everything here is already bounded by `normalizeSession`.
+ */
+export interface SessionNotice {
+  providerId: string;
+  providerSessionId: string;
+  providerName: string;
+  title: string;
+  status: SessionNoticeStatus;
+  previousStatus: SessionStatus;
+  /** Why the session stopped, when its provider said. */
+  error?: string;
+  repository?: string;
+  branch?: string;
+  observedAt: number;
+}
+
+interface TrackedSessionState {
+  status: SessionStatus;
+  /** When each notice-worthy status was last noticed, for the repeat window. */
+  noticedAt: Map<SessionNoticeStatus, number>;
+}
+
+function noticeStatus(status: SessionStatus): SessionNoticeStatus | undefined {
+  return Object.values(SESSION_NOTICE_STATUS).find((candidate) => candidate === status);
+}
+
+function sessionNotice(session: NormalizedSession, previousStatus: SessionStatus): SessionNotice {
+  const status = noticeStatus(session.status);
+  if (!status) throw new Error(`Not a notice status: ${session.status}`);
+  return {
+    providerId: session.providerId,
+    providerSessionId: session.providerSessionId,
+    providerName: session.provider.displayName,
+    title: session.title,
+    status,
+    previousStatus,
+    ...(session.detail.error ? { error: session.detail.error } : {}),
+    ...(session.detail.repository ? { repository: session.detail.repository } : {}),
+    ...(session.detail.branch ? { branch: session.detail.branch } : {}),
+    observedAt: session.observedAt,
+  };
+}
+
+/**
+ * Derives notices from the edges between one observation pass and the next: a
+ * session already waiting when Luke first sees it is the panel's to show, not
+ * a banner's to announce, so only a change of status while watched is news.
+ * Deterministic by construction — nothing a model wrote can reach it — and
+ * purely derived from the roster, so it can never act on a session, only
+ * describe one.
+ *
+ * The tracker must be fed every pass whether or not anything will be shown:
+ * feeding is what keeps its picture current, so switching notices on never
+ * replays edges that happened while they were off.
+ */
+export class SessionNoticeTracker {
+  /** Keyed by the original identifiers, never a composite string. */
+  readonly #sessions = new Map<string, Map<string, TrackedSessionState>>();
+
+  /**
+   * Consumes one full observation pass and returns the notices it produced.
+   * `now` anchors the repeat window; sessions absent from the pass are
+   * forgotten, so a session that returns later is seeded again rather than
+   * diffed against a stale reading.
+   */
+  notices(sessions: readonly NormalizedSession[], now: number): readonly SessionNotice[] {
+    const produced: SessionNotice[] = [];
+    const next = new Map<string, Map<string, TrackedSessionState>>();
+
+    for (const session of sessions) {
+      const previous = this.#sessions.get(session.providerId)?.get(session.providerSessionId);
+      const state: TrackedSessionState = {
+        status: session.status,
+        noticedAt: previous?.noticedAt ?? new Map(),
+      };
+      let provider = next.get(session.providerId);
+      if (!provider) {
+        provider = new Map();
+        next.set(session.providerId, provider);
+      }
+      provider.set(session.providerSessionId, state);
+
+      // First sight seeds silently; an unchanged status is not an edge.
+      if (!previous || previous.status === session.status) continue;
+      const status = noticeStatus(session.status);
+      if (!status) continue;
+      const lastNoticed = state.noticedAt.get(status);
+      if (lastNoticed !== undefined && now - lastNoticed < SESSION_NOTICE_REPEAT_WINDOW_MS) {
+        continue;
+      }
+      state.noticedAt.set(status, now);
+      produced.push(sessionNotice(session, previous.status));
+    }
+
+    this.#sessions.clear();
+    for (const [providerId, provider] of next) this.#sessions.set(providerId, provider);
+
+    if (produced.length <= MAXIMUM_NOTICES_PER_PASS) return produced;
+    // A stable sort by urgency, then the cap: what is dropped is the tail of
+    // a burst, and every dropped session still shows its state in the panel.
+    return produced
+      .map((notice, index) => ({ notice, index }))
+      .sort((a, b) => {
+        const byPriority =
+          NOTICE_PRIORITY.indexOf(a.notice.status) - NOTICE_PRIORITY.indexOf(b.notice.status);
+        return byPriority !== 0 ? byPriority : a.index - b.index;
+      })
+      .slice(0, MAXIMUM_NOTICES_PER_PASS)
+      .map((entry) => entry.notice);
+  }
+}

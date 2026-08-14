@@ -634,6 +634,13 @@ export function App(): React.JSX.Element {
     return result.reason;
   }, []);
 
+  /** And again for the notification banners. */
+  const changeSessionNotifications = useCallback(async (enabled: boolean) => {
+    const result = await window.sidecar.setSessionNotifications(enabled);
+    setSettings(result.settings);
+    return result.reason;
+  }, []);
+
   /**
    * The talk key going down. Every press goes to the session, including the one
    * that has no call to press against yet: the microphone opens with the call,
@@ -1936,6 +1943,7 @@ export function App(): React.JSX.Element {
               settings,
               onVoiceCaptionsChange: changeVoiceCaptions,
               onDuckOtherMediaChange: changeDuckOtherMedia,
+              onSessionNotificationsChange: changeSessionNotifications,
               credentials,
               feedback: feedbackControl,
               onVoiceChange: changeVoice,

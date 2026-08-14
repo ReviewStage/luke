@@ -111,6 +111,14 @@ export interface AppSettings {
    */
   duckOtherMedia: boolean;
   /**
+   * Whether a session arriving somewhere that wants the user — waiting on an
+   * answer, stopped on an error, or finished — posts a macOS notification. On
+   * by default: an agent finishing while its developer looks elsewhere is the
+   * one moment a sidecar exists for, and the notch's own signals only help the
+   * eyes already on it.
+   */
+  sessionNotifications: boolean;
+  /**
    * Whether Luke stands on every connected display at once. Off by default:
    * he keeps to the system's main display until asked, and turning this off
    * again is what brings him back to it.
@@ -287,6 +295,8 @@ export interface AppBridge {
   setVoiceCaptions(enabled: boolean): Promise<SettingsUpdateResult>;
   /** Turns the quieting of Music and Spotify during a spoken exchange on or off. */
   setDuckOtherMedia(enabled: boolean): Promise<SettingsUpdateResult>;
+  /** Turns the macOS notification about a session that wants the user on or off. */
+  setSessionNotifications(enabled: boolean): Promise<SettingsUpdateResult>;
   /**
    * Whether a spoken exchange is live — a turn being held, a reply being
    * spoken, or the call coming up between them. It drives the media duck and
@@ -437,6 +447,7 @@ export const channels = {
   setVoiceHotkey: "app:set-voice-hotkey",
   setAskHotkey: "app:set-ask-hotkey",
   setDuckOtherMedia: "app:set-duck-other-media",
+  setSessionNotifications: "app:set-session-notifications",
   setVoiceExchange: "app:set-voice-exchange",
   openProviderApiKeys: "app:open-provider-api-keys",
   setShowInMenuBar: "app:set-show-in-menu-bar",

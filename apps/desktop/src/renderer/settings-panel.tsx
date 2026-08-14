@@ -80,6 +80,8 @@ export interface SettingsPanelProps {
   onVoiceCaptionsChange: (enabled: boolean) => Promise<string | undefined>;
   /** Turns the quieting of Music and Spotify during a spoken exchange on or off. */
   onDuckOtherMediaChange: (enabled: boolean) => Promise<string | undefined>;
+  /** Turns the macOS notification about a session that wants the user on or off. */
+  onSessionNotificationsChange: (enabled: boolean) => Promise<string | undefined>;
   /** The one credential being entered anywhere, and everything that can be done to it. */
   credentials: CredentialEntryControl;
   /** The one note to the founders being written, and everything that can be done to it. */
@@ -637,6 +639,8 @@ function PreferencesSection({
   onVoiceCaptionsChange,
   ducking,
   onDuckOtherMediaChange,
+  notifications,
+  onSessionNotificationsChange,
   shown,
   onShowInMenuBarChange,
   dockShown,
@@ -654,6 +658,8 @@ function PreferencesSection({
   onVoiceCaptionsChange: (enabled: boolean) => Promise<string | undefined>;
   ducking: boolean;
   onDuckOtherMediaChange: (enabled: boolean) => Promise<string | undefined>;
+  notifications: boolean;
+  onSessionNotificationsChange: (enabled: boolean) => Promise<string | undefined>;
   shown: boolean;
   onShowInMenuBarChange: (show: boolean) => Promise<string | undefined>;
   dockShown: boolean;
@@ -692,6 +698,12 @@ function PreferencesSection({
     setDuckBusy(true);
     setRejection(await onDuckOtherMediaChange(!ducking));
     setDuckBusy(false);
+  };
+  const [notificationsBusy, setNotificationsBusy] = useState(false);
+  const toggleNotifications = async () => {
+    setNotificationsBusy(true);
+    setRejection(await onSessionNotificationsChange(!notifications));
+    setNotificationsBusy(false);
   };
   // The display and form rows round-trip like the switches above, so each
   // rests on its own flag and answers on the shared rejection line.
@@ -826,6 +838,28 @@ function PreferencesSection({
           className="switch"
           disabled={duckBusy}
           onClick={() => void toggleDucking()}
+        >
+          <span className="switch-thumb" />
+        </button>
+      </div>
+      <div className="settings-row">
+        <span className="settings-copy">
+          <strong>Notify when a session needs you</strong>
+          {/* The three edges by name, because the switch governs exactly these
+              and the panel already shows everything else: a banner is for the
+              developer whose eyes are on another screen entirely. */}
+          <small>
+            A macOS notification when an agent starts waiting on you, hits an error, or finishes.
+          </small>
+        </span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={notifications}
+          aria-label="Notify when a session needs you"
+          className="switch"
+          disabled={notificationsBusy}
+          onClick={() => void toggleNotifications()}
         >
           <span className="switch-thumb" />
         </button>
@@ -1142,6 +1176,7 @@ export function SettingsPanel({
   settings,
   onVoiceCaptionsChange,
   onDuckOtherMediaChange,
+  onSessionNotificationsChange,
   credentials,
   feedback,
   onVoiceChange,
@@ -1177,6 +1212,8 @@ export function SettingsPanel({
           onVoiceCaptionsChange={onVoiceCaptionsChange}
           ducking={settings.duckOtherMedia}
           onDuckOtherMediaChange={onDuckOtherMediaChange}
+          notifications={settings.sessionNotifications}
+          onSessionNotificationsChange={onSessionNotificationsChange}
           shown={settings.showInMenuBar}
           onShowInMenuBarChange={onShowInMenuBarChange}
           dockShown={settings.showInDock}
