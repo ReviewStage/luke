@@ -402,6 +402,46 @@ test("a filter whose last session has left falls back to showing everything", ()
   }
 });
 
+// A spoken ask can narrow to the only agent there is, which no chip offers —
+// chips appear only once there is a second value to tell apart. The narrowing
+// must survive anyway: it hides nothing while it is the only agent, and the
+// moment another appears the list stays on what the developer asked to watch
+// rather than widening out from under them.
+test("a filter that still matches survives even when no chip offers it", () => {
+  const codexOnly = displaySessions(bootstrap(false), [
+    liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.WORKING),
+    liveSession(CODEX_PROVIDER, "codex-2", SESSION_STATUS.COMPLETE),
+  ]);
+  const narrowed = arrangeSessions(codexOnly, {
+    ...DEFAULT_SESSION_VIEW,
+    filter: PROVIDER_ID.CODEX,
+  });
+
+  assert.equal(narrowed.filter, PROVIDER_ID.CODEX);
+  assert.equal(narrowed.sessions.length, 2);
+  // No second agent yet, so no chips are offered — the filter outlives them.
+  assert.deepEqual(
+    narrowed.options.map((option) => option.filter),
+    [SESSION_FILTER.ALL],
+  );
+
+  const withClaude = displaySessions(bootstrap(false), [
+    liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.WORKING),
+    liveSession(CODEX_PROVIDER, "codex-2", SESSION_STATUS.COMPLETE),
+    liveSession(CLAUDE_PROVIDER, "claude-1", SESSION_STATUS.WORKING),
+  ]);
+  const still = arrangeSessions(withClaude, {
+    ...DEFAULT_SESSION_VIEW,
+    filter: PROVIDER_ID.CODEX,
+  });
+
+  assert.equal(still.filter, PROVIDER_ID.CODEX);
+  assert.deepEqual(
+    still.sessions.map((session) => session.providerId),
+    [PROVIDER_ID.CODEX, PROVIDER_ID.CODEX],
+  );
+});
+
 // The panel stores the filter this returns rather than only drawing it, so a
 // filter that emptied is dropped instead of lying dormant behind an All that
 // only looks chosen. That write is safe exactly while arranging the result

@@ -104,6 +104,12 @@ review uses — provider name, session title, status, and the provider's own
 summary — so a spoken question about your sessions can be answered. No
 transcript, file content, or command output is ever included.
 
+Luke also sends an app guide describing itself — its features, each setting's
+current value, the talk key, and whether each cloud provider is connected — so
+a spoken question about Luke can be answered and a spoken ask can change a
+setting. The guide never includes an API key, any part of one, or any value
+read from your environment beyond whether one exists.
+
 Luke does not record the conversation, write audio to disk, or keep a
 transcript. With captions enabled in Settings — they are off by default — the
 reply's text is drawn on screen while Luke speaks; it is discarded when the
