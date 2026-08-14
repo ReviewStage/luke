@@ -1761,6 +1761,69 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   font-weight: 700;
 }
 
+/* The front page's list of pages. Its rows carry their own padding for the
+   hover pill, so the card keeps less of its own vertically: the pill's inset
+   already stands the first and last names off the card's edges, and the two
+   paddings stacked read as blank space rather than as calm. */
+.settings-index {
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+/* A page that is one nameless group is no group at all: its rows stand on the
+   page itself, under the header that already names it, and a card around them
+   would be a border around nothing. The border goes transparent rather than
+   away and the horizontal padding stays, so the rows sit exactly where the
+   carded pages draw theirs and a page turn moves nothing sideways. */
+.settings-plain {
+  padding-top: 2px;
+  padding-bottom: 2px;
+  border-color: transparent;
+  background: none;
+}
+
+/* Turning a settings page follows the shape contract. Leaving: the old page's
+   content goes first, over `--duration-exit` and with no delay — the state
+   being entered declares its own `--row-delay` — and only its end releases
+   the room, so the surface never resizes out from under something still
+   drawn. The swap is timed off the same token, mirrored in `PAGE_EXIT_MS`. */
+.settings[data-page-leaving="true"] .settings-header,
+.settings[data-page-leaving="true"] .settings-section,
+.settings[data-page-leaving="true"] .quit-button {
+  --row-delay: 0s;
+
+  opacity: 0;
+}
+
+/* Arriving: the new page's room lands at once — the surface takes one clean
+   spring — and its content becomes visible only over black, riding the pair
+   every arriving element rides on the same `--row-delay` the panel's own
+   arrival fans out with. A mount animation with `backwards` fill rather than
+   a transition, because an element cannot transition from a style it never
+   held. Scoped to a panel that has actually turned a page, so the tab's
+   first draw stays the panel-arrival transition's alone. */
+@keyframes settings-page-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes settings-page-travel {
+  from {
+    transform: translateY(
+      calc((min(var(--row-index, 0), var(--row-fan-limit)) + 1) * var(--row-fan) * -1)
+    );
+  }
+}
+
+.settings[data-page-turned="true"] .settings-header,
+.settings[data-page-turned="true"] .settings-section,
+.settings[data-page-turned="true"] .quit-button {
+  animation:
+    settings-page-fade var(--duration-quick) var(--motion-exit) var(--row-delay) backwards,
+    settings-page-travel var(--duration-shape) var(--spring) var(--row-delay) backwards;
+}
+
 /* A front-page row that opens a page rather than holding a control: glyph,
    name, what the page holds, and the chevron that promises somewhere to go.
    The hover bleeds to the section's padding so the pill reads as the row. */

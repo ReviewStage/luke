@@ -67,6 +67,7 @@ import {
   TrashIcon,
 } from "./settings-icons";
 import {
+  PAGE_EXIT_MS,
   SETTINGS_SUBVIEW_LIST,
   SETTINGS_VIEW,
   type SettingsSubview,
@@ -796,7 +797,10 @@ function VoiceSection({
     setNotificationsBusy(false);
   };
   return (
-    <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
+    <section
+      className="settings-section settings-plain"
+      style={{ "--row-index": 1 } as React.CSSProperties}
+    >
       <div className="settings-row">
         <span className="settings-copy">
           <strong>Voice</strong>
@@ -998,7 +1002,10 @@ function AppearanceSection({
     setFormBusy(false);
   };
   return (
-    <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
+    <section
+      className="settings-section settings-plain"
+      style={{ "--row-index": 1 } as React.CSSProperties}
+    >
       <div className="settings-row">
         <span className="settings-copy">
           <strong>Show Luke in the menu bar</strong>
@@ -1274,7 +1281,10 @@ function ShortcutSection({
   onShortcutCapture: (capturing: boolean) => void;
 }): React.JSX.Element {
   return (
-    <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
+    <section
+      className="settings-section settings-plain"
+      style={{ "--row-index": 1 } as React.CSSProperties}
+    >
       <ShortcutRow
         title="Talk to Luke"
         // What the key actually does, which depends on whether it can report
@@ -1345,52 +1355,76 @@ export function SettingsPanel({
   onShortcutCapture,
 }: SettingsPanelProps): React.JSX.Element {
   const microphone = microphoneAccessRow({ voiceAvailable, status: microphoneStatus });
+  // The page as drawn, trailing the page as asked: turning one is a leave and
+  // then an arrival, and the leaving page must be held mounted through its own
+  // exit — the surface never resizes out from under something still drawn.
+  // The swap is timed off the same token the stylesheet fades with.
+  const [drawnView, setDrawnView] = useState(view);
+  // Whether a page has turned since this panel mounted, which is what scopes
+  // the arrival animation: the tab's first draw belongs to the panel-arrival
+  // transition alone.
+  const [turned, setTurned] = useState(false);
+  const leaving = drawnView !== view;
+  useEffect(() => {
+    if (!leaving) return;
+    const timer = window.setTimeout(() => {
+      setDrawnView(view);
+      setTurned(true);
+    }, PAGE_EXIT_MS);
+    return () => window.clearTimeout(timer);
+  }, [leaving, view]);
   // Moving between pages moves the keyboard with it: into a page, onto its
-  // back button; back out, onto the row that opened the page just left. Only
-  // while the panel is the shape on screen — a view reset behind a closed
-  // panel is housekeeping, and reaching into an inert stage would find
-  // nothing focusable anyway.
+  // back button; back out, onto the row that opened the page just left. Keyed
+  // to the drawn page, because the control being reached for only exists once
+  // the new page is mounted. Only while the panel is the shape on screen — a
+  // view reset behind a closed panel is housekeeping, and reaching into an
+  // inert stage would find nothing focusable anyway.
   const backControl = useRef<HTMLButtonElement | null>(null);
-  const heldView = useRef(view);
+  const heldView = useRef(drawnView);
   useEffect(() => {
     const previous = heldView.current;
-    heldView.current = view;
-    if (previous === view || !panelOpen) return;
-    if (view === SETTINGS_VIEW.ROOT) {
+    heldView.current = drawnView;
+    if (previous === drawnView || !panelOpen) return;
+    if (drawnView === SETTINGS_VIEW.ROOT) {
       if (previous !== SETTINGS_VIEW.ROOT) {
         document.getElementById(settingsNavRowId(previous))?.focus();
       }
       return;
     }
     backControl.current?.focus();
-  }, [view, panelOpen]);
+  }, [drawnView, panelOpen]);
   return (
     <div
       className="settings"
       role="tabpanel"
       id={panelPanelId(PANEL_TAB.SETTINGS)}
       aria-labelledby={panelTabId(PANEL_TAB.SETTINGS)}
+      data-page-leaving={String(leaving)}
+      data-page-turned={String(turned)}
     >
-      {view !== SETTINGS_VIEW.ROOT ? (
+      {drawnView !== SETTINGS_VIEW.ROOT ? (
         <SettingsPageHeader
-          view={view}
+          view={drawnView}
           onBack={() => onViewChange(SETTINGS_VIEW.ROOT)}
           backControl={backControl}
         />
       ) : null}
 
-      {view === SETTINGS_VIEW.ROOT ? (
+      {drawnView === SETTINGS_VIEW.ROOT ? (
         /* The front page: one row per page, then the sections that answer at
            a glance — what Luke is allowed, the way to the founders, and the
            way out. */
-        <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
+        <section
+          className="settings-section settings-index"
+          style={{ "--row-index": 1 } as React.CSSProperties}
+        >
           {SETTINGS_SUBVIEW_LIST.map((subview) => (
             <SettingsNavRow key={subview} view={subview} onOpen={onViewChange} />
           ))}
         </section>
       ) : null}
 
-      {view === SETTINGS_VIEW.VOICE && settings ? (
+      {drawnView === SETTINGS_VIEW.VOICE && settings ? (
         <VoiceSection
           voice={settings.voice}
           onVoiceChange={onVoiceChange}
@@ -1405,7 +1439,7 @@ export function SettingsPanel({
         />
       ) : null}
 
-      {view === SETTINGS_VIEW.APPEARANCE && settings ? (
+      {drawnView === SETTINGS_VIEW.APPEARANCE && settings ? (
         <AppearanceSection
           shown={settings.showInMenuBar}
           onShowInMenuBarChange={onShowInMenuBarChange}
@@ -1418,7 +1452,7 @@ export function SettingsPanel({
         />
       ) : null}
 
-      {view === SETTINGS_VIEW.SHORTCUTS ? (
+      {drawnView === SETTINGS_VIEW.SHORTCUTS ? (
         <ShortcutSection
           {...(voiceHotkey ? { voiceHotkey } : {})}
           voiceHotkeyHeld={voiceHotkeyHeld}
@@ -1434,14 +1468,14 @@ export function SettingsPanel({
         />
       ) : null}
 
-      {view === SETTINGS_VIEW.CONNECTIONS && settings ? (
+      {drawnView === SETTINGS_VIEW.CONNECTIONS && settings ? (
         <>
           <CredentialsSection settings={settings} control={credentials} panelOpen={panelOpen} />
           <IntegrationsSection settings={settings} control={credentials} panelOpen={panelOpen} />
         </>
       ) : null}
 
-      {view !== SETTINGS_VIEW.ROOT ? null : (
+      {drawnView !== SETTINGS_VIEW.ROOT ? null : (
         <>
           <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
             <h2>

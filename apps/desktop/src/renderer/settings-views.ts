@@ -25,6 +25,14 @@ export const SETTINGS_SUBVIEW_LIST = [
 
 export type SettingsSubview = (typeof SETTINGS_SUBVIEW_LIST)[number];
 
+/**
+ * How long a leaving page's content takes to go, in milliseconds — a mirror of
+ * the stylesheet's `--duration-exit`, which is what fades it. The drawn page
+ * swaps only once the old one has finished leaving, so the surface never
+ * resizes out from under content still drawn.
+ */
+export const PAGE_EXIT_MS = 90;
+
 const NAV_ROW_ID: Record<SettingsSubview, string> = {
   [SETTINGS_VIEW.VOICE]: "settings-nav-voice",
   [SETTINGS_VIEW.APPEARANCE]: "settings-nav-appearance",
