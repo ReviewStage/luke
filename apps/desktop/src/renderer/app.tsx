@@ -801,10 +801,16 @@ export function App(): React.JSX.Element {
         }));
       }
       await changeMode(true);
+      // Reported as it was applied, not as it was asked: an agent this build
+      // has no chip for — an unknown provider observed but never registered —
+      // cannot narrow the list, and Luke must not claim it did.
       return {
         status: "shown",
         tab: action.tab,
-        ...(action.filter ? { filter: action.filter } : {}),
+        ...(filter ? { filter: action.filter } : {}),
+        ...(action.filter && !filter
+          ? { note: "That agent has no filter of its own here, so every session is shown." }
+          : {}),
         ...(action.sort ? { sort: action.sort } : {}),
       };
     },
