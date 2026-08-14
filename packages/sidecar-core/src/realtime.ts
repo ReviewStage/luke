@@ -170,9 +170,24 @@ export const REALTIME_SERVER_EVENT = {
   ERROR: "error",
 } as const;
 
+/**
+ * Who decided a proactive sentence was worth voicing. The two sources carry
+ * different standing: a status edge is a deterministic fact the registry
+ * observed and may open a call of Luke's own to be said; an evaluator summary
+ * is a model's words, and may only ride a call the developer already opened.
+ */
+export const ATTENTION_SPEECH_SOURCE = {
+  STATUS_EDGE: "status-edge",
+  EVALUATOR: "evaluator",
+} as const;
+
+export type AttentionSpeechSource =
+  (typeof ATTENTION_SPEECH_SOURCE)[keyof typeof ATTENTION_SPEECH_SOURCE];
+
 /** A proactive sentence the attention layer decided is worth voicing. */
 export interface AttentionSpeech extends SessionIdentity {
   disposition: AttentionDisposition;
+  source: AttentionSpeechSource;
   summary: string;
   decidedAt: number;
 }
@@ -1595,6 +1610,7 @@ export function attentionSpeechFromReviews(
       providerId: review.providerId,
       providerSessionId: review.providerSessionId,
       disposition: review.decision.disposition,
+      source: ATTENTION_SPEECH_SOURCE.EVALUATOR,
       summary,
       decidedAt: review.decision.decidedAt,
     });

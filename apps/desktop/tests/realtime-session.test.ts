@@ -4,6 +4,7 @@ import {
   APP_SETTING_KIND,
   type AppGuideSnapshot,
   ATTENTION_DISPOSITION,
+  ATTENTION_SPEECH_SOURCE,
   ISSUE_TRACKER_ID,
   type NormalizedSession,
   normalizeSession,
@@ -330,6 +331,7 @@ test("a proactive update is spoken once the call is open", async () => {
     providerId: "claude-code",
     providerSessionId: "session-a",
     disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
+    source: ATTENTION_SPEECH_SOURCE.EVALUATOR,
     summary: "Claude Code is waiting on you in checkout-service.",
     decidedAt: 1_800_000_000_000,
   };
@@ -801,6 +803,7 @@ test("a turn is refused while another is already under way", async () => {
     providerId: "claude-code",
     providerSessionId: "session-a",
     disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
+    source: ATTENTION_SPEECH_SOURCE.EVALUATOR,
     summary: "Claude Code is waiting on you in checkout-service.",
     decidedAt: 1_800_000_000_000,
   };
@@ -2306,6 +2309,7 @@ test("a speak-only call reads a notice out but refuses a typed ask", async () =>
       providerId: "claude-code",
       providerSessionId: "session-a",
       disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
+      source: ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
       summary: "Claude Code finished checkout-service.",
       decidedAt: 1_800_000_000_000,
     }),

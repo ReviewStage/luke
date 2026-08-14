@@ -579,6 +579,16 @@ export class RealtimeVoiceSession {
   }
 
   /**
+   * Whether a press is still waiting for a call that can take its turn. The
+   * opening meter reads this: a takeover — the developer's call replacing
+   * Luke's own — passes through a settled status on the way, and the meter
+   * must not come down while the press that started it is still owed a turn.
+   */
+  get turnPending(): boolean {
+    return this.#pendingTurn;
+  }
+
+  /**
    * Forgets a press that was waiting for a call that is not coming — a refused
    * microphone, say. Without this the intention would outlive the attempt and
    * open a turn out of the next connection, which nobody asked for.

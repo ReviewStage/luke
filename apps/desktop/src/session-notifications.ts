@@ -1,5 +1,6 @@
 import {
   ATTENTION_DISPOSITION,
+  ATTENTION_SPEECH_SOURCE,
   type AttentionSpeech,
   SESSION_NOTICE_STATUS,
   type SessionNotice,
@@ -44,6 +45,9 @@ export function sessionNoticeSpeech(notice: SessionNotice, decidedAt: number): A
     providerId: notice.providerId,
     providerSessionId: notice.providerSessionId,
     disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
+    // The source is what entitles this sentence to open a call of Luke's own:
+    // it was worded from a status edge the registry observed, not by a model.
+    source: ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
     summary: NOTICE_SENTENCE[notice.status](notice),
     decidedAt,
   };

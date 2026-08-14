@@ -1,6 +1,7 @@
 import {
   APP_PANEL_TAB,
   type AppGuideSnapshot,
+  ATTENTION_SPEECH_SOURCE,
   EMPTY_APP_GUIDE,
   FEEDBACK_COMPOSER_KIND,
   type FeedbackComposerKind,
@@ -1632,8 +1633,12 @@ export function App(): React.JSX.Element {
     }
     // Any settled status ends the wait the press started, however it ended:
     // listening takes the meter live, ready means the turn was dropped
-    // mid-handshake, and a failure has its own message to show.
-    if (voiceStatus !== REALTIME_STATUS.CONNECTING) setTalkOpening(false);
+    // mid-handshake, and a failure has its own message to show. Unless the
+    // press is still owed a turn — a takeover passes through Luke's own call
+    // settling on its way to the developer's, and the meter must ride across.
+    if (voiceStatus !== REALTIME_STATUS.CONNECTING && !voiceSession.current?.turnPending) {
+      setTalkOpening(false);
+    }
   }, [voiceStatus]);
 
   // The exchange is live from the press to the end of the reply — the call
@@ -1713,13 +1718,22 @@ export function App(): React.JSX.Element {
   }, [bootstrap, settings, microphoneStatus, voiceHotkey, askHotkeyChange]);
 
   useEffect(() => {
-    // The announcer owns delivery: a notice arriving into an open call rides
-    // it, and one arriving into silence opens a speak-only call of Luke's own.
-    // A notice that still cannot be voiced — the call refused, the sentence
-    // gone stale in a queue — is not lost: the session it belongs to still
-    // reads as needing attention in the panel and in the capsule count.
+    // Two kinds of sentence share this channel, and their standing differs.
+    // A status-edge notice — deterministic, worded on this machine — goes to
+    // the announcer, which may open a speak-only call of Luke's own to say
+    // it. An evaluator summary is a model's words, so it keeps its original
+    // bound: spoken only on a call the developer opened themselves, and
+    // dropped otherwise. Either way an unvoiced update is not lost: the
+    // session it belongs to still reads as needing attention in the panel
+    // and in the capsule count.
     return window.sidecar.onAttentionSpeech((speech) => {
-      ensureAnnouncer().enqueue(speech);
+      const notices = speech.filter((item) => item.source === ATTENTION_SPEECH_SOURCE.STATUS_EDGE);
+      if (notices.length > 0) ensureAnnouncer().enqueue(notices);
+      const session = voiceSession.current;
+      if (!session?.microphoneCall) return;
+      for (const item of speech) {
+        if (item.source !== ATTENTION_SPEECH_SOURCE.STATUS_EDGE) session.speak(item);
+      }
     });
   }, [ensureAnnouncer]);
 

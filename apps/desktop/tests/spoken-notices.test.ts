@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { RealtimeStatus } from "@sidecar/core";
-import { ATTENTION_DISPOSITION, type AttentionSpeech, REALTIME_STATUS } from "@sidecar/core";
+import {
+  ATTENTION_DISPOSITION,
+  ATTENTION_SPEECH_SOURCE,
+  type AttentionSpeech,
+  REALTIME_STATUS,
+} from "@sidecar/core";
 import {
   ANNOUNCER_LINGER_MS,
   type AnnouncerSession,
@@ -14,6 +19,7 @@ function speech(id: string, decidedAt = 1_000): AttentionSpeech {
     providerId: "claude-code",
     providerSessionId: id,
     disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
+    source: ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
     summary: `Claude Code finished "${id}".`,
     decidedAt,
   };
