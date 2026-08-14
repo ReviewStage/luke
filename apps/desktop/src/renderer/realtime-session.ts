@@ -635,6 +635,10 @@ export class RealtimeVoiceSession {
     // the current turn's: a `response.done` that matches nothing can neither
     // act with the new turn's arming nor end the new turn early.
     this.#activeResponseId = undefined;
+    // The turn the arming belonged to is over with the reply. Every caller
+    // that opens a new developer turn arms it afresh in #startResponse; left
+    // true here, the cancelled reply's late calls would find it still standing.
+    this.#toolTurnArmed = false;
     this.#generationDone = false;
     this.#remoteQuiet = false;
     this.#clearSettleTimer();
@@ -933,6 +937,12 @@ export class RealtimeVoiceSession {
       if (typeof item?.id === "string") this.#responseItemId = item.id;
     }
     if (type === REALTIME_SERVER_EVENT.RESPONSE_CREATED) {
+      // Only a reply the session is still waiting on may be adopted. A
+      // confirmation arriving after the developer stopped or took the turn is
+      // the cancelled reply's own, landing late — the stop raced the server's
+      // confirmation — and adopting it would re-open the track over the quiet
+      // just asked for, and let its finished form read as the current reply's.
+      if (this.#status !== REALTIME_STATUS.RESPONDING) return;
       // The reply being asked for is under way, so anything arriving from here
       // belongs to it rather than to the one it replaced. Its name is what a
       // `response.done` must present to be read as this reply's: the channel

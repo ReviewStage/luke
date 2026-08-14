@@ -1114,6 +1114,70 @@ test("a stop with nothing being spoken reports so and sends nothing", async () =
   );
 });
 
+test("a stop that races the reply's confirmation still holds", async () => {
+  const carried: unknown[] = [];
+  const context = harness({
+    carryAction: async (action) => {
+      carried.push(action);
+      return { status: "accepted" };
+    },
+  });
+  await context.session.connect();
+  context.deliverRemoteTrack();
+  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
+  // The stop lands in the gap between asking for the reply and the server
+  // confirming it: the cancel and the confirmation cross on the wire.
+  armDeveloperTurn(context);
+  assert.equal(context.session.stopSpeaking(), true);
+
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-a" } });
+
+  // The late confirmation is the cancelled reply's own. Adopting it would
+  // re-open the track over the quiet just asked for.
+  assert.equal(context.lukeAudible(), false);
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+
+  // And its finished form must not act: the turn its arming belonged to
+  // ended with the stop, however armed it was when the reply was asked for.
+  const before = context.sent.length;
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      id: "resp-a",
+      output: [
+        {
+          type: "function_call",
+          name: "send_session_message",
+          call_id: "call-late",
+          arguments:
+            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"do it anyway"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(carried, []);
+  const events = context.sent.slice(before);
+  const output = events.find(
+    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+  );
+  assert.equal(
+    (
+      JSON.parse((output?.item as { output?: string } | undefined)?.output ?? "{}") as {
+        status?: string;
+      }
+    ).status,
+    "refused",
+  );
+  assert.ok(!events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE));
+
+  // The next reply the developer actually asks for is heard again.
+  context.session.sendText("what needs me?");
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-b" } });
+  assert.equal(context.lukeAudible(), true);
+});
+
 test("a stopped reply's tool follow-up stands down instead of speaking over the quiet", async () => {
   let resolveCarry: ((outcome: Record<string, unknown>) => void) | undefined;
   const context = harness({
