@@ -1,7 +1,4 @@
 import {
-  type AppGuideSnapshot,
-  ATTENTION_SPEECH_SOURCE,
-  EMPTY_APP_GUIDE,
   FEEDBACK_COMPOSER_KIND,
   type FeedbackComposerKind,
   FIXTURE_EPOCH_MS,
@@ -10,11 +7,9 @@ import {
   type PanelFormFactor,
   type ProviderId,
   REALTIME_STATUS,
-  type RealtimeStatus,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
   type SessionIdentity,
-  type TrackedIssue,
   VOICE_CAPTION_MAX_HEIGHT,
   type WorkspaceAgentSelection,
 } from "@sidecar/core";
@@ -23,12 +18,9 @@ import type {
   AppBootstrap,
   AppSettings,
   DisplayDiagnostic,
-  MicrophoneStatus,
   OutputAudioState,
   SessionOpenResult,
   SettingsUpdateResult,
-  VoiceHotkeyState,
-  WindowMode,
 } from "../shared/contracts";
 import { CREDENTIAL_SOURCE, SESSION_OPEN_RESULT_STATUS } from "../shared/contracts";
 import type { CredentialProviderId } from "../shared/credential-providers";
@@ -39,13 +31,8 @@ import {
 } from "../shared/credential-providers";
 import type { FeedbackImage, FeedbackKind } from "../shared/feedback";
 import { FEEDBACK_KIND, FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from "../shared/feedback";
-import {
-  TALK_KEY_RELEASE,
-  talkKeyRelease,
-  voiceHotkeyLabel,
-  voiceHotkeyToShow,
-} from "../shared/voice-hotkey";
-import { ASK_LUKE_INPUT_ID, askRefusal, focusAskField } from "./ask-luke";
+import { voiceHotkeyLabel, voiceHotkeyToShow } from "../shared/voice-hotkey";
+import { ASK_LUKE_INPUT_ID, focusAskField } from "./ask-luke";
 import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";
 import { isSubmittable, removalEndsEntry } from "./credential-entry";
 import {
@@ -69,18 +56,9 @@ import {
 import { applySpokenSetting, buildLukeGuide, isAppSettingId } from "./luke-guide";
 import { NotchWings } from "./notch-wings";
 import { PanelBody, type SessionWriteHandlers } from "./panel-body";
-import {
-  HIT_REGION,
-  HIT_REGION_ATTRIBUTE,
-  LEAVE_DELAY_MS,
-  PANEL_PRESENTATION,
-  type PanelPresentation,
-  PEEK_ENTER_DELAY_MS,
-  presentationForMode,
-  SETTLE_DELAY_MS,
-} from "./panel-state";
+import { HIT_REGION, PANEL_PRESENTATION } from "./panel-state";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
-import { type AppActionCarrier, quietIsLukesOwn, RealtimeVoiceSession } from "./realtime-session";
+import type { AppActionCarrier } from "./realtime-session";
 import {
   arrangeSessions,
   DEFAULT_SESSION_VIEW,
@@ -94,7 +72,11 @@ import {
 } from "./session-model";
 import { SESSION_OPTIONS_BUTTON_ID, SESSION_OPTIONS_ID } from "./session-parts";
 import { SETTING_PAGE, SETTINGS_VIEW, type SettingsView } from "./settings-views";
-import { SpokenNoticeAnnouncer } from "./spoken-notices";
+import { useBootstrapRacedChannel } from "./use-bootstrap-raced-channel";
+import { panelEntryOpen, usePanelEntry } from "./use-panel-entry";
+import { usePanelPresentation } from "./use-panel-presentation";
+import { useStateWithRef } from "./use-state-with-ref";
+import { useVoiceConversation } from "./use-voice-conversation";
 import {
   outputSilent,
   VOLUME_HINT_HEIGHT,
@@ -102,28 +84,6 @@ import {
   volumeHintDismissed,
   volumeHintText,
 } from "./volume-hint";
-import { WAVEFORM_VOICE } from "./waveform";
-
-/**
- * The backstop for a reply whose ending never arrives.
- *
- * `output_audio_buffer.stopped` is what actually ends a reply now, so this only
- * has to catch a call where that never came. It is long because the thing it
- * must not mistake for an ending is a pause between two sentences: at 700ms it
- * did exactly that, taking the meter and the face down while Luke talked on
- * into the second one.
- */
-const REMOTE_QUIET_MS = 2_500;
-
-/**
- * What the speaking evidence run captions the reply with. A capture run never
- * opens a call, so there are no words to draw unless the fixture supplies
- * them — and it must, or the caption strip ships unphotographed. Synthetic,
- * like every fixture, and long enough to wrap: a one-line fixture would leave
- * the wrapped form of the strip unphotographed too.
- */
-const FIXTURE_SPEAKING_CAPTION =
-  "Claude Code finished checkout-service, and Codex is still migrating the payments schema. Two sessions are waiting on you.";
 
 /**
  * How long the settings tab keeps saying a note to the founders was sent. Long
@@ -166,81 +126,6 @@ function captionSizeStyle(textHeight: number | undefined, volumeHint: boolean): 
     "--caption-size": `${Math.min(VOICE_CAPTION_MAX_HEIGHT, textHeight + hintHeight + CAPTION_PADDING)}px`,
     "--caption-scroll": `${Math.max(0, textHeight - (VOICE_CAPTION_MAX_HEIGHT - CAPTION_PADDING - hintHeight))}px`,
   } as CSSProperties;
-}
-
-function usePointerPassthrough(
-  onHitRegionEnter: () => void,
-  onHitRegionLeave: () => void,
-  presentation: PanelPresentation,
-): void {
-  const lastValue = useRef<boolean | undefined>(undefined);
-  const lastPoint = useRef<{ x: number; y: number } | undefined>(undefined);
-
-  const update = useCallback(
-    (interceptsPointer: boolean) => {
-      if (lastValue.current === interceptsPointer) return;
-      lastValue.current = interceptsPointer;
-      window.sidecar.setPointerInterception(interceptsPointer);
-      if (interceptsPointer) onHitRegionEnter();
-      else onHitRegionLeave();
-    },
-    [onHitRegionEnter, onHitRegionLeave],
-  );
-
-  const testLastPoint = useCallback(
-    (drawn: PanelPresentation) => {
-      const point = lastPoint.current;
-      if (!point) return;
-      // `elementFromPoint` answers null for a point outside the viewport, which a
-      // forwarded move can carry. Comparing that against null read as "still
-      // inside", so leaving by the edge left the panel open until some other
-      // event closed it.
-      const region = document
-        .elementFromPoint(point.x, point.y)
-        ?.closest(`[${HIT_REGION_ATTRIBUTE}]`);
-      const kind = region?.getAttribute(HIT_REGION_ATTRIBUTE);
-      // The shape takes the pointer wherever it is drawn, which is the whole
-      // rule: the capsule strip and the panel's body are what sit on top of it
-      // and answer first. The surface is what answers in between — the panel's
-      // body is not a target for the first `--expand-delay` of an opening, and
-      // by then the strip has already narrowed from the peek's width back to
-      // the capsule's, so a press out where the marks unfold would otherwise
-      // land on nothing and read as the pointer leaving.
-      update(
-        kind === HIT_REGION.SURFACE ||
-          kind === HIT_REGION.CAPSULE ||
-          (kind === HIT_REGION.PANEL && drawn === PANEL_PRESENTATION.PANEL) ||
-          (kind === HIT_REGION.SLOT && drawn === PANEL_PRESENTATION.SLOT) ||
-          (kind === HIT_REGION.FEEDBACK && drawn === PANEL_PRESENTATION.FEEDBACK),
-      );
-    },
-    [update],
-  );
-
-  useEffect(() => {
-    const handleMove = (event: MouseEvent) => {
-      lastPoint.current = { x: event.clientX, y: event.clientY };
-      testLastPoint(presentation);
-    };
-    const handleLeave = () => {
-      lastPoint.current = undefined;
-      update(false);
-    };
-    window.addEventListener("mousemove", handleMove, { passive: true });
-    document.documentElement.addEventListener("mouseleave", handleLeave);
-    return () => {
-      window.removeEventListener("mousemove", handleMove);
-      document.documentElement.removeEventListener("mouseleave", handleLeave);
-    };
-  }, [presentation, testLastPoint, update]);
-
-  // The shape can change under a pointer that never moves — Escape closes the
-  // panel, and the tray opens it — and what the pointer is over changes with it.
-  // Without this the window keeps intercepting clicks for a shape that is no
-  // longer drawn, and the window is always larger than the shape.
-  useEffect(() => {
-    testLastPoint(presentation);
-  }, [presentation, testLastPoint]);
 }
 
 function notchStyle(display: DisplayDiagnostic): CSSProperties {
@@ -299,18 +184,12 @@ export function App(): React.JSX.Element {
     [],
   );
   const [display, setDisplay] = useState<DisplayDiagnostic>();
-  const [presentation, setPresentation] = useState<PanelPresentation>(PANEL_PRESENTATION.CAPSULE);
-  const [tab, setTab] = useState<PanelTab>(PANEL_TAB.SESSIONS);
+  const [tab, setTab, tabNow] = useStateWithRef<PanelTab>(PANEL_TAB.SESSIONS);
   const [settingsView, setSettingsView] = useState<SettingsView>(SETTINGS_VIEW.ROOT);
   const [sessionView, setSessionView] = useState<SessionView>(DEFAULT_SESSION_VIEW);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [settings, setSettings] = useState<AppSettings>();
-  const [microphoneStatus, setMicrophoneStatus] = useState<MicrophoneStatus>("not-determined");
-  const [microphoneError, setMicrophoneError] = useState<string>();
-  const [analyser, setAnalyser] = useState<AnalyserNode>();
   const [errand, setErrand] = useState<Errand>();
-  const [entry, setEntry] = useState<CredentialEntry>();
-  const [feedback, setFeedback] = useState<FeedbackEntry>();
   const [feedbackNotice, setFeedbackNotice] = useState<string>();
   // Counts for nothing except having changed: each tick re-renders the rows so
   // their "how long ago" labels stay honest while they are on screen.
@@ -319,16 +198,6 @@ export function App(): React.JSX.Element {
   const [slotElement, slotHeight] = useShapeHeight();
   const [feedbackElement, feedbackHeight] = useShapeHeight();
   const [captionTextElement, captionTextHeight] = useShapeHeight();
-  const [voiceStatus, setVoiceStatus] = useState<RealtimeStatus>(REALTIME_STATUS.IDLE);
-  /**
-   * A pressed talk key still waiting for the call it asked to open. The meter
-   * is drawn from this rather than from the connection, because the press is
-   * the moment the developer needs answering: the handshake behind it takes
-   * seconds, and a key that visibly does nothing for that long reads as a key
-   * that did nothing.
-   */
-  const [talkOpening, setTalkOpening] = useState(false);
-  const [voiceHotkey, setVoiceHotkey] = useState<VoiceHotkeyState>();
   /**
    * The ask key as last re-taken, superseding bootstrap's once it has changed
    * at all: moving the talk key re-registers every global chord, and the ask
@@ -339,17 +208,6 @@ export function App(): React.JSX.Element {
   const [askHotkeyChange, setAskHotkeyChange] = useState<{ accelerator?: string }>();
   /** The stop key on the ask key's exact terms, for the guide's sake. */
   const [stopHotkeyChange, setStopHotkeyChange] = useState<{ accelerator?: string }>();
-  const [localStream, setLocalStream] = useState<MediaStream>();
-  const [remoteStream, setRemoteStream] = useState<MediaStream>();
-  const [voiceCaption, setVoiceCaption] = useState<string>();
-  /**
-   * Whether the reply under way answers an ask the developer typed. A typed
-   * ask is read, not only heard, so its reply draws the caption whatever the
-   * captions preference says — the preference is about speech being
-   * duplicated, and here the words are the half of the conversation the
-   * developer chose. Cleared the moment the turn moves on.
-   */
-  const [typedAsk, setTypedAsk] = useState(false);
   /**
    * The Mac's output as last read — its mute switch and volume — absent
    * wherever it cannot be read, which is drawn as audible. While it says
@@ -358,12 +216,6 @@ export function App(): React.JSX.Element {
    */
   const [outputAudio, setOutputAudio] = useState<OutputAudioState>();
   /**
-   * Whether a live push has arrived, so the bootstrap's older snapshot does
-   * not clobber one that raced past it — the same reading order the issue
-   * roster follows.
-   */
-  const outputAudioPushed = useRef(false);
-  /**
    * Which stretch of unbroken silence is on screen, advanced each time one
    * begins. A "Got it" is remembered against the stretch it answered, so it
    * holds for that whole mute and lapses naturally with it.
@@ -371,19 +223,13 @@ export function App(): React.JSX.Element {
   const [silenceStretch, setSilenceStretch] = useState(0);
   const wasSilent = useRef(false);
   const [hintDismissal, setHintDismissal] = useState<VolumeHintDismissal>();
-  const audioContext = useRef<AudioContext | undefined>(undefined);
-  const hoverTimer = useRef<number | undefined>(undefined);
-  const presentationRef = useRef<PanelPresentation>(PANEL_PRESENTATION.CAPSULE);
-  const tabRef = useRef<PanelTab>(PANEL_TAB.SESSIONS);
-  const entryRef = useRef<CredentialEntry | undefined>(undefined);
   /**
-   * Whether the caret is in the ask field. It holds the panel open against the
-   * pointer the way a credential entry does, and for the same reason: the
-   * pointer wandering off is not a decision about the thing someone is in the
-   * middle of typing.
+   * Whether a composer is held, mirrored for the presentation cluster: a
+   * capsule close keeps the settings tab for a half-written key or note, and
+   * the pointer holds the panel open for a credential still on screen.
    */
-  const askEngaged = useRef(false);
-  const feedbackRef = useRef<FeedbackEntry | undefined>(undefined);
+  const credentialHeld = useRef(false);
+  const feedbackHeld = useRef(false);
   const feedbackNoticeTimer = useRef<number | undefined>(undefined);
   /**
    * The words a spoken open asked to start the note with, waiting for the
@@ -392,81 +238,6 @@ export function App(): React.JSX.Element {
    * the developer's own words, under the spoken tool's contract.
    */
   const spokenFeedbackDraft = useRef<string | undefined>(undefined);
-  const pointerInside = useRef(false);
-  const modeGeneration = useRef(0);
-  const remoteAudio = useRef<HTMLAudioElement | null>(null);
-  const voiceSession = useRef<RealtimeVoiceSession | undefined>(undefined);
-  const announcer = useRef<SpokenNoticeAnnouncer | undefined>(undefined);
-  const talking = useRef(false);
-  const quietTimer = useRef<number | undefined>(undefined);
-  const voiceStatusRef = useRef<RealtimeStatus>(REALTIME_STATUS.IDLE);
-  /**
-   * Whether Luke has actually been heard during this reply. Committing a turn
-   * swaps the meter from the microphone to Luke, and the meter reports quiet as
-   * it lets go of the old stream — a silence that belongs to the developer, not
-   * to Luke, and one that would otherwise end his turn before he had said
-   * anything.
-   */
-  const heardLuke = useRef(false);
-  const startMicrophoneRef = useRef<(() => Promise<MicrophoneStatus>) | undefined>(undefined);
-  /**
-   * The spoken form of pressing a row, reached through a ref for the same
-   * reason `startMicrophoneRef` is: the voice session is built once, and the
-   * handler it needs is declared later, beside the press it mirrors.
-   */
-  const openSessionAloudRef = useRef<(identity: SessionIdentity) => Promise<SessionOpenResult>>(
-    (identity) => window.sidecar.openSession(identity),
-  );
-  /**
-   * The guide as last built, so a call that connects after the settings have
-   * already resolved still tells the conversation what Luke knows of himself.
-   */
-  const guideRef = useRef<AppGuideSnapshot>(EMPTY_APP_GUIDE);
-  /**
-   * The spoken asks about Luke himself, reached through a ref for the same
-   * reason the session acts are: the voice session is built once, and the
-   * handlers it needs are declared later, beside the presses they mirror.
-   */
-  const carryAppActionRef = useRef<AppActionCarrier>(async () => ({
-    status: "refused",
-    reason: "Luke is still starting up.",
-  }));
-  /** When the talk key went down, which is what tells a hold from a tap. */
-  const talkPressedAt = useRef<number | undefined>(undefined);
-  /** Whether a tap has left a turn open for a later press to end. */
-  const talkLatched = useRef(false);
-  const sessionsRef = useRef<readonly NormalizedSession[]>([]);
-  const workspaceProjectsRef = useRef<readonly ObservedWorkspaceProject[]>([]);
-  /**
-   * The default provider as last pushed beside the projects, for a
-   * conversation that connects later: the two travel as one context, so the
-   * connect-time push has to carry both.
-   */
-  const defaultWorkspaceProviderRef = useRef<string | undefined>(undefined);
-  /**
-   * Whether a live projects push has arrived. The bootstrap reply resolves
-   * whenever the main process gets to it, so a push can land first — and the
-   * bootstrap's older snapshot must then not clobber it, because the main
-   * process will not repeat a list it believes it already announced.
-   */
-  const workspaceProjectsPushed = useRef(false);
-  /**
-   * The issue roster as last pushed, for a conversation that connects later.
-   * Never state: no panel surface draws it — it exists to be spoken from.
-   */
-  const issuesRef = useRef<readonly TrackedIssue[] | undefined>(undefined);
-  /**
-   * Whether a live roster push has arrived. The bootstrap reply resolves
-   * whenever the main process gets to it, so a push can land first — and the
-   * bootstrap's older snapshot must then not clobber it.
-   */
-  const issuesPushed = useRef(false);
-  /**
-   * Whether another window's settings change has arrived, under the same rule
-   * as the roster above: a push that lands before the bootstrap reply is the
-   * newer truth, and the bootstrap's older snapshot must not clobber it.
-   */
-  const settingsPushed = useRef(false);
   /**
    * How many errands Luke has run. Carried with each one so that asking for
    * the same control twice flies twice, exactly as a repeated face gesture is
@@ -512,37 +283,21 @@ export function App(): React.JSX.Element {
    */
   const errandOpenedPanel = useRef(false);
 
-  /**
-   * Sends Luke to sign what he just did, if there is anywhere to sign it, and
-   * answers whether he actually went.
-   *
-   * Only the panel can hold a signature, so both callers stand it up first and
-   * this is the backstop rather than the decision: an act whose panel never
-   * opened, or that named a control this build does not draw, flies nowhere
-   * and the spoken answer reports it the way it always did. A caller holding
-   * something for the flight reads the answer and lets go itself.
-   */
-  const runErrand = useCallback((targets: readonly ErrandTarget[], wait: ErrandWait): boolean => {
-    if (targets.length === 0) return false;
-    if (presentationRef.current !== PANEL_PRESENTATION.PANEL) return false;
-    errands.current += 1;
-    setErrand({ targets, wait, run: errands.current });
-    return true;
-  }, []);
-
-  const changeTab = useCallback((next: PanelTab) => {
-    tabRef.current = next;
-    setTab(next);
-    // The sheet belongs to the session list, and it is drawn over the list it
-    // belongs to, so leaving for Settings has to take it along.
-    setOptionsOpen(false);
-    // Arriving at the tab is arriving at its front page: a page left open
-    // behind a tab switch would greet the next visit with a corner of the
-    // settings rather than the settings. The flows that need a deeper page —
-    // a credential entry returning from the key slot, the evidence run that
-    // starts in it — set their page right after this reset.
-    setSettingsView(SETTINGS_VIEW.ROOT);
-  }, []);
+  const changeTab = useCallback(
+    (next: PanelTab) => {
+      setTab(next);
+      // The sheet belongs to the session list, and it is drawn over the list it
+      // belongs to, so leaving for Settings has to take it along.
+      setOptionsOpen(false);
+      // Arriving at the tab is arriving at its front page: a page left open
+      // behind a tab switch would greet the next visit with a corner of the
+      // settings rather than the settings. The flows that need a deeper page —
+      // a credential entry returning from the key slot, the evidence run that
+      // starts in it — set their page right after this reset.
+      setSettingsView(SETTINGS_VIEW.ROOT);
+    },
+    [setTab],
+  );
 
   // A choice made in the sheet puts the sheet away. It is drawn over the list
   // and is taller than a row, so a list narrowed to one or two sessions ends up
@@ -555,184 +310,68 @@ export function App(): React.JSX.Element {
     setOptionsOpen(false);
   }, []);
 
-  const applyPresentation = useCallback(
-    (next: PanelPresentation) => {
-      presentationRef.current = next;
-      setPresentation(next);
-      // The sheet is only ever drawn inside the panel, so any other shape puts
-      // it away. Left set behind a shape that cannot draw it, it would be over
-      // the list again the next time the panel came forward with nothing having
-      // been pressed — and a key half-entered is the one thing that survives a
-      // close, which the sheet is not.
-      if (next !== PANEL_PRESENTATION.PANEL) setOptionsOpen(false);
-      // A panel that has closed reopens on the session list, showing every
-      // session with whatever needs a person first: settings are somewhere you
-      // go, not a state the capsule remembers, and a filter left in place would
-      // let the panel hide a session the capsule is still counting.
-      //
-      // Something half-written is the one exception, and only to the tab — a
-      // key being entered or a note to the founders alike: it is what someone
-      // is in the middle of, so however the panel closed, it opens again where
-      // they left it. The list is not something anyone is in the middle of, so
-      // it resets either way.
-      if (next === PANEL_PRESENTATION.CAPSULE) {
-        setSessionView(DEFAULT_SESSION_VIEW);
-        if (entryRef.current === undefined && feedbackRef.current === undefined) {
-          changeTab(PANEL_TAB.SESSIONS);
-        }
-      }
+  const {
+    presentation,
+    current: presentationOf,
+    generation: modeGenerationOf,
+    pointerInside: pointerIsInside,
+    heldAgainstPointer,
+    applyPresentation,
+    applyAuthoritativeMode,
+    changeMode,
+    cancelHover,
+    onHitRegionLeave,
+    changeAskEngagement,
+    settle,
+    leave,
+    expand,
+  } = usePanelPresentation({
+    // True while a field someone could be part-way through is actually on
+    // screen. An entry outlives the tab it was started on now, so holding the
+    // panel open for one that is not drawn would leave the pointer unable to
+    // close a panel showing nothing but sessions.
+    entryDrawn: () => credentialHeld.current && tabNow() === PANEL_TAB.SETTINGS,
+    composerHeld: () => credentialHeld.current || feedbackHeld.current,
+    onNotPanel: () => setOptionsOpen(false),
+    onCapsuleList: () => setSessionView(DEFAULT_SESSION_VIEW),
+    onCapsuleTab: () => changeTab(PANEL_TAB.SESSIONS),
+  });
+
+  /**
+   * Sends Luke to sign what he just did, if there is anywhere to sign it, and
+   * answers whether he actually went.
+   *
+   * Only the panel can hold a signature, so both callers stand it up first and
+   * this is the backstop rather than the decision: an act whose panel never
+   * opened, or that named a control this build does not draw, flies nowhere
+   * and the spoken answer reports it the way it always did. A caller holding
+   * something for the flight reads the answer and lets go itself.
+   */
+  const runErrand = useCallback(
+    (targets: readonly ErrandTarget[], wait: ErrandWait): boolean => {
+      if (targets.length === 0) return false;
+      if (presentationOf() !== PANEL_PRESENTATION.PANEL) return false;
+      errands.current += 1;
+      setErrand({ targets, wait, run: errands.current });
+      return true;
     },
-    [changeTab],
+    [presentationOf],
   );
 
-  const applyAuthoritativeMode = useCallback(
-    (nextMode: WindowMode) => {
-      // A lifecycle notification can originate outside this renderer (for
-      // example from the tray). Ignore an older IPC result that arrives later.
-      modeGeneration.current += 1;
-      applyPresentation(presentationForMode(nextMode));
-    },
-    [applyPresentation],
-  );
-
-  const ensureVoiceSession = useCallback((): RealtimeVoiceSession => {
-    voiceSession.current ??= new RealtimeVoiceSession({
-      requestConnection: () => window.sidecar.requestRealtimeCredential(),
-      // The same bridge calls the rows use — the composer, the chips, and the
-      // press that opens a session: a spoken ask is a third way to ask for the
-      // same act, behind the same gauntlet in the main process.
-      carryAction: (action) =>
-        action.kind === "message"
-          ? window.sidecar.sendSessionMessage(action.identity, action.text)
-          : action.kind === "control"
-            ? window.sidecar.executeSessionControl(action.identity, action.control.id)
-            : action.kind === "create-workspace"
-              ? window.sidecar.createSessionWorkspace(
-                  action.providerId,
-                  action.providerProjectId,
-                  action.name,
-                  action.task,
-                  action.agentSelection,
-                )
-              : action.kind === "add-agent"
-                ? window.sidecar.addWorkspaceAgent(
-                    action.identity,
-                    action.agent,
-                    action.name,
-                    action.task,
-                    action.model,
-                    action.effort,
-                  )
-                : openSessionAloudRef.current(action.identity),
-      // The asks about Luke himself — a settings change, the panel shown —
-      // behind the same gauntlet: validated against the guide before this is
-      // called, and performed by the same handlers the panel's controls use.
-      carryAppAction: (action) => carryAppActionRef.current(action),
-      // The issue acts have no rows to share a bridge call with, but the shape
-      // is the same: validated against the roster here, and again in the main
-      // process against what it observed.
-      carryIssueAction: (action) => window.sidecar.executeIssueAction(action),
-      onStatus: setVoiceStatus,
-      onLocalStream: setLocalStream,
-      onRemoteStream: setRemoteStream,
-      onError: setMicrophoneError,
-      onCaption: setVoiceCaption,
-    });
-    return voiceSession.current;
-  }, []);
-
   /**
-   * The announcer that lets Luke speak into silence: it queues the notices the
-   * main process decided to voice and, when no conversation is open, opens a
-   * speak-only call of Luke's own to say them through — then closes it. Built
-   * beside the session because it drives nothing else.
+   * Brings the panel back around the line the entry belongs to, and leaves it
+   * open the way every other way of opening it does — the pointer closes it by
+   * visiting and leaving.
    */
-  const ensureAnnouncer = useCallback((): SpokenNoticeAnnouncer => {
-    announcer.current ??= new SpokenNoticeAnnouncer({
-      session: () => ensureVoiceSession(),
-    });
-    return announcer.current;
-  }, [ensureVoiceSession]);
-
-  const stopMicrophone = useCallback(async () => {
-    talking.current = false;
-    await voiceSession.current?.close();
-  }, []);
-
-  /**
-   * Opens the call, answering with what the system said about the microphone —
-   * the one fact a caller that could not send anything needs in order to say
-   * why.
-   */
-  const startMicrophone = useCallback(async (): Promise<MicrophoneStatus> => {
-    setMicrophoneError(undefined);
-    const session = ensureVoiceSession();
-    const permission = await window.sidecar.requestMicrophone();
-    setMicrophoneStatus(permission);
-    if (permission !== "granted") {
-      // The press that asked for this is still waiting for a call that is now
-      // not coming. The status never changes on this path, so the meter the
-      // press put up is taken down here rather than by a status settling.
-      session.dropPendingTurn();
-      setTalkOpening(false);
-      return permission;
-    }
-    if (await session.connect()) {
-      session.updateSessions(sessionsRef.current);
-      session.updateWorkspaceProjects(
-        workspaceProjectsRef.current,
-        defaultWorkspaceProviderRef.current,
-      );
-      session.updateGuide(guideRef.current);
-      session.updateIssues(issuesRef.current);
-    }
-    return permission;
-  }, [ensureVoiceSession]);
-  startMicrophoneRef.current = startMicrophone;
-
-  /**
-   * What the talk key means, wherever it was pressed. A first press has to open
-   * the call before it can open a turn, which is what lets the key work without
-   * the panel ever being visited.
-   */
-  /**
-   * Luke's reply is over when it stops being audible, not when the model stops
-   * producing it. The meter is already measuring the stream, so the quiet it
-   * reports is what ends the turn.
-   */
-  const handleVoiceActivity = useCallback((active: boolean) => {
-    if (voiceStatusRef.current !== REALTIME_STATUS.RESPONDING) return;
-    if (active) {
-      heardLuke.current = true;
-      voiceSession.current?.reportRemoteAudioActive();
-    }
-    if (quietTimer.current !== undefined) {
-      window.clearTimeout(quietTimer.current);
-      quietTimer.current = undefined;
-    }
-    if (active) return;
-    // The meter calls quiet after a fifth of a second, which is shorter than the
-    // pause between two sentences. Ending a turn on that would take the meter
-    // down mid-reply — the very thing this is here to stop — so the turn waits
-    // for a silence longer than speech leaves behind.
-    quietTimer.current = window.setTimeout(() => {
-      quietTimer.current = undefined;
-      // Only Luke's own silence ends Luke's turn.
-      if (!quietIsLukesOwn({ status: voiceStatusRef.current, heardLuke: heardLuke.current })) {
-        return;
-      }
-      voiceSession.current?.reportRemoteAudioIdle();
-    }, REMOTE_QUIET_MS);
-  }, []);
-
-  /**
-   * Asks the system for access and nothing else. Opening a call here would hold
-   * the capture device and light the microphone indicator without anyone having
-   * pressed the talk key, which is not what the row offers.
-   */
-  const requestMicrophoneAccess = useCallback(async () => {
-    setMicrophoneStatus(await window.sidecar.requestMicrophone());
-  }, []);
+  const restorePanel = useCallback(() => {
+    changeTab(PANEL_TAB.SETTINGS);
+    // The line the entry belongs to lives on the Connections page, and
+    // changeTab has just reset the tab to its front page: without this, the
+    // check appearing beside the provider — the answer to what was just done
+    // — would land on a page nobody is looking at.
+    setSettingsView(SETTINGS_VIEW.CONNECTIONS);
+    expand();
+  }, [changeTab, expand]);
 
   /**
    * Applies a settings write's reply: the snapshot the store actually holds,
@@ -761,217 +400,37 @@ export function App(): React.JSX.Element {
   );
 
   /**
-   * The talk key going down. Every press goes to the session, including the one
-   * that has no call to press against yet: the microphone opens with the call,
-   * so a press before then is remembered and applied when it comes up.
-   */
-  const beginTalk = useCallback(async () => {
-    talkPressedAt.current = performance.now();
-    // A latched turn is already open. This press is someone saying they are
-    // done, which is the release's to answer.
-    if (talkLatched.current) return;
-    const session = ensureVoiceSession();
-    session.beginTurn();
-    // A press against no call — or against Luke's own speak-only call, which
-    // has no microphone to offer — has seconds of handshake ahead of it, and
-    // the meter has to answer the press, not the handshake.
-    if (!session.microphoneCall) setTalkOpening(true);
-    // The developer's call is up or already coming; the press waits its turn.
-    if (session.microphoneCall) return;
-    // `connect` inside stands Luke's own call down if one is open: the
-    // developer pressing the key always gets the developer's call.
-    await startMicrophoneRef.current?.();
-  }, [ensureVoiceSession]);
-
-  /**
-   * The talk key coming up. How long it was held is the whole of the decision:
-   * held, the turn was as long as the key was down and is sent; tapped, it
-   * stays open for the question too long to hold through, and the next release
-   * sends it.
-   */
-  const endTalk = useCallback(() => {
-    const pressedAt = talkPressedAt.current;
-    talkPressedAt.current = undefined;
-    // A release with nothing before it is not this key's to answer — a turn
-    // ended by Escape leaves the key still down.
-    if (pressedAt === undefined) return;
-    const release = talkKeyRelease({
-      heldMs: performance.now() - pressedAt,
-      latched: talkLatched.current,
-    });
-    if (release === TALK_KEY_RELEASE.LATCH) {
-      talkLatched.current = true;
-      return;
-    }
-    talkLatched.current = false;
-    // A held press let go of before the call opened is dropped, not sent —
-    // nothing was captured to send — and the meter it put up leaves with it.
-    if (voiceSession.current && !voiceSession.current.isConnected) setTalkOpening(false);
-    voiceSession.current?.endTurn(true);
-  }, []);
-
-  const cancelHoverTransition = useCallback(() => {
-    if (hoverTimer.current === undefined) return;
-    window.clearTimeout(hoverTimer.current);
-    hoverTimer.current = undefined;
-  }, []);
-
-  /**
-   * Only the panel needs the main process. The capsule and the peek share a
-   * window, so hovering never leaves the renderer — which is what lets the peek
-   * answer the pointer immediately.
-   */
-
-  const changeMode = useCallback(
-    async (expanded: boolean) => {
-      const previous = presentationRef.current;
-      const generation = modeGeneration.current + 1;
-      modeGeneration.current = generation;
-      presentationRef.current = expanded ? PANEL_PRESENTATION.PANEL : PANEL_PRESENTATION.CAPSULE;
-      try {
-        // Asking for focus is what makes Escape reach the panel someone opened.
-        const confirmedMode = await window.sidecar.setExpanded(expanded, expanded);
-        if (modeGeneration.current === generation) {
-          applyPresentation(presentationForMode(confirmedMode));
-        }
-      } catch (error) {
-        if (modeGeneration.current === generation) presentationRef.current = previous;
-        throw error;
-      }
-    },
-    [applyPresentation],
-  );
-
-  const handleHitRegionEnter = useCallback(() => {
-    cancelHoverTransition();
-    pointerInside.current = true;
-    if (presentationRef.current !== PANEL_PRESENTATION.CAPSULE) return;
-    hoverTimer.current = window.setTimeout(() => {
-      hoverTimer.current = undefined;
-      if (presentationRef.current === PANEL_PRESENTATION.CAPSULE) {
-        applyPresentation(PANEL_PRESENTATION.PEEK);
-      }
-    }, PEEK_ENTER_DELAY_MS);
-  }, [applyPresentation, cancelHoverTransition]);
-
-  /**
-   * True while a field someone could be part-way through is actually on screen.
-   * An entry outlives the tab it was started on now, so holding the panel open
-   * for one that is not drawn would leave the pointer unable to close a panel
-   * showing nothing but sessions.
-   */
-  const entryIsDrawn = useCallback(
-    () => entryRef.current !== undefined && tabRef.current === PANEL_TAB.SETTINGS,
-    [],
-  );
-
-  const handleHitRegionLeave = useCallback(() => {
-    cancelHoverTransition();
-    pointerInside.current = false;
-    const current = presentationRef.current;
-    if (current === PANEL_PRESENTATION.CAPSULE) return;
-    // The slot is drawn for someone who is somewhere else entirely — in a
-    // browser, fetching the key it is waiting for — so the pointer being away
-    // from it is the normal case rather than a dismissal.
-    if (current === PANEL_PRESENTATION.SLOT) return;
-    // The composer holds words someone is in the middle of, which the pointer
-    // must not be allowed to discard: like the slot, it stays put until it is
-    // dismissed, cancelled, or sent.
-    if (current === PANEL_PRESENTATION.FEEDBACK) return;
-    // A key half-typed is one thing the pointer must not be allowed to
-    // discard; an ask being typed to Luke is the other. Everything else on
-    // the settings tab closes like the sessions tab does.
-    if (current === PANEL_PRESENTATION.PANEL && (entryIsDrawn() || askEngaged.current)) return;
-    hoverTimer.current = window.setTimeout(() => {
-      hoverTimer.current = undefined;
-      if (presentationRef.current === PANEL_PRESENTATION.PEEK) {
-        applyPresentation(PANEL_PRESENTATION.CAPSULE);
-      } else if (presentationRef.current === PANEL_PRESENTATION.PANEL) {
-        // Read again rather than trusting the answer from when this was
-        // scheduled: an entry can begin inside the delay — pressing Connect and
-        // reaching for the keyboard does exactly that — and a close decided
-        // before it began would discard it.
-        if (entryIsDrawn() || askEngaged.current) return;
-        void changeMode(false);
-      }
-    }, LEAVE_DELAY_MS);
-  }, [applyPresentation, cancelHoverTransition, changeMode, entryIsDrawn]);
-
-  /**
-   * The ask field taking or letting go of the caret. Letting go while the
-   * pointer is already away has to release the hold the caret had on the
-   * panel — the pointer cannot leave a second time — which is the same rule
-   * ending a credential entry follows.
-   */
-  const changeAskEngagement = useCallback(
-    (engaged: boolean) => {
-      const released = askEngaged.current && !engaged;
-      askEngaged.current = engaged;
-      if (released && !pointerInside.current) handleHitRegionLeave();
-    },
-    [handleHitRegionLeave],
-  );
-
-  /**
-   * The single place an entry changes. A key being entered holds the panel open
-   * against the pointer, so ending one has to release that hold: an entry that
-   * ends while the pointer is already away — Escape out of the field, say —
-   * would otherwise leave the panel held open by nothing, because the pointer
-   * cannot leave a second time.
-   */
-  const applyEntry = useCallback(
-    (next: CredentialEntry | undefined) => {
-      const released = entryRef.current !== undefined && next === undefined;
-      entryRef.current = next;
-      setEntry(next);
-      if (released && !pointerInside.current) handleHitRegionLeave();
-    },
-    [handleHitRegionLeave],
-  );
-
-  /**
-   * Brings the panel back around the line the entry belongs to, and leaves it
-   * open the way every other way of opening it does — the pointer closes it by
-   * visiting and leaving.
-   */
-  const restorePanel = useCallback(() => {
-    changeTab(PANEL_TAB.SETTINGS);
-    // The line the entry belongs to lives on the Connections page, and
-    // changeTab has just reset the tab to its front page: without this, the
-    // check appearing beside the provider — the answer to what was just done
-    // — would land on a page nobody is looking at.
-    setSettingsView(SETTINGS_VIEW.CONNECTIONS);
-    void changeMode(true);
-  }, [changeMode, changeTab]);
-
-  /**
    * Asking to write a key is asking for one thing, so the panel gets out of the
    * way of it: the shape goes down to the slot, which is the field and nothing
    * else. It is the same wherever the key is coming from — a first connection, a
    * stored key being replaced, or one standing in front of the environment's —
    * because they are all the same act.
    */
+  const credentialsEntry = usePanelEntry<CredentialEntry>({
+    aside: PANEL_PRESENTATION.SLOT,
+    restoresPanel: (held) => held.away !== true,
+    isSendable: isSubmittable,
+    send: async (sending) => {
+      const result = await window.sidecar.setProviderApiKey(sending.providerId, sending.draft);
+      setSettings(result.settings);
+      return result.reason ? { rejection: result.reason } : {};
+    },
+    pointerInside: pointerIsInside,
+    presentation: presentationOf,
+    onReleasedWhileAway: onHitRegionLeave,
+    cancelHover,
+    applyPresentation,
+    restorePanel,
+    leave,
+    settle,
+    heldRef: credentialHeld,
+  });
+
   const beginEntry = useCallback(
     (providerId: CredentialProviderId) => {
-      applyEntry({ providerId, draft: "", busy: false, away: false });
-      cancelHoverTransition();
-      applyPresentation(PANEL_PRESENTATION.SLOT);
+      credentialsEntry.begin({ providerId, draft: "", busy: false, away: false });
     },
-    [applyEntry, applyPresentation, cancelHoverTransition],
-  );
-
-  const changeEntry = useCallback(
-    (draft: string) => {
-      const current = entryRef.current;
-      // A key being written is not a moment to change the entry: the reply on
-      // its way back is answering the entry that was sent, and it is recognised
-      // by being that same entry. Nothing may replace it underneath but ending
-      // it outright, which is a decision to stop listening for the reply.
-      if (!current || current.busy) return;
-      // Typing again answers the refusal, so the refusal goes.
-      applyEntry({ ...current, draft, rejection: undefined });
-    },
-    [applyEntry],
+    [credentialsEntry.begin],
   );
 
   /**
@@ -982,66 +441,17 @@ export function App(): React.JSX.Element {
    * panel is only stood down if the link was pressed from inside it.
    */
   const fetchKey = useCallback(() => {
-    const current = entryRef.current;
+    const current = credentialsEntry.latest();
     // Same rule as typing: the key on its way to the store is what the entry is
     // for, and going to fetch another one is not a reason to disturb it. Both
     // views disable the link while it is in flight, so this is the floor rather
     // than the answer.
-    if (!current || current.busy) return;
+    if (!panelEntryOpen(current)) return;
     window.sidecar.openProviderApiKeys(current.providerId);
-    applyEntry({ ...current, away: true });
-    if (presentationRef.current === PANEL_PRESENTATION.SLOT) return;
-    cancelHoverTransition();
-    applyPresentation(PANEL_PRESENTATION.SLOT);
-  }, [applyEntry, applyPresentation, cancelHoverTransition]);
-
-  const cancelEntry = useCallback(() => {
-    const away = entryRef.current?.away === true;
-    const aside = presentationRef.current === PANEL_PRESENTATION.SLOT;
-    applyEntry(undefined);
-    if (!aside) return;
-    // Giving up returns you where you were. If the key page was opened, that is
-    // the browser, and Luke leaves; if it was not, it is the panel this entry
-    // was started from.
-    if (away) void changeMode(false);
-    else restorePanel();
-  }, [applyEntry, changeMode, restorePanel]);
-
-  const commitEntry = useCallback(() => {
-    const current = entryRef.current;
-    if (!isSubmittable(current)) return;
-    const sending = { ...current, busy: true, rejection: undefined };
-    applyEntry(sending);
-    void window.sidecar.setProviderApiKey(current.providerId, current.draft).then((result) => {
-      // The store changed either way, so the sources are always taken.
-      setSettings(result.settings);
-      // Whoever is entering a key now is not necessarily whoever sent this one:
-      // Escape reaches the slot while a save is in flight, and so does another
-      // provider's Connect. A reply that outlived its own entry is spent.
-      if (entryRef.current !== sending) return;
-      if (result.reason) {
-        applyEntry({ ...sending, busy: false, rejection: result.reason });
-        return;
-      }
-      applyEntry(undefined);
-      // Saved from the slot: the whole panel comes back around the provider
-      // that is now connected, because the check appearing beside its name is
-      // the answer to what was just done.
-      if (presentationRef.current !== PANEL_PRESENTATION.SLOT) return;
-      restorePanel();
-      // An answer is worth reading and then done with. The pointer is usually
-      // still on the button that was pressed, and where it is not — the key was
-      // sent from the keyboard, or the shape shrank out from under it — nothing
-      // else would ever ask this panel to close, so it shows the answer and then
-      // takes its leave. Nothing else restores the panel this way: giving up has
-      // no answer to show.
-      if (pointerInside.current) return;
-      hoverTimer.current = window.setTimeout(() => {
-        hoverTimer.current = undefined;
-        if (presentationRef.current === PANEL_PRESENTATION.PANEL) void changeMode(false);
-      }, SETTLE_DELAY_MS);
-    });
-  }, [applyEntry, changeMode, restorePanel]);
+    credentialsEntry.apply({ ...current, away: true });
+    if (presentationOf() === PANEL_PRESENTATION.SLOT) return;
+    credentialsEntry.standDown();
+  }, [credentialsEntry.apply, credentialsEntry.latest, credentialsEntry.standDown, presentationOf]);
 
   const removeProviderApiKey = useCallback(
     async (providerId: CredentialProviderId) => {
@@ -1050,11 +460,23 @@ export function App(): React.JSX.Element {
       // Delete and the field are on the row together once the panel has been
       // brought back around an entry, and a key that has been removed cannot be
       // replaced.
-      if (removalEndsEntry(entryRef.current, providerId, result.reason)) applyEntry(undefined);
+      if (removalEndsEntry(credentialsEntry.latest(), providerId, result.reason)) {
+        credentialsEntry.apply(undefined);
+      }
       return result.reason;
     },
-    [applyEntry],
+    [credentialsEntry.apply, credentialsEntry.latest],
   );
+
+  const credentials: CredentialEntryControl = {
+    entry: credentialsEntry.entry,
+    begin: beginEntry,
+    change: (draft) => credentialsEntry.patch({ draft }),
+    fetchKey,
+    cancel: credentialsEntry.cancel,
+    commit: credentialsEntry.commit,
+    remove: removeProviderApiKey,
+  };
 
   /** Shows or hides the menu bar status item. */
   const changeShowInMenuBar = useCallback(
@@ -1114,33 +536,11 @@ export function App(): React.JSX.Element {
     return [...names.entries()].map(([id, name]) => ({ id, name }));
   }, [workspaceProjects, storedWorkspaceProvider]);
 
-  const credentials: CredentialEntryControl = {
-    entry,
-    begin: beginEntry,
-    change: changeEntry,
-    fetchKey,
-    cancel: cancelEntry,
-    commit: commitEntry,
-    remove: removeProviderApiKey,
-  };
-
   /**
-   * The single place a feedback entry changes, for the same reason a
-   * credential's is: writing one holds the panel open against the pointer, so
-   * ending one has to release that hold — an entry that ends while the pointer
-   * is already away would otherwise leave the panel held open by nothing.
+   * Says a send landed, and stops saying it once it has been readable. Long
+   * enough to be read on the way back from the Send button, short enough that
+   * the line is gone before anyone wonders whether it is stuck.
    */
-  const applyFeedback = useCallback(
-    (next: FeedbackEntry | undefined) => {
-      const released = feedbackRef.current !== undefined && next === undefined;
-      feedbackRef.current = next;
-      setFeedback(next);
-      if (released && !pointerInside.current) handleHitRegionLeave();
-    },
-    [handleHitRegionLeave],
-  );
-
-  /** Says a send landed, and stops saying it once it has been readable. */
   const showFeedbackNotice = useCallback((notice: string) => {
     if (feedbackNoticeTimer.current !== undefined) {
       window.clearTimeout(feedbackNoticeTimer.current);
@@ -1153,6 +553,41 @@ export function App(): React.JSX.Element {
   }, []);
 
   useEffect(() => () => window.clearTimeout(feedbackNoticeTimer.current), []);
+
+  const feedbackEntry = usePanelEntry<FeedbackEntry>({
+    aside: PANEL_PRESENTATION.FEEDBACK,
+    restoresPanel: (held) => held.fromPanel === true,
+    isSendable,
+    send: async (sending) => {
+      const name = sending.name.trim();
+      const email = sending.email.trim();
+      try {
+        const result = await window.sidecar.sendFeedback({
+          kind: sending.kind,
+          message: sending.message.trim(),
+          ...(name ? { name } : {}),
+          ...(email ? { email } : {}),
+          images: sending.images,
+        });
+        if (!result.delivered) {
+          return { rejection: result.reason ?? "Could not send that. Try again." };
+        }
+        return {};
+      } catch {
+        return { rejection: "Could not send that. Try again." };
+      }
+    },
+    onDelivered: () => showFeedbackNotice("Sent — thank you."),
+    pointerInside: pointerIsInside,
+    presentation: presentationOf,
+    onReleasedWhileAway: onHitRegionLeave,
+    cancelHover,
+    applyPresentation,
+    restorePanel,
+    leave,
+    settle,
+    heldRef: feedbackHeld,
+  });
 
   /**
    * Opens the composer for a kind — from the section's own buttons, from the
@@ -1168,17 +603,16 @@ export function App(): React.JSX.Element {
   const beginFeedback = useCallback(
     (kind: FeedbackKind, fromPanel: boolean, draft?: string): boolean => {
       setFeedbackNotice(undefined);
-      const opened = openedFeedbackEntry(feedbackRef.current, {
+      const opened = openedFeedbackEntry(feedbackEntry.latest(), {
         kind,
         fromPanel,
         ...(draft !== undefined ? { draft } : {}),
       });
-      if (opened.entry) applyFeedback(opened.entry);
-      cancelHoverTransition();
-      applyPresentation(PANEL_PRESENTATION.FEEDBACK);
+      if (opened.entry) feedbackEntry.apply(opened.entry);
+      feedbackEntry.standDown();
       return opened.drafted;
     },
-    [applyFeedback, applyPresentation, cancelHoverTransition],
+    [feedbackEntry.apply, feedbackEntry.latest, feedbackEntry.standDown],
   );
 
   /**
@@ -1189,25 +623,10 @@ export function App(): React.JSX.Element {
    * panel, or — from the tray — nothing at all.
    */
   const dismissFeedback = useCallback(() => {
-    if (presentationRef.current !== PANEL_PRESENTATION.FEEDBACK) return;
-    if (feedbackRef.current?.fromPanel === true) restorePanel();
-    else void changeMode(false);
-  }, [changeMode, restorePanel]);
-
-  /**
-   * Every field writes through here, under the rule a credential's draft has:
-   * a note being sent is what the reply on its way back is answering, so
-   * nothing may change under it but ending it outright. Typing again answers
-   * the last refusal, so the refusal goes.
-   */
-  const changeFeedback = useCallback(
-    (patch: Partial<Pick<FeedbackEntry, "message" | "name" | "email">>) => {
-      const current = feedbackRef.current;
-      if (!current || current.busy) return;
-      applyFeedback({ ...current, ...patch, rejection: undefined });
-    },
-    [applyFeedback],
-  );
+    if (presentationOf() !== PANEL_PRESENTATION.FEEDBACK) return;
+    if (feedbackEntry.latest()?.fromPanel === true) restorePanel();
+    else leave();
+  }, [feedbackEntry.latest, leave, presentationOf, restorePanel]);
 
   /**
    * Takes picked or pasted files aboard. Encoding happens here on the user's
@@ -1217,8 +636,8 @@ export function App(): React.JSX.Element {
    */
   const attachFeedbackImages = useCallback(
     async (files: readonly File[]) => {
-      const current = feedbackRef.current;
-      if (!current || current.busy) return;
+      const current = feedbackEntry.latest();
+      if (!panelEntryOpen(current)) return;
       const room = FEEDBACK_LIMITS.MAX_IMAGES - current.images.length;
       const taken = files.slice(0, Math.max(0, room));
       const encoded: FeedbackImage[] = [];
@@ -1230,110 +649,42 @@ export function App(): React.JSX.Element {
       }
       // Read again after the awaits: typing meanwhile replaced the entry
       // object, and Cancel or a send may have ended it altogether.
-      const latest = feedbackRef.current;
-      if (!latest || latest.busy) return;
+      const latest = feedbackEntry.latest();
+      if (!panelEntryOpen(latest)) return;
       const rejection = refused
         ? IMAGE_REFUSAL.UNREADABLE
         : files.length > room
           ? IMAGE_REFUSAL.FULL
           : undefined;
-      applyFeedback({
+      feedbackEntry.apply({
         ...latest,
         images: [...latest.images, ...encoded].slice(0, FEEDBACK_LIMITS.MAX_IMAGES),
         rejection,
       });
     },
-    [applyFeedback],
+    [feedbackEntry.apply, feedbackEntry.latest],
   );
 
-  const removeFeedbackImage = useCallback(
-    (index: number) => {
-      const current = feedbackRef.current;
-      if (!current || current.busy) return;
-      applyFeedback({
+  const feedbackControl: FeedbackEntryControl = {
+    entry: feedbackEntry.entry,
+    ...(feedbackNotice ? { notice: feedbackNotice } : {}),
+    // The section's own buttons are the panel asking, so leaving returns there.
+    begin: (kind) => beginFeedback(kind, true),
+    changeMessage: (message) => feedbackEntry.patch({ message }),
+    changeName: (name) => feedbackEntry.patch({ name }),
+    changeEmail: (email) => feedbackEntry.patch({ email }),
+    attach: (files) => void attachFeedbackImages(files),
+    removeImage: (index) => {
+      const current = feedbackEntry.latest();
+      if (!panelEntryOpen(current)) return;
+      feedbackEntry.apply({
         ...current,
         images: current.images.filter((_, held) => held !== index),
       });
     },
-    [applyFeedback],
-  );
-
-  /** The one way a draft is discarded, and it is the user's own press. */
-  const cancelFeedback = useCallback(() => {
-    const aside = presentationRef.current === PANEL_PRESENTATION.FEEDBACK;
-    const fromPanel = feedbackRef.current?.fromPanel === true;
-    applyFeedback(undefined);
-    if (!aside) return;
-    // Giving up returns you where you were: the panel this was opened from,
-    // or — from the tray — out of the way entirely.
-    if (fromPanel) restorePanel();
-    else void changeMode(false);
-  }, [applyFeedback, changeMode, restorePanel]);
-
-  const commitFeedback = useCallback(() => {
-    const current = feedbackRef.current;
-    if (!isSendable(current)) return;
-    const sending: FeedbackEntry = { ...current, busy: true, rejection: undefined };
-    applyFeedback(sending);
-    const name = sending.name.trim();
-    const email = sending.email.trim();
-    void window.sidecar
-      .sendFeedback({
-        kind: sending.kind,
-        message: sending.message.trim(),
-        ...(name ? { name } : {}),
-        ...(email ? { email } : {}),
-        images: sending.images,
-      })
-      .then((result) => {
-        // A reply that outlived its own entry is spent, exactly as a
-        // credential's is: Cancel reaches the composer while a send is in
-        // flight, and so does beginning again.
-        if (feedbackRef.current !== sending) return;
-        if (!result.delivered) {
-          applyFeedback({
-            ...sending,
-            busy: false,
-            rejection: result.reason ?? "Could not send that. Try again.",
-          });
-          return;
-        }
-        // Sent from the shape: the whole panel comes back around the section
-        // that offered this, because the sent line under the offers is the
-        // answer to what was just done — the same restore a key saved from
-        // the slot gets. An answer is worth reading and then done with, so
-        // with the pointer away nothing else would ever ask this panel to
-        // close, and it shows the answer and then takes its leave.
-        feedbackRef.current = undefined;
-        setFeedback(undefined);
-        showFeedbackNotice("Sent — thank you.");
-        if (presentationRef.current === PANEL_PRESENTATION.FEEDBACK) restorePanel();
-        if (pointerInside.current) return;
-        cancelHoverTransition();
-        hoverTimer.current = window.setTimeout(() => {
-          hoverTimer.current = undefined;
-          if (presentationRef.current === PANEL_PRESENTATION.PANEL) void changeMode(false);
-        }, SETTLE_DELAY_MS);
-      })
-      .catch(() => {
-        if (feedbackRef.current !== sending) return;
-        applyFeedback({ ...sending, busy: false, rejection: "Could not send that. Try again." });
-      });
-  }, [applyFeedback, cancelHoverTransition, changeMode, restorePanel, showFeedbackNotice]);
-
-  const feedbackControl: FeedbackEntryControl = {
-    entry: feedback,
-    ...(feedbackNotice ? { notice: feedbackNotice } : {}),
-    // The section's own buttons are the panel asking, so leaving returns there.
-    begin: (kind) => beginFeedback(kind, true),
-    changeMessage: (message) => changeFeedback({ message }),
-    changeName: (name) => changeFeedback({ name }),
-    changeEmail: (email) => changeFeedback({ email }),
-    attach: (files) => void attachFeedbackImages(files),
-    removeImage: removeFeedbackImage,
     dismiss: dismissFeedback,
-    cancel: cancelFeedback,
-    commit: commitFeedback,
+    cancel: feedbackEntry.cancel,
+    commit: feedbackEntry.commit,
   };
 
   // The row marks the voice the main process reports rather than the one just
@@ -1352,67 +703,6 @@ export function App(): React.JSX.Element {
     },
     [applySettingsReply],
   );
-
-  /**
-   * Carries a changed pace onto the call now open, whichever hand changed it:
-   * the settings row and a spoken ask both land in the stored snapshot, so
-   * watching the snapshot covers them equally. The first snapshot is the
-   * stored value rather than a change, and with no call open there is nothing
-   * to do — the next call is minted at the stored pace.
-   */
-  const heardSpeed = useRef<RealtimeVoiceSpeed | undefined>(undefined);
-  useEffect(() => {
-    const speed = settings?.voiceSpeed;
-    if (speed === undefined) return;
-    const previous = heardSpeed.current;
-    heardSpeed.current = speed;
-    if (previous === undefined || previous === speed) return;
-    voiceSession.current?.applySpeed(speed);
-  }, [settings?.voiceSpeed]);
-
-  /**
-   * Makes a changed voice heard now rather than from the next conversation on.
-   * The API locks a session's voice the moment the model first speaks, so the
-   * one way to change it on a live call is to open a new one. The restart
-   * waits for the turn under way to end — a spoken "change your voice" is
-   * confirmed in the old voice before the new one takes over — and the
-   * conversation starts afresh, because the call is the conversation. A call
-   * that ended on its own owes nothing: the next one is minted in the new
-   * voice already.
-   */
-  const heardVoice = useRef<RealtimeVoice | undefined>(undefined);
-  const voiceRestartDue = useRef(false);
-  useEffect(() => {
-    const voice = settings?.voice;
-    if (!voice) return;
-    const previous = heardVoice.current;
-    heardVoice.current = voice;
-    // A call being opened counts as one to reopen: its credential may already
-    // have been minted in the old voice, and a restart is the only answer the
-    // renderer can be sure of from here.
-    if (
-      previous !== undefined &&
-      previous !== voice &&
-      (voiceSession.current?.isConnected || voiceSession.current?.isConnecting)
-    ) {
-      voiceRestartDue.current = true;
-    }
-    if (!voiceRestartDue.current) return;
-    if (
-      voiceStatus === REALTIME_STATUS.IDLE ||
-      voiceStatus === REALTIME_STATUS.FAILED ||
-      voiceStatus === REALTIME_STATUS.UNAVAILABLE
-    ) {
-      voiceRestartDue.current = false;
-      return;
-    }
-    if (voiceStatus !== REALTIME_STATUS.READY) return;
-    voiceRestartDue.current = false;
-    void (async () => {
-      await voiceSession.current?.close();
-      await startMicrophoneRef.current?.();
-    })();
-  }, [settings?.voice, voiceStatus]);
 
   /**
    * Moves the talk key, or resets it when no chord is named. The key the row
@@ -1465,10 +755,10 @@ export function App(): React.JSX.Element {
         providerId: session.providerId,
         providerSessionId: session.id,
       });
-      cancelHoverTransition();
+      cancelHover();
       void changeMode(false);
     },
-    [cancelHoverTransition, changeMode],
+    [cancelHover, changeMode],
   );
 
   /**
@@ -1482,16 +772,15 @@ export function App(): React.JSX.Element {
       const result = await window.sidecar.openSession(identity);
       if (
         result.status === SESSION_OPEN_RESULT_STATUS.OPENED &&
-        presentationRef.current === PANEL_PRESENTATION.PANEL
+        presentationOf() === PANEL_PRESENTATION.PANEL
       ) {
-        cancelHoverTransition();
+        cancelHover();
         void changeMode(false);
       }
       return result;
     },
-    [cancelHoverTransition, changeMode],
+    [cancelHover, changeMode, presentationOf],
   );
-  openSessionAloudRef.current = openSessionAloud;
 
   /**
    * The ask key, pressed anywhere on the system. The main process has already
@@ -1502,45 +791,17 @@ export function App(): React.JSX.Element {
   const summonAsk = useCallback(() => {
     const field = document.getElementById(ASK_LUKE_INPUT_ID);
     if (
-      presentationRef.current === PANEL_PRESENTATION.PANEL &&
+      presentationOf() === PANEL_PRESENTATION.PANEL &&
       field !== null &&
       document.activeElement === field
     ) {
-      cancelHoverTransition();
+      cancelHover();
       void changeMode(false);
       return;
     }
     changeTab(PANEL_TAB.SESSIONS);
     focusAskField();
-  }, [cancelHoverTransition, changeMode, changeTab]);
-
-  /**
-   * A typed ask to Luke himself. It rides the same call the talk key opens —
-   * permission, connect, then the turn — and opens the same kind of turn:
-   * typing is the developer asking in their own words, so the turn may carry
-   * a tool the way a spoken one may, behind the same roster gauntlet. Answers
-   * with why the ask could not go, or nothing when it did — the reply is
-   * spoken, and its words land under the panel as the answer.
-   */
-  const askLuke = useCallback(
-    async (text: string): Promise<string | undefined> => {
-      const session = ensureVoiceSession();
-      let microphone: MicrophoneStatus = "granted";
-      // Luke's own speak-only call cannot carry a typed ask — it was sent no
-      // roster to validate one against — so it counts as no call here, and
-      // `connect` inside stands it down for the developer's own. A microphone
-      // call still connecting is awaited exactly as before.
-      if (!session.isConnected || !session.microphoneCall) {
-        microphone = (await startMicrophoneRef.current?.()) ?? microphone;
-      }
-      if (session.sendText(text)) {
-        setTypedAsk(true);
-        return undefined;
-      }
-      return askRefusal(session.status, microphone);
-    },
-    [ensureVoiceSession],
-  );
+  }, [cancelHover, changeMode, changeTab, presentationOf]);
 
   /**
    * The panel standing back down once an errand it stood up is over. The same
@@ -1557,13 +818,10 @@ export function App(): React.JSX.Element {
   const standDownAfterErrand = useCallback(() => {
     if (!errandOpenedPanel.current) return;
     errandOpenedPanel.current = false;
-    if (pointerInside.current || entryIsDrawn() || askEngaged.current) return;
-    cancelHoverTransition();
-    hoverTimer.current = window.setTimeout(() => {
-      hoverTimer.current = undefined;
-      if (presentationRef.current === PANEL_PRESENTATION.PANEL) void changeMode(false);
-    }, SETTLE_DELAY_MS);
-  }, [cancelHoverTransition, changeMode, entryIsDrawn]);
+    if (pointerIsInside() || heldAgainstPointer()) return;
+    cancelHover();
+    settle();
+  }, [cancelHover, heldAgainstPointer, pointerIsInside, settle]);
 
   /**
    * The spoken asks about Luke himself. A settings change goes through the
@@ -1608,7 +866,7 @@ export function App(): React.JSX.Element {
           releaseErrandChange();
           return outcome;
         }
-        const opening = presentationRef.current !== PANEL_PRESENTATION.PANEL;
+        const opening = presentationOf() !== PANEL_PRESENTATION.PANEL;
         // The guide's ids travel as plain text, so one that names no setting
         // of Luke's names no page either — and nothing will fly to it.
         const page = isAppSettingId(action.setting.id)
@@ -1622,7 +880,7 @@ export function App(): React.JSX.Element {
         const wait =
           opening || page === undefined
             ? ERRAND_WAIT.CONTENT
-            : tabRef.current === PANEL_TAB.SETTINGS && settingsView === page
+            : tabNow() === PANEL_TAB.SETTINGS && settingsView === page
               ? ERRAND_WAIT.AT_ONCE
               : ERRAND_WAIT.PAGE;
         try {
@@ -1663,7 +921,7 @@ export function App(): React.JSX.Element {
         // nothing here sends: the note leaves only by the Send button's own
         // press.
         const kind = FEEDBACK_KIND_FOR_COMPOSER[action.composer];
-        const drafted = openedFeedbackEntry(feedbackRef.current, {
+        const drafted = openedFeedbackEntry(feedbackEntry.latest(), {
           kind,
           fromPanel: false,
           ...(action.draft === undefined ? {} : { draft: action.draft }),
@@ -1695,7 +953,7 @@ export function App(): React.JSX.Element {
       // Whether this ask is what opens the panel, read before it does: an
       // errand into a shape still growing has to trail the whole opening,
       // and one into a panel already up does not.
-      const opening = presentationRef.current !== PANEL_PRESENTATION.PANEL;
+      const opening = presentationOf() !== PANEL_PRESENTATION.PANEL;
       changeTab(action.tab);
       const spoken = action.filter ? sessionFilterFromSpoken(action.filter) : undefined;
       // An agent this build never registered cannot narrow the list, and Luke
@@ -1732,9 +990,89 @@ export function App(): React.JSX.Element {
         ...(action.sort ? { sort: action.sort } : {}),
       };
     },
-    [changeMode, changeTab, settings, settingsView, bootstrap, releaseErrandChange, runErrand],
+    [
+      changeMode,
+      changeTab,
+      settings,
+      settingsView,
+      bootstrap,
+      releaseErrandChange,
+      runErrand,
+      feedbackEntry.latest,
+      presentationOf,
+      tabNow,
+    ],
   );
-  carryAppActionRef.current = carryAppAction;
+
+  const defaultWorkspaceProvider = (settings ?? bootstrap?.settings)?.defaultWorkspaceProvider;
+  const {
+    analyser,
+    microphoneStatus,
+    setMicrophoneStatus,
+    microphoneError,
+    voiceStatus,
+    setVoiceStatus,
+    talkOpening,
+    voiceHotkey,
+    handleVoiceActivity,
+    requestMicrophoneAccess,
+    startMicrophone,
+    stopMicrophone,
+    askLuke,
+    voiceTurn,
+    lukeCaption,
+    remoteAudio,
+    discardListening,
+    stopSpeaking,
+    syncGuide,
+    syncIssues,
+  } = useVoiceConversation({
+    sessions,
+    workspaceProjects,
+    defaultWorkspaceProvider,
+    voice: settings?.voice,
+    voiceSpeed: settings?.voiceSpeed,
+    voiceCaptions: settings?.voiceCaptions === true,
+    outputSilent: outputSilent(outputAudio),
+    fixtureSpeaking: bootstrap?.profile === "speaking" || bootstrap?.profile === "muted",
+    capturingShortcut: () => shortcutCapture.current,
+    openSession: openSessionAloud,
+    carryAppAction,
+  });
+
+  /**
+   * A live push beats a bootstrap snapshot still in flight. The main process
+   * will not repeat a list it believes it already announced, so the older
+   * snapshot must not clobber one that raced past it.
+   */
+  const acceptProjectsBootstrap = useBootstrapRacedChannel(
+    (onChange) => window.sidecar.onWorkspaceProjectsChanged(onChange),
+    setWorkspaceProjects,
+  );
+  // Straight to the conversation rather than through state: no panel
+  // surface draws the issue roster, so a re-render would be work for nobody.
+  const acceptIssuesBootstrap = useBootstrapRacedChannel(
+    (onChange) => window.sidecar.onIssuesChanged(onChange),
+    syncIssues,
+  );
+  // Another window's settings change: this window's rows and guide redraw
+  // from the same snapshot its reply carried, so no window describes a
+  // state the store no longer holds.
+  const acceptSettingsBootstrap = useBootstrapRacedChannel(
+    (onChange) =>
+      window.sidecar.onSettingsChanged((pushed) => {
+        // A push is newer than anything an errand is still carrying, so it takes
+        // the hold with it: released afterwards, a snapshot caught before this
+        // arrived would draw the store as it was rather than as it is.
+        heldSettings.current = undefined;
+        onChange(pushed);
+      }),
+    setSettings,
+  );
+  const acceptOutputAudioBootstrap = useBootstrapRacedChannel(
+    (onChange) => window.sidecar.onOutputAudioChanged(onChange),
+    setOutputAudio,
+  );
 
   /**
    * The two writes a row can ask for, handed to the main process by session
@@ -1764,13 +1102,11 @@ export function App(): React.JSX.Element {
       // back. `detail` is 0 when the keyboard activated the button, and there
       // the focus is the point and stays where the keyboard put it.
       if (event.detail > 0) event.currentTarget.blur();
-      cancelHoverTransition();
-      void changeMode(presentationRef.current !== PANEL_PRESENTATION.PANEL);
+      cancelHover();
+      void changeMode(presentationOf() !== PANEL_PRESENTATION.PANEL);
     },
-    [cancelHoverTransition, changeMode],
+    [cancelHover, changeMode, presentationOf],
   );
-
-  usePointerPassthrough(handleHitRegionEnter, handleHitRegionLeave, presentation);
 
   // `:focus-visible` is a heuristic about how focus arrived, and here it guesses
   // wrong: the panel takes focus programmatically when it opens, which the
@@ -1796,18 +1132,18 @@ export function App(): React.JSX.Element {
   }, []);
 
   useEffect(() => {
-    const bootstrapGeneration = modeGeneration.current;
+    const bootstrapGeneration = modeGenerationOf();
     void window.sidecar.getBootstrap().then((value) => {
       setBootstrap(value);
       setSessions(value.sessions);
       // Only fill in what no push has said yet: the bootstrap snapshot is
       // older than any change that raced past it, and the main process will
       // not repeat a list it believes it already announced.
-      if (!workspaceProjectsPushed.current) setWorkspaceProjects(value.workspaceProjects);
-      if (!issuesPushed.current) issuesRef.current = value.issues;
-      if (!settingsPushed.current) setSettings(value.settings);
+      acceptProjectsBootstrap(value.workspaceProjects);
+      acceptIssuesBootstrap(value.issues);
+      acceptSettingsBootstrap(value.settings);
       setDisplay(value.display);
-      if (modeGeneration.current === bootstrapGeneration) {
+      if (modeGenerationOf() === bootstrapGeneration) {
         applyAuthoritativeMode(value.mode);
         if (value.startPeeked && value.mode === "compact") {
           applyPresentation(PANEL_PRESENTATION.PEEK);
@@ -1828,7 +1164,7 @@ export function App(): React.JSX.Element {
       setMicrophoneStatus(value.microphoneStatus);
       // Only fill in what no push has said yet, like the issue roster: the
       // bootstrap snapshot is older than any change that raced past it.
-      if (!outputAudioPushed.current && value.outputAudio) setOutputAudio(value.outputAudio);
+      if (value.outputAudio) acceptOutputAudioBootstrap(value.outputAudio);
       if (!value.realtimeAvailable) setVoiceStatus(REALTIME_STATUS.UNAVAILABLE);
       if (value.profile === "microphone") {
         window.setTimeout(() => void startMicrophone(), 500);
@@ -1858,118 +1194,32 @@ export function App(): React.JSX.Element {
       }
     });
     const removeDisplay = window.sidecar.onDisplayChanged(setDisplay);
-    // Another window's settings change: this window's rows and guide redraw
-    // from the same snapshot its reply carried, so no window describes a
-    // state the store no longer holds.
-    const removeSettings = window.sidecar.onSettingsChanged((pushed) => {
-      settingsPushed.current = true;
-      // A push is newer than anything an errand is still carrying, so it takes
-      // the hold with it: released afterwards, a snapshot caught before this
-      // arrived would draw the store as it was rather than as it is.
-      heldSettings.current = undefined;
-      setSettings(pushed);
-    });
     const removeSessions = window.sidecar.onSessionsChanged(setSessions);
-    const removeWorkspaceProjects = window.sidecar.onWorkspaceProjectsChanged((projects) => {
-      workspaceProjectsPushed.current = true;
-      setWorkspaceProjects(projects);
-    });
-    const removeOutputAudio = window.sidecar.onOutputAudioChanged((state) => {
-      outputAudioPushed.current = true;
-      setOutputAudio(state);
-    });
-    // Straight to the conversation rather than through state: no panel
-    // surface draws the issue roster, so a re-render would be work for nobody.
-    const removeIssues = window.sidecar.onIssuesChanged((issues) => {
-      issuesPushed.current = true;
-      issuesRef.current = issues;
-      voiceSession.current?.updateIssues(issues);
-    });
     return () => {
-      cancelHoverTransition();
+      cancelHover();
       removeLifecycle();
       removeDisplay();
-      removeSettings();
       removeSessions();
-      removeWorkspaceProjects();
-      removeOutputAudio();
-      removeIssues();
       void stopMicrophone();
     };
   }, [
+    acceptIssuesBootstrap,
+    acceptOutputAudioBootstrap,
+    acceptProjectsBootstrap,
+    acceptSettingsBootstrap,
     applyAuthoritativeMode,
     applyPresentation,
     beginEntry,
     beginFeedback,
-    cancelHoverTransition,
+    cancelHover,
     changeTab,
+    setMicrophoneStatus,
+    setVoiceStatus,
     startMicrophone,
     stopMicrophone,
     summonAsk,
+    modeGenerationOf,
   ]);
-
-  // The waveform follows whoever is actually talking: the developer while
-  // push-to-talk is held, Luke while it answers, nobody otherwise.
-  const activeStream =
-    voiceStatus === REALTIME_STATUS.RESPONDING
-      ? remoteStream
-      : voiceStatus === REALTIME_STATUS.LISTENING
-        ? localStream
-        : undefined;
-
-  useEffect(() => {
-    if (!activeStream) {
-      setAnalyser(undefined);
-      return;
-    }
-    const context = audioContext.current ?? new AudioContext({ latencyHint: "interactive" });
-    audioContext.current = context;
-    // A suspended context reads a flatline whatever the microphone hears, and
-    // the talk key is a system shortcut, so no user gesture in this window has
-    // ever vouched for the context. Resuming is a no-op when it is running.
-    if (context.state === "suspended") void context.resume();
-    const source = context.createMediaStreamSource(activeStream);
-    const nextAnalyser = context.createAnalyser();
-    nextAnalyser.fftSize = 256;
-    nextAnalyser.smoothingTimeConstant = 0.82;
-    source.connect(nextAnalyser);
-    setAnalyser(nextAnalyser);
-    return () => {
-      source.disconnect();
-      setAnalyser(undefined);
-    };
-  }, [activeStream]);
-
-  useEffect(() => {
-    voiceStatusRef.current = voiceStatus;
-    // Each reply is heard from scratch, so the previous one cannot vouch for it.
-    if (voiceStatus !== REALTIME_STATUS.RESPONDING) {
-      heardLuke.current = false;
-      // The reply that answered the typed ask is over, so the caption goes
-      // back to being the preference's to grant.
-      setTypedAsk(false);
-    }
-    // Any settled status ends the wait the press started, however it ended:
-    // listening takes the meter live, ready means the turn was dropped
-    // mid-handshake, and a failure has its own message to show. Unless the
-    // press is still owed a turn — a takeover passes through Luke's own call
-    // settling on its way to the developer's, and the meter must ride across.
-    if (voiceStatus !== REALTIME_STATUS.CONNECTING && !voiceSession.current?.turnPending) {
-      setTalkOpening(false);
-    }
-  }, [voiceStatus]);
-
-  // The exchange is live from the press to the end of the reply — the call
-  // coming up, a turn being held, Luke speaking — and the media duck follows
-  // it. Whether anything actually comes down is the main process's question:
-  // it holds the setting, the hangover between turns, and the helper.
-  useEffect(() => {
-    window.sidecar.setVoiceExchangeActive(
-      voiceStatus === REALTIME_STATUS.CONNECTING ||
-        voiceStatus === REALTIME_STATUS.LISTENING ||
-        voiceStatus === REALTIME_STATUS.RESPONDING,
-    );
-  }, [voiceStatus]);
 
   // Silence is counted in stretches — one per unbroken run of muted-or-zero —
   // because that is the unit a "Got it" answers. The edge into silence is the
@@ -1988,33 +1238,6 @@ export function App(): React.JSX.Element {
   const dismissVolumeHint = useCallback(() => {
     setHintDismissal({ at: Date.now(), stretch: silenceStretch });
   }, [silenceStretch]);
-
-  useEffect(() => {
-    const element = remoteAudio.current;
-    if (!element) return;
-    element.srcObject = remoteStream ?? null;
-    if (remoteStream) void element.play().catch(() => undefined);
-  }, [remoteStream]);
-
-  // Keep the conversation's view of the sessions current, so a spoken question
-  // is answered from what Luke actually observes.
-  useEffect(() => {
-    sessionsRef.current = sessions;
-    voiceSession.current?.updateSessions(sessions);
-  }, [sessions]);
-
-  // Keep the conversation's view of where a workspace can be created current,
-  // for the same reason the roster is: a spoken creation ask is validated
-  // against this list, so it has to be the list the adapters actually offer.
-  // The default provider travels with it — where a nameless ask goes is part
-  // of the same answer — resolved the way the guide resolves settings, so a
-  // default saved before this window's own settings arrived still steers.
-  const defaultWorkspaceProvider = (settings ?? bootstrap?.settings)?.defaultWorkspaceProvider;
-  useEffect(() => {
-    workspaceProjectsRef.current = workspaceProjects;
-    defaultWorkspaceProviderRef.current = defaultWorkspaceProvider;
-    voiceSession.current?.updateWorkspaceProjects(workspaceProjects, defaultWorkspaceProvider);
-  }, [workspaceProjects, defaultWorkspaceProvider]);
 
   // Keep the conversation's view of Luke himself current, so a spoken question
   // about a setting is answered from the value the store actually holds, and a
@@ -2038,36 +1261,16 @@ export function App(): React.JSX.Element {
       ...(askAccelerator ? { askKey: voiceHotkeyLabel(askAccelerator) } : {}),
       ...(stopAccelerator ? { stopKey: voiceHotkeyLabel(stopAccelerator) } : {}),
     });
-    guideRef.current = guide;
-    voiceSession.current?.updateGuide(guide);
-  }, [bootstrap, settings, microphoneStatus, voiceHotkey, askHotkeyChange, stopHotkeyChange]);
-
-  useEffect(() => {
-    // Two kinds of sentence share this channel, and their standing differs.
-    // A status-edge notice — deterministic, worded on this machine — goes to
-    // the announcer, which may open a speak-only call of Luke's own to say
-    // it. An evaluator summary is a model's words, so it keeps its original
-    // bound: spoken only on a call the developer opened themselves, and
-    // dropped otherwise. Either way an unvoiced update is not lost: the
-    // session it belongs to still reads as needing attention in the panel
-    // and in the capsule count.
-    return window.sidecar.onAttentionSpeech((speech) => {
-      const notices = speech.filter((item) => item.source === ATTENTION_SPEECH_SOURCE.STATUS_EDGE);
-      if (notices.length > 0) ensureAnnouncer().enqueue(notices);
-      const session = voiceSession.current;
-      if (!session?.microphoneCall) return;
-      for (const item of speech) {
-        if (item.source !== ATTENTION_SPEECH_SOURCE.STATUS_EDGE) session.speak(item);
-      }
-    });
-  }, [ensureAnnouncer]);
-
-  // The announcer paces itself by the session's status: READY is when a queued
-  // sentence can speak and when an empty queue starts the walk toward closing
-  // the call Luke opened for himself.
-  useEffect(() => {
-    announcer.current?.onStatus(voiceStatus);
-  }, [voiceStatus]);
+    syncGuide(guide);
+  }, [
+    bootstrap,
+    settings,
+    microphoneStatus,
+    voiceHotkey,
+    askHotkeyChange,
+    stopHotkeyChange,
+    syncGuide,
+  ]);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -2087,9 +1290,7 @@ export function App(): React.JSX.Element {
         // The key may still be down. Forgetting the press as well as the latch
         // means its release lands on a turn that is already gone rather than
         // sending the one Escape just discarded.
-        talkLatched.current = false;
-        talkPressedAt.current = undefined;
-        voiceSession.current?.stopListening(false);
+        discardListening();
         return;
       }
       // Stopping Luke mid-sentence is the same shape one layer on: a reply
@@ -2098,12 +1299,12 @@ export function App(): React.JSX.Element {
       // whether there was a reply to stop, so a press that found none falls
       // through to the layers below rather than being swallowed by a reply
       // that had already ended.
-      if (voiceSession.current?.stopSpeaking()) return;
+      if (stopSpeaking()) return;
       // Escape out of the slot is the entry's own way out, wherever the caret
       // happens to be: the slot is the only thing on screen, so there is nothing
       // else it could mean.
       if (presentation === PANEL_PRESENTATION.SLOT) {
-        cancelEntry();
+        credentialsEntry.cancel();
         return;
       }
       // Escape out of the composer leaves the shape and keeps the draft: a
@@ -2126,50 +1327,24 @@ export function App(): React.JSX.Element {
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [
-    cancelEntry,
+    credentialsEntry.cancel,
     changeMode,
     changeTab,
     dismissFeedback,
+    discardListening,
     optionsOpen,
     presentation,
     settingsView,
+    stopSpeaking,
     tab,
     voiceStatus,
   ]);
 
-  // The talk key is registered by the main process so it answers from any app,
-  // which is the whole point: no window to find, nothing to focus first. Both
-  // edges arrive, because a turn you hold ends when the key does. Only the
-  // press defers to a chord being recorded: the release always lands, so a
-  // hold opened before the recording began still ends when the key comes up
-  // rather than leaving the microphone open under the field — and a release
-  // whose press was held back finds nothing pressed and answers nothing.
-  useEffect(
-    () =>
-      window.sidecar.onVoiceHotkeyPress(() => {
-        if (!shortcutCapture.current) void beginTalk();
-      }),
-    [beginTalk],
-  );
-  useEffect(() => window.sidecar.onVoiceHotkeyRelease(endTalk), [endTalk]);
-  useEffect(() => window.sidecar.onVoiceHotkeyChanged(setVoiceHotkey), []);
   useEffect(
     () =>
       window.sidecar.onAskHotkeyChanged((accelerator) =>
         setAskHotkeyChange(accelerator ? { accelerator } : {}),
       ),
-    [],
-  );
-  // The stop key asks for quiet from any app, exactly as Escape asks for it
-  // from the panel: the session itself answers whether there is a reply to
-  // stop, so a press over silence simply does nothing. It defers to a chord
-  // being recorded on the talk key's terms — the keystroke there is an answer
-  // to the field, not an ask of Luke.
-  useEffect(
-    () =>
-      window.sidecar.onStopHotkeyPress(() => {
-        if (!shortcutCapture.current) voiceSession.current?.stopSpeaking();
-      }),
     [],
   );
   useEffect(
@@ -2243,14 +1418,6 @@ export function App(): React.JSX.Element {
   // measured back from the fixture's own epoch precisely so that no capture
   // run reads them against the time it happened to run at.
   const now = bootstrap.fixtureMode ? FIXTURE_EPOCH_MS : Date.now();
-  // Read once: the stage grows for it and the wings draw it, and two readings
-  // of the same status could disagree by a frame.
-  const voiceTurn =
-    voiceStatus === REALTIME_STATUS.RESPONDING
-      ? WAVEFORM_VOICE.LUKE
-      : voiceStatus === REALTIME_STATUS.LISTENING
-        ? WAVEFORM_VOICE.DEVELOPER
-        : undefined;
   const shownHotkey = voiceHotkeyToShow(bootstrap, voiceHotkey);
   const shownAskHotkey = askHotkeyChange ? askHotkeyChange.accelerator : bootstrap.askHotkey;
   const shownStopHotkey = stopHotkeyChange ? stopHotkeyChange.accelerator : bootstrap.stopHotkey;
@@ -2260,21 +1427,6 @@ export function App(): React.JSX.Element {
   const fixtureSpeaking = bootstrap.profile === "speaking" || fixtureMuted;
   const hasAudioSignal = fixtureSpeaking || analyser !== undefined;
   const outputIsSilent = outputSilent(outputAudio);
-  // Luke's words, drawn only when there is a reason to read them and the reply
-  // they belong to is his turn: the captions preference, the reply answering
-  // an ask the developer typed — a typed conversation's answer must be
-  // readable whatever the preference says — or an output that would swallow
-  // the reply, where the words are the only part of Luke arriving at all. The
-  // session already clears the words when a reply ends or is cut off, and the
-  // turn gate keeps a caption that raced a status change from being drawn
-  // late. A capture run draws the fixture's words regardless, or the strip
-  // ships unphotographed.
-  const lukeCaption = fixtureSpeaking
-    ? FIXTURE_SPEAKING_CAPTION
-    : (settings?.voiceCaptions === true || typedAsk || outputIsSilent) &&
-        voiceTurn === WAVEFORM_VOICE.LUKE
-      ? voiceCaption
-      : undefined;
   // The hint rides the caption it explains, and only over a silence the
   // helper actually reported. "Got it" quiets it for this stretch of silence
   // and any that follows too soon; the captions above it stay either way.
@@ -2289,7 +1441,9 @@ export function App(): React.JSX.Element {
   // What the slot's field is for depends on what answers for that provider now,
   // and settings resolve after the first render.
   const slotSource =
-    entry && settings ? settings.credentialSources[entry.providerId] : CREDENTIAL_SOURCE.NONE;
+    credentialsEntry.entry && settings
+      ? settings.credentialSources[credentialsEntry.entry.providerId]
+      : CREDENTIAL_SOURCE.NONE;
 
   return (
     <div
