@@ -1,12 +1,15 @@
 import {
   CAPSULE_SIDE_WIDTH,
+  compareSessionsByUrgency,
   FIXTURE_EPOCH_MS,
   fixtureSnapshot,
+  MOTION_DURATION_MS,
   PANEL_WIDTH,
   PEEK_SIDE_GROWTH,
   SESSION_LOCATION,
   SESSION_STATE,
   type SessionState,
+  STATE_LABEL,
 } from "@sidecar/core";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import { CloudBadge, ProviderMark } from "./provider-marks";
@@ -46,20 +49,6 @@ const PANEL_AT = 0.35;
 /** The values a MacBook's notch reports, matching the renderer's fixture. */
 const HOUSING_WIDTH = 210;
 
-const STATE_LABEL: Record<SessionState, string> = {
-  [SESSION_STATE.WORKING]: "Working",
-  [SESSION_STATE.ATTENTION]: "Needs you",
-  [SESSION_STATE.COMPLETE]: "Complete",
-  [SESSION_STATE.UNKNOWN]: "Idle",
-};
-
-const STATE_PRIORITY: readonly SessionState[] = [
-  SESSION_STATE.ATTENTION,
-  SESSION_STATE.WORKING,
-  SESSION_STATE.COMPLETE,
-  SESSION_STATE.UNKNOWN,
-];
-
 /**
  * The rows as the product arranges them: most urgent first, and within one
  * state the one that moved most recently. A fixture row whose provider said
@@ -70,11 +59,7 @@ const MOCK_SESSIONS = fixtureSnapshot("smoke")
     ...session,
     detail: session.detail || STATE_LABEL[session.state],
   }))
-  .toSorted(
-    (left, right) =>
-      STATE_PRIORITY.indexOf(left.state) - STATE_PRIORITY.indexOf(right.state) ||
-      right.observedAt - left.observedAt,
-  );
+  .toSorted(compareSessionsByUrgency);
 
 const ATTENTION_COUNT = MOCK_SESSIONS.filter(
   (session) => session.state === SESSION_STATE.ATTENTION,
@@ -114,7 +99,7 @@ const PEEK_CAPACITY = wingMarkCapacity(CAPSULE_SIDE_WIDTH + PEEK_SIDE_GROWTH);
 const PANEL_CAPACITY = wingMarkCapacity((PANEL_WIDTH - HOUSING_WIDTH) / 2);
 
 /** `--duration-exit`: a shrinking wing keeps its marks until their fade ends. */
-const MARK_EXIT_MS = 90;
+const MARK_EXIT_MS = MOTION_DURATION_MS.EXIT;
 
 /**
  * `observedAgoLabel` in the renderer, read against the fixture's own epoch so

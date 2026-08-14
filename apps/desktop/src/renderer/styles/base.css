@@ -80,9 +80,14 @@
   --keycap-size: 18px;
   --keycap-text: 10.5px;
 
-  /* One motion vocabulary. The black surface is the only thing that changes
-     size; everything layered on it moves with `transform` and `opacity` alone,
-     so a frame costs a composite rather than a relayout and a text re-shape.
+  /* Springs, durations, delays, and the row fan arrive from motion-tokens.css,
+     imported by index.css, so the marketing mock cannot ship a different
+     vocabulary. The comments that say *why* those tokens exist stay here,
+     next to the rules that spend them.
+
+     The black surface is the only thing that changes size; everything layered
+     on it moves with `transform` and `opacity` alone, so a frame costs a
+     composite rather than a relayout and a text re-shape.
 
      `--expand-delay` is measured, not chosen: the surface only reaches far
      enough left to enclose the tab bar partway through the spring, and content
@@ -102,82 +107,7 @@
      is what makes the two read as the same object rather than two effects. The
      window carries SURFACE_MARGIN on every side so neither the overshoot nor
      the shadow can clip. */
-  --spring: linear(
-    0,
-    0.0285,
-    0.0993,
-    0.1943,
-    0.3005,
-    0.4083,
-    0.5115,
-    0.6061,
-    0.69,
-    0.7623,
-    0.8229,
-    0.8727,
-    0.9125,
-    0.9437,
-    0.9674,
-    0.9848,
-    0.9972,
-    1.0056,
-    1.0109,
-    1.0138,
-    1.015,
-    1.015,
-    1.0142,
-    1.0129,
-    1.0114,
-    1.0098,
-    1
-  );
-  /* The same damping ratio as the shape spring, so the bounce profile is
-     identical; only the frequency changes, which is what a smaller and lighter
-     element wants. Everything that moves uses one of these two. */
-  --spring-fast: linear(
-    0,
-    0.0288,
-    0.1002,
-    0.1961,
-    0.3029,
-    0.4113,
-    0.5149,
-    0.6097,
-    0.6935,
-    0.7656,
-    0.826,
-    0.8755,
-    0.9149,
-    0.9457,
-    0.969,
-    0.9861,
-    0.9982,
-    1.0063,
-    1.0113,
-    1.014,
-    1.0151,
-    1.015,
-    1.0141,
-    1.0127,
-    1.0112,
-    1.0095,
-    1
-  );
-  --duration-fast: 280ms;
-  --motion-exit: cubic-bezier(0.4, 0, 0.6, 1);
-  --duration-shape: 460ms;
-  --duration-exit: 90ms;
-  --duration-quick: 140ms;
-  --duration-hover: 70ms;
-  --expand-delay: 200ms;
-  --peek-delay: 60ms;
-  --row-stagger: 32ms;
-  /* How far the stack is compressed before it springs apart. The gaps opening
-     is the motion; the rows arriving is just what makes it visible. */
-  --row-fan: 7px;
-  /* Only about five rows are ever on screen, so the fan and the stagger stop
-     accumulating past that rather than leaving late rows to drift in. */
-  --row-fan-limit: 5;
+
   /* Luke's face is the one thing in the wing that is always drawn, and the only
      thing here that moves without being asked to. Stopping it is a token rather
      than a selector, for the same reason the durations are: a capture run and
@@ -212,11 +142,6 @@
   --panel-inset: 20px;
   --scroll-fade: 26px;
   --panel-width: 620px;
-  /* How long the slot's contents wait before arriving. The slot is only ever
-     reached from the panel, so the panel's own content has to have left first:
-     that is `--duration-exit`, and the rest is the pause that keeps the two from
-     reading as one crossfade. */
-  --slot-delay: calc(var(--duration-exit) + var(--peek-delay));
 }
 
 .app-stage {

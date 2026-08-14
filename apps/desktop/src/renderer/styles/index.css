@@ -1,4 +1,7 @@
 /* The renderer ships one stylesheet; esbuild inlines these imports. */
+/* Motion tokens first, so base.css can spend them without restating the springs
+   or the duration set. */
+@import "@sidecar/core/motion-tokens.css";
 @import "./base.css";
 /* Before the surfaces that hold keycaps, so each can size its own without
    out-specifying the cap itself. */

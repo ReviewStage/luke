@@ -17,6 +17,7 @@ import {
   issueCommentText,
   isWorkspaceAgentCapableAdapter,
   isWorkspaceCapableAdapter,
+  MOTION_DURATION_MS,
   type NativeNotchGeometry,
   type NormalizedSession,
   normalizeObservedWorkspaceProjects,
@@ -862,11 +863,11 @@ function applyVoiceExchanges(): void {
 }
 
 /**
- * `--duration-exit` plus `--duration-shape` in
- * apps/desktop/src/renderer/styles/base.css: the content leaves, then the
- * surface closes on the spring, and only then may the window follow.
+ * `--duration-exit` plus `--duration-shape` in the shared motion tokens: the
+ * content leaves, then the surface closes on the spring, and only then may the
+ * window follow.
  */
-const COLLAPSE_ANIMATION_MS = 550;
+const COLLAPSE_ANIMATION_MS = MOTION_DURATION_MS.EXIT + MOTION_DURATION_MS.SHAPE;
 
 function collapseDelay(): number {
   if (captureMode) return 0;

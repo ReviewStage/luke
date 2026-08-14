@@ -1,16 +1,18 @@
 /* Luke's public landing page.
  *
  * The product has no screenshots in this repository, so the hero is a CSS
- * recreation of the real surface rather than an image. Every value under
- * "Notch mock" is ported from `apps/desktop/src/renderer/styles/base.css` and
- * `apps/desktop/src/renderer/styles/sessions.css`; keep them in step when the
- * product's look changes.
+ * recreation of the real surface rather than an image. Layout, colour, and
+ * type under "Notch mock" are ported from the renderer; motion tokens, mark
+ * paths, and state labels are generated into `@sidecar/core` and imported
+ * here, so they cannot drift from the product they advertise.
  *
  * Deliberately not ported from the renderer: `overflow: clip` on the root,
  * `user-select: none`, and the transparent body. Those exist so an Electron
  * notch window can never scroll its capsule off screen, and a scrolling web
  * page needs the opposite of all three.
  */
+
+@import "@sidecar/core/motion-tokens.css";
 
 :root {
   color-scheme: dark;
@@ -301,79 +303,8 @@ button {
   --mark-cursor: #ffffff;
   --mark-devin: #ffffff;
 
-  /* One sampled damped spring drives every resize, at one duration. A real
-     spring's motion is a property of the spring, not of how far it is asked
-     to travel, which is why the same one serving the peek and the panel is
-     what makes the two read as the same object. */
-  --spring: linear(
-    0,
-    0.0285,
-    0.0993,
-    0.1943,
-    0.3005,
-    0.4083,
-    0.5115,
-    0.6061,
-    0.69,
-    0.7623,
-    0.8229,
-    0.8727,
-    0.9125,
-    0.9437,
-    0.9674,
-    0.9848,
-    0.9972,
-    1.0056,
-    1.0109,
-    1.0138,
-    1.015,
-    1.015,
-    1.0142,
-    1.0129,
-    1.0114,
-    1.0098,
-    1
-  );
-  --spring-fast: linear(
-    0,
-    0.0288,
-    0.1002,
-    0.1961,
-    0.3029,
-    0.4113,
-    0.5149,
-    0.6097,
-    0.6935,
-    0.7656,
-    0.826,
-    0.8755,
-    0.9149,
-    0.9457,
-    0.969,
-    0.9861,
-    0.9982,
-    1.0063,
-    1.0113,
-    1.014,
-    1.0151,
-    1.015,
-    1.0141,
-    1.0127,
-    1.0112,
-    1.0095,
-    1
-  );
-  --duration-fast: 280ms;
-  --motion-exit: cubic-bezier(0.4, 0, 0.6, 1);
-  --duration-shape: 460ms;
-  --duration-exit: 90ms;
-  --duration-quick: 140ms;
-  --duration-hover: 70ms;
-  --expand-delay: 200ms;
-  --peek-delay: 60ms;
-  --row-stagger: 32ms;
-  --row-fan: 7px;
-  --row-fan-limit: 5;
+  /* Springs, durations, and the row fan arrive from motion-tokens.css on
+     :root. --loop-motion stays here: the mock has no face to pause. */
   --loop-motion: running;
 
   --surface-fill: #000;

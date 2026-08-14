@@ -254,6 +254,19 @@ rule: it is cut whenever its meaning stops being true rather than at any
 boundary of its own, so its layers may run on offset periods — `talking` bobs
 against its rock deliberately, like a person mid-sentence.
 
+## Shared surface vocabulary
+
+`design/generate-surface-shared.mjs` is the only place the motion tokens, the
+provider-mark path data, and the session state labels are described. It writes
+four committed outputs into `packages/sidecar-core/src/`: `motion-tokens.css`,
+`motion-tokens.ts`, `provider-mark-paths.ts`, and `session-display.ts`. None of
+the four may be hand-edited — change the tables in the script, re-run it, and
+commit what it writes. `repository-checks.sh` runs it with `--check`.
+
+The desktop renderer and the marketing mock both consume those outputs. The
+React that traces a mark stays in each app, because the desktop ships marks
+the mock does not, and a shared component would pull that into the web bundle.
+
 ## Luke's knowledge of himself
 
 `apps/desktop/src/renderer/luke-guide.ts` is the one place Luke's
