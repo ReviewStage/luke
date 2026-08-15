@@ -526,11 +526,6 @@ export class RealtimeVoiceSession {
   }
 
   /**
-   * Starts a turn, ends one, or interrupts a reply — whichever the current
-   * state makes it. One key drives the whole conversation, so what a press
-   * means lives in one place rather than at every call site.
-   */
-  /**
    * The talk key going down. Opening a turn and ending one are separate here
    * rather than one toggle, because a key that reports being let go of can say
    * which of the two it meant — and a turn that lasts exactly as long as the

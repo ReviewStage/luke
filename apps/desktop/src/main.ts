@@ -1510,10 +1510,6 @@ function registerIpc(): void {
     applyVoiceExchanges();
   });
 
-  // Where to get a key is a question the panel cannot answer itself, so it
-  // hands the question to the browser. The renderer names a provider rather
-  // than an address: the pages Luke can open are the ones in the provider
-  // registry, and no URL crosses this boundary.
   // The system's own answer is the user's to change, and this is where macOS
   // keeps it. The address is fixed here rather than passed in, so a renderer
   // names the intent and never an address.
@@ -1524,6 +1520,10 @@ function registerIpc(): void {
     );
   });
 
+  // Where to get a key is a question the panel cannot answer itself, so it
+  // hands the question to the browser. The renderer names a provider rather
+  // than an address: the pages Luke can open are the ones in the provider
+  // registry, and no URL crosses this boundary.
   ipcMain.on(channels.openProviderApiKeys, (event, providerId: unknown) => {
     if (!trustedSender(event) || !isCredentialProviderId(providerId)) return;
     void shell.openExternal(CREDENTIAL_PROVIDERS[providerId].apiKeysUrl);
