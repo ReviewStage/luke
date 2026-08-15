@@ -13,7 +13,7 @@ import {
   type ProviderWorkspaceAgentRequest,
   type ProviderWorkspaceRequest,
   type ProviderWorkspaceResult,
-  positiveInteger,
+  resolveOptions,
   SESSION_CONTROL_KIND,
   SESSION_STATUS,
   type SessionControl,
@@ -352,14 +352,16 @@ export class ConductorSessionAdapter
       },
       options,
     );
-    this.#maximumObservedWorkspaces = positiveInteger(
-      options.maximumObservedWorkspaces,
-      CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_OBSERVED_WORKSPACES,
+    const resolved = resolveOptions(
+      options,
+      {
+        maximumObservedWorkspaces: CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_OBSERVED_WORKSPACES,
+        maximumObservedSessions: CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_OBSERVED_SESSIONS,
+      },
+      { positive: ["maximumObservedWorkspaces", "maximumObservedSessions"] },
     );
-    this.#maximumObservedSessions = positiveInteger(
-      options.maximumObservedSessions,
-      CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_OBSERVED_SESSIONS,
-    );
+    this.#maximumObservedWorkspaces = resolved.maximumObservedWorkspaces;
+    this.#maximumObservedSessions = resolved.maximumObservedSessions;
   }
 
   async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {

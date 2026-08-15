@@ -9,7 +9,7 @@ import {
   type ProviderMessageResult,
   type ProviderSessionMessage,
   type ProviderSessionObservation,
-  positiveInteger,
+  resolveOptions,
   SESSION_STATUS,
   type SessionControl,
   type SessionProvider,
@@ -224,10 +224,12 @@ export class JulesSessionAdapter
       },
       options,
     );
-    this.#maximumObservedSessions = positiveInteger(
-      options.maximumObservedSessions,
-      JULES_ADAPTER_DEFAULTS.MAXIMUM_OBSERVED_SESSIONS,
+    const { maximumObservedSessions } = resolveOptions(
+      options,
+      { maximumObservedSessions: JULES_ADAPTER_DEFAULTS.MAXIMUM_OBSERVED_SESSIONS },
+      { positive: ["maximumObservedSessions"] },
     );
+    this.#maximumObservedSessions = maximumObservedSessions;
   }
 
   async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {

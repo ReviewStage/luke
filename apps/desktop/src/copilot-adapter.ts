@@ -3,7 +3,7 @@ import {
   isRecord,
   OBSERVATION_WINDOW,
   type ProviderSessionObservation,
-  positiveInteger,
+  resolveOptions,
   SESSION_STATUS,
   type SessionProvider,
   type SessionStatus,
@@ -237,10 +237,12 @@ export class CopilotSessionAdapter extends CloudSessionAdapter {
       },
       options,
     );
-    this.#maximumObservedTasks = positiveInteger(
-      options.maximumObservedTasks,
-      COPILOT_ADAPTER_DEFAULTS.MAXIMUM_OBSERVED_TASKS,
+    const { maximumObservedTasks } = resolveOptions(
+      options,
+      { maximumObservedTasks: COPILOT_ADAPTER_DEFAULTS.MAXIMUM_OBSERVED_TASKS },
+      { positive: ["maximumObservedTasks"] },
     );
+    this.#maximumObservedTasks = maximumObservedTasks;
   }
 
   /** GitHub asks for its own media type, and the preview endpoint is pinned. */

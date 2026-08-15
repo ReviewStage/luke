@@ -49,3 +49,28 @@ export function nonNegativeNumber(value: number | undefined, fallback: number): 
   if (value === undefined || !Number.isFinite(value) || value < 0) return fallback;
   return value;
 }
+
+/**
+ * Bounds a bag of numeric constructor options against their defaults. Each
+ * listed key is read from `options` and clamped by kind — a missing, infinite,
+ * or out-of-range value keeps the default — so every adapter constructor does
+ * not restate the same {@link positiveInteger} / {@link nonNegativeNumber}
+ * calls.
+ */
+export function resolveOptions<D extends Record<string, number>>(
+  options: { readonly [K in keyof D]?: number },
+  defaults: D,
+  bounds: {
+    readonly positive?: readonly (keyof D)[];
+    readonly nonNegative?: readonly (keyof D)[];
+  },
+): D {
+  const resolved = { ...defaults };
+  for (const key of bounds.positive ?? []) {
+    resolved[key] = positiveInteger(options[key], defaults[key]);
+  }
+  for (const key of bounds.nonNegative ?? []) {
+    resolved[key] = nonNegativeNumber(options[key], defaults[key]);
+  }
+  return resolved;
+}

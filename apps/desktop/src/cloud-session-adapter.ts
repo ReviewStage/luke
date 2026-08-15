@@ -1,6 +1,5 @@
 import {
   isRecord,
-  nonNegativeNumber,
   OBSERVATION_WINDOW,
   PROVIDER_ACT_RESULT_STATUS,
   type ProviderActResult,
@@ -13,6 +12,7 @@ import {
   type ProviderWorkspaceRequest,
   type ProviderWorkspaceResult,
   positiveInteger,
+  resolveOptions,
   SESSION_LOCATION,
   SESSION_STATUS,
   type SessionControl,
@@ -283,10 +283,12 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
     this.#authorizationHeaders =
       AUTHORIZATION_HEADERS[profile.authScheme ?? CLOUD_AUTH_SCHEME.BEARER];
     this.#now = options.now ?? Date.now;
-    this.#minimumRefreshIntervalMs = nonNegativeNumber(
-      options.minimumRefreshIntervalMs,
-      CLOUD_ADAPTER_DEFAULTS.MINIMUM_REFRESH_INTERVAL_MS,
+    const { minimumRefreshIntervalMs } = resolveOptions(
+      options,
+      { minimumRefreshIntervalMs: CLOUD_ADAPTER_DEFAULTS.MINIMUM_REFRESH_INTERVAL_MS },
+      { nonNegative: ["minimumRefreshIntervalMs"] },
     );
+    this.#minimumRefreshIntervalMs = minimumRefreshIntervalMs;
   }
 
   async observe(): Promise<readonly ProviderSessionObservation[]> {

@@ -5,13 +5,12 @@ import {
   isRecord,
   maximumSessionSummaryLength,
   maximumSessionTitleLength,
-  nonNegativeNumber,
   OBSERVATION_WINDOW,
   oneLine,
   PROVIDER_ID,
   type ProviderSessionObservation,
-  positiveInteger,
   recordFromJsonLine,
+  resolveOptions,
   SESSION_STATUS,
   type SessionDetail,
   type SessionProvider,
@@ -434,30 +433,32 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
   constructor(options: ClaudeCodeAdapterOptions = {}) {
     this.#claudeHome = options.claudeHome ?? defaultClaudeHome();
     this.#now = options.now ?? Date.now;
-    this.#maximumProjectDirectories = positiveInteger(
-      options.maximumProjectDirectories,
-      CLAUDE_ADAPTER_DEFAULTS.MAXIMUM_PROJECT_DIRECTORIES,
+    const resolved = resolveOptions(
+      options,
+      {
+        maximumProjectDirectories: CLAUDE_ADAPTER_DEFAULTS.MAXIMUM_PROJECT_DIRECTORIES,
+        maximumSessionFiles: CLAUDE_ADAPTER_DEFAULTS.MAXIMUM_SESSION_FILES,
+        maximumSessionAgeMs: OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS,
+        activeSessionFreshnessMs: OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
+        readTailBytes: LOCAL_ADAPTER_DEFAULTS.READ_TAIL_BYTES,
+        readHeadBytes: CLAUDE_ADAPTER_DEFAULTS.READ_HEAD_BYTES,
+      },
+      {
+        positive: [
+          "maximumProjectDirectories",
+          "maximumSessionFiles",
+          "readTailBytes",
+          "readHeadBytes",
+        ],
+        nonNegative: ["maximumSessionAgeMs", "activeSessionFreshnessMs"],
+      },
     );
-    this.#maximumSessionFiles = positiveInteger(
-      options.maximumSessionFiles,
-      CLAUDE_ADAPTER_DEFAULTS.MAXIMUM_SESSION_FILES,
-    );
-    this.#maximumSessionAgeMs = nonNegativeNumber(
-      options.maximumSessionAgeMs,
-      OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS,
-    );
-    this.#activeSessionFreshnessMs = nonNegativeNumber(
-      options.activeSessionFreshnessMs,
-      OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
-    );
-    this.#readTailBytes = positiveInteger(
-      options.readTailBytes,
-      LOCAL_ADAPTER_DEFAULTS.READ_TAIL_BYTES,
-    );
-    this.#readHeadBytes = positiveInteger(
-      options.readHeadBytes,
-      CLAUDE_ADAPTER_DEFAULTS.READ_HEAD_BYTES,
-    );
+    this.#maximumProjectDirectories = resolved.maximumProjectDirectories;
+    this.#maximumSessionFiles = resolved.maximumSessionFiles;
+    this.#maximumSessionAgeMs = resolved.maximumSessionAgeMs;
+    this.#activeSessionFreshnessMs = resolved.activeSessionFreshnessMs;
+    this.#readTailBytes = resolved.readTailBytes;
+    this.#readHeadBytes = resolved.readHeadBytes;
   }
 
   async observe(): Promise<readonly ProviderSessionObservation[]> {
