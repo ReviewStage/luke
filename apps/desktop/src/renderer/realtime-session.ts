@@ -1062,8 +1062,9 @@ export class RealtimeVoiceSession {
     let event: unknown;
     try {
       event = JSON.parse(data);
-    } catch {
-      return;
+    } catch (error) {
+      if (error instanceof SyntaxError) return;
+      throw error;
     }
 
     if (event === null || typeof event !== "object") return;
@@ -1228,8 +1229,11 @@ export class RealtimeVoiceSession {
       }
       try {
         return await this.#options.carryAppAction(appAction);
-      } catch {
-        return { status: "refused", reason: "The change could not be made." };
+      } catch (error) {
+        return {
+          status: "refused",
+          reason: error instanceof Error ? error.message : "The change could not be made.",
+        };
       }
     }
     if (isIssueToolName(call.name)) return this.#issueToolCallOutput(call);
@@ -1250,8 +1254,11 @@ export class RealtimeVoiceSession {
     }
     try {
       return await this.#options.carryAction(action);
-    } catch {
-      return { status: "refused", reason: "The action could not be carried out." };
+    } catch (error) {
+      return {
+        status: "refused",
+        reason: error instanceof Error ? error.message : "The action could not be carried out.",
+      };
     }
   }
 
@@ -1267,8 +1274,11 @@ export class RealtimeVoiceSession {
     }
     try {
       return await this.#options.carryIssueAction(action);
-    } catch {
-      return { status: "refused", reason: "The action could not be carried out." };
+    } catch (error) {
+      return {
+        status: "refused",
+        reason: error instanceof Error ? error.message : "The action could not be carried out.",
+      };
     }
   }
 

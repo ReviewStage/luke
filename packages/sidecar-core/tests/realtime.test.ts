@@ -1083,7 +1083,7 @@ test("the reply that voices an outcome cannot itself call a tool", () => {
 });
 
 function actionableIssue() {
-  return normalizeTrackedIssue(
+  const issue = normalizeTrackedIssue(
     { id: ISSUE_TRACKER_ID.LINEAR, displayName: "Linear" },
     {
       trackerIssueId: "issue-uuid-1",
@@ -1098,6 +1098,8 @@ function actionableIssue() {
       canComment: true,
     },
   );
+  assert.ok(issue);
+  return issue;
 }
 
 function issueCall(argumentsJson: string, name: string = REALTIME_TOOL.UPDATE_ISSUE_STATE) {
@@ -1127,8 +1129,8 @@ test("issue context never asks Luke to start talking", () => {
 });
 
 test("issue context stays bounded when many issues are tracked", () => {
-  const issues = Array.from({ length: maximumVoiceContextIssues + 10 }, (_, index) =>
-    normalizeTrackedIssue(
+  const issues = Array.from({ length: maximumVoiceContextIssues + 10 }, (_, index) => {
+    const issue = normalizeTrackedIssue(
       { id: ISSUE_TRACKER_ID.LINEAR, displayName: "Linear" },
       {
         trackerIssueId: `issue-${index}`,
@@ -1137,8 +1139,10 @@ test("issue context stays bounded when many issues are tracked", () => {
         stateName: "Todo",
         observedAt: DECIDED_AT,
       },
-    ),
-  );
+    );
+    assert.ok(issue);
+    return issue;
+  });
 
   const lines = issueContextText(issues).split("\n");
   // One header line plus the bounded roster.
@@ -1203,6 +1207,7 @@ test("an issue tool call can act only on an issue Luke was shown, going where it
       observedAt: DECIDED_AT,
     },
   );
+  assert.ok(still);
   const quietIdentity = '"tracker_id":"linear","issue_id":"LUKE-124"';
   assert.equal(
     issueToolAction(issueCall(`{${quietIdentity},"state":"Done"}`), [still]).kind,

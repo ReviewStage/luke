@@ -2050,7 +2050,8 @@ async function refreshTrackedIssues(): Promise<void> {
       if (!observations) continue;
       connected = true;
       for (const observation of observations) {
-        collected.push(normalizeTrackedIssue(tracker.tracker, observation));
+        const issue = normalizeTrackedIssue(tracker.tracker, observation);
+        if (issue) collected.push(issue);
       }
     }
     trackedIssues = connected ? collected : undefined;

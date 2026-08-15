@@ -41,6 +41,7 @@ interface Harness {
   microphoneEnabled: () => boolean;
   microphoneStopped: () => boolean;
   emit: (event: unknown) => void;
+  emitRaw: (data: unknown) => void;
   lukeAudible: () => boolean;
   deliverRemoteTrack: () => void;
   provideConnection: () => void;
@@ -202,6 +203,10 @@ function harness(
     emit: (event) => {
       const onmessage = channel.onmessage as ((event: { data: string }) => void) | undefined;
       onmessage?.({ data: JSON.stringify(event) });
+    },
+    emitRaw: (data) => {
+      const onmessage = channel.onmessage as ((event: { data: unknown }) => void) | undefined;
+      onmessage?.({ data });
     },
     setConnectionState: (state) => {
       peer.connectionState = state;
@@ -671,6 +676,7 @@ test("malformed server data never breaks the session", async () => {
   await context.session.connect();
 
   context.emit("not an object");
+  context.emitRaw("{");
   // A frame outside the protocol is dropped by the handler rather than thrown.
   assert.equal(context.session.status, REALTIME_STATUS.READY);
 });
@@ -1591,6 +1597,46 @@ test("a spoken ask is carried through the carrier and its outcome is voiced", as
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
 });
 
+test("a session carrier that throws is refused with the error that caused it", async () => {
+  const context = harness({
+    carryAction: async () => {
+      throw new Error("Claude Code could not be reached.");
+    },
+  });
+  await context.session.connect();
+  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
+  armDeveloperTurn(context);
+  const sentBefore = context.sent.length;
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "send_session_message",
+          call_id: "call-1",
+          arguments:
+            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"add tests"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const output = context.sent
+    .slice(sentBefore)
+    .find(
+      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+    );
+  const parsed = JSON.parse((output?.item as { output?: string } | undefined)?.output ?? "{}") as {
+    status?: string;
+    reason?: string;
+  };
+  assert.equal(parsed.status, "refused");
+  assert.equal(parsed.reason, "Claude Code could not be reached.");
+});
+
 test("a spoken ask to open a session is carried, and one with no address is refused", async () => {
   const carried: unknown[] = [];
   const context = harness({
@@ -2178,6 +2224,45 @@ test("a spoken settings change is validated against the guide and carried", asyn
   ]);
 });
 
+test("an app carrier that throws is refused with the error that caused it", async () => {
+  const context = harness({
+    carryAppAction: async () => {
+      throw new Error("Captions could not be saved.");
+    },
+  });
+  await context.session.connect();
+  context.session.updateGuide(CAPTIONS_GUIDE);
+  armDeveloperTurn(context);
+  const sentBefore = context.sent.length;
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "change_app_setting",
+          call_id: "call-guide-fail",
+          arguments: '{"setting_id":"voice_captions","value":"on"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const output = context.sent
+    .slice(sentBefore)
+    .find(
+      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+    );
+  const parsed = JSON.parse((output?.item as { output?: string } | undefined)?.output ?? "{}") as {
+    status?: string;
+    reason?: string;
+  };
+  assert.equal(parsed.status, "refused");
+  assert.equal(parsed.reason, "Captions could not be saved.");
+});
+
 test("a spoken ask about a setting the guide does not carry is refused before the carrier", async () => {
   const carried: unknown[] = [];
   const context = harness({
@@ -2330,7 +2415,7 @@ test("a spoken composer open is validated against the fixed kinds and carried, n
 function trackedIssue(
   overrides: Partial<Parameters<typeof normalizeTrackedIssue>[1]> = {},
 ): TrackedIssue {
-  return normalizeTrackedIssue(
+  const issue = normalizeTrackedIssue(
     { id: ISSUE_TRACKER_ID.LINEAR, displayName: "Linear" },
     {
       trackerIssueId: "issue-uuid-1",
@@ -2343,6 +2428,8 @@ function trackedIssue(
       ...overrides,
     },
   );
+  if (!issue) throw new Error("test fixture must normalize");
+  return issue;
 }
 
 test("the conversation is told which issues the tracker lists", async () => {
@@ -2417,6 +2504,45 @@ test("a spoken issue ask is carried through its own carrier and voiced", async (
     REALTIME_CLIENT_EVENT.RESPONSE_CREATE,
     "the outcome is voiced by the reply that follows",
   );
+});
+
+test("an issue carrier that throws is refused with the error that caused it", async () => {
+  const context = harness({
+    carryIssueAction: async () => {
+      throw new Error("Linear could not be reached.");
+    },
+  });
+  await context.session.connect();
+  context.session.updateIssues([trackedIssue()]);
+  armDeveloperTurn(context);
+  const sentBefore = context.sent.length;
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "update_issue_state",
+          call_id: "call-1",
+          arguments: '{"tracker_id":"linear","issue_id":"LUKE-123","state":"Done"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const output = context.sent
+    .slice(sentBefore)
+    .find(
+      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+    );
+  const parsed = JSON.parse((output?.item as { output?: string } | undefined)?.output ?? "{}") as {
+    status?: string;
+    reason?: string;
+  };
+  assert.equal(parsed.status, "refused");
+  assert.equal(parsed.reason, "Linear could not be reached.");
 });
 
 test("an issue call with no tracker connected is refused before any carrier runs", async () => {
