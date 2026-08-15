@@ -182,6 +182,10 @@ side, which is what the spring overshoots into and the shadow falls in. Anything
 transparent and must stay click-through, so hit regions track the shape rather
 than the window.
 
+The shape's depth is the menu bar's painted depth, not the safe-area inset. The
+inset is the region apps must avoid; macOS may paint the bar deeper than it, and
+a shape built on the inset stops short of the strip it has to pass for.
+
 The window never animates its own frame. An animated `setBounds` re-lays out
 the whole renderer on every frame, because the panel is anchored to the
 viewport's centre. Everything layered on the surface must move with `transform`

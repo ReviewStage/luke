@@ -14,6 +14,7 @@ import { BUBBLE_LIFT } from "../src/motion-tokens";
 const notchedDisplay = {
   bounds: { x: 0, y: 0, width: 1512, height: 982 },
   workArea: { x: 0, y: 38, width: 1512, height: 944 },
+  scaleFactor: 2,
 };
 
 /** The widest shape a compact window ever draws, before spring overshoot. */
@@ -24,6 +25,7 @@ test("anchors the compact window to the physical top edge", () => {
   const result = positionNotchWindow(notchedDisplay, "compact", {
     displayId: 1,
     safeAreaTop: 38,
+    menuBarHeight: 38,
     notchWidth: 210,
     hasNotch: true,
   });
@@ -48,6 +50,7 @@ test("a compact window holds the peek, the overshoot, and the shadow", () => {
   const result = positionNotchWindow(notchedDisplay, "compact", {
     displayId: 1,
     safeAreaTop: 38,
+    menuBarHeight: 38,
     notchWidth: 210,
     hasNotch: true,
   });
@@ -87,7 +90,7 @@ test("the notch form gives a display without a housing the simulated one", () =>
     plainDisplay,
     "compact",
     // The AppKit helper answered for this display: no housing, no inset.
-    { displayId: 2, safeAreaTop: 0, notchWidth: 0, hasNotch: false },
+    { displayId: 2, safeAreaTop: 0, menuBarHeight: 0, notchWidth: 0, hasNotch: false },
     PANEL_FORM_FACTOR.NOTCH,
   );
 
@@ -107,7 +110,13 @@ test("the notch form never argues with a real housing", () => {
   const result = positionNotchWindow(
     notchedDisplay,
     "compact",
-    { displayId: 1, safeAreaTop: 38, notchWidth: 210, hasNotch: true },
+    {
+      displayId: 1,
+      safeAreaTop: 38,
+      menuBarHeight: 38,
+      notchWidth: 210,
+      hasNotch: true,
+    },
     PANEL_FORM_FACTOR.NOTCH,
   );
 
@@ -152,6 +161,7 @@ test("an expanded bubble window holds the lifted panel's shadow", () => {
     positionNotchWindow(notchedDisplay, "expanded", {
       displayId: 1,
       safeAreaTop: 38,
+      menuBarHeight: 38,
       notchWidth: 210,
       hasNotch: true,
     }).height,
@@ -163,6 +173,7 @@ test("keeps the expanded panel attached to the same display edge", () => {
   const result = positionNotchWindow(notchedDisplay, "expanded", {
     displayId: 1,
     safeAreaTop: 38,
+    menuBarHeight: 38,
     notchWidth: 210,
     hasNotch: true,
   });
@@ -182,4 +193,57 @@ test("never grows a window past the display it is on", () => {
   assert.equal(positionNotchWindow(narrow, "compact").width, 240);
   assert.equal(positionNotchWindow(narrow, "expanded").width, 240);
   assert.equal(positionNotchWindow(narrow, "expanded").height, 480);
+});
+
+test("uses the painted menu bar when it is deeper than the safe area", () => {
+  const reportingMachine = positionNotchWindow(notchedDisplay, "compact", {
+    displayId: 1,
+    safeAreaTop: 33,
+    menuBarHeight: 34,
+    notchWidth: 185,
+    hasNotch: true,
+  });
+  const macBookPro14 = positionNotchWindow(notchedDisplay, "compact", {
+    displayId: 1,
+    safeAreaTop: 34,
+    menuBarHeight: 37,
+    notchWidth: 210,
+    hasNotch: true,
+  });
+
+  assert.equal(reportingMachine.notch.topInset, 34);
+  assert.equal(reportingMachine.height, 34 + VOICE_CAPTION_MAX_HEIGHT + SURFACE_MARGIN);
+  assert.equal(macBookPro14.notch.topInset, 37);
+});
+
+test("keeps the safe-area depth when the menu bar reading is absent", () => {
+  const hiddenMenuBar = positionNotchWindow(notchedDisplay, "compact", {
+    displayId: 1,
+    safeAreaTop: 34,
+    menuBarHeight: 0,
+    notchWidth: 210,
+    hasNotch: true,
+  });
+  const olderHelper = positionNotchWindow(notchedDisplay, "compact", {
+    displayId: 1,
+    safeAreaTop: 34,
+    notchWidth: 210,
+    hasNotch: true,
+  });
+
+  assert.equal(hiddenMenuBar.notch.topInset, 34);
+  assert.equal(olderHelper.notch.topInset, 34);
+});
+
+test("snaps fractional depths to device pixels and ceils the window height", () => {
+  const result = positionNotchWindow(notchedDisplay, "compact", {
+    displayId: 1,
+    safeAreaTop: 33,
+    menuBarHeight: 33.7,
+    notchWidth: 185,
+    hasNotch: true,
+  });
+
+  assert.equal(result.notch.topInset, 33.5);
+  assert.equal(result.height, 34 + VOICE_CAPTION_MAX_HEIGHT + SURFACE_MARGIN);
 });
