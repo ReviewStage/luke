@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SESSION_STATUS } from "@sidecar/core";
+import {
+  isControllableAdapter,
+  isMessageCapableAdapter,
+  isWorkspaceAgentCapableAdapter,
+  isWorkspaceCapableAdapter,
+  SESSION_STATUS,
+} from "@sidecar/core";
 import type { CloudFetch } from "../src/cloud-session-adapter";
 import { JULES_PROVIDER, JulesSessionAdapter } from "../src/jules-adapter";
 
@@ -165,6 +171,14 @@ function adapterFor(
 function workingSession(id: string, updateTime: number): TestSession {
   return { id, state: TEST_STATE.IN_PROGRESS, createTime: updateTime, updateTime };
 }
+
+test("routes messages and controls, and no other write", () => {
+  const adapter = adapterFor(async () => new Response("{}", { status: 200 }));
+  assert.equal(isMessageCapableAdapter(adapter), true);
+  assert.equal(isControllableAdapter(adapter), true);
+  assert.equal(isWorkspaceCapableAdapter(adapter), false);
+  assert.equal(isWorkspaceAgentCapableAdapter(adapter), false);
+});
 
 test("observes a session in progress without exposing prompt-derived text", async () => {
   const api = fakeJulesApi([

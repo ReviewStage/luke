@@ -1,9 +1,18 @@
 import {
   agedStatus,
+  type ControllableSessionProviderAdapter,
+  type MessageCapableSessionProviderAdapter,
   maximumSessionSummaryLength,
   maximumSessionTitleLength,
   OBSERVATION_WINDOW,
+  type ProviderControlRequest,
+  type ProviderControlResult,
+  type ProviderMessageResult,
+  type ProviderSessionMessage,
   type ProviderSessionObservation,
+  type ProviderWorkspaceAgentRequest,
+  type ProviderWorkspaceRequest,
+  type ProviderWorkspaceResult,
   positiveInteger,
   SESSION_CONTROL_KIND,
   SESSION_STATUS,
@@ -11,7 +20,9 @@ import {
   type SessionProvider,
   type SessionStatus,
   WORKSPACE_TASK_SUPPORT,
+  type WorkspaceAgentCapableSessionProviderAdapter,
   type WorkspaceAgentSelection,
+  type WorkspaceCapableSessionProviderAdapter,
   type WorkspaceProject,
 } from "@sidecar/core";
 import {
@@ -313,7 +324,14 @@ interface ConductorSession {
  * own endpoint on a chat that advertised it, and a new workspace in a project
  * the latest pass listed, through Conductor's documented creation endpoint.
  */
-export class ConductorSessionAdapter extends CloudSessionAdapter {
+export class ConductorSessionAdapter
+  extends CloudSessionAdapter
+  implements
+    MessageCapableSessionProviderAdapter,
+    ControllableSessionProviderAdapter,
+    WorkspaceCapableSessionProviderAdapter,
+    WorkspaceAgentCapableSessionProviderAdapter
+{
   readonly #maximumObservedWorkspaces: number;
   readonly #maximumObservedSessions: number;
 
@@ -344,6 +362,24 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     );
   }
 
+  async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
+    return this.sendObservedMessage(message);
+  }
+
+  async executeControl(request: ProviderControlRequest): Promise<ProviderControlResult> {
+    return this.executeObservedControl(request);
+  }
+
+  async createWorkspace(request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult> {
+    return this.createObservedWorkspace(request, this.workspaceProjects());
+  }
+
+  async spawnWorkspaceAgent(
+    request: ProviderWorkspaceAgentRequest,
+  ): Promise<ProviderWorkspaceResult> {
+    return this.spawnObservedWorkspaceAgent(request);
+  }
+
   protected override forgetCachedIdentity(): void {
     this.#userId = undefined;
     this.#projects = [];
@@ -355,7 +391,7 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
    * happily — and is handed over after creation, through the documented
    * message endpoint on the first session the creation response names.
    */
-  override workspaceProjects(): readonly WorkspaceProject[] {
+  workspaceProjects(): readonly WorkspaceProject[] {
     return this.#projects.map((project) => ({
       providerProjectId: project.id,
       repository: project.repositoryLabel,

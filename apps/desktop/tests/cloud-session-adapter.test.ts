@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  type ControllableSessionProviderAdapter,
+  isControllableAdapter,
+  isMessageCapableAdapter,
+  isWorkspaceAgentCapableAdapter,
+  isWorkspaceCapableAdapter,
+  type MessageCapableSessionProviderAdapter,
+  type ProviderControlRequest,
+  type ProviderControlResult,
+  type ProviderMessageResult,
+  type ProviderSessionMessage,
   type ProviderSessionObservation,
   SESSION_LOCATION,
   SESSION_STATUS,
@@ -76,13 +86,24 @@ function observation(
 const STUB_APPROVE_CONTROL = { id: "approve", label: "Approve" } as const;
 
 /** Stands in for a real provider so the shared half can be tested on its own. */
-class StubCloudAdapter extends CloudSessionAdapter {
+class StubCloudAdapter
+  extends CloudSessionAdapter
+  implements MessageCapableSessionProviderAdapter, ControllableSessionProviderAdapter
+{
   passes = 0;
   forgottenIdentities = 0;
   collected: readonly ProviderSessionObservation[] = [];
 
   constructor(options: CloudAdapterOptions) {
     super({ provider: STUB_PROVIDER, defaultBaseUrl: TEST_BASE_URL }, options);
+  }
+
+  async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
+    return this.sendObservedMessage(message);
+  }
+
+  async executeControl(request: ProviderControlRequest): Promise<ProviderControlResult> {
+    return this.executeObservedControl(request);
   }
 
   protected override forgetCachedIdentity(): void {
@@ -132,6 +153,34 @@ function adapterFor(
     minimumRefreshIntervalMs: 0,
   });
 }
+
+/** A cloud adapter that observes and routes nothing. */
+class ObservationOnlyAdapter extends CloudSessionAdapter {
+  constructor(options: CloudAdapterOptions) {
+    super({ provider: STUB_PROVIDER, defaultBaseUrl: TEST_BASE_URL }, options);
+  }
+
+  protected async collect(): Promise<readonly ProviderSessionObservation[]> {
+    return [];
+  }
+}
+
+test("advertises only the writes a subclass has routed", () => {
+  const stub = adapterFor(stubFetch().fetch);
+  assert.equal(isMessageCapableAdapter(stub), true);
+  assert.equal(isControllableAdapter(stub), true);
+  assert.equal(isWorkspaceCapableAdapter(stub), false);
+  assert.equal(isWorkspaceAgentCapableAdapter(stub), false);
+
+  const observer = new ObservationOnlyAdapter({
+    readApiKey: async () => TEST_API_KEY,
+    baseUrl: TEST_BASE_URL,
+  });
+  assert.equal(isMessageCapableAdapter(observer), false);
+  assert.equal(isControllableAdapter(observer), false);
+  assert.equal(isWorkspaceCapableAdapter(observer), false);
+  assert.equal(isWorkspaceAgentCapableAdapter(observer), false);
+});
 
 test("accepts only a state this build knows", () => {
   const REPORTED_STATE = { IDLE: "idle", WORKING: "working" } as const;

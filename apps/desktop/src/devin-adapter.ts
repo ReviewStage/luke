@@ -1,7 +1,10 @@
 import {
   agedStatus,
   isRecord,
+  type MessageCapableSessionProviderAdapter,
   OBSERVATION_WINDOW,
+  type ProviderMessageResult,
+  type ProviderSessionMessage,
   type ProviderSessionObservation,
   positiveInteger,
   SESSION_STATUS,
@@ -268,7 +271,10 @@ function sessionFromRecord(
  * The one write it supports is a user-typed message, through Devin's own
  * message endpoint, to a session it advertised as taking one.
  */
-export class DevinSessionAdapter extends CloudSessionAdapter {
+export class DevinSessionAdapter
+  extends CloudSessionAdapter
+  implements MessageCapableSessionProviderAdapter
+{
   readonly #maximumObservedSessions: number;
 
   /** The identity, or `null` once Devin has named one Luke cannot observe as. */
@@ -287,6 +293,10 @@ export class DevinSessionAdapter extends CloudSessionAdapter {
       options.maximumObservedSessions,
       DEVIN_ADAPTER_DEFAULTS.MAXIMUM_OBSERVED_SESSIONS,
     );
+  }
+
+  async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
+    return this.sendObservedMessage(message);
   }
 
   protected override forgetCachedIdentity(): void {

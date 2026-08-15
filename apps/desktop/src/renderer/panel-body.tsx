@@ -1,6 +1,6 @@
 import type { ProviderControlResult, ProviderMessageResult } from "@sidecar/core";
 import {
-  PROVIDER_MESSAGE_RESULT_STATUS,
+  PROVIDER_ACT_RESULT_STATUS,
   SESSION_CONTROL_KIND,
   SESSION_LOCATION,
   SESSION_STATE,
@@ -53,8 +53,8 @@ const COMPOSE_PLACEHOLDER = "Send a follow-up…";
 
 /** One outcome line under the actions, said once and replaced by the next. */
 function feedbackFor(result: ProviderMessageResult | ProviderControlResult): string | undefined {
-  if (result.status === PROVIDER_MESSAGE_RESULT_STATUS.REJECTED) return result.reason;
-  if (result.status === PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED) {
+  if (result.status === PROVIDER_ACT_RESULT_STATUS.REJECTED) return result.reason;
+  if (result.status === PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED) {
     return "The session has moved on and no longer takes this.";
   }
   return undefined;
@@ -147,7 +147,7 @@ function SessionRowActions({
     setFeedback(undefined);
     try {
       const result = await writes.sendMessage(session, text);
-      if (result.status === PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED) {
+      if (result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
         // The draft has become the session's; the field empties for the next.
         setDraft("");
         setFeedback(`Sent to ${session.provider}`);
@@ -173,7 +173,7 @@ function SessionRowActions({
         // until its provider is observed again, and a control that seems to have
         // done nothing would be pressed a second time.
         setFeedback(
-          result.status === PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED
+          result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED
             ? `${session.provider} accepted`
             : feedbackFor(result),
         );

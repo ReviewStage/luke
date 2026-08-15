@@ -24,8 +24,7 @@ import {
   normalizeTrackedIssue,
   type ObservedWorkspaceProject,
   type PanelFormFactor,
-  PROVIDER_CONTROL_RESULT_STATUS,
-  PROVIDER_MESSAGE_RESULT_STATUS,
+  PROVIDER_ACT_RESULT_STATUS,
   type ProviderControlResult,
   type ProviderMessageResult,
   type ProviderWorkspaceResult,
@@ -1577,7 +1576,7 @@ function registerIpc(): void {
       const messageText = sessionMessageText(text);
       if (!messageText) {
         return {
-          status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
           reason: "A message has to be shorter than a document and longer than nothing.",
         };
       }
@@ -1585,13 +1584,13 @@ function registerIpc(): void {
       // deterministic capture must not reach any provider.
       const session = sessionRegistry.get(identity);
       if (!session?.canReceiveMessage) {
-        return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+        return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       }
       const adapter = sessionAdapters.find(
         (candidate) => candidate.provider.id === identity.providerId,
       );
       if (!adapter || !isMessageCapableAdapter(adapter)) {
-        return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+        return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       }
       const result = await adapter.sendMessage({
         providerSessionId: identity.providerSessionId,
@@ -1599,7 +1598,7 @@ function registerIpc(): void {
       });
       // A message that landed changes what the session is doing, so the row
       // should catch up as soon as its provider will say.
-      if (result.status === PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED) {
+      if (result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
         void sessionRegistry.refresh(adapter);
       }
       return result;
@@ -1619,18 +1618,18 @@ function registerIpc(): void {
       }
       const session = sessionRegistry.get(identity);
       const control = session?.controls.find((candidate) => candidate.id === controlId);
-      if (!control) return { status: PROVIDER_CONTROL_RESULT_STATUS.UNSUPPORTED };
+      if (!control) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       const adapter = sessionAdapters.find(
         (candidate) => candidate.provider.id === identity.providerId,
       );
       if (!adapter || !isControllableAdapter(adapter)) {
-        return { status: PROVIDER_CONTROL_RESULT_STATUS.UNSUPPORTED };
+        return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       }
       const result = await adapter.executeControl({
         providerSessionId: identity.providerSessionId,
         control,
       });
-      if (result.status === PROVIDER_CONTROL_RESULT_STATUS.ACCEPTED) {
+      if (result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
         void sessionRegistry.refresh(adapter);
       }
       return result;
@@ -1669,19 +1668,19 @@ function registerIpc(): void {
       if (namedSelection !== undefined && !isWorkspaceAgentSelection(providerId, namedSelection)) {
         throw new Error("Invalid workspace creation request");
       }
-      if (fixtureMode) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+      if (fixtureMode) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       const adapter = sessionAdapters.find((candidate) => candidate.provider.id === providerId);
       if (!adapter || !isWorkspaceCapableAdapter(adapter)) {
-        return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+        return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       }
       const offered = adapter
         .workspaceProjects()
         .some((project) => project.providerProjectId === providerProjectId);
-      if (!offered) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+      if (!offered) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       const workspaceName = name === undefined ? undefined : workspaceNameText(name);
       if (name !== undefined && workspaceName === undefined) {
         return {
-          status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
           reason: "A workspace name has to be short enough to say and longer than nothing.",
         };
       }
@@ -1690,7 +1689,7 @@ function registerIpc(): void {
       const openingTask = task === undefined ? undefined : sessionMessageText(task);
       if (task !== undefined && openingTask === undefined) {
         return {
-          status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
           reason: "A task has to be shorter than a document and longer than nothing.",
         };
       }
@@ -1714,7 +1713,7 @@ function registerIpc(): void {
       // rejection refreshes too: a workspace can stand with its opening task
       // undelivered, and the adapter answers a rejection that never reached
       // the network from its cache anyway.
-      if (result.status !== PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED) {
+      if (result.status !== PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED) {
         void sessionRegistry.refresh(adapter);
       }
       // The first workspace that actually lands chooses the default provider,
@@ -1724,7 +1723,7 @@ function registerIpc(): void {
       // model composed decides this — and losing the save loses only the
       // remembered default, never the workspace that just landed.
       if (
-        result.status === PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED &&
+        result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED &&
         isProviderId(adapter.provider.id)
       ) {
         try {
@@ -1845,7 +1844,7 @@ function registerIpc(): void {
       // A fixture run has an empty registry, so it refuses every ask.
       const session = sessionRegistry.get(identity);
       const advertised = session?.spawnableAgents.find((candidate) => candidate === agent.trim());
-      if (!advertised) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+      if (!advertised) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       // A model named for this one agent must be a documented pairing of
       // exactly the asked-for kind: the user's chosen agent is never
       // re-decided by the model named beside it.
@@ -1863,19 +1862,19 @@ function registerIpc(): void {
         (candidate) => candidate.provider.id === identity.providerId,
       );
       if (!adapter || !isWorkspaceAgentCapableAdapter(adapter)) {
-        return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+        return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       }
       const sessionName = name === undefined ? undefined : workspaceNameText(name);
       if (name !== undefined && sessionName === undefined) {
         return {
-          status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
           reason: "A session name has to be short enough to say and longer than nothing.",
         };
       }
       const openingTask = task === undefined ? undefined : sessionMessageText(task);
       if (task !== undefined && openingTask === undefined) {
         return {
-          status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
           reason: "A task has to be shorter than a document and longer than nothing.",
         };
       }
@@ -1902,7 +1901,7 @@ function registerIpc(): void {
       // A new agent is a session the panel should be showing, so the next
       // look must actually ask rather than serve the cache — on a rejection
       // too, for the same reason a partial workspace creation refreshes.
-      if (result.status !== PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED) {
+      if (result.status !== PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED) {
         void sessionRegistry.refresh(adapter);
       }
       return result;

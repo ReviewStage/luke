@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SESSION_STATUS } from "@sidecar/core";
+import {
+  isControllableAdapter,
+  isMessageCapableAdapter,
+  isWorkspaceAgentCapableAdapter,
+  isWorkspaceCapableAdapter,
+  SESSION_STATUS,
+} from "@sidecar/core";
 import type { CloudFetch } from "../src/cloud-session-adapter";
 import { CURSOR_PROVIDER, CursorSessionAdapter } from "../src/cursor-adapter";
 
@@ -244,6 +250,14 @@ function adapterFor(
       : { maximumObservedSessions: overrides.maximumObservedSessions }),
   });
 }
+
+test("routes messages, controls, and workspace creation, and nothing else", () => {
+  const adapter = adapterFor(async () => new Response("{}", { status: 200 }));
+  assert.equal(isMessageCapableAdapter(adapter), true);
+  assert.equal(isControllableAdapter(adapter), true);
+  assert.equal(isWorkspaceCapableAdapter(adapter), true);
+  assert.equal(isWorkspaceAgentCapableAdapter(adapter), false);
+});
 
 function runningAgent(id: string, updatedAt: number): TestAgent {
   return {

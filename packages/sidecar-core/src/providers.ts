@@ -32,20 +32,32 @@ export function isProviderId(value: string): value is ProviderId {
   return PROVIDER_IDS.has(value);
 }
 
-export const PROVIDER_CONTROL_RESULT_STATUS = {
-  ACCEPTED: "accepted",
-  REJECTED: "rejected",
-  UNSUPPORTED: "unsupported",
-} as const;
-
-export type ProviderControlResultStatus =
-  (typeof PROVIDER_CONTROL_RESULT_STATUS)[keyof typeof PROVIDER_CONTROL_RESULT_STATUS];
-
 /** A provider adapter has no dependency on Electron, a renderer, or live UI state. */
 export interface SessionProviderAdapter {
   readonly provider: SessionProvider;
   observe(): Promise<readonly ProviderSessionObservation[]>;
 }
+
+/**
+ * What became of a write the user asked for. Every adapter capability answers
+ * with the same three: accepted, rejected with a reason the user can act on,
+ * or unsupported — the adapter has no documented way to do this, which is an
+ * answer rather than a failure. One status set, because two identical triples
+ * would be an API break the moment they diverged.
+ */
+export const PROVIDER_ACT_RESULT_STATUS = {
+  ACCEPTED: "accepted",
+  REJECTED: "rejected",
+  UNSUPPORTED: "unsupported",
+} as const;
+
+export type ProviderActResultStatus =
+  (typeof PROVIDER_ACT_RESULT_STATUS)[keyof typeof PROVIDER_ACT_RESULT_STATUS];
+
+export type ProviderActResult =
+  | { status: typeof PROVIDER_ACT_RESULT_STATUS.ACCEPTED }
+  | { status: typeof PROVIDER_ACT_RESULT_STATUS.REJECTED; reason: string }
+  | { status: typeof PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
 
 /** A provider-local request for a control that was previously exposed by observation. */
 export interface ProviderControlRequest {
@@ -54,13 +66,11 @@ export interface ProviderControlRequest {
 }
 
 /**
- * Providers must report unsupported or rejected controls explicitly; the core
- * deliberately provides no fallback path such as terminal input injection.
+ * What became of a control. Providers must report unsupported or rejected
+ * controls explicitly; the core deliberately provides no fallback path such
+ * as terminal input injection.
  */
-export type ProviderControlResult =
-  | { status: typeof PROVIDER_CONTROL_RESULT_STATUS.ACCEPTED }
-  | { status: typeof PROVIDER_CONTROL_RESULT_STATUS.REJECTED; reason: string }
-  | { status: typeof PROVIDER_CONTROL_RESULT_STATUS.UNSUPPORTED };
+export type ProviderControlResult = ProviderActResult;
 
 /**
  * Optional extension for adapters with a reliable provider-owned control path.
@@ -75,19 +85,8 @@ export interface ControllableSessionProviderAdapter extends SessionProviderAdapt
 export function isControllableAdapter(
   adapter: SessionProviderAdapter,
 ): adapter is ControllableSessionProviderAdapter {
-  return (
-    typeof (adapter as Partial<ControllableSessionProviderAdapter>).executeControl === "function"
-  );
+  return adapterHasFunctions(adapter, "executeControl");
 }
-
-export const PROVIDER_MESSAGE_RESULT_STATUS = {
-  ACCEPTED: "accepted",
-  REJECTED: "rejected",
-  UNSUPPORTED: "unsupported",
-} as const;
-
-export type ProviderMessageResultStatus =
-  (typeof PROVIDER_MESSAGE_RESULT_STATUS)[keyof typeof PROVIDER_MESSAGE_RESULT_STATUS];
 
 /** A user-authored message for one session the adapter has already observed. */
 export interface ProviderSessionMessage {
@@ -100,10 +99,7 @@ export interface ProviderSessionMessage {
  * never the message itself; unsupported means the adapter has no documented
  * way to message this session, which is an answer rather than a failure.
  */
-export type ProviderMessageResult =
-  | { status: typeof PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED }
-  | { status: typeof PROVIDER_MESSAGE_RESULT_STATUS.REJECTED; reason: string }
-  | { status: typeof PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+export type ProviderMessageResult = ProviderActResult;
 
 /**
  * Optional extension for adapters whose provider documents a way to hand a
@@ -121,9 +117,7 @@ export interface MessageCapableSessionProviderAdapter extends SessionProviderAda
 export function isMessageCapableAdapter(
   adapter: SessionProviderAdapter,
 ): adapter is MessageCapableSessionProviderAdapter {
-  return (
-    typeof (adapter as Partial<MessageCapableSessionProviderAdapter>).sendMessage === "function"
-  );
+  return adapterHasFunctions(adapter, "sendMessage");
 }
 
 /**
@@ -285,7 +279,7 @@ export interface ProviderWorkspaceRequest {
  * the same reasons: a rejection carries a reason the user can act on, and
  * unsupported means the provider documents no way to create one here.
  */
-export type ProviderWorkspaceResult = ProviderMessageResult;
+export type ProviderWorkspaceResult = ProviderActResult;
 
 /**
  * Optional extension for adapters whose provider documents an endpoint that
@@ -304,11 +298,7 @@ export interface WorkspaceCapableSessionProviderAdapter extends SessionProviderA
 export function isWorkspaceCapableAdapter(
   adapter: SessionProviderAdapter,
 ): adapter is WorkspaceCapableSessionProviderAdapter {
-  const candidate = adapter as Partial<WorkspaceCapableSessionProviderAdapter>;
-  return (
-    typeof candidate.workspaceProjects === "function" &&
-    typeof candidate.createWorkspace === "function"
-  );
+  return adapterHasFunctions(adapter, "workspaceProjects", "createWorkspace");
 }
 
 /**
@@ -351,8 +341,14 @@ export interface WorkspaceAgentCapableSessionProviderAdapter extends SessionProv
 export function isWorkspaceAgentCapableAdapter(
   adapter: SessionProviderAdapter,
 ): adapter is WorkspaceAgentCapableSessionProviderAdapter {
-  return (
-    typeof (adapter as Partial<WorkspaceAgentCapableSessionProviderAdapter>).spawnWorkspaceAgent ===
-    "function"
-  );
+  return adapterHasFunctions(adapter, "spawnWorkspaceAgent");
+}
+
+/** Whether every named method is actually a function on this adapter. */
+function adapterHasFunctions(
+  adapter: SessionProviderAdapter,
+  ...methods: readonly string[]
+): boolean {
+  const candidate = adapter as unknown as Record<string, unknown>;
+  return methods.every((method) => typeof candidate[method] === "function");
 }
