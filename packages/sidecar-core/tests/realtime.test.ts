@@ -53,8 +53,8 @@ import {
   REALTIME_SESSION_TYPE,
   realtimeInstructions,
 } from "../src/realtime-protocol";
-import { maximumSessionMessageLength } from "../src/session";
 import { REALTIME_TOOL } from "../src/realtime-tools";
+import { maximumSessionMessageLength } from "../src/session";
 
 const DECIDED_AT = 1_800_000_000_000;
 const EXPIRES_AT_SECONDS = 1_800_000_060;
