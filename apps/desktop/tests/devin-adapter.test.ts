@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SESSION_STATUS } from "@sidecar/core";
+import {
+  isControllableAdapter,
+  isMessageCapableAdapter,
+  isWorkspaceAgentCapableAdapter,
+  isWorkspaceCapableAdapter,
+  SESSION_STATUS,
+} from "@sidecar/core";
 import type { CloudFetch } from "../src/cloud-session-adapter";
 import { DEVIN_PROVIDER, DevinSessionAdapter } from "../src/devin-adapter";
 
@@ -200,6 +206,14 @@ function adapterFor(
 function workingSession(id: string, updatedAt: number): TestSession {
   return { id, status: TEST_STATUS.RUNNING, detail: TEST_DETAIL.WORKING, updatedAt };
 }
+
+test("routes messages and no other write", () => {
+  const adapter = adapterFor(async () => new Response("{}", { status: 200 }));
+  assert.equal(isMessageCapableAdapter(adapter), true);
+  assert.equal(isControllableAdapter(adapter), false);
+  assert.equal(isWorkspaceCapableAdapter(adapter), false);
+  assert.equal(isWorkspaceAgentCapableAdapter(adapter), false);
+});
 
 test("observes a working session and labels it the way Devin named it", async () => {
   const api = fakeDevinApi([workingSession("devin-working", TEST_TIME - 30_000)]);

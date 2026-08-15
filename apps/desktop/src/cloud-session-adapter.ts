@@ -1,10 +1,9 @@
 import {
-  type ControllableSessionProviderAdapter,
   isRecord,
-  type MessageCapableSessionProviderAdapter,
   nonNegativeNumber,
   OBSERVATION_WINDOW,
-  PROVIDER_MESSAGE_RESULT_STATUS,
+  PROVIDER_ACT_RESULT_STATUS,
+  type ProviderActResult,
   type ProviderControlRequest,
   type ProviderControlResult,
   type ProviderMessageResult,
@@ -18,14 +17,13 @@ import {
   SESSION_STATUS,
   type SessionControl,
   type SessionProvider,
+  type SessionProviderAdapter,
   type SessionStatus,
   sessionMessageText,
   text,
   UNKNOWN_WORKSPACE_LABEL,
   WORKSPACE_TASK_SUPPORT,
-  type WorkspaceAgentCapableSessionProviderAdapter,
   type WorkspaceAgentSelection,
-  type WorkspaceCapableSessionProviderAdapter,
   type WorkspaceProject,
   workspaceNameText,
 } from "@sidecar/core";
@@ -242,22 +240,19 @@ function resolveBaseUrl(profile: CloudAdapterProfile, configured: string | undef
 /**
  * The shared half of every cloud provider adapter: credential handling, its own
  * refresh cadence, the failure rules that decide whether a snapshot survives,
- * and bounded read-only requests. A subclass supplies only the provider's
- * routes and how its reported state maps onto Luke's.
+ * and bounded read-only requests. A subclass supplies the provider's routes,
+ * how its reported state maps onto Luke's, and — by declaring the matching
+ * interfaces — which writes it actually routes.
  *
- * The only writes any of this can make are `sendMessage`, `executeControl`,
- * and `createWorkspace`, and each acts on nothing but what a user asked for
- * against something the last pass observed — a session that advertised the
- * capability being used, or a project the provider itself listed.
- * Observation itself stays read-only.
+ * Write machinery lives here as protected helpers so a subclass that does not
+ * route a capability does not grow the method the probe looks for: capability
+ * is which interfaces the adapter declares, the same meaning local adapters
+ * already have. Each helper acts on nothing but what a user asked for against
+ * something the last pass observed — a session that advertised the capability
+ * being used, or a project the provider itself listed. Observation itself
+ * stays read-only.
  */
-export abstract class CloudSessionAdapter
-  implements
-    MessageCapableSessionProviderAdapter,
-    ControllableSessionProviderAdapter,
-    WorkspaceCapableSessionProviderAdapter,
-    WorkspaceAgentCapableSessionProviderAdapter
-{
+export abstract class CloudSessionAdapter implements SessionProviderAdapter {
   readonly provider: SessionProvider;
 
   readonly #readApiKey: () => Promise<string | undefined>;
@@ -346,18 +341,20 @@ export abstract class CloudSessionAdapter
    * text outside the message bound, and a missing credential all answer
    * without touching the network.
    */
-  async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
+  protected async sendObservedMessage(
+    message: ProviderSessionMessage,
+  ): Promise<ProviderMessageResult> {
     const observation = this.#observations.find(
       (candidate) => candidate.providerSessionId === message.providerSessionId,
     );
     if (!observation?.canReceiveMessage) {
-      return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+      return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
     }
 
     const text = sessionMessageText(message.text);
     if (!text) {
       return {
-        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
         reason: "A message has to be shorter than a document and longer than nothing.",
       };
     }
@@ -371,13 +368,13 @@ export abstract class CloudSessionAdapter
     if (!apiKey) return this.#missingKeyRejection();
 
     const route = this.messageRoute(message.providerSessionId, text);
-    if (!route) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+    if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
     return this.#postWrite(apiKey, route);
   }
 
-  #missingKeyRejection(): ProviderMessageResult {
+  #missingKeyRejection(): ProviderActResult {
     return {
-      status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+      status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
       reason: `${this.provider.displayName}'s API key is no longer configured.`,
     };
   }
@@ -389,7 +386,9 @@ export abstract class CloudSessionAdapter
    * not observe, for a control that session did not advertise, or without a
    * credential.
    */
-  async executeControl(request: ProviderControlRequest): Promise<ProviderControlResult> {
+  protected async executeObservedControl(
+    request: ProviderControlRequest,
+  ): Promise<ProviderControlResult> {
     const observation = this.#observations.find(
       (candidate) => candidate.providerSessionId === request.providerSessionId,
     );
@@ -397,23 +396,14 @@ export abstract class CloudSessionAdapter
     // is built from, so whatever it targets is the thing the last pass actually
     // saw, and nothing a caller sends can redirect it.
     const advertised = observation?.controls?.find((control) => control.id === request.control.id);
-    if (!advertised) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+    if (!advertised) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
 
     const apiKey = await this.#readApiKey().catch(() => undefined);
     if (!apiKey) return this.#missingKeyRejection();
 
     const route = this.controlRoute(request.providerSessionId, advertised);
-    if (!route) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+    if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
     return this.#postWrite(apiKey, route);
-  }
-
-  /**
-   * The projects the latest pass reported this provider will create a
-   * workspace in. Empty by default, so a provider that documents no creation
-   * endpoint offers nowhere — the same posture as the write routes below.
-   */
-  workspaceProjects(): readonly WorkspaceProject[] {
-    return [];
   }
 
   /**
@@ -423,29 +413,29 @@ export abstract class CloudSessionAdapter
    * its observation did not list, a name or task outside its bound, and a
    * missing credential all answer without touching the network.
    */
-  async spawnWorkspaceAgent(
+  protected async spawnObservedWorkspaceAgent(
     request: ProviderWorkspaceAgentRequest,
   ): Promise<ProviderWorkspaceResult> {
     const observation = this.#observations.find(
       (candidate) => candidate.providerSessionId === request.providerSessionId,
     );
-    if (!observation) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+    if (!observation) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
     // The advertised list — not the caller's word — is what the route is
     // built from, so an agent kind is only ever one the last pass promised.
     const agent = observation.spawnableAgents?.find((candidate) => candidate === request.agent);
-    if (!agent) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+    if (!agent) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
 
     const name = request.name === undefined ? undefined : workspaceNameText(request.name);
     if (request.name !== undefined && !name) {
       return {
-        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
         reason: "A session name has to be short enough to say and longer than nothing.",
       };
     }
     const task = request.task === undefined ? undefined : sessionMessageText(request.task);
     if (request.task !== undefined && !task) {
       return {
-        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
         reason: "A task has to be shorter than a document and longer than nothing.",
       };
     }
@@ -461,7 +451,7 @@ export abstract class CloudSessionAdapter
       request.model,
       request.effort,
     );
-    if (!route) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+    if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
 
     const apiKey = await this.#readApiKey().catch(() => undefined);
     if (!apiKey) return this.#missingKeyRejection();
@@ -497,16 +487,19 @@ export abstract class CloudSessionAdapter
    * outside its bound, a task a project does not take or the absence of one it
    * needs, and a missing credential all answer without touching the network.
    */
-  async createWorkspace(request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult> {
-    const project = this.workspaceProjects().find(
+  protected async createObservedWorkspace(
+    request: ProviderWorkspaceRequest,
+    projects: readonly WorkspaceProject[],
+  ): Promise<ProviderWorkspaceResult> {
+    const project = projects.find(
       (candidate) => candidate.providerProjectId === request.providerProjectId,
     );
-    if (!project) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+    if (!project) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
 
     const name = request.name === undefined ? undefined : workspaceNameText(request.name);
     if (request.name !== undefined && !name) {
       return {
-        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
         reason: "A workspace name has to be short enough to say and longer than nothing.",
       };
     }
@@ -517,19 +510,19 @@ export abstract class CloudSessionAdapter
     const task = request.task === undefined ? undefined : sessionMessageText(request.task);
     if (request.task !== undefined && !task) {
       return {
-        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
         reason: "A task has to be shorter than a document and longer than nothing.",
       };
     }
     if (task && project.taskSupport === WORKSPACE_TASK_SUPPORT.NONE) {
       return {
-        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
         reason: "This project takes no opening task.",
       };
     }
     if (!task && project.taskSupport === WORKSPACE_TASK_SUPPORT.REQUIRED) {
       return {
-        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
         reason: "This project needs an opening task to create a workspace.",
       };
     }
@@ -538,9 +531,9 @@ export abstract class CloudSessionAdapter
     if (!apiKey) return this.#missingKeyRejection();
 
     const route = this.workspaceCreationRoute(project, name, task, request.agentSelection);
-    if (!route) return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+    if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
     const created = await this.#postWriteDetailed(apiKey, route, WRITE_SUBJECT.PROJECT);
-    if (created.outcome.status !== PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED || !task) {
+    if (created.outcome.status !== PROVIDER_ACT_RESULT_STATUS.ACCEPTED || !task) {
       return created.outcome;
     }
 
@@ -552,18 +545,18 @@ export abstract class CloudSessionAdapter
     if (followUp === undefined) return created.outcome;
     if ("undeliverable" in followUp) {
       return {
-        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
         reason: `The workspace was created, but its opening task was not delivered: ${followUp.undeliverable}`,
       };
     }
     const delivered = await this.#postWriteDetailed(apiKey, followUp, WRITE_SUBJECT.SESSION);
-    if (delivered.outcome.status === PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED) {
+    if (delivered.outcome.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
       return created.outcome;
     }
     return {
-      status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+      status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
       reason: `The workspace was created, but its opening task was not delivered: ${
-        delivered.outcome.status === PROVIDER_MESSAGE_RESULT_STATUS.REJECTED
+        delivered.outcome.status === PROVIDER_ACT_RESULT_STATUS.REJECTED
           ? delivered.outcome.reason
           : "the provider documents no way to hand it over."
       }`,
@@ -773,7 +766,7 @@ export abstract class CloudSessionAdapter
     apiKey: string,
     route: CloudWriteRoute,
     subject: WriteSubject = WRITE_SUBJECT.SESSION,
-  ): Promise<ProviderMessageResult> {
+  ): Promise<ProviderActResult> {
     return (await this.#postWriteDetailed(apiKey, route, subject)).outcome;
   }
 
@@ -786,7 +779,7 @@ export abstract class CloudSessionAdapter
     apiKey: string,
     route: CloudWriteRoute,
     subject: WriteSubject,
-  ): Promise<{ outcome: ProviderMessageResult; body?: Record<string, unknown> }> {
+  ): Promise<{ outcome: ProviderActResult; body?: Record<string, unknown> }> {
     const name = this.provider.displayName;
     let response: Response;
     try {
@@ -807,7 +800,7 @@ export abstract class CloudSessionAdapter
     } catch {
       return {
         outcome: {
-          status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
           reason: `${name} could not be reached, so nothing was sent.`,
         },
       };
@@ -823,14 +816,14 @@ export abstract class CloudSessionAdapter
       // yes, so only a follow-up that needed the body has anything to miss.
       const body = await response.json().catch(() => undefined);
       return {
-        outcome: { status: PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED },
+        outcome: { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED },
         ...(isRecord(body) ? { body } : {}),
       };
     }
     if (response.status === HTTP_STATUS.UNAUTHORIZED || response.status === HTTP_STATUS.FORBIDDEN) {
       return {
         outcome: {
-          status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
           reason: `${name} rejected the configured API key.`,
         },
       };
@@ -838,7 +831,7 @@ export abstract class CloudSessionAdapter
     if (response.status === HTTP_STATUS.NOT_FOUND) {
       return {
         outcome: {
-          status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
           reason: `${name} no longer has this ${subject}.`,
         },
       };
@@ -846,14 +839,14 @@ export abstract class CloudSessionAdapter
     if (response.status === HTTP_STATUS.CONFLICT) {
       return {
         outcome: {
-          status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
           reason: `${name} says this ${subject} has moved on since Luke last looked.`,
         },
       };
     }
     return {
       outcome: {
-        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
         reason: `${name} answered with status ${response.status}, so the request may not have landed.`,
       },
     };

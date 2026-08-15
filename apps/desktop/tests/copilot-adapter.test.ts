@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SESSION_STATUS } from "@sidecar/core";
+import {
+  isControllableAdapter,
+  isMessageCapableAdapter,
+  isWorkspaceAgentCapableAdapter,
+  isWorkspaceCapableAdapter,
+  SESSION_STATUS,
+} from "@sidecar/core";
 import type { CloudFetch } from "../src/cloud-session-adapter";
 import { COPILOT_PROVIDER, CopilotSessionAdapter } from "../src/copilot-adapter";
 
@@ -169,6 +175,14 @@ function adapterFor(
 function workingTask(id: string, updatedAt: number): TestTask {
   return { id, state: TEST_STATE.IN_PROGRESS, createdAt: updatedAt, updatedAt };
 }
+
+test("is read-only at the adapter probe, matching the writes it does not route", () => {
+  const adapter = adapterFor(fakeAgentTasksApi([]).fetch);
+  assert.equal(isMessageCapableAdapter(adapter), false);
+  assert.equal(isControllableAdapter(adapter), false);
+  assert.equal(isWorkspaceCapableAdapter(adapter), false);
+  assert.equal(isWorkspaceAgentCapableAdapter(adapter), false);
+});
 
 test("observes a task in progress without exposing prompt-derived text", async () => {
   const api = fakeAgentTasksApi([

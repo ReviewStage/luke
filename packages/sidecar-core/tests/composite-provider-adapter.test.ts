@@ -4,7 +4,7 @@ import {
   CompositeSessionProviderAdapter,
   InMemorySessionRegistry,
   type MessageCapableSessionProviderAdapter,
-  PROVIDER_MESSAGE_RESULT_STATUS,
+  PROVIDER_ACT_RESULT_STATUS,
   type ProviderMessageResult,
   type ProviderSessionMessage,
   type ProviderSessionObservation,
@@ -160,17 +160,17 @@ test("carries a message past observers that have never seen the session", async 
     adapters: [
       // The local observer can carry no message at all, and must not stop one.
       observerOf(cursor, [observation("local-session")]),
-      messenger(cursor, () => ({ status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED })),
+      messenger(cursor, () => ({ status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED })),
       messenger(cursor, (message) => {
         sent.push(message);
-        return { status: PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED };
+        return { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
       }),
     ],
   });
 
   const result = await adapter.sendMessage({ providerSessionId: "cloud-agent", text: "go on" });
 
-  assert.deepEqual(result, { status: PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED });
+  assert.deepEqual(result, { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED });
   assert.deepEqual(sent, [{ providerSessionId: "cloud-agent", text: "go on" }]);
 });
 
@@ -180,12 +180,12 @@ test("lets the observer that holds the session refuse for itself", async () => {
     provider: cursor,
     adapters: [
       messenger(cursor, () => ({
-        status: PROVIDER_MESSAGE_RESULT_STATUS.REJECTED,
+        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
         reason: "Cursor is still busy with the current run",
       })),
       messenger(cursor, (message) => {
         unreachable.push(message);
-        return { status: PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED };
+        return { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
       }),
     ],
   });
@@ -194,7 +194,7 @@ test("lets the observer that holds the session refuse for itself", async () => {
 
   // A rejection is the session's own answer, so it must not be shopped past
   // the observer that gave it to one that would say yes to a different session.
-  assert.equal(result.status, PROVIDER_MESSAGE_RESULT_STATUS.REJECTED);
+  assert.equal(result.status, PROVIDER_ACT_RESULT_STATUS.REJECTED);
   assert.deepEqual(unreachable, []);
 });
 
@@ -206,7 +206,7 @@ test("answers unsupported when no observer can carry a message", async () => {
 
   const result = await adapter.sendMessage({ providerSessionId: "local-session", text: "go on" });
 
-  assert.deepEqual(result, { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED });
+  assert.deepEqual(result, { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED });
 });
 
 function workspaceCreator(
@@ -239,7 +239,7 @@ test("offers every observer's projects and carries a creation ask to the one tha
           },
         ],
         () => ({
-          status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED,
+          status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED,
         }),
       ),
       workspaceCreator(
@@ -253,7 +253,7 @@ test("offers every observer's projects and carries a creation ask to the one tha
         ],
         (request) => {
           created.push(request);
-          return { status: PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED };
+          return { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
         },
       ),
     ],
@@ -274,7 +274,7 @@ test("offers every observer's projects and carries a creation ask to the one tha
 
   const result = await adapter.createWorkspace({ providerProjectId: "proj-2" });
 
-  assert.deepEqual(result, { status: PROVIDER_MESSAGE_RESULT_STATUS.ACCEPTED });
+  assert.deepEqual(result, { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED });
   assert.deepEqual(created, [{ providerProjectId: "proj-2" }]);
 });
 
@@ -286,6 +286,6 @@ test("answers unsupported when no observer offers workspace creation", async () 
 
   assert.deepEqual(adapter.workspaceProjects(), []);
   assert.deepEqual(await adapter.createWorkspace({ providerProjectId: "proj-1" }), {
-    status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED,
+    status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED,
   });
 });

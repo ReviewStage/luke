@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SESSION_STATUS } from "@sidecar/core";
+import {
+  isControllableAdapter,
+  isMessageCapableAdapter,
+  isWorkspaceAgentCapableAdapter,
+  isWorkspaceCapableAdapter,
+  SESSION_STATUS,
+} from "@sidecar/core";
 import type { CloudFetch } from "../src/cloud-session-adapter";
 import { CONDUCTOR_PROVIDER, ConductorSessionAdapter } from "../src/conductor-adapter";
 
@@ -264,6 +270,14 @@ function adapterFor(
       : { maximumObservedSessions: overrides.maximumObservedSessions }),
   });
 }
+
+test("routes every write Conductor documents", () => {
+  const adapter = adapterFor(async () => new Response("{}", { status: 200 }));
+  assert.equal(isMessageCapableAdapter(adapter), true);
+  assert.equal(isControllableAdapter(adapter), true);
+  assert.equal(isWorkspaceCapableAdapter(adapter), true);
+  assert.equal(isWorkspaceAgentCapableAdapter(adapter), true);
+});
 
 const LUKE_PROJECT: TestProject = {
   id: "project-luke",

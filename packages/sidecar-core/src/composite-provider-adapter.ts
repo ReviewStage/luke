@@ -5,8 +5,8 @@ import {
   isWorkspaceAgentCapableAdapter,
   isWorkspaceCapableAdapter,
   type MessageCapableSessionProviderAdapter,
-  PROVIDER_CONTROL_RESULT_STATUS,
-  PROVIDER_MESSAGE_RESULT_STATUS,
+  PROVIDER_ACT_RESULT_STATUS,
+  type ProviderActResult,
   type ProviderControlRequest,
   type ProviderControlResult,
   type ProviderMessageResult,
@@ -86,22 +86,12 @@ export class CompositeSessionProviderAdapter
    * answer, accepted or rejected, is the session's own and ends the search.
    */
   async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
-    for (const adapter of this.#adapters) {
-      if (!isMessageCapableAdapter(adapter)) continue;
-      const result = await adapter.sendMessage(message);
-      if (result.status !== PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED) return result;
-    }
-    return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+    return this.#dispatchAct(isMessageCapableAdapter, (adapter) => adapter.sendMessage(message));
   }
 
   /** A control finds its observer the same way a message does. */
   async executeControl(request: ProviderControlRequest): Promise<ProviderControlResult> {
-    for (const adapter of this.#adapters) {
-      if (!isControllableAdapter(adapter)) continue;
-      const result = await adapter.executeControl(request);
-      if (result.status !== PROVIDER_CONTROL_RESULT_STATUS.UNSUPPORTED) return result;
-    }
-    return { status: PROVIDER_CONTROL_RESULT_STATUS.UNSUPPORTED };
+    return this.#dispatchAct(isControllableAdapter, (adapter) => adapter.executeControl(request));
   }
 
   /** Every project any observer offered, in the order the observers stand in. */
@@ -117,23 +107,34 @@ export class CompositeSessionProviderAdapter
    * and any firm answer is the project's own and ends the search.
    */
   async createWorkspace(request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult> {
-    for (const adapter of this.#adapters) {
-      if (!isWorkspaceCapableAdapter(adapter)) continue;
-      const result = await adapter.createWorkspace(request);
-      if (result.status !== PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED) return result;
-    }
-    return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+    return this.#dispatchAct(isWorkspaceCapableAdapter, (adapter) =>
+      adapter.createWorkspace(request),
+    );
   }
 
   /** A new agent finds the observer holding its workspace the same way. */
   async spawnWorkspaceAgent(
     request: ProviderWorkspaceAgentRequest,
   ): Promise<ProviderWorkspaceResult> {
+    return this.#dispatchAct(isWorkspaceAgentCapableAdapter, (adapter) =>
+      adapter.spawnWorkspaceAgent(request),
+    );
+  }
+
+  /**
+   * Ask each capable observer in turn. Unsupported means this observer has
+   * never seen the subject, so the question moves on; any firm answer is the
+   * subject's own and ends the search.
+   */
+  async #dispatchAct<Capable extends SessionProviderAdapter>(
+    isCapable: (adapter: SessionProviderAdapter) => adapter is Capable,
+    act: (adapter: Capable) => Promise<ProviderActResult>,
+  ): Promise<ProviderActResult> {
     for (const adapter of this.#adapters) {
-      if (!isWorkspaceAgentCapableAdapter(adapter)) continue;
-      const result = await adapter.spawnWorkspaceAgent(request);
-      if (result.status !== PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED) return result;
+      if (!isCapable(adapter)) continue;
+      const result = await act(adapter);
+      if (result.status !== PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED) return result;
     }
-    return { status: PROVIDER_MESSAGE_RESULT_STATUS.UNSUPPORTED };
+    return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
   }
 }
