@@ -265,17 +265,6 @@ export class OpenAiRealtimeCredentialMinter {
 }
 
 /**
- * Builds a minter only when an API key is configured. Luke observes sessions
- * and stays silent without one, so no part of the app requires credentials.
- *
- * `OPENAI_BASE_URL` is deliberately not read here. It redirects attention
- * review, which runs entirely in the main process, but the voice path also has
- * to survive the renderer's content-security policy, and that only permits the
- * canonical OpenAI host. Honoring the variable here would mint a credential
- * against one host and then fail the SDP exchange against another — an
- * unsupported endpoint that appears to work until the first word is spoken.
- */
-/**
  * Explains why no minter exists, which is the state the panel shows as "voice
  * unavailable". Distinguishing a missing key from a fixture run matters: they
  * look identical from the UI and have completely different fixes.
@@ -295,6 +284,17 @@ export function unavailableRealtimeDiagnostics(fixtureMode: boolean): RealtimeDi
   };
 }
 
+/**
+ * Builds a minter only when an API key is configured. Luke observes sessions
+ * and stays silent without one, so no part of the app requires credentials.
+ *
+ * `OPENAI_BASE_URL` is deliberately not read here. It redirects attention
+ * review, which runs entirely in the main process, but the voice path also has
+ * to survive the renderer's content-security policy, and that only permits the
+ * canonical OpenAI host. Honoring the variable here would mint a credential
+ * against one host and then fail the SDP exchange against another — an
+ * unsupported endpoint that appears to work until the first word is spoken.
+ */
 export function openAiRealtimeCredentialsFromEnvironment(
   options: OpenAiRealtimeEnvironmentOptions = {},
 ): OpenAiRealtimeCredentialMinter | undefined {
