@@ -4,7 +4,6 @@ import {
   type AttentionSpeech,
   SESSION_NOTICE_STATUS,
   type SessionNotice,
-  type SessionNoticeStatus,
 } from "@sidecar/core";
 
 /**
@@ -21,18 +20,22 @@ function noticePlace(notice: SessionNotice): string {
   return place ? ` on ${place}` : "";
 }
 
-const NOTICE_SENTENCE: Record<SessionNoticeStatus, (notice: SessionNotice) => string> = {
-  [SESSION_NOTICE_STATUS.WAITING]: (notice) =>
-    `${notice.providerName} is waiting on you in "${notice.title}"${noticePlace(notice)}.`,
-  // The provider's own reason when it gave one — already bounded by
-  // normalization, never a transcript.
-  [SESSION_NOTICE_STATUS.ERROR]: (notice) =>
-    notice.error
-      ? `${notice.providerName} stopped in "${notice.title}"${noticePlace(notice)}: ${notice.error}`
-      : `${notice.providerName} stopped on an error in "${notice.title}"${noticePlace(notice)}.`,
-  [SESSION_NOTICE_STATUS.COMPLETE]: (notice) =>
-    `${notice.providerName} finished "${notice.title}"${noticePlace(notice)}.`,
-};
+function noticeSentence(notice: SessionNotice): string {
+  switch (notice.status) {
+    case SESSION_NOTICE_STATUS.WAITING:
+      return `${notice.providerName} is waiting on you in "${notice.title}"${noticePlace(notice)}.`;
+    case SESSION_NOTICE_STATUS.ERROR:
+      // The provider's own reason when it gave one — already bounded by
+      // normalization, never a transcript.
+      return notice.error
+        ? `${notice.providerName} stopped in "${notice.title}"${noticePlace(notice)}: ${notice.error}`
+        : `${notice.providerName} stopped on an error in "${notice.title}"${noticePlace(notice)}.`;
+    case SESSION_NOTICE_STATUS.COMPLETE:
+      return `${notice.providerName} finished "${notice.title}"${noticePlace(notice)}.`;
+    default:
+      throw new Error(`Unknown notice status: ${String(notice.status)}`);
+  }
+}
 
 /**
  * One notice as attention speech: the same shape the evaluator's readouts
@@ -48,7 +51,7 @@ export function sessionNoticeSpeech(notice: SessionNotice, decidedAt: number): A
     // The source is what entitles this sentence to open a call of Luke's own:
     // it was worded from a status edge the registry observed, not by a model.
     source: ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
-    summary: NOTICE_SENTENCE[notice.status](notice),
+    summary: noticeSentence(notice),
     decidedAt,
   };
 }

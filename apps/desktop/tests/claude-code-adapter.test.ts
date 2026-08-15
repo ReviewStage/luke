@@ -560,7 +560,7 @@ test("carries the away recap Claude Code writes for a developer who stepped out"
 
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
   assert.equal(
-    observation?.summary,
+    observation?.recap,
     "You asked for the notch geometry; next, say whether to ship it.",
   );
 });
@@ -616,7 +616,7 @@ test("drops the previous turn's recap when a new prompt opens a turn", async (t)
   const [observation] = await adapter.observe();
 
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
-  assert.equal(observation?.summary, "The second turn's recap.");
+  assert.equal(observation?.recap, "The second turn's recap.");
 });
 
 test("reports no recap for a turn whose closing words are all it wrote", async (t) => {
@@ -647,9 +647,9 @@ test("reports no recap for a turn whose closing words are all it wrote", async (
   const [observation] = await adapter.observe();
 
   // The closing message is the transcript itself, not a recap Claude Code wrote
-  // about the session, and a summary reaches the attention evaluator.
+  // about the session, and a recap reaches the attention evaluator.
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
-  assert.equal(observation?.summary, undefined);
+  assert.equal(observation?.recap, undefined);
 });
 
 test("stops reporting a tool once the turn that ran it has ended", async (t) => {
@@ -711,7 +711,7 @@ test("stops reporting a tool once the turn that ran it has ended", async (t) => 
   // hide what the session actually wants to say.
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
   assert.equal(observation?.detail?.activity, undefined);
-  assert.equal(observation?.summary, "Packaging passed; next, say whether to notarize.");
+  assert.equal(observation?.recap, "Packaging passed; next, say whether to notarize.");
 });
 
 test("keeps reporting a tool between one call and the next", async (t) => {

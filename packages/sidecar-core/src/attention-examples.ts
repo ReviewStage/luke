@@ -3,7 +3,7 @@ import { ATTENTION_DISPOSITION, type AttentionDisposition, SESSION_STATUS } from
 
 /**
  * One redacted update paired with the decision Luke should reach for it. The
- * examples are synthetic: every workspace name, provider summary, and spoken
+ * examples are synthetic: every workspace name, provider recap, and spoken
  * sentence here is written for tuning and contains no observed developer data.
  */
 export interface AttentionTuningExample {
@@ -50,7 +50,7 @@ export const ATTENTION_TUNING_EXAMPLES: readonly AttentionTuningExample[] = [
       title: "Split the checkout total into line items",
       status: SESSION_STATUS.WAITING,
       previousStatus: SESSION_STATUS.WORKING,
-      summary:
+      recap:
         "I split the total into line items, but the tax rounding rule is ambiguous. Next: tell me whether to round per line or on the total.",
       context: { repository: "checkout-service", branch: "main" },
       observedAt: 1_760_000_090_000,
@@ -72,7 +72,7 @@ export const ATTENTION_TUNING_EXAMPLES: readonly AttentionTuningExample[] = [
       title: "Release the billing client to npm",
       status: SESSION_STATUS.WAITING,
       previousStatus: SESSION_STATUS.WORKING,
-      summary: "Published 0.4.2 and merged the release pull request.",
+      recap: "Published 0.4.2 and merged the release pull request.",
       context: { repository: "billing-api", branch: "codex/release-0-4-2" },
       observedAt: 1_760_000_180_000,
     },
@@ -131,13 +131,13 @@ export const ATTENTION_TUNING_EXAMPLES: readonly AttentionTuningExample[] = [
     name: "A recap changes while the session keeps working",
     update: {
       providerId: "claude-code",
-      providerSessionId: "example-summary",
-      trigger: ATTENTION_TRIGGER.SUMMARY_CHANGED,
+      providerSessionId: "example-recap",
+      trigger: ATTENTION_TRIGGER.RECAP_CHANGED,
       providerName: "Claude Code",
       title: "Rewrite the docs landing page",
       status: SESSION_STATUS.WORKING,
       previousStatus: SESSION_STATUS.WORKING,
-      summary: "Rewrote the hero section and moved on to the feature grid.",
+      recap: "Rewrote the hero section and moved on to the feature grid.",
       context: {
         repository: "docs-site",
         branch: "dean/landing",

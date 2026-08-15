@@ -4,7 +4,7 @@ import {
   ATTENTION_DISPOSITION,
   InMemorySessionRegistry,
   maximumSessionLinkLength,
-  maximumSessionSummaryLength,
+  maximumSessionRecapLength,
   type ProviderSessionObservation,
   SESSION_LOCATION,
   SESSION_STATUS,
@@ -42,7 +42,7 @@ test("normalizes provider observations without conflating provider-local identit
     codex,
     observation("run:42", 100, {
       title: "  Implement the shared session core  ",
-      summary: `  ${"a".repeat(maximumSessionSummaryLength + 1)}  `,
+      recap: `  ${"a".repeat(maximumSessionRecapLength + 1)}  `,
       controls: [{ id: TEST_CONTROL_WITH_WHITESPACE, label: " Open workspace " }],
     }),
   );
@@ -53,7 +53,7 @@ test("normalizes provider observations without conflating provider-local identit
     { providerId: codex.id, providerSessionId: "run:42" },
   );
   assert.equal(session.title, "Implement the shared session core");
-  assert.equal(session.summary?.length, maximumSessionSummaryLength);
+  assert.equal(session.recap?.length, maximumSessionRecapLength);
   assert.deepEqual(session.controls, [{ id: TEST_CONTROL.OPEN, label: "Open workspace" }]);
   assert.deepEqual(session.attention, {
     disposition: ATTENTION_DISPOSITION.SILENT,

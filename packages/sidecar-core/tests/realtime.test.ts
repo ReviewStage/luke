@@ -378,7 +378,7 @@ test("session context carries only bounded, redacted fields", () => {
       title: "Claude Code: checkout-service",
       status: SESSION_STATUS.WAITING,
       observedAt: DECIDED_AT,
-      summary: "Claude Code is waiting; transcript content is not retained.",
+      recap: "Claude Code is waiting; transcript content is not retained.",
     },
   );
 

@@ -785,7 +785,7 @@ function sessionCapabilityText(session: NormalizedSession): string {
  * Renders the session roster the conversation is allowed to know about.
  *
  * These are the same bounded, redacted fields the attention layer already
- * sends — provider, title, status, and the provider's own summary — plus the
+ * sends — provider, title, status, and the provider's own recap — plus the
  * workspace a chat belongs to when its provider groups them, what each
  * session can be asked to do, and the identity a tool call names it by.
  * No transcript, file path, or command output is ever included.
@@ -807,7 +807,7 @@ export function sessionContextText(sessions: readonly NormalizedSession[]): stri
         // the machine, the same rule the attention update follows.
         ...(session.workspace?.name ? [`a chat in workspace ${session.workspace.name}`] : []),
         session.status,
-        session.summary ?? "no summary reported",
+        session.recap ?? "no recap reported",
         `[${sessionCapabilityText(session)}]`,
       ].join(" — "),
     ),

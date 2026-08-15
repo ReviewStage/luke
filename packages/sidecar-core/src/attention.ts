@@ -15,13 +15,13 @@ import {
 export const ATTENTION_TRIGGER = {
   OBSERVED: "observed",
   STATUS_CHANGED: "status-changed",
-  SUMMARY_CHANGED: "summary-changed",
+  RECAP_CHANGED: "recap-changed",
   ERROR_REPORTED: "error-reported",
 } as const;
 
 export type AttentionTrigger = (typeof ATTENTION_TRIGGER)[keyof typeof ATTENTION_TRIGGER];
 
-/** A spoken sentence stays far shorter than the summary a provider may observe. */
+/** A spoken sentence stays far shorter than the recap a provider may observe. */
 export const maximumAttentionSummaryLength = 180;
 
 export const ATTENTION_DECISION_SCHEMA_NAME = "attention_decision";
@@ -93,7 +93,7 @@ export interface AttentionUpdate extends SessionIdentity {
   workspace?: string;
   status: SessionStatus;
   previousStatus?: SessionStatus;
-  summary?: string;
+  recap?: string;
   context?: AttentionContext;
   observedAt: number;
 }
@@ -188,7 +188,7 @@ function attentionTrigger(
   if (!previous) return ATTENTION_TRIGGER.OBSERVED;
   if (previous.status !== session.status) return ATTENTION_TRIGGER.STATUS_CHANGED;
   if (previous.detail.error !== session.detail.error) return ATTENTION_TRIGGER.ERROR_REPORTED;
-  if (previous.summary !== session.summary) return ATTENTION_TRIGGER.SUMMARY_CHANGED;
+  if (previous.recap !== session.recap) return ATTENTION_TRIGGER.RECAP_CHANGED;
   return undefined;
 }
 
@@ -215,7 +215,7 @@ export function attentionUpdate(
     ...(workspace ? { workspace } : {}),
     status: session.status,
     ...(previous ? { previousStatus: previous.status } : {}),
-    ...(session.summary ? { summary: session.summary } : {}),
+    ...(session.recap ? { recap: session.recap } : {}),
     ...(context ? { context } : {}),
     observedAt: session.observedAt,
   };
@@ -509,7 +509,7 @@ export class SessionAttentionReviewer {
     if (!current) return true;
     return (
       current.status !== update.status ||
-      current.summary !== update.summary ||
+      current.recap !== update.recap ||
       current.detail.error !== update.context?.error
     );
   }

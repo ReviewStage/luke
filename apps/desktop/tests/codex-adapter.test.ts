@@ -235,7 +235,7 @@ test("reports a finished Codex turn as waiting for its developer", async (t) => 
   const [observation] = await adapter.observe();
 
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
-  assert.equal(observation?.summary, "Released 0.1.6 and merged the PR.");
+  assert.equal(observation?.recap, "Released 0.1.6 and merged the PR.");
   assert.equal(observation?.detail?.activity, undefined);
 });
 
@@ -266,7 +266,7 @@ test("reports a running Codex turn as working with the call it is making", async
   const [observation] = await adapter.observe();
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
-  assert.equal(observation?.summary, undefined);
+  assert.equal(observation?.recap, undefined);
   assert.equal(observation?.detail?.activity, "exec_command: pnpm test");
 });
 
@@ -357,7 +357,7 @@ test("drops the previous turn's call when a new Codex turn starts", async (t) =>
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
   assert.equal(observation?.detail?.activity, undefined);
-  assert.equal(observation?.summary, undefined);
+  assert.equal(observation?.recap, undefined);
 });
 
 test("holds a long Codex turn at working however stale its row is", async (t) => {

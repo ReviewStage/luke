@@ -743,7 +743,7 @@ test("the conversation is told which sessions Luke can see", async () => {
   await context.session.connect();
 
   context.session.updateSessions([
-    observedSession("session-a", { status: SESSION_STATUS.WAITING, summary: "Waiting on input." }),
+    observedSession("session-a", { status: SESSION_STATUS.WAITING, recap: "Waiting on input." }),
   ]);
 
   const item = context.sent.find(
