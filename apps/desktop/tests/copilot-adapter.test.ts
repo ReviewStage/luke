@@ -166,7 +166,7 @@ test("observes a task in progress without exposing prompt-derived text", async (
   assert.equal(observations[0]?.observedAt, TEST_TIME - 30_000);
   assert.equal(observations[0]?.controls, undefined);
   // The row is worded by the surface from these fields, never by the adapter.
-  assert.equal(observations[0]?.summary, undefined);
+  assert.equal(observations[0]?.recap, undefined);
   assert.deepEqual(observations[0]?.detail, {
     repository: "luke",
     branch: "main",

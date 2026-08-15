@@ -181,7 +181,7 @@ test("observes an open turn as work, labelled by its folder and free of transcri
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
   assert.equal(observations[0]?.observedAt, TEST_TIME - 5_000);
   assert.equal(observations[0]?.controls, undefined);
-  assert.equal(observations[0]?.summary, undefined);
+  assert.equal(observations[0]?.recap, undefined);
   assert.deepEqual(observations[0]?.detail, { repository: "luke" });
   // Nothing says this session runs anywhere but here, which is what leaves it
   // local once the registry normalizes it.

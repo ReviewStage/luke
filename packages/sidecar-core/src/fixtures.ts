@@ -5,15 +5,7 @@ import {
   type SessionControl,
   type SessionLocation,
 } from "./session";
-
-export const SESSION_STATE = {
-  WORKING: "working",
-  ATTENTION: "attention",
-  COMPLETE: "complete",
-  UNKNOWN: "unknown",
-} as const;
-
-export type SessionState = (typeof SESSION_STATE)[keyof typeof SESSION_STATE];
+import { SESSION_URGENCY, type SessionUrgency } from "./session-display";
 
 /** The workspace a fixture row is one chat of, shaped as the surface draws it. */
 export interface WorkspaceSnapshot {
@@ -38,7 +30,7 @@ export interface SessionSnapshot {
   branch?: string;
   /** Named on the provider mark's hover rather than spent on a line of its own. */
   model?: string;
-  state: SessionState;
+  urgency: SessionUrgency;
   location: SessionLocation;
   /** When the session was last seen, in the same units a live observation uses. */
   observedAt: number;
@@ -86,7 +78,7 @@ const smokeFixture: FixtureSnapshot = {
       repository: "luke",
       branch: "dean/desktop-shell",
       model: "gpt-5.6-luna",
-      state: SESSION_STATE.WORKING,
+      urgency: SESSION_URGENCY.WORKING,
       location: SESSION_LOCATION.LOCAL,
       observedAt: minutesBeforeEpoch(4),
     },
@@ -99,7 +91,7 @@ const smokeFixture: FixtureSnapshot = {
       repository: "luke",
       branch: "dean/trust-constraints",
       model: "claude-opus-5",
-      state: SESSION_STATE.ATTENTION,
+      urgency: SESSION_URGENCY.ATTENTION,
       location: SESSION_LOCATION.LOCAL,
       observedAt: minutesBeforeEpoch(9),
     },
@@ -115,7 +107,7 @@ const smokeFixture: FixtureSnapshot = {
       detail: "Packaging the macOS build.",
       repository: "luke",
       model: "claude-opus-5",
-      state: SESSION_STATE.WORKING,
+      urgency: SESSION_URGENCY.WORKING,
       location: SESSION_LOCATION.CLOUD,
       observedAt: minutesBeforeEpoch(6),
       workspace: { id: "conductor-lisbon", name: "lisbon-v2" },
@@ -133,7 +125,7 @@ const smokeFixture: FixtureSnapshot = {
       detail: "",
       repository: "luke",
       model: "claude-opus-5",
-      state: SESSION_STATE.COMPLETE,
+      urgency: SESSION_URGENCY.COMPLETE,
       location: SESSION_LOCATION.CLOUD,
       observedAt: minutesBeforeEpoch(1),
       workspace: { id: "conductor-lisbon", name: "lisbon-v2" },
@@ -146,7 +138,7 @@ const smokeFixture: FixtureSnapshot = {
       detail: "Opened a pull request against sidecar.",
       repository: "sidecar",
       branch: "cursor/follow-agent-a1b2",
-      state: SESSION_STATE.WORKING,
+      urgency: SESSION_URGENCY.WORKING,
       location: SESSION_LOCATION.CLOUD,
       observedAt: minutesBeforeEpoch(18),
       // What a working Cursor agent advertises live, so the one screenshot the
@@ -166,7 +158,7 @@ const smokeFixture: FixtureSnapshot = {
       provider: "Devin",
       detail: "Suspended before it opened a pull request.",
       repository: "sidecar-native",
-      state: SESSION_STATE.UNKNOWN,
+      urgency: SESSION_URGENCY.UNKNOWN,
       location: SESSION_LOCATION.CLOUD,
       observedAt: minutesBeforeEpoch(41),
       // A suspended Devin session takes a message live — sending is what
@@ -184,5 +176,6 @@ export function fixtureSnapshot(name: string): FixtureSnapshot {
 }
 
 export function attentionCount(snapshot: FixtureSnapshot): number {
-  return snapshot.sessions.filter((session) => session.state === SESSION_STATE.ATTENTION).length;
+  return snapshot.sessions.filter((session) => session.urgency === SESSION_URGENCY.ATTENTION)
+    .length;
 }

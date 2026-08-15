@@ -396,8 +396,8 @@ test("reads a settled chat's parting words from the transcripts view as its reca
   );
   // The recap is the last message's words alone: the elision mark is dropped,
   // the header is not part of it, and nothing earlier in the tail survives.
-  assert.equal(idle?.summary, TEST_RECAP);
-  assert.equal(closed?.summary, TEST_RECAP);
+  assert.equal(idle?.recap, TEST_RECAP);
+  assert.equal(closed?.recap, TEST_RECAP);
   // The agent kind joins the model label, and stands alone when no model came.
   assert.equal(idle?.detail?.model, "codex · gpt-5.5");
   assert.equal(closed?.detail?.model, "claude");
@@ -457,7 +457,7 @@ test("keeps parting words off a chat that is still working or newly failed", asy
 
   assert.equal(observations.length, 2);
   for (const observation of observations) {
-    assert.equal(observation.summary, undefined);
+    assert.equal(observation.recap, undefined);
   }
   // The agent kind is configuration, not conversation, so it rides regardless.
   const working = observations.find(
@@ -502,11 +502,11 @@ test("reports no recap for a tail it cannot attribute to the agent", async () =>
 
   assert.equal(observations.length, 2);
   for (const observation of observations) {
-    assert.equal(observation.summary, undefined);
+    assert.equal(observation.recap, undefined);
   }
 });
 
-test("cuts a recap at the summary bound", async () => {
+test("cuts a recap at the recap bound", async () => {
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
     projects: [LUKE_PROJECT],
@@ -525,7 +525,7 @@ test("cuts a recap at the summary bound", async () => {
 
   const observations = await adapterFor(api.fetch).observe();
 
-  assert.equal(observations[0]?.summary?.length, 500);
+  assert.equal(observations[0]?.recap?.length, 500);
 });
 
 test("keeps a session id that is not a UUID out of the read document", async () => {
@@ -609,7 +609,7 @@ test("a refused transcripts read costs the recap and agent kind, never the pass"
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
-  assert.equal(observations[0]?.summary, undefined);
+  assert.equal(observations[0]?.recap, undefined);
   assert.equal(observations[0]?.detail?.model, "gpt-5.5");
 
   // Even a credential refusal on this one endpoint costs only the recap: a
@@ -636,7 +636,7 @@ test("a refused transcripts read costs the recap and agent kind, never the pass"
 
   assert.equal(scopedKeyObservations.length, 1);
   assert.equal(scopedKeyObservations[0]?.status, SESSION_STATUS.WAITING);
-  assert.equal(scopedKeyObservations[0]?.summary, undefined);
+  assert.equal(scopedKeyObservations[0]?.recap, undefined);
 });
 
 // Every chat of a workspace is its own row, so no chat has to speak for a

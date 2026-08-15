@@ -126,7 +126,7 @@ const sameSession = exhaustiveSame<NormalizedSession>({
   status: (first, second) => first.status === second.status,
   observedAt: (first, second) => first.observedAt === second.observedAt,
   location: (first, second) => first.location === second.location,
-  summary: (first, second) => first.summary === second.summary,
+  recap: (first, second) => first.recap === second.recap,
   detail: (first, second) => sameDetail(first.detail, second.detail),
   controls: (first, second) => sameItems(first.controls, second.controls, sameControl),
   canReceiveMessage: (first, second) => first.canReceiveMessage === second.canReceiveMessage,

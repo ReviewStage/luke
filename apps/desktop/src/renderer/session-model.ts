@@ -7,13 +7,13 @@ import {
   type ProviderId,
   SESSION_LIST_SORT,
   SESSION_LOCATION,
-  SESSION_STATE,
   SESSION_STATUS,
+  SESSION_URGENCY,
   type SessionControlKind,
   type SessionListSort,
   type SessionLocation,
-  type SessionState,
-  STATE_LABEL,
+  type SessionUrgency,
+  urgencyLabel,
 } from "@sidecar/core";
 import type { AppBootstrap } from "../shared/contracts";
 
@@ -121,7 +121,7 @@ export interface DisplaySession {
   branch?: string;
   /** Read on the provider mark's hover, never spent on a line of the row. */
   model?: string;
-  state: SessionState;
+  urgency: SessionUrgency;
   label: string;
   location: SessionLocation;
   observedAt: number;
@@ -186,8 +186,8 @@ export interface SessionTally {
   working: number;
   complete: number;
   idle: number;
-  /** The state the count badge and the notch capsule adopt. */
-  state: SessionState;
+  /** The urgency the count badge and the notch capsule adopt. */
+  urgency: SessionUrgency;
   /** One agent each, seated where its first session reads under the sort. */
   providers: readonly ProviderTally[];
 }
@@ -211,15 +211,15 @@ function sessionNeedsAttention(session: NormalizedSession): boolean {
  * the other end any more — so a session whose provider said nothing still reads
  * as Working or Complete rather than as a row with a line missing.
  */
-function sessionDetail(session: NormalizedSession, state: SessionState): string {
-  return session.detail.error ?? session.detail.activity ?? session.summary ?? STATE_LABEL[state];
+function sessionDetail(session: NormalizedSession, urgency: SessionUrgency): string {
+  return session.detail.error ?? session.detail.activity ?? session.recap ?? urgencyLabel(urgency);
 }
 
-function sessionState(session: NormalizedSession): SessionState {
-  if (sessionNeedsAttention(session)) return SESSION_STATE.ATTENTION;
-  if (session.status === SESSION_STATUS.COMPLETE) return SESSION_STATE.COMPLETE;
-  if (session.status === SESSION_STATUS.UNKNOWN) return SESSION_STATE.UNKNOWN;
-  return SESSION_STATE.WORKING;
+function sessionUrgency(session: NormalizedSession): SessionUrgency {
+  if (sessionNeedsAttention(session)) return SESSION_URGENCY.ATTENTION;
+  if (session.status === SESSION_STATUS.COMPLETE) return SESSION_URGENCY.COMPLETE;
+  if (session.status === SESSION_STATUS.UNKNOWN) return SESSION_URGENCY.UNKNOWN;
+  return SESSION_URGENCY.WORKING;
 }
 
 /** Most urgent first, and within one state the one that moved most recently. */
@@ -245,8 +245,8 @@ export function displaySessions(
         // The same wording rule the live path applies: a fixture row whose
         // provider said nothing states its own state, so the evidence shows
         // the fallback rather than a gap.
-        detail: session.detail || STATE_LABEL[session.state],
-        label: STATE_LABEL[session.state],
+        detail: session.detail || urgencyLabel(session.urgency),
+        label: urgencyLabel(session.urgency),
         // A fixture stands for sessions that are not on the machine drawing
         // them, so there is nothing for a press to open. The composer and the
         // controls are still drawn where the fixture says a live session would
@@ -258,18 +258,18 @@ export function displaySessions(
         actions: session.actions ?? [],
       }))
     : sessions.map((session) => {
-        const state = sessionState(session);
+        const urgency = sessionUrgency(session);
         return {
           id: session.providerSessionId,
           title: session.title,
           providerId: session.providerId,
           provider: session.provider.displayName,
-          detail: sessionDetail(session, state),
+          detail: sessionDetail(session, urgency),
           repository: session.detail.repository,
           branch: session.detail.branch,
           model: session.detail.model,
-          state,
-          label: STATE_LABEL[state],
+          urgency,
+          label: urgencyLabel(urgency),
           location: session.location,
           observedAt: session.observedAt,
           openable: session.detail.link !== undefined,
@@ -480,11 +480,11 @@ export function sessionTally(
   const attentionIds: string[] = [];
 
   for (const session of [...sessions].sort(bySort(sort))) {
-    if (session.state === SESSION_STATE.ATTENTION) {
+    if (session.urgency === SESSION_URGENCY.ATTENTION) {
       counts.attention += 1;
       attentionIds.push(session.id);
-    } else if (session.state === SESSION_STATE.WORKING) counts.working += 1;
-    else if (session.state === SESSION_STATE.COMPLETE) counts.complete += 1;
+    } else if (session.urgency === SESSION_URGENCY.WORKING) counts.working += 1;
+    else if (session.urgency === SESSION_URGENCY.COMPLETE) counts.complete += 1;
     else counts.idle += 1;
 
     const tally = providers.get(session.providerId) ?? {
@@ -496,7 +496,7 @@ export function sessionTally(
     providers.set(session.providerId, {
       ...tally,
       total: tally.total + 1,
-      attention: tally.attention + (session.state === SESSION_STATE.ATTENTION ? 1 : 0),
+      attention: tally.attention + (session.urgency === SESSION_URGENCY.ATTENTION ? 1 : 0),
     });
   }
 
@@ -504,20 +504,20 @@ export function sessionTally(
     ...counts,
     attentionIds,
     total: sessions.length,
-    state: dominantState(counts),
+    urgency: dominantUrgency(counts),
     providers: [...providers.values()],
   };
 }
 
-function dominantState(counts: {
+function dominantUrgency(counts: {
   attention: number;
   working: number;
   complete: number;
-}): SessionState {
-  if (counts.attention > 0) return SESSION_STATE.ATTENTION;
-  if (counts.working > 0) return SESSION_STATE.WORKING;
-  if (counts.complete > 0) return SESSION_STATE.COMPLETE;
-  return SESSION_STATE.UNKNOWN;
+}): SessionUrgency {
+  if (counts.attention > 0) return SESSION_URGENCY.ATTENTION;
+  if (counts.working > 0) return SESSION_URGENCY.WORKING;
+  if (counts.complete > 0) return SESSION_URGENCY.COMPLETE;
+  return SESSION_URGENCY.UNKNOWN;
 }
 
 /** One sentence that reads correctly for a screen reader in either mode. */

@@ -47,7 +47,7 @@ export function attentionUpdateInput(update: AttentionUpdate): string {
     `Branch: ${update.context?.branch ?? NONE_LABEL}`,
     `Running: ${update.context?.activity ?? NONE_LABEL}`,
     `Error: ${update.context?.error ?? NONE_LABEL}`,
-    `Session recap: ${update.summary ?? NONE_LABEL}`,
+    `Session recap: ${update.recap ?? NONE_LABEL}`,
   ].join("\n");
 }
 

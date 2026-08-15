@@ -7,9 +7,9 @@ import {
   PANEL_WIDTH,
   PEEK_SIDE_GROWTH,
   SESSION_LOCATION,
-  SESSION_STATE,
-  type SessionState,
-  STATE_LABEL,
+  SESSION_URGENCY,
+  type SessionUrgency,
+  urgencyLabel,
 } from "@sidecar/core";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import { CloudBadge, ProviderMark } from "./provider-marks";
@@ -57,17 +57,17 @@ const HOUSING_WIDTH = 210;
 const MOCK_SESSIONS = fixtureSnapshot("smoke")
   .sessions.map((session) => ({
     ...session,
-    detail: session.detail || STATE_LABEL[session.state],
+    detail: session.detail || urgencyLabel(session.urgency),
   }))
   .toSorted(compareSessionsByUrgency);
 
 const ATTENTION_COUNT = MOCK_SESSIONS.filter(
-  (session) => session.state === SESSION_STATE.ATTENTION,
+  (session) => session.urgency === SESSION_URGENCY.ATTENTION,
 ).length;
 
-/** The state the count badge and the capsule adopt, as `sessionTally` decides it. */
-const TALLY_STATE: SessionState =
-  ATTENTION_COUNT > 0 ? SESSION_STATE.ATTENTION : SESSION_STATE.WORKING;
+/** The urgency the count badge and the capsule adopt, as `sessionTally` decides it. */
+const TALLY_URGENCY: SessionUrgency =
+  ATTENTION_COUNT > 0 ? SESSION_URGENCY.ATTENTION : SESSION_URGENCY.WORKING;
 
 /** `tallyCaption` in the renderer: the caption names its own number. */
 const TALLY_CAPTION =
@@ -116,7 +116,7 @@ function observedAgoLabel(observedAt: number): string {
 
 const MOCK_LABEL = `Luke's notch capsule expanding into its session panel, listing ${MOCK_SESSIONS.map(
   (session) =>
-    `${session.title} on ${session.provider}, ${STATE_LABEL[session.state].toLowerCase()}`,
+    `${session.title} on ${session.provider}, ${urgencyLabel(session.urgency).toLowerCase()}`,
 ).join("; ")}.`;
 
 /**
@@ -208,7 +208,7 @@ function MockSessionRow({
   return (
     <article
       className="session-row"
-      data-state={session.state}
+      data-state={session.urgency}
       style={{ "--row-index": index + 1 } as CSSProperties}
     >
       <span className="row-mark">
@@ -218,10 +218,10 @@ function MockSessionRow({
       <span className="row-copy">
         <strong>{session.title}</strong>
         <small className="row-doing">
-          {session.state === SESSION_STATE.WORKING ? (
+          {session.urgency === SESSION_URGENCY.WORKING ? (
             <span className="row-spinner" aria-hidden="true" />
           ) : null}
-          {session.state === SESSION_STATE.COMPLETE ? <CheckGlyph /> : null}
+          {session.urgency === SESSION_URGENCY.COMPLETE ? <CheckGlyph /> : null}
           <span className="row-doing-text">{session.detail}</span>
         </small>
         {place ? (
@@ -405,7 +405,7 @@ export function NotchMock(): React.JSX.Element {
 
           <div className="wing wing-right">
             <div className="wing-inner">
-              <span className="count-badge" data-state={TALLY_STATE}>
+              <span className="count-badge" data-state={TALLY_URGENCY}>
                 <span className="count-value">{MOCK_SESSIONS.length}</span>
                 <span className="count-caption">{TALLY_CAPTION}</span>
               </span>

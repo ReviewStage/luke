@@ -7,8 +7,8 @@ import {
   PROVIDER_ID,
   PROVIDER_ID_LIST,
   SESSION_LOCATION,
-  SESSION_STATE,
   SESSION_STATUS,
+  SESSION_URGENCY,
 } from "@sidecar/core";
 import {
   arrangeSessions,
@@ -51,14 +51,14 @@ function liveSession(
 const FIXTURE_SESSIONS = displaySessions(bootstrap(true), []);
 
 test("the most urgent sessions are listed first in either data source", () => {
-  const fixtureStates = displaySessions(bootstrap(true), []).map((session) => session.state);
-  assert.deepEqual(fixtureStates, [
-    SESSION_STATE.ATTENTION,
-    SESSION_STATE.WORKING,
-    SESSION_STATE.WORKING,
-    SESSION_STATE.WORKING,
-    SESSION_STATE.COMPLETE,
-    SESSION_STATE.UNKNOWN,
+  const fixtureUrgencies = displaySessions(bootstrap(true), []).map((session) => session.urgency);
+  assert.deepEqual(fixtureUrgencies, [
+    SESSION_URGENCY.ATTENTION,
+    SESSION_URGENCY.WORKING,
+    SESSION_URGENCY.WORKING,
+    SESSION_URGENCY.WORKING,
+    SESSION_URGENCY.COMPLETE,
+    SESSION_URGENCY.UNKNOWN,
   ]);
 
   const live = displaySessions(bootstrap(false), [
@@ -70,7 +70,7 @@ test("the most urgent sessions are listed first in either data source", () => {
     live.map((session) => session.id),
     ["codex-2", "claude-1", "codex-1"],
   );
-  assert.equal(live[0]?.state, SESSION_STATE.ATTENTION);
+  assert.equal(live[0]?.urgency, SESSION_URGENCY.ATTENTION);
   assert.equal(live[0]?.providerId, PROVIDER_ID.CODEX);
 });
 
@@ -199,7 +199,7 @@ test("a speaking disposition needs a person even while the session works", () =>
   );
 
   const [session] = displaySessions(bootstrap(false), [speaking]);
-  assert.equal(session?.state, SESSION_STATE.ATTENTION);
+  assert.equal(session?.urgency, SESSION_URGENCY.ATTENTION);
 });
 
 test("the tally counts per state and per provider", () => {
@@ -216,7 +216,7 @@ test("the tally counts per state and per provider", () => {
       working: 3,
       complete: 1,
       idle: 1,
-      state: SESSION_STATE.ATTENTION,
+      urgency: SESSION_URGENCY.ATTENTION,
       providers: undefined,
     },
   );
@@ -257,7 +257,7 @@ test("the providers re-seat with the rows when the other sort is chosen", () => 
   );
 });
 
-test("the badge state follows the most urgent session", () => {
+test("the badge urgency follows the most urgent session", () => {
   const working = sessionTally(
     displaySessions(bootstrap(false), [liveSession(CODEX_PROVIDER, "a", SESSION_STATUS.WORKING)]),
   );
@@ -266,9 +266,9 @@ test("the badge state follows the most urgent session", () => {
   );
   const empty = sessionTally([]);
 
-  assert.equal(working.state, SESSION_STATE.WORKING);
-  assert.equal(complete.state, SESSION_STATE.COMPLETE);
-  assert.equal(empty.state, SESSION_STATE.UNKNOWN);
+  assert.equal(working.urgency, SESSION_URGENCY.WORKING);
+  assert.equal(complete.urgency, SESSION_URGENCY.COMPLETE);
+  assert.equal(empty.urgency, SESSION_URGENCY.UNKNOWN);
 });
 
 test("the caption names its own number so the count is never misread", () => {

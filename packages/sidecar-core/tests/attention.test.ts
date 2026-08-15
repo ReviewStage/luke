@@ -92,9 +92,8 @@ test("derives an update only when a session reports something new", () => {
   assert.equal(attentionUpdate(waiting, working)?.trigger, ATTENTION_TRIGGER.STATUS_CHANGED);
   assert.equal(attentionUpdate(waiting, working)?.previousStatus, SESSION_STATUS.WORKING);
   assert.equal(
-    attentionUpdate(session(claude, "review", { summary: "Claude Code waiting." }), working)
-      ?.trigger,
-    ATTENTION_TRIGGER.SUMMARY_CHANGED,
+    attentionUpdate(session(claude, "review", { recap: "Claude Code waiting." }), working)?.trigger,
+    ATTENTION_TRIGGER.RECAP_CHANGED,
   );
 });
 
@@ -646,7 +645,7 @@ test("sends bounded material and withholds what a decision does not turn on", as
   await reviewer.review([
     session(claude, "review", {
       title: `Split the checkout total ${TRANSCRIPT_SECRET}`.padEnd(400, "x"),
-      summary: `Waiting on the rounding rule. ${TRANSCRIPT_SECRET}`.padEnd(900, "y"),
+      recap: `Waiting on the rounding rule. ${TRANSCRIPT_SECRET}`.padEnd(900, "y"),
       detail: {
         repository: "checkout-service",
         branch: "dean/line-items",
@@ -667,13 +666,13 @@ test("sends bounded material and withholds what a decision does not turn on", as
     "providerId",
     "providerName",
     "providerSessionId",
+    "recap",
     "status",
-    "summary",
     "title",
     "trigger",
   ]);
   assert.equal(update.title.length, 160, "titles stay bounded by session normalization");
-  assert.equal(update.summary?.length, 500, "summaries stay bounded by session normalization");
+  assert.equal(update.recap?.length, 500, "recaps stay bounded by session normalization");
 
   // An evaluator is the one place session material leaves the machine, so the
   // session's own address and the change it published stay behind: they are

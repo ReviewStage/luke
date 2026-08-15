@@ -1,6 +1,13 @@
+/**
+ * Provider-observed condition. Distinct from `SESSION_URGENCY`, the surface's
+ * ranked disposition: both contain the literal "working", so the brand keeps
+ * one from being passed where the other is expected.
+ */
+type SessionStatusBrand<T extends string> = T & { readonly __brand: "SessionStatus" };
+
 export const SESSION_STATUS = {
-  WORKING: "working",
-  WAITING: "waiting",
+  WORKING: "working" as SessionStatusBrand<"working">,
+  WAITING: "waiting" as SessionStatusBrand<"waiting">,
   /**
    * The session stopped on something it cannot get past on its own. Providers
    * report this natively — a Conductor `error`, a Cursor `ERROR` run, a Claude
@@ -8,9 +15,9 @@ export const SESSION_STATUS = {
    * ask different things of the developer: one wants an answer, the other wants
    * a rescue.
    */
-  ERROR: "error",
-  COMPLETE: "complete",
-  UNKNOWN: "unknown",
+  ERROR: "error" as SessionStatusBrand<"error">,
+  COMPLETE: "complete" as SessionStatusBrand<"complete">,
+  UNKNOWN: "unknown" as SessionStatusBrand<"unknown">,
 } as const;
 
 export type SessionStatus = (typeof SESSION_STATUS)[keyof typeof SESSION_STATUS];
@@ -203,7 +210,11 @@ export interface ProviderSessionObservation {
   observedAt: number;
   /** Omitted by an adapter that reads sessions off this machine. */
   location?: SessionLocation;
-  summary?: string;
+  /**
+   * A bounded recap of where the work stands — provider-designated, or a
+   * settled turn's parting words. Never the transcript behind it.
+   */
+  recap?: string;
   detail?: SessionDetail;
   controls?: readonly SessionControl[];
   /**
@@ -243,7 +254,7 @@ export interface NormalizedSession extends SessionIdentity {
   status: SessionStatus;
   observedAt: number;
   location: SessionLocation;
-  summary?: string;
+  recap?: string;
   detail: SessionDetail;
   controls: readonly SessionControl[];
   /** Whether this session's provider will take a message for it right now. */
@@ -262,7 +273,7 @@ export const maximumSessionTitleLength = 160;
 export const maximumSpawnableAgentLength = 40;
 /** How many kinds of agent one session may offer to start. */
 export const maximumSpawnableAgents = 8;
-export const maximumSessionSummaryLength = 500;
+export const maximumSessionRecapLength = 500;
 /** One line of context beside a title, not a paragraph. */
 export const maximumSessionDetailLength = 120;
 /** Long enough for any provider's session address without becoming a payload. */
@@ -431,7 +442,7 @@ export function normalizeAttention(decision: AttentionDecision): AttentionDecisi
   if (!Object.values(ATTENTION_DISPOSITION).includes(decision.disposition)) {
     throw new Error(`Unknown attention disposition: ${decision.disposition}`);
   }
-  const summary = boundedText(decision.summary, maximumSessionSummaryLength);
+  const summary = boundedText(decision.summary, maximumSessionRecapLength);
   return {
     disposition: decision.disposition,
     decidedAt: timestamp(decision.decidedAt, "attention decidedAt"),
@@ -454,7 +465,7 @@ export function normalizeSession(
     providerSessionId: observation.providerSessionId,
   });
   const observedAt = timestamp(observation.observedAt, "observedAt");
-  const summary = boundedText(observation.summary, maximumSessionSummaryLength);
+  const recap = boundedText(observation.recap, maximumSessionRecapLength);
   const spawnTarget = boundedText(observation.spawnTarget, maximumSessionDetailLength);
   const workspace = normalizeWorkspace(observation.workspace);
 
@@ -469,7 +480,7 @@ export function normalizeSession(
     status: normalizeStatus(observation.status),
     observedAt,
     location: normalizeLocation(observation.location),
-    ...(summary ? { summary } : {}),
+    ...(recap ? { recap } : {}),
     detail: normalizeSessionDetail(observation.detail),
     controls: normalizeControls(observation.controls),
     // Anything but an explicit yes is a no, so an adapter that has not thought
