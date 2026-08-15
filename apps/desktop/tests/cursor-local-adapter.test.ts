@@ -41,6 +41,8 @@ const TEST_CONTENT_TYPE = {
 
 interface CursorState {
   cursorHome: string;
+  defaultFolderPath: string;
+  defaultProjectDirectoryName: string;
   workspaceStorageDirectory: string;
 }
 
@@ -63,11 +65,15 @@ async function temporaryCursorState(t: TestContext): Promise<CursorState> {
   const directory = await fs.realpath(
     await fs.mkdtemp(path.join(os.tmpdir(), "luke-cursor-local-")),
   );
+  const defaultFolderPath = path.join(directory, "workspaces", "luke");
+  await fs.mkdir(defaultFolderPath, { recursive: true });
   t.after(async () => {
     await fs.rm(directory, { recursive: true, force: true });
   });
   return {
     cursorHome: path.join(directory, "cursor-home"),
+    defaultFolderPath,
+    defaultProjectDirectoryName: cursorProjectName(defaultFolderPath),
     workspaceStorageDirectory: path.join(directory, "workspace-storage"),
   };
 }
@@ -125,6 +131,12 @@ function cursorProjectName(folderPath: string): string {
   return folderPath.split(path.sep).filter(Boolean).join("-");
 }
 
+function canonicalCursorProjectName(folderPath: string): string {
+  return cursorProjectName(folderPath)
+    .replace(/[^A-Za-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 /**
  * Backdates a directory the way the filesystem would have. A directory's mtime
  * moves when it gains or loses an entry and at no other time, so a project's
@@ -170,10 +182,10 @@ function adapterFor(
 
 test("observes an open turn as work, labelled by its folder and free of transcript text", async (t) => {
   const state = await temporaryCursorState(t);
-  await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
+  await writeWorkspaceRecord(state, "9f1c", state.defaultFolderPath);
   await writeTranscript(
     state,
-    "Users-test-luke",
+    state.defaultProjectDirectoryName,
     "0b1f4b0e-2c5a-4d1e-9a3c-6d5f7e8a9b0c",
     [
       messageRecord(TEST_ROLE.USER, TEST_CONTENT_TYPE.TEXT),
@@ -204,7 +216,7 @@ test("observes a current-format assistant reply as a settled turn", async (t) =>
   const state = await temporaryCursorState(t);
   await writeTranscript(
     state,
-    "Users-test-luke",
+    state.defaultProjectDirectoryName,
     "session-settled",
     [
       messageRecord(TEST_ROLE.USER, TEST_CONTENT_TYPE.TEXT),
@@ -230,7 +242,7 @@ test("keeps a current-format turn open for every known tool-call spelling", asyn
   ].entries()) {
     await writeTranscript(
       state,
-      "Users-test-luke",
+      state.defaultProjectDirectoryName,
       `session-tool-${index}`,
       [messageRecord(TEST_ROLE.ASSISTANT, contentType)],
       TEST_TIME - (index + 1) * 1_000,
@@ -249,7 +261,7 @@ test("settles on assistant messages with thinking, unknown, or string content", 
   const state = await temporaryCursorState(t);
   await writeTranscript(
     state,
-    "Users-test-luke",
+    state.defaultProjectDirectoryName,
     "session-thinking",
     [
       {
@@ -266,14 +278,14 @@ test("settles on assistant messages with thinking, unknown, or string content", 
   );
   await writeTranscript(
     state,
-    "Users-test-luke",
+    state.defaultProjectDirectoryName,
     "session-unknown-block",
     [messageRecord(TEST_ROLE.ASSISTANT, TEST_CONTENT_TYPE.CUSTOM)],
     TEST_TIME - 2_000,
   );
   await writeTranscript(
     state,
-    "Users-test-luke",
+    state.defaultProjectDirectoryName,
     "session-string-content",
     [{ role: TEST_ROLE.ASSISTANT, message: { content: SECRET_TRANSCRIPT_TEXT } }],
     TEST_TIME - 3_000,
@@ -290,10 +302,10 @@ test("settles on assistant messages with thinking, unknown, or string content", 
 
 test("tells a turn that finished from one that failed", async (t) => {
   const state = await temporaryCursorState(t);
-  await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
+  await writeWorkspaceRecord(state, "9f1c", state.defaultFolderPath);
   await writeTranscript(
     state,
-    "Users-test-luke",
+    state.defaultProjectDirectoryName,
     "session-finished",
     [
       messageRecord(TEST_ROLE.ASSISTANT, TEST_CONTENT_TYPE.TEXT),
@@ -303,7 +315,7 @@ test("tells a turn that finished from one that failed", async (t) => {
   );
   await writeTranscript(
     state,
-    "Users-test-luke",
+    state.defaultProjectDirectoryName,
     "session-failed",
     [
       messageRecord(TEST_ROLE.ASSISTANT, TEST_CONTENT_TYPE.TOOL_USE),
@@ -333,7 +345,7 @@ test("passes over trailing records this build does not know", async (t) => {
   const state = await temporaryCursorState(t);
   await writeTranscript(
     state,
-    "Users-test-luke",
+    state.defaultProjectDirectoryName,
     "session-annotated",
     [
       messageRecord(TEST_ROLE.ASSISTANT, TEST_CONTENT_TYPE.TEXT),
@@ -353,14 +365,14 @@ test("leaves a transcript that has gone quiet unknown instead of inventing activ
   const state = await temporaryCursorState(t);
   await writeTranscript(
     state,
-    "Users-test-luke",
+    state.defaultProjectDirectoryName,
     "session-quiet",
     [messageRecord(TEST_ROLE.ASSISTANT, TEST_CONTENT_TYPE.TOOL_USE)],
     TEST_TIME - 20 * 60 * 1000,
   );
   await writeTranscript(
     state,
-    "Users-test-luke",
+    state.defaultProjectDirectoryName,
     "session-abandoned",
     [
       messageRecord(TEST_ROLE.ASSISTANT, TEST_CONTENT_TYPE.TEXT),
@@ -383,7 +395,7 @@ test("keeps reporting a failure that has gone quiet, because it has not healed",
   const state = await temporaryCursorState(t);
   await writeTranscript(
     state,
-    "Users-test-luke",
+    state.defaultProjectDirectoryName,
     "session-stuck",
     [
       messageRecord(TEST_ROLE.ASSISTANT, TEST_CONTENT_TYPE.TOOL_USE),
@@ -406,7 +418,7 @@ test("ignores sessions older than the maximum session age", async (t) => {
   const state = await temporaryCursorState(t);
   await writeTranscript(
     state,
-    "Users-test-luke",
+    state.defaultProjectDirectoryName,
     "session-yesterday",
     [turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
     TEST_TIME - 25 * 60 * 60 * 1000,
@@ -421,26 +433,39 @@ test("ignores sessions older than the maximum session age", async (t) => {
 
 test("names a folder its project directory can no longer spell", async (t) => {
   const state = await temporaryCursorState(t);
-  await writeWorkspaceRecord(state, "6a20", "/Users/test/luke.github.io");
-  await writeWorkspaceRecord(state, "77b8", "/Users/test/Documents/[00] Notes:Archive");
-  await writeWorkspaceRecord(state, "c4d1", "/Users/test/workspaces/luke/sidecar-v2");
+  const siteFolder = path.join(path.dirname(state.cursorHome), "folders", "luke.github.io");
+  const notesFolder = path.join(path.dirname(state.cursorHome), "folders", "[00] Notes:Archive");
+  const workspaceFolder = path.join(
+    path.dirname(state.cursorHome),
+    "folders",
+    "luke",
+    "sidecar-v2",
+  );
+  await Promise.all(
+    [siteFolder, notesFolder, workspaceFolder].map((folder) =>
+      fs.mkdir(folder, { recursive: true }),
+    ),
+  );
+  await writeWorkspaceRecord(state, "6a20", siteFolder);
+  await writeWorkspaceRecord(state, "77b8", notesFolder);
+  await writeWorkspaceRecord(state, "c4d1", workspaceFolder);
   await writeTranscript(
     state,
-    "Users-test-luke-github-io",
+    canonicalCursorProjectName(siteFolder),
     "session-site",
     [turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
     TEST_TIME - 1_000,
   );
   await writeTranscript(
     state,
-    "Users-test-Documents-00-Notes-Archive",
+    canonicalCursorProjectName(notesFolder),
     "session-notes",
     [turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
     TEST_TIME - 2_000,
   );
   await writeTranscript(
     state,
-    "Users-test-workspaces-luke-sidecar-v2",
+    canonicalCursorProjectName(workspaceFolder),
     "session-workspace",
     [turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
     TEST_TIME - 3_000,
@@ -456,21 +481,26 @@ test("names a folder its project directory can no longer spell", async (t) => {
 
 test("names a folder whose project directory kept a character Luke would rewrite", async (t) => {
   const state = await temporaryCursorState(t);
-  await writeWorkspaceRecord(state, "4d5e", "/Users/test/my_project");
-  await writeWorkspaceRecord(state, "8f9a", "/Users/test/Notes (2026)");
+  const underscoredFolder = path.join(path.dirname(state.cursorHome), "folders", "my_project");
+  const bracketedFolder = path.join(path.dirname(state.cursorHome), "folders", "Notes (2026)");
+  await Promise.all(
+    [underscoredFolder, bracketedFolder].map((folder) => fs.mkdir(folder, { recursive: true })),
+  );
+  await writeWorkspaceRecord(state, "4d5e", underscoredFolder);
+  await writeWorkspaceRecord(state, "8f9a", bracketedFolder);
   // Cursor decides for itself which characters it will not put in a directory
   // name, so these keep an underscore and a bracket that Luke's own reduction
   // would have rewritten. Matching must not depend on agreeing with it.
   await writeTranscript(
     state,
-    "Users-test-my_project",
+    cursorProjectName(underscoredFolder),
     "session-underscored",
     [turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
     TEST_TIME - 1_000,
   );
   await writeTranscript(
     state,
-    "Users-test-Notes (2026)",
+    cursorProjectName(bracketedFolder),
     "session-bracketed",
     [turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
     TEST_TIME - 2_000,
@@ -503,7 +533,7 @@ test("names an existing folder without a Cursor workspace record", async (t) => 
   assert.deepEqual(observations[0]?.detail, { repository: "luke" });
 });
 
-test("refuses a project directory name that resolves to two folders", async (t) => {
+test("omits a project directory name that resolves to two folders", async (t) => {
   const state = await temporaryCursorState(t);
   const root = path.join(path.dirname(state.cursorHome), "ambiguous");
   const firstFolder = path.join(root, "alpha", "beta-gamma");
@@ -522,11 +552,10 @@ test("refuses a project directory name that resolves to two folders", async (t) 
 
   const observations = await adapterFor(state).observe();
 
-  assert.equal(observations.length, 1);
-  assert.equal(observations[0]?.title, "workspace");
+  assert.deepEqual(observations, []);
 });
 
-test("refuses a project directory name that resolves to no folder", async (t) => {
+test("omits a project directory name that resolves to no folder", async (t) => {
   const state = await temporaryCursorState(t);
   const missingFolder = path.join(path.dirname(state.cursorHome), "missing", "folder");
   await writeTranscript(
@@ -539,8 +568,25 @@ test("refuses a project directory name that resolves to no folder", async (t) =>
 
   const observations = await adapterFor(state).observe();
 
-  assert.equal(observations.length, 1);
-  assert.equal(observations[0]?.title, "workspace");
+  assert.deepEqual(observations, []);
+});
+
+test("withdraws sessions when their workspace folder is deleted", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeTranscript(
+    state,
+    state.defaultProjectDirectoryName,
+    "session-deleted-workspace",
+    [turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
+    TEST_TIME - 1_000,
+  );
+  const adapter = adapterFor(state);
+
+  assert.equal((await adapter.observe()).length, 1);
+
+  await fs.rm(state.defaultFolderPath, { recursive: true });
+
+  assert.deepEqual(await adapter.observe(), []);
 });
 
 test("keeps a literal hyphen in the uniquely resolved folder label", async (t) => {
@@ -561,13 +607,19 @@ test("keeps a literal hyphen in the uniquely resolved folder label", async (t) =
   assert.equal(observations[0]?.title, "little-rock");
 });
 
-test("labels a session neutrally rather than guessing at a folder", async (t) => {
+test("omits sessions rather than guessing at a folder", async (t) => {
   const state = await temporaryCursorState(t);
+  const firstFolder = path.join(path.dirname(state.cursorHome), "ambiguous", "luke-v2");
+  const secondFolder = path.join(path.dirname(state.cursorHome), "ambiguous", "luke", "v2");
+  await Promise.all([
+    fs.mkdir(firstFolder, { recursive: true }),
+    fs.mkdir(secondFolder, { recursive: true }),
+  ]);
   // A window with no folder, and two folders that share one project directory
-  // name while disagreeing about what it should be called.
+  // name. Neither gives Luke one verified folder to report.
   await writeWorkspaceRecord(state, "1a2b", undefined);
-  await writeWorkspaceRecord(state, "3c4d", "/Users/test/luke-v2");
-  await writeWorkspaceRecord(state, "5e6f", "/Users/test/luke/v2");
+  await writeWorkspaceRecord(state, "3c4d", firstFolder);
+  await writeWorkspaceRecord(state, "5e6f", secondFolder);
   await writeTranscript(
     state,
     "empty-window",
@@ -577,7 +629,7 @@ test("labels a session neutrally rather than guessing at a folder", async (t) =>
   );
   await writeTranscript(
     state,
-    "Users-test-luke-v2",
+    canonicalCursorProjectName(firstFolder),
     "session-ambiguous",
     [turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
     TEST_TIME - 2_000,
@@ -585,10 +637,7 @@ test("labels a session neutrally rather than guessing at a folder", async (t) =>
 
   const observations = await adapterFor(state).observe();
 
-  assert.deepEqual(
-    observations.map((observation) => observation.title),
-    ["workspace", "workspace"],
-  );
+  assert.deepEqual(observations, []);
 });
 
 test("a workspace record that is not JSON does not fail the observation pass", async (t) => {
@@ -598,7 +647,7 @@ test("a workspace record that is not JSON does not fail the observation pass", a
   await fs.writeFile(path.join(entryDirectory, CURSOR_WORKSPACE_FILE), "{");
   await writeTranscript(
     state,
-    "Users-test-luke",
+    state.defaultProjectDirectoryName,
     "session-labelled",
     [turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
     TEST_TIME - 1_000,
@@ -607,22 +656,22 @@ test("a workspace record that is not JSON does not fail the observation pass", a
   const observations = await adapterFor(state).observe();
 
   assert.equal(observations.length, 1);
-  assert.equal(observations[0]?.title, "workspace");
+  assert.equal(observations[0]?.title, "luke");
 });
 
 test("observes a session and not the subagents it ran", async (t) => {
   const state = await temporaryCursorState(t);
-  await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
+  await writeWorkspaceRecord(state, "9f1c", state.defaultFolderPath);
   await writeTranscript(
     state,
-    "Users-test-luke",
+    state.defaultProjectDirectoryName,
     "session-with-subagents",
     [messageRecord(TEST_ROLE.ASSISTANT, TEST_CONTENT_TYPE.TOOL_USE)],
     TEST_TIME - 5_000,
   );
   await writeSubagentTranscript(
     state,
-    "Users-test-luke",
+    state.defaultProjectDirectoryName,
     "session-with-subagents",
     "subagent-explore",
     TEST_TIME - 1_000,
@@ -640,7 +689,7 @@ test("finds the newest records when only the end of a long transcript is read", 
   const state = await temporaryCursorState(t);
   await writeTranscript(
     state,
-    "Users-test-luke",
+    state.defaultProjectDirectoryName,
     "session-long",
     [
       { role: TEST_ROLE.ASSISTANT, message: { content: [{ text: "x".repeat(512) }] } },
@@ -659,7 +708,7 @@ test("keeps working when a bounded tail contains no whole record", async (t) => 
   const state = await temporaryCursorState(t);
   await writeTranscript(
     state,
-    "Users-test-luke",
+    state.defaultProjectDirectoryName,
     "session-oversized-record",
     [
       {
@@ -687,7 +736,7 @@ test("bounds how many sessions one pass reports, keeping the newest", async (t) 
   ].entries()) {
     await writeTranscript(
       state,
-      "Users-test-luke",
+      state.defaultProjectDirectoryName,
       sessionId,
       [turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
       TEST_TIME - (index + 1) * 1_000,
@@ -704,18 +753,26 @@ test("bounds how many sessions one pass reports, keeping the newest", async (t) 
 
 test("keeps the projects that most recently started a session", async (t) => {
   const state = await temporaryCursorState(t);
-  await writeWorkspaceRecord(state, "9f1c", "/Users/test/daily");
-  await writeWorkspaceRecord(state, "7b2e", "/Users/test/dormant");
+  const dailyFolder = path.join(path.dirname(state.cursorHome), "folders", "daily");
+  const dormantFolder = path.join(path.dirname(state.cursorHome), "folders", "dormant");
+  await Promise.all([
+    fs.mkdir(dailyFolder, { recursive: true }),
+    fs.mkdir(dormantFolder, { recursive: true }),
+  ]);
+  const dailyProject = cursorProjectName(dailyFolder);
+  const dormantProject = cursorProjectName(dormantFolder);
+  await writeWorkspaceRecord(state, "9f1c", dailyFolder);
+  await writeWorkspaceRecord(state, "7b2e", dormantFolder);
   await writeTranscript(
     state,
-    "Users-test-daily",
+    dailyProject,
     "session-today",
     [turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
     TEST_TIME - 1_000,
   );
   await writeTranscript(
     state,
-    "Users-test-dormant",
+    dormantProject,
     "session-long-ago",
     [turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
     TEST_TIME - 2_000,
@@ -723,15 +780,15 @@ test("keeps the projects that most recently started a session", async (t) => {
   // The project Cursor wrote to first holds the newer session, and a folder
   // opened moments ago has never run an agent at all. A project directory's own
   // mtime tells all three apart backwards.
-  await setDirectoryMtime(projectDirectory(state, "Users-test-daily"), TEST_TIME - YEAR_MS);
-  await setDirectoryMtime(projectDirectory(state, "Users-test-dormant"), TEST_TIME - 60_000);
+  await setDirectoryMtime(projectDirectory(state, dailyProject), TEST_TIME - YEAR_MS);
+  await setDirectoryMtime(projectDirectory(state, dormantProject), TEST_TIME - 60_000);
   await setDirectoryMtime(projectDirectory(state, "Users-test-opened-today"), TEST_TIME);
   await setDirectoryMtime(
-    path.join(projectDirectory(state, "Users-test-daily"), CURSOR_TRANSCRIPTS_DIRECTORY),
+    path.join(projectDirectory(state, dailyProject), CURSOR_TRANSCRIPTS_DIRECTORY),
     TEST_TIME - 1_000,
   );
   await setDirectoryMtime(
-    path.join(projectDirectory(state, "Users-test-dormant"), CURSOR_TRANSCRIPTS_DIRECTORY),
+    path.join(projectDirectory(state, dormantProject), CURSOR_TRANSCRIPTS_DIRECTORY),
     TEST_TIME - YEAR_MS,
   );
 

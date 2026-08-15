@@ -10,7 +10,6 @@ import {
   type SessionDetail,
   type SessionProviderAdapter,
   type SessionStatus,
-  UNKNOWN_WORKSPACE_LABEL,
 } from "@sidecar/core";
 import { CURSOR_PROVIDER } from "./cursor-adapter";
 import {
@@ -163,8 +162,8 @@ function folderPathFromWorkspaceRecord(source: string): string | undefined {
  */
 class CursorWorkspaceLabels {
   readonly #directory: string;
-  readonly #labelsByProjectName = new Map<string, string | undefined>();
-  readonly #filesystemLabelsByProjectDirectoryName = new Map<string, string | undefined>();
+  readonly #folderPathsByProjectName = new Map<string, string | undefined>();
+  readonly #resolvedFoldersByProjectDirectoryName = new Map<string, string | undefined>();
   readonly #readWorkspaceRecords = new Set<string>();
 
   constructor(directory: string) {
@@ -172,14 +171,14 @@ class CursorWorkspaceLabels {
   }
 
   /**
-   * Reads Cursor's workspace records for any project this pass cannot already
-   * name. A record is read once; a project that stays unnamed is looked for
-   * again, because the folder it belongs to may be opened later.
+   * Reads each Cursor workspace record once, then resolves each project once.
+   * A resolved folder is still checked on every pass so deleting or archiving
+   * its workspace withdraws the sessions that belonged to it.
    */
   async resolve(projectDirectoryNames: readonly string[]): Promise<void> {
     if (
       projectDirectoryNames.some(
-        (name) => !this.#labelsByProjectName.has(canonicalProjectName(name)),
+        (name) => !this.#folderPathsByProjectName.has(canonicalProjectName(name)),
       )
     ) {
       for (const entry of await readDirectory(this.#directory)) {
@@ -194,35 +193,41 @@ class CursorWorkspaceLabels {
     }
 
     for (const projectDirectoryName of new Set(projectDirectoryNames)) {
-      if (this.#labelsByProjectName.get(canonicalProjectName(projectDirectoryName))) continue;
-      if (this.#filesystemLabelsByProjectDirectoryName.has(projectDirectoryName)) continue;
-      const folderPath = await resolveProjectDirectory(projectDirectoryName);
-      this.#filesystemLabelsByProjectDirectoryName.set(
-        projectDirectoryName,
-        folderPath ? workspaceLabel(folderPath) : undefined,
+      if (this.#resolvedFoldersByProjectDirectoryName.has(projectDirectoryName)) {
+        const cachedPath = this.#resolvedFoldersByProjectDirectoryName.get(projectDirectoryName);
+        if (!cachedPath) continue;
+        const stats = await fileStats(cachedPath);
+        if (stats?.isDirectory()) continue;
+        this.#resolvedFoldersByProjectDirectoryName.set(projectDirectoryName, undefined);
+        continue;
+      }
+
+      const recordedPath = this.#folderPathsByProjectName.get(
+        canonicalProjectName(projectDirectoryName),
       );
+      const recordedStats = recordedPath ? await fileStats(recordedPath) : undefined;
+      const folderPath = recordedStats?.isDirectory()
+        ? recordedPath
+        : await resolveProjectDirectory(projectDirectoryName);
+      this.#resolvedFoldersByProjectDirectoryName.set(projectDirectoryName, folderPath);
     }
   }
 
-  label(projectDirectoryName: string): string {
-    return (
-      this.#labelsByProjectName.get(canonicalProjectName(projectDirectoryName)) ??
-      this.#filesystemLabelsByProjectDirectoryName.get(projectDirectoryName) ??
-      UNKNOWN_WORKSPACE_LABEL
-    );
+  label(projectDirectoryName: string): string | undefined {
+    const folderPath = this.#resolvedFoldersByProjectDirectoryName.get(projectDirectoryName);
+    return folderPath ? workspaceLabel(folderPath) : undefined;
   }
 
   #record(folderPath: string): void {
     const projectName = canonicalProjectName(folderPath);
-    const label = workspaceLabel(folderPath);
-    if (!this.#labelsByProjectName.has(projectName)) {
-      this.#labelsByProjectName.set(projectName, label);
+    if (!this.#folderPathsByProjectName.has(projectName)) {
+      this.#folderPathsByProjectName.set(projectName, folderPath);
       return;
     }
-    // Two folders can reduce to one project name. When they disagree about
-    // what to call it, Luke names neither.
-    if (this.#labelsByProjectName.get(projectName) !== label) {
-      this.#labelsByProjectName.set(projectName, undefined);
+    // Two folders can reduce to one project name. Luke reports neither rather
+    // than choosing which real folder the transcript belonged to.
+    if (this.#folderPathsByProjectName.get(projectName) !== folderPath) {
+      this.#folderPathsByProjectName.set(projectName, undefined);
     }
   }
 }
@@ -472,7 +477,12 @@ export class CursorLocalSessionAdapter implements SessionProviderAdapter {
     const observations = new Map<string, ProviderSessionObservation>();
     for (const candidate of candidates) {
       if (observations.has(candidate.providerSessionId)) continue;
-      observations.set(candidate.providerSessionId, await this.#observationFor(candidate, now));
+      const label = this.#workspaceLabels.label(candidate.projectDirectoryName);
+      if (!label) continue;
+      observations.set(
+        candidate.providerSessionId,
+        await this.#observationFor(candidate, label, now),
+      );
     }
     return [...observations.values()];
   }
@@ -485,9 +495,9 @@ export class CursorLocalSessionAdapter implements SessionProviderAdapter {
    */
   async #observationFor(
     candidate: CursorTranscriptCandidate,
+    label: string,
     now: number,
   ): Promise<ProviderSessionObservation> {
-    const label = this.#workspaceLabels.label(candidate.projectDirectoryName);
     const tail = await readTail(candidate.filePath, this.#readTailBytes);
     const status = statusFromTurn(
       closedTurn(tail),
