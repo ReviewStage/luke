@@ -439,6 +439,8 @@ test("the feedback fact says what a spoken open may do, and that sending stays b
   assert.match(fact.detail, /after refusing something he cannot do/);
   assert.match(fact.detail, /never overwritten/);
   assert.match(fact.detail, /no spoken ask can send one/);
+  assert.match(fact.detail, /email client/);
+  assert.match(fact.detail, /attached in the email client/);
 });
 
 test("every adjustable setting is carried to the bridge call its row uses", async () => {

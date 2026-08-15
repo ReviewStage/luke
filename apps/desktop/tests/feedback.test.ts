@@ -4,26 +4,15 @@ import {
   FEEDBACK_KIND,
   FEEDBACK_LIFECYCLE_EVENT,
   FEEDBACK_LIMITS,
-  type FeedbackImage,
   feedbackKindForLifecycleEvent,
   feedbackSubmission,
 } from "../src/shared/feedback";
-
-function image(overrides: Partial<FeedbackImage> = {}): FeedbackImage {
-  return {
-    name: "screenshot.png",
-    mediaType: "image/png",
-    // "hello" in standard base64, which is enough to be real bytes.
-    base64: "aGVsbG8=",
-    ...overrides,
-  };
-}
 
 function submission(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     kind: FEEDBACK_KIND.FEEDBACK,
     message: "The panel opened under my second display's dock.",
-    images: [],
+    imageNames: [],
     ...overrides,
   };
 }
@@ -34,7 +23,7 @@ test("a well-formed submission passes with its words trimmed", () => {
       message: "  It works.  ",
       name: "  Dean  ",
       email: " dean@example.com ",
-      images: [image()],
+      imageNames: ["screenshot.png"],
     }),
   );
 
@@ -42,7 +31,7 @@ test("a well-formed submission passes with its words trimmed", () => {
   assert.equal(parsed.message, "It works.");
   assert.equal(parsed.name, "Dean");
   assert.equal(parsed.email, "dean@example.com");
-  assert.equal(parsed.images.length, 1);
+  assert.deepEqual(parsed.imageNames, ["screenshot.png"]);
 });
 
 test("credit left blank is absent rather than empty", () => {
@@ -72,32 +61,47 @@ test("credit carrying a line break is refused, never stripped", () => {
   assert.equal(feedbackSubmission(submission({ email: "a@b.c\r\nX: y" })), undefined);
 });
 
-test("more images than the cap is refused as a whole", () => {
-  const images = Array.from({ length: FEEDBACK_LIMITS.MAX_IMAGES + 1 }, () => image());
-  assert.equal(feedbackSubmission(submission({ images })), undefined);
+test("more image names than the cap is refused as a whole", () => {
+  const imageNames = Array.from(
+    { length: FEEDBACK_LIMITS.MAX_IMAGES + 1 },
+    (_, index) => `shot-${String(index)}.png`,
+  );
+  assert.equal(feedbackSubmission(submission({ imageNames })), undefined);
 });
 
-test("an image outside the fixed formats is refused", () => {
+test("an image name with a line break is refused, never stripped", () => {
+  assert.equal(feedbackSubmission(submission({ imageNames: ["shot\n.png"] })), undefined);
+});
+
+test("a payload that still carries image bytes is malformed", () => {
+  // The old network delivery took base64 screenshots. Mailto cannot attach
+  // them, and a renderer that still posts bytes is a broken client, not a
+  // submission — imageNames is required, and extra `images` are ignored.
   assert.equal(
-    feedbackSubmission(submission({ images: [image({ mediaType: "image/svg+xml" })] })),
+    feedbackSubmission({
+      kind: FEEDBACK_KIND.FEEDBACK,
+      message: "It broke.",
+      images: [{ name: "shot.png", mediaType: "image/png", base64: "aGVsbG8=" }],
+    }),
     undefined,
   );
 });
 
-test("an image whose bytes are not base64 is refused", () => {
+test("a URL handed over as the IPC payload is a malformed request, not a mailto to open", () => {
   assert.equal(
-    feedbackSubmission(submission({ images: [image({ base64: "not base64!!" })] })),
+    feedbackSubmission("mailto:founders@stagereview.app?subject=Luke%20feedback&body=hi"),
     undefined,
   );
+  assert.equal(feedbackSubmission("https://tryluke.dev/api/feedback"), undefined);
 });
 
-test("an image past the byte cap is refused", () => {
-  // Base64 grows bytes by a third, so this decodes to just over the cap.
-  const oversized = "A".repeat(Math.ceil((FEEDBACK_LIMITS.IMAGE_MAX_BYTES + 3) / 3) * 4);
-  assert.equal(
-    feedbackSubmission(submission({ images: [image({ base64: oversized })] })),
-    undefined,
+test("a URL in the payload is ignored; the mailbox is not taken from the renderer", () => {
+  const parsed = feedbackSubmission(
+    submission({ url: "https://example.test/steal", mailto: "mailto:else@example.test" }),
   );
+  assert.ok(parsed);
+  assert.equal("url" in parsed, false);
+  assert.equal("mailto" in parsed, false);
 });
 
 test("the tray's lifecycle events name their kinds and nothing else answers", () => {

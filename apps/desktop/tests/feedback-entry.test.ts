@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  FEEDBACK_NOTICE,
   type FeedbackEntry,
   feedbackImageUrl,
+  feedbackOpenedNotice,
   freshFeedbackEntry,
+  IMAGE_MAIL_HINT,
   isSendable,
   openedFeedbackEntry,
 } from "../src/renderer/feedback-entry";
@@ -119,4 +122,11 @@ test("a chip draws the image it holds", () => {
     feedbackImageUrl({ name: "shot.png", mediaType: "image/png", base64: "aGVsbG8=" }),
     "data:image/png;base64,aGVsbG8=",
   );
+});
+
+test("opening mail names a picked screenshot rather than dropping it", () => {
+  assert.equal(feedbackOpenedNotice(0), FEEDBACK_NOTICE.OPENED);
+  assert.equal(feedbackOpenedNotice(1), FEEDBACK_NOTICE.ATTACH);
+  assert.match(feedbackOpenedNotice(2), /Attach the screenshots you selected there/);
+  assert.match(IMAGE_MAIL_HINT, /cannot be attached through email automatically/);
 });

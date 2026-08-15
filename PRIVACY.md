@@ -230,3 +230,20 @@ By default, requests go to OpenAI's API. If `OPENAI_BASE_URL` is changed, the
 same attention-review data goes to that configured third-party endpoint and is
 handled under that endpoint's policies. The bearer credential is also sent to
 that endpoint.
+
+## Feedback
+
+Send Feedback and Submit a Prompt open your default email client on a draft
+addressed to `founders@stagereview.app`. Luke does not send the message, and
+does not upload it to a feedback service, webhook, or mail API. The draft's
+subject is `Luke feedback` or `Luke prompt` according to which you opened, and
+its body is the text you typed plus an optional name and email if you gave
+them.
+
+Screenshots you pick in the composer stay on your Mac. They cannot be attached
+through the mail draft Luke opens; if you selected any, Luke tells you to
+attach them in your email client. Nothing observed about your sessions is
+added to the draft.
+
+If macOS cannot open the mail client, Luke shows an error that includes
+`founders@stagereview.app` so you can copy it.

@@ -27,9 +27,9 @@ const RECODE_ROUNDS = [
 ] as const;
 
 export function imageIntake(file: { type: string; size: number }): ImageIntake {
-  // A format the submission carries natively rides untouched while it fits;
-  // past the cap it is re-encoded rather than refused, because the cap exists
-  // for a request-body limit the user should never have to think about.
+  // A format the composer can preview natively rides untouched while it fits;
+  // past the cap it is re-encoded rather than refused, so a huge screenshot
+  // can still be looked at. The bytes stay here: mailto cannot attach them.
   if (isFeedbackImageType(file.type)) {
     return file.size <= FEEDBACK_LIMITS.IMAGE_MAX_BYTES ? IMAGE_INTAKE.KEEP : IMAGE_INTAKE.RECODE;
   }
@@ -85,9 +85,11 @@ async function recodedImage(file: File): Promise<FeedbackImage | undefined> {
 }
 
 /**
- * Turns one picked or pasted file into an attachment, or nothing if it cannot
+ * Turns one picked or pasted file into a preview, or nothing if it cannot
  * come. Everything here happens on the user's machine: a file is only read,
- * scaled, and encoded — nothing leaves until the note it belongs to is sent.
+ * scaled, and encoded for the composer to show. The bytes never leave; mailto
+ * cannot attach them, and the user is told to add the file in their email
+ * client.
  */
 export async function encodeFeedbackImage(file: File): Promise<FeedbackImage | undefined> {
   const intake = imageIntake(file);

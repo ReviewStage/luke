@@ -500,8 +500,10 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "The Feedback section at the foot of the Settings tab — or the menu bar item's Send " +
         "Feedback… and Submit a Prompt… — opens a composer under the notch. Send feedback is for " +
         "bugs and ideas; Submit a prompt sends a prompt to a coding agent, and one the founders " +
-        "like ships in the next release. Either goes by email to the founders with an optional " +
-        "name and email for credit and up to three screenshots. A spoken ask can open the " +
+        "like ships in the next release. Either opens the developer's own email client, " +
+        "addressed to the founders, with an optional name and email for credit. Screenshots " +
+        "picked in the composer cannot ride along through email automatically — they have to " +
+        "be attached in the email client. A spoken ask can open the " +
         "composer and start it with the developer's own words — Luke offers exactly that, once, " +
         "after refusing something he cannot do — but a note already being written is never " +
         "overwritten, and sending is always the Send button's own press, by hand: no spoken ask " +

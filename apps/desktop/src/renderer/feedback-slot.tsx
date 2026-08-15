@@ -6,6 +6,7 @@ import {
   FEEDBACK_COPY,
   type FeedbackEntryControl,
   feedbackImageUrl,
+  IMAGE_MAIL_HINT,
   isSendable,
 } from "./feedback-entry";
 import { imageFiles } from "./feedback-images";
@@ -288,6 +289,9 @@ export function FeedbackSlot({
             }}
           />
         </div>
+        {entry.images.length > 0 ? (
+          <small className="settings-note">{IMAGE_MAIL_HINT}</small>
+        ) : null}
 
         {/* The screenshot at a readable size, arriving the way content joins
             any growing shape: its room lands at once — one clean spring for
@@ -331,10 +335,9 @@ export function FeedbackSlot({
             where it will end up. */}
         <div ref={followStack} className="feedback-follow" data-follow={String(previewMounted)}>
           <div className="settings-row feedback-foot">
-            {/* Where the words go, said before the send: this is the one thing
-                the panel writes to somewhere that is not this machine, and it
-                should never be a surprise. */}
-            <small className="settings-note">Goes by email to the founders.</small>
+            {/* Opening Mail is all Luke does here, and sending stays a press
+                in that client — said before the button so it is never a surprise. */}
+            <small className="settings-note">Opens your email client to the founders.</small>
             <span className="settings-actions">
               <button
                 type="button"
@@ -350,7 +353,7 @@ export function FeedbackSlot({
                 disabled={!ready}
                 onClick={() => control.commit()}
               >
-                {busy ? "Sending…" : "Send"}
+                {busy ? "Opening…" : "Send"}
               </button>
             </span>
           </div>

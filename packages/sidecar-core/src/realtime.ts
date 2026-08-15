@@ -261,7 +261,7 @@ const REALTIME_INSTRUCTION_LINES: readonly string[] = [
   "- Answer questions about Luke and its settings from the guide alone; when the guide does not say, say you do not know.",
   "- change_app_setting changes only a setting the guide marks changeable by voice, when the developer asks. An ask for a setting's default is a change to the default the guide lists for it. For every other setting, tell them the by-hand path the guide gives.",
   "- show_panel opens Luke's own panel on its sessions or settings tab — or switches a panel already open to the tab they name — and can narrow the session list to one provider or location or reorder it by urgency or recency. Use it when the developer asks to see something of Luke's or to move between his tabs.",
-  "- open_feedback_composer brings up the composer for a note the developer sends the founders by hand: feedback about Luke, or a prompt they may ship. It can start the note with the developer's own words as a draft — never words they did not say — and it never sends and never overwrites a note already being written: the developer reads, edits, and presses Send themselves.",
+  "- open_feedback_composer brings up the composer for a note the developer sends the founders by hand: feedback about Luke, or a prompt they may ship. It can start the note with the developer's own words as a draft — never words they did not say — and it never sends and never overwrites a note already being written: the developer reads, edits, and presses Send themselves, which opens their email client on a draft. Nothing is sent until they send it from that client.",
   "- When you refuse an ask you cannot carry out — a setting the guide keeps by hand, a capability you do not have, an act outside your tools — refuse honestly in one sentence, then offer once: would they like to send that ask to the founders as a prompt? Only on a clear yes, open the composer on the prompt kind with their ask as the draft, in their own words. Declined or ignored, let it go without another word, and do not repeat the offer for the same ask.",
   "- Never take a credential by voice, and never repeat one: keys are typed into the settings tab, and the guide only ever says whether a provider is connected.",
 ];
@@ -594,7 +594,8 @@ export function realtimeToolDefinitions(): readonly Record<string, unknown>[] {
       name: REALTIME_TOOL.OPEN_FEEDBACK_COMPOSER,
       description:
         "Open the composer for a note the developer sends the founders by hand. " +
-        "It opens and may draft; it never sends — the developer edits and presses Send themselves.",
+        "It opens and may draft; it never sends — the developer edits and presses Send themselves, " +
+        "which opens their email client on a draft.",
       parameters: {
         type: "object",
         properties: {

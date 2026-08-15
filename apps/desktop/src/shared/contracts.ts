@@ -464,9 +464,10 @@ export interface AppBridge {
    */
   executeIssueAction(action: IssueActionAsk): Promise<TrackerActionResult>;
   /**
-   * Carries one user-typed note to the people who make Luke, as email. The
-   * renderer sends only what the user wrote and attached — the destination is
-   * fixed in the main process, and no session material rides along.
+   * Opens the user's email client on a draft to the people who make Luke. The
+   * renderer sends only what the user wrote and the names of screenshots they
+   * picked — the destination is fixed in the main process, no session material
+   * rides along, and nothing is sent: the client opens with a draft.
    */
   sendFeedback(submission: FeedbackSubmission): Promise<FeedbackResult>;
   /**
@@ -474,7 +475,7 @@ export interface AppBridge {
    * the main process expands the window and sends the composer's lifecycle
    * event down the same ordered channel as the mode event, so the shape that
    * wins is always the composer — the ordering stays owned by setWindowMode
-   * for every caller. Opening is all this does; a note still leaves only
+   * for every caller. Opening is all this does; a draft still leaves only
    * through sendFeedback, from the composer's own Send button.
    */
   summonFeedback(kind: FeedbackKind): Promise<void>;

@@ -146,6 +146,7 @@ test("the instructions bound the refusal offer: once, on a clear yes, never a se
   assert.match(instructions, /never sends/);
   assert.match(instructions, /presses Send themselves/);
   assert.match(instructions, /never words they did not say/);
+  assert.match(instructions, /email client/);
 });
 
 test("a spoken toggle accepts the unambiguous words and nothing else", () => {

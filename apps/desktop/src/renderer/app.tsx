@@ -46,6 +46,7 @@ import { isSubmittable, removalEndsEntry } from "./credential-entry";
 import {
   type FeedbackEntry,
   type FeedbackEntryControl,
+  feedbackOpenedNotice,
   IMAGE_REFUSAL,
   isSendable,
   openedFeedbackEntry,
@@ -96,7 +97,7 @@ import {
 } from "./volume-hint";
 
 /**
- * How long the settings tab keeps saying a note to the founders was sent. Long
+ * How long the settings tab keeps saying the mail client opened. Long
  * enough to be read on the way back from the Send button, short enough that
  * the line is gone before anyone wonders whether it is stuck.
  */
@@ -105,7 +106,7 @@ const FEEDBACK_NOTICE_MS = 6_000;
 /**
  * The composer kind a spoken open names, matched to the composer's own. The
  * two vocabularies are defined apart — the tool's in brand-neutral core, the
- * composer's beside the endpoint that reads a submission — so the seam between
+ * composer's beside the mailto draft a Send opens — so the seam between
  * them is written down once, here, rather than assumed at a call site.
  */
 const FEEDBACK_KIND_FOR_COMPOSER: Record<FeedbackComposerKind, FeedbackKind> = {
@@ -249,6 +250,12 @@ export function App(): React.JSX.Element {
   const credentialHeld = useRef(false);
   const feedbackHeld = useRef(false);
   const feedbackNoticeTimer = useRef<number | undefined>(undefined);
+  /**
+   * How many screenshots the note that just opened Mail was holding. Read by
+   * the delivered notice after the entry is gone, so a picked file is named
+   * there rather than dropped in silence.
+   */
+  const feedbackOpenedImageCount = useRef(0);
   /**
    * The words a spoken open asked to start the note with, waiting for the
    * composer's lifecycle event to consume them. A ref rather than an event
@@ -585,17 +592,18 @@ export function App(): React.JSX.Element {
           message: sending.message.trim(),
           ...(name ? { name } : {}),
           ...(email ? { email } : {}),
-          images: sending.images,
+          imageNames: sending.images.map((image) => image.name),
         });
         if (!result.delivered) {
-          return { rejection: result.reason ?? "Could not send that. Try again." };
+          return { rejection: result.reason ?? "Could not open your email client. Try again." };
         }
+        feedbackOpenedImageCount.current = sending.images.length;
         return {};
       } catch {
-        return { rejection: "Could not send that. Try again." };
+        return { rejection: "Could not open your email client. Try again." };
       }
     },
-    onDelivered: () => showFeedbackNotice("Sent — thank you."),
+    onDelivered: () => showFeedbackNotice(feedbackOpenedNotice(feedbackOpenedImageCount.current)),
     pointerInside: pointerIsInside,
     presentation: presentationOf,
     onReleasedWhileAway: onHitRegionLeave,
@@ -648,9 +656,9 @@ export function App(): React.JSX.Element {
 
   /**
    * Takes picked or pasted files aboard. Encoding happens here on the user's
-   * machine — scaled and re-written where a screenshot would not fit the
-   * request a submission has to travel as — and what could not come is said
-   * beside the field rather than dropped in silence.
+   * machine so the composer can preview them; the bytes never leave, because
+   * mailto cannot attach them. What could not come is said beside the field
+   * rather than dropped in silence.
    */
   const attachFeedbackImages = useCallback(
     async (files: readonly File[]) => {

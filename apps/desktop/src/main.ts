@@ -69,7 +69,7 @@ import { CopilotSessionAdapter } from "./copilot-adapter";
 import { CURSOR_PROVIDER, CursorSessionAdapter } from "./cursor-adapter";
 import { CursorLocalSessionAdapter } from "./cursor-local-adapter";
 import { DevinSessionAdapter } from "./devin-adapter";
-import { feedbackDeliveryFromEnvironment } from "./feedback-delivery";
+import { openFeedbackMail } from "./feedback-mailto";
 import { JulesSessionAdapter } from "./jules-adapter";
 import { LinearIssueTracker } from "./linear-tracker";
 import { readMacScreenGeometry } from "./macos-screen-geometry";
@@ -246,7 +246,6 @@ let realtimeCredentials: OpenAiRealtimeCredentialMinter | undefined;
 // rather than in the renderer because letting the players back up must survive
 // anything the renderer does — and only this process may run a helper.
 const mediaDuck = new MediaDuckController();
-const feedbackDelivery = feedbackDeliveryFromEnvironment();
 /**
  * The output's switches as last read, and the helper that reads them. The
  * state lives here rather than in the renderer so bootstrap can carry the
@@ -1177,7 +1176,7 @@ function registerIpc(): void {
   // mode event setWindowMode sends and the composer event that follows travel
   // the same lifecycle channel, so the shape that wins is always the
   // composer, never a panel racing it in from another channel. Opening is all
-  // this does; a note still arrives only through channels.sendFeedback, from
+  // this does; a draft still opens only through channels.sendFeedback, from
   // the composer's own Send button.
   ipcMain.handle(channels.summonFeedback, (event, kind: unknown) => {
     if (!trustedSender(event) || !isFeedbackKind(kind)) {
@@ -1909,23 +1908,26 @@ function registerIpc(): void {
   );
 
   // A note to the founders travels one road: typed in the composer, validated
-  // here as a whole, and handed to the courier whose destination is fixed by
-  // this build. Only what the user wrote and attached crosses — no session
-  // material, no identifiers, nothing observed — and a refusal comes back as an
-  // answer for the composer rather than a throw, because sending is the user's
-  // own act and its outcome belongs beside the field it left.
+  // here as a whole, and opened as a mailto draft in the user's own email
+  // client. The renderer names a note rather than an address — the mailbox is
+  // fixed by this build, the URL is built here, and openExternal is reached
+  // only after that URL is checked as mailto to that mailbox. Nothing is sent:
+  // the client opens with a draft. A refusal comes back as an answer for the
+  // composer rather than a throw, because opening mail is the user's own act
+  // and its outcome belongs beside the field it left.
   ipcMain.handle(
     channels.sendFeedback,
     async (event, submission: unknown): Promise<FeedbackResult> => {
       if (!trustedSender(event)) throw new Error("Untrusted renderer");
       const parsed = feedbackSubmission(submission);
       if (!parsed) throw new Error("Invalid feedback submission");
-      // A fixture run must be reproducible without a network, so it refuses
-      // rather than sending — and says so, because the composer still draws.
+      // A fixture run must be reproducible without opening Mail, so it refuses
+      // rather than handing a mailto to the system — and says so, because the
+      // composer still draws.
       if (fixtureMode) {
         return { delivered: false, reason: "A fixture run sends nothing." };
       }
-      return feedbackDelivery.deliver(parsed);
+      return openFeedbackMail(parsed, (url) => shell.openExternal(url));
     },
   );
 

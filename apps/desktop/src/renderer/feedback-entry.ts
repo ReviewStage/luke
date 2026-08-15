@@ -18,7 +18,7 @@ export interface FeedbackEntry {
   name: string;
   email: string;
   images: readonly FeedbackImage[];
-  /** True while the note is being sent. */
+  /** True while the mail client is being asked to open. */
   busy: boolean;
   /**
    * Whether the composer was last asked for from inside the panel. It is the
@@ -39,7 +39,7 @@ export interface FeedbackEntry {
  */
 export interface FeedbackEntryControl {
   entry?: FeedbackEntry;
-  /** The line drawn after a send lands, in place of the composer it ended. */
+  /** The line drawn after the mail client opens, in place of the composer it ended. */
   notice?: string;
   /** Opens the composer for a kind, or brings back the one already open. */
   begin(kind: FeedbackKind): void;
@@ -142,6 +142,24 @@ export const IMAGE_REFUSAL = {
   UNREADABLE: "That file could not come along as a screenshot.",
   FULL: `Up to ${FEEDBACK_LIMITS.MAX_IMAGES} screenshots can come along.`,
 } as const;
+
+/**
+ * Screenshots stay on this machine. mailto cannot attach them, so the
+ * composer says so beside a picked file rather than dropping it in silence,
+ * and the notice after a successful open says to attach it in the mail client.
+ */
+export const IMAGE_MAIL_HINT =
+  "Screenshots cannot be attached through email automatically. Add them in your email client after it opens.";
+
+/** The line the settings tab draws after the mail client opens. */
+export const FEEDBACK_NOTICE = {
+  OPENED: "Your email client is open.",
+  ATTACH: "Your email client is open. Attach the screenshots you selected there.",
+} as const;
+
+export function feedbackOpenedNotice(imageCount: number): string {
+  return imageCount > 0 ? FEEDBACK_NOTICE.ATTACH : FEEDBACK_NOTICE.OPENED;
+}
 
 /** What the chips draw. Built here so the format lives beside the type it reads. */
 export function feedbackImageUrl(image: FeedbackImage): string {
