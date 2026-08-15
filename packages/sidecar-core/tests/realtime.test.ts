@@ -53,7 +53,12 @@ import {
   REALTIME_SESSION_TYPE,
   realtimeInstructions,
 } from "../src/realtime-protocol";
-import { REALTIME_TOOL } from "../src/realtime-tools";
+import {
+  REALTIME_TOOL,
+  REALTIME_TOOL_FAMILY,
+  REALTIME_TOOLS,
+  spokenRealtimeToolCount,
+} from "../src/realtime-tools";
 import { maximumSessionMessageLength } from "../src/session";
 
 const DECIDED_AT = 1_800_000_000_000;
@@ -92,6 +97,12 @@ test("the minted session closes the microphone until push-to-talk opens it", () 
   // An always-open microphone is the one thing a desk-side sidecar must not have.
   assert.equal(config.audio.input.turn_detection, null);
   assert.equal(realtimeClientSecretRequest().session.type, REALTIME_SESSION_TYPE);
+});
+
+test("the standing instructions count the tools from the table", () => {
+  const instructions = realtimeInstructions();
+  assert.equal(Object.keys(REALTIME_TOOLS).length, 10);
+  assert.match(instructions, new RegExp(`You have ${spokenRealtimeToolCount()} tools:`));
 });
 
 test("the spoken instructions state what Luke cannot see, and when he may act", () => {
@@ -1323,6 +1334,9 @@ test("the session and issue tools answer to their own validators", () => {
   assert.equal(isIssueToolName(REALTIME_TOOL.UPDATE_ISSUE_STATE), true);
   assert.equal(isIssueToolName(REALTIME_TOOL.COMMENT_ON_ISSUE), true);
   assert.equal(isIssueToolName("delete_everything"), false);
+  assert.equal(REALTIME_TOOLS.CHANGE_APP_SETTING.family, REALTIME_TOOL_FAMILY.APP);
+  assert.equal(REALTIME_TOOLS.SEND_SESSION_MESSAGE.family, REALTIME_TOOL_FAMILY.SESSION);
+  assert.equal(REALTIME_TOOLS.UPDATE_ISSUE_STATE.family, REALTIME_TOOL_FAMILY.ISSUE);
 });
 
 test("a disconnected tracker withdraws the roster without starting a reply", () => {

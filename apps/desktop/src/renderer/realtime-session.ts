@@ -1,19 +1,17 @@
 import {
   type AppGuideSnapshot,
-  type AppToolAction,
   type AttentionSpeech,
   appGuideContextEvents,
   appGuideContextText,
   appToolAction,
+  type CarriedAppAction,
+  type CarriedIssueAction,
+  type CarriedSessionAction,
   cancelResponseEvents,
   clearInputAudioEvents,
   EMPTY_APP_GUIDE,
   functionCallFollowUpEvents,
   functionCallOutputEvents,
-  type IssueToolAction,
-  isAppToolCall,
-  isIssueToolName,
-  isSessionToolName,
   issueContextEvents,
   issueContextText,
   issueToolAction,
@@ -28,10 +26,12 @@ import {
   REALTIME_DATA_CHANNEL,
   REALTIME_SERVER_EVENT,
   REALTIME_STATUS,
+  REALTIME_TOOL_FAMILY,
   type RealtimeConnection,
   type RealtimeFunctionCall,
   type RealtimeStatus,
-  type SessionToolAction,
+  type RealtimeToolFamily,
+  realtimeToolFamily,
   sessionContextEvents,
   sessionContextText,
   sessionToolAction,
@@ -62,10 +62,7 @@ const REALTIME_SETTLE_TIMEOUT_MS = 20_000;
  * again against its registry — the carrier is a courier, not a gate.
  */
 export type SessionActionCarrier = (
-  action: Extract<
-    SessionToolAction,
-    { kind: "message" | "control" | "open" | "create-workspace" | "add-agent" }
-  >,
+  action: CarriedSessionAction,
 ) => Promise<Record<string, unknown>>;
 
 /**
@@ -76,14 +73,10 @@ export type SessionActionCarrier = (
  * reports. Nothing here sends a note: the feedback act opens the composer,
  * and what it holds leaves only by its own Send button.
  */
-export type AppActionCarrier = (
-  action: Extract<AppToolAction, { kind: "setting" | "panel" | "feedback" }>,
-) => Promise<Record<string, unknown>>;
+export type AppActionCarrier = (action: CarriedAppAction) => Promise<Record<string, unknown>>;
 
 /** The issue half of the same courier: validated here, validated again in main. */
-export type IssueActionCarrier = (
-  action: Extract<IssueToolAction, { kind: "issue-state" | "issue-comment" }>,
-) => Promise<Record<string, unknown>>;
+export type IssueActionCarrier = (action: CarriedIssueAction) => Promise<Record<string, unknown>>;
 
 export interface RealtimeVoiceSessionCallbacks {
   onStatus(status: RealtimeStatus): void;
@@ -1210,28 +1203,38 @@ export class RealtimeVoiceSession {
         reason: "Only a request you make yourself can act on a session or an issue.",
       };
     }
+    const family = realtimeToolFamily(call.name);
+    if (family === undefined) {
+      return { status: "refused", reason: "No such tool exists." };
+    }
+    const outputForFamily = {
+      [REALTIME_TOOL_FAMILY.APP]: () => this.#appToolCallOutput(call),
+      [REALTIME_TOOL_FAMILY.ISSUE]: () => this.#issueToolCallOutput(call),
+      [REALTIME_TOOL_FAMILY.SESSION]: () => this.#sessionToolCallOutput(call),
+    } as const satisfies Record<RealtimeToolFamily, () => Promise<Record<string, unknown>>>;
+    return outputForFamily[family]();
+  }
+
+  async #appToolCallOutput(call: RealtimeFunctionCall): Promise<Record<string, unknown>> {
     // An ask about Luke himself is validated against the guide the app
     // actually provided, then carried by the renderer the same way a session
     // act is: perform, and answer with what became of it.
-    if (isAppToolCall(call)) {
-      const appAction = appToolAction(call, this.#guide, this.#sessions);
-      if (appAction.kind === "refused") return { status: "refused", reason: appAction.reason };
-      if (!this.#options.carryAppAction) {
-        return { status: "refused", reason: "Acting on Luke's own settings is not available." };
-      }
-      try {
-        return await this.#options.carryAppAction(appAction);
-      } catch (error) {
-        return {
-          status: "refused",
-          reason: error instanceof Error ? error.message : "The change could not be made.",
-        };
-      }
+    const appAction = appToolAction(call, this.#guide, this.#sessions);
+    if (appAction.kind === "refused") return { status: "refused", reason: appAction.reason };
+    if (!this.#options.carryAppAction) {
+      return { status: "refused", reason: "Acting on Luke's own settings is not available." };
     }
-    if (isIssueToolName(call.name)) return this.#issueToolCallOutput(call);
-    if (!isSessionToolName(call.name)) {
-      return { status: "refused", reason: "No such tool exists." };
+    try {
+      return await this.#options.carryAppAction(appAction);
+    } catch (error) {
+      return {
+        status: "refused",
+        reason: error instanceof Error ? error.message : "The change could not be made.",
+      };
     }
+  }
+
+  async #sessionToolCallOutput(call: RealtimeFunctionCall): Promise<Record<string, unknown>> {
     // The build's own model tables ride into validation, so a creation ask
     // that names a model is held to the same set the settings rows offer.
     const action = sessionToolAction(

@@ -191,12 +191,21 @@ export {
 } from "./realtime-context";
 export {
   type AppToolAction,
+  APP_TOOL_KIND,
   appToolAction,
+  type CarriedAppAction,
+  type CarriedIssueAction,
+  type CarriedSessionAction,
+  dispatchByKind,
   type IssueToolAction,
   isAppToolCall,
   isIssueToolName,
   isSessionToolName,
   issueToolAction,
+  REALTIME_TOOL_FAMILY,
+  type RealtimeToolFamily,
+  realtimeToolFamily,
+  SESSION_TOOL_KIND,
   type SessionToolAction,
   sessionToolAction,
 } from "./realtime-tools";
