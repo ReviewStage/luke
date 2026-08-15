@@ -35,8 +35,9 @@ export function recordFromJsonLine(line: string): Record<string, unknown> | unde
   try {
     const parsed = JSON.parse(line) as unknown;
     return isRecord(parsed) ? parsed : undefined;
-  } catch {
-    return undefined;
+  } catch (error) {
+    if (error instanceof SyntaxError) return undefined;
+    throw error;
   }
 }
 

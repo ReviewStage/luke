@@ -99,10 +99,9 @@ export function issueCommentText(value: unknown): string | undefined {
 }
 
 /** Required, and flattened for the same reason {@link boundedText} is. */
-function requiredText(value: string, field: string): string {
+function requiredText(value: string): string | undefined {
   const normalized = value.trim().replace(/\s+/g, " ");
-  if (!normalized) throw new Error(`${field} must not be empty`);
-  return normalized;
+  return normalized || undefined;
 }
 
 /**
@@ -133,10 +132,8 @@ function issueUrl(value: string | undefined): string | undefined {
   }
 }
 
-function timestamp(value: number, field: string): number {
-  if (!Number.isFinite(value) || value < 0) {
-    throw new Error(`${field} must be a non-negative finite timestamp`);
-  }
+function timestamp(value: number): number | undefined {
+  if (!Number.isFinite(value) || value < 0) return undefined;
   return value;
 }
 
@@ -146,30 +143,41 @@ function normalizeTransitions(
   if (!transitions) return [];
 
   const ids = new Set<string>();
-  return transitions.slice(0, maximumIssueTransitions).map((transition) => {
-    const id = requiredText(transition.id, "transition id");
-    if (ids.has(id)) throw new Error(`Duplicate issue transition: ${id}`);
+  const normalized: IssueTransition[] = [];
+  for (const transition of transitions.slice(0, maximumIssueTransitions)) {
+    const id = requiredText(transition.id);
+    // An empty or repeated id is tracker-authored junk, not a choice. Drop
+    // the offending transition so the rest of the issue can still be listed.
+    if (!id || ids.has(id)) continue;
     ids.add(id);
-    return {
+    normalized.push({
       id,
       name: boundedText(transition.name, maximumIssueStateNameLength) ?? id,
-    };
-  });
+    });
+  }
+  return normalized;
 }
 
 /**
  * Bounds every field a tracker reported and fills the defaults, so the roster
  * can speak any present field and an absent capability stays a refusal.
+ *
+ * These values are written by anyone in the tracker's workspace, so a
+ * malformed issue is discarded rather than raised: one empty identifier or
+ * impossible timestamp cannot fail the observation pass. A bad transition is
+ * dropped; the fields that validate still stand.
  */
 export function normalizeTrackedIssue(
   tracker: IssueTracker,
   observation: TrackerIssueObservation,
-): TrackedIssue {
-  const trackerId = requiredText(tracker.id, "tracker id");
-  const identifier = requiredText(observation.identifier, "issue identifier").slice(
-    0,
-    maximumIssueIdentifierLength,
-  );
+): TrackedIssue | undefined {
+  const trackerId = requiredText(tracker.id);
+  const identifier = requiredText(observation.identifier)?.slice(0, maximumIssueIdentifierLength);
+  const trackerIssueId = requiredText(observation.trackerIssueId);
+  const observedAt = timestamp(observation.observedAt);
+  if (!trackerId || !identifier || !trackerIssueId || observedAt === undefined) {
+    return undefined;
+  }
   const url = issueUrl(observation.url);
 
   return {
@@ -179,10 +187,10 @@ export function normalizeTrackedIssue(
       id: trackerId,
       displayName: boundedText(tracker.displayName, maximumIssueTitleLength) ?? trackerId,
     },
-    trackerIssueId: requiredText(observation.trackerIssueId, "tracker issue id"),
+    trackerIssueId,
     title: boundedText(observation.title, maximumIssueTitleLength) ?? "Untitled issue",
     stateName: boundedText(observation.stateName, maximumIssueStateNameLength) ?? "Unknown",
-    observedAt: timestamp(observation.observedAt, "observedAt"),
+    observedAt,
     ...(url ? { url } : {}),
     transitions: normalizeTransitions(observation.transitions),
     // Anything but an explicit yes is a no, so a client that has not thought

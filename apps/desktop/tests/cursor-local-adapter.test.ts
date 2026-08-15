@@ -415,6 +415,25 @@ test("labels a session neutrally rather than guessing at a folder", async (t) =>
   );
 });
 
+test("a workspace record that is not JSON does not fail the observation pass", async (t) => {
+  const state = await temporaryCursorState(t);
+  const entryDirectory = path.join(state.workspaceStorageDirectory, "broken");
+  await fs.mkdir(entryDirectory, { recursive: true });
+  await fs.writeFile(path.join(entryDirectory, CURSOR_WORKSPACE_FILE), "{");
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "session-labelled",
+    [turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
+    TEST_TIME - 1_000,
+  );
+
+  const observations = await adapterFor(state).observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.title, "workspace");
+});
+
 test("observes a session and not the subagents it ran", async (t) => {
   const state = await temporaryCursorState(t);
   await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");

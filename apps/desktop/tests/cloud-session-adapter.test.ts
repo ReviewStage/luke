@@ -59,6 +59,7 @@ class StubCloudAdapter
   passes = 0;
   forgottenIdentities = 0;
   collected: readonly ProviderSessionObservation[] = [];
+  collectError: Error | undefined;
 
   constructor(options: CloudAdapterOptions) {
     super({ provider: STUB_PROVIDER, defaultBaseUrl: TEST_BASE_URL }, options);
@@ -94,6 +95,7 @@ class StubCloudAdapter
     now: number,
   ): Promise<readonly ProviderSessionObservation[]> {
     this.passes += 1;
+    if (this.collectError) throw this.collectError;
     await request(["v0", "sessions", "id with/slash"], { limit: "2" });
     return this.collected.map((candidate) => ({
       ...candidate,
@@ -108,6 +110,8 @@ function adapterFor(
     apiKey?: string | undefined;
     readApiKey?: () => Promise<string | undefined>;
     now?: () => number;
+    minimumRefreshIntervalMs?: number;
+    onDiagnostic?: (error: unknown) => void;
   } = {},
 ): StubCloudAdapter {
   const apiKey = "apiKey" in overrides ? overrides.apiKey : TEST_API_KEY;
@@ -116,7 +120,8 @@ function adapterFor(
     baseUrl: TEST_BASE_URL,
     fetch,
     now: overrides.now ?? (() => TEST_TIME),
-    minimumRefreshIntervalMs: 0,
+    minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,
+    ...(overrides.onDiagnostic ? { onDiagnostic: overrides.onDiagnostic } : {}),
   });
 }
 
@@ -274,8 +279,9 @@ test("forgets cached identity when the credential changes, and reports nothing w
 
 test("clears observations when the provider rejects the credential", async () => {
   let rejectRequests = false;
+  const diagnostics: unknown[] = [];
   const stub = stubFetch(() => (rejectRequests ? HTTP_STATUS.UNAUTHORIZED : HTTP_STATUS.OK));
-  const adapter = adapterFor(stub.fetch);
+  const adapter = adapterFor(stub.fetch, { onDiagnostic: (error) => diagnostics.push(error) });
   adapter.collected = [observation("session-one")];
 
   const authorized = await adapter.observe();
@@ -286,6 +292,7 @@ test("clears observations when the provider rejects the credential", async () =>
   assert.deepEqual(rejected, []);
   // Once when the key was accepted, once when the provider rejected it.
   assert.equal(adapter.forgottenIdentities, 2);
+  assert.deepEqual(diagnostics, []);
 });
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {
@@ -403,6 +410,52 @@ test("a replaced key rejected mid-flight does not clear the new key's observatio
 
   assert.deepEqual(sessionIds(staleObservations), [NEW_ACCOUNT_SESSION]);
   assert.deepEqual(sessionIds(cachedObservations), [NEW_ACCOUNT_SESSION]);
+});
+
+test("a transient provider failure keeps the previous snapshot", async () => {
+  let status: number = HTTP_STATUS.OK;
+  const diagnostics: unknown[] = [];
+  const stub = stubFetch(() => status);
+  const adapter = adapterFor(stub.fetch, { onDiagnostic: (error) => diagnostics.push(error) });
+  adapter.collected = [observation("session-one")];
+
+  const first = await adapter.observe();
+  status = 500;
+  const second = await adapter.observe();
+
+  assert.equal(first.length, 1);
+  assert.equal(second.length, 1);
+  assert.equal(second[0]?.providerSessionId, "session-one");
+  assert.deepEqual(diagnostics, []);
+});
+
+test("a programming error during observation is reported rather than swallowed", async () => {
+  const diagnostics: unknown[] = [];
+  let now = TEST_TIME;
+  const stub = stubFetch();
+  const adapter = adapterFor(stub.fetch, {
+    now: () => now,
+    minimumRefreshIntervalMs: 60_000,
+    onDiagnostic: (error) => diagnostics.push(error),
+  });
+  adapter.collected = [observation("session-one")];
+
+  const first = await adapter.observe();
+  now += 60_000;
+  const bug = new TypeError("sessions is not iterable");
+  adapter.collectError = bug;
+
+  await assert.rejects(() => adapter.observe(), bug);
+  assert.deepEqual(diagnostics, [bug]);
+
+  adapter.collectError = undefined;
+  const cached = await adapter.observe();
+  assert.equal(first.length, 1);
+  assert.equal(cached.length, 1);
+  assert.equal(cached[0]?.providerSessionId, "session-one");
+  // The interval has not elapsed, so the snapshot the programming error failed
+  // to replace is still served rather than collected again.
+  assert.equal(adapter.passes, 2);
 });
 
 test("issues no request at all when the credential cannot be read", async () => {

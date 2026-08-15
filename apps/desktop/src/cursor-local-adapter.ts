@@ -120,8 +120,9 @@ function folderPathFromWorkspaceRecord(source: string): string | undefined {
   let parsed: unknown;
   try {
     parsed = JSON.parse(source) as unknown;
-  } catch {
-    return undefined;
+  } catch (error) {
+    if (error instanceof SyntaxError) return undefined;
+    throw error;
   }
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
   const folder = (parsed as Record<string, unknown>)[CURSOR_WORKSPACE_FIELD.FOLDER];

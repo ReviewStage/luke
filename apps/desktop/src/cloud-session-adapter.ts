@@ -126,6 +126,12 @@ export interface CloudAdapterOptions {
   fetch?: CloudFetch;
   now?: () => number;
   minimumRefreshIntervalMs?: number;
+  /**
+   * Called when an observation pass fails for a reason other than a network
+   * or credential fault — a TypeError in a subclass's parsing, for example.
+   * Transient and unauthorized {@link CloudRequestError} never reach it.
+   */
+  onDiagnostic?: (error: unknown) => void;
 }
 
 /** The provider-specific identity and endpoint a subclass supplies once. */
@@ -262,6 +268,7 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
   readonly #authorizationHeaders: (apiKey: string) => Readonly<Record<string, string>>;
   readonly #now: () => number;
   readonly #minimumRefreshIntervalMs: number;
+  readonly #onDiagnostic: ((error: unknown) => void) | undefined;
 
   #credential: string | undefined;
   /**
@@ -287,6 +294,7 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
       options.minimumRefreshIntervalMs,
       CLOUD_ADAPTER_DEFAULTS.MINIMUM_REFRESH_INTERVAL_MS,
     );
+    this.#onDiagnostic = options.onDiagnostic;
   }
 
   async observe(): Promise<readonly ProviderSessionObservation[]> {
@@ -323,13 +331,18 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
       // server failure keeps the previous snapshot until the next attempt. A
       // superseded pass reports on a credential that no longer stands, so its
       // rejection says nothing about the current one.
-      if (
-        pass === this.#collectPass &&
-        error instanceof CloudRequestError &&
-        error.failure === CLOUD_FAILURE.UNAUTHORIZED
-      ) {
-        this.#forgetObservedState();
+      if (pass !== this.#collectPass) {
+        return this.#observations;
       }
+      if (error instanceof CloudRequestError) {
+        if (error.failure === CLOUD_FAILURE.UNAUTHORIZED) this.#forgetObservedState();
+        return this.#observations;
+      }
+      // Anything else is a bug in this pass — a TypeError thrown by a
+      // subclass's parsing is not a network blip, and must not keep serving
+      // the stale snapshot with no log, counter, or hook.
+      this.#onDiagnostic?.(error);
+      throw error;
     }
     return this.#observations;
   }
