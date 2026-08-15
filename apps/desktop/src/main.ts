@@ -1103,7 +1103,7 @@ function registerIpc(): void {
       // model composed decides this — and losing the save loses only the
       // remembered default, never the workspace that just landed.
       if (result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
-        void rememberWorkspaceDefaults(
+        await rememberWorkspaceDefaults(
           adapter,
           namedSelection as WorkspaceAgentSelection | undefined,
         );
