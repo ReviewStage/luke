@@ -10,16 +10,12 @@ import {
   OpenAiAttentionEvaluator,
   openAiAttentionEvaluator,
 } from "../src/openai-attention-evaluator";
+import { type RecordedRequest, recordingFetch } from "./support/http-fake";
 
 const DECIDED_AT = 1_800_000_000_000;
 const API_KEY = "test-openai-key";
 const SPOKEN_SUMMARY = "Claude Code is waiting on you in checkout-service.";
 const TRANSCRIPT_SECRET = "SECRET_TRANSCRIPT_TEXT";
-
-interface RecordedRequest {
-  url: string;
-  init: RequestInit;
-}
 
 function update(overrides: Partial<AttentionUpdate> = {}): AttentionUpdate {
   return {
@@ -51,22 +47,18 @@ function evaluatorWith(respond: (request: RecordedRequest) => Promise<Response> 
   evaluator: OpenAiAttentionEvaluator;
   requests: RecordedRequest[];
 } {
-  const requests: RecordedRequest[] = [];
+  const { fetch, requests } = recordingFetch(respond);
   const evaluator = new OpenAiAttentionEvaluator({
     apiKey: API_KEY,
     now: () => DECIDED_AT,
-    fetch: async (url, init) => {
-      const request = { url, init };
-      requests.push(request);
-      return respond(request);
-    },
+    fetch,
   });
   return { evaluator, requests };
 }
 
 function requestBody(request: RecordedRequest): Record<string, unknown> {
-  assert.equal(typeof request.init.body, "string");
-  return JSON.parse(String(request.init.body)) as Record<string, unknown>;
+  assert.equal(typeof request.body, "string");
+  return JSON.parse(String(request.body)) as Record<string, unknown>;
 }
 
 function silenceStderr(t: TestContext): void {
@@ -136,7 +128,7 @@ test("sends only the bounded update and no provider transcript", async (t) => {
 
   const [request] = requests;
   assert.ok(request);
-  const serialized = String(request.init.body);
+  const serialized = String(request.body);
   assert.ok(!serialized.includes(TRANSCRIPT_SECRET));
   assert.ok(!serialized.includes("providerSessionId"));
   assert.ok(!serialized.includes("review"));
@@ -229,15 +221,14 @@ test("builds an evaluator only when there is a key to build one from", (t) => {
 
 test("honors a configured base URL without doubling its separator", async (t) => {
   silenceStderr(t);
-  const requests: RecordedRequest[] = [];
+  const { fetch, requests } = recordingFetch(() =>
+    structuredResponse({ disposition: ATTENTION_DISPOSITION.SILENT, summary: null }),
+  );
   const evaluator = new OpenAiAttentionEvaluator({
     apiKey: API_KEY,
     baseUrl: "https://gateway.test/v1/",
     now: () => DECIDED_AT,
-    fetch: async (url, init) => {
-      requests.push({ url, init });
-      return structuredResponse({ disposition: ATTENTION_DISPOSITION.SILENT, summary: null });
-    },
+    fetch,
   });
 
   await evaluator.evaluate(update());

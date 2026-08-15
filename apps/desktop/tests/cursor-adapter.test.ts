@@ -9,6 +9,7 @@ import {
 } from "@sidecar/core";
 import type { CloudFetch } from "../src/cloud-session-adapter";
 import { CURSOR_PROVIDER, CursorSessionAdapter } from "../src/cursor-adapter";
+import { HTTP_STATUS, jsonResponse, recordingFetch } from "./support/http-fake";
 
 const TEST_TIME = Date.parse("2026-08-12T02:45:00.000Z");
 const TEST_BASE_URL = "https://api.cursor.test";
@@ -35,12 +36,6 @@ const TEST_RUN_STATUS = {
   ERROR: "ERROR",
 } as const;
 
-const HTTP_STATUS = {
-  OK: 200,
-  UNAUTHORIZED: 401,
-  SERVER_ERROR: 500,
-} as const;
-
 interface TestRun {
   id: string;
   status?: string;
@@ -61,29 +56,8 @@ interface TestAgent {
   run?: TestRun;
 }
 
-interface RecordedRequest {
-  method: string;
-  pathname: string;
-  search: string;
-  authorization: string | undefined;
-  contentType: string | undefined;
-  body: string | undefined;
-}
-
-interface FakeCursorApi {
-  fetch: CloudFetch;
-  requests: RecordedRequest[];
-}
-
 function isoTimestamp(timestampMs: number): string {
   return new Date(timestampMs).toISOString();
-}
-
-function jsonResponse(body: unknown, status = HTTP_STATUS.OK): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
 }
 
 function lastActivityAt(agent: TestAgent): number {
@@ -141,21 +115,10 @@ function fakeCursorApi(
     /** Holds the first repositories answer until released, like a slow org. */
     gateFirstRepositoriesRead?: Promise<void>;
   } = {},
-): FakeCursorApi {
+) {
   let repositoriesReads = 0;
-  const requests: RecordedRequest[] = [];
-  const fetch: CloudFetch = async (url, init) => {
-    const { pathname, searchParams, search } = new URL(url);
-    const headers = new Headers(init.headers);
-    requests.push({
-      method: init.method ?? "",
-      pathname,
-      search,
-      authorization: headers.get("authorization") ?? undefined,
-      contentType: headers.get("content-type") ?? undefined,
-      body: typeof init.body === "string" ? init.body : undefined,
-    });
-
+  return recordingFetch(async (request) => {
+    const { pathname, searchParams, method, body: rawBody } = request;
     const segments = pathname.split("/").filter((segment) => segment.length > 0);
     if (segments[0] === "v1" && segments[1] === "repositories" && segments.length === 2) {
       if (!options.repositories) return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
@@ -173,9 +136,9 @@ function fakeCursorApi(
 
     // The three documented writers: a new agent, a follow-up run for an
     // existing one, and a cancel for the run it is still working.
-    if (init.method === "POST") {
+    if (method === "POST") {
       if (segments.length === 2) {
-        const body = JSON.parse(typeof init.body === "string" ? init.body : "{}") as {
+        const body = JSON.parse(rawBody ?? "{}") as {
           prompt?: { text?: string };
           repos?: { url?: string }[];
         };
@@ -224,8 +187,7 @@ function fakeCursorApi(
       return jsonResponse(runPayload(agent, run));
     }
     return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
-  };
-  return { fetch, requests };
+  });
 }
 
 function adapterFor(

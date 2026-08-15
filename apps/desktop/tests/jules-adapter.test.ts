@@ -9,6 +9,7 @@ import {
 } from "@sidecar/core";
 import type { CloudFetch } from "../src/cloud-session-adapter";
 import { JULES_PROVIDER, JulesSessionAdapter } from "../src/jules-adapter";
+import { HTTP_STATUS, jsonResponse, recordingFetch } from "./support/http-fake";
 
 const TEST_TIME = Date.parse("2026-08-13T02:45:00.000Z");
 const TEST_BASE_URL = "https://jules.test";
@@ -30,12 +31,6 @@ const TEST_STATE = {
   COMPLETED: "COMPLETED",
 } as const;
 
-const HTTP_STATUS = {
-  OK: 200,
-  UNAUTHORIZED: 401,
-  SERVER_ERROR: 500,
-} as const;
-
 interface TestSession {
   id: string;
   state?: string;
@@ -46,30 +41,8 @@ interface TestSession {
   updateTime?: number;
 }
 
-interface RecordedRequest {
-  method: string;
-  pathname: string;
-  search: string;
-  apiKey: string | undefined;
-  authorization: string | undefined;
-  contentType: string | undefined;
-  body: string | undefined;
-}
-
-interface FakeJulesApi {
-  fetch: CloudFetch;
-  requests: RecordedRequest[];
-}
-
 function isoTimestamp(timestampMs: number): string {
   return new Date(timestampMs).toISOString();
-}
-
-function jsonResponse(body: unknown, status = HTTP_STATUS.OK): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
 }
 
 function lastActivityAt(session: TestSession): number {
@@ -103,25 +76,13 @@ function sessionPayload(session: TestSession): Record<string, unknown> {
 }
 
 /** Serves the subset of the alpha API the adapter is allowed to use. */
-function fakeJulesApi(sessions: readonly TestSession[]): FakeJulesApi {
-  const requests: RecordedRequest[] = [];
-  const fetch: CloudFetch = async (url, init) => {
-    const { pathname, searchParams, search } = new URL(url);
-    const headers = new Headers(init.headers);
-    requests.push({
-      method: init.method ?? "",
-      pathname,
-      search,
-      apiKey: headers.get(GOOGLE_API_KEY_HEADER) ?? undefined,
-      authorization: headers.get("authorization") ?? undefined,
-      contentType: headers.get("content-type") ?? undefined,
-      body: typeof init.body === "string" ? init.body : undefined,
-    });
-
+function fakeJulesApi(sessions: readonly TestSession[]) {
+  return recordingFetch((request) => {
+    const { pathname, searchParams, method } = request;
     const segments = pathname.split("/").filter((segment) => segment.length > 0);
     // The two documented writers are Google custom methods on one session:
     // `POST /v1alpha/sessions/{id}:sendMessage` and `…:approvePlan`.
-    if (init.method === "POST" && segments[0] === "v1alpha" && segments.length === 3) {
+    if (method === "POST" && segments[0] === "v1alpha" && segments.length === 3) {
       const [id, action] = (segments[2] ?? "").split(":");
       const known = sessions.some((session) => session.id === id);
       if (!known || (action !== "sendMessage" && action !== "approvePlan")) {
@@ -141,8 +102,7 @@ function fakeJulesApi(sessions: readonly TestSession[]): FakeJulesApi {
       sessions: page.map(sessionPayload),
       ...(page.length < sessions.length ? { nextPageToken: "next-page" } : {}),
     });
-  };
-  return { fetch, requests };
+  });
 }
 
 function adapterFor(
@@ -227,7 +187,7 @@ test("reads the whole pass with one list call authenticated by Google's key head
   assert.equal(api.requests[0]?.method, "GET");
   // Jules rejects a bearer token, so the key must travel in its own header and
   // nowhere else.
-  assert.equal(api.requests[0]?.apiKey, TEST_API_KEY);
+  assert.equal(api.requests[0]?.headers.get(GOOGLE_API_KEY_HEADER), TEST_API_KEY);
   assert.equal(api.requests[0]?.authorization, undefined);
 });
 
@@ -451,7 +411,7 @@ test("observes again immediately after the API key changes", async () => {
   assert.ok(api.requests.length > requestsAfterFirstPass);
   assert.equal(observations.length, 1);
   assert.equal(
-    api.requests.at(-1)?.apiKey,
+    api.requests.at(-1)?.headers.get(GOOGLE_API_KEY_HEADER),
     "jules-replacement-key",
     "the replacement key was not used",
   );
@@ -535,7 +495,7 @@ test("hands a user message to Jules through its documented custom method", async
   assert.equal(write?.method, "POST");
   // The colon is part of the route: `%3AsendMessage` would name nothing.
   assert.equal(write?.pathname, "/v1alpha/sessions/session-ask:sendMessage");
-  assert.equal(write?.apiKey, TEST_API_KEY);
+  assert.equal(write?.headers.get(GOOGLE_API_KEY_HEADER), TEST_API_KEY);
   assert.deepEqual(JSON.parse(write?.body ?? ""), { prompt: "Use the existing fixture instead" });
 });
 

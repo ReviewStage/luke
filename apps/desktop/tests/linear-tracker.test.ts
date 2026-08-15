@@ -2,36 +2,39 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ISSUE_ACTION_KIND, TRACKER_ACTION_RESULT_STATUS } from "@sidecar/core";
 import { LinearIssueTracker } from "../src/linear-tracker";
+import {
+  HTTP_STATUS,
+  jsonResponse,
+  type RecordedRequest,
+  recordingFetch,
+} from "./support/http-fake";
 
 const OBSERVED_AT = 1_800_000_000_000;
 
-interface RecordedRequest {
-  url: string;
-  method?: string;
-  headers: Record<string, string>;
-  body: { query: string; variables: Record<string, unknown> };
+function graphqlDocument(request: RecordedRequest | undefined): {
+  query: string;
+  variables: Record<string, unknown>;
+} {
+  return JSON.parse(request?.body ?? "{}") as {
+    query: string;
+    variables: Record<string, unknown>;
+  };
 }
 
 function trackerWith(
   payloads: readonly unknown[],
   options: { apiKey?: string; status?: number } = {},
 ): { tracker: LinearIssueTracker; requests: RecordedRequest[] } {
-  const requests: RecordedRequest[] = [];
   let call = 0;
+  const { fetch, requests } = recordingFetch(() => {
+    const payload = payloads[Math.min(call, payloads.length - 1)];
+    call += 1;
+    return jsonResponse(payload, options.status ?? HTTP_STATUS.OK);
+  });
   const tracker = new LinearIssueTracker({
     readApiKey: async () => options.apiKey,
     now: () => OBSERVED_AT,
-    fetchImplementation: (async (url: unknown, init?: RequestInit) => {
-      requests.push({
-        url: String(url),
-        ...(init?.method ? { method: init.method } : {}),
-        headers: (init?.headers as Record<string, string>) ?? {},
-        body: JSON.parse(String(init?.body)) as RecordedRequest["body"],
-      });
-      const payload = payloads[Math.min(call, payloads.length - 1)];
-      call += 1;
-      return new Response(JSON.stringify(payload), { status: options.status ?? 200 });
-    }) as typeof fetch,
+    fetchImplementation: fetch as typeof fetch,
   });
   return { tracker, requests };
 }
@@ -109,15 +112,15 @@ test("observing reads the assigned issues and advertises the rest of the workflo
   });
 
   // The key authorizes as itself: a personal API key takes no Bearer prefix.
-  assert.equal(requests[0]?.headers.authorization, "lin_api_test");
+  assert.equal(requests[0]?.authorization, "lin_api_test");
   // An observation pass sends the one read document and nothing else.
   assert.equal(requests.length, 1);
-  assert.match(requests[0]?.body.query ?? "", /^query AssignedIssues/);
-  assert.doesNotMatch(requests[0]?.body.query ?? "", /mutation/);
+  assert.match(graphqlDocument(requests[0]).query, /^query AssignedIssues/);
+  assert.doesNotMatch(graphqlDocument(requests[0]).query, /mutation/);
 });
 
 test("a failed or malformed read is an error, never a quieter roster", async () => {
-  const failed = trackerWith([{}], { apiKey: "lin_api_test", status: 500 });
+  const failed = trackerWith([{}], { apiKey: "lin_api_test", status: HTTP_STATUS.SERVER_ERROR });
   await assert.rejects(() => failed.tracker.observe());
 
   const errored = trackerWith([{ errors: [{ message: "rate limited" }] }], {
@@ -139,8 +142,11 @@ test("moving an issue posts the one documented write and reads its answer", asyn
 
   assert.deepEqual(result, { status: TRACKER_ACTION_RESULT_STATUS.ACCEPTED });
   assert.equal(requests.length, 1);
-  assert.match(requests[0]?.body.query ?? "", /^mutation SetIssueState/);
-  assert.deepEqual(requests[0]?.body.variables, { id: "issue-uuid-1", stateId: "state-done" });
+  assert.match(graphqlDocument(requests[0]).query, /^mutation SetIssueState/);
+  assert.deepEqual(graphqlDocument(requests[0]).variables, {
+    id: "issue-uuid-1",
+    stateId: "state-done",
+  });
 });
 
 test("a comment posts the other documented write", async () => {
@@ -155,8 +161,8 @@ test("a comment posts the other documented write", async () => {
   });
 
   assert.deepEqual(result, { status: TRACKER_ACTION_RESULT_STATUS.ACCEPTED });
-  assert.match(requests[0]?.body.query ?? "", /^mutation CommentOnIssue/);
-  assert.deepEqual(requests[0]?.body.variables, {
+  assert.match(graphqlDocument(requests[0]).query, /^mutation CommentOnIssue/);
+  assert.deepEqual(graphqlDocument(requests[0]).variables, {
     issueId: "issue-uuid-1",
     body: "Deferred to next release.",
   });

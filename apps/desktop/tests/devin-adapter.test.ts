@@ -9,6 +9,7 @@ import {
 } from "@sidecar/core";
 import type { CloudFetch } from "../src/cloud-session-adapter";
 import { DEVIN_PROVIDER, DevinSessionAdapter } from "../src/devin-adapter";
+import { HTTP_STATUS, jsonResponse, recordingFetch } from "./support/http-fake";
 
 const TEST_TIME = Date.parse("2026-08-13T02:45:00.000Z");
 const TEST_BASE_URL = "https://api.devin.test";
@@ -46,12 +47,6 @@ const TEST_DETAIL = {
   OUT_OF_CREDITS: "out_of_credits",
 } as const;
 
-const HTTP_STATUS = {
-  OK: 200,
-  UNAUTHORIZED: 401,
-  SERVER_ERROR: 500,
-} as const;
-
 interface TestSession {
   id: string;
   status?: string;
@@ -67,28 +62,8 @@ interface TestSession {
   updatedAt: number;
 }
 
-interface RecordedRequest {
-  method: string;
-  pathname: string;
-  search: string;
-  authorization: string | undefined;
-  body: string | undefined;
-}
-
-interface FakeDevinApi {
-  fetch: CloudFetch;
-  requests: RecordedRequest[];
-}
-
 function seconds(timestampMs: number): number {
   return Math.floor(timestampMs / 1000);
-}
-
-function jsonResponse(body: unknown, status = HTTP_STATUS.OK): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
 }
 
 function sessionPayload(session: TestSession): Record<string, unknown> {
@@ -121,21 +96,12 @@ function sessionPayload(session: TestSession): Record<string, unknown> {
 function fakeDevinApi(
   sessions: readonly TestSession[],
   options: { principal?: string; orgId?: string | undefined; userId?: string } = {},
-): FakeDevinApi {
-  const requests: RecordedRequest[] = [];
-  const fetch: CloudFetch = async (url, init) => {
-    const { pathname, searchParams, search } = new URL(url);
-    const headers = new Headers(init.headers);
-    requests.push({
-      method: init.method ?? "",
-      pathname,
-      search,
-      authorization: headers.get("authorization") ?? undefined,
-      body: typeof init.body === "string" ? init.body : undefined,
-    });
+) {
+  return recordingFetch((request) => {
+    const { pathname, searchParams, method } = request;
 
     // The one documented writer: a message for one existing session.
-    if (init.method === "POST") {
+    if (method === "POST") {
       const match = pathname.match(
         new RegExp(`^/v3/organizations/${TEST_ORG_ID}/sessions/([^/]+)/messages$`),
       );
@@ -176,8 +142,7 @@ function fakeDevinApi(
       has_next_page: after + first < visible.length,
       end_cursor: after + first < visible.length ? String(after + first) : null,
     });
-  };
-  return { fetch, requests };
+  });
 }
 
 function adapterFor(

@@ -24,50 +24,16 @@ import {
   isDefined,
   knownValue,
 } from "../src/cloud-session-adapter";
+import { HTTP_STATUS, jsonResponse, recordingFetch } from "./support/http-fake";
 
 const TEST_TIME = Date.parse("2026-08-12T02:45:00.000Z");
 const TEST_BASE_URL = "https://api.provider.test";
 const TEST_API_KEY = "provider-test-key";
 
-const HTTP_STATUS = {
-  OK: 200,
-  UNAUTHORIZED: 401,
-} as const;
-
 const STUB_PROVIDER = { id: "stub", displayName: "Stub" };
 
-interface RecordedRequest {
-  method: string;
-  url: string;
-  authorization: string | undefined;
-  accept: string | undefined;
-  contentType: string | undefined;
-  body: string | undefined;
-}
-
-interface StubFetch {
-  fetch: CloudFetch;
-  requests: RecordedRequest[];
-}
-
-function stubFetch(status: () => number = () => HTTP_STATUS.OK): StubFetch {
-  const requests: RecordedRequest[] = [];
-  const fetch: CloudFetch = async (url, init) => {
-    const headers = new Headers(init.headers);
-    requests.push({
-      method: init.method ?? "",
-      url,
-      authorization: headers.get("authorization") ?? undefined,
-      accept: headers.get("accept") ?? undefined,
-      contentType: headers.get("content-type") ?? undefined,
-      body: typeof init.body === "string" ? init.body : undefined,
-    });
-    return new Response(JSON.stringify({}), {
-      status: status(),
-      headers: { "content-type": "application/json" },
-    });
-  };
-  return { fetch, requests };
+function stubFetch(status: () => number = () => HTTP_STATUS.OK) {
+  return recordingFetch(() => jsonResponse({}, status()));
 }
 
 function observation(
@@ -202,16 +168,14 @@ test("authenticates a bounded read and encodes the route a subclass asked for", 
 
   assert.equal(adapter.provider.id, "stub");
   assert.equal(observations.length, 1);
-  assert.deepEqual(stub.requests, [
-    {
-      method: "GET",
-      url: `${TEST_BASE_URL}/v0/sessions/id%20with%2Fslash?limit=2`,
-      authorization: `Bearer ${TEST_API_KEY}`,
-      accept: "application/json",
-      contentType: undefined,
-      body: undefined,
-    },
-  ]);
+  const [request] = stub.requests;
+  assert.ok(request);
+  assert.equal(request.method, "GET");
+  assert.equal(request.url, `${TEST_BASE_URL}/v0/sessions/id%20with%2Fslash?limit=2`);
+  assert.equal(request.authorization, `Bearer ${TEST_API_KEY}`);
+  assert.equal(request.accept, "application/json");
+  assert.equal(request.contentType, undefined);
+  assert.equal(request.body, undefined);
 });
 
 /** Stands in for a provider that asks for its own media type and version pin. */
@@ -222,20 +186,7 @@ class PinnedHeaderAdapter extends StubCloudAdapter {
 }
 
 test("lets a subclass pin its own request headers without touching the credential", async () => {
-  const requests: {
-    accept: string | undefined;
-    version: string | undefined;
-    auth: string | undefined;
-  }[] = [];
-  const fetch: CloudFetch = async (_url, init) => {
-    const headers = new Headers(init.headers);
-    requests.push({
-      accept: headers.get("accept") ?? undefined,
-      version: headers.get("x-stub-api-version") ?? undefined,
-      auth: headers.get("authorization") ?? undefined,
-    });
-    return new Response(JSON.stringify({}), { status: HTTP_STATUS.OK });
-  };
+  const { fetch, requests } = recordingFetch(() => jsonResponse({}));
   const adapter = new PinnedHeaderAdapter({
     readApiKey: async () => TEST_API_KEY,
     baseUrl: TEST_BASE_URL,
@@ -246,13 +197,11 @@ test("lets a subclass pin its own request headers without touching the credentia
 
   await adapter.observe();
 
-  assert.deepEqual(requests, [
-    {
-      accept: "application/vnd.stub+json",
-      version: "2026-03-10",
-      auth: `Bearer ${TEST_API_KEY}`,
-    },
-  ]);
+  const [request] = requests;
+  assert.ok(request);
+  assert.equal(request.accept, "application/vnd.stub+json");
+  assert.equal(request.headers.get("x-stub-api-version"), "2026-03-10");
+  assert.equal(request.authorization, `Bearer ${TEST_API_KEY}`);
 });
 
 test("reports every session it serves as running in the cloud", async () => {
@@ -386,9 +335,7 @@ function accountBoundFetch(options: { oldKeyGate: Promise<void>; oldKeyStatus?: 
       await options.oldKeyGate;
       status = options.oldKeyStatus ?? HTTP_STATUS.OK;
     }
-    return new Response(JSON.stringify({ session: sessionByAuthorization[authorization] }), {
-      status,
-    });
+    return jsonResponse({ session: sessionByAuthorization[authorization] }, status);
   };
   return { fetch, authorizations };
 }
@@ -559,13 +506,13 @@ test("reports what became of a send the provider refused", async () => {
   await adapter.observe();
   const message = { providerSessionId: "session-one", text: "go on" };
 
-  status = 401;
+  status = HTTP_STATUS.UNAUTHORIZED;
   const unauthorized = await adapter.sendMessage(message);
-  status = 404;
+  status = HTTP_STATUS.NOT_FOUND;
   const missing = await adapter.sendMessage(message);
-  status = 409;
+  status = HTTP_STATUS.CONFLICT;
   const conflicted = await adapter.sendMessage(message);
-  status = 500;
+  status = HTTP_STATUS.SERVER_ERROR;
   const failed = await adapter.sendMessage(message);
 
   assert.equal(unauthorized.status, "rejected");
