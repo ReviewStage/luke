@@ -38,6 +38,7 @@ import {
 import {
   ATTENTION_DISPOSITION,
   type AttentionDisposition,
+  maximumSessionMessageLength,
   type NormalizedSession,
   SESSION_LOCATION,
   type SessionControl,
@@ -1116,7 +1117,7 @@ export function truncateResponseEvents(input: {
  * of a whole document — which is cut rather than sent, because the ask is a
  * sentence to a companion, not a transfer.
  */
-export const maximumTypedAskLength = 4_000;
+export const maximumTypedAskLength = maximumSessionMessageLength;
 
 /**
  * How long a spoken open may draft into the feedback composer. The typed ask's

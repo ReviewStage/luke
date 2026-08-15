@@ -211,7 +211,8 @@ left drawn on the desktop: growing, the surface leads and content follows;
 shrinking, content leaves over `--duration-exit` before the surface moves.
 `setWindowMode` owns the ordering for every caller — the panel, the tray, and
 the motion recorder alike. `COLLAPSE_ANIMATION_MS` is the sum of
-`--duration-exit` and `--duration-shape`; the three move together.
+`--duration-exit` and `--duration-shape`, taken from `MOTION_DURATION_MS` so
+the three cannot drift.
 
 A key being entered is app state, not field state, because it outlives the panel
 it was started in: asking to write one stands the panel down to the slot, where
@@ -257,11 +258,12 @@ against its rock deliberately, like a person mid-sentence.
 ## Shared surface vocabulary
 
 `design/generate-surface-shared.mjs` is the only place the motion tokens, the
-provider-mark path data, and the session state labels are described. It writes
-four committed outputs into `packages/sidecar-core/src/`: `motion-tokens.css`,
-`motion-tokens.ts`, `provider-mark-paths.ts`, and `session-display.ts`. None of
-the four may be hand-edited — change the tables in the script, re-run it, and
-commit what it writes. `repository-checks.sh` runs it with `--check`.
+layout sizes the window and the drawing share, the provider-mark path data,
+and the session state labels are described. It writes four committed outputs
+into `packages/sidecar-core/src/`: `motion-tokens.css`, `motion-tokens.ts`,
+`provider-mark-paths.ts`, and `session-display.ts`. None of the four may be
+hand-edited — change the tables in the script, re-run it, and commit what it
+writes. `repository-checks.sh` runs it with `--check`.
 
 The desktop renderer and the marketing mock both consume those outputs. The
 React that traces a mark stays in each app, because the desktop ships marks

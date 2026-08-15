@@ -3,7 +3,9 @@
 //
 // Millisecond mirrors of the CSS duration tokens in motion-tokens.css, from the
 // same table. A main-process constant that waits on a CSS total names these
-// rather than restating the numbers.
+// rather than restating the numbers. Pixel sizes follow the same rule: the
+// window and the drawing both name these, and the stylesheet spends the CSS
+// variables emitted beside them.
 
 export const MOTION_DURATION_MS = {
   FAST: 280,
@@ -18,3 +20,12 @@ export const MOTION_DELAY_MS = {
   PEEK: 60,
   ROW_STAGGER: 32,
 } as const;
+
+/** How far a bubble floats off the display's top edge. CSS: `--bubble-lift`. */
+export const BUBBLE_LIFT = 4;
+
+/** Tallest compact caption block the window holds. CSS: `--caption-max`. */
+export const VOICE_CAPTION_MAX_HEIGHT = 70;
+
+/** Expanded panel width. CSS: `--panel-width`. */
+export const PANEL_WIDTH = 620;

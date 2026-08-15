@@ -13,7 +13,15 @@ import {
   VOICE_CAPTION_MAX_HEIGHT,
   type WorkspaceAgentSelection,
 } from "@sidecar/core";
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type {
   AppBootstrap,
   AppSettings,
@@ -70,6 +78,7 @@ import {
   sessionTally,
   tallySummary,
 } from "./session-model";
+import { parsePixels } from "./session-motion";
 import { SESSION_OPTIONS_BUTTON_ID, SESSION_OPTIONS_ID } from "./session-parts";
 import { SETTING_PAGE, SETTINGS_VIEW, type SettingsView } from "./settings-views";
 import { useBootstrapRacedChannel } from "./use-bootstrap-raced-channel";
@@ -104,27 +113,26 @@ const FEEDBACK_KIND_FOR_COMPOSER: Record<FeedbackComposerKind, FeedbackKind> = {
 };
 
 /**
- * The caption block's vertical padding — 5px above the text and 9px keeping
- * it clear of the shape's bottom edge. Mirrors `.voice-caption`'s padding in
- * the stylesheet: the measured text plus this is what the surface grows by.
- */
-const CAPTION_PADDING = 14;
-
-/**
  * Sizes the caption block to the words it currently holds. The text wraps, so
  * only a measurement can say how tall it is; the size drives the surface's
  * growth and the clip that reveals the text, and past the reserved maximum
  * the remainder becomes scroll, rolling the oldest lines up under the shape.
  * The volume hint shares the block's reserved room: while it is drawn, its
  * row is added to the size and taken from the words' budget, so the block
- * never asks for more height than the window holds.
+ * never asks for more height than the window holds. Padding is the caption's
+ * own computed padding, not a restated number, so a retune in the stylesheet
+ * grows the surface by exactly what the text is inset.
  */
-function captionSizeStyle(textHeight: number | undefined, volumeHint: boolean): CSSProperties {
+function captionSizeStyle(
+  textHeight: number | undefined,
+  volumeHint: boolean,
+  padding: number,
+): CSSProperties {
   if (!textHeight) return {};
   const hintHeight = volumeHint ? VOLUME_HINT_HEIGHT : 0;
   return {
-    "--caption-size": `${Math.min(VOICE_CAPTION_MAX_HEIGHT, textHeight + hintHeight + CAPTION_PADDING)}px`,
-    "--caption-scroll": `${Math.max(0, textHeight - (VOICE_CAPTION_MAX_HEIGHT - CAPTION_PADDING - hintHeight))}px`,
+    "--caption-size": `${Math.min(VOICE_CAPTION_MAX_HEIGHT, textHeight + hintHeight + padding)}px`,
+    "--caption-scroll": `${Math.max(0, textHeight - (VOICE_CAPTION_MAX_HEIGHT - padding - hintHeight))}px`,
   } as CSSProperties;
 }
 
@@ -198,6 +206,15 @@ export function App(): React.JSX.Element {
   const [slotElement, slotHeight] = useShapeHeight();
   const [feedbackElement, feedbackHeight] = useShapeHeight();
   const [captionTextElement, captionTextHeight] = useShapeHeight();
+  const captionElement = useRef<HTMLSpanElement>(null);
+  const [captionPadding, setCaptionPadding] = useState(0);
+  useLayoutEffect(() => {
+    const element = captionElement.current;
+    if (!element) return;
+    const style = getComputedStyle(element);
+    const next = parsePixels(style.paddingTop) + parsePixels(style.paddingBottom);
+    setCaptionPadding((previous) => (previous === next ? previous : next));
+  });
   /**
    * The ask key as last re-taken, superseding bootstrap's once it has changed
    * at all: moving the talk key re-registers every global chord, and the ask
@@ -1461,7 +1478,7 @@ export function App(): React.JSX.Element {
       style={{
         ...notchStyle(display),
         ...shapeHeightStyle(panelHeight, slotHeight, feedbackHeight),
-        ...captionSizeStyle(captionTextHeight, volumeHint),
+        ...captionSizeStyle(captionTextHeight, volumeHint, captionPadding),
       }}
     >
       {/* Capsule, peek, slot and panel are all this one shape at different
@@ -1572,7 +1589,7 @@ export function App(): React.JSX.Element {
           its wrapped height is the only honest answer to how much room the
           words need. Hidden from readers: it duplicates what is already
           audible. */}
-      <span className="voice-caption" aria-hidden="true">
+      <span className="voice-caption" ref={captionElement} aria-hidden="true">
         <span className="voice-caption-text" ref={captionTextElement}>
           {lukeCaption}
         </span>
