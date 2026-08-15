@@ -135,3 +135,12 @@ sidecar_require_node() {
         return 1
     fi
 }
+
+# A script that launches Electron is not useful until the workspace has been
+# bootstrapped; running bootstrap here keeps `run.sh` and `evidence.sh` from
+# each restating that guard.
+sidecar_ensure_dependencies() {
+    if [[ ! -x "$SIDECAR_ELECTRON_BIN" ]]; then
+        "$SIDECAR_REPO_ROOT/scripts/bootstrap.sh"
+    fi
+}

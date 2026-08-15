@@ -8,9 +8,7 @@ source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 sidecar_require_macos
 sidecar_require_node
 sidecar_require_command sips
-if [[ ! -x "$SIDECAR_ELECTRON_BIN" ]]; then
-    "$SCRIPT_DIRECTORY/bootstrap.sh"
-fi
+sidecar_ensure_dependencies
 
 cd "$SIDECAR_REPO_ROOT"
 pnpm package
@@ -23,55 +21,31 @@ fi
 
 mkdir -p "$SIDECAR_EVIDENCE_ROOT"
 rm -f -- "$SIDECAR_EVIDENCE_ROOT"/app-smoke-*.png
-EXPANDED_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-expanded.XXXXXX")
-COMPACT_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-compact.XXXXXX")
-"$APP_EXECUTABLE" \
-    --user-data-dir="$EXPANDED_PROFILE" \
-    --fixture "$SIDECAR_FIXTURE_SCENARIO" \
-    --expanded \
-    --capture-evidence "$SIDECAR_EXPANDED_EVIDENCE_PATH"
-"$APP_EXECUTABLE" \
-    --user-data-dir="$COMPACT_PROFILE" \
-    --fixture "$SIDECAR_FIXTURE_SCENARIO" \
-    --compact \
-    --capture-evidence "$SIDECAR_COMPACT_EVIDENCE_PATH"
-PEEK_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-peek.XXXXXX")
-"$APP_EXECUTABLE" \
-    --user-data-dir="$PEEK_PROFILE" \
-    --fixture "$SIDECAR_FIXTURE_SCENARIO" \
-    --compact \
-    --peek \
-    --capture-evidence "$SIDECAR_PEEK_EVIDENCE_PATH"
-SLOT_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-slot.XXXXXX")
-"$APP_EXECUTABLE" \
-    --user-data-dir="$SLOT_PROFILE" \
-    --fixture "$SIDECAR_FIXTURE_SCENARIO" \
-    --expanded \
-    --slot \
-    --capture-evidence "$SIDECAR_SLOT_EVIDENCE_PATH"
-SPEAKING_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-speaking.XXXXXX")
+
+capture_evidence() {
+    local name=$1
+    shift
+    local profile
+    profile=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-${name}.XXXXXX")
+    "$APP_EXECUTABLE" \
+        --user-data-dir="$profile" \
+        --fixture "$SIDECAR_FIXTURE_SCENARIO" \
+        "$@"
+}
+
+capture_evidence expanded --expanded --capture-evidence "$SIDECAR_EXPANDED_EVIDENCE_PATH"
+capture_evidence compact --compact --capture-evidence "$SIDECAR_COMPACT_EVIDENCE_PATH"
+capture_evidence peek --compact --peek --capture-evidence "$SIDECAR_PEEK_EVIDENCE_PATH"
+capture_evidence slot --expanded --slot --capture-evidence "$SIDECAR_SLOT_EVIDENCE_PATH"
 # Peeked rather than at rest: the capsule has no room for the meter beside the
 # face, so it reports a live microphone through the face's colour alone. The
 # peek is the narrowest state that shows both, which is what has to be checked.
-"$APP_EXECUTABLE" \
-    --user-data-dir="$SPEAKING_PROFILE" \
-    --fixture "$SIDECAR_FIXTURE_SCENARIO" \
-    --profile speaking \
-    --compact \
-    --peek \
-    --capture-evidence "$SIDECAR_SPEAKING_EVIDENCE_PATH"
-MUTED_PROFILE=$(mktemp -d "$SIDECAR_BUILD_ROOT/evidence-muted.XXXXXX")
+capture_evidence speaking --profile speaking --compact --peek --capture-evidence "$SIDECAR_SPEAKING_EVIDENCE_PATH"
 # The speaking run with the Mac's output off: the captions are forced on and
 # the volume hint sits on the caption block's bottom edge with its Got it
 # button. The state is the profile's own — a capture run reads no system
 # volume — so the frame is deterministic like every other.
-"$APP_EXECUTABLE" \
-    --user-data-dir="$MUTED_PROFILE" \
-    --fixture "$SIDECAR_FIXTURE_SCENARIO" \
-    --profile muted \
-    --compact \
-    --peek \
-    --capture-evidence "$SIDECAR_MUTED_EVIDENCE_PATH"
+capture_evidence muted --profile muted --compact --peek --capture-evidence "$SIDECAR_MUTED_EVIDENCE_PATH"
 
 validate_evidence() {
     local evidence_path=$1
