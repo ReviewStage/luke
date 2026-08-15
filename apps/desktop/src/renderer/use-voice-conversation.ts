@@ -400,10 +400,10 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     }
     // Only the status voice being off put there is lifted. Anything else — a
     // failure, a call already open — is the session's own to report.
-    if (voiceStatusNow() === REALTIME_STATUS.UNAVAILABLE) {
+    if (voiceStatus === REALTIME_STATUS.UNAVAILABLE) {
       setVoiceStatus(REALTIME_STATUS.IDLE);
     }
-  }, [options.voiceAvailable, setVoiceStatus, stopMicrophone, voiceStatusNow]);
+  }, [options.voiceAvailable, stopMicrophone, voiceStatus]);
 
   /**
    * Opens the call, answering with what the system said about the microphone —
