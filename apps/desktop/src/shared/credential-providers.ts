@@ -4,9 +4,16 @@ import { ISSUE_TRACKER_ID, PROVIDER_ID } from "@sidecar/core";
  * The services Luke can hold a credential for: the subset of the observed
  * providers whose sessions live in a cloud service with no local state to
  * read, plus the issue tracker Luke reads the same way — each of which must
- * observe nothing at all until the user supplies a key. The ids are core's,
+ * observe nothing at all until the user supplies a key. Most ids are core's,
  * so a credential row names the same service a session row or the issue
  * roster does — that is what lets one mark registry serve them all.
+ *
+ * OpenAI is the one that names nothing elsewhere, so it carries an id of its
+ * own: Luke speaks through it rather than observing it, and there are no OpenAI
+ * sessions or issues for a row to belong to. It belongs here all the same,
+ * because a credential the app cannot be given is a feature the app does not
+ * have — and an app opened from Finder has no launch environment to read one
+ * from.
  */
 export const CREDENTIAL_PROVIDER_ID = {
   CONDUCTOR: PROVIDER_ID.CONDUCTOR,
@@ -15,6 +22,7 @@ export const CREDENTIAL_PROVIDER_ID = {
   DEVIN: PROVIDER_ID.DEVIN,
   JULES: PROVIDER_ID.JULES,
   LINEAR: ISSUE_TRACKER_ID.LINEAR,
+  OPENAI: "openai",
 } as const;
 
 export type CredentialProviderId =
@@ -47,6 +55,10 @@ const JULES_ENVIRONMENT = {
 
 const LINEAR_ENVIRONMENT = {
   API_KEY: "LINEAR_API_KEY",
+} as const;
+
+const OPENAI_ENVIRONMENT = {
+  API_KEY: "OPENAI_API_KEY",
 } as const;
 
 /**
@@ -168,16 +180,49 @@ export const CREDENTIAL_PROVIDERS: Readonly<Record<CredentialProviderId, Credent
         "Linear's personal API keys start with lin_api_. OAuth tokens belong to an application rather than to Luke.",
     },
   },
+  [CREDENTIAL_PROVIDER_ID.OPENAI]: {
+    id: CREDENTIAL_PROVIDER_ID.OPENAI,
+    displayName: "OpenAI",
+    // Both things the key buys, said on the row that holds it: talking is the
+    // one feature that sends your voice off the Mac, and the review is the one
+    // that sends what a provider wrote about a session. Neither should be
+    // learned from a settings file or a README.
+    // No apostrophe on purpose: the panel writes one as `&rsquo;` in JSX, and
+    // this string is read as text, so a straight quote here would be the one
+    // typewriter apostrophe on the surface.
+    description:
+      "The voice Luke speaks with, and the review that decides which sessions need you. Nothing is spoken or sent without this key.",
+    // Realtime is what a spoken turn runs on, and an account that cannot reach
+    // it fails at the first word rather than at the paste — so the line says so
+    // before the key is entered rather than after.
+    hint: "Create a key on the OpenAI platform under API keys. Talking uses the Realtime API, which needs billing enabled.",
+    apiKeysUrl: "https://platform.openai.com/api-keys",
+    environmentVariables: [OPENAI_ENVIRONMENT.API_KEY],
+    // No key format. Every kind OpenAI issues carries `sk-`, so a prefix would
+    // refuse nothing, and which of them can reach Realtime is something only
+    // OpenAI can answer — it answers it on the first mint.
+  },
 };
 
 /** Every provider that can hold a key, in the order Settings lists them. */
 export const CREDENTIAL_PROVIDER_LIST: readonly CredentialProvider[] =
   Object.values(CREDENTIAL_PROVIDERS);
 
-/* A key is a key, so the tracker lives in the one provider registry — but
-   Settings draws it apart: an issue tracker is an integration Luke reads and
-   acts on, not an agent whose sessions he observes. */
-const INTEGRATION_IDS: ReadonlySet<CredentialProviderId> = new Set([CREDENTIAL_PROVIDER_ID.LINEAR]);
+/* A key is a key, so every service lives in the one provider registry — but
+   Settings draws these apart: an integration is a service Luke uses, not an
+   agent whose sessions he observes. The tracker is one he reads and acts on;
+   OpenAI is the one he speaks through. */
+const INTEGRATION_IDS: ReadonlySet<CredentialProviderId> = new Set([
+  CREDENTIAL_PROVIDER_ID.LINEAR,
+  CREDENTIAL_PROVIDER_ID.OPENAI,
+]);
+
+/**
+ * The one key Luke speaks through, and asks about a session with. Named here so
+ * the main process reads it by what it is for rather than by an id spelled out
+ * at each of the places that build something from it.
+ */
+export const VOICE_CREDENTIAL_PROVIDER_ID = CREDENTIAL_PROVIDER_ID.OPENAI;
 
 /** The coding-agent providers, in the order the Cloud Agent API keys section lists them. */
 export const CLOUD_AGENT_PROVIDER_LIST: readonly CredentialProvider[] =

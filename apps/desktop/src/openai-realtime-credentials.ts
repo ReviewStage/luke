@@ -50,7 +50,7 @@ export interface OpenAiRealtimeCredentialOptions {
   expiryMarginMs?: number;
 }
 
-export type OpenAiRealtimeEnvironmentOptions = Omit<OpenAiRealtimeCredentialOptions, "apiKey">;
+export type OpenAiRealtimeMinterOptions = Omit<OpenAiRealtimeCredentialOptions, "apiKey">;
 
 function withoutTrailingSlash(value: string): string {
   return value.endsWith("/") ? value.slice(0, -1) : value;
@@ -267,26 +267,34 @@ export class OpenAiRealtimeCredentialMinter {
 /**
  * Explains why no minter exists, which is the state the panel shows as "voice
  * unavailable". Distinguishing a missing key from a fixture run matters: they
- * look identical from the UI and have completely different fixes.
+ * look identical from the UI and have completely different fixes. Whether a key
+ * resolved is passed in rather than read here, because it can now come from the
+ * settings store as well as from the environment and only the caller knows
+ * which.
  */
-export function unavailableRealtimeDiagnostics(fixtureMode: boolean): RealtimeDiagnostics {
-  const apiKeyConfigured = text(process.env[OPENAI_ENVIRONMENT.API_KEY]) !== undefined;
+export function unavailableRealtimeDiagnostics(input: {
+  fixtureMode: boolean;
+  apiKeyConfigured: boolean;
+}): RealtimeDiagnostics {
   return {
-    apiKeyConfigured,
-    fixtureMode,
+    apiKeyConfigured: input.apiKeyConfigured,
+    fixtureMode: input.fixtureMode,
     model: text(process.env[OPENAI_ENVIRONMENT.MODEL]) ?? REALTIME_DEFAULTS.MODEL,
     voice: environmentRealtimeVoice() ?? REALTIME_DEFAULTS.VOICE,
     speed: environmentRealtimeSpeed() ?? REALTIME_DEFAULTS.SPEED,
     endpoint: `${OPENAI_DEFAULTS.BASE_URL}${REALTIME_CLIENT_SECRETS_PATH}`,
-    lastOutcome: fixtureMode
+    lastOutcome: input.fixtureMode
       ? REALTIME_MINT_OUTCOME.DISABLED_BY_FIXTURE
       : REALTIME_MINT_OUTCOME.NO_API_KEY,
   };
 }
 
 /**
- * Builds a minter only when an API key is configured. Luke observes sessions
- * and stays silent without one, so no part of the app requires credentials.
+ * Builds a minter only when there is a key to build one from, and a key arriving
+ * later builds one then — which is what lets voice be turned on from the panel
+ * rather than only by the environment the app was launched with. The key itself
+ * is resolved by the settings store, which reads `OPENAI_API_KEY` as its own
+ * fallback; the model, voice, and pace are still resolved here.
  *
  * `OPENAI_BASE_URL` is deliberately not read here. It redirects attention
  * review, which runs entirely in the main process, but the voice path also has
@@ -295,11 +303,12 @@ export function unavailableRealtimeDiagnostics(fixtureMode: boolean): RealtimeDi
  * against one host and then fail the SDP exchange against another — an
  * unsupported endpoint that appears to work until the first word is spoken.
  */
-export function openAiRealtimeCredentialsFromEnvironment(
-  options: OpenAiRealtimeEnvironmentOptions = {},
+export function openAiRealtimeCredentials(
+  apiKey: string | undefined,
+  options: OpenAiRealtimeMinterOptions = {},
 ): OpenAiRealtimeCredentialMinter | undefined {
-  const apiKey = text(process.env[OPENAI_ENVIRONMENT.API_KEY]);
-  if (!apiKey) return undefined;
+  const resolved = text(apiKey);
+  if (!resolved) return undefined;
 
   const model = text(options.model) ?? text(process.env[OPENAI_ENVIRONMENT.MODEL]);
   const voice = text(options.voice) ?? environmentRealtimeVoice();
@@ -307,7 +316,7 @@ export function openAiRealtimeCredentialsFromEnvironment(
 
   return new OpenAiRealtimeCredentialMinter({
     ...options,
-    apiKey,
+    apiKey: resolved,
     ...(model ? { model } : {}),
     ...(voice ? { voice } : {}),
     ...(speed ? { speed } : {}),

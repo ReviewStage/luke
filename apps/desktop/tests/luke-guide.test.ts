@@ -30,6 +30,7 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
       [CREDENTIAL_PROVIDER_ID.DEVIN]: CREDENTIAL_SOURCE.ENVIRONMENT,
       [CREDENTIAL_PROVIDER_ID.JULES]: CREDENTIAL_SOURCE.NONE,
       [CREDENTIAL_PROVIDER_ID.LINEAR]: CREDENTIAL_SOURCE.NONE,
+      [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.NONE,
     },
     secretStorage: SECRET_STORAGE.UNKNOWN,
     showInMenuBar: true,
@@ -166,7 +167,11 @@ test("the facts say what is connected, never what connects it", () => {
   assert.match(rendered, /Devin \(connected from the environment\)/);
   // The tracker stands in its own fact, the way it stands in its own section.
   assert.match(rendered, /Linear \(not connected\)/);
+  assert.match(rendered, /OpenAI \(not connected\)/);
   assert.match(rendered, /Integrations/);
+  // Each integration says what connecting it buys, so a spoken ask about the
+  // page cannot leave OpenAI sounding like a second Linear.
+  assert.match(rendered, /Connecting OpenAI is what lets Luke speak/);
   // The guide leaves the machine, so no key, prefix, or environment variable
   // value has any business in it.
   assert.doesNotMatch(rendered, /API key:/);
@@ -393,7 +398,7 @@ test("the facts follow the talk key, the microphone, and the storage the system 
   assert.match(denied, /Privacy & Security/);
 
   const voiceless = buildLukeGuide(guideInput({ voiceAvailable: false }));
-  assert.match(JSON.stringify(voiceless.facts), /OPENAI_API_KEY/);
+  assert.match(JSON.stringify(voiceless.facts), /no OpenAI key is connected/);
   // The muted-output behavior belongs to speech, so it is described exactly
   // where speech exists: with a voice it is a fact, without one it would
   // describe captions no reply will ever draw.

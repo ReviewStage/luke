@@ -9,11 +9,13 @@ import {
   ISSUE_TRACKER_ID,
   JULES_PATH,
   LINEAR_PATH,
+  OPENAI_PATH,
   OPENCODE_BLOCK_PATH,
   OPENCODE_FRAME_PATH,
   PROVIDER_ID,
 } from "@sidecar/core";
 import { useId } from "react";
+import { CREDENTIAL_PROVIDER_ID } from "../shared/credential-providers";
 
 /**
  * The provider marks, and the one badge that rides them.
@@ -34,7 +36,7 @@ import { useId } from "react";
  * Cursor via Simple Icons (CC0-1.0, sourced from https://cursor.com/brand),
  * Devin's verbatim from the mark https://devin.ai serves as its own favicon
  * and site header, Jules via Simple Icons (CC0-1.0, sourced from
- * https://jules.google), Linear via Simple Icons (CC0-1.0, sourced from
+ * https://jules.google), OpenAI via Simple Icons (CC0-1.0), Linear via Simple Icons (CC0-1.0, sourced from
  * https://linear.app), and OpenCode's two-tone terminal mark verbatim from
  * the favicon https://opencode.ai serves. Each keeps its own brand colour
  * (see the `--mark-*` custom properties), so a mark says which provider a
@@ -184,6 +186,20 @@ function LinearMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
+function OpenAiMark({ className }: MarkProps): React.JSX.Element {
+  return (
+    <svg
+      className={className}
+      data-mark={CREDENTIAL_PROVIDER_ID.OPENAI}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path fill="currentColor" d={OPENAI_PATH} />
+    </svg>
+  );
+}
+
 function OpenCodeMark({ className }: MarkProps): React.JSX.Element {
   // The box crops the favicon's 512 canvas to a square the glyph fills top to
   // bottom, centred as published; the paths themselves are untouched. Verbatim
@@ -224,6 +240,7 @@ const PROVIDER_MARKS = new Map<string, (props: MarkProps) => React.JSX.Element>(
   [PROVIDER_ID.DEVIN, DevinMark],
   [PROVIDER_ID.JULES, JulesMark],
   [ISSUE_TRACKER_ID.LINEAR, LinearMark],
+  [CREDENTIAL_PROVIDER_ID.OPENAI, OpenAiMark],
   [PROVIDER_ID.OPENCODE, OpenCodeMark],
 ]);
 

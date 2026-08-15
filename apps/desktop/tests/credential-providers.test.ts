@@ -7,6 +7,7 @@ import {
   CREDENTIAL_PROVIDERS,
   INTEGRATION_PROVIDER_LIST,
   isCredentialProviderId,
+  VOICE_CREDENTIAL_PROVIDER_ID,
 } from "../src/shared/credential-providers";
 
 test("accepts only a provider the build ships", () => {
@@ -51,7 +52,7 @@ test("splits the settings sections without losing a provider", () => {
   );
   assert.deepEqual(
     INTEGRATION_PROVIDER_LIST.map((provider) => provider.id),
-    [CREDENTIAL_PROVIDER_ID.LINEAR],
+    [CREDENTIAL_PROVIDER_ID.LINEAR, CREDENTIAL_PROVIDER_ID.OPENAI],
   );
   // An integration's row carries its own answer to what connecting it buys.
   for (const provider of INTEGRATION_PROVIDER_LIST) {
@@ -109,4 +110,33 @@ test("takes only the Linear key kind a person holds", () => {
   assert.equal(linear.keyFormat?.prefix, "lin_api_");
   assert.equal(linear.keyFormat?.label, "Personal API key");
   assert.match(linear.apiKeysUrl, /^https:\/\/linear\.app\/settings\//);
+});
+
+test("holds the key Luke speaks through, apart from the agents he observes", () => {
+  const openai = CREDENTIAL_PROVIDERS[VOICE_CREDENTIAL_PROVIDER_ID];
+
+  // Voice is a credential like any other now: it can be pasted in, replaced and
+  // deleted, rather than reaching the app only through the environment it was
+  // launched with — which an app opened from Finder never has.
+  assert.equal(isCredentialProviderId(CREDENTIAL_PROVIDER_ID.OPENAI), true);
+  assert.equal(openai.displayName, "OpenAI");
+  assert.deepEqual(openai.environmentVariables, ["OPENAI_API_KEY"]);
+  // Realtime is what a spoken turn runs on, and an account that cannot reach it
+  // fails at the first word rather than at the paste.
+  assert.match(openai.hint, /Realtime/);
+  assert.match(openai.hint, /billing/i);
+  // No prefix: every kind OpenAI issues carries `sk-`, so a format would refuse
+  // nothing a working key would not also be refused by.
+  assert.equal(openai.keyFormat, undefined);
+
+  // An integration rather than an agent: Luke speaks through it and asks it
+  // about sessions, and observes nothing of it — there are no OpenAI sessions
+  // for a row to belong to, and no adapter for a saved key to refresh.
+  assert.ok(INTEGRATION_PROVIDER_LIST.includes(openai));
+  assert.equal(CLOUD_AGENT_PROVIDER_LIST.includes(openai), false);
+  // Both things the key buys are said on the row that holds it, because a
+  // credential that quietly enables an outbound request should not have to be
+  // learned from a README.
+  assert.match(openai.description ?? "", /voice/i);
+  assert.match(openai.description ?? "", /review/i);
 });

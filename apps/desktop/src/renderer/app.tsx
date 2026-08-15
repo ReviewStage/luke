@@ -1011,7 +1011,6 @@ export function App(): React.JSX.Element {
     setMicrophoneStatus,
     microphoneError,
     voiceStatus,
-    setVoiceStatus,
     talkOpening,
     voiceHotkey,
     handleVoiceActivity,
@@ -1033,6 +1032,7 @@ export function App(): React.JSX.Element {
     voice: settings?.voice,
     voiceSpeed: settings?.voiceSpeed,
     voiceCaptions: settings?.voiceCaptions === true,
+    voiceAvailable: settings?.voiceAvailable,
     outputSilent: outputSilent(outputAudio),
     fixtureSpeaking: bootstrap?.profile === "speaking" || bootstrap?.profile === "muted",
     capturingShortcut: () => shortcutCapture.current,
@@ -1165,7 +1165,6 @@ export function App(): React.JSX.Element {
       // Only fill in what no push has said yet, like the issue roster: the
       // bootstrap snapshot is older than any change that raced past it.
       if (value.outputAudio) acceptOutputAudioBootstrap(value.outputAudio);
-      if (!value.realtimeAvailable) setVoiceStatus(REALTIME_STATUS.UNAVAILABLE);
       if (value.profile === "microphone") {
         window.setTimeout(() => void startMicrophone(), 500);
       }
@@ -1214,7 +1213,6 @@ export function App(): React.JSX.Element {
     cancelHover,
     changeTab,
     setMicrophoneStatus,
-    setVoiceStatus,
     startMicrophone,
     stopMicrophone,
     summonAsk,
@@ -1252,7 +1250,7 @@ export function App(): React.JSX.Element {
     const talkKey = voiceHotkeyToShow(bootstrap, voiceHotkey);
     const guide = buildLukeGuide({
       settings: settings ?? bootstrap.settings,
-      voiceAvailable: bootstrap.realtimeAvailable,
+      voiceAvailable: (settings ?? bootstrap.settings).voiceAvailable,
       microphoneStatus,
       hotkey: {
         ...(talkKey.hotkey ? { hotkey: voiceHotkeyLabel(talkKey.hotkey) } : {}),
@@ -1497,7 +1495,7 @@ export function App(): React.JSX.Element {
               microphoneError,
               onRequestMicrophone: () => void requestMicrophoneAccess(),
               onOpenMicrophoneSettings: () => window.sidecar.openMicrophoneSettings(),
-              voiceAvailable: bootstrap.realtimeAvailable,
+              voiceAvailable: (settings ?? bootstrap.settings).voiceAvailable,
               settings,
               onVoiceCaptionsChange: changeVoiceCaptions,
               onDuckOtherMediaChange: changeDuckOtherMedia,

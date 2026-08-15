@@ -76,9 +76,10 @@ import { LinearIssueTracker } from "./linear-tracker";
 import { readMacScreenGeometry } from "./macos-screen-geometry";
 import { keepWindowStationary } from "./macos-stationary-window";
 import { MediaDuckController } from "./media-duck";
-import { openAiAttentionEvaluatorFromEnvironment } from "./openai-attention-evaluator";
+import { openAiAttentionEvaluator } from "./openai-attention-evaluator";
 import {
-  openAiRealtimeCredentialsFromEnvironment,
+  type OpenAiRealtimeCredentialMinter,
+  openAiRealtimeCredentials,
   unavailableRealtimeDiagnostics,
 } from "./openai-realtime-credentials";
 import { OpenCodeSessionAdapter } from "./opencode-adapter";
@@ -103,6 +104,7 @@ import {
   CREDENTIAL_PROVIDERS,
   type CredentialProviderId,
   isCredentialProviderId,
+  VOICE_CREDENTIAL_PROVIDER_ID,
 } from "./shared/credential-providers";
 import {
   FEEDBACK_KIND,
@@ -144,6 +146,9 @@ const sessionRegistry = new InMemorySessionRegistry();
 // the Electron app is ready.
 const settingsStore = new SettingsStore({
   directory: () => app.getPath("userData"),
+  // A fixture or evidence run refuses the credentials it resolves, so nothing is
+  // reported as available that would not actually happen.
+  credentialsUsable: !fixtureMode,
   cipher: {
     isAvailable: () => safeStorage.isEncryptionAvailable(),
     encrypt: (plainText) => safeStorage.encryptString(plainText),
@@ -224,18 +229,20 @@ const sessionNoticeTracker = new SessionNoticeTracker();
  * until the file says otherwise, matching the store's default.
  */
 let sessionNotificationsEnabled = true;
-// A fixture run must stay deterministic and credential-free, so it never builds
-// an evaluator — not just capture runs.
-const attentionEvaluator = fixtureMode ? undefined : openAiAttentionEvaluatorFromEnvironment();
-const attentionReviewer = attentionEvaluator
-  ? new SessionAttentionReviewer({
-      evaluator: attentionEvaluator,
-      currentSession: (identity) => sessionRegistry.get(identity),
-    })
-  : undefined;
-// A fixture run stays credential-free for the same reason attention review
-// does: evidence must be reproducible without a key and without a network.
-const realtimeCredentials = fixtureMode ? undefined : openAiRealtimeCredentialsFromEnvironment();
+/**
+ * Everything the one OpenAI key buys, and nothing that outlives it: the review
+ * that decides which sessions need a person, and the credential a spoken turn
+ * runs on.
+ *
+ * Both are built from the stored credential rather than from the environment the
+ * app was launched with, so both are rebuilt whenever that key changes — a key
+ * entered in the panel turns them on, and a key deleted there takes them away
+ * along with any ephemeral secret already minted under it. A fixture run stays
+ * credential-free either way: evidence must be reproducible without a key and
+ * without a network.
+ */
+let attentionReviewer: SessionAttentionReviewer | undefined;
+let realtimeCredentials: OpenAiRealtimeCredentialMinter | undefined;
 // Quiets Music and Spotify while a spoken exchange is live. It lives here
 // rather than in the renderer because letting the players back up must survive
 // anything the renderer does — and only this process may run a helper.
@@ -988,17 +995,59 @@ function isIssueActionAsk(value: unknown): value is {
  * terminal launch — where this is the difference between a one-line answer and
  * guessing at an empty panel.
  */
-function reportVoiceAvailability(): void {
-  const report = realtimeCredentials?.diagnostics() ?? unavailableRealtimeDiagnostics(fixtureMode);
+function reportVoiceAvailability(apiKeyConfigured: boolean): void {
   if (realtimeCredentials) {
+    const report = realtimeCredentials.diagnostics();
     process.stderr.write(
       `Luke voice: enabled (model ${report.model}, voice ${report.voice}, speed ${report.speed}×)\n`,
     );
     return;
   }
+  const report = unavailableRealtimeDiagnostics({ fixtureMode, apiKeyConfigured });
   process.stderr.write(
     `Luke voice: unavailable — ${realtimeMintExplanation(report.lastOutcome)}\n`,
   );
+}
+
+/**
+ * Reads the OpenAI key and rebuilds everything that runs on it.
+ *
+ * This is the whole of turning voice on and off. It runs once at startup and
+ * again on every change to that key, so a key pasted into the panel takes effect
+ * where it was pasted rather than on the next launch — and a key deleted there
+ * takes voice away just as immediately, ephemeral secret included. The talk key
+ * is not moved here: only a change while the app is running needs that, and
+ * `applyVoiceHotkey` is what does it.
+ */
+async function applyVoiceCredential(): Promise<void> {
+  // A fixture run does not ask for the key at all: reading a stored one means a
+  // Keychain decrypt, which a run that would refuse to use it has no business
+  // asking for. That is also why the report says no key resolved — for this run,
+  // none did.
+  const apiKey = fixtureMode
+    ? undefined
+    : await settingsStore.readApiKey(VOICE_CREDENTIAL_PROVIDER_ID);
+  const evaluator = openAiAttentionEvaluator(apiKey);
+  attentionReviewer = evaluator
+    ? new SessionAttentionReviewer({
+        evaluator,
+        currentSession: (identity) => sessionRegistry.get(identity),
+      })
+    : undefined;
+  // The chosen voice and pace are what a credential is minted against, so they
+  // are read here rather than set afterwards: a minter built without them would
+  // speak in the default voice until the next time either changed. A file that
+  // cannot be read means no choice was kept, and the environment or the defaults
+  // answer inside the factory.
+  const [voice, speed] = await Promise.all([
+    settingsStore.readVoice().catch(() => undefined),
+    settingsStore.readVoiceSpeed().catch(() => undefined),
+  ]);
+  realtimeCredentials = openAiRealtimeCredentials(apiKey, {
+    ...(voice ? { voice } : {}),
+    ...(speed ? { speed } : {}),
+  });
+  reportVoiceAvailability(apiKey !== undefined);
 }
 
 /**
@@ -1097,7 +1146,6 @@ function registerIpc(): void {
       chromiumVersion: process.versions.chrome,
       nodeVersion: process.versions.node,
       microphoneStatus: microphoneStatus(),
-      realtimeAvailable: realtimeCredentials !== undefined,
       // Both keys travel as accelerators rather than labels: the renderer needs
       // both spellings — the keycaps' ⌥ and L drawn apart, and aria's Alt+L —
       // and only the accelerator can produce the pair.
@@ -1170,7 +1218,7 @@ function registerIpc(): void {
       return { providerId, apiKey };
     },
     save: ({ providerId, apiKey }) => settingsStore.setApiKey(providerId, apiKey),
-    apply(result, { providerId }) {
+    async apply(result, { providerId }) {
       // Only the provider whose key changed is affected, so the local
       // observers are left alone rather than re-crawling the filesystem on
       // every save.
@@ -1180,6 +1228,15 @@ function registerIpc(): void {
       // its save refreshes the roster instead of the registry.
       if (!result.reason && providerId === CREDENTIAL_PROVIDER_ID.LINEAR) {
         void refreshTrackedIssues();
+      }
+      // The voice key connects neither: it is what the spoken conversation and
+      // the attention review are built from, so a change to it rebuilds both
+      // and then moves the talk key — claimed now that there is something to
+      // talk to, or given back to the machine now that there is not. Awaited,
+      // because a press right after the save has to find a minter.
+      if (!result.reason && providerId === VOICE_CREDENTIAL_PROVIDER_ID) {
+        await applyVoiceCredential();
+        await applyVoiceHotkey();
       }
     },
     refusal: "Could not save that API key on this system.",
@@ -2444,15 +2501,11 @@ if (!app.requestSingleInstanceLock()) {
         sessionNotificationsEnabled = APP_SETTING_DEFAULTS.sessionNotifications;
       },
     );
-    // Awaited, so the chosen voice reaches the minter before the renderer
-    // exists to ask for a credential: the first conversation must already
-    // speak with it. A file that cannot be read means no choice was kept — it
-    // must not keep the panel, the hotkey, or observation from starting.
-    const storedVoice = await settingsStore.readVoice().catch(() => undefined);
-    if (storedVoice) realtimeCredentials?.setVoice(storedVoice);
-    // The chosen pace rides the same await, for the same reason.
-    const storedSpeed = await settingsStore.readVoiceSpeed().catch(() => undefined);
-    if (storedSpeed) realtimeCredentials?.setSpeed(storedSpeed);
+    // Awaited, so the key and the voice it speaks with are both in hand before
+    // the renderer exists to ask for a credential: the first conversation must
+    // already have them. It is also what decides whether the talk key below is
+    // claimed at all.
+    await applyVoiceCredential();
     // Awaited so the panels are created on the chosen displays in their
     // chosen form, rather than appearing on the main display and jumping. A
     // file that cannot be read means no choice was kept — the main display,
@@ -2462,7 +2515,6 @@ if (!app.requestSingleInstanceLock()) {
       .catch(() => APP_SETTING_DEFAULTS.showOnAllDisplays);
     panelFormFactor =
       (await settingsStore.readFormFactor().catch(() => undefined)) ?? DEFAULT_PANEL_FORM_FACTOR;
-    reportVoiceAvailability();
     // Awaited for the same reason the voice is: the chosen chord has to be in
     // hand before the key is registered, or the first registration would take
     // the default away from the user who moved off it. A file that cannot be

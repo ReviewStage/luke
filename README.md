@@ -84,10 +84,17 @@ controls.
 
 ## Talking to Luke
 
-Voice is off unless `OPENAI_API_KEY` is set. It is a real voice session: your
+Voice is off until you give Luke an OpenAI key. It is a real voice session: your
 microphone audio goes to OpenAI, and Luke answers out loud. Read
 [Privacy](PRIVACY.md) first — this is the one feature that sends audio off your
 Mac.
+
+Connect the key in Settings, under **Integrations**: press **Connect** beside
+OpenAI, paste the key, and Luke takes it from there — no relaunch, and no
+terminal. It is stored encrypted through the macOS Keychain, and the panel never
+reads it back. Setting `OPENAI_API_KEY` in the environment still works and is
+used when nothing is stored, but a shell export does not reach an app opened from
+Finder, which is why the panel is the way in.
 
 One key runs it, and it answers from whatever app is frontmost:
 
@@ -149,11 +156,13 @@ switch and volume, and never changes either.
 
 ## Privacy
 
-Luke observes provider state read-only. Without `OPENAI_API_KEY` it never opens
+Luke observes provider state read-only. Without an OpenAI key it never opens
 the microphone and never asks for it: talking is the only thing it uses the
-microphone for, and there is nothing to talk to. With the key set, an
+microphone for, and there is nothing to talk to. With a key — connected in
+Settings or read from the environment — an
 attention-review request is made, and the spoken conversation sends the audio of
-a turn you opened to OpenAI. See [PRIVACY.md](PRIVACY.md) for the exact data
+a turn you opened to OpenAI. Deleting the key in Settings takes both away again
+immediately. See [PRIVACY.md](PRIVACY.md) for the exact data
 boundaries and retention wording.
 
 ## Build from source
@@ -232,26 +241,27 @@ worded announcement — never the session roster, the app guide, or the issue
 list, which travel only on conversations you open yourself. The announcement
 sentence (the session's title, provider, repository or branch, and any
 one-line error reason) is synthesized through the same voice service as the
-spoken conversation, so announcements need `OPENAI_API_KEY` and follow the
+spoken conversation, so announcements need an OpenAI key and follow the
 same privacy boundary; see [PRIVACY.md](PRIVACY.md). They can be switched off
 in Settings · Voice ("Announce when a session needs you"); the panel and
 the capsule count show the same states either way.
 
 ## Optional attention review
 
-Session monitoring does not require `OPENAI_API_KEY`: Claude Code, Codex, and
+Session monitoring does not require an OpenAI key: Claude Code, Codex, and
 OpenCode use
 local state, while Conductor, Cursor, and Devin use their separately configured
-provider credentials. If `OPENAI_API_KEY` is set, Luke can also send a bounded status update to
+provider credentials. Given an OpenAI key, Luke can also send a bounded status update to
 the configured Responses endpoint for attention classification. That update can
 include the session title, recap, repository, branch, current tool activity, and
-reported error; see [PRIVACY.md](PRIVACY.md) for the exact boundary. The same
-key enables the spoken conversation described above. Neither enables agent
-control.
+reported error; see [PRIVACY.md](PRIVACY.md) for the exact boundary. It is the
+same one key as the spoken conversation described above, wherever you put it:
+connecting OpenAI in Settings enables both, and deleting it there disables both.
+The row says so where the key is entered. Neither enables agent control.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `OPENAI_API_KEY` | unset | Enables external attention review and the spoken conversation |
+| `OPENAI_API_KEY` | unset | Enables external attention review and the spoken conversation, when no key is stored in Settings |
 | `LUKE_ATTENTION_MODEL` | `gpt-5.6-luna` | Selects the review model |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Selects the Responses-compatible endpoint |
 | `LUKE_REALTIME_MODEL` | `gpt-realtime-2.1` | Selects the conversation model |

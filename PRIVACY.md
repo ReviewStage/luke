@@ -125,10 +125,10 @@ below.
 
 The microphone is optional and is used two ways.
 
-Without `OPENAI_API_KEY` there is nothing to talk to, so Luke never asks for the
+Without an OpenAI key there is nothing to talk to, so Luke never asks for the
 microphone and never opens it.
 
-With `OPENAI_API_KEY`, the spoken conversation described below sends microphone
+With one, the spoken conversation described below sends microphone
 audio to OpenAI. That is the only thing Luke uses the microphone for; there is no
 local-only listening mode. Nothing is captured until you open a turn: the
 microphone track is created muted, server-side voice detection is disabled, and
@@ -137,8 +137,12 @@ microphone on its own.
 
 ## Optional spoken conversation
 
-Voice is off unless `OPENAI_API_KEY` is set, and no audio leaves your Mac
-without it.
+Voice is off until Luke is given an OpenAI key, and no audio leaves your Mac
+without one. The key can be connected in Settings, under Integrations, or read
+from `OPENAI_API_KEY` in the environment when nothing is stored; a stored key is
+held encrypted through the macOS Keychain, is never sent to the panel, and can be
+deleted in the same place it was entered. Deleting it turns voice off at once,
+along with the attention review described below.
 
 When you open a turn, Luke sends that turn's microphone audio to the OpenAI
 Realtime API over a direct WebRTC connection from your Mac, and plays back the
@@ -170,7 +174,7 @@ against what Linear actually listed. No issue description or comment thread is
 ever included, because Luke never reads one.
 
 With "Announce when a session needs you" on — it is on by default, and does
-nothing without `OPENAI_API_KEY` — Luke also opens a call of his own to speak
+nothing without an OpenAI key — Luke also opens a call of his own to speak
 a session announcement when no conversation is up. That call is narrower in
 every direction: it receives audio and sends none (no microphone track exists
 on it, so nothing can be captured), it carries no tools, and the only thing
@@ -198,9 +202,10 @@ short-lived client secret minted for one call, which expires on its own.
 
 ## Optional external attention review
 
-Without `OPENAI_API_KEY`, Luke does not send an attention-review request.
+Without an OpenAI key, Luke does not send an attention-review request.
 
-With `OPENAI_API_KEY`, Luke sends the configured Responses-compatible endpoint
+With one — the same key the spoken conversation uses, from either place it can
+come from — Luke sends the configured Responses-compatible endpoint
 the provider name, displayed session title, the name of the workspace a chat
 belongs to where its provider groups them, previous and current status, review
 trigger, repository, branch, current tool activity, reported error, and the

@@ -40,7 +40,9 @@ export function microphoneAccessRow(input: {
 }): MicrophoneAccessRow {
   if (!input.voiceAvailable) {
     return {
-      detail: "Luke opens the microphone only to talk, and talking needs OPENAI_API_KEY.",
+      // Names what to do rather than what is missing, and what to do is now
+      // something the panel offers: the OpenAI key, under Integrations.
+      detail: "Luke opens the microphone only to talk, which needs the OpenAI key.",
       offerAccess: false,
       offerSystemSettings: false,
       ready: false,

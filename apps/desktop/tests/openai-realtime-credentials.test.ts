@@ -5,10 +5,11 @@ import {
   REALTIME_MINT_OUTCOME,
   REALTIME_VOICE,
   REALTIME_VOICE_SPEED,
+  realtimeMintExplanation,
 } from "@sidecar/core";
 import {
   OpenAiRealtimeCredentialMinter,
-  openAiRealtimeCredentialsFromEnvironment,
+  openAiRealtimeCredentials,
   unavailableRealtimeDiagnostics,
 } from "../src/openai-realtime-credentials";
 
@@ -205,17 +206,12 @@ test("a failed mint is not cached as a usable credential", async () => {
 });
 
 test("no API key means no minter, so Luke runs without credentials", () => {
-  const previousKey = process.env.OPENAI_API_KEY;
-  try {
-    process.env.OPENAI_API_KEY = "";
-    assert.equal(openAiRealtimeCredentialsFromEnvironment(), undefined);
-
-    process.env.OPENAI_API_KEY = API_KEY;
-    assert.ok(openAiRealtimeCredentialsFromEnvironment());
-  } finally {
-    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
-    else process.env.OPENAI_API_KEY = previousKey;
-  }
+  // The key is the caller's to resolve — the settings store reads the stored one
+  // and falls back to `OPENAI_API_KEY` — so voice stays off until one arrives,
+  // and a key arriving later builds a minter then rather than at the next launch.
+  assert.equal(openAiRealtimeCredentials(undefined), undefined);
+  assert.equal(openAiRealtimeCredentials("   "), undefined);
+  assert.ok(openAiRealtimeCredentials(API_KEY));
 });
 
 test("the model and voice come from the environment when set", () => {
@@ -229,11 +225,8 @@ test("the model and voice come from the environment when set", () => {
     process.env.LUKE_REALTIME_MODEL = "gpt-realtime-preview";
     process.env.LUKE_REALTIME_VOICE = REALTIME_VOICE.MARIN;
 
-    assert.equal(openAiRealtimeCredentialsFromEnvironment()?.model, "gpt-realtime-preview");
-    assert.equal(
-      openAiRealtimeCredentialsFromEnvironment()?.diagnostics().voice,
-      REALTIME_VOICE.MARIN,
-    );
+    assert.equal(openAiRealtimeCredentials(API_KEY)?.model, "gpt-realtime-preview");
+    assert.equal(openAiRealtimeCredentials(API_KEY)?.diagnostics().voice, REALTIME_VOICE.MARIN);
   } finally {
     for (const [name, value] of [
       ["OPENAI_API_KEY", previous.key],
@@ -252,18 +245,18 @@ test("the pace comes from the environment when set, and an unoffered one is refu
     process.env.OPENAI_API_KEY = API_KEY;
     process.env.LUKE_REALTIME_SPEED = String(REALTIME_VOICE_SPEED.QUICK);
     assert.equal(
-      openAiRealtimeCredentialsFromEnvironment()?.diagnostics().speed,
+      openAiRealtimeCredentials(API_KEY)?.diagnostics().speed,
       REALTIME_VOICE_SPEED.QUICK,
     );
 
     // The settings snapshot already refuses it, so honouring it here would
     // have the panel mark the default while minting at something else.
     process.env.LUKE_REALTIME_SPEED = "3";
+    assert.equal(openAiRealtimeCredentials(API_KEY)?.diagnostics().speed, REALTIME_DEFAULTS.SPEED);
     assert.equal(
-      openAiRealtimeCredentialsFromEnvironment()?.diagnostics().speed,
+      unavailableRealtimeDiagnostics({ fixtureMode: true, apiKeyConfigured: true }).speed,
       REALTIME_DEFAULTS.SPEED,
     );
-    assert.equal(unavailableRealtimeDiagnostics(true).speed, REALTIME_DEFAULTS.SPEED);
   } finally {
     for (const [name, value] of [
       ["OPENAI_API_KEY", previous.key],
@@ -284,11 +277,11 @@ test("a voice from the environment that Luke does not offer is not minted", () =
     process.env.OPENAI_API_KEY = API_KEY;
     process.env.LUKE_REALTIME_VOICE = "baritone";
 
+    assert.equal(openAiRealtimeCredentials(API_KEY)?.diagnostics().voice, REALTIME_DEFAULTS.VOICE);
     assert.equal(
-      openAiRealtimeCredentialsFromEnvironment()?.diagnostics().voice,
+      unavailableRealtimeDiagnostics({ fixtureMode: true, apiKeyConfigured: true }).voice,
       REALTIME_DEFAULTS.VOICE,
     );
-    assert.equal(unavailableRealtimeDiagnostics(true).voice, REALTIME_DEFAULTS.VOICE);
   } finally {
     for (const [name, value] of [
       ["OPENAI_API_KEY", previous.key],
@@ -342,24 +335,22 @@ test("a successful mint reports success", async () => {
 });
 
 test("a missing key and a fixture run are told apart", () => {
-  const previousKey = process.env.OPENAI_API_KEY;
-  try {
-    process.env.OPENAI_API_KEY = "";
-    const withoutKey = unavailableRealtimeDiagnostics(false);
-    assert.equal(withoutKey.lastOutcome, REALTIME_MINT_OUTCOME.NO_API_KEY);
-    assert.equal(withoutKey.apiKeyConfigured, false);
+  const withoutKey = unavailableRealtimeDiagnostics({
+    fixtureMode: false,
+    apiKeyConfigured: false,
+  });
+  assert.equal(withoutKey.lastOutcome, REALTIME_MINT_OUTCOME.NO_API_KEY);
+  assert.equal(withoutKey.apiKeyConfigured, false);
+  // The one thing someone in this state has to be told is where a key goes now
+  // that the app takes one.
+  assert.match(realtimeMintExplanation(withoutKey.lastOutcome), /Settings/);
 
-    // A fixture run has credentials available and still refuses to use them,
-    // which is the case most easily mistaken for a broken key.
-    process.env.OPENAI_API_KEY = API_KEY;
-    const fixture = unavailableRealtimeDiagnostics(true);
-    assert.equal(fixture.lastOutcome, REALTIME_MINT_OUTCOME.DISABLED_BY_FIXTURE);
-    assert.equal(fixture.apiKeyConfigured, true);
-    assert.ok(!JSON.stringify(fixture).includes(API_KEY));
-  } finally {
-    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
-    else process.env.OPENAI_API_KEY = previousKey;
-  }
+  // A fixture run has credentials available and still refuses to use them, which
+  // is the case most easily mistaken for a broken key.
+  const fixture = unavailableRealtimeDiagnostics({ fixtureMode: true, apiKeyConfigured: true });
+  assert.equal(fixture.lastOutcome, REALTIME_MINT_OUTCOME.DISABLED_BY_FIXTURE);
+  assert.equal(fixture.apiKeyConfigured, true);
+  assert.ok(!JSON.stringify(fixture).includes(API_KEY));
 });
 
 test("an empty API key is rejected outright", () => {
