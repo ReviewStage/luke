@@ -3,18 +3,12 @@ import test from "node:test";
 import {
   ATTENTION_DECISION_SCHEMA,
   ATTENTION_DISPOSITION,
-  ATTENTION_REVIEW_OUTCOME,
   ATTENTION_TRIGGER,
-  ATTENTION_TUNING_EXAMPLES,
   type AttentionDecision,
-  AttentionSpeechLedger,
   type AttentionUpdate,
   attentionDecisionFromModel,
   attentionInstructions,
-  attentionUpdate,
   attentionUpdateInput,
-  DISPOSITION_GUIDANCE,
-  maximumAttentionSummaryLength,
   type NormalizedSession,
   normalizeSession,
   type ProviderSessionObservation,
@@ -22,6 +16,14 @@ import {
   SessionAttentionReviewer,
   type SessionProvider,
 } from "../src";
+import {
+  ATTENTION_REVIEW_OUTCOME,
+  AttentionSpeechLedger,
+  attentionUpdate,
+  DISPOSITION_GUIDANCE,
+  maximumAttentionSummaryLength,
+} from "../src/attention";
+import { ATTENTION_TUNING_EXAMPLES } from "../src/attention-examples";
 
 const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };
 const codex: SessionProvider = { id: "codex", displayName: "Codex" };

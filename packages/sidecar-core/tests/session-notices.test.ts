@@ -1,16 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  MAXIMUM_NOTICES_PER_PASS,
   type NormalizedSession,
   normalizeSession,
-  SESSION_NOTICE_REPEAT_WINDOW_MS,
   SESSION_NOTICE_STATUS,
   SESSION_STATUS,
   SessionNoticeTracker,
   type SessionProvider,
   type SessionStatus,
 } from "../src";
+import { MAXIMUM_NOTICES_PER_PASS, SESSION_NOTICE_REPEAT_WINDOW_MS } from "../src/session-notices";
 
 const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };
 const conductor: SessionProvider = { id: "conductor", displayName: "Conductor" };

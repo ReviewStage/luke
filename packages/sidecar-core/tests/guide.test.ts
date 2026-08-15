@@ -7,21 +7,20 @@ import {
   appGuideContextEvents,
   appGuideContextText,
   appToggleText,
-  appToggleValue,
   appToolAction,
   EMPTY_APP_GUIDE,
   FEEDBACK_COMPOSER_KIND,
   isAppToolCall,
-  maximumFeedbackDraftLength,
   normalizeSession,
   REALTIME_CLIENT_EVENT,
-  REALTIME_TOOL,
   type RealtimeFunctionCall,
-  realtimeInstructions,
   SESSION_LIST_SORT,
   SESSION_LOCATION,
   SESSION_STATUS,
 } from "../src";
+import { appToggleValue } from "../src/guide";
+import { maximumFeedbackDraftLength, realtimeInstructions } from "../src/realtime-protocol";
+import { REALTIME_TOOL } from "../src/realtime-tools";
 
 const GUIDE: AppGuideSnapshot = {
   facts: [

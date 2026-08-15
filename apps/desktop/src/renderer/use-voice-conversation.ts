@@ -2,6 +2,8 @@ import {
   type AppGuideSnapshot,
   ATTENTION_SPEECH_SOURCE,
   type AttentionSpeech,
+  type CarriedSessionAction,
+  dispatchByKind,
   EMPTY_APP_GUIDE,
   type NormalizedSession,
   type ObservedWorkspaceProject,
@@ -9,6 +11,7 @@ import {
   type RealtimeStatus,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
+  SESSION_TOOL_KIND,
   type SessionIdentity,
   type TrackedIssue,
 } from "@sidecar/core";
@@ -317,29 +320,31 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       // The same bridge calls the rows use — the composer, the chips, and the
       // press that opens a session: a spoken ask is a third way to ask for the
       // same act, behind the same gauntlet in the main process.
-      carryAction: (action) =>
-        action.kind === "message"
-          ? window.sidecar.sendSessionMessage(action.identity, action.text)
-          : action.kind === "control"
-            ? window.sidecar.executeSessionControl(action.identity, action.control.id)
-            : action.kind === "create-workspace"
-              ? window.sidecar.createSessionWorkspace(
-                  action.providerId,
-                  action.providerProjectId,
-                  action.name,
-                  action.task,
-                  action.agentSelection,
-                )
-              : action.kind === "add-agent"
-                ? window.sidecar.addWorkspaceAgent(
-                    action.identity,
-                    action.agent,
-                    action.name,
-                    action.task,
-                    action.model,
-                    action.effort,
-                  )
-                : optionsRef.current.openSession(action.identity),
+      carryAction: (action: CarriedSessionAction) =>
+        dispatchByKind(action, {
+          [SESSION_TOOL_KIND.MESSAGE]: (act) =>
+            window.sidecar.sendSessionMessage(act.identity, act.text),
+          [SESSION_TOOL_KIND.CONTROL]: (act) =>
+            window.sidecar.executeSessionControl(act.identity, act.control.id),
+          [SESSION_TOOL_KIND.CREATE_WORKSPACE]: (act) =>
+            window.sidecar.createSessionWorkspace(
+              act.providerId,
+              act.providerProjectId,
+              act.name,
+              act.task,
+              act.agentSelection,
+            ),
+          [SESSION_TOOL_KIND.ADD_AGENT]: (act) =>
+            window.sidecar.addWorkspaceAgent(
+              act.identity,
+              act.agent,
+              act.name,
+              act.task,
+              act.model,
+              act.effort,
+            ),
+          [SESSION_TOOL_KIND.OPEN]: (act) => optionsRef.current.openSession(act.identity),
+        }),
       // The asks about Luke himself — a settings change, the panel shown —
       // behind the same gauntlet: validated against the guide before this is
       // called, and performed by the same handlers the panel's controls use.

@@ -17,20 +17,15 @@ import {
   issueCommentText,
   isWorkspaceAgentCapableAdapter,
   isWorkspaceCapableAdapter,
-  MOTION_DURATION_MS,
-  type NativeNotchGeometry,
   type NormalizedSession,
   normalizeObservedWorkspaceProjects,
   normalizeTrackedIssue,
   type ObservedWorkspaceProject,
-  type PanelFormFactor,
   PROVIDER_ACT_RESULT_STATUS,
   type ProviderControlResult,
   type ProviderMessageResult,
   type ProviderWorkspaceResult,
-  positionNotchWindow,
   realtimeMintExplanation,
-  resolveNotchGeometry,
   SessionAttentionReviewer,
   type SessionIdentity,
   SessionNoticeTracker,
@@ -46,14 +41,11 @@ import {
 import {
   app,
   BrowserWindow,
-  type Display,
-  globalShortcut,
   type IpcMainEvent,
   type IpcMainInvokeEvent,
   ipcMain,
   Menu,
   nativeImage,
-  nativeTheme,
   powerMonitor,
   safeStorage,
   screen,
@@ -69,11 +61,11 @@ import { CopilotSessionAdapter } from "./copilot-adapter";
 import { CURSOR_PROVIDER, CursorSessionAdapter } from "./cursor-adapter";
 import { CursorLocalSessionAdapter } from "./cursor-local-adapter";
 import { DevinSessionAdapter } from "./devin-adapter";
+import { DockPresence } from "./dock-presence";
 import { feedbackDeliveryFromEnvironment } from "./feedback-delivery";
+import { HOTKEY_RANK, HotkeyRegistrar } from "./hotkey-registrar";
 import { JulesSessionAdapter } from "./jules-adapter";
 import { LinearIssueTracker } from "./linear-tracker";
-import { readMacScreenGeometry } from "./macos-screen-geometry";
-import { keepWindowStationary } from "./macos-stationary-window";
 import { MediaDuckController } from "./media-duck";
 import { openAiAttentionEvaluator } from "./openai-attention-evaluator";
 import {
@@ -83,20 +75,19 @@ import {
 } from "./openai-realtime-credentials";
 import { OpenCodeSessionAdapter } from "./opencode-adapter";
 import { OutputVolumeWatcher } from "./output-volume";
+import { PanelManager } from "./panel-manager";
+import { runModeFor } from "./run-mode";
 import { sessionNoticeSpeech } from "./session-notifications";
+import { createSettingsHandler, SettingsRefusal } from "./settings-handler";
 import { SettingsStore } from "./settings-store";
 import {
   APP_SETTING_DEFAULTS,
   type AppBootstrap,
-  type AppSettings,
   channels,
-  type DisplayDiagnostic,
   type MicrophoneStatus,
   type OutputAudioState,
   SESSION_OPEN_RESULT_STATUS,
   type SessionOpenResult,
-  type SettingsUpdateResult,
-  type WindowMode,
 } from "./shared/contracts";
 import {
   CREDENTIAL_PROVIDER_ID,
@@ -112,19 +103,8 @@ import {
   feedbackSubmission,
   isFeedbackKind,
 } from "./shared/feedback";
-import {
-  askHotkeyCandidates,
-  askHotkeyReport,
-  parseVoiceHotkey,
-  stopHotkeyCandidates,
-  stopHotkeyReport,
-  VOICE_HOTKEY_ABSENCE,
-  type VoiceHotkeyAbsence,
-  voiceHotkeyCandidates,
-  voiceHotkeyReport,
-} from "./shared/voice-hotkey";
+import { parseVoiceHotkey } from "./shared/voice-hotkey";
 import { isWorkspaceAgentSelection } from "./shared/workspace-agents";
-import { TalkKeyWatcher } from "./talk-key";
 
 const captureOutput = argumentValue("--capture-evidence");
 const profile = argumentValue("--profile") ?? "idle";
@@ -139,6 +119,7 @@ const captureMode = captureOutput !== undefined;
 // `--fixture` is enough on its own to make a run deterministic: the panel renders
 // the fixture snapshot and no provider is observed. Capture runs always imply it.
 const fixtureMode = captureMode || fixtureName !== undefined;
+const runMode = runModeFor({ capture: captureMode, fixture: fixtureName !== undefined });
 const SESSION_REFRESH_INTERVAL_MS = 5_000;
 const sessionRegistry = new InMemorySessionRegistry();
 // `directory` and the cipher are read lazily so the store can be declared before
@@ -147,7 +128,7 @@ const settingsStore = new SettingsStore({
   directory: () => app.getPath("userData"),
   // A fixture or evidence run refuses the credentials it resolves, so nothing is
   // reported as available that would not actually happen.
-  credentialsUsable: !fixtureMode,
+  credentialsUsable: runMode.observesProviders,
   cipher: {
     isAvailable: () => safeStorage.isEncryptionAvailable(),
     encrypt: (plainText) => safeStorage.encryptString(plainText),
@@ -256,6 +237,34 @@ const feedbackDelivery = feedbackDeliveryFromEnvironment();
 let outputAudio: OutputAudioState | undefined;
 let outputVolumeWatcher: OutputVolumeWatcher | undefined;
 
+function rendererUrl(): string {
+  return pathToFileURL(path.join(__dirname, "renderer", "index.html")).href;
+}
+
+const panels = new PanelManager({
+  runMode,
+  mediaDuck,
+  preloadPath: path.join(__dirname, "preload.js"),
+  rendererHtmlPath: path.join(__dirname, "renderer", "index.html"),
+  rendererUrl: rendererUrl(),
+});
+const hotkeys = new HotkeyRegistrar({
+  registersGlobalKeys: runMode.registersGlobalKeys,
+  hasCredentials: () => realtimeCredentials !== undefined,
+  host: {
+    voiceHost: () => panels.voiceHost(),
+    displayIdFor: (sender) => panels.displayIdFor(sender),
+    setMode: (displayId, mode, requestFocus) => {
+      panels.setMode(displayId, mode, requestFocus);
+    },
+    broadcast: (channel, payload) => panels.broadcast(channel, payload),
+  },
+});
+const dock = new DockPresence({
+  focusExpanded: (displayId) => panels.focusExpanded(displayId),
+  iconDirectory: path.join(__dirname, "icon"),
+});
+
 /**
  * Starts watching whether the Mac's output would let Luke be heard. Not in a
  * fixture or capture run: evidence must not read the machine it happens to
@@ -263,13 +272,11 @@ let outputVolumeWatcher: OutputVolumeWatcher | undefined;
  * profile asks the renderer for the state directly instead.
  */
 function startOutputVolumeWatch(): void {
-  if (fixtureMode) return;
+  if (!runMode.observesProviders) return;
   const send = (state: OutputAudioState | undefined) => {
     outputAudio = state;
     // Every display's panel captions the same voice, so every one is told.
-    for (const window of panelWindows.values()) {
-      window.webContents.send(channels.outputAudioChanged, state);
-    }
+    panels.broadcast(channels.outputAudioChanged, state);
   };
   outputVolumeWatcher = new OutputVolumeWatcher({
     onState: send,
@@ -278,323 +285,7 @@ function startOutputVolumeWatch(): void {
   if (!outputVolumeWatcher.start()) outputVolumeWatcher = undefined;
 }
 
-let voiceHotkey: string | undefined;
-/**
- * The chord the user chose over the defaults, if any. Read from the settings
- * file before the key is first registered, and moved by the settings panel
- * afterwards; the defaults stay behind it as fallbacks either way.
- */
-let chosenVoiceHotkey: string | undefined;
-let talkKeyWatcher: TalkKeyWatcher | undefined;
-/**
- * Whether the key reports being let go of. The helper does and the Electron
- * fallback cannot, and that is the difference between holding a turn and
- * toggling one — so the panel is told which key it actually has rather than
- * describing the one it hoped for.
- */
-let voiceHotkeyHeld = true;
-// Only read when no key was registered, so it starts at the case that needs no
-// explaining beyond itself: every candidate was refused.
-let voiceHotkeyAbsence: VoiceHotkeyAbsence = VOICE_HOTKEY_ABSENCE.ALREADY_OWNED;
-
-/**
- * Registers the talk key with the system so it answers from whatever app is
- * frontmost. Electron reports only the press and never the release, so the key
- * is a toggle rather than a hold — which is also what lets one key interrupt a
- * reply that is already playing.
- */
-function registerVoiceHotkey(): void {
-  if (captureMode) {
-    voiceHotkeyAbsence = VOICE_HOTKEY_ABSENCE.CAPTURE_RUN;
-    reportVoiceHotkey();
-    return;
-  }
-  // Taking a system-wide key for a feature that cannot run would make every
-  // press somewhere else in macOS do nothing, visibly.
-  if (!realtimeCredentials) {
-    voiceHotkeyAbsence = VOICE_HOTKEY_ABSENCE.NO_CREDENTIAL;
-    reportVoiceHotkey();
-    return;
-  }
-  // The helper first, because it is the only one of the two that reports the
-  // key being let go of, and a key you hold is the whole point.
-  talkKeyWatcher = new TalkKeyWatcher({
-    onPress: () => voiceHostWindow()?.webContents.send(channels.voiceHotkeyPress),
-    onRelease: () => voiceHostWindow()?.webContents.send(channels.voiceHotkeyRelease),
-    onRegistered: (accelerator) => {
-      voiceHotkey = accelerator;
-      reportVoiceHotkey();
-      sendVoiceHotkey();
-    },
-    onUnavailable: () => {
-      talkKeyWatcher = undefined;
-      registerToggleHotkey();
-      reportVoiceHotkey();
-      sendVoiceHotkey();
-    },
-  });
-  if (talkKeyWatcher.start(voiceHotkeyCandidates(chosenVoiceHotkey))) return;
-  talkKeyWatcher = undefined;
-  registerToggleHotkey();
-  reportVoiceHotkey();
-}
-
-/**
- * The talk key without a release: a press toggles the turn instead of holding
- * it. This is what answers when the helper cannot — another platform, a build
- * without it — and it is a lesser thing rather than a broken one, so it is
- * worth standing up rather than leaving the user with no key at all.
- */
-function registerToggleHotkey(): void {
-  for (const accelerator of voiceHotkeyCandidates(chosenVoiceHotkey)) {
-    const registered = globalShortcut.register(accelerator, () => {
-      voiceHostWindow()?.webContents.send(channels.voiceHotkeyPress);
-      // A toggle has only the one edge, so it reports a release immediately and
-      // one short enough to read as a tap. Every press then latches or ends a
-      // turn, which is the old behaviour exactly.
-      voiceHostWindow()?.webContents.send(channels.voiceHotkeyRelease);
-    });
-    if (!registered) continue;
-    voiceHotkey = accelerator;
-    voiceHotkeyHeld = false;
-    return;
-  }
-  voiceHotkeyAbsence = VOICE_HOTKEY_ABSENCE.ALREADY_OWNED;
-}
-
-let askHotkey: string | undefined;
-let chosenAskHotkey: string | undefined;
-
-/**
- * Registers the key that summons the ask field from whatever app is frontmost,
- * on the talk key's own terms: never during a capture run, and never for a
- * conversation that cannot open — a system-wide key that answers nothing is a
- * key taken from every other app for no reason. Electron's registration is
- * enough here, because a summons has no release edge to hear.
- *
- * The press does two things in order: stands the panel up focused, then asks
- * the renderer to put the caret in the field — or, when the caret is already
- * there, the renderer reads the same press as the dismissal, so one key
- * summons and puts away like every launcher does. The panel that answers is
- * the voice host's, the same window every other app-level ask lands in.
- */
-function registerAskHotkey(): void {
-  // Re-runnable: moving the talk key lets everything go and registers afresh,
-  // and a key that could not be re-taken must not still be claimed anywhere.
-  askHotkey = undefined;
-  if (captureMode) {
-    process.stderr.write(`${askHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.CAPTURE_RUN)}\n`);
-    return;
-  }
-  if (!realtimeCredentials) {
-    process.stderr.write(`${askHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.NO_CREDENTIAL)}\n`);
-    return;
-  }
-  // Every chord the talk key could sit on is taken, not just the one it has
-  // announced: its helper falls back through its own candidates after this
-  // runs, so a chord it merely might take is already not the ask key's to
-  // have — the two Luke keys must never compete.
-  for (const accelerator of askHotkeyCandidates(chosenAskHotkey, [
-    ...voiceHotkeyCandidates(chosenVoiceHotkey),
-    voiceHotkey,
-  ])) {
-    const registered = globalShortcut.register(accelerator, () => {
-      const host = voiceHostWindow();
-      const displayId = host ? displayIdFor(host.webContents) : undefined;
-      if (displayId === undefined) return;
-      setWindowMode(displayId, "expanded", true);
-      host?.webContents.send(channels.lifecycle, "ask:focus");
-    });
-    if (!registered) continue;
-    askHotkey = accelerator;
-    process.stderr.write(`${askHotkeyReport(askHotkey, VOICE_HOTKEY_ABSENCE.ALREADY_OWNED)}\n`);
-    return;
-  }
-  process.stderr.write(`${askHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.ALREADY_OWNED)}\n`);
-}
-
-/**
- * Tells every renderer the ask key it should be teaching, whenever that
- * changes. The raw accelerator travels, as in bootstrap: the renderer needs
- * both its spellings, and an absent key clears the hint rather than leaving a
- * keycap up for a chord that answers nothing.
- */
-function sendAskHotkey(): void {
-  for (const window of panelWindows.values()) {
-    window.webContents.send(channels.askHotkeyChanged, askHotkey);
-  }
-}
-
-let stopHotkey: string | undefined;
-let chosenStopHotkey: string | undefined;
-
-/**
- * Registers the key that stops a reply mid-sentence from whatever app is
- * frontmost, on the ask key's exact terms: never during a capture run, never
- * without a credential, and never on a chord the other two Luke keys could
- * sit on — three keys must not compete any more than two, and the stop key
- * is the one that yields, because it alone has Escape standing behind it.
- * Electron's registration is enough here, because a stop has no release edge
- * to hear. The press carries no decision of its own: the renderer's session
- * answers whether there is a reply to stop, exactly as it answers Escape.
- */
-function registerStopHotkey(): void {
-  // Re-runnable on the ask key's terms: moving another key registers afresh,
-  // and a chord that could not be re-taken must not still be claimed anywhere.
-  stopHotkey = undefined;
-  if (captureMode) {
-    process.stderr.write(`${stopHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.CAPTURE_RUN)}\n`);
-    return;
-  }
-  if (!realtimeCredentials) {
-    process.stderr.write(`${stopHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.NO_CREDENTIAL)}\n`);
-    return;
-  }
-  // Every chord the other two keys could sit on is taken, not just the ones
-  // they have announced: the talk key's helper falls back through its own
-  // candidates on its own clock, and the ask key re-registers behind it.
-  for (const accelerator of stopHotkeyCandidates(chosenStopHotkey, [
-    ...voiceHotkeyCandidates(chosenVoiceHotkey),
-    voiceHotkey,
-    ...askHotkeyCandidates(chosenAskHotkey, []),
-    askHotkey,
-  ])) {
-    const registered = globalShortcut.register(accelerator, () => {
-      voiceHostWindow()?.webContents.send(channels.stopHotkeyPress);
-    });
-    if (!registered) continue;
-    stopHotkey = accelerator;
-    process.stderr.write(`${stopHotkeyReport(stopHotkey, VOICE_HOTKEY_ABSENCE.ALREADY_OWNED)}\n`);
-    return;
-  }
-  process.stderr.write(`${stopHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.ALREADY_OWNED)}\n`);
-}
-
-/**
- * Tells every renderer the stop key it should be describing, whenever that
- * changes. An absence travels too, for the guide's sake: a chord that answers
- * nothing must not be one Luke claims to have.
- */
-function sendStopHotkey(): void {
-  for (const window of panelWindows.values()) {
-    window.webContents.send(channels.stopHotkeyChanged, stopHotkey);
-  }
-}
-
-/**
- * Moves the ask key to whatever `chosenAskHotkey` now says, while the app is
- * running. Only the ask key's own chord is let go of — the talk key's
- * registration must not flicker for a change that is none of its business —
- * and unlike the talk key there is no helper exit to wait for: Electron
- * releases a chord the moment it is asked to. The stop key is let go of and
- * re-taken behind it, because the chord it may have is decided by where the
- * ask key lands: an ask key moving onto Option-S must win it, and one moving
- * off must give it back.
- */
-function applyAskHotkey(): void {
-  if (askHotkey) globalShortcut.unregister(askHotkey);
-  if (stopHotkey) globalShortcut.unregister(stopHotkey);
-  registerAskHotkey();
-  sendAskHotkey();
-  registerStopHotkey();
-  sendStopHotkey();
-}
-
-/**
- * Moves the stop key to whatever `chosenStopHotkey` now says, while the app
- * is running. Only its own chord is let go of: the stop key is the bottom of
- * the pecking order, so where it lands is decided by the other two keys and
- * moving it can never oblige either of them to move.
- */
-function applyStopHotkey(): void {
-  if (stopHotkey) globalShortcut.unregister(stopHotkey);
-  registerStopHotkey();
-  sendStopHotkey();
-}
-
-/**
- * Tells every renderer the key it should be showing, whenever that changes.
- * The accelerator rather than its label, on the ask key's terms: the renderer
- * draws the chord as its separate keys and says it as one word, and only the
- * accelerator produces both.
- */
-function sendVoiceHotkey(): void {
-  for (const window of panelWindows.values()) {
-    window.webContents.send(channels.voiceHotkeyChanged, {
-      ...(voiceHotkey ? { hotkey: voiceHotkey } : {}),
-      held: voiceHotkeyHeld,
-    });
-  }
-}
-
-function reportVoiceHotkey(): void {
-  process.stderr.write(`${voiceHotkeyReport(voiceHotkey, voiceHotkeyAbsence)}\n`);
-}
-
-/**
- * Moves the talk key to whatever `chosenVoiceHotkey` now says, while the app
- * is running. The old key is let go of in full before the new one is asked
- * for, so the two can never race for the same chord — and letting everything
- * go takes the ask key down with it, because `unregisterAll` is exactly that,
- * so the ask key is registered afresh once the talk key has settled. Letting
- * go means waiting: the system releases the old helper's chord when its
- * process exits, not when the kill is asked for, and the defaults sit in both
- * helpers' candidate lists — a successor that starts too early is refused the
- * very fallback it was promised. The panel keeps showing the old key until
- * the new one actually answers: the helper announces its own registration
- * over stdout, and every path without a helper is decided by the time
- * `registerVoiceHotkey` returns.
- */
-async function applyVoiceHotkey(): Promise<void> {
-  const released = talkKeyWatcher?.stop();
-  talkKeyWatcher = undefined;
-  globalShortcut.unregisterAll();
-  await released;
-  voiceHotkey = undefined;
-  voiceHotkeyHeld = true;
-  voiceHotkeyAbsence = VOICE_HOTKEY_ABSENCE.ALREADY_OWNED;
-  registerVoiceHotkey();
-  if (!talkKeyWatcher) sendVoiceHotkey();
-  // The ask key went down with `unregisterAll`, and the chord it can have may
-  // itself have changed — the talk key may have moved onto or off of one of
-  // its candidates — so it is re-taken now and the panel told what it teaches.
-  registerAskHotkey();
-  sendAskHotkey();
-  // The stop key went down with it and yields to both, so it goes last: a
-  // talk key moving onto Option-S must win the chord, and one moving off must
-  // give it back.
-  registerStopHotkey();
-  sendStopHotkey();
-}
-
-/** The mode every window is born in; only the dev and capture flags change it. */
-const initialWindowMode: WindowMode = captureMode
-  ? process.argv.includes("--compact")
-    ? "compact"
-    : "expanded"
-  : process.argv.includes("--expanded")
-    ? "expanded"
-    : "compact";
-/**
- * One panel window per display Luke stands on, keyed by the display's id, each
- * with its own mode: a panel opened on one monitor must not resize the capsule
- * on another. The collapse timers ride the same key, because a collapse is a
- * single window's affair.
- */
-const panelWindows = new Map<number, BrowserWindow>();
-const windowModes = new Map<number, WindowMode>();
-const collapseTimers = new Map<number, NodeJS.Timeout>();
 let tray: Tray | undefined;
-/**
- * Whether Luke stands on every display, mirroring the settings file the way
- * the minter mirrors the chosen voice: read once before any panel exists,
- * updated by the same handler that stores a new choice, so every layout
- * decision stays synchronous. Off means the system's main display alone.
- */
-let showOnAllDisplays = false;
-/** The chosen form for displays without a housing, mirrored the same way. */
-let panelFormFactor: PanelFormFactor = DEFAULT_PANEL_FORM_FACTOR;
-let nativeScreens = new Map<number, NativeNotchGeometry>();
 let sessionRefreshTimer: NodeJS.Timeout | undefined;
 let sessionRefreshRunning = false;
 let attentionReviewRunning = false;
@@ -617,310 +308,12 @@ function broadcastWorkspaceProjects(): void {
   const serialized = JSON.stringify(projects);
   if (serialized === lastWorkspaceProjects) return;
   lastWorkspaceProjects = serialized;
-  for (const window of panelWindows.values()) {
-    window.webContents.send(channels.workspaceProjectsChanged, projects);
-  }
+  panels.broadcast(channels.workspaceProjectsChanged, projects);
 }
 
 function argumentValue(name: string): string | undefined {
   const index = process.argv.indexOf(name);
   return index >= 0 ? process.argv[index + 1] : undefined;
-}
-
-/**
- * Where Luke stands right now: every connected display when asked to stand on
- * all of them, the system's main display alone otherwise. A capture run stays
- * on the main display regardless, where its fixture housing is pinned.
- */
-function effectiveDisplayIds(): number[] {
-  if (!captureMode && showOnAllDisplays) {
-    return screen.getAllDisplays().map((display) => display.id);
-  }
-  return [screen.getPrimaryDisplay().id];
-}
-
-function displayById(displayId: number): Display | undefined {
-  return screen.getAllDisplays().find((display) => display.id === displayId);
-}
-
-function windowModeFor(displayId: number): WindowMode {
-  return windowModes.get(displayId) ?? initialWindowMode;
-}
-
-function layoutFor(display: Display, mode: WindowMode) {
-  return positionNotchWindow(display, mode, nativeScreens.get(display.id), panelFormFactor);
-}
-
-function displayDiagnostic(display: Display): DisplayDiagnostic {
-  return {
-    id: display.id,
-    label: display.label || `Display ${display.id}`,
-    bounds: display.bounds,
-    workArea: display.workArea,
-    scaleFactor: display.scaleFactor,
-    notch: resolveNotchGeometry(display, nativeScreens.get(display.id), panelFormFactor),
-  };
-}
-
-/**
- * The one window a spoken conversation lives in. Voice is a single thing —
- * one microphone, one reply, one face speaking — so the talk key and the
- * attention readouts go to a single renderer rather than opening one
- * conversation per display: the main display's window when Luke stands there,
- * else the first window standing anywhere.
- */
-function voiceHostWindow(): BrowserWindow | undefined {
-  const primary = panelWindows.get(screen.getPrimaryDisplay().id);
-  if (primary && !primary.isDestroyed()) return primary;
-  for (const window of panelWindows.values()) {
-    if (!window.isDestroyed()) return window;
-  }
-  return undefined;
-}
-
-/** The display a renderer message came from, so each window answers for itself. */
-function displayIdFor(sender: Electron.WebContents): number | undefined {
-  for (const [displayId, window] of panelWindows) {
-    if (!window.isDestroyed() && window.webContents === sender) return displayId;
-  }
-  return undefined;
-}
-
-function refreshNativeGeometry(): void {
-  nativeScreens = readMacScreenGeometry();
-  if (captureMode) {
-    const display = screen.getPrimaryDisplay();
-    nativeScreens.set(display.id, {
-      displayId: display.id,
-      safeAreaTop: 38,
-      notchWidth: 210,
-      hasNotch: true,
-      source: "fixture",
-    });
-  }
-}
-
-/**
- * Resizes without AppKit's frame animation. An animated setBounds re-lays out
- * the renderer at a new viewport width on every frame — and its duration scales
- * with the distance moved, so a 482px growth ran far longer than the panel's
- * own motion. The window now snaps to the size the mode needs and the renderer
- * animates the capsule into the panel inside it, where the viewport is constant
- * and the work stays on the compositor.
- */
-function positionPanel(displayId: number): void {
-  const window = panelWindows.get(displayId);
-  if (!window || window.isDestroyed()) return;
-  const display = displayById(displayId);
-  // A window whose display has gone is the reconciler's to take down, not
-  // this function's to guess a home for.
-  if (!display) return;
-  const layout = layoutFor(display, windowModeFor(displayId));
-  window.setBounds({
-    x: layout.x,
-    y: layout.y,
-    width: layout.width,
-    height: layout.height,
-  });
-  window.webContents.send(channels.displayChanged, displayDiagnostic(display));
-}
-
-function positionPanels(): void {
-  for (const displayId of panelWindows.keys()) positionPanel(displayId);
-}
-
-/**
- * Hands a fresh settings snapshot to every window but the one that asked —
- * that one already holds it in its reply, and must redraw from the reply
- * rather than race a broadcast. One window's change would otherwise leave
- * every other window's rows and guide describing a state the store no longer
- * holds. A change with no asking window — the first workspace creation saving
- * its provider as the default — names no exception and reaches them all.
- */
-function broadcastSettings(settings: AppSettings, except?: Electron.WebContents): void {
-  for (const window of panelWindows.values()) {
-    if (window.isDestroyed() || window.webContents === except) continue;
-    window.webContents.send(channels.settingsChanged, settings);
-  }
-}
-
-/**
- * Makes the windows match the chosen displays: one raised on every chosen
- * display that is connected, none anywhere else. A window whose display went
- * away is moved to a display that needs one rather than destroyed beside a
- * fresh create — a swap of the main display must carry the conversation and
- * the panel's state across, not drop them on the floor. Raising before razing
- * is load-bearing for what remains — a swap must never pass through zero
- * windows, because all windows closed is how this process decides it is done.
- * Everything that changes what the set should be lands here: a switch
- * pressed, a display plugged or unplugged, the stored choice read at launch.
- */
-function reconcilePanels(): void {
-  const wanted = effectiveDisplayIds();
-  const wantedSet = new Set(wanted);
-  const missing = wanted.filter((displayId) => !panelWindows.has(displayId));
-  const excess = [...panelWindows.keys()].filter((displayId) => !wantedSet.has(displayId));
-  // Pair each display that needs a window with a window that lost its display.
-  while (missing.length > 0 && excess.length > 0) {
-    const toDisplayId = missing.shift();
-    const fromDisplayId = excess.shift();
-    if (toDisplayId === undefined || fromDisplayId === undefined) break;
-    rebindPanel(fromDisplayId, toDisplayId);
-  }
-  for (const displayId of missing) createPanel(displayId);
-  for (const displayId of excess) {
-    const window = panelWindows.get(displayId);
-    panelWindows.delete(displayId);
-    windowModes.delete(displayId);
-    clearCollapseTimer(displayId);
-    // A window taken down takes its exchange report with it, so a host that
-    // goes mid-conversation releases the duck rather than pinning it forever.
-    voiceExchanges.delete(displayId);
-    applyVoiceExchanges();
-    window?.destroy();
-  }
-  positionPanels();
-}
-
-/**
- * Moves a living window to another display, state and all: its mode, its
- * collapse-in-flight, its exchange report, and the renderer behind it — which
- * learns its new ground from the `displayChanged` the repositioning sends,
- * exactly as it would for a geometry change in place.
- */
-function rebindPanel(fromDisplayId: number, toDisplayId: number): void {
-  const window = panelWindows.get(fromDisplayId);
-  if (!window) return;
-  panelWindows.delete(fromDisplayId);
-  panelWindows.set(toDisplayId, window);
-  windowModes.set(toDisplayId, windowModeFor(fromDisplayId));
-  windowModes.delete(fromDisplayId);
-  // The timer's closure names the old display; the reposition below redraws
-  // whatever a cancelled collapse would have.
-  clearCollapseTimer(fromDisplayId);
-  const exchange = voiceExchanges.get(fromDisplayId);
-  voiceExchanges.delete(fromDisplayId);
-  if (exchange !== undefined) voiceExchanges.set(toDisplayId, exchange);
-  applyVoiceExchanges();
-}
-
-function clearCollapseTimer(displayId: number): void {
-  const timer = collapseTimers.get(displayId);
-  if (!timer) return;
-  clearTimeout(timer);
-  collapseTimers.delete(displayId);
-}
-
-function configurePanelBehavior(window: BrowserWindow): void {
-  window.setAlwaysOnTop(true, "pop-up-menu");
-  if (process.platform === "darwin") {
-    window.setVisibleOnAllWorkspaces(true, {
-      visibleOnFullScreen: true,
-      skipTransformProcessType: true,
-    });
-    window.setHiddenInMissionControl(true);
-    window.setWindowButtonVisibility(false);
-    keepWindowStationary(window);
-  }
-}
-
-/**
- * Brings one panel forward as the key window. An accessory app has no Dock
- * presence, so the app itself has to come forward before one of its windows can
- * take keyboard focus.
- */
-function focusPanelWindow(window: BrowserWindow | undefined): void {
-  if (!window || window.isDestroyed() || captureMode) return;
-  if (process.platform === "darwin") app.focus({ steal: true });
-  window.show();
-  window.focus();
-}
-
-/**
- * The expanded panel owed the keyboard: the one that asked, when the asker is
- * known and still expanded, else whichever panel stands expanded. With two
- * panels open, focus must return to the one the user was typing in rather
- * than to whichever the map happens to list first.
- */
-function focusExpandedPanel(preferredDisplayId?: number): void {
-  if (preferredDisplayId !== undefined && windowModeFor(preferredDisplayId) === "expanded") {
-    const preferred = panelWindows.get(preferredDisplayId);
-    if (preferred && !preferred.isDestroyed()) {
-      focusPanelWindow(preferred);
-      return;
-    }
-  }
-  for (const [displayId, window] of panelWindows) {
-    if (windowModeFor(displayId) !== "expanded") continue;
-    focusPanelWindow(window);
-    return;
-  }
-}
-
-/**
- * Which windows hold a live spoken exchange, and the single answer the media
- * duck is given: live anywhere is live. Only the voice host ever actually
- * opens one, but every window reports, so the union is what keeps a
- * bystander's idle from ending the host's exchange.
- */
-const voiceExchanges = new Map<number, boolean>();
-
-function applyVoiceExchanges(): void {
-  mediaDuck.setExchangeActive([...voiceExchanges.values()].some(Boolean));
-}
-
-/**
- * `--duration-exit` plus `--duration-shape` in the shared motion tokens: the
- * content leaves, then the surface closes on the spring, and only then may the
- * window follow.
- */
-const COLLAPSE_ANIMATION_MS = MOTION_DURATION_MS.EXIT + MOTION_DURATION_MS.SHAPE;
-
-function collapseDelay(): number {
-  if (captureMode) return 0;
-  return systemPreferences.getAnimationSettings().prefersReducedMotion ? 0 : COLLAPSE_ANIMATION_MS;
-}
-
-/**
- * The two directions are sequenced differently, and the ordering lives here so
- * every caller gets it — the panel, the tray, and the motion recorder alike.
- * Growing needs the window first, or the panel has nowhere to unfold into.
- * Shrinking needs the capsule drawn first, or the window clips the panel out
- * from under its own collapse. One display's window at a time: a panel opened
- * on one monitor is no reason to resize the capsule on another.
- */
-function setWindowMode(displayId: number, mode: WindowMode, requestFocus: boolean): WindowMode {
-  windowModes.set(displayId, mode);
-  const window = panelWindows.get(displayId);
-  if (!window || window.isDestroyed()) return mode;
-
-  const expanded = mode === "expanded";
-  window.setFocusable(expanded && !captureMode);
-  clearCollapseTimer(displayId);
-  if (expanded) {
-    positionPanel(displayId);
-    window.webContents.send(channels.lifecycle, `mode:${mode}`);
-  } else {
-    window.webContents.send(channels.lifecycle, `mode:${mode}`);
-    const delay = collapseDelay();
-    if (delay === 0) positionPanel(displayId);
-    else {
-      collapseTimers.set(
-        displayId,
-        setTimeout(() => {
-          collapseTimers.delete(displayId);
-          if (windowModeFor(displayId) === "compact") positionPanel(displayId);
-        }, delay),
-      );
-    }
-  }
-
-  if (expanded && requestFocus && !captureMode) {
-    focusPanelWindow(window);
-  } else {
-    window.showInactive();
-  }
-  return mode;
 }
 
 function microphoneStatus(): MicrophoneStatus {
@@ -934,10 +327,6 @@ async function requestMicrophone(): Promise<MicrophoneStatus> {
     await systemPreferences.askForMediaAccess("microphone");
   }
   return microphoneStatus();
-}
-
-function rendererUrl(): string {
-  return pathToFileURL(path.join(__dirname, "renderer", "index.html")).href;
 }
 
 function trustedSender(event: IpcMainEvent | IpcMainInvokeEvent): boolean {
@@ -1002,7 +391,10 @@ function reportVoiceAvailability(apiKeyConfigured: boolean): void {
     );
     return;
   }
-  const report = unavailableRealtimeDiagnostics({ fixtureMode, apiKeyConfigured });
+  const report = unavailableRealtimeDiagnostics({
+    fixtureMode: !runMode.sendsNetwork,
+    apiKeyConfigured,
+  });
   process.stderr.write(
     `Luke voice: unavailable — ${realtimeMintExplanation(report.lastOutcome)}\n`,
   );
@@ -1016,16 +408,16 @@ function reportVoiceAvailability(apiKeyConfigured: boolean): void {
  * where it was pasted rather than on the next launch — and a key deleted there
  * takes voice away just as immediately, ephemeral secret included. The talk key
  * is not moved here: only a change while the app is running needs that, and
- * `applyVoiceHotkey` is what does it.
+ * `hotkeys.reapply` is what does it.
  */
 async function applyVoiceCredential(): Promise<void> {
   // A fixture run does not ask for the key at all: reading a stored one means a
   // Keychain decrypt, which a run that would refuse to use it has no business
   // asking for. That is also why the report says no key resolved — for this run,
   // none did.
-  const apiKey = fixtureMode
-    ? undefined
-    : await settingsStore.readApiKey(VOICE_CREDENTIAL_PROVIDER_ID);
+  const apiKey = runMode.sendsNetwork
+    ? await settingsStore.readApiKey(VOICE_CREDENTIAL_PROVIDER_ID)
+    : undefined;
   const evaluator = openAiAttentionEvaluator(apiKey);
   attentionReviewer = evaluator
     ? new SessionAttentionReviewer({
@@ -1050,65 +442,6 @@ async function applyVoiceCredential(): Promise<void> {
 }
 
 /**
- * A validate step that answers with words instead of a value. The refusal is
- * its own type so the factory can tell it from anything a setting might one
- * day validate to — a shape sniffed for a `settings` key would turn such a
- * value into a silent no-op the day the two collide.
- */
-class SettingsRefusal {
-  constructor(readonly result: SettingsUpdateResult) {}
-}
-
-/**
- * One write path for every settings change the renderer can ask for. Trust,
- * catch, snapshot, and broadcast are identical on every channel — only what
- * is valid, what is stored, and what the write sets in motion differ. A
- * malformed request still throws: that is a broken caller, not a choice the
- * user can correct.
- */
-function registerSettingHandler<Value>(
-  channel: string,
-  {
-    validate,
-    save,
-    apply,
-    refusal,
-  }: {
-    validate: (...args: unknown[]) => Value | SettingsRefusal | Promise<Value | SettingsRefusal>;
-    save: (value: Value) => Promise<SettingsUpdateResult>;
-    apply?: (
-      result: SettingsUpdateResult,
-      value: Value,
-      event: IpcMainInvokeEvent,
-    ) => void | Promise<void>;
-    refusal: string;
-  },
-): void {
-  ipcMain.handle(channel, async (event, ...args: unknown[]): Promise<SettingsUpdateResult> => {
-    if (!trustedSender(event)) throw new Error("Untrusted renderer");
-    const value = await validate(...args);
-    // A validate step that already answered — a chord spoken for, refused with
-    // words — leaves without a write, a side effect, or a broadcast.
-    if (value instanceof SettingsRefusal) {
-      return value.result;
-    }
-    try {
-      const result = await save(value);
-      await apply?.(result, value, event);
-      broadcastSettings(result.settings, event.sender);
-      return result;
-    } catch {
-      // A filesystem failure is not something the user can act on, so it is
-      // reported as one line rather than as a raw system error.
-      return {
-        settings: await settingsStore.snapshot(),
-        reason: refusal,
-      };
-    }
-  });
-}
-
-/**
  * The renderer records chords through the same reader, so one that does
  * not parse is a malformed request rather than a choice to answer.
  */
@@ -1123,16 +456,76 @@ function parsedVoiceHotkey(accelerator: unknown): string | undefined {
   return chosen;
 }
 
+function adapterFor(providerId: string) {
+  return sessionAdapters.find((candidate) => candidate.provider.id === providerId);
+}
+
+/**
+ * A renderer-supplied string that must survive its bound, or be refused.
+ * Omitted stays omitted: the field was not offered.
+ */
+function boundedField(
+  raw: unknown,
+  bound: (value: unknown) => string | undefined,
+): { ok: true; value: string | undefined } | { ok: false } {
+  if (raw === undefined) return { ok: true, value: undefined };
+  const value = bound(raw);
+  return value === undefined ? { ok: false } : { ok: true, value };
+}
+
+/**
+ * The first workspace that lands chooses the default provider — and a model
+ * named for that creation, the default agent — only while nothing is chosen.
+ * A default the user holds is theirs to change, never a creation's. Losing
+ * the save loses only the remembered default, never the workspace that just
+ * landed.
+ */
+async function rememberWorkspaceDefaults(
+  adapter: SessionProviderAdapter,
+  namedSelection: WorkspaceAgentSelection | undefined,
+): Promise<void> {
+  if (!isProviderId(adapter.provider.id)) return;
+  const providerId = adapter.provider.id;
+  try {
+    if ((await settingsStore.readDefaultWorkspaceProvider()) === undefined) {
+      const saved = await settingsStore.setDefaultWorkspaceProvider(providerId);
+      panels.broadcast(channels.settingsChanged, saved.settings);
+    }
+    // A model named for this creation becomes the default on the same
+    // first-choice terms as the provider: only while nothing is chosen.
+    // A default already held is the user's, changed by asking for the
+    // setting itself — never as a side effect of one creation. Read
+    // again here rather than trusting the pre-creation snapshot: a
+    // choice made by hand while the provider was answering is already
+    // held, and must not lose to the request it overlapped.
+    if (
+      namedSelection !== undefined &&
+      (await settingsStore.readWorkspaceAgentDefault(providerId)) === undefined
+    ) {
+      const saved = await settingsStore.setWorkspaceAgentDefault(providerId, namedSelection);
+      panels.broadcast(channels.settingsChanged, saved.settings);
+    }
+  } catch {
+    // The reply is the creation's; a failed remember has no line in it.
+  }
+}
+
 function registerIpc(): void {
+  const registerSettingHandler = createSettingsHandler({
+    trustedSender,
+    snapshot: () => settingsStore.snapshot(),
+    broadcast: (settings, except) => panels.broadcast(channels.settingsChanged, settings, except),
+  });
   ipcMain.handle(channels.bootstrap, async (event): Promise<AppBootstrap> => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
     // Each window bootstraps as itself: its own display, its own mode. The
     // roster and the settings are the same everywhere.
-    const displayId = displayIdFor(event.sender) ?? effectiveDisplayIds()[0];
+    const displayId = panels.displayIdFor(event.sender);
     const display =
-      (displayId !== undefined ? displayById(displayId) : undefined) ?? screen.getPrimaryDisplay();
+      (displayId !== undefined ? panels.display(displayId) : undefined) ??
+      screen.getPrimaryDisplay();
     return {
-      mode: displayId !== undefined ? windowModeFor(displayId) : initialWindowMode,
+      mode: displayId !== undefined ? panels.modeFor(displayId) : panels.initialMode,
       startPeeked,
       startInSlot,
       profile,
@@ -1148,15 +541,15 @@ function registerIpc(): void {
       // Both keys travel as accelerators rather than labels: the renderer needs
       // both spellings — the keycaps' ⌥ and L drawn apart, and aria's Alt+L —
       // and only the accelerator can produce the pair.
-      ...(voiceHotkey ? { voiceHotkey } : {}),
-      voiceHotkeyHeld,
-      ...(askHotkey ? { askHotkey } : {}),
-      ...(stopHotkey ? { stopHotkey } : {}),
+      ...(hotkeys.talk ? { voiceHotkey: hotkeys.talk } : {}),
+      voiceHotkeyHeld: hotkeys.held,
+      ...(hotkeys.ask ? { askHotkey: hotkeys.ask } : {}),
+      ...(hotkeys.stop ? { stopHotkey: hotkeys.stop } : {}),
       ...(outputAudio ? { outputAudio } : {}),
-      display: displayDiagnostic(display),
-      sessions: fixtureMode ? [] : sessionRegistry.snapshot().sessions,
+      display: panels.diagnostic(display),
+      sessions: runMode.observesProviders ? sessionRegistry.snapshot().sessions : [],
       workspaceProjects: observedWorkspaceProjects(),
-      ...(trackedIssues && !fixtureMode ? { issues: trackedIssues } : {}),
+      ...(trackedIssues && runMode.observesProviders ? { issues: trackedIssues } : {}),
       settings: await settingsStore.snapshot(),
     };
   });
@@ -1167,14 +560,14 @@ function registerIpc(): void {
     }
     // The ask is the sender's own window's: expanding a panel on one display
     // must not unfold one on every other.
-    const displayId = displayIdFor(event.sender);
+    const displayId = panels.displayIdFor(event.sender);
     if (displayId === undefined) throw new Error("Invalid window mode request");
-    return setWindowMode(displayId, expanded ? "expanded" : "compact", focus === true);
+    return panels.setMode(displayId, expanded ? "expanded" : "compact", focus === true);
   });
 
   // The tray items' feedback gesture, asked for from a renderer — the spoken
   // open rides this so the ordering stays owned here for every caller: the
-  // mode event setWindowMode sends and the composer event that follows travel
+  // mode event the panel manager sends and the composer event that follows travel
   // the same lifecycle channel, so the shape that wins is always the
   // composer, never a panel racing it in from another channel. Opening is all
   // this does; a note still arrives only through channels.sendFeedback, from
@@ -1183,9 +576,9 @@ function registerIpc(): void {
     if (!trustedSender(event) || !isFeedbackKind(kind)) {
       throw new Error("Invalid composer request");
     }
-    const displayId = displayIdFor(event.sender);
+    const displayId = panels.displayIdFor(event.sender);
     if (displayId === undefined) throw new Error("Invalid composer request");
-    setWindowMode(displayId, "expanded", true);
+    panels.setMode(displayId, "expanded", true);
     event.sender.send(channels.lifecycle, FEEDBACK_LIFECYCLE_EVENT[kind]);
   });
 
@@ -1235,7 +628,7 @@ function registerIpc(): void {
       // because a press right after the save has to find a minter.
       if (!result.reason && providerId === VOICE_CREDENTIAL_PROVIDER_ID) {
         await applyVoiceCredential();
-        await applyVoiceHotkey();
+        await hotkeys.reapply(HOTKEY_RANK.TALK);
       }
     },
     refusal: "Could not save that API key on this system.",
@@ -1263,7 +656,7 @@ function registerIpc(): void {
     },
     save: (show) => settingsStore.setShowInDock(show),
     apply: (result, _show, event) =>
-      applyDockVisibility(result.settings.showInDock, displayIdFor(event.sender)),
+      dock.apply(result.settings.showInDock, panels.displayIdFor(event.sender)),
     refusal: "Could not save that setting on this system.",
   });
 
@@ -1277,8 +670,8 @@ function registerIpc(): void {
     },
     save: (show) => settingsStore.setShowOnAllDisplays(show),
     apply(result) {
-      showOnAllDisplays = result.settings.showOnAllDisplays;
-      reconcilePanels();
+      panels.setShowOnAllDisplays(result.settings.showOnAllDisplays);
+      panels.reconcile();
     },
     refusal: "Could not save that setting on this system.",
   });
@@ -1292,8 +685,8 @@ function registerIpc(): void {
     },
     save: (formFactor) => settingsStore.setFormFactor(formFactor),
     apply(result) {
-      panelFormFactor = result.settings.formFactor;
-      positionPanels();
+      panels.setFormFactor(result.settings.formFactor);
+      panels.positionAll();
     },
     refusal: "Could not save that setting on this system.",
   });
@@ -1391,10 +784,10 @@ function registerIpc(): void {
     save: (chosen) => settingsStore.setVoiceHotkey(chosen),
     async apply(result, chosen) {
       if (!result.reason) {
-        chosenVoiceHotkey = chosen;
+        hotkeys.setChosen(HOTKEY_RANK.TALK, chosen);
         // Awaited so the renderer's controls stay at rest until the swap has
         // finished and the helper's own registration line can say the truth.
-        await applyVoiceHotkey();
+        await hotkeys.reapply(HOTKEY_RANK.TALK);
       }
     },
     refusal: "Could not save that shortcut on this system.",
@@ -1411,10 +804,7 @@ function registerIpc(): void {
       // The talk key's whole candidate list is refused, not just the chord it
       // holds now: its helper may fall back to any of them on a later launch,
       // and an ask key stored on one would race it there.
-      if (
-        chosen &&
-        (voiceHotkeyCandidates(chosenVoiceHotkey).includes(chosen) || chosen === voiceHotkey)
-      ) {
+      if (chosen && hotkeys.reserve(chosen, HOTKEY_RANK.ASK) === HOTKEY_RANK.TALK) {
         return new SettingsRefusal({
           settings: await settingsStore.snapshot(),
           reason: "That chord is reserved for the talk key.",
@@ -1425,8 +815,8 @@ function registerIpc(): void {
     save: (chosen) => settingsStore.setAskHotkey(chosen),
     apply(result, chosen) {
       if (!result.reason) {
-        chosenAskHotkey = chosen;
-        applyAskHotkey();
+        hotkeys.setChosen(HOTKEY_RANK.ASK, chosen);
+        void hotkeys.reapply(HOTKEY_RANK.ASK);
       }
     },
     refusal: "Could not save that shortcut on this system.",
@@ -1440,19 +830,14 @@ function registerIpc(): void {
   registerSettingHandler<string | undefined>(channels.setStopHotkey, {
     async validate(accelerator: unknown) {
       const chosen = parsedVoiceHotkey(accelerator);
-      if (
-        chosen &&
-        (voiceHotkeyCandidates(chosenVoiceHotkey).includes(chosen) || chosen === voiceHotkey)
-      ) {
+      const owner = chosen ? hotkeys.reserve(chosen, HOTKEY_RANK.STOP) : undefined;
+      if (owner === HOTKEY_RANK.TALK) {
         return new SettingsRefusal({
           settings: await settingsStore.snapshot(),
           reason: "That chord is reserved for the talk key.",
         });
       }
-      if (
-        chosen &&
-        (askHotkeyCandidates(chosenAskHotkey, []).includes(chosen) || chosen === askHotkey)
-      ) {
+      if (owner === HOTKEY_RANK.ASK) {
         return new SettingsRefusal({
           settings: await settingsStore.snapshot(),
           reason: "That chord is reserved for the ask key.",
@@ -1463,8 +848,8 @@ function registerIpc(): void {
     save: (chosen) => settingsStore.setStopHotkey(chosen),
     apply(result, chosen) {
       if (!result.reason) {
-        chosenStopHotkey = chosen;
-        applyStopHotkey();
+        hotkeys.setChosen(HOTKEY_RANK.STOP, chosen);
+        void hotkeys.reapply(HOTKEY_RANK.STOP);
       }
     },
     refusal: "Could not save that shortcut on this system.",
@@ -1504,10 +889,9 @@ function registerIpc(): void {
   // the speaking window opened, so the duck follows the union of them all.
   ipcMain.on(channels.setVoiceExchange, (event, active: unknown) => {
     if (!trustedSender(event) || typeof active !== "boolean") return;
-    const displayId = displayIdFor(event.sender);
+    const displayId = panels.displayIdFor(event.sender);
     if (displayId === undefined) return;
-    voiceExchanges.set(displayId, active);
-    applyVoiceExchanges();
+    panels.setVoiceExchange(displayId, active);
   });
 
   // The system's own answer is the user's to change, and this is where macOS
@@ -1573,8 +957,8 @@ function registerIpc(): void {
     async (event, identity: unknown, text: unknown): Promise<ProviderMessageResult> => {
       if (!trustedSender(event)) throw new Error("Untrusted renderer");
       if (!isSessionIdentity(identity)) throw new Error("Invalid session message request");
-      const messageText = sessionMessageText(text);
-      if (!messageText) {
+      const message = boundedField(text, sessionMessageText);
+      if (!message.ok || message.value === undefined) {
         return {
           status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
           reason: "A message has to be shorter than a document and longer than nothing.",
@@ -1586,15 +970,13 @@ function registerIpc(): void {
       if (!session?.canReceiveMessage) {
         return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       }
-      const adapter = sessionAdapters.find(
-        (candidate) => candidate.provider.id === identity.providerId,
-      );
+      const adapter = adapterFor(identity.providerId);
       if (!adapter || !isMessageCapableAdapter(adapter)) {
         return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       }
       const result = await adapter.sendMessage({
         providerSessionId: identity.providerSessionId,
-        text: messageText,
+        text: message.value,
       });
       // A message that landed changes what the session is doing, so the row
       // should catch up as soon as its provider will say.
@@ -1619,9 +1001,7 @@ function registerIpc(): void {
       const session = sessionRegistry.get(identity);
       const control = session?.controls.find((candidate) => candidate.id === controlId);
       if (!control) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-      const adapter = sessionAdapters.find(
-        (candidate) => candidate.provider.id === identity.providerId,
-      );
+      const adapter = adapterFor(identity.providerId);
       if (!adapter || !isControllableAdapter(adapter)) {
         return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       }
@@ -1668,8 +1048,8 @@ function registerIpc(): void {
       if (namedSelection !== undefined && !isWorkspaceAgentSelection(providerId, namedSelection)) {
         throw new Error("Invalid workspace creation request");
       }
-      if (fixtureMode) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-      const adapter = sessionAdapters.find((candidate) => candidate.provider.id === providerId);
+      if (!runMode.sendsNetwork) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      const adapter = adapterFor(providerId);
       if (!adapter || !isWorkspaceCapableAdapter(adapter)) {
         return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       }
@@ -1677,8 +1057,8 @@ function registerIpc(): void {
         .workspaceProjects()
         .some((project) => project.providerProjectId === providerProjectId);
       if (!offered) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-      const workspaceName = name === undefined ? undefined : workspaceNameText(name);
-      if (name !== undefined && workspaceName === undefined) {
+      const workspaceName = boundedField(name, workspaceNameText);
+      if (!workspaceName.ok) {
         return {
           status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
           reason: "A workspace name has to be short enough to say and longer than nothing.",
@@ -1686,8 +1066,8 @@ function registerIpc(): void {
       }
       // The task's own bound, and its fit to the project, are answered by the
       // adapter, which validates both against the projects it actually offers.
-      const openingTask = task === undefined ? undefined : sessionMessageText(task);
-      if (task !== undefined && openingTask === undefined) {
+      const openingTask = boundedField(task, sessionMessageText);
+      if (!openingTask.ok) {
         return {
           status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
           reason: "A task has to be shorter than a document and longer than nothing.",
@@ -1704,8 +1084,8 @@ function registerIpc(): void {
       const agentSelection = namedSelection ?? stored;
       const result = await adapter.createWorkspace({
         providerProjectId,
-        ...(workspaceName ? { name: workspaceName } : {}),
-        ...(openingTask ? { task: openingTask } : {}),
+        ...(workspaceName.value ? { name: workspaceName.value } : {}),
+        ...(openingTask.value ? { task: openingTask.value } : {}),
         ...(agentSelection ? { agentSelection } : {}),
       });
       // A workspace that landed is a session the panel should be showing, so
@@ -1722,35 +1102,11 @@ function registerIpc(): void {
       // never a creation's. Deterministic on the validated act — nothing a
       // model composed decides this — and losing the save loses only the
       // remembered default, never the workspace that just landed.
-      if (
-        result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED &&
-        isProviderId(adapter.provider.id)
-      ) {
-        try {
-          if ((await settingsStore.readDefaultWorkspaceProvider()) === undefined) {
-            const saved = await settingsStore.setDefaultWorkspaceProvider(adapter.provider.id);
-            broadcastSettings(saved.settings);
-          }
-          // A model named for this creation becomes the default on the same
-          // first-choice terms as the provider: only while nothing is chosen.
-          // A default already held is the user's, changed by asking for the
-          // setting itself — never as a side effect of one creation. Read
-          // again here rather than trusting the pre-creation snapshot: a
-          // choice made by hand while the provider was answering is already
-          // held, and must not lose to the request it overlapped.
-          if (
-            namedSelection !== undefined &&
-            (await settingsStore.readWorkspaceAgentDefault(adapter.provider.id)) === undefined
-          ) {
-            const saved = await settingsStore.setWorkspaceAgentDefault(
-              adapter.provider.id,
-              namedSelection,
-            );
-            broadcastSettings(saved.settings);
-          }
-        } catch {
-          // The reply is the creation's; a failed remember has no line in it.
-        }
+      if (result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
+        await rememberWorkspaceDefaults(
+          adapter,
+          namedSelection as WorkspaceAgentSelection | undefined,
+        );
       }
       return result;
     },
@@ -1791,8 +1147,8 @@ function registerIpc(): void {
         });
       } else {
         if (!issue.canComment) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
-        const body = issueCommentText(action.body);
-        if (!body) {
+        const body = boundedField(action.body, issueCommentText);
+        if (!body.ok || body.value === undefined) {
           return {
             status: TRACKER_ACTION_RESULT_STATUS.REJECTED,
             reason: "A comment has to be shorter than a document and longer than nothing.",
@@ -1801,7 +1157,7 @@ function registerIpc(): void {
         result = await tracker.execute({
           kind: ISSUE_ACTION_KIND.COMMENT,
           trackerIssueId: issue.trackerIssueId,
-          body,
+          body: body.value,
         });
       }
       // An act that landed changes the board, so the roster should catch up
@@ -1858,21 +1214,19 @@ function registerIpc(): void {
       ) {
         throw new Error("Invalid workspace agent request");
       }
-      const adapter = sessionAdapters.find(
-        (candidate) => candidate.provider.id === identity.providerId,
-      );
+      const adapter = adapterFor(identity.providerId);
       if (!adapter || !isWorkspaceAgentCapableAdapter(adapter)) {
         return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       }
-      const sessionName = name === undefined ? undefined : workspaceNameText(name);
-      if (name !== undefined && sessionName === undefined) {
+      const sessionName = boundedField(name, workspaceNameText);
+      if (!sessionName.ok) {
         return {
           status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
           reason: "A session name has to be short enough to say and longer than nothing.",
         };
       }
-      const openingTask = task === undefined ? undefined : sessionMessageText(task);
-      if (task !== undefined && openingTask === undefined) {
+      const openingTask = boundedField(task, sessionMessageText);
+      if (!openingTask.ok) {
         return {
           status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
           reason: "A task has to be shorter than a document and longer than nothing.",
@@ -1893,8 +1247,8 @@ function registerIpc(): void {
       const result = await adapter.spawnWorkspaceAgent({
         providerSessionId: identity.providerSessionId,
         agent: advertised,
-        ...(sessionName ? { name: sessionName } : {}),
-        ...(openingTask ? { task: openingTask } : {}),
+        ...(sessionName.value ? { name: sessionName.value } : {}),
+        ...(openingTask.value ? { task: openingTask.value } : {}),
         ...(model ? { model } : {}),
         ...(effort ? { effort } : {}),
       });
@@ -1922,7 +1276,7 @@ function registerIpc(): void {
       if (!parsed) throw new Error("Invalid feedback submission");
       // A fixture run must be reproducible without a network, so it refuses
       // rather than sending — and says so, because the composer still draws.
-      if (fixtureMode) {
+      if (!runMode.sendsNetwork) {
         return { delivered: false, reason: "A fixture run sends nothing." };
       }
       return feedbackDelivery.deliver(parsed);
@@ -1934,9 +1288,9 @@ function registerIpc(): void {
   // for its own window, which is the one holding the field.
   ipcMain.on(channels.focusPanel, (event) => {
     if (!trustedSender(event)) return;
-    const displayId = displayIdFor(event.sender);
-    if (displayId === undefined || windowModeFor(displayId) !== "expanded") return;
-    focusPanelWindow(panelWindows.get(displayId));
+    const displayId = panels.displayIdFor(event.sender);
+    if (displayId === undefined) return;
+    panels.focusIfExpanded(displayId);
   });
 
   ipcMain.handle(channels.requestRealtimeCredential, async (event) => {
@@ -1975,7 +1329,7 @@ function registerIpc(): void {
  * fixture run offers nothing, for the same reason it observes nothing.
  */
 function observedWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
-  if (fixtureMode) return [];
+  if (!runMode.observesProviders) return [];
   return normalizeObservedWorkspaceProjects(
     sessionAdapters.flatMap((adapter) =>
       isWorkspaceCapableAdapter(adapter)
@@ -1990,7 +1344,7 @@ function observedWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
 }
 
 async function refreshProviderSessions(): Promise<void> {
-  if (fixtureMode || sessionRefreshRunning) return;
+  if (!runMode.observesProviders || sessionRefreshRunning) return;
   sessionRefreshRunning = true;
   try {
     // Providers are observed concurrently and reported independently: the
@@ -2032,7 +1386,7 @@ async function reviewSessionAttention(): Promise<void> {
     if (speech.length > 0) {
       // Spoken once, by the one window that holds the voice: every display
       // already shows the same session as needing attention.
-      voiceHostWindow()?.webContents.send(channels.attentionSpeech, speech);
+      panels.voiceHost()?.webContents.send(channels.attentionSpeech, speech);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -2062,15 +1416,13 @@ function announceSessionNotices(sessions: readonly NormalizedSession[]): void {
   // renderer cannot open a call, and the panel still shows every state.
   if (!realtimeCredentials) return;
   const speech = notices.map((notice) => sessionNoticeSpeech(notice, now));
-  voiceHostWindow()?.webContents.send(channels.attentionSpeech, speech);
+  panels.voiceHost()?.webContents.send(channels.attentionSpeech, speech);
 }
 
 function startSessionObservation(): void {
-  if (fixtureMode) return;
+  if (!runMode.observesProviders) return;
   sessionRegistry.subscribe((snapshot) => {
-    for (const window of panelWindows.values()) {
-      window.webContents.send(channels.sessionsChanged, snapshot.sessions);
-    }
+    panels.broadcast(channels.sessionsChanged, snapshot.sessions);
     // The registry only speaks on an effective change, which is exactly when
     // a status edge can exist to announce.
     announceSessionNotices(snapshot.sessions);
@@ -2092,7 +1444,7 @@ function startSessionObservation(): void {
  * which is how the renderer knows there is nothing to advertise.
  */
 async function refreshTrackedIssues(): Promise<void> {
-  if (fixtureMode) return;
+  if (!runMode.observesProviders) return;
   if (issueRefreshRunning) {
     issueRefreshQueued = true;
     return;
@@ -2111,9 +1463,7 @@ async function refreshTrackedIssues(): Promise<void> {
       }
     }
     trackedIssues = connected ? collected : undefined;
-    for (const window of panelWindows.values()) {
-      window.webContents.send(channels.issuesChanged, trackedIssues);
-    }
+    panels.broadcast(channels.issuesChanged, trackedIssues);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`Issue observation failed: ${message}\n`);
@@ -2127,7 +1477,7 @@ async function refreshTrackedIssues(): Promise<void> {
 }
 
 function startIssueObservation(): void {
-  if (fixtureMode) return;
+  if (!runMode.observesProviders) return;
   void refreshTrackedIssues();
   issueRefreshTimer = setInterval(() => {
     void refreshTrackedIssues();
@@ -2135,19 +1485,11 @@ function startIssueObservation(): void {
   issueRefreshTimer.unref();
 }
 
-/** Whether some panel window's renderer is asking, whichever display it is on. */
-function isPanelWebContents(webContents: Electron.WebContents): boolean {
-  for (const window of panelWindows.values()) {
-    if (!window.isDestroyed() && window.webContents === webContents) return true;
-  }
-  return false;
-}
-
 function configurePermissions(): void {
   session.defaultSession.setPermissionCheckHandler(
     (webContents, permission, _origin, details) =>
       webContents !== null &&
-      isPanelWebContents(webContents) &&
+      panels.owns(webContents) &&
       permission === "media" &&
       details.mediaType === "audio",
   );
@@ -2155,79 +1497,13 @@ function configurePermissions(): void {
     (webContents, permission, callback, details) => {
       const mediaTypes = "mediaTypes" in details ? (details.mediaTypes ?? []) : [];
       callback(
-        isPanelWebContents(webContents) &&
+        panels.owns(webContents) &&
           permission === "media" &&
           mediaTypes.length > 0 &&
           mediaTypes.every((mediaType: string) => mediaType === "audio"),
       );
     },
   );
-}
-
-function createPanel(displayId: number): void {
-  const display = displayById(displayId);
-  if (!display) return;
-  windowModes.set(displayId, initialWindowMode);
-  const layout = layoutFor(display, initialWindowMode);
-
-  const window = new BrowserWindow({
-    x: layout.x,
-    y: layout.y,
-    width: layout.width,
-    height: layout.height,
-    title: "Luke",
-    show: false,
-    frame: false,
-    transparent: true,
-    backgroundColor: "#00000000",
-    hasShadow: false,
-    roundedCorners: false,
-    resizable: false,
-    movable: false,
-    minimizable: false,
-    maximizable: false,
-    fullscreenable: false,
-    skipTaskbar: true,
-    alwaysOnTop: true,
-    focusable: initialWindowMode === "expanded" && !captureMode,
-    acceptFirstMouse: true,
-    type: process.platform === "darwin" ? "panel" : undefined,
-    webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      webSecurity: true,
-      devTools: !captureMode,
-      backgroundThrottling: false,
-    },
-  });
-  panelWindows.set(displayId, window);
-
-  configurePanelBehavior(window);
-  window.setIgnoreMouseEvents(true, { forward: true });
-  window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-  window.webContents.on("will-navigate", (event, url) => {
-    if (url !== rendererUrl()) event.preventDefault();
-  });
-  window.once("ready-to-show", () => {
-    if (!captureMode && !window.isDestroyed()) window.showInactive();
-  });
-  // The reconciler deletes before it destroys, so this answers only a window
-  // that went down some other way — and it must not leave a ghost in the map,
-  // nor a phantom exchange holding the duck down. Found by the window rather
-  // than the id it was born under, because a rebind may have moved it.
-  window.on("closed", () => {
-    for (const [id, candidate] of [...panelWindows]) {
-      if (candidate !== window) continue;
-      panelWindows.delete(id);
-      windowModes.delete(id);
-      clearCollapseTimer(id);
-      voiceExchanges.delete(id);
-      applyVoiceExchanges();
-    }
-  });
-  void window.loadFile(path.join(__dirname, "renderer", "index.html"));
 }
 
 function trayMenu(): Electron.Menu {
@@ -2249,10 +1525,10 @@ function trayMenu(): Electron.Menu {
         // The menu bar item lives on whichever display the user opened it
         // from, but the panel it opens is the voice host's: one Settings, on
         // the same window every other app-level ask lands in.
-        const host = voiceHostWindow();
-        const displayId = host ? displayIdFor(host.webContents) : undefined;
+        const host = panels.voiceHost();
+        const displayId = host ? panels.displayIdFor(host.webContents) : undefined;
         if (displayId === undefined) return;
-        setWindowMode(displayId, "expanded", true);
+        panels.setMode(displayId, "expanded", true);
         host?.webContents.send(channels.lifecycle, "tab:settings");
       },
     },
@@ -2264,10 +1540,10 @@ function trayMenu(): Electron.Menu {
       // same one every other app-level ask lands in.
       label: "Send Feedback…",
       click: () => {
-        const host = voiceHostWindow();
-        const displayId = host ? displayIdFor(host.webContents) : undefined;
+        const host = panels.voiceHost();
+        const displayId = host ? panels.displayIdFor(host.webContents) : undefined;
         if (displayId === undefined) return;
-        setWindowMode(displayId, "expanded", true);
+        panels.setMode(displayId, "expanded", true);
         host?.webContents.send(
           channels.lifecycle,
           FEEDBACK_LIFECYCLE_EVENT[FEEDBACK_KIND.FEEDBACK],
@@ -2277,10 +1553,10 @@ function trayMenu(): Electron.Menu {
     {
       label: "Submit a Prompt…",
       click: () => {
-        const host = voiceHostWindow();
-        const displayId = host ? displayIdFor(host.webContents) : undefined;
+        const host = panels.voiceHost();
+        const displayId = host ? panels.displayIdFor(host.webContents) : undefined;
         if (displayId === undefined) return;
-        setWindowMode(displayId, "expanded", true);
+        panels.setMode(displayId, "expanded", true);
         host?.webContents.send(channels.lifecycle, FEEDBACK_LIFECYCLE_EVENT[FEEDBACK_KIND.PROMPT]);
       },
     },
@@ -2334,96 +1610,12 @@ function applyMenuBarVisibility(show: boolean): void {
   destroyTray();
 }
 
-/**
- * The Dock tile per theme: the porcelain tile for a light desktop, the
- * space-black one for a dark. The bundle's `.icns` is cut from the dark tile
- * and cannot follow the theme, and an unpackaged run has only Electron's stock
- * icon, so the running app draws the Dock image itself from these.
- */
-const DOCK_ICON_FILES = {
-  LIGHT: "luke-icon-light.png",
-  DARK: "luke-icon-dark.png",
-} as const;
-
-/**
- * Draws Luke's own face in the Dock, matched to the theme. Called at startup,
- * on every theme change, and after every `dock.show()` — showing the icon
- * transforms the process, and macOS draws the fresh tile from the bundle's
- * icon (in a dev run, Electron's stock one), forgetting any image set while
- * there was no tile to wear it. Artwork missing from a build draws nothing,
- * leaving the bundle icon (or the stock one) in place rather than an empty
- * tile.
- */
-function applyDockIcon(): void {
-  if (!app.dock) return;
-  const file = nativeTheme.shouldUseDarkColors ? DOCK_ICON_FILES.DARK : DOCK_ICON_FILES.LIGHT;
-  const image = nativeImage.createFromPath(path.join(__dirname, "icon", file));
-  if (!image.isEmpty()) app.dock.setIcon(image);
-}
-
-/**
- * macOS ignores a `dock.hide()` within a second of the last Dock change, so a
- * switch pressed twice cannot be honoured call by call; the applier below
- * paces itself to this instead, which is Electron's documented floor.
- */
-const DOCK_SETTLE_MS = 1100;
-
-/** The Dock state last asked for, and whether the applier is chasing it. */
-let dockDesired = false;
-let dockSettling = false;
-/** The display whose panel asked for the last Dock change, when one did. */
-let dockAskedFrom: number | undefined;
-
-/**
- * Puts Luke in the Dock or takes him back out, to match the setting. He ships
- * as an accessory app — the notch is his fixed point — so the icon is a second
- * door like the status item, losing nothing when it is hidden. `askedFrom` is
- * the display whose panel held the switch, so the caret goes back where the
- * press was made rather than to whichever panel stands first.
- */
-function applyDockVisibility(show: boolean, askedFrom?: number): void {
-  if (process.platform !== "darwin") return;
-  dockDesired = show;
-  dockAskedFrom = askedFrom;
-  void settleDock();
-}
-
-/**
- * Chases the desired state rather than relaying each press: a hide within a
- * second of the last Dock change is silently ignored by macOS, so the icon is
- * re-checked after every change and asked again until it matches — the switch
- * and the file must not end a quick on-and-off disagreeing with the Dock.
- */
-async function settleDock(): Promise<void> {
-  if (dockSettling || !app.dock) return;
-  dockSettling = true;
-  try {
-    while (app.dock.isVisible() !== dockDesired) {
-      if (dockDesired) {
-        await app.dock.show();
-        // The show rebuilt the tile from the bundle icon; put Luke's face
-        // back on it.
-        applyDockIcon();
-      } else {
-        app.dock.hide();
-      }
-      // Either direction transforms the process type, which can deactivate
-      // the app; the panel the switch was pressed in is brought back forward
-      // rather than left to lose its caret.
-      focusExpandedPanel(dockAskedFrom);
-      await new Promise((resolve) => setTimeout(resolve, DOCK_SETTLE_MS));
-    }
-  } finally {
-    dockSettling = false;
-  }
-}
-
 function handleDisplayChange(): void {
   setTimeout(() => {
-    refreshNativeGeometry();
+    panels.refreshGeometry();
     // The set of displays may have changed, not just their geometry: a chosen
     // display arriving raises its window, one leaving takes its window down.
-    reconcilePanels();
+    panels.reconcile();
   }, 100);
 }
 
@@ -2440,22 +1632,20 @@ if (!app.requestSingleInstanceLock()) {
   // the one thing the relaunch was meant to show. An explicit `--expanded` is a
   // stated intent rather than a side effect, so it is still honoured.
   app.on("second-instance", (_event, argv) => {
-    refreshNativeGeometry();
+    panels.refreshGeometry();
     if (argv.includes("--expanded")) {
-      const host = voiceHostWindow();
-      const displayId = host ? displayIdFor(host.webContents) : undefined;
-      if (displayId !== undefined) setWindowMode(displayId, "expanded", true);
+      const host = panels.voiceHost();
+      const displayId = host ? panels.displayIdFor(host.webContents) : undefined;
+      if (displayId !== undefined) panels.setMode(displayId, "expanded", true);
       return;
     }
-    reconcilePanels();
-    for (const window of panelWindows.values()) {
-      if (!window.isDestroyed()) window.showInactive();
-    }
+    panels.reconcile();
+    panels.showInactiveAll();
   });
   void app.whenReady().then(async () => {
     if (process.platform === "darwin") app.setActivationPolicy("accessory");
     Menu.setApplicationMenu(null);
-    refreshNativeGeometry();
+    panels.refreshGeometry();
     registerIpc();
     // Resolving settings touches the filesystem, and the OS keychain only for a
     // provider that already has a stored key to decrypt. Starting it here keeps
@@ -2473,14 +1663,14 @@ if (!app.requestSingleInstanceLock()) {
     // The Dock wears Luke's own face from the start, and keeps wearing the
     // right one as the desktop changes mode — whether the icon is shown yet
     // is a separate question, answered by the setting below.
-    applyDockIcon();
-    nativeTheme.on("updated", applyDockIcon);
+    dock.applyIcon();
+    dock.watchTheme();
     // The Dock icon reads the same file under the opposite default: it is
     // opt-in, so a file that cannot be read leaves Luke out of the Dock — the
     // accessory app the launch just asserted. Nothing to do until it says so.
     void settingsStore.showInDock().then(
       (show) => {
-        if (show) applyDockVisibility(true);
+        if (show) dock.apply(true);
       },
       () => undefined,
     );
@@ -2510,28 +1700,35 @@ if (!app.requestSingleInstanceLock()) {
     // chosen form, rather than appearing on the main display and jumping. A
     // file that cannot be read means no choice was kept — the main display,
     // the default form — and must not keep the panels from starting.
-    showOnAllDisplays = await settingsStore
-      .readShowOnAllDisplays()
-      .catch(() => APP_SETTING_DEFAULTS.showOnAllDisplays);
-    panelFormFactor =
-      (await settingsStore.readFormFactor().catch(() => undefined)) ?? DEFAULT_PANEL_FORM_FACTOR;
+    panels.setShowOnAllDisplays(
+      await settingsStore
+        .readShowOnAllDisplays()
+        .catch(() => APP_SETTING_DEFAULTS.showOnAllDisplays),
+    );
+    panels.setFormFactor(
+      (await settingsStore.readFormFactor().catch(() => undefined)) ?? DEFAULT_PANEL_FORM_FACTOR,
+    );
     // Awaited for the same reason the voice is: the chosen chord has to be in
     // hand before the key is registered, or the first registration would take
     // the default away from the user who moved off it. A file that cannot be
     // read means no choice was kept, and the defaults answer.
-    chosenVoiceHotkey = await settingsStore.readVoiceHotkey().catch(() => undefined);
-    chosenAskHotkey = await settingsStore.readAskHotkey().catch(() => undefined);
-    chosenStopHotkey = await settingsStore.readStopHotkey().catch(() => undefined);
+    hotkeys.setChosen(
+      HOTKEY_RANK.TALK,
+      await settingsStore.readVoiceHotkey().catch(() => undefined),
+    );
+    hotkeys.setChosen(HOTKEY_RANK.ASK, await settingsStore.readAskHotkey().catch(() => undefined));
+    hotkeys.setChosen(
+      HOTKEY_RANK.STOP,
+      await settingsStore.readStopHotkey().catch(() => undefined),
+    );
     // The report is not made here: the helper answers over its own stdout a
     // moment later, and a line printed now would state an absence that only
     // exists because nobody has answered yet.
-    registerVoiceHotkey();
-    registerAskHotkey();
-    registerStopHotkey();
+    await hotkeys.reapply(HOTKEY_RANK.TALK);
     // Read-only, like everything else that watches: what it learns decides
     // what the renderer draws while Luke speaks unheard, and nothing more.
     startOutputVolumeWatch();
-    reconcilePanels();
+    panels.reconcile();
     configurePermissions();
     startSessionObservation();
     startIssueObservation();
@@ -2542,9 +1739,7 @@ if (!app.requestSingleInstanceLock()) {
     for (const eventName of ["resume", "unlock-screen", "user-did-become-active"] as const) {
       const handlePowerEvent = () => {
         handleDisplayChange();
-        for (const window of panelWindows.values()) {
-          window.webContents.send(channels.lifecycle, eventName);
-        }
+        panels.broadcast(channels.lifecycle, eventName);
       };
       if (eventName === "resume") powerMonitor.on("resume", handlePowerEvent);
       if (eventName === "unlock-screen") {
@@ -2558,12 +1753,10 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 app.on("will-quit", () => {
-  globalShortcut.unregisterAll();
   // The helper is a process of Luke's own, so it does not outlive the app that
   // spawned it and leave a key registered against nothing. Nothing succeeds it
   // during quit, so its exit is not waited on.
-  void talkKeyWatcher?.stop();
-  talkKeyWatcher = undefined;
+  hotkeys.release();
   // The same rule: a process of Luke's own does not outlive the app.
   outputVolumeWatcher?.stop();
   outputVolumeWatcher = undefined;
@@ -2576,7 +1769,7 @@ app.on("will-quit", () => {
 app.on("before-quit", () => {
   if (sessionRefreshTimer) clearInterval(sessionRefreshTimer);
   if (issueRefreshTimer) clearInterval(issueRefreshTimer);
-  for (const displayId of [...collapseTimers.keys()]) clearCollapseTimer(displayId);
+  panels.clearCollapseTimers();
 });
 
 app.on("window-all-closed", () => app.quit());

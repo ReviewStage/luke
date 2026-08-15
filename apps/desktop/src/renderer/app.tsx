@@ -1,4 +1,6 @@
 import {
+  APP_TOOL_KIND,
+  dispatchByKind,
   FEEDBACK_COMPOSER_KIND,
   type FeedbackComposerKind,
   FIXTURE_EPOCH_MS,
@@ -861,153 +863,158 @@ export function App(): React.JSX.Element {
    * standing where the panel was, so there is nothing for a mark to land on.
    */
   const carryAppAction = useCallback<AppActionCarrier>(
-    async (action) => {
-      if (action.kind === "setting") {
-        // The store's answer is caught rather than drawn: the switch is what
-        // Luke is on his way to move, so it waits for him to reach it. Every
-        // path out of here releases it, and the outcome the conversation is
-        // told is the store's own either way — what is delayed is the drawing,
-        // never the change or the report of it. The settings as this window
-        // holds them ride along so a spoken model or effort change composes
-        // against the selection actually stored.
-        const outcome = await applySpokenSetting(
-          window.sidecar,
-          action,
-          (next) => {
-            heldSettings.current = next;
-          },
-          settings ?? bootstrap?.settings,
-        );
-        // Nothing to show and nothing to sign: a refused change must not stand
-        // the panel up in front of a switch that did not move.
-        if (outcome.status !== "changed") {
-          releaseErrandChange();
-          return outcome;
-        }
-        const opening = presentationOf() !== PANEL_PRESENTATION.PANEL;
-        // The guide's ids travel as plain text, so one that names no setting
-        // of Luke's names no page either — and nothing will fly to it.
-        const page = isAppSettingId(action.setting.id)
-          ? SETTING_PAGE[action.setting.id]
-          : undefined;
-        // What the flight has to wait out. A page already drawn under an open
-        // panel costs nothing; anything else is a page of content arriving,
-        // and a page turned under an open panel takes the leaving one's exit
-        // first. Read before any of it is asked for, because all three of
-        // these are about to stop being true.
-        const wait =
-          opening || page === undefined
-            ? ERRAND_WAIT.CONTENT
-            : tabNow() === PANEL_TAB.SETTINGS && settingsView === page
-              ? ERRAND_WAIT.AT_ONCE
-              : ERRAND_WAIT.PAGE;
-        try {
-          // The control has to be drawn to be flown to, and a settings page
-          // that is not open is not drawn at all — so the tab comes forward
-          // and then the page the setting lives on, in that order, because
-          // arriving at the tab is arriving at its front page. This is the
-          // same move a credential entry returning from the key slot makes.
-          changeTab(PANEL_TAB.SETTINGS);
-          if (page !== undefined) setSettingsView(page);
-          await changeMode(true);
-          if (runErrand(errandTargets(action), wait)) {
-            // Only a panel this errand stood up is the errand's to put away.
-            errandOpenedPanel.current = opening;
-          } else {
+    async (action) =>
+      dispatchByKind(action, {
+        [APP_TOOL_KIND.SETTING]: async (action) => {
+          // The store's answer is caught rather than drawn: the switch is what
+          // Luke is on his way to move, so it waits for him to reach it. Every
+          // path out of here releases it, and the outcome the conversation is
+          // told is the store's own either way — what is delayed is the drawing,
+          // never the change or the report of it. The settings as this window
+          // holds them ride along so a spoken model or effort change composes
+          // against the selection actually stored.
+          const outcome = await applySpokenSetting(
+            window.sidecar,
+            action,
+            (next) => {
+              heldSettings.current = next;
+            },
+            settings ?? bootstrap?.settings,
+          );
+          // Nothing to show and nothing to sign: a refused change must not stand
+          // the panel up in front of a switch that did not move.
+          if (outcome.status !== "changed") {
+            releaseErrandChange();
+            return outcome;
+          }
+          const opening = presentationOf() !== PANEL_PRESENTATION.PANEL;
+          // The guide's ids travel as plain text, so one that names no setting
+          // of Luke's names no page either — and nothing will fly to it.
+          const page = isAppSettingId(action.setting.id)
+            ? SETTING_PAGE[action.setting.id]
+            : undefined;
+          // What the flight has to wait out. A page already drawn under an open
+          // panel costs nothing; anything else is a page of content arriving,
+          // and a page turned under an open panel takes the leaving one's exit
+          // first. Read before any of it is asked for, because all three of
+          // these are about to stop being true.
+          const wait =
+            opening || page === undefined
+              ? ERRAND_WAIT.CONTENT
+              : tabNow() === PANEL_TAB.SETTINGS && settingsView === page
+                ? ERRAND_WAIT.AT_ONCE
+                : ERRAND_WAIT.PAGE;
+          try {
+            // The control has to be drawn to be flown to, and a settings page
+            // that is not open is not drawn at all — so the tab comes forward
+            // and then the page the setting lives on, in that order, because
+            // arriving at the tab is arriving at its front page. This is the
+            // same move a credential entry returning from the key slot makes.
+            changeTab(PANEL_TAB.SETTINGS);
+            if (page !== undefined) setSettingsView(page);
+            await changeMode(true);
+            if (runErrand(errandTargets(action), wait)) {
+              // Only a panel this errand stood up is the errand's to put away.
+              errandOpenedPanel.current = opening;
+            } else {
+              releaseErrandChange();
+            }
+          } catch {
+            // Showing the change is not what was asked for — making it is, and it
+            // is already made. A window that refused to come forward must not be
+            // reported back as a setting that refused to change, and the switch
+            // must be drawn whether or not anyone was shown it moving.
             releaseErrandChange();
           }
-        } catch {
-          // Showing the change is not what was asked for — making it is, and it
-          // is already made. A window that refused to come forward must not be
-          // reported back as a setting that refused to change, and the switch
-          // must be drawn whether or not anyone was shown it moving.
-          releaseErrandChange();
-        }
-        return outcome;
-      }
-      if (action.kind === "feedback") {
-        // The main process expands the window and sends the composer's
-        // lifecycle event down the same ordered channel as the mode event —
-        // exactly the tray items' gesture — so the composer's shape can never
-        // lose a race to the panel apply the expansion causes. The draft
-        // rides this ref because the lifecycle channel carries event names,
-        // not payloads: set before the ask, consumed when the event lands.
-        // Whether it will be placed is decided here with the same pure
-        // decision the open itself makes, on the same entry — the open lands
-        // a beat later on the event, and nothing else writes the entry in
-        // between — so the spoken outcome says what actually happens. And
-        // nothing here sends: the note leaves only by the Send button's own
-        // press.
-        const kind = FEEDBACK_KIND_FOR_COMPOSER[action.composer];
-        const drafted = openedFeedbackEntry(feedbackEntry.latest(), {
-          kind,
-          fromPanel: false,
-          ...(action.draft === undefined ? {} : { draft: action.draft }),
-        }).drafted;
-        spokenFeedbackDraft.current = action.draft;
-        try {
-          await window.sidecar.summonFeedback(kind);
-        } catch (error) {
-          // The composer is not coming, so the event that would consume the
-          // draft is not coming either; a stale one must not season some
-          // later tray press.
-          spokenFeedbackDraft.current = undefined;
-          throw error;
-        }
-        return {
-          status: "opened",
-          kind: action.composer,
-          ...(action.draft === undefined
-            ? {}
-            : drafted
-              ? {
-                  note: "The ask is drafted in the composer; the developer edits and sends it by hand.",
-                }
-              : {
-                  note: "A note was already being written, so it was kept and nothing was drafted over it.",
-                }),
-        };
-      }
-      // Whether this ask is what opens the panel, read before it does: an
-      // errand into a shape still growing has to trail the whole opening,
-      // and one into a panel already up does not.
-      const opening = presentationOf() !== PANEL_PRESENTATION.PANEL;
-      changeTab(action.tab);
-      const spoken = action.filter ? sessionFilterFromSpoken(action.filter) : undefined;
-      // An agent this build never registered cannot narrow the list, and Luke
-      // must not claim it did. The list still has to match the sentence that
-      // says every session is shown, so an unmappable ask widens the view to
-      // All rather than leaving whatever narrowing was already in force.
-      const filter = action.filter ? (spoken ?? SESSION_FILTER.ALL) : undefined;
-      // Caught rather than applied, on the settings switch's terms: the
-      // narrowing is what Luke is on his way to the options button to do, and
-      // a list that has already re-sorted itself by the time he gets there
-      // makes the flight a report rather than the act.
-      if (filter || action.sort) {
-        heldView.current = {
-          ...(filter ? { filter } : {}),
-          ...(action.sort ? { sort: action.sort } : {}),
-        };
-      }
-      await changeMode(true);
-      // Nothing flew, so nothing is coming to release it. The panel itself is
-      // what was asked for and it is already up, so the list must show what
-      // the answer is about to claim it shows.
-      // The tab bar and the options button are outside the settings pages, so
-      // a page reset behind this tab switch is nothing they wait for.
-      if (!runErrand(errandTargets(action), opening ? ERRAND_WAIT.CONTENT : ERRAND_WAIT.AT_ONCE)) {
-        releaseErrandChange();
-      }
-      return {
-        status: "shown",
-        tab: action.tab,
-        ...(spoken ? { filter: action.filter } : {}),
-        ...(action.filter && !spoken
-          ? { note: "That agent has no filter of its own here, so every session is shown." }
-          : {}),
-        ...(action.sort ? { sort: action.sort } : {}),
-      };
-    },
+          return outcome;
+        },
+        [APP_TOOL_KIND.FEEDBACK]: async (action) => {
+          // The main process expands the window and sends the composer's
+          // lifecycle event down the same ordered channel as the mode event —
+          // exactly the tray items' gesture — so the composer's shape can never
+          // lose a race to the panel apply the expansion causes. The draft
+          // rides this ref because the lifecycle channel carries event names,
+          // not payloads: set before the ask, consumed when the event lands.
+          // Whether it will be placed is decided here with the same pure
+          // decision the open itself makes, on the same entry — the open lands
+          // a beat later on the event, and nothing else writes the entry in
+          // between — so the spoken outcome says what actually happens. And
+          // nothing here sends: the note leaves only by the Send button's own
+          // press.
+          const kind = FEEDBACK_KIND_FOR_COMPOSER[action.composer];
+          const drafted = openedFeedbackEntry(feedbackEntry.latest(), {
+            kind,
+            fromPanel: false,
+            ...(action.draft === undefined ? {} : { draft: action.draft }),
+          }).drafted;
+          spokenFeedbackDraft.current = action.draft;
+          try {
+            await window.sidecar.summonFeedback(kind);
+          } catch (error) {
+            // The composer is not coming, so the event that would consume the
+            // draft is not coming either; a stale one must not season some
+            // later tray press.
+            spokenFeedbackDraft.current = undefined;
+            throw error;
+          }
+          return {
+            status: "opened",
+            kind: action.composer,
+            ...(action.draft === undefined
+              ? {}
+              : drafted
+                ? {
+                    note: "The ask is drafted in the composer; the developer edits and sends it by hand.",
+                  }
+                : {
+                    note: "A note was already being written, so it was kept and nothing was drafted over it.",
+                  }),
+          };
+        },
+        [APP_TOOL_KIND.PANEL]: async (action) => {
+          // Whether this ask is what opens the panel, read before it does: an
+          // errand into a shape still growing has to trail the whole opening,
+          // and one into a panel already up does not.
+          const opening = presentationOf() !== PANEL_PRESENTATION.PANEL;
+          changeTab(action.tab);
+          const spoken = action.filter ? sessionFilterFromSpoken(action.filter) : undefined;
+          // An agent this build never registered cannot narrow the list, and Luke
+          // must not claim it did. The list still has to match the sentence that
+          // says every session is shown, so an unmappable ask widens the view to
+          // All rather than leaving whatever narrowing was already in force.
+          const filter = action.filter ? (spoken ?? SESSION_FILTER.ALL) : undefined;
+          // Caught rather than applied, on the settings switch's terms: the
+          // narrowing is what Luke is on his way to the options button to do, and
+          // a list that has already re-sorted itself by the time he gets there
+          // makes the flight a report rather than the act.
+          if (filter || action.sort) {
+            heldView.current = {
+              ...(filter ? { filter } : {}),
+              ...(action.sort ? { sort: action.sort } : {}),
+            };
+          }
+          await changeMode(true);
+          // Nothing flew, so nothing is coming to release it. The panel itself is
+          // what was asked for and it is already up, so the list must show what
+          // the answer is about to claim it shows.
+          // The tab bar and the options button are outside the settings pages, so
+          // a page reset behind this tab switch is nothing they wait for.
+          if (
+            !runErrand(errandTargets(action), opening ? ERRAND_WAIT.CONTENT : ERRAND_WAIT.AT_ONCE)
+          ) {
+            releaseErrandChange();
+          }
+          return {
+            status: "shown",
+            tab: action.tab,
+            ...(spoken ? { filter: action.filter } : {}),
+            ...(action.filter && !spoken
+              ? { note: "That agent has no filter of its own here, so every session is shown." }
+              : {}),
+            ...(action.sort ? { sort: action.sort } : {}),
+          };
+        },
+      }),
     [
       changeMode,
       changeTab,
