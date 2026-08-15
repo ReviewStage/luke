@@ -20,6 +20,7 @@ import {
   ATTENTION_REVIEW_OUTCOME,
   AttentionSpeechLedger,
   attentionUpdate,
+  DISPOSITION_GUIDANCE,
   maximumAttentionSummaryLength,
 } from "../src/attention";
 import { ATTENTION_TUNING_EXAMPLES } from "../src/attention-examples";
@@ -713,8 +714,11 @@ test("tuning examples are synthetic, bounded, and cover every disposition", () =
 
 test("instructions carry the decision contract and the tuning examples", () => {
   const instructions = attentionInstructions();
+  const schemaDescription = ATTENTION_DECISION_SCHEMA.properties.disposition.description;
   for (const disposition of Object.values(ATTENTION_DISPOSITION)) {
-    assert.ok(instructions.includes(disposition));
+    const guidance = `${disposition}: ${DISPOSITION_GUIDANCE[disposition]}`;
+    assert.ok(instructions.includes(guidance));
+    assert.ok(schemaDescription.includes(guidance));
   }
   for (const example of ATTENTION_TUNING_EXAMPLES) {
     assert.ok(instructions.includes(example.name));

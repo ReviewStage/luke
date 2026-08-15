@@ -50,3 +50,32 @@ export function nonNegativeNumber(value: number | undefined, fallback: number): 
   if (value === undefined || !Number.isFinite(value) || value < 0) return fallback;
   return value;
 }
+
+/**
+ * Bounds a bag of numeric constructor options against their defaults. Each
+ * listed key is read from `options` and clamped by kind — a missing, infinite,
+ * or out-of-range value keeps the default — so every adapter constructor does
+ * not restate the same {@link positiveInteger} / {@link nonNegativeNumber}
+ * calls.
+ */
+export function resolveOptions<K extends string>(
+  options: { readonly [P in K]?: number },
+  defaults: { readonly [P in K]: number },
+  bounds: {
+    readonly positive?: readonly K[];
+    readonly nonNegative?: readonly K[];
+  },
+): { [P in K]: number } {
+  const resolved: { [P in K]: number } = { ...defaults };
+  const assign = (key: K, kind: "positive" | "nonNegative"): void => {
+    const fallback = defaults[key];
+    if (typeof fallback !== "number") return;
+    resolved[key] =
+      kind === "positive"
+        ? positiveInteger(options[key], fallback)
+        : nonNegativeNumber(options[key], fallback);
+  };
+  for (const key of bounds.positive ?? []) assign(key, "positive");
+  for (const key of bounds.nonNegative ?? []) assign(key, "nonNegative");
+  return resolved;
+}

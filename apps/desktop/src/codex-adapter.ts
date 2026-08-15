@@ -4,13 +4,12 @@ import {
   isRecord,
   maximumSessionRecapLength,
   maximumSessionTitleLength,
-  nonNegativeNumber,
   OBSERVATION_WINDOW,
   oneLine,
   PROVIDER_ID,
   type ProviderSessionObservation,
-  positiveInteger,
   recordFromJsonLine,
+  resolveOptions,
   SESSION_STATUS,
   type SessionDetail,
   type SessionProvider,
@@ -422,18 +421,21 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
     this.#codexHome = options.codexHome ?? defaultCodexHome();
     this.#sqliteHome = options.sqliteHome;
     this.#now = options.now ?? Date.now;
-    this.#maximumSessionRows = positiveInteger(
-      options.maximumSessionRows,
-      CODEX_ADAPTER_DEFAULTS.MAXIMUM_SESSION_ROWS,
+    const resolved = resolveOptions(
+      options,
+      {
+        maximumSessionRows: CODEX_ADAPTER_DEFAULTS.MAXIMUM_SESSION_ROWS,
+        maximumSessionAgeMs: OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS,
+        activeSessionFreshnessMs: OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
+      },
+      {
+        positive: ["maximumSessionRows"],
+        nonNegative: ["maximumSessionAgeMs", "activeSessionFreshnessMs"],
+      },
     );
-    this.#maximumSessionAgeMs = nonNegativeNumber(
-      options.maximumSessionAgeMs,
-      OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS,
-    );
-    this.#activeSessionFreshnessMs = nonNegativeNumber(
-      options.activeSessionFreshnessMs,
-      OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
-    );
+    this.#maximumSessionRows = resolved.maximumSessionRows;
+    this.#maximumSessionAgeMs = resolved.maximumSessionAgeMs;
+    this.#activeSessionFreshnessMs = resolved.activeSessionFreshnessMs;
     this.#sqlite = options.sqlite ?? defaultSqliteModule;
   }
 

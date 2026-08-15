@@ -7,9 +7,7 @@ source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 
 sidecar_require_macos
 sidecar_require_node
-if [[ ! -x "$SIDECAR_ELECTRON_BIN" ]]; then
-    "$SCRIPT_DIRECTORY/bootstrap.sh"
-fi
+sidecar_ensure_dependencies
 
 # Running this script means "launch the build I just made", so an already-running
 # instance is replaced rather than left in place. `--keep-running` opts out: the

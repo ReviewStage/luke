@@ -1,4 +1,8 @@
-import { type AttentionUpdate, maximumAttentionSummaryLength } from "./attention";
+import {
+  type AttentionUpdate,
+  DISPOSITION_GUIDANCE,
+  maximumAttentionSummaryLength,
+} from "./attention";
 import { ATTENTION_TUNING_EXAMPLES, type AttentionTuningExample } from "./attention-examples";
 import { ATTENTION_DISPOSITION } from "./session";
 
@@ -9,9 +13,9 @@ const ATTENTION_INSTRUCTION_LINES: readonly string[] = [
   "The developer is working, and every sentence you approve interrupts them.",
   "",
   "Choose one disposition:",
-  `- ${ATTENTION_DISPOSITION.SILENT}: say nothing. This is the correct answer for most updates.`,
-  `- ${ATTENTION_DISPOSITION.SPEAK_DURING_TURN}: interrupt now, only when the session cannot progress until the developer acts.`,
-  `- ${ATTENTION_DISPOSITION.SPEAK_AT_TURN_END}: wait for a natural pause, then report a session that reached a resting point.`,
+  ...Object.values(ATTENTION_DISPOSITION).map(
+    (disposition) => `- ${disposition}: ${DISPOSITION_GUIDANCE[disposition]}`,
+  ),
   "",
   "Rules:",
   "- Default to silence when the update is routine, ambiguous, or merely continues work already underway.",

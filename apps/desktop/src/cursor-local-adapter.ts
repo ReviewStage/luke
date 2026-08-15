@@ -3,10 +3,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   agedStatus,
-  nonNegativeNumber,
   OBSERVATION_WINDOW,
   type ProviderSessionObservation,
-  positiveInteger,
+  resolveOptions,
   SESSION_STATUS,
   type SessionDetail,
   type SessionProviderAdapter,
@@ -324,26 +323,25 @@ export class CursorLocalSessionAdapter implements SessionProviderAdapter {
       options.workspaceStorageDirectory ?? defaultWorkspaceStorageDirectory(),
     );
     this.#now = options.now ?? Date.now;
-    this.#maximumProjectDirectories = positiveInteger(
-      options.maximumProjectDirectories,
-      CURSOR_LOCAL_ADAPTER_DEFAULTS.MAXIMUM_PROJECT_DIRECTORIES,
+    const resolved = resolveOptions(
+      options,
+      {
+        maximumProjectDirectories: CURSOR_LOCAL_ADAPTER_DEFAULTS.MAXIMUM_PROJECT_DIRECTORIES,
+        maximumSessionFiles: CURSOR_LOCAL_ADAPTER_DEFAULTS.MAXIMUM_SESSION_FILES,
+        maximumSessionAgeMs: OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS,
+        activeSessionFreshnessMs: OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
+        readTailBytes: LOCAL_ADAPTER_DEFAULTS.READ_TAIL_BYTES,
+      },
+      {
+        positive: ["maximumProjectDirectories", "maximumSessionFiles", "readTailBytes"],
+        nonNegative: ["maximumSessionAgeMs", "activeSessionFreshnessMs"],
+      },
     );
-    this.#maximumSessionFiles = positiveInteger(
-      options.maximumSessionFiles,
-      CURSOR_LOCAL_ADAPTER_DEFAULTS.MAXIMUM_SESSION_FILES,
-    );
-    this.#maximumSessionAgeMs = nonNegativeNumber(
-      options.maximumSessionAgeMs,
-      OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS,
-    );
-    this.#activeSessionFreshnessMs = nonNegativeNumber(
-      options.activeSessionFreshnessMs,
-      OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
-    );
-    this.#readTailBytes = positiveInteger(
-      options.readTailBytes,
-      LOCAL_ADAPTER_DEFAULTS.READ_TAIL_BYTES,
-    );
+    this.#maximumProjectDirectories = resolved.maximumProjectDirectories;
+    this.#maximumSessionFiles = resolved.maximumSessionFiles;
+    this.#maximumSessionAgeMs = resolved.maximumSessionAgeMs;
+    this.#activeSessionFreshnessMs = resolved.activeSessionFreshnessMs;
+    this.#readTailBytes = resolved.readTailBytes;
   }
 
   async observe(): Promise<readonly ProviderSessionObservation[]> {

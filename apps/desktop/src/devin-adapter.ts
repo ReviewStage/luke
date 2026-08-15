@@ -6,7 +6,7 @@ import {
   type ProviderMessageResult,
   type ProviderSessionMessage,
   type ProviderSessionObservation,
-  positiveInteger,
+  resolveOptions,
   SESSION_STATUS,
   type SessionProvider,
   type SessionStatus,
@@ -289,10 +289,12 @@ export class DevinSessionAdapter
       },
       options,
     );
-    this.#maximumObservedSessions = positiveInteger(
-      options.maximumObservedSessions,
-      DEVIN_ADAPTER_DEFAULTS.MAXIMUM_OBSERVED_SESSIONS,
+    const { maximumObservedSessions } = resolveOptions(
+      options,
+      { maximumObservedSessions: DEVIN_ADAPTER_DEFAULTS.MAXIMUM_OBSERVED_SESSIONS },
+      { positive: ["maximumObservedSessions"] },
     );
+    this.#maximumObservedSessions = maximumObservedSessions;
   }
 
   async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
