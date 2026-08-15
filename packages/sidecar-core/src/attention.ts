@@ -29,6 +29,19 @@ export const ATTENTION_DECISION_SCHEMA_NAME = "attention_decision";
 const ATTENTION_DISPOSITIONS: readonly AttentionDisposition[] =
   Object.values(ATTENTION_DISPOSITION);
 
+/**
+ * What each disposition means, in the wording an evaluator is shown. The
+ * schema description and the standing instructions both come from here, so
+ * they cannot drift.
+ */
+export const DISPOSITION_GUIDANCE = {
+  [ATTENTION_DISPOSITION.SILENT]: "say nothing. This is the correct answer for most updates.",
+  [ATTENTION_DISPOSITION.SPEAK_DURING_TURN]:
+    "interrupt now, only when the session cannot progress until the developer acts.",
+  [ATTENTION_DISPOSITION.SPEAK_AT_TURN_END]:
+    "wait for a natural pause, then report a session that reached a resting point.",
+} as const satisfies Record<AttentionDisposition, string>;
+
 const ATTENTION_REVIEW_DEFAULTS = {
   REPEAT_WINDOW_MS: 10 * 60 * 1000,
   MAXIMUM_UPDATES_PER_REVIEW: 4,
@@ -47,8 +60,9 @@ export const ATTENTION_DECISION_SCHEMA = {
     disposition: {
       type: "string",
       enum: ATTENTION_DISPOSITIONS,
-      description:
-        "silent when the update is not worth saying out loud, speak-during-turn when the developer is blocking the session right now, speak-at-turn-end when the session reached a resting point.",
+      description: ATTENTION_DISPOSITIONS.map(
+        (disposition) => `${disposition}: ${DISPOSITION_GUIDANCE[disposition]}`,
+      ).join(" "),
     },
     summary: {
       type: ["string", "null"],
@@ -177,6 +191,30 @@ function isAttentionDisposition(value: unknown): value is AttentionDisposition {
 }
 
 /**
+ * Every field a development can be derived from. `attentionTrigger` and
+ * `#isSuperseded` both walk this list, so adding a dimension is one edit: a
+ * field that can open a review and cannot supersede one would let Luke speak
+ * about a failure the session has already replaced or recovered from.
+ */
+const ATTENTION_DEVELOPMENT = [
+  {
+    trigger: ATTENTION_TRIGGER.STATUS_CHANGED,
+    ofSession: (session: NormalizedSession) => session.status,
+    ofUpdate: (update: AttentionUpdate) => update.status,
+  },
+  {
+    trigger: ATTENTION_TRIGGER.ERROR_REPORTED,
+    ofSession: (session: NormalizedSession) => session.detail.error,
+    ofUpdate: (update: AttentionUpdate) => update.context?.error,
+  },
+  {
+    trigger: ATTENTION_TRIGGER.SUMMARY_CHANGED,
+    ofSession: (session: NormalizedSession) => session.summary,
+    ofUpdate: (update: AttentionUpdate) => update.summary,
+  },
+] as const;
+
+/**
  * What a session is running changes with every tool call, so it is deliberately
  * not a development: reviewing it would put a model call behind each one. Only
  * the state, a new failure, or a new recap is worth a decision.
@@ -186,9 +224,9 @@ function attentionTrigger(
   previous: NormalizedSession | undefined,
 ): AttentionTrigger | undefined {
   if (!previous) return ATTENTION_TRIGGER.OBSERVED;
-  if (previous.status !== session.status) return ATTENTION_TRIGGER.STATUS_CHANGED;
-  if (previous.detail.error !== session.detail.error) return ATTENTION_TRIGGER.ERROR_REPORTED;
-  if (previous.summary !== session.summary) return ATTENTION_TRIGGER.SUMMARY_CHANGED;
+  for (const dimension of ATTENTION_DEVELOPMENT) {
+    if (dimension.ofSession(previous) !== dimension.ofSession(session)) return dimension.trigger;
+  }
   return undefined;
 }
 
@@ -498,19 +536,15 @@ export class SessionAttentionReviewer {
 
   /**
    * Reports whether the session moved past the state the evaluator reasoned
-   * about. It compares every field a development can be derived from, so
-   * `attentionTrigger` and this must be changed together: a dimension that can
-   * open a review and cannot supersede one lets Luke speak about a failure the
-   * session has already replaced or recovered from.
+   * about. It compares every field a development can be derived from, so a
+   * dimension cannot open a review and fail to supersede it.
    */
   #isSuperseded(identity: SessionIdentity, update: AttentionUpdate): boolean {
     if (!this.#currentSession) return false;
     const current = this.#currentSession(identity);
     if (!current) return true;
-    return (
-      current.status !== update.status ||
-      current.summary !== update.summary ||
-      current.detail.error !== update.context?.error
+    return ATTENTION_DEVELOPMENT.some(
+      (dimension) => dimension.ofSession(current) !== dimension.ofUpdate(update),
     );
   }
 
