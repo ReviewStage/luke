@@ -4,6 +4,7 @@ import Foundation
 private struct ScreenGeometry: Codable {
     let displayId: UInt32
     let safeAreaTop: Double
+    let menuBarHeight: Double
     let notchWidth: Double
     let hasNotch: Bool
 }
@@ -32,6 +33,7 @@ private struct ScreenGeometryCommand {
             return ScreenGeometry(
                 displayId: displayNumber.uint32Value,
                 safeAreaTop: screen.safeAreaInsets.top,
+                menuBarHeight: screen.frame.maxY - screen.visibleFrame.maxY,
                 notchWidth: notchWidth,
                 hasNotch: hasNotch
             )

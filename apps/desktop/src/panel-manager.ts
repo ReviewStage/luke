@@ -301,6 +301,7 @@ export class PanelManager {
       this.#nativeScreens.set(display.id, {
         displayId: display.id,
         safeAreaTop: 38,
+        menuBarHeight: 38,
         notchWidth: 210,
         hasNotch: true,
         source: "fixture",

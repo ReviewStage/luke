@@ -16,6 +16,7 @@ function isNativeGeometry(value: unknown): value is NativeNotchGeometry {
   return (
     typeof geometry.displayId === "number" &&
     typeof geometry.safeAreaTop === "number" &&
+    (geometry.menuBarHeight === undefined || typeof geometry.menuBarHeight === "number") &&
     typeof geometry.notchWidth === "number" &&
     typeof geometry.hasNotch === "boolean"
   );

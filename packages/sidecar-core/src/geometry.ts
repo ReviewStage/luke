@@ -10,11 +10,13 @@ export interface Rectangle {
 export interface DisplayGeometry {
   bounds: Rectangle;
   workArea: Rectangle;
+  scaleFactor?: number;
 }
 
 export interface NativeNotchGeometry {
   displayId: number;
   safeAreaTop: number;
+  menuBarHeight?: number;
   notchWidth: number;
   hasNotch: boolean;
   source?: "appkit" | "fixture";
@@ -91,6 +93,11 @@ export const SURFACE_MARGIN = 40;
 const peekSideWidth = CAPSULE_SIDE_WIDTH + PEEK_SIDE_GROWTH;
 const panelHeight = 520;
 
+function snapToDevicePixels(value: number, scaleFactor?: number): number {
+  if (scaleFactor === undefined) return value;
+  return Math.round(value * scaleFactor) / scaleFactor;
+}
+
 export function resolveNotchGeometry(
   display: DisplayGeometry,
   native?: NativeNotchGeometry,
@@ -98,7 +105,10 @@ export function resolveNotchGeometry(
 ): ResolvedNotchGeometry {
   const physical: ResolvedNotchGeometry = native
     ? {
-        topInset: Math.max(0, Math.round(native.safeAreaTop)),
+        topInset: snapToDevicePixels(
+          Math.max(0, native.safeAreaTop, native.menuBarHeight ?? 0),
+          display.scaleFactor,
+        ),
         housingWidth: native.hasNotch ? Math.max(0, Math.round(native.notchWidth)) : 0,
         hasNotch: native.hasNotch,
         source: native.source ?? "appkit",
@@ -110,8 +120,8 @@ export function resolveNotchGeometry(
         source: "work-area",
       };
   // A real housing is never argued with; only its absence takes the form
-  // factor's answer. The top inset is carried through untouched — the window
-  // and the stylesheet already hold every housing to the same 32px floor.
+  // factor's answer. Its resolved depth is carried through untouched — the
+  // window and the stylesheet already hold every housing to the same 32px floor.
   if (physical.hasNotch || formFactor !== PANEL_FORM_FACTOR.NOTCH) return physical;
   return {
     topInset: physical.topInset,
@@ -143,7 +153,7 @@ export function positionNotchWindow(
           display.bounds.height,
         )
       : Math.min(
-          Math.max(32, notch.topInset) + VOICE_CAPTION_MAX_HEIGHT + SURFACE_MARGIN,
+          Math.ceil(Math.max(32, notch.topInset)) + VOICE_CAPTION_MAX_HEIGHT + SURFACE_MARGIN,
           display.bounds.height,
         );
   const x = Math.round(display.bounds.x + (display.bounds.width - width) / 2);
