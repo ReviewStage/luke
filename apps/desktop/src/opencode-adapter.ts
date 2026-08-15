@@ -20,6 +20,7 @@ import {
 } from "@sidecar/core";
 import {
   discoverSessionFiles,
+  existingWorkspaceDirectory,
   readDirectory,
   readTextFile,
   type SessionFileCandidate,
@@ -470,7 +471,14 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
       // A database whose schema was unusable answers nothing; the next
       // candidate, or the legacy files, may still answer.
       if (snapshots === undefined) continue;
-      return snapshots.map((snapshot) =>
+      const existingSnapshots = (
+        await Promise.all(
+          snapshots.map(async (snapshot) =>
+            (await existingWorkspaceDirectory(snapshot.directory)) ? snapshot : undefined,
+          ),
+        )
+      ).filter((snapshot): snapshot is OpenCodeSessionSnapshot => snapshot !== undefined);
+      return existingSnapshots.map((snapshot) =>
         observationFromSnapshot(snapshot, now, this.#activeSessionFreshnessMs),
       );
     }
@@ -604,6 +612,7 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
           wholeNumber(time?.created) ?? 0,
         ),
       };
+      if (!(await existingWorkspaceDirectory(snapshot.directory))) continue;
       // Read for every reported session, not a capped few: a session without
       // its turn would default to working on freshness alone. Each read is one
       // directory listing and one small file, against the same session cap the

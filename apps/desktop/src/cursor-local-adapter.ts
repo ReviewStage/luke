@@ -15,6 +15,7 @@ import { CURSOR_PROVIDER } from "./cursor-adapter";
 import {
   type DirectoryEntry,
   discoverSessionFiles,
+  existingWorkspaceDirectory,
   fileStats,
   LOCAL_ADAPTER_DEFAULTS,
   readDirectory,
@@ -196,8 +197,7 @@ class CursorWorkspaceLabels {
       if (this.#resolvedFoldersByProjectDirectoryName.has(projectDirectoryName)) {
         const cachedPath = this.#resolvedFoldersByProjectDirectoryName.get(projectDirectoryName);
         if (!cachedPath) continue;
-        const stats = await fileStats(cachedPath);
-        if (stats?.isDirectory()) continue;
+        if (await existingWorkspaceDirectory(cachedPath)) continue;
         this.#resolvedFoldersByProjectDirectoryName.set(projectDirectoryName, undefined);
         continue;
       }
@@ -205,10 +205,8 @@ class CursorWorkspaceLabels {
       const recordedPath = this.#folderPathsByProjectName.get(
         canonicalProjectName(projectDirectoryName),
       );
-      const recordedStats = recordedPath ? await fileStats(recordedPath) : undefined;
-      const folderPath = recordedStats?.isDirectory()
-        ? recordedPath
-        : await resolveProjectDirectory(projectDirectoryName);
+      const recordedFolder = await existingWorkspaceDirectory(recordedPath);
+      const folderPath = recordedFolder ?? (await resolveProjectDirectory(projectDirectoryName));
       this.#resolvedFoldersByProjectDirectoryName.set(projectDirectoryName, folderPath);
     }
   }
@@ -273,8 +271,8 @@ async function resolveProjectDirectory(projectDirectoryName: string): Promise<st
       if (!entry || (!entry.isDirectory() && !entry.isSymbolicLink())) continue;
       const candidatePath = path.join(current.directoryPath, name);
       if (end === segments.length) {
-        const stats = await fileStats(candidatePath);
-        if (stats?.isDirectory()) resolvedPaths.add(candidatePath);
+        const resolvedDirectory = await existingWorkspaceDirectory(candidatePath);
+        if (resolvedDirectory) resolvedPaths.add(resolvedDirectory);
         if (resolvedPaths.size > 1) return undefined;
         continue;
       }

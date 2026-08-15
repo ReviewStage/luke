@@ -28,6 +28,12 @@ async function temporaryClaudeHome(t: TestContext): Promise<string> {
   return directory;
 }
 
+async function testWorkspaceDirectory(root: string, directory: string): Promise<string> {
+  const workspace = path.join(root, "test-workspaces", path.basename(directory));
+  await fs.mkdir(workspace, { recursive: true });
+  return workspace;
+}
+
 async function writeSessionFile(
   claudeHome: string,
   projectDirectoryName: string,
@@ -37,8 +43,17 @@ async function writeSessionFile(
 ): Promise<void> {
   const projectDirectory = path.join(claudeHome, CLAUDE_PROJECTS_DIRECTORY, projectDirectoryName);
   await fs.mkdir(projectDirectory, { recursive: true });
+  const materializedRecords = await Promise.all(
+    records.map(async (record) => {
+      const cwd = typeof record.cwd === "string" ? record.cwd : undefined;
+      return cwd ? { ...record, cwd: await testWorkspaceDirectory(claudeHome, cwd) } : record;
+    }),
+  );
   const filePath = path.join(projectDirectory, `${sessionFileName}.jsonl`);
-  await fs.writeFile(filePath, `${records.map((record) => JSON.stringify(record)).join("\n")}\n`);
+  await fs.writeFile(
+    filePath,
+    `${materializedRecords.map((record) => JSON.stringify(record)).join("\n")}\n`,
+  );
   await fs.utimes(filePath, mtimeMs / 1000, mtimeMs / 1000);
 }
 
@@ -847,4 +862,26 @@ test("falls back to the file's date when the tail carries no timestamp", async (
   const [observation] = await adapter.observe();
 
   assert.equal(observation?.observedAt, TEST_TIME - 5_000);
+});
+
+test("withdraws a Claude Code session when its workspace is deleted", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-deleted",
+    "deleted-workspace",
+    [
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.USER,
+        cwd: "/Users/test/deleted",
+        timestamp: "2026-08-11T23:44:55.000Z",
+      },
+    ],
+    TEST_TIME - 1_000,
+  );
+  const adapter = new ClaudeCodeSessionAdapter({ claudeHome, now: () => TEST_TIME });
+
+  assert.equal((await adapter.observe()).length, 1);
+  await fs.rm(path.join(claudeHome, "test-workspaces", "deleted"), { recursive: true });
+  assert.deepEqual(await adapter.observe(), []);
 });

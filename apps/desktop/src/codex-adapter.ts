@@ -17,7 +17,13 @@ import {
   text,
   wholeNumber,
 } from "@sidecar/core";
-import { readTail, readTextFile, uniquePaths, workspaceLabel } from "./local-session-adapter";
+import {
+  existingWorkspaceDirectory,
+  readTail,
+  readTextFile,
+  uniquePaths,
+  workspaceLabel,
+} from "./local-session-adapter";
 import {
   canIgnoreSqliteError,
   defaultSqliteModule,
@@ -459,10 +465,20 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
         database.close();
       }
 
+      const existingRows = (
+        await Promise.all(
+          rows.map(async (row) =>
+            (await existingWorkspaceDirectory(textFromRow(row, CODEX_THREAD_COLUMN.CWD)))
+              ? row
+              : undefined,
+          ),
+        )
+      ).filter((row): row is CodexThreadRow => row !== undefined);
+
       // The rollout read happens with the database already closed, so a slow
       // disk never holds a read lock on state Codex itself is writing.
-      const rollouts = await this.#rollouts(rows);
-      return rows
+      const rollouts = await this.#rollouts(existingRows);
+      return existingRows
         .map((row) =>
           observationFromThreadRow(
             row,

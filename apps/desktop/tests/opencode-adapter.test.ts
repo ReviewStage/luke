@@ -51,6 +51,12 @@ async function temporaryDataDirectory(t: TestContext): Promise<string> {
   return directory;
 }
 
+async function testWorkspaceDirectory(root: string, directory: string): Promise<string> {
+  const workspace = path.join(root, "test-workspaces", path.basename(directory));
+  await fs.mkdir(workspace, { recursive: true });
+  return workspace;
+}
+
 function writeSession(database: DatabaseSync, session: TestSession): void {
   database
     .prepare(`
@@ -115,6 +121,12 @@ async function writeOpenCodeState(
   } = {},
 ): Promise<void> {
   await fs.mkdir(dataDirectory, { recursive: true });
+  const materializedSessions = await Promise.all(
+    sessions.map(async (session) => ({
+      ...session,
+      directory: await testWorkspaceDirectory(dataDirectory, session.directory),
+    })),
+  );
   const database = new DatabaseSync(
     path.join(dataDirectory, options.databaseFile ?? OPENCODE_DATABASE),
     {},
@@ -152,7 +164,7 @@ async function writeOpenCodeState(
         data TEXT NOT NULL
       );
     `);
-    for (const session of sessions) writeSession(database, session);
+    for (const session of materializedSessions) writeSession(database, session);
     for (const message of options.messages ?? []) writeMessage(database, message);
     for (const part of options.parts ?? []) writePart(database, part);
   } finally {
@@ -179,6 +191,12 @@ async function writeEarlyOpenCodeState(
   sessions: readonly { id: string; directory: string; observedAt: number; title: string }[],
 ): Promise<void> {
   await fs.mkdir(dataDirectory, { recursive: true });
+  const materializedSessions = await Promise.all(
+    sessions.map(async (session) => ({
+      ...session,
+      directory: await testWorkspaceDirectory(dataDirectory, session.directory),
+    })),
+  );
   const database = new DatabaseSync(path.join(dataDirectory, OPENCODE_DATABASE), {});
   try {
     database.exec(`
@@ -191,7 +209,7 @@ async function writeEarlyOpenCodeState(
         time_updated INTEGER NOT NULL
       )
     `);
-    for (const session of sessions) {
+    for (const session of materializedSessions) {
       database
         .prepare("INSERT INTO session VALUES (?, ?, ?, ?, ?, ?)")
         .run(
@@ -215,7 +233,14 @@ async function writeLegacySession(
 ): Promise<void> {
   const sessionDirectory = path.join(dataDirectory, "storage", "session", projectId);
   await fs.mkdir(sessionDirectory, { recursive: true });
-  await fs.writeFile(path.join(sessionDirectory, `${info.id}.json`), JSON.stringify(info));
+  const directory = typeof info.directory === "string" ? info.directory : undefined;
+  const materializedInfo = directory
+    ? { ...info, directory: await testWorkspaceDirectory(dataDirectory, directory) }
+    : info;
+  await fs.writeFile(
+    path.join(sessionDirectory, `${info.id}.json`),
+    JSON.stringify(materializedInfo),
+  );
 }
 
 async function writeLegacyMessage(
@@ -815,5 +840,35 @@ test("returns an empty snapshot when OpenCode has no local state", async (t) => 
     now: () => TEST_TIME,
   });
 
+  assert.deepEqual(await adapter.observe(), []);
+});
+
+test("withdraws a database session when its workspace is deleted", async (t) => {
+  const dataDirectory = await temporaryDataDirectory(t);
+  await writeOpenCodeState(dataDirectory, [
+    {
+      id: "ses_deleted_workspace",
+      directory: "/Users/test/deleted",
+      observedAt: TEST_TIME - 1_000,
+    },
+  ]);
+  const adapter = new OpenCodeSessionAdapter({ dataDirectory, now: () => TEST_TIME });
+
+  assert.equal((await adapter.observe()).length, 1);
+  await fs.rm(path.join(dataDirectory, "test-workspaces", "deleted"), { recursive: true });
+  assert.deepEqual(await adapter.observe(), []);
+});
+
+test("withdraws a legacy session when its workspace is deleted", async (t) => {
+  const dataDirectory = await temporaryDataDirectory(t);
+  await writeLegacySession(dataDirectory, "project-one", {
+    id: "ses_legacy_deleted_workspace",
+    directory: "/Users/test/deleted",
+    time: { created: TEST_TIME - 5_000, updated: TEST_TIME - 1_000 },
+  });
+  const adapter = new OpenCodeSessionAdapter({ dataDirectory, now: () => TEST_TIME });
+
+  assert.equal((await adapter.observe()).length, 1);
+  await fs.rm(path.join(dataDirectory, "test-workspaces", "deleted"), { recursive: true });
   assert.deepEqual(await adapter.observe(), []);
 });

@@ -51,6 +51,12 @@ async function temporaryCodexHome(t: TestContext): Promise<string> {
   return directory;
 }
 
+async function testWorkspaceDirectory(root: string, directory: string): Promise<string> {
+  const workspace = path.join(root, "test-workspaces", path.basename(directory));
+  await fs.mkdir(workspace, { recursive: true });
+  return workspace;
+}
+
 function writeThread(database: DatabaseSync, thread: TestThread): void {
   database
     .prepare(`
@@ -101,6 +107,12 @@ function writeThread(database: DatabaseSync, thread: TestThread): void {
 
 async function writeCodexState(codexHome: string, threads: readonly TestThread[]): Promise<void> {
   await fs.mkdir(codexHome, { recursive: true });
+  const materializedThreads = await Promise.all(
+    threads.map(async (thread) => ({
+      ...thread,
+      cwd: await testWorkspaceDirectory(codexHome, thread.cwd),
+    })),
+  );
   const database = new DatabaseSync(path.join(codexHome, CODEX_STATE_DATABASE), {});
   try {
     database.exec(`
@@ -126,7 +138,7 @@ async function writeCodexState(codexHome: string, threads: readonly TestThread[]
         reasoning_effort TEXT
       )
     `);
-    for (const thread of threads) writeThread(database, thread);
+    for (const thread of materializedThreads) writeThread(database, thread);
   } finally {
     database.close();
   }
@@ -647,5 +659,21 @@ test("returns an empty snapshot when node sqlite is unavailable", async (t) => {
     },
   });
 
+  assert.deepEqual(await adapter.observe(), []);
+});
+
+test("withdraws a Codex thread when its workspace is deleted", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  await writeCodexState(codexHome, [
+    {
+      id: "codex-deleted-workspace",
+      cwd: "/Users/test/deleted",
+      observedAt: TEST_TIME - 1_000,
+    },
+  ]);
+  const adapter = new CodexSessionAdapter({ codexHome, now: () => TEST_TIME });
+
+  assert.equal((await adapter.observe()).length, 1);
+  await fs.rm(path.join(codexHome, "test-workspaces", "deleted"), { recursive: true });
   assert.deepEqual(await adapter.observe(), []);
 });

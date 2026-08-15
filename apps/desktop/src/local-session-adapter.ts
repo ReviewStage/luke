@@ -83,6 +83,20 @@ export async function fileStats(filePath: string): Promise<Stats | undefined> {
   }
 }
 
+/**
+ * A local session belongs on the surface only while the directory it ran in
+ * still exists. Providers retain session metadata after a workspace is
+ * deleted, so trusting that stored path would keep an orphaned row forever.
+ */
+export async function existingWorkspaceDirectory(
+  directoryPath: string | undefined,
+): Promise<string | undefined> {
+  const normalized = directoryPath?.trim();
+  if (!normalized) return undefined;
+  const stats = await fileStats(normalized);
+  return stats?.isDirectory() ? normalized : undefined;
+}
+
 /** `lstat`, so a link out of a provider directory is never followed. */
 export async function statDirectoryEntry(
   directoryPath: string,

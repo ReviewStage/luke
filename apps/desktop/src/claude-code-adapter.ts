@@ -20,6 +20,7 @@ import {
 } from "@sidecar/core";
 import {
   discoverSessionFiles,
+  existingWorkspaceDirectory,
   LOCAL_ADAPTER_DEFAULTS,
   readDirectory,
   readHead,
@@ -322,16 +323,19 @@ function parseClaudeSessionTail(tail: string): ParsedClaudeSessionTail {
   return parsed;
 }
 
-/** Recovers only the generated title from a session too long to hold one in its tail. */
-function titleFromHead(head: string): string | undefined {
-  let title: string | undefined;
+/** Recovers only identity fields from a session too long to hold them in its tail. */
+function identityFromHead(head: string): Pick<ParsedClaudeSessionTail, "aiTitle" | "cwd"> {
+  const identity: Pick<ParsedClaudeSessionTail, "aiTitle" | "cwd"> = {};
   for (const line of head.split(/\r?\n/)) {
     const record = recordFromJsonLine(line);
+    if (!record) continue;
+    identity.cwd = cwdFromRecord(record) ?? identity.cwd;
     if (record?.type === CLAUDE_RECORD_TYPE.AI_TITLE) {
-      title = oneLine(text(record.aiTitle), maximumSessionTitleLength) ?? title;
+      identity.aiTitle =
+        oneLine(text(record.aiTitle), maximumSessionTitleLength) ?? identity.aiTitle;
     }
   }
-  return title;
+  return identity;
 }
 
 /**
@@ -475,9 +479,12 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
       if (now - candidate.mtimeMs > this.#maximumSessionAgeMs) continue;
       const tail = await readTail(candidate.filePath, this.#readTailBytes);
       const parsed = parseClaudeSessionTail(tail);
-      if (!parsed.aiTitle) {
-        parsed.aiTitle = titleFromHead(await readHead(candidate.filePath, this.#readHeadBytes));
+      if (!parsed.aiTitle || !parsed.cwd) {
+        const identity = identityFromHead(await readHead(candidate.filePath, this.#readHeadBytes));
+        parsed.aiTitle ??= identity.aiTitle;
+        parsed.cwd ??= identity.cwd;
       }
+      if (!(await existingWorkspaceDirectory(parsed.cwd))) continue;
       const observation = observationFromSessionFile(
         candidate,
         parsed,
