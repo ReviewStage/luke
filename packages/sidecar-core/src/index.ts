@@ -13,6 +13,7 @@ export {
   oneLine,
   positiveInteger,
   recordFromJsonLine,
+  resolveOptions,
   text,
   wholeNumber,
 } from "./json";
