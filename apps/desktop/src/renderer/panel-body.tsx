@@ -491,6 +491,10 @@ export interface PanelBodyProps {
   onOptionsToggle: () => void;
   tab: PanelTab;
   onTabChange: (tab: PanelTab) => void;
+  /**
+   * The settings tab's controls, grouped the way a credential's is. Forwarded
+   * untouched: this body chooses which tab is showing, not what a row writes.
+   */
   settings: SettingsPanelProps;
 }
 

@@ -71,6 +71,7 @@ import {
   tallySummary,
 } from "./session-model";
 import { SESSION_OPTIONS_BUTTON_ID, SESSION_OPTIONS_ID } from "./session-parts";
+import type { MicrophoneControl, PreferenceWrites, ShortcutControl } from "./settings-panel";
 import { SETTING_PAGE, SETTINGS_VIEW, type SettingsView } from "./settings-views";
 import { useBootstrapRacedChannel } from "./use-bootstrap-raced-channel";
 import { panelEntryOpen, usePanelEntry } from "./use-panel-entry";
@@ -1442,6 +1443,41 @@ export function App(): React.JSX.Element {
     credentialsEntry.entry && settings
       ? settings.credentialSources[credentialsEntry.entry.providerId]
       : CREDENTIAL_SOURCE.NONE;
+  const microphone: MicrophoneControl = {
+    status: microphoneStatus,
+    ...(microphoneError ? { error: microphoneError } : {}),
+    voiceAvailable: (settings ?? bootstrap.settings).voiceAvailable,
+    onRequest: () => void requestMicrophoneAccess(),
+    onOpenSettings: () => window.sidecar.openMicrophoneSettings(),
+  };
+  const preferences: PreferenceWrites = {
+    onVoiceCaptionsChange: changeVoiceCaptions,
+    onDuckOtherMediaChange: changeDuckOtherMedia,
+    onSessionNotificationsChange: changeSessionNotifications,
+    onVoiceChange: changeVoice,
+    onVoiceSpeedChange: changeVoiceSpeed,
+    onShowInMenuBarChange: changeShowInMenuBar,
+    onShowInDockChange: changeShowInDock,
+    onShowOnAllDisplaysChange: changeShowOnAllDisplays,
+    onFormFactorChange: changeFormFactor,
+    onDefaultWorkspaceProviderChange: changeDefaultWorkspaceProvider,
+    onWorkspaceAgentDefaultChange: changeWorkspaceAgentDefault,
+  };
+  const shortcuts: ShortcutControl = {
+    ...(shownHotkey.hotkey ? { voiceHotkey: shownHotkey.hotkey } : {}),
+    voiceHotkeyHeld: shownHotkey.held,
+    voiceChosen: settings?.voiceHotkey !== undefined,
+    onVoiceHotkeyChange: changeVoiceHotkey,
+    // Both rows take the accelerator: they draw the keys apart and
+    // label the chord whole for the buttons beside them.
+    ...(shownAskHotkey ? { askHotkey: shownAskHotkey } : {}),
+    askChosen: settings?.askHotkey !== undefined,
+    onAskHotkeyChange: changeAskHotkey,
+    ...(shownStopHotkey ? { stopHotkey: shownStopHotkey } : {}),
+    stopChosen: settings?.stopHotkey !== undefined,
+    onStopHotkeyChange: changeStopHotkey,
+    onCapture: changeShortcutCapture,
+  };
 
   return (
     <div
@@ -1491,38 +1527,15 @@ export function App(): React.JSX.Element {
             settings={{
               view: settingsView,
               onViewChange: setSettingsView,
-              microphoneStatus,
-              microphoneError,
-              onRequestMicrophone: () => void requestMicrophoneAccess(),
-              onOpenMicrophoneSettings: () => window.sidecar.openMicrophoneSettings(),
-              voiceAvailable: (settings ?? bootstrap.settings).voiceAvailable,
+              microphone,
               settings,
-              onVoiceCaptionsChange: changeVoiceCaptions,
-              onDuckOtherMediaChange: changeDuckOtherMedia,
-              onSessionNotificationsChange: changeSessionNotifications,
+              preferences,
               credentials,
               feedback: feedbackControl,
-              onVoiceChange: changeVoice,
-              onVoiceSpeedChange: changeVoiceSpeed,
               panelOpen,
-              ...(shownHotkey.hotkey ? { voiceHotkey: shownHotkey.hotkey } : {}),
-              voiceHotkeyHeld: shownHotkey.held,
-              onVoiceHotkeyChange: changeVoiceHotkey,
-              // Both rows take the accelerator: they draw the keys apart and
-              // label the chord whole for the buttons beside them.
-              ...(shownAskHotkey ? { askHotkey: shownAskHotkey } : {}),
-              onAskHotkeyChange: changeAskHotkey,
-              ...(shownStopHotkey ? { stopHotkey: shownStopHotkey } : {}),
-              onStopHotkeyChange: changeStopHotkey,
-              onShortcutCapture: changeShortcutCapture,
-              onShowInMenuBarChange: changeShowInMenuBar,
-              onShowInDockChange: changeShowInDock,
-              onShowOnAllDisplaysChange: changeShowOnAllDisplays,
-              onFormFactorChange: changeFormFactor,
               workspaceProviders: workspaceProviderOptions,
-              onDefaultWorkspaceProviderChange: changeDefaultWorkspaceProvider,
-              onWorkspaceAgentDefaultChange: changeWorkspaceAgentDefault,
               onQuit: () => window.sidecar.quit(),
+              shortcuts,
             }}
           />
         </section>
