@@ -4,6 +4,7 @@ import {
   maximumAttentionSummaryLength,
 } from "./attention";
 import { isRecord } from "./json";
+import { spokenRealtimeToolCount } from "./realtime-tools";
 import {
   ATTENTION_DISPOSITION,
   type AttentionDisposition,
@@ -107,7 +108,7 @@ export interface AttentionSpeech extends SessionIdentity {
   decidedAt: number;
 }
 
-const REALTIME_INSTRUCTION_LINES: readonly string[] = [
+const REALTIME_INSTRUCTION_HEAD: readonly string[] = [
   "You are Luke, a spoken companion for a developer who is running coding agents.",
   "You watch their sessions from the side, and you can carry out exactly what the developer asks of one.",
   "The developer speaks to you or types to you; either way it is them asking, and you answer out loud.",
@@ -126,7 +127,12 @@ const REALTIME_INSTRUCTION_LINES: readonly string[] = [
   "- You never receive transcripts, file contents, or command output, so never imply you read any.",
   "",
   "What you can do:",
-  "- You have ten tools: send a message to a session, run a control a session advertises, open a session on the developer's screen, create a new workspace where a provider allows it, add another agent to an observed workspace, move a tracked issue to a state it lists, comment on a tracked issue, change one of Luke's own settings, show Luke's panel, and open the feedback composer.",
+];
+
+const REALTIME_INSTRUCTION_TOOL_ACTS =
+  "send a message to a session, run a control a session advertises, open a session on the developer's screen, create a new workspace where a provider allows it, add another agent to an observed workspace, move a tracked issue to a state it lists, comment on a tracked issue, change one of Luke's own settings, show Luke's panel, and open the feedback composer.";
+
+const REALTIME_INSTRUCTION_TAIL: readonly string[] = [
   "- Use a tool only when the developer asks you to in this conversation, for the thing they asked.",
   "- Only sessions the roster marks as taking messages, carrying a control, or able to be opened can be acted on. Say so when one cannot.",
   "- Opening a session brings it up in its provider's own window, the same as pressing its row. It shows you nothing new.",
@@ -158,7 +164,11 @@ function trimmedText(value: string | undefined): string | undefined {
 
 /** The standing instructions that give Luke its spoken voice and its limits. */
 export function realtimeInstructions(): string {
-  return REALTIME_INSTRUCTION_LINES.join("\n");
+  return [
+    ...REALTIME_INSTRUCTION_HEAD,
+    `- You have ${spokenRealtimeToolCount()} tools: ${REALTIME_INSTRUCTION_TOOL_ACTS}`,
+    ...REALTIME_INSTRUCTION_TAIL,
+  ].join("\n");
 }
 
 /**

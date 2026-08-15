@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   APP_SETTING_KIND,
@@ -2784,4 +2785,25 @@ test("the developer's call replaces Luke's own and keeps the waiting press", asy
   assert.ok(context.calls.includes("microphone-requested"));
   assert.equal(context.microphoneEnabled(), true);
   assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
+});
+
+test("a spoken tool call is still validated in both processes", () => {
+  const renderer = readFileSync(
+    new URL("../src/renderer/realtime-session.ts", import.meta.url),
+    "utf8",
+  );
+  const main = readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+
+  // The renderer validates against the roster and the guide before a carrier runs.
+  assert.match(renderer, /\bsessionToolAction\b/);
+  assert.match(renderer, /\bissueToolAction\b/);
+  assert.match(renderer, /\bappToolAction\b/);
+
+  // The main process must not share those validators: it re-checks against its
+  // own registry before an adapter or tracker sees anything.
+  assert.doesNotMatch(main, /\bsessionToolAction\b/);
+  assert.doesNotMatch(main, /\bissueToolAction\b/);
+  assert.doesNotMatch(main, /\bappToolAction\b/);
+  assert.match(main, /sessionRegistry\.get/);
+  assert.match(main, /channels\.executeIssueAction/);
 });
