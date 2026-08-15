@@ -12,15 +12,11 @@ import {
   openAiRealtimeCredentials,
   unavailableRealtimeDiagnostics,
 } from "../src/openai-realtime-credentials";
+import { type RecordedRequest, recordingFetch } from "./support/http-fake";
 
 const API_KEY = "sk-test-standing-key";
 const NOW = 1_800_000_000_000;
 const EXPIRES_AT_SECONDS = NOW / 1000 + 60;
-
-interface RecordedRequest {
-  url: string;
-  init: RequestInit;
-}
 
 function mintResponse(overrides: Record<string, unknown> = {}): Response {
   return new Response(
@@ -38,19 +34,18 @@ function minter(
   responses: readonly (Response | Error)[],
   options: { now?: () => number } = {},
 ): { minter: OpenAiRealtimeCredentialMinter; requests: RecordedRequest[] } {
-  const requests: RecordedRequest[] = [];
   let index = 0;
+  const { fetch, requests } = recordingFetch(() => {
+    const next = responses[Math.min(index, responses.length - 1)];
+    index += 1;
+    if (next instanceof Error) throw next;
+    if (!next) throw new Error("No response configured");
+    return next;
+  });
   const instance = new OpenAiRealtimeCredentialMinter({
     apiKey: API_KEY,
     now: options.now ?? (() => NOW),
-    fetch: async (url, init) => {
-      requests.push({ url, init });
-      const next = responses[Math.min(index, responses.length - 1)];
-      index += 1;
-      if (next instanceof Error) throw next;
-      if (!next) throw new Error("No response configured");
-      return next;
-    },
+    fetch,
   });
   return { minter: instance, requests };
 }

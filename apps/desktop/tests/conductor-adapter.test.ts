@@ -3,6 +3,7 @@ import test from "node:test";
 import { SESSION_STATUS } from "@sidecar/core";
 import type { CloudFetch } from "../src/cloud-session-adapter";
 import { CONDUCTOR_PROVIDER, ConductorSessionAdapter } from "../src/conductor-adapter";
+import { HTTP_STATUS, jsonResponse, recordingFetch } from "./support/http-fake";
 
 const TEST_TIME = Date.parse("2026-08-12T02:45:00.000Z");
 const TEST_BASE_URL = "https://api.conductor.test";
@@ -17,12 +18,6 @@ const TEST_CONDUCTOR_STATUS = {
   IDLE: "idle",
   WORKING: "working",
   ERROR: "error",
-} as const;
-
-const HTTP_STATUS = {
-  OK: 200,
-  UNAUTHORIZED: 401,
-  SERVER_ERROR: 500,
 } as const;
 
 interface TestProject {
@@ -64,28 +59,8 @@ interface TestApi {
   sqlHttpStatus?: number;
 }
 
-interface RecordedRequest {
-  method: string;
-  pathname: string;
-  authorization: string | undefined;
-  contentType: string | undefined;
-  body: string | undefined;
-}
-
-interface FakeConductorApi {
-  fetch: CloudFetch;
-  requests: RecordedRequest[];
-}
-
 function isoTimestamp(timestampMs: number): string {
   return new Date(timestampMs).toISOString();
-}
-
-function jsonResponse(body: unknown, status = HTTP_STATUS.OK): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
 }
 
 function page(data: readonly unknown[]): unknown {
@@ -114,26 +89,16 @@ function sessionPayload(session: TestSession): Record<string, unknown> {
 }
 
 /** Serves the read-only subset of the public API the adapter is allowed to use. */
-function fakeConductorApi(api: TestApi): FakeConductorApi {
-  const requests: RecordedRequest[] = [];
+function fakeConductorApi(api: TestApi) {
   const createdSessionIds = new Set<string>();
-  const fetch: CloudFetch = async (url, init) => {
-    const { pathname } = new URL(url);
-    const headers = new Headers(init.headers);
-    requests.push({
-      method: init.method ?? "",
-      pathname,
-      authorization: headers.get("authorization") ?? undefined,
-      contentType: headers.get("content-type") ?? undefined,
-      body: typeof init.body === "string" ? init.body : undefined,
-    });
-
+  return recordingFetch((request) => {
+    const { pathname, method, body: rawBody } = request;
     const segments = pathname.split("/").filter((segment) => segment.length > 0);
-    if (init.method === "POST") {
+    if (method === "POST") {
       // The transcripts view: the one read that rides as a POSTed document.
       if (segments[1] === "sql" && segments.length === 2) {
         if (api.sqlHttpStatus) return jsonResponse({}, api.sqlHttpStatus);
-        const body = JSON.parse(typeof init.body === "string" ? init.body : "{}") as {
+        const body = JSON.parse(rawBody ?? "{}") as {
           query?: string;
         };
         const query = body.query ?? "";
@@ -151,7 +116,7 @@ function fakeConductorApi(api: TestApi): FakeConductorApi {
       // The three documented writers: a prompt for one session, a cancel for
       // the turn it is working, and a new workspace in one project.
       if (segments[1] === "workspaces" && segments.length === 2) {
-        const body = JSON.parse(typeof init.body === "string" ? init.body : "{}") as {
+        const body = JSON.parse(rawBody ?? "{}") as {
           projectId?: string;
         };
         if (!api.projects.some((project) => project.id === body.projectId)) {
@@ -171,7 +136,7 @@ function fakeConductorApi(api: TestApi): FakeConductorApi {
         );
       }
       if (segments[1] === "sessions" && segments.length === 2) {
-        const body = JSON.parse(typeof init.body === "string" ? init.body : "{}") as {
+        const body = JSON.parse(rawBody ?? "{}") as {
           workspaceId?: string;
           agent?: string;
         };
@@ -234,8 +199,7 @@ function fakeConductorApi(api: TestApi): FakeConductorApi {
       });
     }
     return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
-  };
-  return { fetch, requests };
+  });
 }
 
 function adapterFor(

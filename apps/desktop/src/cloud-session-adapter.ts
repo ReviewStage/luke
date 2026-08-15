@@ -37,7 +37,8 @@ const HTTP_METHOD = {
   POST: "POST",
 } as const;
 
-const HTTP_STATUS = {
+/** HTTP statuses the adapter names when a response is not simply ok. */
+export const HTTP_STATUS = {
   UNAUTHORIZED: 401,
   FORBIDDEN: 403,
   NOT_FOUND: 404,

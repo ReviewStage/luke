@@ -3,6 +3,7 @@ import test from "node:test";
 import { SESSION_STATUS } from "@sidecar/core";
 import type { CloudFetch } from "../src/cloud-session-adapter";
 import { COPILOT_PROVIDER, CopilotSessionAdapter } from "../src/copilot-adapter";
+import { HTTP_STATUS, jsonResponse, recordingFetch } from "./support/http-fake";
 
 const TEST_TIME = Date.parse("2026-08-13T02:45:00.000Z");
 const TEST_BASE_URL = "https://github.test";
@@ -23,12 +24,6 @@ const TEST_STATE = {
   CANCELLED: "cancelled",
 } as const;
 
-const HTTP_STATUS = {
-  OK: 200,
-  UNAUTHORIZED: 401,
-  SERVER_ERROR: 500,
-} as const;
-
 interface TestTask {
   id: string;
   state?: string;
@@ -41,29 +36,8 @@ interface TestTask {
   updatedAt?: number;
 }
 
-interface RecordedRequest {
-  method: string;
-  pathname: string;
-  search: string;
-  authorization: string | undefined;
-  accept: string | undefined;
-  apiVersion: string | undefined;
-}
-
-interface FakeAgentTasksApi {
-  fetch: CloudFetch;
-  requests: RecordedRequest[];
-}
-
 function isoTimestamp(timestampMs: number): string {
   return new Date(timestampMs).toISOString();
-}
-
-function jsonResponse(body: unknown, status = HTTP_STATUS.OK): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
 }
 
 function lastActivityAt(task: TestTask): number {
@@ -111,20 +85,9 @@ function taskPayload(task: TestTask): Record<string, unknown> {
 }
 
 /** Serves the read-only subset of the agent-tasks API the adapter may use. */
-function fakeAgentTasksApi(tasks: readonly TestTask[]): FakeAgentTasksApi {
-  const requests: RecordedRequest[] = [];
-  const fetch: CloudFetch = async (url, init) => {
-    const { pathname, searchParams, search } = new URL(url);
-    const headers = new Headers(init.headers);
-    requests.push({
-      method: init.method ?? "",
-      pathname,
-      search,
-      authorization: headers.get("authorization") ?? undefined,
-      accept: headers.get("accept") ?? undefined,
-      apiVersion: headers.get("x-github-api-version") ?? undefined,
-    });
-
+function fakeAgentTasksApi(tasks: readonly TestTask[]) {
+  return recordingFetch((request) => {
+    const { pathname, searchParams } = request;
     const segments = pathname.split("/").filter((segment) => segment.length > 0);
     if (segments.length !== 2 || segments[0] !== "agents" || segments[1] !== "tasks") {
       return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
@@ -139,8 +102,7 @@ function fakeAgentTasksApi(tasks: readonly TestTask[]): FakeAgentTasksApi {
       total_active_count: tasks.length,
       total_archived_count: 0,
     });
-  };
-  return { fetch, requests };
+  });
 }
 
 function adapterFor(
@@ -220,7 +182,7 @@ test("reads the whole pass with one pinned, GitHub-typed list call", async () =>
   // GitHub's own media type rather than plain JSON, and the endpoint is in
   // public preview, so the dated API version must ride every request.
   assert.equal(api.requests[0]?.accept, "application/vnd.github+json");
-  assert.equal(api.requests[0]?.apiVersion, "2026-03-10");
+  assert.equal(api.requests[0]?.headers.get("x-github-api-version"), "2026-03-10");
 });
 
 test("maps every state GitHub reports onto a state Luke can show", async () => {
