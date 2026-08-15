@@ -4,6 +4,7 @@ import {
   BUBBLE_LIFT,
   CAPSULE_SIDE_WIDTH,
   PANEL_FORM_FACTOR,
+  PANEL_WIDTH,
   PEEK_SIDE_GROWTH,
   positionNotchWindow,
   SIMULATED_HOUSING_WIDTH,
@@ -169,7 +170,7 @@ test("keeps the expanded panel attached to the same display edge", () => {
 
   assert.equal(result.x, 406);
   assert.equal(result.y, 0);
-  assert.equal(result.width, 620 + SURFACE_MARGIN * 2);
+  assert.equal(result.width, PANEL_WIDTH + SURFACE_MARGIN * 2);
   assert.equal(result.height, 520 + SURFACE_MARGIN);
 });
 

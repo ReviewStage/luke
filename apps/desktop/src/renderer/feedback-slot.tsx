@@ -10,13 +10,10 @@ import {
 } from "./feedback-entry";
 import { imageFiles } from "./feedback-images";
 import { HIT_REGION } from "./panel-state";
-import { parseMilliseconds, STILL_MS } from "./session-motion";
+import { parseMilliseconds, parsePixels, STILL_MS } from "./session-motion";
 import { ImageIcon, RemoveIcon } from "./settings-icons";
 
 const MESSAGE_FIELD_ID = "feedback-message";
-
-/** Mirrors `.feedback-slot`'s `gap`: the room a preview takes includes it. */
-const FEEDBACK_SLOT_GAP = 8;
 
 /**
  * The panel stood down to the composer, the way it stands down to the key
@@ -88,14 +85,17 @@ export function FeedbackSlot({
   // its room, told to the stylesheet before the first frame paints: the
   // follow animations replay that journey on the shape's own spring. Observed
   // rather than read once, because the image's height is only sure once it
-  // has laid out.
+  // has laid out. The gap is the slot's own computed gap, so a retune in the
+  // stylesheet is the room the row actually travels.
   useLayoutEffect(() => {
     if (!previewMounted) return;
     const measured = previewButton.current;
     const stack = followStack.current;
     if (!measured || !stack) return;
     const report = () => {
-      const room = Math.ceil(measured.getBoundingClientRect().height) + FEEDBACK_SLOT_GAP;
+      const slot = measured.parentElement ?? stack;
+      const gap = parsePixels(getComputedStyle(slot).gap);
+      const room = Math.ceil(measured.getBoundingClientRect().height) + gap;
       stack.style.setProperty("--preview-room", `${room}px`);
     };
     const observer = new ResizeObserver(report);

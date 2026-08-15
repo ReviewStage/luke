@@ -312,7 +312,6 @@ button {
 
   --panel-radius: 30px;
   --wing-inset: 9px;
-  --panel-width: 620px;
 
   --capsule-width: calc(var(--notch-housing-width) + 72px);
   --capsule-height: max(var(--notch-top-inset), 32px);

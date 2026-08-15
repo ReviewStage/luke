@@ -2,8 +2,8 @@
    the tables in that script and re-run it.
 
    One motion vocabulary for both surfaces. The desktop renderer and the
-   marketing mock import this file so a spring or a duration cannot drift
-   between the product and the page that advertises it. */
+   marketing mock import this file so a spring, a duration, or a layout size
+   cannot drift between the product and the page that advertises it. */
 
 :root {
   --spring: linear(
@@ -76,4 +76,7 @@
   --row-fan: 7px;
   --row-fan-limit: 5;
   --slot-delay: calc(var(--duration-exit) + var(--peek-delay));
+  --bubble-lift: 4px;
+  --caption-max: 70px;
+  --panel-width: 620px;
 }

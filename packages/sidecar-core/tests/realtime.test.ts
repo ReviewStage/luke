@@ -20,6 +20,7 @@ import {
   issueContextText,
   issueToolAction,
   issueTrackerDisconnectedEvents,
+  maximumSessionMessageLength,
   maximumTypedAskLength,
   maximumVoiceContextIssues,
   maximumVoiceContextSessions,
@@ -278,6 +279,7 @@ test("an empty ask opens no turn at all", () => {
 });
 
 test("a typed ask is bounded like a session message", () => {
+  assert.equal(maximumTypedAskLength, maximumSessionMessageLength);
   const events = typedAskEvents("x".repeat(maximumTypedAskLength + 100));
   const item = events[0]?.item as { content?: { text?: string }[] };
 

@@ -55,9 +55,9 @@ git -C "$SIDECAR_REPO_ROOT" diff --check
 # does not.
 node "$SIDECAR_REPO_ROOT/design/generate-brand-assets.mjs" --check
 
-# Motion tokens, provider-mark path data, and session labels are the same
-# contract between the desktop renderer and the marketing mock. One source,
-# four committed outputs in sidecar-core; --check fails if any of them drifted.
+# Motion tokens, layout sizes, provider-mark path data, and session labels are
+# the same contract between the desktop renderer and the marketing mock. One
+# source, four committed outputs in sidecar-core; --check fails if any drifted.
 node "$SIDECAR_REPO_ROOT/design/generate-surface-shared.mjs" --check
 
 printf 'Repository contract checks passed.\n'
