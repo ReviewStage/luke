@@ -4,10 +4,9 @@ import {
   compareSessionsByUrgency,
   MOTION_DURATION_MS,
   SESSION_URGENCY,
-  URGENCY_LABEL,
-  URGENCY_PRIORITY,
   urgencyLabel,
 } from "../src";
+import { URGENCY_LABEL, URGENCY_PRIORITY } from "../src/session-display";
 
 test("every display urgency has a label, and the priority list is a permutation of them", () => {
   assert.deepEqual(new Set(Object.keys(URGENCY_LABEL)), new Set(Object.values(SESSION_URGENCY)));

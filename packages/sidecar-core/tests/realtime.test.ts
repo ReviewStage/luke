@@ -2,10 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   ATTENTION_DISPOSITION,
-  ATTENTION_REVIEW_OUTCOME,
   ATTENTION_SPEECH_SOURCE,
   ATTENTION_TRIGGER,
-  type AttentionReview,
   attentionSpeechFromReviews,
   cancelResponseEvents,
   clearInputAudioEvents,
@@ -20,30 +18,21 @@ import {
   issueContextText,
   issueToolAction,
   issueTrackerDisconnectedEvents,
-  maximumSessionMessageLength,
-  maximumTypedAskLength,
-  maximumVoiceContextIssues,
-  maximumVoiceContextSessions,
-  maximumWorkspaceNameLength,
   normalizeSession,
   normalizeTrackedIssue,
   type ObservedWorkspaceProject,
   outputSpeedUpdateEvents,
+  parseRealtimeServerEvent,
   proactiveSpeechEvents,
   pushToTalkCommitEvents,
   REALTIME_CLIENT_EVENT,
   REALTIME_DEFAULTS,
   REALTIME_SERVER_EVENT,
-  REALTIME_SESSION_TYPE,
-  REALTIME_TOOL,
   REALTIME_VOICE_LIST,
   REALTIME_VOICE_SPEED_LIST,
   realtimeClientSecretRequest,
   realtimeCredentialFromResponse,
   realtimeCredentialIsUsable,
-  realtimeFunctionCalls,
-  realtimeInstructions,
-  realtimeSessionConfig,
   SESSION_STATUS,
   sessionContextEvents,
   sessionContextText,
@@ -55,6 +44,17 @@ import {
   workspaceProjectContextEvents,
   workspaceProjectContextText,
 } from "../src";
+import { ATTENTION_REVIEW_OUTCOME, type AttentionReview } from "../src/attention";
+import { maximumWorkspaceNameLength } from "../src/providers";
+import { maximumVoiceContextIssues, maximumVoiceContextSessions } from "../src/realtime-context";
+import { realtimeSessionConfig } from "../src/realtime-credentials";
+import {
+  maximumTypedAskLength,
+  REALTIME_SESSION_TYPE,
+  realtimeInstructions,
+} from "../src/realtime-protocol";
+import { REALTIME_TOOL } from "../src/realtime-tools";
+import { maximumSessionMessageLength } from "../src/session";
 
 const DECIDED_AT = 1_800_000_000_000;
 const EXPIRES_AT_SECONDS = 1_800_000_060;
@@ -556,9 +556,10 @@ test("a proactive turn is opened with its tools withheld", () => {
 });
 
 test("tool calls are read whole from a finished response", () => {
-  const calls = realtimeFunctionCalls({
+  const event = parseRealtimeServerEvent({
     type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
     response: {
+      id: "resp-1",
       output: [
         { type: "message", id: "item-1" },
         {
@@ -572,14 +573,107 @@ test("tool calls are read whole from a finished response", () => {
     },
   });
 
-  assert.deepEqual(calls, [
+  assert.deepEqual(event, {
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    responseId: "resp-1",
+    calls: [
+      {
+        name: REALTIME_TOOL.SEND_SESSION_MESSAGE,
+        callId: "call-1",
+        argumentsJson: '{"provider_id":"devin"}',
+      },
+    ],
+  });
+});
+
+test("inbound events the conversation acts on are parsed, and nothing else is", () => {
+  assert.deepEqual(parseRealtimeServerEvent({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED }), {
+    type: REALTIME_SERVER_EVENT.RESPONSE_CREATED,
+  });
+  assert.deepEqual(
+    parseRealtimeServerEvent({
+      type: REALTIME_SERVER_EVENT.RESPONSE_CREATED,
+      response: { id: "resp-1" },
+    }),
+    { type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, responseId: "resp-1" },
+  );
+  assert.deepEqual(
+    parseRealtimeServerEvent({
+      type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
+      item: { id: "item-1" },
+    }),
+    { type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED, itemId: "item-1" },
+  );
+  assert.deepEqual(
+    parseRealtimeServerEvent({
+      type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+      item_id: "item-1",
+      delta: "Hello",
+    }),
     {
-      name: REALTIME_TOOL.SEND_SESSION_MESSAGE,
-      callId: "call-1",
-      argumentsJson: '{"provider_id":"devin"}',
+      type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+      itemId: "item-1",
+      delta: "Hello",
     },
-  ]);
-  assert.deepEqual(realtimeFunctionCalls({ type: "response.created" }), []);
+  );
+  assert.deepEqual(
+    parseRealtimeServerEvent({
+      type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE,
+      item_id: "item-1",
+      transcript: "Hello there.",
+    }),
+    {
+      type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE,
+      itemId: "item-1",
+      transcript: "Hello there.",
+    },
+  );
+  assert.deepEqual(
+    parseRealtimeServerEvent({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED }),
+    { type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED },
+  );
+  assert.deepEqual(parseRealtimeServerEvent({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE }), {
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    calls: [],
+  });
+  assert.deepEqual(
+    parseRealtimeServerEvent({
+      type: REALTIME_SERVER_EVENT.ERROR,
+      error: { message: "Session expired" },
+    }),
+    { type: REALTIME_SERVER_EVENT.ERROR, message: "Session expired" },
+  );
+  assert.deepEqual(parseRealtimeServerEvent({ type: REALTIME_SERVER_EVENT.ERROR }), {
+    type: REALTIME_SERVER_EVENT.ERROR,
+    message: "The voice service reported an error.",
+  });
+
+  // The data channel delivers a JSON string; the parser owns that too, so the
+  // renderer never has to know the wire encoding.
+  assert.deepEqual(
+    parseRealtimeServerEvent(
+      JSON.stringify({
+        type: REALTIME_SERVER_EVENT.RESPONSE_CREATED,
+        response: { id: "resp-2" },
+      }),
+    ),
+    { type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, responseId: "resp-2" },
+  );
+
+  for (const payload of [
+    undefined,
+    null,
+    3,
+    "not json {",
+    "not an object",
+    [],
+    {},
+    { type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_CLEARED },
+    { type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA, item_id: "item-1" },
+    { type: "session.updated" },
+  ]) {
+    assert.equal(parseRealtimeServerEvent(payload), undefined);
+  }
 });
 
 function actionableSession() {

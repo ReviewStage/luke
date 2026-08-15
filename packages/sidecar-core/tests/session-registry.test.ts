@@ -3,15 +3,14 @@ import test from "node:test";
 import {
   ATTENTION_DISPOSITION,
   InMemorySessionRegistry,
-  maximumSessionLinkLength,
   maximumSessionRecapLength,
   type ProviderSessionObservation,
   SESSION_LOCATION,
   SESSION_STATUS,
   type SessionLocation,
   type SessionProvider,
-  supportsSessionControl,
 } from "../src";
+import { maximumSessionLinkLength, supportsSessionControl } from "../src/session";
 
 const codex: SessionProvider = { id: "codex", displayName: "Codex" };
 const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };
