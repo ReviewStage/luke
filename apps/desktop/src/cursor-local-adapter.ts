@@ -172,9 +172,9 @@ class CursorWorkspaceLabels {
   }
 
   /**
-   * Reads each Cursor workspace record once, then resolves each project once.
-   * A resolved folder is still checked on every pass so deleting or archiving
-   * its workspace withdraws the sessions that belonged to it.
+   * Reads each Cursor workspace record once, then keeps only successful
+   * project resolutions. A missing folder is retried on later passes so a
+   * workspace record or directory that appears again restores its sessions.
    */
   async resolve(projectDirectoryNames: readonly string[]): Promise<void> {
     if (
@@ -194,20 +194,20 @@ class CursorWorkspaceLabels {
     }
 
     for (const projectDirectoryName of new Set(projectDirectoryNames)) {
-      if (this.#resolvedFoldersByProjectDirectoryName.has(projectDirectoryName)) {
-        const cachedPath = this.#resolvedFoldersByProjectDirectoryName.get(projectDirectoryName);
-        if (!cachedPath) continue;
-        if (await existingWorkspaceDirectory(cachedPath)) continue;
-        this.#resolvedFoldersByProjectDirectoryName.set(projectDirectoryName, undefined);
-        continue;
-      }
+      const cachedPath = this.#resolvedFoldersByProjectDirectoryName.get(projectDirectoryName);
+      if (cachedPath && (await existingWorkspaceDirectory(cachedPath))) continue;
+      this.#resolvedFoldersByProjectDirectoryName.delete(projectDirectoryName);
 
-      const recordedPath = this.#folderPathsByProjectName.get(
-        canonicalProjectName(projectDirectoryName),
-      );
+      const projectName = canonicalProjectName(projectDirectoryName);
+      const hasRecordedPath = this.#folderPathsByProjectName.has(projectName);
+      const recordedPath = this.#folderPathsByProjectName.get(projectName);
       const recordedFolder = await existingWorkspaceDirectory(recordedPath);
-      const folderPath = recordedFolder ?? (await resolveProjectDirectory(projectDirectoryName));
-      this.#resolvedFoldersByProjectDirectoryName.set(projectDirectoryName, folderPath);
+      const folderPath = hasRecordedPath
+        ? recordedFolder
+        : await resolveProjectDirectory(projectDirectoryName);
+      if (folderPath) {
+        this.#resolvedFoldersByProjectDirectoryName.set(projectDirectoryName, folderPath);
+      }
     }
   }
 

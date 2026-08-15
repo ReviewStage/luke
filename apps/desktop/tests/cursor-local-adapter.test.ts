@@ -571,6 +571,46 @@ test("omits a project directory name that resolves to no folder", async (t) => {
   assert.deepEqual(observations, []);
 });
 
+test("observes a project after its missing folder appears", async (t) => {
+  const state = await temporaryCursorState(t);
+  const folderPath = path.join(path.dirname(state.cursorHome), "restored", "folder");
+  await writeTranscript(
+    state,
+    cursorProjectName(folderPath),
+    "session-restored-folder",
+    [turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
+    TEST_TIME - 1_000,
+  );
+  const adapter = adapterFor(state);
+
+  assert.deepEqual(await adapter.observe(), []);
+
+  await fs.mkdir(folderPath, { recursive: true });
+
+  assert.equal((await adapter.observe())[0]?.title, "folder");
+});
+
+test("observes a project after Cursor writes its workspace record", async (t) => {
+  const state = await temporaryCursorState(t);
+  const folderPath = path.join(path.dirname(state.cursorHome), "restored", "luke.github.io");
+  const projectDirectoryName = canonicalCursorProjectName(folderPath);
+  await writeTranscript(
+    state,
+    projectDirectoryName,
+    "session-restored-record",
+    [turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
+    TEST_TIME - 1_000,
+  );
+  const adapter = adapterFor(state);
+
+  assert.deepEqual(await adapter.observe(), []);
+
+  await fs.mkdir(folderPath, { recursive: true });
+  await writeWorkspaceRecord(state, "restored-record", folderPath);
+
+  assert.equal((await adapter.observe())[0]?.title, "luke.github.io");
+});
+
 test("withdraws sessions when their workspace folder is deleted", async (t) => {
   const state = await temporaryCursorState(t);
   await writeTranscript(
@@ -587,6 +627,31 @@ test("withdraws sessions when their workspace folder is deleted", async (t) => {
   await fs.rm(state.defaultFolderPath, { recursive: true });
 
   assert.deepEqual(await adapter.observe(), []);
+
+  await fs.mkdir(state.defaultFolderPath, { recursive: true });
+
+  assert.equal((await adapter.observe())[0]?.title, "luke");
+});
+
+test("does not replace ambiguous workspace records with a filesystem match", async (t) => {
+  const state = await temporaryCursorState(t);
+  const root = path.join(path.dirname(state.cursorHome), "recorded-ambiguity");
+  const existingFolder = path.join(root, "alpha", "beta-gamma");
+  const absentFolder = path.join(root, "alpha-beta", "gamma");
+  await fs.mkdir(existingFolder, { recursive: true });
+  await writeWorkspaceRecord(state, "first-record", existingFolder);
+  await writeWorkspaceRecord(state, "second-record", absentFolder);
+  await writeTranscript(
+    state,
+    canonicalCursorProjectName(existingFolder),
+    "session-ambiguous-records",
+    [turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
+    TEST_TIME - 1_000,
+  );
+
+  const observations = await adapterFor(state).observe();
+
+  assert.deepEqual(observations, []);
 });
 
 test("keeps a literal hyphen in the uniquely resolved folder label", async (t) => {
