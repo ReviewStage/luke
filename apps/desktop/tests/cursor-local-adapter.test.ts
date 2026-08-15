@@ -30,8 +30,13 @@ const TEST_TURN_STATUS = {
 } as const;
 
 const TEST_CONTENT_TYPE = {
+  CUSTOM: "custom_block",
   TEXT: "text",
+  THINKING: "thinking",
+  TOOL_CALL: "tool_call",
+  TOOL_CALL_HYPHENATED: "tool-call",
   TOOL_USE: "tool_use",
+  TOOL_USE_HYPHENATED: "tool-use",
 } as const;
 
 interface CursorState {
@@ -55,7 +60,9 @@ function turnEndedRecord(status: string): Record<string, unknown> {
 }
 
 async function temporaryCursorState(t: TestContext): Promise<CursorState> {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "luke-cursor-local-"));
+  const directory = await fs.realpath(
+    await fs.mkdtemp(path.join(os.tmpdir(), "luke-cursor-local-")),
+  );
   t.after(async () => {
     await fs.rm(directory, { recursive: true, force: true });
   });
@@ -112,6 +119,10 @@ async function writeSubagentTranscript(
 
 function projectDirectory(state: CursorState, projectDirectoryName: string): string {
   return path.join(state.cursorHome, CURSOR_PROJECTS_DIRECTORY, projectDirectoryName);
+}
+
+function cursorProjectName(folderPath: string): string {
+  return folderPath.split(path.sep).filter(Boolean).join("-");
 }
 
 /**
@@ -186,6 +197,94 @@ test("observes an open turn as work, labelled by its folder and free of transcri
   // Nothing says this session runs anywhere but here, which is what leaves it
   // local once the registry normalizes it.
   assert.equal(observations[0]?.location, undefined);
+  assert.equal(JSON.stringify(observations).includes(SECRET_TRANSCRIPT_TEXT), false);
+});
+
+test("observes a current-format assistant reply as a settled turn", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "session-settled",
+    [
+      messageRecord(TEST_ROLE.USER, TEST_CONTENT_TYPE.TEXT),
+      messageRecord(TEST_ROLE.ASSISTANT, TEST_CONTENT_TYPE.TEXT),
+    ],
+    TEST_TIME - 5_000,
+  );
+
+  const observations = await adapterFor(state).observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
+  assert.equal(JSON.stringify(observations).includes(SECRET_TRANSCRIPT_TEXT), false);
+});
+
+test("keeps a current-format turn open for every known tool-call spelling", async (t) => {
+  const state = await temporaryCursorState(t);
+  for (const [index, contentType] of [
+    TEST_CONTENT_TYPE.TOOL_USE,
+    TEST_CONTENT_TYPE.TOOL_USE_HYPHENATED,
+    TEST_CONTENT_TYPE.TOOL_CALL,
+    TEST_CONTENT_TYPE.TOOL_CALL_HYPHENATED,
+  ].entries()) {
+    await writeTranscript(
+      state,
+      "Users-test-luke",
+      `session-tool-${index}`,
+      [messageRecord(TEST_ROLE.ASSISTANT, contentType)],
+      TEST_TIME - (index + 1) * 1_000,
+    );
+  }
+
+  const observations = await adapterFor(state).observe();
+
+  assert.deepEqual(
+    observations.map((observation) => observation.status),
+    Array.from({ length: 4 }, () => SESSION_STATUS.WORKING),
+  );
+});
+
+test("settles on assistant messages with thinking, unknown, or string content", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "session-thinking",
+    [
+      {
+        role: TEST_ROLE.ASSISTANT,
+        message: {
+          content: [
+            { type: TEST_CONTENT_TYPE.THINKING, text: SECRET_TRANSCRIPT_TEXT },
+            { type: TEST_CONTENT_TYPE.TEXT, text: SECRET_TRANSCRIPT_TEXT },
+          ],
+        },
+      },
+    ],
+    TEST_TIME - 1_000,
+  );
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "session-unknown-block",
+    [messageRecord(TEST_ROLE.ASSISTANT, TEST_CONTENT_TYPE.CUSTOM)],
+    TEST_TIME - 2_000,
+  );
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "session-string-content",
+    [{ role: TEST_ROLE.ASSISTANT, message: { content: SECRET_TRANSCRIPT_TEXT } }],
+    TEST_TIME - 3_000,
+  );
+
+  const observations = await adapterFor(state).observe();
+
+  assert.deepEqual(
+    observations.map((observation) => observation.status),
+    Array.from({ length: 3 }, () => SESSION_STATUS.WAITING),
+  );
   assert.equal(JSON.stringify(observations).includes(SECRET_TRANSCRIPT_TEXT), false);
 });
 
@@ -385,6 +484,83 @@ test("names a folder whose project directory kept a character Luke would rewrite
   );
 });
 
+test("names an existing folder without a Cursor workspace record", async (t) => {
+  const state = await temporaryCursorState(t);
+  const folderPath = path.join(path.dirname(state.cursorHome), "workspaces", "luke");
+  await fs.mkdir(folderPath, { recursive: true });
+  await writeTranscript(
+    state,
+    cursorProjectName(folderPath),
+    "session-filesystem-labelled",
+    [turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
+    TEST_TIME - 1_000,
+  );
+
+  const observations = await adapterFor(state).observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.title, "luke");
+  assert.deepEqual(observations[0]?.detail, { repository: "luke" });
+});
+
+test("refuses a project directory name that resolves to two folders", async (t) => {
+  const state = await temporaryCursorState(t);
+  const root = path.join(path.dirname(state.cursorHome), "ambiguous");
+  const firstFolder = path.join(root, "alpha", "beta-gamma");
+  const secondFolder = path.join(root, "alpha-beta", "gamma");
+  await Promise.all([
+    fs.mkdir(firstFolder, { recursive: true }),
+    fs.mkdir(secondFolder, { recursive: true }),
+  ]);
+  await writeTranscript(
+    state,
+    cursorProjectName(firstFolder),
+    "session-ambiguous-filesystem",
+    [turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
+    TEST_TIME - 1_000,
+  );
+
+  const observations = await adapterFor(state).observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.title, "workspace");
+});
+
+test("refuses a project directory name that resolves to no folder", async (t) => {
+  const state = await temporaryCursorState(t);
+  const missingFolder = path.join(path.dirname(state.cursorHome), "missing", "folder");
+  await writeTranscript(
+    state,
+    cursorProjectName(missingFolder),
+    "session-missing-filesystem",
+    [turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
+    TEST_TIME - 1_000,
+  );
+
+  const observations = await adapterFor(state).observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.title, "workspace");
+});
+
+test("keeps a literal hyphen in the uniquely resolved folder label", async (t) => {
+  const state = await temporaryCursorState(t);
+  const folderPath = path.join(path.dirname(state.cursorHome), "workspaces", "little-rock");
+  await fs.mkdir(folderPath, { recursive: true });
+  await writeTranscript(
+    state,
+    cursorProjectName(folderPath),
+    "session-hyphenated-filesystem",
+    [turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
+    TEST_TIME - 1_000,
+  );
+
+  const observations = await adapterFor(state).observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.title, "little-rock");
+});
+
 test("labels a session neutrally rather than guessing at a folder", async (t) => {
   const state = await temporaryCursorState(t);
   // A window with no folder, and two folders that share one project directory
@@ -477,6 +653,29 @@ test("finds the newest records when only the end of a long transcript is read", 
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
+});
+
+test("keeps working when a bounded tail contains no whole record", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "session-oversized-record",
+    [
+      {
+        role: TEST_ROLE.ASSISTANT,
+        message: {
+          content: [{ type: TEST_CONTENT_TYPE.TEXT, text: SECRET_TRANSCRIPT_TEXT.repeat(128) }],
+        },
+      },
+    ],
+    TEST_TIME - 1_000,
+  );
+
+  const observations = await adapterFor(state, { readTailBytes: 128 }).observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
 });
 
 test("bounds how many sessions one pass reports, keeping the newest", async (t) => {

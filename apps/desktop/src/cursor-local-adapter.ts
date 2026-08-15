@@ -54,14 +54,31 @@ const CURSOR_WORKSPACE_FIELD = {
 } as const;
 
 const CURSOR_RECORD_FIELD = {
+  MESSAGE: "message",
   ROLE: "role",
   STATUS: "status",
+  TYPE: "type",
+} as const;
+
+const CURSOR_MESSAGE_FIELD = {
+  CONTENT: "content",
+} as const;
+
+const CURSOR_CONTENT_BLOCK_FIELD = {
   TYPE: "type",
 } as const;
 
 /** The one record type Luke reads: Cursor marking the end of a turn. */
 const CURSOR_RECORD_TYPE = {
   TURN_ENDED: "turn_ended",
+} as const;
+
+/** Block kinds by which Cursor records an assistant asking a tool to continue. */
+const CURSOR_CONTENT_BLOCK = {
+  TOOL_CALL: "tool_call",
+  TOOL_CALL_HYPHENATED: "tool-call",
+  TOOL_USE: "tool_use",
+  TOOL_USE_HYPHENATED: "tool-use",
 } as const;
 
 /**
@@ -81,6 +98,8 @@ const CURSOR_ROLE = {
 const CURSOR_LOCAL_ADAPTER_DEFAULTS = {
   MAXIMUM_PROJECT_DIRECTORIES: 200,
   MAXIMUM_SESSION_FILES: 40,
+  MAXIMUM_WORKSPACE_RESOLUTION_DIRECTORY_READS: 128,
+  MAXIMUM_WORKSPACE_RESOLUTION_FRONTIER_WIDTH: 32,
 } as const;
 
 export interface CursorLocalAdapterOptions {
@@ -145,6 +164,7 @@ function folderPathFromWorkspaceRecord(source: string): string | undefined {
 class CursorWorkspaceLabels {
   readonly #directory: string;
   readonly #labelsByProjectName = new Map<string, string | undefined>();
+  readonly #filesystemLabelsByProjectDirectoryName = new Map<string, string | undefined>();
   readonly #readWorkspaceRecords = new Set<string>();
 
   constructor(directory: string) {
@@ -158,26 +178,36 @@ class CursorWorkspaceLabels {
    */
   async resolve(projectDirectoryNames: readonly string[]): Promise<void> {
     if (
-      projectDirectoryNames.every((name) =>
-        this.#labelsByProjectName.has(canonicalProjectName(name)),
+      projectDirectoryNames.some(
+        (name) => !this.#labelsByProjectName.has(canonicalProjectName(name)),
       )
     ) {
-      return;
+      for (const entry of await readDirectory(this.#directory)) {
+        if (this.#readWorkspaceRecords.has(entry.name)) continue;
+        this.#readWorkspaceRecords.add(entry.name);
+        const record = await readTextFile(
+          path.join(this.#directory, entry.name, CURSOR_WORKSPACE_FILE),
+        );
+        const folderPath = record ? folderPathFromWorkspaceRecord(record) : undefined;
+        if (folderPath) this.#record(folderPath);
+      }
     }
-    for (const entry of await readDirectory(this.#directory)) {
-      if (this.#readWorkspaceRecords.has(entry.name)) continue;
-      this.#readWorkspaceRecords.add(entry.name);
-      const record = await readTextFile(
-        path.join(this.#directory, entry.name, CURSOR_WORKSPACE_FILE),
+
+    for (const projectDirectoryName of new Set(projectDirectoryNames)) {
+      if (this.#labelsByProjectName.get(canonicalProjectName(projectDirectoryName))) continue;
+      if (this.#filesystemLabelsByProjectDirectoryName.has(projectDirectoryName)) continue;
+      const folderPath = await resolveProjectDirectory(projectDirectoryName);
+      this.#filesystemLabelsByProjectDirectoryName.set(
+        projectDirectoryName,
+        folderPath ? workspaceLabel(folderPath) : undefined,
       );
-      const folderPath = record ? folderPathFromWorkspaceRecord(record) : undefined;
-      if (folderPath) this.#record(folderPath);
     }
   }
 
   label(projectDirectoryName: string): string {
     return (
       this.#labelsByProjectName.get(canonicalProjectName(projectDirectoryName)) ??
+      this.#filesystemLabelsByProjectDirectoryName.get(projectDirectoryName) ??
       UNKNOWN_WORKSPACE_LABEL
     );
   }
@@ -195,6 +225,68 @@ class CursorWorkspaceLabels {
       this.#labelsByProjectName.set(projectName, undefined);
     }
   }
+}
+
+interface ProjectPathFrontierEntry {
+  directoryPath: string;
+  nextSegmentIndex: number;
+}
+
+/**
+ * Recovers a project path only when Cursor's flattened directory name has one
+ * interpretation that exists on disk. A hyphen may have been either a path
+ * separator or part of a directory name, so every surviving interpretation is
+ * kept until it fails against the real directory tree. Bounds turn an
+ * unusually ambiguous name into no label rather than unbounded filesystem work.
+ */
+async function resolveProjectDirectory(projectDirectoryName: string): Promise<string | undefined> {
+  const segments = projectDirectoryName.split("-").filter(Boolean);
+  if (segments.length === 0) return undefined;
+
+  const frontier: ProjectPathFrontierEntry[] = [
+    { directoryPath: path.parse(path.resolve(path.sep)).root, nextSegmentIndex: 0 },
+  ];
+  const queued = new Set(
+    frontier.map((entry) => `${entry.directoryPath}\0${entry.nextSegmentIndex}`),
+  );
+  const resolvedPaths = new Set<string>();
+  let directoryReads = 0;
+
+  while (
+    frontier.length > 0 &&
+    directoryReads < CURSOR_LOCAL_ADAPTER_DEFAULTS.MAXIMUM_WORKSPACE_RESOLUTION_DIRECTORY_READS
+  ) {
+    const current = frontier.shift();
+    if (!current) break;
+    const entries = await readDirectory(current.directoryPath);
+    directoryReads += 1;
+    const entriesByName = new Map(entries.map((entry) => [entry.name, entry]));
+
+    for (let end = current.nextSegmentIndex + 1; end <= segments.length; end += 1) {
+      const name = segments.slice(current.nextSegmentIndex, end).join("-");
+      const entry = entriesByName.get(name);
+      if (!entry || (!entry.isDirectory() && !entry.isSymbolicLink())) continue;
+      const candidatePath = path.join(current.directoryPath, name);
+      if (end === segments.length) {
+        const stats = await fileStats(candidatePath);
+        if (stats?.isDirectory()) resolvedPaths.add(candidatePath);
+        if (resolvedPaths.size > 1) return undefined;
+        continue;
+      }
+      const queueKey = `${candidatePath}\0${end}`;
+      if (queued.has(queueKey)) continue;
+      queued.add(queueKey);
+      frontier.push({ directoryPath: candidatePath, nextSegmentIndex: end });
+      if (
+        frontier.length > CURSOR_LOCAL_ADAPTER_DEFAULTS.MAXIMUM_WORKSPACE_RESOLUTION_FRONTIER_WIDTH
+      ) {
+        return undefined;
+      }
+    }
+  }
+
+  if (frontier.length > 0 || resolvedPaths.size !== 1) return undefined;
+  return resolvedPaths.values().next().value;
 }
 
 async function transcriptsIn(
@@ -235,19 +327,36 @@ function isMessageRecord(record: Record<string, unknown>): boolean {
   return Object.values(CURSOR_ROLE).some((knownRole) => knownRole === role);
 }
 
+function messageHasToolCall(record: Record<string, unknown>): boolean {
+  const message = record[CURSOR_RECORD_FIELD.MESSAGE];
+  if (message === null || typeof message !== "object" || Array.isArray(message)) return false;
+  const content = (message as Record<string, unknown>)[CURSOR_MESSAGE_FIELD.CONTENT];
+  if (!Array.isArray(content)) return false;
+  const toolCallKinds = Object.values(CURSOR_CONTENT_BLOCK);
+  return content.some((block) => {
+    if (block === null || typeof block !== "object" || Array.isArray(block)) return false;
+    return toolCallKinds.some(
+      (kind) => kind === (block as Record<string, unknown>)[CURSOR_CONTENT_BLOCK_FIELD.TYPE],
+    );
+  });
+}
+
 /**
- * How the newest turn ended, or nothing while one is still open. Cursor marks
- * the end of a turn explicitly, so an open turn is read from the absence of
- * that mark rather than inferred from what the assistant last said — which is
- * transcript content, and is not read here at all. A record this build does not
- * know is passed over rather than taken for either.
+ * How the newest turn ended, or nothing while one is still open. Older Cursor
+ * builds mark the end explicitly. Current builds do not, so only the kinds of
+ * blocks in the newest message are inspected: an assistant tool call means the
+ * turn will continue, an assistant without one has settled, and a user message
+ * is waiting for the assistant. No content text is read. A record this build
+ * does not know is passed over rather than taken for either.
  */
 function closedTurn(tail: string): { failed: boolean } | undefined {
   for (const record of tailRecords(tail).toReversed()) {
     if (record[CURSOR_RECORD_FIELD.TYPE] === CURSOR_RECORD_TYPE.TURN_ENDED) {
       return { failed: record[CURSOR_RECORD_FIELD.STATUS] === CURSOR_TURN_STATUS.ERROR };
     }
-    if (isMessageRecord(record)) return undefined;
+    if (!isMessageRecord(record)) continue;
+    if (record[CURSOR_RECORD_FIELD.ROLE] === CURSOR_ROLE.USER) return undefined;
+    return messageHasToolCall(record) ? undefined : { failed: false };
   }
   return undefined;
 }
@@ -302,7 +411,7 @@ function defaultWorkspaceStorageDirectory(): string {
 
 /**
  * Observes the Cursor sessions that run on this machine, from the transcripts
- * Cursor already writes for itself. It reads no message content, needs no
+ * Cursor already writes for itself. It reads no message text, needs no
  * credential, and reports nothing that Cursor has not written down.
  */
 export class CursorLocalSessionAdapter implements SessionProviderAdapter {
