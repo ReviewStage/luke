@@ -88,24 +88,29 @@ export interface WorkspaceProviderOption {
   name: string;
 }
 
-export interface SettingsPanelProps {
-  /**
-   * Which settings page is showing: the front page, or one of the pages a
-   * front-page row opens. Held by the app rather than here because Escape
-   * unwinds it and a credential entry has to survive a trip to the key slot
-   * with its page intact.
-   */
-  view: SettingsView;
-  onViewChange: (view: SettingsView) => void;
-  microphoneStatus: MicrophoneStatus;
-  microphoneError?: string;
-  /** Asks the system for access. Using the microphone is the talk key's job. */
-  onRequestMicrophone: () => void;
-  /** Opens the one place the system's own grant can be changed. */
-  onOpenMicrophoneSettings: () => void;
+/**
+ * Whether Luke may open the microphone, and the two things that can be done
+ * about that: asking the system for access, or opening the one place the
+ * system's own grant can be changed.
+ */
+export interface MicrophoneControl {
+  status: MicrophoneStatus;
+  error?: string;
   /** Whether there is anything to talk to, which is the microphone's only use. */
   voiceAvailable: boolean;
-  settings?: AppSettings;
+  /** Asks the system for access. Using the microphone is the talk key's job. */
+  onRequest: () => void;
+  /** Opens the one place the system's own grant can be changed. */
+  onOpenSettings: () => void;
+}
+
+/**
+ * The one way to write a stored preference. Every settings row that keeps a
+ * choice travels through this, so the panel redraws from what was stored
+ * rather than from the press — the same shape a credential's control is, for
+ * the same reason: the writers live above the panel that draws them.
+ */
+export interface PreferenceWrites {
   /**
    * Turns the on-screen caption of Luke's speech on or off. The store answers
    * with why when it refuses, and the row is where that answer belongs.
@@ -115,20 +120,10 @@ export interface SettingsPanelProps {
   onDuckOtherMediaChange: (enabled: boolean) => Promise<string | undefined>;
   /** Turns the macOS notification about a session that wants the user on or off. */
   onSessionNotificationsChange: (enabled: boolean) => Promise<string | undefined>;
-  /** The one credential being entered anywhere, and everything that can be done to it. */
-  credentials: CredentialEntryControl;
-  /** The one note to the founders being written, and everything that can be done to it. */
-  feedback: FeedbackEntryControl;
   /** Chooses the voice Luke speaks with, from the set fixed by this build. */
   onVoiceChange: (voice: RealtimeVoice) => void;
   /** Chooses the pace Luke speaks at, from the set fixed by this build. */
   onVoiceSpeedChange: (speed: RealtimeVoiceSpeed) => void;
-  /**
-   * True while the panel is the shape on screen. A field can only hold the
-   * caret then: everything here sits in an inert stage the rest of the time,
-   * and an entry can outlast the panel it was started in.
-   */
-  panelOpen: boolean;
   /**
    * Shows or hides the menu bar status item. The store answers with why when it
    * refuses, and the row is where that answer belongs.
@@ -148,12 +143,6 @@ export interface SettingsPanelProps {
   /** Chooses how Luke stands on a display without a camera housing. */
   onFormFactorChange: (formFactor: PanelFormFactor) => Promise<string | undefined>;
   /**
-   * The providers the default-workspace row may offer: the ones currently
-   * offering projects, plus a stored default that is not — a choice the row
-   * cannot show is one that can be neither seen nor cleared.
-   */
-  workspaceProviders: readonly WorkspaceProviderOption[];
-  /**
    * Chooses the provider a conversational ask creates a workspace in when the
    * ask names none, or returns to asking each time when omitted. The store
    * answers with why when it refuses, and the row is where that answer
@@ -172,7 +161,15 @@ export interface SettingsPanelProps {
     providerId: ProviderId,
     selection: WorkspaceAgentSelection | undefined,
   ) => Promise<string | undefined>;
-  onQuit: () => void;
+}
+
+/**
+ * The talk, ask, and stop keys as registered, and the one way to move them
+ * or to say a recording is under way. The keys the rows show are the ones
+ * that actually answered, which can differ from the stored choice when
+ * another app owns the chord — that stored choice is what Reset undoes.
+ */
+export interface ShortcutControl {
   /**
    * The talk key as registered, as an accelerator: the row draws it as its
    * separate keys and says it whole in the labels its buttons carry.
@@ -180,6 +177,8 @@ export interface SettingsPanelProps {
   voiceHotkey?: string;
   /** Whether that key can be held, which is what the row has to describe. */
   voiceHotkeyHeld: boolean;
+  /** Whether a chosen talk chord is stored, which is what Reset has to undo. */
+  voiceChosen: boolean;
   /**
    * Moves the talk key to a recorded chord, or back to the defaults when
    * omitted. The store answers with why when it refuses, and the row is where
@@ -188,6 +187,8 @@ export interface SettingsPanelProps {
   onVoiceHotkeyChange: (accelerator: string | undefined) => Promise<string | undefined>;
   /** The ask key as registered, an accelerator on the talk key's terms. */
   askHotkey?: string;
+  /** Whether a chosen ask chord is stored, on the talk key's terms. */
+  askChosen: boolean;
   /**
    * Moves the ask key to a recorded chord, or back to the defaults when
    * omitted, on the talk key's terms: the store answers with why when it
@@ -196,6 +197,8 @@ export interface SettingsPanelProps {
   onAskHotkeyChange: (accelerator: string | undefined) => Promise<string | undefined>;
   /** The stop key as registered, an accelerator on the talk key's terms. */
   stopHotkey?: string;
+  /** Whether a chosen stop chord is stored, on the other rows' terms. */
+  stopChosen: boolean;
   /**
    * Moves the stop key to a recorded chord, or back to the default when
    * omitted, on the other rows' terms: the store answers with why when it
@@ -206,7 +209,44 @@ export interface SettingsPanelProps {
    * Whether a recording control has the keyboard. While one does, no Luke
    * key may act on its own press: the chord arriving is an entry, not an ask.
    */
-  onShortcutCapture: (capturing: boolean) => void;
+  onCapture: (capturing: boolean) => void;
+}
+
+/**
+ * The settings tab, as the grouped controls that draw it. A preference write
+ * or a shortcut lives on its own bundle so a leaf can change without the
+ * panel, the body, or the app's settings object growing a new field.
+ */
+export interface SettingsPanelProps {
+  /**
+   * Which settings page is showing: the front page, or one of the pages a
+   * front-page row opens. Held by the app rather than here because Escape
+   * unwinds it and a credential entry has to survive a trip to the key slot
+   * with its page intact.
+   */
+  view: SettingsView;
+  onViewChange: (view: SettingsView) => void;
+  microphone: MicrophoneControl;
+  settings?: AppSettings;
+  preferences: PreferenceWrites;
+  /** The one credential being entered anywhere, and everything that can be done to it. */
+  credentials: CredentialEntryControl;
+  /** The one note to the founders being written, and everything that can be done to it. */
+  feedback: FeedbackEntryControl;
+  /**
+   * True while the panel is the shape on screen. A field can only hold the
+   * caret then: everything here sits in an inert stage the rest of the time,
+   * and an entry can outlast the panel it was started in.
+   */
+  panelOpen: boolean;
+  /**
+   * The providers the default-workspace row may offer: the ones currently
+   * offering projects, plus a stored default that is not — a choice the row
+   * cannot show is one that can be neither seen nor cleared.
+   */
+  workspaceProviders: readonly WorkspaceProviderOption[];
+  onQuit: () => void;
+  shortcuts: ShortcutControl;
 }
 
 /* What nothing else on the line can say on its own. A key kept here needs no
@@ -912,15 +952,12 @@ function CredentialsSection({
   settings,
   control,
   panelOpen,
-  onWorkspaceAgentDefaultChange,
+  preferences,
 }: {
   settings: AppSettings;
   control: CredentialEntryControl;
   panelOpen: boolean;
-  onWorkspaceAgentDefaultChange: (
-    providerId: ProviderId,
-    selection: WorkspaceAgentSelection | undefined,
-  ) => Promise<string | undefined>;
+  preferences: PreferenceWrites;
 }): React.JSX.Element {
   // Only a system Luke has actually asked, and been refused by, is reported as
   // one that cannot hold a key. Until then the rows stand as usual: a warning
@@ -958,7 +995,7 @@ function CredentialsSection({
                 {...(settings.workspaceAgentDefaults?.[agentRow]
                   ? { selection: settings.workspaceAgentDefaults[agentRow] }
                   : {})}
-                onChange={onWorkspaceAgentDefaultChange}
+                onChange={preferences.onWorkspaceAgentDefaultChange}
               />
             ) : null}
           </Fragment>
@@ -1109,27 +1146,11 @@ function SettingsPageHeader({
  * window sized to the panel rather than being clipped by it.
  */
 function VoiceSection({
-  voice,
-  onVoiceChange,
-  speed,
-  onVoiceSpeedChange,
-  captions,
-  onVoiceCaptionsChange,
-  ducking,
-  onDuckOtherMediaChange,
-  notifications,
-  onSessionNotificationsChange,
+  settings,
+  preferences,
 }: {
-  voice: RealtimeVoice;
-  onVoiceChange: (voice: RealtimeVoice) => void;
-  speed: RealtimeVoiceSpeed;
-  onVoiceSpeedChange: (speed: RealtimeVoiceSpeed) => void;
-  captions: boolean;
-  onVoiceCaptionsChange: (enabled: boolean) => Promise<string | undefined>;
-  ducking: boolean;
-  onDuckOtherMediaChange: (enabled: boolean) => Promise<string | undefined>;
-  notifications: boolean;
-  onSessionNotificationsChange: (enabled: boolean) => Promise<string | undefined>;
+  settings: AppSettings;
+  preferences: PreferenceWrites;
 }): React.JSX.Element {
   return (
     <section
@@ -1147,7 +1168,7 @@ function VoiceSection({
              starting afresh. */
           "How Luke sounds; a conversation under way starts afresh."
         }
-        value={voice}
+        value={settings.voice}
         options={REALTIME_VOICE_LIST.map((candidate) => ({
           value: candidate,
           label: voiceOptionLabel(candidate),
@@ -1157,7 +1178,7 @@ function VoiceSection({
           // of a select is a broken control rather than a choice.
           return isRealtimeVoice(raw) ? raw : undefined;
         }}
-        onChange={onVoiceChange}
+        onChange={preferences.onVoiceChange}
       />
       <SelectRow
         label="Speed"
@@ -1167,7 +1188,7 @@ function VoiceSection({
              call already open, so nothing starts over. */
           "How fast Luke talks, from his next reply on."
         }
-        value={speed}
+        value={settings.voiceSpeed}
         options={REALTIME_VOICE_SPEED_LIST.map((candidate) => ({
           value: candidate,
           label: speedOptionLabel(candidate),
@@ -1178,7 +1199,7 @@ function VoiceSection({
           const next = Number(raw);
           return isRealtimeVoiceSpeed(next) ? next : undefined;
         }}
-        onChange={onVoiceSpeedChange}
+        onChange={preferences.onVoiceSpeedChange}
       />
       <SwitchRow
         label="Captions"
@@ -1192,8 +1213,8 @@ function VoiceSection({
              a reply the Mac would swallow is captioned whatever it says. */
           "Luke\u2019s words on screen as he speaks, and on their own while your Mac is muted. Nothing is kept."
         }
-        checked={captions}
-        onChange={onVoiceCaptionsChange}
+        checked={settings.voiceCaptions}
+        onChange={preferences.onVoiceCaptionsChange}
       />
       <SwitchRow
         label="Quiet Music and Spotify"
@@ -1206,8 +1227,8 @@ function VoiceSection({
              when macOS asks whether Luke may speak to each player at all. */
           "Their volume dips while you and Luke are talking, and returns after."
         }
-        checked={ducking}
-        onChange={onDuckOtherMediaChange}
+        checked={settings.duckOtherMedia}
+        onChange={preferences.onDuckOtherMediaChange}
       />
       <SwitchRow
         label="Announce when a session needs you"
@@ -1220,8 +1241,8 @@ function VoiceSection({
              the sentence, and the microphone stays untouched. */
           "Luke says it out loud when an agent starts waiting on you, hits an error, or finishes."
         }
-        checked={notifications}
-        onChange={onSessionNotificationsChange}
+        checked={settings.sessionNotifications}
+        onChange={preferences.onSessionNotificationsChange}
       />
     </section>
   );
@@ -1235,23 +1256,11 @@ function VoiceSection({
  * answer here.
  */
 function AppearanceSection({
-  shown,
-  onShowInMenuBarChange,
-  dockShown,
-  onShowInDockChange,
-  allDisplays,
-  onShowOnAllDisplaysChange,
-  formFactor,
-  onFormFactorChange,
+  settings,
+  preferences,
 }: {
-  shown: boolean;
-  onShowInMenuBarChange: (show: boolean) => Promise<string | undefined>;
-  dockShown: boolean;
-  onShowInDockChange: (show: boolean) => Promise<string | undefined>;
-  allDisplays: boolean;
-  onShowOnAllDisplaysChange: (show: boolean) => Promise<string | undefined>;
-  formFactor: PanelFormFactor;
-  onFormFactorChange: (formFactor: PanelFormFactor) => Promise<string | undefined>;
+  settings: AppSettings;
+  preferences: PreferenceWrites;
 }): React.JSX.Element {
   return (
     <section
@@ -1261,20 +1270,20 @@ function AppearanceSection({
       <SwitchRow
         label="Show Luke in the menu bar"
         errand={APP_SETTING_ID.SHOW_IN_MENU_BAR}
-        checked={shown}
-        onChange={onShowInMenuBarChange}
+        checked={settings.showInMenuBar}
+        onChange={preferences.onShowInMenuBarChange}
       />
       <SwitchRow
         label="Show Luke in the Dock"
         errand={APP_SETTING_ID.SHOW_IN_DOCK}
-        checked={dockShown}
-        onChange={onShowInDockChange}
+        checked={settings.showInDock}
+        onChange={preferences.onShowInDockChange}
       />
       <SwitchRow
         label="Show Luke on all displays"
         errand={APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS}
-        checked={allDisplays}
-        onChange={onShowOnAllDisplaysChange}
+        checked={settings.showOnAllDisplays}
+        onChange={preferences.onShowOnAllDisplaysChange}
       />
       <SelectRow
         label="Form factor"
@@ -1284,7 +1293,7 @@ function AppearanceSection({
              visibly does nothing: the real housing always wins. */
           "On displays without a notch."
         }
-        value={formFactor}
+        value={settings.formFactor}
         options={PANEL_FORM_FACTOR_LIST.map((candidate) => ({
           value: candidate,
           label: formFactorOptionLabel(candidate),
@@ -1294,7 +1303,7 @@ function AppearanceSection({
           // of a select is a broken control rather than a choice.
           return isPanelFormFactor(raw) ? raw : undefined;
         }}
-        onChange={onFormFactorChange}
+        onChange={preferences.onFormFactorChange}
       />
     </section>
   );
@@ -1306,15 +1315,13 @@ function AppearanceSection({
  * default is about every provider at once rather than any one row.
  */
 function WorkspacesSection({
-  defaultWorkspaceProvider,
+  settings,
   workspaceProviders,
-  onDefaultWorkspaceProviderChange,
+  preferences,
 }: {
-  defaultWorkspaceProvider?: ProviderId;
+  settings: AppSettings;
   workspaceProviders: readonly WorkspaceProviderOption[];
-  onDefaultWorkspaceProviderChange: (
-    providerId: ProviderId | undefined,
-  ) => Promise<string | undefined>;
+  preferences: PreferenceWrites;
 }): React.JSX.Element {
   return (
     <section className="settings-section" style={{ "--row-index": 3 } as React.CSSProperties}>
@@ -1331,7 +1338,7 @@ function WorkspacesSection({
              that choice is seen, changed, or returned to asking. */
           "Where an ask that names no provider creates a workspace. Your first creation sets it."
         }
-        value={defaultWorkspaceProvider ?? ASK_EACH_TIME}
+        value={settings.defaultWorkspaceProvider ?? ASK_EACH_TIME}
         options={[
           { value: ASK_EACH_TIME, label: "Ask each time" },
           ...workspaceProviders.map((option) => ({ value: option.id, label: option.name })),
@@ -1346,8 +1353,9 @@ function WorkspacesSection({
           return undefined;
         }}
         onChange={(next) => {
-          if (next === ASK_EACH_TIME) return onDefaultWorkspaceProviderChange(undefined);
-          if (isProviderId(next)) return onDefaultWorkspaceProviderChange(next);
+          if (next === ASK_EACH_TIME)
+            return preferences.onDefaultWorkspaceProviderChange(undefined);
+          if (isProviderId(next)) return preferences.onDefaultWorkspaceProviderChange(next);
         }}
       />
     </section>
@@ -1515,31 +1523,7 @@ function ShortcutRow({
   );
 }
 
-function ShortcutSection({
-  voiceHotkey,
-  voiceHotkeyHeld,
-  chosen,
-  onVoiceHotkeyChange,
-  askHotkey,
-  askChosen,
-  onAskHotkeyChange,
-  stopHotkey,
-  stopChosen,
-  onStopHotkeyChange,
-  onShortcutCapture,
-}: {
-  voiceHotkey?: string | undefined;
-  voiceHotkeyHeld: boolean;
-  chosen: boolean;
-  onVoiceHotkeyChange: (accelerator: string | undefined) => Promise<string | undefined>;
-  askHotkey?: string | undefined;
-  askChosen: boolean;
-  onAskHotkeyChange: (accelerator: string | undefined) => Promise<string | undefined>;
-  stopHotkey?: string | undefined;
-  stopChosen: boolean;
-  onStopHotkeyChange: (accelerator: string | undefined) => Promise<string | undefined>;
-  onShortcutCapture: (capturing: boolean) => void;
-}): React.JSX.Element {
+function ShortcutSection({ shortcuts }: { shortcuts: ShortcutControl }): React.JSX.Element {
   return (
     <section
       className="settings-section settings-plain"
@@ -1551,33 +1535,33 @@ function ShortcutSection({
         // being let go of. Describing a hold to someone whose key can only
         // toggle would leave them holding it and wondering.
         detail={
-          voiceHotkeyHeld
+          shortcuts.voiceHotkeyHeld
             ? "Hold to talk, let go to send. Tap instead to keep it open."
             : "Press to talk, again to send, again to interrupt."
         }
-        {...(voiceHotkey ? { shown: voiceHotkey } : {})}
-        chosen={chosen}
+        {...(shortcuts.voiceHotkey ? { shown: shortcuts.voiceHotkey } : {})}
+        chosen={shortcuts.voiceChosen}
         defaultKey={DEFAULT_VOICE_HOTKEYS[0] ?? ""}
-        onChange={onVoiceHotkeyChange}
-        onCapture={onShortcutCapture}
+        onChange={shortcuts.onVoiceHotkeyChange}
+        onCapture={shortcuts.onCapture}
       />
       <ShortcutRow
         title="Ask Luke"
         detail="Press to type to Luke from any app. The same key puts it away."
-        {...(askHotkey ? { shown: askHotkey } : {})}
-        chosen={askChosen}
+        {...(shortcuts.askHotkey ? { shown: shortcuts.askHotkey } : {})}
+        chosen={shortcuts.askChosen}
         defaultKey={DEFAULT_ASK_HOTKEYS[0] ?? ""}
-        onChange={onAskHotkeyChange}
-        onCapture={onShortcutCapture}
+        onChange={shortcuts.onAskHotkeyChange}
+        onCapture={shortcuts.onCapture}
       />
       <ShortcutRow
         title="Stop Luke"
         detail="Press to cut off a reply mid-sentence, from any app. Escape does the same here."
-        {...(stopHotkey ? { shown: stopHotkey } : {})}
-        chosen={stopChosen}
+        {...(shortcuts.stopHotkey ? { shown: shortcuts.stopHotkey } : {})}
+        chosen={shortcuts.stopChosen}
         defaultKey={DEFAULT_STOP_HOTKEYS[0] ?? ""}
-        onChange={onStopHotkeyChange}
-        onCapture={onShortcutCapture}
+        onChange={shortcuts.onStopHotkeyChange}
+        onCapture={shortcuts.onCapture}
       />
     </section>
   );
@@ -1586,38 +1570,20 @@ function ShortcutSection({
 export function SettingsPanel({
   view,
   onViewChange,
-  microphoneStatus,
-  microphoneError,
-  onRequestMicrophone,
-  onOpenMicrophoneSettings,
-  voiceAvailable,
+  microphone,
   settings,
-  onVoiceCaptionsChange,
-  onDuckOtherMediaChange,
-  onSessionNotificationsChange,
+  preferences,
   credentials,
   feedback,
-  onVoiceChange,
-  onVoiceSpeedChange,
   panelOpen,
-  onShowInMenuBarChange,
-  onShowInDockChange,
-  onShowOnAllDisplaysChange,
-  onFormFactorChange,
   workspaceProviders,
-  onDefaultWorkspaceProviderChange,
-  onWorkspaceAgentDefaultChange,
   onQuit,
-  voiceHotkey,
-  voiceHotkeyHeld,
-  onVoiceHotkeyChange,
-  askHotkey,
-  onAskHotkeyChange,
-  stopHotkey,
-  onStopHotkeyChange,
-  onShortcutCapture,
+  shortcuts,
 }: SettingsPanelProps): React.JSX.Element {
-  const microphone = microphoneAccessRow({ voiceAvailable, status: microphoneStatus });
+  const microphoneRow = microphoneAccessRow({
+    voiceAvailable: microphone.voiceAvailable,
+    status: microphone.status,
+  });
   // The page as drawn, trailing the page as asked: turning one is a leave and
   // then an arrival, and the leaving page must be held mounted through its own
   // exit — the surface never resizes out from under something still drawn.
@@ -1692,48 +1658,14 @@ export function SettingsPanel({
       ) : null}
 
       {drawnView === SETTINGS_VIEW.VOICE && settings ? (
-        <VoiceSection
-          voice={settings.voice}
-          onVoiceChange={onVoiceChange}
-          speed={settings.voiceSpeed}
-          onVoiceSpeedChange={onVoiceSpeedChange}
-          captions={settings.voiceCaptions}
-          onVoiceCaptionsChange={onVoiceCaptionsChange}
-          ducking={settings.duckOtherMedia}
-          onDuckOtherMediaChange={onDuckOtherMediaChange}
-          notifications={settings.sessionNotifications}
-          onSessionNotificationsChange={onSessionNotificationsChange}
-        />
+        <VoiceSection settings={settings} preferences={preferences} />
       ) : null}
 
       {drawnView === SETTINGS_VIEW.APPEARANCE && settings ? (
-        <AppearanceSection
-          shown={settings.showInMenuBar}
-          onShowInMenuBarChange={onShowInMenuBarChange}
-          dockShown={settings.showInDock}
-          onShowInDockChange={onShowInDockChange}
-          allDisplays={settings.showOnAllDisplays}
-          onShowOnAllDisplaysChange={onShowOnAllDisplaysChange}
-          formFactor={settings.formFactor}
-          onFormFactorChange={onFormFactorChange}
-        />
+        <AppearanceSection settings={settings} preferences={preferences} />
       ) : null}
 
-      {drawnView === SETTINGS_VIEW.SHORTCUTS ? (
-        <ShortcutSection
-          {...(voiceHotkey ? { voiceHotkey } : {})}
-          voiceHotkeyHeld={voiceHotkeyHeld}
-          chosen={settings?.voiceHotkey !== undefined}
-          onVoiceHotkeyChange={onVoiceHotkeyChange}
-          {...(askHotkey ? { askHotkey } : {})}
-          askChosen={settings?.askHotkey !== undefined}
-          onAskHotkeyChange={onAskHotkeyChange}
-          {...(stopHotkey ? { stopHotkey } : {})}
-          stopChosen={settings?.stopHotkey !== undefined}
-          onStopHotkeyChange={onStopHotkeyChange}
-          onShortcutCapture={onShortcutCapture}
-        />
-      ) : null}
+      {drawnView === SETTINGS_VIEW.SHORTCUTS ? <ShortcutSection shortcuts={shortcuts} /> : null}
 
       {drawnView === SETTINGS_VIEW.CONNECTIONS && settings ? (
         <>
@@ -1741,15 +1673,13 @@ export function SettingsPanel({
             settings={settings}
             control={credentials}
             panelOpen={panelOpen}
-            onWorkspaceAgentDefaultChange={onWorkspaceAgentDefaultChange}
+            preferences={preferences}
           />
           <IntegrationsSection settings={settings} control={credentials} panelOpen={panelOpen} />
           <WorkspacesSection
-            {...(settings.defaultWorkspaceProvider
-              ? { defaultWorkspaceProvider: settings.defaultWorkspaceProvider }
-              : {})}
+            settings={settings}
             workspaceProviders={workspaceProviders}
-            onDefaultWorkspaceProviderChange={onDefaultWorkspaceProviderChange}
+            preferences={preferences}
           />
         </>
       ) : null}
@@ -1772,31 +1702,31 @@ export function SettingsPanel({
               <span className="settings-copy">
                 <span className="settings-name">
                   <strong>Microphone</strong>
-                  {microphone.ready ? <CheckIcon /> : null}
+                  {microphoneRow.ready ? <CheckIcon /> : null}
                 </span>
-                <small>{microphone.detail}</small>
+                <small>{microphoneRow.detail}</small>
               </span>
               <span className="settings-actions">
-                {microphone.offerSystemSettings ? (
+                {microphoneRow.offerSystemSettings ? (
                   <button
                     type="button"
                     className="icon-button"
                     aria-label="Open Privacy & Security in System Settings"
                     /* The ellipsis is the promise that it opens somewhere else. */
                     title="System Settings…"
-                    onClick={onOpenMicrophoneSettings}
+                    onClick={microphone.onOpenSettings}
                   >
                     <ExternalIcon />
                   </button>
                 ) : null}
-                {microphone.offerAccess ? (
-                  <button type="button" className="quiet-button" onClick={onRequestMicrophone}>
+                {microphoneRow.offerAccess ? (
+                  <button type="button" className="quiet-button" onClick={microphone.onRequest}>
                     Allow
                   </button>
                 ) : null}
               </span>
             </div>
-            {microphoneError ? <p className="error-message">{microphoneError}</p> : null}
+            {microphone.error ? <p className="error-message">{microphone.error}</p> : null}
           </section>
 
           <FeedbackSection control={feedback} />
