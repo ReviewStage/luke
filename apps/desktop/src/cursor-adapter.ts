@@ -4,7 +4,7 @@ import {
   isRecord,
   type MessageCapableSessionProviderAdapter,
   maximumObservedWorkspaceProjects,
-  maximumSessionSummaryLength,
+  maximumSessionRecapLength,
   maximumSessionTitleLength,
   OBSERVATION_WINDOW,
   type ProviderControlRequest,
@@ -523,7 +523,7 @@ export class CursorSessionAdapter
       ...(latestRunId && this.#agentTakesCancel(agent, run)
         ? { controls: [cursorCancelRunControl(latestRunId)] }
         : {}),
-      ...(run?.result ? { summary: run.result } : {}),
+      ...(run?.result ? { recap: run.result } : {}),
       detail: {
         ...(repository ? { repository } : {}),
         // The branch a run opened says more than the ref it started from, but
@@ -564,7 +564,7 @@ export class CursorSessionAdapter
       CURSOR_ADAPTER_DEFAULTS.MAXIMUM_REFERENCE_LABEL_LENGTH,
     );
     const pullRequestUrl = textFromRecord(branch, CURSOR_FIELD.PR_URL);
-    const result = textFromRecord(body, CURSOR_FIELD.RESULT)?.slice(0, maximumSessionSummaryLength);
+    const result = textFromRecord(body, CURSOR_FIELD.RESULT)?.slice(0, maximumSessionRecapLength);
     return {
       status: knownValue(CURSOR_RUN_STATUS, textFromRecord(body, CURSOR_FIELD.STATUS)),
       updatedAt:

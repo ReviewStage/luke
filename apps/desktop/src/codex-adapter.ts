@@ -2,7 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   isRecord,
-  maximumSessionSummaryLength,
+  maximumSessionRecapLength,
   maximumSessionTitleLength,
   OBSERVATION_WINDOW,
   oneLine,
@@ -217,7 +217,7 @@ function parseCodexRolloutTail(tail: string): ParsedCodexRollout {
         parsed.activity = undefined;
         parsed.lastAgentMessage = oneLine(
           text(payload.last_agent_message),
-          maximumSessionSummaryLength,
+          maximumSessionRecapLength,
         );
       }
       continue;
@@ -396,7 +396,7 @@ function observationFromThreadRow(
     title: titleFromRow(row),
     status,
     observedAt,
-    ...(rollout?.lastAgentMessage ? { summary: rollout.lastAgentMessage } : {}),
+    ...(rollout?.lastAgentMessage ? { recap: rollout.lastAgentMessage } : {}),
     detail: detailFromRow(row, rollout),
   };
 }

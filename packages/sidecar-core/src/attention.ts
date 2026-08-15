@@ -15,13 +15,13 @@ import {
 export const ATTENTION_TRIGGER = {
   OBSERVED: "observed",
   STATUS_CHANGED: "status-changed",
-  SUMMARY_CHANGED: "summary-changed",
+  RECAP_CHANGED: "recap-changed",
   ERROR_REPORTED: "error-reported",
 } as const;
 
 export type AttentionTrigger = (typeof ATTENTION_TRIGGER)[keyof typeof ATTENTION_TRIGGER];
 
-/** A spoken sentence stays far shorter than the summary a provider may observe. */
+/** A spoken sentence stays far shorter than the recap a provider may observe. */
 export const maximumAttentionSummaryLength = 180;
 
 export const ATTENTION_DECISION_SCHEMA_NAME = "attention_decision";
@@ -107,7 +107,7 @@ export interface AttentionUpdate extends SessionIdentity {
   workspace?: string;
   status: SessionStatus;
   previousStatus?: SessionStatus;
-  summary?: string;
+  recap?: string;
   context?: AttentionContext;
   observedAt: number;
 }
@@ -208,9 +208,9 @@ const ATTENTION_DEVELOPMENT = [
     ofUpdate: (update: AttentionUpdate) => update.context?.error,
   },
   {
-    trigger: ATTENTION_TRIGGER.SUMMARY_CHANGED,
-    ofSession: (session: NormalizedSession) => session.summary,
-    ofUpdate: (update: AttentionUpdate) => update.summary,
+    trigger: ATTENTION_TRIGGER.RECAP_CHANGED,
+    ofSession: (session: NormalizedSession) => session.recap,
+    ofUpdate: (update: AttentionUpdate) => update.recap,
   },
 ] as const;
 
@@ -253,7 +253,7 @@ export function attentionUpdate(
     ...(workspace ? { workspace } : {}),
     status: session.status,
     ...(previous ? { previousStatus: previous.status } : {}),
-    ...(session.summary ? { summary: session.summary } : {}),
+    ...(session.recap ? { recap: session.recap } : {}),
     ...(context ? { context } : {}),
     observedAt: session.observedAt,
   };

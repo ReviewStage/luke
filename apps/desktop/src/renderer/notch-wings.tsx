@@ -239,7 +239,7 @@ export function NotchWings({
         <div className="wing-inner">
           <span
             className="count-badge"
-            data-state={tally.state}
+            data-state={tally.urgency}
             data-empty={String(tally.total === 0)}
             role="status"
             aria-live="polite"

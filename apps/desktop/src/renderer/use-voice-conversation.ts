@@ -455,6 +455,10 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   }, []);
 
   /**
+   * What the talk key means, wherever it was pressed. A first press has to open
+   * the call before it can open a turn, which is what lets the key work without
+   * the panel ever being visited.
+   *
    * The talk key going down. Every press goes to the session, including the one
    * that has no call to press against yet: the microphone opens with the call,
    * so a press before then is remembered and applied when it comes up.

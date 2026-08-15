@@ -181,7 +181,7 @@ test("observes an open turn as work, labelled by its folder and free of transcri
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
   assert.equal(observations[0]?.observedAt, TEST_TIME - 5_000);
   assert.equal(observations[0]?.controls, undefined);
-  assert.equal(observations[0]?.summary, undefined);
+  assert.equal(observations[0]?.recap, undefined);
   assert.deepEqual(observations[0]?.detail, { repository: "luke" });
   // Nothing says this session runs anywhere but here, which is what leaves it
   // local once the registry normalizes it.
@@ -413,6 +413,25 @@ test("labels a session neutrally rather than guessing at a folder", async (t) =>
     observations.map((observation) => observation.title),
     ["workspace", "workspace"],
   );
+});
+
+test("a workspace record that is not JSON does not fail the observation pass", async (t) => {
+  const state = await temporaryCursorState(t);
+  const entryDirectory = path.join(state.workspaceStorageDirectory, "broken");
+  await fs.mkdir(entryDirectory, { recursive: true });
+  await fs.writeFile(path.join(entryDirectory, CURSOR_WORKSPACE_FILE), "{");
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "session-labelled",
+    [turnEndedRecord(TEST_TURN_STATUS.SUCCESS)],
+    TEST_TIME - 1_000,
+  );
+
+  const observations = await adapterFor(state).observe();
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.title, "workspace");
 });
 
 test("observes a session and not the subagents it ran", async (t) => {

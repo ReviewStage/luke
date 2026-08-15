@@ -3,31 +3,42 @@ import test from "node:test";
 import {
   compareSessionsByUrgency,
   MOTION_DURATION_MS,
-  SESSION_STATE,
-  STATE_LABEL,
-  STATE_PRIORITY,
+  SESSION_URGENCY,
+  URGENCY_LABEL,
+  URGENCY_PRIORITY,
+  urgencyLabel,
 } from "../src";
 
-test("every display state has a label, and the priority list is a permutation of them", () => {
-  assert.deepEqual(new Set(Object.keys(STATE_LABEL)), new Set(Object.values(SESSION_STATE)));
-  assert.deepEqual(new Set(STATE_PRIORITY), new Set(Object.values(SESSION_STATE)));
-  assert.equal(STATE_PRIORITY.length, Object.values(SESSION_STATE).length);
+test("every display urgency has a label, and the priority list is a permutation of them", () => {
+  assert.deepEqual(new Set(Object.keys(URGENCY_LABEL)), new Set(Object.values(SESSION_URGENCY)));
+  assert.deepEqual(new Set(URGENCY_PRIORITY), new Set(Object.values(SESSION_URGENCY)));
+  assert.equal(URGENCY_PRIORITY.length, Object.values(SESSION_URGENCY).length);
+  for (const urgency of Object.values(SESSION_URGENCY)) {
+    assert.equal(urgencyLabel(urgency), URGENCY_LABEL[urgency]);
+  }
 });
 
 test("urgency puts attention first, then working, complete, and idle", () => {
-  const idle = { state: SESSION_STATE.UNKNOWN, observedAt: 3 };
-  const working = { state: SESSION_STATE.WORKING, observedAt: 2 };
-  const attention = { state: SESSION_STATE.ATTENTION, observedAt: 1 };
-  const complete = { state: SESSION_STATE.COMPLETE, observedAt: 4 };
+  const idle = { urgency: SESSION_URGENCY.UNKNOWN, observedAt: 3 };
+  const working = { urgency: SESSION_URGENCY.WORKING, observedAt: 2 };
+  const attention = { urgency: SESSION_URGENCY.ATTENTION, observedAt: 1 };
+  const complete = { urgency: SESSION_URGENCY.COMPLETE, observedAt: 4 };
   assert.deepEqual(
-    [idle, working, attention, complete].toSorted(compareSessionsByUrgency).map((row) => row.state),
-    [SESSION_STATE.ATTENTION, SESSION_STATE.WORKING, SESSION_STATE.COMPLETE, SESSION_STATE.UNKNOWN],
+    [idle, working, attention, complete]
+      .toSorted(compareSessionsByUrgency)
+      .map((row) => row.urgency),
+    [
+      SESSION_URGENCY.ATTENTION,
+      SESSION_URGENCY.WORKING,
+      SESSION_URGENCY.COMPLETE,
+      SESSION_URGENCY.UNKNOWN,
+    ],
   );
 });
 
-test("within one state, the session that moved most recently comes first", () => {
-  const older = { state: SESSION_STATE.WORKING, observedAt: 1 };
-  const newer = { state: SESSION_STATE.WORKING, observedAt: 2 };
+test("within one urgency, the session that moved most recently comes first", () => {
+  const older = { urgency: SESSION_URGENCY.WORKING, observedAt: 1 };
+  const newer = { urgency: SESSION_URGENCY.WORKING, observedAt: 2 };
   assert.equal(compareSessionsByUrgency(newer, older), -1);
 });
 

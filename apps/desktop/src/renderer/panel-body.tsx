@@ -3,7 +3,7 @@ import {
   PROVIDER_ACT_RESULT_STATUS,
   SESSION_CONTROL_KIND,
   SESSION_LOCATION,
-  SESSION_STATE,
+  SESSION_URGENCY,
 } from "@sidecar/core";
 import { useCallback, useRef, useState } from "react";
 import { type AskHandler, AskLuke } from "./ask-luke";
@@ -300,7 +300,7 @@ function SessionRow({
   const withActions = session.canMessage || session.actions.length > 0;
   const shared = {
     className: "session-row",
-    "data-state": session.state,
+    "data-state": session.urgency,
     // How the reorder measurement finds this row again after a re-sort has
     // moved it, whichever element it is rendered as.
     [SESSION_ROW_ID_ATTRIBUTE]: session.id,
@@ -334,10 +334,10 @@ function SessionRow({
       <span className="row-copy">
         <strong>{title}</strong>
         <small className="row-doing">
-          {session.state === SESSION_STATE.WORKING ? (
+          {session.urgency === SESSION_URGENCY.WORKING ? (
             <span className="row-spinner" aria-hidden="true" />
           ) : null}
-          {session.state === SESSION_STATE.COMPLETE ? <CheckGlyph /> : null}
+          {session.urgency === SESSION_URGENCY.COMPLETE ? <CheckGlyph /> : null}
           <span className="row-doing-text">
             {session.detail === session.label ? null : (
               <span className="visually-hidden">{session.label}. </span>
@@ -491,6 +491,10 @@ export interface PanelBodyProps {
   onOptionsToggle: () => void;
   tab: PanelTab;
   onTabChange: (tab: PanelTab) => void;
+  /**
+   * The settings tab's controls, grouped the way a credential's is. Forwarded
+   * untouched: this body chooses which tab is showing, not what a row writes.
+   */
   settings: SettingsPanelProps;
 }
 

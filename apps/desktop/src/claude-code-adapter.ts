@@ -3,7 +3,7 @@ import path from "node:path";
 import {
   agedStatus,
   isRecord,
-  maximumSessionSummaryLength,
+  maximumSessionRecapLength,
   maximumSessionTitleLength,
   OBSERVATION_WINDOW,
   oneLine,
@@ -57,10 +57,10 @@ const CLAUDE_RECORD_TYPE = {
 const CLAUDE_SYSTEM_SUBTYPE = {
   /**
    * A recap Claude Code composes for a developer who stepped away. It is the
-   * only summary this adapter reports, because it is the only one Claude Code
+   * only recap this adapter reports, because it is the only one Claude Code
    * designates as being *about* the session. The closing text of the last
    * assistant message would read similarly, but it is the message stream
-   * itself, and a summary reaches the attention evaluator off-machine.
+   * itself, and a recap reaches the attention evaluator off-machine.
    */
   AWAY_SUMMARY: "away_summary",
   API_ERROR: "api_error",
@@ -272,7 +272,7 @@ function readClaudeRecord(record: Record<string, unknown>, parsed: ParsedClaudeS
   }
   if (record.type === CLAUDE_RECORD_TYPE.SYSTEM) {
     if (record.subtype === CLAUDE_SYSTEM_SUBTYPE.AWAY_SUMMARY) {
-      parsed.awaySummary = oneLine(text(record.content), maximumSessionSummaryLength);
+      parsed.awaySummary = oneLine(text(record.content), maximumSessionRecapLength);
     }
     if (record.subtype === CLAUDE_SYSTEM_SUBTYPE.API_ERROR) {
       parsed.apiError = apiErrorFromRecord(record);
@@ -408,7 +408,7 @@ function observationFromSessionFile(
     title: titleFromTail(parsed),
     status,
     observedAt,
-    ...(parsed.awaySummary ? { summary: parsed.awaySummary } : {}),
+    ...(parsed.awaySummary ? { recap: parsed.awaySummary } : {}),
     detail: detailFromTail(parsed),
   };
 }

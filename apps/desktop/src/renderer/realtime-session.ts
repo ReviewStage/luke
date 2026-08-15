@@ -552,11 +552,6 @@ export class RealtimeVoiceSession {
   }
 
   /**
-   * Starts a turn, ends one, or interrupts a reply — whichever the current
-   * state makes it. One key drives the whole conversation, so what a press
-   * means lives in one place rather than at every call site.
-   */
-  /**
    * The talk key going down. Opening a turn and ending one are separate here
    * rather than one toggle, because a key that reports being let go of can say
    * which of the two it meant — and a turn that lasts exactly as long as the
@@ -1122,8 +1117,9 @@ export class RealtimeVoiceSession {
     let event: unknown;
     try {
       event = JSON.parse(data);
-    } catch {
-      return;
+    } catch (error) {
+      if (error instanceof SyntaxError) return;
+      throw error;
     }
 
     if (event === null || typeof event !== "object") return;
@@ -1288,8 +1284,11 @@ export class RealtimeVoiceSession {
       }
       try {
         return await this.#options.carryAppAction(appAction);
-      } catch {
-        return { status: "refused", reason: "The change could not be made." };
+      } catch (error) {
+        return {
+          status: "refused",
+          reason: error instanceof Error ? error.message : "The change could not be made.",
+        };
       }
     }
     if (isIssueToolName(call.name)) return this.#issueToolCallOutput(call);
@@ -1310,8 +1309,11 @@ export class RealtimeVoiceSession {
     }
     try {
       return await this.#options.carryAction(action);
-    } catch {
-      return { status: "refused", reason: "The action could not be carried out." };
+    } catch (error) {
+      return {
+        status: "refused",
+        reason: error instanceof Error ? error.message : "The action could not be carried out.",
+      };
     }
   }
 
@@ -1327,8 +1329,11 @@ export class RealtimeVoiceSession {
     }
     try {
       return await this.#options.carryIssueAction(action);
-    } catch {
-      return { status: "refused", reason: "The action could not be carried out." };
+    } catch (error) {
+      return {
+        status: "refused",
+        reason: error instanceof Error ? error.message : "The action could not be carried out.",
+      };
     }
   }
 

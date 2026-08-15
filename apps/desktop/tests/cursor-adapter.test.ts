@@ -45,7 +45,7 @@ interface TestRun {
 
 interface TestAgent {
   id: string;
-  /** Written from the opening prompt, like `summary` and the run's branch. */
+  /** Written from the opening prompt, like the recap and the run's branch. */
   name: string;
   archived?: boolean;
   repository?: string;
@@ -257,7 +257,7 @@ test("observes a running agent under the name Cursor gave it", async () => {
     { id: "cancel-run", label: "Stop this run", kind: "stop", target: "run-running" },
   ]);
   assert.equal(observations[0]?.canReceiveMessage, false);
-  assert.equal(observations[0]?.summary, TEST_RUN_RESULT);
+  assert.equal(observations[0]?.recap, TEST_RUN_RESULT);
   // The repository the run names, which is the only place the API reports one
   // for an agent that came from a list page.
   assert.deepEqual(observations[0]?.detail, {

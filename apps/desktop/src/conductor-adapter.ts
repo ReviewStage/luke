@@ -2,7 +2,7 @@ import {
   agedStatus,
   type ControllableSessionProviderAdapter,
   type MessageCapableSessionProviderAdapter,
-  maximumSessionSummaryLength,
+  maximumSessionRecapLength,
   maximumSessionTitleLength,
   OBSERVATION_WINDOW,
   type ProviderControlRequest,
@@ -767,7 +767,7 @@ export class ConductorSessionAdapter
       ...(reported?.status === CONDUCTOR_SESSION_STATUS.WORKING
         ? { controls: [CONDUCTOR_CANCEL_CONTROL] }
         : {}),
-      ...(recap ? { summary: recap } : {}),
+      ...(recap ? { recap } : {}),
       detail: {
         repository: session.workspace.repositoryLabel,
         ...(model ? { model } : {}),
@@ -886,7 +886,7 @@ function recapFromTranscriptTail(tail: string | undefined): string | undefined {
     .join(" ")
     .replace(/\s+/g, " ")
     .trim();
-  return recap ? recap.slice(0, maximumSessionSummaryLength) : undefined;
+  return recap ? recap.slice(0, maximumSessionRecapLength) : undefined;
 }
 
 /**
