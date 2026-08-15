@@ -18,6 +18,7 @@ import { TALK_KEY_RELEASE, talkKeyRelease } from "../shared/voice-hotkey";
 import { askRefusal } from "./ask-luke";
 import { type AppActionCarrier, RealtimeVoiceSession } from "./realtime-session";
 import { SpokenNoticeAnnouncer } from "./spoken-notices";
+import { useStateWithRef } from "./use-state-with-ref";
 import { WAVEFORM_VOICE, type WaveformVoice } from "./waveform";
 
 /**
@@ -272,7 +273,9 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   const [analyser, setAnalyser] = useState<AnalyserNode>();
   const [microphoneStatus, setMicrophoneStatus] = useState<MicrophoneStatus>("not-determined");
   const [microphoneError, setMicrophoneError] = useState<string>();
-  const [voiceStatus, setVoiceStatus] = useState<RealtimeStatus>(REALTIME_STATUS.IDLE);
+  const [voiceStatus, setVoiceStatus, voiceStatusNow] = useStateWithRef<RealtimeStatus>(
+    REALTIME_STATUS.IDLE,
+  );
   /**
    * A pressed talk key still waiting for the call it asked to open. The meter
    * is drawn from this rather than from the connection, because the press is
@@ -352,7 +355,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       onCaption: setVoiceCaption,
     });
     return voiceSession.current;
-  }, []);
+  }, [setVoiceStatus]);
 
   /**
    * The announcer that lets Luke speak into silence: it queues the notices the
@@ -400,10 +403,10 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     }
     // Only the status voice being off put there is lifted. Anything else — a
     // failure, a call already open — is the session's own to report.
-    if (voiceStatus === REALTIME_STATUS.UNAVAILABLE) {
+    if (voiceStatusNow() === REALTIME_STATUS.UNAVAILABLE) {
       setVoiceStatus(REALTIME_STATUS.IDLE);
     }
-  }, [options.voiceAvailable, stopMicrophone, voiceStatus]);
+  }, [options.voiceAvailable, setVoiceStatus, stopMicrophone, voiceStatusNow]);
 
   /**
    * Opens the call, answering with what the system said about the microphone —

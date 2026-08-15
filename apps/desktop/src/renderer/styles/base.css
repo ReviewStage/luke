@@ -575,9 +575,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   height: max(var(--notch-top-inset), 32px);
   cursor: pointer;
   pointer-events: auto;
-  /* Inside an open panel the strip is surrounded by the shape rather than
-     bounding it, so it has no corner of its own to follow. */
-  border-radius: 0;
 }
 
 /* Notch wings ------------------------------------------------------------ */
@@ -1051,6 +1048,13 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   top: var(--shape-top);
   height: calc(var(--capsule-height) - var(--shape-top) * 2);
   border-radius: 999px;
+}
+
+/* Inside an open panel the strip is surrounded by the shape rather than
+   bounding it, so it has no corner of its own to follow. This has to follow
+   the non-notch pill: the two are equal specificity. */
+.app-stage[data-presentation="panel"] .compact-hover-target {
+  border-radius: 0;
 }
 
 .compact-stage {
