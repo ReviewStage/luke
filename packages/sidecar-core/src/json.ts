@@ -57,20 +57,24 @@ export function nonNegativeNumber(value: number | undefined, fallback: number): 
  * not restate the same {@link positiveInteger} / {@link nonNegativeNumber}
  * calls.
  */
-export function resolveOptions<D extends Record<string, number>>(
-  options: { readonly [K in keyof D]?: number },
-  defaults: D,
+export function resolveOptions<K extends string>(
+  options: { readonly [P in K]?: number },
+  defaults: { readonly [P in K]: number },
   bounds: {
-    readonly positive?: readonly (keyof D)[];
-    readonly nonNegative?: readonly (keyof D)[];
+    readonly positive?: readonly K[];
+    readonly nonNegative?: readonly K[];
   },
-): D {
-  const resolved = { ...defaults };
-  for (const key of bounds.positive ?? []) {
-    resolved[key] = positiveInteger(options[key], defaults[key]);
-  }
-  for (const key of bounds.nonNegative ?? []) {
-    resolved[key] = nonNegativeNumber(options[key], defaults[key]);
-  }
+): { [P in K]: number } {
+  const resolved: { [P in K]: number } = { ...defaults };
+  const assign = (key: K, kind: "positive" | "nonNegative"): void => {
+    const fallback = defaults[key];
+    if (typeof fallback !== "number") return;
+    resolved[key] =
+      kind === "positive"
+        ? positiveInteger(options[key], fallback)
+        : nonNegativeNumber(options[key], fallback);
+  };
+  for (const key of bounds.positive ?? []) assign(key, "positive");
+  for (const key of bounds.nonNegative ?? []) assign(key, "nonNegative");
   return resolved;
 }
