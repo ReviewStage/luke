@@ -38,8 +38,9 @@ export async function startAccountLoopback(
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? "/", `http://${LOOPBACK_HOST}`);
     const code = url.searchParams.get("code");
+    const oauthError = url.searchParams.get("error");
     const returnedState = url.searchParams.get("state");
-    if (url.pathname !== CALLBACK_PATH || !code || returnedState !== state) {
+    if (url.pathname !== CALLBACK_PATH || returnedState !== state) {
       response.writeHead(400, { "content-type": "text/plain; charset=utf-8" });
       response.end("Luke could not verify this sign-in. Return to Luke and try again.");
       return;
@@ -47,6 +48,19 @@ export async function startAccountLoopback(
     if (accepted) {
       response.writeHead(409, { "content-type": "text/plain; charset=utf-8" });
       response.end("This sign-in has already been used.");
+      return;
+    }
+    if (oauthError) {
+      accepted = true;
+      response.writeHead(400, { "content-type": "text/plain; charset=utf-8" });
+      response.end("Sign-in was not completed. Return to Luke and try again.");
+      reject?.(new Error(`Sign-in was not completed (${oauthError})`));
+      reject = undefined;
+      return;
+    }
+    if (!code) {
+      response.writeHead(400, { "content-type": "text/plain; charset=utf-8" });
+      response.end("Luke could not verify this sign-in. Return to Luke and try again.");
       return;
     }
     accepted = true;

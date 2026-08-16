@@ -486,6 +486,11 @@ async function refreshStoredAccount(): Promise<void> {
   }
 
   try {
+    // A refresh token may rotate as soon as the token endpoint answers. Keep
+    // that answer before asking for identity so a transient user-info failure
+    // cannot strand the account with the now-revoked previous token.
+    if (generation !== accountGeneration) return;
+    account = await settingsStore.setAccount({ ...stored, ...tokens });
     const identity = await accountClient.userInfo(tokens.accessToken);
     if (generation !== accountGeneration) return;
     account = await settingsStore.setAccount({ ...tokens, ...identity });

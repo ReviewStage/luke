@@ -31,6 +31,18 @@ test("a second callback is ignored after the first succeeds", async () => {
   }
 });
 
+test("a matching OAuth refusal ends the sign-in immediately", async () => {
+  const loopback = await startAccountLoopback({ timeoutMs: 2_000 });
+  try {
+    const callback = `${loopback.redirectUri}?state=${encodeURIComponent(loopback.state)}`;
+    assert.equal((await fetch(`${callback}&error=access_denied`)).status, 400);
+    await assert.rejects(loopback.waitForCode, /access_denied/);
+    assert.equal((await fetch(`${callback}&code=too-late`)).status, 409);
+  } finally {
+    await loopback.close();
+  }
+});
+
 test("a provider hint keeps a full-entropy state for the hosted choice", async () => {
   const loopback = await startAccountLoopback({
     timeoutMs: 2_000,
