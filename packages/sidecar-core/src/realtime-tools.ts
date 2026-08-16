@@ -77,6 +77,7 @@ export const SESSION_TOOL_KIND = {
   OPEN: "open",
   NOTICE_REQUEST: "notice-request",
   NOTICE_WITHDRAW: "notice-withdraw",
+  READ_TRANSCRIPT: "read-transcript",
   CREATE_WORKSPACE: "create-workspace",
   ADD_AGENT: "add-agent",
 } as const;
@@ -115,6 +116,7 @@ export type SessionToolAction =
   | { kind: typeof SESSION_TOOL_KIND.OPEN; identity: SessionIdentity }
   | { kind: typeof SESSION_TOOL_KIND.NOTICE_REQUEST; identity: SessionIdentity; request: string }
   | { kind: typeof SESSION_TOOL_KIND.NOTICE_WITHDRAW; identity: SessionIdentity }
+  | { kind: typeof SESSION_TOOL_KIND.READ_TRANSCRIPT; identity: SessionIdentity }
   | {
       kind: typeof SESSION_TOOL_KIND.CREATE_WORKSPACE;
       providerId: string;
@@ -429,6 +431,24 @@ function validateWithdrawSessionNotice(
   const found = sessionFromArguments(parsed, context.sessions);
   if ("kind" in found) return found;
   return { kind: SESSION_TOOL_KIND.NOTICE_WITHDRAW, identity: found.identity };
+}
+
+function validateReadSessionTranscript(
+  parsed: Record<string, unknown>,
+  context: SessionToolContext,
+): SessionToolAction {
+  const found = sessionFromArguments(parsed, context.sessions);
+  if ("kind" in found) return found;
+  const { session, identity } = found;
+  // The action carries the identity, never a path: the main process locates
+  // the transcript in its own provider home, the same way a pressed row's
+  // open never carries an address. Only a session on this machine has a
+  // transcript here to read; which local providers keep a readable one is
+  // the main process's answer.
+  if (session.location !== SESSION_LOCATION.LOCAL) {
+    return { kind: "refused", reason: "Only local sessions keep a transcript on this machine." };
+  }
+  return { kind: SESSION_TOOL_KIND.READ_TRANSCRIPT, identity };
 }
 
 function validateCreateWorkspace(
@@ -821,6 +841,22 @@ export const REALTIME_TOOLS = {
       },
     },
     validate: validateWithdrawSessionNotice,
+  },
+  READ_SESSION_TRANSCRIPT: {
+    name: "read_session_transcript",
+    family: REALTIME_TOOL_FAMILY.SESSION,
+    schema: {
+      description:
+        "Read the recent transcript of one observed local session, to answer what it has been " +
+        "doing, what it said, or where it is stuck. Reading happens on this machine, performs " +
+        "nothing, and reaches no provider.",
+      parameters: {
+        type: "object",
+        properties: { ...SESSION_IDENTITY_PARAMETERS },
+        required: ["provider_id", "provider_session_id"],
+      },
+    },
+    validate: validateReadSessionTranscript,
   },
   CREATE_WORKSPACE: {
     name: "create_workspace",

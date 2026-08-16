@@ -1,4 +1,3 @@
-import os from "node:os";
 import path from "node:path";
 import {
   agedStatus,
@@ -19,6 +18,13 @@ import {
   wholeNumber,
 } from "@sidecar/core";
 import {
+  CLAUDE_HOOK_EVENT,
+  type ClaudeHookEvent,
+  defaultClaudeHome,
+  type ObservedClaudeHookEvent,
+  readClaudeHookEvent,
+} from "./claude-code-hooks";
+import {
   discoverSessionFiles,
   LOCAL_ADAPTER_DEFAULTS,
   readDirectory,
@@ -34,10 +40,6 @@ const CLAUDE_CODE_PROVIDER_ID = PROVIDER_ID.CLAUDE_CODE;
 const CLAUDE_CODE_PROVIDER_NAME = "Claude Code";
 const CLAUDE_PROJECTS_DIRECTORY = "projects";
 const CLAUDE_SESSION_FILE_EXTENSION = ".jsonl";
-
-const CLAUDE_ENVIRONMENT = {
-  CONFIG_DIRECTORY: "CLAUDE_CONFIG_DIR",
-} as const;
 
 const CLAUDE_EVENT_TYPE = {
   ASSISTANT: "assistant",
@@ -93,6 +95,15 @@ const CLAUDE_ADAPTER_DEFAULTS = {
    */
   READ_HEAD_BYTES: 64 * 1024,
   MAXIMUM_ACTIVITY_LENGTH: 80,
+  /**
+   * How much older than the transcript's clock a hook event may run and still
+   * describe the same moment. The hook fires as a turn boundary happens and
+   * the closing records land moments later under their own timestamps, so a
+   * boundary's event usually trails the record it belongs with by a breath —
+   * never by more than this. An event further behind describes a turn the
+   * transcript has already moved past, and refines nothing.
+   */
+  HOOK_EVENT_TOLERANCE_MS: 5_000,
 } as const;
 
 export const CLAUDE_CODE_PROVIDER: SessionProvider = {
@@ -107,6 +118,14 @@ export interface ClaudeCodeAdapterOptions {
   activeSessionFreshnessMs?: number;
   readTailBytes?: number;
   readHeadBytes?: number;
+  /**
+   * Where the observation hook spools its events, when hooks are on at all.
+   * Read lazily like the cloud adapters' credentials, because the app decides
+   * the path after this adapter is declared. Absent — or answering nothing —
+   * the adapter reads the transcripts alone, exactly as it always has: the
+   * hooks only ever sharpen what the tail already showed.
+   */
+  hookEventsDirectory?: () => string | undefined;
 }
 
 interface ParsedClaudeSessionTail {
@@ -358,6 +377,34 @@ function statusFromTail(
 }
 
 /**
+ * Sharpens the tail's verdict with what the observation hook last said, in the
+ * order the meanings bind. A failed or closed session is definite in either
+ * direction: the hook saying so outranks the tail, and a tail that says so is
+ * never talked out of it by a softer event. Past those, the events refine only
+ * a fresh session — the decay to `UNKNOWN` exists because a hook can go
+ * silent (a crash fires no `SessionEnd`), so an old "waiting" must age the
+ * same way an old tail does. What the refinement actually buys is the states
+ * the transcript cannot show: a tool call holding for permission writes no
+ * records while it holds, and a turn's true end can sit past the tail's read.
+ */
+function statusWithHookEvent(
+  status: ProviderSessionObservation["status"],
+  event: ClaudeHookEvent,
+  isFresh: boolean,
+): ProviderSessionObservation["status"] {
+  if (event === CLAUDE_HOOK_EVENT.STOP_FAILURE) return SESSION_STATUS.ERROR;
+  if (event === CLAUDE_HOOK_EVENT.SESSION_END) return SESSION_STATUS.COMPLETE;
+  if (status === SESSION_STATUS.COMPLETE || status === SESSION_STATUS.ERROR) return status;
+  if (!isFresh) return status;
+  if (event === CLAUDE_HOOK_EVENT.PROMPT) return SESSION_STATUS.WORKING;
+  if (event === CLAUDE_HOOK_EVENT.STOP) return SESSION_STATUS.WAITING;
+  if (event === CLAUDE_HOOK_EVENT.NOTIFICATION) return SESSION_STATUS.WAITING;
+  // A session that started or resumed proves only that it moved: the bumped
+  // clock above is the whole refinement, and the tail says the rest.
+  return status;
+}
+
+/**
  * Claude Code names its own sessions, and that name is what a developer is
  * looking for. The workspace is the fallback for a session too new to have been
  * named, which is also the only case where two rows can still read alike.
@@ -391,6 +438,7 @@ function observationFromSessionFile(
   parsed: ParsedClaudeSessionTail,
   now: number,
   activeSessionFreshnessMs: number,
+  hookEvent?: ObservedClaudeHookEvent,
 ): ProviderSessionObservation {
   // The transcript's own clock, not the file's. Claude Code touches session
   // files in bulk long after their conversations ended — appending bookkeeping
@@ -398,8 +446,27 @@ function observationFromSessionFile(
   // file, while the last timestamped record says when the session last moved.
   // Trusting mtime made every touched session read as active just now. The
   // file's date remains the fallback for a tail that carried no timestamp.
-  const observedAt = parsed.timestampMs ?? candidate.mtimeMs;
-  const status = statusFromTail(parsed, observedAt, now, activeSessionFreshnessMs);
+  const transcriptAt = parsed.timestampMs ?? candidate.mtimeMs;
+  // A hook event trailing the transcript's clock by more than the tolerance
+  // describes a turn the transcript already moved past, so it is ignored
+  // whole. One that stands is proof the session moved — only Luke's own
+  // script writes the spool, so its date cannot suffer the bulk-touch problem
+  // above — and dates the session for the freshness decay as well. A
+  // notification alone gets no tolerance: it means the session is holding for
+  // the user, and holding writes nothing, so a record at or past the event is
+  // itself the news that the hold ended — a granted permission must not read
+  // as waiting for even one more pass.
+  const toleranceMs =
+    hookEvent?.event === CLAUDE_HOOK_EVENT.NOTIFICATION
+      ? 0
+      : CLAUDE_ADAPTER_DEFAULTS.HOOK_EVENT_TOLERANCE_MS;
+  const eventStands = hookEvent !== undefined && hookEvent.atMs + toleranceMs >= transcriptAt;
+  const observedAt = eventStands ? Math.max(transcriptAt, hookEvent.atMs) : transcriptAt;
+  let status = statusFromTail(parsed, observedAt, now, activeSessionFreshnessMs);
+  if (eventStands) {
+    const isFresh = now - observedAt <= activeSessionFreshnessMs;
+    status = statusWithHookEvent(status, hookEvent.event, isFresh);
+  }
   return {
     providerSessionId: candidate.providerSessionId,
     title: titleFromTail(parsed),
@@ -408,11 +475,6 @@ function observationFromSessionFile(
     ...(parsed.awaySummary ? { recap: parsed.awaySummary } : {}),
     detail: detailFromTail(parsed),
   };
-}
-
-function defaultClaudeHome(): string {
-  const configuredHome = process.env[CLAUDE_ENVIRONMENT.CONFIG_DIRECTORY]?.trim();
-  return configuredHome || path.join(os.homedir(), ".claude");
 }
 
 export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
@@ -431,6 +493,7 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
    * decay above all — is recomputed each pass from the cached parse.
    */
   readonly #parsedTails = new Map<string, { mtimeMs: number; parsed: ParsedClaudeSessionTail }>();
+  readonly #hookEventsDirectory: (() => string | undefined) | undefined;
 
   constructor(options: ClaudeCodeAdapterOptions = {}) {
     this.#claudeHome = options.claudeHome ?? defaultClaudeHome();
@@ -452,6 +515,7 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
     this.#activeSessionFreshnessMs = resolved.activeSessionFreshnessMs;
     this.#readTailBytes = resolved.readTailBytes;
     this.#readHeadBytes = resolved.readHeadBytes;
+    this.#hookEventsDirectory = options.hookEventsDirectory;
   }
 
   async #parsedTail(candidate: SessionFileCandidate): Promise<ParsedClaudeSessionTail> {
@@ -467,6 +531,7 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
 
   async observe(): Promise<readonly ProviderSessionObservation[]> {
     const now = this.#now();
+    const hookEventsDirectory = this.#hookEventsDirectory?.();
     const candidates = await discoverSessionFiles({
       projectsDirectory: path.join(this.#claudeHome, CLAUDE_PROJECTS_DIRECTORY),
       maximumProjectDirectories: this.#maximumProjectDirectories,
@@ -475,11 +540,20 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
     const observations = new Map<string, ProviderSessionObservation>();
 
     for (const candidate of candidates) {
+      // The spool is a refinement, never a dependency: a directory that is
+      // missing, unreadable, or holding something unexpected reads as no
+      // event, and the transcript's own verdict stands.
+      const hookEvent = hookEventsDirectory
+        ? await readClaudeHookEvent(hookEventsDirectory, candidate.providerSessionId).catch(
+            () => undefined,
+          )
+        : undefined;
       const observation = observationFromSessionFile(
         candidate,
         await this.#parsedTail(candidate),
         now,
         this.#activeSessionFreshnessMs,
+        hookEvent,
       );
       if (!observations.has(observation.providerSessionId)) {
         observations.set(observation.providerSessionId, observation);

@@ -539,6 +539,15 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "can send one.",
     },
     {
+      label: "Reading a session's transcript",
+      detail:
+        "Asked what a local session did, said, or is stuck on, Luke can read that session's own " +
+        "recent transcript — Claude Code sessions today — on this machine, and answer from it. " +
+        "The reading happens when asked and is kept nowhere; cloud sessions keep their " +
+        "conversations with their provider, so Luke answers about those from their roster " +
+        "fields alone.",
+    },
+    {
       label: "Creating workspaces",
       detail:
         "Where a connected provider documents a creation endpoint — Conductor and Cursor today — " +

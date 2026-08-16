@@ -29,12 +29,35 @@ activity, reported errors, provider-designated turn recaps, and session or
 change links where available. It inspects event types, turn boundaries, tool
 calls, and stop reasons to derive those fields and the session status.
 
-Luke does not modify provider files, retain raw records or message history,
-inject input, or require provider hooks or plugins. Observed fields are held in
-memory for the local display. Observation itself never controls a provider
-session; see Optional cloud-provider reads and Optional issue-tracker reads
-and spoken acts below for the narrow, user-requested writes Luke makes
-elsewhere.
+Luke does not retain raw records or message history, inject input, or require
+provider hooks or plugins. Observed fields are held in memory for the local
+display. Observation itself never controls a provider session; see Optional
+cloud-provider reads and Optional issue-tracker reads and spoken acts below
+for the narrow, user-requested writes Luke makes elsewhere.
+
+One provider file is the exception to "does not modify", and it is
+configuration rather than session data: Luke merges an observation hook into
+Claude Code's user-level `settings.json` at every launch, preserving whatever
+the user put there and refusing to rewrite a file it cannot parse. The hook
+runs at a session's turn boundaries and writes one fixed status token — such
+as `stop` or `notification` — into a file named by the session's id under
+Luke's own application data. It reads the event envelope Claude Code pipes it
+only to find that id; no prompt text, message content, or transcript ever
+reaches the file. The registered command is a guarded no-op wherever Luke is
+gone, and removing the entries by hand costs only the sharper status:
+observation continues from the transcripts alone.
+
+"Does not retain raw records or message history" has one bounded, on-demand
+counterpart: in a conversation you are holding with Luke, you can ask what a
+local session did, said, or is stuck on, and Luke reads that session's own
+transcript — Claude Code sessions today — from the provider's file on this
+machine. The read happens when you ask, is validated against the observed
+roster, renders a bounded excerpt into that conversation's reply, and keeps
+nothing: no history is stored, watched, or indexed, and nothing is fetched
+from any provider. Because the voice conversation runs on OpenAI's Realtime
+API, an excerpt read into it leaves the machine the same way your spoken words
+do — only in the conversation you opened, never unbidden. The attention
+evaluator still never receives transcript content.
 
 ## Optional cloud-provider reads
 

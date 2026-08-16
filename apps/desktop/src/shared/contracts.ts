@@ -222,6 +222,23 @@ export type SessionOpenResult =
   | { status: typeof SESSION_OPEN_RESULT_STATUS.REJECTED; reason: string }
   | { status: typeof SESSION_OPEN_RESULT_STATUS.UNSUPPORTED };
 
+/**
+ * What became of a request to read a session's transcript. Reading is a local
+ * act like opening — nothing reaches a provider — and the rendering rides the
+ * answer so the conversation that asked can ground its reply in the session's
+ * own words. Every refusal carries words Luke can say aloud.
+ */
+export const SESSION_TRANSCRIPT_RESULT_STATUS = {
+  READ: "read",
+  REJECTED: "rejected",
+  UNSUPPORTED: "unsupported",
+} as const;
+
+export type SessionTranscriptResult =
+  | { status: typeof SESSION_TRANSCRIPT_RESULT_STATUS.READ; transcript: string }
+  | { status: typeof SESSION_TRANSCRIPT_RESULT_STATUS.REJECTED; reason: string }
+  | { status: typeof SESSION_TRANSCRIPT_RESULT_STATUS.UNSUPPORTED; reason: string };
+
 export interface DisplayDiagnostic {
   id: number;
   label: string;
@@ -409,6 +426,13 @@ export interface AppBridge {
    */
   openSession(identity: SessionIdentity): Promise<SessionOpenResult>;
   /**
+   * Reads the recent transcript of one observed local session into a bounded
+   * rendering, for a conversation the developer is holding. The renderer
+   * names a session it was shown; the main process validates it against its
+   * own registry and locates the transcript itself.
+   */
+  readSessionTranscript(identity: SessionIdentity): Promise<SessionTranscriptResult>;
+  /**
    * Hands one user-typed message to an observed session, through its
    * provider's documented API. The renderer names a session it is already
    * drawing, never an address or a credential, and the answer says what became
@@ -578,6 +602,7 @@ export const channels = {
   setWorkspaceAgentDefault: "app:set-workspace-agent-default",
   setWorkspaceProjectDefault: "app:set-workspace-project-default",
   openSession: "app:open-session",
+  readSessionTranscript: "app:read-session-transcript",
   sendSessionMessage: "app:send-session-message",
   executeSessionControl: "app:execute-session-control",
   requestSessionNotice: "app:request-session-notice",
