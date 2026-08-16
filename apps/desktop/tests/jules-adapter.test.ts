@@ -278,12 +278,15 @@ test("keeps a completed session complete however long ago it finished", async ()
   assert.equal(observations[0]?.status, SESSION_STATUS.COMPLETE);
 });
 
-test("ignores sessions untouched for longer than the maximum session age", async () => {
+test("keeps a session untouched since the day before yesterday", async () => {
   const api = fakeJulesApi([workingSession("session-last-week", TEST_TIME - 48 * 60 * 60 * 1000)]);
 
   const observations = await adapterFor(api.fetch).observe();
 
-  assert.deepEqual(observations, []);
+  assert.deepEqual(
+    observations.map((observation) => observation.providerSessionId),
+    ["session-last-week"],
+  );
 });
 
 test("orders the pass itself rather than trusting the order Jules answers in", async () => {

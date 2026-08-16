@@ -835,11 +835,10 @@ test("reports an archived session as complete without requesting its status", as
   );
 });
 
-test("drops a long-closed chat instead of letting a busy workspace make it look recent", async () => {
-  // A closed chat carries no timestamp of its own except archivedAt. Falling
-  // back to the workspace timestamp would make a chat closed days ago read as
-  // freshly complete whenever a sibling chat is active — and let it spend a
-  // budget slot a live session needed.
+test("spends a tight budget on an open chat before a long-closed one", async () => {
+  // A closed chat is never hidden for its age, but it must not spend a budget
+  // slot a live session needed just because its workspace is busy: open chats
+  // take the budget first, wherever they live.
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
     projects: [LUKE_PROJECT],
@@ -973,7 +972,7 @@ test("ignores workspaces created by another user and workspaces without a creato
   );
 });
 
-test("ignores workspaces older than the maximum session age", async () => {
+test("keeps a workspace untouched since the day before yesterday", async () => {
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
     projects: [LUKE_PROJECT],
@@ -985,7 +984,10 @@ test("ignores workspaces older than the maximum session age", async () => {
 
   const observations = await adapterFor(api.fetch).observe();
 
-  assert.deepEqual(observations, []);
+  assert.deepEqual(
+    observations.map((candidate) => candidate.providerSessionId),
+    ["session-yesterday"],
+  );
 });
 
 test("bounds the workspaces and sessions a single pass observes", async () => {

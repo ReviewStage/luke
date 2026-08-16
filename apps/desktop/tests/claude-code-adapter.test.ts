@@ -250,7 +250,7 @@ test("keeps fresh sessions active when a large tail has no complete status event
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
 });
 
-test("filters old sessions and preserves the newest duplicate provider id", async (t) => {
+test("keeps old sessions and preserves the newest duplicate provider id", async (t) => {
   const claudeHome = await temporaryClaudeHome(t);
   await writeSessionFile(
     claudeHome,
@@ -277,7 +277,6 @@ test("filters old sessions and preserves the newest duplicate provider id", asyn
   const adapter = new ClaudeCodeSessionAdapter({
     claudeHome,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
   });
   const observations = await adapter.observe();
 
@@ -292,6 +291,11 @@ test("filters old sessions and preserves the newest duplicate provider id", asyn
         providerSessionId: "duplicate-session",
         status: SESSION_STATUS.COMPLETE,
         title: "duplicate-new",
+      },
+      {
+        providerSessionId: "old-session",
+        status: SESSION_STATUS.WAITING,
+        title: "old",
       },
     ],
   );
@@ -805,7 +809,7 @@ test("dates a touched transcript by its own records rather than the touch", asyn
   assert.equal(observation?.status, SESSION_STATUS.UNKNOWN);
 });
 
-test("keeps a touch from carrying a session past the observation window", async (t) => {
+test("keeps a touch from making a long-settled session look recent", async (t) => {
   const claudeHome = await temporaryClaudeHome(t);
   await writeSessionFile(
     claudeHome,
@@ -826,8 +830,13 @@ test("keeps a touch from carrying a session past the observation window", async 
     claudeHome,
     now: () => TEST_TIME,
   });
+  const [observation] = await adapter.observe();
 
-  assert.deepEqual(await adapter.observe(), []);
+  // A session is never hidden for being old, but the touch must not stand in
+  // for work: the row reports the transcript's own clock, weeks back, and a
+  // wait that stale has long since decayed to unknown.
+  assert.equal(observation?.observedAt, Date.parse("2026-06-25T08:30:00.000Z"));
+  assert.equal(observation?.status, SESSION_STATUS.UNKNOWN);
 });
 
 test("falls back to the file's date when the tail carries no timestamp", async (t) => {

@@ -55,7 +55,6 @@ const DEVIN_ROUTE_SEGMENT = {
 
 const DEVIN_QUERY = {
   FIRST: "first",
-  UPDATED_AFTER: "updated_after",
   USER_IDS: "user_ids",
 } as const;
 
@@ -168,7 +167,7 @@ const PULL_REQUEST_PATH_SEGMENTS: ReadonlySet<string> = new Set(
 );
 
 const DEVIN_ADAPTER_DEFAULTS = {
-  /** The documented maximum, so one call covers as much of a day as it can. */
+  /** The documented maximum, so one call reaches as deep into the history as it can. */
   SESSION_PAGE_SIZE: 200,
   MAXIMUM_OBSERVED_SESSIONS: 12,
 } as const;
@@ -314,7 +313,7 @@ export class DevinSessionAdapter
     // work. It reports nothing rather than a teammate's.
     if (!identity) return [];
 
-    return (await this.#listSessions(request, identity, now))
+    return (await this.#listSessions(request, identity))
       .sort((first, second) => second.observedAt - first.observedAt)
       .slice(0, this.#maximumObservedSessions)
       .map((session) => this.#observationFor(session, now));
@@ -347,15 +346,10 @@ export class DevinSessionAdapter
   /**
    * The whole pass after identity, in one request: a session record carries its
    * own state and timestamp, so unlike the other cloud providers Luke needs no
-   * second request per session, and asking for one person's sessions inside the
-   * observation window leaves a full page far past anything it would report.
+   * second request per session, and one person's page of newest sessions
+   * reaches far past anything the observation cap would keep.
    */
-  async #listSessions(
-    request: CloudRequest,
-    identity: DevinIdentity,
-    now: number,
-  ): Promise<DevinSession[]> {
-    const openedAt = now - OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS;
+  async #listSessions(request: CloudRequest, identity: DevinIdentity): Promise<DevinSession[]> {
     const body = await request(
       [
         DEVIN_ROUTE_SEGMENT.V3,
@@ -366,19 +360,12 @@ export class DevinSessionAdapter
       {
         [DEVIN_QUERY.FIRST]: String(DEVIN_ADAPTER_DEFAULTS.SESSION_PAGE_SIZE),
         [DEVIN_QUERY.USER_IDS]: identity.userId,
-        // Seconds rather than milliseconds, and deliberately so: Devin types
-        // this as an integer without naming the unit, and of the two ways to be
-        // wrong, a value read as milliseconds only asks for more than the window
-        // — which the filter below discards anyway — while one read as seconds
-        // would sit in the far future and match nothing at all.
-        [DEVIN_QUERY.UPDATED_AFTER]: String(Math.floor(openedAt / 1000)),
       },
     );
 
     return recordsFromPage(body, DEVIN_FIELD.ITEMS)
       .map((record) => sessionFromRecord(record, identity))
-      .filter(isDefined)
-      .filter((session) => session.observedAt >= openedAt);
+      .filter(isDefined);
   }
 
   /**

@@ -446,15 +446,14 @@ test("keeps observing when one agent's run cannot be read", async () => {
   assert.equal(observations[1]?.status, SESSION_STATUS.WORKING);
 });
 
-test("ignores agents untouched for longer than the maximum session age", async () => {
+test("keeps an agent untouched since the day before yesterday", async () => {
   const api = fakeCursorApi([runningAgent("agent-last-week", TEST_TIME - 48 * 60 * 60 * 1000)]);
 
   const observations = await adapterFor(api.fetch).observe();
 
-  assert.deepEqual(observations, []);
   assert.deepEqual(
-    api.requests.map((request) => request.pathname),
-    ["/v1/repositories", "/v1/agents"],
+    observations.map((observation) => observation.providerSessionId),
+    ["agent-last-week"],
   );
 });
 

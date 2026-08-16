@@ -106,7 +106,6 @@ export interface ClaudeCodeAdapterOptions {
   now?: () => number;
   maximumProjectDirectories?: number;
   maximumSessionFiles?: number;
-  maximumSessionAgeMs?: number;
   activeSessionFreshnessMs?: number;
   readTailBytes?: number;
   readHeadBytes?: number;
@@ -425,7 +424,6 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
   readonly #now: () => number;
   readonly #maximumProjectDirectories: number;
   readonly #maximumSessionFiles: number;
-  readonly #maximumSessionAgeMs: number;
   readonly #activeSessionFreshnessMs: number;
   readonly #readTailBytes: number;
   readonly #readHeadBytes: number;
@@ -438,7 +436,6 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
       {
         maximumProjectDirectories: CLAUDE_ADAPTER_DEFAULTS.MAXIMUM_PROJECT_DIRECTORIES,
         maximumSessionFiles: CLAUDE_ADAPTER_DEFAULTS.MAXIMUM_SESSION_FILES,
-        maximumSessionAgeMs: OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS,
         activeSessionFreshnessMs: OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
         readTailBytes: LOCAL_ADAPTER_DEFAULTS.READ_TAIL_BYTES,
         readHeadBytes: CLAUDE_ADAPTER_DEFAULTS.READ_HEAD_BYTES,
@@ -450,12 +447,11 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
           "readTailBytes",
           "readHeadBytes",
         ],
-        nonNegative: ["maximumSessionAgeMs", "activeSessionFreshnessMs"],
+        nonNegative: ["activeSessionFreshnessMs"],
       },
     );
     this.#maximumProjectDirectories = resolved.maximumProjectDirectories;
     this.#maximumSessionFiles = resolved.maximumSessionFiles;
-    this.#maximumSessionAgeMs = resolved.maximumSessionAgeMs;
     this.#activeSessionFreshnessMs = resolved.activeSessionFreshnessMs;
     this.#readTailBytes = resolved.readTailBytes;
     this.#readHeadBytes = resolved.readHeadBytes;
@@ -472,7 +468,6 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
     const observations = new Map<string, ProviderSessionObservation>();
 
     for (const candidate of candidates) {
-      if (now - candidate.mtimeMs > this.#maximumSessionAgeMs) continue;
       const tail = await readTail(candidate.filePath, this.#readTailBytes);
       const parsed = parseClaudeSessionTail(tail);
       if (!parsed.aiTitle) {
@@ -484,10 +479,6 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
         now,
         this.#activeSessionFreshnessMs,
       );
-      // The mtime check above is only a cheap gate on reading the file. The
-      // observation window is enforced here, against the transcript's clock:
-      // a touch must not carry a long-dead session back into the panel.
-      if (now - observation.observedAt > this.#maximumSessionAgeMs) continue;
       if (!observations.has(observation.providerSessionId)) {
         observations.set(observation.providerSessionId, observation);
       }

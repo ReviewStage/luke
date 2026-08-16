@@ -188,7 +188,6 @@ export interface OpenCodeAdapterOptions {
   dataDirectory?: string;
   now?: () => number;
   maximumSessionRows?: number;
-  maximumSessionAgeMs?: number;
   activeSessionFreshnessMs?: number;
   sqlite?: SqliteModuleLoader;
 }
@@ -430,7 +429,6 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
   readonly #dataDirectory: string;
   readonly #now: () => number;
   readonly #maximumSessionRows: number;
-  readonly #maximumSessionAgeMs: number;
   readonly #activeSessionFreshnessMs: number;
   readonly #sqlite: SqliteModuleLoader;
 
@@ -441,16 +439,14 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
       options,
       {
         maximumSessionRows: OPENCODE_ADAPTER_DEFAULTS.MAXIMUM_SESSION_ROWS,
-        maximumSessionAgeMs: OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS,
         activeSessionFreshnessMs: OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
       },
       {
         positive: ["maximumSessionRows"],
-        nonNegative: ["maximumSessionAgeMs", "activeSessionFreshnessMs"],
+        nonNegative: ["activeSessionFreshnessMs"],
       },
     );
     this.#maximumSessionRows = resolved.maximumSessionRows;
-    this.#maximumSessionAgeMs = resolved.maximumSessionAgeMs;
     this.#activeSessionFreshnessMs = resolved.activeSessionFreshnessMs;
     this.#sqlite = options.sqlite ?? defaultSqliteModule;
   }
@@ -521,8 +517,7 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
     const snapshots = rows
       .filter(isObservableSessionRow)
       .map(snapshotFromSessionRow)
-      .filter((snapshot): snapshot is OpenCodeSessionSnapshot => snapshot !== undefined)
-      .filter((snapshot) => now - snapshot.observedAt <= this.#maximumSessionAgeMs);
+      .filter((snapshot): snapshot is OpenCodeSessionSnapshot => snapshot !== undefined);
 
     // Every reported session gets its turn read, because a session without one
     // would default to working on freshness alone — inventing live work for a
@@ -575,14 +570,12 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
   async #legacyObservations(): Promise<readonly ProviderSessionObservation[]> {
     const now = this.#now();
     const storageDirectory = path.join(this.#dataDirectory, OPENCODE_STORAGE_DIRECTORY);
-    const candidates = (
-      await discoverSessionFiles({
-        projectsDirectory: path.join(storageDirectory, OPENCODE_STORAGE_SEGMENT.SESSION),
-        maximumProjectDirectories: OPENCODE_ADAPTER_DEFAULTS.MAXIMUM_PROJECT_DIRECTORIES,
-        maximumSessionFiles: this.#maximumSessionRows,
-        sessionFilesIn: legacySessionFilesIn,
-      })
-    ).filter((candidate) => now - candidate.mtimeMs <= this.#maximumSessionAgeMs);
+    const candidates = await discoverSessionFiles({
+      projectsDirectory: path.join(storageDirectory, OPENCODE_STORAGE_SEGMENT.SESSION),
+      maximumProjectDirectories: OPENCODE_ADAPTER_DEFAULTS.MAXIMUM_PROJECT_DIRECTORIES,
+      maximumSessionFiles: this.#maximumSessionRows,
+      sessionFilesIn: legacySessionFilesIn,
+    });
 
     const observations = new Map<string, ProviderSessionObservation>();
     for (const candidate of candidates) {

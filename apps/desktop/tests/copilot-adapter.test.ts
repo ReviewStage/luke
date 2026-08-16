@@ -189,8 +189,7 @@ test("reads the whole pass with one pinned, GitHub-typed list call", async () =>
     api.requests.map((request) => request.pathname),
     ["/agents/tasks"],
   );
-  const since = isoTimestamp(TEST_TIME - 24 * 60 * 60 * 1000);
-  assert.equal(api.requests[0]?.search, `?per_page=100&since=${encodeURIComponent(since)}`);
+  assert.equal(api.requests[0]?.search, "?per_page=100");
   assert.equal(api.requests[0]?.method, "GET");
   assert.equal(api.requests[0]?.authorization, `Bearer ${TEST_API_KEY}`);
   // GitHub's own media type rather than plain JSON, and the endpoint is in
@@ -301,12 +300,15 @@ test("reports a task the user filed away as settled whatever it was doing", asyn
   assert.equal(observations[0]?.status, SESSION_STATUS.COMPLETE);
 });
 
-test("ignores tasks untouched for longer than the maximum session age", async () => {
+test("keeps a task untouched since the day before yesterday", async () => {
   const api = fakeAgentTasksApi([workingTask("task-last-week", TEST_TIME - 48 * 60 * 60 * 1000)]);
 
   const observations = await adapterFor(api.fetch).observe();
 
-  assert.deepEqual(observations, []);
+  assert.deepEqual(
+    observations.map((observation) => observation.providerSessionId),
+    ["task-last-week"],
+  );
 });
 
 test("orders the pass itself rather than trusting the order GitHub answers in", async () => {

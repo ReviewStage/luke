@@ -130,7 +130,7 @@ const SESSION_STATUS_BY_JULES_STATE: Readonly<Record<JulesState, SessionStatus>>
 };
 
 const JULES_ADAPTER_DEFAULTS = {
-  /** The documented maximum, so one call covers as much of a day as it can. */
+  /** The documented maximum, so one call reaches as deep into the history as it can. */
   SESSION_PAGE_SIZE: 100,
   MAXIMUM_OBSERVED_SESSIONS: 12,
   MAXIMUM_BRANCH_LABEL_LENGTH: 60,
@@ -246,8 +246,8 @@ export class JulesSessionAdapter
   ): Promise<readonly ProviderSessionObservation[]> {
     // One call per pass. The list projection already carries the state, the
     // timestamps, and the source, so there is nothing a per-session read would
-    // add, and Jules documents no ordering — the window filter and the sort
-    // below are what bound the page rather than the order it arrives in.
+    // add, and Jules documents no ordering — the sort and the cap below are
+    // what bound the page rather than the order it arrives in.
     const body = await request(JULES_ROUTE.SESSIONS, {
       [JULES_QUERY.PAGE_SIZE]: String(JULES_ADAPTER_DEFAULTS.SESSION_PAGE_SIZE),
     });
@@ -255,7 +255,6 @@ export class JulesSessionAdapter
     return recordsFromPage(body, JULES_FIELD.SESSIONS)
       .map(sessionFromRecord)
       .filter(isDefined)
-      .filter((session) => now - session.observedAt <= OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS)
       .sort((first, second) => second.observedAt - first.observedAt)
       .slice(0, this.#maximumObservedSessions)
       .map((session) => this.#observationFor(session, now));

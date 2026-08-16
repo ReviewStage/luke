@@ -92,8 +92,8 @@ type WriteSubject = (typeof WRITE_SUBJECT)[keyof typeof WRITE_SUBJECT];
 export type CloudFailure = (typeof CLOUD_FAILURE)[keyof typeof CLOUD_FAILURE];
 
 /**
- * Cloud-only request bounds. The observation window itself is shared with
- * every local provider.
+ * Cloud-only request bounds. The freshness bound in `OBSERVATION_WINDOW` is
+ * shared with every local provider.
  */
 export const CLOUD_ADAPTER_DEFAULTS = {
   MINIMUM_REFRESH_INTERVAL_MS: 15 * 1000,
