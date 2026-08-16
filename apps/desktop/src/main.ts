@@ -548,7 +548,12 @@ function registerIpc(): void {
       ...(hotkeys.stop ? { stopHotkey: hotkeys.stop } : {}),
       ...(outputAudio ? { outputAudio } : {}),
       display: panels.diagnostic(display),
-      sessions: runMode.observesProviders ? sessionRegistry.snapshot().sessions : [],
+      // Bootstrapped through the same relevance gate every broadcast passes:
+      // a panel that opens late must not learn of rows the roster has already
+      // let go and then hold them past the next broadcast's dedupe.
+      sessions: runMode.observesProviders
+        ? rosterRelevantSessions(sessionRegistry.snapshot().sessions, Date.now())
+        : [],
       workspaceProjects: observedWorkspaceProjects(),
       ...(trackedIssues && runMode.observesProviders ? { issues: trackedIssues } : {}),
       settings: await settingsStore.snapshot(),
