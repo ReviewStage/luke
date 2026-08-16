@@ -19,6 +19,10 @@ type ResolvedType = {
 	readonly substitutions: TypeAliasEnvironment;
 };
 
+type TypeArgumentsOwner = {
+	readonly typeArguments: ESTree.TSTypeParameterInstantiation | null | undefined;
+};
+
 export type UnsafeDictionary = {
 	readonly kind: "unsafe-dictionary";
 	readonly unsafeValue: "any" | "empty-object" | "object" | "union" | "unknown";
@@ -173,7 +177,7 @@ function resolvedSubstitutionArgument(
 
 function aliasSubstitution(
 	alias: ESTree.TSTypeAliasDeclaration,
-	type: ESTree.TSTypeReference,
+	type: TypeArgumentsOwner,
 	base: TypeAliasEnvironment,
 ): TypeAliasEnvironment | null {
 	const parameters = alias.typeParameters?.params ?? [];
@@ -371,9 +375,7 @@ export function classifyWideningTarget(
 	}
 	const interfaces = environment.interfaces.get(name);
 	if (interfaces !== undefined) {
-		return interfaces.some((declaration) =>
-			declaration.body.body.some((member) => member.type === "TSIndexSignature"),
-		)
+		return interfaceIsOpen(name, environment, new Set())
 			? { kind: "open dictionary" }
 			: null;
 	}
@@ -482,6 +484,50 @@ function classifyAliasBroadTarget(
 		nextSubstitutions,
 		nextResolving,
 	);
+}
+
+function interfaceIsOpen(
+	name: string,
+	environment: TypeEnvironment,
+	resolving: ReadonlySet<string>,
+): boolean {
+	if (resolving.has(name)) return false;
+	const declarations = environment.interfaces.get(name);
+	if (declarations === undefined) return false;
+	if (
+		declarations.some((declaration) =>
+			declaration.body.body.some((member) => member.type === "TSIndexSignature"),
+		)
+	) {
+		return true;
+	}
+
+	const nextResolving = new Set(resolving);
+	nextResolving.add(name);
+	for (const declaration of declarations) {
+		for (const heritage of declaration.extends) {
+			if (heritage.expression.type !== "Identifier") continue;
+			const parentName = heritage.expression.name;
+			if (interfaceIsOpen(parentName, environment, nextResolving)) return true;
+			const alias = environment.aliases.get(parentName);
+			if (alias === undefined || nextResolving.has(parentName)) continue;
+			const substitutions = aliasSubstitution(alias, heritage, new Map());
+			if (substitutions === null) continue;
+			const aliasResolving = new Set(nextResolving);
+			aliasResolving.add(parentName);
+			if (
+				classifyAliasBroadTarget(
+					alias.typeAnnotation,
+					environment,
+					substitutions,
+					aliasResolving,
+				)?.kind === "open dictionary"
+			) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 export function isKnownEvidenceExpression(expression: ESTree.Expression): boolean {

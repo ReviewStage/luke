@@ -159,3 +159,22 @@ test("an open interface discards known value evidence", async () => {
   assert.equal(result.exitCode, 1, result.output);
   assert.equal(result.output.match(/explicit open dictionary type/gu)?.length, 2, result.output);
 });
+
+test("an interface inherits openness from interfaces and aliases", async () => {
+  const result = await lintFixture(
+    "no-known-value-widening",
+    "interface OpenBase { [key: string]: number }\ninterface InterfaceChild extends OpenBase {}\ntype OpenAlias = Record<string, number>;\ninterface AliasChild extends OpenAlias {}\nconst value = { answer: 42 };\nconst first: InterfaceChild = value;\nconst second: AliasChild = value;\n",
+  );
+
+  assert.equal(result.exitCode, 1, result.output);
+  assert.equal(result.output.match(/explicit open dictionary type/gu)?.length, 2, result.output);
+});
+
+test("an interface with only closed ancestors preserves evidence", async () => {
+  const result = await lintFixture(
+    "no-known-value-widening",
+    "interface ClosedBase { answer: number }\ninterface ClosedChild extends ClosedBase {}\nconst value = { answer: 42 };\nconst assigned: ClosedChild = value;\n",
+  );
+
+  assert.equal(result.exitCode, 0, result.output);
+});
