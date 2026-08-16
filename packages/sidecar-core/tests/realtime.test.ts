@@ -210,6 +210,8 @@ test("the spoken instructions state what Luke cannot see, and when he may act", 
   // Both halves of the developer's side are named, so a typed ask is answered
   // rather than remarked on as something unexpected.
   assert.match(instructions, /speaks to you or types to you/i);
+  // Spoken references stay human: a hash or an id is noise read aloud.
+  assert.match(instructions, /identifiers no one says aloud/i);
 });
 
 test("a mint response yields a credential with a millisecond expiry", () => {

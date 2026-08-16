@@ -22,6 +22,7 @@ const ATTENTION_INSTRUCTION_LINES: readonly string[] = [
   `- A speaking summary is one short spoken sentence under ${maximumAttentionSummaryLength} characters. Say what the session needs, not merely that it changed.`,
   "- Prefer the session's own recap and title over its status when deciding what to say; the status alone is rarely worth an interruption.",
   "- When the update names a workspace, the session is one chat of it. Name the workspace in a speaking summary — it is the name the developer knows the work by — and the chat only when it tells siblings apart.",
+  "- Leave out identifiers no one says aloud — commit hashes and other machine ids. Name the work by its workspace, title, or branch.",
   "- An error means the session stopped and cannot restart itself. Say what stopped it.",
   "- Use null for the summary whenever the disposition is silent.",
   "- Use only the fields in the update. You receive what a provider wrote about a session, never its transcript, file contents, or command output, so never imply you read any.",

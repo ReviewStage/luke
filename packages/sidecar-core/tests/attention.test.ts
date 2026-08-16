@@ -725,6 +725,8 @@ test("instructions carry the decision contract and the tuning examples", () => {
     assert.ok(instructions.includes(attentionUpdateInput(example.update)));
   }
   assert.ok(instructions.includes(String(maximumAttentionSummaryLength)));
+  // Spoken summaries stay human: a hash or an id is noise read aloud.
+  assert.match(instructions, /identifiers no one says aloud/i);
   assert.deepEqual(ATTENTION_DECISION_SCHEMA.properties.disposition.enum, [
     ATTENTION_DISPOSITION.SILENT,
     ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
