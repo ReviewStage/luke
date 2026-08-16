@@ -52,7 +52,8 @@ const CONDUCTOR_DEFAULT_API_URL = "https://api.conductor.build";
 
 /**
  * Documented public API routes. The reads walk projects, workspaces, and
- * sessions; the writers are `POST …/sessions/{id}/messages`, which is
+ * sessions, and poll the status endpoints both of those document; the writers
+ * are `POST …/sessions/{id}/messages`, which is
  * Conductor's documented way to hand a prompt to an existing session — queued
  * while it is idle, steered into the running turn while it works —
  * `POST …/sessions/{id}/cancel`, which stops the current turn,
@@ -186,6 +187,7 @@ const CONDUCTOR_SQL_FIELD = {
   SESSION_ID: "session_id",
   AGENT_TYPE: "agent_type",
   TRANSCRIPT_TAIL: "transcript_tail",
+  CHANGE_WINDOW: "change_window",
 } as const;
 
 /**
@@ -193,6 +195,35 @@ const CONDUCTOR_SQL_FIELD = {
  * opening words — where an agent puts the outcome — and no more of it.
  */
 const CONDUCTOR_TRANSCRIPT_TAIL_LENGTH = 2_000;
+
+/**
+ * How a GitHub pull-request address marks itself inside a transcript. The
+ * window is anchored at the marker's last occurrence, because the freshest
+ * pull request a chat names is the one that says what it published.
+ */
+const CONDUCTOR_CHANGE_MARKER = "/pull/";
+
+/**
+ * How far a pull-request address can reach around its marker: GitHub bounds an
+ * owner at 39 characters and a repository at 100, so `https://github.com/` plus
+ * both names fits in 160 characters before the marker, and a pull number in 12
+ * after it. The window is sized to hold one whole address and nothing more.
+ */
+const CONDUCTOR_CHANGE_PREFIX_LENGTH = 160;
+const CONDUCTOR_CHANGE_SUFFIX_LENGTH = 12;
+
+/**
+ * A GitHub pull-request address, whole: the only shape the change window may
+ * yield. The owner and repository groups are what the address is validated
+ * against — it is reported only when it names the workspace's own repository,
+ * so a link an agent merely mentioned in passing about somewhere else never
+ * poses as this session's published work.
+ */
+const GITHUB_PULL_URL_PATTERN =
+  /https:\/\/github\.com\/([A-Za-z0-9-]+)\/([A-Za-z0-9._-]+)\/pull\/\d{1,10}/g;
+
+/** Where a GitHub remote names its owner and repository, however it is written. */
+const GITHUB_REMOTE_PATTERN = /github\.com[/:]([A-Za-z0-9-]+)\/([A-Za-z0-9._-]+?)(?:\.git)?\/?$/i;
 
 /**
  * How Conductor's plain-text transcript marks who is speaking. A line inside a
@@ -222,25 +253,34 @@ function sqlHeaderLiteral(header: string): string {
  * same pass reported — each validated as a UUID first, so no name, title, or
  * message a provider controls can ever be spliced into the document.
  *
- * The columns ask for the agent kind and the opening of the transcript's
- * final message — the settled turn's parting words — and never the
- * conversation behind it. Who wrote that message is computed in the view,
- * from whichever speaker header stands nearest the transcript's end, and the
- * returned tail is anchored at that header rather than cut at a fixed
- * distance: a fixed cut left any final message longer than the cut without
- * its header, which read as unattributable and silently cost most long-form
- * agents their recap. A chat whose user spoke last answers with no tail at
- * all.
+ * The columns ask for the agent kind, the opening of the transcript's final
+ * message — the settled turn's parting words — and a window around the last
+ * pull-request marker the transcript holds, and never the conversation behind
+ * them. Who wrote that message is computed in the view, from whichever
+ * speaker header stands nearest the transcript's end, and the returned tail
+ * is anchored at that header rather than cut at a fixed distance: a fixed cut
+ * left any final message longer than the cut without its header, which read
+ * as unattributable and silently cost most long-form agents their recap. A
+ * chat whose user spoke last answers with no tail at all. The change window
+ * is anchored the same way, at the marker's own last occurrence, and sized to
+ * one whole address: an agent that opened a pull request turns ago and kept
+ * working would otherwise have published work its final message no longer
+ * names.
  */
 const CONDUCTOR_READ_TRANSCRIPT_TAILS_PREFIX =
   `SELECT ${CONDUCTOR_SQL_FIELD.SESSION_ID}, ${CONDUCTOR_SQL_FIELD.AGENT_TYPE}, ` +
   `CASE WHEN assistant_from_end > 0 AND (user_from_end = 0 OR assistant_from_end < user_from_end) ` +
   `THEN SUBSTRING(transcript FROM GREATEST(LENGTH(transcript) - assistant_from_end - ${CONDUCTOR_ASSISTANT_HEADER.length - 2}, 1) ` +
   `FOR ${CONDUCTOR_ASSISTANT_HEADER.length + CONDUCTOR_TRANSCRIPT_TAIL_LENGTH}) ` +
-  `END AS ${CONDUCTOR_SQL_FIELD.TRANSCRIPT_TAIL} ` +
+  `END AS ${CONDUCTOR_SQL_FIELD.TRANSCRIPT_TAIL}, ` +
+  `CASE WHEN pull_from_end > 0 ` +
+  `THEN SUBSTRING(transcript FROM GREATEST(LENGTH(transcript) - pull_from_end - ${CONDUCTOR_CHANGE_MARKER.length - 2 + CONDUCTOR_CHANGE_PREFIX_LENGTH}, 1) ` +
+  `FOR ${CONDUCTOR_CHANGE_PREFIX_LENGTH + CONDUCTOR_CHANGE_MARKER.length + CONDUCTOR_CHANGE_SUFFIX_LENGTH}) ` +
+  `END AS ${CONDUCTOR_SQL_FIELD.CHANGE_WINDOW} ` +
   `FROM (SELECT ${CONDUCTOR_SQL_FIELD.SESSION_ID}, ${CONDUCTOR_SQL_FIELD.AGENT_TYPE}, transcript, ` +
   `position(reverse(${sqlHeaderLiteral(CONDUCTOR_ASSISTANT_HEADER)}) in reverse(transcript)) AS assistant_from_end, ` +
-  `position(reverse(${sqlHeaderLiteral(CONDUCTOR_USER_HEADER)}) in reverse(transcript)) AS user_from_end ` +
+  `position(reverse(${sqlHeaderLiteral(CONDUCTOR_USER_HEADER)}) in reverse(transcript)) AS user_from_end, ` +
+  `position(reverse('${CONDUCTOR_CHANGE_MARKER}') in reverse(transcript)) AS pull_from_end ` +
   `FROM session_transcripts_view WHERE ${CONDUCTOR_SQL_FIELD.SESSION_ID} IN (`;
 
 const CONDUCTOR_READ_TRANSCRIPT_TAILS_SUFFIX = ")) AS attributed";
@@ -272,6 +312,32 @@ const SESSION_STATUS_BY_CONDUCTOR_STATUS: Readonly<Record<ConductorSessionStatus
     [CONDUCTOR_SESSION_STATUS.ERROR]: SESSION_STATUS.ERROR,
   };
 
+/** The lifecycle states `GET …/workspaces/{id}/status` documents. */
+const CONDUCTOR_WORKSPACE_STATUS = {
+  INITIALIZING: "initializing",
+  READY: "ready",
+  SLEEPING: "sleeping",
+  ARCHIVED: "archived",
+  DELETED: "deleted",
+  UPDATING: "updating",
+} as const;
+
+type ConductorWorkspaceStatus =
+  (typeof CONDUCTOR_WORKSPACE_STATUS)[keyof typeof CONDUCTOR_WORKSPACE_STATUS];
+
+/**
+ * The lifecycle states worth a row's activity slot: a workspace still being
+ * built or rebuilt is why its chats are quiet, and without the words a
+ * just-created session reads as unaccountably idle. A ready workspace is the
+ * normal case and says nothing, and a sleeping one is Conductor's own economy
+ * — it wakes on the next message — so wording it would bump the recap off the
+ * row to report a non-event.
+ */
+const CONDUCTOR_WORKSPACE_ACTIVITY: Readonly<Partial<Record<ConductorWorkspaceStatus, string>>> = {
+  [CONDUCTOR_WORKSPACE_STATUS.INITIALIZING]: "Workspace initializing",
+  [CONDUCTOR_WORKSPACE_STATUS.UPDATING]: "Workspace updating",
+};
+
 const CONDUCTOR_ADAPTER_DEFAULTS = {
   MAXIMUM_PROJECTS: 10,
   WORKSPACE_PAGE_SIZE: 100,
@@ -287,10 +353,23 @@ interface ConductorReportedStatus {
   errorMessage?: string;
 }
 
-/** What the transcripts view said about one session: who runs it, and how it left off. */
+/**
+ * What the lifecycle endpoint said about one workspace: where it stands, and
+ * the failure message it carries when standing it up went wrong.
+ */
+interface ConductorWorkspaceLifecycle {
+  status?: ConductorWorkspaceStatus;
+  errorMessage?: string;
+}
+
+/**
+ * What the transcripts view said about one session: who runs it, how it left
+ * off, and the pull request it published in its own repository.
+ */
 interface ConductorTranscript {
   agentKind?: string;
   recap?: string;
+  change?: string;
 }
 
 export const CONDUCTOR_PROVIDER: SessionProvider = {
@@ -303,12 +382,19 @@ export type ConductorAdapterOptions = CloudAdapterOptions;
 interface ConductorProject {
   id: string;
   repositoryLabel: string;
+  /**
+   * The project's GitHub repository as `owner/name`, lowercased, when its git
+   * remote names one. It is what a pull-request address found in a transcript
+   * is validated against before it may be reported as a session's change.
+   */
+  gitHubRepository?: string;
 }
 
 interface ConductorWorkspace {
   id: string;
   name?: string;
   repositoryLabel: string;
+  gitHubRepository?: string;
   creatorId?: string;
   lastActivityAt: number;
   /** A workspace already filed away has nothing left to archive. */
@@ -500,8 +586,12 @@ export class ConductorSessionAdapter
     // refusal: a key an org scopes away from the query endpoint alone still
     // reads the roster, and the roster reads above are what judge the
     // credential — so this one read swallows everything rather than letting
-    // an enrichment 403 clear every observed row.
-    const [transcripts, reportedStatuses] = await Promise.all([
+    // an enrichment 403 clear every observed row. The lifecycle reads ride
+    // the same way, one per still-open workspace — a filed-away workspace's
+    // state is settled — and a failed one costs that workspace's activity
+    // words and failure message, never the pass.
+    const openWorkspaces = workspaces.filter((workspace) => !workspace.archived);
+    const [transcripts, reportedStatuses, workspaceLifecycles] = await Promise.all([
       this.#sessionTranscripts(request, sessions).catch(() => undefined),
       Promise.all(
         sessions.map((session) =>
@@ -512,6 +602,14 @@ export class ConductorSessionAdapter
             : this.tolerateItemFailure(() => this.#sessionStatus(request, session.id)),
         ),
       ),
+      Promise.all(
+        openWorkspaces.map(async (workspace) => {
+          const lifecycle = await this.tolerateItemFailure(() =>
+            this.#workspaceLifecycle(request, workspace.id),
+          );
+          return lifecycle ? ([workspace.id, lifecycle] as const) : undefined;
+        }),
+      ).then((entries) => new Map(entries.filter(isDefined))),
     ]);
 
     // The workspaces every observed chat of which was positively seen settled
@@ -542,6 +640,7 @@ export class ConductorSessionAdapter
           session,
           reportedStatuses[index],
           transcripts?.get(session.id),
+          workspaceLifecycles.get(session.workspace.id),
           settledWorkspaceIds,
           now,
         ),
@@ -563,15 +662,14 @@ export class ConductorSessionAdapter
     return recordsFromPage(body, CONDUCTOR_FIELD.DATA)
       .map((record): ConductorProject | undefined => {
         const id = textFromRecord(record, CONDUCTOR_FIELD.ID);
-        return id
-          ? {
-              id,
-              repositoryLabel: repositoryLabel(
-                textFromRecord(record, CONDUCTOR_FIELD.GIT_REMOTE),
-                textFromRecord(record, CONDUCTOR_FIELD.NAME),
-              ),
-            }
-          : undefined;
+        if (!id) return undefined;
+        const gitRemote = textFromRecord(record, CONDUCTOR_FIELD.GIT_REMOTE);
+        const gitHubRepository = gitHubRepositoryFromRemote(gitRemote);
+        return {
+          id,
+          repositoryLabel: repositoryLabel(gitRemote, textFromRecord(record, CONDUCTOR_FIELD.NAME)),
+          ...(gitHubRepository ? { gitHubRepository } : {}),
+        };
       })
       .filter(isDefined)
       .slice(0, CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_PROJECTS);
@@ -600,6 +698,7 @@ export class ConductorSessionAdapter
         return {
           id,
           repositoryLabel: project.repositoryLabel,
+          ...(project.gitHubRepository ? { gitHubRepository: project.gitHubRepository } : {}),
           lastActivityAt,
           archived: timestampFromRecord(record, CONDUCTOR_FIELD.ARCHIVED_AT) !== undefined,
           ...(name ? { name } : {}),
@@ -745,6 +844,7 @@ export class ConductorSessionAdapter
     session: ConductorSession,
     reported: ConductorReportedStatus | undefined,
     transcript: ConductorTranscript | undefined,
+    lifecycle: ConductorWorkspaceLifecycle | undefined,
     settledWorkspaceIds: ReadonlySet<string>,
     now: number,
   ): ProviderSessionObservation | undefined {
@@ -764,6 +864,12 @@ export class ConductorSessionAdapter
         ? transcript?.recap
         : undefined;
     const model = agentAndModelLabel(transcript?.agentKind, session.model);
+    // The workspace's own words for why its chats are quiet, and its own
+    // failure message when standing it up went wrong. A session's reported
+    // error is about the turn the user is watching, so it always outranks the
+    // machinery's.
+    const activity = lifecycle?.status ? CONDUCTOR_WORKSPACE_ACTIVITY[lifecycle.status] : undefined;
+    const error = reported?.errorMessage ?? lifecycle?.errorMessage;
     // The stop belongs to the turn and the archive to the workspace: a chat
     // mid-turn offers the stop alone — its own workspace is by definition
     // unsettled — and any chat of a positively settled, still-open workspace
@@ -812,8 +918,13 @@ export class ConductorSessionAdapter
       detail: {
         repository: session.workspace.repositoryLabel,
         ...(model ? { model } : {}),
-        ...(reported?.errorMessage ? { error: reported.errorMessage } : {}),
+        ...(activity ? { activity } : {}),
+        ...(error ? { error } : {}),
         ...(session.deepLink ? { link: session.deepLink } : {}),
+        // The pull request this chat published in its own repository: found in
+        // the transcript, validated against the workspace's remote, and a fact
+        // about the work whatever the turn is doing now.
+        ...(transcript?.change ? { change: transcript.change } : {}),
       },
     };
   }
@@ -866,22 +977,57 @@ export class ConductorSessionAdapter
   }
 
   /**
+   * Where one workspace stands in its lifecycle, from the endpoint Conductor
+   * documents for polling exactly that. A workspace still being built or
+   * rebuilt explains why its chats sit quiet, and the failure message it
+   * carries is the one thing that says a workspace never came up at all —
+   * nothing else reports it, because every chat inside just reads idle.
+   */
+  async #workspaceLifecycle(
+    request: CloudRequest,
+    workspaceId: string,
+  ): Promise<ConductorWorkspaceLifecycle> {
+    const body = await request([
+      CONDUCTOR_ROUTE_SEGMENT.V0,
+      CONDUCTOR_ROUTE_SEGMENT.WORKSPACES,
+      workspaceId,
+      CONDUCTOR_ROUTE_SEGMENT.STATUS,
+    ]);
+    const status = knownValue(
+      CONDUCTOR_WORKSPACE_STATUS,
+      textFromRecord(body, CONDUCTOR_FIELD.STATUS),
+    );
+    const errorMessage = textFromRecord(body, CONDUCTOR_FIELD.ERROR_MESSAGE)?.slice(
+      0,
+      CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_ERROR_LENGTH,
+    );
+    return {
+      ...(status ? { status } : {}),
+      ...(errorMessage ? { errorMessage } : {}),
+    };
+  }
+
+  /**
    * One bounded read of the transcripts view for every session this pass
-   * observed: which agent runs each chat, and the tail its recap is taken
-   * from. Only ids that are actually UUIDs may enter the fixed document — an
-   * id that is anything else is a shape this build does not know, so it is
-   * left out rather than sent — and with none there is no read at all.
+   * observed: which agent runs each chat, the tail its recap is taken from,
+   * and the window its published pull request is read out of. Only ids that
+   * are actually UUIDs may enter the fixed document — an id that is anything
+   * else is a shape this build does not know, so it is left out rather than
+   * sent — and with none there is no read at all.
    */
   async #sessionTranscripts(
     request: CloudRequest,
     sessions: readonly ConductorSession[],
   ): Promise<ReadonlyMap<string, ConductorTranscript>> {
     const transcripts = new Map<string, ConductorTranscript>();
-    const ids = sessions.map((session) => session.id).filter((id) => UUID_PATTERN.test(id));
-    if (ids.length === 0) return transcripts;
+    const observed = sessions.filter((session) => UUID_PATTERN.test(session.id));
+    if (observed.length === 0) return transcripts;
+    const repositories = new Map(
+      observed.map((session) => [session.id, session.workspace.gitHubRepository]),
+    );
 
-    const document = `${CONDUCTOR_READ_TRANSCRIPT_TAILS_PREFIX}${ids
-      .map((id) => `'${id}'`)
+    const document = `${CONDUCTOR_READ_TRANSCRIPT_TAILS_PREFIX}${observed
+      .map((session) => `'${session.id}'`)
       .join(", ")}${CONDUCTOR_READ_TRANSCRIPT_TAILS_SUFFIX}`;
     const body = await request(CONDUCTOR_ROUTE.SQL, undefined, { document });
     for (const row of recordsFromPage(body, CONDUCTOR_SQL_FIELD.ROWS)) {
@@ -894,9 +1040,14 @@ export class ConductorSessionAdapter
       const recap = recapFromTranscriptTail(
         textFromRecord(row, CONDUCTOR_SQL_FIELD.TRANSCRIPT_TAIL),
       );
+      const change = changeFromWindow(
+        textFromRecord(row, CONDUCTOR_SQL_FIELD.CHANGE_WINDOW),
+        repositories.get(sessionId),
+      );
       transcripts.set(sessionId, {
         ...(agentKind ? { agentKind } : {}),
         ...(recap ? { recap } : {}),
+        ...(change ? { change } : {}),
       });
     }
     return transcripts;
@@ -928,6 +1079,36 @@ function recapFromTranscriptTail(tail: string | undefined): string | undefined {
     .replace(/\s+/g, " ")
     .trim();
   return recap ? recap.slice(0, maximumSessionRecapLength) : undefined;
+}
+
+/**
+ * The GitHub repository a git remote names, as lowercase `owner/name`, in any
+ * of the ways a remote is written — `https://…`, `git@…:`, with or without
+ * `.git`. Anything that is not recognisably GitHub answers nothing, and with
+ * nothing to validate against, no pull-request address is ever reported.
+ */
+function gitHubRepositoryFromRemote(gitRemote: string | undefined): string | undefined {
+  const match = gitRemote?.trim().match(GITHUB_REMOTE_PATTERN);
+  return match ? `${match[1]}/${match[2]}`.toLowerCase() : undefined;
+}
+
+/**
+ * The pull request a transcript names as this session's published work: the
+ * last whole address in the window, and only when it points into the
+ * workspace's own repository — GitHub treats owner and repository names
+ * case-insensitively, so the comparison does too. An address for anywhere
+ * else is somebody else's work being talked about, and a window whose opening
+ * was cut mid-address simply yields no whole address to consider.
+ */
+function changeFromWindow(
+  window: string | undefined,
+  gitHubRepository: string | undefined,
+): string | undefined {
+  if (!window || !gitHubRepository) return undefined;
+  const addresses = [...window.matchAll(GITHUB_PULL_URL_PATTERN)];
+  const last = addresses.at(-1);
+  if (!last) return undefined;
+  return `${last[1]}/${last[2]}`.toLowerCase() === gitHubRepository ? last[0] : undefined;
 }
 
 /**
