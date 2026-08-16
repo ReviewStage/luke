@@ -66,6 +66,9 @@ importers:
       '@sidecar/core':
         specifier: workspace:*
         version: link:../../packages/sidecar-core
+      marked:
+        specifier: 18.0.9
+        version: 18.0.9
       react:
         specifier: 19.2.8
         version: 19.2.8
@@ -1070,6 +1073,11 @@ packages:
   macos-alias@0.2.12:
     resolution: {integrity: sha512-yiLHa7cfJcGRFq4FrR4tMlpNHb4Vy4mWnpajlSSIFM5k4Lv8/7BbbDLzCAVogWNl0LlLhizRp1drXv0hK9h0Yw==}
     os: [darwin]
+
+  marked@18.0.9:
+    resolution: {integrity: sha512-/Sa4qiiHZxf0/FQdBBowr9q4r10krCwMvpK48FUBdXdUXScDxiQGR9zCPrFgRVR5LU3iySOiIjy09ZQvADir1w==}
+    engines: {node: '>= 20'}
+    hasBin: true
 
   minimatch@10.2.6:
     resolution: {integrity: sha512-vpLQEs+VLCr1nU0BXS07maYoFwlDAH0gngQuuttxIwutDFEMHq2blX+8vpgxDdK3J1PwjCJiep77OitTZ4Ll1A==}
@@ -2086,6 +2094,8 @@ snapshots:
     dependencies:
       nan: 2.28.0
     optional: true
+
+  marked@18.0.9: {}
 
   minimatch@10.2.6:
     dependencies:
