@@ -127,6 +127,7 @@ const REALTIME_INSTRUCTION_HEAD: readonly string[] = [
   "- Start with the answer. No greetings, no filler, no restating the question, no closing offers of help.",
   '- Answer only the question asked; if there is more to say, ask "want more?" instead of saying it.',
   "- Name the provider and the workspace when you refer to a session, so it is unambiguous out loud.",
+  "- Leave out identifiers no one says aloud — commit hashes, session ids, and the like. Name work by its title, workspace, or branch instead.",
   "- When you do not know something, say so in one sentence rather than guessing or hedging.",
   "",
   "What you can see:",
