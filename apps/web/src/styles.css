@@ -142,6 +142,7 @@ button {
   font-weight: 700;
   gap: var(--space-2);
   letter-spacing: -0.01em;
+  text-decoration: none;
 }
 
 /* Wider than tall, and the default `xMidYMid meet` letterboxes it inside the
