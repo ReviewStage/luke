@@ -847,6 +847,52 @@ test("the projects context says where a nameless creation ask goes", () => {
   assert.match(item?.content?.[0]?.text ?? "", /default provider for new workspaces is Conductor/);
 });
 
+test("the projects context says which project a nameless ask lands in", () => {
+  const secondProject: ObservedWorkspaceProject = {
+    providerId: "conductor",
+    providerName: "Conductor",
+    providerProjectId: "proj-2",
+    repository: "acme/other",
+    taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
+  };
+
+  // A chosen default that is still offered is named by its repository, as
+  // where a nameless ask goes.
+  const chosen = workspaceProjectContextText([OFFERED_PROJECT, secondProject], undefined, {
+    conductor: "proj-1",
+  });
+  assert.match(chosen, /default Conductor project is luke/);
+  assert.doesNotMatch(chosen, /No default Conductor project/);
+
+  // Nothing chosen and more than one project listed: ask first, and say that
+  // the first creation there decides — that sentence is how the developer
+  // learns their answer will be remembered.
+  const open = workspaceProjectContextText([OFFERED_PROJECT, secondProject]);
+  assert.match(open, /No default Conductor project is chosen yet/);
+  assert.match(open, /ask which listed project/);
+  assert.match(open, /first workspace created in Conductor saves its project/);
+
+  // One project alone leaves nothing to steer, so nothing is said of it.
+  const single = workspaceProjectContextText([OFFERED_PROJECT]);
+  assert.doesNotMatch(single, /default Conductor project/);
+
+  // A default the provider no longer offers earns no line at all: it is not
+  // somewhere an ask can go, and the choice already made is not re-offered to
+  // the first creation.
+  const away = workspaceProjectContextText([OFFERED_PROJECT, secondProject], undefined, {
+    conductor: "proj-gone",
+  });
+  assert.doesNotMatch(away, /default Conductor project/);
+  assert.doesNotMatch(away, /No default Conductor project/);
+
+  // The default rides the same context event the list does.
+  const [event] = workspaceProjectContextEvents([OFFERED_PROJECT, secondProject], undefined, {
+    conductor: "proj-2",
+  });
+  const item = (event as { item?: { content?: { text?: string }[] } }).item;
+  assert.match(item?.content?.[0]?.text ?? "", /default Conductor project is acme\/other/);
+});
+
 /**
  * A build-documented table the way the app declares one: labels for people,
  * ids for the wire, efforts per agent.

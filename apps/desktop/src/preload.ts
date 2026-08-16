@@ -33,6 +33,7 @@ const bridge: AppBridge = {
   setFormFactor: invoke(channels.setFormFactor),
   setDefaultWorkspaceProvider: invoke(channels.setDefaultWorkspaceProvider),
   setWorkspaceAgentDefault: invoke(channels.setWorkspaceAgentDefault),
+  setWorkspaceProjectDefault: invoke(channels.setWorkspaceProjectDefault),
   setVoiceCaptions: invoke(channels.setVoiceCaptions),
   setVoiceHotkey: invoke(channels.setVoiceHotkey),
   setAskHotkey: invoke(channels.setAskHotkey),

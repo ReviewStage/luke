@@ -1035,18 +1035,20 @@ export class RealtimeVoiceSession {
    * Tells the conversation where a workspace can be created, the same way the
    * roster travels: context that must never open Luke's mouth, kept whole
    * because it is what a spoken creation ask is validated against. The default
-   * provider rides along because it is part of the same answer — where a
-   * nameless ask goes — and a changed default is news the way a changed list
-   * is. Identical lists under identical defaults are not resent.
+   * provider and the per-provider default projects ride along because they
+   * are part of the same answer — where a nameless ask goes — and a changed
+   * default is news the way a changed list is. Identical lists under
+   * identical defaults are not resent.
    */
   updateWorkspaceProjects(
     projects: readonly ObservedWorkspaceProject[],
     defaultProviderId?: string,
+    defaultProjectIds?: Readonly<Partial<Record<string, string>>>,
   ): void {
     this.#workspaceProjects = projects;
     this.#sendContext("workspace-projects", () => ({
-      text: workspaceProjectContextText(projects, defaultProviderId),
-      events: workspaceProjectContextEvents(projects, defaultProviderId),
+      text: workspaceProjectContextText(projects, defaultProviderId, defaultProjectIds),
+      events: workspaceProjectContextEvents(projects, defaultProviderId, defaultProjectIds),
     }));
   }
 

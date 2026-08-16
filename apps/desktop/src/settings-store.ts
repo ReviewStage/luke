@@ -58,6 +58,7 @@ const SETTINGS_FIELD = {
   VOICE_SPEED: "voiceSpeed",
   VOICE_HOTKEY: "voiceHotkey",
   WORKSPACE_AGENT_DEFAULTS: "workspaceAgentDefaults",
+  WORKSPACE_PROJECT_DEFAULTS: "workspaceProjectDefaults",
 } as const;
 
 const API_KEY_LENGTH = {
@@ -191,6 +192,15 @@ interface PersistedSettings {
    * pairing are both dropped, because each names something no endpoint takes.
    */
   workspaceAgentDefaults?: Readonly<Partial<Record<ProviderId, WorkspaceAgentSelection>>>;
+  /**
+   * The project a nameless creation ask lands in, per provider, each entry
+   * absent until the user's first creation there chooses it. Projects are
+   * observed rather than build-fixed, so only the value's shape can be held
+   * here — an unknown provider or a malformed id is dropped, and whether the
+   * project is still offered is answered where the list lives: the id only
+   * ever steers, and every creation is validated against the observed list.
+   */
+  workspaceProjectDefaults?: Readonly<Partial<Record<ProviderId, string>>>;
 }
 
 interface ResolvedApiKey {
@@ -291,6 +301,41 @@ function storedWorkspaceAgentDefaults(
   return Object.keys(defaults).length > 0 ? defaults : undefined;
 }
 
+/** A stored project id reads like one wire value; anything longer is not an id. */
+const MAXIMUM_WORKSPACE_PROJECT_ID_LENGTH = 200;
+
+/** A provider's project id as this store will keep it, or nothing. */
+function workspaceProjectIdText(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim();
+  if (!normalized || normalized.length > MAXIMUM_WORKSPACE_PROJECT_ID_LENGTH) return undefined;
+  return normalized;
+}
+
+/**
+ * Reads the stored per-provider project choices, keeping only entries whose
+ * provider this build knows and whose value has an id's shape. Whether the
+ * project is still offered cannot be answered here — the list is observed at
+ * run time — so a stale id is carried and simply steers nothing until its
+ * provider offers that project again.
+ */
+function storedWorkspaceProjectDefaults(
+  record: Record<string, unknown>,
+): Partial<Record<ProviderId, string>> | undefined {
+  const persisted = record[SETTINGS_FIELD.WORKSPACE_PROJECT_DEFAULTS];
+  if (persisted === null || typeof persisted !== "object" || Array.isArray(persisted)) {
+    return undefined;
+  }
+  const defaults: Partial<Record<ProviderId, string>> = {};
+  for (const [providerId, value] of Object.entries(persisted)) {
+    if (!isProviderId(providerId)) continue;
+    const providerProjectId = workspaceProjectIdText(value);
+    if (!providerProjectId) continue;
+    defaults[providerId] = providerProjectId;
+  }
+  return Object.keys(defaults).length > 0 ? defaults : undefined;
+}
+
 function parsePersistedSettings(source: string): PersistedSettings {
   const parsed: unknown = JSON.parse(source);
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
@@ -303,6 +348,7 @@ function parsePersistedSettings(source: string): PersistedSettings {
   const formFactor = record[SETTINGS_FIELD.FORM_FACTOR];
   const defaultWorkspaceProvider = record[SETTINGS_FIELD.DEFAULT_WORKSPACE_PROVIDER];
   const workspaceAgentDefaults = storedWorkspaceAgentDefaults(record);
+  const workspaceProjectDefaults = storedWorkspaceProjectDefaults(record);
   const storedHotkey = record[SETTINGS_FIELD.VOICE_HOTKEY];
   // Read through the same gate a submitted chord passes, so a hand-edited
   // value is either the one spelling the rest of the app uses or nothing.
@@ -357,6 +403,7 @@ function parsePersistedSettings(source: string): PersistedSettings {
       ? { defaultWorkspaceProvider }
       : {}),
     ...(workspaceAgentDefaults ? { workspaceAgentDefaults } : {}),
+    ...(workspaceProjectDefaults ? { workspaceProjectDefaults } : {}),
   };
 }
 
@@ -429,6 +476,9 @@ export class SettingsStore {
         : {}),
       ...(persisted.workspaceAgentDefaults
         ? { workspaceAgentDefaults: persisted.workspaceAgentDefaults }
+        : {}),
+      ...(persisted.workspaceProjectDefaults
+        ? { workspaceProjectDefaults: persisted.workspaceProjectDefaults }
         : {}),
     };
   }
@@ -715,6 +765,35 @@ export class SettingsStore {
       const next: PersistedSettings = { ...persisted };
       if (Object.keys(defaults).length > 0) next.workspaceAgentDefaults = defaults;
       else delete next.workspaceAgentDefaults;
+      return next;
+    });
+  }
+
+  /**
+   * Shallow like the agent default's read, and read at the same moment: a
+   * creation ask must not wake the keychain to learn which project it prefers.
+   */
+  async readWorkspaceProjectDefault(providerId: ProviderId): Promise<string | undefined> {
+    return (await this.#load()).workspaceProjectDefaults?.[providerId];
+  }
+
+  /**
+   * Stores the project one provider creates nameless-ask workspaces in, or
+   * returns to letting the first creation choose when omitted. One provider's
+   * choice never disturbs another's, the way the agent defaults keep apart.
+   */
+  async setWorkspaceProjectDefault(
+    providerId: ProviderId,
+    providerProjectId: string | undefined,
+  ): Promise<SettingsUpdateResult> {
+    return this.#setField((persisted) => {
+      if (persisted.workspaceProjectDefaults?.[providerId] === providerProjectId) return;
+      const defaults = { ...persisted.workspaceProjectDefaults };
+      if (providerProjectId) defaults[providerId] = providerProjectId;
+      else delete defaults[providerId];
+      const next: PersistedSettings = { ...persisted };
+      if (Object.keys(defaults).length > 0) next.workspaceProjectDefaults = defaults;
+      else delete next.workspaceProjectDefaults;
       return next;
     });
   }

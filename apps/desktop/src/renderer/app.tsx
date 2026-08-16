@@ -4,6 +4,7 @@ import {
   FEEDBACK_COMPOSER_KIND,
   type FeedbackComposerKind,
   FIXTURE_EPOCH_MS,
+  isProviderId,
   type NormalizedSession,
   type ObservedWorkspaceProject,
   type PanelFormFactor,
@@ -535,26 +536,54 @@ export function App(): React.JSX.Element {
     [applySettingsReply],
   );
 
+  // Where a nameless creation ask lands within a provider — the same store
+  // write the first creation there makes on its own, offered by hand so the
+  // choice can be changed or returned to the first creation.
+  const changeWorkspaceProjectDefault = useCallback(
+    async (providerId: ProviderId, providerProjectId: string | undefined) =>
+      applySettingsReply(
+        await window.sidecar.setWorkspaceProjectDefault(providerId, providerProjectId),
+      ),
+    [applySettingsReply],
+  );
+
   /**
-   * The providers the default-workspace row can offer: every provider
+   * The providers the default-workspace rows can offer: every provider
    * currently offering projects, named the way its adapter names itself, plus
-   * a stored default that is not offering right now — the row must show the
-   * choice it holds, or it could be neither seen nor cleared.
+   * one holding a stored default — provider or project — that is not offering
+   * right now: the rows must show the choices they hold, or a choice could be
+   * neither seen nor cleared. Each option carries the projects its
+   * default-project row offers, on the same show-what-is-held terms.
    */
   const storedWorkspaceProvider = settings?.defaultWorkspaceProvider;
+  const storedWorkspaceProjects = settings?.workspaceProjectDefaults;
   const workspaceProviderOptions = useMemo(() => {
+    const fallbackName = (providerId: string) =>
+      isCredentialProviderId(providerId)
+        ? CREDENTIAL_PROVIDERS[providerId].displayName
+        : providerId;
     const names = new Map<string, string>();
     for (const project of workspaceProjects) names.set(project.providerId, project.providerName);
     if (storedWorkspaceProvider && !names.has(storedWorkspaceProvider)) {
-      names.set(
-        storedWorkspaceProvider,
-        isCredentialProviderId(storedWorkspaceProvider)
-          ? CREDENTIAL_PROVIDERS[storedWorkspaceProvider].displayName
-          : storedWorkspaceProvider,
-      );
+      names.set(storedWorkspaceProvider, fallbackName(storedWorkspaceProvider));
     }
-    return [...names.entries()].map(([id, name]) => ({ id, name }));
-  }, [workspaceProjects, storedWorkspaceProvider]);
+    for (const providerId of Object.keys(storedWorkspaceProjects ?? {})) {
+      if (!names.has(providerId)) names.set(providerId, fallbackName(providerId));
+    }
+    return [...names.entries()].map(([id, name]) => {
+      const offered = workspaceProjects
+        .filter((project) => project.providerId === id)
+        .map((project) => ({ id: project.providerProjectId, label: project.repository }));
+      const stored = isProviderId(id) ? storedWorkspaceProjects?.[id] : undefined;
+      // A stored project the provider no longer offers is its own label: the
+      // repository name lived on the observed list that stopped listing it.
+      const projects =
+        stored && !offered.some((project) => project.id === stored)
+          ? [...offered, { id: stored, label: stored }]
+          : offered;
+      return { id, name, projects };
+    });
+  }, [workspaceProjects, storedWorkspaceProvider, storedWorkspaceProjects]);
 
   /**
    * Says a send landed, and stops saying it once it has been readable. Long
@@ -1030,6 +1059,7 @@ export function App(): React.JSX.Element {
   );
 
   const defaultWorkspaceProvider = (settings ?? bootstrap?.settings)?.defaultWorkspaceProvider;
+  const workspaceProjectDefaults = (settings ?? bootstrap?.settings)?.workspaceProjectDefaults;
   const {
     analyser,
     microphoneStatus,
@@ -1054,6 +1084,7 @@ export function App(): React.JSX.Element {
     sessions,
     workspaceProjects,
     defaultWorkspaceProvider,
+    workspaceProjectDefaults,
     voice: settings?.voice,
     voiceSpeed: settings?.voiceSpeed,
     voiceCaptions: settings?.voiceCaptions === true,
@@ -1486,6 +1517,7 @@ export function App(): React.JSX.Element {
     onFormFactorChange: changeFormFactor,
     onDefaultWorkspaceProviderChange: changeDefaultWorkspaceProvider,
     onWorkspaceAgentDefaultChange: changeWorkspaceAgentDefault,
+    onWorkspaceProjectDefaultChange: changeWorkspaceProjectDefault,
   };
   const shortcuts: ShortcutControl = {
     ...(shownHotkey.hotkey ? { voiceHotkey: shownHotkey.hotkey } : {}),
