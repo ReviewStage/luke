@@ -59,6 +59,9 @@ import { parseMilliseconds, parsePixels, STILL_MS } from "./session-motion";
 /** How a control says an errand may land on it, and which one it answers to. */
 export const ERRAND_TARGET_ATTRIBUTE = "data-errand-target";
 
+/** How the stage says which shape is drawn, so a flight can watch it. */
+export const PRESENTATION_ATTRIBUTE = "data-presentation";
+
 /** How Luke's own face says an errand sets off from it. */
 export const ERRAND_ORIGIN_ATTRIBUTE = "data-errand-origin";
 
@@ -366,6 +369,21 @@ export function errandScrollTop(input: {
   return input.scrollTop + Math.min(below, above);
 }
 
+/**
+ * The shape as it will still be by the time the flight is over.
+ *
+ * A drift bounded by the shape as drawn is bounded by a shape that may be
+ * about to get smaller: the captions take their room out of the panel while
+ * Luke talks and give every pixel of it back when he stops, and a reply
+ * ending mid-flight is the ordinary case rather than a strange one. The room
+ * comes off the foot, so the settled shape is the drawn one less the block —
+ * measured against that, the drift stays over black through the shrink
+ * instead of being left on the desktop by it.
+ */
+export function errandSettledBound(bound: ErrandBox, captionSize: number): ErrandBox {
+  return { ...bound, height: Math.max(0, bound.height - Math.max(0, captionSize)) };
+}
+
 /** The largest sway that keeps `base + sway * direction` between two edges. */
 function roomFor(base: number, direction: number, low: number, high: number): number {
   if (direction > 0) return (high - base) / direction;
@@ -607,6 +625,26 @@ export function LukeErrand({ errand, onLanded, onReturned }: LukeErrandProps): R
     const flight: Animation[] = [];
     let beat: number | undefined;
     let settle: number | undefined;
+    let watch: MutationObserver | undefined;
+
+    /**
+     * Everything this flight is holding, put down at once. Called when the
+     * shape goes out from under it, when a second errand overtakes it, and
+     * when the panel unmounts — all of which are the flight being over rather
+     * than paused. Both drawn elements rest invisible, so cancelling is the
+     * whole of putting them away; the beats are released regardless, because
+     * the change being carried has to be drawn whether or not anyone got to
+     * watch it arrive.
+     */
+    const abandon = () => {
+      window.clearTimeout(launch);
+      if (beat !== undefined) window.clearTimeout(beat);
+      if (settle !== undefined) window.clearTimeout(settle);
+      watch?.disconnect();
+      for (const animation of flight) animation.cancel();
+      returnHome();
+    };
+
     const launch = window.setTimeout(() => {
       // Read at the launch rather than when the errand was armed: the panel may
       // have closed behind the answer, and everything below is measured off a
@@ -622,13 +660,14 @@ export function LukeErrand({ errand, onLanded, onReturned }: LukeErrandProps): R
       // the foot that the captions still to come cannot take the view back.
       // An already-visible control with room to spare is left exactly where it
       // is, which is the usual case.
+      const captionSize = parsePixels(token(MOTION_TOKEN.CAPTION_SIZE));
       keepInView(
         stage,
         target,
         captionRoom({
           drawn: stage.dataset.caption === "true",
           speaking: stage.dataset.voice === ERRAND_SPEAKING_VOICE,
-          size: parsePixels(token(MOTION_TOKEN.CAPTION_SIZE)),
+          size: captionSize,
           max: parsePixels(token(MOTION_TOKEN.CAPTION_MAX)),
         }),
       );
@@ -639,14 +678,19 @@ export function LukeErrand({ errand, onLanded, onReturned }: LukeErrandProps): R
         face.getBoundingClientRect(),
         target.getBoundingClientRect(),
       );
-      // The black itself, which is what the loop may not be drawn past. The
+      // The black itself, which is what the drift may not be drawn past. The
       // surface is the one element that is the shape at whatever size it is
       // currently drawn, and it already names itself for the pointer, so the
-      // flight asks the same element the same question.
+      // flight asks the same element the same question — then takes back the
+      // room the captions are only borrowing, because the shape the drift has
+      // to stay inside is the one that will still be there when it gets home.
       const surface = stage.querySelector<HTMLElement>(
         `[${HIT_REGION_ATTRIBUTE}="${HIT_REGION.SURFACE}"]`,
       );
-      const bound = errandBound(stageBox, (surface ?? stage).getBoundingClientRect());
+      const bound = errandSettledBound(
+        errandBound(stageBox, (surface ?? stage).getBoundingClientRect()),
+        captionSize,
+      );
       const drift = errandDrift(journey, beats, bound);
       // A control drawn exactly where the face is has no journey to make.
       if (drift.length === 0) return returnHome();
@@ -772,20 +816,27 @@ export function LukeErrand({ errand, onLanded, onReturned }: LukeErrandProps): R
         }
       }, beats.duration * beats.arrival);
       settle = window.setTimeout(returnHome, beats.duration);
+
+      // The shape can go while he is out over it. Escape, the pointer leaving,
+      // the capsule pressed, a tray item, another window's lifecycle event —
+      // any of them collapses the panel to the capsule, and a flight measured
+      // against the shape it set off from would carry on across a surface that
+      // is no longer under it and be drawn on the desktop. Nothing else here
+      // watches the presentation: it is read once at the launch, and the
+      // launch is over.
+      //
+      // Watched rather than passed down, and watched rather than re-run: the
+      // presentation as a dependency would tear this effect down and build it
+      // again on every change, which is a second flight rather than the end of
+      // this one.
+      watch = new MutationObserver(() => {
+        if (stage.dataset.presentation === PANEL_PRESENTATION.PANEL) return;
+        abandon();
+      });
+      watch.observe(stage, { attributes: true, attributeFilter: [PRESENTATION_ATTRIBUTE] });
     }, beats.delay);
 
-    return () => {
-      window.clearTimeout(launch);
-      if (beat !== undefined) window.clearTimeout(beat);
-      if (settle !== undefined) window.clearTimeout(settle);
-      // A flight the panel closed under, or that a second errand overtook, is
-      // over rather than paused: both elements rest invisible, so cancelling is
-      // the whole of putting them away. Its beats are still released, because
-      // the change it was carrying has to be drawn whether or not anyone got to
-      // watch it arrive.
-      for (const animation of flight) animation.cancel();
-      returnHome();
-    };
+    return abandon;
   }, [errand, onLanded, onReturned]);
 
   return (

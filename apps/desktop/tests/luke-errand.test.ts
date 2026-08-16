@@ -21,6 +21,7 @@ import {
   errandFlies,
   errandJourney,
   errandScrollTop,
+  errandSettledBound,
   errandTargets,
   tabErrandTarget,
 } from "../src/renderer/luke-errand";
@@ -425,4 +426,38 @@ test("a control taller than what is left keeps its own top on screen", () => {
     }),
     20,
   );
+});
+
+test("the drift is bounded by the shape that will still be there at the end", () => {
+  // The captions borrow their room from the panel and give all of it back the
+  // moment the reply ends, which can easily happen mid-flight. Bounded by the
+  // shape as drawn, a drift could be left on the desktop by that shrink; the
+  // room comes off the foot, so the settled shape is the drawn one less the
+  // block.
+  const drawn = { left: 446, top: 0, width: 620, height: 520 };
+  assert.deepEqual(errandSettledBound(drawn, 70), { ...drawn, height: 450 });
+  // No captions, nothing borrowed, nothing to take back.
+  assert.deepEqual(errandSettledBound(drawn, 0), drawn);
+  // An unreadable token reads as zero rather than as a negative reservation,
+  // and a block somehow taller than the shape leaves no room rather than a
+  // shape inside out.
+  assert.deepEqual(errandSettledBound(drawn, -20), drawn);
+  assert.equal(errandSettledBound(drawn, 900).height, 0);
+});
+
+test("a shape that shrinks to nothing leaves a drift with nowhere to lean", () => {
+  // The bound is what decides the sway, so a settled shape with no height
+  // collapses the drift onto the straight run home — the one path already
+  // known to be over black — rather than bowing off it.
+  const journey = errandJourney(
+    STAGE,
+    { left: 747, top: 9, width: 18, height: 18 },
+    { left: 960, top: 300, width: 34, height: 20 },
+  );
+  const beats = errandBeats(TOKENS, ERRAND_WAIT.AT_ONCE);
+  const flattened = errandSettledBound(errandBound(STAGE, SURFACE), SURFACE.height);
+  const drift = errandDrift(journey, beats, flattened);
+  for (const step of drift) {
+    assert.ok(swayAt(journey, step.point) < 1e-9, "every step is on the run itself");
+  }
 });
