@@ -621,6 +621,19 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
               "hint's Got it button rests it for that stretch of silence and any that begins " +
               "within fifteen minutes; the captions stay.",
           },
+          {
+            label: "How long a conversation lasts",
+            detail:
+              "One conversation lasts as long as the call it is held on. The call opens on the " +
+              "first press of the talk key or the first typed ask, stays open across as many " +
+              "turns as the developer takes, and is put away after ten minutes with nothing said " +
+              "on it — which releases the microphone rather than holding it all day. The voice " +
+              "service also ends any call at an hour. Either way the next press opens a fresh " +
+              "conversation, and Luke will not remember the last one: what he knows then is what " +
+              "the panel observes, not what was said before. A call that ends underneath a " +
+              "conversation says so rather than quietly forgetting. Nothing is written down " +
+              "between conversations.",
+          },
         ]
       : [
           {

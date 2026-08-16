@@ -44,6 +44,24 @@ function trimmedText(value: string | undefined): string | undefined {
 }
 
 /**
+ * How the conversation gives way at the edge of the model's window.
+ *
+ * Eviction happens either way; the only question is whether the build chose
+ * it. Left unset, the service trims the least it can get away with, which
+ * means a conversation sitting at the ceiling trims again on every single turn
+ * and moves the cached prefix every time it does. Trimming a fifth of the
+ * window in one go instead is one cache miss rather than a run of them.
+ *
+ * What is evicted is the oldest of what remains, and the oldest of what remains
+ * is the developer's own earlier turns — which is the argument for the context
+ * items superseding themselves rather than piling up beside those turns.
+ */
+export const REALTIME_TRUNCATION = {
+  TYPE: "retention_ratio",
+  RETENTION_RATIO: 0.8,
+} as const;
+
+/**
  * Builds the session a client secret is minted against. Turn detection is
  * disabled outright so the developer, not a voice-activity heuristic, decides
  * when Luke is listening — an always-open microphone is exactly what a sidecar
@@ -57,6 +75,10 @@ export function realtimeSessionConfig(options: RealtimeSessionOptions = {}) {
     tools: realtimeToolDefinitions(),
     // Auto for the conversation; each proactive readout narrows itself to none.
     tool_choice: "auto",
+    truncation: {
+      type: REALTIME_TRUNCATION.TYPE,
+      retention_ratio: REALTIME_TRUNCATION.RETENTION_RATIO,
+    },
     audio: {
       input: {
         turn_detection: null,

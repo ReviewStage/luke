@@ -85,14 +85,80 @@ export function sessionContextText(sessions: readonly NormalizedSession[]): stri
 }
 
 /**
+ * The kinds of context a conversation is told, each of which answers exactly
+ * one standing question: what Luke can see, where he can create, what he knows
+ * about himself, and what the tracker lists.
+ *
+ * A kind holds one live item at a time. Saying it again replaces the item that
+ * said it before rather than adding a second answer beside the first, because
+ * a conversation holding nine rosters is holding eight wrong ones — and paying
+ * for all nine out of a window the developer's own turns are evicted from.
+ */
+export const CONTEXT_ITEM_KIND = {
+  SESSIONS: "sessions",
+  WORKSPACE_PROJECTS: "workspace-projects",
+  APP_GUIDE: "app-guide",
+  ISSUES: "issues",
+} as const;
+
+export type ContextItemKind = (typeof CONTEXT_ITEM_KIND)[keyof typeof CONTEXT_ITEM_KIND];
+
+/**
+ * Names the item one context update will occupy, so the update after it has
+ * something to delete. The Realtime API lets the client name an item on
+ * creation, which is what makes a replacement possible without waiting to be
+ * told the server's own name for it.
+ *
+ * The sequence rises rather than the name being reused: a delete that failed
+ * would otherwise leave the old item sitting under the name the new one is
+ * about to claim. This composes a wire identifier, not a lookup key — nothing
+ * indexes on it, and both halves are the build's own.
+ */
+export function contextItemId(kind: ContextItemKind, sequence: number): string {
+  return `luke_ctx_${kind}_${sequence}`;
+}
+
+/** Names the delete itself, so the error a failed one answers with is known as ours. */
+export function contextSupersedeEventId(sequence: number): string {
+  return `luke_supersede_${sequence}`;
+}
+
+/**
+ * Builds the event that removes the context item a fresher one is replacing.
+ *
+ * Only ever aimed at an item this build named and created. Deleting an item
+ * the conversation does not hold is answered with an error rather than
+ * silence, which is why the event is named: the caller keeps the name and
+ * knows the answer for its own rather than reporting it to the developer as a
+ * fault in their call.
+ */
+export function contextSupersedeEvents(input: {
+  itemId: string;
+  eventId: string;
+}): readonly Record<string, unknown>[] {
+  if (!input.itemId.trim() || !input.eventId.trim()) return [];
+  return [
+    {
+      type: REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_DELETE,
+      event_id: input.eventId,
+      item_id: input.itemId,
+    },
+  ];
+}
+
+/**
  * The conversation.item.create envelope every roster update travels in. A
  * user-role item is universally accepted by the Realtime API, and the explicit
  * label keeps it from reading as something the developer said.
+ *
+ * The item is named on creation so a fresher answer of the same kind can take
+ * its place rather than pile up beside it.
  */
-function labeledContextEvent(label: string, text: string): Record<string, unknown> {
+function labeledContextEvent(label: string, text: string, itemId: string): Record<string, unknown> {
   return {
     type: REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE,
     item: {
+      id: itemId,
       type: "message",
       role: "user",
       content: [{ type: "input_text", text: `[${label}]\n${text}` }],
@@ -110,11 +176,13 @@ function labeledContextEvent(label: string, text: string): Record<string, unknow
  */
 export function sessionContextEvents(
   sessions: readonly NormalizedSession[],
+  itemId: string,
 ): readonly Record<string, unknown>[] {
   return [
     labeledContextEvent(
       "observed session status, sent automatically",
       sessionContextText(sessions),
+      itemId,
     ),
   ];
 }
@@ -170,9 +238,14 @@ export function issueContextText(issues: readonly TrackedIssue[]): string {
  */
 export function issueContextEvents(
   issues: readonly TrackedIssue[],
+  itemId: string,
 ): readonly Record<string, unknown>[] {
   return [
-    labeledContextEvent("observed issue tracker, sent automatically", issueContextText(issues)),
+    labeledContextEvent(
+      "observed issue tracker, sent automatically",
+      issueContextText(issues),
+      itemId,
+    ),
   ];
 }
 
@@ -182,11 +255,14 @@ export function issueContextEvents(
  * board would keep answering from it — so the disconnection is news the same
  * way the roster was, and just as deliberately not a prompt.
  */
-export function issueTrackerDisconnectedEvents(): readonly Record<string, unknown>[] {
+export const ISSUE_TRACKER_DISCONNECTED_TEXT = "The issue tracker is no longer connected.";
+
+export function issueTrackerDisconnectedEvents(itemId: string): readonly Record<string, unknown>[] {
   return [
     labeledContextEvent(
       "observed issue tracker, sent automatically",
-      "The issue tracker is no longer connected. Disregard earlier issue rosters.",
+      ISSUE_TRACKER_DISCONNECTED_TEXT,
+      itemId,
     ),
   ];
 }
@@ -329,6 +405,7 @@ const TASK_SUPPORT_TEXT: Readonly<Record<string, string>> = {
  */
 export function workspaceProjectContextEvents(
   projects: readonly ObservedWorkspaceProject[],
+  itemId: string,
   defaultProviderId?: string,
   defaultProjectIds?: Readonly<Partial<Record<string, string>>>,
 ): readonly Record<string, unknown>[] {
@@ -336,6 +413,7 @@ export function workspaceProjectContextEvents(
     labeledContextEvent(
       "workspace projects, sent automatically",
       workspaceProjectContextText(projects, defaultProviderId, defaultProjectIds),
+      itemId,
     ),
   ];
 }
@@ -346,6 +424,9 @@ export function workspaceProjectContextEvents(
  * standing instructions describe a guide, so one has to actually arrive, and
  * it must never open Luke's mouth by itself — context, not a prompt.
  */
-export function appGuideContextEvents(guide: AppGuideSnapshot): readonly Record<string, unknown>[] {
-  return [labeledContextEvent("app guide, sent automatically", appGuideContextText(guide))];
+export function appGuideContextEvents(
+  guide: AppGuideSnapshot,
+  itemId: string,
+): readonly Record<string, unknown>[] {
+  return [labeledContextEvent("app guide, sent automatically", appGuideContextText(guide), itemId)];
 }

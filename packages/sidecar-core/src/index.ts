@@ -172,6 +172,7 @@ export {
   REALTIME_CALLS_PATH,
   REALTIME_CLIENT_SECRETS_PATH,
   REALTIME_MINT_OUTCOME,
+  REALTIME_TRUNCATION,
   type RealtimeConnection,
   type RealtimeDiagnostics,
   type RealtimeMintOutcome,
@@ -182,6 +183,12 @@ export {
 } from "./realtime-credentials";
 export {
   appGuideContextEvents,
+  CONTEXT_ITEM_KIND,
+  type ContextItemKind,
+  contextItemId,
+  contextSupersedeEventId,
+  contextSupersedeEvents,
+  ISSUE_TRACKER_DISCONNECTED_TEXT,
   issueContextEvents,
   issueContextText,
   issueTrackerDisconnectedEvents,

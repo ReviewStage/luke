@@ -105,7 +105,7 @@ test("an empty guide says so rather than describing an app it was never told abo
 });
 
 test("the guide travels as context and never opens Luke's mouth", () => {
-  const events = appGuideContextEvents(GUIDE);
+  const events = appGuideContextEvents(GUIDE, "luke_ctx_app-guide_1");
 
   assert.equal(events.length, 1);
   assert.equal(events[0]?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE);

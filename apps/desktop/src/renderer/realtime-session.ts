@@ -7,11 +7,17 @@ import {
   type CarriedAppAction,
   type CarriedIssueAction,
   type CarriedSessionAction,
+  CONTEXT_ITEM_KIND,
+  type ContextItemKind,
   cancelResponseEvents,
   clearInputAudioEvents,
+  contextItemId,
+  contextSupersedeEventId,
+  contextSupersedeEvents,
   EMPTY_APP_GUIDE,
   functionCallFollowUpEvents,
   functionCallOutputEvents,
+  ISSUE_TRACKER_DISCONNECTED_TEXT,
   issueContextEvents,
   issueContextText,
   issueToolAction,
@@ -54,6 +60,56 @@ const CONNECT_TIMEOUT_MS = 15_000;
  * normal path: a spoken reply ends when it goes quiet.
  */
 const REALTIME_SETTLE_TIMEOUT_MS = 20_000;
+
+/**
+ * How long the developer's call stays open with nothing being said on it.
+ *
+ * A call costs something to hold whether or not it is used: the capture device
+ * stays open and the macOS microphone indicator stays lit, which on a sidecar
+ * that sits on a desk all day is the whole difference between a companion and
+ * something listening. The service ends the session at an hour regardless, so
+ * the choice was never between keeping this conversation and losing it — only
+ * between letting go of it deliberately and being cut off mid-sentence.
+ *
+ * Ten minutes is longer than any pause inside a conversation and shorter than
+ * the walk to get a coffee. Coming back costs one handshake.
+ */
+export const VOICE_IDLE_TIMEOUT_MS = 10 * 60_000;
+
+/**
+ * The order context is flushed in, so a turn's items land the same way every
+ * time: what Luke can see, then where he can create, then what he knows about
+ * himself, then what the tracker lists.
+ */
+const CONTEXT_FLUSH_ORDER: readonly ContextItemKind[] = [
+  CONTEXT_ITEM_KIND.SESSIONS,
+  CONTEXT_ITEM_KIND.WORKSPACE_PROJECTS,
+  CONTEXT_ITEM_KIND.APP_GUIDE,
+  CONTEXT_ITEM_KIND.ISSUES,
+];
+
+/**
+ * How many unanswered deletes are worth remembering. One flush issues at most
+ * one per kind, and each is answered within the round trip, so this is already
+ * two turns' worth of room for something that ordinarily clears immediately.
+ */
+const MAXIMUM_PENDING_SUPERSEDES = CONTEXT_FLUSH_ORDER.length * 2;
+
+/**
+ * One kind of context as it is waiting to be said: the words, for telling an
+ * unchanged answer from a fresh one, and how to build the item once it has a
+ * name to occupy.
+ */
+interface PendingContext {
+  text: string;
+  build: (itemId: string) => readonly Record<string, unknown>[];
+}
+
+/** A context item this call put in the conversation, and what it says. */
+interface LiveContext {
+  itemId: string;
+  text: string;
+}
 
 /**
  * The backstop for a reply whose ending never arrives.
@@ -122,6 +178,14 @@ export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbac
   requestMicrophoneStream?: () => Promise<MediaStream>;
   exchangeDescription?: (url: string, init: RequestInit) => Promise<Response>;
   connectTimeoutMs?: number;
+  /**
+   * How long a call may sit idle before it is put away. Injectable so the
+   * retirement can be exercised without waiting ten real minutes.
+   */
+  idleTimeoutMs?: number;
+  /** The timer the idle retirement runs on, injectable for the same reason. */
+  schedule?: (callback: () => void, delayMs: number) => unknown;
+  cancel?: (timer: unknown) => void;
   /** Injectable so a test can hold the clock a truncate measures against. */
   now?: () => number;
 }
@@ -197,11 +261,34 @@ export class RealtimeVoiceSession {
    */
   #issues: readonly TrackedIssue[] | undefined;
   /**
-   * The last rendered context sent on this call, keyed by label. Identical
-   * text is not resent; teardown clears the map so the next call starts
-   * current rather than believing the last call already told it.
+   * The context each kind would send if a turn opened now, and the item each
+   * kind actually occupies in the conversation.
+   *
+   * Nothing is sent when it changes. A roster that churns every five seconds
+   * while the developer says nothing would otherwise write a fresh copy of
+   * itself into the conversation every five seconds, and the model's window is
+   * evicted oldest-first — so the developer's own earlier turns are what a pile
+   * of superseded rosters costs. Instead the newest answer waits here and goes
+   * in at the moment a turn opens, which is both the only moment it is read and
+   * the moment it is most nearly true.
+   *
+   * Teardown clears both, so the next call starts current rather than believing
+   * the last call already told it.
    */
-  #contextCache = new Map<string, string>();
+  #contextPending = new Map<ContextItemKind, PendingContext>();
+  #contextLive = new Map<ContextItemKind, LiveContext>();
+  /**
+   * Rises for every context item named, so a replacement never claims the name
+   * of something a failed delete left behind.
+   */
+  #contextSequence = 0;
+  /**
+   * The deletes issued and not yet answered, by the name stamped on each. A
+   * delete is answered with an error when the item is already gone — evicted at
+   * the window's edge, most likely — and that error is this call's own business
+   * rather than a fault to report to the developer.
+   */
+  #pendingSupersedes = new Map<string, string>();
   /**
    * Luke's own audio track. Cancelling stops the model producing more, but what
    * it already produced is on its way down the connection and keeps playing —
@@ -305,6 +392,18 @@ export class RealtimeVoiceSession {
    * speaking is held here and sent ahead of whatever the call does next.
    */
   #pendingSpeed: number | undefined;
+  /**
+   * The timer that puts an idle call away, armed whenever the call settles and
+   * cancelled the moment anything is being said on it.
+   */
+  #idleTimer: unknown;
+  /**
+   * Whether the developer has taken a turn on this call. It is what makes a
+   * dropped connection worth mentioning: a call that carried a conversation
+   * takes the conversation with it, and Luke would otherwise answer the next
+   * question having quietly forgotten the last one.
+   */
+  #conversationBegan = false;
 
   constructor(options: RealtimeVoiceSessionOptions) {
     this.#options = options;
@@ -448,10 +547,24 @@ export class RealtimeVoiceSession {
       channel.onmessage = (event) => this.#handleServerEvent(event.data);
       channel.onclose = () => {
         if (this.#closed) return;
+        // What the call was holding has to be read before the teardown empties
+        // it. A call that carried a conversation takes the conversation with
+        // it, and the service ends every session at an hour whether or not
+        // anyone is finished talking — so this is the ordinary end of a long
+        // one, not an exotic failure.
+        const lost = this.#conversationBegan;
         // A channel that closes on its own still leaves the capture running,
         // so this has to release the device as thoroughly as an explicit stop.
         this.#teardown();
         this.#setStatus(REALTIME_STATUS.IDLE);
+        // Silence here is what made Luke seem to have forgotten on purpose:
+        // the next question was answered by someone who had never heard the
+        // last one, and nothing said so.
+        if (lost) {
+          this.#options.onError(
+            "The voice call ended, so Luke has lost the thread of this conversation. Press the talk key to start a new one.",
+          );
+        }
       };
 
       // One deadline covers the SDP exchange and the channel opening together.
@@ -815,7 +928,14 @@ export class RealtimeVoiceSession {
     this.#guide = EMPTY_APP_GUIDE;
     this.#workspaceProjects = [];
     this.#issues = undefined;
-    this.#contextCache.clear();
+    // What was said on the call goes with the call. The pending answers go too:
+    // they were built from stores this teardown is emptying, and the next call
+    // is filled from the app afresh before it takes a turn.
+    this.#contextPending.clear();
+    this.#contextLive.clear();
+    this.#pendingSupersedes.clear();
+    this.#conversationBegan = false;
+    this.#clearIdleTimer();
     this.#generationDone = false;
     this.#remoteQuiet = false;
     this.#heardLuke = false;
@@ -840,6 +960,15 @@ export class RealtimeVoiceSession {
     // cancel for the reply being talked over was sent before this — so the
     // reply about to be asked for is already spoken at the new pace.
     this.#flushPendingSpeed();
+    // The turn the developer just opened is the one that reads the context, so
+    // it is the moment the context goes in — ahead of the events asking for the
+    // reply, on a channel that keeps them in that order. The turns Luke opens
+    // himself get none: a readout has a sentence to say and nothing to look up,
+    // and a tool follow-up is answering from what this same flush already sent.
+    if (toolsArmed) {
+      this.#conversationBegan = true;
+      this.#flushContext();
+    }
     // The track is deliberately left as it is. A reply that was cut off left it
     // disabled, and re-opening it here would let the tail of that reply — still
     // arriving, because the server sent it before it was told to stop — be
@@ -1025,10 +1154,9 @@ export class RealtimeVoiceSession {
    */
   updateSessions(sessions: readonly NormalizedSession[]): void {
     this.#sessions = sessions;
-    this.#sendContext("sessions", () => ({
-      text: sessionContextText(sessions),
-      events: sessionContextEvents(sessions),
-    }));
+    this.#rememberContext(CONTEXT_ITEM_KIND.SESSIONS, sessionContextText(sessions), (itemId) =>
+      sessionContextEvents(sessions, itemId),
+    );
   }
 
   /**
@@ -1046,10 +1174,12 @@ export class RealtimeVoiceSession {
     defaultProjectIds?: Readonly<Partial<Record<string, string>>>,
   ): void {
     this.#workspaceProjects = projects;
-    this.#sendContext("workspace-projects", () => ({
-      text: workspaceProjectContextText(projects, defaultProviderId, defaultProjectIds),
-      events: workspaceProjectContextEvents(projects, defaultProviderId, defaultProjectIds),
-    }));
+    this.#rememberContext(
+      CONTEXT_ITEM_KIND.WORKSPACE_PROJECTS,
+      workspaceProjectContextText(projects, defaultProviderId, defaultProjectIds),
+      (itemId) =>
+        workspaceProjectContextEvents(projects, itemId, defaultProviderId, defaultProjectIds),
+    );
   }
 
   /**
@@ -1061,10 +1191,9 @@ export class RealtimeVoiceSession {
    */
   updateGuide(guide: AppGuideSnapshot): void {
     this.#guide = guide;
-    this.#sendContext("guide", () => ({
-      text: appGuideContextText(guide),
-      events: appGuideContextEvents(guide),
-    }));
+    this.#rememberContext(CONTEXT_ITEM_KIND.APP_GUIDE, appGuideContextText(guide), (itemId) =>
+      appGuideContextEvents(guide, itemId),
+    );
   }
 
   /**
@@ -1075,37 +1204,120 @@ export class RealtimeVoiceSession {
    */
   updateIssues(issues: readonly TrackedIssue[] | undefined): void {
     this.#issues = issues;
-    if (!issues) {
-      // A conversation that was never told about a board has nothing to
-      // withdraw; one that was must be told the board is gone, or Luke keeps
-      // answering from a tracker nobody is observing.
-      if (!this.#carriesContext()) return;
-      if (!this.#contextCache.has("issues")) return;
-      this.#contextCache.delete("issues");
-      this.#send(issueTrackerDisconnectedEvents());
+    if (issues) {
+      this.#rememberContext(CONTEXT_ITEM_KIND.ISSUES, issueContextText(issues), (itemId) =>
+        issueContextEvents(issues, itemId),
+      );
       return;
     }
-    this.#sendContext("issues", () => ({
-      text: issueContextText(issues),
-      events: issueContextEvents(issues),
-    }));
+    // A conversation that was never going to be told about a board has nothing
+    // to withdraw, and saying a tracker is "no longer" connected when none ever
+    // was is a different and wrong sentence. One that had a board — or was
+    // about to be given one — is told the board is gone, or Luke keeps
+    // answering from a tracker nobody is observing.
+    if (!this.#contextPending.has(CONTEXT_ITEM_KIND.ISSUES)) return;
+    if (!this.#contextLive.has(CONTEXT_ITEM_KIND.ISSUES)) {
+      this.#contextPending.delete(CONTEXT_ITEM_KIND.ISSUES);
+      return;
+    }
+    this.#rememberContext(CONTEXT_ITEM_KIND.ISSUES, ISSUE_TRACKER_DISCONNECTED_TEXT, (itemId) =>
+      issueTrackerDisconnectedEvents(itemId),
+    );
   }
 
   /**
-   * Diffs one labelled context against what this call was last told and sends
-   * it only when the text changed. The stores above still update either way,
-   * so the developer's next call starts current even when this one is
-   * speak-only and carries nothing.
+   * Holds one kind of context until a turn asks for it. Nothing is sent here:
+   * what a turn needs is the newest answer, not every answer on the way to it.
    */
-  #sendContext(
-    label: string,
-    render: () => { text: string; events: readonly Record<string, unknown>[] },
+  #rememberContext(
+    kind: ContextItemKind,
+    text: string,
+    build: (itemId: string) => readonly Record<string, unknown>[],
   ): void {
+    this.#contextPending.set(kind, { text, build });
+  }
+
+  /**
+   * Puts the context a turn is about to be answered from into the conversation,
+   * each kind replacing whatever it said before.
+   *
+   * Two things happen per changed kind, in this order: the item holding the old
+   * answer is deleted, and the new one is created under a fresh name. Ordered
+   * that way because the channel is ordered — the conversation is never briefly
+   * holding two rosters, and never briefly holding none.
+   *
+   * An answer that has not changed since it was last said is left alone
+   * entirely, which is what keeps a quiet stretch of the conversation cached.
+   */
+  #flushContext(): void {
     if (!this.#carriesContext()) return;
-    const { text, events } = render();
-    if (text === this.#contextCache.get(label)) return;
-    this.#contextCache.set(label, text);
-    this.#send(events);
+    for (const kind of CONTEXT_FLUSH_ORDER) {
+      const pending = this.#contextPending.get(kind);
+      if (!pending) continue;
+      const live = this.#contextLive.get(kind);
+      if (live?.text === pending.text) continue;
+      this.#contextSequence += 1;
+      const itemId = contextItemId(kind, this.#contextSequence);
+      if (live) this.#supersede(live.itemId);
+      this.#send(pending.build(itemId));
+      this.#contextLive.set(kind, { itemId, text: pending.text });
+    }
+  }
+
+  /** Removes the item a fresher answer is replacing, and remembers asking. */
+  #supersede(itemId: string): void {
+    const eventId = contextSupersedeEventId(this.#contextSequence);
+    // A delete is answered within the round trip or not at all, so anything
+    // still waiting after this many is an answer that was never coming — and a
+    // record kept for the length of a call is one that grows for the length of
+    // a call. The oldest goes; insertion order is what makes it the oldest.
+    while (this.#pendingSupersedes.size >= MAXIMUM_PENDING_SUPERSEDES) {
+      const [oldest] = this.#pendingSupersedes.keys();
+      if (oldest === undefined) break;
+      this.#pendingSupersedes.delete(oldest);
+    }
+    this.#pendingSupersedes.set(eventId, itemId);
+    this.#send(contextSupersedeEvents({ itemId, eventId }));
+  }
+
+  /** Forgets a delete that has been answered, however it was answered. */
+  #settleSupersede(itemId: string): void {
+    for (const [eventId, pending] of this.#pendingSupersedes) {
+      if (pending === itemId) this.#pendingSupersedes.delete(eventId);
+    }
+  }
+
+  /**
+   * Whether an error is one of this call's own deletes coming back refused.
+   *
+   * The event is named when it is sent, so the answer naming it back is the
+   * reliable half of this. The item id is checked too because the field
+   * carrying the name back is not one the API reference states plainly, and a
+   * silent mismatch here would put an error on screen for something the
+   * developer neither did nor can do anything about.
+   */
+  #supersedeError(event: { message: string; eventId?: string }): boolean {
+    if (this.#pendingSupersedes.size === 0) return false;
+    if (event.eventId !== undefined && this.#pendingSupersedes.has(event.eventId)) {
+      this.#pendingSupersedes.delete(event.eventId);
+      return true;
+    }
+    for (const [eventId, itemId] of this.#pendingSupersedes) {
+      if (event.message.includes(itemId)) {
+        this.#pendingSupersedes.delete(eventId);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * The context items this call currently holds, by kind — what the
+   * conversation would be answered from if a turn opened now. Exposed for the
+   * tests that hold this class to its one-item-per-kind promise.
+   */
+  get liveContextItemIds(): ReadonlyMap<ContextItemKind, string> {
+    return new Map([...this.#contextLive].map(([kind, live]) => [kind, live.itemId] as const));
   }
 
   /**
@@ -1206,7 +1418,16 @@ export class RealtimeVoiceSession {
         }, REALTIME_SETTLE_TIMEOUT_MS);
         return;
       }
+      case REALTIME_SERVER_EVENT.CONVERSATION_ITEM_DELETED:
+        if (event.itemId) this.#settleSupersede(event.itemId);
+        return;
       case REALTIME_SERVER_EVENT.ERROR:
+        // A delete this call issued can be answered with an error rather than a
+        // deletion, because the item was already gone — evicted at the window's
+        // edge is the way that happens. It is nothing the developer did and
+        // nothing they can act on, and reporting it would both put a fault on
+        // screen and, below, end a reply that is still being spoken.
+        if (this.#supersedeError(event)) return;
         this.#options.onError(event.message);
         // An error can arrive *instead of* `response.done` — an empty push-to-talk
         // commit is the common case — which would otherwise leave the session
@@ -1357,6 +1578,37 @@ export class RealtimeVoiceSession {
   #setStatus(status: RealtimeStatus): void {
     if (this.#status === status) return;
     this.#status = status;
+    this.#restIdleTimer(status);
     this.#options.onStatus(status);
+  }
+
+  /**
+   * Starts the clock on an idle call, or stops it because the call is in use.
+   *
+   * Only the developer's own call is retired this way. The call Luke opens to
+   * read a notice out already puts itself away once the queue is quiet, and it
+   * holds no capture device to be worth hurrying.
+   *
+   * A settled call restarts the clock however it settled, so a notice read out
+   * counts as the call being used. It reached the developer, and a call that
+   * just spoke to someone is not one nobody is having.
+   */
+  #restIdleTimer(status: RealtimeStatus): void {
+    this.#clearIdleTimer();
+    if (status !== REALTIME_STATUS.READY || !this.#microphone) return;
+    const timeoutMs = positiveInteger(this.#options.idleTimeoutMs, VOICE_IDLE_TIMEOUT_MS);
+    this.#idleTimer = (this.#options.schedule ?? setTimeout)(() => {
+      this.#idleTimer = undefined;
+      // Re-checked at the moment of closing, because ten minutes is long: a
+      // turn may have opened, or the call may already be gone.
+      if (this.#status !== REALTIME_STATUS.READY || !this.#microphone) return;
+      void this.close();
+    }, timeoutMs);
+  }
+
+  #clearIdleTimer(): void {
+    if (this.#idleTimer === undefined) return;
+    (this.#options.cancel ?? clearTimeout)(this.#idleTimer as Parameters<typeof clearTimeout>[0]);
+    this.#idleTimer = undefined;
   }
 }

@@ -4,9 +4,15 @@ import {
   ATTENTION_DISPOSITION,
   ATTENTION_SPEECH_SOURCE,
   ATTENTION_TRIGGER,
+  appGuideContextEvents,
   attentionSpeechFromReviews,
+  CONTEXT_ITEM_KIND,
   cancelResponseEvents,
   clearInputAudioEvents,
+  contextItemId,
+  contextSupersedeEventId,
+  contextSupersedeEvents,
+  EMPTY_APP_GUIDE,
   functionCallFollowUpEvents,
   functionCallOutputEvents,
   ISSUE_TRACKER_ID,
@@ -51,7 +57,7 @@ import {
   maximumVoiceContextSessions,
   maximumVoiceContextWorkspaceProjects,
 } from "../src/realtime-context";
-import { realtimeSessionConfig } from "../src/realtime-credentials";
+import { REALTIME_TRUNCATION, realtimeSessionConfig } from "../src/realtime-credentials";
 import {
   maximumTypedAskLength,
   REALTIME_SESSION_TYPE,
@@ -101,6 +107,89 @@ test("the minted session closes the microphone until push-to-talk opens it", () 
   // An always-open microphone is the one thing a desk-side sidecar must not have.
   assert.equal(config.audio.input.turn_detection, null);
   assert.equal(realtimeClientSecretRequest().session.type, REALTIME_SESSION_TYPE);
+});
+
+test("the minted session chooses how it gives way at the edge of the window", () => {
+  const config = realtimeSessionConfig();
+
+  // Eviction happens either way; left unset the service trims the least it can,
+  // which means trimming again on every turn once the ceiling is reached and
+  // moving the cached prefix every time. One larger trim is one cache miss.
+  assert.equal(config.truncation.type, REALTIME_TRUNCATION.TYPE);
+  assert.equal(config.truncation.retention_ratio, REALTIME_TRUNCATION.RETENTION_RATIO);
+  assert.ok(config.truncation.retention_ratio > 0 && config.truncation.retention_ratio <= 1);
+  assert.equal(realtimeClientSecretRequest().session.truncation.type, REALTIME_TRUNCATION.TYPE);
+});
+
+test("a context item is named so the next one can take its place", () => {
+  const first = contextItemId(CONTEXT_ITEM_KIND.SESSIONS, 1);
+  const second = contextItemId(CONTEXT_ITEM_KIND.SESSIONS, 2);
+
+  // The sequence rises rather than the name being reused: a delete that failed
+  // would otherwise leave the old item sitting under the new one's name.
+  assert.notEqual(first, second);
+  assert.notEqual(first, contextItemId(CONTEXT_ITEM_KIND.ISSUES, 1));
+
+  const [supersede] = contextSupersedeEvents({ itemId: first, eventId: "luke_supersede_2" });
+  assert.equal(supersede?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_DELETE);
+  assert.equal(supersede?.item_id, first);
+  // Named, so the error a refused delete answers with is known as ours rather
+  // than shown to the developer as a fault in their call.
+  assert.equal(supersede?.event_id, "luke_supersede_2");
+  assert.notEqual(contextSupersedeEventId(1), contextSupersedeEventId(2));
+
+  // Nothing to delete builds nothing, rather than an event the API would refuse.
+  assert.deepEqual(contextSupersedeEvents({ itemId: "", eventId: "luke_supersede_3" }), []);
+  assert.deepEqual(contextSupersedeEvents({ itemId: first, eventId: " " }), []);
+});
+
+test("every kind of context travels as one nameable item and never as a prompt", () => {
+  const built = [
+    sessionContextEvents([], contextItemId(CONTEXT_ITEM_KIND.SESSIONS, 1)),
+    workspaceProjectContextEvents([], contextItemId(CONTEXT_ITEM_KIND.WORKSPACE_PROJECTS, 2)),
+    appGuideContextEvents(EMPTY_APP_GUIDE, contextItemId(CONTEXT_ITEM_KIND.APP_GUIDE, 3)),
+    issueContextEvents([], contextItemId(CONTEXT_ITEM_KIND.ISSUES, 4)),
+    issueTrackerDisconnectedEvents(contextItemId(CONTEXT_ITEM_KIND.ISSUES, 5)),
+  ];
+
+  for (const events of built) {
+    assert.equal(events.length, 1);
+    const [event] = events;
+    assert.equal(event?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE);
+    const item = event?.item as { id?: string; role?: string };
+    // Named on creation, which is what makes a replacement possible without
+    // waiting to be told the server's own name for it.
+    assert.match(item?.id ?? "", /^luke_ctx_/);
+    assert.equal(item?.role, "user");
+    assert.equal(
+      events.some((candidate) => candidate.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE),
+      false,
+    );
+  }
+});
+
+test("a refused delete is read back with the event it names", () => {
+  // The caller tells its own delete's refusal from a fault meant for the
+  // developer by this name, so the wire has to carry it through.
+  const parsed = parseRealtimeServerEvent({
+    type: REALTIME_SERVER_EVENT.ERROR,
+    error: {
+      type: "invalid_request_error",
+      message: "Item with id 'luke_ctx_sessions_1' not found.",
+      event_id: "luke_supersede_2",
+    },
+  });
+
+  assert.equal(parsed?.type, REALTIME_SERVER_EVENT.ERROR);
+  assert.equal(parsed?.eventId, "luke_supersede_2");
+  assert.match(parsed?.message ?? "", /not found/);
+
+  const deleted = parseRealtimeServerEvent({
+    type: REALTIME_SERVER_EVENT.CONVERSATION_ITEM_DELETED,
+    item_id: "luke_ctx_sessions_1",
+  });
+  assert.equal(deleted?.type, REALTIME_SERVER_EVENT.CONVERSATION_ITEM_DELETED);
+  assert.equal(deleted?.itemId, "luke_ctx_sessions_1");
 });
 
 test("the standing instructions count the tools from the table", () => {
@@ -479,7 +568,7 @@ test("an empty roster says so rather than implying Luke sees nothing at all", ()
 });
 
 test("session context never asks Luke to start talking", () => {
-  const events = sessionContextEvents([]);
+  const events = sessionContextEvents([], "luke_ctx_sessions_1");
 
   assert.equal(events.length, 1);
   assert.equal(events[0]?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE);
@@ -797,13 +886,13 @@ test("the projects context lists each project with the identity a call names", (
   // imagine somewhere a workspace could go.
   assert.match(workspaceProjectContextText([]), /No provider currently offers/);
 
-  const [event] = workspaceProjectContextEvents([OFFERED_PROJECT]);
+  const [event] = workspaceProjectContextEvents([OFFERED_PROJECT], "luke_ctx_workspace-projects_1");
   assert.equal(event?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE);
   const item = (event as { item?: { content?: { text?: string }[] } }).item;
   assert.match(item?.content?.[0]?.text ?? "", /^\[workspace projects, sent automatically\]/);
   // Context, never a prompt: nothing here may open Luke's mouth.
   assert.equal(
-    workspaceProjectContextEvents([OFFERED_PROJECT]).some(
+    workspaceProjectContextEvents([OFFERED_PROJECT], "luke_ctx_workspace-projects_1").some(
       (candidate) => candidate.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE,
     ),
     false,
@@ -846,7 +935,11 @@ test("the projects context says where a nameless creation ask goes", () => {
   assert.doesNotMatch(away, /default provider/);
 
   // The default rides the same context event the list does.
-  const [event] = workspaceProjectContextEvents([OFFERED_PROJECT], "conductor");
+  const [event] = workspaceProjectContextEvents(
+    [OFFERED_PROJECT],
+    "luke_ctx_workspace-projects_2",
+    "conductor",
+  );
   const item = (event as { item?: { content?: { text?: string }[] } }).item;
   assert.match(item?.content?.[0]?.text ?? "", /default provider for new workspaces is Conductor/);
 });
@@ -890,9 +983,12 @@ test("the projects context says which project a nameless ask lands in", () => {
   assert.doesNotMatch(away, /No default Conductor project/);
 
   // The default rides the same context event the list does.
-  const [event] = workspaceProjectContextEvents([OFFERED_PROJECT, secondProject], undefined, {
-    conductor: "proj-2",
-  });
+  const [event] = workspaceProjectContextEvents(
+    [OFFERED_PROJECT, secondProject],
+    "luke_ctx_workspace-projects_3",
+    undefined,
+    { conductor: "proj-2" },
+  );
   const item = (event as { item?: { content?: { text?: string }[] } }).item;
   assert.match(item?.content?.[0]?.text ?? "", /default Conductor project is acme\/other/);
 });
@@ -1300,7 +1396,7 @@ test("issue context carries the roster and what each issue will take", () => {
 });
 
 test("issue context never asks Luke to start talking", () => {
-  const events = issueContextEvents([actionableIssue()]);
+  const events = issueContextEvents([actionableIssue()], "luke_ctx_issues_1");
 
   assert.equal(events.length, 1);
   assert.equal(events[0]?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE);
@@ -1415,7 +1511,7 @@ test("the session and issue tools answer to their own validators", () => {
 });
 
 test("a disconnected tracker withdraws the roster without starting a reply", () => {
-  const events = issueTrackerDisconnectedEvents();
+  const events = issueTrackerDisconnectedEvents("luke_ctx_issues_2");
 
   assert.equal(events.length, 1);
   assert.equal(events[0]?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE);
