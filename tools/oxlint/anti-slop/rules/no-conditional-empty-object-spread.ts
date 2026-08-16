@@ -10,7 +10,8 @@ function unwrapParentheses(node: ESTree.Expression): ESTree.Expression {
 }
 
 function isEmptyObjectExpression(node: ESTree.Expression): boolean {
-  return node.type === "ObjectExpression" && node.properties.length === 0;
+  const expression = unwrapParentheses(node);
+  return expression.type === "ObjectExpression" && expression.properties.length === 0;
 }
 
 function isConditionalEmptyObjectSpread(node: ESTree.Expression): boolean {
