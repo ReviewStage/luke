@@ -483,6 +483,24 @@ test("the reply ends when the server says the audio ran out", async () => {
   assert.equal(context.session.status, REALTIME_STATUS.READY);
 });
 
+test("a reply the server says made no sound ends at response.done", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.session.beginTurn();
+  context.session.endTurn(true);
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+
+  // A success is said with silence, so the follow-up after a tool call is
+  // often exactly this: a finished reply with no audio in its output. The
+  // meter will never hear him and never call him quiet, so the turn must end
+  // here rather than waiting out the settle backstop with the face up.
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: { output: [{ type: "message", id: "item-1", content: [] }] },
+  });
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+});
+
 test("two sentences are one reply, whatever the pause between them", async () => {
   const context = harness();
   await context.session.connect();
