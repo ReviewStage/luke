@@ -183,15 +183,10 @@ export const CREDENTIAL_PROVIDERS: Readonly<Record<CredentialProviderId, Credent
   [CREDENTIAL_PROVIDER_ID.OPENAI]: {
     id: CREDENTIAL_PROVIDER_ID.OPENAI,
     displayName: "OpenAI",
-    // Both things the key buys, said on the row that holds it: talking is the
-    // one feature that sends your voice off the Mac, and the review is the one
-    // that sends what a provider wrote about a session. Neither should be
-    // learned from a settings file or a README.
-    // No apostrophe on purpose: the panel writes one as `&rsquo;` in JSX, and
-    // this string is read as text, so a straight quote here would be the one
-    // typewriter apostrophe on the surface.
-    description:
-      "The voice Luke speaks with, and the review that decides which sessions need you. Nothing is spoken or sent without this key.",
+    // The panel writes apostrophes as `&rsquo;` in JSX and this string is read
+    // as text, so the apostrophe here is the typographic one rather than a
+    // straight quote.
+    description: "The API key for Luke’s voice capabilities.",
     // Realtime is what a spoken turn runs on, and an account that cannot reach
     // it fails at the first word rather than at the paste — so the line says so
     // before the key is entered rather than after.

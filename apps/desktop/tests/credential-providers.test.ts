@@ -151,9 +151,8 @@ test("holds the key Luke speaks through, apart from the agents he observes", () 
   assert.equal(VOICE_CREDENTIAL_PROVIDER, openai);
   assert.equal(INTEGRATION_PROVIDER_LIST.includes(openai), false);
   assert.equal(CLOUD_AGENT_PROVIDER_LIST.includes(openai), false);
-  // Both things the key buys are said on the row that holds it, because a
-  // credential that quietly enables an outbound request should not have to be
-  // learned from a README.
+  // The row that holds the key says what it is for, because a credential that
+  // quietly enables an outbound request should not have to be learned from a
+  // README.
   assert.match(openai.description ?? "", /voice/i);
-  assert.match(openai.description ?? "", /review/i);
 });
