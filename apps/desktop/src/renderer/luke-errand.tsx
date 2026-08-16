@@ -547,15 +547,18 @@ export interface LukeErrandProps {
   /**
    * The tap has landed, which is the moment the control it flew to should be
    * seen to move. Called once per errand and always — at once when there is
-   * no flight to make — so whatever is waiting on it is never left held.
+   * no flight to make — so whatever is waiting on it is never left held. The
+   * errand rides along so the caller can tell a replaced flight's beat from
+   * the current one's: what the app holds belongs to the newest errand, and
+   * an overtaken flight must not release it early.
    */
-  onLanded?: () => void;
+  onLanded?: (errand: Errand) => void;
   /**
    * The flight is over, or was abandoned. Called once per errand and always,
-   * on the same terms, so a panel that was stood up for an errand knows when
-   * it may stand back down.
+   * on the same terms and carrying the same errand, so a panel that was stood
+   * up for an errand knows when it may stand back down.
    */
-  onReturned?: () => void;
+  onReturned?: (errand: Errand) => void;
 }
 
 /**
@@ -578,6 +581,10 @@ export function LukeErrand({ errand, onLanded, onReturned }: LukeErrandProps): R
   const ring = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
+    if (errand === undefined) return;
+    // Held by name for the beats below: a closure over the prop would not
+    // survive the narrowing, and each beat reports the errand it belongs to.
+    const flown = errand;
     // Each beat is released once and only once, however this effect leaves —
     // and releasing one that never came due is better than leaving the app
     // holding a switch that will never be allowed to move.
@@ -586,18 +593,17 @@ export function LukeErrand({ errand, onLanded, onReturned }: LukeErrandProps): R
     const land = () => {
       if (landed) return;
       landed = true;
-      onLanded?.();
+      onLanded?.(flown);
     };
     const returnHome = () => {
       land();
       if (returned) return;
       returned = true;
-      onReturned?.();
+      onReturned?.(flown);
     };
 
     const markElement = mark.current;
     const ringElement = ring.current;
-    if (errand === undefined) return;
     if (markElement === null || ringElement === null) return returnHome();
     // The stage is the mark's own containing box, so it is found rather than
     // handed down: the two are the same element by construction.

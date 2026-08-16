@@ -859,6 +859,30 @@ export function App(): React.JSX.Element {
   }, [cancelHover, heldAgainstPointer, pointerIsInside, settle]);
 
   /**
+   * The same two releases, keyed to the flight reporting them. A flight
+   * overtaken by the next carry in the same turn still fires its beats — a
+   * hold nobody releases is worse — but what the app holds belongs to the
+   * newest errand by then: the settings snapshot was overwritten by the later
+   * change, and the panel is the later flight's to put away. So a stale
+   * flight's beats release nothing, and the newest flight's release
+   * everything, which is also why nothing is ever left held.
+   */
+  const releaseIfCurrentErrand = useCallback(
+    (finished: Errand) => {
+      if (finished.run !== errands.current) return;
+      releaseErrandChange();
+    },
+    [releaseErrandChange],
+  );
+  const standDownIfCurrentErrand = useCallback(
+    (finished: Errand) => {
+      if (finished.run !== errands.current) return;
+      standDownAfterErrand();
+    },
+    [standDownAfterErrand],
+  );
+
+  /**
    * The spoken asks about Luke himself. A settings change goes through the
    * same bridge calls the settings rows use, and the snapshot that comes back
    * redraws the panel's switches; showing the panel is the capsule's press
@@ -934,8 +958,11 @@ export function App(): React.JSX.Element {
             if (page !== undefined) setSettingsView(page);
             await changeMode(true);
             if (runErrand(errandTargets(action), wait)) {
-              // Only a panel this errand stood up is the errand's to put away.
-              errandOpenedPanel.current = opening;
+              // Only a panel this errand stood up is the errand's to put away
+              // — and a claim once made survives the rest of the turn, because
+              // the second carry of a paired ask finds the panel open exactly
+              // because the first stood it up.
+              errandOpenedPanel.current ||= opening;
             } else {
               releaseErrandChange();
             }
@@ -1624,8 +1651,8 @@ export function App(): React.JSX.Element {
           the errand stand back down. */}
       <LukeErrand
         {...(errand ? { errand } : {})}
-        onLanded={releaseErrandChange}
-        onReturned={standDownAfterErrand}
+        onLanded={releaseIfCurrentErrand}
+        onReturned={standDownIfCurrentErrand}
       />
 
       {/* Luke's words while he says them: one element in every state, under
