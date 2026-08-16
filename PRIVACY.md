@@ -178,16 +178,24 @@ allows — so a question about your board can be answered and an ask validated
 against what Linear actually listed. No issue description or comment thread is
 ever included, because Luke never reads one.
 
-With "Announce when a session needs you" on — it is on by default, and does
-nothing without an OpenAI key — Luke also opens a call of his own to speak
-a session announcement when no conversation is up. That call is narrower in
+While voice is available — announcements do nothing without an OpenAI key —
+Luke also opens a call of his own to speak a session announcement when no
+conversation is up. That call is narrower in
 every direction: it receives audio and sends none (no microphone track exists
 on it, so nothing can be captured), it carries no tools, and the only thing
-sent up it is the announcement sentence itself — the session's provider name,
-title, repository or branch, and the provider's one-line error reason when
-there is one. The session roster, workspace projects, app guide, and issue
-roster named above travel only on conversations you open yourself. The call
-closes itself shortly after the announcement is spoken.
+sent up it is the one update's bounded fields — the session's provider name,
+title, the name of the workspace it is one chat of, repository or branch,
+what changed, the provider's one-line error reason when there is one, whether
+the session takes a reply, and — for a session that started waiting or
+finished — a bounded excerpt of the same session recap the attention review
+and open conversations above already carry. The voice words those fields into
+the announcement you hear, so it can say what the session is waiting on
+rather than only that it waits; whether and when to announce is decided on
+your Mac by the status change alone. As above, a recap can reflect what a
+session was asked and replied, but the conversation behind it never travels.
+The session roster, workspace projects, app guide, and issue roster named
+above travel only on conversations you open yourself. The call closes itself
+shortly after the announcement is spoken.
 
 Luke does not record the conversation, write audio to disk, or keep a
 transcript. With captions enabled in Settings — they are off by default — the

@@ -22,13 +22,28 @@ function session(
   provider: SessionProvider,
   providerSessionId: string,
   status: SessionStatus,
-  overrides: { error?: string; repository?: string; branch?: string; observedAt?: number } = {},
+  overrides: {
+    error?: string;
+    repository?: string;
+    branch?: string;
+    observedAt?: number;
+    recap?: string;
+    workspace?: string;
+    canReceiveMessage?: boolean;
+  } = {},
 ): NormalizedSession {
   return normalizeSession(provider, {
     providerSessionId,
     title: `Session ${providerSessionId}`,
     status,
     observedAt: overrides.observedAt ?? 100,
+    ...(overrides.recap ? { recap: overrides.recap } : {}),
+    ...(overrides.workspace
+      ? { workspace: { providerWorkspaceId: "ws-1", name: overrides.workspace } }
+      : {}),
+    ...(overrides.canReceiveMessage !== undefined
+      ? { canReceiveMessage: overrides.canReceiveMessage }
+      : {}),
     detail: {
       ...(overrides.error ? { error: overrides.error } : {}),
       ...(overrides.repository ? { repository: overrides.repository } : {}),
@@ -54,6 +69,7 @@ test("first sight seeds silently, and only a change of status is news", () => {
     title: "Session a",
     status: SESSION_NOTICE_STATUS.COMPLETE,
     previousStatus: SESSION_STATUS.WAITING,
+    canReceiveMessage: false,
     observedAt: 100,
   });
 });
@@ -103,6 +119,28 @@ test("the provider's own context rides the notice", () => {
 
   assert.equal(notices[0]?.repository, "luke");
   assert.equal(notices[0]?.branch, "algiers");
+});
+
+test("the recap, workspace, and reply-ability ride a waiting notice", () => {
+  const tracker = new SessionNoticeTracker();
+  tracker.notices([session(conductor, "asks", SESSION_STATUS.WORKING)], 1_000);
+
+  // The agent's parting words at the edge are usually the question the
+  // session is now waiting on — the whole reason the notice is worth hearing.
+  const notices = tracker.notices(
+    [
+      session(conductor, "asks", SESSION_STATUS.WAITING, {
+        recap: "Should sessions expire after 24 hours?",
+        workspace: "Albany",
+        canReceiveMessage: true,
+      }),
+    ],
+    2_000,
+  );
+
+  assert.equal(notices[0]?.recap, "Should sessions expire after 24 hours?");
+  assert.equal(notices[0]?.workspace, "Albany");
+  assert.equal(notices[0]?.canReceiveMessage, true);
 });
 
 test("a flapping status is noticed once per repeat window, then again after it", () => {
