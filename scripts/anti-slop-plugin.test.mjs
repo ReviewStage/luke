@@ -105,6 +105,25 @@ test("a broad inline mapped type still discards known value evidence", async () 
   assert.match(result.output, /explicit open dictionary type on assertion/u);
 });
 
+test("a precise Record preserves known value evidence", async () => {
+  const result = await lintFixture(
+    "no-known-value-widening",
+    'type AnswerRecord = Record<"answer", number>;\nconst value = { answer: 42 };\nconst direct = value as Record<"answer", number>;\nconst aliased: AnswerRecord = value;\n',
+  );
+
+  assert.equal(result.exitCode, 0, result.output);
+});
+
+test("a broad Record still discards known value evidence", async () => {
+  const result = await lintFixture(
+    "no-known-value-widening",
+    "type OpenRecord = Record<string, number>;\nconst value = { answer: 42 };\nconst direct = value as Record<string, number>;\nconst aliased: OpenRecord = value;\n",
+  );
+
+  assert.equal(result.exitCode, 1, result.output);
+  assert.equal(result.output.match(/explicit open dictionary type/gu)?.length, 2, result.output);
+});
+
 test("an unknown union cannot hide behind a type alias", async () => {
   const result = await lintFixture("no-unknown-type-aliases", "type Hidden = unknown | string;\n");
 

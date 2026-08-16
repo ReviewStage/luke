@@ -363,7 +363,12 @@ export function classifyWideningTarget(
 		const wrapped = unwrapped.typeArguments?.params[0];
 		return wrapped === undefined ? null : classifyWideningTarget(wrapped, environment);
 	}
-	if (name === "Record" && isBuiltIn(name, environment)) return { kind: "open dictionary" };
+	if (name === "Record" && isBuiltIn(name, environment)) {
+		const key = unwrapped.typeArguments?.params[0];
+		return key === undefined || isBroadMappedKey(key, environment, new Map())
+			? { kind: "open dictionary" }
+			: null;
+	}
 	const alias = environment.aliases.get(name);
 	if (alias === undefined) return null;
 	if ((alias.typeParameters?.params.length ?? 0) > 0) {
@@ -452,7 +457,10 @@ function classifyAliasBroadTarget(
 			: classifyAliasBroadTarget(wrapped, environment, substitutions, resolvingAliases);
 	}
 	if (name === "Record" && isBuiltIn(name, environment)) {
-		return { kind: "open dictionary" };
+		const key = unwrapped.typeArguments?.params[0];
+		return key === undefined || isBroadMappedKey(key, environment, substitutions)
+			? { kind: "open dictionary" }
+			: null;
 	}
 	const alias = environment.aliases.get(name);
 	if (alias === undefined || resolvingAliases.has(name)) return null;
