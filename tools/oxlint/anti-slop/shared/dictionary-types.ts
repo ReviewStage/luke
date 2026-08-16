@@ -369,6 +369,14 @@ export function classifyWideningTarget(
 			? { kind: "open dictionary" }
 			: null;
 	}
+	const interfaces = environment.interfaces.get(name);
+	if (interfaces !== undefined) {
+		return interfaces.some((declaration) =>
+			declaration.body.body.some((member) => member.type === "TSIndexSignature"),
+		)
+			? { kind: "open dictionary" }
+			: null;
+	}
 	const alias = environment.aliases.get(name);
 	if (alias === undefined) return null;
 	if ((alias.typeParameters?.params.length ?? 0) > 0) {

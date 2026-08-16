@@ -130,3 +130,32 @@ test("an unknown union cannot hide behind a type alias", async () => {
   assert.equal(result.exitCode, 1, result.output);
   assert.match(result.output, /hides `unknown`/u);
 });
+
+test("unknown parameters cannot hide behind parentheses or unions", async () => {
+  const result = await lintFixture(
+    "no-unknown-parameters",
+    "function parenthesized(value: (unknown)) {}\nfunction union(value: unknown | string) {}\nfunction enrich(cause: unknown | string) {}\n",
+  );
+
+  assert.equal(result.exitCode, 1, result.output);
+  assert.equal(result.output.match(/leaves input unparsed/gu)?.length, 2, result.output);
+});
+
+test("a closed interface preserves known value evidence", async () => {
+  const result = await lintFixture(
+    "no-known-value-widening",
+    "interface Answer { answer: number }\nconst value = { answer: 42 };\nconst assigned: Answer = value;\nconst asserted = value as Answer;\n",
+  );
+
+  assert.equal(result.exitCode, 0, result.output);
+});
+
+test("an open interface discards known value evidence", async () => {
+  const result = await lintFixture(
+    "no-known-value-widening",
+    "interface Answers { [key: string]: number }\nconst value = { answer: 42 };\nconst assigned: Answers = value;\nconst asserted = value as Answers;\n",
+  );
+
+  assert.equal(result.exitCode, 1, result.output);
+  assert.equal(result.output.match(/explicit open dictionary type/gu)?.length, 2, result.output);
+});
