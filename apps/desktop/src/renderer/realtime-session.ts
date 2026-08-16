@@ -1188,6 +1188,17 @@ export class RealtimeVoiceSession {
           return;
         }
         if (!fresh) return;
+        // A reply the server says made no sound has nothing to play out — a
+        // success is said with silence, so the follow-up after a tool call is
+        // often exactly this. The meter will never hear him and never call
+        // him quiet, and waiting out the settle backstop would hold the meter
+        // and the face on a reply that was over the moment it was finished.
+        // Only a response that reported its output may end here: an unknown
+        // is not a silence, and keeps the ordinary endings below.
+        if (event.hasAudio === false) {
+          this.#finishResponse();
+          return;
+        }
         // Generation is done; the reply is not. The turn ends when Luke stops
         // being audible, which the caller reports from the audio itself rather
         // than from an event — the one that would say so is undocumented.

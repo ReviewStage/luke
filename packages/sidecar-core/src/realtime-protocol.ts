@@ -381,6 +381,13 @@ export type ParsedRealtimeServerEvent =
       type: typeof REALTIME_SERVER_EVENT.RESPONSE_DONE;
       responseId?: string;
       calls: readonly RealtimeFunctionCall[];
+      /**
+       * Whether the finished response made any sound, absent when the payload
+       * carried no output to read it from. A reply of pure silence — a
+       * success answered without a word — has nothing to play out, so its
+       * turn may end here instead of waiting on quiet that never comes.
+       */
+      hasAudio?: boolean;
     }
   | { type: typeof REALTIME_SERVER_EVENT.ERROR; message: string };
 
@@ -410,6 +417,22 @@ function functionCallsFromDone(event: Record<string, unknown>): readonly Realtim
     const callId = typeof item.call_id === "string" ? item.call_id : "";
     const argumentsJson = typeof item.arguments === "string" ? item.arguments : "";
     return name && callId ? [{ name, callId, argumentsJson }] : [];
+  });
+}
+
+/**
+ * Whether a `response.done` event's response produced any audio, read from
+ * its own output items. Unknown when there is no output array to read,
+ * and unknown must not pass for silent: only a response that says what it
+ * made may say it made no sound.
+ */
+function audioFromDone(event: Record<string, unknown>): boolean | undefined {
+  const response = recordField(event, "response");
+  const output = response && Array.isArray(response.output) ? response.output : undefined;
+  if (!output) return undefined;
+  return output.filter(isRecord).some((item) => {
+    const content = Array.isArray(item.content) ? item.content : [];
+    return content.filter(isRecord).some((part) => part.type === "output_audio");
   });
 }
 
@@ -474,10 +497,12 @@ export function parseRealtimeServerEvent(data: unknown): ParsedRealtimeServerEve
       return { type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED };
     case REALTIME_SERVER_EVENT.RESPONSE_DONE: {
       const responseId = optionalString(recordField(event, "response")?.id);
+      const hasAudio = audioFromDone(event);
       return {
         type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
         calls: functionCallsFromDone(event),
         ...(responseId ? { responseId } : {}),
+        ...(hasAudio === undefined ? {} : { hasAudio }),
       };
     }
     case REALTIME_SERVER_EVENT.ERROR: {

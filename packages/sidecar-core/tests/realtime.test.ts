@@ -598,7 +598,34 @@ test("tool calls are read whole from a finished response", () => {
         argumentsJson: '{"provider_id":"devin"}',
       },
     ],
+    hasAudio: false,
   });
+});
+
+test("a finished response says whether it made any sound", () => {
+  // Audio in the output: the reply has speech to play out.
+  assert.deepEqual(
+    parseRealtimeServerEvent({
+      type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+      response: {
+        id: "resp-1",
+        output: [
+          { type: "message", id: "item-1", content: [{ type: "output_audio", transcript: "Hi" }] },
+        ],
+      },
+    }),
+    { type: REALTIME_SERVER_EVENT.RESPONSE_DONE, responseId: "resp-1", calls: [], hasAudio: true },
+  );
+  // Output with no audio in it: a reply of pure silence.
+  assert.deepEqual(
+    parseRealtimeServerEvent({
+      type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+      response: { id: "resp-1", output: [] },
+    }),
+    { type: REALTIME_SERVER_EVENT.RESPONSE_DONE, responseId: "resp-1", calls: [], hasAudio: false },
+  );
+  // No output to read: unknown, which must not pass for silent — the bare
+  // event below stays exactly as it always parsed.
 });
 
 test("inbound events the conversation acts on are parsed, and nothing else is", () => {
