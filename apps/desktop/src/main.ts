@@ -1508,12 +1508,13 @@ function announceSessionNotices(sessions: readonly NormalizedSession[]): void {
   // this commit is the earliest that can be known.
   attentionRequests.retain(sessions);
   const now = Date.now();
-  const notices = sessionNoticeTracker
-    .notices(sessions, now)
-    // A session the developer asked about by name is the evaluator's to word:
-    // its review reads the ask and speaks to it, and two announcements about
-    // one edge would say the same news twice in a row.
-    .filter((notice) => attentionRequests.get(notice) === undefined);
+  // A standing ask never quiets an edge. The ask licenses more speech about
+  // its session, not less: an edge the ask did not name — an error under a
+  // finish-only ask — would otherwise go unspoken, because the evaluator only
+  // answers what was asked. When the evaluator answers the same edge the ask
+  // named, the finish is said twice in a row — a cost worth the guarantee
+  // that a deterministic alert is never traded away on a model's judgment.
+  const notices = sessionNoticeTracker.notices(sessions, now);
   if (notices.length === 0) return;
   // No voice, nothing to say it with: without a Realtime credential the
   // renderer cannot open a call, and the panel still shows every state.
