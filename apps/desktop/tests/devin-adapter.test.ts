@@ -156,7 +156,6 @@ function adapterFor(
     readApiKey?: () => Promise<string | undefined>;
     now?: () => number;
     minimumRefreshIntervalMs?: number;
-    maximumObservedSessions?: number;
   } = {},
 ): DevinSessionAdapter {
   const apiKey = "apiKey" in overrides ? overrides.apiKey : TEST_API_KEY;
@@ -166,9 +165,6 @@ function adapterFor(
     fetch,
     now: overrides.now ?? (() => TEST_TIME),
     minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,
-    ...(overrides.maximumObservedSessions === undefined
-      ? {}
-      : { maximumObservedSessions: overrides.maximumObservedSessions }),
   });
 }
 
@@ -385,7 +381,7 @@ test("maps the states Devin reports onto states Luke can show", async () => {
     })),
   );
 
-  const observations = await adapterFor(api.fetch, { maximumObservedSessions: 20 }).observe();
+  const observations = await adapterFor(api.fetch).observe();
 
   assert.deepEqual(
     observations.map((observation) => [observation.providerSessionId, observation.status]),
@@ -539,18 +535,18 @@ test("surfaces only the credential owner's work, however Devin answers the filte
   );
 });
 
-test("bounds the sessions a single pass observes, keeping the freshest", async () => {
+test("reports every session the page holds, newest first", async () => {
   const api = fakeDevinApi([
     workingSession("devin-oldest", TEST_TIME - 3_000),
     workingSession("devin-newest", TEST_TIME - 1_000),
     workingSession("devin-middle", TEST_TIME - 2_000),
   ]);
 
-  const observations = await adapterFor(api.fetch, { maximumObservedSessions: 2 }).observe();
+  const observations = await adapterFor(api.fetch).observe();
 
   assert.deepEqual(
     observations.map((observation) => observation.providerSessionId),
-    ["devin-newest", "devin-middle"],
+    ["devin-newest", "devin-middle", "devin-oldest"],
   );
 });
 

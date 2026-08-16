@@ -86,7 +86,6 @@ const CLAUDE_TOOL_INPUT_KEY = ["description", "file_path", "pattern", "command",
 
 const CLAUDE_ADAPTER_DEFAULTS = {
   MAXIMUM_PROJECT_DIRECTORIES: 200,
-  MAXIMUM_SESSION_FILES: 40,
   /**
    * Claude Code writes its generated title early and then only when the subject
    * changes, so a long session's title sits far behind the tail. Only a file
@@ -105,7 +104,6 @@ export interface ClaudeCodeAdapterOptions {
   claudeHome?: string;
   now?: () => number;
   maximumProjectDirectories?: number;
-  maximumSessionFiles?: number;
   activeSessionFreshnessMs?: number;
   readTailBytes?: number;
   readHeadBytes?: number;
@@ -423,10 +421,16 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
   readonly #claudeHome: string;
   readonly #now: () => number;
   readonly #maximumProjectDirectories: number;
-  readonly #maximumSessionFiles: number;
   readonly #activeSessionFreshnessMs: number;
   readonly #readTailBytes: number;
   readonly #readHeadBytes: number;
+  /**
+   * The parse of each file as of the mtime it was read at. Sessions are never
+   * capped, so this is what keeps a pass cheap: a transcript is re-read only
+   * when it has been written to, and everything derived from `now` — status
+   * decay above all — is recomputed each pass from the cached parse.
+   */
+  readonly #parsedTails = new Map<string, { mtimeMs: number; parsed: ParsedClaudeSessionTail }>();
 
   constructor(options: ClaudeCodeAdapterOptions = {}) {
     this.#claudeHome = options.claudeHome ?? defaultClaudeHome();
@@ -435,26 +439,30 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
       options,
       {
         maximumProjectDirectories: CLAUDE_ADAPTER_DEFAULTS.MAXIMUM_PROJECT_DIRECTORIES,
-        maximumSessionFiles: CLAUDE_ADAPTER_DEFAULTS.MAXIMUM_SESSION_FILES,
         activeSessionFreshnessMs: OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
         readTailBytes: LOCAL_ADAPTER_DEFAULTS.READ_TAIL_BYTES,
         readHeadBytes: CLAUDE_ADAPTER_DEFAULTS.READ_HEAD_BYTES,
       },
       {
-        positive: [
-          "maximumProjectDirectories",
-          "maximumSessionFiles",
-          "readTailBytes",
-          "readHeadBytes",
-        ],
+        positive: ["maximumProjectDirectories", "readTailBytes", "readHeadBytes"],
         nonNegative: ["activeSessionFreshnessMs"],
       },
     );
     this.#maximumProjectDirectories = resolved.maximumProjectDirectories;
-    this.#maximumSessionFiles = resolved.maximumSessionFiles;
     this.#activeSessionFreshnessMs = resolved.activeSessionFreshnessMs;
     this.#readTailBytes = resolved.readTailBytes;
     this.#readHeadBytes = resolved.readHeadBytes;
+  }
+
+  async #parsedTail(candidate: SessionFileCandidate): Promise<ParsedClaudeSessionTail> {
+    const cached = this.#parsedTails.get(candidate.filePath);
+    if (cached && cached.mtimeMs === candidate.mtimeMs) return cached.parsed;
+    const parsed = parseClaudeSessionTail(await readTail(candidate.filePath, this.#readTailBytes));
+    if (!parsed.aiTitle) {
+      parsed.aiTitle = titleFromHead(await readHead(candidate.filePath, this.#readHeadBytes));
+    }
+    this.#parsedTails.set(candidate.filePath, { mtimeMs: candidate.mtimeMs, parsed });
+    return parsed;
   }
 
   async observe(): Promise<readonly ProviderSessionObservation[]> {
@@ -462,26 +470,26 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
     const candidates = await discoverSessionFiles({
       projectsDirectory: path.join(this.#claudeHome, CLAUDE_PROJECTS_DIRECTORY),
       maximumProjectDirectories: this.#maximumProjectDirectories,
-      maximumSessionFiles: this.#maximumSessionFiles,
       sessionFilesIn,
     });
     const observations = new Map<string, ProviderSessionObservation>();
 
     for (const candidate of candidates) {
-      const tail = await readTail(candidate.filePath, this.#readTailBytes);
-      const parsed = parseClaudeSessionTail(tail);
-      if (!parsed.aiTitle) {
-        parsed.aiTitle = titleFromHead(await readHead(candidate.filePath, this.#readHeadBytes));
-      }
       const observation = observationFromSessionFile(
         candidate,
-        parsed,
+        await this.#parsedTail(candidate),
         now,
         this.#activeSessionFreshnessMs,
       );
       if (!observations.has(observation.providerSessionId)) {
         observations.set(observation.providerSessionId, observation);
       }
+    }
+
+    // A file no longer discovered was deleted, so its parse must not outlive it.
+    const discovered = new Set(candidates.map((candidate) => candidate.filePath));
+    for (const filePath of this.#parsedTails.keys()) {
+      if (!discovered.has(filePath)) this.#parsedTails.delete(filePath);
     }
 
     return [...observations.values()];

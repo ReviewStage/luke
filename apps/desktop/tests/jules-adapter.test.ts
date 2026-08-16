@@ -112,7 +112,6 @@ function adapterFor(
     readApiKey?: () => Promise<string | undefined>;
     now?: () => number;
     minimumRefreshIntervalMs?: number;
-    maximumObservedSessions?: number;
   } = {},
 ): JulesSessionAdapter {
   const apiKey = "apiKey" in overrides ? overrides.apiKey : TEST_API_KEY;
@@ -122,9 +121,6 @@ function adapterFor(
     fetch,
     now: overrides.now ?? (() => TEST_TIME),
     minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,
-    ...(overrides.maximumObservedSessions === undefined
-      ? {}
-      : { maximumObservedSessions: overrides.maximumObservedSessions }),
   });
 }
 
@@ -290,19 +286,19 @@ test("keeps a session untouched since the day before yesterday", async () => {
 });
 
 test("orders the pass itself rather than trusting the order Jules answers in", async () => {
-  // Jules documents no ordering for `sessions.list`, so the newest sessions
-  // have to survive the cap however the page happens to arrive.
+  // Jules documents no ordering for `sessions.list`, so the pass sorts the
+  // page newest-first however it happens to arrive.
   const api = fakeJulesApi([
     workingSession("session-oldest", TEST_TIME - 3_000),
     workingSession("session-newest", TEST_TIME - 1_000),
     workingSession("session-middle", TEST_TIME - 2_000),
   ]);
 
-  const observations = await adapterFor(api.fetch, { maximumObservedSessions: 2 }).observe();
+  const observations = await adapterFor(api.fetch).observe();
 
   assert.deepEqual(
     observations.map((observation) => observation.providerSessionId),
-    ["session-newest", "session-middle"],
+    ["session-newest", "session-middle", "session-oldest"],
   );
 });
 

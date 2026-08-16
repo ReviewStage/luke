@@ -201,7 +201,6 @@ function adapterFor(
     readApiKey?: () => Promise<string | undefined>;
     now?: () => number;
     minimumRefreshIntervalMs?: number;
-    maximumObservedSessions?: number;
   } = {},
 ): CursorSessionAdapter {
   const apiKey = "apiKey" in overrides ? overrides.apiKey : TEST_API_KEY;
@@ -211,9 +210,6 @@ function adapterFor(
     fetch,
     now: overrides.now ?? (() => TEST_TIME),
     minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,
-    ...(overrides.maximumObservedSessions === undefined
-      ? {}
-      : { maximumObservedSessions: overrides.maximumObservedSessions }),
   });
 }
 
@@ -502,7 +498,7 @@ test("falls back to a neutral label for an agent with no name at all", async () 
   assert.equal(observations[0]?.title, "Cloud agent");
 });
 
-test("bounds the agents a single pass observes, keeping the ones that can still change", async () => {
+test("reports every agent the page holds, the ones that can still change first", async () => {
   const api = fakeCursorApi([
     {
       id: "agent-archived-moments-ago",
@@ -515,11 +511,11 @@ test("bounds the agents a single pass observes, keeping the ones that can still 
     runningAgent("agent-running-older", TEST_TIME - 3_000),
   ]);
 
-  const observations = await adapterFor(api.fetch, { maximumObservedSessions: 2 }).observe();
+  const observations = await adapterFor(api.fetch).observe();
 
   assert.deepEqual(
     observations.map((observation) => observation.providerSessionId),
-    ["agent-running-newer", "agent-running-older"],
+    ["agent-running-newer", "agent-running-older", "agent-archived-moments-ago"],
   );
 });
 

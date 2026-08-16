@@ -9,7 +9,6 @@ import {
   type ProviderMessageResult,
   type ProviderSessionMessage,
   type ProviderSessionObservation,
-  resolveOptions,
   SESSION_STATUS,
   type SessionControl,
   type SessionProvider,
@@ -132,7 +131,6 @@ const SESSION_STATUS_BY_JULES_STATE: Readonly<Record<JulesState, SessionStatus>>
 const JULES_ADAPTER_DEFAULTS = {
   /** The documented maximum, so one call reaches as deep into the history as it can. */
   SESSION_PAGE_SIZE: 100,
-  MAXIMUM_OBSERVED_SESSIONS: 12,
   MAXIMUM_BRANCH_LABEL_LENGTH: 60,
 } as const;
 
@@ -141,9 +139,7 @@ export const JULES_PROVIDER: SessionProvider = {
   displayName: JULES_PROVIDER_NAME,
 };
 
-export interface JulesAdapterOptions extends CloudAdapterOptions {
-  maximumObservedSessions?: number;
-}
+export type JulesAdapterOptions = CloudAdapterOptions;
 
 interface JulesSession {
   id: string;
@@ -210,8 +206,6 @@ export class JulesSessionAdapter
   extends CloudSessionAdapter
   implements MessageCapableSessionProviderAdapter, ControllableSessionProviderAdapter
 {
-  readonly #maximumObservedSessions: number;
-
   constructor(options: JulesAdapterOptions) {
     super(
       {
@@ -224,12 +218,6 @@ export class JulesSessionAdapter
       },
       options,
     );
-    const { maximumObservedSessions } = resolveOptions(
-      options,
-      { maximumObservedSessions: JULES_ADAPTER_DEFAULTS.MAXIMUM_OBSERVED_SESSIONS },
-      { positive: ["maximumObservedSessions"] },
-    );
-    this.#maximumObservedSessions = maximumObservedSessions;
   }
 
   async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
@@ -246,8 +234,9 @@ export class JulesSessionAdapter
   ): Promise<readonly ProviderSessionObservation[]> {
     // One call per pass. The list projection already carries the state, the
     // timestamps, and the source, so there is nothing a per-session read would
-    // add, and Jules documents no ordering — the sort and the cap below are
-    // what bound the page rather than the order it arrives in.
+    // add. Sessions are never capped — one page of the documented maximum is
+    // the request's only bound — and Jules documents no ordering, so the sort
+    // below is what orders the page rather than the order it arrives in.
     const body = await request(JULES_ROUTE.SESSIONS, {
       [JULES_QUERY.PAGE_SIZE]: String(JULES_ADAPTER_DEFAULTS.SESSION_PAGE_SIZE),
     });
@@ -256,7 +245,6 @@ export class JulesSessionAdapter
       .map(sessionFromRecord)
       .filter(isDefined)
       .sort((first, second) => second.observedAt - first.observedAt)
-      .slice(0, this.#maximumObservedSessions)
       .map((session) => this.#observationFor(session, now));
   }
 

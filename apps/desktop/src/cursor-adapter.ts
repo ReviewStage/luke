@@ -14,7 +14,6 @@ import {
   type ProviderSessionObservation,
   type ProviderWorkspaceRequest,
   type ProviderWorkspaceResult,
-  positiveInteger,
   SESSION_CONTROL_KIND,
   SESSION_STATUS,
   type SessionControl,
@@ -207,7 +206,6 @@ const SESSION_STATUS_BY_CURSOR_RUN_STATUS: Readonly<Record<CursorRunStatus, Sess
 const CURSOR_ADAPTER_DEFAULTS = {
   /** The documented maximum, so one call reaches as deep into the history as it can. */
   AGENT_PAGE_SIZE: 100,
-  MAXIMUM_OBSERVED_SESSIONS: 12,
   MAXIMUM_REFERENCE_LABEL_LENGTH: 60,
 } as const;
 
@@ -216,9 +214,7 @@ export const CURSOR_PROVIDER: SessionProvider = {
   displayName: CURSOR_PROVIDER_NAME,
 };
 
-export interface CursorAdapterOptions extends CloudAdapterOptions {
-  maximumObservedSessions?: number;
-}
+export type CursorAdapterOptions = CloudAdapterOptions;
 
 interface CursorAgent {
   id: string;
@@ -305,8 +301,6 @@ export class CursorSessionAdapter
     ControllableSessionProviderAdapter,
     WorkspaceCapableSessionProviderAdapter
 {
-  readonly #maximumObservedSessions: number;
-
   /**
    * The repositories the key may launch agents in, as Cursor last listed
    * them. They are where a new workspace — a new agent — can be created, so a
@@ -324,10 +318,6 @@ export class CursorSessionAdapter
         baseUrlEnvironmentVariable: CURSOR_ENVIRONMENT.API_URL,
       },
       options,
-    );
-    this.#maximumObservedSessions = positiveInteger(
-      options.maximumObservedSessions,
-      CURSOR_ADAPTER_DEFAULTS.MAXIMUM_OBSERVED_SESSIONS,
     );
   }
 
@@ -367,25 +357,22 @@ export class CursorSessionAdapter
       [CURSOR_QUERY.LIMIT]: String(CURSOR_ADAPTER_DEFAULTS.AGENT_PAGE_SIZE),
     });
 
-    // Cursor lists agents newest-first, so a full first page already reaches
-    // past anything the caps below would keep and the `cursor` page after it
-    // could only hold agents the budget has already passed over.
+    // Agents are never capped: one page of the documented maximum is the
+    // request's only bound, and Cursor lists newest-first, so the `cursor`
+    // page after it could only reach further into the settled past.
     const agents = recordsFromPage(body, CURSOR_FIELD.ITEMS)
       .map(agentFromRecord)
       .filter(isDefined)
-      // When the page holds more agents than Luke observes, the ones that can
-      // still change take the budget: an agent the user filed away has nothing
-      // left to say, however recently it was touched.
       .sort(
         (first, second) =>
           Number(first.archived) - Number(second.archived) ||
           second.lastActivityAt - first.lastActivityAt,
-      )
-      .slice(0, this.#maximumObservedSessions);
+      );
 
-    // The only fan-out in a pass, already bounded by the cap above: an agent
-    // record reports whether it was filed away, never what it is doing, so the
-    // status Luke shows exists only on the run.
+    // The only fan-out in a pass, bounded by the page above — and an archived
+    // agent spends no request at all: an agent record reports whether it was
+    // filed away, never what it is doing, so the status Luke shows exists
+    // only on the run.
     const observations = await Promise.all(
       agents.map((agent) => this.#observationFor(request, agent, now)),
     );

@@ -105,7 +105,6 @@ const CODEX_CALL_ARGUMENT_KEY = [
 ] as const;
 
 const CODEX_ADAPTER_DEFAULTS = {
-  MAXIMUM_SESSION_ROWS: 40,
   /** Enough to reach past one turn's token accounting to its boundary event. */
   READ_ROLLOUT_TAIL_BYTES: 64 * 1024,
   /** Only the threads that can still change are worth a second file read. */
@@ -131,7 +130,6 @@ const CODEX_THREAD_QUERY = `
       ELSE created_at * 1000
     END DESC,
     id DESC
-  LIMIT ?
 `;
 
 type CodexThreadRow = Record<string, unknown>;
@@ -145,7 +143,6 @@ export interface CodexAdapterOptions {
   codexHome?: string;
   sqliteHome?: string;
   now?: () => number;
-  maximumSessionRows?: number;
   activeSessionFreshnessMs?: number;
   sqlite?: SqliteModuleLoader;
 }
@@ -411,7 +408,6 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
   readonly #codexHome: string;
   readonly #sqliteHome: string | undefined;
   readonly #now: () => number;
-  readonly #maximumSessionRows: number;
   readonly #activeSessionFreshnessMs: number;
   readonly #sqlite: SqliteModuleLoader;
 
@@ -422,15 +418,12 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
     const resolved = resolveOptions(
       options,
       {
-        maximumSessionRows: CODEX_ADAPTER_DEFAULTS.MAXIMUM_SESSION_ROWS,
         activeSessionFreshnessMs: OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
       },
       {
-        positive: ["maximumSessionRows"],
         nonNegative: ["activeSessionFreshnessMs"],
       },
     );
-    this.#maximumSessionRows = resolved.maximumSessionRows;
     this.#activeSessionFreshnessMs = resolved.activeSessionFreshnessMs;
     this.#sqlite = options.sqlite ?? defaultSqliteModule;
   }
@@ -445,7 +438,7 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
         now = this.#now();
         rows = database
           .prepare(CODEX_THREAD_QUERY)
-          .all(this.#maximumSessionRows)
+          .all()
           .filter((row): row is CodexThreadRow => row !== null && typeof row === "object");
       } catch (error) {
         if (canIgnoreSqliteError(error)) continue;

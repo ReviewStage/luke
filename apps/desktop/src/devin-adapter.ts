@@ -9,7 +9,6 @@ import {
   type ProviderMessageResult,
   type ProviderSessionMessage,
   type ProviderSessionObservation,
-  resolveOptions,
   SESSION_STATUS,
   type SessionControl,
   type SessionProvider,
@@ -189,7 +188,6 @@ const PULL_REQUEST_PATH_SEGMENTS: ReadonlySet<string> = new Set(
 const DEVIN_ADAPTER_DEFAULTS = {
   /** The documented maximum, so one call reaches as deep into the history as it can. */
   SESSION_PAGE_SIZE: 200,
-  MAXIMUM_OBSERVED_SESSIONS: 12,
 } as const;
 
 /**
@@ -205,9 +203,7 @@ export const DEVIN_PROVIDER: SessionProvider = {
   displayName: DEVIN_PROVIDER_NAME,
 };
 
-export interface DevinAdapterOptions extends CloudAdapterOptions {
-  maximumObservedSessions?: number;
-}
+export type DevinAdapterOptions = CloudAdapterOptions;
 
 /** The person a credential belongs to, and the organization to read as them. */
 interface DevinIdentity {
@@ -296,8 +292,6 @@ export class DevinSessionAdapter
   extends CloudSessionAdapter
   implements MessageCapableSessionProviderAdapter, ControllableSessionProviderAdapter
 {
-  readonly #maximumObservedSessions: number;
-
   /** The identity, or `null` once Devin has named one Luke cannot observe as. */
   #principal: DevinIdentity | null | undefined;
 
@@ -310,12 +304,6 @@ export class DevinSessionAdapter
       },
       options,
     );
-    const { maximumObservedSessions } = resolveOptions(
-      options,
-      { maximumObservedSessions: DEVIN_ADAPTER_DEFAULTS.MAXIMUM_OBSERVED_SESSIONS },
-      { positive: ["maximumObservedSessions"] },
-    );
-    this.#maximumObservedSessions = maximumObservedSessions;
   }
 
   async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
@@ -341,7 +329,6 @@ export class DevinSessionAdapter
 
     return (await this.#listSessions(request, identity))
       .sort((first, second) => second.observedAt - first.observedAt)
-      .slice(0, this.#maximumObservedSessions)
       .map((session) => this.#observationFor(session, now));
   }
 

@@ -250,6 +250,61 @@ test("keeps fresh sessions active when a large tail has no complete status event
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
 });
 
+test("re-reads a transcript once it has been written to again", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-luke",
+    "evolving-session",
+    [{ type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT, cwd: "/Users/test/luke" }],
+    TEST_TIME - 20_000,
+  );
+
+  const adapter = new ClaudeCodeSessionAdapter({ claudeHome, now: () => TEST_TIME });
+  const [before] = await adapter.observe();
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-luke",
+    "evolving-session",
+    [{ type: TEST_CLAUDE_EVENT_TYPE.RESULT, cwd: "/Users/test/luke" }],
+    TEST_TIME - 5_000,
+  );
+  const [after] = await adapter.observe();
+
+  // The same adapter serves both passes, so the second one must notice the
+  // new mtime and re-read rather than serving the first parse back.
+  assert.equal(before?.status, SESSION_STATUS.WAITING);
+  assert.equal(after?.status, SESSION_STATUS.COMPLETE);
+  assert.equal(after?.observedAt, TEST_TIME - 5_000);
+});
+
+test("serves an untouched transcript from its previous parse", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-luke",
+    "settled-session",
+    [{ type: TEST_CLAUDE_EVENT_TYPE.RESULT, cwd: "/Users/test/luke" }],
+    TEST_TIME - 20_000,
+  );
+
+  const adapter = new ClaudeCodeSessionAdapter({ claudeHome, now: () => TEST_TIME });
+  const [before] = await adapter.observe();
+  // Same mtime, different content: only a write Claude Code actually made —
+  // which moves the mtime — may cost a read, so the parse is served as it was.
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-luke",
+    "settled-session",
+    [{ type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT, cwd: "/Users/test/luke" }],
+    TEST_TIME - 20_000,
+  );
+  const [after] = await adapter.observe();
+
+  assert.equal(before?.status, SESSION_STATUS.COMPLETE);
+  assert.equal(after?.status, SESSION_STATUS.COMPLETE);
+});
+
 test("keeps old sessions and preserves the newest duplicate provider id", async (t) => {
   const claudeHome = await temporaryClaudeHome(t);
   await writeSessionFile(

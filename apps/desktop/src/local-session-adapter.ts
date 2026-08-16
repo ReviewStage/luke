@@ -36,7 +36,6 @@ export interface SessionFileDiscovery<Candidate extends SessionFileCandidate> {
    */
   sessionsDirectoryName?: string;
   maximumProjectDirectories: number;
-  maximumSessionFiles: number;
   sessionFilesIn: (sessionsDirectory: string, project: DirectoryEntry) => Promise<Candidate[]>;
 }
 
@@ -229,7 +228,9 @@ export async function discoverSessionFiles<Candidate extends SessionFileCandidat
       ),
     )
   ).flat();
-  return files
-    .sort((first, second) => second.mtimeMs - first.mtimeMs)
-    .slice(0, discovery.maximumSessionFiles);
+  // Newest first, so a duplicate session id resolves to its latest file.
+  // There is deliberately no cap: a conversation is never dropped for being
+  // old, and what keeps a pass cheap is each adapter re-reading only the
+  // files that changed since the last one.
+  return files.sort((first, second) => second.mtimeMs - first.mtimeMs);
 }

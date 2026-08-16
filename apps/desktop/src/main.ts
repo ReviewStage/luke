@@ -26,6 +26,7 @@ import {
   type ProviderMessageResult,
   type ProviderWorkspaceResult,
   realtimeMintExplanation,
+  rosterRelevantSessions,
   SessionAttentionReviewer,
   type SessionIdentity,
   SessionNoticeTracker,
@@ -557,7 +558,12 @@ function registerIpc(): void {
       ...(hotkeys.stop ? { stopHotkey: hotkeys.stop } : {}),
       ...(outputAudio ? { outputAudio } : {}),
       display: panels.diagnostic(display),
-      sessions: runMode.observesProviders ? sessionRegistry.snapshot().sessions : [],
+      // Bootstrapped through the same relevance gate every broadcast passes:
+      // a panel that opens late must not learn of rows the roster has already
+      // let go and then hold them past the next broadcast's dedupe.
+      sessions: runMode.observesProviders
+        ? rosterRelevantSessions(sessionRegistry.snapshot().sessions, Date.now())
+        : [],
       workspaceProjects: observedWorkspaceProjects(),
       ...(trackedIssues && runMode.observesProviders ? { issues: trackedIssues } : {}),
       settings: await settingsStore.snapshot(),
@@ -1460,12 +1466,41 @@ function announceSessionNotices(sessions: readonly NormalizedSession[]): void {
   panels.voiceHost()?.webContents.send(channels.attentionSpeech, speech);
 }
 
+/**
+ * What the last roster broadcast said, so a pass that changed nothing the
+ * renderer can see costs no send. The registry's revision covers every field
+ * of every session; the id line covers the one thing revision cannot — a
+ * session leaving the roster because only the clock moved.
+ */
+let lastRosterRevision = -1;
+let lastRosterIds = "";
+
+/**
+ * Hands the renderer the sessions still worth a row. The registry keeps every
+ * observation — announcements and attention read it whole — but the panel and
+ * the voice roster it feeds see only what `isRosterRelevant` keeps: adapters
+ * no longer age out or cap anything, so this one gate is where a session that
+ * settled long ago stops being a row.
+ */
+function broadcastRelevantSessions(): void {
+  const snapshot = sessionRegistry.snapshot();
+  const roster = rosterRelevantSessions(snapshot.sessions, Date.now());
+  const rosterIds = roster
+    .map((session) => `${session.providerId} ${session.providerSessionId}`)
+    .join("  ");
+  if (snapshot.revision === lastRosterRevision && rosterIds === lastRosterIds) return;
+  lastRosterRevision = snapshot.revision;
+  lastRosterIds = rosterIds;
+  panels.broadcast(channels.sessionsChanged, roster);
+}
+
 function startSessionObservation(): void {
   if (!runMode.observesProviders) return;
   sessionRegistry.subscribe((snapshot) => {
-    panels.broadcast(channels.sessionsChanged, snapshot.sessions);
+    broadcastRelevantSessions();
     // The registry only speaks on an effective change, which is exactly when
-    // a status edge can exist to announce.
+    // a status edge can exist to announce. The notices read the unfiltered
+    // snapshot: an edge is an edge wherever the session ends up on the roster.
     announceSessionNotices(snapshot.sessions);
     // A commit is the earliest a write-triggered refresh can have changed the
     // offer, so the announcement rides it rather than waiting for the timer.
@@ -1474,6 +1509,10 @@ function startSessionObservation(): void {
   void refreshProviderSessions();
   sessionRefreshTimer = setInterval(() => {
     void refreshProviderSessions();
+    // Relevance moves with the clock as well as with observations: a session
+    // can cross its retention horizon in a pass where nothing was observed to
+    // change, and only this re-check makes that row leave.
+    broadcastRelevantSessions();
   }, SESSION_REFRESH_INTERVAL_MS);
   sessionRefreshTimer.unref();
 }

@@ -20,6 +20,7 @@ import {
 } from "@sidecar/core";
 import {
   discoverSessionFiles,
+  fileStats,
   readDirectory,
   readTextFile,
   type SessionFileCandidate,
@@ -132,7 +133,6 @@ const OPENCODE_TOOL_INPUT_KEY = [
 ] as const;
 
 const OPENCODE_ADAPTER_DEFAULTS = {
-  MAXIMUM_SESSION_ROWS: 40,
   MAXIMUM_PROJECT_DIRECTORIES: 200,
   /** Enough parts to reach past a finished step's bookkeeping to its tool. */
   MAXIMUM_PART_ROWS: 8,
@@ -148,7 +148,6 @@ const OPENCODE_SESSION_QUERY = `
   WHERE parent_id IS NULL
     AND time_archived IS NULL
   ORDER BY time_updated DESC, id DESC
-  LIMIT ?
 `;
 
 // The WHERE clause above is the one thing that can name a column an old schema
@@ -158,7 +157,6 @@ const OPENCODE_SESSION_QUERY_MINIMAL = `
   SELECT *
   FROM session
   ORDER BY time_updated DESC, id DESC
-  LIMIT ?
 `;
 
 const OPENCODE_LAST_MESSAGE_QUERY = `
@@ -187,7 +185,6 @@ export const OPENCODE_PROVIDER: SessionProvider = {
 export interface OpenCodeAdapterOptions {
   dataDirectory?: string;
   now?: () => number;
-  maximumSessionRows?: number;
   activeSessionFreshnessMs?: number;
   sqlite?: SqliteModuleLoader;
 }
@@ -428,9 +425,23 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
 
   readonly #dataDirectory: string;
   readonly #now: () => number;
-  readonly #maximumSessionRows: number;
   readonly #activeSessionFreshnessMs: number;
   readonly #sqlite: SqliteModuleLoader;
+  /**
+   * What each legacy file said as of the mtime it was read at. Sessions are
+   * never capped, so this is what keeps the no-database fallback's pass cheap:
+   * a session's info file is re-read only when it has been written to, and its
+   * turn only when a newer message file exists or the newest was written to —
+   * OpenCode moves that file's clock whenever it moves the turn's bookkeeping.
+   */
+  readonly #legacyInfo = new Map<
+    string,
+    { mtimeMs: number; info: Record<string, unknown> | undefined }
+  >();
+  readonly #legacyTurns = new Map<
+    string,
+    { filePath: string; mtimeMs: number; turn: OpenCodeTurn | undefined }
+  >();
 
   constructor(options: OpenCodeAdapterOptions = {}) {
     this.#dataDirectory = options.dataDirectory ?? defaultDataDirectory();
@@ -438,15 +449,12 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
     const resolved = resolveOptions(
       options,
       {
-        maximumSessionRows: OPENCODE_ADAPTER_DEFAULTS.MAXIMUM_SESSION_ROWS,
         activeSessionFreshnessMs: OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
       },
       {
-        positive: ["maximumSessionRows"],
         nonNegative: ["activeSessionFreshnessMs"],
       },
     );
-    this.#maximumSessionRows = resolved.maximumSessionRows;
     this.#activeSessionFreshnessMs = resolved.activeSessionFreshnessMs;
     this.#sqlite = options.sqlite ?? defaultSqliteModule;
   }
@@ -501,7 +509,7 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
       try {
         return database
           .prepare(query)
-          .all(this.#maximumSessionRows)
+          .all()
           .filter((row): row is OpenCodeRow => isRecord(row));
       } catch (error) {
         if (!canIgnoreSqliteError(error)) throw error;
@@ -521,9 +529,9 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
 
     // Every reported session gets its turn read, because a session without one
     // would default to working on freshness alone — inventing live work for a
-    // row whose turn actually ended. The pass stays bounded the way the Claude
-    // Code adapter's is: each read is an indexed point query against the row
-    // cap above, not a scan.
+    // row whose turn actually ended. Each read is an indexed point query
+    // against one session's id, not a scan, so the pass costs one cheap query
+    // per row however many rows the database holds.
     for (const snapshot of snapshots) {
       snapshot.turn = this.#turnFor(database, snapshot.providerSessionId);
       if (
@@ -573,14 +581,13 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
     const candidates = await discoverSessionFiles({
       projectsDirectory: path.join(storageDirectory, OPENCODE_STORAGE_SEGMENT.SESSION),
       maximumProjectDirectories: OPENCODE_ADAPTER_DEFAULTS.MAXIMUM_PROJECT_DIRECTORIES,
-      maximumSessionFiles: this.#maximumSessionRows,
       sessionFilesIn: legacySessionFilesIn,
     });
 
     const observations = new Map<string, ProviderSessionObservation>();
     for (const candidate of candidates) {
       if (observations.has(candidate.providerSessionId)) continue;
-      const info = recordFromJsonLine((await readTextFile(candidate.filePath)) ?? "");
+      const info = await this.#legacyInfoFor(candidate);
       if (!info) continue;
       if (text(info.parentID)) continue;
 
@@ -598,22 +605,46 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
         ),
       };
       // Read for every reported session, not a capped few: a session without
-      // its turn would default to working on freshness alone. Each read is one
-      // directory listing and one small file, against the same session cap the
-      // Claude Code adapter pays a bounded tail read for.
+      // its turn would default to working on freshness alone. Steady state,
+      // each read is one directory listing and one stat — the caches above
+      // pay a file read only for what actually changed.
       snapshot.turn = await this.#legacyTurn(storageDirectory, candidate.providerSessionId);
       observations.set(
         candidate.providerSessionId,
         observationFromSnapshot(snapshot, now, this.#activeSessionFreshnessMs),
       );
     }
+
+    // A file no longer discovered was deleted, so its parse must not outlive it.
+    const discoveredFiles = new Set(candidates.map((candidate) => candidate.filePath));
+    for (const filePath of this.#legacyInfo.keys()) {
+      if (!discoveredFiles.has(filePath)) this.#legacyInfo.delete(filePath);
+    }
+    const discoveredSessions = new Set(candidates.map((candidate) => candidate.providerSessionId));
+    for (const providerSessionId of this.#legacyTurns.keys()) {
+      if (!discoveredSessions.has(providerSessionId)) this.#legacyTurns.delete(providerSessionId);
+    }
+
     return [...observations.values()];
+  }
+
+  /** The session's own record, re-read only when its file has been written to. */
+  async #legacyInfoFor(
+    candidate: SessionFileCandidate,
+  ): Promise<Record<string, unknown> | undefined> {
+    const cached = this.#legacyInfo.get(candidate.filePath);
+    if (cached && cached.mtimeMs === candidate.mtimeMs) return cached.info;
+    const info = recordFromJsonLine((await readTextFile(candidate.filePath)) ?? "");
+    this.#legacyInfo.set(candidate.filePath, { mtimeMs: candidate.mtimeMs, info });
+    return info;
   }
 
   /**
    * The newest message file's bookkeeping. OpenCode's message identifiers sort
    * in creation order, so the greatest file name is the newest message and no
-   * second directory pass is needed to find it.
+   * second directory pass is needed to find it. The file is re-read only when
+   * a newer message exists or this one's clock has moved: OpenCode rewrites a
+   * message's file as its turn opens, aborts, fails, and completes.
    */
   async #legacyTurn(
     storageDirectory: string,
@@ -630,9 +661,13 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
       .sort()
       .at(-1);
     if (!newest) return undefined;
-    const record = recordFromJsonLine(
-      (await readTextFile(path.join(messagesDirectory, newest))) ?? "",
-    );
-    return record ? turnFromMessage(record) : undefined;
+    const filePath = path.join(messagesDirectory, newest);
+    const mtimeMs = (await fileStats(filePath))?.mtimeMs ?? 0;
+    const cached = this.#legacyTurns.get(providerSessionId);
+    if (cached && cached.filePath === filePath && cached.mtimeMs === mtimeMs) return cached.turn;
+    const record = recordFromJsonLine((await readTextFile(filePath)) ?? "");
+    const turn = record ? turnFromMessage(record) : undefined;
+    this.#legacyTurns.set(providerSessionId, { filePath, mtimeMs, turn });
+    return turn;
   }
 }

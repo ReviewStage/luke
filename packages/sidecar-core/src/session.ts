@@ -52,6 +52,47 @@ export const OBSERVATION_WINDOW = {
   ACTIVE_SESSION_FRESHNESS_MS: 15 * 60 * 1000,
 } as const;
 
+/**
+ * How long a status keeps its session on the roster, measured from the moment
+ * the status was entered. This is what bounds the roster now that no adapter
+ * ages out or caps its sessions: relevance follows what the status asks of the
+ * user, never a blanket clock over every conversation. A failure does not heal
+ * by going stale, but a rescue nobody made for days is a session the user has
+ * left behind; a settled or unreadable session says only where work ended,
+ * which is news while the user might still come back for it and history after.
+ */
+export const SESSION_ROSTER_RETENTION_MS = {
+  RESCUE_MS: 3 * 24 * 60 * 60 * 1000,
+  SETTLED_MS: 2 * 24 * 60 * 60 * 1000,
+} as const;
+
+/** The retention one status earns. */
+export function sessionRosterRetentionMs(status: SessionStatus): number {
+  if (status === SESSION_STATUS.ERROR) return SESSION_ROSTER_RETENTION_MS.RESCUE_MS;
+  if (status === SESSION_STATUS.COMPLETE || status === SESSION_STATUS.UNKNOWN) {
+    return SESSION_ROSTER_RETENTION_MS.SETTLED_MS;
+  }
+  // Working and waiting are live right now, so neither expires: the age of
+  // the ask is not the age of its relevance.
+  return Number.POSITIVE_INFINITY;
+}
+
+/** Whether a session's status still earns it a place on the roster. */
+export function isRosterRelevant(
+  session: Pick<NormalizedSession, "status" | "observedAt">,
+  now: number,
+): boolean {
+  return now - session.observedAt <= sessionRosterRetentionMs(session.status);
+}
+
+/** The sessions still worth a row, in the order they arrived. */
+export function rosterRelevantSessions(
+  sessions: readonly NormalizedSession[],
+  now: number,
+): readonly NormalizedSession[] {
+  return sessions.filter((session) => isRosterRelevant(session, now));
+}
+
 /** The label a session takes when Luke cannot name the folder or repository it belongs to. */
 export const UNKNOWN_WORKSPACE_LABEL = "workspace";
 

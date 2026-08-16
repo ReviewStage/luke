@@ -80,7 +80,6 @@ const CURSOR_ROLE = {
 
 const CURSOR_LOCAL_ADAPTER_DEFAULTS = {
   MAXIMUM_PROJECT_DIRECTORIES: 200,
-  MAXIMUM_SESSION_FILES: 40,
 } as const;
 
 export interface CursorLocalAdapterOptions {
@@ -88,7 +87,6 @@ export interface CursorLocalAdapterOptions {
   workspaceStorageDirectory?: string;
   now?: () => number;
   maximumProjectDirectories?: number;
-  maximumSessionFiles?: number;
   activeSessionFreshnessMs?: number;
   readTailBytes?: number;
 }
@@ -311,9 +309,18 @@ export class CursorLocalSessionAdapter implements SessionProviderAdapter {
   readonly #workspaceLabels: CursorWorkspaceLabels;
   readonly #now: () => number;
   readonly #maximumProjectDirectories: number;
-  readonly #maximumSessionFiles: number;
   readonly #activeSessionFreshnessMs: number;
   readonly #readTailBytes: number;
+  /**
+   * The parsed turn of each transcript as of the mtime it was read at.
+   * Sessions are never capped, so this is what keeps a pass cheap: a
+   * transcript is re-read only when it has been written to, and status decay
+   * is recomputed each pass from the cached turn.
+   */
+  readonly #parsedTurns = new Map<
+    string,
+    { mtimeMs: number; turn: { failed: boolean } | undefined }
+  >();
 
   constructor(options: CursorLocalAdapterOptions = {}) {
     this.#cursorHome = options.cursorHome ?? defaultCursorHome();
@@ -325,17 +332,15 @@ export class CursorLocalSessionAdapter implements SessionProviderAdapter {
       options,
       {
         maximumProjectDirectories: CURSOR_LOCAL_ADAPTER_DEFAULTS.MAXIMUM_PROJECT_DIRECTORIES,
-        maximumSessionFiles: CURSOR_LOCAL_ADAPTER_DEFAULTS.MAXIMUM_SESSION_FILES,
         activeSessionFreshnessMs: OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
         readTailBytes: LOCAL_ADAPTER_DEFAULTS.READ_TAIL_BYTES,
       },
       {
-        positive: ["maximumProjectDirectories", "maximumSessionFiles", "readTailBytes"],
+        positive: ["maximumProjectDirectories", "readTailBytes"],
         nonNegative: ["activeSessionFreshnessMs"],
       },
     );
     this.#maximumProjectDirectories = resolved.maximumProjectDirectories;
-    this.#maximumSessionFiles = resolved.maximumSessionFiles;
     this.#activeSessionFreshnessMs = resolved.activeSessionFreshnessMs;
     this.#readTailBytes = resolved.readTailBytes;
   }
@@ -346,7 +351,6 @@ export class CursorLocalSessionAdapter implements SessionProviderAdapter {
       projectsDirectory: path.join(this.#cursorHome, CURSOR_DIRECTORY.PROJECTS),
       sessionsDirectoryName: CURSOR_DIRECTORY.TRANSCRIPTS,
       maximumProjectDirectories: this.#maximumProjectDirectories,
-      maximumSessionFiles: this.#maximumSessionFiles,
       sessionFilesIn: transcriptsIn,
     });
     // Only the sessions this pass reports are worth naming a folder for.
@@ -359,7 +363,24 @@ export class CursorLocalSessionAdapter implements SessionProviderAdapter {
       if (observations.has(candidate.providerSessionId)) continue;
       observations.set(candidate.providerSessionId, await this.#observationFor(candidate, now));
     }
+
+    // A file no longer discovered was deleted, so its parse must not outlive it.
+    const discovered = new Set(candidates.map((candidate) => candidate.filePath));
+    for (const filePath of this.#parsedTurns.keys()) {
+      if (!discovered.has(filePath)) this.#parsedTurns.delete(filePath);
+    }
+
     return [...observations.values()];
+  }
+
+  async #parsedTurn(
+    candidate: CursorTranscriptCandidate,
+  ): Promise<{ failed: boolean } | undefined> {
+    const cached = this.#parsedTurns.get(candidate.filePath);
+    if (cached && cached.mtimeMs === candidate.mtimeMs) return cached.turn;
+    const turn = closedTurn(await readTail(candidate.filePath, this.#readTailBytes));
+    this.#parsedTurns.set(candidate.filePath, { mtimeMs: candidate.mtimeMs, turn });
+    return turn;
   }
 
   /**
@@ -373,9 +394,8 @@ export class CursorLocalSessionAdapter implements SessionProviderAdapter {
     now: number,
   ): Promise<ProviderSessionObservation> {
     const label = this.#workspaceLabels.label(candidate.projectDirectoryName);
-    const tail = await readTail(candidate.filePath, this.#readTailBytes);
     const status = statusFromTurn(
-      closedTurn(tail),
+      await this.#parsedTurn(candidate),
       candidate.mtimeMs,
       now,
       this.#activeSessionFreshnessMs,
