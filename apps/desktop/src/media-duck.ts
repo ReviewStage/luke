@@ -42,9 +42,9 @@ function spawnMediaDuckHelper(): MediaDuckProcess | undefined {
     : path.join(app.getAppPath(), ".build", "native", "mac-media-duck");
   return spawn(helperPath, [], {
     // Stdin is the whole protocol — its closing is what tells the helper to
-    // restore and go. What the helper says back is diagnostic, so it rides
-    // through to the app's own stdout: one line per act in a terminal run,
-    // nowhere at all in a packaged one.
+    // restore and go. The helper speaks back only to say a player refused it,
+    // and that diagnostic rides through to the app's own stdout: visible in a
+    // terminal run, nowhere at all in a packaged one.
     stdio: ["pipe", "inherit", "ignore"],
   }) as unknown as MediaDuckProcess;
 }
