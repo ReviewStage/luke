@@ -46,7 +46,11 @@ import {
 } from "../src";
 import { ATTENTION_REVIEW_OUTCOME, type AttentionReview } from "../src/attention";
 import { maximumWorkspaceNameLength } from "../src/providers";
-import { maximumVoiceContextIssues, maximumVoiceContextSessions } from "../src/realtime-context";
+import {
+  maximumVoiceContextIssues,
+  maximumVoiceContextSessions,
+  maximumVoiceContextWorkspaceProjects,
+} from "../src/realtime-context";
 import { realtimeSessionConfig } from "../src/realtime-credentials";
 import {
   maximumTypedAskLength,
@@ -891,6 +895,31 @@ test("the projects context says which project a nameless ask lands in", () => {
   });
   const item = (event as { item?: { content?: { text?: string }[] } }).item;
   assert.match(item?.content?.[0]?.text ?? "", /default Conductor project is acme\/other/);
+});
+
+test("a chosen default project survives the context cap", () => {
+  // One more project than the context will list, alphabetical like the
+  // normalizer hands them over, with the developer's chosen default sorted
+  // dead last — exactly the project the cap would otherwise cut.
+  const crowd = Array.from({ length: maximumVoiceContextWorkspaceProjects + 1 }, (_, index) => ({
+    ...OFFERED_PROJECT,
+    providerProjectId: `proj-${String(index).padStart(2, "0")}`,
+    repository: `repo-${String(index).padStart(2, "0")}`,
+  }));
+  const last = crowd.at(-1);
+  assert.ok(last);
+
+  // Uncapped by the choice: without a default the tail stays cut.
+  const capless = workspaceProjectContextText(crowd);
+  assert.doesNotMatch(capless, new RegExp(last.providerProjectId));
+
+  // The chosen default rides past the cut, listed and steered both — a
+  // default the sentence names but the list omits would be unaskable.
+  const kept = workspaceProjectContextText(crowd, undefined, {
+    conductor: last.providerProjectId,
+  });
+  assert.match(kept, new RegExp(`project_id=${last.providerProjectId}`));
+  assert.match(kept, new RegExp(`default Conductor project is ${last.repository}`));
 });
 
 /**

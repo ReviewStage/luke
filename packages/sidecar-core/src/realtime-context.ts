@@ -215,7 +215,7 @@ export function workspaceProjectContextText(
   defaultProjectIds?: Readonly<Partial<Record<string, string>>>,
 ): string {
   if (projects.length === 0) return "No provider currently offers workspace creation.";
-  const listed = projects.slice(0, maximumVoiceContextWorkspaceProjects);
+  const listed = listedWorkspaceProjects(projects, defaultProjectIds);
   return [
     "Projects a new workspace can be created in:",
     ...listed.map(
@@ -225,6 +225,27 @@ export function workspaceProjectContextText(
     ...workspaceDefaultProviderLines(listed, defaultProviderId),
     ...workspaceDefaultProjectLines(listed, defaultProjectIds),
   ].join("\n");
+}
+
+/**
+ * The bounded slice the conversation is shown, kept default-aware: a chosen
+ * default project that survived observation must survive this cap too, or
+ * the alphabetical order could push the one project a nameless ask should
+ * land in off the list — unnamed, unlisted, and unsteerable. Each provider's
+ * chosen default rides past the cut instead, so the cap still bounds the
+ * list at the maximum plus at most one project per provider.
+ */
+function listedWorkspaceProjects(
+  projects: readonly ObservedWorkspaceProject[],
+  defaultProjectIds: Readonly<Partial<Record<string, string>>> | undefined,
+): readonly ObservedWorkspaceProject[] {
+  const listed = projects.slice(0, maximumVoiceContextWorkspaceProjects);
+  for (const project of projects.slice(maximumVoiceContextWorkspaceProjects)) {
+    if (defaultProjectIds?.[project.providerId] === project.providerProjectId) {
+      listed.push(project);
+    }
+  }
+  return listed;
 }
 
 /**
