@@ -292,35 +292,6 @@ test("a corrupt media duck value reads as the default rather than as off", async
   assert.equal((await storeIn(directory).snapshot()).duckOtherMedia, true);
 });
 
-test("sessions notify until asked otherwise, and the choice survives a reopen", async (t) => {
-  const directory = await temporaryDirectory(t);
-  // A preference like the duck's: choosing it must reach the Keychain not at all.
-  const cipher = countingCipher();
-  const store = storeIn(directory, { cipher });
-
-  assert.equal((await store.snapshot()).sessionNotifications, true);
-  assert.equal(await store.readSessionNotifications(), true);
-  const disabled = await store.setSessionNotifications(false);
-
-  assert.equal(disabled.settings.sessionNotifications, false);
-  assert.equal((await storeIn(directory).snapshot()).sessionNotifications, false);
-  assert.equal(await storeIn(directory).readSessionNotifications(), false);
-  assert.equal(cipher.calls.isAvailable, 0);
-  assert.equal(cipher.calls.encrypt, 0);
-});
-
-test("a corrupt notification value reads as the default rather than as off", async (t) => {
-  const directory = await temporaryDirectory(t);
-  // The duck's rule again: this switch's default is on, so nonsense lands on on.
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 2, apiKeys: {}, sessionNotifications: "no" }),
-    "utf8",
-  );
-
-  assert.equal((await storeIn(directory).snapshot()).sessionNotifications, true);
-});
-
 test("keeps each provider's key, environment fallback, and reported source separate", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory, {
@@ -375,7 +346,6 @@ test("keeps both keys when two providers are saved at once", async (t) => {
     showInMenuBar: true,
     voiceCaptions: false,
     duckOtherMedia: true,
-    sessionNotifications: true,
     showOnAllDisplays: false,
   });
   const reopened = storeIn(directory, { providers: TEST_PROVIDERS });
@@ -576,7 +546,6 @@ test("keeps a Conductor key stored by an earlier version working", async (t) => 
     showInMenuBar: true,
     voiceCaptions: false,
     duckOtherMedia: true,
-    sessionNotifications: true,
     showOnAllDisplays: false,
   });
   assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), "conductor-replacement-key");
@@ -600,7 +569,6 @@ test("carries a key belonging to a provider this build does not know", async (t)
     showInMenuBar: true,
     voiceCaptions: false,
     duckOtherMedia: true,
-    sessionNotifications: true,
     showOnAllDisplays: false,
   });
 });
@@ -622,7 +590,6 @@ test("shows the menu bar item until asked otherwise, and remembers the answer", 
     showInMenuBar: false,
     voiceCaptions: false,
     duckOtherMedia: true,
-    sessionNotifications: true,
     showOnAllDisplays: false,
   });
   // The choice outlives the run that heard it.
@@ -705,7 +672,6 @@ test("keeps Luke out of the Dock until asked, and remembers the answer", async (
     showInMenuBar: true,
     voiceCaptions: false,
     duckOtherMedia: true,
-    sessionNotifications: true,
     showOnAllDisplays: false,
   });
   // The choice outlives the run that heard it.
