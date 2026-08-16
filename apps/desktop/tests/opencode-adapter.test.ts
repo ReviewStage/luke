@@ -767,6 +767,36 @@ test("reads the newest legacy message by its ordered identifier", async (t) => {
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
 });
 
+test("re-reads a legacy session once a newer message lands", async (t) => {
+  const dataDirectory = await temporaryDataDirectory(t);
+  await writeLegacySession(dataDirectory, "project-one", {
+    id: "ses_legacy_evolving",
+    title: "Long refactor",
+    directory: "/Users/test/luke",
+    time: { created: TEST_TIME - 5_000, updated: TEST_TIME - 1_000 },
+  });
+  await writeLegacyMessage(dataDirectory, "ses_legacy_evolving", "msg_01", {
+    role: "assistant",
+    time: { created: TEST_TIME - 4_000 },
+  });
+
+  const adapter = new OpenCodeSessionAdapter({
+    dataDirectory,
+    now: () => TEST_TIME,
+  });
+  const [before] = await adapter.observe();
+  await writeLegacyMessage(dataDirectory, "ses_legacy_evolving", "msg_02", {
+    role: "assistant",
+    time: { created: TEST_TIME - 2_000, completed: TEST_TIME - 1_000 },
+  });
+  const [after] = await adapter.observe();
+
+  // The same adapter serves both passes, so the second one must find the new
+  // message rather than serving the first turn back.
+  assert.equal(before?.status, SESSION_STATUS.WORKING);
+  assert.equal(after?.status, SESSION_STATUS.WAITING);
+});
+
 test("observes legacy JSON sessions when node sqlite is unavailable", async (t) => {
   const dataDirectory = await temporaryDataDirectory(t);
   await writeOpenCodeState(dataDirectory, [
