@@ -199,7 +199,10 @@ export function App(): React.JSX.Element {
   const [settingsView, setSettingsView] = useState<SettingsView>(SETTINGS_VIEW.ROOT);
   const [sessionView, setSessionView] = useState<SessionView>(DEFAULT_SESSION_VIEW);
   const [optionsOpen, setOptionsOpen] = useState(false);
-  const [settings, setSettings] = useState<AppSettings>();
+  // The latest is needed from the spoken-settings carrier, which cannot wait
+  // a render: two changes asked for in one breath arrive as two calls in one
+  // turn, and the second composes against whatever the first just stored.
+  const [settings, setSettings, settingsNow] = useStateWithRef<AppSettings | undefined>(undefined);
   const [errand, setErrand] = useState<Errand>();
   const [feedbackNotice, setFeedbackNotice] = useState<string>();
   // Counts for nothing except having changed: each tick re-renders the rows so
@@ -283,6 +286,15 @@ export function App(): React.JSX.Element {
    */
   const heldSettings = useRef<AppSettings | undefined>(undefined);
   const heldView = useRef<Partial<SessionView> | undefined>(undefined);
+  /**
+   * The way to tell the conversation what the store now holds, for the spoken
+   * carrier below. Only the drawing waits for Luke: the guide has to describe
+   * the store's answer at once, because the next call in the same turn is
+   * validated against it — an effort named in the same breath as a model only
+   * exists in the guide the model change just made true. A ref because the
+   * carrier is created before the conversation hook that owns the publisher.
+   */
+  const publishGuideRef = useRef<(next: AppSettings) => void>(() => {});
   const releaseErrandChange = useCallback(() => {
     const settings = heldSettings.current;
     const view = heldView.current;
@@ -293,7 +305,7 @@ export function App(): React.JSX.Element {
     // moment it was chosen: the list corrects its own filter during render
     // when one empties, and a snapshot taken at the ask would undo that.
     if (view !== undefined) setSessionView((current) => ({ ...current, ...view }));
-  }, []);
+  }, [setSettings]);
 
   /**
    * Whether the panel on screen is one an errand stood up. Only then is it the
@@ -398,10 +410,13 @@ export function App(): React.JSX.Element {
    * and any refusal for the row to show. Every settings row travels this
    * road so it redraws from what was stored rather than from the press.
    */
-  const applySettingsReply = useCallback((result: SettingsUpdateResult) => {
-    setSettings(result.settings);
-    return result.reason;
-  }, []);
+  const applySettingsReply = useCallback(
+    (result: SettingsUpdateResult) => {
+      setSettings(result.settings);
+      return result.reason;
+    },
+    [setSettings],
+  );
 
   const changeVoiceCaptions = useCallback(
     async (enabled: boolean) => applySettingsReply(await window.sidecar.setVoiceCaptions(enabled)),
@@ -485,7 +500,7 @@ export function App(): React.JSX.Element {
       }
       return result.reason;
     },
-    [credentialsEntry.apply, credentialsEntry.latest],
+    [credentialsEntry.apply, credentialsEntry.latest, setSettings],
   );
 
   const credentials: CredentialEntryControl = {
@@ -844,6 +859,30 @@ export function App(): React.JSX.Element {
   }, [cancelHover, heldAgainstPointer, pointerIsInside, settle]);
 
   /**
+   * The same two releases, keyed to the flight reporting them. A flight
+   * overtaken by the next carry in the same turn still fires its beats — a
+   * hold nobody releases is worse — but what the app holds belongs to the
+   * newest errand by then: the settings snapshot was overwritten by the later
+   * change, and the panel is the later flight's to put away. So a stale
+   * flight's beats release nothing, and the newest flight's release
+   * everything, which is also why nothing is ever left held.
+   */
+  const releaseIfCurrentErrand = useCallback(
+    (finished: Errand) => {
+      if (finished.run !== errands.current) return;
+      releaseErrandChange();
+    },
+    [releaseErrandChange],
+  );
+  const standDownIfCurrentErrand = useCallback(
+    (finished: Errand) => {
+      if (finished.run !== errands.current) return;
+      standDownAfterErrand();
+    },
+    [standDownAfterErrand],
+  );
+
+  /**
    * The spoken asks about Luke himself. A settings change goes through the
    * same bridge calls the settings rows use, and the snapshot that comes back
    * redraws the panel's switches; showing the panel is the capsule's press
@@ -870,16 +909,21 @@ export function App(): React.JSX.Element {
           // Luke is on his way to move, so it waits for him to reach it. Every
           // path out of here releases it, and the outcome the conversation is
           // told is the store's own either way — what is delayed is the drawing,
-          // never the change or the report of it. The settings as this window
-          // holds them ride along so a spoken model or effort change composes
-          // against the selection actually stored.
+          // never the change or the report of it. The guide is the one thing
+          // that must not wait: the next call in this same turn is validated
+          // against it. The freshest settings this window knows ride along so
+          // a spoken model or effort change composes against the selection
+          // actually stored — the held answer first, because a model and its
+          // effort asked for in one breath land as two calls before anything
+          // is released.
           const outcome = await applySpokenSetting(
             window.sidecar,
             action,
             (next) => {
               heldSettings.current = next;
+              publishGuideRef.current(next);
             },
-            settings ?? bootstrap?.settings,
+            heldSettings.current ?? settingsNow() ?? bootstrap?.settings,
           );
           // Nothing to show and nothing to sign: a refused change must not stand
           // the panel up in front of a switch that did not move.
@@ -914,8 +958,11 @@ export function App(): React.JSX.Element {
             if (page !== undefined) setSettingsView(page);
             await changeMode(true);
             if (runErrand(errandTargets(action), wait)) {
-              // Only a panel this errand stood up is the errand's to put away.
-              errandOpenedPanel.current = opening;
+              // Only a panel this errand stood up is the errand's to put away
+              // — and a claim once made survives the rest of the turn, because
+              // the second carry of a paired ask finds the panel open exactly
+              // because the first stood it up.
+              errandOpenedPanel.current ||= opening;
             } else {
               releaseErrandChange();
             }
@@ -1018,7 +1065,7 @@ export function App(): React.JSX.Element {
     [
       changeMode,
       changeTab,
-      settings,
+      settingsNow,
       settingsView,
       bootstrap,
       releaseErrandChange,
@@ -1265,35 +1312,43 @@ export function App(): React.JSX.Element {
   // Keep the conversation's view of Luke himself current, so a spoken question
   // about a setting is answered from the value the store actually holds, and a
   // change made in the panel is known to the conversation the moment it lands.
+  const publishGuide = useCallback(
+    (current: AppSettings) => {
+      if (!bootstrap) return;
+      const askAccelerator = askHotkeyChange ? askHotkeyChange.accelerator : bootstrap.askHotkey;
+      const stopAccelerator = stopHotkeyChange
+        ? stopHotkeyChange.accelerator
+        : bootstrap.stopHotkey;
+      // All three keys reach the guide labelled: it is spoken and read, so a
+      // chord belongs there as the one word macOS writes it as rather than as
+      // the keys the panel draws apart.
+      const talkKey = voiceHotkeyToShow(bootstrap, voiceHotkey);
+      const guide = buildLukeGuide({
+        settings: current,
+        voiceAvailable: current.voiceAvailable,
+        microphoneStatus,
+        hotkey: {
+          ...(talkKey.hotkey ? { hotkey: voiceHotkeyLabel(talkKey.hotkey) } : {}),
+          held: talkKey.held,
+        },
+        ...(askAccelerator ? { askKey: voiceHotkeyLabel(askAccelerator) } : {}),
+        ...(stopAccelerator ? { stopKey: voiceHotkeyLabel(stopAccelerator) } : {}),
+      });
+      syncGuide(guide);
+    },
+    [bootstrap, microphoneStatus, voiceHotkey, askHotkeyChange, stopHotkeyChange, syncGuide],
+  );
   useEffect(() => {
     if (!bootstrap) return;
-    const askAccelerator = askHotkeyChange ? askHotkeyChange.accelerator : bootstrap.askHotkey;
-    const stopAccelerator = stopHotkeyChange ? stopHotkeyChange.accelerator : bootstrap.stopHotkey;
-    // All three keys reach the guide labelled: it is spoken and read, so a
-    // chord belongs there as the one word macOS writes it as rather than as
-    // the keys the panel draws apart.
-    const talkKey = voiceHotkeyToShow(bootstrap, voiceHotkey);
-    const guide = buildLukeGuide({
-      settings: settings ?? bootstrap.settings,
-      voiceAvailable: (settings ?? bootstrap.settings).voiceAvailable,
-      microphoneStatus,
-      hotkey: {
-        ...(talkKey.hotkey ? { hotkey: voiceHotkeyLabel(talkKey.hotkey) } : {}),
-        held: talkKey.held,
-      },
-      ...(askAccelerator ? { askKey: voiceHotkeyLabel(askAccelerator) } : {}),
-      ...(stopAccelerator ? { stopKey: voiceHotkeyLabel(stopAccelerator) } : {}),
-    });
-    syncGuide(guide);
-  }, [
-    bootstrap,
-    settings,
-    microphoneStatus,
-    voiceHotkey,
-    askHotkeyChange,
-    stopHotkeyChange,
-    syncGuide,
-  ]);
+    publishGuide(settings ?? bootstrap.settings);
+  }, [bootstrap, settings, publishGuide]);
+  // The spoken carrier publishes the store's answer through this ref the
+  // moment the change is made, because the settings state above it is still
+  // held for Luke's flight — and identical guides are not resent, so the
+  // landing republishing the same snapshot costs nothing.
+  useEffect(() => {
+    publishGuideRef.current = publishGuide;
+  }, [publishGuide]);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -1596,8 +1651,8 @@ export function App(): React.JSX.Element {
           the errand stand back down. */}
       <LukeErrand
         {...(errand ? { errand } : {})}
-        onLanded={releaseErrandChange}
-        onReturned={standDownAfterErrand}
+        onLanded={releaseIfCurrentErrand}
+        onReturned={standDownIfCurrentErrand}
       />
 
       {/* Luke's words while he says them: one element in every state, under

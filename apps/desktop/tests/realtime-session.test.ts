@@ -2255,6 +2255,85 @@ test("a spoken settings change is validated against the guide and carried", asyn
   ]);
 });
 
+const MODEL_GUIDE_ENTRY = {
+  id: "workspace_agent_model",
+  label: "New Conductor agents run",
+  description: "Which model a Conductor workspace or agent created through Luke starts with.",
+  kind: APP_SETTING_KIND.CHOICE,
+  value: "Conductor's default",
+  choices: ["Conductor's default", "Fable 5"],
+  adjustable: true,
+  manual: "the Conductor row under Cloud Agent API keys",
+} as const;
+
+const MODEL_ONLY_GUIDE: AppGuideSnapshot = {
+  facts: CAPTIONS_GUIDE.facts,
+  settings: [MODEL_GUIDE_ENTRY],
+};
+
+const MODEL_AND_EFFORT_GUIDE: AppGuideSnapshot = {
+  facts: CAPTIONS_GUIDE.facts,
+  settings: [
+    { ...MODEL_GUIDE_ENTRY, value: "Fable 5" },
+    {
+      id: "workspace_agent_effort",
+      label: "New Conductor agents' effort",
+      description: "How hard the chosen model thinks.",
+      kind: APP_SETTING_KIND.CHOICE,
+      value: "Conductor's default",
+      choices: ["Conductor's default", "high", "max"],
+      adjustable: true,
+      manual: "the Conductor row under Cloud Agent API keys",
+    },
+  ],
+};
+
+test("the second call of a turn is validated against the guide the first call's carry rewrote", async () => {
+  // A model and its effort asked for in one breath arrive as two calls in one
+  // turn, and the effort entry only exists in the guide once the model is
+  // stored. The renderer republishes the guide from the store's answer before
+  // its carrier returns, so the calls being carried one at a time is what
+  // lets the second half validate — this pins that ordering.
+  const carried: { setting: string; value: string }[] = [];
+  const context = harness({
+    carryAppAction: async (action) => {
+      if (action.kind !== "setting") return { status: "refused" };
+      carried.push({ setting: String(action.setting.id), value: action.value });
+      context.session.updateGuide(MODEL_AND_EFFORT_GUIDE);
+      return { status: "changed" };
+    },
+  });
+  await context.session.connect();
+  context.session.updateGuide(MODEL_ONLY_GUIDE);
+  armDeveloperTurn(context);
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "change_app_setting",
+          call_id: "call-paired-model",
+          arguments: '{"setting_id":"workspace_agent_model","value":"Fable 5"}',
+        },
+        {
+          type: "function_call",
+          name: "change_app_setting",
+          call_id: "call-paired-effort",
+          arguments: '{"setting_id":"workspace_agent_effort","value":"high"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(carried, [
+    { setting: "workspace_agent_model", value: "Fable 5" },
+    { setting: "workspace_agent_effort", value: "high" },
+  ]);
+});
+
 test("an app carrier that throws is refused with the error that caused it", async () => {
   const context = harness({
     carryAppAction: async () => {

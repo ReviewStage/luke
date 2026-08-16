@@ -328,6 +328,58 @@ test("a spoken model or effort change composes the one stored selection", async 
   assert.equal(carried.length, 5);
 });
 
+test("a model and its effort asked in one breath compose through the held answer", async () => {
+  const carried: (WorkspaceAgentSelection | undefined)[] = [];
+  const bridge = {
+    setWorkspaceAgentDefault: async (
+      _providerId: string,
+      selection: WorkspaceAgentSelection | undefined,
+    ) => {
+      carried.push(selection);
+      return {
+        settings: settings(
+          selection ? { workspaceAgentDefaults: { [PROVIDER_ID.CONDUCTOR]: selection } } : {},
+        ),
+      };
+    },
+  } as unknown as Parameters<typeof applySpokenSetting>[0];
+
+  // Nothing chosen yet, so the guide carries no effort entry at all — the
+  // paired ask arrives as two calls, and everything the second half needs
+  // only becomes true when the first half's answer lands.
+  const unset = settings();
+  let held: AppSettings | undefined;
+  await applySpokenSetting(
+    bridge,
+    {
+      setting: guideSetting(APP_SETTING_ID.WORKSPACE_AGENT_MODEL, guideInput({ settings: unset })),
+      value: "Fable 5",
+    },
+    (next) => {
+      held = next;
+    },
+    unset,
+  );
+  assert.deepEqual(carried.at(-1), { agent: "claude", model: "fable-5" });
+  assert.ok(held);
+
+  // The guide rebuilt from that answer is what the effort half validates
+  // against, and the answer is what it composes with: the effort rides the
+  // model just stored, not the state a panel is still waiting to draw.
+  const effort = guideSetting(
+    APP_SETTING_ID.WORKSPACE_AGENT_EFFORT,
+    guideInput({ settings: held }),
+  );
+  const outcome = await applySpokenSetting(
+    bridge,
+    { setting: effort, value: "high" },
+    () => undefined,
+    held,
+  );
+  assert.equal(outcome.status, "changed");
+  assert.deepEqual(carried.at(-1), { agent: "claude", model: "fable-5", effort: "high" });
+});
+
 test("the guide describes the default workspace provider without offering to change it", () => {
   // Unset reads as the asking state — the default every install starts in —
   // not as a missing value.
