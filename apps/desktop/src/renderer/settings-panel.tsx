@@ -21,6 +21,8 @@ import type { CredentialProvider } from "../shared/credential-providers";
 import {
   CLOUD_AGENT_PROVIDER_LIST,
   INTEGRATION_PROVIDER_LIST,
+  providerRunsSessionsInCloud,
+  VOICE_CREDENTIAL_PROVIDER,
 } from "../shared/credential-providers";
 import {
   capturedVoiceHotkey,
@@ -420,14 +422,15 @@ function ProviderCredential({
       <div className="credential-row">
         <span className="credential-identity">
           {/* The provider's own mark, so a list is read by brand rather than by
-              a word every line would have to repeat. Every provider that can
-              hold a key is one whose sessions live in a cloud service — that is
-              what makes the key necessary — so each mark carries the same badge
-              its session rows do, rather than one line's mark differing from
-              the same mark elsewhere. */}
+              a word every line would have to repeat. An agent provider's mark
+              carries the same cloud badge its session rows do — the key buys
+              the observation of cloud sessions, and the same mark cannot
+              differ between the row and the sessions it stands for. Linear and
+              OpenAI are services Luke uses rather than sessions he watches, so
+              their marks stand alone. */}
           <span className="credential-mark">
             <ProviderMark providerId={provider.id} />
-            <CloudBadge />
+            {providerRunsSessionsInCloud(provider.id) ? <CloudBadge /> : null}
           </span>
           <span className="credential-name">{provider.displayName}</span>
           {connected ? <CheckIcon /> : null}
@@ -1015,7 +1018,8 @@ function CredentialsSection({
  * The services Luke connects to that are not agents: today, the issue tracker.
  * Each row is the same credential line an agent provider gets — same entry,
  * same trash, same environment fallback — with its own one-line answer to what
- * connecting it buys, because the rows here do not all buy the same thing.
+ * connecting it buys. The OpenAI key is not here: it lives at the top of the
+ * Voice page, beside the feature it turns on.
  */
 function IntegrationsSection({
   settings,
@@ -1139,13 +1143,68 @@ function SettingsPageHeader({
 }
 
 /**
- * How Luke sounds and what he says unprompted. The voice he speaks with comes
- * first — it is what Luke *is* to the ear — offered the way macOS offers one
- * value from a small fixed set: a pop-up button whose closed face is drawn
- * here and whose open menu is the system's, which also lets it escape a
- * window sized to the panel rather than being clipped by it.
+ * How Luke sounds and what he says unprompted — led by the key it all runs
+ * on. The OpenAI credential stands at the top of this page rather than under
+ * Connections because voice is what the key turns on: the page that goes
+ * quiet without one is where its absence has to be explained, or every
+ * control below reads as broken rather than as waiting. The voice he speaks
+ * with comes next — it is what Luke *is* to the ear — offered the way macOS
+ * offers one value from a small fixed set: a pop-up button whose closed face
+ * is drawn here and whose open menu is the system's, which also lets it
+ * escape a window sized to the panel rather than being clipped by it.
  */
 function VoiceSection({
+  settings,
+  preferences,
+  credentials,
+  panelOpen,
+}: {
+  settings: AppSettings;
+  preferences: PreferenceWrites;
+  credentials: CredentialEntryControl;
+  panelOpen: boolean;
+}): React.JSX.Element {
+  const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
+  return (
+    <>
+      <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
+        <h2>
+          <KeyIcon />
+          OpenAI API key
+        </h2>
+        <ProviderCredential
+          provider={VOICE_CREDENTIAL_PROVIDER}
+          source={settings.credentialSources[VOICE_CREDENTIAL_PROVIDER.id]}
+          storageUnavailable={storageUnavailable}
+          control={credentials}
+          panelOpen={panelOpen}
+        />
+        {/* Said only while it is true, and as a state rather than an error:
+            nothing is broken, the page is waiting on the one thing that turns
+            it on. `voiceAvailable` rather than the credential source, because
+            availability is the store's own answer — a fixture run or a key
+            that failed to resolve leaves voice off however the row reads.
+            While this system cannot store a key at all, the storage refusal
+            replaces the invitation: a Connect stilled by missing storage
+            needs its why here exactly as it does in the other key sections,
+            and a note urging a key the panel will not store would only send
+            someone to a disabled control. */}
+        {storageUnavailable ? (
+          <p className="settings-note">{STORAGE_UNAVAILABLE_NOTE}</p>
+        ) : settings.voiceAvailable ? null : (
+          <p className="settings-note">
+            Voice is off until a key is connected — Luke cannot talk, listen, or announce sessions.
+            The settings below will take effect once it is.
+          </p>
+        )}
+      </section>
+      <VoiceControlsSection settings={settings} preferences={preferences} />
+    </>
+  );
+}
+
+/** The voice controls themselves, below the key that powers them. */
+function VoiceControlsSection({
   settings,
   preferences,
 }: {
@@ -1155,7 +1214,7 @@ function VoiceSection({
   return (
     <section
       className="settings-section settings-plain"
-      style={{ "--row-index": 1 } as React.CSSProperties}
+      style={{ "--row-index": 2 } as React.CSSProperties}
     >
       <SelectRow
         label="Voice"
@@ -1658,7 +1717,12 @@ export function SettingsPanel({
       ) : null}
 
       {drawnView === SETTINGS_VIEW.VOICE && settings ? (
-        <VoiceSection settings={settings} preferences={preferences} />
+        <VoiceSection
+          settings={settings}
+          preferences={preferences}
+          credentials={credentials}
+          panelOpen={panelOpen}
+        />
       ) : null}
 
       {drawnView === SETTINGS_VIEW.APPEARANCE && settings ? (

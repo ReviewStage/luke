@@ -1,11 +1,15 @@
+import {
+  type CredentialProviderId,
+  VOICE_CREDENTIAL_PROVIDER_ID,
+} from "../shared/credential-providers";
 import { APP_SETTING_ID, type AppSettingId } from "./luke-guide";
 
 /**
  * Where inside the Settings tab the panel currently is: its front page, or one
  * of the pages a front-page row opens. App state rather than panel state for
  * the same reason the tab is — Escape unwinds it one layer at a time from the
- * app's own key handler, and a credential entry begun on the Connections page
- * has to bring the panel back to that page after its trip to the key slot.
+ * app's own key handler, and a credential entry begun on a settings page has
+ * to bring the panel back to that page after its trip to the key slot.
  */
 export const SETTINGS_VIEW = {
   ROOT: "root",
@@ -86,6 +90,20 @@ export const SETTING_PAGE: Record<AppSettingId, SettingsSubview> = {
   [APP_SETTING_ID.WORKSPACE_AGENT_MODEL]: SETTINGS_VIEW.CONNECTIONS,
   [APP_SETTING_ID.WORKSPACE_AGENT_EFFORT]: SETTINGS_VIEW.CONNECTIONS,
 };
+
+/**
+ * Which page draws a provider's credential row. Every key lives under
+ * Connections except the one voice runs on: the OpenAI row stands at the top
+ * of the Voice page, beside the feature it turns on. This is what brings a
+ * credential entry back from the key slot to the page it began on — restoring
+ * Connections around an entry begun on Voice would land the answer on a page
+ * nobody was looking at.
+ */
+export function credentialSettingsPage(providerId: CredentialProviderId): SettingsSubview {
+  return providerId === VOICE_CREDENTIAL_PROVIDER_ID
+    ? SETTINGS_VIEW.VOICE
+    : SETTINGS_VIEW.CONNECTIONS;
+}
 
 /** How each page names itself, which is how the guide's by-hand paths word it. */
 export const SETTINGS_PAGE_LABEL: Record<SettingsSubview, string> = {

@@ -92,7 +92,13 @@ import {
 import { parsePixels } from "./session-motion";
 import { SESSION_OPTIONS_BUTTON_ID, SESSION_OPTIONS_ID } from "./session-parts";
 import type { MicrophoneControl, PreferenceWrites, ShortcutControl } from "./settings-panel";
-import { SETTING_PAGE, SETTINGS_VIEW, type SettingsView } from "./settings-views";
+import {
+  credentialSettingsPage,
+  SETTING_PAGE,
+  SETTINGS_VIEW,
+  type SettingsSubview,
+  type SettingsView,
+} from "./settings-views";
 import { useBootstrapRacedChannel } from "./use-bootstrap-raced-channel";
 import { panelEntryOpen, usePanelEntry } from "./use-panel-entry";
 import { usePanelPresentation } from "./use-panel-presentation";
@@ -266,6 +272,13 @@ export function App(): React.JSX.Element {
    * the pointer holds the panel open for a credential still on screen.
    */
   const credentialHeld = useRef(false);
+  /**
+   * The settings page the held credential's row is drawn on — Voice for the
+   * OpenAI key, Connections for every other — so the trip to the key slot
+   * ends back on the page it began on. A ref rather than state: it is read
+   * only when the panel is restored, by a callback that has to stay stable.
+   */
+  const credentialPage = useRef<SettingsSubview>(SETTINGS_VIEW.CONNECTIONS);
   const feedbackHeld = useRef(false);
   const feedbackNoticeTimer = useRef<number | undefined>(undefined);
   /**
@@ -506,11 +519,12 @@ export function App(): React.JSX.Element {
    */
   const restorePanel = useCallback(() => {
     changeTab(PANEL_TAB.SETTINGS);
-    // The line the entry belongs to lives on the Connections page, and
-    // changeTab has just reset the tab to its front page: without this, the
-    // check appearing beside the provider — the answer to what was just done
-    // — would land on a page nobody is looking at.
-    setSettingsView(SETTINGS_VIEW.CONNECTIONS);
+    // The line the entry belongs to lives on the page it was begun from —
+    // Voice for the OpenAI key, Connections for the rest — and changeTab has
+    // just reset the tab to its front page: without this, the check appearing
+    // beside the provider — the answer to what was just done — would land on
+    // a page nobody is looking at.
+    setSettingsView(credentialPage.current);
     expand();
   }, [changeTab, expand, setSettingsView]);
 
@@ -572,6 +586,9 @@ export function App(): React.JSX.Element {
 
   const beginEntry = useCallback(
     (providerId: CredentialProviderId) => {
+      // Where the entry's row is drawn, remembered before the trip to the
+      // slot so coming back lands on the page the entry began on.
+      credentialPage.current = credentialSettingsPage(providerId);
       credentialsEntry.begin({ providerId, draft: "", busy: false, away: false });
     },
     [credentialsEntry.begin],
@@ -1329,7 +1346,7 @@ export function App(): React.JSX.Element {
           // The tab and page an entry begins on, so pressing the capsule from
           // here lands where it would have in the flow this is standing in for.
           changeTab(PANEL_TAB.SETTINGS);
-          setSettingsView(SETTINGS_VIEW.CONNECTIONS);
+          setSettingsView(credentialSettingsPage(firstProvider.id));
           beginEntry(firstProvider.id);
         }
       }

@@ -22,6 +22,9 @@ test("access is offered only where it can be used", () => {
   });
   assert.equal(unavailable.offerAccess, false);
   assert.ok(!unavailable.detail.includes("macOS will ask"));
+  // The row names the way out as well as the reason: the key's own row, at
+  // the top of the Voice page.
+  assert.match(unavailable.detail, /Voice page/);
 });
 
 test("a permission already granted is not a microphone in use", () => {

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { CredentialSource } from "../shared/contracts";
-import { CREDENTIAL_PROVIDERS } from "../shared/credential-providers";
+import { CREDENTIAL_PROVIDERS, providerRunsSessionsInCloud } from "../shared/credential-providers";
 import {
   CREDENTIAL_PLACEHOLDER,
   type CredentialEntryControl,
@@ -100,14 +100,14 @@ export function KeySlot({
             beneath is the one both share, so neither has to repeat the other. */}
         <span className="settings-label key-slot-label">{credential}</span>
         <div className="key-slot-row">
-          {/* Whose key this is, said the way the settings line says it — mark
-              and cloud badge together, because a service that needs a key is
-              one that lives in a cloud — a provider's sessions or the issue
-              tracker alike — and the same mark cannot differ between the line
-              and the slot it opens. */}
+          {/* Whose key this is, said exactly the way the settings line says
+              it: an agent provider's mark keeps the cloud badge its session
+              rows wear, and a service Luke merely uses — Linear, OpenAI —
+              stands bare, because the same mark cannot differ between the
+              line and the slot it opens. */}
           <span className="key-slot-mark">
             <ProviderMark providerId={provider.id} />
-            <CloudBadge />
+            {providerRunsSessionsInCloud(provider.id) ? <CloudBadge /> : null}
           </span>
           <input
             ref={field}
