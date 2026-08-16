@@ -47,6 +47,11 @@ import { parseMilliseconds, parsePixels, STILL_MS } from "./session-motion";
  * is away flies nowhere at all, because attribution is only worth anything to
  * someone who can see what was attributed.
  *
+ * One flight at a time, and that is the caller's to guarantee: a reply may ask
+ * for several acts at once, and a new errand handed over mid-flight abandons
+ * the one in the air wherever it had got to. `errand-queue.ts` is where they
+ * are made to take turns, and the reason each act carries its own hold.
+ *
  * Everything moves with `transform` and `opacity` alone; the control it lands
  * on is read for its box and never restyled, so nothing about a settings row
  * changes because an errand happened to visit it. The one thing it does move
@@ -547,18 +552,20 @@ export interface LukeErrandProps {
   /**
    * The tap has landed, which is the moment the control it flew to should be
    * seen to move. Called once per errand and always — at once when there is
-   * no flight to make — so whatever is waiting on it is never left held. The
-   * errand rides along so the caller can tell a replaced flight's beat from
-   * the current one's: what the app holds belongs to the newest errand, and
-   * an overtaken flight must not release it early.
+   * no flight to make — so whatever is waiting on it is never left held.
+   *
+   * Neither beat says which errand it belongs to, because there is only ever
+   * one it could belong to: a second act waits its turn rather than overtaking
+   * the flight in the air, so no beat is ever a stale flight's.
    */
-  onLanded?: (errand: Errand) => void;
+  onLanded?: () => void;
   /**
    * The flight is over, or was abandoned. Called once per errand and always,
-   * on the same terms and carrying the same errand, so a panel that was stood
-   * up for an errand knows when it may stand back down.
+   * on the same terms, so a panel that was stood up for an errand knows when
+   * it may stand back down — and so the act waiting behind this one knows it
+   * may set off.
    */
-  onReturned?: (errand: Errand) => void;
+  onReturned?: () => void;
 }
 
 /**
@@ -582,9 +589,6 @@ export function LukeErrand({ errand, onLanded, onReturned }: LukeErrandProps): R
 
   useEffect(() => {
     if (errand === undefined) return;
-    // Held by name for the beats below: a closure over the prop would not
-    // survive the narrowing, and each beat reports the errand it belongs to.
-    const flown = errand;
     // Each beat is released once and only once, however this effect leaves —
     // and releasing one that never came due is better than leaving the app
     // holding a switch that will never be allowed to move.
@@ -593,13 +597,13 @@ export function LukeErrand({ errand, onLanded, onReturned }: LukeErrandProps): R
     const land = () => {
       if (landed) return;
       landed = true;
-      onLanded?.(flown);
+      onLanded?.();
     };
     const returnHome = () => {
       land();
       if (returned) return;
       returned = true;
-      onReturned?.(flown);
+      onReturned?.();
     };
 
     const markElement = mark.current;
