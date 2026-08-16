@@ -134,8 +134,9 @@ function fakeCursorApi(
       return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
     }
 
-    // The three documented writers: a new agent, a follow-up run for an
-    // existing one, and a cancel for the run it is still working.
+    // The four documented writers: a new agent, a follow-up run for an
+    // existing one, a cancel for the run it is still working, and an archive
+    // for the agent itself.
     if (method === "POST") {
       if (segments.length === 2) {
         const body = JSON.parse(rawBody ?? "{}") as {
@@ -154,6 +155,9 @@ function fakeCursorApi(
       const agent = agents.find((candidate) => candidate.id === segments[2]);
       if (agent && segments[3] === "runs" && segments.length === 4) {
         return jsonResponse({ run: { id: "run-followup", agentId: agent.id } }, 201);
+      }
+      if (agent && segments[3] === "archive" && segments.length === 4) {
+        return jsonResponse({ id: agent.id, status: "ARCHIVED" });
       }
       if (
         agent &&
@@ -680,11 +684,18 @@ test("advertises a follow-up only for an agent whose run has finished", async ()
   assert.equal(byId.get("agent-running")?.canReceiveMessage, false);
   assert.equal(byId.get("agent-errored")?.canReceiveMessage, false);
   assert.equal(byId.get("agent-filed")?.canReceiveMessage, false);
-  // The stoppable one is the one still running.
+  // The stoppable one is the one still running; every settled agent offers to
+  // be filed away instead, and one already filed offers nothing.
   assert.deepEqual(byId.get("agent-running")?.controls, [
     { id: "cancel-run", label: "Stop this run", kind: "stop", target: "run-agent-running" },
   ]);
-  assert.equal(byId.get("agent-finished")?.controls, undefined);
+  assert.deepEqual(byId.get("agent-finished")?.controls, [
+    { id: "archive-agent", label: "Archive this agent" },
+  ]);
+  assert.deepEqual(byId.get("agent-errored")?.controls, [
+    { id: "archive-agent", label: "Archive this agent" },
+  ]);
+  assert.equal(byId.get("agent-filed")?.controls, undefined);
 });
 
 test("hands a follow-up to Cursor's documented run endpoint", async () => {
@@ -727,6 +738,43 @@ test("stops the run the user saw through Cursor's cancel endpoint, sending no bo
   // Cursor documents no body for a cancel.
   assert.equal(write?.contentType, undefined);
   assert.equal(write?.body, undefined);
+});
+
+test("files a settled agent away through Cursor's archive endpoint, sending no body", async () => {
+  const api = fakeCursorApi([finishedAgent("agent-finished", TEST_TIME - 1_000)]);
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+
+  const result = await adapter.executeControl({
+    providerSessionId: "agent-finished",
+    control: { id: "archive-agent", label: "Archive this agent" },
+  });
+
+  assert.deepEqual(result, { status: "accepted" });
+  const write = api.requests.at(-1);
+  assert.equal(write?.method, "POST");
+  assert.equal(write?.pathname, "/v1/agents/agent-finished/archive");
+  assert.equal(write?.authorization, `Bearer ${TEST_API_KEY}`);
+  // Cursor documents no body for an archive.
+  assert.equal(write?.contentType, undefined);
+  assert.equal(write?.body, undefined);
+});
+
+test("refuses to archive an agent whose row never advertised it", async () => {
+  const api = fakeCursorApi([runningAgent("agent-running", TEST_TIME - 1_000)]);
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+  const requestsBefore = api.requests.length;
+
+  // A running agent advertised only its stop, so an archive ask has nothing
+  // behind it and no request exists.
+  const result = await adapter.executeControl({
+    providerSessionId: "agent-running",
+    control: { id: "archive-agent", label: "Archive this agent" },
+  });
+
+  assert.deepEqual(result, { status: "unsupported" });
+  assert.equal(api.requests.length, requestsBefore);
 });
 
 test("offers the repositories Cursor lists, on a cadence far below the observation pass", async () => {
