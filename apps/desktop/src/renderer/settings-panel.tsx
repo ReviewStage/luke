@@ -14,7 +14,7 @@ import {
   type RealtimeVoiceSpeed,
   type WorkspaceAgentSelection,
 } from "@sidecar/core";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AppSettings, CredentialSource, MicrophoneStatus } from "../shared/contracts";
 import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "../shared/contracts";
 import type { CredentialProvider } from "../shared/credential-providers";
@@ -304,12 +304,19 @@ function ProviderCredential({
   storageUnavailable,
   control,
   panelOpen,
+  children,
 }: {
   provider: CredentialProvider;
   source: CredentialSource;
   storageUnavailable: boolean;
   control: CredentialEntryControl;
   panelOpen: boolean;
+  /**
+   * The provider's own sub-rows — today, the agent defaults a connected
+   * Conductor offers. Drawn inside the credential block so the rule that
+   * separates providers falls under them, not between them and their line.
+   */
+  children?: React.ReactNode;
 }): React.JSX.Element {
   // Deleting is the one act that begins and ends on this line, question and
   // answer both. Entering a credential does not: it can leave for the slot and
@@ -622,6 +629,7 @@ function ProviderCredential({
         </fieldset>
       ) : null}
       {rejection ? <p className="error-message">{rejection}</p> : null}
+      {children}
     </div>
   );
 }
@@ -983,14 +991,14 @@ function CredentialsSection({
             ? provider.id
             : undefined;
         return (
-          <Fragment key={provider.id}>
-            <ProviderCredential
-              provider={provider}
-              source={settings.credentialSources[provider.id]}
-              storageUnavailable={storageUnavailable}
-              control={control}
-              panelOpen={panelOpen}
-            />
+          <ProviderCredential
+            key={provider.id}
+            provider={provider}
+            source={settings.credentialSources[provider.id]}
+            storageUnavailable={storageUnavailable}
+            control={control}
+            panelOpen={panelOpen}
+          >
             {agentRow ? (
               <WorkspaceAgentRow
                 provider={provider}
@@ -1001,7 +1009,7 @@ function CredentialsSection({
                 onChange={preferences.onWorkspaceAgentDefaultChange}
               />
             ) : null}
-          </Fragment>
+          </ProviderCredential>
         );
       })}
       {/* True of every key here, so it is said once rather than per provider. */}
