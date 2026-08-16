@@ -44,6 +44,13 @@ export const REALTIME_CLIENT_EVENT = {
   INPUT_AUDIO_BUFFER_COMMIT: "input_audio_buffer.commit",
   INPUT_AUDIO_BUFFER_CLEAR: "input_audio_buffer.clear",
   CONVERSATION_ITEM_CREATE: "conversation.item.create",
+  /**
+   * Removes an item from the conversation. Only ever used on context Luke
+   * himself put there — a roster, a guide, a projects list, an issue board —
+   * and only to make room for the same context said again. Nothing the
+   * developer said is ever deleted.
+   */
+  CONVERSATION_ITEM_DELETE: "conversation.item.delete",
   RESPONSE_CREATE: "response.create",
   RESPONSE_CANCEL: "response.cancel",
   /**
@@ -63,6 +70,8 @@ export const REALTIME_CLIENT_EVENT = {
 
 export const REALTIME_SERVER_EVENT = {
   RESPONSE_CREATED: "response.created",
+  /** The server confirming a superseded context item is gone. */
+  CONVERSATION_ITEM_DELETED: "conversation.item.deleted",
   /** The server confirming it dropped the audio it had queued for us. */
   OUTPUT_AUDIO_BUFFER_CLEARED: "output_audio_buffer.cleared",
   /** Names the message a reply is being spoken into, which is what a truncate cuts. */
@@ -389,7 +398,13 @@ export type ParsedRealtimeServerEvent =
        */
       hasAudio?: boolean;
     }
-  | { type: typeof REALTIME_SERVER_EVENT.ERROR; message: string };
+  | { type: typeof REALTIME_SERVER_EVENT.CONVERSATION_ITEM_DELETED; itemId?: string }
+  /**
+   * `eventId` names the client event the service is complaining about, when it
+   * says. It is what lets a caller tell an error meant for the developer from
+   * the answer to something it asked for itself.
+   */
+  | { type: typeof REALTIME_SERVER_EVENT.ERROR; message: string; eventId?: string };
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
@@ -505,11 +520,21 @@ export function parseRealtimeServerEvent(data: unknown): ParsedRealtimeServerEve
         ...(hasAudio === undefined ? {} : { hasAudio }),
       };
     }
+    case REALTIME_SERVER_EVENT.CONVERSATION_ITEM_DELETED: {
+      const itemId = optionalString(event.item_id);
+      return {
+        type: REALTIME_SERVER_EVENT.CONVERSATION_ITEM_DELETED,
+        ...(itemId ? { itemId } : {}),
+      };
+    }
     case REALTIME_SERVER_EVENT.ERROR: {
-      const message = optionalString(recordField(event, "error")?.message);
+      const error = recordField(event, "error");
+      const message = optionalString(error?.message);
+      const eventId = optionalString(error?.event_id);
       return {
         type: REALTIME_SERVER_EVENT.ERROR,
         message: message ?? "The voice service reported an error.",
+        ...(eventId ? { eventId } : {}),
       };
     }
     default:

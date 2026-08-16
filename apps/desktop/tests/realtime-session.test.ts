@@ -6,6 +6,7 @@ import {
   type AppGuideSnapshot,
   ATTENTION_DISPOSITION,
   ATTENTION_SPEECH_SOURCE,
+  CONTEXT_ITEM_KIND,
   ISSUE_TRACKER_ID,
   type NormalizedSession,
   normalizeSession,
@@ -26,6 +27,7 @@ import {
   REMOTE_QUIET_MS,
   RealtimeVoiceSession,
   type SessionActionCarrier,
+  VOICE_IDLE_TIMEOUT_MS,
 } from "../src/renderer/realtime-session";
 
 const CONNECTION: RealtimeConnection = {
@@ -54,6 +56,20 @@ interface Harness {
   calls: string[];
   /** The transceivers declared instead of tracks, as a speak-only call does. */
   transceivers: { kind: string; direction?: string }[];
+  /**
+   * The idle retirement, held rather than run: every test connects and few
+   * close, so a real ten-minute timer would keep the run alive for ten minutes
+   * apiece. `fireIdle` runs whatever is currently armed, if anything.
+   */
+  idleArmed: () => boolean;
+  idleDelayMs: () => number | undefined;
+  fireIdle: () => void;
+}
+
+interface HeldTimer {
+  callback: () => void;
+  delayMs: number;
+  cancelled: boolean;
 }
 
 function observedSession(
@@ -86,8 +102,11 @@ function harness(
     carryAction?: SessionActionCarrier;
     carryAppAction?: AppActionCarrier;
     carryIssueAction?: IssueActionCarrier;
+    idleTimeoutMs?: number;
   } = {},
 ): Harness {
+  const timers: HeldTimer[] = [];
+  const armedTimer = (): HeldTimer | undefined => timers.findLast((timer) => !timer.cancelled);
   const sent: Record<string, unknown>[] = [];
   const errors: (string | undefined)[] = [];
   const captions: (string | undefined)[] = [];
@@ -175,6 +194,15 @@ function harness(
       ? {}
       : { connectTimeoutMs: options.connectTimeoutMs }),
     ...(options.now ? { now: options.now } : {}),
+    ...(options.idleTimeoutMs === undefined ? {} : { idleTimeoutMs: options.idleTimeoutMs }),
+    schedule: (callback, delayMs) => {
+      const timer: HeldTimer = { callback, delayMs, cancelled: false };
+      timers.push(timer);
+      return timer;
+    },
+    cancel: (timer) => {
+      (timer as HeldTimer).cancelled = true;
+    },
     ...(options.carryAction ? { carryAction: options.carryAction } : {}),
     ...(options.carryAppAction ? { carryAppAction: options.carryAppAction } : {}),
     ...(options.carryIssueAction ? { carryIssueAction: options.carryIssueAction } : {}),
@@ -220,8 +248,37 @@ function harness(
     },
     requests,
     calls,
+    idleArmed: () => armedTimer() !== undefined,
+    idleDelayMs: () => armedTimer()?.delayMs,
+    fireIdle: () => {
+      armedTimer()?.callback();
+    },
     transceivers,
   };
+}
+
+const CONVERSATION_ITEM_DELETE = REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_DELETE;
+
+/** The words one context item carries, or nothing when the event is not one. */
+function itemText(event: Record<string, unknown> | undefined): string {
+  const item = event?.item as { content?: { text?: string }[] } | undefined;
+  return item?.content?.[0]?.text ?? "";
+}
+
+/** The context items of one kind that were sent, named by their own label. */
+function contextItems(context: Harness, label: string, from = 0): Record<string, unknown>[] {
+  return context.sent
+    .slice(from)
+    .filter(
+      (event) =>
+        event.type === REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE &&
+        itemText(event).startsWith(label),
+    );
+}
+
+/** The errors actually shown, past the clearing every connect starts with. */
+function reportedErrors(context: Harness): string[] {
+  return context.errors.filter((message): message is string => message !== undefined);
 }
 
 test("connecting opens the call and leaves the microphone closed", async () => {
@@ -793,13 +850,20 @@ test("an error instead of response.done still frees the turn", async () => {
   assert.equal(context.session.startListening(), true);
 });
 
-test("the conversation is told which sessions Luke can see", async () => {
+test("the conversation is told which sessions Luke can see, at the turn that reads them", async () => {
   const context = harness();
   await context.session.connect();
 
   context.session.updateSessions([
     observedSession("session-a", { status: SESSION_STATUS.WAITING, recap: "Waiting on input." }),
   ]);
+
+  // Nothing yet: a roster nobody has asked about is an answer waiting to be
+  // given, not an item to keep in the conversation.
+  assert.deepEqual(context.sent, []);
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+
+  armDeveloperTurn(context);
 
   const item = context.sent.find(
     (event) => event.type === REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE,
@@ -808,26 +872,129 @@ test("the conversation is told which sessions Luke can see", async () => {
   assert.ok(text.includes("Claude Code"));
   assert.ok(text.includes("waiting"));
   assert.ok(text.includes("Waiting on input."));
-  // Context must not make Luke start talking on its own.
-  assert.equal(
-    context.sent.filter((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE).length,
-    0,
+  // And it goes in ahead of the turn it is answering, not after it.
+  const rosterIndex = context.sent.indexOf(item as Record<string, unknown>);
+  const commitIndex = context.sent.findIndex(
+    (event) => event.type === REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_COMMIT,
   );
+  assert.ok(rosterIndex >= 0 && rosterIndex < commitIndex);
+});
+
+test("a roster that churns between turns is only ever said once", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  // Five seconds apart, all day: the poll sees a working session tick over and
+  // the rendered roster differs every time. None of it is worth an item until
+  // somebody asks — otherwise the developer's own earlier turns are what gets
+  // evicted to make room for a status that has already changed again.
+  for (const recap of ["Reading files.", "Editing.", "Running tests.", "Waiting on input."]) {
+    context.session.updateSessions([observedSession("session-a", { recap })]);
+  }
+  assert.deepEqual(context.sent, []);
+
+  armDeveloperTurn(context);
+
+  const rosters = contextItems(context, "[observed session status");
+  assert.equal(rosters.length, 1);
+  // The newest one, not the first: the turn is answered from what is true now.
+  assert.match(itemText(rosters[0]), /Waiting on input\./);
+});
+
+test("a fresh roster replaces the item the last one occupied", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  context.session.updateSessions([observedSession("session-a", { recap: "Editing." })]);
+  armDeveloperTurn(context);
+  const first = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.SESSIONS);
+  assert.ok(first);
+
+  context.session.updateSessions([observedSession("session-a", { recap: "Waiting on input." })]);
+  context.session.stopSpeaking();
+  const sentBefore = context.sent.length;
+  armDeveloperTurn(context);
+
+  // The old item is deleted, then the new one created — in that order, on a
+  // channel that keeps it, so the conversation never holds two rosters.
+  const events = context.sent.slice(sentBefore);
+  const deleteIndex = events.findIndex((event) => event.type === CONVERSATION_ITEM_DELETE);
+  const createIndex = events.findIndex(
+    (event) => event.type === REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE,
+  );
+  assert.ok(deleteIndex >= 0 && deleteIndex < createIndex);
+  assert.equal((events[deleteIndex] as { item_id?: string }).item_id, first);
+
+  const second = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.SESSIONS);
+  assert.ok(second);
+  assert.notEqual(second, first);
+});
+
+test("a supersede the server refuses is this call's own business", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  context.session.updateSessions([observedSession("session-a", { recap: "Editing." })]);
+  armDeveloperTurn(context);
+  const superseded = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.SESSIONS);
+
+  context.session.updateSessions([observedSession("session-a", { recap: "Waiting." })]);
+  context.session.stopSpeaking();
+  armDeveloperTurn(context);
+  const supersede = context.sent.findLast((event) => event.type === CONVERSATION_ITEM_DELETE) as {
+    event_id?: string;
+  };
+
+  // The item was already gone — evicted at the window's edge is how that
+  // happens — so the delete is answered with an error naming the event we sent.
+  // It is not a fault of the developer's and must not be shown as one, nor end
+  // the reply they are listening to.
+  context.emit({
+    type: REALTIME_SERVER_EVENT.ERROR,
+    error: {
+      type: "invalid_request_error",
+      message: `Item with id '${superseded}' not found.`,
+      event_id: supersede.event_id,
+    },
+  });
+
+  assert.deepEqual(reportedErrors(context), []);
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+});
+
+test("an error that is not ours is still reported and still ends the turn", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.session.updateSessions([observedSession("session-a")]);
+  armDeveloperTurn(context);
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.ERROR,
+    error: { type: "invalid_request_error", message: "The commit held no audio." },
+  });
+
+  assert.deepEqual(reportedErrors(context), ["The commit held no audio."]);
   assert.equal(context.session.status, REALTIME_STATUS.READY);
 });
 
 test("an unchanged session roster is not resent", async () => {
   const context = harness();
   await context.session.connect();
-  const roster = [observedSession("session-a")];
 
-  context.session.updateSessions(roster);
   context.session.updateSessions([observedSession("session-a")]);
+  armDeveloperTurn(context);
+  const sentBefore = context.sent.length;
 
+  // The same roster again, and another turn: there is nothing new to say, so
+  // nothing is said and the item already standing keeps its place.
+  context.session.updateSessions([observedSession("session-a")]);
+  context.session.stopSpeaking();
+  armDeveloperTurn(context);
+
+  assert.deepEqual(contextItems(context, "[observed session status", sentBefore), []);
   assert.equal(
-    context.sent.filter((event) => event.type === REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE)
-      .length,
-    1,
+    context.sent.slice(sentBefore).some((event) => event.type === CONVERSATION_ITEM_DELETE),
+    false,
   );
 });
 
@@ -1755,56 +1922,30 @@ test("a spoken ask for a new workspace is carried, and an unlisted project is re
     },
   });
   await context.session.connect();
-  const sentBeforeContext = context.sent.length;
-  context.session.updateWorkspaceProjects([
-    {
-      providerId: "conductor",
-      providerName: "Conductor",
-      providerProjectId: "proj-1",
-      repository: "luke",
-      taskSupport: "optional",
-    },
-  ]);
+  const project = {
+    providerId: "conductor",
+    providerName: "Conductor",
+    providerProjectId: "proj-1",
+    repository: "luke",
+    taskSupport: "optional",
+  } as const;
+  context.session.updateWorkspaceProjects([project]);
   // The projects travel as context the way the roster does, and an identical
   // list is not resent.
-  const contextEvent = context.sent.slice(sentBeforeContext).at(0);
-  assert.match(
-    ((contextEvent?.item as { content?: { text?: string }[] } | undefined)?.content?.[0]?.text ??
-      "") as string,
-    /^\[workspace projects, sent automatically\]/,
-  );
-  context.session.updateWorkspaceProjects([
-    {
-      providerId: "conductor",
-      providerName: "Conductor",
-      providerProjectId: "proj-1",
-      repository: "luke",
-      taskSupport: "optional",
-    },
-  ]);
-  assert.equal(context.sent.length, sentBeforeContext + 1);
+  context.session.updateWorkspaceProjects([project]);
+  armDeveloperTurn(context);
+  assert.equal(contextItems(context, "[workspace projects").length, 1);
+
   // The default provider is part of the same answer, so choosing one is news
   // even while the list itself has not moved.
-  context.session.updateWorkspaceProjects(
-    [
-      {
-        providerId: "conductor",
-        providerName: "Conductor",
-        providerProjectId: "proj-1",
-        repository: "luke",
-        taskSupport: "optional",
-      },
-    ],
-    "conductor",
-  );
-  assert.equal(context.sent.length, sentBeforeContext + 2);
-  assert.match(
-    ((context.sent.at(-1)?.item as { content?: { text?: string }[] } | undefined)?.content?.[0]
-      ?.text ?? "") as string,
-    /default provider for new workspaces is Conductor/,
-  );
-
+  const sentBeforeDefault = context.sent.length;
+  context.session.updateWorkspaceProjects([project], "conductor");
+  context.session.stopSpeaking();
   armDeveloperTurn(context);
+  const chosen = contextItems(context, "[workspace projects", sentBeforeDefault);
+  assert.equal(chosen.length, 1);
+  assert.match(itemText(chosen[0]), /default provider for new workspaces is Conductor/);
+
   const sentBefore = context.sent.length;
 
   context.emit({
@@ -2215,30 +2356,27 @@ const CAPTIONS_GUIDE: AppGuideSnapshot = {
 test("the app guide reaches the conversation, and identical guides are not resent", async () => {
   const context = harness();
   await context.session.connect();
-  const sentBefore = context.sent.length;
 
   context.session.updateGuide(CAPTIONS_GUIDE);
-  // The same knowledge again is not news; a changed value is.
+  // The same knowledge again is not news; a changed value is. Neither is worth
+  // an item on its own — the turn that asks is what collects the latest.
   context.session.updateGuide({ ...CAPTIONS_GUIDE });
+  armDeveloperTurn(context);
+  assert.equal(contextItems(context, "[app guide").length, 1);
+
+  const sentBefore = context.sent.length;
   context.session.updateGuide({
     ...CAPTIONS_GUIDE,
     settings: [
       { ...CAPTIONS_GUIDE.settings[0], value: "on" } as (typeof CAPTIONS_GUIDE.settings)[0],
     ],
   });
+  context.session.stopSpeaking();
+  armDeveloperTurn(context);
 
-  const guideEvents = context.sent.slice(sentBefore).filter((event) => {
-    const item = event.item as { content?: { text?: string }[] } | undefined;
-    return item?.content?.[0]?.text?.startsWith("[app guide") === true;
-  });
-  assert.equal(guideEvents.length, 2);
-  // Context, not a prompt: telling Luke about himself never opens his mouth.
-  assert.equal(
-    context.sent
-      .slice(sentBefore)
-      .some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE),
-    false,
-  );
+  const guideEvents = contextItems(context, "[app guide", sentBefore);
+  assert.equal(guideEvents.length, 1);
+  assert.match(itemText(guideEvents[0]), /on/);
 });
 
 test("a spoken settings change is validated against the guide and carried", async () => {
@@ -2565,26 +2703,19 @@ test("the conversation is told which issues the tracker lists", async () => {
   await context.session.connect();
 
   context.session.updateIssues([trackedIssue()]);
+  armDeveloperTurn(context);
 
-  const contextEvent = context.sent.find((event) => {
-    const item = event.item as { content?: { text?: string }[] } | undefined;
-    return item?.content?.[0]?.text?.includes("[observed issue tracker, sent automatically]");
-  });
+  const [contextEvent] = contextItems(context, "[observed issue tracker");
   assert.ok(contextEvent, "the issue roster was sent");
-  const text =
-    (contextEvent?.item as { content?: { text?: string }[] } | undefined)?.content?.[0]?.text ?? "";
-  assert.match(text, /LUKE-123/);
-  assert.match(text, /states: Done/);
-  // Context is never a prompt: nothing here asks Luke to start talking.
-  assert.equal(
-    context.sent.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE),
-    false,
-  );
+  assert.match(itemText(contextEvent), /LUKE-123/);
+  assert.match(itemText(contextEvent), /states: Done/);
 
-  // An unchanged roster is not resent.
+  // An unchanged roster is not resent, however many turns go by.
   const sentBefore = context.sent.length;
   context.session.updateIssues([trackedIssue()]);
-  assert.equal(context.sent.length, sentBefore);
+  context.session.stopSpeaking();
+  armDeveloperTurn(context);
+  assert.deepEqual(contextItems(context, "[observed issue tracker", sentBefore), []);
 });
 
 test("a spoken issue ask is carried through its own carrier and voiced", async () => {
@@ -2801,33 +2932,51 @@ test("a tracker that disconnects withdraws the roster, and a reconnect resends i
   const context = harness();
   await context.session.connect();
   context.session.updateIssues([trackedIssue()]);
+  armDeveloperTurn(context);
+  const board = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.ISSUES);
+  assert.ok(board);
   const sentBefore = context.sent.length;
 
   // Disconnecting is news once; staying disconnected is not.
   context.session.updateIssues(undefined);
   context.session.updateIssues(undefined);
+  context.session.stopSpeaking();
+  armDeveloperTurn(context);
 
-  const withdrawals = context.sent.slice(sentBefore).filter((event) => {
-    const item = event.item as { content?: { text?: string }[] } | undefined;
-    return item?.content?.[0]?.text?.includes("no longer connected") === true;
-  });
+  const withdrawals = contextItems(context, "[observed issue tracker", sentBefore).filter((event) =>
+    itemText(event).includes("no longer connected"),
+  );
   assert.equal(withdrawals.length, 1);
+  // The withdrawal takes the board's place rather than sitting beside it: an
+  // answer of "none" is still the answer to the standing question.
+  assert.equal(
+    context.sent
+      .slice(sentBefore)
+      .some(
+        (event) =>
+          event.type === CONVERSATION_ITEM_DELETE &&
+          (event as { item_id?: string }).item_id === board,
+      ),
+    true,
+  );
 
-  // The same roster arriving again after a reconnect is news again: the
-  // conversation was told to disregard it, so it has to be retold.
+  // The same roster arriving again after a reconnect is news again.
+  const reconnectBefore = context.sent.length;
   context.session.updateIssues([trackedIssue()]);
-  const rosters = context.sent.slice(sentBefore).filter((event) => {
-    const item = event.item as { content?: { text?: string }[] } | undefined;
-    return item?.content?.[0]?.text?.includes("LUKE-123") === true;
-  });
+  context.session.stopSpeaking();
+  armDeveloperTurn(context);
+  const rosters = contextItems(context, "[observed issue tracker", reconnectBefore).filter(
+    (event) => itemText(event).includes("LUKE-123"),
+  );
   assert.equal(rosters.length, 1);
 
-  // A conversation never told about a board has nothing to withdraw.
+  // A conversation never told about a board has nothing to withdraw, and must
+  // not say a tracker is "no longer" connected when none ever was.
   const fresh = harness();
   await fresh.session.connect();
-  const freshBefore = fresh.sent.length;
   fresh.session.updateIssues(undefined);
-  assert.equal(fresh.sent.length, freshBefore);
+  armDeveloperTurn(fresh);
+  assert.deepEqual(contextItems(fresh, "[observed issue tracker"), []);
 });
 
 test("a speak-only connect never asks for the microphone", async () => {
@@ -2893,6 +3042,86 @@ test("the rosters and the guide never travel on Luke's own call", async () => {
   // The stores still updated — the developer's next call starts current — but
   // nothing left on this one beyond the sentence it exists to say.
   assert.equal(context.sent.length, before);
+});
+
+test("an idle call is put away, and a call being used is not", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  // Settled and unused: the clock is running.
+  assert.equal(context.idleArmed(), true);
+  assert.equal(context.idleDelayMs(), VOICE_IDLE_TIMEOUT_MS);
+
+  // A turn stops it. A call someone is talking on is never put away underneath
+  // them, however long the turn runs.
+  context.session.startListening();
+  assert.equal(context.idleArmed(), false);
+  context.session.stopListening(false);
+  assert.equal(context.idleArmed(), true);
+
+  context.fireIdle();
+
+  // The device is released with the call: the whole point of retiring one is
+  // that the macOS microphone indicator stops standing for nothing.
+  assert.equal(context.session.status, REALTIME_STATUS.IDLE);
+  assert.equal(context.microphoneStopped(), true);
+});
+
+test("an idle call that was taken up in the meantime is left alone", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.session.startListening();
+
+  // Ten minutes is long enough for the timer to fire against a call that has
+  // since been taken up, so the decision is made again at the moment of it.
+  context.fireIdle();
+
+  assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
+});
+
+test("Luke's own call is not on the developer's idle clock", async () => {
+  const context = harness();
+
+  await context.session.connect({ microphone: false });
+
+  // It holds no device and already puts itself away once its queue is quiet.
+  assert.equal(context.idleArmed(), false);
+});
+
+test("a call that drops mid-conversation says the thread is lost", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.session.updateSessions([observedSession("session-a")]);
+  armDeveloperTurn(context);
+
+  // The service ends every session at an hour, so this is how a long
+  // conversation ordinarily ends rather than an exotic failure.
+  context.closeChannel();
+
+  assert.equal(context.session.status, REALTIME_STATUS.IDLE);
+  assert.match(reportedErrors(context).at(-1) ?? "", /lost the thread/i);
+});
+
+test("a call that drops before anything was said goes quietly", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  context.closeChannel();
+
+  // Nothing was lost, so there is nothing to report: a notice here would be a
+  // fault shown for a conversation that never happened.
+  assert.equal(context.session.status, REALTIME_STATUS.IDLE);
+  assert.deepEqual(reportedErrors(context), []);
+});
+
+test("a call put away on purpose does not report itself as lost", async () => {
+  const context = harness();
+  await context.session.connect();
+  armDeveloperTurn(context);
+
+  await context.session.close();
+
+  assert.deepEqual(reportedErrors(context), []);
 });
 
 test("the developer's call replaces Luke's own and keeps the waiting press", async () => {
