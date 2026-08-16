@@ -387,9 +387,7 @@ function isIssueActionAsk(value: unknown): value is {
 function reportVoiceAvailability(apiKeyConfigured: boolean): void {
   if (realtimeCredentials) {
     const report = realtimeCredentials.diagnostics();
-    process.stderr.write(
-      `Luke voice: enabled (model ${report.model}, voice ${report.voice}, speed ${report.speed}×)\n`,
-    );
+    process.stderr.write(`Luke voice: enabled (${report.model})\n`);
     return;
   }
   const report = unavailableRealtimeDiagnostics({
