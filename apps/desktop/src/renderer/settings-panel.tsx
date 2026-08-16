@@ -1000,6 +1000,10 @@ function CredentialsSection({
         <KeyIcon />
         Cloud Agent API keys
       </h2>
+      {/* True of every key here, so it is said once rather than per provider. */}
+      <p className="settings-note">
+        Luke reads only cloud workspaces you created, and never sends a prompt or any other change.
+      </p>
       {CLOUD_AGENT_PROVIDER_LIST.map((provider) => {
         // The agent row belongs to providers the build documents a table for,
         // and only while connected: disconnected, there is nothing the choice
@@ -1032,12 +1036,9 @@ function CredentialsSection({
           </ProviderCredential>
         );
       })}
-      {/* True of every key here, so it is said once rather than per provider. */}
-      <p className="settings-note">
-        {storageUnavailable
-          ? STORAGE_UNAVAILABLE_NOTE
-          : "Luke reads only cloud workspaces you created, and never sends a prompt or any other change."}
-      </p>
+      {/* The same refusal the trackers' section explains: a Connect stilled by
+          missing storage needs its why in this section too. */}
+      {storageUnavailable ? <p className="settings-note">{STORAGE_UNAVAILABLE_NOTE}</p> : null}
     </section>
   );
 }
