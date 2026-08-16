@@ -93,12 +93,22 @@ test("the guide describes every spoken-adjustable setting with its current value
   assert.equal(dock.value, "off");
   assert.equal(dock.defaultValue, "off");
 
-  // The pace is offered in words a voice can carry, current value included.
+  // The pace is offered in words a voice can carry and in the multiples its
+  // settings row shows, so an ask in either spelling lands.
   const speed = guideSetting(APP_SETTING_ID.VOICE_SPEED);
   assert.equal(speed.kind, APP_SETTING_KIND.CHOICE);
   assert.equal(speed.value, "normal");
   assert.equal(speed.defaultValue, "normal");
-  assert.deepEqual(speed.choices, ["slow", "normal", "quick", "fast"]);
+  assert.deepEqual(speed.choices, [
+    "slow",
+    "0.75×",
+    "normal",
+    "1×",
+    "quick",
+    "1.25×",
+    "fast",
+    "1.5×",
+  ]);
   assert.equal(
     guideSetting(
       APP_SETTING_ID.VOICE_SPEED,
@@ -569,6 +579,27 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
   // The snapshot the store answered with is handed back either way, so the
   // panel's switches redraw from what was actually stored.
   assert.equal(seen.length, calls.length);
+});
+
+test("a pace asked for by its multiple carries the same as its word", async () => {
+  const calls: string[] = [];
+  const bridge = {
+    setVoiceSpeed: async (speed: number) => {
+      calls.push(`setVoiceSpeed:${speed}`);
+      return { settings: settings() };
+    },
+  };
+
+  for (const value of ["quick", "1.25×"]) {
+    const outcome = await applySpokenSetting(
+      bridge,
+      { setting: guideSetting(APP_SETTING_ID.VOICE_SPEED), value },
+      () => undefined,
+    );
+    assert.equal(outcome.status, "changed");
+  }
+
+  assert.deepEqual(calls, ["setVoiceSpeed:1.25", "setVoiceSpeed:1.25"]);
 });
 
 test("the store's refusal comes back as the spoken outcome", async () => {

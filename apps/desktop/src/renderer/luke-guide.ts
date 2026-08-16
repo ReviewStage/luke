@@ -110,8 +110,10 @@ const ASK_EACH_TIME_CHOICE = "ask each time";
 
 /**
  * The words a pace is asked for in, slowest to fastest, each paired with the
- * multiple it means. The settings row shows the multiples; a conversation
- * offers the words, because "quick" survives speech where "1.25×" does not.
+ * multiple it means. A conversation offers both spellings: the word because
+ * "quick" survives speech where "1.25×" does not, and the multiple because it
+ * is the label the settings row shows, so it is the name a reader of the row
+ * will ask by.
  */
 const VOICE_SPEED_WORDS: readonly { word: string; speed: RealtimeVoiceSpeed }[] = [
   { word: "slow", speed: REALTIME_VOICE_SPEED.SLOW },
@@ -120,12 +122,19 @@ const VOICE_SPEED_WORDS: readonly { word: string; speed: RealtimeVoiceSpeed }[] 
   { word: "fast", speed: REALTIME_VOICE_SPEED.FAST },
 ];
 
+/** A pace spelt the way its settings row labels it. */
+function voiceSpeedMultiple(speed: RealtimeVoiceSpeed): string {
+  return `${speed}×`;
+}
+
 function voiceSpeedWord(speed: RealtimeVoiceSpeed): string {
   return VOICE_SPEED_WORDS.find((candidate) => candidate.speed === speed)?.word ?? "normal";
 }
 
 function voiceSpeedFromWord(word: string): RealtimeVoiceSpeed | undefined {
-  return VOICE_SPEED_WORDS.find((candidate) => candidate.word === word)?.speed;
+  return VOICE_SPEED_WORDS.find(
+    (candidate) => candidate.word === word || voiceSpeedMultiple(candidate.speed) === word,
+  )?.speed;
 }
 
 /** The name a provider is known by on its rows, falling back to its id. */
@@ -161,11 +170,14 @@ const SETTING_GUIDE: Record<
     id: APP_SETTING_ID.VOICE_SPEED,
     label: "Speed",
     description:
-      "How fast Luke talks — slow is 0.75×, normal 1×, quick 1.25×, fast 1.5× the voice's natural rate; a change is heard from the next reply on.",
+      "How fast Luke talks — slow is 0.75×, normal 1×, quick 1.25×, fast 1.5× the voice's natural rate, and an ask may use the word or the multiple; a change is heard from the next reply on.",
     kind: APP_SETTING_KIND.CHOICE,
     value: voiceSpeedWord(settings.voiceSpeed),
     defaultValue: voiceSpeedWord(REALTIME_DEFAULTS.SPEED),
-    choices: VOICE_SPEED_WORDS.map((candidate) => candidate.word),
+    choices: VOICE_SPEED_WORDS.flatMap((candidate) => [
+      candidate.word,
+      voiceSpeedMultiple(candidate.speed),
+    ]),
     adjustable: true,
     manual: VOICE_PAGE,
   }),
