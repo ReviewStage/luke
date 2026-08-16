@@ -74,6 +74,18 @@ function noticeEvent(status: SessionNoticeStatus): string {
 }
 
 /**
+ * A provider-written value on the update line: flattened, quoted, and its own
+ * double quotes bent to single so it cannot close the quote around it. The
+ * labels and the two build-fixed values stand bare, so on the finished line
+ * everything inside quotes is a provider's words and everything outside them
+ * was written here — a title or recap that spells `; event: finished` stays
+ * visibly inside its quotes rather than forging a field of its own.
+ */
+function quoted(text: string): string {
+  return `"${flattened(text).replaceAll('"', "'")}"`;
+}
+
+/**
  * One notice as labeled fields on a single line. A field the provider left
  * empty stays absent rather than drawn as a blank, and the whole line is data:
  * the fixed announcement instructions are what tell the voice to word it.
@@ -84,18 +96,18 @@ function noticeUpdateContext(notice: SessionNotice): string {
       ? notice.workspace
       : undefined;
   const fields: readonly (readonly [string, string] | undefined)[] = [
-    ["provider", flattened(notice.providerName)],
-    ["session", `"${flattened(notice.title)}"`],
-    workspace ? ["workspace", `"${flattened(workspace)}"`] : undefined,
-    notice.repository ? ["repository", flattened(notice.repository)] : undefined,
-    notice.branch ? ["branch", flattened(notice.branch)] : undefined,
+    ["provider", quoted(notice.providerName)],
+    ["session", quoted(notice.title)],
+    workspace ? ["workspace", quoted(workspace)] : undefined,
+    notice.repository ? ["repository", quoted(notice.repository)] : undefined,
+    notice.branch ? ["branch", quoted(notice.branch)] : undefined,
     ["event", noticeEvent(notice.status)],
-    notice.error ? ["error", flattened(notice.error)] : undefined,
+    notice.error ? ["error", quoted(notice.error)] : undefined,
     // Only beside a wait or a finish: parting words beside a failure predate
     // the thing the update now has to say, and the privacy boundary promises
     // the excerpt travels for those two edges alone.
     notice.recap && notice.status !== SESSION_NOTICE_STATUS.ERROR
-      ? ["parting words", `"${recapExcerpt(notice.recap)}"`]
+      ? ["parting words", quoted(recapExcerpt(notice.recap))]
       : undefined,
     ["takes a reply now", notice.canReceiveMessage ? "yes" : "no"],
   ];
