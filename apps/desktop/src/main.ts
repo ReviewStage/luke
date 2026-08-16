@@ -118,7 +118,7 @@ import {
   sessionNoticeSpeech,
 } from "./session-notifications";
 import { createSettingsHandler, SettingsRefusal } from "./settings-handler";
-import { SettingsStore } from "./settings-store";
+import { SettingsStore, type StoredAccount } from "./settings-store";
 import {
   ACCOUNT_PROVIDER,
   ACCOUNT_STATUS,
@@ -427,10 +427,12 @@ function broadcastAccount(): void {
   panels.broadcast(channels.accountChanged, account);
 }
 
-async function startAccountCapabilities(): Promise<void> {
-  if (!accountCapabilitiesActive()) return;
+async function startAccountCapabilities(generation = accountGeneration): Promise<void> {
+  if (generation !== accountGeneration || !accountCapabilitiesActive()) return;
   await applyVoiceCredential();
+  if (generation !== accountGeneration || !accountCapabilitiesActive()) return;
   await hotkeys.reapply(HOTKEY_RANK.TALK);
+  if (generation !== accountGeneration || !accountCapabilitiesActive()) return;
   startSessionObservation();
   startIssueObservation();
 }
@@ -451,6 +453,17 @@ async function signOutAccount(): Promise<AccountSnapshot> {
   return account;
 }
 
+/** Stores credentials only while the account lifecycle that produced them is current. */
+async function storeCurrentAccount(generation: number, stored: StoredAccount): Promise<boolean> {
+  if (generation !== accountGeneration) return false;
+  const next = await settingsStore.setAccount(stored);
+  // The store serializes this write with clearAccount(), so a sign-out that
+  // arrived during the await owns the final disk state. It must own memory too.
+  if (generation !== accountGeneration) return false;
+  account = next;
+  return true;
+}
+
 async function refreshStoredAccount(): Promise<void> {
   const stored = await settingsStore.readAccount();
   if (!stored || !runMode.requiresAccount) return;
@@ -462,8 +475,7 @@ async function refreshStoredAccount(): Promise<void> {
       identity.name !== stored.name ||
       identity.provider !== stored.provider
     ) {
-      if (generation !== accountGeneration) return;
-      account = await settingsStore.setAccount({ ...stored, ...identity });
+      if (!(await storeCurrentAccount(generation, { ...stored, ...identity }))) return;
       broadcastAccount();
     }
     return;
@@ -489,11 +501,9 @@ async function refreshStoredAccount(): Promise<void> {
     // A refresh token may rotate as soon as the token endpoint answers. Keep
     // that answer before asking for identity so a transient user-info failure
     // cannot strand the account with the now-revoked previous token.
-    if (generation !== accountGeneration) return;
-    account = await settingsStore.setAccount({ ...stored, ...tokens });
+    if (!(await storeCurrentAccount(generation, { ...stored, ...tokens }))) return;
     const identity = await accountClient.userInfo(tokens.accessToken);
-    if (generation !== accountGeneration) return;
-    account = await settingsStore.setAccount({ ...tokens, ...identity });
+    if (!(await storeCurrentAccount(generation, { ...tokens, ...identity }))) return;
     broadcastAccount();
   } catch {}
 }
@@ -521,9 +531,11 @@ function beginAccountSignIn(provider: AccountProvider): Promise<AccountSnapshot>
         redirectUri: loopback.redirectUri,
       });
       const identity = await accountClient.userInfo(tokens.accessToken);
+      if (!(await storeCurrentAccount(generation, { ...tokens, ...identity }))) {
+        throw new Error("Sign-in was cancelled");
+      }
+      await startAccountCapabilities(generation);
       if (generation !== accountGeneration) throw new Error("Sign-in was cancelled");
-      account = await settingsStore.setAccount({ ...tokens, ...identity });
-      await startAccountCapabilities();
       broadcastAccount();
       return account;
     } catch (error) {
