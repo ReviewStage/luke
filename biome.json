@@ -7,7 +7,7 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!!**/pnpm-lock.yaml"]
+    "includes": ["**", "!!**/pnpm-lock.yaml", "!!tools/oxlint/anti-slop"]
   },
   "formatter": {
     "enabled": true,

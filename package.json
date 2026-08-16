@@ -12,7 +12,7 @@
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "evidence:record": "node scripts/record-evidence.mjs",
     "format": "biome format --write .",
-    "lint": "biome check .",
+    "lint": "biome check . && oxlint .",
     "lint:fix": "biome check --write .",
     "package": "pnpm --filter @luke/desktop package",
     "prepare": "husky",
@@ -23,14 +23,17 @@
     "typecheck": "pnpm --recursive --if-present run typecheck"
   },
   "lint-staged": {
-    "*.{js,jsx,mjs,ts,tsx,json,md,css}": "biome check --write --no-errors-on-unmatched"
+    "*.{js,jsx,mjs,ts,tsx,json,md,css}": "biome check --write --no-errors-on-unmatched",
+    "*.{js,jsx,cjs,mjs,ts,tsx,cts,mts}": "oxlint --no-error-on-unmatched-pattern"
   },
   "optionalDependencies": {
     "ds-store": "0.1.6"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.8",
+    "@oxlint/plugins": "1.78.0",
     "husky": "9.1.7",
-    "lint-staged": "17.3.0"
+    "lint-staged": "17.3.0",
+    "oxlint": "1.78.0"
   }
 }
