@@ -127,7 +127,9 @@ function isDictionaryAccumulatorTarget(destination: WideningTarget): boolean {
 }
 
 function hasParentAssertion(node: ESTree.Node): boolean {
-	return node.parent?.type === "TSAsExpression" || node.parent?.type === "TSTypeAssertion";
+	let current = node.parent;
+	while (current?.type === "ParenthesizedExpression") current = current.parent;
+	return current?.type === "TSAsExpression" || current?.type === "TSTypeAssertion";
 }
 
 /** Detect sound syntactic cases where a known value is explicitly widened and loses evidence. */

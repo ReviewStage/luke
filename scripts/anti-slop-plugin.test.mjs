@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -65,4 +65,49 @@ test("a parenthesized empty-object branch is rejected", async () => {
 
   assert.equal(result.exitCode, 1, result.output);
   assert.match(result.output, /conditional spread hides property omission/u);
+});
+
+test("staged JavaScript formatting finishes before Oxlint starts", async () => {
+  const packageJson = JSON.parse(await readFile(path.join(repositoryRoot, "package.json"), "utf8"));
+
+  assert.deepEqual(packageJson["lint-staged"]["*.{js,jsx,cjs,mjs,ts,tsx,cts,mts}"], [
+    "biome check --write --no-errors-on-unmatched",
+    "oxlint --no-error-on-unmatched-pattern",
+  ]);
+});
+
+test("a parenthesized assertion chain reports only its outer widening", async () => {
+  const result = await lintFixture(
+    "no-known-value-widening",
+    "const value = { answer: 42 };\nconst widened = (value as unknown) as object;\n",
+  );
+
+  assert.equal(result.exitCode, 1, result.output);
+  assert.equal(result.output.match(/explicit .* type on assertion/gu)?.length, 1, result.output);
+});
+
+test("a precise inline mapped type preserves known value evidence", async () => {
+  const result = await lintFixture(
+    "no-known-value-widening",
+    'const value = { answer: 42 };\nconst mapped = value as { [Key in "answer"]: number };\n',
+  );
+
+  assert.equal(result.exitCode, 0, result.output);
+});
+
+test("a broad inline mapped type still discards known value evidence", async () => {
+  const result = await lintFixture(
+    "no-known-value-widening",
+    "const value = { answer: 42 };\nconst mapped = value as { [Key in string]: number };\n",
+  );
+
+  assert.equal(result.exitCode, 1, result.output);
+  assert.match(result.output, /explicit open dictionary type on assertion/u);
+});
+
+test("an unknown union cannot hide behind a type alias", async () => {
+  const result = await lintFixture("no-unknown-type-aliases", "type Hidden = unknown | string;\n");
+
+  assert.equal(result.exitCode, 1, result.output);
+  assert.match(result.output, /hides `unknown`/u);
 });

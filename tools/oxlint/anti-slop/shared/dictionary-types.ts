@@ -351,7 +351,11 @@ export function classifyWideningTarget(
 				? { kind: "anonymous object" }
 				: null;
 	}
-	if (unwrapped.type === "TSMappedType") return { kind: "open dictionary" };
+	if (unwrapped.type === "TSMappedType") {
+		return isBroadMappedKey(unwrapped.constraint, environment, new Map())
+			? { kind: "open dictionary" }
+			: null;
+	}
 	if (unwrapped.type !== "TSTypeReference") return null;
 	const name = typeReferenceName(unwrapped);
 	if (name === null) return null;
