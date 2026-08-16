@@ -10,6 +10,7 @@ import {
   SESSION_LIST_SORT,
 } from "@sidecar/core";
 import {
+  captionRoom,
   ERRAND_TARGET,
   ERRAND_WAIT,
   type ErrandJourney,
@@ -19,6 +20,8 @@ import {
   errandDrift,
   errandFlies,
   errandJourney,
+  errandScrollTop,
+  errandSettledBound,
   errandTargets,
   tabErrandTarget,
 } from "../src/renderer/luke-errand";
@@ -369,5 +372,93 @@ test("every setting is signed on the page it is actually drawn on", () => {
       setting.manual.includes(SETTINGS_PAGE_LABEL[page]),
       `${setting.id} is opened on the ${page} page and the guide sends a hand to ${setting.manual}`,
     );
+  }
+});
+
+test("the captions' room is reserved only while there are words or words coming", () => {
+  const block = { size: 28, max: 70 };
+  // Nothing is drawn and nobody is talking, so nothing is coming either.
+  assert.equal(captionRoom({ ...block, drawn: false, speaking: false }), 0);
+  // Drawn: what is left of the block is what it can still take.
+  assert.equal(captionRoom({ ...block, drawn: true, speaking: false }), 42);
+  // A muted Mac captions whatever the preference says, so a reply under way
+  // with nothing measured yet may still take the whole block.
+  assert.equal(captionRoom({ size: 0, max: 70, drawn: false, speaking: true }), 70);
+  // Already at its limit: it has nothing left to take.
+  assert.equal(captionRoom({ size: 70, max: 70, drawn: true, speaking: true }), 0);
+});
+
+test("a landing is scrolled clear of the room the captions may still take", () => {
+  const view = { top: 100, bottom: 400 };
+  // Comfortably inside, with the room to spare: left exactly where it is.
+  assert.equal(
+    errandScrollTop({ scrollTop: 0, view, target: { top: 150, bottom: 170 }, room: 70 }),
+    0,
+  );
+  // Inside now, but inside the band the captions are about to take: scrolled
+  // up by just enough to clear it, which is what a muted reply would have
+  // clipped out of view by the time he landed.
+  assert.equal(
+    errandScrollTop({ scrollTop: 40, view, target: { top: 350, bottom: 370 }, room: 70 }),
+    80,
+  );
+  // The same control with no captions coming needs no scrolling at all.
+  assert.equal(
+    errandScrollTop({ scrollTop: 40, view, target: { top: 350, bottom: 370 }, room: 0 }),
+    40,
+  );
+  // Above the view: brought down to its top, room or no room.
+  assert.equal(
+    errandScrollTop({ scrollTop: 90, view, target: { top: 60, bottom: 80 }, room: 70 }),
+    50,
+  );
+});
+
+test("a control taller than what is left keeps its own top on screen", () => {
+  // Clearing the whole band would push the control's head out of the view.
+  // Its top is where its name and its switch are, so that is what is kept: a
+  // switch sitting a little low still reads, one scrolled past does not.
+  assert.equal(
+    errandScrollTop({
+      scrollTop: 0,
+      view: { top: 100, bottom: 400 },
+      target: { top: 120, bottom: 390 },
+      room: 70,
+    }),
+    20,
+  );
+});
+
+test("the drift is bounded by the shape that will still be there at the end", () => {
+  // The captions borrow their room from the panel and give all of it back the
+  // moment the reply ends, which can easily happen mid-flight. Bounded by the
+  // shape as drawn, a drift could be left on the desktop by that shrink; the
+  // room comes off the foot, so the settled shape is the drawn one less the
+  // block.
+  const drawn = { left: 446, top: 0, width: 620, height: 520 };
+  assert.deepEqual(errandSettledBound(drawn, 70), { ...drawn, height: 450 });
+  // No captions, nothing borrowed, nothing to take back.
+  assert.deepEqual(errandSettledBound(drawn, 0), drawn);
+  // An unreadable token reads as zero rather than as a negative reservation,
+  // and a block somehow taller than the shape leaves no room rather than a
+  // shape inside out.
+  assert.deepEqual(errandSettledBound(drawn, -20), drawn);
+  assert.equal(errandSettledBound(drawn, 900).height, 0);
+});
+
+test("a shape that shrinks to nothing leaves a drift with nowhere to lean", () => {
+  // The bound is what decides the sway, so a settled shape with no height
+  // collapses the drift onto the straight run home — the one path already
+  // known to be over black — rather than bowing off it.
+  const journey = errandJourney(
+    STAGE,
+    { left: 747, top: 9, width: 18, height: 18 },
+    { left: 960, top: 300, width: 34, height: 20 },
+  );
+  const beats = errandBeats(TOKENS, ERRAND_WAIT.AT_ONCE);
+  const flattened = errandSettledBound(errandBound(STAGE, SURFACE), SURFACE.height);
+  const drift = errandDrift(journey, beats, flattened);
+  for (const step of drift) {
+    assert.ok(swayAt(journey, step.point) < 1e-9, "every step is on the run itself");
   }
 });

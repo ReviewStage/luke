@@ -918,15 +918,23 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    box wearing the colour the face is wearing — so the same face is simply
    somewhere else for a second.
 
-   Above everything, because the flight passes over the panel rather than
-   through it, and past every pointer: the strip's one button and the control
-   being landed on both keep every press they ever had. There is no reduced
-   motion rule to write — the flight is timed off the tokens in JavaScript, so
-   zeroed tokens are simply no flight. */
+   Above everything drawn on the shape, and that is a rule rather than a
+   number: this is Luke himself for a second, and a layer of chrome sliding
+   over him reads as the animation breaking rather than as depth. It has to
+   clear the captions (3) and the row that asks for volume over them (5) in
+   particular, because a muted Mac draws both under the housing he sets off
+   from and at the foot he flies toward — so a mark at the hover strip's own
+   level spent the muted case disappearing behind them. Anything layered on
+   the surface later goes below this, not above it.
+
+   Past every pointer, though: the strip's one button, the control being
+   landed on, and the hint's own Got it all keep every press they ever had.
+   There is no reduced motion rule to write — the flight is timed off the
+   tokens in JavaScript, so zeroed tokens are simply no flight. */
 .luke-errand-mark,
 .luke-errand-ring {
   position: absolute;
-  z-index: 4;
+  z-index: 6;
   top: 0;
   left: 0;
   opacity: 0;
