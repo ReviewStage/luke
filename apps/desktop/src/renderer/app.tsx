@@ -283,7 +283,44 @@ export function App(): React.JSX.Element {
   const errands = useRef(0);
 
   /**
-   * What the panel is not drawing yet, because Luke has not reached it.
+   * The way to tell the conversation what the store now holds, for the spoken
+   * carrier below. Only the drawing waits for Luke: the guide has to describe
+   * the store's answer at once, because the next call in the same turn is
+   * validated against it — an effort named in the same breath as a model only
+   * exists in the guide the model change just made true. A ref because the
+   * carrier is created before the conversation hook that owns the publisher.
+   */
+  const publishGuideRef = useRef<(next: AppSettings) => void>(() => {});
+  /**
+   * The newest snapshot this window has seen, drawn or still held back.
+   *
+   * What waits for Luke is the drawing alone. What the next call of the same
+   * turn composes against has to be current, or a model and the effort named
+   * in the same breath would compose the second against the selection the
+   * first just replaced. So the spoken carrier writes this the moment the
+   * store answers, before any of it is drawn.
+   *
+   * It cannot be only the spoken answers, though, or a switch pressed by hand
+   * between two spoken changes would be shadowed by a snapshot older than it.
+   * So every write goes through {@link applySettings} and this is always at
+   * least as new as the drawn state, whichever path wrote it.
+   */
+  const answeredSettings = useRef<AppSettings | undefined>(undefined);
+  /**
+   * The one way settings are drawn. Every path travels it — a row's own press,
+   * a key stored or removed, another window's push, and an errand's hold
+   * coming down — so the snapshot the next spoken change composes against is
+   * never older than the panel it is drawn on.
+   */
+  const applySettings = useCallback(
+    (next: AppSettings) => {
+      answeredSettings.current = next;
+      setSettings(next);
+    },
+    [setSettings],
+  );
+  /**
+   * Draws what the panel was not drawing yet, because Luke had not reached it.
    *
    * The change itself is made the moment it is asked for — nothing here delays
    * a write, and the spoken answer reports what actually happened. What waits
@@ -301,32 +338,17 @@ export function App(): React.JSX.Element {
    * flight they are timing, and an errand whose callbacks changed identity
    * would be torn down and rebuilt mid-air.
    */
-  /**
-   * The way to tell the conversation what the store now holds, for the spoken
-   * carrier below. Only the drawing waits for Luke: the guide has to describe
-   * the store's answer at once, because the next call in the same turn is
-   * validated against it — an effort named in the same breath as a model only
-   * exists in the guide the model change just made true. A ref because the
-   * carrier is created before the conversation hook that owns the publisher.
-   */
-  const publishGuideRef = useRef<(next: AppSettings) => void>(() => {});
-  /**
-   * The newest snapshot the store has answered with, held back from the panel
-   * or not. What waits for Luke is the drawing; what the next call in the same
-   * turn composes against must be current, or a model and its effort asked for
-   * in one breath would compose the second against the selection the first
-   * replaced. Kept beside the holds rather than in one, because a hold belongs
-   * to a single act and this is what every act after it has to read.
-   */
-  const answeredSettings = useRef<AppSettings | undefined>(undefined);
-  const drawErrandHold = useCallback((hold: ErrandHold) => {
-    if (hold.settings !== undefined) setSettings(hold.settings);
-    // Folded into whatever the view is at the moment it lands rather than the
-    // moment it was chosen: the list corrects its own filter during render
-    // when one empties, and a snapshot taken at the ask would undo that.
-    const view = hold.view;
-    if (view !== undefined) setSessionView((current) => ({ ...current, ...view }));
-  }, [setSettings]);
+  const drawErrandHold = useCallback(
+    (hold: ErrandHold) => {
+      if (hold.settings !== undefined) applySettings(hold.settings);
+      // Folded into whatever the view is at the moment it lands rather than the
+      // moment it was chosen: the list corrects its own filter during render
+      // when one empties, and a snapshot taken at the ask would undo that.
+      const view = hold.view;
+      if (view !== undefined) setSessionView((current) => ({ ...current, ...view }));
+    },
+    [applySettings],
+  );
 
   /**
    * Every act this reply asked Luke to sign, in the order he will sign them.
@@ -499,10 +521,10 @@ export function App(): React.JSX.Element {
    */
   const applySettingsReply = useCallback(
     (result: SettingsUpdateResult) => {
-      setSettings(result.settings);
+      applySettings(result.settings);
       return result.reason;
     },
-    [setSettings],
+    [applySettings],
   );
 
   const changeVoiceCaptions = useCallback(
@@ -534,7 +556,7 @@ export function App(): React.JSX.Element {
     isSendable: isSubmittable,
     send: async (sending) => {
       const result = await window.sidecar.setProviderApiKey(sending.providerId, sending.draft);
-      setSettings(result.settings);
+      applySettings(result.settings);
       return result.reason ? { rejection: result.reason } : {};
     },
     pointerInside: pointerIsInside,
@@ -578,7 +600,7 @@ export function App(): React.JSX.Element {
   const removeProviderApiKey = useCallback(
     async (providerId: CredentialProviderId) => {
       const result = await window.sidecar.setProviderApiKey(providerId, undefined);
-      setSettings(result.settings);
+      applySettings(result.settings);
       // Delete and the field are on the row together once the panel has been
       // brought back around an entry, and a key that has been removed cannot be
       // replaced.
@@ -587,7 +609,7 @@ export function App(): React.JSX.Element {
       }
       return result.reason;
     },
-    [credentialsEntry.apply, credentialsEntry.latest, setSettings],
+    [applySettings, credentialsEntry.apply, credentialsEntry.latest],
   );
 
   const credentials: CredentialEntryControl = {
@@ -1217,7 +1239,7 @@ export function App(): React.JSX.Element {
         errandRun.current = supersedeErrandSettings(errandRun.current);
         onChange(pushed);
       }),
-    setSettings,
+    applySettings,
   );
   const acceptOutputAudioBootstrap = useBootstrapRacedChannel(
     (onChange) => window.sidecar.onOutputAudioChanged(onChange),
