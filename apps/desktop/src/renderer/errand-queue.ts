@@ -183,6 +183,23 @@ export function supersedeErrandSettings(run: ErrandRun): ErrandRun {
 }
 
 /**
+ * Whether the panel is still the run's to put away once this act has been
+ * taken up.
+ *
+ * A run signs its acts in turn under one panel, so the question is asked of
+ * the run rather than of any single act. An act that borrows the panel to show
+ * a switch claims it back only if it is the one that stood it up — a panel
+ * that was already open is somewhere the developer had gone themselves. An act
+ * that asked for the panel in its own right disclaims it outright, whichever
+ * act put it there: once someone has asked out loud to see the panel, closing
+ * it afterwards is taking it from them for having spoken.
+ */
+export function errandBorrowedPanel(borrowed: boolean, launch: PendingErrand): boolean {
+  if (!launch.borrowsPanel) return false;
+  return borrowed || launch.opening;
+}
+
+/**
  * What a flight has to wait out before it can measure anything, read off what
  * the panel is drawing at the moment the act comes up rather than at the
  * moment it was asked for. In a run of several, the page drawn when the second

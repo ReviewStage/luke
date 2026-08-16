@@ -6,6 +6,7 @@ import {
   EMPTY_ERRAND_RUN,
   type ErrandHold,
   type ErrandRun,
+  errandBorrowedPanel,
   errandRunIdle,
   errandWait,
   finishErrand,
@@ -219,6 +220,34 @@ test("the run is idle only once there is nothing in the air and nothing waiting"
   const flying = nextErrand(run(only)).run;
   assert.equal(errandRunIdle(flying), false);
   assert.equal(errandRunIdle(finishErrand(flying).run), true);
+});
+
+test("a panel asked for out loud is nobody's to take away afterwards", () => {
+  const shows = (opening: boolean): PendingErrand => ({
+    targets: [ERRAND_TARGET.SESSIONS_TAB],
+    tab: PANEL_TAB.SESSIONS,
+    opening,
+    borrowsPanel: false,
+    hold: NOTHING_HELD,
+  });
+  const changes = (opening: boolean): PendingErrand =>
+    settingAct(APP_SETTING_ID.VOICE_CAPTIONS, SETTINGS_VIEW.VOICE, NOTHING_HELD, opening);
+
+  // A switch has to be seen moving, so a settings change borrows the panel and
+  // gives it back — but only the one it stood up itself.
+  assert.equal(errandBorrowedPanel(false, changes(true)), true);
+  assert.equal(errandBorrowedPanel(false, changes(false)), false);
+
+  // A second settings act finds the panel already open, so its own opening is
+  // false. It must not answer "no" on the first act's behalf: the close the
+  // first one is owed still has to happen, and only once the run is done.
+  assert.equal(errandBorrowedPanel(true, changes(false)), true);
+
+  // The panel someone asked for out loud is the answer itself, so it stays —
+  // and it stays even when an earlier settings act is what stood it up, which
+  // is the whole of this rule.
+  assert.equal(errandBorrowedPanel(true, shows(false)), false);
+  assert.equal(errandBorrowedPanel(false, shows(true)), false);
 });
 
 test("a flight waits out whatever the act it signs has set in motion", () => {

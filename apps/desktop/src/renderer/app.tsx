@@ -50,6 +50,7 @@ import {
   EMPTY_ERRAND_RUN,
   type ErrandHold,
   type ErrandRun,
+  errandBorrowedPanel,
   errandRunIdle,
   errandWait,
   finishErrand,
@@ -451,12 +452,13 @@ export function App(): React.JSX.Element {
       if (launch.targets.length > 0) {
         errands.current += 1;
         setErrand({ targets: launch.targets, wait, run: errands.current });
-        // Only a panel an errand borrowed is the errand's to put away, and only
-        // the first act of a run can have been the one that stood it up. Later
-        // acts must not answer "no" on its behalf: a close scheduled by the
-        // first act and then disowned by the second still fires, and it fires
-        // into the middle of the second act's flight.
-        if (launch.opening && launch.borrowsPanel) errandOpenedPanel.current = true;
+        // Whether the panel is still the run's to put away, asked of the run
+        // rather than of this act alone. A later act must not answer "no" on
+        // the first one's behalf just for having found the panel already open:
+        // a close the first act scheduled and the second disowned still fires,
+        // into the middle of the second act's flight. But an act that asked for
+        // the panel itself does disclaim it, whichever act stood it up.
+        errandOpenedPanel.current = errandBorrowedPanel(errandOpenedPanel.current, launch);
         return;
       }
       // Nothing flew, so nothing is coming to release it.
