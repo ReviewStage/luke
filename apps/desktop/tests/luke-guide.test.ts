@@ -558,13 +558,21 @@ test("the guide says what the calendar hold is doing, and never what is on it", 
   assert.match(refused.detail, /none of them could be read/);
 });
 
-test("no calendar's name reaches the guide, however many are connected", () => {
+test("nothing a subscription is made of reaches the guide", () => {
+  // Sentinels rather than a real name and host: what is asserted is that
+  // whatever those two fields hold stays out of the guide, and a word nothing
+  // else could possibly say is the only way to assert that without a passing
+  // test being an accident of vocabulary.
+  const marks = {
+    label: "zqlabelsentinel",
+    host: "zqhostsentinel",
+  };
   const guide = buildLukeGuide(
     guideInput({
       settings: settings({
         calendarSubscriptions: [
-          { id: "work", label: "Layoff planning", host: "calendar.google.com" },
-          { id: "home", label: "Therapy", host: "outlook.office365.com" },
+          { id: "work", label: marks.label, host: marks.host },
+          { id: "home", label: `${marks.label}-two`, host: `${marks.host}-two` },
         ],
       }),
       meeting: { status: MEETING_STATUS.ON, access: CALENDAR_ACCESS.GRANTED },
@@ -578,15 +586,12 @@ test("no calendar's name reaches the guide, however many are connected", () => {
     .toLowerCase();
 
   // The guide is the document that leaves the machine, so what it may not carry
-  // is asserted rather than reviewed: not the calendars' names, and not a count
-  // that would narrow them.
-  assert.equal(words.includes("layoff"), false);
-  assert.equal(words.includes("therapy"), false);
-  // Nor where they are read from: a host is a smaller leak than a name and
-  // still says more about a developer's employer than Luke has any business
-  // carrying off the machine.
-  assert.equal(words.includes("outlook.office365.com"), false);
-  assert.equal(words.includes("calendar.google.com"), false);
+  // is asserted rather than reviewed: not what a calendar is called, and not
+  // where it is read from — a host is a smaller leak than a name and still says
+  // more about a developer's employer than Luke has any business carrying off
+  // the machine.
+  assert.equal(words.includes(marks.label), false);
+  assert.equal(words.includes(marks.host), false);
   // The settings half refuses the field outright rather than describing it.
   assert.equal(
     guide.settings.some((setting) => setting.label.toLowerCase().includes("calendar")),
