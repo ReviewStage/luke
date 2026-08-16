@@ -15,6 +15,7 @@ import {
   type SessionDetail,
   type SessionProvider,
   type SessionProviderAdapter,
+  sessionProviderObservation,
   text,
   wholeNumber,
 } from "@sidecar/core";
@@ -465,7 +466,11 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
     return parsed;
   }
 
-  async observe(): Promise<readonly ProviderSessionObservation[]> {
+  observe() {
+    return sessionProviderObservation(this.provider, () => this.#observe());
+  }
+
+  async #observe(): Promise<readonly ProviderSessionObservation[]> {
     const now = this.#now();
     const candidates = await discoverSessionFiles({
       projectsDirectory: path.join(this.#claudeHome, CLAUDE_PROJECTS_DIRECTORY),

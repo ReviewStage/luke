@@ -10,6 +10,7 @@ import {
   REALTIME_VOICE,
   REALTIME_VOICE_SPEED,
 } from "@sidecar/core";
+import { runEffect } from "../../../packages/sidecar-core/test-support/effect";
 import { type SecretCipher, SettingsStore } from "../src/settings-store";
 import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "../src/shared/contracts";
 import {
@@ -156,7 +157,7 @@ test("stores an API key encrypted, private to the owner, and never in a snapshot
   assert.equal(contents.includes(TEST_API_KEY), false, "the key was written in plaintext");
   assert.equal(stats.mode & 0o777, 0o600);
   assert.equal(JSON.stringify(settings).includes(TEST_API_KEY), false);
-  assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
+  assert.equal(await runEffect(store.readApiKey(CONDUCTOR)), TEST_API_KEY);
 });
 
 test("decrypts once and re-decrypts only after the key changes", async (t) => {
@@ -177,14 +178,14 @@ test("decrypts once and re-decrypts only after the key changes", async (t) => {
   await store.setApiKey(CONDUCTOR, TEST_API_KEY);
 
   const afterStore = decryptions;
-  for (let read = 0; read < 5; read += 1) await store.readApiKey(CONDUCTOR);
+  for (let read = 0; read < 5; read += 1) await runEffect(store.readApiKey(CONDUCTOR));
   const afterReads = decryptions;
   await store.setApiKey(CONDUCTOR, "conductor-replacement-key");
-  await store.readApiKey(CONDUCTOR);
+  await runEffect(store.readApiKey(CONDUCTOR));
 
   assert.equal(afterReads, afterStore, "a repeated read decrypted again");
   assert.ok(decryptions > afterReads, "a replaced key was not re-read");
-  assert.equal(await store.readApiKey(CONDUCTOR), "conductor-replacement-key");
+  assert.equal(await runEffect(store.readApiKey(CONDUCTOR)), "conductor-replacement-key");
 });
 
 test("reads a stored key back from a new store instance", async (t) => {
@@ -193,7 +194,7 @@ test("reads a stored key back from a new store instance", async (t) => {
 
   const reopened = storeIn(directory);
 
-  assert.equal(await reopened.readApiKey(CONDUCTOR), TEST_API_KEY);
+  assert.equal(await runEffect(reopened.readApiKey(CONDUCTOR)), TEST_API_KEY);
   assert.equal(
     (await reopened.snapshot()).credentialSources[CONDUCTOR],
     CREDENTIAL_SOURCE.ENCRYPTED_FILE,
@@ -208,7 +209,7 @@ test("clears a stored key", async (t) => {
   const { settings } = await store.setApiKey(CONDUCTOR, undefined);
 
   assert.equal(settings.credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.NONE);
-  assert.equal(await store.readApiKey(CONDUCTOR), undefined);
+  assert.equal(await runEffect(store.readApiKey(CONDUCTOR)), undefined);
   assert.equal((await readSettingsFile(directory)).includes(CONDUCTOR), false);
 });
 
@@ -237,7 +238,7 @@ test("switching captions never disturbs a stored key", async (t) => {
   const off = await store.setVoiceCaptions(false);
 
   assert.equal(off.settings.voiceCaptions, false);
-  assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), TEST_API_KEY);
+  assert.equal(await runEffect(storeIn(directory).readApiKey(CONDUCTOR)), TEST_API_KEY);
 });
 
 test("a corrupt captions value reads as off rather than switching them on", async (t) => {
@@ -276,7 +277,7 @@ test("switching the media duck never disturbs a stored key", async (t) => {
   const on = await store.setDuckOtherMedia(true);
 
   assert.equal(on.settings.duckOtherMedia, true);
-  assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), TEST_API_KEY);
+  assert.equal(await runEffect(storeIn(directory).readApiKey(CONDUCTOR)), TEST_API_KEY);
 });
 
 test("a corrupt media duck value reads as the default rather than as off", async (t) => {
@@ -333,16 +334,16 @@ test("keeps each provider's key, environment fallback, and reported source separ
 
   assert.equal(settings.credentialSources[FIRST_CLOUD], CREDENTIAL_SOURCE.ENCRYPTED_FILE);
   assert.equal(settings.credentialSources[SECOND_CLOUD], CREDENTIAL_SOURCE.ENVIRONMENT);
-  assert.equal(await store.readApiKey(FIRST_CLOUD), "first-cloud-key");
-  assert.equal(await store.readApiKey(SECOND_CLOUD), "second-cloud-environment");
+  assert.equal(await runEffect(store.readApiKey(FIRST_CLOUD)), "first-cloud-key");
+  assert.equal(await runEffect(store.readApiKey(SECOND_CLOUD)), "second-cloud-environment");
 
   // Storing and then clearing one provider's key leaves the other untouched.
   await store.setApiKey(SECOND_CLOUD, "second-cloud-key");
-  assert.equal(await store.readApiKey(FIRST_CLOUD), "first-cloud-key");
+  assert.equal(await runEffect(store.readApiKey(FIRST_CLOUD)), "first-cloud-key");
   await store.setApiKey(FIRST_CLOUD, undefined);
 
-  assert.equal(await store.readApiKey(SECOND_CLOUD), "second-cloud-key");
-  assert.equal(await store.readApiKey(FIRST_CLOUD), undefined);
+  assert.equal(await runEffect(store.readApiKey(SECOND_CLOUD)), "second-cloud-key");
+  assert.equal(await runEffect(store.readApiKey(FIRST_CLOUD)), undefined);
   assert.equal(
     (await store.snapshot()).credentialSources[FIRST_CLOUD],
     CREDENTIAL_SOURCE.NONE,
@@ -361,8 +362,8 @@ test("keeps both keys when two providers are saved at once", async (t) => {
     store.setApiKey(SECOND_CLOUD, "second-cloud-key"),
   ]);
 
-  assert.equal(await store.readApiKey(FIRST_CLOUD), "first-cloud-key");
-  assert.equal(await store.readApiKey(SECOND_CLOUD), "second-cloud-key");
+  assert.equal(await runEffect(store.readApiKey(FIRST_CLOUD)), "first-cloud-key");
+  assert.equal(await runEffect(store.readApiKey(SECOND_CLOUD)), "second-cloud-key");
   assert.deepEqual(JSON.parse(await readSettingsFile(directory)), {
     version: 2,
     apiKeys: {
@@ -379,15 +380,15 @@ test("keeps both keys when two providers are saved at once", async (t) => {
     showOnAllDisplays: false,
   });
   const reopened = storeIn(directory, { providers: TEST_PROVIDERS });
-  assert.equal(await reopened.readApiKey(FIRST_CLOUD), "first-cloud-key");
-  assert.equal(await reopened.readApiKey(SECOND_CLOUD), "second-cloud-key");
+  assert.equal(await runEffect(reopened.readApiKey(FIRST_CLOUD)), "first-cloud-key");
+  assert.equal(await runEffect(reopened.readApiKey(SECOND_CLOUD)), "second-cloud-key");
 });
 
 test("reports nothing for a provider this store does not know", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory, { providers: [FIRST_CLOUD_PROVIDER] });
 
-  assert.equal(await store.readApiKey(SECOND_CLOUD), undefined);
+  assert.equal(await runEffect(store.readApiKey(SECOND_CLOUD)), undefined);
   assert.equal((await store.snapshot()).credentialSources[SECOND_CLOUD], undefined);
 });
 
@@ -400,7 +401,7 @@ test("falls back to an API key from the environment", async (t) => {
   const settings = await store.snapshot();
 
   assert.equal(settings.credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.ENVIRONMENT);
-  assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
+  assert.equal(await runEffect(store.readApiKey(CONDUCTOR)), TEST_API_KEY);
 });
 
 test("prefers a stored key over one from the environment", async (t) => {
@@ -410,7 +411,7 @@ test("prefers a stored key over one from the environment", async (t) => {
   });
   await store.setApiKey(CONDUCTOR, TEST_API_KEY);
 
-  assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
+  assert.equal(await runEffect(store.readApiKey(CONDUCTOR)), TEST_API_KEY);
 });
 
 test("rejects a key that cannot be sent as an authorization header", async (t) => {
@@ -420,7 +421,7 @@ test("rejects a key that cannot be sent as an authorization header", async (t) =
   assert.match((await store.setApiKey(CONDUCTOR, "short")).reason ?? "", /too short/);
   assert.match((await store.setApiKey(CONDUCTOR, "key with spaces")).reason ?? "", /unsupported/);
   assert.match((await store.setApiKey(CONDUCTOR, "k".repeat(513))).reason ?? "", /too long/);
-  assert.equal(await store.readApiKey(CONDUCTOR), undefined);
+  assert.equal(await runEffect(store.readApiKey(CONDUCTOR)), undefined);
   await assert.rejects(() => readSettingsFile(directory), /ENOENT/);
 });
 
@@ -437,14 +438,14 @@ test("holds a key only in the form its provider says it issues", async (t) => {
   const refused = await store.setApiKey(THIRD_CLOUD, "legacy-third-cloud-key");
 
   assert.match(refused.reason ?? "", /start with current_/);
-  assert.equal(await store.readApiKey(THIRD_CLOUD), undefined);
+  assert.equal(await runEffect(store.readApiKey(THIRD_CLOUD)), undefined);
   // The same rule holds a key read from the environment, so a shell profile is
   // not a way around it.
   assert.equal(refused.settings.credentialSources[THIRD_CLOUD], CREDENTIAL_SOURCE.NONE);
 
   const accepted = await store.setApiKey(THIRD_CLOUD, "current_third-cloud-key");
   assert.equal(accepted.reason, undefined);
-  assert.equal(await store.readApiKey(THIRD_CLOUD), "current_third-cloud-key");
+  assert.equal(await runEffect(store.readApiKey(THIRD_CLOUD)), "current_third-cloud-key");
   // A provider that publishes no format still takes whatever it issues.
   assert.equal((await store.setApiKey(FIRST_CLOUD, "legacy-third-cloud-key")).reason, undefined);
 });
@@ -460,7 +461,7 @@ test("stops honouring a stored key the moment its provider names a form it is no
 
   const store = storeIn(directory, { providers: TEST_PROVIDERS });
 
-  assert.equal(await store.readApiKey(THIRD_CLOUD), undefined);
+  assert.equal(await runEffect(store.readApiKey(THIRD_CLOUD)), undefined);
   assert.equal(
     (await store.snapshot()).credentialSources[THIRD_CLOUD],
     CREDENTIAL_SOURCE.NONE,
@@ -487,7 +488,7 @@ test("asks the cipher nothing on a launch with no key to protect", async (t) => 
 
   const settings = await store.snapshot();
 
-  assert.equal(await store.readApiKey(CONDUCTOR), undefined);
+  assert.equal(await runEffect(store.readApiKey(CONDUCTOR)), undefined);
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
   // Nothing has asked, so nothing is claimed either way.
   assert.equal(settings.secretStorage, SECRET_STORAGE.UNKNOWN);
@@ -526,7 +527,7 @@ test("decrypts a stored key without asking whether storage is available", async 
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
+  assert.equal(await runEffect(store.readApiKey(CONDUCTOR)), TEST_API_KEY);
   // Recovering a key the user has is the one reason to reach the Keychain on a
   // launch, and it is reason enough on its own.
   assert.equal(cipher.calls.decrypt, 1);
@@ -546,7 +547,7 @@ test("ignores a stored key that can no longer be decrypted", async (t) => {
 
   const store = storeIn(directory);
 
-  assert.equal(await store.readApiKey(CONDUCTOR), undefined);
+  assert.equal(await runEffect(store.readApiKey(CONDUCTOR)), undefined);
   assert.equal((await store.snapshot()).credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.NONE);
 });
 
@@ -558,7 +559,7 @@ test("keeps a Conductor key stored by an earlier version working", async (t) => 
   );
   const store = storeIn(directory);
 
-  assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
+  assert.equal(await runEffect(store.readApiKey(CONDUCTOR)), TEST_API_KEY);
   assert.equal(
     (await store.snapshot()).credentialSources[CONDUCTOR],
     CREDENTIAL_SOURCE.ENCRYPTED_FILE,
@@ -579,7 +580,10 @@ test("keeps a Conductor key stored by an earlier version working", async (t) => 
     sessionNotifications: true,
     showOnAllDisplays: false,
   });
-  assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), "conductor-replacement-key");
+  assert.equal(
+    await runEffect(storeIn(directory).readApiKey(CONDUCTOR)),
+    "conductor-replacement-key",
+  );
 });
 
 test("carries a key belonging to a provider this build does not know", async (t) => {
@@ -654,7 +658,7 @@ test("keeps stored keys when the menu bar preference changes beside them", async
     store.setShowInMenuBar(false),
   ]);
 
-  assert.equal(await store.readApiKey(FIRST_CLOUD), "first-cloud-key");
+  assert.equal(await runEffect(store.readApiKey(FIRST_CLOUD)), "first-cloud-key");
   assert.equal((await store.snapshot()).showInMenuBar, false);
 });
 
@@ -1023,7 +1027,7 @@ test("the talk-key chord and a stored key survive each other's writes", async (t
   await store.setApiKey(CONDUCTOR, "conductor-replacement-key");
 
   const reopened = storeIn(directory);
-  assert.equal(await reopened.readApiKey(CONDUCTOR), "conductor-replacement-key");
+  assert.equal(await runEffect(reopened.readApiKey(CONDUCTOR)), "conductor-replacement-key");
   assert.equal(await reopened.readVoiceHotkey(), "Control+Alt+Space");
 });
 
@@ -1306,7 +1310,7 @@ test("the voice and a stored key survive each other's writes", async (t) => {
   await store.setApiKey(CONDUCTOR, "conductor-replacement-key");
 
   const reopened = storeIn(directory);
-  assert.equal(await reopened.readApiKey(CONDUCTOR), "conductor-replacement-key");
+  assert.equal(await runEffect(reopened.readApiKey(CONDUCTOR)), "conductor-replacement-key");
   assert.equal(await reopened.readVoice(), REALTIME_VOICE.MARIN);
 });
 
@@ -1318,5 +1322,5 @@ test("recovers from a corrupt settings file", async (t) => {
   const { settings } = await store.setApiKey(CONDUCTOR, TEST_API_KEY);
 
   assert.equal(settings.credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.ENCRYPTED_FILE);
-  assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
+  assert.equal(await runEffect(store.readApiKey(CONDUCTOR)), TEST_API_KEY);
 });

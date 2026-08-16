@@ -1,3 +1,4 @@
+import { Duration, Effect } from "effect";
 import type { FeedbackResult, FeedbackSubmission } from "./shared/feedback";
 
 const FEEDBACK_ENVIRONMENT = {
@@ -54,26 +55,34 @@ export class FeedbackDelivery {
     this.#requestTimeoutMs = options.requestTimeoutMs ?? FEEDBACK_DEFAULTS.REQUEST_TIMEOUT_MS;
   }
 
-  async deliver(submission: FeedbackSubmission): Promise<FeedbackResult> {
-    let response: Response;
-    try {
-      response = await this.#fetch(this.#url, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(submission),
-        signal: AbortSignal.timeout(this.#requestTimeoutMs),
-      });
-    } catch (error) {
-      this.#report(
-        `Feedback delivery did not complete: ${error instanceof Error ? error.name : "unknown error"}`,
-      );
-      return { delivered: false, reason: FEEDBACK_REFUSAL.UNREACHABLE };
-    }
-    if (!response.ok) {
-      this.#report(`Feedback delivery failed with status ${response.status}`);
-      return { delivered: false, reason: FEEDBACK_REFUSAL.REFUSED };
-    }
-    return { delivered: true };
+  deliver(submission: FeedbackSubmission): Effect.Effect<FeedbackResult> {
+    return Effect.tryPromise({
+      try: (signal) =>
+        this.#fetch(this.#url, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(submission),
+          signal,
+        }),
+      catch: (error) => error,
+    }).pipe(
+      Effect.timeout(Duration.millis(this.#requestTimeoutMs)),
+      Effect.match({
+        onFailure: (error): FeedbackResult => {
+          this.#report(
+            `Feedback delivery did not complete: ${error instanceof Error ? error.name : "unknown error"}`,
+          );
+          return { delivered: false, reason: FEEDBACK_REFUSAL.UNREACHABLE };
+        },
+        onSuccess: (response): FeedbackResult => {
+          if (!response.ok) {
+            this.#report(`Feedback delivery failed with status ${response.status}`);
+            return { delivered: false, reason: FEEDBACK_REFUSAL.REFUSED };
+          }
+          return { delivered: true };
+        },
+      }),
+    );
   }
 
   #report(message: string): void {

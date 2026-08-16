@@ -8,14 +8,16 @@ import {
   isWorkspaceCapableAdapter,
   type MessageCapableSessionProviderAdapter,
   type ProviderControlRequest,
-  type ProviderControlResult,
-  type ProviderMessageResult,
   type ProviderSessionMessage,
   type ProviderSessionObservation,
   SESSION_LOCATION,
+  SESSION_PROVIDER_ACTION,
   SESSION_STATUS,
   type SessionControl,
+  sessionProviderAction,
 } from "@sidecar/core";
+import { Effect } from "effect";
+import { runEffect } from "../../../packages/sidecar-core/test-support/effect";
 import {
   type CloudAdapterOptions,
   type CloudFetch,
@@ -65,12 +67,20 @@ class StubCloudAdapter
     super({ provider: STUB_PROVIDER, defaultBaseUrl: TEST_BASE_URL }, options);
   }
 
-  async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
-    return this.sendObservedMessage(message);
+  sendMessage(message: ProviderSessionMessage) {
+    return sessionProviderAction(
+      this.provider,
+      SESSION_PROVIDER_ACTION.SEND_MESSAGE,
+      this.sendObservedMessage(message),
+    );
   }
 
-  async executeControl(request: ProviderControlRequest): Promise<ProviderControlResult> {
-    return this.executeObservedControl(request);
+  executeControl(request: ProviderControlRequest) {
+    return sessionProviderAction(
+      this.provider,
+      SESSION_PROVIDER_ACTION.EXECUTE_CONTROL,
+      this.executeObservedControl(request),
+    );
   }
 
   protected override forgetCachedIdentity(): void {
@@ -108,7 +118,7 @@ function adapterFor(
   fetch: CloudFetch,
   overrides: {
     apiKey?: string | undefined;
-    readApiKey?: () => Promise<string | undefined>;
+    readApiKey?: () => Effect.Effect<string | undefined, Error>;
     now?: () => number;
     minimumRefreshIntervalMs?: number;
     onDiagnostic?: (error: unknown) => void;
@@ -116,7 +126,7 @@ function adapterFor(
 ): StubCloudAdapter {
   const apiKey = "apiKey" in overrides ? overrides.apiKey : TEST_API_KEY;
   return new StubCloudAdapter({
-    readApiKey: overrides.readApiKey ?? (async () => apiKey),
+    readApiKey: overrides.readApiKey ?? (() => Effect.succeed(apiKey)),
     baseUrl: TEST_BASE_URL,
     fetch,
     now: overrides.now ?? (() => TEST_TIME),
@@ -144,7 +154,7 @@ test("advertises only the writes a subclass has routed", () => {
   assert.equal(isWorkspaceAgentCapableAdapter(stub), false);
 
   const observer = new ObservationOnlyAdapter({
-    readApiKey: async () => TEST_API_KEY,
+    readApiKey: () => Effect.succeed(TEST_API_KEY),
     baseUrl: TEST_BASE_URL,
   });
   assert.equal(isMessageCapableAdapter(observer), false);
@@ -169,7 +179,7 @@ test("authenticates a bounded read and encodes the route a subclass asked for", 
   const adapter = adapterFor(stub.fetch);
   adapter.collected = [observation("session-one")];
 
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.equal(adapter.provider.id, "stub");
   assert.equal(observations.length, 1);
@@ -193,14 +203,14 @@ class PinnedHeaderAdapter extends StubCloudAdapter {
 test("lets a subclass pin its own request headers without touching the credential", async () => {
   const { fetch, requests } = recordingFetch(() => jsonResponse({}));
   const adapter = new PinnedHeaderAdapter({
-    readApiKey: async () => TEST_API_KEY,
+    readApiKey: () => Effect.succeed(TEST_API_KEY),
     baseUrl: TEST_BASE_URL,
     fetch,
     now: () => TEST_TIME,
     minimumRefreshIntervalMs: 0,
   });
 
-  await adapter.observe();
+  await runEffect(adapter.observe());
 
   const [request] = requests;
   assert.ok(request);
@@ -216,7 +226,7 @@ test("reports every session it serves as running in the cloud", async () => {
   // reaches it except over the network.
   adapter.collected = [observation("session-one"), observation("session-two")];
 
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.deepEqual(
     observations.map((candidate) => candidate.location),
@@ -233,7 +243,7 @@ test("drops a session a subclass reported twice in one pass", async () => {
     observation("session-other"),
   ];
 
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.deepEqual(
     observations.map((candidate) => candidate.providerSessionId),
@@ -250,7 +260,7 @@ test("leaves a stopped session unknown once its timestamp goes stale", async () 
     observation("session-stale", { observedAt: TEST_TIME - 60 * 60 * 1000 }),
   ];
 
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
   assert.equal(observations[1]?.status, SESSION_STATUS.UNKNOWN);
@@ -259,14 +269,14 @@ test("leaves a stopped session unknown once its timestamp goes stale", async () 
 test("forgets cached identity when the credential changes, and reports nothing without one", async () => {
   const stub = stubFetch();
   let apiKey: string | undefined = TEST_API_KEY;
-  const adapter = adapterFor(stub.fetch, { readApiKey: async () => apiKey });
+  const adapter = adapterFor(stub.fetch, { readApiKey: () => Effect.succeed(apiKey) });
   adapter.collected = [observation("session-one")];
 
-  await adapter.observe();
+  await runEffect(adapter.observe());
   apiKey = "replacement-key";
-  const afterRotation = await adapter.observe();
+  const afterRotation = await runEffect(adapter.observe());
   apiKey = undefined;
-  const afterRemoval = await adapter.observe();
+  const afterRemoval = await runEffect(adapter.observe());
 
   assert.equal(adapter.passes, 2, "the replacement key did not trigger a pass");
   assert.equal(afterRotation.length, 1);
@@ -284,9 +294,9 @@ test("clears observations when the provider rejects the credential", async () =>
   const adapter = adapterFor(stub.fetch, { onDiagnostic: (error) => diagnostics.push(error) });
   adapter.collected = [observation("session-one")];
 
-  const authorized = await adapter.observe();
+  const authorized = await runEffect(adapter.observe());
   rejectRequests = true;
-  const rejected = await adapter.observe();
+  const rejected = await runEffect(adapter.observe());
 
   assert.equal(authorized.length, 1);
   assert.deepEqual(rejected, []);
@@ -360,16 +370,16 @@ test("a pass superseded by a key rotation neither lands nor keeps using the old 
   const { fetch, authorizations } = accountBoundFetch({ oldKeyGate: oldKeyRequest.promise });
   let apiKey = "first-key";
   const adapter = new AccountBoundAdapter({
-    readApiKey: async () => apiKey,
+    readApiKey: () => Effect.succeed(apiKey),
     baseUrl: TEST_BASE_URL,
     fetch,
     now: () => TEST_TIME,
     minimumRefreshIntervalMs: 0,
   });
 
-  const stalePass = adapter.observe();
+  const stalePass = runEffect(adapter.observe());
   apiKey = "second-key";
-  const freshObservations = await adapter.observe();
+  const freshObservations = await runEffect(adapter.observe());
   oldKeyRequest.resolve();
   const staleObservations = await stalePass;
 
@@ -392,21 +402,21 @@ test("a replaced key rejected mid-flight does not clear the new key's observatio
   });
   let apiKey = "first-key";
   const adapter = new AccountBoundAdapter({
-    readApiKey: async () => apiKey,
+    readApiKey: () => Effect.succeed(apiKey),
     baseUrl: TEST_BASE_URL,
     fetch,
     now: () => TEST_TIME,
     minimumRefreshIntervalMs: 60_000,
   });
 
-  const stalePass = adapter.observe();
+  const stalePass = runEffect(adapter.observe());
   apiKey = "second-key";
-  await adapter.observe();
+  await runEffect(adapter.observe());
   oldKeyRequest.resolve();
   const staleObservations = await stalePass;
   // Inside the refresh interval this serves the cache, which is exactly where
   // a wrongly cleared snapshot would surface as vanished rows.
-  const cachedObservations = await adapter.observe();
+  const cachedObservations = await runEffect(adapter.observe());
 
   assert.deepEqual(sessionIds(staleObservations), [NEW_ACCOUNT_SESSION]);
   assert.deepEqual(sessionIds(cachedObservations), [NEW_ACCOUNT_SESSION]);
@@ -419,9 +429,9 @@ test("a transient provider failure keeps the previous snapshot", async () => {
   const adapter = adapterFor(stub.fetch, { onDiagnostic: (error) => diagnostics.push(error) });
   adapter.collected = [observation("session-one")];
 
-  const first = await adapter.observe();
+  const first = await runEffect(adapter.observe());
   status = 500;
-  const second = await adapter.observe();
+  const second = await runEffect(adapter.observe());
 
   assert.equal(first.length, 1);
   assert.equal(second.length, 1);
@@ -440,16 +450,19 @@ test("a programming error during observation is reported rather than swallowed",
   });
   adapter.collected = [observation("session-one")];
 
-  const first = await adapter.observe();
+  const first = await runEffect(adapter.observe());
   now += 60_000;
   const bug = new TypeError("sessions is not iterable");
   adapter.collectError = bug;
 
-  await assert.rejects(() => adapter.observe(), bug);
+  await assert.rejects(
+    () => runEffect(adapter.observe()),
+    /SessionProviderObservationError: sessions/,
+  );
   assert.deepEqual(diagnostics, [bug]);
 
   adapter.collectError = undefined;
-  const cached = await adapter.observe();
+  const cached = await runEffect(adapter.observe());
   assert.equal(first.length, 1);
   assert.equal(cached.length, 1);
   assert.equal(cached[0]?.providerSessionId, "session-one");
@@ -461,13 +474,11 @@ test("a programming error during observation is reported rather than swallowed",
 test("issues no request at all when the credential cannot be read", async () => {
   const stub = stubFetch();
   const adapter = adapterFor(stub.fetch, {
-    readApiKey: async () => {
-      throw new Error("settings are unreadable");
-    },
+    readApiKey: () => Effect.fail(new Error("settings are unreadable")),
   });
   adapter.collected = [observation("session-one")];
 
-  assert.deepEqual(await adapter.observe(), []);
+  assert.deepEqual(await runEffect(adapter.observe()), []);
   assert.deepEqual(stub.requests, []);
   assert.equal(adapter.passes, 0);
 });
@@ -476,9 +487,11 @@ test("sends a user message through the route and body the provider documents", a
   const stub = stubFetch();
   const adapter = adapterFor(stub.fetch);
   adapter.collected = [observation("session-one", { canReceiveMessage: true })];
-  await adapter.observe();
+  await runEffect(adapter.observe());
 
-  const result = await adapter.sendMessage({ providerSessionId: "session-one", text: "  go on  " });
+  const result = await runEffect(
+    adapter.sendMessage({ providerSessionId: "session-one", text: "  go on  " }),
+  );
 
   assert.deepEqual(result, { status: "accepted" });
   const write = stub.requests.at(-1);
@@ -495,17 +508,21 @@ test("refuses a message for any session that did not advertise taking one", asyn
   const stub = stubFetch();
   const adapter = adapterFor(stub.fetch);
   adapter.collected = [observation("session-quiet")];
-  await adapter.observe();
+  await runEffect(adapter.observe());
   const observationRequests = stub.requests.length;
 
-  const unadvertised = await adapter.sendMessage({
-    providerSessionId: "session-quiet",
-    text: "go on",
-  });
-  const unobserved = await adapter.sendMessage({
-    providerSessionId: "session-unknown",
-    text: "go on",
-  });
+  const unadvertised = await runEffect(
+    adapter.sendMessage({
+      providerSessionId: "session-quiet",
+      text: "go on",
+    }),
+  );
+  const unobserved = await runEffect(
+    adapter.sendMessage({
+      providerSessionId: "session-unknown",
+      text: "go on",
+    }),
+  );
 
   // Neither refusal may spend a request: a session that advertised nothing has
   // been promised nothing, and no request should exist to find that out.
@@ -518,14 +535,18 @@ test("refuses text outside the message bound without spending a request", async 
   const stub = stubFetch();
   const adapter = adapterFor(stub.fetch);
   adapter.collected = [observation("session-one", { canReceiveMessage: true })];
-  await adapter.observe();
+  await runEffect(adapter.observe());
   const observationRequests = stub.requests.length;
 
-  const empty = await adapter.sendMessage({ providerSessionId: "session-one", text: "   " });
-  const oversized = await adapter.sendMessage({
-    providerSessionId: "session-one",
-    text: "a".repeat(4_001),
-  });
+  const empty = await runEffect(
+    adapter.sendMessage({ providerSessionId: "session-one", text: "   " }),
+  );
+  const oversized = await runEffect(
+    adapter.sendMessage({
+      providerSessionId: "session-one",
+      text: "a".repeat(4_001),
+    }),
+  );
 
   assert.equal(empty.status, "rejected");
   assert.equal(oversized.status, "rejected");
@@ -535,13 +556,15 @@ test("refuses text outside the message bound without spending a request", async 
 test("refuses to send once the credential is gone, whatever was observed with it", async () => {
   const stub = stubFetch();
   let apiKey: string | undefined = TEST_API_KEY;
-  const adapter = adapterFor(stub.fetch, { readApiKey: async () => apiKey });
+  const adapter = adapterFor(stub.fetch, { readApiKey: () => Effect.succeed(apiKey) });
   adapter.collected = [observation("session-one", { canReceiveMessage: true })];
-  await adapter.observe();
+  await runEffect(adapter.observe());
   const observationRequests = stub.requests.length;
 
   apiKey = undefined;
-  const result = await adapter.sendMessage({ providerSessionId: "session-one", text: "go on" });
+  const result = await runEffect(
+    adapter.sendMessage({ providerSessionId: "session-one", text: "go on" }),
+  );
 
   // A refusal with the actual reason, not "unsupported": the session
   // advertised taking messages while a key stood behind it, and a key that has
@@ -556,17 +579,17 @@ test("reports what became of a send the provider refused", async () => {
   const stub = stubFetch(() => status);
   const adapter = adapterFor(stub.fetch);
   adapter.collected = [observation("session-one", { canReceiveMessage: true })];
-  await adapter.observe();
+  await runEffect(adapter.observe());
   const message = { providerSessionId: "session-one", text: "go on" };
 
   status = HTTP_STATUS.UNAUTHORIZED;
-  const unauthorized = await adapter.sendMessage(message);
+  const unauthorized = await runEffect(adapter.sendMessage(message));
   status = HTTP_STATUS.NOT_FOUND;
-  const missing = await adapter.sendMessage(message);
+  const missing = await runEffect(adapter.sendMessage(message));
   status = HTTP_STATUS.CONFLICT;
-  const conflicted = await adapter.sendMessage(message);
+  const conflicted = await runEffect(adapter.sendMessage(message));
   status = HTTP_STATUS.SERVER_ERROR;
-  const failed = await adapter.sendMessage(message);
+  const failed = await runEffect(adapter.sendMessage(message));
 
   assert.equal(unauthorized.status, "rejected");
   assert.match(unauthorized.status === "rejected" ? unauthorized.reason : "", /API key/);
@@ -583,10 +606,12 @@ test("reports a send that never reached the provider as rejected, not thrown", a
     throw new Error("connection reset");
   });
   adapter.collected = [observation("session-one", { canReceiveMessage: true })];
-  await adapter.observe().catch(() => {});
+  await runEffect(adapter.observe()).catch(() => {});
   // Observation failed too, so the session was never observed; re-prime the
   // adapter with a working pass before the network goes away.
-  const result = await adapter.sendMessage({ providerSessionId: "session-one", text: "go on" });
+  const result = await runEffect(
+    adapter.sendMessage({ providerSessionId: "session-one", text: "go on" }),
+  );
 
   assert.equal(result.status, "unsupported");
 });
@@ -598,21 +623,27 @@ test("runs an advertised control through its documented route, sending no body",
     observation("session-plan", { controls: [STUB_APPROVE_CONTROL] }),
     observation("session-quiet"),
   ];
-  await adapter.observe();
+  await runEffect(adapter.observe());
   const observationRequests = stub.requests.length;
 
-  const approved = await adapter.executeControl({
-    providerSessionId: "session-plan",
-    control: STUB_APPROVE_CONTROL,
-  });
-  const unadvertised = await adapter.executeControl({
-    providerSessionId: "session-quiet",
-    control: STUB_APPROVE_CONTROL,
-  });
-  const unknown = await adapter.executeControl({
-    providerSessionId: "session-plan",
-    control: { id: "terminate", label: "Terminate" },
-  });
+  const approved = await runEffect(
+    adapter.executeControl({
+      providerSessionId: "session-plan",
+      control: STUB_APPROVE_CONTROL,
+    }),
+  );
+  const unadvertised = await runEffect(
+    adapter.executeControl({
+      providerSessionId: "session-quiet",
+      control: STUB_APPROVE_CONTROL,
+    }),
+  );
+  const unknown = await runEffect(
+    adapter.executeControl({
+      providerSessionId: "session-plan",
+      control: { id: "terminate", label: "Terminate" },
+    }),
+  );
 
   assert.deepEqual(approved, { status: "accepted" });
   const write = stub.requests.at(-1);

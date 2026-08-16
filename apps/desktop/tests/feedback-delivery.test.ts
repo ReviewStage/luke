@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { runEffect } from "../../../packages/sidecar-core/test-support/effect";
 import { FeedbackDelivery } from "../src/feedback-delivery";
 import { FEEDBACK_KIND, type FeedbackSubmission } from "../src/shared/feedback";
 
@@ -20,7 +21,7 @@ test("a landed send answers delivered, and the submission travels whole", async 
     },
   });
 
-  const result = await delivery.deliver(SUBMISSION);
+  const result = await runEffect(delivery.deliver(SUBMISSION));
 
   assert.deepEqual(result, { delivered: true });
   assert.equal(requests.length, 1);
@@ -33,7 +34,7 @@ test("a refusing endpoint comes back as a reason, not a throw", async () => {
     fetch: () => Promise.resolve(new Response("", { status: 503 })),
   });
 
-  const result = await delivery.deliver(SUBMISSION);
+  const result = await runEffect(delivery.deliver(SUBMISSION));
 
   assert.equal(result.delivered, false);
   assert.ok(result.reason);
@@ -44,8 +45,28 @@ test("an unreachable endpoint comes back as a reason, not a throw", async () => 
     fetch: () => Promise.reject(new Error("connection refused")),
   });
 
-  const result = await delivery.deliver(SUBMISSION);
+  const result = await runEffect(delivery.deliver(SUBMISSION));
 
   assert.equal(result.delivered, false);
   assert.ok(result.reason);
+});
+
+test("a timed-out send aborts its request and comes back as a reason", async () => {
+  let aborted = false;
+  const delivery = new FeedbackDelivery({
+    requestTimeoutMs: 1,
+    fetch: (_input, init) =>
+      new Promise((_resolve, reject) => {
+        init.signal?.addEventListener("abort", () => {
+          aborted = true;
+          reject(new Error("aborted"));
+        });
+      }),
+  });
+
+  const result = await runEffect(delivery.deliver(SUBMISSION));
+
+  assert.equal(result.delivered, false);
+  assert.ok(result.reason);
+  assert.equal(aborted, true);
 });

@@ -10,6 +10,7 @@ import {
   type SessionDetail,
   type SessionProviderAdapter,
   type SessionStatus,
+  sessionProviderObservation,
   UNKNOWN_WORKSPACE_LABEL,
 } from "@sidecar/core";
 import { CURSOR_PROVIDER } from "./cursor-adapter";
@@ -345,7 +346,11 @@ export class CursorLocalSessionAdapter implements SessionProviderAdapter {
     this.#readTailBytes = resolved.readTailBytes;
   }
 
-  async observe(): Promise<readonly ProviderSessionObservation[]> {
+  observe() {
+    return sessionProviderObservation(this.provider, () => this.#observe());
+  }
+
+  async #observe(): Promise<readonly ProviderSessionObservation[]> {
     const now = this.#now();
     const candidates = await discoverSessionFiles({
       projectsDirectory: path.join(this.#cursorHome, CURSOR_DIRECTORY.PROJECTS),

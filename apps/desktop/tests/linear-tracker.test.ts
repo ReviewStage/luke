@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ISSUE_ACTION_KIND, TRACKER_ACTION_RESULT_STATUS } from "@sidecar/core";
+import { Effect } from "effect";
+import { runEffect } from "../../../packages/sidecar-core/test-support/effect";
 import { LinearIssueTracker } from "../src/linear-tracker";
 import {
   HTTP_STATUS,
@@ -32,7 +34,7 @@ function trackerWith(
     return jsonResponse(payload, options.status ?? HTTP_STATUS.OK);
   });
   const tracker = new LinearIssueTracker({
-    readApiKey: async () => options.apiKey,
+    readApiKey: () => Effect.succeed(options.apiKey),
     now: () => OBSERVED_AT,
     fetchImplementation: fetch as typeof fetch,
   });
@@ -74,14 +76,16 @@ function assignedIssuesPayload() {
 test("no key means no request and a tracker that is not connected", async () => {
   const { tracker, requests } = trackerWith([assignedIssuesPayload()]);
 
-  assert.equal(await tracker.observe(), undefined);
+  assert.equal(await runEffect(tracker.observe()), undefined);
   assert.equal(requests.length, 0);
   assert.deepEqual(
-    await tracker.execute({
-      kind: ISSUE_ACTION_KIND.SET_STATE,
-      trackerIssueId: "issue-uuid-1",
-      transition: { id: "state-done", name: "Done" },
-    }),
+    await runEffect(
+      tracker.execute({
+        kind: ISSUE_ACTION_KIND.SET_STATE,
+        trackerIssueId: "issue-uuid-1",
+        transition: { id: "state-done", name: "Done" },
+      }),
+    ),
     { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED },
   );
   assert.equal(requests.length, 0);
@@ -92,7 +96,7 @@ test("observing reads the assigned issues and advertises the rest of the workflo
     apiKey: "lin_api_test",
   });
 
-  const observations = await tracker.observe();
+  const observations = await runEffect(tracker.observe());
 
   assert.ok(observations);
   assert.equal(observations.length, 1);
@@ -121,12 +125,12 @@ test("observing reads the assigned issues and advertises the rest of the workflo
 
 test("a failed or malformed read is an error, never a quieter roster", async () => {
   const failed = trackerWith([{}], { apiKey: "lin_api_test", status: HTTP_STATUS.SERVER_ERROR });
-  await assert.rejects(() => failed.tracker.observe());
+  await assert.rejects(() => runEffect(failed.tracker.observe()));
 
   const errored = trackerWith([{ errors: [{ message: "rate limited" }] }], {
     apiKey: "lin_api_test",
   });
-  await assert.rejects(() => errored.tracker.observe());
+  await assert.rejects(() => runEffect(errored.tracker.observe()));
 });
 
 test("moving an issue posts the one documented write and reads its answer", async () => {
@@ -134,11 +138,13 @@ test("moving an issue posts the one documented write and reads its answer", asyn
     apiKey: "lin_api_test",
   });
 
-  const result = await tracker.execute({
-    kind: ISSUE_ACTION_KIND.SET_STATE,
-    trackerIssueId: "issue-uuid-1",
-    transition: { id: "state-done", name: "Done" },
-  });
+  const result = await runEffect(
+    tracker.execute({
+      kind: ISSUE_ACTION_KIND.SET_STATE,
+      trackerIssueId: "issue-uuid-1",
+      transition: { id: "state-done", name: "Done" },
+    }),
+  );
 
   assert.deepEqual(result, { status: TRACKER_ACTION_RESULT_STATUS.ACCEPTED });
   assert.equal(requests.length, 1);
@@ -154,11 +160,13 @@ test("a comment posts the other documented write", async () => {
     apiKey: "lin_api_test",
   });
 
-  const result = await tracker.execute({
-    kind: ISSUE_ACTION_KIND.COMMENT,
-    trackerIssueId: "issue-uuid-1",
-    body: "Deferred to next release.",
-  });
+  const result = await runEffect(
+    tracker.execute({
+      kind: ISSUE_ACTION_KIND.COMMENT,
+      trackerIssueId: "issue-uuid-1",
+      body: "Deferred to next release.",
+    }),
+  );
 
   assert.deepEqual(result, { status: TRACKER_ACTION_RESULT_STATUS.ACCEPTED });
   assert.match(graphqlDocument(requests[0]).query, /^mutation CommentOnIssue/);
@@ -181,12 +189,12 @@ test("a write Linear turns down is a rejection with a reason, never a throw", as
     { data: {} },
   ]) {
     const { tracker } = trackerWith([payload], { apiKey: "lin_api_test" });
-    const result = await tracker.execute(setState);
+    const result = await runEffect(tracker.execute(setState));
     assert.equal(result.status, TRACKER_ACTION_RESULT_STATUS.REJECTED);
     assert.ok("reason" in result && result.reason.length > 0);
   }
 
   const failed = trackerWith([{}], { apiKey: "lin_api_test", status: 401 });
-  const result = await failed.tracker.execute(setState);
+  const result = await runEffect(failed.tracker.execute(setState));
   assert.equal(result.status, TRACKER_ACTION_RESULT_STATUS.REJECTED);
 });

@@ -1,4 +1,5 @@
-import type { SessionProviderAdapter } from "./providers";
+import { Effect } from "effect";
+import type { SessionProviderAdapter, SessionProviderObservationError } from "./providers";
 import {
   type AttentionDecision,
   type NormalizedSession,
@@ -248,22 +249,26 @@ export class InMemorySessionRegistry {
   }
 
   /** Reads a provider adapter and applies its newest full observation as one update. */
-  async refresh(adapter: SessionProviderAdapter): Promise<SessionRegistrySnapshot> {
-    const providerId = normalizedProviderId(adapter.provider);
-    const mutationEpoch = this.#providerMutationEpochs.get(providerId) ?? 0;
-    const attempt = this.#startProviderRefreshAttempt(providerId);
-    const observations = await adapter.observe();
-    const latestAttempt = this.#latestAppliedRefreshAttempts.get(providerId) ?? 0;
-    if (
-      latestAttempt >= attempt ||
-      (this.#providerMutationEpochs.get(providerId) ?? 0) !== mutationEpoch
-    ) {
+  refresh(
+    adapter: SessionProviderAdapter,
+  ): Effect.Effect<SessionRegistrySnapshot, SessionProviderObservationError> {
+    return Effect.gen(this, function* () {
+      const providerId = normalizedProviderId(adapter.provider);
+      const mutationEpoch = this.#providerMutationEpochs.get(providerId) ?? 0;
+      const attempt = this.#startProviderRefreshAttempt(providerId);
+      const observations = yield* adapter.observe();
+      const latestAttempt = this.#latestAppliedRefreshAttempts.get(providerId) ?? 0;
+      if (
+        latestAttempt >= attempt ||
+        (this.#providerMutationEpochs.get(providerId) ?? 0) !== mutationEpoch
+      ) {
+        return this.snapshot();
+      }
+      const next = this.#nextProviderStore(adapter.provider, providerId, observations);
+      this.#latestAppliedRefreshAttempts.set(providerId, attempt);
+      this.#commit(next);
       return this.snapshot();
-    }
-    const next = this.#nextProviderStore(adapter.provider, providerId, observations);
-    this.#latestAppliedRefreshAttempts.set(providerId, attempt);
-    this.#commit(next);
-    return this.snapshot();
+    });
   }
 
   /** Stores Luke's latest attention decision without mutating provider-owned data. */

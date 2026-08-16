@@ -7,6 +7,8 @@ import {
   isWorkspaceCapableAdapter,
   SESSION_STATUS,
 } from "@sidecar/core";
+import { Effect } from "effect";
+import { runEffect } from "../../../packages/sidecar-core/test-support/effect";
 import type { CloudFetch } from "../src/cloud-session-adapter";
 import { DEVIN_PROVIDER, DevinSessionAdapter } from "../src/devin-adapter";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "./support/http-fake";
@@ -153,14 +155,14 @@ function adapterFor(
   fetch: CloudFetch,
   overrides: {
     apiKey?: string | undefined;
-    readApiKey?: () => Promise<string | undefined>;
+    readApiKey?: () => Effect.Effect<string | undefined, Error>;
     now?: () => number;
     minimumRefreshIntervalMs?: number;
   } = {},
 ): DevinSessionAdapter {
   const apiKey = "apiKey" in overrides ? overrides.apiKey : TEST_API_KEY;
   return new DevinSessionAdapter({
-    readApiKey: overrides.readApiKey ?? (async () => apiKey),
+    readApiKey: overrides.readApiKey ?? (() => Effect.succeed(apiKey)),
     baseUrl: TEST_BASE_URL,
     fetch,
     now: overrides.now ?? (() => TEST_TIME),
@@ -200,7 +202,7 @@ test("advertises the archive only for a session positively seen settled", async 
     { id: "devin-filed", status: TEST_STATUS.EXIT, archived: true, updatedAt: settled },
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runEffect(adapterFor(api.fetch).observe());
   const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
 
   for (const sessionId of ["devin-exited", "devin-errored", "devin-suspended", "devin-holding"]) {
@@ -218,12 +220,14 @@ test("files a settled session away through Devin's archive endpoint, sending no 
     { id: "devin-suspended", status: TEST_STATUS.SUSPENDED, updatedAt: TEST_TIME - 1_000 },
   ]);
   const adapter = adapterFor(api.fetch);
-  await adapter.observe();
+  await runEffect(adapter.observe());
 
-  const result = await adapter.executeControl({
-    providerSessionId: "devin-suspended",
-    control: { id: "archive-session", label: "Archive this session" },
-  });
+  const result = await runEffect(
+    adapter.executeControl({
+      providerSessionId: "devin-suspended",
+      control: { id: "archive-session", label: "Archive this session" },
+    }),
+  );
 
   assert.deepEqual(result, { status: "accepted" });
   const write = api.requests.at(-1);
@@ -241,15 +245,17 @@ test("files a settled session away through Devin's archive endpoint, sending no 
 test("refuses to archive a session whose row never advertised it", async () => {
   const api = fakeDevinApi([workingSession("devin-working", TEST_TIME - 1_000)]);
   const adapter = adapterFor(api.fetch);
-  await adapter.observe();
+  await runEffect(adapter.observe());
   const requestsBefore = api.requests.length;
 
   // A working session advertised no archive, so the ask has nothing behind it
   // and no request exists.
-  const result = await adapter.executeControl({
-    providerSessionId: "devin-working",
-    control: { id: "archive-session", label: "Archive this session" },
-  });
+  const result = await runEffect(
+    adapter.executeControl({
+      providerSessionId: "devin-working",
+      control: { id: "archive-session", label: "Archive this session" },
+    }),
+  );
 
   assert.deepEqual(result, { status: "unsupported" });
   assert.equal(api.requests.length, requestsBefore);
@@ -258,7 +264,7 @@ test("refuses to archive a session whose row never advertised it", async () => {
 test("observes a working session and labels it the way Devin named it", async () => {
   const api = fakeDevinApi([workingSession("devin-working", TEST_TIME - 30_000)]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runEffect(adapterFor(api.fetch).observe());
 
   assert.deepEqual(DEVIN_PROVIDER, { id: "devin", displayName: "Devin" });
   assert.equal(observations.length, 1);
@@ -291,8 +297,8 @@ test("asks Devin who the credential belongs to once and reuses the answer", asyn
   const api = fakeDevinApi([workingSession("devin-working", TEST_TIME - 1_000)]);
   const adapter = adapterFor(api.fetch);
 
-  await adapter.observe();
-  await adapter.observe();
+  await runEffect(adapter.observe());
+  await runEffect(adapter.observe());
 
   assert.deepEqual(
     api.requests.map((request) => request.pathname),
@@ -311,7 +317,7 @@ test("reports nothing for a service-user credential, which names no person", asy
     principal: TEST_PRINCIPAL.SERVICE_USER,
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runEffect(adapterFor(api.fetch).observe());
 
   assert.deepEqual(observations, []);
   assert.deepEqual(
@@ -327,7 +333,7 @@ test("reports nothing for a token Devin places in no organization", async () => 
     orgId: undefined,
   });
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runEffect(adapterFor(api.fetch).observe());
 
   assert.deepEqual(observations, []);
   assert.deepEqual(
@@ -343,9 +349,9 @@ test("asks once about a credential it cannot observe as, not once a refresh", as
     const api = fakeDevinApi([workingSession("devin-working", TEST_TIME - 1_000)], options);
     const adapter = adapterFor(api.fetch);
 
-    await adapter.observe();
-    await adapter.observe();
-    await adapter.observe();
+    await runEffect(adapter.observe());
+    await runEffect(adapter.observe());
+    await runEffect(adapter.observe());
 
     assert.deepEqual(
       api.requests.map((request) => request.pathname),
@@ -381,7 +387,7 @@ test("maps the states Devin reports onto states Luke can show", async () => {
     })),
   );
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runEffect(adapterFor(api.fetch).observe());
 
   assert.deepEqual(
     observations.map((observation) => [observation.providerSessionId, observation.status]),
@@ -412,7 +418,7 @@ test("reports an archived session as complete whatever it was doing", async () =
     { ...workingSession("devin-archived", TEST_TIME - 1_000), archived: true },
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runEffect(adapterFor(api.fetch).observe());
 
   assert.equal(observations[0]?.status, SESSION_STATUS.COMPLETE);
 });
@@ -427,7 +433,7 @@ test("keeps reporting a long turn as working, and a session that ended as comple
     { id: "devin-long-done", status: TEST_STATUS.EXIT, updatedAt: startedAt },
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runEffect(adapterFor(api.fetch).observe());
 
   assert.deepEqual(
     observations.map((observation) => observation.status),
@@ -446,7 +452,7 @@ test("stops calling a session that is holding for the user waiting once it goes 
     },
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runEffect(adapterFor(api.fetch).observe());
 
   assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
 });
@@ -456,7 +462,7 @@ test("reads a timestamp Devin reports in seconds as the moment it means", async 
   // session updated a minute ago must not read as one from 1970.
   const api = fakeDevinApi([workingSession("devin-recent", TEST_TIME - 60_000)]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runEffect(adapterFor(api.fetch).observe());
 
   assert.equal(observations[0]?.observedAt, TEST_TIME - 60_000);
 });
@@ -464,7 +470,7 @@ test("reads a timestamp Devin reports in seconds as the moment it means", async 
 test("keeps a session untouched since the day before yesterday", async () => {
   const api = fakeDevinApi([workingSession("devin-last-week", TEST_TIME - 48 * 60 * 60 * 1000)]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runEffect(adapterFor(api.fetch).observe());
 
   assert.deepEqual(
     observations.map((observation) => observation.providerSessionId),
@@ -494,7 +500,7 @@ test("falls back to the repository its pull request is in when Devin named nothi
     },
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runEffect(adapterFor(api.fetch).observe());
 
   assert.deepEqual(
     observations.map((observation) => observation.detail?.repository),
@@ -522,8 +528,8 @@ test("surfaces only the credential owner's work, however Devin answers the filte
     return api.fetch(address.href, init);
   };
 
-  const filtered = await adapterFor(api.fetch).observe();
-  const ignored = await adapterFor(unfiltered).observe();
+  const filtered = await runEffect(adapterFor(api.fetch).observe());
+  const ignored = await runEffect(adapterFor(unfiltered).observe());
 
   assert.deepEqual(
     filtered.map((observation) => observation.providerSessionId),
@@ -542,7 +548,7 @@ test("reports every session the page holds, newest first", async () => {
     workingSession("devin-middle", TEST_TIME - 2_000),
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runEffect(adapterFor(api.fetch).observe());
 
   assert.deepEqual(
     observations.map((observation) => observation.providerSessionId),
@@ -573,7 +579,7 @@ test("drops a session it cannot place in time without losing the rest of the pas
           ],
         });
 
-  const observations = await adapterFor(fetch).observe();
+  const observations = await runEffect(adapterFor(fetch).observe());
 
   assert.deepEqual(
     observations.map((observation) => observation.providerSessionId),
@@ -584,7 +590,7 @@ test("drops a session it cannot place in time without losing the rest of the pas
 test("reports nothing and issues no request without an API key", async () => {
   const api = fakeDevinApi([workingSession("devin-working", TEST_TIME - 1_000)]);
 
-  const observations = await adapterFor(api.fetch, { apiKey: undefined }).observe();
+  const observations = await runEffect(adapterFor(api.fetch, { apiKey: undefined }).observe());
 
   assert.deepEqual(observations, []);
   assert.deepEqual(api.requests, []);
@@ -595,13 +601,13 @@ test("reuses the previous snapshot inside the minimum refresh interval", async (
   let now = TEST_TIME;
   const adapter = adapterFor(api.fetch, { now: () => now, minimumRefreshIntervalMs: 15_000 });
 
-  const first = await adapter.observe();
+  const first = await runEffect(adapter.observe());
   const requestsAfterFirstPass = api.requests.length;
   now = TEST_TIME + 5_000;
-  const throttled = await adapter.observe();
+  const throttled = await runEffect(adapter.observe());
   const requestsAfterThrottledPass = api.requests.length;
   now = TEST_TIME + 20_000;
-  const refreshed = await adapter.observe();
+  const refreshed = await runEffect(adapter.observe());
 
   assert.equal(first.length, 1);
   assert.deepEqual(throttled, first);
@@ -618,13 +624,13 @@ test("forgets who a replaced credential belonged to before reading as the new on
   const api = fakeDevinApi([workingSession("devin-working", TEST_TIME - 1_000)]);
   let apiKey = TEST_API_KEY;
   const adapter = adapterFor(api.fetch, {
-    readApiKey: async () => apiKey,
+    readApiKey: () => Effect.succeed(apiKey),
     minimumRefreshIntervalMs: 60_000,
   });
 
-  await adapter.observe();
+  await runEffect(adapter.observe());
   apiKey = "cog_replacement-token";
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   // The identity is read again rather than carried over from the key it was
@@ -648,9 +654,9 @@ test("clears observations when Devin rejects the credential", async () => {
     rejectRequests ? jsonResponse({}, HTTP_STATUS.UNAUTHORIZED) : api.fetch(url, init);
   const adapter = adapterFor(gatedFetch);
 
-  const authorized = await adapter.observe();
+  const authorized = await runEffect(adapter.observe());
   rejectRequests = true;
-  const rejected = await adapter.observe();
+  const rejected = await runEffect(adapter.observe());
 
   assert.equal(authorized.length, 1);
   assert.deepEqual(rejected, []);
@@ -665,9 +671,9 @@ test("keeps the previous snapshot when the list request fails transiently", asyn
   };
   const adapter = adapterFor(gatedFetch);
 
-  const observed = await adapter.observe();
+  const observed = await runEffect(adapter.observe());
   failRequests = true;
-  const duringOutage = await adapter.observe();
+  const duringOutage = await runEffect(adapter.observe());
 
   assert.equal(observed.length, 1);
   assert.deepEqual(duringOutage, observed);
@@ -687,7 +693,7 @@ test("advertises a message only for sessions Devin will take one for", async () 
     },
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runEffect(adapterFor(api.fetch).observe());
   const messageable = new Map(
     observations.map((entry) => [entry.providerSessionId, entry.canReceiveMessage]),
   );
@@ -705,12 +711,14 @@ test("advertises a message only for sessions Devin will take one for", async () 
 test("hands a user message to Devin's documented message endpoint", async () => {
   const api = fakeDevinApi([workingSession("devin-working", TEST_TIME - 30_000)]);
   const adapter = adapterFor(api.fetch);
-  await adapter.observe();
+  await runEffect(adapter.observe());
 
-  const result = await adapter.sendMessage({
-    providerSessionId: "devin-working",
-    text: "Please also add unit tests",
-  });
+  const result = await runEffect(
+    adapter.sendMessage({
+      providerSessionId: "devin-working",
+      text: "Please also add unit tests",
+    }),
+  );
 
   assert.deepEqual(result, { status: "accepted" });
   const write = api.requests.at(-1);
@@ -725,11 +733,15 @@ test("refuses a message for a session Devin never promised to take one for", asy
     { id: "devin-exited", status: TEST_STATUS.EXIT, updatedAt: TEST_TIME - 1_000 },
   ]);
   const adapter = adapterFor(api.fetch);
-  await adapter.observe();
+  await runEffect(adapter.observe());
   const observationRequests = api.requests.length;
 
-  const settled = await adapter.sendMessage({ providerSessionId: "devin-exited", text: "go on" });
-  const unknown = await adapter.sendMessage({ providerSessionId: "devin-unknown", text: "go on" });
+  const settled = await runEffect(
+    adapter.sendMessage({ providerSessionId: "devin-exited", text: "go on" }),
+  );
+  const unknown = await runEffect(
+    adapter.sendMessage({ providerSessionId: "devin-unknown", text: "go on" }),
+  );
 
   assert.deepEqual(settled, { status: "unsupported" });
   assert.deepEqual(unknown, { status: "unsupported" });

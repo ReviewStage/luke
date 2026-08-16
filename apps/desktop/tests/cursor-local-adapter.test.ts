@@ -5,6 +5,7 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 import { pathToFileURL } from "node:url";
 import { SESSION_STATUS } from "@sidecar/core";
+import { runEffect } from "../../../packages/sidecar-core/test-support/effect";
 import { CURSOR_PROVIDER } from "../src/cursor-adapter";
 import { CursorLocalSessionAdapter } from "../src/cursor-local-adapter";
 
@@ -169,7 +170,7 @@ test("observes an open turn as work, labelled by its folder and free of transcri
   );
 
   const adapter = adapterFor(state);
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.deepEqual(adapter.provider, CURSOR_PROVIDER);
   assert.equal(observations.length, 1);
@@ -210,7 +211,7 @@ test("tells a turn that finished from one that failed", async (t) => {
     TEST_TIME - 10_000,
   );
 
-  const observations = await adapterFor(state).observe();
+  const observations = await runEffect(adapterFor(state).observe());
 
   assert.deepEqual(
     observations.map((observation) => [observation.providerSessionId, observation.status]),
@@ -241,7 +242,7 @@ test("passes over trailing records this build does not know", async (t) => {
     TEST_TIME - 5_000,
   );
 
-  const observations = await adapterFor(state).observe();
+  const observations = await runEffect(adapterFor(state).observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
@@ -267,9 +268,11 @@ test("leaves a transcript that has gone quiet unknown instead of inventing activ
     TEST_TIME - 21 * 60 * 1000,
   );
 
-  const observations = await adapterFor(state, {
-    activeSessionFreshnessMs: 15 * 60 * 1000,
-  }).observe();
+  const observations = await runEffect(
+    adapterFor(state, {
+      activeSessionFreshnessMs: 15 * 60 * 1000,
+    }).observe(),
+  );
 
   assert.deepEqual(
     observations.map((observation) => observation.status),
@@ -290,9 +293,11 @@ test("keeps reporting a failure that has gone quiet, because it has not healed",
     TEST_TIME - 40 * 60 * 1000,
   );
 
-  const observations = await adapterFor(state, {
-    activeSessionFreshnessMs: 15 * 60 * 1000,
-  }).observe();
+  const observations = await runEffect(
+    adapterFor(state, {
+      activeSessionFreshnessMs: 15 * 60 * 1000,
+    }).observe(),
+  );
 
   assert.deepEqual(
     observations.map((observation) => observation.status),
@@ -310,7 +315,7 @@ test("keeps a session from yesterday on the roster", async (t) => {
     TEST_TIME - 25 * 60 * 60 * 1000,
   );
 
-  const [observation] = await adapterFor(state).observe();
+  const [observation] = await runEffect(adapterFor(state).observe());
 
   // Never hidden for its age — but a wait that stale has decayed to unknown,
   // so the row says nothing it can no longer vouch for.
@@ -345,7 +350,7 @@ test("names a folder its project directory can no longer spell", async (t) => {
     TEST_TIME - 3_000,
   );
 
-  const observations = await adapterFor(state).observe();
+  const observations = await runEffect(adapterFor(state).observe());
 
   assert.deepEqual(
     observations.map((observation) => observation.title),
@@ -375,7 +380,7 @@ test("names a folder whose project directory kept a character Luke would rewrite
     TEST_TIME - 2_000,
   );
 
-  const observations = await adapterFor(state).observe();
+  const observations = await runEffect(adapterFor(state).observe());
 
   assert.deepEqual(
     observations.map((observation) => observation.title),
@@ -405,7 +410,7 @@ test("labels a session neutrally rather than guessing at a folder", async (t) =>
     TEST_TIME - 2_000,
   );
 
-  const observations = await adapterFor(state).observe();
+  const observations = await runEffect(adapterFor(state).observe());
 
   assert.deepEqual(
     observations.map((observation) => observation.title),
@@ -426,7 +431,7 @@ test("a workspace record that is not JSON does not fail the observation pass", a
     TEST_TIME - 1_000,
   );
 
-  const observations = await adapterFor(state).observe();
+  const observations = await runEffect(adapterFor(state).observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.title, "workspace");
@@ -450,7 +455,7 @@ test("observes a session and not the subagents it ran", async (t) => {
     TEST_TIME - 1_000,
   );
 
-  const observations = await adapterFor(state).observe();
+  const observations = await runEffect(adapterFor(state).observe());
 
   assert.deepEqual(
     observations.map((observation) => observation.providerSessionId),
@@ -471,7 +476,7 @@ test("finds the newest records when only the end of a long transcript is read", 
     TEST_TIME - 1_000,
   );
 
-  const observations = await adapterFor(state, { readTailBytes: 128 }).observe();
+  const observations = await runEffect(adapterFor(state, { readTailBytes: 128 }).observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
@@ -489,7 +494,7 @@ test("re-reads a transcript once it has been written to again", async (t) => {
   );
 
   const adapter = adapterFor(state);
-  const [before] = await adapter.observe();
+  const [before] = await runEffect(adapter.observe());
   await writeTranscript(
     state,
     "Users-test-luke",
@@ -500,7 +505,7 @@ test("re-reads a transcript once it has been written to again", async (t) => {
     ],
     TEST_TIME - 5_000,
   );
-  const [after] = await adapter.observe();
+  const [after] = await runEffect(adapter.observe());
 
   // The same adapter serves both passes, so the second one must notice the
   // new mtime and re-read rather than serving the first parse back.
@@ -525,7 +530,7 @@ test("reports every session one pass discovers, newest first", async (t) => {
     );
   }
 
-  const observations = await adapterFor(state).observe();
+  const observations = await runEffect(adapterFor(state).observe());
 
   assert.deepEqual(
     observations.map((observation) => observation.providerSessionId),
@@ -566,7 +571,9 @@ test("keeps the projects that most recently started a session", async (t) => {
     TEST_TIME - YEAR_MS,
   );
 
-  const observations = await adapterFor(state, { maximumProjectDirectories: 1 }).observe();
+  const observations = await runEffect(
+    adapterFor(state, { maximumProjectDirectories: 1 }).observe(),
+  );
 
   assert.deepEqual(
     observations.map((observation) => observation.providerSessionId),
@@ -577,5 +584,5 @@ test("keeps the projects that most recently started a session", async (t) => {
 test("returns an empty snapshot when Cursor has no local sessions", async (t) => {
   const state = await temporaryCursorState(t);
 
-  assert.deepEqual(await adapterFor(state).observe(), []);
+  assert.deepEqual(await runEffect(adapterFor(state).observe()), []);
 });

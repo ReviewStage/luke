@@ -15,6 +15,7 @@ import {
   type SessionProvider,
   type SessionProviderAdapter,
   type SessionStatus,
+  sessionProviderObservation,
   text,
   wholeNumber,
 } from "@sidecar/core";
@@ -459,7 +460,11 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
     this.#sqlite = options.sqlite ?? defaultSqliteModule;
   }
 
-  async observe(): Promise<readonly ProviderSessionObservation[]> {
+  observe() {
+    return sessionProviderObservation(this.provider, () => this.#observe());
+  }
+
+  async #observe(): Promise<readonly ProviderSessionObservation[]> {
     for (const databasePath of this.#databasePaths()) {
       const database = await openReadOnlyDatabase(this.#sqlite, databasePath);
       if (!database) continue;

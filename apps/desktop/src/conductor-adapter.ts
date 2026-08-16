@@ -6,18 +6,17 @@ import {
   maximumSessionTitleLength,
   OBSERVATION_WINDOW,
   type ProviderControlRequest,
-  type ProviderControlResult,
-  type ProviderMessageResult,
   type ProviderSessionMessage,
   type ProviderSessionObservation,
   type ProviderWorkspaceAgentRequest,
   type ProviderWorkspaceRequest,
-  type ProviderWorkspaceResult,
   SESSION_CONTROL_KIND,
+  SESSION_PROVIDER_ACTION,
   SESSION_STATUS,
   type SessionControl,
   type SessionProvider,
   type SessionStatus,
+  sessionProviderAction,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceAgentCapableSessionProviderAdapter,
   type WorkspaceAgentSelection,
@@ -370,22 +369,36 @@ export class ConductorSessionAdapter
     );
   }
 
-  async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
-    return this.sendObservedMessage(message);
+  sendMessage(message: ProviderSessionMessage) {
+    return sessionProviderAction(
+      this.provider,
+      SESSION_PROVIDER_ACTION.SEND_MESSAGE,
+      this.sendObservedMessage(message),
+    );
   }
 
-  async executeControl(request: ProviderControlRequest): Promise<ProviderControlResult> {
-    return this.executeObservedControl(request);
+  executeControl(request: ProviderControlRequest) {
+    return sessionProviderAction(
+      this.provider,
+      SESSION_PROVIDER_ACTION.EXECUTE_CONTROL,
+      this.executeObservedControl(request),
+    );
   }
 
-  async createWorkspace(request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult> {
-    return this.createObservedWorkspace(request, this.workspaceProjects());
+  createWorkspace(request: ProviderWorkspaceRequest) {
+    return sessionProviderAction(
+      this.provider,
+      SESSION_PROVIDER_ACTION.CREATE_WORKSPACE,
+      this.createObservedWorkspace(request, this.workspaceProjects()),
+    );
   }
 
-  async spawnWorkspaceAgent(
-    request: ProviderWorkspaceAgentRequest,
-  ): Promise<ProviderWorkspaceResult> {
-    return this.spawnObservedWorkspaceAgent(request);
+  spawnWorkspaceAgent(request: ProviderWorkspaceAgentRequest) {
+    return sessionProviderAction(
+      this.provider,
+      SESSION_PROVIDER_ACTION.SPAWN_WORKSPACE_AGENT,
+      this.spawnObservedWorkspaceAgent(request),
+    );
   }
 
   protected override forgetCachedIdentity(): void {

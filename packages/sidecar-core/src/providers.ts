@@ -1,3 +1,4 @@
+import { Data, Effect } from "effect";
 import type { ProviderSessionObservation, SessionControl, SessionProvider } from "./session";
 
 /**
@@ -35,7 +36,39 @@ export function isProviderId(value: string): value is ProviderId {
 /** A provider adapter has no dependency on Electron, a renderer, or live UI state. */
 export interface SessionProviderAdapter {
   readonly provider: SessionProvider;
-  observe(): Promise<readonly ProviderSessionObservation[]>;
+  observe(): Effect.Effect<readonly ProviderSessionObservation[], SessionProviderObservationError>;
+}
+
+/** A session provider could not complete its read-only observation pass. */
+export class SessionProviderObservationError extends Data.TaggedError(
+  "SessionProviderObservationError",
+)<{
+  readonly providerId: string;
+  readonly message: string;
+  readonly cause: unknown;
+}> {}
+
+/** Bridges one provider's existing callback-style observer into its typed Effect interface. */
+export function sessionProviderObservation(
+  provider: SessionProvider,
+  observe:
+    | Effect.Effect<readonly ProviderSessionObservation[], unknown>
+    | (() => Promise<readonly ProviderSessionObservation[]>),
+): Effect.Effect<readonly ProviderSessionObservation[], SessionProviderObservationError> {
+  const operation =
+    typeof observe === "function"
+      ? Effect.tryPromise({ try: observe, catch: (error) => error })
+      : observe;
+  return operation.pipe(
+    Effect.mapError(
+      (error) =>
+        new SessionProviderObservationError({
+          providerId: provider.id,
+          message: error instanceof Error ? error.message : String(error),
+          cause: error,
+        }),
+    ),
+  );
 }
 
 /**
@@ -78,7 +111,9 @@ export type ProviderControlResult = ProviderActResult;
  * observed session.
  */
 export interface ControllableSessionProviderAdapter extends SessionProviderAdapter {
-  executeControl(request: ProviderControlRequest): Promise<ProviderControlResult>;
+  executeControl(
+    request: ProviderControlRequest,
+  ): Effect.Effect<ProviderControlResult, SessionProviderActionError>;
 }
 
 /** Whether an adapter can run a control at all, before asking it to. */
@@ -110,7 +145,9 @@ export type ProviderMessageResult = ProviderActResult;
  * evaluator above all — may reach this interface.
  */
 export interface MessageCapableSessionProviderAdapter extends SessionProviderAdapter {
-  sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult>;
+  sendMessage(
+    message: ProviderSessionMessage,
+  ): Effect.Effect<ProviderMessageResult, SessionProviderActionError>;
 }
 
 /** Whether an adapter can carry a message at all, before asking it to. */
@@ -307,7 +344,9 @@ export type ProviderWorkspaceResult = ProviderActResult;
 export interface WorkspaceCapableSessionProviderAdapter extends SessionProviderAdapter {
   /** The projects the latest observation pass reported, or none. */
   workspaceProjects(): readonly WorkspaceProject[];
-  createWorkspace(request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult>;
+  createWorkspace(
+    request: ProviderWorkspaceRequest,
+  ): Effect.Effect<ProviderWorkspaceResult, SessionProviderActionError>;
 }
 
 /** Whether an adapter can create a workspace at all, before asking it to. */
@@ -350,7 +389,9 @@ export interface ProviderWorkspaceAgentRequest {
  * reach it.
  */
 export interface WorkspaceAgentCapableSessionProviderAdapter extends SessionProviderAdapter {
-  spawnWorkspaceAgent(request: ProviderWorkspaceAgentRequest): Promise<ProviderWorkspaceResult>;
+  spawnWorkspaceAgent(
+    request: ProviderWorkspaceAgentRequest,
+  ): Effect.Effect<ProviderWorkspaceResult, SessionProviderActionError>;
 }
 
 /** Whether an adapter can start another agent at all, before asking it to. */
@@ -358,6 +399,46 @@ export function isWorkspaceAgentCapableAdapter(
   adapter: SessionProviderAdapter,
 ): adapter is WorkspaceAgentCapableSessionProviderAdapter {
   return adapterHasFunctions(adapter, "spawnWorkspaceAgent");
+}
+
+/** Provider operations whose operational failures use the typed error channel. */
+export const SESSION_PROVIDER_ACTION = {
+  CREATE_WORKSPACE: "create-workspace",
+  EXECUTE_CONTROL: "execute-control",
+  SEND_MESSAGE: "send-message",
+  SPAWN_WORKSPACE_AGENT: "spawn-workspace-agent",
+} as const;
+
+export type SessionProviderAction =
+  (typeof SESSION_PROVIDER_ACTION)[keyof typeof SESSION_PROVIDER_ACTION];
+
+/** A user-opened provider operation failed before it could report an expected outcome. */
+export class SessionProviderActionError extends Data.TaggedError("SessionProviderActionError")<{
+  readonly providerId: string;
+  readonly action: SessionProviderAction;
+  readonly message: string;
+  readonly cause: unknown;
+}> {}
+
+/** Bridges an adapter's callback-style implementation into its typed Effect interface. */
+export function sessionProviderAction<Result>(
+  provider: SessionProvider,
+  action: SessionProviderAction,
+  run: Effect.Effect<Result, unknown> | (() => Promise<Result>),
+): Effect.Effect<Result, SessionProviderActionError> {
+  const operation =
+    typeof run === "function" ? Effect.tryPromise({ try: run, catch: (error) => error }) : run;
+  return operation.pipe(
+    Effect.mapError(
+      (error) =>
+        new SessionProviderActionError({
+          providerId: provider.id,
+          action,
+          message: error instanceof Error ? error.message : String(error),
+          cause: error,
+        }),
+    ),
+  );
 }
 
 /** Whether every named method is actually a function on this adapter. */

@@ -5,14 +5,14 @@ import {
   type MessageCapableSessionProviderAdapter,
   OBSERVATION_WINDOW,
   type ProviderControlRequest,
-  type ProviderControlResult,
-  type ProviderMessageResult,
   type ProviderSessionMessage,
   type ProviderSessionObservation,
+  SESSION_PROVIDER_ACTION,
   SESSION_STATUS,
   type SessionControl,
   type SessionProvider,
   type SessionStatus,
+  sessionProviderAction,
 } from "@sidecar/core";
 import {
   type CloudAdapterOptions,
@@ -306,12 +306,20 @@ export class DevinSessionAdapter
     );
   }
 
-  async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
-    return this.sendObservedMessage(message);
+  sendMessage(message: ProviderSessionMessage) {
+    return sessionProviderAction(
+      this.provider,
+      SESSION_PROVIDER_ACTION.SEND_MESSAGE,
+      this.sendObservedMessage(message),
+    );
   }
 
-  async executeControl(request: ProviderControlRequest): Promise<ProviderControlResult> {
-    return this.executeObservedControl(request);
+  executeControl(request: ProviderControlRequest) {
+    return sessionProviderAction(
+      this.provider,
+      SESSION_PROVIDER_ACTION.EXECUTE_CONTROL,
+      this.executeObservedControl(request),
+    );
   }
 
   protected override forgetCachedIdentity(): void {

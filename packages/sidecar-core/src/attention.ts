@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { nonNegativeNumber, positiveInteger } from "./json";
 import {
   ATTENTION_DISPOSITION,
@@ -125,7 +126,7 @@ export function attentionContext(detail: SessionDetail): AttentionContext | unde
 
 /** Reviews one bounded update and decides whether Luke should speak. */
 export interface AttentionEvaluator {
-  evaluate(update: AttentionUpdate): Promise<AttentionDecision | undefined>;
+  evaluate(update: AttentionUpdate): Effect.Effect<AttentionDecision | undefined, Error>;
 }
 
 /** Why a reviewed update ended up with the decision it carries. */
@@ -394,47 +395,52 @@ export class SessionAttentionReviewer {
     });
   }
 
-  async review(sessions: readonly NormalizedSession[]): Promise<readonly AttentionReview[]> {
-    this.#ledger.retain(sessions);
+  review(sessions: readonly NormalizedSession[]): Effect.Effect<readonly AttentionReview[]> {
+    return Effect.suspend(() => {
+      this.#ledger.retain(sessions);
 
-    const candidates: AttentionCandidate[] = [];
-    for (const session of sessions) {
-      if (this.#isPending(session)) continue;
-      const update = attentionUpdate(session, this.#observedSession(session));
-      if (update) candidates.push({ session, update });
-    }
+      const candidates: AttentionCandidate[] = [];
+      for (const session of sessions) {
+        if (this.#isPending(session)) continue;
+        const update = attentionUpdate(session, this.#observedSession(session));
+        if (update) candidates.push({ session, update });
+      }
 
-    const selected = candidates
-      .sort((first, second) => second.session.observedAt - first.session.observedAt)
-      .slice(0, this.#maximumUpdatesPerReview);
+      const selected = candidates
+        .sort((first, second) => second.session.observedAt - first.session.observedAt)
+        .slice(0, this.#maximumUpdatesPerReview);
 
-    // Sessions left out of this pass keep their previous baseline so the same
-    // development is derived again once a slot frees up.
-    this.#observed = this.#nextObserved(sessions, selected);
-    for (const candidate of selected) this.#markPending(candidate.session);
+      // Sessions left out of this pass keep their previous baseline so the same
+      // development is derived again once a slot frees up.
+      this.#observed = this.#nextObserved(sessions, selected);
+      for (const candidate of selected) this.#markPending(candidate.session);
 
-    try {
-      const evaluated = await Promise.all(
+      return Effect.all(
         selected.map((candidate) => this.#reviewUpdate(candidate.update)),
+        { concurrency: "unbounded" },
+      ).pipe(
+        Effect.map((evaluated) =>
+          // Every speaking decision is settled here, in one uninterrupted step,
+          // rather than as each evaluation lands: waiting on a slower sibling is
+          // itself long enough for a provider to move a session on.
+          evaluated.map((review, index) => {
+            const settled = this.#settle(review);
+            const candidate = selected[index];
+            // A development is only consumed once a decision was actually reached
+            // about it. Anything else must stay derivable, or the update is lost.
+            if (candidate && this.#keepsDevelopmentPending(settled, candidate.session)) {
+              this.#reopen(candidate.session);
+            }
+            return settled;
+          }),
+        ),
+        Effect.ensuring(
+          Effect.sync(() => {
+            for (const candidate of selected) this.#clearPending(candidate.session);
+          }),
+        ),
       );
-      // Every speaking decision is settled here, in one uninterrupted step,
-      // rather than as each evaluation lands: waiting on a slower sibling is
-      // itself long enough for a provider to move a session on. Callers apply
-      // the returned decisions without awaiting in between, so nothing can
-      // change the session between this check and the write.
-      return evaluated.map((review, index) => {
-        const settled = this.#settle(review);
-        const candidate = selected[index];
-        // A development is only consumed once a decision was actually reached
-        // about it. Anything else must stay derivable, or the update is lost.
-        if (candidate && this.#keepsDevelopmentPending(settled, candidate.session)) {
-          this.#reopen(candidate.session);
-        }
-        return settled;
-      });
-    } finally {
-      for (const candidate of selected) this.#clearPending(candidate.session);
-    }
+    });
   }
 
   /**
@@ -497,17 +503,20 @@ export class SessionAttentionReviewer {
     if (providerSessions.size === 0) this.#observed.delete(session.providerId);
   }
 
-  async #reviewUpdate(update: AttentionUpdate): Promise<AttentionReview> {
-    const decision = await this.#evaluate(update);
-    const identity: SessionIdentity = {
-      providerId: update.providerId,
-      providerSessionId: update.providerSessionId,
-    };
+  #reviewUpdate(update: AttentionUpdate): Effect.Effect<AttentionReview> {
+    return this.#evaluate(update).pipe(
+      Effect.map((decision) => {
+        const identity: SessionIdentity = {
+          providerId: update.providerId,
+          providerSessionId: update.providerSessionId,
+        };
 
-    if (!decision) {
-      return this.#silentReview(identity, update, ATTENTION_REVIEW_OUTCOME.UNAVAILABLE);
-    }
-    return { ...identity, update, decision, outcome: ATTENTION_REVIEW_OUTCOME.DECIDED };
+        if (!decision) {
+          return this.#silentReview(identity, update, ATTENTION_REVIEW_OUTCOME.UNAVAILABLE);
+        }
+        return { ...identity, update, decision, outcome: ATTENTION_REVIEW_OUTCOME.DECIDED };
+      }),
+    );
   }
 
   /**
@@ -556,14 +565,10 @@ export class SessionAttentionReviewer {
     return { ...identity, update, decision: silentAttention(this.#now()), outcome };
   }
 
-  async #evaluate(update: AttentionUpdate): Promise<AttentionDecision | undefined> {
-    try {
-      return await this.#evaluator.evaluate(update);
-    } catch {
-      // A background evaluator must never break session observation; a failed
-      // review simply leaves Luke silent about that update.
-      return undefined;
-    }
+  #evaluate(update: AttentionUpdate): Effect.Effect<AttentionDecision | undefined> {
+    // A background evaluator must never break session observation; a failed
+    // review simply leaves Luke silent about that update.
+    return this.#evaluator.evaluate(update).pipe(Effect.catchAll(() => Effect.succeed(undefined)));
   }
 
   #observedSession(session: NormalizedSession): NormalizedSession | undefined {

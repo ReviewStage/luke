@@ -1,3 +1,5 @@
+import { Data, type Effect } from "effect";
+
 /**
  * The issue-tracker model: the work items a tracker lists for the developer,
  * and the two acts a tracker may be asked to carry for one of them. It mirrors
@@ -223,6 +225,13 @@ export type TrackerActionResult =
   | { status: typeof TRACKER_ACTION_RESULT_STATUS.REJECTED; reason: string }
   | { status: typeof TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
 
+/** An issue tracker could not complete its read-only observation pass. */
+export class IssueTrackerObservationError extends Data.TaggedError("IssueTrackerObservationError")<{
+  readonly trackerId: string;
+  readonly message: string;
+  readonly cause: unknown;
+}> {}
+
 export const ISSUE_ACTION_KIND = {
   SET_STATE: "set-state",
   COMMENT: "comment",
@@ -261,6 +270,9 @@ export interface IssueTrackerAdapter {
    * tracker is not connected — no credential, so nothing was asked — which is
    * a different answer from a connected tracker listing nothing.
    */
-  observe(): Promise<readonly TrackerIssueObservation[] | undefined>;
-  execute(action: TrackerIssueAction): Promise<TrackerActionResult>;
+  observe(): Effect.Effect<
+    readonly TrackerIssueObservation[] | undefined,
+    IssueTrackerObservationError
+  >;
+  execute(action: TrackerIssueAction): Effect.Effect<TrackerActionResult>;
 }

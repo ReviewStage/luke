@@ -11,6 +11,7 @@ import {
   positiveInteger,
   text,
 } from "@sidecar/core";
+import { Duration, Effect } from "effect";
 
 /* The key is not read here: it is the stored credential the settings store
    resolves, which reads `OPENAI_API_KEY` as its own fallback. */
@@ -141,73 +142,88 @@ export class OpenAiAttentionEvaluator implements AttentionEvaluator {
     return this.#model;
   }
 
-  async evaluate(update: AttentionUpdate): Promise<AttentionDecision | undefined> {
-    const response = await this.#request(update);
-    if (!response) return undefined;
+  evaluate(update: AttentionUpdate): Effect.Effect<AttentionDecision | undefined> {
+    return Effect.gen(this, function* () {
+      const response = yield* this.#request(update);
+      if (!response) return undefined;
 
-    if (!response.ok) {
-      // Status alone is enough to diagnose credentials or rate limits without
-      // writing the request, the key, or any session material to the log.
-      this.#report(`OpenAI attention request failed with status ${response.status}`);
-      return undefined;
-    }
+      if (!response.ok) {
+        // Status alone is enough to diagnose credentials or rate limits without
+        // writing the request, the key, or any session material to the log.
+        this.#report(`OpenAI attention request failed with status ${response.status}`);
+        return undefined;
+      }
 
-    const payload = await this.#payload(response);
-    if (payload === undefined) return undefined;
+      const payload = yield* this.#payload(response);
+      if (payload === undefined) return undefined;
 
-    const text = outputText(payload);
-    if (!text) {
-      this.#report(
-        `OpenAI attention response carried no decision${missingDecisionReason(payload)}`,
-      );
-      return undefined;
-    }
+      const text = outputText(payload);
+      if (!text) {
+        this.#report(
+          `OpenAI attention response carried no decision${missingDecisionReason(payload)}`,
+        );
+        return undefined;
+      }
 
-    const decision = attentionDecisionFromModel(parsedJson(text), this.#now());
-    if (!decision) this.#report("OpenAI attention response did not satisfy the decision contract");
-    return decision;
+      const decision = attentionDecisionFromModel(parsedJson(text), this.#now());
+      if (!decision) {
+        this.#report("OpenAI attention response did not satisfy the decision contract");
+      }
+      return decision;
+    });
   }
 
-  async #request(update: AttentionUpdate): Promise<Response | undefined> {
-    try {
-      return await this.#fetch(`${this.#baseUrl}${OPENAI_RESPONSES_PATH}`, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${this.#apiKey}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          model: this.#model,
-          instructions: attentionInstructions(),
-          input: attentionUpdateInput(update),
-          max_output_tokens: this.#maximumOutputTokens,
-          store: false,
-          text: {
-            format: {
-              type: OPENAI_TEXT_FORMAT_TYPE,
-              name: ATTENTION_DECISION_SCHEMA_NAME,
-              schema: ATTENTION_DECISION_SCHEMA,
-              strict: true,
-            },
+  #request(update: AttentionUpdate): Effect.Effect<Response | undefined> {
+    return Effect.tryPromise({
+      try: (signal) =>
+        this.#fetch(`${this.#baseUrl}${OPENAI_RESPONSES_PATH}`, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${this.#apiKey}`,
+            "content-type": "application/json",
           },
+          body: JSON.stringify({
+            model: this.#model,
+            instructions: attentionInstructions(),
+            input: attentionUpdateInput(update),
+            max_output_tokens: this.#maximumOutputTokens,
+            store: false,
+            text: {
+              format: {
+                type: OPENAI_TEXT_FORMAT_TYPE,
+                name: ATTENTION_DECISION_SCHEMA_NAME,
+                schema: ATTENTION_DECISION_SCHEMA,
+                strict: true,
+              },
+            },
+          }),
+          signal,
         }),
-        signal: AbortSignal.timeout(this.#requestTimeoutMs),
-      });
-    } catch (error) {
-      this.#report(
-        `OpenAI attention request did not complete: ${error instanceof Error ? error.name : "unknown error"}`,
-      );
-      return undefined;
-    }
+      catch: (error) => error,
+    }).pipe(
+      Effect.timeout(Duration.millis(this.#requestTimeoutMs)),
+      Effect.match({
+        onFailure: (error) => {
+          this.#report(
+            `OpenAI attention request did not complete: ${error instanceof Error ? error.name : "unknown error"}`,
+          );
+          return undefined;
+        },
+        onSuccess: (response) => response,
+      }),
+    );
   }
 
-  async #payload(response: Response): Promise<unknown> {
-    try {
-      return await response.json();
-    } catch {
-      this.#report("OpenAI attention response was not JSON");
-      return undefined;
-    }
+  #payload(response: Response): Effect.Effect<unknown> {
+    return Effect.tryPromise({
+      try: () => response.json() as Promise<unknown>,
+      catch: (error) => error,
+    }).pipe(
+      Effect.catchAll(() => {
+        this.#report("OpenAI attention response was not JSON");
+        return Effect.succeed(undefined);
+      }),
+    );
   }
 
   #report(message: string): void {

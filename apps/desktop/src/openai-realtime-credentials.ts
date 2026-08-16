@@ -17,6 +17,7 @@ import {
   realtimeCredentialIsUsable,
   text,
 } from "@sidecar/core";
+import { Duration, Effect } from "effect";
 
 export const OPENAI_ENVIRONMENT = {
   API_KEY: "OPENAI_API_KEY",
@@ -162,49 +163,57 @@ export class OpenAiRealtimeCredentialMinter {
   }
 
   /** Returns a usable credential, reusing the outstanding one until it nears expiry. */
-  async mint(): Promise<RealtimeConnection | undefined> {
-    const existing = this.#credential;
-    if (existing && realtimeCredentialIsUsable(existing, this.#now() + this.#expiryMarginMs)) {
-      return existing;
-    }
-    this.#credential = undefined;
-    this.#lastAttemptAt = this.#now();
+  mint(): Effect.Effect<RealtimeConnection | undefined> {
+    return Effect.gen(this, function* () {
+      const existing = this.#credential;
+      if (existing && realtimeCredentialIsUsable(existing, this.#now() + this.#expiryMarginMs)) {
+        return existing;
+      }
+      this.#credential = undefined;
+      this.#lastAttemptAt = this.#now();
 
-    const response = await this.#request();
-    if (!response) return undefined;
+      const response = yield* this.#request();
+      if (!response) return undefined;
 
-    if (!response.ok) {
-      // Status alone diagnoses credentials or rate limits without writing the
-      // request, the key, or the minted secret to the log.
-      this.#record(REALTIME_MINT_OUTCOME.HTTP_ERROR, `status ${response.status}`);
-      return undefined;
-    }
+      if (!response.ok) {
+        // Status alone diagnoses credentials or rate limits without writing the
+        // request, the key, or the minted secret to the log.
+        this.#record(REALTIME_MINT_OUTCOME.HTTP_ERROR, `status ${response.status}`);
+        return undefined;
+      }
 
-    let payload: unknown;
-    try {
-      payload = await response.json();
-    } catch {
-      this.#record(REALTIME_MINT_OUTCOME.MALFORMED_RESPONSE, "response was not JSON");
-      return undefined;
-    }
+      const payload = yield* Effect.tryPromise({
+        try: () => response.json() as Promise<unknown>,
+        catch: (error) => error,
+      }).pipe(
+        Effect.match({
+          onFailure: () => {
+            this.#record(REALTIME_MINT_OUTCOME.MALFORMED_RESPONSE, "response was not JSON");
+            return undefined;
+          },
+          onSuccess: (value) => value,
+        }),
+      );
+      if (payload === undefined) return undefined;
 
-    const credential = realtimeCredentialFromResponse(payload, this.#model);
-    if (!credential) {
-      this.#record(REALTIME_MINT_OUTCOME.MALFORMED_RESPONSE, "no usable client secret");
-      return undefined;
-    }
-    if (!realtimeCredentialIsUsable(credential, this.#now())) {
-      this.#record(REALTIME_MINT_OUTCOME.EXPIRED_CREDENTIAL, "already expired on arrival");
-      return undefined;
-    }
+      const credential = realtimeCredentialFromResponse(payload, this.#model);
+      if (!credential) {
+        this.#record(REALTIME_MINT_OUTCOME.MALFORMED_RESPONSE, "no usable client secret");
+        return undefined;
+      }
+      if (!realtimeCredentialIsUsable(credential, this.#now())) {
+        this.#record(REALTIME_MINT_OUTCOME.EXPIRED_CREDENTIAL, "already expired on arrival");
+        return undefined;
+      }
 
-    const connection: RealtimeConnection = {
-      ...credential,
-      callsUrl: `${this.#baseUrl}${REALTIME_CALLS_PATH}`,
-    };
-    this.#credential = connection;
-    this.#record(REALTIME_MINT_OUTCOME.SUCCEEDED);
-    return connection;
+      const connection: RealtimeConnection = {
+        ...credential,
+        callsUrl: `${this.#baseUrl}${REALTIME_CALLS_PATH}`,
+      };
+      this.#credential = connection;
+      this.#record(REALTIME_MINT_OUTCOME.SUCCEEDED);
+      return connection;
+    });
   }
 
   /**
@@ -226,30 +235,38 @@ export class OpenAiRealtimeCredentialMinter {
     };
   }
 
-  async #request(): Promise<Response | undefined> {
-    try {
-      return await this.#fetch(`${this.#baseUrl}${REALTIME_CLIENT_SECRETS_PATH}`, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${this.#apiKey}`,
-          "content-type": "application/json",
+  #request(): Effect.Effect<Response | undefined> {
+    return Effect.tryPromise({
+      try: (signal) =>
+        this.#fetch(`${this.#baseUrl}${REALTIME_CLIENT_SECRETS_PATH}`, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${this.#apiKey}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(
+            realtimeClientSecretRequest({
+              model: this.#model,
+              voice: this.#voice,
+              speed: this.#speed,
+            }),
+          ),
+          signal,
+        }),
+      catch: (error) => error,
+    }).pipe(
+      Effect.timeout(Duration.millis(this.#requestTimeoutMs)),
+      Effect.match({
+        onFailure: (error) => {
+          this.#record(
+            REALTIME_MINT_OUTCOME.NETWORK_ERROR,
+            error instanceof Error ? error.name : "unknown error",
+          );
+          return undefined;
         },
-        body: JSON.stringify(
-          realtimeClientSecretRequest({
-            model: this.#model,
-            voice: this.#voice,
-            speed: this.#speed,
-          }),
-        ),
-        signal: AbortSignal.timeout(this.#requestTimeoutMs),
-      });
-    } catch (error) {
-      this.#record(
-        REALTIME_MINT_OUTCOME.NETWORK_ERROR,
-        error instanceof Error ? error.name : "unknown error",
-      );
-      return undefined;
-    }
+        onSuccess: (response) => response,
+      }),
+    );
   }
 
   #record(outcome: RealtimeMintOutcome, detail?: string): void {

@@ -2,6 +2,7 @@ import {
   ISSUE_ACTION_KIND,
   type IssueTracker,
   type IssueTrackerAdapter,
+  IssueTrackerObservationError,
   type IssueTransition,
   isRecord,
   maximumIssueTransitions,
@@ -11,6 +12,7 @@ import {
   type TrackerIssueObservation,
   text,
 } from "@sidecar/core";
+import { Duration, Effect } from "effect";
 import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "./shared/credential-providers";
 
 // Shared with the credential registry so the key the user saves and the
@@ -75,7 +77,7 @@ export interface LinearTrackerOptions {
    * Resolved at observation time, so a key saved or cleared in settings takes
    * effect on the next pass without the tracker being rebuilt.
    */
-  readApiKey: () => Promise<string | undefined>;
+  readApiKey: () => Effect.Effect<string | undefined, Error>;
   /** Injectable so tests exercise the client without a network. */
   fetchImplementation?: typeof fetch;
   now?: () => number;
@@ -113,6 +115,39 @@ function transitionsFrom(node: Record<string, unknown>, currentStateId: string):
     .map((state) => ({ id: state.id, name: state.name }));
 }
 
+function observationsFrom(
+  payload: GraphQlPayload,
+  observedAt: number,
+): readonly TrackerIssueObservation[] {
+  const viewer =
+    isRecord(payload.data) && isRecord(payload.data.viewer) ? payload.data.viewer : undefined;
+  const issues = isRecord(viewer?.assignedIssues) ? viewer.assignedIssues : undefined;
+  const nodes = Array.isArray(issues?.nodes) ? issues.nodes : [];
+  // A malformed issue is skipped rather than failing the pass: the roster
+  // should say what Linear could say, not go silent over one broken node.
+  return nodes.flatMap((node): TrackerIssueObservation[] => {
+    if (!isRecord(node)) return [];
+    const trackerIssueId = text(node.id);
+    const identifier = text(node.identifier);
+    const title = text(node.title);
+    const state = stateFrom(node.state);
+    if (!trackerIssueId || !identifier || !title || !state) return [];
+    const url = text(node.url);
+    return [
+      {
+        trackerIssueId,
+        identifier,
+        title,
+        stateName: state.name,
+        observedAt,
+        ...(url ? { url } : {}),
+        transitions: transitionsFrom(node, state.id),
+        canComment: true,
+      },
+    ];
+  });
+}
+
 /**
  * Reads the issues Linear lists for the user, and carries the two acts the
  * user can ask of one, through Linear's own GraphQL API under the user's own
@@ -124,7 +159,7 @@ export class LinearIssueTracker implements IssueTrackerAdapter {
     displayName: LINEAR_TRACKER_NAME,
   };
 
-  readonly #readApiKey: () => Promise<string | undefined>;
+  readonly #readApiKey: () => Effect.Effect<string | undefined, Error>;
   readonly #fetch: typeof fetch;
   readonly #now: () => number;
   readonly #endpoint: string;
@@ -136,116 +171,123 @@ export class LinearIssueTracker implements IssueTrackerAdapter {
     this.#endpoint = process.env[LINEAR_ENVIRONMENT.API_URL]?.trim() || LINEAR_DEFAULT_API_URL;
   }
 
-  async observe(): Promise<readonly TrackerIssueObservation[] | undefined> {
-    const apiKey = await this.#readApiKey();
-    // No key, no request: the tracker is not connected, which is a different
-    // answer from a connected tracker listing nothing.
-    if (!apiKey) return undefined;
+  observe(): Effect.Effect<
+    readonly TrackerIssueObservation[] | undefined,
+    IssueTrackerObservationError
+  > {
+    return Effect.gen(this, function* () {
+      const apiKey = yield* this.#apiKey();
+      // No key, no request: the tracker is not connected, which is a different
+      // answer from a connected tracker listing nothing.
+      if (!apiKey) return undefined;
+      const payload = yield* this.#post(apiKey, LINEAR_READ_ASSIGNED_ISSUES, {
+        first: ISSUE_PAGE_SIZE,
+      });
+      if (payload.errors) {
+        return yield* Effect.fail(new Error("Linear answered the read with errors"));
+      }
+      return observationsFrom(payload, this.#now());
+    }).pipe(
+      Effect.mapError(
+        (error) =>
+          new IssueTrackerObservationError({
+            trackerId: this.tracker.id,
+            message: error.message,
+            cause: error,
+          }),
+      ),
+    );
+  }
 
-    const payload = await this.#post(apiKey, LINEAR_READ_ASSIGNED_ISSUES, {
-      first: ISSUE_PAGE_SIZE,
-    });
-    if (payload.errors) throw new Error("Linear answered the read with errors");
-    const viewer =
-      isRecord(payload.data) && isRecord(payload.data.viewer) ? payload.data.viewer : undefined;
-    const issues = isRecord(viewer?.assignedIssues) ? viewer.assignedIssues : undefined;
-    const nodes = Array.isArray(issues?.nodes) ? issues.nodes : [];
-    const observedAt = this.#now();
+  execute(action: TrackerIssueAction): Effect.Effect<TrackerActionResult> {
+    return Effect.gen(this, function* () {
+      const apiKey = yield* this.#apiKey().pipe(Effect.orDie);
+      if (!apiKey) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
 
-    // A malformed issue is skipped rather than failing the pass: the roster
-    // should say what Linear could say, not go silent over one broken node.
-    return nodes.flatMap((node): TrackerIssueObservation[] => {
-      if (!isRecord(node)) return [];
-      const trackerIssueId = text(node.id);
-      const identifier = text(node.identifier);
-      const title = text(node.title);
-      const state = stateFrom(node.state);
-      if (!trackerIssueId || !identifier || !title || !state) return [];
-      const url = text(node.url);
-      return [
-        {
-          trackerIssueId,
-          identifier,
-          title,
-          stateName: state.name,
-          observedAt,
-          ...(url ? { url } : {}),
-          transitions: transitionsFrom(node, state.id),
-          canComment: true,
-        },
-      ];
+      const [document, variables, resultField] =
+        action.kind === ISSUE_ACTION_KIND.SET_STATE
+          ? ([
+              LINEAR_WRITE[ISSUE_ACTION_KIND.SET_STATE],
+              { id: action.trackerIssueId, stateId: action.transition.id },
+              "issueUpdate",
+            ] as const)
+          : ([
+              LINEAR_WRITE[ISSUE_ACTION_KIND.COMMENT],
+              { issueId: action.trackerIssueId, body: action.body },
+              "commentCreate",
+            ] as const);
+
+      // What became of the act is an answer for the conversation, never a
+      // failure: the developer asked for something, and the reply has to say.
+      const payload = yield* this.#post(apiKey, document, variables).pipe(Effect.either);
+      if (payload._tag === "Left") {
+        return {
+          status: TRACKER_ACTION_RESULT_STATUS.REJECTED,
+          reason: "The request to Linear did not complete.",
+        };
+      }
+      if (payload.right.errors) {
+        return {
+          status: TRACKER_ACTION_RESULT_STATUS.REJECTED,
+          reason: "Linear rejected that change.",
+        };
+      }
+      const result = isRecord(payload.right.data) ? payload.right.data[resultField] : undefined;
+      if (!isRecord(result) || result.success !== true) {
+        return {
+          status: TRACKER_ACTION_RESULT_STATUS.REJECTED,
+          reason: "Linear did not confirm that change.",
+        };
+      }
+      return { status: TRACKER_ACTION_RESULT_STATUS.ACCEPTED };
     });
   }
 
-  async execute(action: TrackerIssueAction): Promise<TrackerActionResult> {
-    const apiKey = await this.#readApiKey();
-    if (!apiKey) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
-
-    const [document, variables, resultField] =
-      action.kind === ISSUE_ACTION_KIND.SET_STATE
-        ? ([
-            LINEAR_WRITE[ISSUE_ACTION_KIND.SET_STATE],
-            { id: action.trackerIssueId, stateId: action.transition.id },
-            "issueUpdate",
-          ] as const)
-        : ([
-            LINEAR_WRITE[ISSUE_ACTION_KIND.COMMENT],
-            { issueId: action.trackerIssueId, body: action.body },
-            "commentCreate",
-          ] as const);
-
-    // What became of the act is an answer for the conversation, never a
-    // throw: the developer asked for something, and the reply has to say.
-    let payload: GraphQlPayload;
-    try {
-      payload = await this.#post(apiKey, document, variables);
-    } catch {
-      return {
-        status: TRACKER_ACTION_RESULT_STATUS.REJECTED,
-        reason: "The request to Linear did not complete.",
-      };
-    }
-    if (payload.errors) {
-      return {
-        status: TRACKER_ACTION_RESULT_STATUS.REJECTED,
-        reason: "Linear rejected that change.",
-      };
-    }
-    const result = isRecord(payload.data) ? payload.data[resultField] : undefined;
-    if (!isRecord(result) || result.success !== true) {
-      return {
-        status: TRACKER_ACTION_RESULT_STATUS.REJECTED,
-        reason: "Linear did not confirm that change.",
-      };
-    }
-    return { status: TRACKER_ACTION_RESULT_STATUS.ACCEPTED };
+  #apiKey(): Effect.Effect<string | undefined, Error> {
+    return this.#readApiKey();
   }
 
-  async #post(
+  #post(
     apiKey: string,
     document: string,
     variables: Record<string, unknown>,
-  ): Promise<GraphQlPayload> {
-    const response = await this.#fetch(this.#endpoint, {
-      method: "POST",
-      headers: {
-        // A personal API key is its own authorization; only an OAuth token
-        // takes a Bearer prefix, and the credential registry refuses those.
-        authorization: apiKey,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ query: document, variables }),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-    if (!response.ok) throw new Error(`Linear answered ${response.status}`);
-    const payload: unknown = await response.json();
-    if (!isRecord(payload)) throw new Error("Linear answered with something other than GraphQL");
-    return {
-      ...(isRecord(payload.data) ? { data: payload.data } : {}),
-      ...(Array.isArray(payload.errors) && payload.errors.length > 0
-        ? { errors: payload.errors }
-        : {}),
-    };
+  ): Effect.Effect<GraphQlPayload, Error> {
+    return Effect.tryPromise({
+      try: (signal) =>
+        this.#fetch(this.#endpoint, {
+          method: "POST",
+          headers: {
+            // A personal API key is its own authorization; only an OAuth token
+            // takes a Bearer prefix, and the credential registry refuses those.
+            authorization: apiKey,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ query: document, variables }),
+          signal,
+        }),
+      catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+    }).pipe(
+      Effect.timeout(Duration.millis(REQUEST_TIMEOUT_MS)),
+      Effect.flatMap((response) =>
+        response.ok
+          ? Effect.tryPromise({
+              try: () => response.json() as Promise<unknown>,
+              catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+            })
+          : Effect.fail(new Error(`Linear answered ${response.status}`)),
+      ),
+      Effect.flatMap((payload) => {
+        if (!isRecord(payload)) {
+          return Effect.fail(new Error("Linear answered with something other than GraphQL"));
+        }
+        return Effect.succeed({
+          ...(isRecord(payload.data) ? { data: payload.data } : {}),
+          ...(Array.isArray(payload.errors) && payload.errors.length > 0
+            ? { errors: payload.errors }
+            : {}),
+        });
+      }),
+    );
   }
 }
 

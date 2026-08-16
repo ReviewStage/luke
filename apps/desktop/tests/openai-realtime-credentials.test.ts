@@ -7,6 +7,7 @@ import {
   REALTIME_VOICE_SPEED,
   realtimeMintExplanation,
 } from "@sidecar/core";
+import { runEffect } from "../../../packages/sidecar-core/test-support/effect";
 import {
   OpenAiRealtimeCredentialMinter,
   openAiRealtimeCredentials,
@@ -50,10 +51,14 @@ function minter(
   return { minter: instance, requests };
 }
 
+function mint(instance: OpenAiRealtimeCredentialMinter) {
+  return runEffect(instance.mint());
+}
+
 test("minting posts the realtime session to the client-secrets endpoint", async () => {
   const { minter: instance, requests } = minter([mintResponse()]);
 
-  const credential = await instance.mint();
+  const credential = await mint(instance);
 
   assert.equal(credential?.value, "ek_test_secret");
   assert.equal(credential?.expiresAt, EXPIRES_AT_SECONDS * 1000);
@@ -76,7 +81,7 @@ test("minting posts the realtime session to the client-secrets endpoint", async 
 test("the standing key authorizes the mint and never appears in the response", async () => {
   const { minter: instance, requests } = minter([mintResponse()]);
 
-  const credential = await instance.mint();
+  const credential = await mint(instance);
 
   const headers = requests[0]?.init.headers as Record<string, string>;
   assert.equal(headers.authorization, `Bearer ${API_KEY}`);
@@ -91,22 +96,22 @@ test("an outstanding credential is reused until it nears expiry", async () => {
     now: () => now,
   });
 
-  await instance.mint();
-  await instance.mint();
+  await mint(instance);
+  await mint(instance);
   assert.equal(requests.length, 1);
 
   // Inside the expiry margin the credential can no longer survive a handshake.
   now = EXPIRES_AT_SECONDS * 1000 - 1_000;
-  await instance.mint();
+  await mint(instance);
   assert.equal(requests.length, 2);
 });
 
 test("changing the voice discards the outstanding credential and mints for the new one", async () => {
   const { minter: instance, requests } = minter([mintResponse(), mintResponse()]);
-  await instance.mint();
+  await mint(instance);
 
   instance.setVoice(REALTIME_VOICE.MARIN);
-  await instance.mint();
+  await mint(instance);
 
   // The first credential was minted against the old voice, so serving it after
   // the change would answer the next conversation with the wrong one.
@@ -120,10 +125,10 @@ test("changing the voice discards the outstanding credential and mints for the n
 
 test("the same voice again keeps the outstanding credential", async () => {
   const { minter: instance, requests } = minter([mintResponse(), mintResponse()]);
-  await instance.mint();
+  await mint(instance);
 
   instance.setVoice(REALTIME_DEFAULTS.VOICE);
-  await instance.mint();
+  await mint(instance);
 
   assert.equal(requests.length, 1);
 });
@@ -139,10 +144,10 @@ test("clearing the voice returns to the one the minter was built with", () => {
 
 test("changing the pace discards the outstanding credential and mints for the new one", async () => {
   const { minter: instance, requests } = minter([mintResponse(), mintResponse()]);
-  await instance.mint();
+  await mint(instance);
 
   instance.setSpeed(REALTIME_VOICE_SPEED.FAST);
-  await instance.mint();
+  await mint(instance);
 
   // The first credential was minted at the old pace, so serving it after the
   // change would answer the next conversation at the wrong one.
@@ -156,10 +161,10 @@ test("changing the pace discards the outstanding credential and mints for the ne
 
 test("the same pace again keeps the outstanding credential", async () => {
   const { minter: instance, requests } = minter([mintResponse(), mintResponse()]);
-  await instance.mint();
+  await mint(instance);
 
   instance.setSpeed(REALTIME_DEFAULTS.SPEED);
-  await instance.mint();
+  await mint(instance);
 
   assert.equal(requests.length, 1);
 });
@@ -185,7 +190,7 @@ test("every failure path leaves the voice experience unavailable", async () => {
     new Error("network unreachable"),
   ]) {
     const { minter: instance } = minter([response]);
-    assert.equal(await instance.mint(), undefined);
+    assert.equal(await mint(instance), undefined);
   }
 });
 
@@ -195,8 +200,8 @@ test("a failed mint is not cached as a usable credential", async () => {
     mintResponse(),
   ]);
 
-  assert.equal(await instance.mint(), undefined);
-  assert.equal((await instance.mint())?.value, "ek_test_secret");
+  assert.equal(await mint(instance), undefined);
+  assert.equal((await mint(instance))?.value, "ek_test_secret");
   assert.equal(requests.length, 2);
 });
 
@@ -292,7 +297,7 @@ test("diagnostics name why a mint failed without carrying the key", async () => 
   const { minter: instance } = minter([new Response("", { status: 401 })]);
 
   assert.equal(instance.diagnostics().lastOutcome, REALTIME_MINT_OUTCOME.NOT_ATTEMPTED);
-  await instance.mint();
+  await mint(instance);
 
   const report = instance.diagnostics();
   assert.equal(report.lastOutcome, REALTIME_MINT_OUTCOME.HTTP_ERROR);
@@ -316,7 +321,7 @@ test("each mint failure reports its own distinguishable outcome", async () => {
 
   for (const [response, expected] of cases) {
     const { minter: instance } = minter([response]);
-    await instance.mint();
+    await mint(instance);
     assert.equal(instance.diagnostics().lastOutcome, expected);
   }
 });
@@ -324,7 +329,7 @@ test("each mint failure reports its own distinguishable outcome", async () => {
 test("a successful mint reports success", async () => {
   const { minter: instance } = minter([mintResponse()]);
 
-  await instance.mint();
+  await mint(instance);
 
   assert.equal(instance.diagnostics().lastOutcome, REALTIME_MINT_OUTCOME.SUCCEEDED);
 });

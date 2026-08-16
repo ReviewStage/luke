@@ -13,6 +13,7 @@ import {
   type RealtimeVoiceSpeed,
   type WorkspaceAgentSelection,
 } from "@sidecar/core";
+import { Data, Effect } from "effect";
 import { environmentRealtimeSpeed, environmentRealtimeVoice } from "./openai-realtime-credentials";
 import {
   APP_SETTING_DEFAULTS,
@@ -97,6 +98,13 @@ export interface SettingsStoreOptions {
    */
   credentialsUsable?: boolean;
 }
+
+/** Persistent settings could not be read or decrypted. */
+export class SettingsStoreError extends Data.TaggedError("SettingsStoreError")<{
+  readonly operation: string;
+  readonly message: string;
+  readonly cause: unknown;
+}> {}
 
 interface PersistedSettings {
   version: number;
@@ -806,7 +814,7 @@ export class SettingsStore {
    */
   async #voiceAvailable(): Promise<boolean> {
     if (!this.#credentialsUsable) return false;
-    return (await this.readApiKey(VOICE_CREDENTIAL_PROVIDER_ID)) !== undefined;
+    return (await this.#readApiKey(VOICE_CREDENTIAL_PROVIDER_ID)) !== undefined;
   }
 
   /**
@@ -814,10 +822,24 @@ export class SettingsStore {
    * reads. A provider with no key resolves to nothing, so its adapter observes
    * nothing and issues no request.
    */
-  async readApiKey(providerId: CredentialProviderId): Promise<string | undefined> {
+  async #readApiKey(providerId: CredentialProviderId): Promise<string | undefined> {
     const provider = this.#providers.find((candidate) => candidate.id === providerId);
     if (!provider) return undefined;
     return (await this.#resolveApiKey(provider)).apiKey;
+  }
+
+  readApiKey(
+    providerId: CredentialProviderId,
+  ): Effect.Effect<string | undefined, SettingsStoreError> {
+    return Effect.tryPromise({
+      try: () => this.#readApiKey(providerId),
+      catch: (error) =>
+        new SettingsStoreError({
+          operation: "read-api-key",
+          message: error instanceof Error ? error.message : String(error),
+          cause: error,
+        }),
+    });
   }
 
   /**

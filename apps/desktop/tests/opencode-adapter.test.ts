@@ -5,6 +5,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import { SESSION_STATUS } from "@sidecar/core";
+import { runEffect } from "../../../packages/sidecar-core/test-support/effect";
 import { OPENCODE_PROVIDER, OpenCodeSessionAdapter } from "../src/opencode-adapter";
 
 const TEST_TIME = Date.parse("2026-08-13T21:30:00.000Z");
@@ -259,7 +260,7 @@ test("observes an OpenCode session under the name OpenCode gave it", async (t) =
     dataDirectory,
     now: () => TEST_TIME,
   });
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.deepEqual(adapter.provider, OPENCODE_PROVIDER);
   assert.equal(observations.length, 1);
@@ -289,7 +290,7 @@ test("falls back to the workspace while OpenCode has not named the session", asy
     dataDirectory,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runEffect(adapter.observe());
 
   assert.equal(observation?.title, "luke");
   // A session with no messages yet has just been started.
@@ -333,7 +334,7 @@ test("reports a finished OpenCode turn as waiting for its developer", async (t) 
     dataDirectory,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
   assert.equal(observation?.detail?.activity, undefined);
@@ -364,7 +365,7 @@ test("reports a stopped OpenCode turn as waiting when its user aborted it", asyn
     dataDirectory,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
   assert.equal(observation?.detail?.error, undefined);
@@ -403,7 +404,7 @@ test("reports a failed OpenCode turn with the failure it recorded", async (t) =>
     now: () => TEST_TIME,
     activeSessionFreshnessMs: 15 * 60 * 1000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.ERROR);
   assert.equal(observation?.detail?.error, "API key is invalid");
@@ -454,7 +455,7 @@ test("names the tool an OpenCode session is running", async (t) => {
     dataDirectory,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
   assert.equal(observation?.detail?.activity, "bash: pnpm test");
@@ -507,7 +508,7 @@ test("names the tool still running behind one that already settled", async (t) =
     dataDirectory,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
   assert.equal(observation?.detail?.activity, "bash: pnpm test");
@@ -540,7 +541,7 @@ test("skips OpenCode subagent and archived sessions", async (t) => {
     dataDirectory,
     now: () => TEST_TIME,
   });
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.deepEqual(
     observations.map((observation) => observation.providerSessionId),
@@ -574,7 +575,7 @@ test("reads every session's turn rather than a capped few", async (t) => {
     dataDirectory,
     now: () => TEST_TIME,
   });
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.equal(observations.length, 15);
   for (const observation of observations) {
@@ -593,7 +594,7 @@ test("keeps old OpenCode sessions beside the newest", async (t) => {
     dataDirectory,
     now: () => TEST_TIME,
   });
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.deepEqual(
     observations.map((observation) => ({
@@ -630,7 +631,7 @@ test("keeps stale open OpenCode turns unknown instead of inventing activity", as
     now: () => TEST_TIME,
     activeSessionFreshnessMs: 15 * 60 * 1000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.UNKNOWN);
   assert.equal(observation?.detail?.activity, undefined);
@@ -657,7 +658,7 @@ test("observes the database OPENCODE_DB names", async (t) => {
     dataDirectory,
     now: () => TEST_TIME,
   });
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "ses_configured");
@@ -676,7 +677,7 @@ test("falls back to the prod-channel database when the current one is unusable",
     dataDirectory,
     now: () => TEST_TIME,
   });
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "ses_prod");
@@ -698,7 +699,7 @@ test("observes sessions from a database predating the archive column", async (t)
     dataDirectory,
     now: () => TEST_TIME,
   });
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "ses_early");
@@ -732,7 +733,7 @@ test("observes legacy JSON sessions when no database exists", async (t) => {
     dataDirectory,
     now: () => TEST_TIME,
   });
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "ses_legacy");
@@ -762,7 +763,7 @@ test("reads the newest legacy message by its ordered identifier", async (t) => {
     dataDirectory,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
 });
@@ -784,12 +785,12 @@ test("re-reads a legacy session once a newer message lands", async (t) => {
     dataDirectory,
     now: () => TEST_TIME,
   });
-  const [before] = await adapter.observe();
+  const [before] = await runEffect(adapter.observe());
   await writeLegacyMessage(dataDirectory, "ses_legacy_evolving", "msg_02", {
     role: "assistant",
     time: { created: TEST_TIME - 2_000, completed: TEST_TIME - 1_000 },
   });
-  const [after] = await adapter.observe();
+  const [after] = await runEffect(adapter.observe());
 
   // The same adapter serves both passes, so the second one must find the new
   // message rather than serving the first turn back.
@@ -818,7 +819,7 @@ test("observes legacy JSON sessions when node sqlite is unavailable", async (t) 
       throw error;
     },
   });
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "ses_legacy");
@@ -831,5 +832,5 @@ test("returns an empty snapshot when OpenCode has no local state", async (t) => 
     now: () => TEST_TIME,
   });
 
-  assert.deepEqual(await adapter.observe(), []);
+  assert.deepEqual(await runEffect(adapter.observe()), []);
 });

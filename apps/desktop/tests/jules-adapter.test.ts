@@ -7,6 +7,8 @@ import {
   isWorkspaceCapableAdapter,
   SESSION_STATUS,
 } from "@sidecar/core";
+import { Effect } from "effect";
+import { runEffect } from "../../../packages/sidecar-core/test-support/effect";
 import type { CloudFetch } from "../src/cloud-session-adapter";
 import { JULES_PROVIDER, JulesSessionAdapter } from "../src/jules-adapter";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "./support/http-fake";
@@ -109,14 +111,14 @@ function adapterFor(
   fetch: CloudFetch,
   overrides: {
     apiKey?: string | undefined;
-    readApiKey?: () => Promise<string | undefined>;
+    readApiKey?: () => Effect.Effect<string | undefined, Error>;
     now?: () => number;
     minimumRefreshIntervalMs?: number;
   } = {},
 ): JulesSessionAdapter {
   const apiKey = "apiKey" in overrides ? overrides.apiKey : TEST_API_KEY;
   return new JulesSessionAdapter({
-    readApiKey: overrides.readApiKey ?? (async () => apiKey),
+    readApiKey: overrides.readApiKey ?? (() => Effect.succeed(apiKey)),
     baseUrl: TEST_BASE_URL,
     fetch,
     now: overrides.now ?? (() => TEST_TIME),
@@ -147,7 +149,7 @@ test("observes a session in progress without exposing prompt-derived text", asyn
     },
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runEffect(adapterFor(api.fetch).observe());
 
   assert.deepEqual(JULES_PROVIDER, { id: "jules", displayName: "Jules" });
   assert.equal(observations.length, 1);
@@ -172,7 +174,7 @@ test("reads the whole pass with one list call authenticated by Google's key head
     workingSession("session-two", TEST_TIME - 2_000),
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runEffect(adapterFor(api.fetch).observe());
 
   assert.equal(observations.length, 2);
   assert.deepEqual(
@@ -210,7 +212,7 @@ test("maps every state Jules reports onto a state Luke can show", async () => {
     })),
   );
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runEffect(adapterFor(api.fetch).observe());
 
   assert.deepEqual(
     observations.map((observation) => [observation.providerSessionId, observation.status]),
@@ -236,7 +238,7 @@ test("keeps reporting a long turn as working", async () => {
   const startedAt = TEST_TIME - 60 * 60 * 1000;
   const api = fakeJulesApi([workingSession("session-long-turn", startedAt)]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runEffect(adapterFor(api.fetch).observe());
 
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
   assert.equal(observations[0]?.observedAt, startedAt);
@@ -253,7 +255,7 @@ test("stops calling a session that asked for feedback waiting once it goes stale
     },
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runEffect(adapterFor(api.fetch).observe());
 
   assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
 });
@@ -269,7 +271,7 @@ test("keeps a completed session complete however long ago it finished", async ()
     },
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runEffect(adapterFor(api.fetch).observe());
 
   assert.equal(observations[0]?.status, SESSION_STATUS.COMPLETE);
 });
@@ -277,7 +279,7 @@ test("keeps a completed session complete however long ago it finished", async ()
 test("keeps a session untouched since the day before yesterday", async () => {
   const api = fakeJulesApi([workingSession("session-last-week", TEST_TIME - 48 * 60 * 60 * 1000)]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runEffect(adapterFor(api.fetch).observe());
 
   assert.deepEqual(
     observations.map((observation) => observation.providerSessionId),
@@ -294,7 +296,7 @@ test("orders the pass itself rather than trusting the order Jules answers in", a
     workingSession("session-middle", TEST_TIME - 2_000),
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runEffect(adapterFor(api.fetch).observe());
 
   assert.deepEqual(
     observations.map((observation) => observation.providerSessionId),
@@ -312,7 +314,7 @@ test("labels a session by its repository, and by neither its title nor nothing",
     { id: "session-sourceless", omitSourceContext: true, createTime: TEST_TIME - 2_000 },
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runEffect(adapterFor(api.fetch).observe());
 
   assert.equal(observations[0]?.title, "sidecar");
   assert.equal(observations[0]?.detail?.repository, "sidecar");
@@ -330,7 +332,7 @@ test("reports why a failed session stopped rather than leaving it idle", async (
     },
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runEffect(adapterFor(api.fetch).observe());
 
   assert.equal(observations[0]?.status, SESSION_STATUS.ERROR);
   assert.equal(observations[0]?.detail?.error, "The session failed");
@@ -346,7 +348,7 @@ test("drops a session it cannot place in time without losing the rest of the pas
       ],
     });
 
-  const observations = await adapterFor(fetch).observe();
+  const observations = await runEffect(adapterFor(fetch).observe());
 
   assert.deepEqual(
     observations.map((observation) => observation.providerSessionId),
@@ -357,7 +359,7 @@ test("drops a session it cannot place in time without losing the rest of the pas
 test("reports nothing and issues no request without an API key", async () => {
   const api = fakeJulesApi([workingSession("session-in-progress", TEST_TIME - 1_000)]);
 
-  const observations = await adapterFor(api.fetch, { apiKey: undefined }).observe();
+  const observations = await runEffect(adapterFor(api.fetch, { apiKey: undefined }).observe());
 
   assert.deepEqual(observations, []);
   assert.deepEqual(api.requests, []);
@@ -366,12 +368,10 @@ test("reports nothing and issues no request without an API key", async () => {
 test("reports nothing when the credential cannot be read", async () => {
   const api = fakeJulesApi([workingSession("session-in-progress", TEST_TIME - 1_000)]);
   const adapter = adapterFor(api.fetch, {
-    readApiKey: async () => {
-      throw new Error("settings are unreadable");
-    },
+    readApiKey: () => Effect.fail(new Error("settings are unreadable")),
   });
 
-  assert.deepEqual(await adapter.observe(), []);
+  assert.deepEqual(await runEffect(adapter.observe()), []);
   assert.deepEqual(api.requests, []);
 });
 
@@ -380,12 +380,12 @@ test("reuses the previous snapshot inside the minimum refresh interval", async (
   let now = TEST_TIME;
   const adapter = adapterFor(api.fetch, { now: () => now, minimumRefreshIntervalMs: 15_000 });
 
-  const first = await adapter.observe();
+  const first = await runEffect(adapter.observe());
   now = TEST_TIME + 5_000;
-  const throttled = await adapter.observe();
+  const throttled = await runEffect(adapter.observe());
   const requestsAfterThrottledPass = api.requests.length;
   now = TEST_TIME + 20_000;
-  const refreshed = await adapter.observe();
+  const refreshed = await runEffect(adapter.observe());
 
   assert.equal(first.length, 1);
   assert.deepEqual(throttled, first);
@@ -398,14 +398,14 @@ test("observes again immediately after the API key changes", async () => {
   const api = fakeJulesApi([workingSession("session-in-progress", TEST_TIME - 1_000)]);
   let apiKey = TEST_API_KEY;
   const adapter = adapterFor(api.fetch, {
-    readApiKey: async () => apiKey,
+    readApiKey: () => Effect.succeed(apiKey),
     minimumRefreshIntervalMs: 60_000,
   });
 
-  await adapter.observe();
+  await runEffect(adapter.observe());
   const requestsAfterFirstPass = api.requests.length;
   apiKey = "jules-replacement-key";
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.ok(api.requests.length > requestsAfterFirstPass);
   assert.equal(observations.length, 1);
@@ -423,9 +423,9 @@ test("clears observations when Jules rejects the API key", async () => {
     rejectRequests ? jsonResponse({}, HTTP_STATUS.UNAUTHORIZED) : api.fetch(url, init);
   const adapter = adapterFor(gatedFetch);
 
-  const authorized = await adapter.observe();
+  const authorized = await runEffect(adapter.observe());
   rejectRequests = true;
-  const rejected = await adapter.observe();
+  const rejected = await runEffect(adapter.observe());
 
   assert.equal(authorized.length, 1);
   assert.deepEqual(rejected, []);
@@ -440,9 +440,9 @@ test("keeps the previous snapshot when the list request fails transiently", asyn
   };
   const adapter = adapterFor(gatedFetch);
 
-  const observed = await adapter.observe();
+  const observed = await runEffect(adapter.observe());
   failRequests = true;
-  const duringOutage = await adapter.observe();
+  const duringOutage = await runEffect(adapter.observe());
 
   assert.equal(observed.length, 1);
   assert.deepEqual(duringOutage, observed);
@@ -460,7 +460,7 @@ test("advertises a message only for the states Jules documents as active", async
     { id: "session-failed", state: TEST_STATE.FAILED, createTime: TEST_TIME - 8_000 },
   ]);
 
-  const observations = await adapterFor(api.fetch).observe();
+  const observations = await runEffect(adapterFor(api.fetch).observe());
   const messageable = new Map(
     observations.map((entry) => [entry.providerSessionId, entry.canReceiveMessage]),
   );
@@ -482,12 +482,14 @@ test("hands a user message to Jules through its documented custom method", async
     { id: "session-ask", state: TEST_STATE.AWAITING_USER_FEEDBACK, createTime: TEST_TIME - 1_000 },
   ]);
   const adapter = adapterFor(api.fetch);
-  await adapter.observe();
+  await runEffect(adapter.observe());
 
-  const result = await adapter.sendMessage({
-    providerSessionId: "session-ask",
-    text: "Use the existing fixture instead",
-  });
+  const result = await runEffect(
+    adapter.sendMessage({
+      providerSessionId: "session-ask",
+      text: "Use the existing fixture instead",
+    }),
+  );
 
   assert.deepEqual(result, { status: "accepted" });
   const write = api.requests.at(-1);
@@ -504,7 +506,7 @@ test("offers approving the plan only while Jules is holding one, and sends no bo
     { id: "session-working", state: TEST_STATE.IN_PROGRESS, createTime: TEST_TIME - 2_000 },
   ]);
   const adapter = adapterFor(api.fetch);
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
   const approveControl = { id: "approve-plan", label: "Approve the plan" };
 
   const holding = observations.find((entry) => entry.providerSessionId === "session-plan");
@@ -512,14 +514,18 @@ test("offers approving the plan only while Jules is holding one, and sends no bo
   assert.deepEqual(holding?.controls, [approveControl]);
   assert.equal(working?.controls, undefined);
 
-  const approved = await adapter.executeControl({
-    providerSessionId: "session-plan",
-    control: approveControl,
-  });
-  const refused = await adapter.executeControl({
-    providerSessionId: "session-working",
-    control: approveControl,
-  });
+  const approved = await runEffect(
+    adapter.executeControl({
+      providerSessionId: "session-plan",
+      control: approveControl,
+    }),
+  );
+  const refused = await runEffect(
+    adapter.executeControl({
+      providerSessionId: "session-working",
+      control: approveControl,
+    }),
+  );
 
   assert.deepEqual(approved, { status: "accepted" });
   const write = api.requests.at(-1);

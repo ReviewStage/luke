@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import {
   type ControllableSessionProviderAdapter,
   isControllableAdapter,
@@ -8,13 +9,12 @@ import {
   PROVIDER_ACT_RESULT_STATUS,
   type ProviderActResult,
   type ProviderControlRequest,
-  type ProviderControlResult,
-  type ProviderMessageResult,
   type ProviderSessionMessage,
   type ProviderWorkspaceAgentRequest,
   type ProviderWorkspaceRequest,
-  type ProviderWorkspaceResult,
+  type SessionProviderActionError,
   type SessionProviderAdapter,
+  type SessionProviderObservationError,
   type WorkspaceAgentCapableSessionProviderAdapter,
   type WorkspaceCapableSessionProviderAdapter,
   type WorkspaceProject,
@@ -65,17 +65,25 @@ export class CompositeSessionProviderAdapter
    * reporting the observers that answered would retire every session belonging
    * to the one that did not, and the panel would lose them until it recovers.
    */
-  async observe(): Promise<readonly ProviderSessionObservation[]> {
-    const collected = await Promise.all(this.#adapters.map((adapter) => adapter.observe()));
-    const observations = new Map<string, ProviderSessionObservation>();
-    // A session two observers both reached is still one session, and the
-    // registry rejects a snapshot that names one twice.
-    for (const observation of collected.flat()) {
-      if (!observations.has(observation.providerSessionId)) {
-        observations.set(observation.providerSessionId, observation);
-      }
-    }
-    return [...observations.values()];
+  observe(): Effect.Effect<readonly ProviderSessionObservation[], SessionProviderObservationError> {
+    return Effect.all(
+      this.#adapters.map((adapter) => adapter.observe()),
+      {
+        concurrency: "unbounded",
+      },
+    ).pipe(
+      Effect.map((collected) => {
+        const observations = new Map<string, ProviderSessionObservation>();
+        // A session two observers both reached is still one session, and the
+        // registry rejects a snapshot that names one twice.
+        for (const observation of collected.flat()) {
+          if (!observations.has(observation.providerSessionId)) {
+            observations.set(observation.providerSessionId, observation);
+          }
+        }
+        return [...observations.values()];
+      }),
+    );
   }
 
   /**
@@ -85,12 +93,12 @@ export class CompositeSessionProviderAdapter
    * still reachable — so the question moves on rather than settling. Any firm
    * answer, accepted or rejected, is the session's own and ends the search.
    */
-  async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
+  sendMessage(message: ProviderSessionMessage) {
     return this.#dispatchAct(isMessageCapableAdapter, (adapter) => adapter.sendMessage(message));
   }
 
   /** A control finds its observer the same way a message does. */
-  async executeControl(request: ProviderControlRequest): Promise<ProviderControlResult> {
+  executeControl(request: ProviderControlRequest) {
     return this.#dispatchAct(isControllableAdapter, (adapter) => adapter.executeControl(request));
   }
 
@@ -106,16 +114,14 @@ export class CompositeSessionProviderAdapter
    * answers unsupported never offered the project, so the question moves on,
    * and any firm answer is the project's own and ends the search.
    */
-  async createWorkspace(request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult> {
+  createWorkspace(request: ProviderWorkspaceRequest) {
     return this.#dispatchAct(isWorkspaceCapableAdapter, (adapter) =>
       adapter.createWorkspace(request),
     );
   }
 
   /** A new agent finds the observer holding its workspace the same way. */
-  async spawnWorkspaceAgent(
-    request: ProviderWorkspaceAgentRequest,
-  ): Promise<ProviderWorkspaceResult> {
+  spawnWorkspaceAgent(request: ProviderWorkspaceAgentRequest) {
     return this.#dispatchAct(isWorkspaceAgentCapableAdapter, (adapter) =>
       adapter.spawnWorkspaceAgent(request),
     );
@@ -126,15 +132,18 @@ export class CompositeSessionProviderAdapter
    * never seen the subject, so the question moves on; any firm answer is the
    * subject's own and ends the search.
    */
-  async #dispatchAct<Capable extends SessionProviderAdapter>(
+  #dispatchAct<Capable extends SessionProviderAdapter>(
     isCapable: (adapter: SessionProviderAdapter) => adapter is Capable,
-    act: (adapter: Capable) => Promise<ProviderActResult>,
-  ): Promise<ProviderActResult> {
-    for (const adapter of this.#adapters) {
-      if (!isCapable(adapter)) continue;
-      const result = await act(adapter);
-      if (result.status !== PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED) return result;
-    }
-    return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+    act: (adapter: Capable) => Effect.Effect<ProviderActResult, SessionProviderActionError>,
+  ): Effect.Effect<ProviderActResult, SessionProviderActionError> {
+    const adapters = this.#adapters;
+    return Effect.gen(function* () {
+      for (const adapter of adapters) {
+        if (!isCapable(adapter)) continue;
+        const result = yield* act(adapter);
+        if (result.status !== PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED) return result;
+      }
+      return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED } as const;
+    });
   }
 }

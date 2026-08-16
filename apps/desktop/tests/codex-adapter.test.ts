@@ -5,6 +5,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import { SESSION_STATUS } from "@sidecar/core";
+import { runEffect } from "../../../packages/sidecar-core/test-support/effect";
 import { CODEX_PROVIDER, CodexSessionAdapter } from "../src/codex-adapter";
 
 const TEST_TIME = Date.parse("2026-08-11T23:45:00.000Z");
@@ -166,7 +167,7 @@ test("observes a Codex thread under the name Codex gave it", async (t) => {
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.deepEqual(adapter.provider, CODEX_PROVIDER);
   assert.equal(observations.length, 1);
@@ -200,7 +201,7 @@ test("addresses a Codex thread by the id Codex files it under", async (t) => {
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.equal(observations[0]?.detail?.link, "codex://threads/codex%20thread%2Fone%3Ftwo");
 });
@@ -232,7 +233,7 @@ test("reports a finished Codex turn as waiting for its developer", async (t) => 
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
   assert.equal(observation?.recap, "Released 0.1.6 and merged the PR.");
@@ -263,7 +264,7 @@ test("reports a running Codex turn as working with the call it is making", async
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
   assert.equal(observation?.recap, undefined);
@@ -294,7 +295,7 @@ test("names a call whose argument Codex passes as a list of tokens", async (t) =
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runEffect(adapter.observe());
 
   assert.equal(observation?.detail?.activity, "run: notch geometry inset");
 });
@@ -323,7 +324,7 @@ test("names a call by its tool alone when no argument reads as a phrase", async 
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runEffect(adapter.observe());
 
   assert.equal(observation?.detail?.activity, "update_plan");
 });
@@ -353,7 +354,7 @@ test("drops the previous turn's call when a new Codex turn starts", async (t) =>
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
   assert.equal(observation?.detail?.activity, undefined);
@@ -379,7 +380,7 @@ test("holds a long Codex turn at working however stale its row is", async (t) =>
     activeSessionFreshnessMs: 15 * 60 * 1000,
     maximumSessionAgeMs: 60 * 60 * 1000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
 });
@@ -401,7 +402,7 @@ test("observes Codex sessions from an explicit SQLite home", async (t) => {
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "codex-sqlite-home");
@@ -431,7 +432,7 @@ test("observes Codex sessions from configured sqlite_home", async (t) => {
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "codex-configured-home");
@@ -461,7 +462,7 @@ test("observes Codex sessions from CODEX_SQLITE_HOME", async (t) => {
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "codex-env-home");
@@ -499,7 +500,7 @@ test("prefers configured sqlite_home over CODEX_SQLITE_HOME", async (t) => {
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "codex-configured-home");
@@ -521,7 +522,7 @@ test("observes Codex sessions from the default sqlite subdirectory", async (t) =
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "codex-default-sqlite");
@@ -544,7 +545,7 @@ test("falls back when a higher-priority Codex database has an unusable schema", 
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.providerSessionId, "codex-legacy-valid");
@@ -567,7 +568,7 @@ test("keeps stale unarchived Codex sessions unknown instead of inventing activit
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60 * 60 * 1000,
   });
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
@@ -598,7 +599,7 @@ test("filters archived Codex threads while keeping sessions however old", async 
     codexHome,
     now: () => TEST_TIME,
   });
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.deepEqual(
     observations.map((observation) => ({
@@ -628,7 +629,7 @@ test("returns an empty snapshot when Codex has no local state database", async (
     now: () => TEST_TIME,
   });
 
-  assert.deepEqual(await adapter.observe(), []);
+  assert.deepEqual(await runEffect(adapter.observe()), []);
 });
 
 test("returns an empty snapshot when node sqlite is unavailable", async (t) => {
@@ -651,5 +652,5 @@ test("returns an empty snapshot when node sqlite is unavailable", async (t) => {
     },
   });
 
-  assert.deepEqual(await adapter.observe(), []);
+  assert.deepEqual(await runEffect(adapter.observe()), []);
 });

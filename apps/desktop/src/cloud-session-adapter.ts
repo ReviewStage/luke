@@ -20,6 +20,7 @@ import {
   type SessionProviderAdapter,
   type SessionStatus,
   sessionMessageText,
+  sessionProviderObservation,
   text,
   UNKNOWN_WORKSPACE_LABEL,
   WORKSPACE_TASK_SUPPORT,
@@ -27,6 +28,7 @@ import {
   type WorkspaceProject,
   workspaceNameText,
 } from "@sidecar/core";
+import { Effect } from "effect";
 
 const GIT_SUFFIX = ".git";
 
@@ -121,7 +123,7 @@ export class CloudRequestError extends Error {
 
 export interface CloudAdapterOptions {
   /** Resolves the credential at observation time so a settings change applies immediately. */
-  readApiKey: () => Promise<string | undefined>;
+  readApiKey: () => Effect.Effect<string | undefined, unknown>;
   baseUrl?: string;
   fetch?: CloudFetch;
   now?: () => number;
@@ -262,7 +264,7 @@ function resolveBaseUrl(profile: CloudAdapterProfile, configured: string | undef
 export abstract class CloudSessionAdapter implements SessionProviderAdapter {
   readonly provider: SessionProvider;
 
-  readonly #readApiKey: () => Promise<string | undefined>;
+  readonly #readApiKey: () => Effect.Effect<string | undefined, unknown>;
   readonly #baseUrl: string;
   readonly #fetch: CloudFetch;
   readonly #authorizationHeaders: (apiKey: string) => Readonly<Record<string, string>>;
@@ -299,10 +301,20 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
     this.#onDiagnostic = options.onDiagnostic;
   }
 
-  async observe(): Promise<readonly ProviderSessionObservation[]> {
+  observe() {
+    return this.#readApiKey().pipe(
+      Effect.catchAll(() => Effect.succeed(undefined)),
+      Effect.flatMap((apiKey) =>
+        sessionProviderObservation(this.provider, () => this.#observeWithApiKey(apiKey)),
+      ),
+    );
+  }
+
+  async #observeWithApiKey(
+    apiKey: string | undefined,
+  ): Promise<readonly ProviderSessionObservation[]> {
     // One observer must never abort the shared refresh pass, so a settings read
     // that fails is treated the same as having no credential at all.
-    const apiKey = await this.#readApiKey().catch(() => undefined);
     if (!apiKey) {
       this.#credential = undefined;
       this.#forgetObservedState();
@@ -357,35 +369,34 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
    * text outside the message bound, and a missing credential all answer
    * without touching the network.
    */
-  protected async sendObservedMessage(
+  protected sendObservedMessage(
     message: ProviderSessionMessage,
-  ): Promise<ProviderMessageResult> {
-    const observation = this.#observations.find(
-      (candidate) => candidate.providerSessionId === message.providerSessionId,
-    );
-    if (!observation?.canReceiveMessage) {
-      return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-    }
+  ): Effect.Effect<ProviderMessageResult, unknown> {
+    return Effect.gen(this, function* () {
+      const observation = this.#observations.find(
+        (candidate) => candidate.providerSessionId === message.providerSessionId,
+      );
+      if (!observation?.canReceiveMessage) {
+        return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      }
 
-    const text = sessionMessageText(message.text);
-    if (!text) {
-      return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: "A message has to be shorter than a document and longer than nothing.",
-      };
-    }
+      const text = sessionMessageText(message.text);
+      if (!text) {
+        return {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: "A message has to be shorter than a document and longer than nothing.",
+        };
+      }
 
-    // The credential is read at send time, not held from the observation pass,
-    // so a key the user just replaced or removed is honoured immediately. Its
-    // absence is a rejection with the actual reason, not "unsupported": the
-    // session advertised taking messages while a key stood behind it, and a
-    // key that has since gone is a different fact than a session that moved on.
-    const apiKey = await this.#readApiKey().catch(() => undefined);
-    if (!apiKey) return this.#missingKeyRejection();
+      // The credential is read at send time, not held from the observation pass,
+      // so a key the user just replaced or removed is honoured immediately.
+      const apiKey = yield* this.#apiKeyOrUndefined();
+      if (!apiKey) return this.#missingKeyRejection();
 
-    const route = this.messageRoute(message.providerSessionId, text);
-    if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-    return this.#postWrite(apiKey, route);
+      const route = this.messageRoute(message.providerSessionId, text);
+      if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      return yield* this.#promiseEffect(() => this.#postWrite(apiKey, route));
+    });
   }
 
   #missingKeyRejection(): ProviderActResult {
@@ -402,24 +413,28 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
    * not observe, for a control that session did not advertise, or without a
    * credential.
    */
-  protected async executeObservedControl(
+  protected executeObservedControl(
     request: ProviderControlRequest,
-  ): Promise<ProviderControlResult> {
-    const observation = this.#observations.find(
-      (candidate) => candidate.providerSessionId === request.providerSessionId,
-    );
-    // The advertised control — not the caller's copy of it — is what the route
-    // is built from, so whatever it targets is the thing the last pass actually
-    // saw, and nothing a caller sends can redirect it.
-    const advertised = observation?.controls?.find((control) => control.id === request.control.id);
-    if (!advertised) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+  ): Effect.Effect<ProviderControlResult, unknown> {
+    return Effect.gen(this, function* () {
+      const observation = this.#observations.find(
+        (candidate) => candidate.providerSessionId === request.providerSessionId,
+      );
+      // The advertised control — not the caller's copy of it — is what the route
+      // is built from, so whatever it targets is the thing the last pass actually
+      // saw, and nothing a caller sends can redirect it.
+      const advertised = observation?.controls?.find(
+        (control) => control.id === request.control.id,
+      );
+      if (!advertised) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
 
-    const apiKey = await this.#readApiKey().catch(() => undefined);
-    if (!apiKey) return this.#missingKeyRejection();
+      const apiKey = yield* this.#apiKeyOrUndefined();
+      if (!apiKey) return this.#missingKeyRejection();
 
-    const route = this.controlRoute(request.providerSessionId, advertised);
-    if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-    return this.#postWrite(apiKey, route);
+      const route = this.controlRoute(request.providerSessionId, advertised);
+      if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      return yield* this.#promiseEffect(() => this.#postWrite(apiKey, route));
+    });
   }
 
   /**
@@ -429,47 +444,49 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
    * its observation did not list, a name or task outside its bound, and a
    * missing credential all answer without touching the network.
    */
-  protected async spawnObservedWorkspaceAgent(
+  protected spawnObservedWorkspaceAgent(
     request: ProviderWorkspaceAgentRequest,
-  ): Promise<ProviderWorkspaceResult> {
-    const observation = this.#observations.find(
-      (candidate) => candidate.providerSessionId === request.providerSessionId,
-    );
-    if (!observation) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-    // The advertised list — not the caller's word — is what the route is
-    // built from, so an agent kind is only ever one the last pass promised.
-    const agent = observation.spawnableAgents?.find((candidate) => candidate === request.agent);
-    if (!agent) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+  ): Effect.Effect<ProviderWorkspaceResult, unknown> {
+    return Effect.gen(this, function* () {
+      const observation = this.#observations.find(
+        (candidate) => candidate.providerSessionId === request.providerSessionId,
+      );
+      if (!observation) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      // The advertised list — not the caller's word — is what the route is
+      // built from, so an agent kind is only ever one the last pass promised.
+      const agent = observation.spawnableAgents?.find((candidate) => candidate === request.agent);
+      if (!agent) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
 
-    const name = request.name === undefined ? undefined : workspaceNameText(request.name);
-    if (request.name !== undefined && !name) {
-      return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: "A session name has to be short enough to say and longer than nothing.",
-      };
-    }
-    const task = request.task === undefined ? undefined : sessionMessageText(request.task);
-    if (request.task !== undefined && !task) {
-      return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: "A task has to be shorter than a document and longer than nothing.",
-      };
-    }
+      const name = request.name === undefined ? undefined : workspaceNameText(request.name);
+      if (request.name !== undefined && !name) {
+        return {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: "A session name has to be short enough to say and longer than nothing.",
+        };
+      }
+      const task = request.task === undefined ? undefined : sessionMessageText(request.task);
+      if (request.task !== undefined && !task) {
+        return {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: "A task has to be shorter than a document and longer than nothing.",
+        };
+      }
 
-    // The route is built in the same synchronous step as the validation, from
-    // the observation's own spawn target: a pass landing while the key is read
-    // must not be able to swap the snapshot between the check and the route.
-    const route = this.workspaceAgentRoute(observation.spawnTarget ?? request.providerSessionId, {
-      ...request,
-      agent,
-      name,
-      task,
+      // The route is built in the same synchronous step as the validation, from
+      // the observation's own spawn target: a pass landing while the key is read
+      // must not be able to swap the snapshot between the check and the route.
+      const route = this.workspaceAgentRoute(observation.spawnTarget ?? request.providerSessionId, {
+        ...request,
+        agent,
+        name,
+        task,
+      });
+      if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+
+      const apiKey = yield* this.#apiKeyOrUndefined();
+      if (!apiKey) return this.#missingKeyRejection();
+      return yield* this.#promiseEffect(() => this.#postWrite(apiKey, route));
     });
-    if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-
-    const apiKey = await this.#readApiKey().catch(() => undefined);
-    if (!apiKey) return this.#missingKeyRejection();
-    return this.#postWrite(apiKey, route);
   }
 
   /**
@@ -497,80 +514,86 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
    * outside its bound, a task a project does not take or the absence of one it
    * needs, and a missing credential all answer without touching the network.
    */
-  protected async createObservedWorkspace(
+  protected createObservedWorkspace(
     request: ProviderWorkspaceRequest,
     projects: readonly WorkspaceProject[],
-  ): Promise<ProviderWorkspaceResult> {
-    const project = projects.find(
-      (candidate) => candidate.providerProjectId === request.providerProjectId,
-    );
-    if (!project) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+  ): Effect.Effect<ProviderWorkspaceResult, unknown> {
+    return Effect.gen(this, function* () {
+      const project = projects.find(
+        (candidate) => candidate.providerProjectId === request.providerProjectId,
+      );
+      if (!project) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
 
-    const name = request.name === undefined ? undefined : workspaceNameText(request.name);
-    if (request.name !== undefined && !name) {
+      const name = request.name === undefined ? undefined : workspaceNameText(request.name);
+      if (request.name !== undefined && !name) {
+        return {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: "A workspace name has to be short enough to say and longer than nothing.",
+        };
+      }
+
+      // The task is held to the project's own word for it, again here: the
+      // renderer already refused what it could, but an adapter answers for its
+      // own writes.
+      const task = request.task === undefined ? undefined : sessionMessageText(request.task);
+      if (request.task !== undefined && !task) {
+        return {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: "A task has to be shorter than a document and longer than nothing.",
+        };
+      }
+      if (task && project.taskSupport === WORKSPACE_TASK_SUPPORT.NONE) {
+        return {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: "This project takes no opening task.",
+        };
+      }
+      if (!task && project.taskSupport === WORKSPACE_TASK_SUPPORT.REQUIRED) {
+        return {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: "This project needs an opening task to create a workspace.",
+        };
+      }
+
+      const apiKey = yield* this.#apiKeyOrUndefined();
+      if (!apiKey) return this.#missingKeyRejection();
+
+      const route = this.workspaceCreationRoute(project, name, task, request.agentSelection);
+      if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      const created = yield* this.#promiseEffect(() =>
+        this.#postWriteDetailed(apiKey, route, WRITE_SUBJECT.PROJECT),
+      );
+      if (created.outcome.status !== PROVIDER_ACT_RESULT_STATUS.ACCEPTED || !task) {
+        return created.outcome;
+      }
+
+      // The workspace stands; what is left is the task. A provider whose
+      // creation request already carried it has nothing to answer here, and one
+      // that hands tasks somewhere the creation response names answers with
+      // that route — built from what the provider itself just returned.
+      const followUp = this.workspaceTaskRoute(created.body ?? {}, task);
+      if (followUp === undefined) return created.outcome;
+      if ("undeliverable" in followUp) {
+        return {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: `The workspace was created, but its opening task was not delivered: ${followUp.undeliverable}`,
+        };
+      }
+      const delivered = yield* this.#promiseEffect(() =>
+        this.#postWriteDetailed(apiKey, followUp, WRITE_SUBJECT.SESSION),
+      );
+      if (delivered.outcome.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
+        return created.outcome;
+      }
       return {
         status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: "A workspace name has to be short enough to say and longer than nothing.",
+        reason: `The workspace was created, but its opening task was not delivered: ${
+          delivered.outcome.status === PROVIDER_ACT_RESULT_STATUS.REJECTED
+            ? delivered.outcome.reason
+            : "the provider documents no way to hand it over."
+        }`,
       };
-    }
-
-    // The task is held to the project's own word for it, again here: the
-    // renderer already refused what it could, but an adapter answers for its
-    // own writes.
-    const task = request.task === undefined ? undefined : sessionMessageText(request.task);
-    if (request.task !== undefined && !task) {
-      return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: "A task has to be shorter than a document and longer than nothing.",
-      };
-    }
-    if (task && project.taskSupport === WORKSPACE_TASK_SUPPORT.NONE) {
-      return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: "This project takes no opening task.",
-      };
-    }
-    if (!task && project.taskSupport === WORKSPACE_TASK_SUPPORT.REQUIRED) {
-      return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: "This project needs an opening task to create a workspace.",
-      };
-    }
-
-    const apiKey = await this.#readApiKey().catch(() => undefined);
-    if (!apiKey) return this.#missingKeyRejection();
-
-    const route = this.workspaceCreationRoute(project, name, task, request.agentSelection);
-    if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-    const created = await this.#postWriteDetailed(apiKey, route, WRITE_SUBJECT.PROJECT);
-    if (created.outcome.status !== PROVIDER_ACT_RESULT_STATUS.ACCEPTED || !task) {
-      return created.outcome;
-    }
-
-    // The workspace stands; what is left is the task. A provider whose
-    // creation request already carried it has nothing to answer here, and one
-    // that hands tasks somewhere the creation response names answers with
-    // that route — built from what the provider itself just returned.
-    const followUp = this.workspaceTaskRoute(created.body ?? {}, task);
-    if (followUp === undefined) return created.outcome;
-    if ("undeliverable" in followUp) {
-      return {
-        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: `The workspace was created, but its opening task was not delivered: ${followUp.undeliverable}`,
-      };
-    }
-    const delivered = await this.#postWriteDetailed(apiKey, followUp, WRITE_SUBJECT.SESSION);
-    if (delivered.outcome.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
-      return created.outcome;
-    }
-    return {
-      status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-      reason: `The workspace was created, but its opening task was not delivered: ${
-        delivered.outcome.status === PROVIDER_ACT_RESULT_STATUS.REJECTED
-          ? delivered.outcome.reason
-          : "the provider documents no way to hand it over."
-      }`,
-    };
+    });
   }
 
   /**
@@ -642,6 +665,14 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
    * reported as another.
    */
   protected forgetCachedIdentity(): void {}
+
+  #apiKeyOrUndefined(): Effect.Effect<string | undefined> {
+    return this.#readApiKey().pipe(Effect.catchAll(() => Effect.succeed(undefined)));
+  }
+
+  #promiseEffect<Result>(run: () => Promise<Result>): Effect.Effect<Result, unknown> {
+    return Effect.tryPromise({ try: run, catch: (error) => error });
+  }
 
   /**
    * Holds a status only while its timestamp is recent. Luke cannot tell a turn

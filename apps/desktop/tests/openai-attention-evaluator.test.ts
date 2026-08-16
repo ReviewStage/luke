@@ -6,6 +6,7 @@ import {
   type AttentionUpdate,
   SESSION_STATUS,
 } from "@sidecar/core";
+import { runEffect } from "../../../packages/sidecar-core/test-support/effect";
 import {
   OpenAiAttentionEvaluator,
   openAiAttentionEvaluator,
@@ -56,6 +57,10 @@ function evaluatorWith(respond: (request: RecordedRequest) => Promise<Response> 
   return { evaluator, requests };
 }
 
+function evaluate(evaluator: OpenAiAttentionEvaluator, value: AttentionUpdate) {
+  return runEffect(evaluator.evaluate(value));
+}
+
 function requestBody(request: RecordedRequest): Record<string, unknown> {
   assert.equal(typeof request.body, "string");
   return JSON.parse(String(request.body)) as Record<string, unknown>;
@@ -83,7 +88,7 @@ test("requests a strict structured decision and never asks the API to retain it"
     }),
   );
 
-  const decision = await evaluator.evaluate(update());
+  const decision = await evaluate(evaluator, update());
 
   assert.deepEqual(decision, {
     disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
@@ -124,7 +129,7 @@ test("sends only the bounded update and no provider transcript", async (t) => {
     structuredResponse({ disposition: ATTENTION_DISPOSITION.SILENT, summary: null }),
   );
 
-  await evaluator.evaluate(update());
+  await evaluate(evaluator, update());
 
   const [request] = requests;
   assert.ok(request);
@@ -150,7 +155,7 @@ test("stays silent when the API is unavailable or answers outside the contract",
 
   for (const failure of failures) {
     const { evaluator } = evaluatorWith(failure);
-    assert.equal(await evaluator.evaluate(update()), undefined);
+    assert.equal(await evaluate(evaluator, update()), undefined);
   }
 });
 
@@ -164,7 +169,7 @@ test("reports a response that carried no decision instead of failing quietly", a
     }),
   );
 
-  assert.equal(await evaluator.evaluate(update()), undefined);
+  assert.equal(await evaluate(evaluator, update()), undefined);
   const message = written.join("");
   assert.match(message, /carried no decision/);
   assert.match(
@@ -185,7 +190,7 @@ test("reads a decision from a payload that carries aggregated output text", asyn
     }),
   );
 
-  assert.deepEqual(await evaluator.evaluate(update()), {
+  assert.deepEqual(await evaluate(evaluator, update()), {
     disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
     decidedAt: DECIDED_AT,
     summary: "Codex finished its turn in billing-api.",
@@ -231,6 +236,6 @@ test("honors a configured base URL without doubling its separator", async (t) =>
     fetch,
   });
 
-  await evaluator.evaluate(update());
+  await evaluate(evaluator, update());
   assert.equal(requests[0]?.url, "https://gateway.test/v1/responses");
 });

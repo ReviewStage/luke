@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 import { SESSION_STATUS } from "@sidecar/core";
+import { runEffect } from "../../../packages/sidecar-core/test-support/effect";
 import { CLAUDE_CODE_PROVIDER, ClaudeCodeSessionAdapter } from "../src/claude-code-adapter";
 
 const TEST_TIME = Date.parse("2026-08-11T23:45:00.000Z");
@@ -70,7 +71,7 @@ test("observes a Claude Code session file and labels it by its workspace", async
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.deepEqual(adapter.provider, CLAUDE_CODE_PROVIDER);
   assert.equal(observations.length, 1);
@@ -103,7 +104,7 @@ test("keeps stale user-tail sessions unknown instead of inventing activity", asy
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60 * 60 * 1000,
   });
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
@@ -131,7 +132,7 @@ test("keeps stale assistant-tail sessions from staying in attention", async (t) 
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60 * 60 * 1000,
   });
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
@@ -164,7 +165,7 @@ test("ignores trailing system records when finding Claude session status", async
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
@@ -199,7 +200,7 @@ test("treats fresh assistant tool use as active work", async (t) => {
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
@@ -244,7 +245,7 @@ test("keeps fresh sessions active when a large tail has no complete status event
     maximumSessionAgeMs: 60_000,
     readTailBytes: 128,
   });
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
@@ -261,7 +262,7 @@ test("re-reads a transcript once it has been written to again", async (t) => {
   );
 
   const adapter = new ClaudeCodeSessionAdapter({ claudeHome, now: () => TEST_TIME });
-  const [before] = await adapter.observe();
+  const [before] = await runEffect(adapter.observe());
   await writeSessionFile(
     claudeHome,
     "-Users-test-luke",
@@ -269,7 +270,7 @@ test("re-reads a transcript once it has been written to again", async (t) => {
     [{ type: TEST_CLAUDE_EVENT_TYPE.RESULT, cwd: "/Users/test/luke" }],
     TEST_TIME - 5_000,
   );
-  const [after] = await adapter.observe();
+  const [after] = await runEffect(adapter.observe());
 
   // The same adapter serves both passes, so the second one must notice the
   // new mtime and re-read rather than serving the first parse back.
@@ -289,7 +290,7 @@ test("serves an untouched transcript from its previous parse", async (t) => {
   );
 
   const adapter = new ClaudeCodeSessionAdapter({ claudeHome, now: () => TEST_TIME });
-  const [before] = await adapter.observe();
+  const [before] = await runEffect(adapter.observe());
   // Same mtime, different content: only a write Claude Code actually made —
   // which moves the mtime — may cost a read, so the parse is served as it was.
   await writeSessionFile(
@@ -299,7 +300,7 @@ test("serves an untouched transcript from its previous parse", async (t) => {
     [{ type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT, cwd: "/Users/test/luke" }],
     TEST_TIME - 20_000,
   );
-  const [after] = await adapter.observe();
+  const [after] = await runEffect(adapter.observe());
 
   assert.equal(before?.status, SESSION_STATUS.COMPLETE);
   assert.equal(after?.status, SESSION_STATUS.COMPLETE);
@@ -333,7 +334,7 @@ test("keeps old sessions and preserves the newest duplicate provider id", async 
     claudeHome,
     now: () => TEST_TIME,
   });
-  const observations = await adapter.observe();
+  const observations = await runEffect(adapter.observe());
 
   assert.deepEqual(
     observations.map((observation) => ({
@@ -390,7 +391,7 @@ test("surfaces the generated title, branch, model, and the tool being run", asyn
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runEffect(adapter.observe());
 
   assert.equal(observation?.title, "Revamp the notch panel");
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
@@ -434,7 +435,7 @@ test("reports a failed request as an error once the retries are spent", async (t
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.ERROR);
   assert.equal(observation?.detail?.error, "429 rate limit exceeded");
@@ -472,7 +473,7 @@ test("stays working through a retry the session is still backing off from", asyn
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runEffect(adapter.observe());
 
   // Claude Code records every backoff, not only the attempt that gives up.
   // Interrupting on the first would be an interruption about nothing.
@@ -506,7 +507,7 @@ test("keeps a spent failure at error after it goes stale", async (t) => {
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60 * 60 * 1000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runEffect(adapter.observe());
 
   // The row would otherwise show the failure text under an "Idle" chip, and
   // stop sorting as a session that needs someone.
@@ -543,7 +544,7 @@ test("clears a recorded error once the session gets past it", async (t) => {
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
   assert.equal(observation?.detail?.error, undefined);
@@ -580,7 +581,7 @@ test("recovers a title from a session too long to hold one in its tail", async (
     // Small enough that the title is far behind the tail the status comes from.
     readTailBytes: 256,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runEffect(adapter.observe());
 
   assert.equal(observation?.title, "Graduate the L-face identity");
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
@@ -615,7 +616,7 @@ test("carries the away recap Claude Code writes for a developer who stepped out"
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
   assert.equal(
@@ -672,7 +673,7 @@ test("drops the previous turn's recap when a new prompt opens a turn", async (t)
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
   assert.equal(observation?.recap, "The second turn's recap.");
@@ -703,7 +704,7 @@ test("reports no recap for a turn whose closing words are all it wrote", async (
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runEffect(adapter.observe());
 
   // The closing message is the transcript itself, not a recap Claude Code wrote
   // about the session, and a recap reaches the attention evaluator.
@@ -764,7 +765,7 @@ test("stops reporting a tool once the turn that ran it has ended", async (t) => 
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runEffect(adapter.observe());
 
   // The row prefers activity over the recap, so a tool left behind here would
   // hide what the session actually wants to say.
@@ -810,7 +811,7 @@ test("keeps reporting a tool between one call and the next", async (t) => {
     now: () => TEST_TIME,
     maximumSessionAgeMs: 60_000,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runEffect(adapter.observe());
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
   assert.equal(observation?.detail?.activity, "Bash: Run the macOS packaging check");
@@ -823,7 +824,7 @@ test("returns an empty snapshot when Claude Code has no local project directory"
     now: () => TEST_TIME,
   });
 
-  assert.deepEqual(await adapter.observe(), []);
+  assert.deepEqual(await runEffect(adapter.observe()), []);
 });
 
 test("dates a touched transcript by its own records rather than the touch", async (t) => {
@@ -856,7 +857,7 @@ test("dates a touched transcript by its own records rather than the touch", asyn
     claudeHome,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runEffect(adapter.observe());
 
   // Three hours old by its own clock, so the row must say so — and a session
   // that old has left the freshness window however recently it was touched.
@@ -885,13 +886,12 @@ test("keeps a touch from making a long-settled session look recent", async (t) =
     claudeHome,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
-
+  const [effectObservation] = await runEffect(adapter.observe());
   // A session is never hidden for being old, but the touch must not stand in
   // for work: the row reports the transcript's own clock, weeks back, and a
   // wait that stale has long since decayed to unknown.
-  assert.equal(observation?.observedAt, Date.parse("2026-06-25T08:30:00.000Z"));
-  assert.equal(observation?.status, SESSION_STATUS.UNKNOWN);
+  assert.equal(effectObservation?.observedAt, Date.parse("2026-06-25T08:30:00.000Z"));
+  assert.equal(effectObservation?.status, SESSION_STATUS.UNKNOWN);
 });
 
 test("falls back to the file's date when the tail carries no timestamp", async (t) => {
@@ -908,7 +908,7 @@ test("falls back to the file's date when the tail carries no timestamp", async (
     claudeHome,
     now: () => TEST_TIME,
   });
-  const [observation] = await adapter.observe();
+  const [observation] = await runEffect(adapter.observe());
 
   assert.equal(observation?.observedAt, TEST_TIME - 5_000);
 });

@@ -151,6 +151,30 @@ Biome is the executable style policy for TypeScript, JavaScript, JSON,
 Markdown, and CSS. Husky runs the same checks against staged files as a local
 convenience; `./scripts/check.sh` and CI remain authoritative.
 
+## Effect execution model
+
+Effect is Luke's execution model for TypeScript work that can fail, suspend,
+acquire resources, or run concurrently. Keep pure domain transformations as
+ordinary functions; wrapping a pure value in `Effect.sync` adds ceremony and
+hides what is actually effectful.
+
+- Module interfaces return `Effect` for effectful work. A `Promise` belongs
+  only at a framework or third-party seam that requires one.
+- Run effects only at the outer edge: Electron handlers and lifecycle events,
+  React effects and event handlers, executable scripts, and tests.
+- Use the `AbortSignal` supplied by `Effect.tryPromise` when bridging a
+  cancellation-aware API. Do not create an independent timeout signal beside
+  the Effect fiber.
+- Expected product outcomes such as unsupported, rejected, or unavailable stay
+  in the existing discriminated result values. Operational failures use the
+  typed Effect error channel; defects are reserved for violated invariants.
+- Use `Scope` for resources, fibers for owned background work, and `Schedule`
+  for recurring work. Do not add new boolean running guards or raw interval
+  handles when Effect can own that lifecycle.
+- Keep provider-read effects and user-opened write effects distinct. Effect
+  composition must preserve every validation gate and cannot give an
+  observation or model-opened turn a path to a write capability.
+
 ## Git workflow
 
 - Follow [Conventional Commits

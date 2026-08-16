@@ -14,6 +14,7 @@ import {
   type SessionDetail,
   type SessionProvider,
   type SessionProviderAdapter,
+  sessionProviderObservation,
   text,
   wholeNumber,
 } from "@sidecar/core";
@@ -428,7 +429,11 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
     this.#sqlite = options.sqlite ?? defaultSqliteModule;
   }
 
-  async observe(): Promise<readonly ProviderSessionObservation[]> {
+  observe() {
+    return sessionProviderObservation(this.provider, () => this.#observe());
+  }
+
+  async #observe(): Promise<readonly ProviderSessionObservation[]> {
     for (const databasePath of await stateDatabasePaths(this.#codexHome, this.#sqliteHome)) {
       const database = await openReadOnlyDatabase(this.#sqlite, databasePath);
       if (!database) continue;

@@ -38,7 +38,7 @@ import {
   type WorkspaceAgentSelection,
   workspaceNameText,
 } from "@sidecar/core";
-
+import { Duration, Effect, Fiber, Schedule } from "effect";
 import {
   app,
   BrowserWindow,
@@ -80,7 +80,7 @@ import { PanelManager } from "./panel-manager";
 import { runModeFor } from "./run-mode";
 import { sessionNoticeSpeech } from "./session-notifications";
 import { createSettingsHandler, SettingsRefusal } from "./settings-handler";
-import { SettingsStore } from "./settings-store";
+import { SettingsStore, type SettingsStoreError } from "./settings-store";
 import {
   APP_SETTING_DEFAULTS,
   type AppBootstrap,
@@ -186,22 +186,18 @@ const sessionAdapters = [
 // roster rather than the registry, so it stands beside the adapters rather
 // than among them.
 const linearTracker = new LinearIssueTracker({
-  readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.LINEAR),
+  readApiKey: () =>
+    settingsStore
+      .readApiKey(CREDENTIAL_PROVIDER_ID.LINEAR)
+      .pipe(Effect.mapError((error) => new Error(error.message))),
 });
 const issueTrackers = [linearTracker] as const;
 /** A board changes at the pace of hands, not of models; a minute is current. */
 const ISSUE_REFRESH_INTERVAL_MS = 60_000;
 /** The latest roster, which is also what every spoken act is validated against. */
 let trackedIssues: readonly TrackedIssue[] | undefined;
-let issueRefreshTimer: NodeJS.Timeout | undefined;
-let issueRefreshRunning = false;
-/**
- * Whether a pass was asked for while one was running. A key save or clear
- * must reach the roster on the very next pass, not be swallowed by an
- * interval tick that happened to be in flight — so the guard queues instead
- * of dropping.
- */
-let issueRefreshQueued = false;
+let issueObservationFiber: Fiber.RuntimeFiber<void, never> | undefined;
+const issueRefreshSemaphore = Effect.unsafeMakeSemaphore(1);
 // Notices come from status edges the registry observed, never from anything a
 // model decided, so they work — and matter most — with no evaluator configured.
 const sessionNoticeTracker = new SessionNoticeTracker();
@@ -287,9 +283,9 @@ function startOutputVolumeWatch(): void {
 }
 
 let tray: Tray | undefined;
-let sessionRefreshTimer: NodeJS.Timeout | undefined;
-let sessionRefreshRunning = false;
-let attentionReviewRunning = false;
+let sessionObservationFiber: Fiber.RuntimeFiber<void, never> | undefined;
+const sessionRefreshSemaphore = Effect.unsafeMakeSemaphore(1);
+const attentionReviewSemaphore = Effect.unsafeMakeSemaphore(1);
 /**
  * The projects last announced to the renderer, serialized for comparison.
  * Undefined until the first announcement decides what there is to compare.
@@ -411,35 +407,44 @@ function reportVoiceAvailability(apiKeyConfigured: boolean): void {
  * is not moved here: only a change while the app is running needs that, and
  * `hotkeys.reapply` is what does it.
  */
-async function applyVoiceCredential(): Promise<void> {
+function applyVoiceCredential(): Effect.Effect<void, SettingsStoreError> {
   // A fixture run does not ask for the key at all: reading a stored one means a
   // Keychain decrypt, which a run that would refuse to use it has no business
   // asking for. That is also why the report says no key resolved — for this run,
   // none did.
-  const apiKey = runMode.sendsNetwork
-    ? await settingsStore.readApiKey(VOICE_CREDENTIAL_PROVIDER_ID)
-    : undefined;
-  const evaluator = openAiAttentionEvaluator(apiKey);
-  attentionReviewer = evaluator
-    ? new SessionAttentionReviewer({
-        evaluator,
-        currentSession: (identity) => sessionRegistry.get(identity),
-      })
-    : undefined;
-  // The chosen voice and pace are what a credential is minted against, so they
-  // are read here rather than set afterwards: a minter built without them would
-  // speak in the default voice until the next time either changed. A file that
-  // cannot be read means no choice was kept, and the environment or the defaults
-  // answer inside the factory.
-  const [voice, speed] = await Promise.all([
-    settingsStore.readVoice().catch(() => undefined),
-    settingsStore.readVoiceSpeed().catch(() => undefined),
-  ]);
-  realtimeCredentials = openAiRealtimeCredentials(apiKey, {
-    ...(voice ? { voice } : {}),
-    ...(speed ? { speed } : {}),
+  return Effect.gen(function* () {
+    const apiKey = runMode.sendsNetwork
+      ? yield* settingsStore.readApiKey(VOICE_CREDENTIAL_PROVIDER_ID)
+      : undefined;
+    const evaluator = openAiAttentionEvaluator(apiKey);
+    attentionReviewer = evaluator
+      ? new SessionAttentionReviewer({
+          evaluator,
+          currentSession: (identity) => sessionRegistry.get(identity),
+        })
+      : undefined;
+    // The chosen voice and pace are what a credential is minted against, so they
+    // are read here rather than set afterwards: a minter built without them would
+    // speak in the default voice until the next time either changed. A file that
+    // cannot be read means no choice was kept, and the environment or the defaults
+    // answer inside the factory.
+    const [voice, speed] = yield* Effect.all(
+      [
+        Effect.tryPromise(() => settingsStore.readVoice()).pipe(
+          Effect.orElseSucceed(() => undefined),
+        ),
+        Effect.tryPromise(() => settingsStore.readVoiceSpeed()).pipe(
+          Effect.orElseSucceed(() => undefined),
+        ),
+      ] as const,
+      { concurrency: "unbounded" },
+    );
+    realtimeCredentials = openAiRealtimeCredentials(apiKey, {
+      ...(voice ? { voice } : {}),
+      ...(speed ? { speed } : {}),
+    });
+    reportVoiceAvailability(apiKey !== undefined);
   });
-  reportVoiceAvailability(apiKey !== undefined);
 }
 
 /**
@@ -631,11 +636,12 @@ function registerIpc(): void {
       // observers are left alone rather than re-crawling the filesystem on
       // every save.
       const adapter = adapterByCredentialProvider.get(providerId);
-      if (!result.reason && adapter) void sessionRegistry.refresh(adapter);
+      if (!result.reason && adapter)
+        Effect.runFork(sessionRegistry.refresh(adapter).pipe(Effect.orDie));
       // The tracker's key connects the tracker, not a session provider, so
       // its save refreshes the roster instead of the registry.
       if (!result.reason && providerId === CREDENTIAL_PROVIDER_ID.LINEAR) {
-        void refreshTrackedIssues();
+        Effect.runFork(refreshTrackedIssues());
       }
       // The voice key connects neither: it is what the spoken conversation and
       // the attention review are built from, so a change to it rebuilds both
@@ -643,7 +649,7 @@ function registerIpc(): void {
       // talk to, or given back to the machine now that there is not. Awaited,
       // because a press right after the save has to find a minter.
       if (!result.reason && providerId === VOICE_CREDENTIAL_PROVIDER_ID) {
-        await applyVoiceCredential();
+        await Effect.runPromise(applyVoiceCredential());
         await hotkeys.reapply(HOTKEY_RANK.TALK);
       }
     },
@@ -1020,14 +1026,16 @@ function registerIpc(): void {
       if (!adapter || !isMessageCapableAdapter(adapter)) {
         return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       }
-      const result = await adapter.sendMessage({
-        providerSessionId: identity.providerSessionId,
-        text: message.value,
-      });
+      const result = await Effect.runPromise(
+        adapter.sendMessage({
+          providerSessionId: identity.providerSessionId,
+          text: message.value,
+        }),
+      );
       // A message that landed changes what the session is doing, so the row
       // should catch up as soon as its provider will say.
       if (result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
-        void sessionRegistry.refresh(adapter);
+        Effect.runFork(sessionRegistry.refresh(adapter).pipe(Effect.orDie));
       }
       return result;
     },
@@ -1051,12 +1059,14 @@ function registerIpc(): void {
       if (!adapter || !isControllableAdapter(adapter)) {
         return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       }
-      const result = await adapter.executeControl({
-        providerSessionId: identity.providerSessionId,
-        control,
-      });
+      const result = await Effect.runPromise(
+        adapter.executeControl({
+          providerSessionId: identity.providerSessionId,
+          control,
+        }),
+      );
       if (result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
-        void sessionRegistry.refresh(adapter);
+        Effect.runFork(sessionRegistry.refresh(adapter).pipe(Effect.orDie));
       }
       return result;
     },
@@ -1128,19 +1138,21 @@ function registerIpc(): void {
         ? await settingsStore.readWorkspaceAgentDefault(providerId)
         : undefined;
       const agentSelection = namedSelection ?? stored;
-      const result = await adapter.createWorkspace({
-        providerProjectId,
-        ...(workspaceName.value ? { name: workspaceName.value } : {}),
-        ...(openingTask.value ? { task: openingTask.value } : {}),
-        ...(agentSelection ? { agentSelection } : {}),
-      });
+      const result = await Effect.runPromise(
+        adapter.createWorkspace({
+          providerProjectId,
+          ...(workspaceName.value ? { name: workspaceName.value } : {}),
+          ...(openingTask.value ? { task: openingTask.value } : {}),
+          ...(agentSelection ? { agentSelection } : {}),
+        }),
+      );
       // A workspace that landed is a session the panel should be showing, so
       // the next look must actually ask rather than serve the cache. A
       // rejection refreshes too: a workspace can stand with its opening task
       // undelivered, and the adapter answers a rejection that never reached
       // the network from its cache anyway.
       if (result.status !== PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED) {
-        void sessionRegistry.refresh(adapter);
+        Effect.runFork(sessionRegistry.refresh(adapter).pipe(Effect.orDie));
       }
       // The first workspace that actually lands chooses the default provider,
       // so a later ask that names none has somewhere unsurprising to go. Only
@@ -1187,11 +1199,13 @@ function registerIpc(): void {
           (candidate) => candidate.id === action.transition?.id,
         );
         if (!transition) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
-        result = await tracker.execute({
-          kind: ISSUE_ACTION_KIND.SET_STATE,
-          trackerIssueId: issue.trackerIssueId,
-          transition,
-        });
+        result = await Effect.runPromise(
+          tracker.execute({
+            kind: ISSUE_ACTION_KIND.SET_STATE,
+            trackerIssueId: issue.trackerIssueId,
+            transition,
+          }),
+        );
       } else {
         if (!issue.canComment) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
         const body = boundedField(action.body, issueCommentText);
@@ -1201,16 +1215,18 @@ function registerIpc(): void {
             reason: "A comment has to be shorter than a document and longer than nothing.",
           };
         }
-        result = await tracker.execute({
-          kind: ISSUE_ACTION_KIND.COMMENT,
-          trackerIssueId: issue.trackerIssueId,
-          body: body.value,
-        });
+        result = await Effect.runPromise(
+          tracker.execute({
+            kind: ISSUE_ACTION_KIND.COMMENT,
+            trackerIssueId: issue.trackerIssueId,
+            body: body.value,
+          }),
+        );
       }
       // An act that landed changes the board, so the roster should catch up
       // as soon as Linear will say.
       if (result.status === TRACKER_ACTION_RESULT_STATUS.ACCEPTED) {
-        void refreshTrackedIssues();
+        Effect.runFork(refreshTrackedIssues());
       }
       return result;
     },
@@ -1291,19 +1307,21 @@ function registerIpc(): void {
       const fallback = stored?.agent === advertised ? stored : undefined;
       const model = namedModel ?? fallback?.model;
       const effort = namedModel !== undefined ? namedEffort : fallback?.effort;
-      const result = await adapter.spawnWorkspaceAgent({
-        providerSessionId: identity.providerSessionId,
-        agent: advertised,
-        ...(sessionName.value ? { name: sessionName.value } : {}),
-        ...(openingTask.value ? { task: openingTask.value } : {}),
-        ...(model ? { model } : {}),
-        ...(effort ? { effort } : {}),
-      });
+      const result = await Effect.runPromise(
+        adapter.spawnWorkspaceAgent({
+          providerSessionId: identity.providerSessionId,
+          agent: advertised,
+          ...(sessionName.value ? { name: sessionName.value } : {}),
+          ...(openingTask.value ? { task: openingTask.value } : {}),
+          ...(model ? { model } : {}),
+          ...(effort ? { effort } : {}),
+        }),
+      );
       // A new agent is a session the panel should be showing, so the next
       // look must actually ask rather than serve the cache — on a rejection
       // too, for the same reason a partial workspace creation refreshes.
       if (result.status !== PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED) {
-        void sessionRegistry.refresh(adapter);
+        Effect.runFork(sessionRegistry.refresh(adapter).pipe(Effect.orDie));
       }
       return result;
     },
@@ -1326,7 +1344,7 @@ function registerIpc(): void {
       if (!runMode.sendsNetwork) {
         return { delivered: false, reason: "A fixture run sends nothing." };
       }
-      return feedbackDelivery.deliver(parsed);
+      return Effect.runPromise(feedbackDelivery.deliver(parsed));
     },
   );
 
@@ -1344,7 +1362,7 @@ function registerIpc(): void {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
     // Returning nothing rather than throwing keeps "no credentials configured"
     // and "the mint failed" on the same explicit, non-fatal path.
-    return realtimeCredentials?.mint();
+    return realtimeCredentials ? Effect.runPromise(realtimeCredentials.mint()) : undefined;
   });
 
   ipcMain.on(channels.quit, (event) => {
@@ -1390,57 +1408,66 @@ function observedWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
   );
 }
 
-async function refreshProviderSessions(): Promise<void> {
-  if (!runMode.observesProviders || sessionRefreshRunning) return;
-  sessionRefreshRunning = true;
-  try {
+function reviewSessionAttention(): Effect.Effect<void> {
+  return Effect.suspend(() => {
+    const reviewer = attentionReviewer;
+    if (!reviewer) return Effect.void;
+    return attentionReviewSemaphore
+      .withPermitsIfAvailable(1)(
+        reviewer.review(sessionRegistry.list()).pipe(
+          Effect.tap((reviews) =>
+            Effect.sync(() => {
+              for (const review of reviews) {
+                sessionRegistry.setAttention(review, review.decision);
+              }
+              // `decision` says the session needs attention, which the panel shows;
+              // `outcome` says whether to voice it now, which only these reviews do.
+              const speech = attentionSpeechFromReviews(reviews);
+              if (speech.length > 0) {
+                // Spoken once, by the one window that holds the voice: every display
+                // already shows the same session as needing attention.
+                panels.voiceHost()?.webContents.send(channels.attentionSpeech, speech);
+              }
+            }),
+          ),
+        ),
+      )
+      .pipe(Effect.asVoid);
+  });
+}
+
+function refreshProviderSessions(): Effect.Effect<void> {
+  return Effect.suspend(() => {
+    if (!runMode.observesProviders) return Effect.void;
     // Providers are observed concurrently and reported independently: the
     // registry commits each provider atomically, so one that is slow or failing
     // can neither delay nor cancel the others. A network provider would
     // otherwise hold up the local ones for as long as its requests take.
-    await Promise.all(
-      sessionAdapters.map(async (adapter) => {
-        try {
-          await sessionRegistry.refresh(adapter);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          process.stderr.write(`Session observation failed (${adapter.provider.id}): ${message}\n`);
-        }
-      }),
+    const refreshes = sessionAdapters.map((adapter) =>
+      sessionRegistry.refresh(adapter).pipe(
+        Effect.catchAll((error) =>
+          Effect.sync(() => {
+            const message = error instanceof Error ? error.message : String(error);
+            process.stderr.write(
+              `Session observation failed (${adapter.provider.id}): ${message}\n`,
+            );
+          }),
+        ),
+      ),
     );
-  } finally {
-    sessionRefreshRunning = false;
-  }
-  // The registry only spoke if the sessions themselves changed, and a pass can
-  // change the project list while leaving them exactly as they were.
-  broadcastWorkspaceProjects();
-  // Attention review runs outside the observation guard so a slow model call
-  // never delays the next provider snapshot.
-  void reviewSessionAttention();
-}
-
-async function reviewSessionAttention(): Promise<void> {
-  if (!attentionReviewer || attentionReviewRunning) return;
-  attentionReviewRunning = true;
-  try {
-    const reviews = await attentionReviewer.review(sessionRegistry.list());
-    for (const review of reviews) {
-      sessionRegistry.setAttention(review, review.decision);
-    }
-    // `decision` says the session needs attention, which the panel shows;
-    // `outcome` says whether to voice it now, which only these reviews do.
-    const speech = attentionSpeechFromReviews(reviews);
-    if (speech.length > 0) {
-      // Spoken once, by the one window that holds the voice: every display
-      // already shows the same session as needing attention.
-      panels.voiceHost()?.webContents.send(channels.attentionSpeech, speech);
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`Attention review failed: ${message}\n`);
-  } finally {
-    attentionReviewRunning = false;
-  }
+    return sessionRefreshSemaphore
+      .withPermitsIfAvailable(1)(
+        Effect.all(refreshes, { concurrency: "unbounded", discard: true }).pipe(
+          // The registry only spoke if the sessions themselves changed, and a pass
+          // can change the project list while leaving them exactly as they were.
+          Effect.tap(() => Effect.sync(broadcastWorkspaceProjects)),
+          // Attention review runs outside the observation guard so a slow model
+          // call never delays the next provider snapshot.
+          Effect.tap(() => reviewSessionAttention().pipe(Effect.forkDaemon)),
+        ),
+      )
+      .pipe(Effect.asVoid);
+  });
 }
 
 /**
@@ -1506,15 +1533,16 @@ function startSessionObservation(): void {
     // offer, so the announcement rides it rather than waiting for the timer.
     broadcastWorkspaceProjects();
   });
-  void refreshProviderSessions();
-  sessionRefreshTimer = setInterval(() => {
-    void refreshProviderSessions();
-    // Relevance moves with the clock as well as with observations: a session
-    // can cross its retention horizon in a pass where nothing was observed to
-    // change, and only this re-check makes that row leave.
-    broadcastRelevantSessions();
-  }, SESSION_REFRESH_INTERVAL_MS);
-  sessionRefreshTimer.unref();
+  sessionObservationFiber = Effect.runFork(
+    refreshProviderSessions().pipe(
+      // Relevance moves with the clock as well as with observations: a session
+      // can cross its retention horizon in a pass where nothing was observed to
+      // change, and only this re-check makes that row leave.
+      Effect.tap(() => Effect.sync(broadcastRelevantSessions)),
+      Effect.repeat(Schedule.spaced(Duration.millis(SESSION_REFRESH_INTERVAL_MS))),
+      Effect.asVoid,
+    ),
+  );
 }
 
 /**
@@ -1523,46 +1551,53 @@ function startSessionObservation(): void {
  * not a board with nothing on it — and a tracker with no key stays absent,
  * which is how the renderer knows there is nothing to advertise.
  */
-async function refreshTrackedIssues(): Promise<void> {
-  if (!runMode.observesProviders) return;
-  if (issueRefreshRunning) {
-    issueRefreshQueued = true;
-    return;
-  }
-  issueRefreshRunning = true;
-  try {
-    const collected: TrackedIssue[] = [];
-    let connected = false;
-    for (const tracker of issueTrackers) {
-      const observations = await tracker.observe();
-      if (!observations) continue;
-      connected = true;
-      for (const observation of observations) {
-        const issue = normalizeTrackedIssue(tracker.tracker, observation);
-        if (issue) collected.push(issue);
-      }
-    }
-    trackedIssues = connected ? collected : undefined;
-    panels.broadcast(channels.issuesChanged, trackedIssues);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`Issue observation failed: ${message}\n`);
-  } finally {
-    issueRefreshRunning = false;
-    if (issueRefreshQueued) {
-      issueRefreshQueued = false;
-      void refreshTrackedIssues();
-    }
-  }
+function refreshTrackedIssues(): Effect.Effect<void> {
+  return Effect.suspend(() => {
+    if (!runMode.observesProviders) return Effect.void;
+    return issueRefreshSemaphore
+      .withPermits(1)(
+        Effect.forEach(
+          issueTrackers,
+          (tracker) =>
+            tracker.observe().pipe(Effect.map((observations) => [tracker, observations] as const)),
+          { concurrency: 1 },
+        ).pipe(
+          Effect.tap((observationSets) =>
+            Effect.sync(() => {
+              const collected: TrackedIssue[] = [];
+              let connected = false;
+              for (const [tracker, observations] of observationSets) {
+                if (!observations) continue;
+                connected = true;
+                for (const observation of observations) {
+                  const issue = normalizeTrackedIssue(tracker.tracker, observation);
+                  if (issue) collected.push(issue);
+                }
+              }
+              trackedIssues = connected ? collected : undefined;
+              panels.broadcast(channels.issuesChanged, trackedIssues);
+            }),
+          ),
+          Effect.catchAll((error) =>
+            Effect.sync(() => {
+              const message = error instanceof Error ? error.message : String(error);
+              process.stderr.write(`Issue observation failed: ${message}\n`);
+            }),
+          ),
+        ),
+      )
+      .pipe(Effect.asVoid);
+  });
 }
 
 function startIssueObservation(): void {
   if (!runMode.observesProviders) return;
-  void refreshTrackedIssues();
-  issueRefreshTimer = setInterval(() => {
-    void refreshTrackedIssues();
-  }, ISSUE_REFRESH_INTERVAL_MS);
-  issueRefreshTimer.unref();
+  issueObservationFiber = Effect.runFork(
+    refreshTrackedIssues().pipe(
+      Effect.repeat(Schedule.spaced(Duration.millis(ISSUE_REFRESH_INTERVAL_MS))),
+      Effect.asVoid,
+    ),
+  );
 }
 
 function configurePermissions(): void {
@@ -1775,7 +1810,7 @@ if (!app.requestSingleInstanceLock()) {
     // the renderer exists to ask for a credential: the first conversation must
     // already have them. It is also what decides whether the talk key below is
     // claimed at all.
-    await applyVoiceCredential();
+    await Effect.runPromise(applyVoiceCredential());
     // Awaited so the panels are created on the chosen displays in their
     // chosen form, rather than appearing on the main display and jumping. A
     // file that cannot be read means no choice was kept — the main display,
@@ -1847,8 +1882,8 @@ app.on("will-quit", () => {
 });
 
 app.on("before-quit", () => {
-  if (sessionRefreshTimer) clearInterval(sessionRefreshTimer);
-  if (issueRefreshTimer) clearInterval(issueRefreshTimer);
+  if (sessionObservationFiber) Effect.runFork(Fiber.interrupt(sessionObservationFiber));
+  if (issueObservationFiber) Effect.runFork(Fiber.interrupt(issueObservationFiber));
   panels.clearCollapseTimers();
 });
 
