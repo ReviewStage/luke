@@ -62,6 +62,9 @@ import {
   systemPreferences,
   Tray,
 } from "electron";
+import { AccountClient, AccountClientError } from "./account-client";
+import { ACCOUNT_FAILURE_ACTION, accountFailureAction, accountGateOpen } from "./account-gate";
+import { startAccountLoopback } from "./account-loopback";
 import { CLAUDE_CODE_PROVIDER, ClaudeCodeSessionAdapter } from "./claude-code-adapter";
 import {
   CLAUDE_HOOK_SCRIPT_NAME,
@@ -112,6 +115,10 @@ import {
 import { createSettingsHandler, SettingsRefusal } from "./settings-handler";
 import { SettingsStore } from "./settings-store";
 import {
+  ACCOUNT_PROVIDER,
+  ACCOUNT_STATUS,
+  type AccountProvider,
+  type AccountSnapshot,
   APP_SETTING_DEFAULTS,
   type AppBootstrap,
   channels,
@@ -153,6 +160,8 @@ const captureMode = captureOutput !== undefined;
 // the fixture snapshot and no provider is observed. Capture runs always imply it.
 const fixtureMode = captureMode || fixtureName !== undefined;
 const runMode = runModeFor({ capture: captureMode, fixture: fixtureName !== undefined });
+const ACCOUNT_BASE_URL = process.env.LUKE_ACCOUNT_BASE_URL ?? "https://tryluke.dev/api/auth";
+const ACCOUNT_CLIENT_ID = "luke-desktop";
 const SESSION_REFRESH_INTERVAL_MS = 5_000;
 const sessionRegistry = new InMemorySessionRegistry();
 // `directory` and the cipher are read lazily so the store can be declared before
@@ -168,6 +177,9 @@ const settingsStore = new SettingsStore({
     decrypt: (cipherText) => safeStorage.decryptString(cipherText),
   },
 });
+const accountClient = new AccountClient({ baseUrl: ACCOUNT_BASE_URL, clientId: ACCOUNT_CLIENT_ID });
+let account: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
+let signInRunning: Promise<AccountSnapshot> | undefined;
 const conductorAdapter = new ConductorSessionAdapter({
   readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.CONDUCTOR),
 });
@@ -348,6 +360,7 @@ function startOutputVolumeWatch(): void {
 
 let tray: Tray | undefined;
 let sessionRefreshTimer: NodeJS.Timeout | undefined;
+let unsubscribeSessions: (() => void) | undefined;
 let sessionRefreshRunning = false;
 let attentionReviewRunning = false;
 /**
@@ -393,6 +406,108 @@ async function requestMicrophone(): Promise<MicrophoneStatus> {
 function trustedSender(event: IpcMainEvent | IpcMainInvokeEvent): boolean {
   const url = event.senderFrame?.url ?? event.sender.getURL();
   return url === rendererUrl();
+}
+
+function isAccountProvider(value: unknown): value is AccountProvider {
+  return value === ACCOUNT_PROVIDER.GOOGLE || value === ACCOUNT_PROVIDER.GITHUB;
+}
+
+function accountCapabilitiesActive(): boolean {
+  return accountGateOpen(runMode, account.status === ACCOUNT_STATUS.SIGNED_IN);
+}
+
+function broadcastAccount(): void {
+  panels.broadcast(channels.accountChanged, account);
+}
+
+async function startAccountCapabilities(): Promise<void> {
+  if (!accountCapabilitiesActive()) return;
+  await applyVoiceCredential();
+  await hotkeys.reapply(HOTKEY_RANK.TALK);
+  startSessionObservation();
+  startIssueObservation();
+}
+
+async function stopAccountCapabilities(): Promise<void> {
+  stopSessionObservation();
+  stopIssueObservation();
+  await applyVoiceCredential();
+  await hotkeys.reapply(HOTKEY_RANK.TALK);
+}
+
+async function signOutAccount(): Promise<AccountSnapshot> {
+  account = await settingsStore.clearAccount();
+  await stopAccountCapabilities();
+  broadcastAccount();
+  return account;
+}
+
+async function refreshStoredAccount(): Promise<void> {
+  const stored = await settingsStore.readAccount();
+  if (!stored || !runMode.requiresAccount) return;
+  try {
+    const identity = await accountClient.userInfo(stored.accessToken);
+    if (
+      identity.email !== stored.email ||
+      identity.name !== stored.name ||
+      identity.provider !== stored.provider
+    ) {
+      account = await settingsStore.setAccount({ ...stored, ...identity });
+      broadcastAccount();
+    }
+    return;
+  } catch (error) {
+    if (!(error instanceof AccountClientError && error.status === 401)) return;
+  }
+
+  try {
+    const tokens = await accountClient.refresh(stored.refreshToken);
+    const identity = await accountClient.userInfo(tokens.accessToken);
+    account = await settingsStore.setAccount({ ...tokens, ...identity });
+    broadcastAccount();
+  } catch (error) {
+    if (accountFailureAction(error) === ACCOUNT_FAILURE_ACTION.SIGN_OUT) {
+      await signOutAccount();
+    }
+  }
+}
+
+function beginAccountSignIn(provider: AccountProvider): Promise<AccountSnapshot> {
+  if (account.status === ACCOUNT_STATUS.SIGNED_IN) return Promise.resolve(account);
+  if (signInRunning) return signInRunning;
+  account = { status: ACCOUNT_STATUS.SIGNING_IN };
+  broadcastAccount();
+  signInRunning = (async () => {
+    let loopback: Awaited<ReturnType<typeof startAccountLoopback>> | undefined;
+    try {
+      loopback = await startAccountLoopback({ providerHint: provider });
+      const authorizeUrl = accountClient.authorizeUrl({
+        redirectUri: loopback.redirectUri,
+        state: loopback.state,
+        codeChallenge: loopback.codeChallenge,
+      });
+      await shell.openExternal(authorizeUrl);
+      const code = await loopback.waitForCode;
+      const tokens = await accountClient.exchangeCode({
+        code,
+        codeVerifier: loopback.codeVerifier,
+        redirectUri: loopback.redirectUri,
+      });
+      const identity = await accountClient.userInfo(tokens.accessToken);
+      account = await settingsStore.setAccount({ ...tokens, ...identity });
+      await startAccountCapabilities();
+      broadcastAccount();
+      return account;
+    } catch (error) {
+      account = { status: ACCOUNT_STATUS.SIGNED_OUT };
+      broadcastAccount();
+      throw error;
+    } finally {
+      await loopback?.close();
+      signInRunning = undefined;
+    }
+  })();
+  return signInRunning;
 }
 
 /**
@@ -474,9 +589,10 @@ async function applyVoiceCredential(): Promise<void> {
   // Keychain decrypt, which a run that would refuse to use it has no business
   // asking for. That is also why the report says no key resolved — for this run,
   // none did.
-  const apiKey = runMode.sendsNetwork
-    ? await settingsStore.readApiKey(VOICE_CREDENTIAL_PROVIDER_ID)
-    : undefined;
+  const apiKey =
+    runMode.sendsNetwork && accountCapabilitiesActive()
+      ? await settingsStore.readApiKey(VOICE_CREDENTIAL_PROVIDER_ID)
+      : undefined;
   const evaluator = openAiAttentionEvaluator(apiKey);
   attentionReviewer = evaluator
     ? new SessionAttentionReviewer({
@@ -602,6 +718,8 @@ function registerIpc(): void {
       fixture,
       captureMode,
       fixtureMode,
+      accountRequired: runMode.requiresAccount,
+      account,
       packaged: app.isPackaged,
       platform: process.platform,
       electronVersion: process.versions.electron,
@@ -627,6 +745,18 @@ function registerIpc(): void {
       ...(trackedIssues && runMode.observesProviders ? { issues: trackedIssues } : {}),
       settings: await settingsStore.snapshot(),
     };
+  });
+
+  ipcMain.handle(channels.beginSignIn, (event, provider: unknown) => {
+    if (!trustedSender(event) || !isAccountProvider(provider)) {
+      throw new Error("Invalid sign-in request");
+    }
+    return beginAccountSignIn(provider);
+  });
+
+  ipcMain.handle(channels.signOut, async (event) => {
+    if (!trustedSender(event)) throw new Error("Untrusted renderer");
+    return signOutAccount();
   });
 
   ipcMain.handle(channels.setExpanded, (event, expanded: unknown, focus: unknown) => {
@@ -1632,7 +1762,7 @@ async function applyLocalSessionHooks(): Promise<void> {
 }
 
 async function refreshProviderSessions(): Promise<void> {
-  if (!runMode.observesProviders || sessionRefreshRunning) return;
+  if (!runMode.observesProviders || !accountCapabilitiesActive() || sessionRefreshRunning) return;
   sessionRefreshRunning = true;
   try {
     // Providers are observed concurrently and reported independently: the
@@ -1760,8 +1890,8 @@ function broadcastRelevantSessions(): void {
 }
 
 function startSessionObservation(): void {
-  if (!runMode.observesProviders) return;
-  sessionRegistry.subscribe((snapshot) => {
+  if (!runMode.observesProviders || !accountCapabilitiesActive() || unsubscribeSessions) return;
+  unsubscribeSessions = sessionRegistry.subscribe((snapshot) => {
     broadcastRelevantSessions();
     // The registry only speaks on an effective change, which is exactly when
     // a status edge can exist to announce. The notices read the unfiltered
@@ -1782,6 +1912,17 @@ function startSessionObservation(): void {
   sessionRefreshTimer.unref();
 }
 
+function stopSessionObservation(): void {
+  if (sessionRefreshTimer) clearInterval(sessionRefreshTimer);
+  sessionRefreshTimer = undefined;
+  unsubscribeSessions?.();
+  unsubscribeSessions = undefined;
+  for (const adapter of sessionAdapters) sessionRegistry.replaceProvider(adapter.provider, []);
+  panels.broadcast(channels.sessionsChanged, []);
+  panels.broadcast(channels.workspaceProjectsChanged, []);
+  lastWorkspaceProjects = undefined;
+}
+
 /**
  * Reads the issue roster from every connected tracker. A failing pass keeps
  * the roster it has rather than blanking it — a tracker that cannot answer is
@@ -1789,7 +1930,7 @@ function startSessionObservation(): void {
  * which is how the renderer knows there is nothing to advertise.
  */
 async function refreshTrackedIssues(): Promise<void> {
-  if (!runMode.observesProviders) return;
+  if (!runMode.observesProviders || !accountCapabilitiesActive()) return;
   if (issueRefreshRunning) {
     issueRefreshQueued = true;
     return;
@@ -1822,12 +1963,19 @@ async function refreshTrackedIssues(): Promise<void> {
 }
 
 function startIssueObservation(): void {
-  if (!runMode.observesProviders) return;
+  if (!runMode.observesProviders || !accountCapabilitiesActive() || issueRefreshTimer) return;
   void refreshTrackedIssues();
   issueRefreshTimer = setInterval(() => {
     void refreshTrackedIssues();
   }, ISSUE_REFRESH_INTERVAL_MS);
   issueRefreshTimer.unref();
+}
+
+function stopIssueObservation(): void {
+  if (issueRefreshTimer) clearInterval(issueRefreshTimer);
+  issueRefreshTimer = undefined;
+  trackedIssues = undefined;
+  panels.broadcast(channels.issuesChanged, undefined);
 }
 
 function configurePermissions(): void {
@@ -1990,6 +2138,11 @@ if (!app.requestSingleInstanceLock()) {
   void app.whenReady().then(async () => {
     if (process.platform === "darwin") app.setActivationPolicy("accessory");
     Menu.setApplicationMenu(null);
+    // A stored refresh token is the account gate. No network request stands
+    // between an offline launch and Luke's local capabilities.
+    account = runMode.requiresAccount
+      ? await settingsStore.accountSnapshot()
+      : { status: ACCOUNT_STATUS.SIGNED_OUT };
     panels.refreshGeometry();
     registerIpc();
     // Resolving settings touches the filesystem, and the OS keychain only for a
@@ -2076,6 +2229,9 @@ if (!app.requestSingleInstanceLock()) {
     configurePermissions();
     startSessionObservation();
     startIssueObservation();
+    // Reconcile in the background. Only an explicit invalid_grant removes the
+    // stored account; network failures and service outages leave it active.
+    void refreshStoredAccount();
 
     screen.on("display-added", handleDisplayChange);
     screen.on("display-removed", handleDisplayChange);

@@ -11,7 +11,7 @@ import {
   REALTIME_VOICE_SPEED,
 } from "@sidecar/core";
 import { type SecretCipher, SettingsStore } from "../src/settings-store";
-import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "../src/shared/contracts";
+import { ACCOUNT_STATUS, CREDENTIAL_SOURCE, SECRET_STORAGE } from "../src/shared/contracts";
 import {
   CREDENTIAL_PROVIDER_ID,
   type CredentialProvider,
@@ -157,6 +157,34 @@ test("stores an API key encrypted, private to the owner, and never in a snapshot
   assert.equal(stats.mode & 0o777, 0o600);
   assert.equal(JSON.stringify(settings).includes(TEST_API_KEY), false);
   assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
+});
+
+test("round-trips an encrypted account without exposing either token in snapshots", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+  const account = {
+    accessToken: "access-token-secret",
+    refreshToken: "refresh-token-secret",
+    email: "developer@example.com",
+    name: "Developer",
+    provider: "github" as const,
+  };
+
+  const snapshot = await store.setAccount(account);
+  const contents = await readSettingsFile(directory);
+  const reopened = storeIn(directory);
+
+  assert.deepEqual(snapshot, {
+    status: ACCOUNT_STATUS.SIGNED_IN,
+    email: account.email,
+    name: account.name,
+    provider: account.provider,
+  });
+  assert.deepEqual(await reopened.readAccount(), account);
+  assert.equal(contents.includes(account.accessToken), false);
+  assert.equal(contents.includes(account.refreshToken), false);
+  assert.equal(JSON.stringify(await reopened.accountSnapshot()).includes("token-secret"), false);
+  assert.equal(JSON.stringify(await reopened.snapshot()).includes("token-secret"), false);
 });
 
 test("decrypts once and re-decrypts only after the key changes", async (t) => {

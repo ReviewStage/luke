@@ -8,6 +8,8 @@
     "node": "22.x"
   },
   "scripts": {
+    "auth:generate": "pnpm dlx @better-auth/cli@1.4.21 generate --config server/auth.ts --output server/auth-schema.sql --yes",
+    "auth:seed": "node server/seed-desktop-client.mjs",
     "build": "vite build",
     "db:check": "drizzle-kit check",
     "db:generate": "drizzle-kit generate",
@@ -18,11 +20,14 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
+    "@better-auth/oauth-provider": "1.6.29",
     "@fontsource-variable/bricolage-grotesque": "5.3.0",
     "@sidecar/core": "workspace:*",
+    "better-auth": "1.6.29",
     "drizzle-orm": "0.45.2",
     "marked": "18.0.9",
     "pg": "8.23.0",
+    "posthog-node": "5.49.1",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },

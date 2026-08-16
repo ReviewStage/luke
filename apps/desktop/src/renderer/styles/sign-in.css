@@ -1,0 +1,64 @@
+.sign-in-gate {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  min-height: 250px;
+  padding: 28px 24px 26px;
+  text-align: center;
+}
+
+.sign-in-gate h1,
+.sign-in-gate p {
+  margin: 0;
+}
+
+.sign-in-gate h1 {
+  font-size: 20px;
+}
+
+.sign-in-gate p,
+.sign-in-gate small {
+  color: var(--text-secondary);
+}
+
+.sign-in-eyes {
+  display: flex;
+  gap: 24px;
+  padding: 7px 0;
+  transform: rotate(-8deg);
+}
+
+.sign-in-eyes span {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.sign-in-actions {
+  display: grid;
+  width: 100%;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.sign-in-actions button {
+  min-height: 38px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--raised);
+  color: var(--text);
+  font-weight: 650;
+}
+
+.sign-in-actions button:hover:not(:disabled) {
+  background: var(--raised-strong);
+}
+
+.sign-in-actions button:disabled {
+  opacity: 0.55;
+}
+
+.sign-in-gate .sign-in-error {
+  color: var(--state-attention);
+}

@@ -26,6 +26,30 @@ import type { FeedbackKind, FeedbackResult, FeedbackSubmission } from "./feedbac
 
 export type { WindowMode } from "@sidecar/core";
 
+export const ACCOUNT_PROVIDER = {
+  GOOGLE: "google",
+  GITHUB: "github",
+} as const;
+
+export type AccountProvider = (typeof ACCOUNT_PROVIDER)[keyof typeof ACCOUNT_PROVIDER];
+
+export const ACCOUNT_STATUS = {
+  SIGNED_OUT: "signed-out",
+  SIGNING_IN: "signing-in",
+  SIGNED_IN: "signed-in",
+} as const;
+
+/** Renderer-safe identity. OAuth tokens never cross the preload boundary. */
+export type AccountSnapshot =
+  | { status: typeof ACCOUNT_STATUS.SIGNED_OUT }
+  | { status: typeof ACCOUNT_STATUS.SIGNING_IN }
+  | {
+      status: typeof ACCOUNT_STATUS.SIGNED_IN;
+      email: string;
+      name?: string;
+      provider: AccountProvider;
+    };
+
 export type MicrophoneStatus = "not-determined" | "granted" | "denied" | "restricted" | "unknown";
 
 /** Where a credential was resolved from, without ever exposing the credential. */
@@ -273,6 +297,9 @@ export interface AppBootstrap {
   captureMode: boolean;
   /** True when `--fixture` (or a capture run) makes the panel render fixture sessions. */
   fixtureMode: boolean;
+  /** False for fixture and capture runs, which must stay deterministic. */
+  accountRequired: boolean;
+  account: AccountSnapshot;
   packaged: boolean;
   platform: string;
   electronVersion: string;
@@ -330,6 +357,8 @@ export interface VoiceHotkeyState {
 
 export interface AppBridge {
   getBootstrap(): Promise<AppBootstrap>;
+  beginSignIn(provider: AccountProvider): Promise<AccountSnapshot>;
+  signOut(): Promise<AccountSnapshot>;
   setExpanded(expanded: boolean, focus?: boolean): Promise<WindowMode>;
   setPointerInterception(interceptsPointer: boolean): void;
   requestMicrophone(): Promise<MicrophoneStatus>;
@@ -550,6 +579,7 @@ export interface AppBridge {
    * stop describing a state the store no longer holds.
    */
   onSettingsChanged(callback: (settings: AppSettings) => void): () => void;
+  onAccountChanged(callback: (account: AccountSnapshot) => void): () => void;
   onSessionsChanged(callback: (sessions: readonly NormalizedSession[]) => void): () => void;
   /** The projects a workspace can be created in, whenever the set changes. */
   onWorkspaceProjectsChanged(
@@ -602,6 +632,9 @@ export interface AppBridge {
 
 export const channels = {
   bootstrap: "app:bootstrap",
+  beginSignIn: "app:begin-sign-in",
+  signOut: "app:sign-out",
+  accountChanged: "app:account-changed",
   setExpanded: "app:set-expanded",
   setPointerInterception: "app:set-pointer-interception",
   requestMicrophone: "app:request-microphone",

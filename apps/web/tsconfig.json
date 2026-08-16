@@ -4,6 +4,7 @@
     "types": ["vite/client", "node"]
   },
   "include": [
+    "api/**/*.ts",
     "src/**/*.ts",
     "src/**/*.tsx",
     "server/**/*.ts",

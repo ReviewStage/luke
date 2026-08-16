@@ -110,6 +110,82 @@ button {
   font: inherit;
 }
 
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: var(--space-5);
+}
+
+.auth-card {
+  width: min(100%, 390px);
+  padding: var(--space-7) var(--space-6);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
+  text-align: center;
+}
+
+.auth-card h1 {
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: 1.75rem;
+  line-height: 1.15;
+}
+
+.auth-card p {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.auth-mark {
+  display: inline-flex;
+  gap: 22px;
+  transform: rotate(-8deg);
+}
+
+.auth-mark span {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text);
+}
+
+.auth-actions {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-6) 0 var(--space-4);
+}
+
+.auth-actions button {
+  min-height: 46px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-control);
+  background: var(--raised);
+  font-weight: 650;
+  transition:
+    background 140ms ease,
+    transform 140ms ease;
+}
+
+.auth-actions button:hover:not(:disabled) {
+  background: var(--raised-strong);
+  transform: translateY(-1px);
+}
+
+.auth-actions button:disabled {
+  cursor: wait;
+  opacity: 0.56;
+}
+
+.auth-card .auth-error {
+  color: var(--attention);
+}
+
+.auth-card small {
+  color: var(--text-muted);
+}
+
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
@@ -198,6 +274,12 @@ button {
   letter-spacing: -0.02em;
   line-height: 1.05;
   white-space: nowrap;
+}
+
+.hero-account {
+  margin: calc(var(--space-3) * -1) 0 var(--space-5);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
 }
 
 .hero-subhead {

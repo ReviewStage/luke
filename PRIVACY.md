@@ -3,6 +3,27 @@
 Luke v0.1 observes coding-agent sessions on your Mac. This document describes
 the current implementation; it is not a promise about third-party services.
 
+## Required Luke account
+
+Live use starts with an identity-only Google or GitHub sign-in. The hosted Luke
+auth service stores the account name, email address, chosen sign-in provider,
+and the account and session records needed to keep that sign-in working. The
+desktop stores its short-lived access token and refresh token together under
+Electron `safeStorage`, backed by the macOS login Keychain. Those tokens remain
+in Electron's main process; the renderer receives only whether an account is
+signed in and its name, email address, and provider.
+
+The auth service receives no coding-agent sessions, transcripts, file content,
+command output, issue data, or provider API keys. Signing in with GitHub does
+not make that identity a Copilot credential. Browser sign-out does not sign the
+desktop out; the desktop keeps its own refresh token until you sign out in
+Luke, or the auth service reports that token revoked or invalid.
+
+On first account creation, the auth service sends PostHog one server-side event
+containing Luke's internal user identifier and the sign-in provider. Luke sends
+no client-side telemetry or heartbeat, and no observed session material is
+included in that event.
+
 ## What Luke reads locally
 
 - For Claude Code, Luke finds recent session files, opens bounded tails

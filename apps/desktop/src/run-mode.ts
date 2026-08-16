@@ -7,6 +7,8 @@
  * two booleans, so a third launch mode cannot silently inherit the wrong half.
  */
 export interface RunMode {
+  /** Require a stored Luke account before live capabilities start. */
+  readonly requiresAccount: boolean;
   /** Watch session providers, issue trackers, and the machine's own output. */
   readonly observesProviders: boolean;
   /** Claim system-wide shortcuts. A capture run drives the panel itself. */
@@ -27,6 +29,7 @@ export function runModeFor(input: { capture: boolean; fixture: boolean }): RunMo
   const deterministic = input.capture || input.fixture;
   const interactive = !input.capture;
   return {
+    requiresAccount: !deterministic,
     observesProviders: !deterministic,
     registersGlobalKeys: interactive,
     animates: interactive,

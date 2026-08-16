@@ -4,6 +4,7 @@ import { runModeFor } from "../src/run-mode";
 
 test("a live launch observes, talks, animates, focuses, and may send", () => {
   assert.deepEqual(runModeFor({ capture: false, fixture: false }), {
+    requiresAccount: true,
     observesProviders: true,
     registersGlobalKeys: true,
     animates: true,
@@ -16,6 +17,7 @@ test("a fixture launch is deterministic and credential-free, still interactive",
   // `--fixture` without a capture is a person looking: no providers, no
   // network, but the panel still takes focus and the keys still register.
   assert.deepEqual(runModeFor({ capture: false, fixture: true }), {
+    requiresAccount: false,
     observesProviders: false,
     registersGlobalKeys: true,
     animates: true,
@@ -26,6 +28,7 @@ test("a fixture launch is deterministic and credential-free, still interactive",
 
 test("a capture launch is unattended: no keys, no focus, no motion, no network", () => {
   assert.deepEqual(runModeFor({ capture: true, fixture: false }), {
+    requiresAccount: false,
     observesProviders: false,
     registersGlobalKeys: false,
     animates: false,

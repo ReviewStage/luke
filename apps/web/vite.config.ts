@@ -11,6 +11,8 @@ export default defineConfig({
       input: {
         main: resolveEntry("./index.html"),
         privacy: resolveEntry("./privacy.html"),
+        "sign-in": resolveEntry("./sign-in.html"),
+        consent: resolveEntry("./consent.html"),
       },
     },
   },
