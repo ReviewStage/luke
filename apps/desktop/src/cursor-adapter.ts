@@ -55,6 +55,7 @@ const CURSOR_DEFAULT_API_URL = "https://api.cursor.com";
 
 const CURSOR_ROUTE_SEGMENT = {
   AGENTS: "agents",
+  ARCHIVE: "archive",
   CANCEL: "cancel",
   REPOSITORIES: "repositories",
   RUNS: "runs",
@@ -66,9 +67,10 @@ const CURSOR_ROUTE_SEGMENT = {
  * repositories the key may launch agents in; the writers are
  * `POST …/agents/{id}/runs`, which is Cursor's documented follow-up — a new
  * run on the agent's existing conversation and workspace state —
- * `POST …/runs/{runId}/cancel`, which stops one that is active, and
+ * `POST …/runs/{runId}/cancel`, which stops one that is active,
  * `POST /v1/agents`, which is its documented way to launch a new agent on a
- * repository the key can reach.
+ * repository the key can reach, and `POST …/agents/{id}/archive`, which is
+ * its documented way to file an agent away.
  */
 const CURSOR_ROUTE = {
   AGENTS: [CURSOR_ROUTE_SEGMENT.V1, CURSOR_ROUTE_SEGMENT.AGENTS],
@@ -103,11 +105,11 @@ const CURSOR_REPOSITORY_RETRY_MS = 5 * 60 * 1000;
 const CURSOR_CANCEL_RUN_CONTROL_ID = "cancel-run";
 
 /**
- * The one control this adapter can honour, advertised per session and only in
- * the state Cursor documents it for. The run it would cancel rides the
- * advertisement as the control's target, so a press stops the run the user
- * was shown — state an adapter kept on the side could outlive the snapshot
- * that promised it, but a control cannot.
+ * The run-level control, advertised per session and only in the state Cursor
+ * documents it for. The run it would cancel rides the advertisement as the
+ * control's target, so a press stops the run the user was shown — state an
+ * adapter kept on the side could outlive the snapshot that promised it, but a
+ * control cannot.
  */
 function cursorCancelRunControl(runId: string): SessionControl {
   return {
@@ -117,6 +119,18 @@ function cursorCancelRunControl(runId: string): SessionControl {
     target: runId,
   };
 }
+
+/**
+ * The agent-level control: Cursor documents archiving an agent — it stays
+ * readable but takes no new runs — and the agent is the whole unit of a
+ * Cursor cloud workspace, so filing it away is this provider's workspace
+ * archive. It is advertised only once the latest run has settled: an agent
+ * mid-run has a stop to offer, not a filing away.
+ */
+const CURSOR_ARCHIVE_AGENT_CONTROL = {
+  id: "archive-agent",
+  label: "Archive this agent",
+} as const;
 
 const CURSOR_QUERY = {
   LIMIT: "limit",
@@ -162,6 +176,18 @@ const CURSOR_RUN_STATUS = {
 } as const;
 
 type CursorRunStatus = (typeof CURSOR_RUN_STATUS)[keyof typeof CURSOR_RUN_STATUS];
+
+/**
+ * The run states in which a run has positively stopped. The archive is offered
+ * only over one of these — never over a run still moving, one still being
+ * created, or one whose state could not be read at all.
+ */
+const CURSOR_SETTLED_RUN_STATUSES: ReadonlySet<CursorRunStatus> = new Set([
+  CURSOR_RUN_STATUS.FINISHED,
+  CURSOR_RUN_STATUS.CANCELLED,
+  CURSOR_RUN_STATUS.EXPIRED,
+  CURSOR_RUN_STATUS.ERROR,
+]);
 
 /**
  * A finished run has stopped and is holding for the user, which is what Luke
@@ -267,9 +293,10 @@ function agentFromRecord(record: Record<string, unknown>): CursorAgent | undefin
  * the agents the supplied key owns, observation issues no request that can
  * change provider state, and it reports nothing at all without a credential.
  * The writes it supports are a user-typed follow-up, through Cursor's own run
- * endpoint, to an agent it advertised as taking one, and a new agent — asked
- * for with the user's own opening task — in a repository Cursor listed for
- * this key, through its documented creation endpoint.
+ * endpoint, to an agent it advertised as taking one, a stop for an active run
+ * and an archive for a settled agent — each on a row that advertised it — and
+ * a new agent — asked for with the user's own opening task — in a repository
+ * Cursor listed for this key, through its documented creation endpoint.
  */
 export class CursorSessionAdapter
   extends CloudSessionAdapter
@@ -389,6 +416,22 @@ export class CursorSessionAdapter
   }
 
   /**
+   * Cursor documents archiving an agent in any state, but the offer waits for
+   * the latest run to positively settle: filing an agent away mid-run would
+   * take the run with it, and the running row already has the one control
+   * that ends a run on purpose. An agent that has never run has no run to
+   * take; one whose run could not be read, or reports a state this build does
+   * not know, is not known to have stopped, so it is offered nothing rather
+   * than a filing away that could land on a live turn. An agent already
+   * archived has nothing left to archive.
+   */
+  #agentTakesArchive(agent: CursorAgent, run: CursorRun | undefined): boolean {
+    if (agent.archived) return false;
+    if (!agent.latestRunId) return true;
+    return run?.status !== undefined && CURSOR_SETTLED_RUN_STATUSES.has(run.status);
+  }
+
+  /**
    * Reads `GET /v1/repositories` on its own cadence, keeping only usable
    * entries. Every failure is swallowed here — including a rejected key, which
    * the agents read in the same pass will surface — because nothing awaits
@@ -480,17 +523,25 @@ export class CursorSessionAdapter
     // The run to cancel is the advertised control's own target, so it is the
     // run of the observation the user pressed, under the credential that
     // observed it.
-    if (control.id !== CURSOR_CANCEL_RUN_CONTROL_ID || !control.target) return undefined;
-    return {
-      segments: [
-        ...CURSOR_ROUTE.AGENTS,
-        providerSessionId,
-        CURSOR_ROUTE_SEGMENT.RUNS,
-        control.target,
-        CURSOR_ROUTE_SEGMENT.CANCEL,
-      ],
-      // Cursor documents no body for a cancel, so none is sent.
-    };
+    if (control.id === CURSOR_CANCEL_RUN_CONTROL_ID && control.target) {
+      return {
+        segments: [
+          ...CURSOR_ROUTE.AGENTS,
+          providerSessionId,
+          CURSOR_ROUTE_SEGMENT.RUNS,
+          control.target,
+          CURSOR_ROUTE_SEGMENT.CANCEL,
+        ],
+        // Cursor documents no body for a cancel, so none is sent.
+      };
+    }
+    if (control.id === CURSOR_ARCHIVE_AGENT_CONTROL.id) {
+      return {
+        segments: [...CURSOR_ROUTE.AGENTS, providerSessionId, CURSOR_ROUTE_SEGMENT.ARCHIVE],
+        // Cursor documents no body for an archive, so none is sent.
+      };
+    }
+    return undefined;
   }
 
   async #observationFor(
@@ -517,9 +568,14 @@ export class CursorSessionAdapter
       status,
       observedAt,
       canReceiveMessage: this.#agentTakesMessages(agent, run),
+      // The two controls are exclusive by construction: an active run offers
+      // its stop, a settled agent offers to be filed away, and an archived one
+      // offers nothing.
       ...(latestRunId && this.#agentTakesCancel(agent, run)
         ? { controls: [cursorCancelRunControl(latestRunId)] }
-        : {}),
+        : this.#agentTakesArchive(agent, run)
+          ? { controls: [CURSOR_ARCHIVE_AGENT_CONTROL] }
+          : {}),
       ...(run?.result ? { recap: run.result } : {}),
       detail: {
         ...(repository ? { repository } : {}),

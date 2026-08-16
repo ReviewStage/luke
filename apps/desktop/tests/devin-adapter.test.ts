@@ -100,13 +100,17 @@ function fakeDevinApi(
   return recordingFetch((request) => {
     const { pathname, searchParams, method } = request;
 
-    // The one documented writer: a message for one existing session.
+    // The two documented writers: a message for one existing session, and an
+    // archive that files one away.
     if (method === "POST") {
       const match = pathname.match(
-        new RegExp(`^/v3/organizations/${TEST_ORG_ID}/sessions/([^/]+)/messages$`),
+        new RegExp(`^/v3/organizations/${TEST_ORG_ID}/sessions/([^/]+)/(messages|archive)$`),
       );
       const known = match && sessions.some((session) => session.id === match[1]);
-      return known ? jsonResponse({}) : jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
+      if (!known) return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
+      return match[2] === "archive"
+        ? jsonResponse({ session_id: match[1], is_archived: true })
+        : jsonResponse({});
     }
 
     if (pathname === "/v3/self") {
@@ -172,12 +176,87 @@ function workingSession(id: string, updatedAt: number): TestSession {
   return { id, status: TEST_STATUS.RUNNING, detail: TEST_DETAIL.WORKING, updatedAt };
 }
 
-test("routes messages and no other write", () => {
+test("routes messages and the archive control, and no other write", () => {
   const adapter = adapterFor(async () => new Response("{}", { status: 200 }));
   assert.equal(isMessageCapableAdapter(adapter), true);
-  assert.equal(isControllableAdapter(adapter), false);
+  assert.equal(isControllableAdapter(adapter), true);
   assert.equal(isWorkspaceCapableAdapter(adapter), false);
   assert.equal(isWorkspaceAgentCapableAdapter(adapter), false);
+});
+
+test("advertises the archive only for a session positively seen settled", async () => {
+  const settled = TEST_TIME - 1_000;
+  const api = fakeDevinApi([
+    { id: "devin-exited", status: TEST_STATUS.EXIT, updatedAt: settled },
+    { id: "devin-errored", status: TEST_STATUS.ERROR, updatedAt: settled },
+    { id: "devin-suspended", status: TEST_STATUS.SUSPENDED, updatedAt: settled },
+    {
+      id: "devin-holding",
+      status: TEST_STATUS.RUNNING,
+      detail: TEST_DETAIL.WAITING_FOR_USER,
+      updatedAt: settled,
+    },
+    workingSession("devin-working", settled),
+    // A running session whose machine reports no detail may be mid-turn, and
+    // a state this build does not know is not a settled one.
+    { id: "devin-detailless", status: TEST_STATUS.RUNNING, updatedAt: settled },
+    { id: "devin-new", status: TEST_STATUS.NEW, updatedAt: settled },
+    { id: "devin-filed", status: TEST_STATUS.EXIT, archived: true, updatedAt: settled },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+  const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
+
+  for (const sessionId of ["devin-exited", "devin-errored", "devin-suspended", "devin-holding"]) {
+    assert.deepEqual(byId.get(sessionId)?.controls, [
+      { id: "archive-session", label: "Archive this session" },
+    ]);
+  }
+  for (const sessionId of ["devin-working", "devin-detailless", "devin-new", "devin-filed"]) {
+    assert.equal(byId.get(sessionId)?.controls, undefined);
+  }
+});
+
+test("files a settled session away through Devin's archive endpoint, sending no body", async () => {
+  const api = fakeDevinApi([
+    { id: "devin-suspended", status: TEST_STATUS.SUSPENDED, updatedAt: TEST_TIME - 1_000 },
+  ]);
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+
+  const result = await adapter.executeControl({
+    providerSessionId: "devin-suspended",
+    control: { id: "archive-session", label: "Archive this session" },
+  });
+
+  assert.deepEqual(result, { status: "accepted" });
+  const write = api.requests.at(-1);
+  assert.equal(write?.method, "POST");
+  assert.equal(
+    write?.pathname,
+    `/v3/organizations/${TEST_ORG_ID}/sessions/devin-suspended/archive`,
+  );
+  assert.equal(write?.authorization, `Bearer ${TEST_API_KEY}`);
+  // Devin documents no body for an archive.
+  assert.equal(write?.contentType, undefined);
+  assert.equal(write?.body, undefined);
+});
+
+test("refuses to archive a session whose row never advertised it", async () => {
+  const api = fakeDevinApi([workingSession("devin-working", TEST_TIME - 1_000)]);
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+  const requestsBefore = api.requests.length;
+
+  // A working session advertised no archive, so the ask has nothing behind it
+  // and no request exists.
+  const result = await adapter.executeControl({
+    providerSessionId: "devin-working",
+    control: { id: "archive-session", label: "Archive this session" },
+  });
+
+  assert.deepEqual(result, { status: "unsupported" });
+  assert.equal(api.requests.length, requestsBefore);
 });
 
 test("observes a working session and labels it the way Devin named it", async () => {

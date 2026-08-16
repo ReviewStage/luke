@@ -545,6 +545,19 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "kinds that session's roster entry lists, optionally named and optionally with an " +
         "opening task. A session whose entry lists no new agents takes no such ask.",
     },
+    {
+      label: "Archiving",
+      detail:
+        "Where a provider documents an archive endpoint — a Conductor workspace, a Cursor " +
+        "cloud agent, and a Devin session today — a row offers Archive as a control once the " +
+        "work there was positively seen to settle: pressed on the row, or asked of Luke in " +
+        "conversation, it files the work away through the provider's own endpoint. Archiving a " +
+        "Conductor workspace files away every chat in it at once; an archived Cursor agent " +
+        "stays readable but takes no new runs; an archived Devin session can be viewed but not " +
+        "resumed. A row mid-turn — or one whose state could not be read — offers no archive, a " +
+        "session whose roster entry lists no archive control takes no such ask, and local " +
+        "sessions — which Luke only reads — are never archived.",
+    },
     talkKeyFact(input.hotkey),
     askKeyFact(input.askKey),
     { label: "Microphone access", detail: MICROPHONE_DETAIL[input.microphoneStatus] },

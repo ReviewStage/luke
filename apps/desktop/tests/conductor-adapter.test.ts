@@ -38,6 +38,7 @@ interface TestWorkspace {
   name: string;
   creatorId?: string;
   lastActivityAt: number;
+  archivedAt?: string;
 }
 
 interface TestSession {
@@ -81,6 +82,7 @@ function workspacePayload(workspace: TestWorkspace): Record<string, unknown> {
     deepLink: `conductor://workspace?id=${workspace.id}`,
     lastActivityAt: isoTimestamp(workspace.lastActivityAt),
     ...(workspace.creatorId ? { creatorId: workspace.creatorId } : {}),
+    ...(workspace.archivedAt ? { archivedAt: workspace.archivedAt } : {}),
   };
 }
 
@@ -119,8 +121,14 @@ function fakeConductorApi(api: TestApi) {
           }));
         return jsonResponse({ rows, rowCount: rows.length, truncated: false });
       }
-      // The three documented writers: a prompt for one session, a cancel for
-      // the turn it is working, and a new workspace in one project.
+      // The four documented writers: a prompt for one session, a cancel for
+      // the turn it is working, a new workspace in one project, and an
+      // archive for one workspace.
+      if (segments[1] === "workspaces" && segments.length === 4 && segments[3] === "archive") {
+        const workspace = api.workspaces.find((candidate) => candidate.id === segments[2]);
+        if (!workspace) return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
+        return jsonResponse({ workspaceId: workspace.id, status: "archived" });
+      }
       if (segments[1] === "workspaces" && segments.length === 2) {
         const body = JSON.parse(rawBody ?? "{}") as {
           projectId?: string;
@@ -1289,7 +1297,7 @@ test("keeps observing when one session's status cannot be read", async () => {
   assert.equal(byId.get("session-unreadable")?.status, SESSION_STATUS.UNKNOWN);
 });
 
-test("advertises a message for any open chat and a stop only while one works", async () => {
+test("advertises a message for any open chat, a stop mid-turn, and an archive once settled", async () => {
   // One workspace per chat, so each state under test reads on its own row
   // without any sibling beside it.
   const api = fakeConductorApi({
@@ -1340,10 +1348,110 @@ test("advertises a message for any open chat and a stop only while one works", a
   // A failed chat is documented for no writer, and a closed one is settled.
   assert.equal(byId.get("session-failed")?.canReceiveMessage, false);
   assert.equal(byId.get("session-closed")?.canReceiveMessage, false);
-  assert.equal(byId.get("session-idle")?.controls, undefined);
+  // A chat mid-turn offers its stop and nothing else; every chat of a settled,
+  // still-open workspace — idle, failed, or closed — offers to file that
+  // workspace away, each naming its own workspace as the target.
   assert.deepEqual(byId.get("session-working")?.controls, [
     { id: "cancel-turn", label: "Stop this turn", kind: "stop" },
   ]);
+  for (const [sessionId, workspaceId] of [
+    ["session-idle", "workspace-idle"],
+    ["session-failed", "workspace-failed"],
+    ["session-closed", "workspace-closed"],
+  ] as const) {
+    assert.deepEqual(byId.get(sessionId)?.controls, [
+      { id: "archive-workspace", label: "Archive this workspace", target: workspaceId },
+    ]);
+  }
+});
+
+test("keeps the archive off every chat of a workspace while a sibling works", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 30_000)],
+    sessions: [
+      {
+        id: "session-working",
+        workspaceId: "workspace-active",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.WORKING,
+        statusUpdatedAt: TEST_TIME - 5_000,
+      },
+      {
+        id: "session-idle",
+        workspaceId: "workspace-active",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 6_000,
+      },
+    ],
+  });
+
+  const observations = await adapterFor(api.fetch).observe();
+  const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
+
+  // The idle chat's own turn is settled, but the workspace an archive acts on
+  // is not: filing it away would take the sibling's running turn with it, so
+  // no row of this workspace offers the archive.
+  assert.deepEqual(byId.get("session-working")?.controls, [
+    { id: "cancel-turn", label: "Stop this turn", kind: "stop" },
+  ]);
+  assert.equal(byId.get("session-idle")?.controls, undefined);
+});
+
+test("keeps the archive off a workspace whose chat's state could not be read", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 30_000)],
+    sessions: [
+      {
+        id: "session-unreadable",
+        workspaceId: "workspace-active",
+        name: TEST_SESSION_NAME,
+        statusHttpStatus: HTTP_STATUS.SERVER_ERROR,
+      },
+    ],
+  });
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  // An unread status is not a settled one: the chat stands as unknown rather
+  // than being dropped, and a workspace not positively seen settled offers no
+  // filing away — the turn Luke could not read may still be running.
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
+  assert.equal(observations[0]?.controls, undefined);
+});
+
+test("offers no archive for a workspace already filed away", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [
+      {
+        ...ownedWorkspace("workspace-filed", TEST_TIME - 30_000),
+        archivedAt: isoTimestamp(TEST_TIME - 20_000),
+      },
+    ],
+    sessions: [
+      {
+        id: "session-closed",
+        workspaceId: "workspace-filed",
+        name: TEST_SESSION_NAME,
+        archivedAt: isoTimestamp(TEST_TIME - 20_000),
+      },
+    ],
+  });
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  // The chat still reads as a settled row, but its workspace has nothing left
+  // to archive, so no control is advertised at all.
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.status, SESSION_STATUS.COMPLETE);
+  assert.equal(observations[0]?.controls, undefined);
 });
 
 test("hands a user prompt to Conductor's documented message endpoint", async () => {
@@ -1409,6 +1517,76 @@ test("stops a working turn through Conductor's cancel endpoint, sending no body"
   // Conductor documents no body for a cancel.
   assert.equal(write?.contentType, undefined);
   assert.equal(write?.body, undefined);
+});
+
+test("archives the workspace the user saw through Conductor's archive endpoint, sending no body", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 30_000)],
+    sessions: [
+      {
+        id: "session-idle",
+        workspaceId: "workspace-active",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 5_000,
+      },
+    ],
+  });
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+
+  // Deliberately without a target: the route must be built from the control
+  // the adapter itself advertised, never from the caller's copy of it.
+  const result = await adapter.executeControl({
+    providerSessionId: "session-idle",
+    control: { id: "archive-workspace", label: "Archive this workspace" },
+  });
+
+  assert.deepEqual(result, { status: "accepted" });
+  const write = api.requests.at(-1);
+  assert.equal(write?.method, "POST");
+  assert.equal(write?.pathname, "/v0/workspaces/workspace-active/archive");
+  assert.equal(write?.authorization, `Bearer ${TEST_API_KEY}`);
+  // Conductor documents no body for an archive.
+  assert.equal(write?.contentType, undefined);
+  assert.equal(write?.body, undefined);
+});
+
+test("refuses to archive a workspace no row advertised, before any request exists", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 30_000)],
+    sessions: [
+      {
+        id: "session-working",
+        workspaceId: "workspace-active",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.WORKING,
+        statusUpdatedAt: TEST_TIME - 5_000,
+      },
+    ],
+  });
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+  const requestsBefore = api.requests.length;
+
+  // A working workspace advertised only the turn's stop, so an archive ask
+  // has nothing behind it and no request exists — whatever target the caller
+  // writes into their copy of the control.
+  const result = await adapter.executeControl({
+    providerSessionId: "session-working",
+    control: {
+      id: "archive-workspace",
+      label: "Archive this workspace",
+      target: "workspace-active",
+    },
+  });
+
+  assert.deepEqual(result, { status: "unsupported" });
+  assert.equal(api.requests.length, requestsBefore);
 });
 
 test("offers the projects the last pass listed as places a workspace can be created", async () => {

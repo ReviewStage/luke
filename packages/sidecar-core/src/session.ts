@@ -109,10 +109,10 @@ export interface SessionControl {
   kind?: SessionControlKind;
   /**
    * The provider-owned identifier of the thing this control acts on, when that
-   * is narrower than the session — the run a stop stops, say. It rides the
-   * advertisement so it is replaced with every observation and can never
-   * outlive the snapshot that promised it, the way state an adapter kept on
-   * the side could.
+   * is not the session itself — the run a stop stops, or the workspace an
+   * archive files away. It rides the advertisement so it is replaced with
+   * every observation and can never outlive the snapshot that promised it,
+   * the way state an adapter kept on the side could.
    */
   target?: string;
 }

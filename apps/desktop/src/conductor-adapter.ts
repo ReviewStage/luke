@@ -56,9 +56,11 @@ const CONDUCTOR_DEFAULT_API_URL = "https://api.conductor.build";
  * sessions; the writers are `POST …/sessions/{id}/messages`, which is
  * Conductor's documented way to hand a prompt to an existing session — queued
  * while it is idle, steered into the running turn while it works —
- * `POST …/sessions/{id}/cancel`, which stops the current turn, and
+ * `POST …/sessions/{id}/cancel`, which stops the current turn,
  * `POST /v0/workspaces`, which is its documented way to create a workspace in
- * a project the user already connected.
+ * a project the user already connected, and
+ * `POST …/workspaces/{id}/archive`, which is its documented way to file a
+ * workspace away.
  */
 const CONDUCTOR_ROUTE = {
   IDENTITY: ["me"],
@@ -68,6 +70,7 @@ const CONDUCTOR_ROUTE = {
 } as const;
 
 const CONDUCTOR_ROUTE_SEGMENT = {
+  ARCHIVE: "archive",
   CANCEL: "cancel",
   MESSAGES: "messages",
   SESSIONS: "sessions",
@@ -124,14 +127,34 @@ const CONDUCTOR_SPAWNABLE_AGENTS: readonly string[] = workspaceAgentModels(
 ).map((entry) => entry.agent);
 
 /**
- * The one control this adapter can honour, advertised only while a session is
- * actually working a turn there is something to stop.
+ * The turn-level control, advertised only while a session is actually working
+ * a turn there is something to stop.
  */
 const CONDUCTOR_CANCEL_CONTROL = {
   id: "cancel-turn",
   label: "Stop this turn",
   kind: SESSION_CONTROL_KIND.STOP,
 } as const;
+
+const CONDUCTOR_ARCHIVE_WORKSPACE_CONTROL_ID = "archive-workspace";
+
+/**
+ * The workspace-level control: Conductor documents archiving a workspace,
+ * which files away every chat in it at once. It is advertised on a chat's row
+ * only once every chat in that workspace was positively seen settled — a
+ * workspace mid-turn has a stop to offer, not a filing away, and one whose
+ * state could not be read is not known to have stopped — and the workspace it
+ * acts on rides the advertisement as the control's target, so a press
+ * archives the workspace the user was shown and nothing an adapter kept on
+ * the side.
+ */
+function conductorArchiveWorkspaceControl(workspaceId: string): SessionControl {
+  return {
+    id: CONDUCTOR_ARCHIVE_WORKSPACE_CONTROL_ID,
+    label: "Archive this workspace",
+    target: workspaceId,
+  };
+}
 
 const CONDUCTOR_QUERY = {
   LIMIT: "limit",
@@ -295,6 +318,8 @@ interface ConductorWorkspace {
   repositoryLabel: string;
   creatorId?: string;
   lastActivityAt: number;
+  /** A workspace already filed away has nothing left to archive. */
+  archived: boolean;
 }
 
 interface ConductorSession {
@@ -320,9 +345,10 @@ interface ConductorSession {
  * workspace is the unit Conductor's own surface shows, but the chat is the
  * thing a press opens and a write reaches, and a workspace holding two chats
  * in two states is two facts, not one. The writes it supports are a
- * user-typed prompt and a stop for the running turn, each through Conductor's
- * own endpoint on a chat that advertised it, and a new workspace in a project
- * the latest pass listed, through Conductor's documented creation endpoint.
+ * user-typed prompt, a stop for the running turn, and an archive for the
+ * settled workspace around a chat, each through Conductor's own endpoint on a
+ * chat that advertised it, and a new workspace in a project the latest pass
+ * listed, through Conductor's documented creation endpoint.
  */
 export class ConductorSessionAdapter
   extends CloudSessionAdapter
@@ -517,6 +543,22 @@ export class ConductorSessionAdapter
       ),
     ]);
 
+    // The workspaces every observed chat of which was positively seen settled
+    // — closed, or reporting idle or errored — judged from this pass's own
+    // statuses. An archive is a workspace-level act, so it is offered only for
+    // these: a chat still working, and just as much one whose status could not
+    // be read at all, keeps the whole workspace off the list, because filing
+    // away a workspace whose state Luke has not actually seen stop could take
+    // a live turn with it.
+    const settledWorkspaceIds = new Set(sessions.map((session) => session.workspace.id));
+    sessions.forEach((session, index) => {
+      const settled =
+        session.archived ||
+        reportedStatuses[index]?.status === CONDUCTOR_SESSION_STATUS.IDLE ||
+        reportedStatuses[index]?.status === CONDUCTOR_SESSION_STATUS.ERROR;
+      if (!settled) settledWorkspaceIds.delete(session.workspace.id);
+    });
+
     // One row per chat, each grouped under its workspace. Two chats used to
     // collapse into one row because their generated names drew as identical
     // lines — but the workspace grouping now names the group once, which
@@ -525,7 +567,13 @@ export class ConductorSessionAdapter
     // sibling most needed a person.
     return sessions
       .map((session, index) =>
-        this.#observationFor(session, reportedStatuses[index], transcripts?.get(session.id), now),
+        this.#observationFor(
+          session,
+          reportedStatuses[index],
+          transcripts?.get(session.id),
+          settledWorkspaceIds,
+          now,
+        ),
       )
       .filter(isDefined);
   }
@@ -582,6 +630,7 @@ export class ConductorSessionAdapter
           id,
           repositoryLabel: project.repositoryLabel,
           lastActivityAt,
+          archived: timestampFromRecord(record, CONDUCTOR_FIELD.ARCHIVED_AT) !== undefined,
           ...(name ? { name } : {}),
           ...(creatorId ? { creatorId } : {}),
         };
@@ -694,22 +743,40 @@ export class ConductorSessionAdapter
     providerSessionId: string,
     control: SessionControl,
   ): CloudWriteRoute | undefined {
-    if (control.id !== CONDUCTOR_CANCEL_CONTROL.id) return undefined;
-    return {
-      segments: [
-        CONDUCTOR_ROUTE_SEGMENT.V0,
-        CONDUCTOR_ROUTE_SEGMENT.SESSIONS,
-        providerSessionId,
-        CONDUCTOR_ROUTE_SEGMENT.CANCEL,
-      ],
-      // Conductor documents no body for a cancel, so none is sent.
-    };
+    if (control.id === CONDUCTOR_CANCEL_CONTROL.id) {
+      return {
+        segments: [
+          CONDUCTOR_ROUTE_SEGMENT.V0,
+          CONDUCTOR_ROUTE_SEGMENT.SESSIONS,
+          providerSessionId,
+          CONDUCTOR_ROUTE_SEGMENT.CANCEL,
+        ],
+        // Conductor documents no body for a cancel, so none is sent.
+      };
+    }
+    if (control.id === CONDUCTOR_ARCHIVE_WORKSPACE_CONTROL_ID) {
+      // The workspace to archive is the advertised control's own target, so it
+      // is the workspace of the observation the user pressed, under the
+      // credential that observed it.
+      if (!control.target) return undefined;
+      return {
+        segments: [
+          CONDUCTOR_ROUTE_SEGMENT.V0,
+          CONDUCTOR_ROUTE_SEGMENT.WORKSPACES,
+          control.target,
+          CONDUCTOR_ROUTE_SEGMENT.ARCHIVE,
+        ],
+        // Conductor documents no body for an archive, so none is sent.
+      };
+    }
+    return undefined;
   }
 
   #observationFor(
     session: ConductorSession,
     reported: ConductorReportedStatus | undefined,
     transcript: ConductorTranscript | undefined,
+    settledWorkspaceIds: ReadonlySet<string>,
     now: number,
   ): ProviderSessionObservation | undefined {
     // A workspace timestamp covers every chat in that workspace, so it would
@@ -728,6 +795,17 @@ export class ConductorSessionAdapter
         ? transcript?.recap
         : undefined;
     const model = agentAndModelLabel(transcript?.agentKind, session.model);
+    // The stop belongs to the turn and the archive to the workspace: a chat
+    // mid-turn offers the stop alone — its own workspace is by definition
+    // unsettled — and any chat of a positively settled, still-open workspace
+    // offers to file the whole workspace away, closed chats included, because
+    // a closed chat's row is exactly where tidying up happens.
+    const controls = [
+      ...(reported?.status === CONDUCTOR_SESSION_STATUS.WORKING ? [CONDUCTOR_CANCEL_CONTROL] : []),
+      ...(!session.workspace.archived && settledWorkspaceIds.has(session.workspace.id)
+        ? [conductorArchiveWorkspaceControl(session.workspace.id)]
+        : []),
+    ];
     return {
       providerSessionId: session.id,
       // The chat's own name titles the row, because the row is the chat; the
@@ -760,9 +838,7 @@ export class ConductorSessionAdapter
       // snapshot that promised it.
       spawnableAgents: CONDUCTOR_SPAWNABLE_AGENTS,
       spawnTarget: session.workspace.id,
-      ...(reported?.status === CONDUCTOR_SESSION_STATUS.WORKING
-        ? { controls: [CONDUCTOR_CANCEL_CONTROL] }
-        : {}),
+      ...(controls.length > 0 ? { controls } : {}),
       ...(recap ? { recap } : {}),
       detail: {
         repository: session.workspace.repositoryLabel,

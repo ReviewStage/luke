@@ -716,7 +716,8 @@ export const REALTIME_TOOLS = {
     family: REALTIME_TOOL_FAMILY.SESSION,
     schema: {
       description:
-        "Run a control one observed session advertises, such as stopping its current run. " +
+        "Run a control one observed session advertises, such as stopping its current run or " +
+        "archiving the settled workspace around it. " +
         "Only controls the roster lists for that session exist.",
       parameters: {
         type: "object",
