@@ -46,6 +46,21 @@ import { ASK_LUKE_INPUT_ID, focusAskField } from "./ask-luke";
 import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";
 import { isSubmittable, removalEndsEntry } from "./credential-entry";
 import {
+  armErrand,
+  EMPTY_ERRAND_RUN,
+  type ErrandHold,
+  type ErrandRun,
+  errandRunIdle,
+  errandWait,
+  finishErrand,
+  flushErrands,
+  landErrand,
+  NOTHING_HELD,
+  nextErrand,
+  type PendingErrand,
+  supersedeErrandSettings,
+} from "./errand-queue";
+import {
   type FeedbackEntry,
   type FeedbackEntryControl,
   IMAGE_REFUSAL,
@@ -55,14 +70,7 @@ import {
 import { encodeFeedbackImage } from "./feedback-images";
 import { FeedbackSlot } from "./feedback-slot";
 import { KeySlot } from "./key-slot";
-import {
-  ERRAND_WAIT,
-  type Errand,
-  type ErrandTarget,
-  type ErrandWait,
-  errandTargets,
-  LukeErrand,
-} from "./luke-errand";
+import { type Errand, errandTargets, LukeErrand } from "./luke-errand";
 import { applySpokenSetting, buildLukeGuide, isAppSettingId } from "./luke-guide";
 import { NotchWings } from "./notch-wings";
 import { PanelBody, type SessionWriteHandlers } from "./panel-body";
@@ -196,7 +204,12 @@ export function App(): React.JSX.Element {
   );
   const [display, setDisplay] = useState<DisplayDiagnostic>();
   const [tab, setTab, tabNow] = useStateWithRef<PanelTab>(PANEL_TAB.SESSIONS);
-  const [settingsView, setSettingsView] = useState<SettingsView>(SETTINGS_VIEW.ROOT);
+  // The drawn page has to be readable from a callback as well as rendered: an
+  // errand coming up for its turn reads it to decide whether a page still has
+  // to be turned before the mark can be measured against anything.
+  const [settingsView, setSettingsView, settingsViewNow] = useStateWithRef<SettingsView>(
+    SETTINGS_VIEW.ROOT,
+  );
   const [sessionView, setSessionView] = useState<SessionView>(DEFAULT_SESSION_VIEW);
   const [optionsOpen, setOptionsOpen] = useState(false);
   // The latest is needed from the spoken-settings carrier, which cannot wait
@@ -280,12 +293,13 @@ export function App(): React.JSX.Element {
    * mistake — the settings snapshot the store answered with, and the narrowing
    * or re-ordering a spoken ask chose for the list.
    *
-   * Refs rather than state: the release runs from a callback that has to stay
-   * stable across the whole flight it is timing, and an errand carries one of
-   * these or the other, never both.
+   * A hold belongs to the act that caught it rather than to the app, because
+   * one reply can ask for several acts and each has its own switch to move.
+   * They ride the run in {@link errandRun}, which is a ref rather than state:
+   * the callbacks that release them have to stay stable across the whole
+   * flight they are timing, and an errand whose callbacks changed identity
+   * would be torn down and rebuilt mid-air.
    */
-  const heldSettings = useRef<AppSettings | undefined>(undefined);
-  const heldView = useRef<Partial<SessionView> | undefined>(undefined);
   /**
    * The way to tell the conversation what the store now holds, for the spoken
    * carrier below. Only the drawing waits for Luke: the guide has to describe
@@ -295,17 +309,38 @@ export function App(): React.JSX.Element {
    * carrier is created before the conversation hook that owns the publisher.
    */
   const publishGuideRef = useRef<(next: AppSettings) => void>(() => {});
-  const releaseErrandChange = useCallback(() => {
-    const settings = heldSettings.current;
-    const view = heldView.current;
-    heldSettings.current = undefined;
-    heldView.current = undefined;
-    if (settings !== undefined) setSettings(settings);
+  /**
+   * The newest snapshot the store has answered with, held back from the panel
+   * or not. What waits for Luke is the drawing; what the next call in the same
+   * turn composes against must be current, or a model and its effort asked for
+   * in one breath would compose the second against the selection the first
+   * replaced. Kept beside the holds rather than in one, because a hold belongs
+   * to a single act and this is what every act after it has to read.
+   */
+  const answeredSettings = useRef<AppSettings | undefined>(undefined);
+  const drawErrandHold = useCallback((hold: ErrandHold) => {
+    if (hold.settings !== undefined) setSettings(hold.settings);
     // Folded into whatever the view is at the moment it lands rather than the
     // moment it was chosen: the list corrects its own filter during render
     // when one empties, and a snapshot taken at the ask would undo that.
+    const view = hold.view;
     if (view !== undefined) setSessionView((current) => ({ ...current, ...view }));
   }, [setSettings]);
+
+  /**
+   * Every act this reply asked Luke to sign, in the order he will sign them.
+   * One flight at a time: a second act handed straight to the flight ends the
+   * first one mid-air, which is both switches flipping at once with nobody
+   * seen doing either.
+   */
+  const errandRun = useRef<ErrandRun>(EMPTY_ERRAND_RUN);
+
+  /** The tap has landed, so the act in the air may finally be drawn. */
+  const releaseErrandChange = useCallback(() => {
+    const landed = landErrand(errandRun.current);
+    errandRun.current = landed.run;
+    drawErrandHold(landed.hold);
+  }, [drawErrandHold]);
 
   /**
    * Whether the panel on screen is one an errand stood up. Only then is it the
@@ -328,7 +363,7 @@ export function App(): React.JSX.Element {
       // starts in it — set their page right after this reset.
       setSettingsView(SETTINGS_VIEW.ROOT);
     },
-    [setTab],
+    [setSettingsView, setTab],
   );
 
   // A choice made in the sheet puts the sheet away. It is drawn over the list
@@ -370,24 +405,74 @@ export function App(): React.JSX.Element {
   });
 
   /**
-   * Sends Luke to sign what he just did, if there is anywhere to sign it, and
-   * answers whether he actually went.
+   * Sends Luke to sign the next act waiting on him, and puts the panel where
+   * that act can be seen.
    *
-   * Only the panel can hold a signature, so both callers stand it up first and
-   * this is the backstop rather than the decision: an act whose panel never
-   * opened, or that named a control this build does not draw, flies nowhere
-   * and the spoken answer reports it the way it always did. A caller holding
-   * something for the flight reads the answer and lets go itself.
+   * Only the panel can hold a signature, so every caller stands it up first
+   * and this is the backstop rather than the decision: a run whose panel never
+   * opened has nobody to show anything to, so everything it was holding is
+   * drawn at once and the run is over. An act that named a control this build
+   * does not draw is over the moment it is taken up, in the same way — which
+   * is why this loops rather than returning: the next act takes its turn
+   * immediately instead of waiting for a flight that will never be made.
+   *
+   * The tab and the page are turned here rather than where the act was asked
+   * for, because a page turned at the ask would take the previous act's
+   * control off screen before Luke had reached it.
    */
-  const runErrand = useCallback(
-    (targets: readonly ErrandTarget[], wait: ErrandWait): boolean => {
-      if (targets.length === 0) return false;
-      if (presentationOf() !== PANEL_PRESENTATION.PANEL) return false;
-      errands.current += 1;
-      setErrand({ targets, wait, run: errands.current });
-      return true;
+  const flyNextErrand = useCallback(() => {
+    while (errandRun.current.flying === undefined && errandRun.current.waiting.length > 0) {
+      if (presentationOf() !== PANEL_PRESENTATION.PANEL) {
+        const flushed = flushErrands(errandRun.current);
+        errandRun.current = flushed.run;
+        drawErrandHold(flushed.hold);
+        return;
+      }
+      const { run, launch } = nextErrand(errandRun.current);
+      errandRun.current = run;
+      if (launch === undefined) return;
+      // What the flight has to wait out, read off the panel as it is drawn
+      // this moment — which is the last moment it is true, because turning the
+      // tab and the page below is the very thing being waited for.
+      const wait = errandWait({
+        opening: launch.opening,
+        tab: launch.tab,
+        ...(launch.page === undefined ? {} : { page: launch.page }),
+        drawnTab: tabNow(),
+        drawnPage: settingsViewNow(),
+      });
+      // The control has to be drawn to be flown to, and a settings page that is
+      // not open is not drawn at all — so the tab comes forward and then the
+      // page the setting lives on, in that order, because arriving at the tab
+      // is arriving at its front page. This is the same move a credential entry
+      // returning from the key slot makes.
+      changeTab(launch.tab);
+      if (launch.page !== undefined) setSettingsView(launch.page);
+      if (launch.targets.length > 0) {
+        errands.current += 1;
+        setErrand({ targets: launch.targets, wait, run: errands.current });
+        // Only a panel an errand borrowed is the errand's to put away, and only
+        // the first act of a run can have been the one that stood it up. Later
+        // acts must not answer "no" on its behalf: a close scheduled by the
+        // first act and then disowned by the second still fires, and it fires
+        // into the middle of the second act's flight.
+        if (launch.opening && launch.borrowsPanel) errandOpenedPanel.current = true;
+        return;
+      }
+      // Nothing flew, so nothing is coming to release it.
+      const finished = finishErrand(errandRun.current);
+      errandRun.current = finished.run;
+      drawErrandHold(finished.hold);
+    }
+  }, [changeTab, drawErrandHold, presentationOf, setSettingsView, settingsViewNow, tabNow]);
+
+  /** Adds an act to the run, and sends Luke off if he is not already out. */
+  const armErrandFlight = useCallback(
+    (pending: PendingErrand) => {
+      errandRun.current = armErrand(errandRun.current, pending);
+      flyNextErrand();
     },
-    [presentationOf],
+    [flyNextErrand],
   );
 
   /**
@@ -403,7 +488,7 @@ export function App(): React.JSX.Element {
     // — would land on a page nobody is looking at.
     setSettingsView(SETTINGS_VIEW.CONNECTIONS);
     expand();
-  }, [changeTab, expand]);
+  }, [changeTab, expand, setSettingsView]);
 
   /**
    * Applies a settings write's reply: the snapshot the store actually holds,
@@ -859,28 +944,26 @@ export function App(): React.JSX.Element {
   }, [cancelHover, heldAgainstPointer, pointerIsInside, settle]);
 
   /**
-   * The same two releases, keyed to the flight reporting them. A flight
-   * overtaken by the next carry in the same turn still fires its beats — a
-   * hold nobody releases is worse — but what the app holds belongs to the
-   * newest errand by then: the settings snapshot was overwritten by the later
-   * change, and the panel is the later flight's to put away. So a stale
-   * flight's beats release nothing, and the newest flight's release
-   * everything, which is also why nothing is ever left held.
+   * One flight over, and the next one away if the reply asked for more than one
+   * act. The panel only stands back down once the whole run is signed: a close
+   * scheduled between two flights would land in the middle of the second, and
+   * a flight whose shape goes out from under it is cut short where it stands.
+   *
+   * Every beat is acted on, with no test for whether the flight reporting it is
+   * still the current one. There is no such thing as a stale flight any more —
+   * a second act waits its turn rather than overtaking the one in the air — and
+   * a guard here would be worse than redundant: this is what advances the run,
+   * so a beat it declined to act on would strand every act still waiting and
+   * every hold they carry.
    */
-  const releaseIfCurrentErrand = useCallback(
-    (finished: Errand) => {
-      if (finished.run !== errands.current) return;
-      releaseErrandChange();
-    },
-    [releaseErrandChange],
-  );
-  const standDownIfCurrentErrand = useCallback(
-    (finished: Errand) => {
-      if (finished.run !== errands.current) return;
-      standDownAfterErrand();
-    },
-    [standDownAfterErrand],
-  );
+  const finishErrandFlight = useCallback(() => {
+    const finished = finishErrand(errandRun.current);
+    errandRun.current = finished.run;
+    drawErrandHold(finished.hold);
+    flyNextErrand();
+    if (!errandRunIdle(errandRun.current)) return;
+    standDownAfterErrand();
+  }, [drawErrandHold, flyNextErrand, standDownAfterErrand]);
 
   /**
    * The spoken asks about Luke himself. A settings change goes through the
@@ -906,29 +989,37 @@ export function App(): React.JSX.Element {
       dispatchByKind(action, {
         [APP_TOOL_KIND.SETTING]: async (action) => {
           // The store's answer is caught rather than drawn: the switch is what
-          // Luke is on his way to move, so it waits for him to reach it. Every
-          // path out of here releases it, and the outcome the conversation is
-          // told is the store's own either way — what is delayed is the drawing,
-          // never the change or the report of it. The guide is the one thing
-          // that must not wait: the next call in this same turn is validated
-          // against it. The freshest settings this window knows ride along so
-          // a spoken model or effort change composes against the selection
-          // actually stored — the held answer first, because a model and its
-          // effort asked for in one breath land as two calls before anything
-          // is released.
+          // Luke is on his way to move, so it waits for him to reach it. It is
+          // caught in a local and handed to this act alone, because one reply
+          // can change two settings and each switch waits for its own tap.
+          // Every path out of here releases it, and the outcome the
+          // conversation is told is the store's own either way — what is
+          // delayed is the drawing, never the change or the report of it.
+          //
+          // Two things must not wait for Luke, and neither is the drawing. The
+          // guide has to describe the store's answer at once, because the next
+          // call in this same turn is validated against it — an effort named in
+          // the same breath as a model only exists in the guide the model
+          // change just made true. And the freshest answer this window has seen
+          // is what that next call composes against, which is why it is
+          // remembered outside the hold: the hold belongs to one act, and every
+          // act after it has to read this.
+          let caught: AppSettings | undefined;
           const outcome = await applySpokenSetting(
             window.sidecar,
             action,
             (next) => {
-              heldSettings.current = next;
+              caught = next;
+              answeredSettings.current = next;
               publishGuideRef.current(next);
             },
-            heldSettings.current ?? settingsNow() ?? bootstrap?.settings,
+            answeredSettings.current ?? settingsNow() ?? bootstrap?.settings,
           );
+          const hold: ErrandHold = caught === undefined ? NOTHING_HELD : { settings: caught };
           // Nothing to show and nothing to sign: a refused change must not stand
           // the panel up in front of a switch that did not move.
           if (outcome.status !== "changed") {
-            releaseErrandChange();
+            drawErrandHold(hold);
             return outcome;
           }
           const opening = presentationOf() !== PANEL_PRESENTATION.PANEL;
@@ -937,41 +1028,26 @@ export function App(): React.JSX.Element {
           const page = isAppSettingId(action.setting.id)
             ? SETTING_PAGE[action.setting.id]
             : undefined;
-          // What the flight has to wait out. A page already drawn under an open
-          // panel costs nothing; anything else is a page of content arriving,
-          // and a page turned under an open panel takes the leaving one's exit
-          // first. Read before any of it is asked for, because all three of
-          // these are about to stop being true.
-          const wait =
-            opening || page === undefined
-              ? ERRAND_WAIT.CONTENT
-              : tabNow() === PANEL_TAB.SETTINGS && settingsView === page
-                ? ERRAND_WAIT.AT_ONCE
-                : ERRAND_WAIT.PAGE;
           try {
-            // The control has to be drawn to be flown to, and a settings page
-            // that is not open is not drawn at all — so the tab comes forward
-            // and then the page the setting lives on, in that order, because
-            // arriving at the tab is arriving at its front page. This is the
-            // same move a credential entry returning from the key slot makes.
-            changeTab(PANEL_TAB.SETTINGS);
-            if (page !== undefined) setSettingsView(page);
             await changeMode(true);
-            if (runErrand(errandTargets(action), wait)) {
-              // Only a panel this errand stood up is the errand's to put away
-              // — and a claim once made survives the rest of the turn, because
-              // the second carry of a paired ask finds the panel open exactly
-              // because the first stood it up.
-              errandOpenedPanel.current ||= opening;
-            } else {
-              releaseErrandChange();
-            }
+            // Queued rather than flown at once. The tab, the page and the wait
+            // are all decided when this act comes up for its turn, because an
+            // earlier act may still be out over the very page this one would
+            // otherwise turn away.
+            armErrandFlight({
+              targets: errandTargets(action),
+              tab: PANEL_TAB.SETTINGS,
+              ...(page === undefined ? {} : { page }),
+              opening,
+              borrowsPanel: true,
+              hold,
+            });
           } catch {
             // Showing the change is not what was asked for — making it is, and it
             // is already made. A window that refused to come forward must not be
             // reported back as a setting that refused to change, and the switch
             // must be drawn whether or not anyone was shown it moving.
-            releaseErrandChange();
+            drawErrandHold(hold);
           }
           return outcome;
         },
@@ -1023,7 +1099,6 @@ export function App(): React.JSX.Element {
           // errand into a shape still growing has to trail the whole opening,
           // and one into a panel already up does not.
           const opening = presentationOf() !== PANEL_PRESENTATION.PANEL;
-          changeTab(action.tab);
           const spoken = action.filter ? sessionFilterFromSpoken(action.filter) : undefined;
           // An agent this build never registered cannot narrow the list, and Luke
           // must not claim it did. The list still has to match the sentence that
@@ -1034,23 +1109,27 @@ export function App(): React.JSX.Element {
           // narrowing is what Luke is on his way to the options button to do, and
           // a list that has already re-sorted itself by the time he gets there
           // makes the flight a report rather than the act.
-          if (filter || action.sort) {
-            heldView.current = {
-              ...(filter ? { filter } : {}),
-              ...(action.sort ? { sort: action.sort } : {}),
-            };
-          }
+          const view =
+            filter || action.sort
+              ? {
+                  ...(filter ? { filter } : {}),
+                  ...(action.sort ? { sort: action.sort } : {}),
+                }
+              : undefined;
           await changeMode(true);
-          // Nothing flew, so nothing is coming to release it. The panel itself is
-          // what was asked for and it is already up, so the list must show what
-          // the answer is about to claim it shows.
-          // The tab bar and the options button are outside the settings pages, so
-          // a page reset behind this tab switch is nothing they wait for.
-          if (
-            !runErrand(errandTargets(action), opening ? ERRAND_WAIT.CONTENT : ERRAND_WAIT.AT_ONCE)
-          ) {
-            releaseErrandChange();
-          }
+          // The tab bar and the options button are drawn outside the settings
+          // pages, so this act names no page and waits for none. An act with
+          // nowhere to land releases what it holds the moment it comes up: the
+          // panel itself is what was asked for and it is already open, so the
+          // list must show what the answer is about to claim it shows.
+          armErrandFlight({
+            targets: errandTargets(action),
+            tab: action.tab,
+            opening,
+            // The panel is what was asked for, so it is nobody's to take away.
+            borrowsPanel: false,
+            hold: view === undefined ? NOTHING_HELD : { view },
+          });
           return {
             status: "shown",
             tab: action.tab,
@@ -1063,16 +1142,13 @@ export function App(): React.JSX.Element {
         },
       }),
     [
+      armErrandFlight,
       changeMode,
-      changeTab,
       settingsNow,
-      settingsView,
       bootstrap,
-      releaseErrandChange,
-      runErrand,
+      drawErrandHold,
       feedbackEntry.latest,
       presentationOf,
-      tabNow,
     ],
   );
 
@@ -1133,10 +1209,10 @@ export function App(): React.JSX.Element {
   const acceptSettingsBootstrap = useBootstrapRacedChannel(
     (onChange) =>
       window.sidecar.onSettingsChanged((pushed) => {
-        // A push is newer than anything an errand is still carrying, so it takes
-        // the hold with it: released afterwards, a snapshot caught before this
-        // arrived would draw the store as it was rather than as it is.
-        heldSettings.current = undefined;
+        // A push is newer than anything the run is still carrying, so it takes
+        // every held snapshot with it: released afterwards, one caught before
+        // this arrived would draw the store as it was rather than as it is.
+        errandRun.current = supersedeErrandSettings(errandRun.current);
         onChange(pushed);
       }),
     setSettings,
@@ -1285,6 +1361,7 @@ export function App(): React.JSX.Element {
     cancelHover,
     changeTab,
     setMicrophoneStatus,
+    setSettingsView,
     startMicrophone,
     stopMicrophone,
     summonAsk,
@@ -1412,6 +1489,7 @@ export function App(): React.JSX.Element {
     discardListening,
     optionsOpen,
     presentation,
+    setSettingsView,
     settingsView,
     stopSpeaking,
     tab,
@@ -1651,8 +1729,8 @@ export function App(): React.JSX.Element {
           the errand stand back down. */}
       <LukeErrand
         {...(errand ? { errand } : {})}
-        onLanded={releaseIfCurrentErrand}
-        onReturned={standDownIfCurrentErrand}
+        onLanded={releaseErrandChange}
+        onReturned={finishErrandFlight}
       />
 
       {/* Luke's words while he says them: one element in every state, under
