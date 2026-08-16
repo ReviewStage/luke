@@ -386,6 +386,14 @@ test("words a workspace still being built onto its rows, ready and asleep say no
     sessions: [
       { id: "chat-building", workspaceId: "workspace-building", name: TEST_SESSION_NAME },
       { id: "chat-rebuilding", workspaceId: "workspace-rebuilding", name: TEST_SESSION_NAME },
+      // A closed chat beside the one being rebuilt is already settled: the
+      // machinery around it is not its news.
+      {
+        id: "chat-closed-beside",
+        workspaceId: "workspace-rebuilding",
+        name: TEST_SESSION_NAME,
+        archivedAt: isoTimestamp(TEST_TIME - 60_000),
+      },
       { id: "chat-ready", workspaceId: "workspace-ready", name: TEST_SESSION_NAME },
       { id: "chat-asleep", workspaceId: "workspace-asleep", name: TEST_SESSION_NAME },
     ],
@@ -399,6 +407,7 @@ test("words a workspace still being built onto its rows, ready and asleep say no
   // Conductor's own economy, so neither takes the activity slot from a recap.
   assert.equal(byId.get("chat-building")?.detail?.activity, "Workspace initializing");
   assert.equal(byId.get("chat-rebuilding")?.detail?.activity, "Workspace updating");
+  assert.equal(byId.get("chat-closed-beside")?.detail?.activity, undefined);
   assert.equal(byId.get("chat-ready")?.detail?.activity, undefined);
   assert.equal(byId.get("chat-asleep")?.detail?.activity, undefined);
 });
@@ -436,6 +445,14 @@ test("reports the failure that kept a workspace from coming up, behind the chat'
         status: TEST_CONDUCTOR_STATUS.ERROR,
         statusUpdatedAt: TEST_TIME - 1_000,
       },
+      // A closed chat is complete, and a complete row must not be dressed as
+      // newly failed by the workspace around it.
+      {
+        id: "chat-closed-in-failed",
+        workspaceId: "workspace-failed",
+        name: TEST_SESSION_NAME,
+        archivedAt: isoTimestamp(TEST_TIME - 60_000),
+      },
     ],
   });
 
@@ -447,6 +464,8 @@ test("reports the failure that kept a workspace from coming up, behind the chat'
     "The setup script exited with status 1",
   );
   assert.equal(byId.get("chat-loudly-failed")?.detail?.error, TEST_ERROR_MESSAGE);
+  assert.equal(byId.get("chat-closed-in-failed")?.status, SESSION_STATUS.COMPLETE);
+  assert.equal(byId.get("chat-closed-in-failed")?.detail?.error, undefined);
 });
 
 test("a failed lifecycle read costs the workspace's words, never the pass", async () => {

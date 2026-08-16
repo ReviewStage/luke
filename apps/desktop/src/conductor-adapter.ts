@@ -865,11 +865,18 @@ export class ConductorSessionAdapter
         : undefined;
     const model = agentAndModelLabel(transcript?.agentKind, session.model);
     // The workspace's own words for why its chats are quiet, and its own
-    // failure message when standing it up went wrong. A session's reported
-    // error is about the turn the user is watching, so it always outranks the
-    // machinery's.
-    const activity = lifecycle?.status ? CONDUCTOR_WORKSPACE_ACTIVITY[lifecycle.status] : undefined;
-    const error = reported?.errorMessage ?? lifecycle?.errorMessage;
+    // failure message when standing it up went wrong. Both belong only to the
+    // open chats: a closed one is settled, and the machinery around it must
+    // not bump its recap or dress a complete row as newly failed. A session's
+    // reported error is about the turn the user is watching, so it always
+    // outranks the machinery's.
+    const activity =
+      !session.archived && lifecycle?.status
+        ? CONDUCTOR_WORKSPACE_ACTIVITY[lifecycle.status]
+        : undefined;
+    const error = session.archived
+      ? undefined
+      : (reported?.errorMessage ?? lifecycle?.errorMessage);
     // The stop belongs to the turn and the archive to the workspace: a chat
     // mid-turn offers the stop alone — its own workspace is by definition
     // unsettled — and any chat of a positively settled, still-open workspace
