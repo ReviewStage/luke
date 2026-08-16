@@ -18,9 +18,12 @@ import {
 } from "../src";
 import {
   ATTENTION_REVIEW_OUTCOME,
+  AttentionRequestRegistry,
   AttentionSpeechLedger,
+  attentionRequestText,
   attentionUpdate,
   DISPOSITION_GUIDANCE,
+  maximumAttentionRequestLength,
   maximumAttentionSummaryLength,
 } from "../src/attention";
 import { ATTENTION_TUNING_EXAMPLES } from "../src/attention-examples";
@@ -732,6 +735,102 @@ test("instructions carry the decision contract and the tuning examples", () => {
     ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
     ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
   ]);
-  assert.deepEqual(ATTENTION_DECISION_SCHEMA.required, ["disposition", "summary"]);
+  assert.deepEqual(ATTENTION_DECISION_SCHEMA.required, ["disposition", "summary", "answers_ask"]);
   assert.equal(ATTENTION_DECISION_SCHEMA.additionalProperties, false);
+});
+
+test("an ask is bounded like the message it is: refused long or empty, never cut", () => {
+  assert.equal(
+    attentionRequestText("  Tell me when this finishes.  "),
+    "Tell me when this finishes.",
+  );
+  assert.equal(attentionRequestText(""), undefined);
+  assert.equal(attentionRequestText("   "), undefined);
+  assert.equal(attentionRequestText(12), undefined);
+  assert.equal(
+    attentionRequestText("a".repeat(maximumAttentionRequestLength)),
+    "a".repeat(maximumAttentionRequestLength),
+  );
+  assert.equal(attentionRequestText("a".repeat(maximumAttentionRequestLength + 1)), undefined);
+});
+
+test("one ask stands per session: replaced whole, withdrawn honestly, dropped with its session", () => {
+  const requests = new AttentionRequestRegistry();
+  const identity = { providerId: claude.id, providerSessionId: "watched" };
+
+  assert.equal(requests.get(identity), undefined);
+  assert.equal(requests.withdraw(identity), false, "nothing standing is nothing to withdraw");
+
+  requests.set(identity, "Tell me when this finishes.");
+  requests.set(identity, "Warn me if it fails.");
+  assert.equal(requests.get(identity), "Warn me if it fails.");
+  assert.equal(requests.withdraw(identity), true);
+  assert.equal(requests.get(identity), undefined);
+
+  // A session its provider no longer reports takes the ask with it: there is
+  // nothing left for the ask to be about.
+  requests.set(identity, "Tell me when this finishes.");
+  requests.retain([{ providerId: claude.id, providerSessionId: "other" }]);
+  assert.equal(requests.get(identity), undefined);
+});
+
+test("a standing ask rides the update of the session it was made about, and no other", async () => {
+  const requests = new AttentionRequestRegistry();
+  requests.set(
+    { providerId: claude.id, providerSessionId: "watched" },
+    "Tell me when this finishes.",
+  );
+  const evaluator = evaluatorReturning(undefined);
+  const reviewer = new SessionAttentionReviewer({
+    evaluator,
+    noticeRequestFor: (identity) => requests.get(identity),
+  });
+
+  await reviewer.review([session(claude, "watched"), session(claude, "unwatched")]);
+
+  const watched = evaluator.updates.find((update) => update.providerSessionId === "watched");
+  const unwatched = evaluator.updates.find((update) => update.providerSessionId === "unwatched");
+  assert.equal(watched?.noticeRequest, "Tell me when this finishes.");
+  assert.equal(unwatched?.noticeRequest, undefined);
+});
+
+test("answering an ask is earned by a literal true, and never by a silent decision", () => {
+  const spoken = {
+    disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
+    summary: SPOKEN_SUMMARY,
+  };
+
+  assert.equal(
+    attentionDecisionFromModel({ ...spoken, answers_ask: true }, DECIDED_AT)?.answersAsk,
+    true,
+  );
+  // A malformed or absent field reads as not answering: the privileges an
+  // answer earns must come from the model saying so.
+  assert.equal(
+    attentionDecisionFromModel({ ...spoken, answers_ask: "yes" }, DECIDED_AT)?.answersAsk,
+    undefined,
+  );
+  assert.equal(attentionDecisionFromModel(spoken, DECIDED_AT)?.answersAsk, undefined);
+  assert.equal(
+    attentionDecisionFromModel(
+      { disposition: ATTENTION_DISPOSITION.SILENT, summary: null, answers_ask: true },
+      DECIDED_AT,
+    )?.answersAsk,
+    undefined,
+    "a silent decision answers nothing out loud",
+  );
+});
+
+test("the rendered update says the developer's ask, and says none while none stands", () => {
+  const asked = attentionUpdate(
+    session(claude, "watched"),
+    undefined,
+    "Tell me when this finishes.",
+  );
+  assert.ok(asked, "a first observation is an update");
+  assert.ok(attentionUpdateInput(asked).includes("Developer's ask: Tell me when this finishes."));
+
+  const unasked = attentionUpdate(session(claude, "watched"));
+  assert.ok(unasked, "a first observation is an update");
+  assert.ok(attentionUpdateInput(unasked).includes("Developer's ask: none"));
 });

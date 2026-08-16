@@ -50,7 +50,11 @@ import {
   workspaceProjectContextEvents,
   workspaceProjectContextText,
 } from "../src";
-import { ATTENTION_REVIEW_OUTCOME, type AttentionReview } from "../src/attention";
+import {
+  ATTENTION_REVIEW_OUTCOME,
+  type AttentionReview,
+  maximumAttentionRequestLength,
+} from "../src/attention";
 import { maximumWorkspaceNameLength } from "../src/providers";
 import {
   maximumVoiceContextIssues,
@@ -194,7 +198,7 @@ test("a refused delete is read back with the event it names", () => {
 
 test("the standing instructions count the tools from the table", () => {
   const instructions = realtimeInstructions();
-  assert.equal(Object.keys(REALTIME_TOOLS).length, 10);
+  assert.equal(Object.keys(REALTIME_TOOLS).length, 12);
   assert.match(instructions, new RegExp(`You have ${spokenRealtimeToolCount()} tools:`));
 });
 
@@ -622,7 +626,7 @@ test("a resting-point update is voiced just like a blocking one", () => {
   assert.equal(speech[0]?.disposition, ATTENTION_DISPOSITION.SPEAK_AT_TURN_END);
 });
 
-test("the session is minted with the ten acts and nothing wider", () => {
+test("the session is minted with the twelve acts and nothing wider", () => {
   const config = realtimeSessionConfig();
 
   assert.deepEqual(
@@ -631,6 +635,8 @@ test("the session is minted with the ten acts and nothing wider", () => {
       REALTIME_TOOL.SEND_SESSION_MESSAGE,
       REALTIME_TOOL.RUN_SESSION_CONTROL,
       REALTIME_TOOL.OPEN_SESSION,
+      REALTIME_TOOL.REQUEST_SESSION_NOTICE,
+      REALTIME_TOOL.WITHDRAW_SESSION_NOTICE,
       REALTIME_TOOL.CREATE_WORKSPACE,
       REALTIME_TOOL.ADD_WORKSPACE_AGENT,
       REALTIME_TOOL.UPDATE_ISSUE_STATE,
@@ -1549,4 +1555,88 @@ test("a disconnected tracker withdraws the roster without starting a reply", () 
     events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE),
     false,
   );
+});
+
+test("a standing ask is kept only for a session Luke was shown, in bounded words", () => {
+  const roster = [actionableSession()];
+  const identity = '"provider_id":"devin","provider_session_id":"devin-1"';
+
+  assert.deepEqual(
+    sessionToolAction(
+      messageCall(
+        `{${identity},"request":"Tell me when this finishes."}`,
+        REALTIME_TOOL.REQUEST_SESSION_NOTICE,
+      ),
+      roster,
+    ),
+    {
+      kind: "notice-request",
+      identity: { providerId: "devin", providerSessionId: "devin-1" },
+      request: "Tell me when this finishes.",
+    },
+  );
+  assert.deepEqual(
+    sessionToolAction(messageCall(`{${identity}}`, REALTIME_TOOL.WITHDRAW_SESSION_NOTICE), roster),
+    {
+      kind: "notice-withdraw",
+      identity: { providerId: "devin", providerSessionId: "devin-1" },
+    },
+  );
+
+  const refusals = [
+    sessionToolAction(
+      messageCall(`{${identity},"request":""}`, REALTIME_TOOL.REQUEST_SESSION_NOTICE),
+      roster,
+    ),
+    sessionToolAction(
+      messageCall(
+        `{${identity},"request":"${"a".repeat(maximumAttentionRequestLength + 1)}"}`,
+        REALTIME_TOOL.REQUEST_SESSION_NOTICE,
+      ),
+      roster,
+    ),
+    sessionToolAction(
+      messageCall(
+        '{"provider_id":"devin","provider_session_id":"other","request":"tell me"}',
+        REALTIME_TOOL.REQUEST_SESSION_NOTICE,
+      ),
+      roster,
+    ),
+    sessionToolAction(
+      messageCall(
+        '{"provider_id":"devin","provider_session_id":"other"}',
+        REALTIME_TOOL.WITHDRAW_SESSION_NOTICE,
+      ),
+      roster,
+    ),
+  ];
+  for (const refusal of refusals) assert.equal(refusal.kind, "refused");
+});
+
+test("only a review that answers a standing ask may be heard without a call open", () => {
+  const asked = review({
+    providerSessionId: "session-b",
+    update: {
+      ...review().update,
+      providerSessionId: "session-b",
+      noticeRequest: "Tell me when this finishes.",
+    },
+  });
+  const speech = attentionSpeechFromReviews([
+    review(),
+    { ...asked, decision: { ...asked.decision, answersAsk: true } },
+    // The evaluator speaking about a watched session for its own reasons: the
+    // ask licenses its answer, nothing beside it.
+    asked,
+    // A stray answersAsk with no ask standing earns nothing.
+    review({ decision: { ...review().decision, answersAsk: true } }),
+  ]);
+
+  assert.equal(speech.length, 4);
+  // An unbidden summary keeps its bound; the answered ask alone earns the
+  // source that lets the announcer open Luke's own call to say it.
+  assert.equal(speech[0]?.source, ATTENTION_SPEECH_SOURCE.EVALUATOR);
+  assert.equal(speech[1]?.source, ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST);
+  assert.equal(speech[2]?.source, ATTENTION_SPEECH_SOURCE.EVALUATOR);
+  assert.equal(speech[3]?.source, ATTENTION_SPEECH_SOURCE.EVALUATOR);
 });

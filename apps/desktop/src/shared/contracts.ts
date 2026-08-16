@@ -1,4 +1,5 @@
 import type {
+  AttentionRequestResult,
   AttentionSpeech,
   FixtureSnapshot,
   IssueToolAction,
@@ -424,6 +425,16 @@ export interface AppBridge {
     controlId: string,
   ): Promise<ProviderControlResult>;
   /**
+   * Keeps the developer's standing ask to hear about one observed session —
+   * their own words, bounded, held in the main process for the attention
+   * evaluator to weigh updates against. Nothing reaches any provider: the ask
+   * changes only what Luke says, never what a session does, and the identity
+   * is validated against the registry again before it is kept.
+   */
+  requestSessionNotice(identity: SessionIdentity, request: string): Promise<AttentionRequestResult>;
+  /** Lets a standing ask go; answers whether one was standing to let go of. */
+  withdrawSessionNotice(identity: SessionIdentity): Promise<AttentionRequestResult>;
+  /**
    * Creates one workspace the user just asked for, in a project its provider
    * reported — carrying, where that project takes one, the opening task the
    * user gave its agent in their own words. The renderer names a project it
@@ -569,6 +580,8 @@ export const channels = {
   openSession: "app:open-session",
   sendSessionMessage: "app:send-session-message",
   executeSessionControl: "app:execute-session-control",
+  requestSessionNotice: "app:request-session-notice",
+  withdrawSessionNotice: "app:withdraw-session-notice",
   createSessionWorkspace: "app:create-session-workspace",
   addWorkspaceAgent: "app:add-workspace-agent",
   executeIssueAction: "app:execute-issue-action",

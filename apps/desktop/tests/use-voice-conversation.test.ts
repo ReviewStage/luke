@@ -10,11 +10,11 @@ import {
 } from "@sidecar/core";
 import {
   activeVoiceStream,
+  announcerNotices,
   evaluatorSummaries,
   FIXTURE_SPEAKING_CAPTION,
   liveSpeedApplies,
   lukeCaptionToShow,
-  statusEdgeNotices,
   talkKeyPress,
   talkOpeningHolds,
   typedAskHolds,
@@ -242,10 +242,11 @@ function speech(source: AttentionSpeech["source"], id: string): AttentionSpeech 
   };
 }
 
-test("status-edge notices go to the announcer; evaluator summaries keep to an open call", () => {
+test("edges and answered asks go to the announcer; unbidden summaries keep to an open call", () => {
   const edge = speech(ATTENTION_SPEECH_SOURCE.STATUS_EDGE, "checkout");
+  const answered = speech(ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST, "schema");
   const summary = speech(ATTENTION_SPEECH_SOURCE.EVALUATOR, "payments");
-  const mixed = [edge, summary];
-  assert.deepEqual(statusEdgeNotices(mixed), [edge]);
+  const mixed = [edge, answered, summary];
+  assert.deepEqual(announcerNotices(mixed), [edge, answered]);
   assert.deepEqual(evaluatorSummaries(mixed), [summary]);
 });

@@ -110,10 +110,15 @@ export {
 export {
   ATTENTION_DECISION_SCHEMA,
   ATTENTION_DECISION_SCHEMA_NAME,
+  ATTENTION_REQUEST_RESULT_STATUS,
   ATTENTION_TRIGGER,
   type AttentionEvaluator,
+  AttentionRequestRegistry,
+  type AttentionRequestResult,
+  attentionRequestText,
   type AttentionUpdate,
   attentionDecisionFromModel,
+  maximumAttentionRequestLength,
   SessionAttentionReviewer,
 } from "./attention";
 export {

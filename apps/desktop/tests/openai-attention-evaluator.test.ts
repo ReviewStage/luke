@@ -115,7 +115,11 @@ test("requests a strict structured decision and never asks the API to retain it"
   assert.equal(format.type, "json_schema");
   assert.equal(format.strict, true);
   assert.equal(format.name, "attention_decision");
-  assert.deepEqual((format.schema as { required: string[] }).required, ["disposition", "summary"]);
+  assert.deepEqual((format.schema as { required: string[] }).required, [
+    "disposition",
+    "summary",
+    "answers_ask",
+  ]);
 });
 
 test("sends only the bounded update and no provider transcript", async (t) => {

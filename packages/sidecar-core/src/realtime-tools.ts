@@ -6,9 +6,10 @@
  * The session trio are the same acts the panel's rows offer — the two writes,
  * and the press that opens a session where its provider keeps it — and the
  * issue pair are the two acts a connected tracker takes. Creating a workspace
- * is the one act with no row yet to mirror. The last three are the same
- * presses turned toward the app itself: a settings change, showing the panel,
- * and opening the feedback composer.
+ * and the standing-ask pair — keeping the developer's ask to hear about a
+ * session, and letting it go — are the acts with no row yet to mirror. The
+ * last three are the same presses turned toward the app itself: a settings
+ * change, showing the panel, and opening the feedback composer.
  *
  * All run the same gauntlet: a call is validated against the observed roster
  * (or the guide) before anything leaves the renderer, and the main process
@@ -17,6 +18,7 @@
  * for the main process's. Luke is another way to ask, never a wider one.
  */
 
+import { attentionRequestText, maximumAttentionRequestLength } from "./attention";
 import {
   APP_PANEL_TAB,
   APP_SETTING_KIND,
@@ -73,6 +75,8 @@ export const SESSION_TOOL_KIND = {
   MESSAGE: "message",
   CONTROL: "control",
   OPEN: "open",
+  NOTICE_REQUEST: "notice-request",
+  NOTICE_WITHDRAW: "notice-withdraw",
   CREATE_WORKSPACE: "create-workspace",
   ADD_AGENT: "add-agent",
 } as const;
@@ -109,6 +113,8 @@ export type SessionToolAction =
   | { kind: typeof SESSION_TOOL_KIND.MESSAGE; identity: SessionIdentity; text: string }
   | { kind: typeof SESSION_TOOL_KIND.CONTROL; identity: SessionIdentity; control: SessionControl }
   | { kind: typeof SESSION_TOOL_KIND.OPEN; identity: SessionIdentity }
+  | { kind: typeof SESSION_TOOL_KIND.NOTICE_REQUEST; identity: SessionIdentity; request: string }
+  | { kind: typeof SESSION_TOOL_KIND.NOTICE_WITHDRAW; identity: SessionIdentity }
   | {
       kind: typeof SESSION_TOOL_KIND.CREATE_WORKSPACE;
       providerId: string;
@@ -394,6 +400,35 @@ function validateOpenSession(
     return { kind: "refused", reason: "That session has no address to open." };
   }
   return { kind: SESSION_TOOL_KIND.OPEN, identity };
+}
+
+function validateRequestSessionNotice(
+  parsed: Record<string, unknown>,
+  context: SessionToolContext,
+): SessionToolAction {
+  const found = sessionFromArguments(parsed, context.sessions);
+  if ("kind" in found) return found;
+  const { identity } = found;
+  // Observation is the only prerequisite: the ask writes nothing anywhere and
+  // asks the session for nothing, so a session that takes no messages and
+  // advertises no controls can still be asked about.
+  const request = attentionRequestText(parsed.request);
+  if (!request) {
+    return {
+      kind: "refused",
+      reason: `An ask has to be under ${maximumAttentionRequestLength} characters and longer than nothing.`,
+    };
+  }
+  return { kind: SESSION_TOOL_KIND.NOTICE_REQUEST, identity, request };
+}
+
+function validateWithdrawSessionNotice(
+  parsed: Record<string, unknown>,
+  context: SessionToolContext,
+): SessionToolAction {
+  const found = sessionFromArguments(parsed, context.sessions);
+  if ("kind" in found) return found;
+  return { kind: SESSION_TOOL_KIND.NOTICE_WITHDRAW, identity: found.identity };
 }
 
 function validateCreateWorkspace(
@@ -747,6 +782,45 @@ export const REALTIME_TOOLS = {
       },
     },
     validate: validateOpenSession,
+  },
+  REQUEST_SESSION_NOTICE: {
+    name: "request_session_notice",
+    family: REALTIME_TOOL_FAMILY.SESSION,
+    schema: {
+      description:
+        "Keep the developer's ask to hear about one observed session later, in their own words " +
+        "— told when it finishes, warned if it fails, whatever they asked. Luke's background " +
+        "review speaks when an update satisfies it. One ask stands per session; a new one " +
+        "replaces it.",
+      parameters: {
+        type: "object",
+        properties: {
+          ...SESSION_IDENTITY_PARAMETERS,
+          request: {
+            type: "string",
+            description:
+              "What the developer asked to hear about, in their own words or their clear intent.",
+          },
+        },
+        required: ["provider_id", "provider_session_id", "request"],
+      },
+    },
+    validate: validateRequestSessionNotice,
+  },
+  WITHDRAW_SESSION_NOTICE: {
+    name: "withdraw_session_notice",
+    family: REALTIME_TOOL_FAMILY.SESSION,
+    schema: {
+      description:
+        "Let go of the standing ask kept for one observed session, when the developer no longer " +
+        "wants to hear about it.",
+      parameters: {
+        type: "object",
+        properties: { ...SESSION_IDENTITY_PARAMETERS },
+        required: ["provider_id", "provider_session_id"],
+      },
+    },
+    validate: validateWithdrawSessionNotice,
   },
   CREATE_WORKSPACE: {
     name: "create_workspace",
