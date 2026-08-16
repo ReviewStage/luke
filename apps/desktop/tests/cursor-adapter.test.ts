@@ -740,6 +740,30 @@ test("stops the run the user saw through Cursor's cancel endpoint, sending no bo
   assert.equal(write?.body, undefined);
 });
 
+test("keeps the archive off an agent whose run could not be read", async () => {
+  const api = fakeCursorApi([
+    {
+      id: "agent-unreadable",
+      name: TEST_AGENT_NAME,
+      createdAt: TEST_TIME - 1_000,
+      run: { id: "run-agent-unreadable", httpStatus: HTTP_STATUS.SERVER_ERROR },
+    },
+    { id: "agent-never-ran", name: TEST_AGENT_NAME, createdAt: TEST_TIME - 2_000 },
+  ]);
+
+  const observations = await adapterFor(api.fetch).observe();
+  const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
+
+  // A run that could not be read is not known to have stopped, so that agent
+  // is offered nothing rather than a filing away that could land on a live
+  // turn. An agent that never ran has no run to take: its own record is the
+  // positive observation, so it still offers the archive.
+  assert.equal(byId.get("agent-unreadable")?.controls, undefined);
+  assert.deepEqual(byId.get("agent-never-ran")?.controls, [
+    { id: "archive-agent", label: "Archive this agent" },
+  ]);
+});
+
 test("files a settled agent away through Cursor's archive endpoint, sending no body", async () => {
   const api = fakeCursorApi([finishedAgent("agent-finished", TEST_TIME - 1_000)]);
   const adapter = adapterFor(api.fetch);

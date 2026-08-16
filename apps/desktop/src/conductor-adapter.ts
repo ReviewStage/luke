@@ -141,10 +141,12 @@ const CONDUCTOR_ARCHIVE_WORKSPACE_CONTROL_ID = "archive-workspace";
 /**
  * The workspace-level control: Conductor documents archiving a workspace,
  * which files away every chat in it at once. It is advertised on a chat's row
- * only while nothing in that workspace is observed working — a workspace
- * mid-turn has a stop to offer, not a filing away — and the workspace it acts
- * on rides the advertisement as the control's target, so a press archives the
- * workspace the user was shown and nothing an adapter kept on the side.
+ * only once every chat in that workspace was positively seen settled — a
+ * workspace mid-turn has a stop to offer, not a filing away, and one whose
+ * state could not be read is not known to have stopped — and the workspace it
+ * acts on rides the advertisement as the control's target, so a press
+ * archives the workspace the user was shown and nothing an adapter kept on
+ * the side.
  */
 function conductorArchiveWorkspaceControl(workspaceId: string): SessionControl {
   return {
@@ -541,17 +543,21 @@ export class ConductorSessionAdapter
       ),
     ]);
 
-    // The workspaces with a chat observed mid-turn, judged from this pass's
-    // own statuses: an archive is a workspace-level act, so it is held back
-    // from every chat of a workspace where any observed sibling still works —
-    // filing the workspace away would take the running turn with it.
-    const workingWorkspaceIds = new Set(
-      sessions
-        .filter(
-          (session, index) => reportedStatuses[index]?.status === CONDUCTOR_SESSION_STATUS.WORKING,
-        )
-        .map((session) => session.workspace.id),
-    );
+    // The workspaces every observed chat of which was positively seen settled
+    // — closed, or reporting idle or errored — judged from this pass's own
+    // statuses. An archive is a workspace-level act, so it is offered only for
+    // these: a chat still working, and just as much one whose status could not
+    // be read at all, keeps the whole workspace off the list, because filing
+    // away a workspace whose state Luke has not actually seen stop could take
+    // a live turn with it.
+    const settledWorkspaceIds = new Set(sessions.map((session) => session.workspace.id));
+    sessions.forEach((session, index) => {
+      const settled =
+        session.archived ||
+        reportedStatuses[index]?.status === CONDUCTOR_SESSION_STATUS.IDLE ||
+        reportedStatuses[index]?.status === CONDUCTOR_SESSION_STATUS.ERROR;
+      if (!settled) settledWorkspaceIds.delete(session.workspace.id);
+    });
 
     // One row per chat, each grouped under its workspace. Two chats used to
     // collapse into one row because their generated names drew as identical
@@ -565,7 +571,7 @@ export class ConductorSessionAdapter
           session,
           reportedStatuses[index],
           transcripts?.get(session.id),
-          workingWorkspaceIds,
+          settledWorkspaceIds,
           now,
         ),
       )
@@ -770,7 +776,7 @@ export class ConductorSessionAdapter
     session: ConductorSession,
     reported: ConductorReportedStatus | undefined,
     transcript: ConductorTranscript | undefined,
-    workingWorkspaceIds: ReadonlySet<string>,
+    settledWorkspaceIds: ReadonlySet<string>,
     now: number,
   ): ProviderSessionObservation | undefined {
     // A workspace timestamp covers every chat in that workspace, so it would
@@ -791,14 +797,14 @@ export class ConductorSessionAdapter
     const model = agentAndModelLabel(transcript?.agentKind, session.model);
     // The stop belongs to the turn and the archive to the workspace: a chat
     // mid-turn offers the stop alone — its own workspace is by definition
-    // working — and any chat of a settled, still-open workspace offers to
-    // file the whole workspace away, closed chats included, because a closed
-    // chat's row is exactly where tidying up happens.
+    // unsettled — and any chat of a positively settled, still-open workspace
+    // offers to file the whole workspace away, closed chats included, because
+    // a closed chat's row is exactly where tidying up happens.
     const controls = [
       ...(reported?.status === CONDUCTOR_SESSION_STATUS.WORKING ? [CONDUCTOR_CANCEL_CONTROL] : []),
-      ...(session.workspace.archived || workingWorkspaceIds.has(session.workspace.id)
-        ? []
-        : [conductorArchiveWorkspaceControl(session.workspace.id)]),
+      ...(!session.workspace.archived && settledWorkspaceIds.has(session.workspace.id)
+        ? [conductorArchiveWorkspaceControl(session.workspace.id)]
+        : []),
     ];
     return {
       providerSessionId: session.id,

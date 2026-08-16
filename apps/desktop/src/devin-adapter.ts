@@ -1,13 +1,17 @@
 import {
   agedStatus,
+  type ControllableSessionProviderAdapter,
   isRecord,
   type MessageCapableSessionProviderAdapter,
   OBSERVATION_WINDOW,
+  type ProviderControlRequest,
+  type ProviderControlResult,
   type ProviderMessageResult,
   type ProviderSessionMessage,
   type ProviderSessionObservation,
   resolveOptions,
   SESSION_STATUS,
+  type SessionControl,
   type SessionProvider,
   type SessionStatus,
 } from "@sidecar/core";
@@ -41,9 +45,11 @@ const DEVIN_SESSION_FAILED_MESSAGE = "The session stopped on an error";
 /**
  * Documented public API routes, read with v3 rather than the deprecated v1 the
  * older `apk_` keys are for: v3 is the only version that says who a credential
- * belongs to and that can narrow a list to one person. The one writer among
- * them is `messages`, which is Devin's documented way to hand a message to an
- * existing session.
+ * belongs to and that can narrow a list to one person. The writers among them
+ * are `messages`, which is Devin's documented way to hand a message to an
+ * existing session, and `archive`, which files one away — putting it to sleep
+ * if it was still running, which is why the control is only offered once a
+ * session's turn has settled.
  */
 const DEVIN_ROUTE_SEGMENT = {
   SELF: "self",
@@ -51,6 +57,7 @@ const DEVIN_ROUTE_SEGMENT = {
   ORGANIZATIONS: "organizations",
   SESSIONS: "sessions",
   MESSAGES: "messages",
+  ARCHIVE: "archive",
 } as const;
 
 const DEVIN_QUERY = {
@@ -61,6 +68,19 @@ const DEVIN_QUERY = {
 /** The body `POST …/sessions/{id}/messages` documents. */
 const DEVIN_MESSAGE_FIELD = {
   MESSAGE: "message",
+} as const;
+
+/**
+ * The session-level control: Devin documents archiving a session, after which
+ * it can be viewed but not modified or resumed — and a Devin session is the
+ * whole unit of its cloud workspace, so filing it away is this provider's
+ * workspace archive. It is advertised only for a session positively observed
+ * as settled: one that exited, failed, was suspended, or whose running
+ * machine reports the turn is holding for the user.
+ */
+const DEVIN_ARCHIVE_SESSION_CONTROL = {
+  id: "archive-session",
+  label: "Archive this session",
 } as const;
 
 const DEVIN_FIELD = {
@@ -267,12 +287,14 @@ function sessionFromRecord(
  * person's sessions. Observation issues no request that can change provider
  * state, reports nothing at all without a credential, and reports nothing for
  * a service-user credential, which names an organization rather than a person.
- * The one write it supports is a user-typed message, through Devin's own
- * message endpoint, to a session it advertised as taking one.
+ * The writes it supports are a user-typed message, through Devin's own
+ * message endpoint, to a session it advertised as taking one, and an archive
+ * for a settled session, through Devin's own archive endpoint on a session
+ * that advertised it.
  */
 export class DevinSessionAdapter
   extends CloudSessionAdapter
-  implements MessageCapableSessionProviderAdapter
+  implements MessageCapableSessionProviderAdapter, ControllableSessionProviderAdapter
 {
   readonly #maximumObservedSessions: number;
 
@@ -298,6 +320,10 @@ export class DevinSessionAdapter
 
   async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
     return this.sendObservedMessage(message);
+  }
+
+  async executeControl(request: ProviderControlRequest): Promise<ProviderControlResult> {
+    return this.executeObservedControl(request);
   }
 
   protected override forgetCachedIdentity(): void {
@@ -383,6 +409,31 @@ export class DevinSessionAdapter
     );
   }
 
+  /**
+   * Devin documents archiving a session in any state — a running one is put to
+   * sleep — but the offer waits for the turn to positively settle: a session
+   * that exited, failed, or was suspended, or a running machine whose reported
+   * detail says the turn is holding for the user. A state this build does not
+   * know, or one still mid-turn or mid-transition, advertises nothing: filing
+   * a session away must never be offered over work Luke has not actually seen
+   * stop. An archived session has nothing left to archive.
+   */
+  #sessionTakesArchive(session: DevinSession): boolean {
+    if (session.archived) return false;
+    if (
+      session.status === DEVIN_SESSION_STATUS.EXIT ||
+      session.status === DEVIN_SESSION_STATUS.ERROR ||
+      session.status === DEVIN_SESSION_STATUS.SUSPENDED
+    ) {
+      return true;
+    }
+    return (
+      session.status === DEVIN_SESSION_STATUS.RUNNING &&
+      session.detail !== undefined &&
+      session.detail !== DEVIN_RUNNING_DETAIL.WORKING
+    );
+  }
+
   protected override messageRoute(
     providerSessionId: string,
     text: string,
@@ -404,6 +455,28 @@ export class DevinSessionAdapter
     };
   }
 
+  protected override controlRoute(
+    providerSessionId: string,
+    control: SessionControl,
+  ): CloudWriteRoute | undefined {
+    if (control.id !== DEVIN_ARCHIVE_SESSION_CONTROL.id) return undefined;
+    // The identity was learned when the session was observed, and only a
+    // session that was observed can be archived; no identity, no route.
+    const identity = this.#principal;
+    if (!identity) return undefined;
+    return {
+      segments: [
+        DEVIN_ROUTE_SEGMENT.V3,
+        DEVIN_ROUTE_SEGMENT.ORGANIZATIONS,
+        identity.orgId,
+        DEVIN_ROUTE_SEGMENT.SESSIONS,
+        providerSessionId,
+        DEVIN_ROUTE_SEGMENT.ARCHIVE,
+      ],
+      // Devin documents no body for an archive, so none is sent.
+    };
+  }
+
   #observationFor(session: DevinSession, now: number): ProviderSessionObservation {
     const status = this.#statusFor(session, now);
     return {
@@ -414,6 +487,7 @@ export class DevinSessionAdapter
       status,
       observedAt: session.observedAt,
       canReceiveMessage: this.#sessionTakesMessages(session),
+      ...(this.#sessionTakesArchive(session) ? { controls: [DEVIN_ARCHIVE_SESSION_CONTROL] } : {}),
       detail: {
         ...(session.repository ? { repository: session.repository } : {}),
         ...(status === SESSION_STATUS.ERROR ? { error: DEVIN_SESSION_FAILED_MESSAGE } : {}),

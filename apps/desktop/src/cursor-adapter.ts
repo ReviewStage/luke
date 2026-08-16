@@ -178,6 +178,18 @@ const CURSOR_RUN_STATUS = {
 type CursorRunStatus = (typeof CURSOR_RUN_STATUS)[keyof typeof CURSOR_RUN_STATUS];
 
 /**
+ * The run states in which a run has positively stopped. The archive is offered
+ * only over one of these — never over a run still moving, one still being
+ * created, or one whose state could not be read at all.
+ */
+const CURSOR_SETTLED_RUN_STATUSES: ReadonlySet<CursorRunStatus> = new Set([
+  CURSOR_RUN_STATUS.FINISHED,
+  CURSOR_RUN_STATUS.CANCELLED,
+  CURSOR_RUN_STATUS.EXPIRED,
+  CURSOR_RUN_STATUS.ERROR,
+]);
+
+/**
  * A finished run has stopped and is holding for the user, which is what Luke
  * reports as waiting. A run that was cancelled or expired stopped for good. One
  * that is still being created, or that failed, is left unknown rather than
@@ -405,12 +417,18 @@ export class CursorSessionAdapter
 
   /**
    * Cursor documents archiving an agent in any state, but the offer waits for
-   * the latest run to settle: filing an agent away mid-run would take the run
-   * with it, and the running row already has the one control that ends a run
-   * on purpose. An agent already archived has nothing left to archive.
+   * the latest run to positively settle: filing an agent away mid-run would
+   * take the run with it, and the running row already has the one control
+   * that ends a run on purpose. An agent that has never run has no run to
+   * take; one whose run could not be read, or reports a state this build does
+   * not know, is not known to have stopped, so it is offered nothing rather
+   * than a filing away that could land on a live turn. An agent already
+   * archived has nothing left to archive.
    */
   #agentTakesArchive(agent: CursorAgent, run: CursorRun | undefined): boolean {
-    return !agent.archived && !this.#agentTakesCancel(agent, run);
+    if (agent.archived) return false;
+    if (!agent.latestRunId) return true;
+    return run?.status !== undefined && CURSOR_SETTLED_RUN_STATUSES.has(run.status);
   }
 
   /**

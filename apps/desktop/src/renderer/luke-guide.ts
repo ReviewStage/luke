@@ -536,14 +536,15 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "Archiving",
       detail:
-        "Where a provider documents an archive endpoint — a Conductor workspace and a Cursor " +
-        "cloud agent today — a row offers Archive as a control once nothing there is still " +
-        "working: pressed on the row, or asked of Luke in conversation, it files the work away " +
-        "through the provider's own endpoint. Archiving a Conductor workspace files away every " +
-        "chat in it at once; archiving a Cursor agent leaves it readable but taking no new " +
-        "runs. A row mid-turn offers a stop instead, a session whose roster entry lists no " +
-        "archive control takes no such ask, and local sessions — which Luke only reads — are " +
-        "never archived.",
+        "Where a provider documents an archive endpoint — a Conductor workspace, a Cursor " +
+        "cloud agent, and a Devin session today — a row offers Archive as a control once the " +
+        "work there was positively seen to settle: pressed on the row, or asked of Luke in " +
+        "conversation, it files the work away through the provider's own endpoint. Archiving a " +
+        "Conductor workspace files away every chat in it at once; an archived Cursor agent " +
+        "stays readable but takes no new runs; an archived Devin session can be viewed but not " +
+        "resumed. A row mid-turn — or one whose state could not be read — offers no archive, a " +
+        "session whose roster entry lists no archive control takes no such ask, and local " +
+        "sessions — which Luke only reads — are never archived.",
     },
     talkKeyFact(input.hotkey),
     askKeyFact(input.askKey),

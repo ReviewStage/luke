@@ -1400,6 +1400,31 @@ test("keeps the archive off every chat of a workspace while a sibling works", as
   assert.equal(byId.get("session-idle")?.controls, undefined);
 });
 
+test("keeps the archive off a workspace whose chat's state could not be read", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 30_000)],
+    sessions: [
+      {
+        id: "session-unreadable",
+        workspaceId: "workspace-active",
+        name: TEST_SESSION_NAME,
+        statusHttpStatus: HTTP_STATUS.SERVER_ERROR,
+      },
+    ],
+  });
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  // An unread status is not a settled one: the chat stands as unknown rather
+  // than being dropped, and a workspace not positively seen settled offers no
+  // filing away — the turn Luke could not read may still be running.
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
+  assert.equal(observations[0]?.controls, undefined);
+});
+
 test("offers no archive for a workspace already filed away", async () => {
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
