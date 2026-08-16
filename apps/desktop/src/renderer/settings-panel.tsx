@@ -1164,6 +1164,7 @@ function VoiceSection({
   credentials: CredentialEntryControl;
   panelOpen: boolean;
 }): React.JSX.Element {
+  const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
   return (
     <>
       <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
@@ -1174,7 +1175,7 @@ function VoiceSection({
         <ProviderCredential
           provider={VOICE_CREDENTIAL_PROVIDER}
           source={settings.credentialSources[VOICE_CREDENTIAL_PROVIDER.id]}
-          storageUnavailable={settings.secretStorage === SECRET_STORAGE.UNAVAILABLE}
+          storageUnavailable={storageUnavailable}
           control={credentials}
           panelOpen={panelOpen}
         />
@@ -1182,8 +1183,15 @@ function VoiceSection({
             nothing is broken, the page is waiting on the one thing that turns
             it on. `voiceAvailable` rather than the credential source, because
             availability is the store's own answer — a fixture run or a key
-            that failed to resolve leaves voice off however the row reads. */}
-        {settings.voiceAvailable ? null : (
+            that failed to resolve leaves voice off however the row reads.
+            While this system cannot store a key at all, the storage refusal
+            replaces the invitation: a Connect stilled by missing storage
+            needs its why here exactly as it does in the other key sections,
+            and a note urging a key the panel will not store would only send
+            someone to a disabled control. */}
+        {storageUnavailable ? (
+          <p className="settings-note">{STORAGE_UNAVAILABLE_NOTE}</p>
+        ) : settings.voiceAvailable ? null : (
           <p className="settings-note">
             Voice is off until a key is connected — Luke cannot talk, listen, or announce sessions.
             The settings below will take effect once it is.
