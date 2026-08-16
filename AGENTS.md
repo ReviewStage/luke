@@ -118,14 +118,9 @@ What Luke may show:
   view — is read for a bounded tail of its transcript, and the last message's
   words become the recap only when that message is attributably the agent's
   and the chat is idle or closed: a settled turn's parting words say where the
-  work stands, where half a sentence mid-turn poses as an outcome. The same
-  fixed read returns one more bounded window, around the last pull-request
-  marker the transcript holds, and the address inside it is reported as the
-  session's published change only when it is whole and names the workspace's
-  own repository — an address into anywhere else is somebody else's work
-  being talked about. Both excerpts are inspected in memory and discarded —
-  the bounded recap and that one validated address are all that is ever
-  reported, and the history behind them is never read at all.
+  work stands, where half a sentence mid-turn poses as an outcome. The tail is
+  inspected in memory and discarded — the bounded recap is all that is ever
+  reported, and the history behind it is never read at all.
 - Session material leaves the machine unbidden in exactly two places, each
   with its own narrower rule. An evaluator receives `AttentionContext` — what
   a provider wrote *about* a session — and never the transcript behind it: no

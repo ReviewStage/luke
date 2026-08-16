@@ -56,7 +56,6 @@ interface TestSession {
   lastError?: string;
   agentType?: string;
   transcriptTail?: string;
-  changeWindow?: string;
 }
 
 interface TestApi {
@@ -117,16 +116,11 @@ function fakeConductorApi(api: TestApi) {
         if (!query.startsWith("SELECT ")) return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
         const ids = [...query.matchAll(/'([^']*)'/g)].map((match) => match[1]);
         const rows = api.sessions
-          .filter(
-            (session) =>
-              ids.includes(session.id) &&
-              (session.transcriptTail !== undefined || session.changeWindow !== undefined),
-          )
+          .filter((session) => ids.includes(session.id) && session.transcriptTail !== undefined)
           .map((session) => ({
             session_id: session.id,
             agent_type: session.agentType ?? null,
-            transcript_tail: session.transcriptTail ?? null,
-            change_window: session.changeWindow ?? null,
+            transcript_tail: session.transcriptTail,
           }));
         return jsonResponse({ rows, rowCount: rows.length, truncated: false });
       }
@@ -584,14 +578,10 @@ test("reads a settled chat's parting words from the transcripts view as its reca
       "SELECT session_id, agent_type, " +
       "CASE WHEN assistant_from_end > 0 AND (user_from_end = 0 OR assistant_from_end < user_from_end) " +
       "THEN SUBSTRING(transcript FROM GREATEST(LENGTH(transcript) - assistant_from_end - 12, 1) FOR 2014) " +
-      "END AS transcript_tail, " +
-      "CASE WHEN pull_from_end > 0 " +
-      "THEN SUBSTRING(transcript FROM GREATEST(LENGTH(transcript) - pull_from_end - 164, 1) FOR 178) " +
-      "END AS change_window " +
+      "END AS transcript_tail " +
       "FROM (SELECT session_id, agent_type, transcript, " +
       "position(reverse(E'\\n## Assistant\\n') in reverse(transcript)) AS assistant_from_end, " +
-      "position(reverse(E'\\n## User\\n') in reverse(transcript)) AS user_from_end, " +
-      "position(reverse('/pull/') in reverse(transcript)) AS pull_from_end " +
+      "position(reverse(E'\\n## User\\n') in reverse(transcript)) AS user_from_end " +
       "FROM session_transcripts_view WHERE session_id IN " +
       `('${IDLE_SESSION_UUID}', '${CLOSED_SESSION_UUID}')) AS attributed`,
   });
@@ -701,89 +691,6 @@ test("cuts a recap at the recap bound", async () => {
   const observations = await adapterFor(api.fetch).observe();
 
   assert.equal(observations[0]?.recap?.length, 500);
-});
-
-test("reports the pull request a transcript names in the workspace's own repository", async () => {
-  const api = fakeConductorApi({
-    userId: TEST_USER_ID,
-    projects: [LUKE_PROJECT],
-    workspaces: [
-      ownedWorkspace("workspace-published", TEST_TIME - 30_000),
-      ownedWorkspace("workspace-elsewhere", TEST_TIME - 40_000),
-    ],
-    sessions: [
-      // The last whole address in the window wins, GitHub's case-insensitive
-      // names are honoured, and published work is a fact about the session
-      // whatever its turn is doing now — so a working chat reports it too.
-      {
-        id: WORKING_SESSION_UUID,
-        workspaceId: "workspace-published",
-        name: TEST_SESSION_NAME,
-        changeWindow:
-          "opened https://github.com/reviewstage/luke/pull/9 first, superseded by " +
-          "[#151](https://github.com/ReviewStage/luke/pull/151) which is green",
-        status: TEST_CONDUCTOR_STATUS.WORKING,
-        statusUpdatedAt: TEST_TIME - 1_000,
-      },
-      // An address into somebody else's repository is work being talked
-      // about, not work this session published.
-      {
-        id: IDLE_SESSION_UUID,
-        workspaceId: "workspace-elsewhere",
-        name: TEST_SESSION_NAME,
-        changeWindow: "have a look at https://github.com/vendor/toolkit/pull/12 for the idiom",
-        status: TEST_CONDUCTOR_STATUS.IDLE,
-        statusUpdatedAt: TEST_TIME - 1_000,
-      },
-    ],
-  });
-
-  const observations = await adapterFor(api.fetch).observe();
-  const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
-
-  assert.equal(
-    byId.get(WORKING_SESSION_UUID)?.detail?.change,
-    "https://github.com/ReviewStage/luke/pull/151",
-  );
-  assert.equal(byId.get(IDLE_SESSION_UUID)?.detail?.change, undefined);
-});
-
-test("reports no change for a workspace whose remote does not name GitHub", async () => {
-  const api = fakeConductorApi({
-    userId: TEST_USER_ID,
-    projects: [
-      {
-        id: "project-hosted",
-        name: "hosted",
-        gitRemote: "https://gitlab.com/reviewstage/luke.git",
-      },
-    ],
-    workspaces: [
-      {
-        id: "workspace-hosted",
-        projectId: "project-hosted",
-        name: TEST_WORKSPACE_NAME,
-        creatorId: TEST_USER_ID,
-        lastActivityAt: TEST_TIME - 30_000,
-      },
-    ],
-    sessions: [
-      // With no GitHub repository to validate against, even a GitHub address
-      // in the window has nothing to prove it is this session's work.
-      {
-        id: IDLE_SESSION_UUID,
-        workspaceId: "workspace-hosted",
-        name: TEST_SESSION_NAME,
-        changeWindow: "see https://github.com/reviewstage/luke/pull/151",
-        status: TEST_CONDUCTOR_STATUS.IDLE,
-        statusUpdatedAt: TEST_TIME - 1_000,
-      },
-    ],
-  });
-
-  const observations = await adapterFor(api.fetch).observe();
-
-  assert.equal(observations[0]?.detail?.change, undefined);
 });
 
 test("keeps a session id that is not a UUID out of the read document", async () => {

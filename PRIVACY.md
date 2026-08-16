@@ -56,14 +56,11 @@ describes.
   timestamps; model configuration; archive state; status and reported errors;
   and session deep links. For the sessions it observed, Luke also queries
   Conductor's transcripts view for each chat's agent kind, which speaker wrote
-  the transcript's last message, the bounded opening of that final message —
-  returned only when that speaker is the agent — and a bounded window around
-  the last pull-request address the transcript holds. Luke reports the final message's
-  words as the session's recap only while the chat is idle or closed, and the
-  pull-request address only when it is whole and names the workspace's own
-  repository. The excerpts are inspected in memory and discarded, the
-  conversation behind them is never requested, and nothing but the bounded
-  recap, agent kind, and validated pull-request link is reported.
+  the transcript's last message, and — only when that speaker is the agent —
+  the bounded opening of that final message. Luke reports its words as the
+  session's recap only while the chat is idle or closed. The excerpt is
+  inspected in memory and discarded, the conversation behind it is never
+  requested, and nothing but the bounded recap and agent kind is reported.
 - For Cursor, Luke reads agents owned by the supplied key and their latest runs,
   and — on a much slower cadence, within Cursor's documented limits — the list
   of repositories the key may launch agents in. It processes identifiers, agent
