@@ -26,6 +26,12 @@ export interface PanelDuck {
 export interface PanelManagerOptions {
   runMode: RunMode;
   mediaDuck: PanelDuck;
+  /**
+   * Whether a spoken exchange is live anywhere. Only the voice host ever opens
+   * one, but every window reports, so the union is what keeps a bystander's
+   * idle from ending the host's exchange.
+   */
+  onVoiceExchange?: (active: boolean) => void;
   preloadPath: string;
   rendererHtmlPath: string;
   rendererUrl: string;
@@ -57,6 +63,7 @@ function initialWindowMode(runMode: RunMode, argv: readonly string[]): WindowMod
 export class PanelManager {
   readonly #runMode: RunMode;
   readonly #mediaDuck: PanelDuck;
+  readonly #onVoiceExchange: ((active: boolean) => void) | undefined;
   readonly #preloadPath: string;
   readonly #rendererHtmlPath: string;
   readonly #rendererUrl: string;
@@ -91,6 +98,7 @@ export class PanelManager {
   constructor(options: PanelManagerOptions) {
     this.#runMode = options.runMode;
     this.#mediaDuck = options.mediaDuck;
+    this.#onVoiceExchange = options.onVoiceExchange;
     this.#preloadPath = options.preloadPath;
     this.#rendererHtmlPath = options.rendererHtmlPath;
     this.#rendererUrl = options.rendererUrl;
@@ -420,7 +428,12 @@ export class PanelManager {
   }
 
   #applyVoiceExchanges(): void {
-    this.#mediaDuck.setExchangeActive([...this.#voiceExchanges.values()].some(Boolean));
+    const active = [...this.#voiceExchanges.values()].some(Boolean);
+    this.#mediaDuck.setExchangeActive(active);
+    // The same statement, to the one other thing that has to know Luke is
+    // being spoken to: a notice held for a meeting is not held through the
+    // conversation the developer just opened.
+    this.#onVoiceExchange?.(active);
   }
 
   #collapseDelay(): number {

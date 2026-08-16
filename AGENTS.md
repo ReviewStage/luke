@@ -97,6 +97,50 @@ Trust constraints:
   renderer draws while Luke speaks into that silence: his captions forced on,
   and a hint asking for volume. Luke never changes the system volume himself;
   turning it up stays the user's own act on their own keys.
+- Noticing that the developer is in a meeting is bounded the same way, and its
+  three answers are the bound. It is a subscription rather than a permission:
+  the developer pastes the address a calendar already publishes itself at —
+  Google's secret iCal address, an Outlook published calendar — and Luke
+  fetches that over HTTPS. Nothing on the Mac is asked for, no consent prompt
+  is raised, and nobody is signed in to anything; a sidecar that reads one
+  calendar should not have to be trusted with the Mac's own. With none
+  subscribed nothing is fetched at all, and removing the last one stops the
+  fetching rather than ignoring what it finds. The address is the credential —
+  anyone holding it can read that calendar — so it is sealed like an API key,
+  never returned to a renderer, and never drawn: a row shows the calendar's own
+  name and the host it came from, both of which stay on the machine and out of
+  the guide. Of an event only the start, the end, whether it runs all day, the
+  developer's own answer to the invitation, how many other people are on it,
+  and whether it was cancelled are kept — no title, no location, no note, no
+  organiser and nobody's name, none of which are taken out of the file, so what
+  a meeting is and who is in it cannot leave the machine even by accident.
+  Whether an event counts is decided in TypeScript that can be tested without a
+  network, and every rule errs the same way: an all-day event, an event with
+  nobody else on it, one the developer declined, has never answered, or handed
+  to somebody else, anything the calendar itself marks as free time, and
+  anything longer than a few hours are none of them meetings. Rooms and
+  projectors are attendees in a calendar file and are not people here. The
+  trigger is a clock edge against an event's own start and end times, a
+  deterministic boundary, never anything Luke read or decided. An address that
+  answers with anything but a calendar, a calendar that has been withdrawn, a
+  network that is down: all of them answer `unavailable`, which holds nothing
+  back, and the Connections page says so where the row is. A spoken exchange
+  lifts the hold — Luke is being talked to at the time, so a notice is not an
+  interruption. Two things may act on the answer — whether a proactive notice
+  waits, and the sleeping face that says so, because a hold nothing reports is
+  indistinguishable from a Luke who has stopped working — and a held notice is
+  re-checked against the session before it is ever spoken: an evaluator's
+  summary against the decision it came from, a status edge against the status
+  it announced, and what it is stamped with is the moment it was released
+  rather than the moment it was decided, or a hold longer than the announcer's
+  staleness window would end in silence instead of the readout it promised. The
+  count and the rows are unchanged throughout: a meeting quiets what Luke would
+  have started and hides nothing he is watching. Reading the Mac's own calendar
+  through EventKit is the more direct question and is deliberately not asked:
+  it needs a consent prompt for the whole calendar store, and the answer to
+  "which calendars may Luke read" is better given one address at a time.
+  Widening what is read from a calendar, or what counts as a meeting, is a
+  product decision rather than an implementation detail.
 - Keep unsupported capabilities explicit; do not invent fallback controls.
 - Keep Electron renderers sandboxed with context isolation and narrow IPC.
 - Commit only synthetic fixtures and repository-relative paths. This binds

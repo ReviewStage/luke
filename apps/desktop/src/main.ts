@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -6,6 +7,7 @@ import {
   CompositeSessionProviderAdapter,
   DEFAULT_PANEL_FORM_FACTOR,
   fixtureSnapshot,
+  HeldAttentionQueue,
   InMemorySessionRegistry,
   ISSUE_ACTION_KIND,
   isControllableAdapter,
@@ -55,6 +57,8 @@ import {
   systemPreferences,
   Tray,
 } from "electron";
+import { readCalendar, subscriptionHost } from "./calendar-subscription";
+import { CalendarWatch } from "./calendar-watch";
 import { ClaudeCodeSessionAdapter } from "./claude-code-adapter";
 import { CodexSessionAdapter } from "./codex-adapter";
 import { ConductorSessionAdapter } from "./conductor-adapter";
@@ -68,6 +72,7 @@ import { HOTKEY_RANK, HotkeyRegistrar } from "./hotkey-registrar";
 import { JulesSessionAdapter } from "./jules-adapter";
 import { LinearIssueTracker } from "./linear-tracker";
 import { MediaDuckController } from "./media-duck";
+import { MeetingPresence } from "./meeting-presence";
 import { openAiAttentionEvaluator } from "./openai-attention-evaluator";
 import {
   type OpenAiRealtimeCredentialMinter,
@@ -84,11 +89,15 @@ import { SettingsStore } from "./settings-store";
 import {
   APP_SETTING_DEFAULTS,
   type AppBootstrap,
+  CALENDAR_ACCESS,
   channels,
+  MEETING_STATUS,
+  type MeetingState,
   type MicrophoneStatus,
   type OutputAudioState,
   SESSION_OPEN_RESULT_STATUS,
   type SessionOpenResult,
+  type SettingsUpdateResult,
 } from "./shared/contracts";
 import {
   CREDENTIAL_PROVIDER_ID,
@@ -206,6 +215,52 @@ let issueRefreshQueued = false;
 // model decided, so they work — and matter most — with no evaluator configured.
 const sessionNoticeTracker = new SessionNoticeTracker();
 /**
+ * The notices a meeting is keeping back, and what decides whether it is.
+ *
+ * All of it lives here rather than in a renderer for one reason: the review
+ * that produces a notice happens here, so this is the only place a notice can
+ * be kept from being sent at all. A renderer that received one and sat on it
+ * would be holding a sentence Luke had already been told to say.
+ */
+const heldAttention = new HeldAttentionQueue();
+/**
+ * What the calendar says. A run that observes nothing says the state a granted,
+ * empty calendar would — evidence may not depend on what was in the diary of
+ * whoever ran it — and every other build starts at the state of never having
+ * looked, because looking is what raises the consent prompt.
+ */
+let meetingState: MeetingState = runMode.observesProviders
+  ? { status: MEETING_STATUS.UNAVAILABLE, access: CALENDAR_ACCESS.UNKNOWN }
+  : { status: MEETING_STATUS.OFF, access: CALENDAR_ACCESS.GRANTED };
+/**
+ * Turns the calendars' answer into the developer's, on a clock edge and nothing
+ * else. Its readings only ever arrive while a calendar is subscribed to,
+ * because the watch below only runs then.
+ */
+const meetingPresence = new MeetingPresence({
+  onChanged: (state) => applyMeetingState(state),
+});
+/**
+ * Fetches the subscribed calendars and keeps them fetched. It reads published
+ * addresses over HTTPS — nothing on this Mac is asked for, and nothing but the
+ * times of events is kept.
+ */
+const calendarWatch = new CalendarWatch({
+  onChanged: (reading) => meetingPresence.setReading(reading),
+  // A calendar names itself in its own file, which is a better label than
+  // anything the developer would have to invent for it.
+  onLabel: (id, label) => {
+    void settingsStore.labelCalendarSubscription(id, label).then(
+      (result) => panels.broadcast(channels.settingsChanged, result.settings),
+      () => undefined,
+    );
+  },
+  onDiagnostic: (message) => process.stderr.write(`Calendar: ${message}\n`),
+});
+/** Whether a spoken exchange is live anywhere, which lifts the hold below. */
+let voiceExchangeActive = false;
+/**
+>>>>>>> 73797f4 (feat(settings): wait for a meeting on a calendar you subscribed to)
  * Everything the one OpenAI key buys, and nothing that outlives it: the review
  * that decides which sessions need a person, and the credential a spoken turn
  * runs on.
@@ -240,6 +295,12 @@ function rendererUrl(): string {
 const panels = new PanelManager({
   runMode,
   mediaDuck,
+  onVoiceExchange: (active) => {
+    voiceExchangeActive = active;
+    // An exchange beginning lifts the hold: whatever was waiting is read back
+    // into the conversation the developer just opened rather than after it.
+    if (!holdingNotices()) releaseHeldAttention();
+  },
   preloadPath: path.join(__dirname, "preload.js"),
   rendererHtmlPath: path.join(__dirname, "renderer", "index.html"),
   rendererUrl: rendererUrl(),
@@ -550,6 +611,7 @@ function registerIpc(): void {
       ...(hotkeys.ask ? { askHotkey: hotkeys.ask } : {}),
       ...(hotkeys.stop ? { stopHotkey: hotkeys.stop } : {}),
       ...(outputAudio ? { outputAudio } : {}),
+      meeting: meetingState,
       display: panels.diagnostic(display),
       // Bootstrapped through the same relevance gate every broadcast passes:
       // a panel that opens late must not learn of rows the roster has already
@@ -903,6 +965,62 @@ function registerIpc(): void {
     },
     save: (enabled) => settingsStore.setDuckOtherMedia(enabled),
     apply: (result) => mediaDuck.setEnabled(result.settings.duckOtherMedia),
+    refusal: "Could not save that setting on this system.",
+  });
+
+  // Subscribing reads the address once before anything is stored: a calendar
+  // that cannot be fetched, or is not a calendar at all, is answered in words
+  // rather than saved as a subscription that could only ever fail. The address
+  // itself never comes back out — the panel is told what the calendar calls
+  // itself and where it came from.
+  ipcMain.handle(
+    channels.addCalendarSubscription,
+    async (event, url: unknown): Promise<SettingsUpdateResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (typeof url !== "string") throw new Error("Invalid calendar subscription request");
+      const address = url.trim();
+      const host = subscriptionHost(address);
+      if (!host) {
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "That is not an https calendar address.",
+        };
+      }
+      const read = await readCalendar(address, undefined, {
+        onDiagnostic: (message) => process.stderr.write(`Calendar: ${message}\n`),
+      });
+      if (!read) {
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: `Nothing at ${host} answered with a calendar.`,
+        };
+      }
+      const result = await settingsStore.addCalendarSubscription({
+        id: randomUUID(),
+        label: read.label ?? host,
+        host,
+        url: address,
+      });
+      if (!result.reason) {
+        await applyCalendarWatch();
+        panels.broadcast(channels.settingsChanged, result.settings, event.sender);
+      }
+      return result;
+    },
+  );
+
+  // Removing needs no such check: taking an entry off a list the developer is
+  // looking at can only ever undo something they did.
+  registerSettingHandler(channels.removeCalendarSubscription, {
+    validate(id: unknown) {
+      if (typeof id !== "string") throw new Error("Invalid calendar removal request");
+      return id;
+    },
+    save: (id) => settingsStore.removeCalendarSubscription(id),
+    apply: async () => {
+      await applyCalendarWatch();
+      if (!holdingNotices()) releaseHeldAttention();
+    },
     refusal: "Could not save that setting on this system.",
   });
 
@@ -1398,6 +1516,76 @@ async function refreshProviderSessions(): Promise<void> {
   void reviewSessionAttention();
 }
 
+/**
+ * Whether a notice decided right now would wait rather than be spoken.
+ *
+ * Both halves have to be true: the calendar has to say a meeting is happening,
+ * and the developer has to have connected the calendar it is on. `UNAVAILABLE`
+ * is deliberately neither — a calendar Luke was never allowed to read is one he
+ * speaks over, because the failure that leaves a developer wondering why
+ * nothing was said is worse than the one that says something during a meeting.
+ *
+ * A spoken exchange lifts the hold for its duration. Luke is being talked to at
+ * the time, so a notice is not an interruption — and holding the answer to a
+ * question just asked is the one silence nobody would forgive.
+ */
+function holdingNotices(): boolean {
+  if (voiceExchangeActive) return false;
+  return meetingState.status === MEETING_STATUS.ON;
+}
+
+/**
+ * Says what the hold kept, once it is no longer keeping it.
+ *
+ * The queue is what decides which notices survive — it re-checks every one
+ * against the session as it stands — so a meeting that ran an hour ends in what
+ * is still true, not in what was true when it started. They go out as one
+ * message because they are one readout: a turn already under way refuses the
+ * next, and a queue emptying at a developer is not a welcome back.
+ */
+function releaseHeldAttention(): void {
+  if (heldAttention.size === 0) return;
+  const released = heldAttention.release(sessionRegistry.list(), Date.now());
+  if (released.length === 0) return;
+  panels.voiceHost()?.webContents.send(channels.attentionSpeech, released);
+}
+
+/**
+ * Takes the calendar's answer as the meeting gate now reads it, and tells every
+ * panel: the connection that governs this is drawn on each of them and has to
+ * say what it is currently amounting to.
+ */
+function applyMeetingState(state: MeetingState): void {
+  if (state.status === meetingState.status && state.access === meetingState.access) return;
+  meetingState = state;
+  panels.broadcast(channels.meetingChanged, state);
+  // A meeting ending is the whole point; losing the ability to read the
+  // calendar has to do the same, or a helper that died mid-meeting would hold
+  // notices until Luke was restarted.
+  if (!holdingNotices()) releaseHeldAttention();
+}
+
+/**
+ * Points the watch at whatever is subscribed to now.
+ *
+ * The list is the switch: with nothing subscribed nothing is fetched, so no
+ * calendar is read at all. Removing the last one stops the reading rather than
+ * ignoring what it finds.
+ *
+ * A fixture or capture run is left out under the same capability that keeps it
+ * from watching providers: evidence has to come out the same twice, and what
+ * was in the diary of whoever ran it is not something a screenshot may depend
+ * on.
+ */
+async function applyCalendarWatch(): Promise<void> {
+  if (!runMode.observesProviders) {
+    meetingPresence.reset();
+    return;
+  }
+  const subscriptions = await settingsStore.calendarSubscriptions().catch(() => []);
+  calendarWatch.setCalendars(subscriptions);
+}
+
 async function reviewSessionAttention(): Promise<void> {
   if (!attentionReviewer || attentionReviewRunning) return;
   attentionReviewRunning = true;
@@ -1409,11 +1597,16 @@ async function reviewSessionAttention(): Promise<void> {
     // `decision` says the session needs attention, which the panel shows;
     // `outcome` says whether to voice it now, which only these reviews do.
     const speech = attentionSpeechFromReviews(reviews);
-    if (speech.length > 0) {
-      // Spoken once, by the one window that holds the voice: every display
-      // already shows the same session as needing attention.
-      panels.voiceHost()?.webContents.send(channels.attentionSpeech, speech);
+    if (speech.length === 0) return;
+    if (holdingNotices()) {
+      // Every session in it still reads as needing attention on every display
+      // throughout the hold. What waits is the sentence, not the news.
+      heldAttention.hold(speech);
+      return;
     }
+    // Spoken once, by the one window that holds the voice: every display
+    // already shows the same session as needing attention.
+    panels.voiceHost()?.webContents.send(channels.attentionSpeech, speech);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`Attention review failed: ${message}\n`);
@@ -1439,6 +1632,15 @@ function announceSessionNotices(sessions: readonly NormalizedSession[]): void {
   // renderer cannot open a call, and the panel still shows every state.
   if (!realtimeCredentials) return;
   const speech = notices.map((notice) => sessionNoticeSpeech(notice, now));
+  // The hold covers this door too, and covers it more than the evaluator's: a
+  // status-edge notice may open a speak-only call of Luke's own, so without
+  // this a finished agent would ring a developer who is mid-sentence to
+  // somebody else. Every session in it still reads as needing attention on
+  // every display throughout.
+  if (holdingNotices()) {
+    heldAttention.hold(speech);
+    return;
+  }
   panels.voiceHost()?.webContents.send(channels.attentionSpeech, speech);
 }
 

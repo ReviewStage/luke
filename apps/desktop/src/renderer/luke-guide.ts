@@ -42,9 +42,16 @@ import type {
   AppBridge,
   AppSettings,
   CredentialSource,
+  MeetingState,
   MicrophoneStatus,
 } from "../shared/contracts";
-import { APP_SETTING_DEFAULTS, CREDENTIAL_SOURCE, SECRET_STORAGE } from "../shared/contracts";
+import {
+  APP_SETTING_DEFAULTS,
+  CALENDAR_ACCESS,
+  CREDENTIAL_SOURCE,
+  MEETING_STATUS,
+  SECRET_STORAGE,
+} from "../shared/contracts";
 import {
   CLOUD_AGENT_PROVIDER_LIST,
   CREDENTIAL_PROVIDERS,
@@ -205,6 +212,17 @@ const SETTING_GUIDE: Record<
     adjustable: true,
     manual: VOICE_PAGE,
   }),
+  /**
+   * Deliberately absent, and this is the one entry where that is a trust
+   * decision rather than a shape one. The guide leaves the machine: it is sent
+   * into the voice conversation as context, so what a developer keeps in their
+   * diary has no business in it — not the calendars' names, not the addresses
+   * they are read from, and not a count that would narrow them. The meetings
+   * fact says a calendar is subscribed to and where subscribing happens, which
+   * is everything Luke needs to answer a question about it, and a spoken ask
+   * cannot touch it: an address is typed by hand, never dictated.
+   */
+  calendarSubscriptions: () => undefined,
   showInMenuBar: (settings) => ({
     id: APP_SETTING_ID.SHOW_IN_MENU_BAR,
     label: "Show Luke in the menu bar",
@@ -386,6 +404,60 @@ export interface LukeGuideInput {
    * — another app owns Option-S, or another Luke key was moved onto it.
    */
   stopKey?: string;
+  /** What the calendar says, and how far Luke was allowed to look for it. */
+  meeting: MeetingState;
+}
+
+/**
+ * What the meeting hold is doing right now — the machine's answer beside the
+ * connection that decides what it amounts to.
+ *
+ * **Nothing about a meeting itself may appear here, and nothing does.** The
+ * guide is sent into the voice conversation, so it leaves the machine; a title,
+ * an attendee, an organiser, or the name of a calendar would be the developer's
+ * own diary going with it. Luke is told that a meeting is happening and when
+ * the hold ends, which is everything he needs to answer "why did you not tell
+ * me", and it is deliberately all he is told. The refusal costs nothing,
+ * because the helper that reads the calendar never reads those fields in the
+ * first place — there is no wording here that could accidentally widen.
+ */
+const MEETING_PRIVACY_NOTE =
+  " Luke reads only when meetings start and end: he cannot say what a meeting is, who is in it, what it is called, or which calendar it is on.";
+
+/** What counts, said once, because it is the question every branch invites. */
+const MEETING_RULES_NOTE =
+  " A meeting is an event happening now, on a subscribed calendar, with at least one other person on it. All-day events, events the developer declined or has not answered, events with nobody else on them, and anything running longer than four hours are not meetings and hold nothing back.";
+
+function meetingFact(meeting: MeetingState, connected: number): AppGuideFact {
+  if (connected === 0) {
+    return {
+      label: "Meetings",
+      detail: `No calendar is subscribed to, so Luke is not reading one at all — nothing is fetched and nothing is held for it. A calendar is added by pasting its published address in ${CONNECTIONS_PAGE}, under Calendars; Luke cannot add one himself, and cannot say what any address is.`,
+    };
+  }
+  const calendars = connected === 1 ? "one calendar is" : `${connected} calendars are`;
+  if (meeting.access === CALENDAR_ACCESS.UNAVAILABLE) {
+    return {
+      label: "Meetings",
+      detail: `${calendars} subscribed to, but none of them could be read just now — an address may have been withdrawn, or the network may be down. Nothing is held until one answers.`,
+    };
+  }
+  if (meeting.access === CALENDAR_ACCESS.UNKNOWN) {
+    return {
+      label: "Meetings",
+      detail: `${calendars} subscribed to, and nothing has been read back yet. Nothing is held until it has.`,
+    };
+  }
+  if (meeting.status === MEETING_STATUS.ON) {
+    return {
+      label: "Meetings",
+      detail: `A meeting is happening right now on a subscribed calendar, so notices are waiting rather than being spoken. They are read out when it ends, and only the ones still true by then. Luke's face on the capsule is asleep for the duration, which is how the holding is shown — the session count beside it goes on counting normally, and speaking to him wakes him to answer.${MEETING_PRIVACY_NOTE}`,
+    };
+  }
+  return {
+    label: "Meetings",
+    detail: `${calendars} subscribed to and no meeting is happening right now, so notices are spoken as they are decided.${MEETING_RULES_NOTE}${MEETING_PRIVACY_NOTE}`,
+  };
 }
 
 function talkKeyFact(hotkey: LukeGuideInput["hotkey"]): AppGuideFact {
@@ -645,6 +717,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     providersFact(input.settings),
     voiceKeyFact(input.settings),
     integrationsFact(input.settings),
+    meetingFact(input.meeting, input.settings.calendarSubscriptions.length),
     ...(input.settings.secretStorage === SECRET_STORAGE.UNAVAILABLE
       ? [
           {

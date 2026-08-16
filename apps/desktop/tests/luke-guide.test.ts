@@ -18,7 +18,12 @@ import {
   type LukeGuideInput,
 } from "../src/renderer/luke-guide";
 import type { AppSettings, SettingsUpdateResult } from "../src/shared/contracts";
-import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "../src/shared/contracts";
+import {
+  CALENDAR_ACCESS,
+  CREDENTIAL_SOURCE,
+  MEETING_STATUS,
+  SECRET_STORAGE,
+} from "../src/shared/contracts";
 import { CREDENTIAL_PROVIDER_ID } from "../src/shared/credential-providers";
 
 function settings(overrides: Partial<AppSettings> = {}): AppSettings {
@@ -39,6 +44,7 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
     voiceSpeed: REALTIME_VOICE_SPEED.NORMAL,
     voiceCaptions: false,
     duckOtherMedia: true,
+    calendarSubscriptions: [],
     showOnAllDisplays: false,
     formFactor: PANEL_FORM_FACTOR.BUBBLE,
     ...overrides,
@@ -50,6 +56,7 @@ function guideInput(overrides: Partial<LukeGuideInput> = {}): LukeGuideInput {
     settings: settings(),
     voiceAvailable: true,
     microphoneStatus: "granted",
+    meeting: { status: MEETING_STATUS.OFF, access: CALENDAR_ACCESS.GRANTED },
     hotkey: { hotkey: "⌥Space", held: true },
     askKey: "⌥L",
     stopKey: "⌥S",
@@ -510,6 +517,81 @@ test("the feedback fact says what a spoken open may do, and that sending stays b
   assert.match(fact.detail, /after refusing something he cannot do/);
   assert.match(fact.detail, /never overwritten/);
   assert.match(fact.detail, /no spoken ask can send one/);
+});
+
+test("the guide says what the calendar hold is doing, and never what is on it", () => {
+  const meetingFact = (input: LukeGuideInput) =>
+    buildLukeGuide(input).facts.find((fact) => fact.label === "Meetings");
+
+  // Nothing connected is not "no meetings": it is Luke not reading a calendar
+  // at all, and the guide has to say so rather than imply a free afternoon.
+  const none = meetingFact(guideInput());
+  assert.ok(none);
+  assert.match(none.detail, /No calendar is subscribed to/);
+
+  const holding = meetingFact(
+    guideInput({
+      settings: settings({
+        calendarSubscriptions: [{ id: "work", label: "Work", host: "calendar.google.com" }],
+      }),
+      meeting: { status: MEETING_STATUS.ON, access: CALENDAR_ACCESS.GRANTED },
+    }),
+  );
+  assert.ok(holding);
+  assert.match(holding.detail, /waiting rather than being spoken/);
+  // The guide leaves the machine, so the one thing it may say about a meeting
+  // is that there is one. Everything a developer's diary actually contains is
+  // refused here, and refused again by a helper that never reads it.
+  assert.match(holding.detail, /cannot say what a meeting is/);
+
+  // A calendar that stopped answering is not "no meeting": the fact has to say
+  // the subscription is there and doing nothing, or nobody can act on it.
+  const refused = meetingFact(
+    guideInput({
+      settings: settings({
+        calendarSubscriptions: [{ id: "work", label: "Work", host: "calendar.google.com" }],
+      }),
+      meeting: { status: MEETING_STATUS.UNAVAILABLE, access: CALENDAR_ACCESS.UNAVAILABLE },
+    }),
+  );
+  assert.ok(refused);
+  assert.match(refused.detail, /none of them could be read/);
+});
+
+test("no calendar's name reaches the guide, however many are connected", () => {
+  const guide = buildLukeGuide(
+    guideInput({
+      settings: settings({
+        calendarSubscriptions: [
+          { id: "work", label: "Layoff planning", host: "calendar.google.com" },
+          { id: "home", label: "Therapy", host: "outlook.office365.com" },
+        ],
+      }),
+      meeting: { status: MEETING_STATUS.ON, access: CALENDAR_ACCESS.GRANTED },
+    }),
+  );
+  const words = [
+    ...guide.facts.map((fact) => `${fact.label} ${fact.detail}`),
+    ...guide.settings.map((setting) => `${setting.label} ${setting.description} ${setting.value}`),
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  // The guide is the document that leaves the machine, so what it may not carry
+  // is asserted rather than reviewed: not the calendars' names, and not a count
+  // that would narrow them.
+  assert.equal(words.includes("layoff"), false);
+  assert.equal(words.includes("therapy"), false);
+  // Nor where they are read from: a host is a smaller leak than a name and
+  // still says more about a developer's employer than Luke has any business
+  // carrying off the machine.
+  assert.equal(words.includes("outlook.office365.com"), false);
+  assert.equal(words.includes("calendar.google.com"), false);
+  // The settings half refuses the field outright rather than describing it.
+  assert.equal(
+    guide.settings.some((setting) => setting.label.toLowerCase().includes("calendar")),
+    false,
+  );
 });
 
 test("every adjustable setting is carried to the bridge call its row uses", async () => {

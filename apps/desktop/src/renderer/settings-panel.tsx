@@ -15,8 +15,15 @@ import {
   type WorkspaceAgentSelection,
 } from "@sidecar/core";
 import { useEffect, useRef, useState } from "react";
-import type { AppSettings, CredentialSource, MicrophoneStatus } from "../shared/contracts";
-import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "../shared/contracts";
+import type {
+  AppSettings,
+  CalendarAccess,
+  CalendarSubscription,
+  CredentialSource,
+  MeetingState,
+  MicrophoneStatus,
+} from "../shared/contracts";
+import { CALENDAR_ACCESS, CREDENTIAL_SOURCE, SECRET_STORAGE } from "../shared/contracts";
 import type { CredentialProvider } from "../shared/credential-providers";
 import {
   CLOUD_AGENT_PROVIDER_LIST,
@@ -58,6 +65,7 @@ import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import { CloudBadge, ProviderMark } from "./provider-marks";
 import {
   BackIcon,
+  CalendarIcon,
   CheckIcon,
   ChevronIcon,
   CloseIcon,
@@ -233,6 +241,16 @@ export interface ShortcutControl {
  * or a shortcut lives on its own bundle so a leaf can change without the
  * panel, the body, or the app's settings object growing a new field.
  */
+/**
+ * Subscribing to a calendar, as the panel sees it: an address in, and the
+ * subscription out. Both are the app's to carry out — the address is read once
+ * before anything is stored, and never handed back afterwards.
+ */
+export interface CalendarConnectControl {
+  add: (url: string) => Promise<string | undefined>;
+  remove: (id: string) => Promise<string | undefined>;
+}
+
 export interface SettingsPanelProps {
   /**
    * Which settings page is showing: the front page, or one of the pages a
@@ -247,6 +265,14 @@ export interface SettingsPanelProps {
   preferences: PreferenceWrites;
   /** The one credential being entered anywhere, and everything that can be done to it. */
   credentials: CredentialEntryControl;
+  /** Asking this Mac for its calendars, and choosing which of them count. */
+  calendars: CalendarConnectControl;
+  /**
+   * What the calendar currently says. Only the access is ever drawn: the
+   * connection has to be able to explain itself when macOS has refused it, and
+   * there is nothing else about a meeting the panel needs — or is told.
+   */
+  meeting: MeetingState;
   /** The one note to the founders being written, and everything that can be done to it. */
   feedback: FeedbackEntryControl;
   /**
@@ -1672,6 +1698,131 @@ function ShortcutSection({ shortcuts }: { shortcuts: ShortcutControl }): React.J
   );
 }
 
+/**
+ * The calendars Luke waits for a meeting on.
+ *
+ * A calendar is added the way every other connection on this page is: by
+ * pasting the address it publishes itself at — Google calls it a secret
+ * address in iCal format, Outlook a published calendar — into a field. Nothing
+ * on this Mac is asked for and nobody is signed in to anything, which is the
+ * whole point: a sidecar that reads a calendar should not have to be trusted
+ * with the Mac's own.
+ *
+ * The address is the credential, so the field behaves like the key fields
+ * above it: what was typed is not read back, and the row afterwards shows the
+ * calendar's own name and the host it came from.
+ */
+function CalendarsSection({
+  settings,
+  meeting,
+  calendars,
+}: {
+  settings: AppSettings;
+  meeting: MeetingState;
+  calendars: CalendarConnectControl;
+}): React.JSX.Element {
+  const [address, setAddress] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [rejection, setRejection] = useState<string>();
+  const subscriptions = settings.calendarSubscriptions;
+
+  const add = async () => {
+    const typed = address.trim();
+    if (!typed) return;
+    setBusy(true);
+    const reason = await calendars.add(typed);
+    setRejection(reason);
+    // Kept on a refusal so it can be corrected rather than typed again, and
+    // cleared once it has become a row above.
+    if (!reason) setAddress("");
+    setBusy(false);
+  };
+
+  const remove = async (subscription: CalendarSubscription) => {
+    setBusy(true);
+    setRejection(await calendars.remove(subscription.id));
+    setBusy(false);
+  };
+
+  return (
+    <section className="settings-section" style={{ "--row-index": 4 } as React.CSSProperties}>
+      <h2>
+        <CalendarIcon />
+        Calendars
+      </h2>
+      {subscriptions.map((subscription) => (
+        <div className="settings-row" key={subscription.id}>
+          <span className="settings-copy">
+            <strong>{subscription.label}</strong>
+            {/* Where it came from, never the address itself: two calendars can
+                share a name, and an address on screen is one worth stealing. */}
+            <small>{subscription.host}</small>
+          </span>
+          <span className="settings-actions">
+            <button
+              type="button"
+              className="icon-button"
+              disabled={busy}
+              aria-label={`Stop reading ${subscription.label}`}
+              title="Remove"
+              onClick={() => void remove(subscription)}
+            >
+              <TrashIcon />
+            </button>
+          </span>
+        </div>
+      ))}
+      <div className="settings-row">
+        <span className="settings-copy">
+          <strong>Add a calendar</strong>
+          <small>{calendarConnectNote(meeting.access, subscriptions.length)}</small>
+        </span>
+        <span className="settings-actions">
+          <input
+            type="url"
+            className="settings-field"
+            value={address}
+            placeholder="https://calendar.google.com/…/basic.ics"
+            aria-label="Published calendar address"
+            spellCheck={false}
+            autoComplete="off"
+            disabled={busy}
+            onChange={(event) => setAddress(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return;
+              event.preventDefault();
+              void add();
+            }}
+          />
+          <button
+            type="button"
+            className="quiet-button"
+            disabled={busy || address.trim().length === 0}
+            onClick={() => void add()}
+          >
+            Add
+          </button>
+        </span>
+      </div>
+      {rejection ? <p className="error-message">{rejection}</p> : null}
+    </section>
+  );
+}
+
+/**
+ * What the Calendars row has to admit, in the order it becomes true.
+ *
+ * One line, the way every other row's second line is: this is a control, not
+ * the documentation. Only the failure earns an explanation — a subscription
+ * that stopped answering is a row that looks connected and does nothing.
+ */
+export function calendarConnectNote(access: CalendarAccess, subscribed: number): string {
+  if (subscribed > 0 && access === CALENDAR_ACCESS.UNAVAILABLE) {
+    return "These calendars cannot be read just now.";
+  }
+  return "Luke won't notify you during calendar events.";
+}
+
 export function SettingsPanel({
   view,
   onViewChange,
@@ -1679,6 +1830,8 @@ export function SettingsPanel({
   settings,
   preferences,
   credentials,
+  calendars,
+  meeting,
   feedback,
   panelOpen,
   workspaceProviders,
@@ -1791,6 +1944,7 @@ export function SettingsPanel({
             workspaceProviders={workspaceProviders}
             preferences={preferences}
           />
+          <CalendarsSection settings={settings} meeting={meeting} calendars={calendars} />
         </>
       ) : null}
 

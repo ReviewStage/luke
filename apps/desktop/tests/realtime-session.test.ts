@@ -391,14 +391,18 @@ test("push-to-talk does nothing before the call is open", () => {
 
 test("a proactive update is spoken once the call is open", async () => {
   const context = harness();
-  const speech = {
-    providerId: "claude-code",
-    providerSessionId: "session-a",
-    disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
-    source: ATTENTION_SPEECH_SOURCE.EVALUATOR,
-    summary: "Claude Code is waiting on you in checkout-service.",
-    decidedAt: 1_800_000_000_000,
-  };
+  // An array, because a batch is one turn: notices sent separately would leave
+  // all but the first unsaid.
+  const speech = [
+    {
+      providerId: "claude-code",
+      providerSessionId: "session-a",
+      disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
+      source: ATTENTION_SPEECH_SOURCE.EVALUATOR,
+      summary: "Claude Code is waiting on you in checkout-service.",
+      decidedAt: 1_800_000_000_000,
+    },
+  ];
 
   // Nothing is spoken before there is a call to speak over.
   assert.equal(context.session.speak(speech), false);
@@ -1079,14 +1083,18 @@ test("stopping after the device is open still releases it", async () => {
 test("a turn is refused while another is already under way", async () => {
   const context = harness();
   await context.session.connect();
-  const speech = {
-    providerId: "claude-code",
-    providerSessionId: "session-a",
-    disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
-    source: ATTENTION_SPEECH_SOURCE.EVALUATOR,
-    summary: "Claude Code is waiting on you in checkout-service.",
-    decidedAt: 1_800_000_000_000,
-  };
+  // An array, because a batch is one turn: notices sent separately would leave
+  // all but the first unsaid.
+  const speech = [
+    {
+      providerId: "claude-code",
+      providerSessionId: "session-a",
+      disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
+      source: ATTENTION_SPEECH_SOURCE.EVALUATOR,
+      summary: "Claude Code is waiting on you in checkout-service.",
+      decidedAt: 1_800_000_000_000,
+    },
+  ];
 
   // While the developer holds the microphone open.
   context.session.startListening();
@@ -2998,14 +3006,16 @@ test("a speak-only call reads a notice out but refuses a typed ask", async () =>
   await context.session.connect({ microphone: false });
 
   assert.equal(
-    context.session.speak({
-      providerId: "claude-code",
-      providerSessionId: "session-a",
-      disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-      source: ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
-      summary: "Claude Code finished checkout-service.",
-      decidedAt: 1_800_000_000_000,
-    }),
+    context.session.speak([
+      {
+        providerId: "claude-code",
+        providerSessionId: "session-a",
+        disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
+        source: ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
+        summary: "Claude Code finished checkout-service.",
+        decidedAt: 1_800_000_000_000,
+      },
+    ]),
     true,
   );
   assert.deepEqual(

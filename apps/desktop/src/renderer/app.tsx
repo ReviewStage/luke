@@ -29,11 +29,17 @@ import type {
   AppBootstrap,
   AppSettings,
   DisplayDiagnostic,
+  MeetingState,
   OutputAudioState,
   SessionOpenResult,
   SettingsUpdateResult,
 } from "../shared/contracts";
-import { CREDENTIAL_SOURCE, SESSION_OPEN_RESULT_STATUS } from "../shared/contracts";
+import {
+  CALENDAR_ACCESS,
+  CREDENTIAL_SOURCE,
+  MEETING_STATUS,
+  SESSION_OPEN_RESULT_STATUS,
+} from "../shared/contracts";
 import type { CredentialProviderId } from "../shared/credential-providers";
 import {
   CREDENTIAL_PROVIDER_LIST,
@@ -92,7 +98,12 @@ import {
 } from "./session-model";
 import { parsePixels } from "./session-motion";
 import { SESSION_OPTIONS_BUTTON_ID, SESSION_OPTIONS_ID } from "./session-parts";
-import type { MicrophoneControl, PreferenceWrites, ShortcutControl } from "./settings-panel";
+import type {
+  CalendarConnectControl,
+  MicrophoneControl,
+  PreferenceWrites,
+  ShortcutControl,
+} from "./settings-panel";
 import {
   credentialSettingsPage,
   SETTING_PAGE,
@@ -224,6 +235,15 @@ export function App(): React.JSX.Element {
   // a render: two changes asked for in one breath arrive as two calls in one
   // turn, and the second composes against whatever the first just stored.
   const [settings, setSettings, settingsNow] = useStateWithRef<AppSettings | undefined>(undefined);
+  /**
+   * What the calendar says. Only read here — the holding itself happens in the
+   * main process, beside the reviews it holds — but the Connections page has to
+   * say what the connection is currently amounting to, and so does the guide.
+   */
+  const [meeting, setMeeting] = useState<MeetingState>({
+    status: MEETING_STATUS.UNAVAILABLE,
+    access: CALENDAR_ACCESS.UNKNOWN,
+  });
   const [errand, setErrand] = useState<Errand>();
   const [feedbackNotice, setFeedbackNotice] = useState<string>();
   // Counts for nothing except having changed: each tick re-renders the rows so
@@ -1379,6 +1399,7 @@ export function App(): React.JSX.Element {
       // Only fill in what no push has said yet, like the issue roster: the
       // bootstrap snapshot is older than any change that raced past it.
       if (value.outputAudio) acceptOutputAudioBootstrap(value.outputAudio);
+      setMeeting(value.meeting);
       if (value.profile === "microphone") {
         window.setTimeout(() => void startMicrophone(), 500);
       }
@@ -1470,6 +1491,7 @@ export function App(): React.JSX.Element {
         settings: current,
         voiceAvailable: current.voiceAvailable,
         microphoneStatus,
+        meeting,
         hotkey: {
           ...(talkKey.hotkey ? { hotkey: voiceHotkeyLabel(talkKey.hotkey) } : {}),
           held: talkKey.held,
@@ -1479,7 +1501,15 @@ export function App(): React.JSX.Element {
       });
       syncGuide(guide);
     },
-    [bootstrap, microphoneStatus, voiceHotkey, askHotkeyChange, stopHotkeyChange, syncGuide],
+    [
+      bootstrap,
+      microphoneStatus,
+      meeting,
+      voiceHotkey,
+      askHotkeyChange,
+      stopHotkeyChange,
+      syncGuide,
+    ],
   );
   useEffect(() => {
     if (!bootstrap) return;
@@ -1657,6 +1687,10 @@ export function App(): React.JSX.Element {
     (outputIsSilent &&
       lukeCaption !== undefined &&
       !volumeHintDismissed(hintDismissal, silenceStretch, Date.now()));
+  // Whether Luke has gone deliberately quiet: a meeting on a connected calendar
+  // is happening. Recomputed here rather than sent as its own state, so the
+  // capsule can never disagree with the Connections page it is drawn beside.
+  const holdingNotices = meeting.status === MEETING_STATUS.ON;
   const panelOpen = presentation === PANEL_PRESENTATION.PANEL;
   const slotOpen = presentation === PANEL_PRESENTATION.SLOT;
   const feedbackOpen = presentation === PANEL_PRESENTATION.FEEDBACK;
@@ -1672,6 +1706,15 @@ export function App(): React.JSX.Element {
     voiceAvailable: (settings ?? bootstrap.settings).voiceAvailable,
     onRequest: () => void requestMicrophoneAccess(),
     onOpenSettings: () => window.sidecar.openMicrophoneSettings(),
+  };
+  /**
+   * Subscribing to a calendar by its published address, and unsubscribing
+   * again. Both are ordinary settings writes; the address is read once before
+   * anything is stored and never handed back.
+   */
+  const calendars: CalendarConnectControl = {
+    add: async (url) => applySettingsReply(await window.sidecar.addCalendarSubscription(url)),
+    remove: async (id) => applySettingsReply(await window.sidecar.removeCalendarSubscription(id)),
   };
   const preferences: PreferenceWrites = {
     onVoiceCaptionsChange: changeVoiceCaptions,
@@ -1754,6 +1797,8 @@ export function App(): React.JSX.Element {
               settings,
               preferences,
               credentials,
+              calendars,
+              meeting,
               feedback: feedbackControl,
               panelOpen,
               workspaceProviders: workspaceProviderOptions,
@@ -1783,6 +1828,7 @@ export function App(): React.JSX.Element {
         fixtureSpeaking={fixtureSpeaking}
         hasAudioSignal={hasAudioSignal}
         voiceOpening={talkOpening}
+        holdingNotices={holdingNotices}
         presentation={presentation}
         housingWidth={display.notch.housingWidth}
       />

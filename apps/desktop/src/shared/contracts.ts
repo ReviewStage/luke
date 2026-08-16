@@ -68,6 +68,75 @@ export const APP_SETTING_DEFAULTS = {
   showOnAllDisplays: false,
 } as const satisfies Partial<Record<keyof AppSettings, boolean>>;
 
+/**
+ * Whether the developer is in a meeting, as their own calendar reports it.
+ *
+ * Three answers rather than two, and the third is load-bearing: `UNAVAILABLE`
+ * is every way the question can fail to be answered — no calendar connected,
+ * access refused, a calendar that has left the Mac, a helper that would not
+ * run — and it is deliberately not `OFF`, so a calendar Luke cannot read holds
+ * nothing back at all. A wrong `OFF` talks over a meeting; a wrong `ON` is
+ * silence with no end in sight.
+ */
+export const MEETING_STATUS = {
+  ON: "on",
+  OFF: "off",
+  UNAVAILABLE: "unavailable",
+} as const;
+
+export type MeetingStatus = (typeof MEETING_STATUS)[keyof typeof MEETING_STATUS];
+
+/**
+ * How far the machine will let Luke read the calendar.
+ *
+ * Beside the status rather than folded into it, because the two have different
+ * jobs: the status decides the hold, and this is only ever words. A connection
+ * that silently does nothing because a consent prompt was refused is the one
+ * failure a settings row has to be able to explain, and `UNAVAILABLE` alone
+ * cannot tell "you said no" from "there was nothing to ask".
+ */
+export const CALENDAR_ACCESS = {
+  /** Nothing has answered yet, including because nobody has asked. */
+  UNKNOWN: "unknown",
+  GRANTED: "granted",
+  /** Refused at the prompt, or refused by policy. Only System Settings undoes it. */
+  DENIED: "denied",
+  /** No calendars, no helper, no macOS, or EventKit itself failing. */
+  UNAVAILABLE: "unavailable",
+} as const;
+
+export type CalendarAccess = (typeof CALENDAR_ACCESS)[keyof typeof CALENDAR_ACCESS];
+
+/**
+ * One calendar Luke reads, as the panel sees it.
+ *
+ * The name and the host, and never the address: a published calendar URL is the
+ * right to read that calendar, so it is sealed in the settings file and never
+ * handed back. What a row needs is what it is called and where it came from.
+ */
+export interface CalendarSubscription {
+  id: string;
+  label: string;
+  host: string;
+}
+
+/** What subscribing to one answered: the subscription, or why it could not be read. */
+export interface CalendarSubscriptionResult {
+  settings: AppSettings;
+  reason?: string;
+}
+
+/**
+ * What the calendar signal amounts to right now: the answer, and how far Luke
+ * was allowed to look for it. They travel together because the panel draws them
+ * in one sentence and would otherwise be able to contradict itself between two
+ * arrivals.
+ */
+export interface MeetingState {
+  status: MeetingStatus;
+  access: CalendarAccess;
+}
+
 /** Renderer-safe settings. Credentials are never sent to a renderer. */
 export interface AppSettings {
   /** Where each provider's key comes from, keyed by provider id. */
@@ -141,6 +210,18 @@ export interface AppSettings {
    * the duck is left where the hand put it.
    */
   duckOtherMedia: boolean;
+  /**
+  /**
+   * The calendars the developer subscribed to, so a notice waits out a meeting
+   * on one rather than landing mid-sentence to somebody else.
+   *
+   * A list rather than a switch because a developer has more than one calendar
+   * and means only some of them: the work one silences Luke for, the birthdays
+   * one never should. Empty is the whole of "off" — nothing is fetched and the
+   * hold can never engage — which is why adding one starts the reading and
+   * removing the last stops it rather than ignoring what it finds.
+   */
+  calendarSubscriptions: readonly CalendarSubscription[];
   /**
    * Whether Luke stands on every connected display at once. Off by default:
    * he keeps to the system's main display until asked, and turning this off
@@ -278,6 +359,12 @@ export interface AppBootstrap {
    * arrives — or forever, where there is no helper to ask.
    */
   outputAudio?: OutputAudioState;
+  /**
+   * What the calendar says right now. `UNAVAILABLE` with an access of
+   * `UNKNOWN` is what a build says before anything has looked, which includes
+   * every build whose developer has connected no calendar.
+   */
+  meeting: MeetingState;
   display: DisplayDiagnostic;
   sessions: readonly NormalizedSession[];
   /** Where a new workspace can be created, as the adapters currently offer it. */
@@ -372,6 +459,14 @@ export interface AppBridge {
   setVoiceCaptions(enabled: boolean): Promise<SettingsUpdateResult>;
   /** Turns the quieting of Music and Spotify during a spoken exchange on or off. */
   setDuckOtherMedia(enabled: boolean): Promise<SettingsUpdateResult>;
+  /**
+   * Subscribes to one published calendar by its address. The address is read
+   * once before anything is stored — a typo saved is a subscription that can
+   * only ever fail — and is sealed the way an API key is.
+   */
+  addCalendarSubscription(url: string): Promise<SettingsUpdateResult>;
+  /** Unsubscribes from one, by the identifier the list is keyed by. */
+  removeCalendarSubscription(id: string): Promise<SettingsUpdateResult>;
   /**
    * Whether a spoken exchange is live — a turn being held, a reply being
    * spoken, or the call coming up between them. It drives the media duck and
@@ -509,6 +604,12 @@ export interface AppBridge {
   /** The issue roster as last observed; `undefined` says no tracker is connected. */
   onIssuesChanged(callback: (issues: readonly TrackedIssue[] | undefined) => void): () => void;
   onAttentionSpeech(callback: (speech: readonly AttentionSpeech[]) => void): () => void;
+  /**
+   * A meeting beginning or ending, and the calendar becoming readable or
+   * unreadable. Both halves arrive together for the same reason they are one
+   * state: the row that draws them says one sentence.
+   */
+  onMeetingChanged(callback: (meeting: MeetingState) => void): () => void;
   /** The talk key going down, from whatever app happened to be frontmost. */
   onVoiceHotkeyPress(callback: () => void): () => void;
   /** The same key being let go of, which is what ends a held turn. */
@@ -557,6 +658,9 @@ export const channels = {
   setAskHotkey: "app:set-ask-hotkey",
   setStopHotkey: "app:set-stop-hotkey",
   setDuckOtherMedia: "app:set-duck-other-media",
+  addCalendarSubscription: "app:add-calendar-subscription",
+  removeCalendarSubscription: "app:remove-calendar-subscription",
+  meetingChanged: "app:meeting-changed",
   setVoiceExchange: "app:set-voice-exchange",
   openProviderApiKeys: "app:open-provider-api-keys",
   setShowInMenuBar: "app:set-show-in-menu-bar",

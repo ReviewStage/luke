@@ -292,6 +292,62 @@ test("a corrupt media duck value reads as the default rather than as off", async
   assert.equal((await storeIn(directory).snapshot()).duckOtherMedia, true);
 });
 
+test("a subscribed calendar is kept by name and host, with its address sealed", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+
+  assert.deepEqual((await store.snapshot()).calendarSubscriptions, []);
+  const added = await store.addCalendarSubscription({
+    id: "one",
+    label: "Work",
+    host: "calendar.google.com",
+    url: "https://calendar.google.com/calendar/ical/secret/basic.ics",
+  });
+
+  // What the panel is told: the name and where it came from. The address is
+  // the right to read the calendar, so it never comes back out.
+  assert.deepEqual(added.settings.calendarSubscriptions, [
+    { id: "one", label: "Work", host: "calendar.google.com" },
+  ]);
+  const file = JSON.parse(await readSettingsFile(directory));
+  assert.equal(file.calendarSubscriptions[0].url.includes("secret"), false);
+  // And it comes back for the watch, which is the only thing that needs it.
+  assert.deepEqual(await store.calendarSubscriptions(), [
+    { id: "one", url: "https://calendar.google.com/calendar/ical/secret/basic.ics" },
+  ]);
+
+  const renamed = await store.labelCalendarSubscription("one", "Work calendar");
+  assert.equal(renamed.settings.calendarSubscriptions[0]?.label, "Work calendar");
+
+  const removed = await store.removeCalendarSubscription("one");
+  assert.deepEqual(removed.settings.calendarSubscriptions, []);
+});
+
+test("a subscription with no address is dropped rather than repaired", async (t) => {
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({
+      version: 2,
+      apiKeys: {},
+      calendarSubscriptions: [
+        { id: "one", label: "Work", host: "calendar.google.com", url: "sealed" },
+        { id: "two", label: "No address", host: "example.com" },
+        { id: "one", label: "Repeated", host: "example.com", url: "sealed" },
+        "not an object",
+      ],
+    }),
+    "utf8",
+  );
+
+  // An entry with nothing to fetch can only ever fail, and would sit in the
+  // list forever looking like it did something.
+  assert.deepEqual((await storeIn(directory).snapshot()).calendarSubscriptions, [
+    { id: "one", label: "Work", host: "calendar.google.com" },
+  ]);
+});
+
 test("keeps each provider's key, environment fallback, and reported source separate", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory, {
@@ -345,6 +401,7 @@ test("keeps both keys when two providers are saved at once", async (t) => {
     showInDock: false,
     showInMenuBar: true,
     voiceCaptions: false,
+    calendarSubscriptions: [],
     duckOtherMedia: true,
     showOnAllDisplays: false,
   });
@@ -545,6 +602,7 @@ test("keeps a Conductor key stored by an earlier version working", async (t) => 
     showInDock: false,
     showInMenuBar: true,
     voiceCaptions: false,
+    calendarSubscriptions: [],
     duckOtherMedia: true,
     showOnAllDisplays: false,
   });
@@ -568,6 +626,7 @@ test("carries a key belonging to a provider this build does not know", async (t)
     showInDock: false,
     showInMenuBar: true,
     voiceCaptions: false,
+    calendarSubscriptions: [],
     duckOtherMedia: true,
     showOnAllDisplays: false,
   });
@@ -589,6 +648,7 @@ test("shows the menu bar item until asked otherwise, and remembers the answer", 
     showInDock: false,
     showInMenuBar: false,
     voiceCaptions: false,
+    calendarSubscriptions: [],
     duckOtherMedia: true,
     showOnAllDisplays: false,
   });
@@ -671,6 +731,7 @@ test("keeps Luke out of the Dock until asked, and remembers the answer", async (
     showInDock: true,
     showInMenuBar: true,
     voiceCaptions: false,
+    calendarSubscriptions: [],
     duckOtherMedia: true,
     showOnAllDisplays: false,
   });

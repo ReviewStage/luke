@@ -246,6 +246,35 @@ same privacy boundary; see [PRIVACY.md](PRIVACY.md). They can be switched off
 in Settings · Voice ("Announce when a session needs you"); the panel and
 the capsule count show the same states either way.
 
+## Waiting for your meeting to end
+
+A readout that lands mid-sentence to another person is the one interruption
+Luke has no excuse for, so he can wait for a meeting to end and read back what
+is still worth hearing.
+
+Add a calendar under **Calendars** on Settings' Connections page by pasting the
+address it publishes itself at — in Google Calendar that is *Settings → your
+calendar → Secret address in iCal format*; in Outlook it is *Publish a
+calendar*. Luke never asks macOS for the calendars on your Mac, and you are not
+signing in to anything: he fetches that address over HTTPS every few minutes.
+Paste one per calendar, and remove any of them at any time.
+
+The address is a credential — anyone holding it can read that calendar — so it
+is stored encrypted through the macOS Keychain and never shown again. The row
+afterwards shows the calendar's own name and the host it came from.
+
+A meeting is an event happening now, on a calendar you added, with at least one
+other person on it. All-day events, ones you declined or never answered, ones
+with nobody else on them, anything the calendar itself marks as free time, and
+anything running longer than four hours are not meetings. Only the sentence
+waits: every session goes on showing as needing attention in the panel
+throughout, Luke's face sleeps on the capsule to say he is holding, and what is
+still true is read out when the meeting ends. A calendar that stops answering
+holds nothing back, and the page says so where the row is.
+
+Luke reads only when events start and end. Never their titles, notes,
+locations, or who is on them; see [Privacy](PRIVACY.md) for the exact boundary.
+
 ## Optional attention review
 
 Session monitoring does not require an OpenAI key: Claude Code, Codex, and

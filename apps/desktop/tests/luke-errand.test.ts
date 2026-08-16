@@ -33,7 +33,12 @@ import {
 } from "../src/renderer/luke-guide";
 import { SETTING_PAGE, SETTINGS_PAGE_LABEL } from "../src/renderer/settings-views";
 import type { AppSettings } from "../src/shared/contracts";
-import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "../src/shared/contracts";
+import {
+  CALENDAR_ACCESS,
+  CREDENTIAL_SOURCE,
+  MEETING_STATUS,
+  SECRET_STORAGE,
+} from "../src/shared/contracts";
 import { CREDENTIAL_PROVIDER_ID } from "../src/shared/credential-providers";
 
 function settings(): AppSettings {
@@ -54,6 +59,7 @@ function settings(): AppSettings {
     voiceSpeed: REALTIME_VOICE_SPEED.NORMAL,
     voiceCaptions: false,
     duckOtherMedia: true,
+    calendarSubscriptions: [],
     showOnAllDisplays: false,
     formFactor: PANEL_FORM_FACTOR.BUBBLE,
   };
@@ -63,6 +69,7 @@ const guideInput: LukeGuideInput = {
   settings: settings(),
   voiceAvailable: true,
   microphoneStatus: "granted",
+  meeting: { status: MEETING_STATUS.OFF, access: CALENDAR_ACCESS.GRANTED },
   hotkey: { hotkey: "⌥Space", held: true },
   askKey: "⌥L",
 };

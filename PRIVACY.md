@@ -135,6 +135,33 @@ microphone track is created muted, server-side voice detection is disabled, and
 each turn begins by discarding whatever the buffer held. Luke never opens the
 microphone on its own.
 
+## Optional calendar reads
+
+Luke can hold a spoken notice until a meeting ends rather than saying it over
+you. Nothing about your calendar is read until you subscribe to one, and Luke
+never asks macOS for access to the calendars on your Mac.
+
+Instead you paste the address a calendar already publishes itself at — Google
+calls it the secret address in iCal format, Outlook a published calendar — under
+**Calendars** on Settings' Connections page. Luke fetches that address over
+HTTPS about every five minutes. The request goes to whoever hosts the calendar
+and carries nothing about you beyond the address itself; no calendar data is
+sent anywhere.
+
+That address is a credential: anyone holding it can read the calendar. It is
+encrypted with Electron `safeStorage`, backed by the macOS login Keychain,
+never returned to the panel, and never displayed. What the panel shows is the
+name the calendar gives itself and the host it came from.
+
+From each calendar Luke keeps six things per event: when it starts, when it
+ends, whether it runs all day, how you answered the invitation, how many other
+people are on it, and whether it was cancelled. Titles, locations, notes,
+organisers and attendee names are in the file and none of them are read out of
+it. Nothing from a calendar is written to disk, and the app guide described
+below carries whether a meeting is currently holding notices back and nothing
+about what the meeting is, who is in it, what it is called, or which calendar it
+is on.
+
 ## Optional spoken conversation
 
 Voice is off until Luke is given an OpenAI key, and no audio leaves your Mac

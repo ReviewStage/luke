@@ -113,6 +113,18 @@ export function PlugIcon(): React.JSX.Element {
 }
 
 /** Points into a page: the row it sits on opens one. */
+/** A month, drawn the way macOS draws one: a grid with its hanging rings. */
+export function CalendarIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <rect x="3.4" y="5" width="17.2" height="16" rx="2.6" />
+      <path d="M3.4 10h17.2" />
+      <path d="M8 2.6v4.4" />
+      <path d="M16 2.6v4.4" />
+    </Glyph>
+  );
+}
+
 export function ChevronIcon(): React.JSX.Element {
   return (
     <Glyph className="settings-chevron">

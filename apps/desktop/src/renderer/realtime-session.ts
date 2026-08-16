@@ -872,13 +872,18 @@ export class RealtimeVoiceSession {
   }
 
   /**
-   * Voices a proactive update that the attention layer already approved,
-   * reporting whether it could. A refusal is not a loss: the caller shows the
-   * sentence instead, which is the same thing it does when voice is off. That
-   * is better than holding it — the attention layer supersedes its own
-   * decisions, so a sentence saved for later is a sentence likely to be stale.
+   * Voices the proactive updates the attention layer already approved,
+   * reporting whether it could. They are spoken as one turn, because a turn
+   * already under way refuses the next one.
+   *
+   * A refusal is not a loss: the caller shows the sentences instead, which is
+   * the same thing it does when voice is off. That is better than holding them
+   * here — the attention layer supersedes its own decisions, so a sentence
+   * saved for later is a sentence likely to be stale. The one place a notice is
+   * deliberately held is the meeting hold upstream, and it re-checks every
+   * sentence against the session before letting it go.
    */
-  speak(speech: AttentionSpeech): boolean {
+  speak(speech: readonly AttentionSpeech[]): boolean {
     const events = proactiveSpeechEvents(speech);
     if (events.length === 0 || !this.isConnected || this.#turnBusy) return false;
     this.#startResponse(events);

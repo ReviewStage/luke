@@ -13,6 +13,7 @@ import {
   type RealtimeVoiceSpeed,
   type WorkspaceAgentSelection,
 } from "@sidecar/core";
+import type { WatchedCalendar } from "./calendar-watch";
 import { environmentRealtimeSpeed, environmentRealtimeVoice } from "./openai-realtime-credentials";
 import {
   APP_SETTING_DEFAULTS,
@@ -46,6 +47,7 @@ const SETTINGS_FIELD = {
   DEFAULT_WORKSPACE_PROVIDER: "defaultWorkspaceProvider",
   DUCK_OTHER_MEDIA: "duckOtherMedia",
   FORM_FACTOR: "formFactor",
+  CALENDAR_SUBSCRIPTIONS: "calendarSubscriptions",
   LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
   SHOW_IN_DOCK: "showInDock",
   SHOW_IN_MENU_BAR: "showInMenuBar",
@@ -158,6 +160,17 @@ interface PersistedSettings {
    */
   duckOtherMedia: boolean;
   /**
+  /**
+   * The calendars the developer subscribed to: what to call each one, where it
+   * came from, and its address sealed the way an API key is.
+   *
+   * The address is the credential — anyone holding a published calendar URL can
+   * read that calendar — so it never sits in the file in the clear and is never
+   * handed back to a renderer. The name and the host are neither, and are what
+   * the panel draws.
+   */
+  calendarSubscriptions: readonly PersistedCalendarSubscription[];
+  /**
    * Whether Luke stands on every connected display. Off unless the file says
    * `true` outright, like the Dock: a missing field, an older file, and a
    * corrupt value all land on the main display alone rather than raising
@@ -205,6 +218,54 @@ interface ResolvedApiKey {
  * field, an older file, a corrupt value — lands on the stated default rather
  * than switching anything on or off by accident.
  */
+/**
+ * What the connected list may hold. A developer connects the handful of
+ * calendars they actually keep; the cap is what stops a hand-edited or corrupt
+ * file becoming a settings page nobody can scroll.
+ */
+export const MAXIMUM_CONNECTED_CALENDARS = 25;
+const MAXIMUM_CALENDAR_ID_LENGTH = 256;
+const MAXIMUM_CALENDAR_TITLE_LENGTH = 128;
+
+/**
+ * The subscriptions as the file holds them, with everything unusable dropped.
+ *
+ * An entry needs an identifier, a sealed address, and something to draw;
+ * anything short of that is discarded rather than repaired, because a
+ * half-written entry can only ever fail to read a calendar and would sit in the
+ * list forever looking like it did something.
+ */
+function storedCalendarSubscriptions(value: unknown): readonly PersistedCalendarSubscription[] {
+  if (!Array.isArray(value)) return [];
+  const subscriptions: PersistedCalendarSubscription[] = [];
+  for (const entry of value) {
+    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const candidate = entry as Record<string, unknown>;
+    const id = typeof candidate.id === "string" ? candidate.id.trim() : "";
+    const url = typeof candidate.url === "string" ? candidate.url.trim() : "";
+    if (!id || !url || id.length > MAXIMUM_CALENDAR_ID_LENGTH) continue;
+    if (subscriptions.some((subscription) => subscription.id === id)) continue;
+    const label = typeof candidate.label === "string" ? candidate.label.trim() : "";
+    const host = typeof candidate.host === "string" ? candidate.host.trim() : "";
+    subscriptions.push({
+      id,
+      url,
+      label: label.slice(0, MAXIMUM_CALENDAR_TITLE_LENGTH) || host || id,
+      host: host.slice(0, MAXIMUM_CALENDAR_TITLE_LENGTH),
+    });
+    if (subscriptions.length >= MAXIMUM_CONNECTED_CALENDARS) break;
+  }
+  return subscriptions;
+}
+
+/** One subscription as the file holds it, its address sealed. */
+interface PersistedCalendarSubscription {
+  id: string;
+  label: string;
+  host: string;
+  url: string;
+}
+
 function booleanSetting(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
@@ -379,6 +440,9 @@ function parsePersistedSettings(source: string): PersistedSettings {
       record[SETTINGS_FIELD.DUCK_OTHER_MEDIA],
       APP_SETTING_DEFAULTS.duckOtherMedia,
     ),
+    calendarSubscriptions: storedCalendarSubscriptions(
+      record[SETTINGS_FIELD.CALENDAR_SUBSCRIPTIONS],
+    ),
     showOnAllDisplays: booleanSetting(
       record[SETTINGS_FIELD.SHOW_ON_ALL_DISPLAYS],
       APP_SETTING_DEFAULTS.showOnAllDisplays,
@@ -456,6 +520,14 @@ export class SettingsStore {
       ...(persisted.askHotkey ? { askHotkey: persisted.askHotkey } : {}),
       ...(persisted.stopHotkey ? { stopHotkey: persisted.stopHotkey } : {}),
       duckOtherMedia: persisted.duckOtherMedia,
+      // The address never leaves the store: the panel is told what to call the
+      // calendar and where it came from, which is what a row needs and nothing
+      // anyone could read a calendar with.
+      calendarSubscriptions: persisted.calendarSubscriptions.map(({ id, label, host }) => ({
+        id,
+        label,
+        host,
+      })),
       showOnAllDisplays: persisted.showOnAllDisplays,
       formFactor: persisted.formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
       ...(persisted.defaultWorkspaceProvider
@@ -629,6 +701,84 @@ export class SettingsStore {
     return this.#setField((persisted) => {
       if (persisted.duckOtherMedia === enabled) return;
       return { ...persisted, duckOtherMedia: enabled };
+    });
+  }
+
+  /**
+   * The subscriptions with their addresses, for the watch. Main-process only,
+   * like a resolved key: an address is what reads the calendar, so it is
+   * decrypted here and never handed to a renderer.
+   */
+  async calendarSubscriptions(): Promise<readonly WatchedCalendar[]> {
+    const persisted = await this.#load();
+    const watched: WatchedCalendar[] = [];
+    for (const subscription of persisted.calendarSubscriptions) {
+      const url = this.#unseal(subscription.url);
+      if (url) watched.push({ id: subscription.id, url });
+    }
+    return watched;
+  }
+
+  /**
+   * Subscribes to one calendar, sealing its address the way a key is sealed.
+   *
+   * The address is checked for being an `https` calendar URL before anything is
+   * stored — a typo saved is a subscription that can only ever fail — and a
+   * calendar already subscribed to under the same address is not added twice.
+   */
+  async addCalendarSubscription(subscription: {
+    id: string;
+    label: string;
+    host: string;
+    url: string;
+  }): Promise<SettingsUpdateResult> {
+    if (!this.#secretStorageUsable()) {
+      return {
+        settings: await this.snapshot(),
+        reason: "Encrypted credential storage is unavailable on this system.",
+      };
+    }
+    const sealed = this.#cipher.encrypt(subscription.url).toString("base64");
+    return this.#setField((persisted) => {
+      if (persisted.calendarSubscriptions.length >= MAXIMUM_CONNECTED_CALENDARS) return;
+      return {
+        ...persisted,
+        calendarSubscriptions: [
+          ...persisted.calendarSubscriptions,
+          {
+            id: subscription.id,
+            label: subscription.label.slice(0, MAXIMUM_CALENDAR_TITLE_LENGTH),
+            host: subscription.host.slice(0, MAXIMUM_CALENDAR_TITLE_LENGTH),
+            url: sealed,
+          },
+        ],
+      };
+    });
+  }
+
+  /** Renames one subscription, which is how a calendar's own name is kept. */
+  async labelCalendarSubscription(id: string, label: string): Promise<SettingsUpdateResult> {
+    const trimmed = label.trim().slice(0, MAXIMUM_CALENDAR_TITLE_LENGTH);
+    return this.#setField((persisted) => {
+      const subscription = persisted.calendarSubscriptions.find((each) => each.id === id);
+      if (!trimmed || !subscription || subscription.label === trimmed) return;
+      return {
+        ...persisted,
+        calendarSubscriptions: persisted.calendarSubscriptions.map((each) =>
+          each.id === id ? { ...each, label: trimmed } : each,
+        ),
+      };
+    });
+  }
+
+  /** Unsubscribes from one calendar, by the identifier the list is keyed by. */
+  async removeCalendarSubscription(id: string): Promise<SettingsUpdateResult> {
+    return this.#setField((persisted) => {
+      if (!persisted.calendarSubscriptions.some((each) => each.id === id)) return;
+      return {
+        ...persisted,
+        calendarSubscriptions: persisted.calendarSubscriptions.filter((each) => each.id !== id),
+      };
     });
   }
 
@@ -899,6 +1049,21 @@ export class SettingsStore {
    * credential in hand: on macOS asking is a Keychain read, which is the
    * permission dialog this deliberately keeps out of an ordinary launch.
    */
+  /**
+   * Reads one sealed address back, or nothing when the cipher cannot. A
+   * subscription whose address will not decrypt is a calendar Luke cannot read
+   * rather than a calendar with nothing on it, and the watch answers the
+   * difference.
+   */
+  #unseal(ciphertext: string): string | undefined {
+    try {
+      const url = this.#cipher.decrypt(Buffer.from(ciphertext, "base64")).trim();
+      return url || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   #secretStorageUsable(): boolean {
     if (this.#secretStorage === SECRET_STORAGE.UNKNOWN) {
       let available = false;
@@ -965,6 +1130,9 @@ export class SettingsStore {
       version: SETTINGS_FILE_VERSION,
       apiKeys: {},
       ...APP_SETTING_DEFAULTS,
+      // Not a plain boolean, so it is not one of the shared defaults: an empty
+      // list is what having subscribed to no calendar looks like.
+      calendarSubscriptions: [],
     };
     if (source) {
       try {

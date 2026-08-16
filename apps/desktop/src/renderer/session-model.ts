@@ -521,7 +521,23 @@ function dominantUrgency(counts: {
 }
 
 /** One sentence that reads correctly for a screen reader in either mode. */
-export function tallySummary(tally: SessionTally): string {
+export function tallySummary(
+  tally: SessionTally,
+  /**
+   * Whether a meeting is keeping Luke quiet. It rides here because the capsule
+   * says it by sleeping, and a sleeping drawing says nothing to a reader who
+   * cannot see it — the count and the reason a face is shut have to arrive
+   * together, or the label describes a Luke nobody else is looking at. It names
+   * what ends the quiet, because a hold with no stated end is worse than not
+   * having said Luke was holding at all.
+   */
+  options: { holdingNotices?: boolean } = {},
+): string {
+  const counted = tallyCount(tally);
+  return options.holdingNotices ? `${counted}. Quiet until your meeting ends` : counted;
+}
+
+function tallyCount(tally: SessionTally): string {
   if (tally.total === 0) return "No sessions tracked";
   const sessionWord = tally.total === 1 ? "session" : "sessions";
   if (tally.attention > 0) {

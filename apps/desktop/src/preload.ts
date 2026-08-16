@@ -39,6 +39,8 @@ const bridge: AppBridge = {
   setAskHotkey: invoke(channels.setAskHotkey),
   setStopHotkey: invoke(channels.setStopHotkey),
   setDuckOtherMedia: invoke(channels.setDuckOtherMedia),
+  addCalendarSubscription: invoke(channels.addCalendarSubscription),
+  removeCalendarSubscription: invoke(channels.removeCalendarSubscription),
   setVoiceExchangeActive: (active) => {
     ipcRenderer.send(channels.setVoiceExchange, active);
   },
@@ -68,6 +70,7 @@ const bridge: AppBridge = {
   onStopHotkeyChanged: subscribe(channels.stopHotkeyChanged),
   onOutputAudioChanged: subscribe(channels.outputAudioChanged),
   onAttentionSpeech: subscribe(channels.attentionSpeech),
+  onMeetingChanged: subscribe(channels.meetingChanged),
 };
 
 contextBridge.exposeInMainWorld("sidecar", bridge);

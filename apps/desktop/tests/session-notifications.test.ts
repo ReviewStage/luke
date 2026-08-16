@@ -28,6 +28,9 @@ test("a notice becomes one sentence in the shape attention speech travels in", (
     providerSessionId: "run:1",
     disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
     source: ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
+    // Carried so a hold can re-check the session before reading it out: this
+    // sentence has no evaluator decision to be checked against.
+    noticeStatus: SESSION_NOTICE_STATUS.COMPLETE,
     summary: 'Claude Code finished "Implement better notifications" on luke.',
     // When the announcement was decided on, not when the provider observed
     // the session: it is what staleness is measured against.

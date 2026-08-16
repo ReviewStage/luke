@@ -60,9 +60,9 @@ function fakeSession(): FakeSession {
       this.setStatus(this.connectOpens ? REALTIME_STATUS.READY : REALTIME_STATUS.UNAVAILABLE);
       return this.connectOpens;
     },
-    speak(item: AttentionSpeech) {
+    speak(items: readonly AttentionSpeech[]) {
       if (!this.isConnected || this.status === REALTIME_STATUS.RESPONDING) return false;
-      this.spoken.push(item);
+      this.spoken.push(...items);
       this.setStatus(REALTIME_STATUS.RESPONDING);
       return true;
     },
@@ -132,24 +132,32 @@ test("a notice arriving into silence opens Luke's own call and is spoken", async
   );
 });
 
-test("queued notices speak one reply at a time, paced by READY", async () => {
+test("everything queued is read as one turn, and a straggler waits for READY", async () => {
   const session = fakeSession();
   const timers = fakeTimers();
   const subject = announcer(session, timers);
 
   subject.enqueue([speech("a"), speech("b")]);
   await Promise.resolve();
-  // The first took the turn; the second waits for the reply to end.
+  // Both in the first turn: a turn already under way refuses the next, so
+  // sentences handed over one at a time would leave all but the first unsaid —
+  // which is exactly the shape a hold ends in.
   assert.deepEqual(
     session.spoken.map((item) => item.providerSessionId),
-    ["a"],
+    ["a", "b"],
   );
 
+  // One arriving mid-reply is refused and kept, and goes out on the next READY.
+  subject.enqueue([speech("c")]);
+  assert.deepEqual(
+    session.spoken.map((item) => item.providerSessionId),
+    ["a", "b"],
+  );
   session.setStatus(REALTIME_STATUS.READY);
   subject.onStatus(REALTIME_STATUS.READY);
   assert.deepEqual(
     session.spoken.map((item) => item.providerSessionId),
-    ["a", "b"],
+    ["a", "b", "c"],
   );
   // One call served the whole queue.
   assert.equal(session.connects, 1);

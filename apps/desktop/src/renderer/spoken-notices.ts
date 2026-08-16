@@ -31,7 +31,7 @@ export interface AnnouncerSession {
   readonly status: RealtimeStatus;
   readonly microphoneCall: boolean;
   connect(options: { microphone: false }): Promise<boolean>;
-  speak(speech: AttentionSpeech): boolean;
+  speak(speech: readonly AttentionSpeech[]): boolean;
   close(): Promise<void>;
 }
 
@@ -118,9 +118,12 @@ export class SpokenNoticeAnnouncer {
     if (session.isConnected) {
       // One reply at a time: the first speak takes the turn and the second is
       // refused, so the loop stops itself and READY resumes it.
-      while (this.#queue.length > 0 && session.speak(this.#queue[0] as AttentionSpeech)) {
-        this.#queue.shift();
-      }
+      // Everything waiting goes as one turn. A turn already under way refuses
+      // the next, so sentences handed over one at a time would leave all but
+      // the first unsaid — and a hold that has just ended is exactly when
+      // several are waiting at once. A refusal keeps the queue for the next
+      // READY rather than dropping it.
+      if (session.speak(this.#queue)) this.#queue = [];
       return;
     }
     if (session.isConnecting) return;

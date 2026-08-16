@@ -684,7 +684,11 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       if (notices.length > 0) ensureAnnouncer().enqueue(notices);
       const session = voiceSession.current;
       if (!session?.microphoneCall) return;
-      for (const item of evaluatorSummaries(speech)) session.speak(item);
+      // The evaluator's half goes as one turn, because a turn already under way
+      // refuses the next: sent one at a time, all but the first would go
+      // unsaid. It is also the better sentence to come back to after a hold.
+      const summaries = evaluatorSummaries(speech);
+      if (summaries.length > 0) session.speak(summaries);
     });
   }, [ensureAnnouncer]);
 

@@ -44,6 +44,7 @@ export {
   type SessionProvider,
   type SessionStatus,
   sessionMessageText,
+  silentAttention,
   UNKNOWN_WORKSPACE_LABEL,
 } from "./session";
 export { InMemorySessionRegistry } from "./session-registry";
@@ -105,6 +106,9 @@ export {
   type TrackerIssueAction,
   type TrackerIssueObservation,
 } from "./issues";
+
+// Holding a decided notice until the developer is free to hear it.
+export { HeldAttentionQueue, maximumHeldAttention } from "./attention-hold";
 
 // Attention — whether a session change is worth voicing.
 export {

@@ -51,6 +51,10 @@ export function sessionNoticeSpeech(notice: SessionNotice, decidedAt: number): A
     // The source is what entitles this sentence to open a call of Luke's own:
     // it was worded from a status edge the registry observed, not by a model.
     source: ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
+    // What a hold re-checks the session against before reading this out: a
+    // meeting that ran an hour ends in what is still true, and a session that
+    // moved on since is dropped rather than announced late.
+    noticeStatus: notice.status,
     summary: noticeSentence(notice),
     decidedAt,
   };
