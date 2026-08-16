@@ -492,7 +492,9 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       detail:
         "Two tabs, switched by pressing one or by asking Luke — out loud or typed — to show it; " +
         "asked while the panel is closed, the panel opens on that tab. " +
-        "Sessions lists every observed session with its state, narrowable to all, local, " +
+        "Sessions lists every session that still matters — one that is working or waiting stays " +
+        "at any age, a failure stays for three days, and a finished or quiet one for two — " +
+        "with its state, narrowable to all, local, " +
         "cloud, or one provider, and orderable by urgency (what needs the developer first) or " +
         "recency (what moved last first); a row can be opened, messaged, or controlled where its " +
         "provider allows. Where a provider nests chats in a workspace — Conductor today — each " +
