@@ -735,7 +735,7 @@ test("instructions carry the decision contract and the tuning examples", () => {
     ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
     ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
   ]);
-  assert.deepEqual(ATTENTION_DECISION_SCHEMA.required, ["disposition", "summary"]);
+  assert.deepEqual(ATTENTION_DECISION_SCHEMA.required, ["disposition", "summary", "answers_ask"]);
   assert.equal(ATTENTION_DECISION_SCHEMA.additionalProperties, false);
 });
 
@@ -792,6 +792,33 @@ test("a standing ask rides the update of the session it was made about, and no o
   const unwatched = evaluator.updates.find((update) => update.providerSessionId === "unwatched");
   assert.equal(watched?.noticeRequest, "Tell me when this finishes.");
   assert.equal(unwatched?.noticeRequest, undefined);
+});
+
+test("answering an ask is earned by a literal true, and never by a silent decision", () => {
+  const spoken = {
+    disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
+    summary: SPOKEN_SUMMARY,
+  };
+
+  assert.equal(
+    attentionDecisionFromModel({ ...spoken, answers_ask: true }, DECIDED_AT)?.answersAsk,
+    true,
+  );
+  // A malformed or absent field reads as not answering: the privileges an
+  // answer earns must come from the model saying so.
+  assert.equal(
+    attentionDecisionFromModel({ ...spoken, answers_ask: "yes" }, DECIDED_AT)?.answersAsk,
+    undefined,
+  );
+  assert.equal(attentionDecisionFromModel(spoken, DECIDED_AT)?.answersAsk, undefined);
+  assert.equal(
+    attentionDecisionFromModel(
+      { disposition: ATTENTION_DISPOSITION.SILENT, summary: null, answers_ask: true },
+      DECIDED_AT,
+    )?.answersAsk,
+    undefined,
+    "a silent decision answers nothing out loud",
+  );
 });
 
 test("the rendered update says the developer's ask, and says none while none stands", () => {

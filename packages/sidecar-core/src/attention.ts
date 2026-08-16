@@ -70,7 +70,7 @@ const ATTENTION_REVIEW_DEFAULTS = {
 export const ATTENTION_DECISION_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["disposition", "summary"],
+  required: ["disposition", "summary", "answers_ask"],
   properties: {
     disposition: {
       type: "string",
@@ -82,6 +82,11 @@ export const ATTENTION_DECISION_SCHEMA = {
     summary: {
       type: ["string", "null"],
       description: `One short spoken sentence under ${maximumAttentionSummaryLength} characters, or null when the disposition is silent.`,
+    },
+    answers_ask: {
+      type: "boolean",
+      description:
+        "True only when a developer's ask is present and the summary answers it. False when no ask stands, when the update is not what it asked for, or when the disposition is silent.",
     },
   },
 };
@@ -312,10 +317,16 @@ export function attentionDecisionFromModel(
       : undefined;
   if (record.disposition !== ATTENTION_DISPOSITION.SILENT && !summary) return undefined;
 
+  // Anything but a literal true reads as not answering: an ask's privileges
+  // are earned by the model saying so, never by a field being malformed.
+  const answersAsk =
+    record.answers_ask === true && record.disposition !== ATTENTION_DISPOSITION.SILENT;
+
   return normalizeAttention({
     disposition: record.disposition,
     decidedAt,
     ...(summary ? { summary } : {}),
+    ...(answersAsk ? { answersAsk } : {}),
   });
 }
 

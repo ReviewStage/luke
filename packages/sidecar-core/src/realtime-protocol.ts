@@ -153,7 +153,7 @@ const REALTIME_INSTRUCTION_TAIL: readonly string[] = [
   "- Only sessions the roster marks as taking messages, carrying a control, or able to be opened can be acted on. Say so when one cannot.",
   "- Opening a session brings it up in its provider's own window, the same as pressing its row. It shows you nothing new.",
   '- request_session_notice keeps the developer\'s ask to hear about one observed session later — "tell me when this finishes", "warn me if it fails" — in their own words. Luke\'s background review holds each update against it and speaks when one satisfies it, with no conversation needing to be open. One ask stands per session; a new one replaces it, and withdraw_session_notice lets it go. An ask about a workspace is an ask about each of its listed chats.',
-  "- When the acceptance shows the session already where the ask points — already finished, already failed — say so now instead of promising news that is not coming.",
+  "- A kept ask is the one success not always answered with silence: when its acceptance shows the session already where the ask points — already finished, already failed — say so now, in one sentence, rather than stay quiet over a promise of news that is not coming.",
   "- create_workspace starts a fresh workspace in one of the projects listed in messages marked [workspace projects]. Only those projects exist; a provider that lists none cannot take one, and you never invent a repository or an id.",
   "- Where the projects list says a project takes or needs a task, create_workspace can carry the developer's opening ask for the new agent, in their words. A project that needs one cannot be created without it.",
   "- The projects context also says where a creation ask goes when the developer names no provider: to their default provider when it names one, and while none is chosen, you ask which provider when more than one is listed — the first workspace created saves its provider as the default, and you say so when that happens.",
@@ -588,9 +588,12 @@ export function functionCallFollowUpEvents(): readonly Record<string, unknown>[]
 /**
  * Selects the reviews worth voicing right now. A deduplicated review still
  * means the session needs attention, which the panel shows, but repeating the
- * same sentence out loud would be noise rather than news. A review whose
- * update carried the developer's standing ask speaks with the notice-request
+ * same sentence out loud would be noise rather than news. A review that
+ * answers the developer's standing ask — the ask was present, and the
+ * evaluator said its sentence answers it — speaks with the notice-request
  * source, which is what entitles it to be heard without a call already open.
+ * A watched session the evaluator speaks about for its own reasons keeps the
+ * evaluator's terms: the ask licenses its answer, nothing beside it.
  */
 export function attentionSpeechFromReviews(
   reviews: readonly AttentionReview[],
@@ -605,9 +608,10 @@ export function attentionSpeechFromReviews(
       providerId: review.providerId,
       providerSessionId: review.providerSessionId,
       disposition: review.decision.disposition,
-      source: review.update.noticeRequest
-        ? ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST
-        : ATTENTION_SPEECH_SOURCE.EVALUATOR,
+      source:
+        review.update.noticeRequest && review.decision.answersAsk
+          ? ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST
+          : ATTENTION_SPEECH_SOURCE.EVALUATOR,
       summary,
       decidedAt: review.decision.decidedAt,
     });

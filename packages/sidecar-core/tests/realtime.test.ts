@@ -1613,22 +1613,30 @@ test("a standing ask is kept only for a session Luke was shown, in bounded words
   for (const refusal of refusals) assert.equal(refusal.kind, "refused");
 });
 
-test("a review answering a standing ask may be heard without a call open", () => {
+test("only a review that answers a standing ask may be heard without a call open", () => {
+  const asked = review({
+    providerSessionId: "session-b",
+    update: {
+      ...review().update,
+      providerSessionId: "session-b",
+      noticeRequest: "Tell me when this finishes.",
+    },
+  });
   const speech = attentionSpeechFromReviews([
     review(),
-    review({
-      providerSessionId: "session-b",
-      update: {
-        ...review().update,
-        providerSessionId: "session-b",
-        noticeRequest: "Tell me when this finishes.",
-      },
-    }),
+    { ...asked, decision: { ...asked.decision, answersAsk: true } },
+    // The evaluator speaking about a watched session for its own reasons: the
+    // ask licenses its answer, nothing beside it.
+    asked,
+    // A stray answersAsk with no ask standing earns nothing.
+    review({ decision: { ...review().decision, answersAsk: true } }),
   ]);
 
-  assert.equal(speech.length, 2);
-  // An unbidden summary keeps its bound; the answered ask earns the source
-  // that lets the announcer open Luke's own call to say it.
+  assert.equal(speech.length, 4);
+  // An unbidden summary keeps its bound; the answered ask alone earns the
+  // source that lets the announcer open Luke's own call to say it.
   assert.equal(speech[0]?.source, ATTENTION_SPEECH_SOURCE.EVALUATOR);
   assert.equal(speech[1]?.source, ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST);
+  assert.equal(speech[2]?.source, ATTENTION_SPEECH_SOURCE.EVALUATOR);
+  assert.equal(speech[3]?.source, ATTENTION_SPEECH_SOURCE.EVALUATOR);
 });

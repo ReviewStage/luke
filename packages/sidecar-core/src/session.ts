@@ -126,6 +126,13 @@ export interface AttentionDecision {
   disposition: AttentionDisposition;
   decidedAt: number;
   summary?: string;
+  /**
+   * Whether the summary answers the developer's standing ask about this
+   * session. Only an answer earns an ask's privilege — being heard with no
+   * call open — so an evaluator speaking about a watched session for its own
+   * reasons stays on the evaluator's terms.
+   */
+  answersAsk?: boolean;
 }
 
 /**
@@ -490,6 +497,7 @@ export function normalizeAttention(decision: AttentionDecision): AttentionDecisi
     disposition: decision.disposition,
     decidedAt: timestamp(decision.decidedAt, "attention decidedAt"),
     ...(summary ? { summary } : {}),
+    ...(decision.answersAsk ? { answersAsk: true } : {}),
   };
 }
 

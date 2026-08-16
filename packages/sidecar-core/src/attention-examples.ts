@@ -12,6 +12,7 @@ export interface AttentionTuningExample {
   expected: {
     disposition: AttentionDisposition;
     summary: string | null;
+    answers_ask: boolean;
   };
   rationale: string;
 }
@@ -36,6 +37,7 @@ export const ATTENTION_TUNING_EXAMPLES: readonly AttentionTuningExample[] = [
     expected: {
       disposition: ATTENTION_DISPOSITION.SILENT,
       summary: null,
+      answers_ask: false,
     },
     rationale:
       "Noticing a session that is already running is not a development the developer asked to hear about.",
@@ -58,6 +60,7 @@ export const ATTENTION_TUNING_EXAMPLES: readonly AttentionTuningExample[] = [
     expected: {
       disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
       summary: "Claude Code needs to know how to round tax in checkout-service.",
+      answers_ask: false,
     },
     rationale:
       "The recap names the decision the session is blocked on, so the sentence can carry it instead of merely reporting a state change.",
@@ -79,6 +82,7 @@ export const ATTENTION_TUNING_EXAMPLES: readonly AttentionTuningExample[] = [
     expected: {
       disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
       summary: "Codex published billing-api 0.4.2 and merged the release.",
+      answers_ask: false,
     },
     rationale:
       "The session reached a resting point and nothing is blocked, so it waits for a natural pause rather than interrupting.",
@@ -103,6 +107,7 @@ export const ATTENTION_TUNING_EXAMPLES: readonly AttentionTuningExample[] = [
     expected: {
       disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
       summary: "Claude Code hit a rate limit in billing-api and stopped.",
+      answers_ask: false,
     },
     rationale:
       "A stopped session burns wall-clock until someone restarts it, and the error names what to fix.",
@@ -123,6 +128,7 @@ export const ATTENTION_TUNING_EXAMPLES: readonly AttentionTuningExample[] = [
     expected: {
       disposition: ATTENTION_DISPOSITION.SILENT,
       summary: null,
+      answers_ask: false,
     },
     rationale:
       "An observation Luke cannot explain is not a development; announcing it would invent certainty Luke does not have.",
@@ -147,6 +153,7 @@ export const ATTENTION_TUNING_EXAMPLES: readonly AttentionTuningExample[] = [
       disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
       summary:
         "The payments-schema workspace you asked about finished: migration verified on staging.",
+      answers_ask: true,
     },
     rationale:
       "The developer asked for exactly this development by name, so the finish is theirs to hear and the summary answers the ask.",
@@ -170,6 +177,7 @@ export const ATTENTION_TUNING_EXAMPLES: readonly AttentionTuningExample[] = [
     expected: {
       disposition: ATTENTION_DISPOSITION.SILENT,
       summary: null,
+      answers_ask: false,
     },
     rationale:
       "The ask names a finish and the session has not finished; a standing ask licenses the development it asks for, not narration on the way there.",
@@ -195,6 +203,7 @@ export const ATTENTION_TUNING_EXAMPLES: readonly AttentionTuningExample[] = [
     expected: {
       disposition: ATTENTION_DISPOSITION.SILENT,
       summary: null,
+      answers_ask: false,
     },
     rationale:
       "Ongoing work is the normal case however specific the recap is, and narrating it would make Luke noise.",
