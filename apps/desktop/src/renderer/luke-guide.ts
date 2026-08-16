@@ -94,7 +94,7 @@ const SHORTCUTS_PAGE = `${SETTINGS_TAB}, on its Keyboard shortcuts page`;
 const CONNECTIONS_PAGE = `${SETTINGS_TAB}, on its Connections page`;
 
 /** Where the Conductor agent choices live, said once for both their entries. */
-const CONDUCTOR_ROW_PATH = `the Conductor row under Cloud Agent API keys, in ${CONNECTIONS_PAGE}`;
+const CONDUCTOR_ROW_PATH = `the Conductor row under Cloud Agent API keys, in ${CONNECTIONS_PAGE} — drawn once Conductor is connected`;
 
 /**
  * The word both Conductor agent entries use for no choice at all. It is a
@@ -187,7 +187,8 @@ const SETTING_GUIDE: Record<
     label: "Captions",
     description:
       "Luke's words on screen while he speaks; nothing is kept. They also appear on their own, " +
-      "whatever this says, while the Mac's output is muted or at zero.",
+      "whatever this says, for a reply answering a typed ask and while the Mac's output is " +
+      "muted or at zero.",
     kind: APP_SETTING_KIND.TOGGLE,
     value: appToggleText(settings.voiceCaptions),
     defaultValue: appToggleText(APP_SETTING_DEFAULTS.voiceCaptions),
@@ -366,9 +367,9 @@ const SETTING_GUIDE: Record<
   // Only worth a word when it has refused a key, which the facts carry.
   secretStorage: () => undefined,
   /* Not a setting: it is whether the OpenAI key resolved, which the credential
-     row is where anyone changes. Luke is told whether he can speak at all
-     through `voiceAvailable` on the guide itself, so a spoken ask about it is
-     already answered without a settings entry to adjust. */
+     row is where anyone changes. Luke is told whether he can speak at all by
+     the voice facts built from `LukeGuideInput.voiceAvailable`, so a spoken
+     ask about it is already answered without a settings entry to adjust. */
   voiceAvailable: () => undefined,
 };
 
@@ -431,7 +432,8 @@ const MICROPHONE_DETAIL: Record<MicrophoneStatus, string> = {
   denied:
     "Denied. It can only be granted back in System Settings, under Privacy & Security, Microphone.",
   restricted: "Restricted by a system policy, which only the system's manager can change.",
-  "not-determined": "Not asked yet. The Settings tab's Permissions section can ask.",
+  "not-determined":
+    "Not asked yet. The Settings tab's Permissions section can ask once an OpenAI key is connected.",
   unknown: "Unknown. The Settings tab's Permissions section shows its state.",
 };
 
@@ -452,7 +454,7 @@ function providersFact(settings: AppSettings): AppGuideFact {
   return {
     label: "Cloud providers",
     detail:
-      `${roster.join(", ")}. Connecting one takes its API key, typed by hand into ` +
+      `${roster.join(", ")}. Connecting one takes the key its row names, typed by hand into ` +
       `${CONNECTIONS_PAGE}, under Cloud Agent API keys — never spoken, and never repeated back. ` +
       "Local providers such as Claude Code need no key and are observed on their own.",
   };
@@ -498,10 +500,11 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "What Luke is",
       detail:
-        "A macOS sidecar living beside the notch. The capsule under the housing counts observed " +
+        "A macOS sidecar living beside the notch. The capsule beside the housing counts observed " +
         "sessions; hovering it peeks, pressing it opens the panel, and Escape closes what is open. " +
-        "Resting the pointer on the face itself earns one trick — usually flying off the strip and " +
-        "swooping back — and another only after the pointer leaves and returns.",
+        "Resting the pointer on the face itself earns one trick — most often flying off the strip " +
+        "and swooping back — and another only after the pointer leaves and returns; asking the " +
+        "system for reduced motion stills the tricks.",
     },
     {
       label: "The panel",
@@ -510,22 +513,26 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "asked while the panel is closed, the panel opens on that tab. " +
         "Sessions lists every observed session with its state, narrowable to all, local, " +
         "cloud, or one provider, and orderable by urgency (what needs the developer first) or " +
-        "recency (what moved last first); a row can be opened, messaged, or controlled where its " +
-        "provider allows. Where a provider nests chats in a workspace — Conductor today — each " +
+        "recency (what moved last first) — by its options button, or by the same ask that shows " +
+        "the tab; a row can be opened, messaged, or controlled where its " +
+        "provider allows, and Luke's own composer at the foot of the list takes a typed ask. " +
+        "Where a provider nests chats in a workspace — Conductor today — each " +
         "chat is its own row: a workspace holding several draws them inside one tray named by " +
         "the workspace at its top, one holding a single chat stays one row titled by the " +
         "workspace, and every chat can be seen, opened, and messaged individually. Settings " +
         "holds a front page whose rows open its Voice, Appearance, Keyboard shortcuts, and " +
         "Connections pages — each led back out by its back button or Escape — and keeps the " +
-        "microphone permission, the Feedback section, and Quit on the front page itself. A " +
+        "microphone permission, the Feedback section, and Quit on the front page itself; the " +
+        "menu bar item's Settings… opens the same tab, and Command-comma switches to it while " +
+        "the panel has the keyboard. A " +
         "change Luke makes himself is shown as it is made: the panel comes forward on the tab, " +
-        "and the page, the change belongs to, and his face leaves the strip under the housing, " +
+        "and the page, the change belongs to, and his face leaves the strip beside the housing, " +
         "dives to the control that moved, and floats back.",
     },
     {
       label: "Feedback and prompts",
       detail:
-        "The Feedback section at the foot of the Settings tab — or the menu bar item's Send " +
+        "The Feedback section near the foot of the Settings tab, just above Quit — or the menu bar item's Send " +
         "Feedback… and Submit a Prompt… — opens a composer under the notch. Send feedback is for " +
         "bugs and ideas; Submit a prompt sends a prompt to a coding agent, and one the founders " +
         "like ships in the next release. Either goes by email to the founders with an optional " +
@@ -559,7 +566,9 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "Where a session's provider documents it — Conductor today — the same kind of ask can " +
         "start another agent in the workspace an observed session runs in, as one of the agent " +
         "kinds that session's roster entry lists, optionally named and optionally with an " +
-        "opening task. A session whose entry lists no new agents takes no such ask.",
+        "opening task. A model named in the ask — with an effort where its agent takes one — " +
+        "rides that agent alone; unnamed, the Conductor row's choice rides along only when it " +
+        "names the same agent kind. A session whose entry lists no new agents takes no such ask.",
     },
     {
       label: "Archiving",
@@ -597,7 +606,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
             detail:
               "While the Mac is muted or its volume is at zero, Luke's replies are captioned on " +
               "screen even with Captions off, and a hint under the words asks for volume. The " +
-              "hint's Got it button rests it for that stretch of silence; the captions stay.",
+              "hint's Got it button rests it for that stretch of silence and any that begins " +
+              "within fifteen minutes; the captions stay.",
           },
         ]
       : [
