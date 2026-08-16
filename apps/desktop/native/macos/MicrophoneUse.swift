@@ -23,7 +23,16 @@ import Foundation
 private struct CallApp {
     let id: String
     let name: String
+    /// The app's own icon as a small PNG, base64-encoded, or nothing when macOS
+    /// has none to give. Drawn and never matched on — the identifier is what
+    /// anything is decided by.
+    let icon: String?
 }
+
+/// Drawn at 16pt, so 32 pixels covers a retina panel. Small on purpose: it
+/// rides in a line of JSON on every change, and an app's full 512px icon would
+/// be tens of kilobytes of it.
+private let ICON_PIXELS = 32.0
 
 /// Faster than the Focus watcher's backstop was, because this one is load
 /// bearing: a prompt the developer has seconds to answer cannot wait five of
@@ -142,6 +151,31 @@ private func bundleIdentifier(_ process: AudioObjectID) -> String? {
     return identifier.isEmpty ? nil : identifier
 }
 
+/// The app's icon, small enough to send. `NSRunningApplication` carries it
+/// already — this only shrinks it and encodes it, and answers nothing when the
+/// app has no icon rather than substituting one: what to draw instead is the
+/// panel's decision, not this helper's.
+private func iconPNG(_ running: NSRunningApplication) -> String? {
+    guard let icon = running.icon else { return nil }
+    let size = NSSize(width: ICON_PIXELS, height: ICON_PIXELS)
+    let scaled = NSImage(size: size)
+    scaled.lockFocus()
+    icon.draw(
+        in: NSRect(origin: .zero, size: size),
+        from: .zero,
+        operation: .copy,
+        fraction: 1.0
+    )
+    scaled.unlockFocus()
+    guard let tiff = scaled.tiffRepresentation,
+          let bitmap = NSBitmapImageRep(data: tiff),
+          let png = bitmap.representation(using: .png, properties: [:])
+    else {
+        return nil
+    }
+    return png.base64EncodedString()
+}
+
 /// Names one process, or refuses to.
 ///
 /// A process with no bundle identifier is dropped rather than reported under
@@ -154,13 +188,15 @@ private func callApp(for process: AudioObjectID, ignoring prefixes: [String]) ->
 
     var identifier = bundleIdentifier(process)
     var displayName: String?
+    var icon: String?
     // The running application is asked second and trusted first: it carries the
-    // name a developer would recognise, where the audio process carries only
-    // the identifier.
+    // name a developer would recognise, and the icon, where the audio process
+    // carries only the identifier.
     if let pid = processIdentifier(process),
        let running = NSRunningApplication(processIdentifier: pid) {
         identifier = running.bundleIdentifier ?? identifier
         displayName = running.localizedName
+        icon = iconPNG(running)
     }
 
     guard let identifier, !identifier.isEmpty else { return nil }
@@ -169,7 +205,7 @@ private func callApp(for process: AudioObjectID, ignoring prefixes: [String]) ->
     if prefixes.contains(where: { identifier == $0 || identifier.hasPrefix("\($0).") }) {
         return nil
     }
-    return CallApp(id: identifier, name: displayName ?? identifier)
+    return CallApp(id: identifier, name: displayName ?? identifier, icon: icon)
 }
 
 @main
@@ -237,7 +273,11 @@ private struct MicrophoneUseCommand {
             apps.sort { $0.id < $1.id }
             payload = [
                 "running": running ?? !apps.isEmpty,
-                "apps": apps.map { ["id": $0.id, "name": $0.name] },
+                "apps": apps.map { app -> [String: Any] in
+                    var entry: [String: Any] = ["id": app.id, "name": app.name]
+                    if let icon = app.icon { entry["icon"] = icon }
+                    return entry
+                },
             ]
         }
 

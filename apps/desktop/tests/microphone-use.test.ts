@@ -6,6 +6,7 @@ import {
   MicrophoneUseWatcher,
   microphoneReadingFromLine,
 } from "../src/microphone-use";
+import { MAXIMUM_CALL_APP_ICON_LENGTH } from "../src/shared/contracts";
 
 interface Harness {
   watcher: MicrophoneUseWatcher;
@@ -93,6 +94,34 @@ test("an app with no usable identifier is dropped, not drawn nameless", () => {
   // The identifier is what an ignore list is keyed by, so an entry without one
   // could never be acted on. A missing name falls back to the identifier.
   assert.deepEqual(reading, { running: true, apps: [{ id: "a.b", name: "a.b" }] });
+});
+
+test("an app's icon rides with it, and an implausible one does not", () => {
+  const withIcon = microphoneReadingFromLine(
+    '{"running":true,"apps":[{"id":"us.zoom.xos","name":"zoom.us","icon":"iVBORw0KGgo="}]}',
+  );
+  assert.equal(withIcon?.apps[0]?.icon, "iVBORw0KGgo=");
+
+  // Dropped rather than carried: the row falls back to a glyph, which is a
+  // better answer than a settings file with something else's megabyte in it.
+  const huge = "A".repeat(MAXIMUM_CALL_APP_ICON_LENGTH + 1);
+  const oversized = microphoneReadingFromLine(
+    JSON.stringify({ running: true, apps: [{ id: "us.zoom.xos", name: "zoom.us", icon: huge }] }),
+  );
+  assert.equal(oversized?.apps[0]?.icon, undefined);
+  assert.equal(oversized?.apps[0]?.id, "us.zoom.xos");
+});
+
+test("an icon arriving late is a change worth reporting", () => {
+  const context = harness();
+  context.watcher.start();
+  context.emit('{"running":true,"apps":[{"id":"us.zoom.xos","name":"zoom.us"}]}\n');
+  context.emit('{"running":true,"apps":[{"id":"us.zoom.xos","name":"zoom.us","icon":"iVBOR"}]}\n');
+
+  // The same app on the same device, but the panel now has something to draw
+  // for it — so the row has to be told.
+  assert.equal(context.readings.length, 2);
+  assert.equal(context.readings[1]?.apps[0]?.icon, "iVBOR");
 });
 
 test("the unavailable line is not an empty list", () => {

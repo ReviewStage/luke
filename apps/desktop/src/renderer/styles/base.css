@@ -2198,6 +2198,46 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   white-space: nowrap;
 }
 
+/* An app's own icon, at the size the rest of the panel draws a mark. Beside the
+   name rather than above it: the row is one line, and the icon is what is read
+   first. */
+.call-app-copy {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.call-app-mark {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.call-app-mark img {
+  width: 100%;
+  height: 100%;
+  /* The icon is a square PNG of an app's own artwork, so it is drawn whole
+     rather than cropped to fit. */
+  object-fit: contain;
+}
+
+/* The prompt's title is a line of prose with a mark at its head, so the two
+   sit on one baseline rather than the icon riding the first line of a wrap. */
+.call-prompt-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.call-prompt-title .call-app-mark {
+  width: 18px;
+  height: 18px;
+}
+
 .icon-button:disabled {
   opacity: 0.4;
 }

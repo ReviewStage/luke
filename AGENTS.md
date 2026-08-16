@@ -100,17 +100,18 @@ Trust constraints:
 - Noticing that the developer is on a call is bounded the same way, and its
   three answers are the bound. A native helper asks CoreAudio two documented
   questions — which processes hold the input device, and whether each is
-  running it — and says so on every change. The setting is what starts it: with
-  the hold off the helper does not run and nothing is read, which is the
-  difference between a preference and a promise. It never opens a stream, so it can
-  learn which apps are listening and nothing whatever about what they hear:
-  who is on the other end and a syllable of what was said are both outside
-  what the API can answer. Naming them is what the ignore list is keyed by,
-  and it is the reason this went past a boolean — a hold with no way to say
-  "not that app" is a hold that gets switched off. That list stays on the
-  machine: it reaches the settings file and the panel, and it is deliberately
-  kept out of the guide, because the guide leaves the machine and what a
-  developer runs is not Luke's to carry. Luke opens the same device himself,
+  running it — and says so on every change, adding the name and icon macOS
+  already publishes for each so a row can be recognised. The setting is what
+  starts it: with the hold off the helper does not run and nothing is read,
+  which is the difference between a preference and a promise. It never opens a
+  stream, so it can learn which apps are listening and nothing whatever about
+  what they hear: who is on the other end and a syllable of what was said are
+  both outside what the API can answer. Naming them is what the ignore list is
+  keyed by, and it is the reason this went past a boolean — a hold with no way
+  to say "not that app" is a hold that gets switched off. That list stays on the
+  machine: the identifiers, names, and icons reach the settings file and the
+  panel, and they are deliberately kept out of the guide, because the guide
+  leaves the machine and what a developer runs is not Luke's to carry. Luke opens the same device himself,
   so his own processes are dropped by bundle identifier before anyone is
   named and his own exchanges are subtracted after; a device running with
   nobody nameable on it must answer `unavailable` rather than `on`, because an

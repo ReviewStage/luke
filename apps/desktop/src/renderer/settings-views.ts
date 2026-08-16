@@ -11,6 +11,7 @@ export const SETTINGS_VIEW = {
   ROOT: "root",
   VOICE: "voice",
   APPEARANCE: "appearance",
+  CALLS: "calls",
   SHORTCUTS: "shortcuts",
   CONNECTIONS: "connections",
 } as const;
@@ -20,6 +21,7 @@ export type SettingsView = (typeof SETTINGS_VIEW)[keyof typeof SETTINGS_VIEW];
 /** The pages the front page opens, in the order its rows offer them. */
 export const SETTINGS_SUBVIEW_LIST = [
   SETTINGS_VIEW.VOICE,
+  SETTINGS_VIEW.CALLS,
   SETTINGS_VIEW.APPEARANCE,
   SETTINGS_VIEW.SHORTCUTS,
   SETTINGS_VIEW.CONNECTIONS,
@@ -74,7 +76,7 @@ export const SETTING_PAGE: Record<AppSettingId, SettingsSubview> = {
   [APP_SETTING_ID.VOICE_CAPTIONS]: SETTINGS_VIEW.VOICE,
   [APP_SETTING_ID.DUCK_OTHER_MEDIA]: SETTINGS_VIEW.VOICE,
   [APP_SETTING_ID.SESSION_NOTIFICATIONS]: SETTINGS_VIEW.VOICE,
-  [APP_SETTING_ID.HOLD_NOTICES_ON_CALL]: SETTINGS_VIEW.VOICE,
+  [APP_SETTING_ID.HOLD_NOTICES_ON_CALL]: SETTINGS_VIEW.CALLS,
   [APP_SETTING_ID.SHOW_IN_MENU_BAR]: SETTINGS_VIEW.APPEARANCE,
   [APP_SETTING_ID.SHOW_IN_DOCK]: SETTINGS_VIEW.APPEARANCE,
   [APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS]: SETTINGS_VIEW.APPEARANCE,
@@ -91,6 +93,7 @@ export const SETTING_PAGE: Record<AppSettingId, SettingsSubview> = {
 /** How each page names itself, which is how the guide's by-hand paths word it. */
 export const SETTINGS_PAGE_LABEL: Record<SettingsSubview, string> = {
   [SETTINGS_VIEW.VOICE]: "Voice",
+  [SETTINGS_VIEW.CALLS]: "Calls",
   [SETTINGS_VIEW.APPEARANCE]: "Appearance",
   [SETTINGS_VIEW.SHORTCUTS]: "Keyboard shortcuts",
   [SETTINGS_VIEW.CONNECTIONS]: "Connections",
@@ -98,6 +101,7 @@ export const SETTINGS_PAGE_LABEL: Record<SettingsSubview, string> = {
 
 const NAV_ROW_ID: Record<SettingsSubview, string> = {
   [SETTINGS_VIEW.VOICE]: "settings-nav-voice",
+  [SETTINGS_VIEW.CALLS]: "settings-nav-calls",
   [SETTINGS_VIEW.APPEARANCE]: "settings-nav-appearance",
   [SETTINGS_VIEW.SHORTCUTS]: "settings-nav-shortcuts",
   [SETTINGS_VIEW.CONNECTIONS]: "settings-nav-connections",

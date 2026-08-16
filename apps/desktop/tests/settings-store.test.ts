@@ -11,7 +11,11 @@ import {
   REALTIME_VOICE_SPEED,
 } from "@sidecar/core";
 import { type SecretCipher, SettingsStore } from "../src/settings-store";
-import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "../src/shared/contracts";
+import {
+  CREDENTIAL_SOURCE,
+  MAXIMUM_CALL_APP_ICON_LENGTH,
+  SECRET_STORAGE,
+} from "../src/shared/contracts";
 import {
   CREDENTIAL_PROVIDER_ID,
   type CredentialProvider,
@@ -379,6 +383,32 @@ test("an app is ignored by identifier, and taken off the list by the same one", 
   // keychain.
   assert.equal(cipher.calls.isAvailable, 0);
   assert.equal(cipher.calls.encrypt, 0);
+});
+
+test("an exemption stores the app's icon, so the row can draw it later", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  // An exempted app is usually not on the microphone by the time anyone goes
+  // looking for it in Settings, so the icon has to survive with the entry.
+  await store.ignoreCallApp({ id: "us.zoom.xos", name: "zoom.us", icon: "iVBORw0KGgo=" });
+  assert.deepEqual((await storeIn(directory).snapshot()).ignoredCallApps, [
+    { id: "us.zoom.xos", name: "zoom.us", icon: "iVBORw0KGgo=" },
+  ]);
+});
+
+test("an implausible icon is dropped rather than written fifty times over", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  await store.ignoreCallApp({
+    id: "us.zoom.xos",
+    name: "zoom.us",
+    icon: "A".repeat(MAXIMUM_CALL_APP_ICON_LENGTH + 1),
+  });
+
+  const stored = (await storeIn(directory).snapshot()).ignoredCallApps;
+  assert.deepEqual(stored, [{ id: "us.zoom.xos", name: "zoom.us" }]);
 });
 
 test("an ignore entry that could never match an app is refused rather than stored", async (t) => {

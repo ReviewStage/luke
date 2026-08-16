@@ -20,6 +20,7 @@ import {
   type CallApp,
   CREDENTIAL_SOURCE,
   type CredentialSource,
+  MAXIMUM_CALL_APP_ICON_LENGTH,
   SECRET_STORAGE,
   type SecretStorage,
   type SettingsUpdateResult,
@@ -285,7 +286,17 @@ function storedIgnoredCallApps(value: unknown): readonly CallApp[] {
     if (!id || id.length > MAXIMUM_IGNORED_APP_ID_LENGTH) continue;
     if (apps.some((app) => app.id === id)) continue;
     const name = typeof candidate.name === "string" ? candidate.name.trim() : "";
-    apps.push({ id, name: name.slice(0, MAXIMUM_IGNORED_APP_NAME_LENGTH) || id });
+    const icon =
+      typeof candidate.icon === "string" &&
+      candidate.icon.length > 0 &&
+      candidate.icon.length <= MAXIMUM_CALL_APP_ICON_LENGTH
+        ? candidate.icon
+        : undefined;
+    apps.push({
+      id,
+      name: name.slice(0, MAXIMUM_IGNORED_APP_NAME_LENGTH) || id,
+      ...(icon ? { icon } : {}),
+    });
     if (apps.length >= MAXIMUM_IGNORED_CALL_APPS) break;
   }
   return apps;
@@ -694,6 +705,10 @@ export class SettingsStore {
       return { settings: await this.snapshot(), reason: "That app cannot be ignored." };
     }
     const name = app.name.trim().slice(0, MAXIMUM_IGNORED_APP_NAME_LENGTH) || id;
+    // The icon is stored with the exemption because that is the only way the
+    // row can draw it later: an exempted app is usually not on the microphone
+    // by the time anyone goes looking for it in Settings.
+    const icon = app.icon && app.icon.length <= MAXIMUM_CALL_APP_ICON_LENGTH ? app.icon : undefined;
     // A full list is a refusal rather than a silent no-op, so it goes round the
     // write path rather than through it: nothing is written, and the reason is
     // the row's to draw.
@@ -706,7 +721,10 @@ export class SettingsStore {
     return this.#setField((persisted) => {
       if (persisted.ignoredCallApps.some((ignored) => ignored.id === id)) return;
       if (persisted.ignoredCallApps.length >= MAXIMUM_IGNORED_CALL_APPS) return;
-      return { ...persisted, ignoredCallApps: [...persisted.ignoredCallApps, { id, name }] };
+      return {
+        ...persisted,
+        ignoredCallApps: [...persisted.ignoredCallApps, { id, name, ...(icon ? { icon } : {}) }],
+      };
     });
   }
 

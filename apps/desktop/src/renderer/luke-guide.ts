@@ -96,6 +96,7 @@ const SETTINGS_TAB = "the panel's Settings tab";
 /* The tab's front page opens pages, and each setting is changed by hand on
    one of them — so every by-hand path names its page, worded once each. */
 const VOICE_PAGE = `${SETTINGS_TAB}, on its Voice page`;
+const CALLS_PAGE = `${SETTINGS_TAB}, on its Calls page`;
 const APPEARANCE_PAGE = `${SETTINGS_TAB}, on its Appearance page`;
 const SHORTCUTS_PAGE = `${SETTINGS_TAB}, on its Keyboard shortcuts page`;
 const CONNECTIONS_PAGE = `${SETTINGS_TAB}, on its Connections page`;
@@ -226,7 +227,7 @@ const SETTING_GUIDE: Record<
     value: appToggleText(settings.holdNoticesOnCall),
     defaultValue: appToggleText(APP_SETTING_DEFAULTS.holdNoticesOnCall),
     adjustable: true,
-    manual: VOICE_PAGE,
+    manual: CALLS_PAGE,
   }),
   showInMenuBar: (settings) => ({
     id: APP_SETTING_ID.SHOW_IN_MENU_BAR,
@@ -426,7 +427,7 @@ export interface LukeGuideInput {
  * Which apps are on that list is deliberately not said — see `ignoredCallApps`.
  */
 const IGNORED_APPS_NOTE =
-  " When an app first takes the microphone — including whatever is already on it the moment the switch goes on — the panel stands down for a few seconds to name it, with a Not a call button that exempts it from counting. The Voice page of the panel's Settings tab lists whatever is on the microphone now with the same button, under the switch, and the exemptions already made with a way to remove them — so a prompt that was missed is still answerable there. Luke cannot say which apps any of those are, or change the list.";
+  " When an app first takes the microphone — including whatever is already on it the moment the switch goes on — the panel stands down for a few seconds to name it, with a Not a call button that exempts it from counting. The Calls page of the panel's Settings tab lists whatever is on the microphone now with the same button, under the switch, and the exemptions already made with a way to remove them — so a prompt that was missed is still answerable there. Luke cannot say which apps any of those are, or change the list.";
 
 function callFact(status: CallStatus, holding: boolean): AppGuideFact {
   if (status === CALL_STATUS.UNAVAILABLE) {

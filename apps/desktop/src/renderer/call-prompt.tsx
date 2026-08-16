@@ -1,4 +1,5 @@
 import type { CallApp } from "../shared/contracts";
+import { CallAppMark } from "./call-app-mark";
 import { CALL_PROMPT_MS } from "./panel-state";
 
 /**
@@ -71,10 +72,16 @@ export function CallPrompt({
         onBlurCapture={() => onHoverChange(false)}
       >
         <p className="call-prompt-title">
-          {/* The name, then what is being done about it. Named rather than
-              described — "an app" would be a thing the developer has to go and
-              identify, and the identifying is what this shape exists to save. */}
-          <strong>{app.name}</strong> is using your microphone
+          {/* The app's own icon beside its name, the same pair the Settings
+              rows draw: it is what makes the app recognisable before the name
+              has been read, which matters most in the shape with a clock on
+              it. Named rather than described — "an app" would be a thing the
+              developer has to go and identify, and the identifying is what
+              this shape exists to save. */}
+          <CallAppMark app={app} />
+          <span>
+            <strong>{app.name}</strong> is using your microphone
+          </span>
         </p>
         <p className="call-prompt-detail">
           Luke will hold his notices until it stops. They are read out afterwards.

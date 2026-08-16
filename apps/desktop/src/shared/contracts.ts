@@ -103,7 +103,20 @@ export type CallStatus = (typeof CALL_STATUS)[keyof typeof CALL_STATUS];
 export interface CallApp {
   id: string;
   name: string;
+  /**
+   * The app's own icon as a base64 PNG, absent where macOS had none to give.
+   * Drawn and never matched on, like the name — and bounded, because it rides
+   * in every reading and is written to the settings file with an exemption.
+   */
+  icon?: string;
 }
+
+/**
+ * How much icon is worth carrying. A 32-pixel PNG is a couple of kilobytes;
+ * anything an order of magnitude past that is not an icon this build asked for,
+ * and it would be written to the settings file fifty times over.
+ */
+export const MAXIMUM_CALL_APP_ICON_LENGTH = 24_000;
 
 /** Renderer-safe settings. Credentials are never sent to a renderer. */
 export interface AppSettings {

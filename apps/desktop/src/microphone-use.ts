@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { app } from "electron";
-import type { CallApp } from "./shared/contracts";
+import { type CallApp, MAXIMUM_CALL_APP_ICON_LENGTH } from "./shared/contracts";
 
 /**
  * The bundle identifiers Luke himself answers to, which the helper drops before
@@ -97,7 +97,16 @@ export function microphoneReadingFromLine(line: string): MicrophoneReading | und
     const id = typeof candidate.id === "string" ? candidate.id.trim() : "";
     const name = typeof candidate.name === "string" ? candidate.name.trim() : "";
     if (!id) continue;
-    apps.push({ id, name: name || id });
+    // An icon too large to be one is dropped rather than carried: the row falls
+    // back to a glyph, which is a better answer than a settings file with
+    // something else's megabyte in it.
+    const icon =
+      typeof candidate.icon === "string" &&
+      candidate.icon.length > 0 &&
+      candidate.icon.length <= MAXIMUM_CALL_APP_ICON_LENGTH
+        ? candidate.icon
+        : undefined;
+    apps.push({ id, name: name || id, ...(icon ? { icon } : {}) });
   }
   return { running: record.running, apps };
 }
@@ -209,5 +218,7 @@ function sameReading(
   if (first === undefined || second === undefined) return first === second;
   if (first.running !== second.running) return false;
   if (first.apps.length !== second.apps.length) return false;
-  return first.apps.every((app, index) => app.id === second.apps[index]?.id);
+  return first.apps.every(
+    (app, index) => app.id === second.apps[index]?.id && app.icon === second.apps[index]?.icon,
+  );
 }
