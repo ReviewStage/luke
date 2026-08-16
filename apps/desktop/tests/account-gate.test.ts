@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { AccountClientError } from "../src/account-client";
-import { ACCOUNT_FAILURE_ACTION, accountFailureAction, accountGateOpen } from "../src/account-gate";
+import {
+  ACCOUNT_FAILURE_ACTION,
+  accessTokenNeedsRefresh,
+  accountFailureAction,
+  accountGateOpen,
+} from "../src/account-gate";
 
 test("invalid_grant is the only refresh result that signs an account out", () => {
   assert.equal(
@@ -20,6 +25,22 @@ test("invalid_grant is the only refresh result that signs an account out", () =>
     accountFailureAction(new DOMException("timed out", "TimeoutError")),
     ACCOUNT_FAILURE_ACTION.KEEP_ACCOUNT,
   );
+});
+
+test("a rejected or expired access token refreshes without signing out", () => {
+  assert.equal(
+    accessTokenNeedsRefresh(new AccountClientError("expired", { oauthError: "invalid_scope" })),
+    true,
+  );
+  assert.equal(
+    accessTokenNeedsRefresh(new AccountClientError("unauthorized", { status: 401 })),
+    true,
+  );
+  assert.equal(
+    accessTokenNeedsRefresh(new AccountClientError("service down", { status: 503 })),
+    false,
+  );
+  assert.equal(accessTokenNeedsRefresh(new TypeError("network failed")), false);
 });
 
 test("capture and fixture runs bypass the account wall", () => {

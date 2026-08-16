@@ -16,6 +16,14 @@ export function accountFailureAction(error: unknown): AccountFailureAction {
     : ACCOUNT_FAILURE_ACTION.KEEP_ACCOUNT;
 }
 
+/** Whether the pinned auth provider has definitively rejected an access token. */
+export function accessTokenNeedsRefresh(error: unknown): boolean {
+  return (
+    error instanceof AccountClientError &&
+    (error.status === 401 || error.oauthError === "invalid_scope")
+  );
+}
+
 /** Fixture and capture modes remain deterministic and never need an account. */
 export function accountGateOpen(
   runMode: Pick<RunMode, "requiresAccount">,

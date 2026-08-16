@@ -62,8 +62,13 @@ import {
   systemPreferences,
   Tray,
 } from "electron";
-import { AccountClient, AccountClientError } from "./account-client";
-import { ACCOUNT_FAILURE_ACTION, accountFailureAction, accountGateOpen } from "./account-gate";
+import { AccountClient, type AccountTokens } from "./account-client";
+import {
+  ACCOUNT_FAILURE_ACTION,
+  accessTokenNeedsRefresh,
+  accountFailureAction,
+  accountGateOpen,
+} from "./account-gate";
 import { startAccountLoopback } from "./account-loopback";
 import { CLAUDE_CODE_PROVIDER, ClaudeCodeSessionAdapter } from "./claude-code-adapter";
 import {
@@ -457,19 +462,27 @@ async function refreshStoredAccount(): Promise<void> {
     }
     return;
   } catch (error) {
-    if (!(error instanceof AccountClientError && error.status === 401)) return;
+    if (!accessTokenNeedsRefresh(error)) return;
   }
 
+  let tokens: AccountTokens;
   try {
-    const tokens = await accountClient.refresh(stored.refreshToken);
-    const identity = await accountClient.userInfo(tokens.accessToken);
-    account = await settingsStore.setAccount({ ...tokens, ...identity });
-    broadcastAccount();
+    tokens = await accountClient.refresh(stored.refreshToken);
   } catch (error) {
+    // Only the token endpoint can definitively revoke the account. User-info
+    // failures below are identity refresh failures and never clear the stored
+    // refresh token, regardless of what shape their response happens to take.
     if (accountFailureAction(error) === ACCOUNT_FAILURE_ACTION.SIGN_OUT) {
       await signOutAccount();
     }
+    return;
   }
+
+  try {
+    const identity = await accountClient.userInfo(tokens.accessToken);
+    account = await settingsStore.setAccount({ ...tokens, ...identity });
+    broadcastAccount();
+  } catch {}
 }
 
 function beginAccountSignIn(provider: AccountProvider): Promise<AccountSnapshot> {
