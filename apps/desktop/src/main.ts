@@ -185,6 +185,8 @@ const settingsStore = new SettingsStore({
 const accountClient = new AccountClient({ baseUrl: ACCOUNT_BASE_URL, clientId: ACCOUNT_CLIENT_ID });
 let account: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
 let signInRunning: Promise<AccountSnapshot> | undefined;
+let accountGeneration = 0;
+let observationGeneration = 0;
 const conductorAdapter = new ConductorSessionAdapter({
   readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.CONDUCTOR),
 });
@@ -441,6 +443,8 @@ async function stopAccountCapabilities(): Promise<void> {
 }
 
 async function signOutAccount(): Promise<AccountSnapshot> {
+  accountGeneration += 1;
+  observationGeneration += 1;
   account = await settingsStore.clearAccount();
   await stopAccountCapabilities();
   broadcastAccount();
@@ -450,6 +454,7 @@ async function signOutAccount(): Promise<AccountSnapshot> {
 async function refreshStoredAccount(): Promise<void> {
   const stored = await settingsStore.readAccount();
   if (!stored || !runMode.requiresAccount) return;
+  const generation = accountGeneration;
   try {
     const identity = await accountClient.userInfo(stored.accessToken);
     if (
@@ -457,6 +462,7 @@ async function refreshStoredAccount(): Promise<void> {
       identity.name !== stored.name ||
       identity.provider !== stored.provider
     ) {
+      if (generation !== accountGeneration) return;
       account = await settingsStore.setAccount({ ...stored, ...identity });
       broadcastAccount();
     }
@@ -473,6 +479,7 @@ async function refreshStoredAccount(): Promise<void> {
     // failures below are identity refresh failures and never clear the stored
     // refresh token, regardless of what shape their response happens to take.
     if (accountFailureAction(error) === ACCOUNT_FAILURE_ACTION.SIGN_OUT) {
+      if (generation !== accountGeneration) return;
       await signOutAccount();
     }
     return;
@@ -480,6 +487,7 @@ async function refreshStoredAccount(): Promise<void> {
 
   try {
     const identity = await accountClient.userInfo(tokens.accessToken);
+    if (generation !== accountGeneration) return;
     account = await settingsStore.setAccount({ ...tokens, ...identity });
     broadcastAccount();
   } catch {}
@@ -489,6 +497,7 @@ function beginAccountSignIn(provider: AccountProvider): Promise<AccountSnapshot>
   if (account.status === ACCOUNT_STATUS.SIGNED_IN) return Promise.resolve(account);
   if (signInRunning) return signInRunning;
   account = { status: ACCOUNT_STATUS.SIGNING_IN };
+  const generation = ++accountGeneration;
   broadcastAccount();
   signInRunning = (async () => {
     let loopback: Awaited<ReturnType<typeof startAccountLoopback>> | undefined;
@@ -507,13 +516,16 @@ function beginAccountSignIn(provider: AccountProvider): Promise<AccountSnapshot>
         redirectUri: loopback.redirectUri,
       });
       const identity = await accountClient.userInfo(tokens.accessToken);
+      if (generation !== accountGeneration) throw new Error("Sign-in was cancelled");
       account = await settingsStore.setAccount({ ...tokens, ...identity });
       await startAccountCapabilities();
       broadcastAccount();
       return account;
     } catch (error) {
-      account = { status: ACCOUNT_STATUS.SIGNED_OUT };
-      broadcastAccount();
+      if (generation === accountGeneration) {
+        account = { status: ACCOUNT_STATUS.SIGNED_OUT };
+        broadcastAccount();
+      }
       throw error;
     } finally {
       await loopback?.close();
@@ -751,11 +763,14 @@ function registerIpc(): void {
       // Bootstrapped through the same relevance gate every broadcast passes:
       // a panel that opens late must not learn of rows the roster has already
       // let go and then hold them past the next broadcast's dedupe.
-      sessions: runMode.observesProviders
-        ? rosterRelevantSessions(sessionRegistry.snapshot().sessions, Date.now())
-        : [],
-      workspaceProjects: observedWorkspaceProjects(),
-      ...(trackedIssues && runMode.observesProviders ? { issues: trackedIssues } : {}),
+      sessions:
+        runMode.observesProviders && accountCapabilitiesActive()
+          ? rosterRelevantSessions(sessionRegistry.snapshot().sessions, Date.now())
+          : [],
+      workspaceProjects: accountCapabilitiesActive() ? observedWorkspaceProjects() : [],
+      ...(trackedIssues && runMode.observesProviders && accountCapabilitiesActive()
+        ? { issues: trackedIssues }
+        : {}),
       settings: await settingsStore.snapshot(),
     };
   });
@@ -1776,6 +1791,7 @@ async function applyLocalSessionHooks(): Promise<void> {
 
 async function refreshProviderSessions(): Promise<void> {
   if (!runMode.observesProviders || !accountCapabilitiesActive() || sessionRefreshRunning) return;
+  const generation = observationGeneration;
   sessionRefreshRunning = true;
   try {
     // Providers are observed concurrently and reported independently: the
@@ -1795,15 +1811,20 @@ async function refreshProviderSessions(): Promise<void> {
   } finally {
     sessionRefreshRunning = false;
   }
+  if (generation !== observationGeneration || !accountCapabilitiesActive()) {
+    for (const adapter of sessionAdapters) sessionRegistry.replaceProvider(adapter.provider, []);
+    if (accountCapabilitiesActive()) void refreshProviderSessions();
+    return;
+  }
   // The registry only spoke if the sessions themselves changed, and a pass can
   // change the project list while leaving them exactly as they were.
   broadcastWorkspaceProjects();
   // Attention review runs outside the observation guard so a slow model call
   // never delays the next provider snapshot.
-  void reviewSessionAttention();
+  void reviewSessionAttention(generation);
 }
 
-async function reviewSessionAttention(): Promise<void> {
+async function reviewSessionAttention(generation = observationGeneration): Promise<void> {
   if (!attentionReviewer || attentionReviewRunning) return;
   attentionReviewRunning = true;
   try {
@@ -1815,6 +1836,7 @@ async function reviewSessionAttention(): Promise<void> {
     const reviews = await attentionReviewer.review(
       rosterRelevantSessions(sessionRegistry.list(), Date.now()),
     );
+    if (generation !== observationGeneration || !accountCapabilitiesActive()) return;
     for (const review of reviews) {
       sessionRegistry.setAttention(review, review.decision);
     }
@@ -1948,6 +1970,7 @@ async function refreshTrackedIssues(): Promise<void> {
     issueRefreshQueued = true;
     return;
   }
+  const generation = observationGeneration;
   issueRefreshRunning = true;
   try {
     const collected: TrackedIssue[] = [];
@@ -1961,8 +1984,10 @@ async function refreshTrackedIssues(): Promise<void> {
         if (issue) collected.push(issue);
       }
     }
-    trackedIssues = connected ? collected : undefined;
-    panels.broadcast(channels.issuesChanged, trackedIssues);
+    if (generation === observationGeneration && accountCapabilitiesActive()) {
+      trackedIssues = connected ? collected : undefined;
+      panels.broadcast(channels.issuesChanged, trackedIssues);
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`Issue observation failed: ${message}\n`);
