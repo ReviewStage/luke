@@ -50,6 +50,7 @@ import {
   CREDENTIAL_PROVIDERS,
   INTEGRATION_PROVIDER_LIST,
   isCredentialProviderId,
+  VOICE_CREDENTIAL_PROVIDER_ID,
 } from "../shared/credential-providers";
 import { workspaceAgentModelLabel, workspaceAgentModels } from "../shared/workspace-agents";
 
@@ -466,9 +467,24 @@ function integrationsFact(settings: AppSettings): AppGuideFact {
     label: "Integrations",
     detail:
       `${roster.join(", ")}. Connecting Linear lets Luke read the developer's issues and, only ` +
-      `when asked in a turn the developer opened, move or comment on one. Connecting OpenAI is ` +
-      `what lets Luke speak, and review which sessions need a person. Each key is typed by ` +
+      `when asked in a turn the developer opened, move or comment on one. Its key is typed by ` +
       `hand into ${CONNECTIONS_PAGE}, under Integrations — never spoken, and never repeated back.`,
+  };
+}
+
+/**
+ * The one key that is neither an agent's nor an integration's, described where
+ * its row lives: at the top of the Voice page, beside the feature it turns on.
+ */
+function voiceKeyFact(settings: AppSettings): AppGuideFact {
+  const openai = CREDENTIAL_PROVIDERS[VOICE_CREDENTIAL_PROVIDER_ID];
+  return {
+    label: "OpenAI",
+    detail:
+      `${openai.displayName} (${connectionWord(settings.credentialSources[openai.id])}). ` +
+      `Connecting OpenAI is what lets Luke speak, and review which sessions need a person. ` +
+      `Its key is typed by hand into ${VOICE_PAGE}, at its top — never spoken, and never ` +
+      `repeated back.`,
   };
 }
 
@@ -574,10 +590,13 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       : [
           {
             label: "Voice",
-            detail: "Off: no OpenAI key is connected, so no conversation can be opened.",
+            detail:
+              "Off: no OpenAI key is connected, so no conversation can be opened. " +
+              `The key is entered in ${VOICE_PAGE}, at its top.`,
           },
         ]),
     providersFact(input.settings),
+    voiceKeyFact(input.settings),
     integrationsFact(input.settings),
     ...(input.settings.secretStorage === SECRET_STORAGE.UNAVAILABLE
       ? [

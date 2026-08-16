@@ -210,27 +210,41 @@ export const CREDENTIAL_PROVIDER_LIST: readonly CredentialProvider[] =
 
 /* A key is a key, so every service lives in the one provider registry — but
    Settings draws these apart: an integration is a service Luke uses, not an
-   agent whose sessions he observes. The tracker is one he reads and acts on;
-   OpenAI is the one he speaks through. */
-const INTEGRATION_IDS: ReadonlySet<CredentialProviderId> = new Set([
-  CREDENTIAL_PROVIDER_ID.LINEAR,
-  CREDENTIAL_PROVIDER_ID.OPENAI,
-]);
+   agent whose sessions he observes. The tracker is one he reads and acts on. */
+const INTEGRATION_IDS: ReadonlySet<CredentialProviderId> = new Set([CREDENTIAL_PROVIDER_ID.LINEAR]);
 
 /**
  * The one key Luke speaks through, and asks about a session with. Named here so
  * the main process reads it by what it is for rather than by an id spelled out
- * at each of the places that build something from it.
+ * at each of the places that build something from it. Its row lives on the
+ * Voice page rather than under Connections, because the key is what turns
+ * voice on and the page that goes quiet without one is where that is learned.
  */
 export const VOICE_CREDENTIAL_PROVIDER_ID = CREDENTIAL_PROVIDER_ID.OPENAI;
 
+/** The one provider the Voice page holds a key for. */
+export const VOICE_CREDENTIAL_PROVIDER: CredentialProvider =
+  CREDENTIAL_PROVIDERS[VOICE_CREDENTIAL_PROVIDER_ID];
+
 /** The coding-agent providers, in the order the Cloud Agent API keys section lists them. */
 export const CLOUD_AGENT_PROVIDER_LIST: readonly CredentialProvider[] =
-  CREDENTIAL_PROVIDER_LIST.filter((provider) => !INTEGRATION_IDS.has(provider.id));
+  CREDENTIAL_PROVIDER_LIST.filter(
+    (provider) => !INTEGRATION_IDS.has(provider.id) && provider.id !== VOICE_CREDENTIAL_PROVIDER_ID,
+  );
 
 /** The services beyond the agents, in the order the Integrations section lists them. */
 export const INTEGRATION_PROVIDER_LIST: readonly CredentialProvider[] =
   CREDENTIAL_PROVIDER_LIST.filter((provider) => INTEGRATION_IDS.has(provider.id));
+
+/**
+ * Whether this provider's key buys the observation of cloud sessions, which is
+ * what the cloud badge on a mark says. Linear's issues and OpenAI's voice are
+ * services Luke uses rather than sessions he watches, so their marks carry no
+ * badge — a badge there would claim sessions neither service has.
+ */
+export function providerRunsSessionsInCloud(id: CredentialProviderId): boolean {
+  return !INTEGRATION_IDS.has(id) && id !== VOICE_CREDENTIAL_PROVIDER_ID;
+}
 
 /**
  * Guards the provider id an IPC message carries. `hasOwn` rather than `in`: an

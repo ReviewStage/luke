@@ -177,11 +177,14 @@ test("the facts say what is connected, never what connects it", () => {
   assert.match(rendered, /Devin \(connected from the environment\)/);
   // The tracker stands in its own fact, the way it stands in its own section.
   assert.match(rendered, /Linear \(not connected\)/);
-  assert.match(rendered, /OpenAI \(not connected\)/);
   assert.match(rendered, /Integrations/);
-  // Each integration says what connecting it buys, so a spoken ask about the
-  // page cannot leave OpenAI sounding like a second Linear.
+  // The voice key stands in a fact of its own, saying what connecting it buys
+  // and naming the page its row actually lives on — the Voice page, not the
+  // Integrations section it once shared with Linear.
+  assert.match(rendered, /OpenAI \(not connected\)/);
   assert.match(rendered, /Connecting OpenAI is what lets Luke speak/);
+  assert.match(rendered, /Voice page, at its top/);
+  assert.doesNotMatch(rendered, /OpenAI[^"]*under Integrations/);
   // The guide leaves the machine, so no key, prefix, or environment variable
   // value has any business in it.
   assert.doesNotMatch(rendered, /API key:/);
@@ -461,6 +464,9 @@ test("the facts follow the talk key, the microphone, and the storage the system 
 
   const voiceless = buildLukeGuide(guideInput({ voiceAvailable: false }));
   assert.match(JSON.stringify(voiceless.facts), /no OpenAI key is connected/);
+  // The refusal carries the way out: the key's row is at the top of the Voice
+  // page, and a fact that stopped at "off" would leave the ask unanswerable.
+  assert.match(JSON.stringify(voiceless.facts), /Voice page, at its top/);
   // The muted-output behavior belongs to speech, so it is described exactly
   // where speech exists: with a voice it is a fact, without one it would
   // describe captions no reply will ever draw.

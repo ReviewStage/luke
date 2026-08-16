@@ -7,6 +7,8 @@ import {
   CREDENTIAL_PROVIDERS,
   INTEGRATION_PROVIDER_LIST,
   isCredentialProviderId,
+  providerRunsSessionsInCloud,
+  VOICE_CREDENTIAL_PROVIDER,
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "../src/shared/credential-providers";
 
@@ -41,23 +43,36 @@ test("describes every provider it lists", () => {
 });
 
 test("splits the settings sections without losing a provider", () => {
-  // The two sections together are exactly the registry: a provider missing
-  // from both would hold a key no row can enter, and one in both would be
-  // asked for the same key twice.
+  // The sections together are exactly the registry: a provider missing from
+  // all of them would hold a key no row can enter, and one in two would be
+  // asked for the same key twice. The voice key stands apart because its row
+  // is drawn on the Voice page rather than under Connections.
   assert.deepEqual(
-    [...CLOUD_AGENT_PROVIDER_LIST, ...INTEGRATION_PROVIDER_LIST]
+    [...CLOUD_AGENT_PROVIDER_LIST, ...INTEGRATION_PROVIDER_LIST, VOICE_CREDENTIAL_PROVIDER]
       .map((provider) => provider.id)
       .sort(),
     CREDENTIAL_PROVIDER_LIST.map((provider) => provider.id).sort(),
   );
   assert.deepEqual(
     INTEGRATION_PROVIDER_LIST.map((provider) => provider.id),
-    [CREDENTIAL_PROVIDER_ID.LINEAR, CREDENTIAL_PROVIDER_ID.OPENAI],
+    [CREDENTIAL_PROVIDER_ID.LINEAR],
   );
-  // An integration's row carries its own answer to what connecting it buys.
-  for (const provider of INTEGRATION_PROVIDER_LIST) {
+  // A row outside the agents' section carries its own answer to what
+  // connecting it buys.
+  for (const provider of [...INTEGRATION_PROVIDER_LIST, VOICE_CREDENTIAL_PROVIDER]) {
     assert.ok(provider.description, `${provider.id} says what connecting it allows`);
   }
+});
+
+test("the cloud badge belongs to the agents alone", () => {
+  // The badge says a provider's sessions run in a cloud service. Linear's
+  // issues and OpenAI's voice are services Luke uses rather than sessions he
+  // watches, so a badge on their marks would claim sessions neither has.
+  for (const provider of CLOUD_AGENT_PROVIDER_LIST) {
+    assert.equal(providerRunsSessionsInCloud(provider.id), true, provider.id);
+  }
+  assert.equal(providerRunsSessionsInCloud(CREDENTIAL_PROVIDER_ID.LINEAR), false);
+  assert.equal(providerRunsSessionsInCloud(CREDENTIAL_PROVIDER_ID.OPENAI), false);
 });
 
 test("sends the user to the one GitHub token kind the agent-tasks API answers", () => {
@@ -129,10 +144,12 @@ test("holds the key Luke speaks through, apart from the agents he observes", () 
   // nothing a working key would not also be refused by.
   assert.equal(openai.keyFormat, undefined);
 
-  // An integration rather than an agent: Luke speaks through it and asks it
+  // Neither an agent nor an integration: Luke speaks through it and asks it
   // about sessions, and observes nothing of it — there are no OpenAI sessions
-  // for a row to belong to, and no adapter for a saved key to refresh.
-  assert.ok(INTEGRATION_PROVIDER_LIST.includes(openai));
+  // for a row to belong to, and no adapter for a saved key to refresh. Its
+  // row stands at the top of the Voice page, beside the feature it turns on.
+  assert.equal(VOICE_CREDENTIAL_PROVIDER, openai);
+  assert.equal(INTEGRATION_PROVIDER_LIST.includes(openai), false);
   assert.equal(CLOUD_AGENT_PROVIDER_LIST.includes(openai), false);
   // Both things the key buys are said on the row that holds it, because a
   // credential that quietly enables an outbound request should not have to be
