@@ -368,7 +368,7 @@ function startOutputVolumeWatch(): void {
 let tray: Tray | undefined;
 let sessionRefreshTimer: NodeJS.Timeout | undefined;
 let unsubscribeSessions: (() => void) | undefined;
-let sessionRefreshRunning = false;
+let sessionRefreshGeneration: number | undefined;
 let attentionReviewRunning = false;
 /**
  * The projects last announced to the renderer, serialized for comparison.
@@ -1807,9 +1807,15 @@ async function applyLocalSessionHooks(): Promise<void> {
 }
 
 async function refreshProviderSessions(): Promise<void> {
-  if (!runMode.observesProviders || !accountCapabilitiesActive() || sessionRefreshRunning) return;
   const generation = observationGeneration;
-  sessionRefreshRunning = true;
+  if (
+    !runMode.observesProviders ||
+    !accountCapabilitiesActive() ||
+    sessionRefreshGeneration === generation
+  ) {
+    return;
+  }
+  sessionRefreshGeneration = generation;
   try {
     // Providers are observed concurrently and reported independently: the
     // registry commits each provider atomically, so one that is slow or failing
@@ -1826,11 +1832,15 @@ async function refreshProviderSessions(): Promise<void> {
       }),
     );
   } finally {
-    sessionRefreshRunning = false;
+    if (sessionRefreshGeneration === generation) sessionRefreshGeneration = undefined;
   }
   if (generation !== observationGeneration || !accountCapabilitiesActive()) {
-    for (const adapter of sessionAdapters) sessionRegistry.replaceProvider(adapter.provider, []);
-    if (accountCapabilitiesActive()) void refreshProviderSessions();
+    // stopSessionObservation() already invalidated every old provider attempt
+    // through the registry's mutation epochs. Do not clear a newer account's
+    // pass when this orphan finishes; only make sure a current pass exists.
+    if (accountCapabilitiesActive() && sessionRefreshGeneration === undefined) {
+      void refreshProviderSessions();
+    }
     return;
   }
   // The registry only spoke if the sessions themselves changed, and a pass can
