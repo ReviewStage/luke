@@ -215,8 +215,6 @@ function adapterFor(
     readApiKey?: () => Promise<string | undefined>;
     now?: () => number;
     minimumRefreshIntervalMs?: number;
-    maximumObservedWorkspaces?: number;
-    maximumObservedSessions?: number;
   } = {},
 ): ConductorSessionAdapter {
   const apiKey = "apiKey" in overrides ? overrides.apiKey : TEST_API_KEY;
@@ -226,12 +224,6 @@ function adapterFor(
     fetch,
     now: overrides.now ?? (() => TEST_TIME),
     minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,
-    ...(overrides.maximumObservedWorkspaces === undefined
-      ? {}
-      : { maximumObservedWorkspaces: overrides.maximumObservedWorkspaces }),
-    ...(overrides.maximumObservedSessions === undefined
-      ? {}
-      : { maximumObservedSessions: overrides.maximumObservedSessions }),
   });
 }
 
@@ -835,10 +827,9 @@ test("reports an archived session as complete without requesting its status", as
   );
 });
 
-test("spends a tight budget on an open chat before a long-closed one", async () => {
-  // A closed chat is never hidden for its age, but it must not spend a budget
-  // slot a live session needed just because its workspace is busy: open chats
-  // take the budget first, wherever they live.
+test("keeps a long-closed chat beside an open one", async () => {
+  // A closed chat is never hidden for its age, and it costs the open chat in
+  // the quieter workspace nothing: both are rows.
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
     projects: [LUKE_PROJECT],
@@ -863,12 +854,12 @@ test("spends a tight budget on an open chat before a long-closed one", async () 
     ],
   });
 
-  const observations = await adapterFor(api.fetch, { maximumObservedSessions: 1 }).observe();
+  const observations = await adapterFor(api.fetch).observe();
 
-  assert.deepEqual(
-    observations.map((candidate) => candidate.providerSessionId),
-    ["session-open"],
-  );
+  assert.deepEqual(observations.map((candidate) => candidate.providerSessionId).sort(), [
+    "session-closed-days-ago",
+    "session-open",
+  ]);
 });
 
 test("keeps reporting a long turn as working", async () => {
@@ -990,7 +981,7 @@ test("keeps a workspace untouched since the day before yesterday", async () => {
   );
 });
 
-test("bounds the workspaces and sessions a single pass observes", async () => {
+test("observes every workspace and chat the pages hold", async () => {
   const workspaces = Array.from({ length: 6 }, (_value, index) =>
     ownedWorkspace(`workspace-${index}`, TEST_TIME - index * 1_000),
   );
@@ -1007,19 +998,15 @@ test("bounds the workspaces and sessions a single pass observes", async () => {
     })),
   });
 
-  const observations = await adapterFor(api.fetch, {
-    maximumObservedWorkspaces: 3,
-    maximumObservedSessions: 2,
-  }).observe();
+  const observations = await adapterFor(api.fetch).observe();
 
-  assert.equal(observations.length, 2);
   assert.deepEqual(
     observations.map((observation) => observation.providerSessionId),
-    ["session-0", "session-1"],
+    ["session-0", "session-1", "session-2", "session-3", "session-4", "session-5"],
   );
 });
 
-test("spreads a bounded session budget across workspaces", async () => {
+test("lets a crowded workspace keep every chat beside its quiet neighbour", async () => {
   const workspaces = [
     ownedWorkspace("workspace-crowded", TEST_TIME - 1_000),
     ownedWorkspace("workspace-quiet", TEST_TIME - 2_000),
@@ -1049,12 +1036,11 @@ test("spreads a bounded session budget across workspaces", async () => {
   const observations = await adapterFor(api.fetch).observe();
   const observedIds = observations.map((observation) => observation.providerSessionId);
 
-  // The crowded workspace holds four of the session budget's slots — the
-  // per-workspace cap is what kept it from spending all of them — and its
-  // quiet neighbour's chat still has a slot of its own.
-  assert.equal(observedIds.filter((id) => id.startsWith("crowded-")).length, 4);
+  // A crowded workspace no longer costs anyone anything: all of its chats are
+  // rows, and its quiet neighbour's chat is one too.
+  assert.equal(observedIds.filter((id) => id.startsWith("crowded-")).length, 8);
   assert.equal(observedIds.includes("quiet-session"), true);
-  assert.equal(observations.length, 5);
+  assert.equal(observations.length, 9);
 });
 
 test("prefers open chats over closed ones inside one workspace", async () => {
@@ -1082,10 +1068,10 @@ test("prefers open chats over closed ones inside one workspace", async () => {
   const observations = await adapterFor(api.fetch).observe();
   const observedIds = observations.map((observation) => observation.providerSessionId);
 
-  // The open chat takes a budget slot ahead of the closed ones: the
-  // per-workspace cap trims the oldest closed chat, never the one still going.
-  assert.equal(observations.length, 4);
-  assert.equal(observedIds.includes("open-session"), true);
+  // Every chat is a row, and the open one is ordered first: it is the one
+  // that can still change.
+  assert.equal(observations.length, 5);
+  assert.equal(observedIds[0], "open-session");
   assert.equal(
     observations.find((entry) => entry.providerSessionId === "open-session")?.status,
     SESSION_STATUS.WORKING,

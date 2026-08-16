@@ -132,7 +132,6 @@ const OPENCODE_TOOL_INPUT_KEY = [
 ] as const;
 
 const OPENCODE_ADAPTER_DEFAULTS = {
-  MAXIMUM_SESSION_ROWS: 40,
   MAXIMUM_PROJECT_DIRECTORIES: 200,
   /** Enough parts to reach past a finished step's bookkeeping to its tool. */
   MAXIMUM_PART_ROWS: 8,
@@ -148,7 +147,6 @@ const OPENCODE_SESSION_QUERY = `
   WHERE parent_id IS NULL
     AND time_archived IS NULL
   ORDER BY time_updated DESC, id DESC
-  LIMIT ?
 `;
 
 // The WHERE clause above is the one thing that can name a column an old schema
@@ -158,7 +156,6 @@ const OPENCODE_SESSION_QUERY_MINIMAL = `
   SELECT *
   FROM session
   ORDER BY time_updated DESC, id DESC
-  LIMIT ?
 `;
 
 const OPENCODE_LAST_MESSAGE_QUERY = `
@@ -187,7 +184,6 @@ export const OPENCODE_PROVIDER: SessionProvider = {
 export interface OpenCodeAdapterOptions {
   dataDirectory?: string;
   now?: () => number;
-  maximumSessionRows?: number;
   activeSessionFreshnessMs?: number;
   sqlite?: SqliteModuleLoader;
 }
@@ -428,7 +424,6 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
 
   readonly #dataDirectory: string;
   readonly #now: () => number;
-  readonly #maximumSessionRows: number;
   readonly #activeSessionFreshnessMs: number;
   readonly #sqlite: SqliteModuleLoader;
 
@@ -438,15 +433,12 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
     const resolved = resolveOptions(
       options,
       {
-        maximumSessionRows: OPENCODE_ADAPTER_DEFAULTS.MAXIMUM_SESSION_ROWS,
         activeSessionFreshnessMs: OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
       },
       {
-        positive: ["maximumSessionRows"],
         nonNegative: ["activeSessionFreshnessMs"],
       },
     );
-    this.#maximumSessionRows = resolved.maximumSessionRows;
     this.#activeSessionFreshnessMs = resolved.activeSessionFreshnessMs;
     this.#sqlite = options.sqlite ?? defaultSqliteModule;
   }
@@ -501,7 +493,7 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
       try {
         return database
           .prepare(query)
-          .all(this.#maximumSessionRows)
+          .all()
           .filter((row): row is OpenCodeRow => isRecord(row));
       } catch (error) {
         if (!canIgnoreSqliteError(error)) throw error;
@@ -521,9 +513,9 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
 
     // Every reported session gets its turn read, because a session without one
     // would default to working on freshness alone — inventing live work for a
-    // row whose turn actually ended. The pass stays bounded the way the Claude
-    // Code adapter's is: each read is an indexed point query against the row
-    // cap above, not a scan.
+    // row whose turn actually ended. Each read is an indexed point query
+    // against one session's id, not a scan, so the pass costs one cheap query
+    // per row however many rows the database holds.
     for (const snapshot of snapshots) {
       snapshot.turn = this.#turnFor(database, snapshot.providerSessionId);
       if (
@@ -573,7 +565,6 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
     const candidates = await discoverSessionFiles({
       projectsDirectory: path.join(storageDirectory, OPENCODE_STORAGE_SEGMENT.SESSION),
       maximumProjectDirectories: OPENCODE_ADAPTER_DEFAULTS.MAXIMUM_PROJECT_DIRECTORIES,
-      maximumSessionFiles: this.#maximumSessionRows,
       sessionFilesIn: legacySessionFilesIn,
     });
 

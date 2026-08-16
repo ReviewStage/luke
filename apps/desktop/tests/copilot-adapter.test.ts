@@ -118,7 +118,6 @@ function adapterFor(
     readApiKey?: () => Promise<string | undefined>;
     now?: () => number;
     minimumRefreshIntervalMs?: number;
-    maximumObservedTasks?: number;
   } = {},
 ): CopilotSessionAdapter {
   const apiKey = "apiKey" in overrides ? overrides.apiKey : TEST_API_KEY;
@@ -128,9 +127,6 @@ function adapterFor(
     fetch,
     now: overrides.now ?? (() => TEST_TIME),
     minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,
-    ...(overrides.maximumObservedTasks === undefined
-      ? {}
-      : { maximumObservedTasks: overrides.maximumObservedTasks }),
   });
 }
 
@@ -318,11 +314,11 @@ test("orders the pass itself rather than trusting the order GitHub answers in", 
     workingTask("task-middle", TEST_TIME - 2_000),
   ]);
 
-  const observations = await adapterFor(api.fetch, { maximumObservedTasks: 2 }).observe();
+  const observations = await adapterFor(api.fetch).observe();
 
   assert.deepEqual(
     observations.map((observation) => observation.providerSessionId),
-    ["task-newest", "task-middle"],
+    ["task-newest", "task-middle", "task-oldest"],
   );
 });
 

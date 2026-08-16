@@ -13,7 +13,6 @@ import {
   type ProviderWorkspaceAgentRequest,
   type ProviderWorkspaceRequest,
   type ProviderWorkspaceResult,
-  resolveOptions,
   SESSION_CONTROL_KIND,
   SESSION_STATUS,
   type SessionControl,
@@ -253,10 +252,7 @@ const SESSION_STATUS_BY_CONDUCTOR_STATUS: Readonly<Record<ConductorSessionStatus
 const CONDUCTOR_ADAPTER_DEFAULTS = {
   MAXIMUM_PROJECTS: 10,
   WORKSPACE_PAGE_SIZE: 100,
-  MAXIMUM_OBSERVED_WORKSPACES: 8,
   SESSION_PAGE_SIZE: 20,
-  MAXIMUM_SESSIONS_PER_WORKSPACE: 4,
-  MAXIMUM_OBSERVED_SESSIONS: 12,
   MAXIMUM_MODEL_LABEL_LENGTH: 60,
   MAXIMUM_ERROR_LENGTH: 120,
   MAXIMUM_AGENT_KIND_LENGTH: 40,
@@ -279,10 +275,7 @@ export const CONDUCTOR_PROVIDER: SessionProvider = {
   displayName: CONDUCTOR_PROVIDER_NAME,
 };
 
-export interface ConductorAdapterOptions extends CloudAdapterOptions {
-  maximumObservedWorkspaces?: number;
-  maximumObservedSessions?: number;
-}
+export type ConductorAdapterOptions = CloudAdapterOptions;
 
 interface ConductorProject {
   id: string;
@@ -332,9 +325,6 @@ export class ConductorSessionAdapter
     WorkspaceCapableSessionProviderAdapter,
     WorkspaceAgentCapableSessionProviderAdapter
 {
-  readonly #maximumObservedWorkspaces: number;
-  readonly #maximumObservedSessions: number;
-
   #userId: string | undefined;
   /**
    * The projects the latest pass listed, kept because they are also where a
@@ -352,16 +342,6 @@ export class ConductorSessionAdapter
       },
       options,
     );
-    const resolved = resolveOptions(
-      options,
-      {
-        maximumObservedWorkspaces: CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_OBSERVED_WORKSPACES,
-        maximumObservedSessions: CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_OBSERVED_SESSIONS,
-      },
-      { positive: ["maximumObservedWorkspaces", "maximumObservedSessions"] },
-    );
-    this.#maximumObservedWorkspaces = resolved.maximumObservedWorkspaces;
-    this.#maximumObservedSessions = resolved.maximumObservedSessions;
   }
 
   async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
@@ -457,8 +437,10 @@ export class ConductorSessionAdapter
     const userId = await this.#identity(request);
     if (!userId) return [];
 
-    // Every fan-out below is already bounded by the caps in
-    // CONDUCTOR_ADAPTER_DEFAULTS, so at most a dozen requests are ever in flight.
+    // Every fan-out below is bounded by the page sizes in
+    // CONDUCTOR_ADAPTER_DEFAULTS — one page of workspaces per project, one
+    // page of chats per workspace — and workspaces and chats are never
+    // capped beyond that: a conversation is never dropped to spare a request.
     const projects = await this.#listProjects(request);
     this.#projects = projects;
     const workspaces = (
@@ -474,8 +456,7 @@ export class ConductorSessionAdapter
       // user unless it reports a creator, and unattributed org workspaces stay
       // out of a personal sidecar.
       .filter((workspace) => workspace.creatorId === userId)
-      .sort((first, second) => second.lastActivityAt - first.lastActivityAt)
-      .slice(0, this.#maximumObservedWorkspaces);
+      .sort((first, second) => second.lastActivityAt - first.lastActivityAt);
 
     const sessions = (
       await Promise.all(
@@ -485,17 +466,7 @@ export class ConductorSessionAdapter
       )
     )
       .filter(isDefined)
-      .flat()
-      // An open chat can still change, so it takes the budget before any
-      // closed one however old the closed chat is; closed chats spend what
-      // remains, newest first. Open chats carry no timestamp of their own
-      // yet, and the stable sort keeps them in workspace-recency order.
-      .sort(
-        (first, second) =>
-          Number(first.archived) - Number(second.archived) ||
-          (second.archivedAt ?? 0) - (first.archivedAt ?? 0),
-      )
-      .slice(0, this.#maximumObservedSessions);
+      .flat();
 
     // The transcripts read rides beside the status reads: one bounded query
     // for every observed session, so a failed or missing answer costs a recap
@@ -628,15 +599,13 @@ export class ConductorSessionAdapter
         })
         .filter(isDefined)
         // An open chat carries no timestamp until its status is read, so open
-        // chats are preferred over closed ones, then closed ones by how
-        // recently they closed. Capping here keeps one crowded workspace from
-        // spending the whole session budget.
+        // chats are ordered before closed ones, then closed ones by how
+        // recently they closed.
         .sort(
           (first, second) =>
             Number(first.archived) - Number(second.archived) ||
             (second.archivedAt ?? 0) - (first.archivedAt ?? 0),
         )
-        .slice(0, CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_SESSIONS_PER_WORKSPACE)
     );
   }
 

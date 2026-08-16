@@ -3,7 +3,6 @@ import {
   isRecord,
   OBSERVATION_WINDOW,
   type ProviderSessionObservation,
-  resolveOptions,
   SESSION_STATUS,
   type SessionProvider,
   type SessionStatus,
@@ -128,7 +127,6 @@ const SESSION_STATUS_BY_COPILOT_STATE: Readonly<Record<CopilotTaskState, Session
 const COPILOT_ADAPTER_DEFAULTS = {
   /** The documented maximum, so one call reaches as deep into the history as it can. */
   TASK_PAGE_SIZE: 100,
-  MAXIMUM_OBSERVED_TASKS: 12,
   MAXIMUM_BRANCH_LABEL_LENGTH: 60,
 } as const;
 
@@ -137,9 +135,7 @@ export const COPILOT_PROVIDER: SessionProvider = {
   displayName: COPILOT_PROVIDER_NAME,
 };
 
-export interface CopilotAdapterOptions extends CloudAdapterOptions {
-  maximumObservedTasks?: number;
-}
+export type CopilotAdapterOptions = CloudAdapterOptions;
 
 interface CopilotTask {
   id: string;
@@ -225,8 +221,6 @@ function taskFromRecord(record: Record<string, unknown>): CopilotTask | undefine
  * task's own page, where steering lives — is the honest way in.
  */
 export class CopilotSessionAdapter extends CloudSessionAdapter {
-  readonly #maximumObservedTasks: number;
-
   constructor(options: CopilotAdapterOptions) {
     super(
       {
@@ -236,12 +230,6 @@ export class CopilotSessionAdapter extends CloudSessionAdapter {
       },
       options,
     );
-    const { maximumObservedTasks } = resolveOptions(
-      options,
-      { maximumObservedTasks: COPILOT_ADAPTER_DEFAULTS.MAXIMUM_OBSERVED_TASKS },
-      { positive: ["maximumObservedTasks"] },
-    );
-    this.#maximumObservedTasks = maximumObservedTasks;
   }
 
   /** GitHub asks for its own media type, and the preview endpoint is pinned. */
@@ -255,8 +243,8 @@ export class CopilotSessionAdapter extends CloudSessionAdapter {
   ): Promise<readonly ProviderSessionObservation[]> {
     // One call per pass. The list projection already carries the state, the
     // timestamps, and the task's own addresses, so there is nothing a
-    // per-task read would add. Tasks are never aged out — the newest-first
-    // cap below is the only bound on what the page yields.
+    // per-task read would add. Tasks are never aged out or capped — one page
+    // of the documented maximum is the request's only bound.
     const body = await request(COPILOT_ROUTE.TASKS, {
       [COPILOT_QUERY.PER_PAGE]: String(COPILOT_ADAPTER_DEFAULTS.TASK_PAGE_SIZE),
     });
@@ -265,7 +253,6 @@ export class CopilotSessionAdapter extends CloudSessionAdapter {
       .map(taskFromRecord)
       .filter(isDefined)
       .sort((first, second) => second.observedAt - first.observedAt)
-      .slice(0, this.#maximumObservedTasks)
       .map((task) => this.#observationFor(task, now));
   }
 

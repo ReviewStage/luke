@@ -144,7 +144,6 @@ function adapterFor(
     now?: () => number;
     activeSessionFreshnessMs?: number;
     maximumProjectDirectories?: number;
-    maximumSessionFiles?: number;
     readTailBytes?: number;
   } = {},
 ): CursorLocalSessionAdapter {
@@ -478,7 +477,39 @@ test("finds the newest records when only the end of a long transcript is read", 
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
 });
 
-test("bounds how many sessions one pass reports, keeping the newest", async (t) => {
+test("re-reads a transcript once it has been written to again", async (t) => {
+  const state = await temporaryCursorState(t);
+  await writeWorkspaceRecord(state, "9f1c", "/Users/test/luke");
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "session-evolving",
+    [messageRecord(TEST_ROLE.ASSISTANT, TEST_CONTENT_TYPE.TOOL_USE)],
+    TEST_TIME - 20_000,
+  );
+
+  const adapter = adapterFor(state);
+  const [before] = await adapter.observe();
+  await writeTranscript(
+    state,
+    "Users-test-luke",
+    "session-evolving",
+    [
+      messageRecord(TEST_ROLE.ASSISTANT, TEST_CONTENT_TYPE.TEXT),
+      turnEndedRecord(TEST_TURN_STATUS.SUCCESS),
+    ],
+    TEST_TIME - 5_000,
+  );
+  const [after] = await adapter.observe();
+
+  // The same adapter serves both passes, so the second one must notice the
+  // new mtime and re-read rather than serving the first parse back.
+  assert.equal(before?.status, SESSION_STATUS.WORKING);
+  assert.equal(after?.status, SESSION_STATUS.WAITING);
+  assert.equal(after?.observedAt, TEST_TIME - 5_000);
+});
+
+test("reports every session one pass discovers, newest first", async (t) => {
   const state = await temporaryCursorState(t);
   for (const [index, sessionId] of [
     "session-newest",
@@ -494,11 +525,11 @@ test("bounds how many sessions one pass reports, keeping the newest", async (t) 
     );
   }
 
-  const observations = await adapterFor(state, { maximumSessionFiles: 2 }).observe();
+  const observations = await adapterFor(state).observe();
 
   assert.deepEqual(
     observations.map((observation) => observation.providerSessionId),
-    ["session-newest", "session-older"],
+    ["session-newest", "session-older", "session-oldest"],
   );
 });
 
