@@ -439,6 +439,20 @@ button:disabled {
   transition-delay: calc(var(--duration-shape) - var(--duration-quick));
 }
 
+/* Luke's meter always mounts into this state already live — the turn is what
+   mounts it — and a transition only runs from a style the element has held.
+   This is the pose the meter would have waited in, the same answer the late
+   marks get below, so the crossing above actually runs instead of the meter
+   appearing over desktop the shape is still 300ms from covering. Only Luke's:
+   your own meter takes the face's place, where nothing grows, and must keep
+   appearing at once. */
+@starting-style {
+  .app-stage[data-presentation="capsule"][data-voice="luke"] .wing-meter[data-turn] {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+}
+
 /* Luke's words follow him onto the shape: the compact states grow a caption
    block below the housing while there are words to draw. Gated on the words
    rather than on the turn, because the first of them arrives a beat after the
