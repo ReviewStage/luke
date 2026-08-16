@@ -178,6 +178,16 @@ export interface AppSettings {
    * provider's endpoints take.
    */
   workspaceAgentDefaults?: Readonly<Partial<Record<ProviderId, WorkspaceAgentSelection>>>;
+  /**
+   * The project a conversational ask creates a workspace in when the ask
+   * names none, per provider, each entry absent until one has been chosen. It
+   * starts unset the way the provider does: the first workspace the user
+   * creates in a provider saves its project here, so the default is always a
+   * choice they made rather than one made for them. Projects are observed
+   * rather than build-fixed, so the value is the provider's own project id,
+   * and it steers an ask only while its provider still offers that project.
+   */
+  workspaceProjectDefaults?: Readonly<Partial<Record<ProviderId, string>>>;
 }
 
 /**
@@ -357,6 +367,16 @@ export interface AppBridge {
   setWorkspaceAgentDefault(
     providerId: ProviderId,
     selection: WorkspaceAgentSelection | undefined,
+  ): Promise<SettingsUpdateResult>;
+  /**
+   * Chooses the project one provider creates nameless-ask workspaces in, or
+   * returns to letting the first creation choose when omitted. The project
+   * must be one the provider's adapter currently offers; the main process
+   * validates that again before the store keeps it.
+   */
+  setWorkspaceProjectDefault(
+    providerId: ProviderId,
+    providerProjectId: string | undefined,
   ): Promise<SettingsUpdateResult>;
   /** Turns the on-screen caption of Luke's speech on or off. */
   setVoiceCaptions(enabled: boolean): Promise<SettingsUpdateResult>;
@@ -558,6 +578,7 @@ export const channels = {
   setFormFactor: "app:set-form-factor",
   setDefaultWorkspaceProvider: "app:set-default-workspace-provider",
   setWorkspaceAgentDefault: "app:set-workspace-agent-default",
+  setWorkspaceProjectDefault: "app:set-workspace-project-default",
   openSession: "app:open-session",
   sendSessionMessage: "app:send-session-message",
   executeSessionControl: "app:execute-session-control",

@@ -1190,6 +1190,90 @@ test("changes a workspace agent pairing without touching the cipher", async (t) 
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
 });
 
+test("lets the first creation choose each provider's project until one is chosen", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  // Unset on purpose, the provider default's own terms: the default is always
+  // a choice the user made — by hand or by their first creation there.
+  assert.equal((await store.snapshot()).workspaceProjectDefaults, undefined);
+  assert.equal(await store.readWorkspaceProjectDefault(PROVIDER_ID.CONDUCTOR), undefined);
+
+  const { settings, reason } = await store.setWorkspaceProjectDefault(
+    PROVIDER_ID.CONDUCTOR,
+    "proj-1",
+  );
+
+  assert.equal(reason, undefined);
+  assert.deepEqual(settings.workspaceProjectDefaults, { [PROVIDER_ID.CONDUCTOR]: "proj-1" });
+  // The choice outlives the run that heard it.
+  assert.equal(
+    await storeIn(directory).readWorkspaceProjectDefault(PROVIDER_ID.CONDUCTOR),
+    "proj-1",
+  );
+
+  // Clearing returns that one provider to its first creation choosing.
+  const cleared = await store.setWorkspaceProjectDefault(PROVIDER_ID.CONDUCTOR, undefined);
+  assert.equal(cleared.settings.workspaceProjectDefaults, undefined);
+  assert.equal(
+    await storeIn(directory).readWorkspaceProjectDefault(PROVIDER_ID.CONDUCTOR),
+    undefined,
+  );
+});
+
+test("changes a default project without touching the cipher", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+
+  const { settings } = await store.setWorkspaceProjectDefault(PROVIDER_ID.CURSOR, "proj-2");
+
+  assert.deepEqual(settings.workspaceProjectDefaults, { [PROVIDER_ID.CURSOR]: "proj-2" });
+  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
+});
+
+test("keeps one provider's default project apart from another's", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  await store.setWorkspaceProjectDefault(PROVIDER_ID.CONDUCTOR, "proj-1");
+  const { settings } = await store.setWorkspaceProjectDefault(PROVIDER_ID.CURSOR, "proj-2");
+
+  assert.deepEqual(settings.workspaceProjectDefaults, {
+    [PROVIDER_ID.CONDUCTOR]: "proj-1",
+    [PROVIDER_ID.CURSOR]: "proj-2",
+  });
+
+  const cleared = await store.setWorkspaceProjectDefault(PROVIDER_ID.CONDUCTOR, undefined);
+  assert.deepEqual(cleared.settings.workspaceProjectDefaults, {
+    [PROVIDER_ID.CURSOR]: "proj-2",
+  });
+});
+
+test("ignores stored default projects this store cannot hold", async (t) => {
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({
+      version: 2,
+      apiKeys: {},
+      workspaceProjectDefaults: {
+        // A provider this build does not know, a value that is not an id at
+        // all, an empty one, and one too long to be an id: each names nowhere
+        // a creation ask could be steered.
+        "someone-else": "proj-1",
+        conductor: 7,
+        cursor: "   ",
+        codex: "x".repeat(500),
+      },
+    }),
+  );
+
+  const store = storeIn(directory);
+  assert.equal(await store.readWorkspaceProjectDefault(PROVIDER_ID.CONDUCTOR), undefined);
+  assert.equal((await store.snapshot()).workspaceProjectDefaults, undefined);
+});
+
 test("ignores a stored pairing this build's table does not list", async (t) => {
   const directory = await temporaryDirectory(t);
   await fs.writeFile(

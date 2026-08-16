@@ -208,6 +208,8 @@ export interface VoiceConversationOptions {
   sessions: readonly NormalizedSession[];
   workspaceProjects: readonly ObservedWorkspaceProject[];
   defaultWorkspaceProvider: string | undefined;
+  /** The per-provider default projects, riding the projects context they steer. */
+  workspaceProjectDefaults: Readonly<Partial<Record<string, string>>> | undefined;
   voice: RealtimeVoice | undefined;
   voiceSpeed: RealtimeVoiceSpeed | undefined;
   voiceCaptions: boolean;
@@ -311,6 +313,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   const sessionsRef = useRef(options.sessions);
   const workspaceProjectsRef = useRef(options.workspaceProjects);
   const defaultWorkspaceProviderRef = useRef(options.defaultWorkspaceProvider);
+  const workspaceProjectDefaultsRef = useRef(options.workspaceProjectDefaults);
   const guideRef = useRef<AppGuideSnapshot>(EMPTY_APP_GUIDE);
   const issuesRef = useRef<readonly TrackedIssue[] | undefined>(undefined);
 
@@ -436,6 +439,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       session.updateWorkspaceProjects(
         workspaceProjectsRef.current,
         defaultWorkspaceProviderRef.current,
+        workspaceProjectDefaultsRef.current,
       );
       session.updateGuide(guideRef.current);
       session.updateIssues(issuesRef.current);
@@ -662,11 +666,17 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   useEffect(() => {
     workspaceProjectsRef.current = options.workspaceProjects;
     defaultWorkspaceProviderRef.current = options.defaultWorkspaceProvider;
+    workspaceProjectDefaultsRef.current = options.workspaceProjectDefaults;
     voiceSession.current?.updateWorkspaceProjects(
       options.workspaceProjects,
       options.defaultWorkspaceProvider,
+      options.workspaceProjectDefaults,
     );
-  }, [options.defaultWorkspaceProvider, options.workspaceProjects]);
+  }, [
+    options.defaultWorkspaceProvider,
+    options.workspaceProjectDefaults,
+    options.workspaceProjects,
+  ]);
 
   useEffect(() => {
     return window.sidecar.onAttentionSpeech((speech) => {

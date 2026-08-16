@@ -84,10 +84,16 @@ import {
   settingsNavRowId,
 } from "./settings-views";
 
-/** One provider the default-workspace row can offer, by id and display name. */
+/** One provider the default-workspace rows can offer, by id and display name. */
 export interface WorkspaceProviderOption {
   id: string;
   name: string;
+  /**
+   * The projects this provider's default-project row can offer: everything
+   * currently observed for it, plus a stored default it no longer offers — a
+   * choice the row cannot show is one that can be neither seen nor cleared.
+   */
+  projects: readonly { id: string; label: string }[];
 }
 
 /**
@@ -162,6 +168,16 @@ export interface PreferenceWrites {
   onWorkspaceAgentDefaultChange: (
     providerId: ProviderId,
     selection: WorkspaceAgentSelection | undefined,
+  ) => Promise<string | undefined>;
+  /**
+   * Chooses the project one provider creates nameless-ask workspaces in, or
+   * returns to letting the first creation there choose when omitted. The
+   * store answers with why when it refuses, and the row is where that answer
+   * belongs.
+   */
+  onWorkspaceProjectDefaultChange: (
+    providerId: ProviderId,
+    providerProjectId: string | undefined,
   ) => Promise<string | undefined>;
 }
 
@@ -268,6 +284,10 @@ const ASK_EACH_TIME = "";
 
 /* The agent row's word for no choice at all: the provider's own default. */
 const PROVIDER_DEFAULT_VALUE = "";
+
+/* The default-project rows' word for no default at all. An empty value for
+   the ASK_EACH_TIME reason: no provider's project id can collide with it. */
+const FIRST_CREATION_SETS_IT = "";
 
 /* The safe answer arrives first and the one that cannot be taken back lands a
    beat behind it, on the same stagger the panel's rows fan open with. Their
@@ -1425,7 +1445,61 @@ function WorkspacesSection({
           if (isProviderId(next)) return preferences.onDefaultWorkspaceProviderChange(next);
         }}
       />
+      {workspaceProviders.map((provider) => (
+        <WorkspaceProjectRow
+          key={provider.id}
+          provider={provider}
+          settings={settings}
+          preferences={preferences}
+        />
+      ))}
     </section>
+  );
+}
+
+/**
+ * Where one provider's nameless creation ask lands: a row per provider with
+ * projects to choose between, filled in the way the provider default is — by
+ * the first creation there — and this select is where that choice is seen,
+ * changed, or returned to the first creation.
+ */
+function WorkspaceProjectRow({
+  provider,
+  settings,
+  preferences,
+}: {
+  provider: WorkspaceProviderOption;
+  settings: AppSettings;
+  preferences: PreferenceWrites;
+}): React.JSX.Element | null {
+  const providerId = provider.id;
+  // A provider this build cannot store a choice for, or one with no projects
+  // to choose between, has nothing for the row to say.
+  if (!isProviderId(providerId) || provider.projects.length === 0) return null;
+  const stored = settings.workspaceProjectDefaults?.[providerId];
+  return (
+    <SelectRow
+      label={`Default ${provider.name} project`}
+      ariaLabel={`The project a nameless ask creates ${provider.name} workspaces in`}
+      detail="Where an ask that names no project creates a workspace. Your first creation there sets it."
+      value={stored ?? FIRST_CREATION_SETS_IT}
+      options={[
+        { value: FIRST_CREATION_SETS_IT, label: "First creation sets it" },
+        ...provider.projects.map((project) => ({ value: project.id, label: project.label })),
+      ]}
+      parse={(raw) => {
+        if (raw === FIRST_CREATION_SETS_IT) return raw;
+        // The set is the one this row offered, so anything else arriving out
+        // of the select is a broken control rather than a choice.
+        return provider.projects.some((project) => project.id === raw) ? raw : undefined;
+      }}
+      onChange={(next) =>
+        preferences.onWorkspaceProjectDefaultChange(
+          providerId,
+          next === FIRST_CREATION_SETS_IT ? undefined : next,
+        )
+      }
+    />
   );
 }
 

@@ -336,6 +336,14 @@ const SETTING_GUIDE: Record<
     adjustable: false,
     manual: `${CONNECTIONS_PAGE}, under Workspaces`,
   }),
+  // Described in the workspace projects context instead, for a reason the
+  // provider entry does not have: projects are observed rather than
+  // build-fixed, so the guide's settings half holds only their ids, while the
+  // projects context names each provider's default by the repository a person
+  // knows it as. Kept by hand for the provider default's own reason — the
+  // first creation in a provider saves its project — and the Creating
+  // workspaces fact carries the by-hand path.
+  workspaceProjectDefaults: () => undefined,
   formFactor: (settings) => ({
     id: APP_SETTING_ID.FORM_FACTOR,
     label: "Form factor",
@@ -553,7 +561,11 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "without one, and a provider that reports none takes no ask. An ask that names no " +
         "provider goes to the default workspace provider; until one is chosen Luke asks when " +
         "more than one provider could take it, and the first workspace created saves its " +
-        "provider as the default — changed or cleared by hand in the Settings tab. What a new " +
+        "provider as the default — changed or cleared by hand in the Settings tab. An ask that " +
+        "names no project goes the same way: each provider remembers a default project, filled " +
+        "in by the first workspace created there and changed or cleared by hand on the " +
+        "Connections page, under Workspaces; until one is chosen Luke asks when the provider " +
+        "lists more than one project. What a new " +
         "Conductor agent runs — its model, and its effort where the model's agent takes one — " +
         "follows the choice on the Conductor row under Cloud Agent API keys, or Conductor's own " +
         "defaults while none is made. A model named in a creation ask rides that creation alone " +

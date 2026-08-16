@@ -474,14 +474,15 @@ function boundedField(
 }
 
 /**
- * The first workspace that lands chooses the default provider — and a model
- * named for that creation, the default agent — only while nothing is chosen.
- * A default the user holds is theirs to change, never a creation's. Losing
- * the save loses only the remembered default, never the workspace that just
- * landed.
+ * The first workspace that lands chooses the default provider — and its
+ * project, and a model named for that creation, the default agent — only
+ * while nothing is chosen. A default the user holds is theirs to change,
+ * never a creation's. Losing the save loses only the remembered default,
+ * never the workspace that just landed.
  */
 async function rememberWorkspaceDefaults(
   adapter: SessionProviderAdapter,
+  providerProjectId: string,
   namedSelection: WorkspaceAgentSelection | undefined,
 ): Promise<void> {
   if (!isProviderId(adapter.provider.id)) return;
@@ -489,6 +490,15 @@ async function rememberWorkspaceDefaults(
   try {
     if ((await settingsStore.readDefaultWorkspaceProvider()) === undefined) {
       const saved = await settingsStore.setDefaultWorkspaceProvider(providerId);
+      panels.broadcast(channels.settingsChanged, saved.settings);
+    }
+    // The project the workspace landed in becomes that provider's default on
+    // the same first-choice terms, read again for the same overlap reason as
+    // the model below. The id was validated against the adapter's offered
+    // projects before the creation ran, so what is remembered is one the
+    // provider itself listed.
+    if ((await settingsStore.readWorkspaceProjectDefault(providerId)) === undefined) {
+      const saved = await settingsStore.setWorkspaceProjectDefault(providerId, providerProjectId);
       panels.broadcast(channels.settingsChanged, saved.settings);
     }
     // A model named for this creation becomes the default on the same
@@ -726,6 +736,36 @@ function registerIpc(): void {
     },
     save: ({ providerId, selection }) =>
       settingsStore.setWorkspaceAgentDefault(providerId, selection),
+    refusal: "Could not save that setting on this system.",
+  });
+
+  // The project one provider creates nameless-ask workspaces in. Projects are
+  // observed rather than build-fixed, so the value is held to the list the
+  // provider's adapter currently offers — the same list every creation act is
+  // validated against — and clearing needs no list at all.
+  registerSettingHandler(channels.setWorkspaceProjectDefault, {
+    validate(providerId: unknown, providerProjectId: unknown) {
+      if (typeof providerId !== "string" || !isProviderId(providerId)) {
+        throw new Error("Unknown workspace provider");
+      }
+      if (providerProjectId === undefined) {
+        return { providerId, providerProjectId: undefined };
+      }
+      if (typeof providerProjectId !== "string" || !providerProjectId.trim()) {
+        throw new Error("Invalid workspace project");
+      }
+      const adapter = adapterFor(providerId);
+      const offered =
+        adapter && isWorkspaceCapableAdapter(adapter)
+          ? adapter
+              .workspaceProjects()
+              .some((project) => project.providerProjectId === providerProjectId)
+          : false;
+      if (!offered) throw new Error("Unknown workspace project");
+      return { providerId, providerProjectId };
+    },
+    save: ({ providerId, providerProjectId }) =>
+      settingsStore.setWorkspaceProjectDefault(providerId, providerProjectId),
     refusal: "Could not save that setting on this system.",
   });
 
@@ -1105,6 +1145,7 @@ function registerIpc(): void {
       if (result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
         await rememberWorkspaceDefaults(
           adapter,
+          providerProjectId,
           namedSelection as WorkspaceAgentSelection | undefined,
         );
       }

@@ -205,13 +205,17 @@ export const maximumVoiceContextWorkspaceProjects = 10;
  * chosen and offering, and while none is chosen the context says that the
  * first creation decides — the saving itself is the main process's, done on
  * the validated act, so the sentence here is a description and never a lever.
+ * The default projects ride on the same terms, one tie-break per provider:
+ * an ask that names no project goes to that provider's default when one is
+ * chosen and still offered.
  */
 export function workspaceProjectContextText(
   projects: readonly ObservedWorkspaceProject[],
   defaultProviderId?: string,
+  defaultProjectIds?: Readonly<Partial<Record<string, string>>>,
 ): string {
   if (projects.length === 0) return "No provider currently offers workspace creation.";
-  const listed = projects.slice(0, maximumVoiceContextWorkspaceProjects);
+  const listed = listedWorkspaceProjects(projects, defaultProjectIds);
   return [
     "Projects a new workspace can be created in:",
     ...listed.map(
@@ -219,7 +223,29 @@ export function workspaceProjectContextText(
         `- ${project.providerName} — ${project.repository} [provider_id=${project.providerId} project_id=${project.providerProjectId}]; ${TASK_SUPPORT_TEXT[project.taskSupport]}`,
     ),
     ...workspaceDefaultProviderLines(listed, defaultProviderId),
+    ...workspaceDefaultProjectLines(listed, defaultProjectIds),
   ].join("\n");
+}
+
+/**
+ * The bounded slice the conversation is shown, kept default-aware: a chosen
+ * default project that survived observation must survive this cap too, or
+ * the alphabetical order could push the one project a nameless ask should
+ * land in off the list — unnamed, unlisted, and unsteerable. Each provider's
+ * chosen default rides past the cut instead, so the cap still bounds the
+ * list at the maximum plus at most one project per provider.
+ */
+function listedWorkspaceProjects(
+  projects: readonly ObservedWorkspaceProject[],
+  defaultProjectIds: Readonly<Partial<Record<string, string>>> | undefined,
+): readonly ObservedWorkspaceProject[] {
+  const listed = projects.slice(0, maximumVoiceContextWorkspaceProjects);
+  for (const project of projects.slice(maximumVoiceContextWorkspaceProjects)) {
+    if (defaultProjectIds?.[project.providerId] === project.providerProjectId) {
+      listed.push(project);
+    }
+  }
+  return listed;
 }
 
 /**
@@ -251,6 +277,41 @@ function workspaceDefaultProviderLines(
 }
 
 /**
+ * How each provider's default project reads under the projects list, on the
+ * provider default's own terms. A default that is chosen but no longer
+ * offered earns no line at all; a provider with exactly one project earns
+ * none either while nothing is chosen, because there is nothing to steer —
+ * only a provider actually offering a choice is said to be decided by the
+ * first creation there.
+ */
+function workspaceDefaultProjectLines(
+  projects: readonly ObservedWorkspaceProject[],
+  defaultProjectIds: Readonly<Partial<Record<string, string>>> | undefined,
+): readonly string[] {
+  const lines: string[] = [];
+  const said = new Set<string>();
+  for (const project of projects) {
+    if (said.has(project.providerId)) continue;
+    said.add(project.providerId);
+    const offered = projects.filter((candidate) => candidate.providerId === project.providerId);
+    const chosenId = defaultProjectIds?.[project.providerId];
+    const chosen = chosenId
+      ? offered.find((candidate) => candidate.providerProjectId === chosenId)
+      : undefined;
+    if (chosen) {
+      lines.push(
+        `The developer's default ${chosen.providerName} project is ${chosen.repository}: an ask that names no project creates there.`,
+      );
+    } else if (chosenId === undefined && offered.length > 1) {
+      lines.push(
+        `No default ${project.providerName} project is chosen yet: when an ask names no project there, ask which listed project it should be. The first workspace created in ${project.providerName} saves its project as the default.`,
+      );
+    }
+  }
+  return lines;
+}
+
+/**
  * How each support level reads in the projects list. Said beside the identity
  * so the ask and its validation share one vocabulary: the sentence Luke reads
  * is the rule the call is held to.
@@ -269,11 +330,12 @@ const TASK_SUPPORT_TEXT: Readonly<Record<string, string>> = {
 export function workspaceProjectContextEvents(
   projects: readonly ObservedWorkspaceProject[],
   defaultProviderId?: string,
+  defaultProjectIds?: Readonly<Partial<Record<string, string>>>,
 ): readonly Record<string, unknown>[] {
   return [
     labeledContextEvent(
       "workspace projects, sent automatically",
-      workspaceProjectContextText(projects, defaultProviderId),
+      workspaceProjectContextText(projects, defaultProviderId, defaultProjectIds),
     ),
   ];
 }

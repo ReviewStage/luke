@@ -200,6 +200,10 @@ test("the facts describe creating a workspace, so Luke does not deny the capabil
   // choice is something Luke explains rather than something that surprises.
   assert.match(rendered, /default workspace provider/);
   assert.match(rendered, /first workspace created saves its provider/);
+  // The project a nameless ask lands in rides the same way, so the remembered
+  // first choice within a provider is explained rather than a surprise.
+  assert.match(rendered, /default project/);
+  assert.match(rendered, /first workspace created there/);
   // And so is what the new agent runs, because a model the user never chose
   // is exactly the surprise this setting exists to end.
   assert.match(rendered, /its model, and its effort/);

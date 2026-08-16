@@ -46,7 +46,11 @@ import {
 } from "../src";
 import { ATTENTION_REVIEW_OUTCOME, type AttentionReview } from "../src/attention";
 import { maximumWorkspaceNameLength } from "../src/providers";
-import { maximumVoiceContextIssues, maximumVoiceContextSessions } from "../src/realtime-context";
+import {
+  maximumVoiceContextIssues,
+  maximumVoiceContextSessions,
+  maximumVoiceContextWorkspaceProjects,
+} from "../src/realtime-context";
 import { realtimeSessionConfig } from "../src/realtime-credentials";
 import {
   maximumTypedAskLength,
@@ -845,6 +849,77 @@ test("the projects context says where a nameless creation ask goes", () => {
   const [event] = workspaceProjectContextEvents([OFFERED_PROJECT], "conductor");
   const item = (event as { item?: { content?: { text?: string }[] } }).item;
   assert.match(item?.content?.[0]?.text ?? "", /default provider for new workspaces is Conductor/);
+});
+
+test("the projects context says which project a nameless ask lands in", () => {
+  const secondProject: ObservedWorkspaceProject = {
+    providerId: "conductor",
+    providerName: "Conductor",
+    providerProjectId: "proj-2",
+    repository: "acme/other",
+    taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
+  };
+
+  // A chosen default that is still offered is named by its repository, as
+  // where a nameless ask goes.
+  const chosen = workspaceProjectContextText([OFFERED_PROJECT, secondProject], undefined, {
+    conductor: "proj-1",
+  });
+  assert.match(chosen, /default Conductor project is luke/);
+  assert.doesNotMatch(chosen, /No default Conductor project/);
+
+  // Nothing chosen and more than one project listed: ask first, and say that
+  // the first creation there decides — that sentence is how the developer
+  // learns their answer will be remembered.
+  const open = workspaceProjectContextText([OFFERED_PROJECT, secondProject]);
+  assert.match(open, /No default Conductor project is chosen yet/);
+  assert.match(open, /ask which listed project/);
+  assert.match(open, /first workspace created in Conductor saves its project/);
+
+  // One project alone leaves nothing to steer, so nothing is said of it.
+  const single = workspaceProjectContextText([OFFERED_PROJECT]);
+  assert.doesNotMatch(single, /default Conductor project/);
+
+  // A default the provider no longer offers earns no line at all: it is not
+  // somewhere an ask can go, and the choice already made is not re-offered to
+  // the first creation.
+  const away = workspaceProjectContextText([OFFERED_PROJECT, secondProject], undefined, {
+    conductor: "proj-gone",
+  });
+  assert.doesNotMatch(away, /default Conductor project/);
+  assert.doesNotMatch(away, /No default Conductor project/);
+
+  // The default rides the same context event the list does.
+  const [event] = workspaceProjectContextEvents([OFFERED_PROJECT, secondProject], undefined, {
+    conductor: "proj-2",
+  });
+  const item = (event as { item?: { content?: { text?: string }[] } }).item;
+  assert.match(item?.content?.[0]?.text ?? "", /default Conductor project is acme\/other/);
+});
+
+test("a chosen default project survives the context cap", () => {
+  // One more project than the context will list, alphabetical like the
+  // normalizer hands them over, with the developer's chosen default sorted
+  // dead last — exactly the project the cap would otherwise cut.
+  const crowd = Array.from({ length: maximumVoiceContextWorkspaceProjects + 1 }, (_, index) => ({
+    ...OFFERED_PROJECT,
+    providerProjectId: `proj-${String(index).padStart(2, "0")}`,
+    repository: `repo-${String(index).padStart(2, "0")}`,
+  }));
+  const last = crowd.at(-1);
+  assert.ok(last);
+
+  // Uncapped by the choice: without a default the tail stays cut.
+  const capless = workspaceProjectContextText(crowd);
+  assert.doesNotMatch(capless, new RegExp(last.providerProjectId));
+
+  // The chosen default rides past the cut, listed and steered both — a
+  // default the sentence names but the list omits would be unaskable.
+  const kept = workspaceProjectContextText(crowd, undefined, {
+    conductor: last.providerProjectId,
+  });
+  assert.match(kept, new RegExp(`project_id=${last.providerProjectId}`));
+  assert.match(kept, new RegExp(`default Conductor project is ${last.repository}`));
 });
 
 /**

@@ -180,8 +180,11 @@ export function workspaceNameText(value: unknown): string | undefined {
 }
 
 /**
- * Bounds and deduplicates the projects adapters offered, so the surface and
- * the conversation are handed the same capped, display-safe list.
+ * Bounds, deduplicates, and alphabetizes the projects adapters offered, so
+ * the surface and the conversation are handed the same capped, display-safe
+ * list. Ordered by the repository label a person scans for — not by which
+ * adapter answered first — and capped after the sort, so a list too long to
+ * keep whole loses its alphabetical tail rather than an arbitrary provider.
  */
 export function normalizeObservedWorkspaceProjects(
   projects: readonly ObservedWorkspaceProject[],
@@ -208,9 +211,22 @@ export function normalizeObservedWorkspaceProjects(
         ? project.taskSupport
         : WORKSPACE_TASK_SUPPORT.NONE,
     });
-    if (normalized.length >= maximumObservedWorkspaceProjects) break;
   }
-  return normalized;
+  return normalized
+    .sort(
+      (left, right) =>
+        compareRepositoryLabels(left.repository, right.repository) ||
+        // Two providers can offer one repository label; the provider and then
+        // the id keep the order deterministic rather than arrival-dependent.
+        left.providerName.localeCompare(right.providerName) ||
+        left.providerProjectId.localeCompare(right.providerProjectId),
+    )
+    .slice(0, maximumObservedWorkspaceProjects);
+}
+
+/** Alphabetical the way a person reads labels: case-blind, digits as numbers. */
+function compareRepositoryLabels(left: string, right: string): number {
+  return left.localeCompare(right, undefined, { sensitivity: "base", numeric: true });
 }
 
 /**
