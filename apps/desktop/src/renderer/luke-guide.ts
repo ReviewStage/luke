@@ -583,6 +583,17 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "session whose roster entry lists no archive control takes no such ask, and local " +
         "sessions — which Luke only reads — are never archived.",
     },
+    {
+      label: "Standing asks about sessions",
+      detail:
+        "An ask in conversation, spoken or typed, can be kept standing for one observed session " +
+        "— told when it finishes, warned if it fails, whatever the developer asked in their own " +
+        "words. Luke's background review weighs each of that session's updates against the ask " +
+        "and speaks when one satisfies it, opening a speak-only call if no conversation is up; " +
+        "the ask itself is the consent. One ask stands per session, a new one replaces it, asking Luke to drop " +
+        "it withdraws it, and an ask ends with the session it was about. It needs the OpenAI connection, " +
+        "changes nothing about the session itself, and is never sent to a provider.",
+    },
     talkKeyFact(input.hotkey),
     askKeyFact(input.askKey),
     { label: "Microphone access", detail: MICROPHONE_DETAIL[input.microphoneStatus] },

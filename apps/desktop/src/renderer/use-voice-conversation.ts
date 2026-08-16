@@ -190,18 +190,28 @@ export function voiceRestartAction(input: {
 }
 
 /**
- * Status-edge notices — deterministic, worded on this machine — go to the
- * announcer, which may open a speak-only call of Luke's own to say them. An
- * evaluator summary is a model's words, so it keeps its original bound: spoken
- * only on a call the developer opened themselves.
+ * The sources entitled to be heard without a call already open: a status edge
+ * — deterministic, worded on this machine — and an evaluator answer to a
+ * standing ask the developer made themselves. Both go to the announcer, which
+ * may open a speak-only call of Luke's own to say them.
  */
-export function statusEdgeNotices(speech: readonly AttentionSpeech[]): AttentionSpeech[] {
-  return speech.filter((item) => item.source === ATTENTION_SPEECH_SOURCE.STATUS_EDGE);
+const ANNOUNCER_SPEECH_SOURCES: ReadonlySet<string> = new Set([
+  ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
+  ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST,
+]);
+
+/** The speech the announcer takes, which may open Luke's own call to be said. */
+export function announcerNotices(speech: readonly AttentionSpeech[]): AttentionSpeech[] {
+  return speech.filter((item) => ANNOUNCER_SPEECH_SOURCES.has(item.source));
 }
 
-/** The other half of {@link statusEdgeNotices}: summaries that ride an open call. */
+/**
+ * The other half of {@link announcerNotices}: an unbidden evaluator summary is
+ * a model's words on a session nobody asked about, so it keeps its original
+ * bound — spoken only on a call the developer opened themselves.
+ */
 export function evaluatorSummaries(speech: readonly AttentionSpeech[]): AttentionSpeech[] {
-  return speech.filter((item) => item.source !== ATTENTION_SPEECH_SOURCE.STATUS_EDGE);
+  return speech.filter((item) => !ANNOUNCER_SPEECH_SOURCES.has(item.source));
 }
 
 export interface VoiceConversationOptions {
@@ -329,6 +339,10 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
             window.sidecar.sendSessionMessage(act.identity, act.text),
           [SESSION_TOOL_KIND.CONTROL]: (act) =>
             window.sidecar.executeSessionControl(act.identity, act.control.id),
+          [SESSION_TOOL_KIND.NOTICE_REQUEST]: (act) =>
+            window.sidecar.requestSessionNotice(act.identity, act.request),
+          [SESSION_TOOL_KIND.NOTICE_WITHDRAW]: (act) =>
+            window.sidecar.withdrawSessionNotice(act.identity),
           [SESSION_TOOL_KIND.CREATE_WORKSPACE]: (act) =>
             window.sidecar.createSessionWorkspace(
               act.providerId,
@@ -680,7 +694,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
 
   useEffect(() => {
     return window.sidecar.onAttentionSpeech((speech) => {
-      const notices = statusEdgeNotices(speech);
+      const notices = announcerNotices(speech);
       if (notices.length > 0) ensureAnnouncer().enqueue(notices);
       const session = voiceSession.current;
       if (!session?.microphoneCall) return;

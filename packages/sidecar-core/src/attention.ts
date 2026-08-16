@@ -24,6 +24,21 @@ export type AttentionTrigger = (typeof ATTENTION_TRIGGER)[keyof typeof ATTENTION
 /** A spoken sentence stays far shorter than the recap a provider may observe. */
 export const maximumAttentionSummaryLength = 180;
 
+/** A standing ask is one spoken sentence of the developer's, not a document. */
+export const maximumAttentionRequestLength = 300;
+
+/**
+ * The text of a standing ask on its way into the registry, or nothing. Refused
+ * rather than cut when it runs long, on the message rule's own grounds: a
+ * truncated ask asks for something its author did not.
+ */
+export function attentionRequestText(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim();
+  if (!normalized || normalized.length > maximumAttentionRequestLength) return undefined;
+  return normalized;
+}
+
 export const ATTENTION_DECISION_SCHEMA_NAME = "attention_decision";
 
 const ATTENTION_DISPOSITIONS: readonly AttentionDisposition[] =
@@ -90,9 +105,10 @@ export interface AttentionContext {
 /**
  * A bounded description of what changed for one session, and the only session
  * material an attention evaluator ever receives. It carries what a provider
- * wrote *about* a session — its title, its state, its own closing recap — and
- * never the transcript that sits behind them: no message history, file
- * contents, or command output.
+ * wrote *about* a session — its title, its state, its own closing recap — plus
+ * the developer's own standing ask about it when one stands, and never the
+ * transcript that sits behind them: no message history, file contents, or
+ * command output.
  */
 export interface AttentionUpdate extends SessionIdentity {
   trigger: AttentionTrigger;
@@ -109,6 +125,14 @@ export interface AttentionUpdate extends SessionIdentity {
   previousStatus?: SessionStatus;
   recap?: string;
   context?: AttentionContext;
+  /**
+   * The developer's own standing ask about this session — "tell me when this
+   * finishes" — kept in their words. A deliberate widening of what leaves the
+   * machine: it is something the developer said rather than something a
+   * provider wrote, asked of Luke in conversation precisely so the evaluator
+   * would weigh updates against it, and it travels only while it stands.
+   */
+  noticeRequest?: string;
   observedAt: number;
 }
 
@@ -166,6 +190,13 @@ export interface SessionAttentionReviewerOptions {
    * that the state it reasoned about is gone.
    */
   currentSession?: (identity: SessionIdentity) => NormalizedSession | undefined;
+  /**
+   * Reads the developer's standing ask about a session, when one stands. It
+   * rides the update so the evaluator can weigh the development against what
+   * the developer said they wanted to hear; without it every update is judged
+   * on the default rules alone.
+   */
+  noticeRequestFor?: (identity: SessionIdentity) => string | undefined;
   now?: () => number;
   repeatWindowMs?: number;
   maximumUpdatesPerReview?: number;
@@ -238,6 +269,7 @@ function attentionTrigger(
 export function attentionUpdate(
   session: NormalizedSession,
   previous?: NormalizedSession,
+  noticeRequest?: string,
 ): AttentionUpdate | undefined {
   const trigger = attentionTrigger(session, previous);
   if (!trigger) return undefined;
@@ -255,6 +287,7 @@ export function attentionUpdate(
     ...(previous ? { previousStatus: previous.status } : {}),
     ...(session.recap ? { recap: session.recap } : {}),
     ...(context ? { context } : {}),
+    ...(noticeRequest ? { noticeRequest } : {}),
     observedAt: session.observedAt,
   };
 }
@@ -355,6 +388,83 @@ export class AttentionSpeechLedger {
   }
 }
 
+/** What became of a standing ask, worded so a spoken reply can carry it. */
+export const ATTENTION_REQUEST_RESULT_STATUS = {
+  ACCEPTED: "accepted",
+  REJECTED: "rejected",
+} as const;
+
+export type AttentionRequestResultStatus =
+  (typeof ATTENTION_REQUEST_RESULT_STATUS)[keyof typeof ATTENTION_REQUEST_RESULT_STATUS];
+
+/**
+ * The answer to registering or withdrawing a standing ask. An acceptance
+ * carries the session's status as observed at that moment, because the ask may
+ * already be answered — a session asked about after it finished has no later
+ * finish coming, and the reply should be able to say so.
+ */
+export type AttentionRequestResult =
+  | { status: typeof ATTENTION_REQUEST_RESULT_STATUS.ACCEPTED; sessionStatus: SessionStatus }
+  | { status: typeof ATTENTION_REQUEST_RESULT_STATUS.REJECTED; reason: string };
+
+/**
+ * The standing asks the developer has made about sessions, one per session,
+ * each in their own words. Keyed by provider identity rather than a composed
+ * string, like the speech ledger, and retained on the same terms: an ask for a
+ * session its provider no longer reports has nothing left to be about.
+ */
+export class AttentionRequestRegistry {
+  #requests = new Map<string, Map<string, string>>();
+
+  set(identity: SessionIdentity, request: string): void {
+    const normalizedIdentity = normalizeSessionIdentity(identity);
+    const providerRequests =
+      this.#requests.get(normalizedIdentity.providerId) ?? new Map<string, string>();
+    providerRequests.set(normalizedIdentity.providerSessionId, request);
+    this.#requests.set(normalizedIdentity.providerId, providerRequests);
+  }
+
+  get(identity: SessionIdentity): string | undefined {
+    const normalizedIdentity = normalizeSessionIdentity(identity);
+    return this.#requests
+      .get(normalizedIdentity.providerId)
+      ?.get(normalizedIdentity.providerSessionId);
+  }
+
+  /** Lets an ask go, and answers whether one was standing to let go of. */
+  withdraw(identity: SessionIdentity): boolean {
+    const normalizedIdentity = normalizeSessionIdentity(identity);
+    const providerRequests = this.#requests.get(normalizedIdentity.providerId);
+    if (!providerRequests?.delete(normalizedIdentity.providerSessionId)) return false;
+    if (providerRequests.size === 0) this.#requests.delete(normalizedIdentity.providerId);
+    return true;
+  }
+
+  /** Drops asks about sessions a provider no longer reports. */
+  retain(identities: readonly SessionIdentity[]): void {
+    const live = new Map<string, Set<string>>();
+    for (const identity of identities) {
+      const normalizedIdentity = normalizeSessionIdentity(identity);
+      const providerSessionIds = live.get(normalizedIdentity.providerId) ?? new Set<string>();
+      providerSessionIds.add(normalizedIdentity.providerSessionId);
+      live.set(normalizedIdentity.providerId, providerSessionIds);
+    }
+
+    const retained = new Map<string, Map<string, string>>();
+    for (const [providerId, providerRequests] of this.#requests) {
+      const providerSessionIds = live.get(providerId);
+      if (!providerSessionIds) continue;
+      const kept = new Map(
+        [...providerRequests].filter(([providerSessionId]) =>
+          providerSessionIds.has(providerSessionId),
+        ),
+      );
+      if (kept.size > 0) retained.set(providerId, kept);
+    }
+    this.#requests = retained;
+  }
+}
+
 /**
  * Turns registry snapshots into attention decisions. It reviews only sessions
  * that actually changed, bounds how many updates one pass may evaluate, keeps a
@@ -368,6 +478,7 @@ export class SessionAttentionReviewer {
   readonly #currentSession:
     | ((identity: SessionIdentity) => NormalizedSession | undefined)
     | undefined;
+  readonly #noticeRequestFor: ((identity: SessionIdentity) => string | undefined) | undefined;
   readonly #now: () => number;
   readonly #maximumUpdatesPerReview: number;
   readonly #ledger: AttentionSpeechLedger;
@@ -379,6 +490,7 @@ export class SessionAttentionReviewer {
   constructor(options: SessionAttentionReviewerOptions) {
     this.#evaluator = options.evaluator;
     this.#currentSession = options.currentSession;
+    this.#noticeRequestFor = options.noticeRequestFor;
     this.#now = options.now ?? Date.now;
     this.#maximumUpdatesPerReview = positiveInteger(
       options.maximumUpdatesPerReview,
@@ -400,7 +512,11 @@ export class SessionAttentionReviewer {
     const candidates: AttentionCandidate[] = [];
     for (const session of sessions) {
       if (this.#isPending(session)) continue;
-      const update = attentionUpdate(session, this.#observedSession(session));
+      const update = attentionUpdate(
+        session,
+        this.#observedSession(session),
+        this.#noticeRequestFor?.(session),
+      );
       if (update) candidates.push({ session, update });
     }
 

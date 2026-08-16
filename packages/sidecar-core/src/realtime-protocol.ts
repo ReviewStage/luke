@@ -96,14 +96,20 @@ export const REALTIME_SERVER_EVENT = {
 } as const;
 
 /**
- * Who decided a proactive sentence was worth voicing. The two sources carry
- * different standing: a status edge is a deterministic fact the registry
- * observed and may open a call of Luke's own to be said; an evaluator summary
- * is a model's words, and may only ride a call the developer already opened.
+ * Who decided a proactive sentence was worth voicing. The sources carry
+ * different standing. A status edge is a deterministic fact the registry
+ * observed and may open a call of Luke's own to be said. An unbidden evaluator
+ * summary is a model's words on a session nobody asked about, and may only
+ * ride a call the developer already opened. A notice request sits between
+ * them: the words are still the evaluator's, but the developer asked out loud
+ * to hear about that session, and an answer they cannot hear until they happen
+ * to open a call is no answer — so it may open Luke's own call the way an
+ * edge does, for exactly as long as the ask stands.
  */
 export const ATTENTION_SPEECH_SOURCE = {
   STATUS_EDGE: "status-edge",
   EVALUATOR: "evaluator",
+  NOTICE_REQUEST: "notice-request",
 } as const;
 
 export type AttentionSpeechSource =
@@ -140,12 +146,14 @@ const REALTIME_INSTRUCTION_HEAD: readonly string[] = [
 ];
 
 const REALTIME_INSTRUCTION_TOOL_ACTS =
-  "send a message to a session, run a control a session advertises, open a session on the developer's screen, create a new workspace where a provider allows it, add another agent to an observed workspace, move a tracked issue to a state it lists, comment on a tracked issue, change one of Luke's own settings, show Luke's panel, and open the feedback composer.";
+  "send a message to a session, run a control a session advertises, open a session on the developer's screen, keep a standing ask to be told about a session, withdraw that ask, create a new workspace where a provider allows it, add another agent to an observed workspace, move a tracked issue to a state it lists, comment on a tracked issue, change one of Luke's own settings, show Luke's panel, and open the feedback composer.";
 
 const REALTIME_INSTRUCTION_TAIL: readonly string[] = [
   "- Use a tool only when the developer asks you to in this conversation, for the thing they asked.",
   "- Only sessions the roster marks as taking messages, carrying a control, or able to be opened can be acted on. Say so when one cannot.",
   "- Opening a session brings it up in its provider's own window, the same as pressing its row. It shows you nothing new.",
+  '- request_session_notice keeps the developer\'s ask to hear about one observed session later — "tell me when this finishes", "warn me if it fails" — in their own words. Luke\'s background review holds each update against it and speaks when one satisfies it, with no conversation needing to be open. One ask stands per session; a new one replaces it, and withdraw_session_notice lets it go. An ask about a workspace is an ask about each of its listed chats.',
+  "- When the acceptance shows the session already where the ask points — already finished, already failed — say so now instead of promising news that is not coming.",
   "- create_workspace starts a fresh workspace in one of the projects listed in messages marked [workspace projects]. Only those projects exist; a provider that lists none cannot take one, and you never invent a repository or an id.",
   "- Where the projects list says a project takes or needs a task, create_workspace can carry the developer's opening ask for the new agent, in their words. A project that needs one cannot be created without it.",
   "- The projects context also says where a creation ask goes when the developer names no provider: to their default provider when it names one, and while none is chosen, you ask which provider when more than one is listed — the first workspace created saves its provider as the default, and you say so when that happens.",
@@ -580,7 +588,9 @@ export function functionCallFollowUpEvents(): readonly Record<string, unknown>[]
 /**
  * Selects the reviews worth voicing right now. A deduplicated review still
  * means the session needs attention, which the panel shows, but repeating the
- * same sentence out loud would be noise rather than news.
+ * same sentence out loud would be noise rather than news. A review whose
+ * update carried the developer's standing ask speaks with the notice-request
+ * source, which is what entitles it to be heard without a call already open.
  */
 export function attentionSpeechFromReviews(
   reviews: readonly AttentionReview[],
@@ -595,7 +605,9 @@ export function attentionSpeechFromReviews(
       providerId: review.providerId,
       providerSessionId: review.providerSessionId,
       disposition: review.decision.disposition,
-      source: ATTENTION_SPEECH_SOURCE.EVALUATOR,
+      source: review.update.noticeRequest
+        ? ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST
+        : ATTENTION_SPEECH_SOURCE.EVALUATOR,
       summary,
       decidedAt: review.decision.decidedAt,
     });

@@ -45,6 +45,8 @@ const bridge: AppBridge = {
   openSession: invoke(channels.openSession),
   sendSessionMessage: invoke(channels.sendSessionMessage),
   executeSessionControl: invoke(channels.executeSessionControl),
+  requestSessionNotice: invoke(channels.requestSessionNotice),
+  withdrawSessionNotice: invoke(channels.withdrawSessionNotice),
   createSessionWorkspace: invoke(channels.createSessionWorkspace),
   addWorkspaceAgent: invoke(channels.addWorkspaceAgent),
   executeIssueAction: invoke(channels.executeIssueAction),

@@ -128,6 +128,53 @@ export const ATTENTION_TUNING_EXAMPLES: readonly AttentionTuningExample[] = [
       "An observation Luke cannot explain is not a development; announcing it would invent certainty Luke does not have.",
   },
   {
+    name: "A session the developer asked about finishes",
+    update: {
+      providerId: "conductor",
+      providerSessionId: "example-requested-finish",
+      trigger: ATTENTION_TRIGGER.STATUS_CHANGED,
+      providerName: "Conductor",
+      title: "Migrate the payments schema",
+      workspace: "payments-schema",
+      status: SESSION_STATUS.COMPLETE,
+      previousStatus: SESSION_STATUS.WORKING,
+      recap: "Migration applied and the backfill verified on staging.",
+      context: { repository: "billing-api", branch: "conductor/payments-schema" },
+      noticeRequest: "Tell me when the payments migration finishes.",
+      observedAt: 1_760_000_520_000,
+    },
+    expected: {
+      disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
+      summary:
+        "The payments-schema workspace you asked about finished: migration verified on staging.",
+    },
+    rationale:
+      "The developer asked for exactly this development by name, so the finish is theirs to hear and the summary answers the ask.",
+  },
+  {
+    name: "A session the developer asked about is still working",
+    update: {
+      providerId: "conductor",
+      providerSessionId: "example-requested-working",
+      trigger: ATTENTION_TRIGGER.RECAP_CHANGED,
+      providerName: "Conductor",
+      title: "Migrate the payments schema",
+      workspace: "payments-schema",
+      status: SESSION_STATUS.WORKING,
+      previousStatus: SESSION_STATUS.WORKING,
+      recap: "Backfilling the ledger table, four of nine shards done.",
+      context: { repository: "billing-api", branch: "conductor/payments-schema" },
+      noticeRequest: "Tell me when the payments migration finishes.",
+      observedAt: 1_760_000_460_000,
+    },
+    expected: {
+      disposition: ATTENTION_DISPOSITION.SILENT,
+      summary: null,
+    },
+    rationale:
+      "The ask names a finish and the session has not finished; a standing ask licenses the development it asks for, not narration on the way there.",
+  },
+  {
     name: "A recap changes while the session keeps working",
     update: {
       providerId: "claude-code",

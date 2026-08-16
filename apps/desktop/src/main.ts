@@ -2,6 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
+  ATTENTION_REQUEST_RESULT_STATUS,
+  AttentionRequestRegistry,
+  type AttentionRequestResult,
+  attentionRequestText,
   attentionSpeechFromReviews,
   CompositeSessionProviderAdapter,
   DEFAULT_PANEL_FORM_FACTOR,
@@ -205,6 +209,12 @@ let issueRefreshQueued = false;
 // Notices come from status edges the registry observed, never from anything a
 // model decided, so they work — and matter most — with no evaluator configured.
 const sessionNoticeTracker = new SessionNoticeTracker();
+/**
+ * The standing asks the developer has made about sessions, in their words.
+ * They outlive the reviewer — a key re-entered must not forget what was asked
+ * — and are dropped only when withdrawn or when the session itself goes.
+ */
+const attentionRequests = new AttentionRequestRegistry();
 /**
  * Everything the one OpenAI key buys, and nothing that outlives it: the review
  * that decides which sessions need a person, and the credential a spoken turn
@@ -417,6 +427,7 @@ async function applyVoiceCredential(): Promise<void> {
     ? new SessionAttentionReviewer({
         evaluator,
         currentSession: (identity) => sessionRegistry.get(identity),
+        noticeRequestFor: (identity) => attentionRequests.get(identity),
       })
     : undefined;
   // The chosen voice and pace are what a credential is minted against, so they
@@ -1041,6 +1052,67 @@ function registerIpc(): void {
     },
   );
 
+  // A standing ask runs the front half of the message gauntlet — a trusted
+  // sender, a bounded text, a session the registry actually observes — and
+  // then stops on this machine: it is kept for the attention evaluator to
+  // weigh updates against, and no adapter or provider ever sees it. It is
+  // refused while no evaluator is configured, because keeping an ask nothing
+  // will ever read is a promise Luke cannot keep.
+  ipcMain.handle(
+    channels.requestSessionNotice,
+    (event, identity: unknown, request: unknown): AttentionRequestResult => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (!isSessionIdentity(identity)) throw new Error("Invalid session notice request");
+      const ask = attentionRequestText(request);
+      if (!ask) {
+        return {
+          status: ATTENTION_REQUEST_RESULT_STATUS.REJECTED,
+          reason: "An ask has to be one short request and longer than nothing.",
+        };
+      }
+      const session = sessionRegistry.get(identity);
+      if (!session) {
+        return {
+          status: ATTENTION_REQUEST_RESULT_STATUS.REJECTED,
+          reason: "No observed session matches that identity.",
+        };
+      }
+      if (!attentionReviewer) {
+        return {
+          status: ATTENTION_REQUEST_RESULT_STATUS.REJECTED,
+          reason: "No OpenAI key is connected, so nothing would ever read the ask.",
+        };
+      }
+      attentionRequests.set(identity, ask);
+      // The status rides the acceptance because the ask may already be
+      // answered: a session asked about after it finished has no later finish
+      // coming, and the reply should say so rather than promise one.
+      return { status: ATTENTION_REQUEST_RESULT_STATUS.ACCEPTED, sessionStatus: session.status };
+    },
+  );
+
+  ipcMain.handle(
+    channels.withdrawSessionNotice,
+    (event, identity: unknown): AttentionRequestResult => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (!isSessionIdentity(identity)) throw new Error("Invalid session notice request");
+      const session = sessionRegistry.get(identity);
+      if (!session) {
+        return {
+          status: ATTENTION_REQUEST_RESULT_STATUS.REJECTED,
+          reason: "No observed session matches that identity.",
+        };
+      }
+      if (!attentionRequests.withdraw(identity)) {
+        return {
+          status: ATTENTION_REQUEST_RESULT_STATUS.REJECTED,
+          reason: "No ask was standing for that session.",
+        };
+      }
+      return { status: ATTENTION_REQUEST_RESULT_STATUS.ACCEPTED, sessionStatus: session.status };
+    },
+  );
+
   // A new workspace runs the same gauntlet a message does, against the list
   // that offered it: the renderer names a project rather than a repository, and
   // only a project an adapter reported on its latest pass — read back here from
@@ -1432,8 +1504,16 @@ async function reviewSessionAttention(): Promise<void> {
  * being heard needs no talk-key press first.
  */
 function announceSessionNotices(sessions: readonly NormalizedSession[]): void {
+  // Asks about sessions no longer reported have nothing left to be about, and
+  // this commit is the earliest that can be known.
+  attentionRequests.retain(sessions);
   const now = Date.now();
-  const notices = sessionNoticeTracker.notices(sessions, now);
+  const notices = sessionNoticeTracker
+    .notices(sessions, now)
+    // A session the developer asked about by name is the evaluator's to word:
+    // its review reads the ask and speaks to it, and two announcements about
+    // one edge would say the same news twice in a row.
+    .filter((notice) => attentionRequests.get(notice) === undefined);
   if (notices.length === 0) return;
   // No voice, nothing to say it with: without a Realtime credential the
   // renderer cannot open a call, and the panel still shows every state.
