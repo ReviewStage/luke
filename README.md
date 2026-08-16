@@ -39,8 +39,12 @@ it takes a personal access token (`cog_…`, created under **Devin API · PATs**
 and refuses the deprecated `apk_` keys of v1 and v2. A token that belongs to a
 service user rather than to a person is refused too — Devin lists an
 organization's sessions, and Luke reports only the sessions belonging to whoever
-the token authenticates as. Every provider integration is read-only. None
-requires hooks, plugins, wrappers, or changes to how a session is launched.
+the token authenticates as. Every provider integration observes read-only, and
+none requires hooks, plugins, wrappers, or changes to how a session is
+launched. The only writes Luke makes are ones you directly ask for — a
+message, a control the provider advertised, or a new workspace, described
+below — sent through that provider's own documented endpoint and checked
+against the latest observed roster.
 
 ## Issue tracker support
 
@@ -79,8 +83,10 @@ ask, out loud or typed, through Linear's own GraphQL API under your key.
 - An optional spoken conversation, described below, lets you ask Luke about your
   sessions and hear the answer.
 
-Luke does not send commands to agents, inject terminal input, or expose agent
-controls.
+Luke never injects terminal input or simulates keystrokes. The messaging,
+controls, and workspace creation described above happen only when you
+directly ask for them, out loud or typed, through each provider's own
+documented endpoint.
 
 ## Talking to Luke
 
@@ -257,7 +263,10 @@ include the session title, recap, repository, branch, current tool activity, and
 reported error; see [PRIVACY.md](PRIVACY.md) for the exact boundary. It is the
 same one key as the spoken conversation described above, wherever you put it:
 connecting OpenAI in Settings enables both, and deleting it there disables both.
-The row says so where the key is entered. Neither enables agent control.
+The row says so where the key is entered. Attention review only classifies;
+nothing it decides reaches a write path. The spoken conversation can send a
+message or run a control, but only when you directly ask it to in a turn you
+open yourself.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |

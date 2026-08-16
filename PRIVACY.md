@@ -31,7 +31,10 @@ calls, and stop reasons to derive those fields and the session status.
 
 Luke does not modify provider files, retain raw records or message history,
 inject input, or require provider hooks or plugins. Observed fields are held in
-memory for the local display. Luke does not control provider sessions.
+memory for the local display. Observation itself never controls a provider
+session; see Optional cloud-provider reads and Optional issue-tracker reads
+and spoken acts below for the narrow, user-requested writes Luke makes
+elsewhere.
 
 ## Optional cloud-provider reads
 
