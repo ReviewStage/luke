@@ -134,7 +134,6 @@ private struct MediaDuckCommand {
                 }
             }
         }
-        emit("ready")
         dispatchMain()
     }
 
@@ -169,7 +168,6 @@ private struct MediaDuckCommand {
                 ducked: target
             )
         }
-        emit("ducked \(ducked.count)")
     }
 
     /// Only what `duck` changed goes back, and only if it is still where the
@@ -181,7 +179,6 @@ private struct MediaDuckCommand {
     static func restore() {
         let restoring = ducked
         ducked = [:]
-        var restored = 0
         for (key, entry) in restoring {
             guard isRunning(entry.player) else { continue }
             guard let current = volume(of: entry.player) else {
@@ -190,8 +187,6 @@ private struct MediaDuckCommand {
             }
             guard abs(current - entry.ducked) <= RESTORE_TOLERANCE else { continue }
             fade(entry.player, from: current, to: entry.original, stepSeconds: RESTORE_STEP_SECONDS)
-            restored += 1
         }
-        emit("restored \(restored)")
     }
 }

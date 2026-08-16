@@ -2,13 +2,8 @@ import { type BrowserWindow, globalShortcut, type WebContents } from "electron";
 import { channels, type WindowMode } from "./shared/contracts";
 import {
   askHotkeyCandidates,
-  askHotkeyReport,
   stopHotkeyCandidates,
-  stopHotkeyReport,
-  VOICE_HOTKEY_ABSENCE,
-  type VoiceHotkeyAbsence,
   voiceHotkeyCandidates,
-  voiceHotkeyReport,
 } from "./shared/voice-hotkey";
 import { type TalkKeyEdges, TalkKeyWatcher } from "./talk-key";
 
@@ -55,7 +50,6 @@ export interface HotkeyRegistrarOptions {
   hasCredentials: () => boolean;
   shortcut?: ShortcutSurface;
   createTalkKeyWatcher?: (edges: TalkKeyEdges) => TalkKeyHandle;
-  report?: (line: string) => void;
 }
 
 /**
@@ -74,7 +68,6 @@ export class HotkeyRegistrar {
   readonly #hasCredentials: () => boolean;
   readonly #shortcut: ShortcutSurface;
   readonly #createTalkKeyWatcher: (edges: TalkKeyEdges) => TalkKeyHandle;
-  readonly #report: (line: string) => void;
 
   #talk: string | undefined;
   #chosenTalk: string | undefined;
@@ -86,9 +79,6 @@ export class HotkeyRegistrar {
    * describing the one it hoped for.
    */
   #held = true;
-  // Only read when no key was registered, so it starts at the case that needs no
-  // explaining beyond itself: every candidate was refused.
-  #absence: VoiceHotkeyAbsence = VOICE_HOTKEY_ABSENCE.ALREADY_OWNED;
 
   #ask: string | undefined;
   #chosenAsk: string | undefined;
@@ -102,7 +92,6 @@ export class HotkeyRegistrar {
     this.#shortcut = options.shortcut ?? globalShortcut;
     this.#createTalkKeyWatcher =
       options.createTalkKeyWatcher ?? ((edges) => new TalkKeyWatcher(edges));
-    this.#report = options.report ?? ((line) => process.stderr.write(`${line}\n`));
   }
 
   get talk(): string | undefined {
@@ -194,18 +183,10 @@ export class HotkeyRegistrar {
    * reply that is already playing.
    */
   #registerTalk(): void {
-    if (!this.#registersGlobalKeys) {
-      this.#absence = VOICE_HOTKEY_ABSENCE.CAPTURE_RUN;
-      this.#report(voiceHotkeyReport(this.#talk, this.#absence));
-      return;
-    }
+    if (!this.#registersGlobalKeys) return;
     // Taking a system-wide key for a feature that cannot run would make every
     // press somewhere else in macOS do nothing, visibly.
-    if (!this.#hasCredentials()) {
-      this.#absence = VOICE_HOTKEY_ABSENCE.NO_CREDENTIAL;
-      this.#report(voiceHotkeyReport(this.#talk, this.#absence));
-      return;
-    }
+    if (!this.#hasCredentials()) return;
     // The helper first, because it is the only one of the two that reports the
     // key being let go of, and a key you hold is the whole point.
     this.#talkKeyWatcher = this.#createTalkKeyWatcher({
@@ -213,20 +194,17 @@ export class HotkeyRegistrar {
       onRelease: () => this.#send(this.#voiceHostContents(), channels.voiceHotkeyRelease),
       onRegistered: (accelerator) => {
         this.#talk = accelerator;
-        this.#report(voiceHotkeyReport(this.#talk, this.#absence));
         this.#sendTalk();
       },
       onUnavailable: () => {
         this.#talkKeyWatcher = undefined;
         this.#registerToggle();
-        this.#report(voiceHotkeyReport(this.#talk, this.#absence));
         this.#sendTalk();
       },
     });
     if (this.#talkKeyWatcher.start(voiceHotkeyCandidates(this.#chosenTalk))) return;
     this.#talkKeyWatcher = undefined;
     this.#registerToggle();
-    this.#report(voiceHotkeyReport(this.#talk, this.#absence));
   }
 
   /**
@@ -249,7 +227,6 @@ export class HotkeyRegistrar {
       this.#held = false;
       return;
     }
-    this.#absence = VOICE_HOTKEY_ABSENCE.ALREADY_OWNED;
   }
 
   /**
@@ -269,14 +246,8 @@ export class HotkeyRegistrar {
     // Re-runnable: moving the talk key lets everything go and registers afresh,
     // and a key that could not be re-taken must not still be claimed anywhere.
     this.#ask = undefined;
-    if (!this.#registersGlobalKeys) {
-      this.#report(askHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.CAPTURE_RUN));
-      return;
-    }
-    if (!this.#hasCredentials()) {
-      this.#report(askHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.NO_CREDENTIAL));
-      return;
-    }
+    if (!this.#registersGlobalKeys) return;
+    if (!this.#hasCredentials()) return;
     // Every chord the talk key could sit on is taken, not just the one it has
     // announced: its helper falls back through its own candidates after this
     // runs, so a chord it merely might take is already not the ask key's to
@@ -294,10 +265,8 @@ export class HotkeyRegistrar {
       });
       if (!registered) continue;
       this.#ask = accelerator;
-      this.#report(askHotkeyReport(this.#ask, VOICE_HOTKEY_ABSENCE.ALREADY_OWNED));
       return;
     }
-    this.#report(askHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.ALREADY_OWNED));
   }
 
   /**
@@ -314,14 +283,8 @@ export class HotkeyRegistrar {
     // Re-runnable on the ask key's terms: moving another key registers afresh,
     // and a chord that could not be re-taken must not still be claimed anywhere.
     this.#stop = undefined;
-    if (!this.#registersGlobalKeys) {
-      this.#report(stopHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.CAPTURE_RUN));
-      return;
-    }
-    if (!this.#hasCredentials()) {
-      this.#report(stopHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.NO_CREDENTIAL));
-      return;
-    }
+    if (!this.#registersGlobalKeys) return;
+    if (!this.#hasCredentials()) return;
     // Every chord the other two keys could sit on is taken, not just the ones
     // they have announced: the talk key's helper falls back through its own
     // candidates on its own clock, and the ask key re-registers behind it.
@@ -336,10 +299,8 @@ export class HotkeyRegistrar {
       });
       if (!registered) continue;
       this.#stop = accelerator;
-      this.#report(stopHotkeyReport(this.#stop, VOICE_HOTKEY_ABSENCE.ALREADY_OWNED));
       return;
     }
-    this.#report(stopHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.ALREADY_OWNED));
   }
 
   /**
@@ -395,7 +356,6 @@ export class HotkeyRegistrar {
     await released;
     this.#talk = undefined;
     this.#held = true;
-    this.#absence = VOICE_HOTKEY_ABSENCE.ALREADY_OWNED;
     this.#registerTalk();
     if (!this.#talkKeyWatcher) this.#sendTalk();
     // The ask key went down with `unregisterAll`, and the chord it can have may

@@ -18,7 +18,6 @@ function harness(options: { credentials?: boolean; registers?: boolean } = {}) {
   const unregistered: string[] = [];
   let unregisterAllCount = 0;
   const broadcasts: { channel: string; payload: unknown }[] = [];
-  const reports: string[] = [];
   const talkStops: number[] = [];
   let talkEdges: TalkKeyEdges | undefined;
   let talkStart = true;
@@ -41,7 +40,6 @@ function harness(options: { credentials?: boolean; registers?: boolean } = {}) {
     registersGlobalKeys: options.registers ?? true,
     hasCredentials: () => options.credentials ?? true,
     shortcut,
-    report: (line) => reports.push(line),
     createTalkKeyWatcher: (edges): TalkKeyHandle => {
       talkEdges = edges;
       return {
@@ -66,7 +64,6 @@ function harness(options: { credentials?: boolean; registers?: boolean } = {}) {
     unregistered: () => unregistered,
     unregisterAllCount: () => unregisterAllCount,
     broadcasts: () => broadcasts,
-    reports: () => reports,
     talkStops: () => talkStops,
     failTalkStart() {
       talkStart = false;
@@ -139,14 +136,12 @@ test("a capture run takes no system key", async () => {
   const context = harness({ registers: false });
   await context.registrar.reapply(HOTKEY_RANK.TALK);
   assert.deepEqual(context.registered(), []);
-  assert.match(context.reports().join("\n"), /capture run/);
 });
 
 test("no credential takes no system key", async () => {
   const context = harness({ credentials: false });
   await context.registrar.reapply(HOTKEY_RANK.TALK);
   assert.deepEqual(context.registered(), []);
-  assert.match(context.reports().join("\n"), /voice is off/);
 });
 
 test("a helper that cannot start falls back to a toggle", async () => {

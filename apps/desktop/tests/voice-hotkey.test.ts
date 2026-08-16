@@ -2,23 +2,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   askHotkeyCandidates,
-  askHotkeyReport,
   capturedVoiceHotkey,
   DEFAULT_ASK_HOTKEYS,
   DEFAULT_STOP_HOTKEYS,
   DEFAULT_VOICE_HOTKEYS,
   parseVoiceHotkey,
   stopHotkeyCandidates,
-  stopHotkeyReport,
   TALK_KEY_RELEASE,
   TALK_KEY_TAP_MS,
   talkKeyRelease,
-  VOICE_HOTKEY_ABSENCE,
   VOICE_HOTKEY_CAPTURE,
   voiceHotkeyCandidates,
   voiceHotkeyKeycaps,
   voiceHotkeyLabel,
-  voiceHotkeyReport,
   voiceHotkeyToShow,
 } from "../src/shared/voice-hotkey";
 
@@ -54,16 +50,6 @@ test("a chosen stop chord goes first, with the default kept behind it", () => {
   assert.deepEqual(stopHotkeyCandidates("Alt+S", [undefined]), DEFAULT_STOP_HOTKEYS);
   // The other keys outrank even a chosen chord: no two Luke keys compete.
   assert.deepEqual(stopHotkeyCandidates("Control+Alt+X", ["Control+Alt+X"]), DEFAULT_STOP_HOTKEYS);
-});
-
-test("a missing stop key reports on the talk key's terms", () => {
-  assert.equal(stopHotkeyReport("Alt+S", VOICE_HOTKEY_ABSENCE.ALREADY_OWNED), "Luke stop key: ⌥S");
-  assert.match(
-    stopHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.ALREADY_OWNED),
-    /another app already owns it/,
-  );
-  assert.match(stopHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.CAPTURE_RUN), /capture run/);
-  assert.match(stopHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.NO_CREDENTIAL), /voice is off/);
 });
 
 test("the ask key is the talk key's sibling, never its rival", () => {
@@ -120,16 +106,6 @@ test("a chosen ask chord goes first, with the defaults kept behind it", () => {
   );
 });
 
-test("a missing ask key reports on the talk key's terms", () => {
-  assert.equal(askHotkeyReport("Alt+L", VOICE_HOTKEY_ABSENCE.ALREADY_OWNED), "Luke ask key: ⌥L");
-  assert.match(
-    askHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.ALREADY_OWNED),
-    /another app already owns it/,
-  );
-  assert.match(askHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.CAPTURE_RUN), /capture run/);
-  assert.match(askHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.NO_CREDENTIAL), /voice is off/);
-});
-
 test("an accelerator reads the way macOS writes it", () => {
   assert.equal(voiceHotkeyLabel("Alt+Space"), "⌥Space");
   assert.equal(voiceHotkeyLabel("Alt+S"), "⌥S");
@@ -152,25 +128,6 @@ test("a chord drawn as keys comes apart into the keys a hand presses", () => {
   // is never one of the modifier glyphs.
   const caps = voiceHotkeyKeycaps("Control+Alt+Shift+Command+K");
   assert.equal(new Set(caps).size, caps.length);
-});
-
-test("a missing talk key says which absence it is", () => {
-  assert.equal(
-    voiceHotkeyReport("Alt+Space", VOICE_HOTKEY_ABSENCE.ALREADY_OWNED),
-    "Luke talk key: ⌥Space",
-  );
-
-  // Blaming a conflict for an absence nobody attempted sends the reader off to
-  // hunt for the app that stole the key, when no key was ever asked for.
-  const withoutCredential = voiceHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.NO_CREDENTIAL);
-  assert.match(withoutCredential, /voice is off/);
-  assert.ok(!withoutCredential.includes("another app"));
-
-  assert.match(
-    voiceHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.ALREADY_OWNED),
-    /another app already owns it/,
-  );
-  assert.match(voiceHotkeyReport(undefined, VOICE_HOTKEY_ABSENCE.CAPTURE_RUN), /capture run/);
 });
 
 test("a chord is read into one canonical spelling", () => {
