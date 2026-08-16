@@ -52,7 +52,8 @@ const CONDUCTOR_DEFAULT_API_URL = "https://api.conductor.build";
 
 /**
  * Documented public API routes. The reads walk projects, workspaces, and
- * sessions; the writers are `POST …/sessions/{id}/messages`, which is
+ * sessions, and poll the status endpoints both of those document; the writers
+ * are `POST …/sessions/{id}/messages`, which is
  * Conductor's documented way to hand a prompt to an existing session — queued
  * while it is idle, steered into the running turn while it works —
  * `POST …/sessions/{id}/cancel`, which stops the current turn,
@@ -272,6 +273,32 @@ const SESSION_STATUS_BY_CONDUCTOR_STATUS: Readonly<Record<ConductorSessionStatus
     [CONDUCTOR_SESSION_STATUS.ERROR]: SESSION_STATUS.ERROR,
   };
 
+/** The lifecycle states `GET …/workspaces/{id}/status` documents. */
+const CONDUCTOR_WORKSPACE_STATUS = {
+  INITIALIZING: "initializing",
+  READY: "ready",
+  SLEEPING: "sleeping",
+  ARCHIVED: "archived",
+  DELETED: "deleted",
+  UPDATING: "updating",
+} as const;
+
+type ConductorWorkspaceStatus =
+  (typeof CONDUCTOR_WORKSPACE_STATUS)[keyof typeof CONDUCTOR_WORKSPACE_STATUS];
+
+/**
+ * The lifecycle states worth a row's activity slot: a workspace still being
+ * built or rebuilt is why its chats are quiet, and without the words a
+ * just-created session reads as unaccountably idle. A ready workspace is the
+ * normal case and says nothing, and a sleeping one is Conductor's own economy
+ * — it wakes on the next message — so wording it would bump the recap off the
+ * row to report a non-event.
+ */
+const CONDUCTOR_WORKSPACE_ACTIVITY: Readonly<Partial<Record<ConductorWorkspaceStatus, string>>> = {
+  [CONDUCTOR_WORKSPACE_STATUS.INITIALIZING]: "Workspace initializing",
+  [CONDUCTOR_WORKSPACE_STATUS.UPDATING]: "Workspace updating",
+};
+
 const CONDUCTOR_ADAPTER_DEFAULTS = {
   MAXIMUM_PROJECTS: 10,
   WORKSPACE_PAGE_SIZE: 100,
@@ -284,6 +311,15 @@ const CONDUCTOR_ADAPTER_DEFAULTS = {
 interface ConductorReportedStatus {
   status: ConductorSessionStatus | undefined;
   updatedAt: number | undefined;
+  errorMessage?: string;
+}
+
+/**
+ * What the lifecycle endpoint said about one workspace: where it stands, and
+ * the failure message it carries when standing it up went wrong.
+ */
+interface ConductorWorkspaceLifecycle {
+  status?: ConductorWorkspaceStatus;
   errorMessage?: string;
 }
 
@@ -500,8 +536,12 @@ export class ConductorSessionAdapter
     // refusal: a key an org scopes away from the query endpoint alone still
     // reads the roster, and the roster reads above are what judge the
     // credential — so this one read swallows everything rather than letting
-    // an enrichment 403 clear every observed row.
-    const [transcripts, reportedStatuses] = await Promise.all([
+    // an enrichment 403 clear every observed row. The lifecycle reads ride
+    // the same way, one per still-open workspace — a filed-away workspace's
+    // state is settled — and a failed one costs that workspace's activity
+    // words and failure message, never the pass.
+    const openWorkspaces = workspaces.filter((workspace) => !workspace.archived);
+    const [transcripts, reportedStatuses, workspaceLifecycles] = await Promise.all([
       this.#sessionTranscripts(request, sessions).catch(() => undefined),
       Promise.all(
         sessions.map((session) =>
@@ -512,6 +552,14 @@ export class ConductorSessionAdapter
             : this.tolerateItemFailure(() => this.#sessionStatus(request, session.id)),
         ),
       ),
+      Promise.all(
+        openWorkspaces.map(async (workspace) => {
+          const lifecycle = await this.tolerateItemFailure(() =>
+            this.#workspaceLifecycle(request, workspace.id),
+          );
+          return lifecycle ? ([workspace.id, lifecycle] as const) : undefined;
+        }),
+      ).then((entries) => new Map(entries.filter(isDefined))),
     ]);
 
     // The workspaces every observed chat of which was positively seen settled
@@ -542,6 +590,7 @@ export class ConductorSessionAdapter
           session,
           reportedStatuses[index],
           transcripts?.get(session.id),
+          workspaceLifecycles.get(session.workspace.id),
           settledWorkspaceIds,
           now,
         ),
@@ -745,6 +794,7 @@ export class ConductorSessionAdapter
     session: ConductorSession,
     reported: ConductorReportedStatus | undefined,
     transcript: ConductorTranscript | undefined,
+    lifecycle: ConductorWorkspaceLifecycle | undefined,
     settledWorkspaceIds: ReadonlySet<string>,
     now: number,
   ): ProviderSessionObservation | undefined {
@@ -764,6 +814,19 @@ export class ConductorSessionAdapter
         ? transcript?.recap
         : undefined;
     const model = agentAndModelLabel(transcript?.agentKind, session.model);
+    // The workspace's own words for why its chats are quiet, and its own
+    // failure message when standing it up went wrong. Both belong only to the
+    // open chats: a closed one is settled, and the machinery around it must
+    // not bump its recap or dress a complete row as newly failed. A session's
+    // reported error is about the turn the user is watching, so it always
+    // outranks the machinery's.
+    const activity =
+      !session.archived && lifecycle?.status
+        ? CONDUCTOR_WORKSPACE_ACTIVITY[lifecycle.status]
+        : undefined;
+    const error = session.archived
+      ? undefined
+      : (reported?.errorMessage ?? lifecycle?.errorMessage);
     // The stop belongs to the turn and the archive to the workspace: a chat
     // mid-turn offers the stop alone — its own workspace is by definition
     // unsettled — and any chat of a positively settled, still-open workspace
@@ -812,7 +875,8 @@ export class ConductorSessionAdapter
       detail: {
         repository: session.workspace.repositoryLabel,
         ...(model ? { model } : {}),
-        ...(reported?.errorMessage ? { error: reported.errorMessage } : {}),
+        ...(activity ? { activity } : {}),
+        ...(error ? { error } : {}),
         ...(session.deepLink ? { link: session.deepLink } : {}),
       },
     };
@@ -861,6 +925,37 @@ export class ConductorSessionAdapter
     return {
       status,
       updatedAt: timestampFromRecord(body, CONDUCTOR_FIELD.UPDATED_AT),
+      ...(errorMessage ? { errorMessage } : {}),
+    };
+  }
+
+  /**
+   * Where one workspace stands in its lifecycle, from the endpoint Conductor
+   * documents for polling exactly that. A workspace still being built or
+   * rebuilt explains why its chats sit quiet, and the failure message it
+   * carries is the one thing that says a workspace never came up at all —
+   * nothing else reports it, because every chat inside just reads idle.
+   */
+  async #workspaceLifecycle(
+    request: CloudRequest,
+    workspaceId: string,
+  ): Promise<ConductorWorkspaceLifecycle> {
+    const body = await request([
+      CONDUCTOR_ROUTE_SEGMENT.V0,
+      CONDUCTOR_ROUTE_SEGMENT.WORKSPACES,
+      workspaceId,
+      CONDUCTOR_ROUTE_SEGMENT.STATUS,
+    ]);
+    const status = knownValue(
+      CONDUCTOR_WORKSPACE_STATUS,
+      textFromRecord(body, CONDUCTOR_FIELD.STATUS),
+    );
+    const errorMessage = textFromRecord(body, CONDUCTOR_FIELD.ERROR_MESSAGE)?.slice(
+      0,
+      CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_ERROR_LENGTH,
+    );
+    return {
+      ...(status ? { status } : {}),
       ...(errorMessage ? { errorMessage } : {}),
     };
   }

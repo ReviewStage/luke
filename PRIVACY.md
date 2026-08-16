@@ -48,7 +48,9 @@ endpoint, under the same read-document boundary the Linear section below
 describes.
 
 - For Conductor, Luke reads the authenticated identity, projects, workspaces the
-  authenticated user created, sessions, and session statuses. It processes
+  authenticated user created, sessions, session statuses, and each open
+  workspace's lifecycle status — whether it is still being stood up, and the
+  failure message it carries when standing it up went wrong. It processes
   identifiers; project, workspace, and session names; repository names derived
   from Git remotes (or the project name when no usable remote is available);
   timestamps; model configuration; archive state; status and reported errors;

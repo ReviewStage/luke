@@ -39,6 +39,9 @@ interface TestWorkspace {
   creatorId?: string;
   lastActivityAt: number;
   archivedAt?: string;
+  lifecycleStatus?: string;
+  lifecycleErrorMessage?: string;
+  lifecycleHttpStatus?: number;
 }
 
 interface TestSession {
@@ -197,6 +200,19 @@ function fakeConductorApi(api: TestApi) {
         ),
       );
     }
+    if (segments[1] === "workspaces" && segments[3] === "status") {
+      const workspace = api.workspaces.find((candidate) => candidate.id === segments[2]);
+      if (!workspace) return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
+      if (workspace.lifecycleHttpStatus) return jsonResponse({}, workspace.lifecycleHttpStatus);
+      return jsonResponse({
+        workspaceId: workspace.id,
+        status: workspace.lifecycleStatus ?? "ready",
+        updatedAt: isoTimestamp(workspace.lastActivityAt),
+        ...(workspace.lifecycleErrorMessage
+          ? { errorMessage: workspace.lifecycleErrorMessage }
+          : {}),
+      });
+    }
     if (segments[1] === "sessions" && segments[3] === "status") {
       const session = api.sessions.find((candidate) => candidate.id === segments[2]);
       if (!session) return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
@@ -343,6 +359,155 @@ test("reports an idle session as waiting and an errored session with its reason"
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
   assert.equal(observations[1]?.status, SESSION_STATUS.ERROR);
   assert.equal(observations[1]?.detail?.error, TEST_ERROR_MESSAGE);
+});
+
+test("words a workspace still being built onto its rows, ready and asleep say nothing", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [
+      {
+        ...ownedWorkspace("workspace-building", TEST_TIME - 5_000),
+        lifecycleStatus: "initializing",
+      },
+      {
+        ...ownedWorkspace("workspace-rebuilding", TEST_TIME - 10_000),
+        lifecycleStatus: "updating",
+      },
+      { ...ownedWorkspace("workspace-ready", TEST_TIME - 20_000) },
+      { ...ownedWorkspace("workspace-asleep", TEST_TIME - 30_000), lifecycleStatus: "sleeping" },
+    ],
+    sessions: [
+      { id: "chat-building", workspaceId: "workspace-building", name: TEST_SESSION_NAME },
+      { id: "chat-rebuilding", workspaceId: "workspace-rebuilding", name: TEST_SESSION_NAME },
+      // A closed chat beside the one being rebuilt is already settled: the
+      // machinery around it is not its news.
+      {
+        id: "chat-closed-beside",
+        workspaceId: "workspace-rebuilding",
+        name: TEST_SESSION_NAME,
+        archivedAt: isoTimestamp(TEST_TIME - 60_000),
+      },
+      { id: "chat-ready", workspaceId: "workspace-ready", name: TEST_SESSION_NAME },
+      { id: "chat-asleep", workspaceId: "workspace-asleep", name: TEST_SESSION_NAME },
+    ],
+  });
+
+  const observations = await adapterFor(api.fetch).observe();
+  const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
+
+  // A workspace being stood up or rebuilt is why its chat sits quiet, so the
+  // row says so; a ready workspace is the normal case and a sleeping one is
+  // Conductor's own economy, so neither takes the activity slot from a recap.
+  assert.equal(byId.get("chat-building")?.detail?.activity, "Workspace initializing");
+  assert.equal(byId.get("chat-rebuilding")?.detail?.activity, "Workspace updating");
+  assert.equal(byId.get("chat-closed-beside")?.detail?.activity, undefined);
+  assert.equal(byId.get("chat-ready")?.detail?.activity, undefined);
+  assert.equal(byId.get("chat-asleep")?.detail?.activity, undefined);
+});
+
+test("reports the failure that kept a workspace from coming up, behind the chat's own", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [
+      {
+        ...ownedWorkspace("workspace-failed", TEST_TIME - 5_000),
+        lifecycleStatus: "initializing",
+        lifecycleErrorMessage: "The setup script exited with status 1",
+      },
+      {
+        ...ownedWorkspace("workspace-both-failed", TEST_TIME - 10_000),
+        lifecycleStatus: "ready",
+        lifecycleErrorMessage: "The snapshot could not be restored",
+      },
+    ],
+    sessions: [
+      {
+        id: "chat-quietly-failed",
+        workspaceId: "workspace-failed",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 1_000,
+      },
+      // A chat with a failure of its own is telling the user about the turn
+      // they are watching, which outranks the machinery around it.
+      {
+        id: "chat-loudly-failed",
+        workspaceId: "workspace-both-failed",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.ERROR,
+        statusUpdatedAt: TEST_TIME - 1_000,
+      },
+      // A closed chat is complete, and a complete row must not be dressed as
+      // newly failed by the workspace around it.
+      {
+        id: "chat-closed-in-failed",
+        workspaceId: "workspace-failed",
+        name: TEST_SESSION_NAME,
+        archivedAt: isoTimestamp(TEST_TIME - 60_000),
+      },
+    ],
+  });
+
+  const observations = await adapterFor(api.fetch).observe();
+  const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
+
+  assert.equal(
+    byId.get("chat-quietly-failed")?.detail?.error,
+    "The setup script exited with status 1",
+  );
+  assert.equal(byId.get("chat-loudly-failed")?.detail?.error, TEST_ERROR_MESSAGE);
+  assert.equal(byId.get("chat-closed-in-failed")?.status, SESSION_STATUS.COMPLETE);
+  assert.equal(byId.get("chat-closed-in-failed")?.detail?.error, undefined);
+});
+
+test("a failed lifecycle read costs the workspace's words, never the pass", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [
+      {
+        ...ownedWorkspace("workspace-unreadable", TEST_TIME - 5_000),
+        lifecycleStatus: "initializing",
+        lifecycleHttpStatus: HTTP_STATUS.SERVER_ERROR,
+      },
+      // A filed-away workspace's state is settled, so its lifecycle is not
+      // asked after at all.
+      {
+        ...ownedWorkspace("workspace-archived", TEST_TIME - 10_000),
+        archivedAt: isoTimestamp(TEST_TIME - 10_000),
+      },
+    ],
+    sessions: [
+      {
+        id: "chat-unreadable",
+        workspaceId: "workspace-unreadable",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 1_000,
+      },
+      {
+        id: "chat-archived",
+        workspaceId: "workspace-archived",
+        name: TEST_SESSION_NAME,
+        archivedAt: isoTimestamp(TEST_TIME - 10_000),
+      },
+    ],
+  });
+
+  const observations = await adapterFor(api.fetch).observe();
+  const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
+
+  assert.equal(observations.length, 2);
+  assert.equal(byId.get("chat-unreadable")?.detail?.activity, undefined);
+  assert.equal(byId.get("chat-unreadable")?.status, SESSION_STATUS.WAITING);
+  assert.equal(
+    api.requests.some((request) =>
+      request.pathname.endsWith("/workspaces/workspace-archived/status"),
+    ),
+    false,
+  );
 });
 
 const IDLE_SESSION_UUID = "11111111-1111-4111-8111-111111111111";
@@ -827,10 +992,13 @@ test("reports an archived session as complete without requesting its status", as
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.COMPLETE);
   // The archive time is when the chat settled; the workspace timestamp would
-  // date it by whatever a sibling chat did since.
+  // date it by whatever a sibling chat did since. The workspace's own
+  // lifecycle is still read; it is the chat's status that has nothing to ask.
   assert.equal(observations[0]?.observedAt, TEST_TIME - 20_000);
   assert.equal(
-    api.requests.some((request) => request.pathname.endsWith("/status")),
+    api.requests.some(
+      (request) => request.pathname.includes("/sessions/") && request.pathname.endsWith("/status"),
+    ),
     false,
   );
 });
