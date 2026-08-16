@@ -198,15 +198,12 @@ test("observes a working session and labels it the way Devin named it", async ()
   // The session's structured output is shaped by its prompt, so it stays out.
   assert.equal(JSON.stringify(observations).includes("SECRET_STRUCTURED_OUTPUT"), false);
   // Devin is asked who the credential belongs to, then for that person's
-  // sessions since the observation window opened. Nothing else.
+  // sessions. Nothing else.
   assert.deepEqual(
     api.requests.map((request) => request.pathname),
     ["/v3/self", `/v3/organizations/${TEST_ORG_ID}/sessions`],
   );
-  assert.equal(
-    api.requests[1]?.search,
-    `?first=200&user_ids=${TEST_USER_ID}&updated_after=${seconds(TEST_TIME - 24 * 60 * 60 * 1000)}`,
-  );
+  assert.equal(api.requests[1]?.search, `?first=200&user_ids=${TEST_USER_ID}`);
   assert.equal(
     api.requests.every(
       (request) => request.method === "GET" && request.authorization === `Bearer ${TEST_API_KEY}`,
@@ -387,25 +384,17 @@ test("reads a timestamp Devin reports in seconds as the moment it means", async 
   const observations = await adapterFor(api.fetch).observe();
 
   assert.equal(observations[0]?.observedAt, TEST_TIME - 60_000);
-  // The window is asked for in the same unit, so a page cannot come back empty
-  // because Luke asked for sessions updated after the year 5138.
-  const requested = Number(
-    new URL(api.requests[1]?.search ?? "", TEST_BASE_URL).searchParams.get("updated_after"),
-  );
-  assert.ok(requested > 0 && requested < seconds(TEST_TIME));
 });
 
-test("ignores sessions untouched for longer than the maximum session age", async () => {
-  // The request already excludes them, so this covers a provider that answers
-  // more broadly than it was asked to.
+test("keeps a session untouched since the day before yesterday", async () => {
   const api = fakeDevinApi([workingSession("devin-last-week", TEST_TIME - 48 * 60 * 60 * 1000)]);
-  const unfiltered: CloudFetch = async (url, init) => {
-    const address = new URL(url);
-    address.searchParams.delete("updated_after");
-    return api.fetch(address.href, init);
-  };
 
-  assert.deepEqual(await adapterFor(unfiltered).observe(), []);
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.deepEqual(
+    observations.map((observation) => observation.providerSessionId),
+    ["devin-last-week"],
+  );
 });
 
 test("falls back to the repository its pull request is in when Devin named nothing", async () => {

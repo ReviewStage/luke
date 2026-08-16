@@ -146,7 +146,6 @@ export interface CodexAdapterOptions {
   sqliteHome?: string;
   now?: () => number;
   maximumSessionRows?: number;
-  maximumSessionAgeMs?: number;
   activeSessionFreshnessMs?: number;
   sqlite?: SqliteModuleLoader;
 }
@@ -413,7 +412,6 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
   readonly #sqliteHome: string | undefined;
   readonly #now: () => number;
   readonly #maximumSessionRows: number;
-  readonly #maximumSessionAgeMs: number;
   readonly #activeSessionFreshnessMs: number;
   readonly #sqlite: SqliteModuleLoader;
 
@@ -425,16 +423,14 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
       options,
       {
         maximumSessionRows: CODEX_ADAPTER_DEFAULTS.MAXIMUM_SESSION_ROWS,
-        maximumSessionAgeMs: OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS,
         activeSessionFreshnessMs: OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
       },
       {
         positive: ["maximumSessionRows"],
-        nonNegative: ["maximumSessionAgeMs", "activeSessionFreshnessMs"],
+        nonNegative: ["activeSessionFreshnessMs"],
       },
     );
     this.#maximumSessionRows = resolved.maximumSessionRows;
-    this.#maximumSessionAgeMs = resolved.maximumSessionAgeMs;
     this.#activeSessionFreshnessMs = resolved.activeSessionFreshnessMs;
     this.#sqlite = options.sqlite ?? defaultSqliteModule;
   }
@@ -450,8 +446,7 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
         rows = database
           .prepare(CODEX_THREAD_QUERY)
           .all(this.#maximumSessionRows)
-          .filter((row): row is CodexThreadRow => row !== null && typeof row === "object")
-          .filter((row) => now - timestampFromRow(row) <= this.#maximumSessionAgeMs);
+          .filter((row): row is CodexThreadRow => row !== null && typeof row === "object");
       } catch (error) {
         if (canIgnoreSqliteError(error)) continue;
         throw error;

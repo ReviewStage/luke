@@ -43,10 +43,12 @@ export function agedStatus(
 
 /**
  * Shared bounds for every provider. A session reads the same whether Luke
- * observed it on disk or over the network.
+ * observed it on disk or over the network. There is deliberately no maximum
+ * session age: a conversation is never hidden for being old, only crowded out
+ * by newer ones when a provider's count budget fills. Each adapter's budget —
+ * newest first — is what bounds the roster and the observation pass.
  */
 export const OBSERVATION_WINDOW = {
-  MAXIMUM_SESSION_AGE_MS: 24 * 60 * 60 * 1000,
   ACTIVE_SESSION_FRESHNESS_MS: 15 * 60 * 1000,
 } as const;
 

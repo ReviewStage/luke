@@ -44,7 +44,6 @@ const COPILOT_ROUTE = {
 
 const COPILOT_QUERY = {
   PER_PAGE: "per_page",
-  SINCE: "since",
 } as const;
 
 const COPILOT_FIELD = {
@@ -127,7 +126,7 @@ const SESSION_STATUS_BY_COPILOT_STATE: Readonly<Record<CopilotTaskState, Session
 };
 
 const COPILOT_ADAPTER_DEFAULTS = {
-  /** The documented maximum, so one call covers as much of a day as it can. */
+  /** The documented maximum, so one call reaches as deep into the history as it can. */
   TASK_PAGE_SIZE: 100,
   MAXIMUM_OBSERVED_TASKS: 12,
   MAXIMUM_BRANCH_LABEL_LENGTH: 60,
@@ -256,19 +255,15 @@ export class CopilotSessionAdapter extends CloudSessionAdapter {
   ): Promise<readonly ProviderSessionObservation[]> {
     // One call per pass. The list projection already carries the state, the
     // timestamps, and the task's own addresses, so there is nothing a
-    // per-task read would add. `since` asks GitHub for the observation window,
-    // and the filter below holds it against whatever comes back.
+    // per-task read would add. Tasks are never aged out — the newest-first
+    // cap below is the only bound on what the page yields.
     const body = await request(COPILOT_ROUTE.TASKS, {
       [COPILOT_QUERY.PER_PAGE]: String(COPILOT_ADAPTER_DEFAULTS.TASK_PAGE_SIZE),
-      [COPILOT_QUERY.SINCE]: new Date(
-        now - OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS,
-      ).toISOString(),
     });
 
     return recordsFromPage(body, COPILOT_FIELD.TASKS)
       .map(taskFromRecord)
       .filter(isDefined)
-      .filter((task) => now - task.observedAt <= OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS)
       .sort((first, second) => second.observedAt - first.observedAt)
       .slice(0, this.#maximumObservedTasks)
       .map((task) => this.#observationFor(task, now));

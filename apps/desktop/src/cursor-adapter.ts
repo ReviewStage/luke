@@ -179,7 +179,7 @@ const SESSION_STATUS_BY_CURSOR_RUN_STATUS: Readonly<Record<CursorRunStatus, Sess
 };
 
 const CURSOR_ADAPTER_DEFAULTS = {
-  /** The documented maximum, so one call covers as much of a day as it can. */
+  /** The documented maximum, so one call reaches as deep into the history as it can. */
   AGENT_PAGE_SIZE: 100,
   MAXIMUM_OBSERVED_SESSIONS: 12,
   MAXIMUM_REFERENCE_LABEL_LENGTH: 60,
@@ -232,7 +232,7 @@ function firstRunBranch(record: Record<string, unknown>): Record<string, unknown
 function agentFromRecord(record: Record<string, unknown>): CursorAgent | undefined {
   const id = textFromRecord(record, CURSOR_FIELD.ID);
   // An agent is a standing definition that can be run again months later, so
-  // the time it was last touched is what places it in the observation window.
+  // the time it was last touched is what orders it against the budget.
   const lastActivityAt =
     timestampFromRecord(record, CURSOR_FIELD.UPDATED_AT) ??
     timestampFromRecord(record, CURSOR_FIELD.CREATED_AT);
@@ -341,13 +341,12 @@ export class CursorSessionAdapter
     });
 
     // Cursor lists agents newest-first, so a full first page already reaches
-    // past the observation window and the `cursor` page after it could only
-    // hold agents Luke has already aged out.
+    // past anything the caps below would keep and the `cursor` page after it
+    // could only hold agents the budget has already passed over.
     const agents = recordsFromPage(body, CURSOR_FIELD.ITEMS)
       .map(agentFromRecord)
       .filter(isDefined)
-      .filter((agent) => now - agent.lastActivityAt <= OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS)
-      // When a day holds more agents than Luke observes, the ones that can
+      // When the page holds more agents than Luke observes, the ones that can
       // still change take the budget: an agent the user filed away has nothing
       // left to say, however recently it was touched.
       .sort(
@@ -508,8 +507,6 @@ export class CursorSessionAdapter
     // The run's timestamp is the moment its state was entered; the agent's is
     // only the last resort, because it also moves for edits that are not work.
     const observedAt = run?.updatedAt ?? agent.lastActivityAt;
-    if (now - observedAt > OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS) return undefined;
-
     const status = this.#statusFor(agent, run, observedAt, now);
     // A run names the repository it pushed to, so a list item that carries no
     // `repos` still resolves to something better than "workspace".

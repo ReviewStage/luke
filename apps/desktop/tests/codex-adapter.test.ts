@@ -573,7 +573,7 @@ test("keeps stale unarchived Codex sessions unknown instead of inventing activit
   assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
 });
 
-test("filters old and archived Codex threads while preserving newest sessions", async (t) => {
+test("filters archived Codex threads while keeping sessions however old", async (t) => {
   const codexHome = await temporaryCodexHome(t);
   await writeCodexState(codexHome, [
     {
@@ -597,7 +597,6 @@ test("filters old and archived Codex threads while preserving newest sessions", 
   const adapter = new CodexSessionAdapter({
     codexHome,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
   });
   const observations = await adapter.observe();
 
@@ -612,6 +611,11 @@ test("filters old and archived Codex threads while preserving newest sessions", 
         providerSessionId: "new-session",
         status: SESSION_STATUS.WORKING,
         title: "new",
+      },
+      {
+        providerSessionId: "old-session",
+        status: SESSION_STATUS.WORKING,
+        title: "old",
       },
     ],
   );

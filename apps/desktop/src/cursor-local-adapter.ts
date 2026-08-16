@@ -89,7 +89,6 @@ export interface CursorLocalAdapterOptions {
   now?: () => number;
   maximumProjectDirectories?: number;
   maximumSessionFiles?: number;
-  maximumSessionAgeMs?: number;
   activeSessionFreshnessMs?: number;
   readTailBytes?: number;
 }
@@ -313,7 +312,6 @@ export class CursorLocalSessionAdapter implements SessionProviderAdapter {
   readonly #now: () => number;
   readonly #maximumProjectDirectories: number;
   readonly #maximumSessionFiles: number;
-  readonly #maximumSessionAgeMs: number;
   readonly #activeSessionFreshnessMs: number;
   readonly #readTailBytes: number;
 
@@ -328,33 +326,29 @@ export class CursorLocalSessionAdapter implements SessionProviderAdapter {
       {
         maximumProjectDirectories: CURSOR_LOCAL_ADAPTER_DEFAULTS.MAXIMUM_PROJECT_DIRECTORIES,
         maximumSessionFiles: CURSOR_LOCAL_ADAPTER_DEFAULTS.MAXIMUM_SESSION_FILES,
-        maximumSessionAgeMs: OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS,
         activeSessionFreshnessMs: OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
         readTailBytes: LOCAL_ADAPTER_DEFAULTS.READ_TAIL_BYTES,
       },
       {
         positive: ["maximumProjectDirectories", "maximumSessionFiles", "readTailBytes"],
-        nonNegative: ["maximumSessionAgeMs", "activeSessionFreshnessMs"],
+        nonNegative: ["activeSessionFreshnessMs"],
       },
     );
     this.#maximumProjectDirectories = resolved.maximumProjectDirectories;
     this.#maximumSessionFiles = resolved.maximumSessionFiles;
-    this.#maximumSessionAgeMs = resolved.maximumSessionAgeMs;
     this.#activeSessionFreshnessMs = resolved.activeSessionFreshnessMs;
     this.#readTailBytes = resolved.readTailBytes;
   }
 
   async observe(): Promise<readonly ProviderSessionObservation[]> {
     const now = this.#now();
-    const candidates = (
-      await discoverSessionFiles({
-        projectsDirectory: path.join(this.#cursorHome, CURSOR_DIRECTORY.PROJECTS),
-        sessionsDirectoryName: CURSOR_DIRECTORY.TRANSCRIPTS,
-        maximumProjectDirectories: this.#maximumProjectDirectories,
-        maximumSessionFiles: this.#maximumSessionFiles,
-        sessionFilesIn: transcriptsIn,
-      })
-    ).filter((candidate) => now - candidate.mtimeMs <= this.#maximumSessionAgeMs);
+    const candidates = await discoverSessionFiles({
+      projectsDirectory: path.join(this.#cursorHome, CURSOR_DIRECTORY.PROJECTS),
+      sessionsDirectoryName: CURSOR_DIRECTORY.TRANSCRIPTS,
+      maximumProjectDirectories: this.#maximumProjectDirectories,
+      maximumSessionFiles: this.#maximumSessionFiles,
+      sessionFilesIn: transcriptsIn,
+    });
     // Only the sessions this pass reports are worth naming a folder for.
     await this.#workspaceLabels.resolve(
       candidates.map((candidate) => candidate.projectDirectoryName),

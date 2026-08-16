@@ -142,7 +142,6 @@ function adapterFor(
   state: CursorState,
   overrides: {
     now?: () => number;
-    maximumSessionAgeMs?: number;
     activeSessionFreshnessMs?: number;
     maximumProjectDirectories?: number;
     maximumSessionFiles?: number;
@@ -152,7 +151,6 @@ function adapterFor(
   return new CursorLocalSessionAdapter({
     ...state,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60 * 60 * 1000,
     ...overrides,
   });
 }
@@ -303,7 +301,7 @@ test("keeps reporting a failure that has gone quiet, because it has not healed",
   );
 });
 
-test("ignores sessions older than the maximum session age", async (t) => {
+test("keeps a session from yesterday on the roster", async (t) => {
   const state = await temporaryCursorState(t);
   await writeTranscript(
     state,
@@ -313,11 +311,12 @@ test("ignores sessions older than the maximum session age", async (t) => {
     TEST_TIME - 25 * 60 * 60 * 1000,
   );
 
-  const observations = await adapterFor(state, {
-    maximumSessionAgeMs: 24 * 60 * 60 * 1000,
-  }).observe();
+  const [observation] = await adapterFor(state).observe();
 
-  assert.deepEqual(observations, []);
+  // Never hidden for its age — but a wait that stale has decayed to unknown,
+  // so the row says nothing it can no longer vouch for.
+  assert.equal(observation?.providerSessionId, "session-yesterday");
+  assert.equal(observation?.status, SESSION_STATUS.UNKNOWN);
 });
 
 test("names a folder its project directory can no longer spell", async (t) => {

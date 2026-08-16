@@ -474,21 +474,27 @@ export class ConductorSessionAdapter
       // user unless it reports a creator, and unattributed org workspaces stay
       // out of a personal sidecar.
       .filter((workspace) => workspace.creatorId === userId)
-      .filter(
-        (workspace) => now - workspace.lastActivityAt <= OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS,
-      )
       .sort((first, second) => second.lastActivityAt - first.lastActivityAt)
       .slice(0, this.#maximumObservedWorkspaces);
 
     const sessions = (
       await Promise.all(
         workspaces.map((workspace) =>
-          this.tolerateItemFailure(() => this.#listSessions(request, workspace, now)),
+          this.tolerateItemFailure(() => this.#listSessions(request, workspace)),
         ),
       )
     )
       .filter(isDefined)
       .flat()
+      // An open chat can still change, so it takes the budget before any
+      // closed one however old the closed chat is; closed chats spend what
+      // remains, newest first. Open chats carry no timestamp of their own
+      // yet, and the stable sort keeps them in workspace-recency order.
+      .sort(
+        (first, second) =>
+          Number(first.archived) - Number(second.archived) ||
+          (second.archivedAt ?? 0) - (first.archivedAt ?? 0),
+      )
       .slice(0, this.#maximumObservedSessions);
 
     // The transcripts read rides beside the status reads: one bounded query
@@ -586,7 +592,6 @@ export class ConductorSessionAdapter
   async #listSessions(
     request: CloudRequest,
     workspace: ConductorWorkspace,
-    now: number,
   ): Promise<ConductorSession[]> {
     const body = await request(
       [
@@ -622,13 +627,6 @@ export class ConductorSessionAdapter
           };
         })
         .filter(isDefined)
-        // A chat closed before the observation window opened is already
-        // outside it, so it must not spend budget a live session could hold.
-        .filter(
-          (session) =>
-            session.archivedAt === undefined ||
-            now - session.archivedAt <= OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS,
-        )
         // An open chat carries no timestamp until its status is read, so open
         // chats are preferred over closed ones, then closed ones by how
         // recently they closed. Capping here keeps one crowded workspace from
@@ -720,8 +718,6 @@ export class ConductorSessionAdapter
     // it settled; the workspace timestamp is only the last resort.
     const observedAt =
       reported?.updatedAt ?? session.archivedAt ?? session.workspace.lastActivityAt;
-    if (now - observedAt > OBSERVATION_WINDOW.MAXIMUM_SESSION_AGE_MS) return undefined;
-
     const status = this.#statusFor(session, reported?.status, observedAt, now);
     // The parting words are a recap only once the turn has actually parted:
     // read for an idle or closed chat, they say where the agent left the work;

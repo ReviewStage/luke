@@ -258,7 +258,6 @@ test("observes an OpenCode session under the name OpenCode gave it", async (t) =
   const adapter = new OpenCodeSessionAdapter({
     dataDirectory,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
   });
   const observations = await adapter.observe();
 
@@ -289,7 +288,6 @@ test("falls back to the workspace while OpenCode has not named the session", asy
   const adapter = new OpenCodeSessionAdapter({
     dataDirectory,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
   });
   const [observation] = await adapter.observe();
 
@@ -334,7 +332,6 @@ test("reports a finished OpenCode turn as waiting for its developer", async (t) 
   const adapter = new OpenCodeSessionAdapter({
     dataDirectory,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
   });
   const [observation] = await adapter.observe();
 
@@ -366,7 +363,6 @@ test("reports a stopped OpenCode turn as waiting when its user aborted it", asyn
   const adapter = new OpenCodeSessionAdapter({
     dataDirectory,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
   });
   const [observation] = await adapter.observe();
 
@@ -406,7 +402,6 @@ test("reports a failed OpenCode turn with the failure it recorded", async (t) =>
     dataDirectory,
     now: () => TEST_TIME,
     activeSessionFreshnessMs: 15 * 60 * 1000,
-    maximumSessionAgeMs: 60 * 60 * 1000,
   });
   const [observation] = await adapter.observe();
 
@@ -458,7 +453,6 @@ test("names the tool an OpenCode session is running", async (t) => {
   const adapter = new OpenCodeSessionAdapter({
     dataDirectory,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
   });
   const [observation] = await adapter.observe();
 
@@ -512,7 +506,6 @@ test("names the tool still running behind one that already settled", async (t) =
   const adapter = new OpenCodeSessionAdapter({
     dataDirectory,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
   });
   const [observation] = await adapter.observe();
 
@@ -546,7 +539,6 @@ test("skips OpenCode subagent and archived sessions", async (t) => {
   const adapter = new OpenCodeSessionAdapter({
     dataDirectory,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
   });
   const observations = await adapter.observe();
 
@@ -581,7 +573,6 @@ test("reads every session's turn rather than a capped few", async (t) => {
   const adapter = new OpenCodeSessionAdapter({
     dataDirectory,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
   });
   const observations = await adapter.observe();
 
@@ -591,7 +582,7 @@ test("reads every session's turn rather than a capped few", async (t) => {
   }
 });
 
-test("filters old OpenCode sessions while preserving the newest", async (t) => {
+test("keeps old OpenCode sessions beside the newest", async (t) => {
   const dataDirectory = await temporaryDataDirectory(t);
   await writeOpenCodeState(dataDirectory, [
     { id: "ses_old", directory: "/Users/test/old", observedAt: TEST_TIME - 90_000 },
@@ -601,7 +592,6 @@ test("filters old OpenCode sessions while preserving the newest", async (t) => {
   const adapter = new OpenCodeSessionAdapter({
     dataDirectory,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
   });
   const observations = await adapter.observe();
 
@@ -610,7 +600,10 @@ test("filters old OpenCode sessions while preserving the newest", async (t) => {
       providerSessionId: observation.providerSessionId,
       title: observation.title,
     })),
-    [{ providerSessionId: "ses_new", title: "new" }],
+    [
+      { providerSessionId: "ses_new", title: "new" },
+      { providerSessionId: "ses_old", title: "old" },
+    ],
   );
 });
 
@@ -636,7 +629,6 @@ test("keeps stale open OpenCode turns unknown instead of inventing activity", as
     dataDirectory,
     now: () => TEST_TIME,
     activeSessionFreshnessMs: 15 * 60 * 1000,
-    maximumSessionAgeMs: 60 * 60 * 1000,
   });
   const [observation] = await adapter.observe();
 
@@ -664,7 +656,6 @@ test("observes the database OPENCODE_DB names", async (t) => {
   const adapter = new OpenCodeSessionAdapter({
     dataDirectory,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
   });
   const observations = await adapter.observe();
 
@@ -684,7 +675,6 @@ test("falls back to the prod-channel database when the current one is unusable",
   const adapter = new OpenCodeSessionAdapter({
     dataDirectory,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
   });
   const observations = await adapter.observe();
 
@@ -707,7 +697,6 @@ test("observes sessions from a database predating the archive column", async (t)
   const adapter = new OpenCodeSessionAdapter({
     dataDirectory,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
   });
   const observations = await adapter.observe();
 
@@ -742,7 +731,6 @@ test("observes legacy JSON sessions when no database exists", async (t) => {
   const adapter = new OpenCodeSessionAdapter({
     dataDirectory,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
   });
   const observations = await adapter.observe();
 
@@ -773,7 +761,6 @@ test("reads the newest legacy message by its ordered identifier", async (t) => {
   const adapter = new OpenCodeSessionAdapter({
     dataDirectory,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
   });
   const [observation] = await adapter.observe();
 
@@ -797,7 +784,6 @@ test("observes legacy JSON sessions when node sqlite is unavailable", async (t) 
   const adapter = new OpenCodeSessionAdapter({
     dataDirectory,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
     sqlite: async () => {
       throw error;
     },
