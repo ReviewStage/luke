@@ -9,7 +9,11 @@ import {
   type SessionProvider,
   type SessionStatus,
 } from "../src";
-import { MAXIMUM_NOTICES_PER_PASS, SESSION_NOTICE_REPEAT_WINDOW_MS } from "../src/session-notices";
+import {
+  MAXIMUM_NOTICES_PER_PASS,
+  SESSION_NOTICE_FRESH_AGE_MS,
+  SESSION_NOTICE_REPEAT_WINDOW_MS,
+} from "../src/session-notices";
 
 const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };
 const conductor: SessionProvider = { id: "conductor", displayName: "Conductor" };
@@ -113,13 +117,73 @@ test("a flapping status is noticed once per repeat window, then again after it",
   // A different status is its own ledger entry.
   assert.equal(tracker.notices([session(claude, "flap", SESSION_STATUS.ERROR)], 5_000).length, 1);
   tracker.notices([session(claude, "flap", SESSION_STATUS.WORKING)], 6_000);
-  // And past the window the same status may speak again.
+  // And past the window the same status may speak again — the ask is fresh,
+  // not a stale reading resurfacing.
   assert.equal(
     tracker.notices(
-      [session(claude, "flap", SESSION_STATUS.WAITING)],
+      [
+        session(claude, "flap", SESSION_STATUS.WAITING, {
+          observedAt: 1_000 + SESSION_NOTICE_REPEAT_WINDOW_MS,
+        }),
+      ],
       1_000 + SESSION_NOTICE_REPEAT_WINDOW_MS,
     ).length,
     1,
+  );
+});
+
+test("an edge whose event is old is tracked but never announced", () => {
+  const tracker = new SessionNoticeTracker();
+  const slept = 4 * 60 * 60 * 1_000;
+  tracker.notices([session(claude, "asleep", SESSION_STATUS.WORKING)], 1_000);
+
+  // The Mac slept for hours; the session finished minutes into the nap. The
+  // edge only becomes visible on the first pass after waking, but the event
+  // it describes is old news the panel has shown the whole time.
+  assert.deepEqual(
+    tracker.notices(
+      [session(claude, "asleep", SESSION_STATUS.COMPLETE, { observedAt: 10 * 60 * 1_000 })],
+      1_000 + slept,
+    ),
+    [],
+  );
+  // The suppressed edge was still recorded: the unchanged status is no edge,
+  // so the stale event does not resurface on a later pass either.
+  assert.deepEqual(
+    tracker.notices(
+      [session(claude, "asleep", SESSION_STATUS.COMPLETE, { observedAt: 10 * 60 * 1_000 })],
+      2_000 + slept,
+    ),
+    [],
+  );
+});
+
+test("a stale edge stays quiet while a fresh one in the same pass announces", () => {
+  const tracker = new SessionNoticeTracker();
+  const now = SESSION_NOTICE_FRESH_AGE_MS * 10;
+  tracker.notices(
+    [
+      session(claude, "stale", SESSION_STATUS.WORKING),
+      session(claude, "fresh", SESSION_STATUS.WORKING),
+    ],
+    1_000,
+  );
+
+  const notices = tracker.notices(
+    [
+      session(claude, "stale", SESSION_STATUS.COMPLETE, {
+        observedAt: now - SESSION_NOTICE_FRESH_AGE_MS - 1,
+      }),
+      session(claude, "fresh", SESSION_STATUS.COMPLETE, {
+        observedAt: now - SESSION_NOTICE_FRESH_AGE_MS,
+      }),
+    ],
+    now,
+  );
+
+  assert.deepEqual(
+    notices.map((notice) => [notice.providerSessionId, notice.status]),
+    [["fresh", SESSION_NOTICE_STATUS.COMPLETE]],
   );
 });
 
