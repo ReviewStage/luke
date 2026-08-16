@@ -180,7 +180,14 @@ export function NotchWings({
             keeps: the rest unfold outward and never displace it. */}
         <div className="wing-inner">
           {meterShown ? (
-            <span className="wing-meter" data-turn={meterVoice}>
+            /* Keyed on whose turn it is, so each voice's meter is a fresh
+               mount: the arrival choreography lives in a starting style, and
+               only a mount reads one. Luke's turn is what grows the capsule,
+               and a meter the developer's turn already had on screen would
+               otherwise relocate beside the returning face on the frame the
+               turn flips — drawn on the desktop, ahead of an edge still most
+               of its travel away. */
+            <span className="wing-meter" data-turn={meterVoice} key={meterVoice}>
               <Waveform
                 analyser={analyser}
                 speaking={fixtureSpeaking}
