@@ -39,7 +39,6 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
     voiceSpeed: REALTIME_VOICE_SPEED.NORMAL,
     voiceCaptions: false,
     duckOtherMedia: true,
-    sessionNotifications: true,
     showOnAllDisplays: false,
     formFactor: PANEL_FORM_FACTOR.BUBBLE,
     ...overrides,
@@ -533,10 +532,6 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
       calls.push(`setDuckOtherMedia:${enabled}`);
       return answered;
     },
-    setSessionNotifications: async (enabled: boolean) => {
-      calls.push(`setSessionNotifications:${enabled}`);
-      return answered;
-    },
     setShowInMenuBar: async (show: boolean) => {
       calls.push(`setShowInMenuBar:${show}`);
       return answered;
@@ -575,7 +570,6 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
   assert.deepEqual(calls.sort(), [
     "setDuckOtherMedia:true",
     "setFormFactor:notch",
-    "setSessionNotifications:true",
     "setShowInDock:true",
     "setShowInMenuBar:true",
     "setShowOnAllDisplays:true",

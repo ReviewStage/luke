@@ -39,7 +39,6 @@ const bridge: AppBridge = {
   setAskHotkey: invoke(channels.setAskHotkey),
   setStopHotkey: invoke(channels.setStopHotkey),
   setDuckOtherMedia: invoke(channels.setDuckOtherMedia),
-  setSessionNotifications: invoke(channels.setSessionNotifications),
   setVoiceExchangeActive: (active) => {
     ipcRenderer.send(channels.setVoiceExchange, active);
   },

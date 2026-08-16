@@ -47,7 +47,6 @@ const SETTINGS_FIELD = {
   DUCK_OTHER_MEDIA: "duckOtherMedia",
   FORM_FACTOR: "formFactor",
   LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
-  SESSION_NOTIFICATIONS: "sessionNotifications",
   SHOW_IN_DOCK: "showInDock",
   SHOW_IN_MENU_BAR: "showInMenuBar",
   SHOW_ON_ALL_DISPLAYS: "showOnAllDisplays",
@@ -158,13 +157,6 @@ interface PersistedSettings {
    * and a corrupt value both land on doing it.
    */
   duckOtherMedia: boolean;
-  /**
-   * Whether a session that wants the user is announced in Luke's voice. On
-   * unless the file says `false` outright, like the media duck: being told an
-   * agent finished is what Luke does until the user asks otherwise, so a
-   * missing field and a corrupt value both land on doing it.
-   */
-  sessionNotifications: boolean;
   /**
    * Whether Luke stands on every connected display. Off unless the file says
    * `true` outright, like the Dock: a missing field, an older file, and a
@@ -387,10 +379,6 @@ function parsePersistedSettings(source: string): PersistedSettings {
       record[SETTINGS_FIELD.DUCK_OTHER_MEDIA],
       APP_SETTING_DEFAULTS.duckOtherMedia,
     ),
-    sessionNotifications: booleanSetting(
-      record[SETTINGS_FIELD.SESSION_NOTIFICATIONS],
-      APP_SETTING_DEFAULTS.sessionNotifications,
-    ),
     showOnAllDisplays: booleanSetting(
       record[SETTINGS_FIELD.SHOW_ON_ALL_DISPLAYS],
       APP_SETTING_DEFAULTS.showOnAllDisplays,
@@ -468,7 +456,6 @@ export class SettingsStore {
       ...(persisted.askHotkey ? { askHotkey: persisted.askHotkey } : {}),
       ...(persisted.stopHotkey ? { stopHotkey: persisted.stopHotkey } : {}),
       duckOtherMedia: persisted.duckOtherMedia,
-      sessionNotifications: persisted.sessionNotifications,
       showOnAllDisplays: persisted.showOnAllDisplays,
       formFactor: persisted.formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
       ...(persisted.defaultWorkspaceProvider
@@ -642,26 +629,6 @@ export class SettingsStore {
     return this.#setField((persisted) => {
       if (persisted.duckOtherMedia === enabled) return;
       return { ...persisted, duckOtherMedia: enabled };
-    });
-  }
-
-  /**
-   * Shallow for the same reason as `duckOtherMedia()`: the announcer arms at
-   * startup, and arming it must never be what wakes the OS keychain.
-   */
-  async readSessionNotifications(): Promise<boolean> {
-    return (await this.#load()).sessionNotifications;
-  }
-
-  /**
-   * Turns the spoken announcement about a session that wants the user on or
-   * off. A plain preference like the media duck's: no cipher, no invalid
-   * value, so the write either lands or throws.
-   */
-  async setSessionNotifications(enabled: boolean): Promise<SettingsUpdateResult> {
-    return this.#setField((persisted) => {
-      if (persisted.sessionNotifications === enabled) return;
-      return { ...persisted, sessionNotifications: enabled };
     });
   }
 

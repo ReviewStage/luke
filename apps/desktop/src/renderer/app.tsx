@@ -552,12 +552,6 @@ export function App(): React.JSX.Element {
     [applySettingsReply],
   );
 
-  const changeSessionNotifications = useCallback(
-    async (enabled: boolean) =>
-      applySettingsReply(await window.sidecar.setSessionNotifications(enabled)),
-    [applySettingsReply],
-  );
-
   /**
    * Asking to write a key is asking for one thing, so the panel gets out of the
    * way of it: the shape goes down to the slot, which is the field and nothing
@@ -1682,7 +1676,6 @@ export function App(): React.JSX.Element {
   const preferences: PreferenceWrites = {
     onVoiceCaptionsChange: changeVoiceCaptions,
     onDuckOtherMediaChange: changeDuckOtherMedia,
-    onSessionNotificationsChange: changeSessionNotifications,
     onVoiceChange: changeVoice,
     onVoiceSpeedChange: changeVoiceSpeed,
     onShowInMenuBarChange: changeShowInMenuBar,

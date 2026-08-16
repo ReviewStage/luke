@@ -206,11 +206,6 @@ let issueRefreshQueued = false;
 // model decided, so they work — and matter most — with no evaluator configured.
 const sessionNoticeTracker = new SessionNoticeTracker();
 /**
- * Follows the stored answer: read at startup, updated by its own handler. On
- * until the file says otherwise, matching the store's default.
- */
-let sessionNotificationsEnabled = true;
-/**
  * Everything the one OpenAI key buys, and nothing that outlives it: the review
  * that decides which sessions need a person, and the credential a spoken turn
  * runs on.
@@ -913,20 +908,6 @@ function registerIpc(): void {
     refusal: "Could not save that setting on this system.",
   });
 
-  // The announcer follows the stored answer at once, like the duck: off must
-  // silence the very next pass, not the next launch.
-  registerSettingHandler(channels.setSessionNotifications, {
-    validate(enabled: unknown) {
-      if (typeof enabled !== "boolean") throw new Error("Invalid notification request");
-      return enabled;
-    },
-    save: (enabled) => settingsStore.setSessionNotifications(enabled),
-    apply(result) {
-      sessionNotificationsEnabled = result.settings.sessionNotifications;
-    },
-    refusal: "Could not save that setting on this system.",
-  });
-
   // A statement of state, not a request: the renderer says whether a spoken
   // exchange is live, and the duck holds every other decision — the setting,
   // the hangover after an exchange, which players are playing at all. Each
@@ -1453,12 +1434,9 @@ async function reviewSessionAttention(): Promise<void> {
  * being heard needs no talk-key press first.
  */
 function announceSessionNotices(sessions: readonly NormalizedSession[]): void {
-  // The tracker is fed on every commit whether or not announcements are on:
-  // feeding is what keeps its picture current, so switching them on never
-  // replays edges that happened while they were off.
   const now = Date.now();
   const notices = sessionNoticeTracker.notices(sessions, now);
-  if (notices.length === 0 || !sessionNotificationsEnabled) return;
+  if (notices.length === 0) return;
   // No voice, nothing to say it with: without a Realtime credential the
   // renderer cannot open a call, and the panel still shows every state.
   if (!realtimeCredentials) return;
@@ -1760,16 +1738,6 @@ if (!app.requestSingleInstanceLock()) {
     void settingsStore.duckOtherMedia().then(
       (enabled) => mediaDuck.setEnabled(enabled),
       () => mediaDuck.setEnabled(APP_SETTING_DEFAULTS.duckOtherMedia),
-    );
-    // The announcer arms the same way, under the same default: a file that
-    // cannot be read leaves the announcements on.
-    void settingsStore.readSessionNotifications().then(
-      (enabled) => {
-        sessionNotificationsEnabled = enabled;
-      },
-      () => {
-        sessionNotificationsEnabled = APP_SETTING_DEFAULTS.sessionNotifications;
-      },
     );
     // Awaited, so the key and the voice it speaks with are both in hand before
     // the renderer exists to ask for a credential: the first conversation must

@@ -126,8 +126,6 @@ export interface PreferenceWrites {
   onVoiceCaptionsChange: (enabled: boolean) => Promise<string | undefined>;
   /** Turns the quieting of Music and Spotify during a spoken exchange on or off. */
   onDuckOtherMediaChange: (enabled: boolean) => Promise<string | undefined>;
-  /** Turns the macOS notification about a session that wants the user on or off. */
-  onSessionNotificationsChange: (enabled: boolean) => Promise<string | undefined>;
   /** Chooses the voice Luke speaks with, from the set fixed by this build. */
   onVoiceChange: (voice: RealtimeVoice) => void;
   /** Chooses the pace Luke speaks at, from the set fixed by this build. */
@@ -1247,14 +1245,6 @@ function VoiceControlsSection({
       <SelectRow
         label="Voice"
         errand={APP_SETTING_ID.VOICE}
-        detail={
-          /* When it lands, because a control that seems not to act invites a
-             second press. The API locks a session's voice once the model has
-             spoken, so a call already open is quietly reopened in the new
-             voice — heard right away, at the price of the conversation
-             starting afresh. */
-          "How Luke sounds; a conversation under way starts afresh."
-        }
         value={settings.voice}
         options={REALTIME_VOICE_LIST.map((candidate) => ({
           value: candidate,
@@ -1270,11 +1260,6 @@ function VoiceControlsSection({
       <SelectRow
         label="Speed"
         errand={APP_SETTING_ID.VOICE_SPEED}
-        detail={
-          /* Unlike the voice, a pace change rides a session update onto the
-             call already open, so nothing starts over. */
-          "How fast Luke talks, from his next reply on."
-        }
         value={settings.voiceSpeed}
         options={REALTIME_VOICE_SPEED_LIST.map((candidate) => ({
           value: candidate,
@@ -1292,14 +1277,6 @@ function VoiceControlsSection({
         label="Captions"
         ariaLabel="Caption Luke's speech on screen"
         errand={APP_SETTING_ID.VOICE_CAPTIONS}
-        detail={
-          /* Off by default: the voice experience ships as sound, so the words
-             are chosen rather than discovered. What is *not* kept is the one
-             thing worth a line — the caption is the reply being said. The
-             muted exception is stated because it overrides this very switch:
-             a reply the Mac would swallow is captioned whatever it says. */
-          "Luke\u2019s words on screen as he speaks, and on their own while your Mac is muted. Nothing is kept."
-        }
         checked={settings.voiceCaptions}
         onChange={preferences.onVoiceCaptionsChange}
       />
@@ -1316,20 +1293,6 @@ function VoiceControlsSection({
         }
         checked={settings.duckOtherMedia}
         onChange={preferences.onDuckOtherMediaChange}
-      />
-      <SwitchRow
-        label="Announce when a session needs you"
-        errand={APP_SETTING_ID.SESSION_NOTIFICATIONS}
-        detail={
-          /* The three edges by name, because the switch governs exactly these
-             and the panel already shows everything else: the voice is for the
-             developer whose eyes are on another screen entirely. No
-             conversation needs to be open — Luke opens a speak-only call for
-             the sentence, and the microphone stays untouched. */
-          "Luke says it out loud when an agent starts waiting on you, hits an error, or finishes."
-        }
-        checked={settings.sessionNotifications}
-        onChange={preferences.onSessionNotificationsChange}
       />
     </section>
   );
