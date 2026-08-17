@@ -459,7 +459,7 @@ const MICROPHONE_DETAIL: Record<MicrophoneStatus, string> = {
     "Denied. It can only be granted back in System Settings, under Privacy & Security, Microphone.",
   restricted: "Restricted by a system policy, which only the system's manager can change.",
   "not-determined":
-    "Not asked yet. The Permissions section on the Settings tab's Voice page can ask once an OpenAI key is connected.",
+    "Not asked yet. The Permissions section on the Settings tab's Voice page can ask while voice is available — a signed-in account includes it, and an OpenAI key also provides it.",
   unknown: "Unknown. The Permissions section on the Settings tab's Voice page shows its state.",
 };
 
@@ -519,14 +519,21 @@ function integrationsFact(settings: AppSettings): AppGuideFact {
  * The one key that is neither an agent's nor an integration's, described where
  * its row lives: at the top of the Voice page, beside the feature it turns on.
  */
-function voiceKeyFact(settings: AppSettings): AppGuideFact {
+function voiceKeyFact(settings: AppSettings, voiceAvailable: boolean): AppGuideFact {
   const openai = CREDENTIAL_PROVIDERS[VOICE_CREDENTIAL_PROVIDER_ID];
+  const source = settings.credentialSources[openai.id];
+  const hosted = voiceAvailable && source === CREDENTIAL_SOURCE.NONE;
   return {
     label: "OpenAI",
     detail:
-      `${openai.displayName} (${connectionWord(settings.credentialSources[openai.id])}). ` +
-      `Connecting OpenAI is what lets Luke speak, and review which sessions need a person. ` +
-      `Its key is typed by hand into ${VOICE_PAGE}, at its top — never spoken, and never ` +
+      `${openai.displayName} (${connectionWord(source)}). ` +
+      (hosted
+        ? `Voice and session review currently run on the signed-in Luke account, which includes ` +
+          `a daily allowance. Connecting a personal OpenAI key lifts the allowance and runs ` +
+          `voice on that key instead. `
+        : `Connecting OpenAI is what lets Luke speak, and review which sessions need a person; ` +
+          `a signed-in Luke account also includes both under a daily allowance without one. `) +
+      `The key is typed by hand into ${VOICE_PAGE}, at its top — never spoken, and never ` +
       `repeated back.`,
   };
 }
@@ -581,11 +588,14 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "holds a front page whose rows open its Voice, Appearance, Keyboard shortcuts, and " +
         "Connections pages — each led back out by its back button or Escape — and keeps the " +
         "Feedback section and Quit on the front page itself; the Voice page reveals itself in " +
-        "stages — the OpenAI key alone until one is connected, then the microphone permission " +
-        "under it, and the voice settings only once both stand — and a small exclamation mark " +
-        "sits on whichever stage still needs a hand, on the front page's Voice row while " +
-        "either does, and on the Keyboard shortcuts rows while voice is off, where each key's " +
-        "chord stays shown and changeable but answers nothing until the key connects; the " +
+        "stages — the OpenAI key section alone until voice is available at all (the signed-in " +
+        "account includes it, so for most people the page opens whole, with a note saying " +
+        "whose allowance voice runs on and how much of today's remains), then the microphone " +
+        "permission under it, and the voice settings only once both stand — and a small " +
+        "exclamation mark sits on whichever stage still needs a hand, on the front page's " +
+        "Voice row while either does, and on the Keyboard shortcuts rows while voice is off, " +
+        "where each key's chord stays shown and changeable but answers nothing until voice is " +
+        "available; the " +
         "menu bar item's Settings… opens the same tab, and Command-comma switches to it while " +
         "the panel has the keyboard. A dot beside a settings row marks a value changed from " +
         "its default, and a page holding one ends its head with a reset, pressed by hand and " +
@@ -690,7 +700,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "the ask itself is the consent. One ask stands per session, a new one replaces it, asking Luke to drop " +
         "it withdraws it, and an ask ends with the session it was about. A row with an ask standing wears a " +
         "small listening mark beside its age, and the conversation roster carries each standing ask, so Luke " +
-        "can say what he is already listening for. It needs the OpenAI connection, " +
+        "can say what he is already listening for. It needs voice to be available — the " +
+        "signed-in account includes it, and a personal OpenAI key also provides it — " +
         "changes nothing about the session itself, and is never sent to a provider.",
     },
     talkKeyFact(input.hotkey),
@@ -775,7 +786,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
           },
         ]),
     providersFact(input.settings),
-    voiceKeyFact(input.settings),
+    voiceKeyFact(input.settings, input.voiceAvailable),
     integrationsFact(input.settings),
     ...(input.settings.secretStorage === SECRET_STORAGE.UNAVAILABLE
       ? [

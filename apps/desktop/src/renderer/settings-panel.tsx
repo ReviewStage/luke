@@ -10,6 +10,7 @@ import {
   REALTIME_DEFAULTS,
   REALTIME_VOICE_LIST,
   REALTIME_VOICE_SPEED_LIST,
+  type RealtimeDiagnostics,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
   type WorkspaceAgentSelection,
@@ -72,6 +73,7 @@ import { Keycaps } from "./keycaps";
 import { type ErrandTarget, errandTargetProps } from "./luke-errand";
 import { APP_SETTING_ID } from "./luke-guide";
 import {
+  hostedVoiceNote,
   MICROPHONE_UNGRANTED_NOTE,
   microphoneAccessRow,
   VOICE_KEYLESS_NOTE,
@@ -299,6 +301,13 @@ export interface SettingsPanelProps {
   microphone: MicrophoneControl;
   updates: UpdateControl;
   settings?: AppSettings;
+  /**
+   * How voice stands right now, asked of the main process while the panel is
+   * up: whose credential it runs on and what remains of a hosted day's
+   * allowance. Absent until the first answer lands; the Voice page words its
+   * hosted note without it until then.
+   */
+  voiceService?: RealtimeDiagnostics;
   preferences: PreferenceWrites;
   /** The one credential being entered anywhere, and everything that can be done to it. */
   credentials: CredentialEntryControl;
@@ -1600,13 +1609,16 @@ function SettingsPageHeader({
 }
 
 /**
- * How Luke sounds and what he says unprompted — led by the key it all runs
- * on. The OpenAI credential stands at the top of this page rather than under
- * Connections because voice is what the key turns on: the page that goes
- * quiet without one is where its absence has to be explained. The page
- * reveals itself in stages rather than all at once: the key alone until one
- * is connected, the microphone permission beneath it once there is a voice
- * for the microphone to reach, and the voice controls only once both stand —
+ * How Luke sounds and what he says unprompted — led by what voice runs on.
+ * The OpenAI credential stands at the top of this page rather than under
+ * Connections because voice is what the key changes: included with the
+ * signed-in account under a daily allowance, and run unmetered on the
+ * developer's own key the moment one is connected — so the section that
+ * explains whose credential is speaking is the section a key is typed into.
+ * The page reveals itself in stages rather than all at once: the key section
+ * alone until voice is available at all, the microphone permission beneath it
+ * once there is a voice for the microphone to reach, and the voice controls
+ * only once both stand —
  * a page of settings for a feature two steps from running reads as work
  * already done, and the one thing to do next reads clearest standing alone.
  * Whichever stage is missing wears the same exclamation mark the front
@@ -1623,12 +1635,14 @@ function VoiceSection({
   credentials,
   panelOpen,
   microphone,
+  voiceService,
 }: {
   settings: AppSettings;
   preferences: PreferenceWrites;
   credentials: CredentialEntryControl;
   panelOpen: boolean;
   microphone: MicrophoneControl;
+  voiceService?: RealtimeDiagnostics;
 }): React.JSX.Element {
   const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
   const microphoneRow = microphoneAccessRow({
@@ -1658,18 +1672,24 @@ function VoiceSection({
             it on. `voiceAvailable` rather than the credential source, because
             availability is the store's own answer — a fixture run or a key
             that failed to resolve leaves voice off however the row reads.
-            While this system cannot store a key at all, the storage refusal
-            replaces the invitation: a Connect stilled by missing storage
-            needs its why here exactly as it does in the other key sections,
-            and a note urging a key the panel will not store would only send
-            someone to a disabled control. */}
+            While voice runs on the account instead, the note says whose
+            allowance is speaking and what a key of one's own changes, so an
+            unconnected row above a working feature does not read as a step
+            still owed. While this system cannot store a key at all, the
+            storage refusal replaces the invitation: a Connect stilled by
+            missing storage needs its why here exactly as it does in the other
+            key sections, and a note urging a key the panel will not store
+            would only send someone to a disabled control. */}
         {storageUnavailable ? (
           <p className="settings-note">{STORAGE_UNAVAILABLE_NOTE}</p>
-        ) : settings.voiceAvailable ? null : (
+        ) : !settings.voiceAvailable ? (
           <p className="settings-note">
-            Voice is off until a key is connected — Luke cannot talk, listen, or announce sessions.
+            Voice is off until you sign in or connect a key — Luke cannot talk, listen, or announce
+            sessions.
           </p>
-        )}
+        ) : settings.credentialSources[VOICE_CREDENTIAL_PROVIDER.id] === CREDENTIAL_SOURCE.NONE ? (
+          <p className="settings-note">{hostedVoiceNote(voiceService)}</p>
+        ) : null}
       </section>
       {/* Drawn only once there is a voice for the microphone to reach: until
           the key connects, the permission guards a feature that cannot run,
@@ -2452,6 +2472,7 @@ export function SettingsPanel({
   microphone,
   updates,
   settings,
+  voiceService,
   preferences,
   credentials,
   feedback,
@@ -2557,6 +2578,7 @@ export function SettingsPanel({
           credentials={credentials}
           panelOpen={panelOpen}
           microphone={microphone}
+          {...(voiceService ? { voiceService } : {})}
         />
       ) : null}
 

@@ -208,6 +208,19 @@ export {
   typedAskEvents,
 } from "./realtime-protocol.js";
 export {
+  HOSTED_API_ERROR,
+  HOSTED_CALLS_URL,
+  HOSTED_SERVICE_PATH,
+  type HostedApiError,
+  type HostedMintAnswer,
+  type HostedQuota,
+  type HostedReviewAnswer,
+  hostedErrorFromWire,
+  hostedMintAnswerFromWire,
+  hostedQuotaFromWire,
+  hostedReviewAnswerFromWire,
+} from "./hosted-service.js";
+export {
   REALTIME_CALLS_PATH,
   REALTIME_CLIENT_SECRETS_PATH,
   REALTIME_MINT_OUTCOME,

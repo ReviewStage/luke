@@ -1056,7 +1056,11 @@ export class SettingsStore {
    */
   async #voiceAvailable(): Promise<boolean> {
     if (!this.#credentialsUsable) return false;
-    return (await this.readApiKey(VOICE_CREDENTIAL_PROVIDER_ID)) !== undefined;
+    if ((await this.readApiKey(VOICE_CREDENTIAL_PROVIDER_ID)) !== undefined) return true;
+    // A signed-in account carries the hosted allowance, so voice is on without
+    // a key of the developer's own — the same resolution the main process makes
+    // when it builds the minter.
+    return (await this.readAccount()) !== undefined;
   }
 
   /**

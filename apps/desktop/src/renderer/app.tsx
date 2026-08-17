@@ -10,6 +10,7 @@ import {
   type PanelFormFactor,
   type ProviderId,
   REALTIME_STATUS,
+  type RealtimeDiagnostics,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
   type SessionIdentity,
@@ -2095,6 +2096,29 @@ export function App(): React.JSX.Element {
     return () => window.removeEventListener("pointerdown", handlePointerDown, { capture: true });
   }, [optionsOpen]);
 
+  // How voice stands right now — whose credential it runs on and what remains
+  // of a hosted day's allowance — asked while the Settings tab is up. Asked
+  // again on every settings change because the answer moves with the key and
+  // the account; a call spent while the tab was away is caught by the next
+  // change or visit. Gated on the tab alone: the ask is one local IPC round
+  // trip answering from memory, and the tab is what decides whether the
+  // answer can be seen.
+  const [voiceService, setVoiceService] = useState<RealtimeDiagnostics | undefined>();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the settings snapshot is not read here — its arrival is the signal the held answer went stale, because the key or the account may have moved with it.
+  useEffect(() => {
+    if (tab !== PANEL_TAB.SETTINGS || !bootstrap) return;
+    let stale = false;
+    void window.sidecar
+      .requestRealtimeDiagnostics()
+      .then((report) => {
+        if (!stale) setVoiceService(report);
+      })
+      .catch(() => undefined);
+    return () => {
+      stale = true;
+    };
+  }, [tab, settings, bootstrap]);
+
   if (!bootstrap || !display) return <div />;
 
   const visibleSessions = displaySessions(bootstrap, sessions, noticeAsks);
@@ -2301,6 +2325,7 @@ export function App(): React.JSX.Element {
               microphone,
               updates,
               settings,
+              ...(voiceService ? { voiceService } : {}),
               preferences,
               credentials,
               feedback: feedbackControl,
