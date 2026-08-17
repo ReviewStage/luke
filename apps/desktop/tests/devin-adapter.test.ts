@@ -204,9 +204,7 @@ test("advertises the archive only for a session positively seen settled", async 
   const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
 
   for (const sessionId of ["devin-exited", "devin-errored", "devin-suspended", "devin-holding"]) {
-    assert.deepEqual(byId.get(sessionId)?.controls, [
-      { id: "archive-session", label: "Archive this session" },
-    ]);
+    assert.deepEqual(byId.get(sessionId)?.controls, [{ id: "archive-session", label: "Archive" }]);
   }
   for (const sessionId of ["devin-working", "devin-detailless", "devin-new", "devin-filed"]) {
     assert.equal(byId.get(sessionId)?.controls, undefined);
@@ -222,7 +220,7 @@ test("files a settled session away through Devin's archive endpoint, sending no 
 
   const result = await adapter.executeControl({
     providerSessionId: "devin-suspended",
-    control: { id: "archive-session", label: "Archive this session" },
+    control: { id: "archive-session", label: "Archive" },
   });
 
   assert.deepEqual(result, { status: "accepted" });
@@ -248,7 +246,7 @@ test("refuses to archive a session whose row never advertised it", async () => {
   // and no request exists.
   const result = await adapter.executeControl({
     providerSessionId: "devin-working",
-    control: { id: "archive-session", label: "Archive this session" },
+    control: { id: "archive-session", label: "Archive" },
   });
 
   assert.deepEqual(result, { status: "unsupported" });

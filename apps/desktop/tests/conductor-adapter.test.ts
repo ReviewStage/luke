@@ -1496,7 +1496,7 @@ test("advertises a message for any open chat, a stop mid-turn, and an archive on
     ["session-closed", "workspace-closed"],
   ] as const) {
     assert.deepEqual(byId.get(sessionId)?.controls, [
-      { id: "archive-workspace", label: "Archive this workspace", target: workspaceId },
+      { id: "archive-workspace", label: "Archive", target: workspaceId },
     ]);
   }
 });
@@ -1694,7 +1694,7 @@ test("archives the workspace the user saw through Conductor's archive endpoint, 
   // the adapter itself advertised, never from the caller's copy of it.
   const result = await adapter.executeControl({
     providerSessionId: "session-idle",
-    control: { id: "archive-workspace", label: "Archive this workspace" },
+    control: { id: "archive-workspace", label: "Archive" },
   });
 
   assert.deepEqual(result, { status: "accepted" });
@@ -1733,7 +1733,7 @@ test("refuses to archive a workspace no row advertised, before any request exist
     providerSessionId: "session-working",
     control: {
       id: "archive-workspace",
-      label: "Archive this workspace",
+      label: "Archive",
       target: "workspace-active",
     },
   });
