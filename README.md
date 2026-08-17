@@ -20,6 +20,10 @@ Luke v0.1 is an Apple Silicon developer preview for macOS 14 and newer.
 Download the latest build from
 [GitHub Releases](https://github.com/ReviewStage/luke/releases).
 
+Luke asks for an identity-only Google or GitHub sign-in when it first opens —
+see [Privacy](PRIVACY.md) for exactly what the account does and does not
+carry.
+
 Visit [tryluke.dev](https://tryluke.dev) to see Luke in action.
 
 ## Features
@@ -51,7 +55,9 @@ Visit [tryluke.dev](https://tryluke.dev) to see Luke in action.
 | Google Calendar | Meeting busy times | Yes (sign-in) |
 
 Cloud integrations remain inactive until you add their credentials in Luke's
-Settings. Voice and optional attention review require an OpenAI API key.
+Settings. Voice and the optional attention review are included with the
+signed-in account under a daily allowance; connecting your own OpenAI API key
+lifts the allowance and runs both on that key instead.
 
 ## Calendar support
 
@@ -107,19 +113,21 @@ panel keeps showing every session state throughout either way.
 - An optional spoken conversation, described below, lets you ask Luke about your
   sessions and hear the answer.
 
-Luke does not send commands to agents, inject terminal input, or expose agent
-controls.
+Luke never injects terminal input or simulates keystrokes. A message or a
+provider-advertised control reaches a session only when you explicitly ask —
+typed on its row, or requested of Luke in a conversation you opened.
 
 ## Talking to Luke
 
-Voice is off until you give Luke an OpenAI key. It is a real voice session: your
-microphone audio goes to OpenAI, and Luke answers out loud. Read
-[Privacy](PRIVACY.md) first — this is the one feature that sends audio off your
-Mac.
+Voice works as soon as you sign in — the account includes a daily allowance —
+and runs on your own OpenAI key once you connect one. Either way it is a real
+voice session: your microphone audio goes to OpenAI, and Luke answers out
+loud. Read [Privacy](PRIVACY.md) first — this is the one feature that sends
+audio off your Mac.
 
-Connect the key in Settings, under **Integrations**: press **Connect** beside
-OpenAI, paste the key, and Luke takes it from there — no relaunch, and no
-terminal. It is stored encrypted through the macOS Keychain, and the panel never
+Connect a key of your own in Settings, at the top of the **Voice** page: paste
+the key and Luke takes it from there — no relaunch, and no terminal. It is
+stored encrypted through the macOS Keychain, and the panel never
 reads it back. Setting `OPENAI_API_KEY` in the environment still works and is
 used when nothing is stored, but a shell export does not reach an app opened from
 Finder, which is why the panel is the way in.
@@ -181,7 +189,6 @@ hint under the words asks for volume. Its **Got it** button rests the hint for
 that stretch of silence (the captions stay); once sound has been back for a
 while, a fresh mute earns the hint again. Luke only reads the output's mute
 switch and volume, and never changes either.
->>>>>>> Stashed changes
 
 ## Privacy
 

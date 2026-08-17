@@ -10,14 +10,16 @@
  * function is compiled by Vercel's builder, and handing it JavaScript leaves
  * that builder nothing to resolve, transpile, or fail on.
  *
- * Deployment needs one secret: `RESEND_API_KEY`, a Resend key for a domain
- * verified to send as the `from` address. `FEEDBACK_FROM` may override that
- * sender. Without the key the endpoint answers 503 and the composer reports
- * the service unavailable; nothing else about the app depends on it.
+ * Deployment needs two values: `RESEND_API_KEY`, a Resend key for a domain
+ * verified to send as the `from` address, and `FEEDBACK_TO`, the inbox
+ * submissions are forwarded to — held in the deployment rather than this
+ * public repository, so the address cannot be scraped from source.
+ * `FEEDBACK_FROM` may override the sender. Without either required value the
+ * endpoint answers 503 and the composer reports the service unavailable;
+ * nothing else about the app depends on it.
  */
 
 const RESEND_URL = "https://api.resend.com/emails";
-const DESTINATION = "founders@stagereview.app";
 const DEFAULT_FROM = "Luke <feedback@tryluke.dev>";
 
 /**
@@ -247,7 +249,10 @@ function json(status, body) {
 /** @param {Request} request */
 export async function POST(request) {
   const apiKey = process.env.RESEND_API_KEY?.trim();
-  if (!apiKey) return json(503, { reason: "The feedback service is not configured." });
+  const destination = process.env.FEEDBACK_TO?.trim();
+  if (!apiKey || !destination) {
+    return json(503, { reason: "The feedback service is not configured." });
+  }
   if (rateLimited(senderAddress(request), Date.now())) {
     return json(429, { reason: "Too many submissions from this address. Try again later." });
   }
@@ -276,7 +281,7 @@ export async function POST(request) {
       },
       body: JSON.stringify({
         from: process.env.FEEDBACK_FROM?.trim() || DEFAULT_FROM,
-        to: [DESTINATION],
+        to: [destination],
         subject,
         text: emailBody(submission),
         // Replying to the email answers the person who wrote it, when they
