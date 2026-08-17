@@ -472,12 +472,6 @@ test("a failed lifecycle read costs the workspace's words, never the pass", asyn
         lifecycleStatus: "initializing",
         lifecycleHttpStatus: HTTP_STATUS.SERVER_ERROR,
       },
-      // A filed-away workspace's state is settled, so its lifecycle is not
-      // asked after at all.
-      {
-        ...ownedWorkspace("workspace-archived", TEST_TIME - 10_000),
-        archivedAt: isoTimestamp(TEST_TIME - 10_000),
-      },
     ],
     sessions: [
       {
@@ -487,27 +481,15 @@ test("a failed lifecycle read costs the workspace's words, never the pass", asyn
         status: TEST_CONDUCTOR_STATUS.IDLE,
         statusUpdatedAt: TEST_TIME - 1_000,
       },
-      {
-        id: "chat-archived",
-        workspaceId: "workspace-archived",
-        name: TEST_SESSION_NAME,
-        archivedAt: isoTimestamp(TEST_TIME - 10_000),
-      },
     ],
   });
 
   const observations = await adapterFor(api.fetch).observe();
   const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
 
-  assert.equal(observations.length, 2);
+  assert.equal(observations.length, 1);
   assert.equal(byId.get("chat-unreadable")?.detail?.activity, undefined);
   assert.equal(byId.get("chat-unreadable")?.status, SESSION_STATUS.WAITING);
-  assert.equal(
-    api.requests.some((request) =>
-      request.pathname.endsWith("/workspaces/workspace-archived/status"),
-    ),
-    false,
-  );
 });
 
 const IDLE_SESSION_UUID = "11111111-1111-4111-8111-111111111111";
@@ -1579,15 +1561,20 @@ test("keeps the archive off a workspace whose chat's state could not be read", a
   assert.equal(observations[0]?.controls, undefined);
 });
 
-test("offers no archive for a workspace already filed away", async () => {
+test("leaves a filed-away workspace and its chats off the roster entirely", async () => {
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
     projects: [LUKE_PROJECT],
     workspaces: [
+      // Filing a workspace away is how a user says its chats are done being
+      // watched, so nothing of it survives to the roster — this is also what
+      // makes a press of the archive control actually clear the rows it
+      // acted on, come the next pass.
       {
         ...ownedWorkspace("workspace-filed", TEST_TIME - 30_000),
         archivedAt: isoTimestamp(TEST_TIME - 20_000),
       },
+      ownedWorkspace("workspace-open", TEST_TIME - 5_000),
     ],
     sessions: [
       {
@@ -1596,16 +1583,28 @@ test("offers no archive for a workspace already filed away", async () => {
         name: TEST_SESSION_NAME,
         archivedAt: isoTimestamp(TEST_TIME - 20_000),
       },
+      {
+        id: "session-open",
+        workspaceId: "workspace-open",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 1_000,
+      },
     ],
   });
 
   const observations = await adapterFor(api.fetch).observe();
 
-  // The chat still reads as a settled row, but its workspace has nothing left
-  // to archive, so no control is advertised at all.
-  assert.equal(observations.length, 1);
-  assert.equal(observations[0]?.status, SESSION_STATUS.COMPLETE);
-  assert.equal(observations[0]?.controls, undefined);
+  assert.deepEqual(
+    observations.map((candidate) => candidate.providerSessionId),
+    ["session-open"],
+  );
+  // Dropped before its sessions are ever asked for: the filed-away workspace
+  // costs no requests, not just no rows.
+  assert.equal(
+    api.requests.some((request) => request.pathname.includes("workspace-filed")),
+    false,
+  );
 });
 
 test("hands a user prompt to Conductor's documented message endpoint", async () => {
