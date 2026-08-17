@@ -535,9 +535,21 @@ function broadcastAccount(): void {
   panels.broadcast(channels.accountChanged, account);
 }
 
+/**
+ * Tells every panel what an account transition just did to the settings.
+ * `voiceAvailable` rides the settings snapshot and now moves with the account
+ * — a sign-in carries the hosted allowance, a sign-out takes it — but the
+ * transitions themselves only broadcast `accountChanged`, so without this the
+ * renderer keeps drawing the voice state of the account it no longer has.
+ */
+async function broadcastVoiceAvailability(): Promise<void> {
+  panels.broadcast(channels.settingsChanged, await settingsStore.snapshot());
+}
+
 async function startAccountCapabilities(generation = accountGeneration): Promise<void> {
   if (generation !== accountGeneration || !accountCapabilitiesActive()) return;
   await applyVoiceCredential();
+  await broadcastVoiceAvailability();
   if (generation !== accountGeneration || !accountCapabilitiesActive()) return;
   await hotkeys.reapply(HOTKEY_RANK.TALK);
   if (generation !== accountGeneration || !accountCapabilitiesActive()) return;
@@ -566,6 +578,9 @@ async function signOutAccount(options: { revokeRemote?: boolean } = {}): Promise
   await stopAccountCapabilities();
   account = await clearingAccount;
   broadcastAccount();
+  // Only after the clear has settled: a snapshot taken while it was in flight
+  // could still see the account and say voice survives the sign-out.
+  await broadcastVoiceAvailability();
   const refreshToken = (await storedAccount)?.refreshToken;
   if (refreshToken) {
     await accountClient.revoke(refreshToken).catch((error) => {
