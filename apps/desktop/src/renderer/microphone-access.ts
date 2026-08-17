@@ -15,6 +15,21 @@ import type { MicrophoneStatus } from "../shared/contracts";
  */
 export const VOICE_KEYLESS_NOTE = "Voice is off: sign in, or connect an OpenAI key.";
 
+/** The one sentence a spent allowance is worded with, wherever it shows. */
+export const HOSTED_VOICE_SPENT_NOTE =
+  "Today's included voice is used up — it returns at midnight UTC.";
+
+/**
+ * The BYOK hint, worded once for every surface that carries it. Away from the
+ * key's own row, the hint says where that row lives; beside it, naming the
+ * page would send the reader to where they already are.
+ */
+export function hostedVoiceLift(options: { namesKeyRow?: boolean } = {}): string {
+  return options.namesKeyRow
+    ? "Connecting your own OpenAI key — on the Voice page — lifts the allowance and runs voice on it instead."
+    : "Connecting your own OpenAI key lifts the allowance and runs voice on it instead.";
+}
+
 /**
  * What the key section says while voice runs on the signed-in account: whose
  * allowance is speaking, how much of today's remains, and what connecting a
@@ -27,13 +42,12 @@ export const VOICE_KEYLESS_NOTE = "Voice is off: sign in, or connect an OpenAI k
 export function hostedVoiceNote(
   diagnostics: RealtimeDiagnostics | undefined,
   usage?: HostedUsageAnswer,
-  options: { namesKeyRow?: boolean } = {},
+  options: { namesKeyRow?: boolean; offersKey?: boolean } = {},
 ): string {
-  // Away from the key's own row, the hint says where that row lives; beside
-  // it, naming the page would send the reader to where they already are.
-  const lift = options.namesKeyRow
-    ? "Connecting your own OpenAI key — on the Voice page — lifts the allowance and runs voice on it instead."
-    : "Connecting your own OpenAI key lifts the allowance and runs voice on it instead.";
+  // A machine that cannot store a key is not sent to go connect one: the
+  // Voice page withholds that invitation while storage is unavailable, and a
+  // note pointing there from a page away must withhold it the same way.
+  const lift = options.offersKey === false ? "" : ` ${hostedVoiceLift(options)}`;
   // When a fresh read is in hand it alone decides spent-ness: the minter's
   // last outcome survives midnight, and yesterday's refusal must not outrank
   // today's full allowance.
@@ -41,20 +55,20 @@ export function hostedVoiceNote(
     ? usage.voice.remaining === 0
     : diagnostics?.lastOutcome === REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED;
   if (voiceSpent) {
-    return `Today's included voice is used up — it returns at midnight UTC. ${lift}`;
+    return `${HOSTED_VOICE_SPENT_NOTE}${lift}`;
   }
   if (usage) {
     return (
       `Voice is included with your Luke account — ${usage.voice.remaining} of ` +
       `${usage.voice.limit} calls and ${usage.attention.remaining} of ` +
-      `${usage.attention.limit} session reviews left today. ${lift}`
+      `${usage.attention.limit} session reviews left today.${lift}`
     );
   }
   const quota = diagnostics?.quota;
   if (quota) {
-    return `Voice is included with your Luke account — ${quota.remaining} of ${quota.limit} calls left today. ${lift}`;
+    return `Voice is included with your Luke account — ${quota.remaining} of ${quota.limit} calls left today.${lift}`;
   }
-  return `Voice is included with your Luke account, under a daily allowance. ${lift}`;
+  return `Voice is included with your Luke account, under a daily allowance.${lift}`;
 }
 
 /** Why Luke can speak but not listen: the system's grant is still missing. */

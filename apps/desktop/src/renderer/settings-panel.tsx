@@ -1,5 +1,6 @@
 import {
   DEFAULT_PANEL_FORM_FACTOR,
+  type HostedQuota,
   type HostedUsageAnswer,
   isPanelFormFactor,
   isProviderId,
@@ -74,6 +75,8 @@ import { Keycaps } from "./keycaps";
 import { type ErrandTarget, errandTargetProps } from "./luke-errand";
 import { APP_SETTING_ID } from "./luke-guide";
 import {
+  HOSTED_VOICE_SPENT_NOTE,
+  hostedVoiceLift,
   hostedVoiceNote,
   MICROPHONE_UNGRANTED_NOTE,
   microphoneAccessRow,
@@ -2296,6 +2299,34 @@ const ACCOUNT_ASK = {
 
 type AccountAsk = (typeof ACCOUNT_ASK)[keyof typeof ACCOUNT_ASK];
 
+/**
+ * One meter of today's allowance, drawn as a track the day fills. The native
+ * `meter` rather than a progressbar, because nothing is underway: it reports
+ * a level against a limit. Nothing about it animates — a changed value snaps
+ * in place and only the section's arrival staggers — and a spent meter turns
+ * to the attention color, so the bar and the sentence beside it agree.
+ */
+function UsageMeter({ label, quota }: { label: string; quota: HostedQuota }): React.JSX.Element {
+  const capped = Math.min(quota.used, quota.limit);
+  return (
+    <div className="usage-meter" data-spent={String(quota.remaining === 0)}>
+      <span className="usage-words" aria-hidden="true">
+        <small>{label}</small>
+        <small>
+          {quota.remaining} of {quota.limit} left
+        </small>
+      </span>
+      <meter
+        className="usage-track"
+        min={0}
+        max={quota.limit > 0 ? quota.limit : 1}
+        value={quota.limit > 0 ? capped : 1}
+        aria-label={`${label}: ${quota.remaining} of ${quota.limit} left today`}
+      />
+    </div>
+  );
+}
+
 function AccountSection({
   account,
   onSignOut,
@@ -2303,6 +2334,7 @@ function AccountSection({
   panelOpen,
   hosted,
   keyed,
+  storageLocked,
   voiceService,
   hostedUsage,
 }: {
@@ -2314,6 +2346,11 @@ function AccountSection({
   hosted: boolean;
   /** Whether voice runs on the developer's own key instead. */
   keyed: boolean;
+  /**
+   * Whether this system cannot store a key at all. The Voice page withholds
+   * its connect invitation then, so the hint pointing there must too.
+   */
+  storageLocked: boolean;
   voiceService?: RealtimeDiagnostics;
   hostedUsage?: HostedUsageAnswer;
 }): React.JSX.Element {
@@ -2451,12 +2488,28 @@ function AccountSection({
         </span>
       </div>
       {/* What the account is buying right now, said where the account is: the
-          day's remaining allowance while voice runs on it, or whose key it
-          runs on instead. The wording is the Voice page's own note, worded
+          day's allowance drawn as two meters while voice runs on it — the
+          note beneath them keeps only what the bars cannot say — or whose key
+          it runs on instead. The wording is the Voice page's own, worded
           once, with the key row named because it is a page away from here. */}
-      {hosted ? (
+      {hosted && hostedUsage ? (
+        <>
+          <UsageMeter label="Voice calls" quota={hostedUsage.voice} />
+          <UsageMeter label="Session reviews" quota={hostedUsage.attention} />
+          {(() => {
+            const parts = [
+              ...(hostedUsage.voice.remaining === 0 ? [HOSTED_VOICE_SPENT_NOTE] : []),
+              ...(storageLocked ? [] : [hostedVoiceLift({ namesKeyRow: true })]),
+            ];
+            return parts.length > 0 ? <p className="settings-note">{parts.join(" ")}</p> : null;
+          })()}
+        </>
+      ) : hosted ? (
         <p className="settings-note">
-          {hostedVoiceNote(voiceService, hostedUsage, { namesKeyRow: true })}
+          {hostedVoiceNote(voiceService, hostedUsage, {
+            namesKeyRow: true,
+            offersKey: !storageLocked,
+          })}
         </p>
       ) : keyed ? (
         <p className="settings-note">
@@ -2710,6 +2763,7 @@ export function SettingsPanel({
               keyed={
                 settings.credentialSources[VOICE_CREDENTIAL_PROVIDER.id] !== CREDENTIAL_SOURCE.NONE
               }
+              storageLocked={settings.secretStorage === SECRET_STORAGE.UNAVAILABLE}
               {...(voiceService ? { voiceService } : {})}
               {...(hostedUsage ? { hostedUsage } : {})}
             />

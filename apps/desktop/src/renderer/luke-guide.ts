@@ -603,9 +603,9 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "the workspace at its top, one holding a single chat stays one row titled by the " +
         "workspace, and every chat can be seen, opened, and messaged individually. Settings " +
         "holds a front page led by the Account section — who is signed in, and what the " +
-        "account is buying right now: the day's remaining voice calls and session reviews " +
-        "while voice runs on its included allowance, or a note that it runs on the " +
-        "developer's own key — then rows that open its Voice, Appearance, Keyboard " +
+        "account is buying right now: two small meters filling with the day's used voice " +
+        "calls and session reviews while voice runs on its included allowance, or a note " +
+        "that it runs on the developer's own key — then rows that open its Voice, Appearance, Keyboard " +
         "shortcuts, and Connections pages — each led back out by its back button or Escape — " +
         "and keeps the Feedback section and Quit on the front page itself; the Voice page reveals itself in " +
         "stages — the OpenAI key section alone until voice is available at all (the signed-in " +

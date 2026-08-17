@@ -164,6 +164,11 @@ test("the usage read words both meters, and a spent voice reads the same from ei
   );
   assert.match(rolledOver, /47 of 50 calls/);
   assert.doesNotMatch(rolledOver, /used up/);
+
+  // A machine that cannot store a key is not sent to go connect one.
+  const locked = hostedVoiceNote(undefined, usage, { offersKey: false });
+  assert.doesNotMatch(locked, /OpenAI key/);
+  assert.match(locked, /left today\.$/);
 });
 
 test("the hosted note says whose allowance voice runs on, and what remains once known", () => {
