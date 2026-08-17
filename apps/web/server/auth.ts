@@ -1,15 +1,13 @@
+import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { betterAuth } from "better-auth";
 import { jwt, lastLoginMethod } from "better-auth/plugins";
-import { Pool } from "pg";
 import { PostHog } from "posthog-node";
+import { getDatabase } from "./db/index.js";
+import * as schema from "./db/schema.js";
+import { DESKTOP_OAUTH_CLIENT } from "./desktop-oauth-client.js";
 
-export const DESKTOP_OAUTH_CLIENT_ID = "luke-desktop";
-
-const database = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  max: 4,
-});
+export const DESKTOP_OAUTH_CLIENT_ID = DESKTOP_OAUTH_CLIENT.id;
 
 const posthog = process.env.POSTHOG_API_KEY
   ? new PostHog(process.env.POSTHOG_API_KEY, {
@@ -21,7 +19,7 @@ export const auth = betterAuth({
   appName: "Luke",
   baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:5173",
   secret: process.env.BETTER_AUTH_SECRET,
-  database,
+  database: drizzleAdapter(getDatabase(), { provider: "pg", schema }),
   disabledPaths: ["/token"],
   socialProviders: {
     google: {
