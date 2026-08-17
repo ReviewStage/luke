@@ -50,7 +50,7 @@ import {
   type WorkspaceAgentSelection,
   workspaceNameText,
 } from "./providers";
-import type { RealtimeFunctionCall } from "./realtime-protocol";
+import type { RealtimeFunctionCall } from "./realtime-types";
 import {
   maximumSessionMessageLength,
   type NormalizedSession,

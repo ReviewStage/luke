@@ -5,6 +5,7 @@ import {
 } from "./attention";
 import { isRecord } from "./json";
 import { spokenRealtimeToolCount } from "./realtime-tools";
+import type { RealtimeFunctionCall } from "./realtime-types";
 import {
   ATTENTION_DISPOSITION,
   type AttentionDisposition,
@@ -430,12 +431,7 @@ export function proactiveSpeechEvents(speech: AttentionSpeech): readonly Record<
   ];
 }
 
-/** One tool call the model made, as it arrives inside a finished response. */
-export interface RealtimeFunctionCall {
-  name: string;
-  callId: string;
-  argumentsJson: string;
-}
+export type { RealtimeFunctionCall } from "./realtime-types";
 
 /**
  * An inbound Realtime event the conversation acts on. The wire names stay the
