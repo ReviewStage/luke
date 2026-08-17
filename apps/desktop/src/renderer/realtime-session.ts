@@ -659,6 +659,11 @@ export class RealtimeVoiceSession {
       body: offer,
       signal: deadline,
     };
+    // The kind of call and nothing else: the ephemeral secret and the SDP
+    // stay out of the log.
+    console.log(
+      `AI call: opening realtime voice call (${this.#withMicrophone ? "conversation" : "speak-only"})`,
+    );
     const response = await (this.#options.exchangeDescription?.(connection.callsUrl, init) ??
       fetch(connection.callsUrl, init));
     if (!response.ok) {
@@ -1033,6 +1038,12 @@ export class RealtimeVoiceSession {
     this.#turnEpoch += 1;
     this.#setCaption(undefined);
     this.#clearSettleTimer();
+    // Every reply request passes through here, so this one line logs each
+    // voice-model turn. The turn's kind and nothing else: what was said stays
+    // out of the log.
+    console.log(
+      `AI call: realtime voice reply requested (${toolsArmed ? "developer turn" : "Luke's own turn"})`,
+    );
     this.#send(events);
     this.#setStatus(REALTIME_STATUS.RESPONDING);
   }

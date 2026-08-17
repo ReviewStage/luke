@@ -206,6 +206,9 @@ export class OpenAiRealtimeCredentialMinter {
   }
 
   async #request(): Promise<Response | undefined> {
+    // The model and nothing else: the key and the minted secret stay out of
+    // the log.
+    console.log(`AI call: realtime voice credential mint (model ${this.#model})`);
     try {
       return await this.#fetch(`${this.#baseUrl}${REALTIME_CLIENT_SECRETS_PATH}`, {
         method: "POST",
