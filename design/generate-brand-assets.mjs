@@ -988,6 +988,46 @@ for (const [mode, tile] of Object.entries(TILES)) {
   emit(`icon/luke-icon-${mode}.svg`, icon.replaceAll("currentColor", tile.ink), "Luke app icon");
 }
 
+// Square mark: the static mark's own tight fill — the face's bounding box
+// padded by the same 6 units, squared by its larger side — with the corners
+// left square, one per mode, tiled and transparent. The tiled pair carries
+// the icon's gradient full-bleed and is the avatar shape for surfaces that
+// round their own tiles — GitHub among them, where a pre-rounded tile would
+// show seams in the corners. The transparent pair is the same crop with no
+// tile: the see-through version of the icon and the tiled mark alike, since
+// the tile is all they do not share. A transparent avatar shows GitHub's
+// badge background color instead of a tile: pair the dark set with #1c1c1e,
+// the space-black end of the dark tile, which reads on either GitHub theme.
+const squareSide = Math.max(bbox.w, bbox.h) + 12;
+const squareX = bbox.cx - squareSide / 2;
+const squareY = bbox.cy - squareSide / 2;
+for (const [mode, tile] of Object.entries(TILES)) {
+  const open = svgOpenAt(squareX, squareY, squareSide, squareSide);
+  const tiled =
+    `${open}<defs><linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">` +
+    `<stop offset="0" stop-color="${tile.gradient[0]}"/><stop offset="1" stop-color="${tile.gradient[1]}"/></linearGradient></defs>` +
+    `<rect x="${fmt(squareX)}" y="${fmt(squareY)}" width="${fmt(squareSide)}" height="${fmt(squareSide)}" fill="url(#tile)"/>` +
+    `${face()}</svg>`;
+  emit(`mark/luke-mark-square-${mode}.svg`, tiled.replaceAll("currentColor", tile.ink), "Luke");
+  emit(
+    `mark/luke-mark-square-transparent-${mode}.svg`,
+    `${open}${face()}</svg>`.replaceAll("currentColor", tile.ink),
+    "Luke",
+  );
+}
+
+// And the dark mark once more over flat pure black instead of the tile's
+// gradient, for surfaces that want the mark on true black.
+const squareBlack =
+  `${svgOpenAt(squareX, squareY, squareSide, squareSide)}` +
+  `<rect x="${fmt(squareX)}" y="${fmt(squareY)}" width="${fmt(squareSide)}" height="${fmt(squareSide)}" fill="#000000"/>` +
+  `${face()}</svg>`;
+emit(
+  "mark/luke-mark-square-black.svg",
+  squareBlack.replaceAll("currentColor", TILES.dark.ink),
+  "Luke",
+);
+
 // Menu-bar template source: pure black, macOS recolors it. Square canvas
 // with the artwork filling ~90% of it, per status-item conventions.
 const side = Math.max(bbox.w, bbox.h) * 1.1;

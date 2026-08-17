@@ -21,6 +21,11 @@ for m in light dark; do
     rsvg-convert -w $s -h $s icon/luke-icon-$m.svg -o icon/luke-icon-$m-$s.png
   done
 done
+for m in light dark; do
+  rsvg-convert -w 1024 -h 1024 mark/luke-mark-square-$m.svg -o mark/luke-mark-square-$m-1024.png
+  rsvg-convert -w 1024 -h 1024 mark/luke-mark-square-transparent-$m.svg -o mark/luke-mark-square-transparent-$m-1024.png
+done
+rsvg-convert -w 1024 -h 1024 mark/luke-mark-square-black.svg -o mark/luke-mark-square-black-1024.png
 rsvg-convert -w 18 -h 18 menubar/luke-menubar-template.svg -o menubar/lukeTemplate.png
 rsvg-convert -w 36 -h 36 menubar/luke-menubar-template.svg -o menubar/lukeTemplate@2x.png
 rsvg-convert -w 660 -h 400 dmg/luke-dmg-background.svg -o dmg/luke-dmg-background.png
@@ -76,12 +81,14 @@ keep the full 240×240 canvas — they need headroom to move.
 
 | File | Use |
 |---|---|
-| `luke-mark-{light,dark}.svg` | The static face mark |
+| `luke-mark-{light,dark}.svg` | The static face mark, tight-cropped on a transparent background |
 | `luke-wordmark-{light,dark}.svg` | Face-first caps LUKE wordmark |
 | `luke-wordmark-talking-{light,dark}.svg` | Animated hero: the face talks mid-word |
 | `icon/luke-icon-{light,dark}.svg` + `luke-icon-{light,dark}-{16…1024}.png` | App icon (squircle tile), per mode |
 | `menubar/luke-menubar-template.svg` + `lukeTemplate{,@2x}.png` | macOS menu-bar template image (pure black + alpha; macOS recolors it). Packaging builds `Luke.icns` from the dark icon PNGs automatically in `apps/desktop/scripts/package.mjs`; no `.icns` is committed |
 | `dmg/luke-dmg-background.svg` + `luke-dmg-background{,@2x}.png` | Neutral installer background with a branded drag-and-drop arrow |
+| `mark/luke-mark-square{,-transparent}-{light,dark}.svg` + `-1024.png` | The face at the static mark's tight fill on a square canvas, per mode: over the icon's gradient with square corners (the avatar shape for surfaces that round their own tiles, GitHub among them), and the same crop with no tile. A transparent avatar shows GitHub's badge background color instead — pair the dark set with `#1c1c1e`, the space-black end of the dark icon tile, which reads on either GitHub theme |
+| `mark/luke-mark-square-black.svg` + `-1024.png` | The dark mark once more over flat pure black (`#000000`) instead of the tile's gradient, for surfaces that want the mark on true black |
 | `motion/luke-<state>-{light,dark}.svg` | Animated state marks (below) |
 
 ## Motion states
