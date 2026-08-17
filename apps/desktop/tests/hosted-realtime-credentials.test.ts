@@ -86,19 +86,23 @@ test("mints through the hosted service on the account's bearer token", async () 
   assert.deepEqual(report.quota, QUOTA);
 });
 
-test("reuses the outstanding credential and discards it when the voice changes", async () => {
+test("mints a fresh secret for every call and follows a voice change on the next", async () => {
   const { requests, fetchLike } = service([
     () => new Response(JSON.stringify(mintedBody()), { status: 200 }),
   ]);
   const hosted = minter({ fetch: fetchLike });
 
+  // Never reused: the service refuses a reused secret at the calls endpoint,
+  // so each call is answered by its own mint — which is also what the hosted
+  // allowance counts.
   await hosted.mint();
   await hosted.mint();
-  assert.equal(requests.length, 1);
+  assert.equal(requests.length, 2);
 
   hosted.setVoice(REALTIME_VOICE.SAGE);
   await hosted.mint();
-  assert.equal(requests.length, 2);
+  assert.equal(requests.length, 3);
+  assert.equal(JSON.parse(String(requests[2]?.init.body)).voice, REALTIME_VOICE.SAGE);
 });
 
 test("no access token asks the service nothing and says why voice is off", async () => {

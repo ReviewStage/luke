@@ -8,22 +8,18 @@ import {
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
   isRecord,
-  nonNegativeNumber,
   positiveInteger,
   REALTIME_DEFAULTS,
   REALTIME_MINT_OUTCOME,
   type RealtimeConnection,
   type RealtimeDiagnostics,
   type RealtimeMintOutcome,
-  realtimeCredentialIsUsable,
   text,
 } from "@sidecar/core";
 import type { RealtimeCredentialMinter } from "./realtime-minter";
 
 const HOSTED_DEFAULTS = {
   REQUEST_TIMEOUT_MS: 10_000,
-  /** The same pre-expiry margin the keyed minter keeps, for the same SDP round trip. */
-  EXPIRY_MARGIN_MS: 5_000,
 } as const;
 
 const UNAUTHORIZED_STATUS = 401;
@@ -49,7 +45,6 @@ export interface HostedRealtimeCredentialOptions {
   fetch?: FetchLike;
   now?: () => number;
   requestTimeoutMs?: number;
-  expiryMarginMs?: number;
 }
 
 function withoutTrailingSlash(value: string): string {
@@ -77,8 +72,6 @@ export class HostedRealtimeCredentialMinter implements RealtimeCredentialMinter 
   readonly #fetch: FetchLike;
   readonly #now: () => number;
   readonly #requestTimeoutMs: number;
-  readonly #expiryMarginMs: number;
-  #credential: RealtimeConnection | undefined;
   #lastModel: string | undefined;
   #lastOutcome: RealtimeMintOutcome = REALTIME_MINT_OUTCOME.NOT_ATTEMPTED;
   #lastDetail: string | undefined;
@@ -101,34 +94,28 @@ export class HostedRealtimeCredentialMinter implements RealtimeCredentialMinter 
       options.requestTimeoutMs,
       HOSTED_DEFAULTS.REQUEST_TIMEOUT_MS,
     );
-    this.#expiryMarginMs = nonNegativeNumber(
-      options.expiryMarginMs,
-      HOSTED_DEFAULTS.EXPIRY_MARGIN_MS,
-    );
   }
 
-  /** The same discard rule as the keyed minter: an outstanding credential was minted for the old voice. */
+  /**
+   * Changes the voice new credentials are minted for. A call already open
+   * keeps the voice it answered with, the keyed minter's own rule.
+   */
   setVoice(voice: string | undefined): void {
-    const next = text(voice) ?? this.#configuredVoice;
-    if (next === this.#voice) return;
-    this.#voice = next;
-    this.#credential = undefined;
+    this.#voice = text(voice) ?? this.#configuredVoice;
   }
 
   setSpeed(speed: number | undefined): void {
-    const next = speed ?? this.#configuredSpeed;
-    if (next === this.#speed) return;
-    this.#speed = next;
-    this.#credential = undefined;
+    this.#speed = speed ?? this.#configuredSpeed;
   }
 
-  /** Returns a usable credential, reusing the outstanding one until it nears expiry. */
+  /**
+   * Mints a fresh credential for every call, the keyed minter's own rule: the
+   * service has been seen to refuse a reused secret at the calls endpoint
+   * (status 401) even inside its stated expiry, and a refused call in the
+   * announcer's path is an announcement lost. This is also what the hosted
+   * allowance counts — each mint answers exactly one call.
+   */
   async mint(): Promise<RealtimeConnection | undefined> {
-    const existing = this.#credential;
-    if (existing && realtimeCredentialIsUsable(existing, this.#now() + this.#expiryMarginMs)) {
-      return existing;
-    }
-    this.#credential = undefined;
     this.#lastAttemptAt = this.#now();
 
     const token = await this.#readAccessToken();
@@ -162,7 +149,6 @@ export class HostedRealtimeCredentialMinter implements RealtimeCredentialMinter 
       return undefined;
     }
 
-    this.#credential = answer.connection;
     this.#lastModel = answer.connection.model;
     this.#quota = answer.quota ?? this.#quota;
     this.#record(REALTIME_MINT_OUTCOME.SUCCEEDED);
