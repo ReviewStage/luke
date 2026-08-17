@@ -171,8 +171,6 @@ export interface PreferenceWrites {
    * answer belongs.
    */
   onQuietDuringMeetingsChange: (enabled: boolean) => Promise<string | undefined>;
-  /** Turns the timed update check on or off. */
-  onAutomaticUpdatesChange: (enabled: boolean) => Promise<string | undefined>;
   /** Chooses the voice Luke speaks with, from the set fixed by this build. */
   onVoiceChange: (voice: RealtimeVoice) => void;
   /** Chooses the pace Luke speaks at, from the set fixed by this build. */
@@ -2406,15 +2404,7 @@ function pageResetControl(
   return undefined;
 }
 
-function UpdatesSection({
-  control,
-  automaticUpdates,
-  onAutomaticUpdatesChange,
-}: {
-  control: UpdateControl;
-  automaticUpdates: boolean;
-  onAutomaticUpdatesChange: (enabled: boolean) => Promise<string | undefined>;
-}): React.JSX.Element {
+function UpdatesSection({ control }: { control: UpdateControl }): React.JSX.Element {
   const row = updateRow(control.update);
   return (
     <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
@@ -2445,13 +2435,11 @@ function UpdatesSection({
           </button>
         )}
       </div>
-      <SwitchRow
-        label="Check for updates automatically"
-        detail="Asks GitHub for the latest release name a few times a day. Nothing about you or your sessions is sent."
-        errand={APP_SETTING_ID.AUTOMATIC_UPDATES}
-        checked={automaticUpdates}
-        onChange={onAutomaticUpdatesChange}
-      />
+      {/* Always on, like the announcements — stated rather than switched, so
+          the disclosure the retired switch carried is still on the row. */}
+      <p className="settings-note">
+        Luke checks on his own a few times a day. Nothing about you or your sessions is sent.
+      </p>
     </section>
   );
 }
@@ -2609,13 +2597,7 @@ export function SettingsPanel({
 
       {drawnView !== SETTINGS_VIEW.ROOT ? null : (
         <>
-          {settings ? (
-            <UpdatesSection
-              control={updates}
-              automaticUpdates={settings.automaticUpdates}
-              onAutomaticUpdatesChange={preferences.onAutomaticUpdatesChange}
-            />
-          ) : null}
+          <UpdatesSection control={updates} />
 
           <FeedbackSection control={feedback} />
 

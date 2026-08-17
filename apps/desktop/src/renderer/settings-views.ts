@@ -72,7 +72,7 @@ export function pageExitMs(element: Element | null): number {
  * each setting. That the two agree is a test rather than a type, because one
  * is a sentence and the other is a page.
  */
-export const SETTING_PAGE: Record<AppSettingId, SettingsView> = {
+export const SETTING_PAGE: Record<AppSettingId, SettingsSubview> = {
   [APP_SETTING_ID.VOICE]: SETTINGS_VIEW.VOICE,
   [APP_SETTING_ID.VOICE_SPEED]: SETTINGS_VIEW.VOICE,
   [APP_SETTING_ID.VOICE_CAPTIONS]: SETTINGS_VIEW.VOICE,
@@ -84,9 +84,6 @@ export const SETTING_PAGE: Record<AppSettingId, SettingsView> = {
   [APP_SETTING_ID.SHOW_IN_DOCK]: SETTINGS_VIEW.APPEARANCE,
   [APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS]: SETTINGS_VIEW.APPEARANCE,
   [APP_SETTING_ID.FORM_FACTOR]: SETTINGS_VIEW.APPEARANCE,
-  // Drawn on the front page itself, beside Feedback: a flight
-  // to it opens no page at all, only the tab.
-  [APP_SETTING_ID.AUTOMATIC_UPDATES]: SETTINGS_VIEW.ROOT,
   // The three the guide describes but marks by-hand-only. Nothing flies to
   // them — a spoken ask is refused before it reaches a page — but where they
   // are drawn is a fact about the settings either way, and answering it here
@@ -111,8 +108,7 @@ export function credentialSettingsPage(providerId: CredentialProviderId): Settin
 }
 
 /** How each page names itself, which is how the guide's by-hand paths word it. */
-export const SETTINGS_PAGE_LABEL: Record<SettingsView, string> = {
-  [SETTINGS_VIEW.ROOT]: "front page",
+export const SETTINGS_PAGE_LABEL: Record<SettingsSubview, string> = {
   [SETTINGS_VIEW.VOICE]: "Voice",
   [SETTINGS_VIEW.APPEARANCE]: "Appearance",
   [SETTINGS_VIEW.SHORTCUTS]: "Keyboard shortcuts",

@@ -100,16 +100,11 @@ export class UpdateService {
   }
 
   /**
-   * Starts or stops the timed check. Starting checks at once — a build that
-   * only ever checked hours after launch would spend its first day behind —
-   * and the timer never holds the process open.
+   * Starts the timed check. It checks at once — a build that only ever
+   * checked hours after launch would spend its first day behind — and the
+   * timer never holds the process open.
    */
-  setAutomatic(enabled: boolean): void {
-    if (!enabled) {
-      if (this.#timer) clearInterval(this.#timer);
-      this.#timer = undefined;
-      return;
-    }
+  start(): void {
     if (this.#timer) return;
     void this.check();
     this.#timer = setInterval(() => void this.check(), this.#intervalMs);
@@ -117,7 +112,8 @@ export class UpdateService {
   }
 
   stop(): void {
-    this.setAutomatic(false);
+    if (this.#timer) clearInterval(this.#timer);
+    this.#timer = undefined;
   }
 
   async #read(): Promise<UpdateSnapshot> {

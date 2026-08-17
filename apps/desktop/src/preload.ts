@@ -53,7 +53,6 @@ const bridge: AppBridge = {
   },
   removeCalendarAccount: invoke(channels.removeCalendarAccount),
   setCalendarSelected: invoke(channels.setCalendarSelected),
-  setAutomaticUpdates: invoke(channels.setAutomaticUpdates),
   checkForUpdates: invoke(channels.checkForUpdates),
   openLatestRelease: () => ipcRenderer.send(channels.openLatestRelease),
   setVoiceExchangeActive: (active) => {
