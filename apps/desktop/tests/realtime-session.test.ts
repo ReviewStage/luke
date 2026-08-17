@@ -1093,6 +1093,87 @@ test("a reference whose session leaves the roster is withdrawn", async () => {
   assert.match(itemText(items[0]), /no longer observed/);
 });
 
+function announcementSpeech(summary: string) {
+  return {
+    providerId: "claude-code",
+    providerSessionId: "session-a",
+    disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
+    source: ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
+    summary,
+    decidedAt: 1_800_000_000_000,
+  };
+}
+
+test("the last announcement travels with the roster, carrying the words said", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  context.session.updateSessions([observedSession("session-a")]);
+  // The announcement may have been read out on a speak-only call this one
+  // replaced, or only shown as a popup: the words go in here so "what did you
+  // just say?" lands on a call that heard them.
+  context.session.updateLastAnnouncement(
+    announcementSpeech("Claude Code finished checkout-service."),
+  );
+  // Remembered, not sent: the words go in at the turn that reads them.
+  assert.deepEqual(context.sent, []);
+
+  armDeveloperTurn(context);
+
+  const items = contextItems(context, "[last announcement");
+  assert.equal(items.length, 1);
+  assert.match(itemText(items[0]), /finished checkout-service/);
+  // After the roster, on a channel that keeps order.
+  const rosterIndex = context.sent.findIndex((event) =>
+    itemText(event).startsWith("[observed session status"),
+  );
+  assert.ok(rosterIndex >= 0 && rosterIndex < context.sent.indexOf(items[0] ?? {}));
+});
+
+test("a fresh announcement replaces the one before it", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  context.session.updateLastAnnouncement(
+    announcementSpeech("Claude Code finished checkout-service."),
+  );
+  armDeveloperTurn(context);
+  const first = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.LAST_ANNOUNCEMENT);
+  assert.ok(first);
+
+  context.session.stopSpeaking();
+  context.session.updateLastAnnouncement(announcementSpeech("Codex failed in payments."));
+  const sentBefore = context.sent.length;
+  armDeveloperTurn(context);
+
+  // One live item per kind: the old words are deleted before the new go in,
+  // so the conversation never holds two last announcements.
+  assert.equal(
+    context.sent
+      .slice(sentBefore)
+      .some(
+        (event) =>
+          event.type === CONVERSATION_ITEM_DELETE &&
+          (event as { item_id?: string }).item_id === first,
+      ),
+    true,
+  );
+  const items = contextItems(context, "[last announcement", sentBefore);
+  assert.equal(items.length, 1);
+  assert.match(itemText(items[0]), /failed in payments/);
+  assert.notEqual(
+    context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.LAST_ANNOUNCEMENT),
+    first,
+  );
+
+  // The same words again are not news: nothing is resent.
+  context.session.stopSpeaking();
+  context.session.updateLastAnnouncement(announcementSpeech("Codex failed in payments."));
+  const repeatBefore = context.sent.length;
+  armDeveloperTurn(context);
+  assert.deepEqual(contextItems(context, "[last announcement", repeatBefore), []);
+});
+
 test("a refused call still reads as failed after the channel finishes closing", async () => {
   const context = harness({ sdpResponse: new Response("nope", { status: 403 }) });
 
@@ -3123,6 +3204,11 @@ test("the rosters and the guide never travel on Luke's own call", async () => {
     providerId: "claude-code",
     providerSessionId: "session-a",
   });
+  // The last announcement is under the same gate: Luke's own call is sent the
+  // one sentence it exists to say, never the context items.
+  context.session.updateLastAnnouncement(
+    announcementSpeech("Claude Code finished checkout-service."),
+  );
   context.session.updateGuide({
     facts: [{ label: "What Luke is", detail: "A sidecar." }],
     settings: [],

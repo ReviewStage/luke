@@ -232,22 +232,32 @@ export function announcerNotices(speech: readonly AttentionSpeech[]): AttentionS
 }
 
 /**
- * The session one batch of attention speech leaves under discussion: the
- * newest mention, because it is the one a bare "that chat" a moment later
- * points back at. Every item counts, however it reached the developer —
- * spoken on an open call, read out on Luke's own, or only shown as a popup —
- * since each is a session Luke just told them about. Deterministic on both
- * sides: the deciders behind the speech are the status edge and the standing
- * ask, and picking the newest is arithmetic, so no model output chooses what
- * the reference points at.
+ * The newest item of one batch of attention speech, by the moment it was
+ * decided. Every item counts, however it reached the developer — spoken on an
+ * open call, read out on Luke's own, or only shown as a popup — since each is
+ * something Luke just told them. Picking the newest is arithmetic, so no
+ * model output chooses what survives the batch.
  */
-export function latestSpeechReference(
-  speech: readonly AttentionSpeech[],
-): SessionIdentity | undefined {
+export function latestSpeech(speech: readonly AttentionSpeech[]): AttentionSpeech | undefined {
   let latest: AttentionSpeech | undefined;
   for (const item of speech) {
     if (latest === undefined || item.decidedAt >= latest.decidedAt) latest = item;
   }
+  return latest;
+}
+
+/**
+ * The session one batch of attention speech leaves under discussion: the
+ * newest mention, because it is the one a bare "that chat" a moment later
+ * points back at. Deterministic on both sides: the deciders behind the speech
+ * are the status edge and the standing ask, and {@link latestSpeech} picks the
+ * newest by arithmetic, so no model output chooses what the reference points
+ * at.
+ */
+export function latestSpeechReference(
+  speech: readonly AttentionSpeech[],
+): SessionIdentity | undefined {
+  const latest = latestSpeech(speech);
   return latest
     ? { providerId: latest.providerId, providerSessionId: latest.providerSessionId }
     : undefined;
@@ -398,6 +408,14 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    * copy goes with its teardown; this one re-feeds the next call.
    */
   const sessionReferenceRef = useRef<SessionIdentity | undefined>(undefined);
+  /**
+   * The most recent announcement's words, surviving here on the reference's
+   * own terms: the announcement was often read out on Luke's speak-only call,
+   * which the talk-key press tears down — and "what did you just say?"
+   * arrives on the call that never said it. The session's copy goes with its
+   * teardown; this one re-feeds the next call.
+   */
+  const lastAnnouncementRef = useRef<AttentionSpeech | undefined>(undefined);
 
   /**
    * Moves the session under discussion, when there is somewhere to move it.
@@ -408,6 +426,17 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     if (!identity) return;
     sessionReferenceRef.current = identity;
     voiceSession.current?.updateSessionReference(identity);
+  }, []);
+
+  /**
+   * Keeps the newest announcement's words, when a batch carried any. Nothing
+   * here ever clears them: words already said do not go stale the way an
+   * identity does, and the next announcement replaces them soon enough.
+   */
+  const rememberLastAnnouncement = useCallback((speech: AttentionSpeech | undefined) => {
+    if (!speech) return;
+    lastAnnouncementRef.current = speech;
+    voiceSession.current?.updateLastAnnouncement(speech);
   }, []);
 
   const ensureVoiceSession = useCallback((): RealtimeVoiceSession => {
@@ -544,6 +573,12 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       // the calls themselves on purpose: the announcement it points back at
       // may have been read out on the speak-only call this one just replaced.
       session.updateSessionReference(sessionReferenceRef.current);
+      // The announcement's own words re-feed on the same terms, so "what did
+      // you just say?" can be answered on the call that replaced the one that
+      // said it.
+      if (lastAnnouncementRef.current) {
+        session.updateLastAnnouncement(lastAnnouncementRef.current);
+      }
       session.updateWorkspaceProjects(
         workspaceProjectsRef.current,
         defaultWorkspaceProviderRef.current,
@@ -809,13 +844,17 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       // out on Luke's own, or only shown as a popup — its session is now the
       // one under discussion, and the next turn may say just "that chat".
       rememberSessionReference(latestSpeechReference(speech));
+      // And its words are now the last announcement, so "what did you just
+      // say?" has an answer on whichever call the question lands on. The two
+      // compose: the reference carries the identity, this carries the words.
+      rememberLastAnnouncement(latestSpeech(speech));
       const notices = announcerNotices(speech);
       if (notices.length > 0) ensureAnnouncer().enqueue(notices);
       const session = voiceSession.current;
       if (!session?.microphoneCall) return;
       for (const item of evaluatorSummaries(speech)) session.speak(item);
     });
-  }, [ensureAnnouncer, rememberSessionReference]);
+  }, [ensureAnnouncer, rememberLastAnnouncement, rememberSessionReference]);
 
   // The announcer paces itself by the session's status: READY is when a queued
   // sentence can speak and when an empty queue starts the walk toward closing

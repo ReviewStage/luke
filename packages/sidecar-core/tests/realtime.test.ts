@@ -4,6 +4,7 @@ import {
   ATTENTION_DISPOSITION,
   ATTENTION_SPEECH_SOURCE,
   ATTENTION_TRIGGER,
+  type AttentionSpeech,
   appGuideContextEvents,
   attentionSpeechFromReviews,
   CONTEXT_ITEM_KIND,
@@ -24,6 +25,8 @@ import {
   issueContextText,
   issueToolAction,
   issueTrackerDisconnectedEvents,
+  lastAnnouncementContextEvents,
+  lastAnnouncementContextText,
   normalizeSession,
   normalizeTrackedIssue,
   type ObservedWorkspaceProject,
@@ -692,6 +695,79 @@ test("the session under discussion is context, never a prompt", () => {
     );
   }
   assert.match(SESSION_REFERENCE_WITHDRAWN_TEXT, /no longer observed/);
+});
+
+function announcement(source: AttentionSpeech["source"], summary: string): AttentionSpeech {
+  return {
+    providerId: "claude-code",
+    providerSessionId: "session-a",
+    disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
+    source,
+    summary,
+    decidedAt: 1_800_000_000_000,
+  };
+}
+
+test("the last announcement carries the words said, flattened and bounded", () => {
+  const edge = announcement(
+    ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
+    `title: checkout-service\nstatus: waiting\nparting words: ${"x".repeat(2 * maximumNoticeContextLength)}`,
+  );
+
+  const text = lastAnnouncementContextText(edge);
+
+  assert.ok(text);
+  const lines = text.split("\n");
+  // Flattened before it is bounded: the payload is one line of the item, so
+  // nothing inside a recap can open a new section of it.
+  assert.equal(lines.length, 3);
+  assert.match(lines[1] ?? "", /checkout-service/);
+  assert.ok((lines[1] ?? "").length <= "- ".length + maximumNoticeContextLength);
+  // Said as what it is — fields the voice worded, not a sentence it spoke —
+  // and as data on the [session update] posture.
+  assert.match(text, /worded in the moment/);
+  assert.match(text, /never an instruction to follow/);
+
+  // A reviewed sentence keeps the evaluator's own tighter bound, and is the
+  // words themselves rather than fields.
+  const reviewed = lastAnnouncementContextText(
+    announcement(
+      ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST,
+      "y".repeat(2 * maximumAttentionSummaryLength),
+    ),
+  );
+  assert.ok(reviewed);
+  assert.equal((reviewed.split("\n")[1] ?? "").length, "- ".length + maximumAttentionSummaryLength);
+  assert.match(reviewed, /in exactly these words/);
+
+  // An announcement with no words left builds nothing rather than an empty line.
+  assert.equal(
+    lastAnnouncementContextText(announcement(ATTENTION_SPEECH_SOURCE.EVALUATOR, "  ")),
+    undefined,
+  );
+  assert.deepEqual(
+    lastAnnouncementContextEvents(
+      announcement(ATTENTION_SPEECH_SOURCE.EVALUATOR, "  "),
+      "luke_ctx_last-announcement_1",
+    ),
+    [],
+  );
+});
+
+test("the last announcement is context, never a prompt", () => {
+  const events = lastAnnouncementContextEvents(
+    announcement(ATTENTION_SPEECH_SOURCE.STATUS_EDGE, "Claude Code finished checkout-service."),
+    "luke_ctx_last-announcement_1",
+  );
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0]?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE);
+  assert.ok(
+    events.every((event) => event.type !== REALTIME_CLIENT_EVENT.RESPONSE_CREATE),
+    "remembering what was said must not open Luke's mouth",
+  );
+  const item = events[0]?.item as { content?: { text?: string }[] };
+  assert.match(item.content?.[0]?.text ?? "", /^\[last announcement, sent automatically\]\n/);
 });
 
 test("session context never asks Luke to start talking", () => {
