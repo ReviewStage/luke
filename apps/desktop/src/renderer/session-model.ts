@@ -257,9 +257,12 @@ function searchTokens(query: string): readonly string[] {
 /**
  * The lines a query is read against: everything the row itself can say — its
  * title, the sentence under it, the branch and repository, the workspace it is
- * a chat of — plus the two identifiers the row keeps on the mark's hover, the
- * agent's name and its model. Search finds rows by what they show, so a match
- * is always something the developer can see once the row is on screen.
+ * a chat of — plus identifiers the row does not always spend a line on: the
+ * agent's name and its model, kept on the mark's hover, and a chat's own name,
+ * which a lone chat cedes its title line to its workspace for. Those still
+ * find the session — each is a name the provider's own surface knows it by —
+ * so a row can match without a mark to show for it; the marks only ever land
+ * on the lines the row draws.
  */
 function searchableLines(session: DisplaySession): readonly string[] {
   const lines = [
