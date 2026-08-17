@@ -1294,6 +1294,18 @@ export function App(): React.JSX.Element {
     carryAppAction,
   });
 
+  // Whether the caption strip is holding the band under the housing — Luke's
+  // live words, or the voice-failure notice reported in their place. The gate
+  // reads the same pair the strip is drawn from below, so the popup can never
+  // advance into a band either of them is occupying.
+  const captionDrawn =
+    (lukeCaption ??
+      voiceErrorToShow({
+        fixtureSpeaking: bootstrap?.profile === "speaking" || bootstrap?.profile === "muted",
+        voice: voiceTurn,
+        error: voiceError,
+      })) !== undefined;
+
   // The notice popup: one announcement at a time standing under the housing,
   // pressable, on the room the caption otherwise uses. The queue holds what
   // arrived while the room was taken.
@@ -1356,7 +1368,7 @@ export function App(): React.JSX.Element {
   // the last popup gone, the caption cleared, or the shape back at rest.
   useEffect(() => {
     if (notice || noticeQueue.length === 0) return;
-    if (!noticePopupAllowed({ presentation, captionDrawn: lukeCaption !== undefined })) return;
+    if (!noticePopupAllowed({ presentation, captionDrawn })) return;
     const taken = takeNoticePopup(
       noticeQueue,
       Date.now(),
@@ -1372,7 +1384,7 @@ export function App(): React.JSX.Element {
       setNotice(taken.drawn);
       setNoticeShown(true);
     }
-  }, [notice, noticeQueue, presentation, lukeCaption, sessions]);
+  }, [notice, noticeQueue, presentation, captionDrawn, sessions]);
 
   // The dwell: a shown popup stands for its beat and puts itself away. A
   // pointer resting on it is someone reading; the timer re-arms rather than
@@ -1398,9 +1410,9 @@ export function App(): React.JSX.Element {
   // showing the session's row.
   useEffect(() => {
     if (!notice || !noticeShown) return;
-    if (noticePopupAllowed({ presentation, captionDrawn: lukeCaption !== undefined })) return;
+    if (noticePopupAllowed({ presentation, captionDrawn })) return;
     standDownNotice();
-  }, [notice, noticeShown, presentation, lukeCaption, standDownNotice]);
+  }, [notice, noticeShown, presentation, captionDrawn, standDownNotice]);
 
   /**
    * The popup's press: a row press at one remove. A session its provider gave
