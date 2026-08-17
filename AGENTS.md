@@ -34,21 +34,23 @@ Trust constraints:
 - One registration is the exception the previous rule's word "require" leaves
   room for, and it is bounded on every side: Luke may merge an observation
   hook into a provider's own user-level hook configuration — today Claude
-  Code's `settings.json`, and nothing else of the provider's — so local rows
-  can tell a turn that just ended from a session walked away from, and can see
-  a tool call holding for permission at all. The hook itself writes one fixed
-  status token into a spool under Luke's own application data, named by the
-  session's id; the envelope the provider pipes it is read only for that id
-  and never reaches disk. The merge preserves the user's own entries and
-  settings as parsed, recognizes its own entries by the script's name, refuses
-  to rewrite a file it cannot parse, converges at launch rather than
-  accumulating, and skips a machine with no provider home to join. The
-  registration is part of observing at all, like reading the transcripts, so
-  it converges at every launch rather than answering to a preference; an
-  entry outliving Luke is a guarded no-op, and everything the hook sharpens
-  still observes from the transcripts alone wherever the hook is absent.
-  Widening it to another provider or another lifecycle event is a product
-  decision, not an implementation detail.
+  Code's `settings.json` and Codex's `hooks.json`, and nothing else of either
+  provider's — so local rows can tell a turn that just ended from a session
+  walked away from, and can see a tool call holding for permission at all. The
+  hook itself writes one fixed status token into a spool under Luke's own
+  application data, named by the session's id; the envelope the provider hands
+  it — piped in, or passed as an argument — is read only for that id and never
+  reaches disk. The merge preserves the user's own entries and settings as
+  parsed, recognizes its own entries by the script's name, refuses to rewrite
+  a file it cannot parse, converges at launch rather than accumulating, and
+  skips a machine with no provider home to join. The registration is part of
+  observing at all, like reading the transcripts, so it converges at every
+  launch rather than answering to a preference; an entry outliving Luke is a
+  guarded no-op, and everything the hook sharpens still observes from the
+  transcripts alone wherever the hook is absent — including behind Codex's own
+  review gate, which shows a new entry to the user and runs nothing until they
+  trust it. Widening it to another provider or another lifecycle event is a
+  product decision, not an implementation detail.
 - The one thing Luke may change about a session is what the user just asked to
   send it: a message typed on its row, a control its provider advertised for
   it, or the same two acts asked of Luke — out loud, or typed into his own
@@ -95,8 +97,12 @@ Trust constraints:
   on this machine, and rendered into a bounded reply that is kept nowhere —
   the read performs nothing, reaches no provider, and is offered only for a
   local session whose provider's transcript this build documents reading
-  (Claude Code today); a cloud session's conversation lives with its provider
-  and is never fetched.
+  (Claude Code, Codex, OpenCode, and Cursor's local agents today); a cloud
+  session's conversation lives with its provider and is never fetched. The
+  read renders only what the provider actually wrote down — Cursor keeps tool
+  outputs out of its transcripts, so a Cursor reading carries none — and a
+  provider whose stored shape this build cannot render faithfully keeps the
+  honest refusal instead.
 - The issue tracker follows the same rule at one remove. Luke reads the issues
   a tracker lists for the user under a user-supplied key and observes nothing
   without one, exactly like a cloud session provider. The two acts a tracker

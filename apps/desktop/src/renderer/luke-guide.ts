@@ -549,7 +549,9 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       label: "Reading a session's transcript",
       detail:
         "Asked what a local session did, said, or is stuck on, Luke can read that session's own " +
-        "recent transcript — Claude Code sessions today — on this machine, and answer from it. " +
+        "recent transcript — Claude Code, Codex, OpenCode, and the Cursor agents running on " +
+        "this machine today — and answer from it. Cursor keeps tool outputs out of its own " +
+        "transcripts, so those readings carry the words and the calls but no results. " +
         "The reading happens when asked and is kept nowhere; cloud sessions keep their " +
         "conversations with their provider, so Luke answers about those from their roster " +
         "fields alone.",

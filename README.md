@@ -54,9 +54,13 @@ Settings. Voice and optional attention review require an OpenAI API key.
 ## Privacy
 
 Luke observes provider state without changing provider transcripts or session
-files. Local session data stays on your Mac unless you start a feature that
+files. Its one provider-side write is an observation hook registered for
+Claude Code and Codex in their own hook settings — it records a session's
+status, never its conversation, and Codex asks you to trust it before it
+runs. Local session data stays on your Mac unless you start a feature that
 requires an external service. Messages, controls, workspace creation, and issue
-updates run only when you explicitly request them.
+updates run only when you explicitly request them, and Luke reads a local
+session's transcript only when you ask about that session.
 
 See [PRIVACY.md](PRIVACY.md) for the data sent by each optional integration and
 how credentials are stored.
