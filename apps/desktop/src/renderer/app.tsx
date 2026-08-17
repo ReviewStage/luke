@@ -5,6 +5,7 @@ import {
   type FeedbackComposerKind,
   FIXTURE_EPOCH_MS,
   isProviderId,
+  MOTION_DURATION_MS,
   type NormalizedSession,
   type ObservedWorkspaceProject,
   type PanelFormFactor,
@@ -30,6 +31,7 @@ import type {
   AppSettings,
   DisplayDiagnostic,
   OutputAudioState,
+  SessionNoticePopup,
   SessionOpenResult,
   SettingsUpdateResult,
 } from "../shared/contracts";
@@ -78,6 +80,7 @@ import { NotchWings } from "./notch-wings";
 import { PanelBody, type SessionWriteHandlers } from "./panel-body";
 import { HIT_REGION, PANEL_PRESENTATION } from "./panel-state";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
+import { ProviderMark } from "./provider-marks";
 import type { AppActionCarrier } from "./realtime-session";
 import {
   arrangeSessions,
@@ -91,6 +94,13 @@ import {
   tallySummary,
 } from "./session-model";
 import { parsePixels } from "./session-motion";
+import {
+  type DrawnNotice,
+  enqueueNoticePopups,
+  NOTICE_POPUP_MS,
+  noticePopupAllowed,
+  takeNoticePopup,
+} from "./session-notice-popup";
 import { SESSION_OPTIONS_BUTTON_ID, SESSION_OPTIONS_ID } from "./session-parts";
 import { focusSearchField } from "./session-search";
 import type { MicrophoneControl, PreferenceWrites, ShortcutControl } from "./settings-panel";
@@ -1284,6 +1294,140 @@ export function App(): React.JSX.Element {
     carryAppAction,
   });
 
+  // The notice popup: one announcement at a time standing under the housing,
+  // pressable, on the room the caption otherwise uses. The queue holds what
+  // arrived while the room was taken.
+  const [noticeQueue, setNoticeQueue] = useState<readonly SessionNoticePopup[]>([]);
+  // What the popup is drawing. The popup and its exit outlive the roster entry
+  // they were resolved from, so the drawn fields are kept here rather than
+  // looked up on every render.
+  const [notice, setNotice] = useState<DrawnNotice>();
+  // False while the popup is leaving: content leaves first, over the exit
+  // beat, and only the exit timer clearing `notice` releases the room — never
+  // the frame the state changed on.
+  const [noticeShown, setNoticeShown] = useState(false);
+  const noticeDwell = useRef<number | undefined>(undefined);
+  const noticeExit = useRef<number | undefined>(undefined);
+  // A pointer resting on the popup is someone reading it; the dwell timer
+  // fires through the ref so a held popup waits for the pointer to leave.
+  const noticeHeld = useRef(false);
+
+  const cancelNoticeTimers = useCallback(() => {
+    if (noticeDwell.current !== undefined) window.clearTimeout(noticeDwell.current);
+    if (noticeExit.current !== undefined) window.clearTimeout(noticeExit.current);
+    noticeDwell.current = undefined;
+    noticeExit.current = undefined;
+  }, []);
+
+  /**
+   * Puts the popup away: the content's exit runs first, and the drawn fields
+   * are held through it so the words fade in place rather than vanishing on
+   * the frame the state changed. Only after the surface has followed does the
+   * slot clear, which is what lets the next queued popup take the room.
+   */
+  const standDownNotice = useCallback(() => {
+    cancelNoticeTimers();
+    setNoticeShown(false);
+    noticeExit.current = window.setTimeout(() => {
+      noticeExit.current = undefined;
+      setNotice(undefined);
+    }, MOTION_DURATION_MS.EXIT + MOTION_DURATION_MS.SHAPE);
+  }, [cancelNoticeTimers]);
+
+  const holdNotice = useCallback(() => {
+    noticeHeld.current = true;
+  }, []);
+
+  const releaseNotice = useCallback(() => {
+    noticeHeld.current = false;
+  }, []);
+
+  useEffect(() => {
+    const removeNotices = window.sidecar.onSessionNotices((popups) => {
+      setNoticeQueue((waiting) => enqueueNoticePopups(waiting, popups));
+    });
+    return () => {
+      removeNotices();
+      cancelNoticeTimers();
+    };
+  }, [cancelNoticeTimers]);
+
+  // Advances the queue whenever something is waiting and the room is free:
+  // the last popup gone, the caption cleared, or the shape back at rest.
+  useEffect(() => {
+    if (notice || noticeQueue.length === 0) return;
+    if (!noticePopupAllowed({ presentation, captionDrawn: lukeCaption !== undefined })) return;
+    const taken = takeNoticePopup(
+      noticeQueue,
+      Date.now(),
+      (popup) =>
+        sessions.find(
+          (candidate) =>
+            candidate.providerId === popup.providerId &&
+            candidate.providerSessionId === popup.providerSessionId,
+        )?.title,
+    );
+    setNoticeQueue(taken.queue);
+    if (taken.drawn) {
+      setNotice(taken.drawn);
+      setNoticeShown(true);
+    }
+  }, [notice, noticeQueue, presentation, lukeCaption, sessions]);
+
+  // The dwell: a shown popup stands for its beat and puts itself away. A
+  // pointer resting on it is someone reading; the timer re-arms rather than
+  // taking the words out from under them.
+  useEffect(() => {
+    if (!notice || !noticeShown) return;
+    const arm = () => {
+      noticeDwell.current = window.setTimeout(() => {
+        noticeDwell.current = undefined;
+        if (noticeHeld.current) arm();
+        else standDownNotice();
+      }, NOTICE_POPUP_MS);
+    };
+    arm();
+    return () => {
+      if (noticeDwell.current !== undefined) window.clearTimeout(noticeDwell.current);
+      noticeDwell.current = undefined;
+    };
+  }, [notice, noticeShown, standDownNotice]);
+
+  // The room going away stands the popup down: a caption arriving mid-popup
+  // takes the band for the words being spoken, and a panel opening is already
+  // showing the session's row.
+  useEffect(() => {
+    if (!notice || !noticeShown) return;
+    if (noticePopupAllowed({ presentation, captionDrawn: lukeCaption !== undefined })) return;
+    standDownNotice();
+  }, [notice, noticeShown, presentation, lukeCaption, standDownNotice]);
+
+  /**
+   * The popup's press: a row press at one remove. A session its provider gave
+   * an address goes to the system, exactly as pressing the row would; one
+   * with no address — a local session — has the panel opened instead, where
+   * its row is already sorted to the top.
+   */
+  const openNoticedSession = useCallback(() => {
+    if (!notice) return;
+    const identity: SessionIdentity = {
+      providerId: notice.popup.providerId,
+      providerSessionId: notice.popup.providerSessionId,
+    };
+    const openable = sessions.some(
+      (candidate) =>
+        candidate.providerId === identity.providerId &&
+        candidate.providerSessionId === identity.providerSessionId &&
+        candidate.detail.link !== undefined,
+    );
+    standDownNotice();
+    if (openable) {
+      void window.sidecar.openSession(identity);
+      return;
+    }
+    expand();
+  }, [notice, sessions, standDownNotice, expand]);
+
   /**
    * A live push beats a bootstrap snapshot still in flight. The main process
    * will not repeat a list it believes it already announced, so the older
@@ -1782,6 +1926,9 @@ export function App(): React.JSX.Element {
       // Whether those words need the volume hint under them, which shares the
       // caption block's room.
       data-volume-hint={String(volumeHint)}
+      // Whether an announcement is standing under the housing, which grows
+      // the same room the caption does — the two never draw together.
+      data-notice={String(noticeShown && notice !== undefined)}
       data-presentation={presentation}
       data-notch={String(display.notch.hasNotch)}
       data-capture={String(bootstrap.captureMode)}
@@ -1911,6 +2058,35 @@ export function App(): React.JSX.Element {
           Got it
         </button>
       </span>
+
+      {/* An announcement standing under the housing: the session it names,
+          and what just happened to it. One press, and it is a row press at
+          one remove — the session opens where its provider keeps it, or the
+          panel comes forward for one with no page of its own. Always mounted,
+          like the caption, so both edges of its fade can run, and holding the
+          last notice through its own exit so the words leave in place. Inert
+          while away so nothing hidden can be pressed or tabbed to; its own
+          hit region keeps the pointer resting on it from reading as leaving
+          the shape. */}
+      <button
+        type="button"
+        className="session-notice"
+        data-hit-region={HIT_REGION.CAPSULE}
+        inert={!noticeShown || notice === undefined}
+        aria-label={notice ? `Open "${notice.title}"` : undefined}
+        // Keeps the press from moving focus here, like the capsule strip's
+        // own button, so a focused settings field keeps the caret.
+        onMouseDown={(event) => event.preventDefault()}
+        onMouseEnter={holdNotice}
+        onMouseLeave={releaseNotice}
+        onClick={openNoticedSession}
+      >
+        <span className="session-notice-title">
+          {notice ? <ProviderMark providerId={notice.popup.providerId} /> : null}
+          <span className="session-notice-name">{notice?.title}</span>
+        </span>
+        <span className="session-notice-body">{notice?.popup.body}</span>
+      </button>
 
       <div className="compact-stage">
         {/* A button, not a hover target: hovering only peeks, pressing commits.

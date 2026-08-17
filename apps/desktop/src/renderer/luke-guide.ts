@@ -641,7 +641,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
               "what it needs, from the agent's parting words or the provider's error line when " +
               "one was reported. No conversation needs to be open, and the microphone stays " +
               "off. Always on while voice is available; the panel and the capsule count show " +
-              "the same states either way.",
+              "the same states either way, and the same news also stands briefly as a " +
+              "pressable notice under the housing.",
           },
           {
             label: "Muted output",
@@ -680,6 +681,18 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
               `The key is entered in ${VOICE_PAGE}, at its top.`,
           },
         ]),
+    {
+      // Stated outside the voice facts because the popup needs no voice: a
+      // status change is drawn under the housing with no OpenAI key at all.
+      label: "Notice popup",
+      detail:
+        "When an observed session starts waiting, stops on an error, or finishes — and when " +
+        "Luke's background review decides one needs a person — a notice stands briefly under " +
+        "the housing naming the session and what happened. Pressing it opens the session where " +
+        "its provider keeps it, or opens the panel for a local session with no page of its own. " +
+        "It puts itself away after a few seconds and waits its turn while Luke's words are on " +
+        "screen; it is always on, and the panel and the capsule count show the same states.",
+    },
     providersFact(input.settings),
     voiceKeyFact(input.settings),
     integrationsFact(input.settings),

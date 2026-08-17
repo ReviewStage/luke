@@ -86,11 +86,13 @@ Trust constraints:
   endpoint — a session whose provider lists none takes no such ask. A session whose provider documents no way in, or whose current state is
   documented for none, advertises nothing and is offered nothing; local
   sessions have no such endpoint and stay entirely read-only. Opening a
-  session — its row pressed, or the same press asked of Luke in conversation —
-  is not a write and needs no endpoint: the address its provider reported is
-  handed to the operating system, and nothing reaches the provider; an open
-  asked of Luke still runs only in a developer-opened turn, and a session that
-  reported no address is offered nowhere to open. Reading a local session's
+  session — its row pressed, the same press asked of Luke in conversation, or
+  the notice popup announcing it pressed under the housing — is not a write
+  and needs no endpoint: the address its provider reported is handed to the
+  operating system, and nothing reaches the provider; an open asked of Luke
+  still runs only in a developer-opened turn, and a session that reported no
+  address is offered nowhere to open — its popup's press opens Luke's own
+  panel instead, which touches no provider at all. Reading a local session's
   transcript in conversation is the same shape of act: asked of Luke in a
   turn the developer opened, validated against the observed roster in the
   renderer and again in the main process, read from the provider's own file
@@ -186,7 +188,12 @@ What Luke may show:
   call. The edge announcements speak whenever voice can; an answered ask
   speaks on the consent of the ask itself, for exactly as long as it stands.
   Widening either set is a product decision, not an implementation detail;
-  make it deliberately.
+  make it deliberately. The same announcements also stand briefly as a notice
+  popup on Luke's own surface, under the housing — worded and drawn on this
+  machine, leaving it never, fed by the same two deciders and nothing else,
+  and needing no voice credential. The popup's press is a row press at one
+  remove: the session's reported address goes to the operating system, or
+  Luke's own panel opens for a session that reported none.
 
 Before handoff, run `./scripts/check.sh` for portable-only changes. For any
 macOS or UI change, `./scripts/verify.sh` is the completion invariant. Report
