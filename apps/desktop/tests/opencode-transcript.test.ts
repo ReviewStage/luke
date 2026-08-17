@@ -293,7 +293,7 @@ test("a turn that outgrows the part bound keeps its newest parts", async (t) => 
   // Forty tool calls and then the concluding words: the bound must cut the
   // oldest calls, never the answer the turn actually ended on.
   const toolParts = Array.from({ length: 40 }, (_, index) => ({
-    id: `prt_${String(index).padStart(3, "0")}`,
+    id: `prt_${String(index + 100)}`,
     messageId: "msg_01",
     time: index,
     data: {
@@ -316,7 +316,10 @@ test("a turn that outgrows the part bound keeps its newest parts", async (t) => 
     [
       ...toolParts,
       {
-        id: "prt_999",
+        // An id that sorts before every call's: OpenCode ids only sort in
+        // creation order until their timestamp half wraps, so the row's own
+        // clock — the newest here — is what has to decide the cut.
+        id: "prt_000",
         messageId: "msg_01",
         time: 50,
         data: { type: "text", text: "All forty steps passed." },

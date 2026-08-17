@@ -71,13 +71,15 @@ const OPENCODE_RECENT_MESSAGE_QUERY = `
 `;
 
 // Newest first here too: a tool-heavy turn can outgrow the bound, and the
-// concluding words sit on its newest parts. The rows are put back in the
+// concluding words sit on its newest parts. Ordered by the row's own clock
+// before its id, like every other query over these tables — ids sort in
+// creation order only until their timestamp half wraps — and put back in the
 // order they were said before rendering.
 const OPENCODE_MESSAGE_PART_QUERY = `
   SELECT *
   FROM part
   WHERE message_id = ?
-  ORDER BY id DESC
+  ORDER BY time_created DESC, id DESC
   LIMIT ?
 `;
 
