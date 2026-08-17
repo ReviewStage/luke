@@ -300,6 +300,17 @@ const CONDUCTOR_WORKSPACE_ACTIVITY: Readonly<Partial<Record<ConductorWorkspaceSt
   [CONDUCTOR_WORKSPACE_STATUS.UPDATING]: "Workspace updating",
 };
 
+/**
+ * The lifecycle states of a workspace no longer open. Conductor's workspace
+ * listing keeps a filed-away workspace in the page without marking it — the
+ * lifecycle endpoint is the one place the archive shows — so these are what
+ * the roster filters on.
+ */
+const CONDUCTOR_RETIRED_WORKSPACE_STATUSES: ReadonlySet<ConductorWorkspaceStatus> = new Set([
+  CONDUCTOR_WORKSPACE_STATUS.ARCHIVED,
+  CONDUCTOR_WORKSPACE_STATUS.DELETED,
+]);
+
 const CONDUCTOR_ADAPTER_DEFAULTS = {
   MAXIMUM_PROJECTS: 10,
   WORKSPACE_PAGE_SIZE: 100,
@@ -542,9 +553,35 @@ export class ConductorSessionAdapter
       .filter((workspace) => workspace.creatorId === userId)
       .sort((first, second) => second.lastActivityAt - first.lastActivityAt);
 
+    // Conductor's listing keeps a filed-away workspace in the page without
+    // marking it — only the lifecycle endpoint says it was archived — so the
+    // lifecycle reads come before the session listings, one per listed
+    // workspace, and a workspace standing archived or deleted is dropped
+    // here, before its chats are ever asked for. This is what makes a press
+    // of the archive control actually clear the rows it acted on. A
+    // lifecycle that could not be read keeps its workspace: a transient
+    // failure costs that workspace's activity words and failure message,
+    // never its rows.
+    const workspaceLifecycles = new Map(
+      (
+        await Promise.all(
+          workspaces.map(async (workspace) => {
+            const lifecycle = await this.tolerateItemFailure(() =>
+              this.#workspaceLifecycle(request, workspace.id),
+            );
+            return lifecycle ? ([workspace.id, lifecycle] as const) : undefined;
+          }),
+        )
+      ).filter(isDefined),
+    );
+    const openWorkspaces = workspaces.filter((workspace) => {
+      const lifecycleStatus = workspaceLifecycles.get(workspace.id)?.status;
+      return !lifecycleStatus || !CONDUCTOR_RETIRED_WORKSPACE_STATUSES.has(lifecycleStatus);
+    });
+
     const sessions = (
       await Promise.all(
-        workspaces.map((workspace) =>
+        openWorkspaces.map((workspace) =>
           this.tolerateItemFailure(() => this.#listSessions(request, workspace)),
         ),
       )
@@ -558,26 +595,14 @@ export class ConductorSessionAdapter
     // refusal: a key an org scopes away from the query endpoint alone still
     // reads the roster, and the roster reads above are what judge the
     // credential — so this one read swallows everything rather than letting
-    // an enrichment 403 clear every observed row. The lifecycle reads ride
-    // the same way, one per workspace — every listed workspace is open,
-    // because the listing dropped the filed-away ones — and a failed one
-    // costs that workspace's activity words and failure message, never the
-    // pass.
-    const [transcripts, reportedStatuses, workspaceLifecycles] = await Promise.all([
+    // an enrichment 403 clear every observed row.
+    const [transcripts, reportedStatuses] = await Promise.all([
       this.#sessionTranscripts(request, sessions).catch(() => undefined),
       Promise.all(
         sessions.map((session) =>
           this.tolerateItemFailure(() => this.#sessionStatus(request, session.id)),
         ),
       ),
-      Promise.all(
-        workspaces.map(async (workspace) => {
-          const lifecycle = await this.tolerateItemFailure(() =>
-            this.#workspaceLifecycle(request, workspace.id),
-          );
-          return lifecycle ? ([workspace.id, lifecycle] as const) : undefined;
-        }),
-      ).then((entries) => new Map(entries.filter(isDefined))),
     ]);
 
     // The workspaces every observed chat of which was positively seen settled
@@ -659,10 +684,10 @@ export class ConductorSessionAdapter
           timestampFromRecord(record, CONDUCTOR_FIELD.LAST_ACTIVITY_AT) ??
           timestampFromRecord(record, CONDUCTOR_FIELD.CREATED_AT);
         if (!id || lastActivityAt === undefined) return undefined;
-        // An archived workspace was filed away on Conductor's own surface, so
-        // none of its chats belongs on the roster: it is dropped here, before
-        // its sessions are ever asked for. This is what makes a press of the
-        // archive control actually clear the rows it acted on.
+        // Conductor's listing does not mark a filed-away workspace today —
+        // the lifecycle read in the collect pass is what drops those — but a
+        // record that does carry an archive timestamp is honored without
+        // waiting for that read.
         if (timestampFromRecord(record, CONDUCTOR_FIELD.ARCHIVED_AT) !== undefined) {
           return undefined;
         }
@@ -699,10 +724,10 @@ export class ConductorSessionAdapter
       .map((record): ConductorSession | undefined => {
         const id = textFromRecord(record, CONDUCTOR_FIELD.ID);
         if (!id) return undefined;
-        // An archived chat was filed away on Conductor's own surface, so it
-        // does not belong on the roster any more than an archived workspace
-        // does: it is dropped here, before its status or transcript is ever
-        // asked for. Its workspace stays, carrying only the chats still open.
+        // Conductor's listing already leaves an archived chat off the page,
+        // but one that arrives carrying an archive timestamp is dropped all
+        // the same, before its status or transcript is ever asked for. Its
+        // workspace stays, carrying only the chats still open.
         if (timestampFromRecord(record, CONDUCTOR_FIELD.ARCHIVED_AT) !== undefined) {
           return undefined;
         }
@@ -839,7 +864,8 @@ export class ConductorSessionAdapter
     // mid-turn offers the stop alone — its own workspace is by definition
     // unsettled — and any chat of a positively settled workspace offers to
     // file the whole workspace away. Every workspace and every chat here is
-    // still open: the filed-away ones never made it past the listing.
+    // still open: the filed-away workspaces never made it past the lifecycle
+    // read, and the filed-away chats never made it past the listing.
     const controls = [
       ...(reported?.status === CONDUCTOR_SESSION_STATUS.WORKING ? [CONDUCTOR_CANCEL_CONTROL] : []),
       ...(settledWorkspaceIds.has(session.workspace.id)
