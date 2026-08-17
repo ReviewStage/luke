@@ -700,6 +700,14 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     return () => clearTimeout(timer);
   }, [voiceError]);
 
+  // An exchange going live outranks the clock: the conversation has moved on,
+  // and a fault the turn hid must not come back once the words finish.
+  // `startMicrophone` clears the calls that have to reconnect; this clears the
+  // one that carried a mid-call error and never dropped.
+  useEffect(() => {
+    if (voiceExchangeActive(voiceStatus)) setVoiceError(undefined);
+  }, [voiceStatus]);
+
   useEffect(() => {
     window.sidecar.setVoiceExchangeActive(voiceExchangeActive(voiceStatus));
   }, [voiceStatus]);
