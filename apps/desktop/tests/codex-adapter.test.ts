@@ -849,3 +849,32 @@ test("a spool that cannot be read costs only the refinement", async (t) => {
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
 });
+
+test("a permission hold that outlives the freshness window never reads as work", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const spool = await temporaryHookSpool(t);
+  const rolloutPath = path.join(codexHome, "rollout-long-hold.jsonl");
+  // Codex deliberately holds a long open turn at working, so without this
+  // rule a hold past the window would flip from waiting back to active work.
+  await writeCodexState(codexHome, [
+    {
+      id: "codex-long-hold",
+      cwd: "/Users/test/luke",
+      observedAt: TEST_TIME - 30 * 60 * 1000,
+      rolloutPath,
+    },
+  ]);
+  await writeRollout(rolloutPath, [{ type: "event_msg", payload: { type: "task_started" } }]);
+  await writeHookEvent(spool, "codex-long-hold", "notification", TEST_TIME - 20 * 60 * 1000);
+
+  const adapter = new CodexSessionAdapter({
+    activeSessionFreshnessMs: 15 * 60 * 1000,
+    codexHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60 * 60 * 1000,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.UNKNOWN);
+});

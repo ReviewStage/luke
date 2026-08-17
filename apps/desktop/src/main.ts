@@ -62,7 +62,7 @@ import {
   systemPreferences,
   Tray,
 } from "electron";
-import { ClaudeCodeSessionAdapter } from "./claude-code-adapter";
+import { CLAUDE_CODE_PROVIDER, ClaudeCodeSessionAdapter } from "./claude-code-adapter";
 import {
   CLAUDE_HOOK_SCRIPT_NAME,
   CLAUDE_HOOK_SPOOL_MAXIMUM_AGE_MS,
@@ -72,7 +72,7 @@ import {
   pruneClaudeHookSpool,
 } from "./claude-code-hooks";
 import { readClaudeSessionTranscript } from "./claude-code-transcript";
-import { CodexSessionAdapter, defaultCodexHome } from "./codex-adapter";
+import { CODEX_PROVIDER, CodexSessionAdapter, defaultCodexHome } from "./codex-adapter";
 import {
   CODEX_HOOK_SCRIPT_NAME,
   CODEX_HOOK_SPOOL_MAXIMUM_AGE_MS,
@@ -1587,30 +1587,44 @@ function observedWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
 async function applyLocalSessionHooks(): Promise<void> {
   if (fixtureMode) return;
   const registrations = [
-    async () => {
-      const installation = claudeHookInstallation();
-      await installClaudeCodeObservationHooks(installation);
-      await pruneClaudeHookSpool(
-        installation.spoolDirectory,
-        CLAUDE_HOOK_SPOOL_MAXIMUM_AGE_MS,
-        Date.now(),
-      );
+    {
+      providerName: CLAUDE_CODE_PROVIDER.displayName,
+      register: async () => {
+        const installation = claudeHookInstallation();
+        await installClaudeCodeObservationHooks(installation);
+        await pruneClaudeHookSpool(
+          installation.spoolDirectory,
+          CLAUDE_HOOK_SPOOL_MAXIMUM_AGE_MS,
+          Date.now(),
+        );
+      },
     },
-    async () => {
-      const installation = codexHookInstallation();
-      await installCodexObservationHooks(installation);
-      await pruneCodexHookSpool(
-        installation.spoolDirectory,
-        CODEX_HOOK_SPOOL_MAXIMUM_AGE_MS,
-        Date.now(),
-      );
+    {
+      providerName: CODEX_PROVIDER.displayName,
+      register: async () => {
+        const installation = codexHookInstallation();
+        await installCodexObservationHooks(installation);
+        await pruneCodexHookSpool(
+          installation.spoolDirectory,
+          CODEX_HOOK_SPOOL_MAXIMUM_AGE_MS,
+          Date.now(),
+        );
+      },
     },
   ];
-  const outcomes = await Promise.allSettled(registrations.map((register) => register()));
-  const failure = outcomes.find(
-    (outcome): outcome is PromiseRejectedResult => outcome.status === "rejected",
+  // Failures are logged under the provider they belong to and absorbed here:
+  // one provider's broken configuration must neither reach the other's
+  // registration nor the launch, and either costs only the sharper status.
+  await Promise.all(
+    registrations.map(async ({ providerName, register }) => {
+      try {
+        await register();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        process.stderr.write(`${providerName} hook registration failed: ${message}\n`);
+      }
+    }),
   );
-  if (failure) throw failure.reason;
 }
 
 async function refreshProviderSessions(): Promise<void> {
@@ -1991,12 +2005,13 @@ if (!app.requestSingleInstanceLock()) {
       (enabled) => mediaDuck.setEnabled(enabled),
       () => mediaDuck.setEnabled(APP_SETTING_DEFAULTS.duckOtherMedia),
     );
-    // The hook registration converges at every launch. Failure here is logged
-    // and absorbed — a launch must never hang on another app's configuration
-    // file.
+    // The hook registrations converge at every launch. Each provider's
+    // failure is logged under its own name and absorbed inside — a launch
+    // must never hang on another app's configuration file — so this catch is
+    // only the backstop for the arrangement itself failing.
     void applyLocalSessionHooks().catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
-      process.stderr.write(`Claude Code hook registration failed: ${message}
+      process.stderr.write(`Local session hook registration failed: ${message}
 `);
     });
     // Awaited, so the key and the voice it speaks with are both in hand before

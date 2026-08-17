@@ -405,10 +405,18 @@ function statusWithHookEvent(
 ): ProviderSessionObservation["status"] {
   if (event === CODEX_HOOK_EVENT.SESSION_END) return SESSION_STATUS.COMPLETE;
   if (status === SESSION_STATUS.COMPLETE) return status;
+  // A notification still standing means the approval is still open — its zero
+  // staleness tolerance drops it the moment the thread moves — so it outranks
+  // a mid-turn row however long the hold has run: Codex holds a long turn at
+  // working, and a long hold must not read as active work. It still ages the
+  // way every waiting verdict does, because a Codex killed mid-hold fires
+  // nothing further, and a hold that old is a session left behind.
+  if (event === CODEX_HOOK_EVENT.NOTIFICATION) {
+    return isFresh ? SESSION_STATUS.WAITING : SESSION_STATUS.UNKNOWN;
+  }
   if (!isFresh) return status;
   if (event === CODEX_HOOK_EVENT.PROMPT) return SESSION_STATUS.WORKING;
   if (event === CODEX_HOOK_EVENT.STOP) return SESSION_STATUS.WAITING;
-  if (event === CODEX_HOOK_EVENT.NOTIFICATION) return SESSION_STATUS.WAITING;
   // A session that started or resumed proves only that it moved: the bumped
   // clock above is the whole refinement, and the row says the rest.
   return status;
