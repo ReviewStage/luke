@@ -29,6 +29,7 @@ export {
   type NormalizedSession,
   normalizeSession,
   OBSERVATION_WINDOW,
+  SESSION_EVENT_FRESH_AGE_MS,
   type ProviderSessionObservation,
   rosterRelevantSessions,
   SESSION_CONTROL_KIND,

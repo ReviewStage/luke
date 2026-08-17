@@ -1,5 +1,5 @@
 import type { NormalizedSession, SessionStatus } from "./session";
-import { SESSION_STATUS } from "./session";
+import { SESSION_EVENT_FRESH_AGE_MS, SESSION_STATUS } from "./session";
 
 /**
  * The statuses worth telling the user about when a session arrives at one.
@@ -43,17 +43,9 @@ export const SESSION_NOTICE_REPEAT_WINDOW_MS = 5 * 60_000;
 export const MAXIMUM_NOTICES_PER_PASS = 6;
 
 /**
- * How recently a status must have been entered to be announced as news. The
- * tracker sees the edge between two readings, not the event itself, and the
- * two usually coincide only because passes run every few seconds: a Mac
- * waking from hours of sleep, or a provider back from an outage, delivers
- * edges whose events happened long ago. `observedAt` is the provider's own
- * timestamp for when the status was entered, so an edge older than this is
- * history arriving late — the panel's to show, not a banner's to announce as
- * though it just happened. Generous next to the refresh cadence, so a fresh
- * finish is never lost to one slow pass.
+ * Same rule as {@link SESSION_EVENT_FRESH_AGE_MS}; the name names the consumer.
  */
-export const SESSION_NOTICE_FRESH_AGE_MS = 5 * 60_000;
+export const SESSION_NOTICE_FRESH_AGE_MS = SESSION_EVENT_FRESH_AGE_MS;
 
 /**
  * One session arriving at a status the user may want to know about. Fields,

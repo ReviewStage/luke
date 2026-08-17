@@ -53,6 +53,17 @@ export const OBSERVATION_WINDOW = {
 } as const;
 
 /**
+ * How recently a session development must have happened to be treated as news.
+ * The notice tracker and the attention reviewer both see edges between readings,
+ * not the events themselves — a Mac waking from sleep or a provider reconnecting
+ * can deliver edges whose provider-written timestamps are hours old. Anything
+ * older than this is history arriving late: the panel may show it, but neither
+ * path announces or evaluates it as though it just happened. Generous next to
+ * the refresh cadence, so a fresh finish is never lost to one slow pass.
+ */
+export const SESSION_EVENT_FRESH_AGE_MS = 5 * 60_000;
+
+/**
  * How long a status keeps its session on the roster, measured from the moment
  * the status was entered. This is what bounds the roster now that no adapter
  * ages out or caps its sessions: relevance follows what the status asks of the

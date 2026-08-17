@@ -9,6 +9,7 @@ import {
   type SessionDetail,
   type SessionIdentity,
   type SessionStatus,
+  SESSION_EVENT_FRESH_AGE_MS,
   silentAttention,
 } from "./session";
 
@@ -63,20 +64,8 @@ const ATTENTION_REVIEW_DEFAULTS = {
   MAXIMUM_UNAVAILABLE_RETRIES: 2,
 } as const;
 
-/**
- * How recently a development must have happened to be worth a model call. The
- * reviewer sees the difference between two readings, not the event itself, and
- * on first sight it has no earlier reading at all: a launch reads the whole
- * roster — sessions that settled, stopped, or asked their question hours ago —
- * and every one of them derives an update as though it just happened. The same
- * notice tracker that announces status edges already refuses an edge whose
- * event is old; this is the identical rule for the evaluator's door, keyed on
- * the same provider-written timestamp, so history arriving late is consumed
- * silently instead of reviewed as news. The panel has shown the state the
- * whole time. A development carrying the developer's standing ask is exempt:
- * the ask is consent to hear its answer late rather than never.
- */
-export const ATTENTION_EVENT_FRESH_AGE_MS = 5 * 60_000;
+/** Same rule as {@link SESSION_EVENT_FRESH_AGE_MS}; the name names the consumer. */
+export const ATTENTION_EVENT_FRESH_AGE_MS = SESSION_EVENT_FRESH_AGE_MS;
 
 /**
  * The decision contract an evaluator must satisfy. It is deliberately small so
