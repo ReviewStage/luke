@@ -1524,6 +1524,51 @@ test("leaves a filed-away workspace and its chats off the roster entirely", asyn
   );
 });
 
+test("leaves a workspace whose lifecycle stands archived off the roster", async () => {
+  // Conductor's listing keeps a filed-away workspace in the page with no
+  // mark of it — no archive timestamp, nothing — and only the lifecycle
+  // endpoint says it was archived. Without that read deciding the roster,
+  // every chat of every workspace ever archived kept its row, standing gray
+  // forever.
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [
+      { ...ownedWorkspace("workspace-archived", TEST_TIME - 30_000), lifecycleStatus: "archived" },
+      { ...ownedWorkspace("workspace-deleted", TEST_TIME - 40_000), lifecycleStatus: "deleted" },
+      ownedWorkspace("workspace-open", TEST_TIME - 5_000),
+    ],
+    sessions: [
+      { id: "session-filed", workspaceId: "workspace-archived", name: TEST_SESSION_NAME },
+      { id: "session-gone", workspaceId: "workspace-deleted", name: TEST_SESSION_NAME },
+      {
+        id: "session-open",
+        workspaceId: "workspace-open",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 1_000,
+      },
+    ],
+  });
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.deepEqual(
+    observations.map((candidate) => candidate.providerSessionId),
+    ["session-open"],
+  );
+  // Dropped before its chats are ever asked for: the retired workspaces cost
+  // one lifecycle read each and nothing more.
+  assert.equal(
+    api.requests.some((request) => request.pathname.endsWith("workspace-archived/sessions")),
+    false,
+  );
+  assert.equal(
+    api.requests.some((request) => request.pathname.includes("session-filed")),
+    false,
+  );
+});
+
 test("hands a user prompt to Conductor's documented message endpoint", async () => {
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
