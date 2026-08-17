@@ -152,12 +152,6 @@ export class SpokenNoticeAnnouncer {
       return;
     }
     if (session.isConnecting) return;
-    // The backlog has had its tries; what is left is the panel's to show.
-    if (this.#connectAttempts >= MAXIMUM_CONNECT_ATTEMPTS) {
-      this.#queue = [];
-      this.#connectAttempts = 0;
-      return;
-    }
     // Silence, and something to say into it: open a call of Luke's own.
     this.#connectAttempts += 1;
     this.#ownsCall = true;
@@ -170,19 +164,35 @@ export class SpokenNoticeAnnouncer {
           return;
         }
         this.#ownsCall = false;
-        this.#armRetry();
+        this.#retreatOrRetry();
       })
       .catch(() => {
         this.#ownsCall = false;
-        this.#armRetry();
+        this.#retreatOrRetry();
       });
+  }
+
+  /**
+   * Decides what a refused connect leaves behind. A backlog still owed a try
+   * keeps it, on the retry clock; one that has had its tries is dropped here,
+   * at the moment of the final refusal, so notices arriving afterwards start
+   * a fresh backlog with tries of its own rather than dying against a spent
+   * counter. What is dropped is still standing in the panel.
+   */
+  #retreatOrRetry(): void {
+    if (this.#connectAttempts >= MAXIMUM_CONNECT_ATTEMPTS) {
+      this.#queue = [];
+      this.#connectAttempts = 0;
+      return;
+    }
+    this.#armRetry();
   }
 
   /**
    * Starts the clock on another try at a backlog whose call could not open or
    * did not last. Idempotent, because a refused connect and the failed status
    * it causes both land here; the queue's own age filter and the attempt cap
-   * in {@link #flush} are what keep the clock from ticking forever.
+   * in {@link #retreatOrRetry} are what keep the clock from ticking forever.
    */
   #armRetry(): void {
     if (this.#queue.length === 0) return;

@@ -247,13 +247,39 @@ test("a backlog that outlives its attempts is dropped, not retried into a loop",
   }
   assert.equal(session.connects, MAXIMUM_CONNECT_ATTEMPTS);
 
-  // The attempts are spent: the next tick empties the queue and stops asking.
+  // The final refusal spent the attempts: the backlog is already dropped and
+  // no clock is left ticking for it.
+  assert.equal(timers.armed(), 0);
   timers.fire();
   await Promise.resolve();
   assert.equal(session.connects, MAXIMUM_CONNECT_ATTEMPTS);
-  assert.equal(timers.armed(), 0);
 
   // A later notice is a fresh backlog with fresh attempts.
+  session.connectOpens = true;
+  subject.enqueue([speech("b")]);
+  await Promise.resolve();
+  assert.deepEqual(
+    session.spoken.map((item) => item.providerSessionId),
+    ["b"],
+  );
+});
+
+test("a notice arriving right after a spent backlog is kept, not dropped with it", async () => {
+  const session = fakeSession();
+  session.connectOpens = false;
+  const timers = fakeTimers();
+  const subject = announcer(session, timers);
+
+  subject.enqueue([speech("a")]);
+  await Promise.resolve();
+  for (let attempt = 1; attempt < MAXIMUM_CONNECT_ATTEMPTS; attempt += 1) {
+    timers.fire();
+    await Promise.resolve();
+  }
+  assert.equal(session.connects, MAXIMUM_CONNECT_ATTEMPTS);
+
+  // Fresh news arriving before any clock ticks must find a fresh counter,
+  // not die against the one the spent backlog left behind.
   session.connectOpens = true;
   subject.enqueue([speech("b")]);
   await Promise.resolve();
