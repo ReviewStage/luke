@@ -152,6 +152,12 @@ export const REALTIME_MINT_OUTCOME = {
   NETWORK_ERROR: "network-error",
   MALFORMED_RESPONSE: "malformed-response",
   EXPIRED_CREDENTIAL: "expired-credential",
+  /** The hosted service found no signed-in account behind the request. */
+  NOT_SIGNED_IN: "not-signed-in",
+  /** Today's included voice is spent; the diagnostics carry the quota that says when it returns. */
+  QUOTA_EXHAUSTED: "quota-exhausted",
+  /** The hosted tier is switched off service-side. */
+  HOSTED_UNAVAILABLE: "hosted-unavailable",
 } as const;
 
 export type RealtimeMintOutcome =
@@ -167,6 +173,8 @@ export interface RealtimeDiagnostics {
   apiKeyConfigured: boolean;
   /** A fixture or evidence run never mints, regardless of credentials. */
   fixtureMode: boolean;
+  /** Whether voice runs on the hosted service rather than the developer's own key. */
+  hosted?: boolean;
   model: string;
   voice: string;
   /** The pace new credentials would be minted for, as a rate multiple. */
@@ -176,6 +184,13 @@ export interface RealtimeDiagnostics {
   /** A status code or error name; never a request body or credential. */
   lastDetail?: string;
   lastAttemptAt?: number;
+  /** The hosted allowance as the service last reported it; absent on a keyed run. */
+  quota?: {
+    used: number;
+    limit: number;
+    remaining: number;
+    resetsAt: number;
+  };
 }
 
 const REALTIME_MINT_EXPLANATIONS: Record<RealtimeMintOutcome, string> = {
@@ -190,6 +205,12 @@ const REALTIME_MINT_EXPLANATIONS: Record<RealtimeMintOutcome, string> = {
   [REALTIME_MINT_OUTCOME.MALFORMED_RESPONSE]: "The API answered without a usable client secret.",
   [REALTIME_MINT_OUTCOME.EXPIRED_CREDENTIAL]:
     "The API returned a client secret that had already expired, which usually means the local clock is wrong.",
+  [REALTIME_MINT_OUTCOME.NOT_SIGNED_IN]:
+    "The Luke account behind hosted voice did not authenticate. Signing out and back in usually repairs it.",
+  [REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED]:
+    "Today's included voice is used up. It returns at midnight UTC, and a personal OpenAI key in Settings removes the daily allowance.",
+  [REALTIME_MINT_OUTCOME.HOSTED_UNAVAILABLE]:
+    "Luke's hosted voice service is not answering right now. A personal OpenAI key in Settings works independently of it.",
 };
 
 /** Explains a mint outcome in one sentence, for the panel and for logs. */

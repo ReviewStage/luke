@@ -110,13 +110,14 @@ import { DockPresence } from "./dock-presence";
 import { feedbackDeliveryFromEnvironment } from "./feedback-delivery";
 import { GoogleCalendarReader } from "./google-calendar";
 import { GoogleCalendarSignIn } from "./google-calendar-oauth";
+import { HostedAttentionEvaluator } from "./hosted-attention-evaluator";
+import { HostedRealtimeCredentialMinter } from "./hosted-realtime-credentials";
 import { HOTKEY_RANK, HotkeyRegistrar } from "./hotkey-registrar";
 import { JulesSessionAdapter } from "./jules-adapter";
 import { LinearIssueTracker } from "./linear-tracker";
 import { MediaDuckController } from "./media-duck";
 import { openAiAttentionEvaluator } from "./openai-attention-evaluator";
 import {
-  type OpenAiRealtimeCredentialMinter,
   openAiRealtimeCredentials,
   unavailableRealtimeDiagnostics,
 } from "./openai-realtime-credentials";
@@ -124,6 +125,7 @@ import { OpenCodeSessionAdapter } from "./opencode-adapter";
 import { readOpenCodeSessionTranscript } from "./opencode-transcript";
 import { OutputVolumeWatcher } from "./output-volume";
 import { PanelManager } from "./panel-manager";
+import type { RealtimeCredentialMinter } from "./realtime-minter";
 import { runModeFor } from "./run-mode";
 import { sessionNoticeSpeech } from "./session-notifications";
 import { createSettingsHandler, SettingsRefusal } from "./settings-handler";
@@ -185,6 +187,10 @@ const runMode = runModeFor({ capture: captureMode, fixture: fixtureName !== unde
 const ACCOUNT_BASE_URL =
   (app.isPackaged ? undefined : process.env.LUKE_ACCOUNT_BASE_URL) ??
   "https://tryluke.dev/api/auth";
+// The hosted voice and attention endpoints live on the same origin as the
+// account service, so the one development override redirects both together —
+// a build pointed at a local account service reviews and mints against it too.
+const HOSTED_SERVICE_BASE_URL = ACCOUNT_BASE_URL.replace(/\/api\/auth\/?$/, "");
 const ACCOUNT_CLIENT_ID = "luke-desktop";
 const SESSION_REFRESH_INTERVAL_MS = 5_000;
 const sessionRegistry = new InMemorySessionRegistry();
@@ -388,7 +394,7 @@ const attentionRequests = new AttentionRequestRegistry();
  * without a network.
  */
 let attentionReviewer: SessionAttentionReviewer | undefined;
-let realtimeCredentials: OpenAiRealtimeCredentialMinter | undefined;
+let realtimeCredentials: RealtimeCredentialMinter | undefined;
 // Quiets Music and Spotify while a spoken exchange is live. It lives here
 // rather than in the renderer because letting the players back up must survive
 // anything the renderer does — and only this process may run a helper.
@@ -757,7 +763,9 @@ function isIssueActionAsk(value: unknown): value is {
 function reportVoiceAvailability(apiKeyConfigured: boolean): void {
   if (realtimeCredentials) {
     const report = realtimeCredentials.diagnostics();
-    process.stderr.write(`Luke voice: enabled (${report.model})\n`);
+    process.stderr.write(
+      `Luke voice: enabled (${report.hosted ? "hosted, " : ""}${report.model})\n`,
+    );
     return;
   }
   const report = unavailableRealtimeDiagnostics({
@@ -779,6 +787,19 @@ function reportVoiceAvailability(apiKeyConfigured: boolean): void {
  * is not moved here: only a change while the app is running needs that, and
  * `hotkeys.reapply` is what does it.
  */
+/**
+ * The seams the hosted clients reach the account through. The token is read
+ * fresh from the store on every use — the lifecycle owns rotation — and a 401
+ * asks that same lifecycle for a refresh rather than growing a second one.
+ */
+function hostedServiceSeams() {
+  return {
+    serviceBaseUrl: HOSTED_SERVICE_BASE_URL,
+    readAccessToken: async () => (await settingsStore.readAccount())?.accessToken,
+    refreshAccount: () => refreshStoredAccount(),
+  };
+}
+
 async function applyVoiceCredential(): Promise<void> {
   // A fixture run does not ask for the key at all: reading a stored one means a
   // Keychain decrypt, which a run that would refuse to use it has no business
@@ -788,7 +809,17 @@ async function applyVoiceCredential(): Promise<void> {
     runMode.sendsNetwork && accountCapabilitiesActive()
       ? await settingsStore.readApiKey(VOICE_CREDENTIAL_PROVIDER_ID)
       : undefined;
-  const evaluator = openAiAttentionEvaluator(apiKey);
+  // The hosted service stands in exactly where a key could have: a run that
+  // sends network traffic, signed in, with no key of the developer's own. The
+  // developer's key wins when both are present — it is unmetered, and it keeps
+  // voice and review off Luke's servers entirely.
+  const hosted =
+    apiKey === undefined && runMode.sendsNetwork && account.status === ACCOUNT_STATUS.SIGNED_IN;
+  const evaluator = apiKey
+    ? openAiAttentionEvaluator(apiKey)
+    : hosted
+      ? new HostedAttentionEvaluator(hostedServiceSeams())
+      : undefined;
   attentionReviewer = evaluator
     ? new SessionAttentionReviewer({
         evaluator,
@@ -805,10 +836,18 @@ async function applyVoiceCredential(): Promise<void> {
     settingsStore.readVoice().catch(() => undefined),
     settingsStore.readVoiceSpeed().catch(() => undefined),
   ]);
-  realtimeCredentials = openAiRealtimeCredentials(apiKey, {
-    ...(voice ? { voice } : {}),
-    ...(speed ? { speed } : {}),
-  });
+  realtimeCredentials = apiKey
+    ? openAiRealtimeCredentials(apiKey, {
+        ...(voice ? { voice } : {}),
+        ...(speed ? { speed } : {}),
+      })
+    : hosted
+      ? new HostedRealtimeCredentialMinter({
+          ...hostedServiceSeams(),
+          ...(voice ? { voice } : {}),
+          ...(speed ? { speed } : {}),
+        })
+      : undefined;
   reportVoiceAvailability(apiKey !== undefined);
 }
 

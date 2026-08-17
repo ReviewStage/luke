@@ -221,10 +221,15 @@ test("the facts say what is connected, never what connects it", () => {
   assert.match(connected, /checkboxes under each account/);
   // The voice key stands in a fact of its own, saying what connecting it buys
   // and naming the page its row actually lives on — the Voice page, not the
-  // Integrations section it once shared with Linear.
+  // Integrations section it once shared with Linear. With voice available and
+  // no key connected, the fact says whose account voice is running on; with
+  // voice unavailable, it says what connecting a key would turn on.
   assert.match(rendered, /OpenAI \(not connected\)/);
-  assert.match(rendered, /Connecting OpenAI is what lets Luke speak/);
+  assert.match(rendered, /run on the signed-in Luke account/);
+  assert.match(rendered, /daily allowance/);
   assert.match(rendered, /Voice page, at its top/);
+  const voiceless = JSON.stringify(buildLukeGuide(guideInput({ voiceAvailable: false })).facts);
+  assert.match(voiceless, /Connecting OpenAI is what lets Luke speak/);
   assert.doesNotMatch(rendered, /OpenAI[^"]*under Integrations/);
   // The guide leaves the machine, so no key, prefix, or environment variable
   // value has any business in it.
