@@ -13,6 +13,9 @@ import {
   type RealtimeVoiceSpeed,
   type WorkspaceAgentSelection,
 } from "@sidecar/core";
+// The reader owns the shape it is fed: what this store resolves a stored
+// account into is exactly what `readAccounts` promises it.
+import type { CalendarAccountCredential } from "./google-calendar";
 import { googleCalendarSignInConfig } from "./google-calendar-oauth";
 import { environmentRealtimeSpeed, environmentRealtimeVoice } from "./openai-realtime-credentials";
 import {
@@ -283,13 +286,6 @@ interface PersistedCalendarAccount {
   token: string;
   /** The calendar ids the user chose to count toward meetings. */
   calendars: readonly string[];
-}
-
-/** One connected account, grant decrypted — main-process eyes only. */
-export interface CalendarAccountCredential {
-  id: string;
-  refreshToken: string;
-  selectedCalendarIds: readonly string[];
 }
 
 /** An account or calendar id reads like one wire value; longer is not an id. */
@@ -594,7 +590,7 @@ export class SettingsStore {
       voiceAvailable: await this.#voiceAvailable(),
       // Whether this build can offer the Google Calendar sign-in at all: a
       // registered OAuth client resolved, and this run would use what it
-      // grants. Without one the row still takes the secret address.
+      // grants. Without one the integration is not drawn at all.
       calendarSignInAvailable:
         this.#credentialsUsable && googleCalendarSignInConfig(this.#environment) !== undefined,
       // The accounts without their grants: which are connected and which
