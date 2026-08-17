@@ -9,6 +9,7 @@ import {
   realtimeClientSecretRequest,
   realtimeCredentialFromResponse,
   realtimeCredentialIsUsable,
+  text as trimmedText,
 } from "@sidecar/core";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 import { type FetchLike, HOSTED_OPENAI_DEFAULTS, postOpenAi } from "./openai.js";
@@ -79,7 +80,11 @@ export async function handleVoiceMint(options: VoiceMintOptions): Promise<Respon
       HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
     );
   }
-  if (!options.apiKey) {
+  // Trimmed like the desktop's own key reads: a whitespace credential is the
+  // kill switch, not a key, and a blank model override is no override at all.
+  const apiKey = trimmedText(options.apiKey);
+  const model = trimmedText(options.model);
+  if (!apiKey) {
     return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
   }
 
@@ -103,11 +108,11 @@ export async function handleVoiceMint(options: VoiceMintOptions): Promise<Respon
   const response = await postOpenAi(
     REALTIME_CLIENT_SECRETS_PATH,
     realtimeClientSecretRequest({
-      ...(options.model ? { model: options.model } : {}),
+      ...(model ? { model } : {}),
       ...(preferences.voice ? { voice: preferences.voice } : {}),
       ...(preferences.speed ? { speed: preferences.speed } : {}),
     }),
-    { apiKey: options.apiKey, fetch: options.fetch, timeoutMs: options.timeoutMs },
+    { apiKey, fetch: options.fetch, timeoutMs: options.timeoutMs },
   );
   if (!response) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR);

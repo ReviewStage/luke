@@ -93,6 +93,17 @@ test("an empty body mints the build's own defaults", async () => {
   assert.equal(sent.session.audio.output.speed, REALTIME_DEFAULTS.SPEED);
 });
 
+test("a blank model override is no override at all", async () => {
+  const call: UpstreamCall = {};
+  const response = await handleVoiceMint(
+    options({ model: "   ", fetch: upstream(call, mintedPayload) }),
+  );
+
+  assert.equal(response.status, 200);
+  const sent = JSON.parse(String(call.init?.body));
+  assert.equal(sent.session.model, REALTIME_DEFAULTS.MODEL);
+});
+
 test("a voice or pace outside the build's sets is refused before anything is spent", async () => {
   let spent = 0;
   const spend = async () => {
@@ -119,6 +130,10 @@ test("the gate order is method, kill switch, token, body, quota", async () => {
   const keyless = await handleVoiceMint(options({ apiKey: undefined }));
   assert.equal(keyless.status, 503);
   assert.equal((await keyless.json()).error, HOSTED_API_ERROR.UNAVAILABLE);
+
+  const blankKey = await handleVoiceMint(options({ apiKey: "   " }));
+  assert.equal(blankKey.status, 503);
+  assert.equal((await blankKey.json()).error, HOSTED_API_ERROR.UNAVAILABLE);
 
   const anonymous = await handleVoiceMint(options({ resolveUserId: async () => undefined }));
   assert.equal(anonymous.status, 401);

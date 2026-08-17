@@ -5,6 +5,7 @@ import {
   attentionPromptUpdateFromWire,
   attentionResponsesOutputText,
   attentionResponsesRequest,
+  text as trimmedText,
 } from "@sidecar/core";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 import { type FetchLike, postOpenAi } from "./openai.js";
@@ -54,7 +55,10 @@ export async function handleAttentionReview(options: AttentionReviewOptions): Pr
       HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
     );
   }
-  if (!options.apiKey) {
+  // Trimmed like the desktop's own key reads: a whitespace credential is the
+  // kill switch, not a key, and a blank model override is no override at all.
+  const apiKey = trimmedText(options.apiKey);
+  if (!apiKey) {
     return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
   }
 
@@ -79,10 +83,10 @@ export async function handleAttentionReview(options: AttentionReviewOptions): Pr
   const response = await postOpenAi(
     ATTENTION_RESPONSES_PATH,
     attentionResponsesRequest(update, {
-      model: options.model ?? HOSTED_ATTENTION_DEFAULTS.MODEL,
+      model: trimmedText(options.model) ?? HOSTED_ATTENTION_DEFAULTS.MODEL,
       maximumOutputTokens: HOSTED_ATTENTION_DEFAULTS.MAXIMUM_OUTPUT_TOKENS,
     }),
-    { apiKey: options.apiKey, fetch: options.fetch, timeoutMs: options.timeoutMs },
+    { apiKey, fetch: options.fetch, timeoutMs: options.timeoutMs },
   );
   if (!response || !response.ok) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR, {

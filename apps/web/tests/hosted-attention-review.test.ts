@@ -99,6 +99,17 @@ test("a review sends the build's own construction and answers the parsed decisio
   );
 });
 
+test("a blank model override is no override at all", async () => {
+  const call: UpstreamCall = {};
+  const response = await handleAttentionReview(
+    options({ model: "   ", fetch: upstream(call, decisionPayload) }),
+  );
+
+  assert.equal(response.status, 200);
+  const sent = JSON.parse(String(call.init?.body));
+  assert.equal(sent.model, HOSTED_ATTENTION_DEFAULTS.MODEL);
+});
+
 test("an update that fails the wire contract is refused before anything is spent", async () => {
   let spent = 0;
   const spend = async () => {
@@ -122,6 +133,9 @@ test("the gate order is method, kill switch, token, body, quota", async () => {
 
   const keyless = await handleAttentionReview(options({ apiKey: undefined }));
   assert.equal(keyless.status, 503);
+
+  const blankKey = await handleAttentionReview(options({ apiKey: "   " }));
+  assert.equal(blankKey.status, 503);
 
   const anonymous = await handleAttentionReview(options({ resolveUserId: async () => undefined }));
   assert.equal(anonymous.status, 401);
