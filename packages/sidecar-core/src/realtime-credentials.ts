@@ -197,7 +197,7 @@ const REALTIME_MINT_EXPLANATIONS: Record<RealtimeMintOutcome, string> = {
   [REALTIME_MINT_OUTCOME.NOT_ATTEMPTED]: "No credential has been requested yet.",
   [REALTIME_MINT_OUTCOME.SUCCEEDED]: "A short-lived credential was minted.",
   [REALTIME_MINT_OUTCOME.NO_API_KEY]:
-    "No OpenAI key has been given. Connect one in Settings, at the top of the Voice page. Exporting OPENAI_API_KEY in a shell also works, but does not reach an app opened from Finder.",
+    "Voice has nothing to run on: no signed-in Luke account, and no OpenAI key. Signing in turns voice on with its included allowance; a key connected in Settings, at the top of the Voice page, also works. Exporting OPENAI_API_KEY in a shell works too, but does not reach an app opened from Finder.",
   [REALTIME_MINT_OUTCOME.DISABLED_BY_FIXTURE]:
     "This is a fixture or evidence run, which never uses credentials.",
   [REALTIME_MINT_OUTCOME.HTTP_ERROR]: "The API rejected the mint request.",
