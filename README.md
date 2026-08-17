@@ -107,9 +107,6 @@ See [WORKFLOW.md](WORKFLOW.md) for the issue-to-pull-request workflow.
 
 ## Documentation
 
-- [Connect providers and Linear](docs/providers.md)
-- [Talk to Luke](docs/voice.md)
-- [Configuration reference](docs/configuration.md)
 - [Privacy details](PRIVACY.md)
 - [Maintainer release guide](.github/RELEASE.md)
 
