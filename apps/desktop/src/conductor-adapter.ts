@@ -151,7 +151,7 @@ const CONDUCTOR_ARCHIVE_WORKSPACE_CONTROL_ID = "archive-workspace";
 function conductorArchiveWorkspaceControl(workspaceId: string): SessionControl {
   return {
     id: CONDUCTOR_ARCHIVE_WORKSPACE_CONTROL_ID,
-    label: "Archive this workspace",
+    label: "Archive",
     target: workspaceId,
   };
 }

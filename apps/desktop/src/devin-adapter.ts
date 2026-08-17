@@ -79,7 +79,7 @@ const DEVIN_MESSAGE_FIELD = {
  */
 const DEVIN_ARCHIVE_SESSION_CONTROL = {
   id: "archive-session",
-  label: "Archive this session",
+  label: "Archive",
 } as const;
 
 const DEVIN_FIELD = {
