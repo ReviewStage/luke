@@ -14,6 +14,7 @@ import {
   CreatedWorkspaceOpenTracker,
   DEFAULT_PANEL_FORM_FACTOR,
   fixtureSnapshot,
+  HOSTED_SERVICE_PATH,
   InMemorySessionRegistry,
   ISSUE_ACTION_KIND,
   isControllableAdapter,
@@ -802,6 +803,23 @@ function reportVoiceAvailability(apiKeyConfigured: boolean): void {
 }
 
 /**
+ * Pays the mint function's cold start before the first press needs it. The
+ * hosted mint runs in a serverless function that unloads between uses, and a
+ * cold one adds seconds to exactly the moment someone is already speaking —
+ * a press released mid-connect abandons the attempt by design, so the first
+ * exchange after launch was being lost to startup the developer never sees.
+ * The GET carries nothing, authenticates nothing, and spends nothing: the
+ * endpoint answers it 405 by design, and loading the module to say no is the
+ * entire point.
+ */
+function warmHostedVoice(): void {
+  fetch(`${HOSTED_SERVICE_BASE_URL}${HOSTED_SERVICE_PATH.VOICE_MINT}`, {
+    method: "GET",
+    signal: AbortSignal.timeout(10_000),
+  }).catch(() => undefined);
+}
+
+/**
  * Reads the OpenAI key and rebuilds everything that runs on it.
  *
  * This is the whole of turning voice on and off. It runs once at startup and
@@ -881,6 +899,8 @@ async function applyVoiceCredential(): Promise<void> {
     fixtureMode: !runMode.sendsNetwork,
     apiKeyConfigured: apiKey !== undefined,
   });
+  // Warm only when the next press would actually mint through the service.
+  if (hosted) warmHostedVoice();
   reportVoiceAvailability(apiKey !== undefined);
 }
 
