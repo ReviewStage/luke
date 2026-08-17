@@ -1,11 +1,14 @@
 # Releasing Luke for macOS
 
 The release workflow builds, signs, notarizes, staples, and validates an arm64 macOS app. It
-then creates `Luke-X.Y.Z-macos-arm64.zip` and a matching `.sha256` file.
+then creates `Luke-X.Y.Z-macos-arm64.zip` with a matching `.sha256` file, and a notarized
+`Luke-X.Y.Z-arm64.dmg` with its own `.sha256` plus a version-free copy named `Luke.dmg` —
+the asset the website's download button reaches through
+`releases/latest/download/Luke.dmg`, which is why its name must never change.
 
 Pushing a `vX.Y.Z` tag publishes or updates a GitHub Release. A manual
-`workflow_dispatch` run performs the same release rehearsal without publishing; its zip and
-checksum are retained as workflow artifacts for 14 days.
+`workflow_dispatch` run performs the same release rehearsal without publishing; its zip,
+DMG, and checksums are retained as workflow artifacts for 14 days.
 
 ## Required GitHub Actions secrets
 
@@ -63,7 +66,7 @@ git push origin v0.1.0
 
 The tag push is the human release decision. The workflow does not create credentials or
 push tags. It creates a published, non-draft release with generated notes. Re-running the
-workflow is safe: an existing release is reused and its two assets are replaced with
+workflow is safe: an existing release is reused and its assets are replaced with
 `gh release upload --clobber`.
 
 ## Verify a download
@@ -84,7 +87,8 @@ A successful assessment identifies the source as `Notarized Developer ID`.
 
 ## Local DMG release
 
-The GitHub Actions flow above produces a zip and uses App Store Connect API-key
-secrets. The separate local `pnpm release:macos` flow produces a DMG under
-`artifacts/release/` and uses the `luke-notary` keychain profile. It does not
-upload or publish the DMG; distribution remains a separate deliberate step.
+The same DMG builder the workflow runs is available locally: `pnpm release:macos`
+produces the DMG under `artifacts/release/` using the `luke-notary` keychain
+profile where the workflow decodes the API-key secrets into a key file. The
+local flow does not upload or publish the DMG; distribution remains a separate
+deliberate step.
