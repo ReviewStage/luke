@@ -447,8 +447,13 @@ async function stopAccountCapabilities(): Promise<void> {
 async function signOutAccount(): Promise<AccountSnapshot> {
   accountGeneration += 1;
   observationGeneration += 1;
-  account = await settingsStore.clearAccount();
+  // Close the gate synchronously, before the settings write yields. Otherwise
+  // the observation timer can see the new generation with the old signed-in
+  // account and start a pass that belongs to neither account lifecycle.
+  account = { status: ACCOUNT_STATUS.SIGNED_OUT };
+  const clearingAccount = settingsStore.clearAccount();
   await stopAccountCapabilities();
+  account = await clearingAccount;
   broadcastAccount();
   return account;
 }
