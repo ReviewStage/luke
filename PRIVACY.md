@@ -128,7 +128,7 @@ nests them, and session or change links. The links, model label, and workspace
 identifier are kept out of the optional attention-review request described
 below.
 
-The microphone is optional and is used two ways.
+The microphone is optional.
 
 Without an OpenAI key there is nothing to talk to, so Luke never asks for the
 microphone and never opens it.

@@ -142,6 +142,7 @@ button {
   font-weight: 700;
   gap: var(--space-2);
   letter-spacing: -0.01em;
+  text-decoration: none;
 }
 
 /* Wider than tall, and the default `xMidYMid meet` letterboxes it inside the
@@ -1024,9 +1025,81 @@ button {
   gap: var(--space-2);
 }
 
-.footer-meta span + span::before {
+.footer-meta > * + *::before {
   margin-right: var(--space-2);
   content: "·";
+}
+
+.footer-link {
+  text-decoration: none;
+  transition: color 140ms ease;
+}
+
+.footer-link:hover {
+  color: var(--text);
+}
+
+/* Privacy
+   A legal document read start to finish, so it gets a narrower measure and
+   more vertical rhythm than the marketing copy above: constrained width,
+   a clear step between h1/h2, and generous paragraph spacing.
+   ------------------------------------------------------------------------- */
+
+.privacy {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--space-8) 0 var(--space-9);
+}
+
+.privacy h1 {
+  margin: 0 0 var(--space-6);
+  font-size: 2rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.privacy h2 {
+  margin: var(--space-8) 0 var(--space-4);
+  font-size: var(--text-lg);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.privacy p {
+  margin: 0 0 var(--space-4);
+  color: var(--text-secondary);
+}
+
+.privacy ul {
+  margin: 0 0 var(--space-4);
+  padding-left: var(--space-5);
+  color: var(--text-secondary);
+}
+
+.privacy li {
+  margin-bottom: var(--space-2);
+}
+
+.privacy li:last-child {
+  margin-bottom: 0;
+}
+
+.privacy strong {
+  color: var(--text);
+}
+
+.privacy a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.privacy code {
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  background: var(--raised);
+  font-size: 0.9em;
 }
 
 /* Responsive
