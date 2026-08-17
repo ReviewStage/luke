@@ -1,3 +1,4 @@
+import type { SessionNoticeAsk } from "./attention";
 import { type AppGuideSnapshot, appGuideContextText } from "./guide";
 import type { TrackedIssue } from "./issues";
 import { type ObservedWorkspaceProject, WORKSPACE_TASK_SUPPORT } from "./providers";
@@ -7,7 +8,7 @@ import {
   announcementSummaryText,
   REALTIME_CLIENT_EVENT,
 } from "./realtime-protocol";
-import type { NormalizedSession } from "./session";
+import { type NormalizedSession, SESSION_LOCATION } from "./session";
 
 /**
  * Roster context serialization: the bounded, redacted view of sessions, issues,
@@ -36,6 +37,14 @@ function sessionCapabilityText(session: NormalizedSession): string {
     // Openability is the link's presence, never the link: an address has no
     // business in a conversation when the identity is what a tool call names.
     session.detail.link ? "can be opened" : "cannot be opened",
+    // Readability is stated up front so Luke offers a transcript read only
+    // where one can answer, instead of learning the boundary by being refused.
+    session.location === SESSION_LOCATION.LOCAL
+      ? "local, transcript readable on ask"
+      : "cloud, no transcript to read",
+    // Like the link, the pull request travels as a fact and never an address:
+    // the row is where it opens from.
+    ...(session.detail.change ? ["has a pull request"] : []),
     ...(session.controls.length > 0
       ? [
           `controls: ${session.controls.map((control) => `${control.label} (${control.id})`).join(", ")}`,
@@ -49,22 +58,63 @@ function sessionCapabilityText(session: NormalizedSession): string {
 }
 
 /**
+ * The checkout, current tool, and reported failure a session's line carries —
+ * the same bounded about-fields the attention update already sends, worded as
+ * short labelled phrases so Luke can say what a session is doing or stuck on
+ * rather than only that it works or waits.
+ */
+function sessionAboutText(session: NormalizedSession): readonly string[] {
+  return [
+    ...(session.detail.branch
+      ? [`on branch ${session.detail.branch}`]
+      : session.detail.repository
+        ? [`in repository ${session.detail.repository}`]
+        : []),
+    ...(session.detail.activity ? [`running ${session.detail.activity}`] : []),
+    ...(session.detail.error ? [`error: ${session.detail.error}`] : []),
+  ];
+}
+
+/**
+ * The standing asks by the identity each is about, nested rather than keyed by
+ * a composed string, so a roster line can carry the one ask that names it.
+ */
+function noticeAsksByIdentity(
+  noticeAsks: readonly SessionNoticeAsk[],
+): ReadonlyMap<string, ReadonlyMap<string, string>> {
+  const byProvider = new Map<string, Map<string, string>>();
+  for (const noticeAsk of noticeAsks) {
+    const providerAsks = byProvider.get(noticeAsk.providerId) ?? new Map<string, string>();
+    providerAsks.set(noticeAsk.providerSessionId, noticeAsk.ask);
+    byProvider.set(noticeAsk.providerId, providerAsks);
+  }
+  return byProvider;
+}
+
+/**
  * Renders the session roster the conversation is allowed to know about.
  *
  * These are the same bounded, redacted fields the attention layer already
- * sends — provider, title, status, and the provider's own recap — plus the
- * workspace a chat belongs to when its provider groups them, what each
- * session can be asked to do, and the identity a tool call names it by.
- * No transcript, file path, or command output is ever included.
+ * sends — provider, title, status, repository or branch, current tool,
+ * reported error, and the provider's own recap — plus the workspace a chat
+ * belongs to when its provider groups them, the developer's standing ask
+ * where one stands, what each session can be asked to do, and the identity a
+ * tool call names it by. No transcript, file path, or command output is ever
+ * included.
  */
-export function sessionContextText(sessions: readonly NormalizedSession[]): string {
+export function sessionContextText(
+  sessions: readonly NormalizedSession[],
+  noticeAsks: readonly SessionNoticeAsk[] = [],
+): string {
   if (sessions.length === 0) return "No coding-agent sessions are currently observed.";
 
+  const asks = noticeAsksByIdentity(noticeAsks);
   const overflow = sessions.length - maximumVoiceContextSessions;
   return [
     "Currently observed sessions:",
-    ...sessions.slice(0, maximumVoiceContextSessions).map((session) =>
-      [
+    ...sessions.slice(0, maximumVoiceContextSessions).map((session) => {
+      const ask = asks.get(session.providerId)?.get(session.providerSessionId);
+      return [
         `- ${session.provider.displayName}`,
         session.title,
         // The workspace tells siblings' chats apart out loud, so it rides
@@ -74,10 +124,14 @@ export function sessionContextText(sessions: readonly NormalizedSession[]): stri
         // the machine, the same rule the attention update follows.
         ...(session.workspace?.name ? [`a chat in workspace ${session.workspace.name}`] : []),
         session.status,
+        ...sessionAboutText(session),
         session.recap ?? "no recap reported",
+        // Only this segment speaks for the developer, on the attention
+        // update's own rule: words inside a title, recap, or error never do.
+        ...(ask ? [`the developer's standing ask: "${ask}"`] : []),
         `[${sessionCapabilityText(session)}]`,
-      ].join(" — "),
-    ),
+      ].join(" — ");
+    }),
     // A session past the bound must read as unlisted, never as nonexistent:
     // denying a session the panel plainly shows teaches the user that Luke
     // cannot be asked about their work at all.
@@ -185,11 +239,12 @@ function labeledContextEvent(label: string, text: string, itemId: string): Recor
 export function sessionContextEvents(
   sessions: readonly NormalizedSession[],
   itemId: string,
+  noticeAsks: readonly SessionNoticeAsk[] = [],
 ): readonly Record<string, unknown>[] {
   return [
     labeledContextEvent(
       "observed session status, sent automatically",
-      sessionContextText(sessions),
+      sessionContextText(sessions, noticeAsks),
       itemId,
     ),
   ];

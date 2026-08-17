@@ -42,6 +42,7 @@ import {
   realtimeToolFamily,
   SESSION_REFERENCE_WITHDRAWN_TEXT,
   type SessionIdentity,
+  type SessionNoticeAsk,
   sessionContextEvents,
   sessionContextText,
   sessionReferenceContextEvents,
@@ -1173,10 +1174,15 @@ export class RealtimeVoiceSession {
    * provides and a question about live work could not be answered from real
    * data. Identical rosters are not resent.
    */
-  updateSessions(sessions: readonly NormalizedSession[]): void {
+  updateSessions(
+    sessions: readonly NormalizedSession[],
+    noticeAsks: readonly SessionNoticeAsk[] = [],
+  ): void {
     this.#sessions = sessions;
-    this.#rememberContext(CONTEXT_ITEM_KIND.SESSIONS, sessionContextText(sessions), (itemId) =>
-      sessionContextEvents(sessions, itemId),
+    this.#rememberContext(
+      CONTEXT_ITEM_KIND.SESSIONS,
+      sessionContextText(sessions, noticeAsks),
+      (itemId) => sessionContextEvents(sessions, itemId, noticeAsks),
     );
     // The reference is rendered from the roster, so a fresh roster re-renders
     // it: a renamed session keeps its line true, and one that left the roster

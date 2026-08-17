@@ -6,7 +6,12 @@ import {
   SESSION_URGENCY,
 } from "@sidecar/core";
 import { useCallback, useRef, useState } from "react";
-import { ACCOUNT_STATUS, type AccountSnapshot } from "../shared/contracts";
+import {
+  ACCOUNT_STATUS,
+  type AccountSnapshot,
+  SESSION_OPEN_RESULT_STATUS,
+  type SessionOpenResult,
+} from "../shared/contracts";
 import { type AskHandler, AskLuke } from "./ask-luke";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
 import { CloudBadge, ProviderMark } from "./provider-marks";
@@ -31,6 +36,7 @@ import {
   BranchGlyph,
   CheckGlyph,
   EmptyState,
+  ListeningGlyph,
   SessionOptions,
   SessionOptionsButton,
   SessionsPanel,
@@ -51,6 +57,12 @@ import { SignInGate } from "./sign-in-gate";
 export interface SessionWriteHandlers {
   sendMessage: (session: DisplaySession, text: string) => Promise<ProviderMessageResult>;
   runAction: (session: DisplaySession, actionId: string) => Promise<ProviderControlResult>;
+  /**
+   * Not a provider write — the address is handed to the operating system —
+   * but it rides the same shape so the chip can report a refusal on the same
+   * line the other acts answer on.
+   */
+  openChange: (session: DisplaySession) => Promise<SessionOpenResult>;
 }
 
 /**
@@ -195,6 +207,17 @@ function SessionRowActions({
     [session, writes],
   );
 
+  const openChange = useCallback(async () => {
+    const result = await writes.openChange(session);
+    // An opened page is its own answer; only a failure needs the line.
+    if (result.status === SESSION_OPEN_RESULT_STATUS.OPENED) return;
+    setFeedback(
+      result.status === SESSION_OPEN_RESULT_STATUS.REJECTED
+        ? result.reason
+        : "The session no longer reports a pull request.",
+    );
+  }, [session, writes]);
+
   return (
     <div className="row-actions">
       {session.canMessage ? (
@@ -259,6 +282,22 @@ function SessionRowActions({
           onRun={(actionId) => void runAction(actionId)}
         />
       ))}
+      {session.hasChange ? (
+        <button
+          type="button"
+          className="row-action"
+          title="Open the pull request this session published"
+          // Opening the pull request hands an address to the system, not a
+          // write to a provider, so it stays offered while a provider write is
+          // in flight — only the row's open-on-press must not fire with it.
+          onClick={(event) => {
+            event.stopPropagation();
+            void openChange();
+          }}
+        >
+          Pull request
+        </button>
+      ) : null}
       {feedback ? <small className="row-feedback">{feedback}</small> : null}
     </div>
   );
@@ -310,7 +349,7 @@ function SessionRow({
   onOpen: (session: DisplaySession) => void;
   writes: SessionWriteHandlers;
 }): React.JSX.Element {
-  const withActions = session.canMessage || session.actions.length > 0;
+  const withActions = session.canMessage || session.actions.length > 0 || session.hasChange;
   const shared = {
     className: "session-row",
     "data-state": session.urgency,
@@ -353,7 +392,9 @@ function SessionRow({
             <span className="row-spinner" aria-hidden="true" />
           ) : null}
           {session.urgency === SESSION_URGENCY.COMPLETE ? <CheckGlyph /> : null}
-          <span className="row-doing-text">
+          {/* The line truncates without a disclosure, so the hover is the one
+              way the rest of a long sentence can be read at all. */}
+          <span className="row-doing-text" title={session.detail}>
             {session.detail === session.label ? null : (
               <span className="visually-hidden">{session.label}. </span>
             )}
@@ -361,7 +402,7 @@ function SessionRow({
           </span>
         </small>
         {place ? (
-          <small className="row-place">
+          <small className="row-place" title={place}>
             {session.branch ? <BranchGlyph /> : null}
             <span>
               <Highlighted text={place} tokens={highlight} />
@@ -369,7 +410,10 @@ function SessionRow({
           </small>
         ) : null}
       </span>
-      <small className="row-when">{observedAgoLabel(session.observedAt, now)}</small>
+      <small className="row-when">
+        {session.noticeAsk ? <ListeningGlyph ask={session.noticeAsk} /> : null}
+        {observedAgoLabel(session.observedAt, now)}
+      </small>
     </>
   );
 

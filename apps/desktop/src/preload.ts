@@ -45,6 +45,7 @@ const bridge: AppBridge = {
     ipcRenderer.send(channels.setVoiceExchange, active);
   },
   openSession: invoke(channels.openSession),
+  openSessionChange: invoke(channels.openSessionChange),
   readSessionTranscript: invoke(channels.readSessionTranscript),
   sendSessionMessage: invoke(channels.sendSessionMessage),
   executeSessionControl: invoke(channels.executeSessionControl),
@@ -64,6 +65,7 @@ const bridge: AppBridge = {
   onSettingsChanged: subscribe(channels.settingsChanged),
   onAccountChanged: subscribe(channels.accountChanged),
   onSessionsChanged: subscribe(channels.sessionsChanged),
+  onNoticeAsksChanged: subscribe(channels.noticeAsksChanged),
   onWorkspaceProjectsChanged: subscribe(channels.workspaceProjectsChanged),
   onIssuesChanged: subscribe(channels.issuesChanged),
   onVoiceHotkeyPress: subscribe(channels.voiceHotkeyPress),

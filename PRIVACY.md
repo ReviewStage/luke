@@ -202,11 +202,19 @@ spoken reply. OpenAI's policies govern that audio and the reply.
 
 Alongside the audio, Luke sends the same bounded session fields the attention
 review uses — provider name, session title, status, the name of the workspace
-a chat belongs to where its provider groups them, and each session's recap —
-so a spoken question about your sessions can be answered. No message history,
-file content, or command output is ever included: a recap can reflect what a
-session was asked and replied — for Conductor it is the agent's own parting
-words — but the conversation behind it never travels.
+a chat belongs to where its provider groups them, repository or branch, the
+tool a session is currently running, the provider's reported error line, and
+each session's recap — so a spoken question about your sessions can be
+answered with what a session is doing or stuck on, not only that it works or
+waits. Each roster line also states what the session can be asked to do —
+whether it takes messages, can be opened, is a local session whose transcript
+can be read on ask, has a pull request, and which controls its provider
+advertised — as facts, never as addresses. A standing ask you have made about
+a session (described below under the attention review) rides its roster line
+in your own words, so Luke can say what he is already listening for. No
+message history, file content, or command output is ever included: a recap
+can reflect what a session was asked and replied — for Conductor it is the
+agent's own parting words — but the conversation behind it never travels.
 
 Luke also sends the list of projects a new workspace could be created in —
 each project's provider, repository label, and provider-assigned identifier —
@@ -277,7 +285,11 @@ the provider name, displayed session title, the name of the workspace a chat
 belongs to where its provider groups them, previous and current status, review
 trigger, repository, branch, current tool activity, reported error, and the
 session recap — provider-designated, or for Conductor the agent's parting
-words read from its transcript. Titles, workspace names, and recaps can
+words read from its transcript. When you have asked Luke to keep a standing
+ask about a session — "tell me when this finishes" — that ask also travels
+with that session's updates, in your own words, so the review can answer it;
+it is withdrawn the same way it was made and dropped with the session it was
+about. Titles, workspace names, and recaps can
 reflect task and reply content; for a Conductor chat, the title is the chat's
 own name and the workspace name can contain the project-name fallback
 described above. The request also includes fixed review instructions and

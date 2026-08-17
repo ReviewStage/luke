@@ -89,6 +89,12 @@ const CODEX_ROLLOUT_TYPE = {
 const CODEX_EVENT_PAYLOAD = {
   TASK_STARTED: "task_started",
   TASK_COMPLETE: "task_complete",
+  /**
+   * The failure that ended a turn early. Current Codex builds carry the error
+   * on `task_complete` itself; older ones wrote this event standing alone, so
+   * both shapes are read — the same pair the transcript reader renders.
+   */
+  ERROR: "error",
 } as const;
 
 const CODEX_RESPONSE_PAYLOAD = {
@@ -205,6 +211,7 @@ function activityFromCall(payload: Record<string, unknown>): string | undefined 
 
 interface ParsedCodexRollout {
   activity?: string;
+  error?: string;
   lastAgentMessage?: string;
   turnComplete?: boolean;
 }
@@ -230,14 +237,36 @@ function parseCodexRolloutTail(tail: string): ParsedCodexRollout {
         // A new turn is not running the previous turn's last call, and holding
         // it would keep a stale line on the row until some other tool runs.
         parsed.activity = undefined;
+        // A new turn is also not stuck on the previous turn's failure, and
+        // holding it would keep the row at error while the session works.
+        parsed.error = undefined;
+      }
+      if (payload.type === CODEX_EVENT_PAYLOAD.ERROR) {
+        parsed.error =
+          oneLine(text(payload.message), CODEX_ADAPTER_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH) ??
+          parsed.error;
       }
       if (payload.type === CODEX_EVENT_PAYLOAD.TASK_COMPLETE) {
         parsed.turnComplete = true;
         parsed.activity = undefined;
-        parsed.lastAgentMessage = oneLine(
-          text(payload.last_agent_message),
-          maximumSessionRecapLength,
-        );
+        if (isRecord(payload.error)) {
+          // A turn that ended on a failure gets no recap: the agent's parting
+          // words predate what went wrong, and the error is what the row now
+          // has to say. The fallback keeps a standalone error event's message
+          // when the boundary's own error carries none.
+          parsed.error =
+            oneLine(text(payload.error.message), CODEX_ADAPTER_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH) ??
+            parsed.error;
+          parsed.lastAgentMessage = undefined;
+        } else {
+          // A turn that settled cleanly got past any failure it recorded on
+          // the way, so a stale error must not outlive it.
+          parsed.error = undefined;
+          parsed.lastAgentMessage = oneLine(
+            text(payload.last_agent_message),
+            maximumSessionRecapLength,
+          );
+        }
       }
       continue;
     }
@@ -376,6 +405,11 @@ function statusFromRow(
   if ((numberFromRow(row, CODEX_THREAD_COLUMN.ARCHIVED) ?? 0) !== 0) {
     return SESSION_STATUS.COMPLETE;
   }
+  // A turn that failed is stuck until someone comes back to it, so the error
+  // outranks freshness: going stale is exactly what a session waiting on a
+  // rescue looks like, and decaying it to unknown would hide the one row
+  // that most needs a person.
+  if (rollout?.error) return SESSION_STATUS.ERROR;
   const isFresh = now - observedAt <= activeSessionFreshnessMs;
   // A turn that ended is holding for the developer however the row's timestamp
   // reads, but once it is stale Luke cannot tell a turn that just finished from
@@ -389,10 +423,11 @@ function statusFromRow(
 
 /**
  * Sharpens the row's verdict with what the observation hook last said, in the
- * order the meanings bind. A closed session is definite: the hook saying so
- * outranks the row, and an archived thread is never talked out of complete by
- * a softer event. Past those, the events refine only a fresh session — the
- * decay to `UNKNOWN` exists because a hook can go silent (a killed process
+ * order the meanings bind. A closed or failed session is definite: the hook
+ * saying closed outranks the row, and a row that says complete or error is
+ * never talked out of it by a softer event. Past those, the events refine
+ * only a fresh session — the decay to `UNKNOWN` exists because a hook can go
+ * silent (a killed process
  * fires no `SessionEnd`), so an old "waiting" must age the same way an old
  * row does. What the refinement actually buys is the states the state
  * database cannot show: a tool call holding for approval writes no records
@@ -404,7 +439,12 @@ function statusWithHookEvent(
   isFresh: boolean,
 ): ProviderSessionObservation["status"] {
   if (event === CODEX_HOOK_EVENT.SESSION_END) return SESSION_STATUS.COMPLETE;
-  if (status === SESSION_STATUS.COMPLETE) return status;
+  // Codex fires no failure hook, so `stop` fires for a failed turn too: a
+  // stop or prompt standing for the same turn the rollout saw fail must not
+  // talk the row out of the error. The rollout itself is what clears it — the
+  // next pass reads the new turn's `task_started` — so a genuinely newer turn
+  // costs one observation pass, never the failure.
+  if (status === SESSION_STATUS.COMPLETE || status === SESSION_STATUS.ERROR) return status;
   // A notification still standing means the approval is still open — its zero
   // staleness tolerance drops it the moment the thread moves — so it outranks
   // a mid-turn row however long the hold has run: Codex holds a long turn at
@@ -429,12 +469,14 @@ function detailFromRow(
   const activity = rollout?.activity;
   const branch = textFromRow(row, CODEX_THREAD_COLUMN.GIT_BRANCH);
   const model = modelFromRow(row);
+  const error = rollout?.error;
   const threadId = textFromRow(row, CODEX_THREAD_COLUMN.ID);
   return {
     ...(activity ? { activity } : {}),
     repository: workspaceLabel(textFromRow(row, CODEX_THREAD_COLUMN.CWD)),
     ...(branch ? { branch } : {}),
     ...(model ? { model } : {}),
+    ...(error ? { error } : {}),
     ...(threadId ? { link: `${CODEX_THREAD_LINK_PREFIX}${encodeURIComponent(threadId)}` } : {}),
   };
 }

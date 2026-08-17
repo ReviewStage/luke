@@ -125,6 +125,7 @@ export {
   attentionDecisionFromModel,
   maximumAttentionRequestLength,
   SessionAttentionReviewer,
+  type SessionNoticeAsk,
 } from "./attention";
 export {
   attentionInstructions,

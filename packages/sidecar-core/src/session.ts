@@ -366,6 +366,22 @@ function sessionLink(value: string | undefined): string | undefined {
   return isOpenableSessionLink(normalized) ? normalized : undefined;
 }
 
+/**
+ * The published work's address, or nothing, under the link's own rules — a
+ * truncated address is a different address — narrowed further to `https`
+ * alone: every pull request a provider reports lives on the web, and this
+ * field too is one the surface acts on rather than merely draws.
+ */
+function sessionChange(value: string | undefined): string | undefined {
+  const normalized = value?.trim();
+  if (!normalized || normalized.length > maximumSessionLinkLength) return undefined;
+  try {
+    return new URL(normalized).protocol === SESSION_LINK_SCHEME.HTTPS ? normalized : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function timestamp(value: number, field: string): number {
   if (!Number.isFinite(value) || value < 0) {
     throw new Error(`${field} must be a non-negative finite timestamp`);
@@ -426,7 +442,7 @@ export function normalizeSessionDetail(detail: SessionDetail | undefined): Sessi
   const model = boundedText(detail.model, maximumSessionDetailLength);
   const error = boundedText(detail.error, maximumSessionDetailLength);
   const link = sessionLink(detail.link);
-  const change = boundedText(detail.change, maximumSessionLinkLength);
+  const change = sessionChange(detail.change);
 
   return {
     ...(activity ? { activity } : {}),

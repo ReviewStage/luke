@@ -47,6 +47,31 @@ export function WorkspaceGlyph(): React.JSX.Element {
   );
 }
 
+/**
+ * Marks a row the developer asked Luke to listen for — a small ear-like arc
+ * pair, drawn in the line's own colour like every row glyph. The ask itself is
+ * the hover and the accessible name, so the mark says what is being listened
+ * for rather than only that something is.
+ */
+export function ListeningGlyph({ ask }: { ask: string }): React.JSX.Element {
+  const label = `Luke is listening: ${ask}`;
+  return (
+    <svg
+      className="row-listening"
+      viewBox="0 0 16 16"
+      role="img"
+      aria-label={label}
+      focusable="false"
+    >
+      <title>{label}</title>
+      <g fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+        <circle cx="8" cy="8" r="1.3" fill="currentColor" stroke="none" />
+        <path d="M4.6 4.6a4.8 4.8 0 0 0 0 6.8M11.4 4.6a4.8 4.8 0 0 1 0 6.8" />
+      </g>
+    </svg>
+  );
+}
+
 /** Leads a finished session's sentence, the way a spinner leads a working one. */
 export function CheckGlyph(): React.JSX.Element {
   return (

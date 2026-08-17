@@ -730,13 +730,25 @@ html[data-keyboard="true"] button.session-row:focus-visible {
    against the title's line rather than centred on the row, so two-line and
    three-line rows hold it at the same height. */
 .row-when {
+  display: flex;
   flex: 0 0 auto;
   align-self: flex-start;
+  align-items: center;
+  gap: 4px;
   padding-top: 2px;
   color: var(--text-tertiary);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+/* The mark for a row Luke was asked to listen for, riding beside the age in
+   the age's own quiet colour: the ask changes what Luke says, not the row's
+   urgency, so it must not read as a state. The ask itself is the hover. */
+.row-listening {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 auto;
 }
 
 /* A row with a second line stacks, and hands its box's padding down: the first

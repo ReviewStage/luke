@@ -452,6 +452,22 @@ export type AttentionRequestResult =
 export class AttentionRequestRegistry {
   #requests = new Map<string, Map<string, string>>();
 
+  /**
+   * Every standing ask, flattened for the surfaces that show them: the panel's
+   * row marks and the roster a developer-opened conversation carries. The
+   * identity rides each entry because the ask means nothing apart from the
+   * session it is about.
+   */
+  list(): readonly SessionNoticeAsk[] {
+    return [...this.#requests].flatMap(([providerId, providerRequests]) =>
+      [...providerRequests].map(([providerSessionId, ask]) => ({
+        providerId,
+        providerSessionId,
+        ask,
+      })),
+    );
+  }
+
   set(identity: SessionIdentity, request: string): void {
     const normalizedIdentity = normalizeSessionIdentity(identity);
     const providerRequests =
@@ -476,8 +492,12 @@ export class AttentionRequestRegistry {
     return true;
   }
 
-  /** Drops asks about sessions a provider no longer reports. */
-  retain(identities: readonly SessionIdentity[]): void {
+  /**
+   * Drops asks about sessions a provider no longer reports, and answers
+   * whether any were dropped so the surfaces showing asks can be told exactly
+   * when the set changed.
+   */
+  retain(identities: readonly SessionIdentity[]): boolean {
     const live = new Map<string, Set<string>>();
     for (const identity of identities) {
       const normalizedIdentity = normalizeSessionIdentity(identity);
@@ -486,19 +506,30 @@ export class AttentionRequestRegistry {
       live.set(normalizedIdentity.providerId, providerSessionIds);
     }
 
+    let dropped = false;
     const retained = new Map<string, Map<string, string>>();
     for (const [providerId, providerRequests] of this.#requests) {
       const providerSessionIds = live.get(providerId);
-      if (!providerSessionIds) continue;
       const kept = new Map(
         [...providerRequests].filter(([providerSessionId]) =>
-          providerSessionIds.has(providerSessionId),
+          providerSessionIds?.has(providerSessionId),
         ),
       );
+      if (kept.size < providerRequests.size) dropped = true;
       if (kept.size > 0) retained.set(providerId, kept);
     }
     this.#requests = retained;
+    return dropped;
   }
+}
+
+/**
+ * One standing ask beside the session it is about, as the flattened entry the
+ * panel's rows and the conversation roster consume. The words are the
+ * developer's own, already bounded by {@link attentionRequestText}.
+ */
+export interface SessionNoticeAsk extends SessionIdentity {
+  ask: string;
 }
 
 /**

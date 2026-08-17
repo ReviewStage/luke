@@ -895,6 +895,26 @@ test("one ask stands per session: replaced whole, withdrawn honestly, dropped wi
   assert.equal(requests.get(identity), undefined);
 });
 
+test("the ask list carries every standing ask, and retain says whether it changed", () => {
+  const requests = new AttentionRequestRegistry();
+  const watched = { providerId: claude.id, providerSessionId: "watched" };
+  const other = { providerId: "codex", providerSessionId: "thread-1" };
+
+  assert.deepEqual(requests.list(), []);
+  requests.set(watched, "Tell me when this finishes.");
+  requests.set(other, "Warn me if it fails.");
+  assert.deepEqual(requests.list(), [
+    { ...watched, ask: "Tell me when this finishes." },
+    { ...other, ask: "Warn me if it fails." },
+  ]);
+
+  // The surfaces marking asks are told only on a real change, so retain has
+  // to answer honestly in both directions.
+  assert.equal(requests.retain([watched, other]), false, "nothing dropped is no change");
+  assert.equal(requests.retain([watched]), true, "a dropped ask is a change");
+  assert.deepEqual(requests.list(), [{ ...watched, ask: "Tell me when this finishes." }]);
+});
+
 test("a standing ask rides the update of the session it was made about, and no other", async () => {
   const requests = new AttentionRequestRegistry();
   requests.set(
