@@ -6,7 +6,13 @@ import {
   type AccountSnapshot,
 } from "../shared/contracts";
 
-export function SignInGate({ account }: { account: AccountSnapshot }): React.JSX.Element {
+export function SignInGate({
+  account,
+  onQuit,
+}: {
+  account: AccountSnapshot;
+  onQuit: () => void;
+}): React.JSX.Element {
   const [chosen, setChosen] = useState<AccountProvider>();
   const [failure, setFailure] = useState<string>();
   const pending = account.status === ACCOUNT_STATUS.SIGNING_IN || chosen !== undefined;
@@ -49,6 +55,9 @@ export function SignInGate({ account }: { account: AccountSnapshot }): React.JSX
       </div>
       {failure ? <small className="sign-in-error">{failure}</small> : null}
       {pending ? <small>Finish signing in in your browser.</small> : null}
+      <button type="button" className="quit-button sign-in-quit" onClick={onQuit}>
+        Quit Luke
+      </button>
     </section>
   );
 }

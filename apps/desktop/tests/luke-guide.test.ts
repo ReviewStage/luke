@@ -68,6 +68,11 @@ function guideSetting(id: string, input: LukeGuideInput = guideInput()): AppGuid
   return setting;
 }
 
+test("the guide keeps the signed-out escape path explicit", () => {
+  const quitting = buildLukeGuide(guideInput()).facts.find((fact) => fact.label === "Quitting");
+  assert.match(quitting?.detail ?? "", /sign-in screen/);
+});
+
 test("the guide describes every spoken-adjustable setting with its current value", () => {
   const captionsOff = guideSetting(APP_SETTING_ID.VOICE_CAPTIONS);
   assert.equal(captionsOff.kind, APP_SETTING_KIND.TOGGLE);

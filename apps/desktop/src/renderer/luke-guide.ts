@@ -724,7 +724,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       : []),
     {
       label: "Quitting",
-      detail: `The Quit button at the foot of ${SETTINGS_TAB}, or the menu bar item when it is shown.`,
+      detail: `The Quit button at the foot of ${SETTINGS_TAB}, on the sign-in screen when it is shown, or the menu bar item when it is shown.`,
     },
   ];
 

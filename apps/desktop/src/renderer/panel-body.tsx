@@ -562,7 +562,7 @@ export function PanelBody({
   if (accountRequired && account.status !== ACCOUNT_STATUS.SIGNED_IN) {
     return (
       <div className="body">
-        <SignInGate account={account} />
+        <SignInGate account={account} onQuit={settings.onQuit} />
       </div>
     );
   }
