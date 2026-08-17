@@ -12,7 +12,6 @@ export function App(): React.JSX.Element {
           <p className="hero-subhead">
             Luke watches your coding agent sessions and notifies you when they need your attention.
           </p>
-          <p className="hero-account">Google or GitHub sign-in is required before Luke starts.</p>
           <div className="cta-row">
             <a className="cta-primary" href={REPOSITORY_URL}>
               <GitHubMark />

@@ -276,12 +276,6 @@ button {
   white-space: nowrap;
 }
 
-.hero-account {
-  margin: calc(var(--space-3) * -1) 0 var(--space-5);
-  color: var(--text-muted);
-  font-size: var(--text-sm);
-}
-
 .hero-subhead {
   max-width: 620px;
   margin: 0 auto;
