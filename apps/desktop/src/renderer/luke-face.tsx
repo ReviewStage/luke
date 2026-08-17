@@ -15,6 +15,18 @@ interface LukeFaceProps {
 /** Nothing beyond the smile and the eyes, which is what a still face draws. */
 const RESTING_PARTS = { brows: false, lids: false, sleepZ: false } as const;
 
+/** The monoline stroke every drawn line of the face shares. */
+const STROKE = {
+  fill: "none",
+  stroke: "currentColor",
+  strokeLinecap: "round",
+} as const;
+
+/** The paired parts are drawn per side, keyed the way the artwork names them. */
+const SIDES = ["LEFT", "RIGHT"] as const;
+/** Each eye is named so the wink's generated rule can close one of them. */
+const EYE_CLASS = { LEFT: "luke-face-eye-left", RIGHT: "luke-face-eye-right" } as const;
+
 /**
  * Luke's face. The artwork is drawn here rather than loaded, for the same reason
  * the provider marks are — the renderer stays asset-free and the face scales
@@ -25,7 +37,8 @@ const RESTING_PARTS = { brows: false, lids: false, sleepZ: false } as const;
  * cuts the SVGs in `design/brand/` from the same table: the geometry arrives as
  * `luke-face-art.ts` and the motions as `styles/face-motion.css`. Nothing about
  * the face is decided in this file; it only says which parts a motion needs and
- * in what order they nest.
+ * in what order they nest. `luke-face-part` marks everything the artwork moves,
+ * which is what the wiring in base.css plays, pauses, and repeats as one set.
  */
 export function LukeFace({ motion, repeat = false }: LukeFaceProps): React.JSX.Element {
   const parts = motion === undefined ? RESTING_PARTS : FACE_MOTION_PARTS[motion];
@@ -44,75 +57,50 @@ export function LukeFace({ motion, repeat = false }: LukeFaceProps): React.JSX.E
           drawn, and a motion that needs only one simply leaves the outer one
           still. A CSS transform on a layer replaces a transform attribute on the
           same element, so the resting tilt has to be a group of its own. */}
-      <g className="luke-face-layer luke-face-layer-2">
-        <g className="luke-face-layer luke-face-layer-1">
+      <g className="luke-face-part luke-face-layer luke-face-layer-2">
+        <g className="luke-face-part luke-face-layer luke-face-layer-1">
           <g transform={FACE_ART.TILT}>
             <path
               d={FACE_ART.SMILE}
-              fill="none"
-              stroke="currentColor"
+              {...STROKE}
               strokeWidth={FACE_ART.STROKE_WIDTH}
-              strokeLinecap="round"
               strokeLinejoin="round"
             />
-            {parts.lids ? (
-              /* Asleep: closed lids in place of the eyes, not eyes that happen
-                 to be shut — a blink is a squeeze, and a lid is an arc. */
-              <>
-                <path
-                  d={FACE_ART.LID.LEFT}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={FACE_ART.LID_WIDTH}
-                  strokeLinecap="round"
-                />
-                <path
-                  d={FACE_ART.LID.RIGHT}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={FACE_ART.LID_WIDTH}
-                  strokeLinecap="round"
-                />
-              </>
-            ) : (
-              /* Ellipses rather than circles: blinking, squinting and widening
-                 are all the radius moving, and an ellipse has nothing to
-                 convert. Each is named so the wink can close one of them. */
-              <>
-                <ellipse
-                  className="luke-face-eye luke-face-eye-left"
-                  cx={FACE_ART.EYE_X.LEFT}
-                  cy={FACE_ART.EYE_Y}
-                  rx={FACE_ART.EYE_RADIUS}
-                  ry={FACE_ART.EYE_RADIUS}
-                  fill="currentColor"
-                />
-                <ellipse
-                  className="luke-face-eye luke-face-eye-right"
-                  cx={FACE_ART.EYE_X.RIGHT}
-                  cy={FACE_ART.EYE_Y}
-                  rx={FACE_ART.EYE_RADIUS}
-                  ry={FACE_ART.EYE_RADIUS}
-                  fill="currentColor"
-                />
-              </>
-            )}
+            {parts.lids
+              ? /* Asleep: closed lids in place of the eyes, not eyes that happen
+                   to be shut — a blink is a squeeze, and a lid is an arc. */
+                SIDES.map((side) => (
+                  <path
+                    key={side}
+                    d={FACE_ART.LID[side]}
+                    {...STROKE}
+                    strokeWidth={FACE_ART.LID_WIDTH}
+                  />
+                ))
+              : /* Ellipses rather than circles: blinking, squinting and widening
+                   are all the radius moving, and an ellipse has nothing to
+                   convert. */
+                SIDES.map((side) => (
+                  <ellipse
+                    key={side}
+                    className={`luke-face-part luke-face-eye ${EYE_CLASS[side]}`}
+                    cx={FACE_ART.EYE_X[side]}
+                    cy={FACE_ART.EYE_Y}
+                    rx={FACE_ART.EYE_RADIUS}
+                    ry={FACE_ART.EYE_RADIUS}
+                    fill="currentColor"
+                  />
+                ))}
             {parts.brows ? (
-              <g className="luke-face-brows">
-                <path
-                  d={FACE_ART.BROW.LEFT}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={FACE_ART.BROW_WIDTH}
-                  strokeLinecap="round"
-                />
-                <path
-                  d={FACE_ART.BROW.RIGHT}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={FACE_ART.BROW_WIDTH}
-                  strokeLinecap="round"
-                />
+              <g className="luke-face-part luke-face-brows">
+                {SIDES.map((side) => (
+                  <path
+                    key={side}
+                    d={FACE_ART.BROW[side]}
+                    {...STROKE}
+                    strokeWidth={FACE_ART.BROW_WIDTH}
+                  />
+                ))}
               </g>
             ) : null}
           </g>
@@ -125,12 +113,10 @@ export function LukeFace({ motion, repeat = false }: LukeFaceProps): React.JSX.E
         ? FACE_ART.SLEEP_Z.map((sleepZ, index) => (
             <g key={sleepZ.path} transform={`translate(${sleepZ.x} ${sleepZ.y})`}>
               <path
-                className={`luke-face-z luke-face-z-${index + 1}`}
+                className={`luke-face-part luke-face-z luke-face-z-${index + 1}`}
                 d={sleepZ.path}
-                fill="none"
-                stroke="currentColor"
+                {...STROKE}
                 strokeWidth={FACE_ART.SLEEP_Z_WIDTH}
-                strokeLinecap="round"
                 strokeLinejoin="round"
               />
             </g>

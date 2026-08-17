@@ -112,23 +112,29 @@ test("only what stays true for as long as it holds may hold the face", () => {
   }
 });
 
+/**
+ * Every motion that says something about the world: the three rests, the three
+ * moments, and the sway that means work. Nothing fired by a mere timer or a
+ * passing hand may play one, or the face is lying about the sessions.
+ */
+const SPOKEN = [
+  FACE_MOTION.TALKING,
+  FACE_MOTION.LISTENING,
+  FACE_MOTION.SLEEPING,
+  FACE_MOTION.WAITING,
+  FACE_MOTION.SUCCESS,
+  FACE_MOTION.NOTIFICATION,
+  FACE_MOTION.MONITORING,
+];
+
 test("a gesture says nothing a rest or a moment already says", () => {
   // A gesture arrives because a timer fired, so one that carried meaning would
   // be a lie: Luke must not look like a session just started asking, finished,
   // or turned up, and he must not look like he is listening to a closed
   // microphone. The sway is the exception that proves the rule — it means work
   // is happening, so it is only offered while work is happening.
-  const spoken = [
-    FACE_MOTION.TALKING,
-    FACE_MOTION.LISTENING,
-    FACE_MOTION.SLEEPING,
-    FACE_MOTION.WAITING,
-    FACE_MOTION.SUCCESS,
-    FACE_MOTION.NOTIFICATION,
-    FACE_MOTION.MONITORING,
-  ];
   for (const aside of asidePool(false)) {
-    assert.ok(!spoken.includes(aside.motion), `${aside.motion} carries meaning and cannot be idle`);
+    assert.ok(!SPOKEN.includes(aside.motion), `${aside.motion} carries meaning and cannot be idle`);
   }
   const working = asidePool(true).map((aside) => aside.motion);
   assert.ok(working.includes(FACE_MOTION.MONITORING));
@@ -185,18 +191,9 @@ test("a moment is sampled by weight, and the smallest gesture is most of the poo
 test("a hover earns a trick, and the trick says nothing about the sessions", () => {
   // A hand crosses the strip whenever it likes, so nothing a hover plays may
   // mean anything — not a rest, not a moment, not the sway that means work.
-  const spoken = [
-    FACE_MOTION.TALKING,
-    FACE_MOTION.LISTENING,
-    FACE_MOTION.SLEEPING,
-    FACE_MOTION.WAITING,
-    FACE_MOTION.SUCCESS,
-    FACE_MOTION.NOTIFICATION,
-    FACE_MOTION.MONITORING,
-  ];
   for (const aside of HOVER_ASIDES) {
     assert.ok(
-      !spoken.includes(aside.motion),
+      !SPOKEN.includes(aside.motion),
       `${aside.motion} carries meaning and cannot be hover`,
     );
     assert.ok(aside.weight > 0, `${aside.motion} can never be chosen`);
