@@ -41,9 +41,9 @@ export function microphoneAccessRow(input: {
   if (!input.voiceAvailable) {
     return {
       // Names what to do rather than what is missing, and what to do is
-      // something the panel offers: the OpenAI key, at the top of the Voice page.
+      // something this same page offers: the OpenAI key, at its top.
       detail:
-        "Luke opens the microphone only to talk, which needs the OpenAI key on the Voice page.",
+        "Luke opens the microphone only to talk, which needs the OpenAI key at the top of this page.",
       offerAccess: false,
       offerSystemSettings: false,
       ready: false,
@@ -55,4 +55,25 @@ export function microphoneAccessRow(input: {
     offerSystemSettings: input.status === "granted" || input.status === "denied",
     ready: input.status === "granted",
   };
+}
+
+/**
+ * Why the front page's Voice row wears its exclamation mark, or nothing while
+ * voice is ready to run. One sentence naming the first thing still missing —
+ * the key before the microphone, because the key is what makes the microphone
+ * worth asking for — worded for the hover and the screen reader alike. The
+ * Voice page itself is where the missing thing is explained and supplied, so
+ * the mark only has to say that something there still needs a hand.
+ */
+export function voiceAttentionNote(input: {
+  voiceAvailable: boolean;
+  status: MicrophoneStatus;
+}): string | undefined {
+  if (!input.voiceAvailable) {
+    return "Voice is off: it needs an OpenAI key.";
+  }
+  if (!microphoneAccessRow(input).ready) {
+    return "Luke cannot listen: the microphone is not allowed yet.";
+  }
+  return undefined;
 }

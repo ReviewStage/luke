@@ -436,8 +436,8 @@ const MICROPHONE_DETAIL: Record<MicrophoneStatus, string> = {
     "Denied. It can only be granted back in System Settings, under Privacy & Security, Microphone.",
   restricted: "Restricted by a system policy, which only the system's manager can change.",
   "not-determined":
-    "Not asked yet. The Settings tab's Permissions section can ask once an OpenAI key is connected.",
-  unknown: "Unknown. The Settings tab's Permissions section shows its state.",
+    "Not asked yet. The Permissions section on the Settings tab's Voice page can ask once an OpenAI key is connected.",
+  unknown: "Unknown. The Permissions section on the Settings tab's Voice page shows its state.",
 };
 
 /** The same three answers a credential row gives, in words a fact can carry. */
@@ -539,7 +539,10 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "workspace, and every chat can be seen, opened, and messaged individually. Settings " +
         "holds a front page whose rows open its Voice, Appearance, Keyboard shortcuts, and " +
         "Connections pages — each led back out by its back button or Escape — and keeps the " +
-        "microphone permission, the Feedback section, and Quit on the front page itself; the " +
+        "Feedback section and Quit on the front page itself; the microphone permission lives " +
+        "on the Voice page, under the OpenAI key it waits on, and the front page's Voice row " +
+        "wears a small exclamation mark while voice is still missing that key or the " +
+        "microphone permission; the " +
         "menu bar item's Settings… opens the same tab, and Command-comma switches to it while " +
         "the panel has the keyboard. A dot beside a settings row marks a value changed from " +
         "its default, and a page holding one ends its head with a reset, pressed by hand and " +
