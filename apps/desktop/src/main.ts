@@ -1342,6 +1342,12 @@ function registerIpc(): void {
             { providerId: adapter.provider.id, providerSessionId: result.providerSessionId },
             Date.now(),
           );
+          // An interval pass can commit the new session while the creation's
+          // own follow-up write is still in flight — before the entry above
+          // exists — and a registry already holding the session commits
+          // nothing further to resolve it. So the current picture is claimed
+          // against here, and future commits carry every later arrival.
+          openCreatedWorkspaces(sessionRegistry.list());
         }
         void sessionRegistry.refresh(adapter);
       }
