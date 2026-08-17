@@ -13,6 +13,20 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Whether the signing secrets exist, asked in a step because that is the
+  # only place the `secrets` context is allowed — a job-level `if` cannot
+  # read it, and referencing it there fails the whole workflow at startup.
+  # The expression compares to empty and never prints the secret itself.
+  gate:
+    name: Check for signing secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      signable: ${{ steps.check.outputs.signable }}
+    steps:
+      - id: check
+        run: echo "signable=${{ secrets.MACOS_CERTIFICATE_P12_BASE64 != '' }}" >> "$GITHUB_OUTPUT"
+
   release:
     name: Sign and notarize macOS release
     # Until the Apple secrets are configured, releases are cut by hand with
@@ -20,7 +34,8 @@ jobs:
     # skips this job cleanly instead of failing it. A manual dispatch still
     # runs unconditionally, so asking for a rehearsal without secrets fails
     # loudly at the check below rather than silently doing nothing.
-    if: ${{ github.event_name == 'workflow_dispatch' || secrets.MACOS_CERTIFICATE_P12_BASE64 != '' }}
+    needs: gate
+    if: ${{ github.event_name == 'workflow_dispatch' || needs.gate.outputs.signable == 'true' }}
     runs-on: macos-15
     timeout-minutes: 60
     permissions:
