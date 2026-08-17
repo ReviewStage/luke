@@ -4,6 +4,7 @@ import {
   FEEDBACK_COMPOSER_KIND,
   type FeedbackComposerKind,
   FIXTURE_EPOCH_MS,
+  type HostedUsageAnswer,
   isProviderId,
   type NormalizedSession,
   type ObservedWorkspaceProject,
@@ -2117,7 +2118,8 @@ export function App(): React.JSX.Element {
   // trip answering from memory, and the tab is what decides whether the
   // answer can be seen.
   const [voiceService, setVoiceService] = useState<RealtimeDiagnostics | undefined>();
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the settings snapshot is not read here — its arrival is the signal the held answer went stale, because the key or the account may have moved with it.
+  const [hostedUsage, setHostedUsage] = useState<HostedUsageAnswer | undefined>();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the settings snapshot is not read here — its arrival is the signal the held answers went stale, because the key or the account may have moved with it.
   useEffect(() => {
     if (tab !== PANEL_TAB.SETTINGS || !bootstrap) return;
     let stale = false;
@@ -2125,6 +2127,15 @@ export function App(): React.JSX.Element {
       .requestRealtimeDiagnostics()
       .then((report) => {
         if (!stale) setVoiceService(report);
+      })
+      .catch(() => undefined);
+    // Nothing on a keyed or signed-out run clears the numbers rather than
+    // holding the last hosted day's: an allowance no longer in play must not
+    // keep being shown.
+    void window.sidecar
+      .requestHostedUsage()
+      .then((usage) => {
+        if (!stale) setHostedUsage(usage);
       })
       .catch(() => undefined);
     return () => {
@@ -2350,6 +2361,7 @@ export function App(): React.JSX.Element {
               updates,
               settings,
               ...(voiceService ? { voiceService } : {}),
+              ...(hostedUsage ? { hostedUsage } : {}),
               preferences,
               credentials,
               feedback: feedbackControl,

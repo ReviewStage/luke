@@ -134,6 +134,29 @@ test("the mark and the row agree on what ready means", () => {
   }
 });
 
+test("the usage read words both meters, and a spent voice reads the same from either source", () => {
+  const usage = {
+    voice: { used: 3, limit: 50, remaining: 47, resetsAt: 1_800_003_600_000 },
+    attention: { used: 37, limit: 500, remaining: 463, resetsAt: 1_800_003_600_000 },
+  };
+  const counted = hostedVoiceNote(undefined, usage);
+  assert.match(counted, /47 of 50 calls and 463 of 500 session reviews left today/);
+
+  // The usage read outranks the quota a mint carried: it is fresher and it
+  // counts the reviews the mint's own diagnostics never see.
+  const both = hostedVoiceNote(
+    diagnostics({ quota: { used: 10, limit: 50, remaining: 40, resetsAt: 1_800_003_600_000 } }),
+    usage,
+  );
+  assert.match(both, /47 of 50 calls/);
+
+  const spentByUsage = hostedVoiceNote(undefined, {
+    ...usage,
+    voice: { used: 50, limit: 50, remaining: 0, resetsAt: 1_800_003_600_000 },
+  });
+  assert.match(spentByUsage, /used up — it returns at midnight UTC/);
+});
+
 test("the hosted note says whose allowance voice runs on, and what remains once known", () => {
   // Before any mint has answered, the note promises only the allowance.
   assert.match(

@@ -76,6 +76,7 @@ const bridge: AppBridge = {
   focusPanel: () => ipcRenderer.send(channels.focusPanel),
   requestRealtimeCredential: invoke(channels.requestRealtimeCredential),
   requestRealtimeDiagnostics: invoke(channels.requestRealtimeDiagnostics),
+  requestHostedUsage: invoke(channels.requestHostedUsage),
   notifyReady: () => ipcRenderer.send(channels.rendererReady),
   quit: () => ipcRenderer.send(channels.quit),
   onLifecycle: subscribe(channels.lifecycle),

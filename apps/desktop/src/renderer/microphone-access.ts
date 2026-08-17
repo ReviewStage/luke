@@ -1,4 +1,8 @@
-import { REALTIME_MINT_OUTCOME, type RealtimeDiagnostics } from "@sidecar/core";
+import {
+  type HostedUsageAnswer,
+  REALTIME_MINT_OUTCOME,
+  type RealtimeDiagnostics,
+} from "@sidecar/core";
 import type { MicrophoneStatus } from "../shared/contracts";
 
 /**
@@ -13,15 +17,30 @@ export const VOICE_KEYLESS_NOTE = "Voice is off: sign in, or connect an OpenAI k
 
 /**
  * What the key section says while voice runs on the signed-in account: whose
- * allowance is speaking, how much of today's remains once a mint has said,
- * and what connecting a key of one's own changes. The refusal a spent
- * allowance answers with is a state here, not an error — nothing is broken,
- * and the sentence says when voice returns on its own.
+ * allowance is speaking, how much of today's remains, and what connecting a
+ * key of one's own changes. The numbers prefer the usage read — it answers
+ * before the first call of the day and counts the reviews the mint's own
+ * diagnostics never see — and fall back to the quota the last mint carried.
+ * The refusal a spent allowance answers with is a state here, not an error —
+ * nothing is broken, and the sentence says when voice returns on its own.
  */
-export function hostedVoiceNote(diagnostics: RealtimeDiagnostics | undefined): string {
+export function hostedVoiceNote(
+  diagnostics: RealtimeDiagnostics | undefined,
+  usage?: HostedUsageAnswer,
+): string {
   const lift = "Connecting your own OpenAI key lifts the allowance and runs voice on it instead.";
-  if (diagnostics?.lastOutcome === REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED) {
+  const voiceSpent =
+    diagnostics?.lastOutcome === REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED ||
+    usage?.voice.remaining === 0;
+  if (voiceSpent) {
     return `Today's included voice is used up — it returns at midnight UTC. ${lift}`;
+  }
+  if (usage) {
+    return (
+      `Voice is included with your Luke account — ${usage.voice.remaining} of ` +
+      `${usage.voice.limit} calls and ${usage.attention.remaining} of ` +
+      `${usage.attention.limit} session reviews left today. ${lift}`
+    );
   }
   const quota = diagnostics?.quota;
   if (quota) {

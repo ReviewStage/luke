@@ -1,5 +1,6 @@
 import {
   DEFAULT_PANEL_FORM_FACTOR,
+  type HostedUsageAnswer,
   isPanelFormFactor,
   isProviderId,
   isRealtimeVoice,
@@ -315,6 +316,11 @@ export interface SettingsPanelProps {
    * hosted note without it until then.
    */
   voiceService?: RealtimeDiagnostics;
+  /**
+   * Today's hosted allowance on both meters, read without spending either.
+   * Absent on a keyed or signed-out run, and until the first answer lands.
+   */
+  hostedUsage?: HostedUsageAnswer;
   preferences: PreferenceWrites;
   /** The one credential being entered anywhere, and everything that can be done to it. */
   credentials: CredentialEntryControl;
@@ -1644,6 +1650,7 @@ function VoiceSection({
   panelOpen,
   microphone,
   voiceService,
+  hostedUsage,
 }: {
   settings: AppSettings;
   preferences: PreferenceWrites;
@@ -1651,6 +1658,7 @@ function VoiceSection({
   panelOpen: boolean;
   microphone: MicrophoneControl;
   voiceService?: RealtimeDiagnostics;
+  hostedUsage?: HostedUsageAnswer;
 }): React.JSX.Element {
   const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
   const microphoneRow = microphoneAccessRow({
@@ -1696,7 +1704,7 @@ function VoiceSection({
             sessions.
           </p>
         ) : settings.credentialSources[VOICE_CREDENTIAL_PROVIDER.id] === CREDENTIAL_SOURCE.NONE ? (
-          <p className="settings-note">{hostedVoiceNote(voiceService)}</p>
+          <p className="settings-note">{hostedVoiceNote(voiceService, hostedUsage)}</p>
         ) : null}
       </section>
       {/* Drawn only once there is a voice for the microphone to reach: until
@@ -2578,6 +2586,7 @@ export function SettingsPanel({
   updates,
   settings,
   voiceService,
+  hostedUsage,
   preferences,
   credentials,
   feedback,
@@ -2684,6 +2693,7 @@ export function SettingsPanel({
           panelOpen={panelOpen}
           microphone={microphone}
           {...(voiceService ? { voiceService } : {})}
+          {...(hostedUsage ? { hostedUsage } : {})}
         />
       ) : null}
 

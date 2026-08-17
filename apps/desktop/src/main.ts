@@ -114,6 +114,7 @@ import { GoogleCalendarReader } from "./google-calendar";
 import { GoogleCalendarSignIn } from "./google-calendar-oauth";
 import { HostedAttentionEvaluator } from "./hosted-attention-evaluator";
 import { HostedRealtimeCredentialMinter } from "./hosted-realtime-credentials";
+import { HostedUsageReader } from "./hosted-usage";
 import { HOTKEY_RANK, HotkeyRegistrar } from "./hotkey-registrar";
 import { JulesSessionAdapter } from "./jules-adapter";
 import { LinearIssueTracker } from "./linear-tracker";
@@ -408,6 +409,8 @@ let voiceUnavailableDiagnostics = unavailableRealtimeDiagnostics({
   fixtureMode: !runMode.sendsNetwork,
   apiKeyConfigured: false,
 });
+/** Reads the hosted allowance; exists exactly while the hosted minter does. */
+let hostedUsageReader: HostedUsageReader | undefined;
 // Quiets Music and Spotify while a spoken exchange is live. It lives here
 // rather than in the renderer because letting the players back up must survive
 // anything the renderer does — and only this process may run a helper.
@@ -966,6 +969,7 @@ async function applyVoiceCredential(): Promise<void> {
     fixtureMode: !runMode.sendsNetwork,
     apiKeyConfigured: apiKey !== undefined,
   });
+  hostedUsageReader = hosted ? new HostedUsageReader(hostedServiceSeams()) : undefined;
   // Warm only when the next press would actually mint through the service.
   if (hosted) warmHostedVoice();
   reportVoiceAvailability(apiKey !== undefined);
@@ -2296,6 +2300,13 @@ function registerIpc(): void {
   ipcMain.handle(channels.requestRealtimeDiagnostics, (event) => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
     return realtimeCredentials?.diagnostics() ?? voiceUnavailableDiagnostics;
+  });
+
+  ipcMain.handle(channels.requestHostedUsage, async (event) => {
+    if (!trustedSender(event)) throw new Error("Untrusted renderer");
+    // Nothing rather than an error on a keyed or signed-out run: no allowance
+    // is in play, and the page words itself without numbers.
+    return hostedUsageReader?.read();
   });
 
   ipcMain.on(channels.quit, (event) => {

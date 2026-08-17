@@ -2,6 +2,7 @@ import type {
   AttentionRequestResult,
   AttentionSpeech,
   FixtureSnapshot,
+  HostedUsageAnswer,
   IssueToolAction,
   NormalizedSession,
   ObservedWorkspaceProject,
@@ -814,6 +815,12 @@ export interface AppBridge {
    * It carries no credential material, which is what lets it cross at all.
    */
   requestRealtimeDiagnostics(): Promise<RealtimeDiagnostics>;
+  /**
+   * Where today's hosted allowance stands on both meters, read from the
+   * service without spending either. Nothing on a keyed or signed-out run,
+   * where no allowance is in play.
+   */
+  requestHostedUsage(): Promise<HostedUsageAnswer | undefined>;
   notifyReady(): void;
   quit(): void;
   onLifecycle(callback: (eventName: string) => void): () => void;
@@ -940,6 +947,7 @@ export const channels = {
   focusPanel: "app:focus-panel",
   requestRealtimeCredential: "app:request-realtime-credential",
   requestRealtimeDiagnostics: "app:request-realtime-diagnostics",
+  requestHostedUsage: "app:request-hosted-usage",
   attentionSpeech: "app:attention-speech",
   voiceHotkeyPress: "app:voice-hotkey-press",
   voiceHotkeyRelease: "app:voice-hotkey-release",

@@ -19,6 +19,7 @@ export const HOSTED_SERVICE_PATH = {
   VOICE_MINT: "/api/voice/mint",
   ATTENTION_REVIEW: "/api/attention/review",
   ACCOUNT_DELETE: "/api/account/delete",
+  USAGE: "/api/usage",
 } as const;
 
 /** Every refusal a hosted endpoint answers with, by its reason. */
@@ -132,6 +133,23 @@ export function hostedReviewAnswerFromWire(
   if (!decision) return undefined;
   const quota = hostedQuotaFromWire(value.quota);
   return { decision, ...(quota ? { quota } : {}) };
+}
+
+/**
+ * Where today's allowance stands on both meters, read without spending
+ * either: what the usage endpoint answers, and what the panel shows.
+ */
+export interface HostedUsageAnswer {
+  voice: HostedQuota;
+  attention: HostedQuota;
+}
+
+/** Validates a usage answer; a malformed one reads as no answer at all. */
+export function hostedUsageAnswerFromWire(value: unknown): HostedUsageAnswer | undefined {
+  if (!isRecord(value)) return undefined;
+  const voice = hostedQuotaFromWire(value.voice);
+  const attention = hostedQuotaFromWire(value.attention);
+  return voice && attention ? { voice, attention } : undefined;
 }
 
 /** Reads the error reason out of a refused hosted answer, or nothing. */
