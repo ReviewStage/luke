@@ -53,6 +53,10 @@ export {
   type SessionNoticeStatus,
   SessionNoticeTracker,
 } from "./session-notices";
+export {
+  CREATED_WORKSPACE_OPEN_WINDOW_MS,
+  CreatedWorkspaceOpenTracker,
+} from "./workspace-opens";
 
 // Providers — adapters and the acts they advertise.
 export {

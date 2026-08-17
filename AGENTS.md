@@ -92,7 +92,16 @@ Trust constraints:
   operating system, and nothing reaches the provider; an open asked of Luke
   still runs only in a developer-opened turn, and a session that reported no
   address is offered nowhere to open — its popup's press opens Luke's own
-  panel instead, which touches no provider at all. Reading a local session's
+  panel instead, which touches no provider at all. A workspace Luke just
+  created opens itself the same way: the creation ask, already a
+  developer-opened turn, is also the ask to be taken there, so the session id
+  the provider's creation response named — the one thing read out of that
+  response that outlives the adapter, an identifier and never an address — is
+  held briefly, and the first observation pass to report that session with an
+  address hands the address to the operating system exactly once, as a row
+  press would. Nothing a model decided can start that wait, and a created
+  session that reports no address inside its window is left unopened like any
+  other row without one. Reading a local session's
   transcript in conversation is the same shape of act: asked of Luke in a
   turn the developer opened, validated against the observed roster in the
   renderer and again in the main process, read from the provider's own file

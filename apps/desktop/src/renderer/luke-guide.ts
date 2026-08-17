@@ -576,7 +576,11 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "follows the choice on the Conductor row under Cloud Agent API keys, or Conductor's own " +
         "defaults while none is made. A model named in a creation ask rides that creation alone " +
         "and is saved as the default only while none is chosen; the settings themselves change " +
-        "only when the developer asks for that, and Luke never asks or suggests a model.",
+        "only when the developer asks for that, and Luke never asks or suggests a model. A " +
+        "workspace that lands opens on the developer's screen by itself: the moment observation " +
+        "reports the new session with an address, that address is handed to the operating " +
+        "system, the same as pressing the session's row. One whose provider reports no address " +
+        "stays on its row, unopened.",
     },
     {
       label: "Adding agents to a workspace",

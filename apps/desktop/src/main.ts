@@ -8,6 +8,7 @@ import {
   attentionRequestText,
   attentionSpeechFromReviews,
   CompositeSessionProviderAdapter,
+  CreatedWorkspaceOpenTracker,
   DEFAULT_PANEL_FORM_FACTOR,
   fixtureSnapshot,
   InMemorySessionRegistry,
@@ -264,6 +265,10 @@ let issueRefreshQueued = false;
 // Notices come from status edges the registry observed, never from anything a
 // model decided, so they work — and matter most — with no evaluator configured.
 const sessionNoticeTracker = new SessionNoticeTracker();
+// The workspaces Luke just created and has yet to open on screen. Entries come
+// only from the validated creation act — nothing a model decided can add one —
+// and each resolves against what observation itself reports.
+const createdWorkspaceOpens = new CreatedWorkspaceOpenTracker();
 /**
  * The standing asks the developer has made about sessions, in their words.
  * They outlive the reviewer — a key re-entered must not forget what was asked
@@ -1327,6 +1332,17 @@ function registerIpc(): void {
       // undelivered, and the adapter answers a rejection that never reached
       // the network from its cache anyway.
       if (result.status !== PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED) {
+        // A workspace that landed is also one the developer just asked to be
+        // taken to, so the session the creation response named — an id the
+        // adapter reported, never an address — waits here for observation to
+        // report it, and is opened then like a pressed row. Noted before the
+        // refresh, so the very pass that first sees the session resolves it.
+        if (result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED && result.providerSessionId) {
+          createdWorkspaceOpens.expect(
+            { providerId: adapter.provider.id, providerSessionId: result.providerSessionId },
+            Date.now(),
+          );
+        }
         void sessionRegistry.refresh(adapter);
       }
       // The first workspace that actually lands chooses the default provider,
@@ -1341,6 +1357,10 @@ function registerIpc(): void {
           providerProjectId,
           namedSelection as WorkspaceAgentSelection | undefined,
         );
+        // The named session was consumed above; the renderer's answer stays
+        // what became of the ask, so nothing rides this boundary that the
+        // roster will not report on its own.
+        return { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
       }
       return result;
     },
@@ -1732,6 +1752,27 @@ function announceSessionNotices(sessions: readonly NormalizedSession[]): void {
 }
 
 /**
+ * Opens each workspace Luke just created, the moment observation reports it
+ * with an address. The entry behind it is the direct product of the
+ * developer's own creation ask — the same turn that made the workspace asked
+ * to be taken to it — and the address handed to the system is the one the
+ * registry holds for that session, read the way a row press reads it: an
+ * address in a scheme outside `SESSION_LINK_SCHEME` never reached the
+ * registry at all. A created session that never reports an address inside
+ * its window is left unopened, like any other row without one.
+ */
+function openCreatedWorkspaces(sessions: readonly NormalizedSession[]): void {
+  for (const created of createdWorkspaceOpens.claim(sessions, Date.now())) {
+    const link = created.detail.link;
+    if (!link) continue;
+    shell.openExternal(link).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`Created workspace could not be opened: ${message}\n`);
+    });
+  }
+}
+
+/**
  * What the last roster broadcast said, so a pass that changed nothing the
  * renderer can see costs no send. The registry's revision covers every field
  * of every session; the id line covers the one thing revision cannot — a
@@ -1767,6 +1808,10 @@ function startSessionObservation(): void {
     // a status edge can exist to announce. The notices read the unfiltered
     // snapshot: an edge is an edge wherever the session ends up on the roster.
     announceSessionNotices(snapshot.sessions);
+    // A commit is also the earliest a created workspace can have arrived with
+    // the address to open it by — whether on the refresh the creation itself
+    // fired or on an ordinary pass catching up.
+    openCreatedWorkspaces(snapshot.sessions);
     // A commit is the earliest a write-triggered refresh can have changed the
     // offer, so the announcement rides it rather than waiting for the timer.
     broadcastWorkspaceProjects();

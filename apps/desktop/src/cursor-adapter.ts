@@ -136,6 +136,7 @@ const CURSOR_QUERY = {
 } as const;
 
 const CURSOR_FIELD = {
+  AGENT: "agent",
   BRANCH: "branch",
   BRANCHES: "branches",
   CREATED_AT: "createdAt",
@@ -489,6 +490,15 @@ export class CursorSessionAdapter
         ...(name ? { [CURSOR_CREATE_FIELD.NAME]: name } : {}),
       },
     };
+  }
+
+  protected override createdWorkspaceSessionId(
+    creationBody: Record<string, unknown>,
+  ): string | undefined {
+    // The launch response nests the agent it made; its id is the id the
+    // agents listing reports, and so the session the next pass will show.
+    const agent = creationBody[CURSOR_FIELD.AGENT];
+    return isRecord(agent) ? textFromRecord(agent, CURSOR_FIELD.ID) : undefined;
   }
 
   protected override messageRoute(

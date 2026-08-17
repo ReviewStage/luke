@@ -293,9 +293,21 @@ export interface ProviderWorkspaceRequest {
 /**
  * What became of a creation ask — the same three answers a message gets, for
  * the same reasons: a rejection carries a reason the user can act on, and
- * unsupported means the provider documents no way to create one here.
+ * unsupported means the provider documents no way to create one here. An
+ * acceptance may also carry the id of the session the creation response
+ * named — an identifier only, never an address — so the surface can open the
+ * new workspace once an observation pass reports it under that id. A provider
+ * whose response names no session simply omits it, and the workspace stands
+ * unopened rather than guessed at.
  */
-export type ProviderWorkspaceResult = ProviderActResult;
+export type ProviderWorkspaceResult =
+  | {
+      status: typeof PROVIDER_ACT_RESULT_STATUS.ACCEPTED;
+      /** The created session's id, exactly as the provider's response named it. */
+      providerSessionId?: string;
+    }
+  | { status: typeof PROVIDER_ACT_RESULT_STATUS.REJECTED; reason: string }
+  | { status: typeof PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
 
 /**
  * Optional extension for adapters whose provider documents an endpoint that

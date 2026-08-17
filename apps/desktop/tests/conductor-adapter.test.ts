@@ -1776,7 +1776,9 @@ test("creates a workspace through Conductor's documented creation endpoint", asy
     name: "fix the notch panel",
   });
 
-  assert.deepEqual(named, { status: "accepted" });
+  // The acceptance names the session the response did, so the surface can
+  // open the workspace once observation reports it — an id, never an address.
+  assert.deepEqual(named, { status: "accepted", providerSessionId: "session-new" });
   const write = api.requests.at(-1);
   assert.equal(write?.method, "POST");
   assert.equal(write?.pathname, "/v0/workspaces");
@@ -1789,8 +1791,26 @@ test("creates a workspace through Conductor's documented creation endpoint", asy
   // Left unnamed, the ask carries no name at all: Conductor generates one, and
   // an empty field is not the same request as an absent one.
   const unnamed = await adapter.createWorkspace({ providerProjectId: LUKE_PROJECT.id });
-  assert.deepEqual(unnamed, { status: "accepted" });
+  assert.deepEqual(unnamed, { status: "accepted", providerSessionId: "session-new" });
   assert.deepEqual(JSON.parse(api.requests.at(-1)?.body ?? ""), { projectId: LUKE_PROJECT.id });
+});
+
+test("an acceptance whose response names no session stays a plain acceptance", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [],
+    sessions: [],
+    createWithoutSessionId: true,
+  });
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+
+  const result = await adapter.createWorkspace({ providerProjectId: LUKE_PROJECT.id });
+
+  // Nothing named means nothing to wait on: the workspace stands unopened
+  // rather than correlated by a guess.
+  assert.deepEqual(result, { status: "accepted" });
 });
 
 test("a chosen agent and model ride the creation, and an unlisted pairing does not", async () => {
@@ -1809,7 +1829,7 @@ test("a chosen agent and model ride the creation, and an unlisted pairing does n
     providerProjectId: LUKE_PROJECT.id,
     agentSelection: { agent: "claude", model: "sonnet", effort: "max" },
   });
-  assert.deepEqual(chosen, { status: "accepted" });
+  assert.deepEqual(chosen, { status: "accepted", providerSessionId: "session-new" });
   assert.deepEqual(JSON.parse(api.requests.at(-1)?.body ?? ""), {
     projectId: LUKE_PROJECT.id,
     agent: "claude",
@@ -1822,7 +1842,7 @@ test("a chosen agent and model ride the creation, and an unlisted pairing does n
     providerProjectId: LUKE_PROJECT.id,
     agentSelection: { agent: "claude", model: "sonnet" },
   });
-  assert.deepEqual(effortless, { status: "accepted" });
+  assert.deepEqual(effortless, { status: "accepted", providerSessionId: "session-new" });
   assert.deepEqual(JSON.parse(api.requests.at(-1)?.body ?? ""), {
     projectId: LUKE_PROJECT.id,
     agent: "claude",
@@ -1840,7 +1860,7 @@ test("a chosen agent and model ride the creation, and an unlisted pairing does n
       providerProjectId: LUKE_PROJECT.id,
       agentSelection,
     });
-    assert.deepEqual(unlisted, { status: "accepted" });
+    assert.deepEqual(unlisted, { status: "accepted", providerSessionId: "session-new" });
     assert.deepEqual(JSON.parse(api.requests.at(-1)?.body ?? ""), {
       projectId: LUKE_PROJECT.id,
     });
@@ -1895,7 +1915,7 @@ test("hands an opening task to the first session the creation response names", a
     task: "Add a smoke test for the panel motion",
   });
 
-  assert.deepEqual(result, { status: "accepted" });
+  assert.deepEqual(result, { status: "accepted", providerSessionId: "session-new" });
   // Two documented writes, in order: the creation, then the message to
   // exactly the session Conductor said it made.
   const writes = api.requests.filter((request) => request.method === "POST");

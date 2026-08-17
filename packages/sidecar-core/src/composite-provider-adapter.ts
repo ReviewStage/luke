@@ -126,10 +126,10 @@ export class CompositeSessionProviderAdapter
    * never seen the subject, so the question moves on; any firm answer is the
    * subject's own and ends the search.
    */
-  async #dispatchAct<Capable extends SessionProviderAdapter>(
+  async #dispatchAct<Capable extends SessionProviderAdapter, Result extends ProviderActResult>(
     isCapable: (adapter: SessionProviderAdapter) => adapter is Capable,
-    act: (adapter: Capable) => Promise<ProviderActResult>,
-  ): Promise<ProviderActResult> {
+    act: (adapter: Capable) => Promise<Result>,
+  ): Promise<Result | { status: typeof PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED }> {
     for (const adapter of this.#adapters) {
       if (!isCapable(adapter)) continue;
       const result = await act(adapter);
