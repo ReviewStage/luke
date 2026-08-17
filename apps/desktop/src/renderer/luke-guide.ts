@@ -67,6 +67,7 @@ export const APP_SETTING_ID = {
   VOICE_SPEED: "voice_speed",
   VOICE_CAPTIONS: "voice_captions",
   DUCK_OTHER_MEDIA: "duck_other_media",
+  QUIET_DURING_MEETINGS: "quiet_during_meetings",
   SHOW_IN_MENU_BAR: "show_in_menu_bar",
   SHOW_IN_DOCK: "show_in_dock",
   SHOW_ON_ALL_DISPLAYS: "show_on_all_displays",
@@ -211,6 +212,17 @@ const SETTING_GUIDE: Record<
     defaultValue: appToggleText(APP_SETTING_DEFAULTS.duckOtherMedia),
     adjustable: true,
     manual: VOICE_PAGE,
+  }),
+  quietDuringMeetings: (settings) => ({
+    id: APP_SETTING_ID.QUIET_DURING_MEETINGS,
+    label: "Quiet during meetings",
+    description:
+      "Whether spoken announcements wait while a connected calendar shows a meeting on, and are read out together once it ends. It changes nothing until a Google Calendar account is connected.",
+    kind: APP_SETTING_KIND.TOGGLE,
+    value: appToggleText(settings.quietDuringMeetings),
+    defaultValue: appToggleText(APP_SETTING_DEFAULTS.quietDuringMeetings),
+    adjustable: true,
+    manual: `${CONNECTIONS_PAGE} — drawn once a calendar account is connected`,
   }),
   showInMenuBar: (settings) => ({
     id: APP_SETTING_ID.SHOW_IN_MENU_BAR,
@@ -372,6 +384,15 @@ const SETTING_GUIDE: Record<
      the voice facts built from `LukeGuideInput.voiceAvailable`, so a spoken
      ask about it is already answered without a settings entry to adjust. */
   voiceAvailable: () => undefined,
+  /* Not a setting either: whether this build carries the OAuth client the
+     Google Calendar sign-in runs on. The integrations fact says whether the
+     calendar is connected, which is the question anyone actually asks. */
+  calendarSignInAvailable: () => undefined,
+  /* Connections rather than settings: accounts are signed into and
+     disconnected on their own rows, and which calendars count is chosen
+     there too. The integrations fact carries the counts; nothing here is a
+     value a spoken change could set. */
+  calendarAccounts: () => undefined,
 };
 
 /** What the guide needs from the app to describe the current state of it. */
@@ -468,12 +489,27 @@ function integrationsFact(settings: AppSettings): AppGuideFact {
     (provider) =>
       `${provider.displayName} (${connectionWord(settings.credentialSources[provider.id])})`,
   );
+  // The calendar is an integration too, connected by sign-in rather than by a
+  // key — and only a build carrying the sign-in offers it at all, so a build
+  // without one says nothing rather than describing a row that is not drawn.
+  const accounts = settings.calendarAccounts.length;
+  const calendar = !settings.calendarSignInAvailable
+    ? ""
+    : accounts === 0
+      ? " Google Calendar (not connected) connects by signing in with Google from its row. " +
+        "Connecting it lets Luke read only when meetings start and end — never their titles " +
+        "or who attends — so announcements can wait out a meeting."
+      : ` Google Calendar (${accounts === 1 ? "1 account" : `${accounts} accounts`} connected) ` +
+        "reads only when meetings start and end — never their titles or who attends. Which " +
+        "calendars count is chosen with the checkboxes under each account, and more accounts " +
+        "can be added from the same row.";
   return {
     label: "Integrations",
     detail:
       `${roster.join(", ")}. Connecting Linear lets Luke read the developer's issues and, only ` +
       `when asked in a turn the developer opened, move or comment on one. Its key is typed by ` +
-      `hand into ${CONNECTIONS_PAGE}, under Integrations — never spoken, and never repeated back.`,
+      `hand into ${CONNECTIONS_PAGE}, under Integrations — never spoken, and never repeated ` +
+      `back.${calendar}`,
   };
 }
 
@@ -682,7 +718,16 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
               "he is talking about: pressing it opens the session where its provider keeps it, " +
               "or opens the panel for a local session with no page of its own. " +
               "Always on while voice is available; the panel and the capsule count show the " +
-              "same states either way.",
+              "same states either way." +
+              // Only a build that offers the calendar may describe the quiet:
+              // a hold Luke claims without a calendar row to connect is a
+              // capability he does not have.
+              (input.settings.calendarSignInAvailable
+                ? " With a Google Calendar account connected and Quiet during meetings on, " +
+                  "announcements decided during a meeting wait and are read out together once " +
+                  "it ends — and Luke's face sleeps beside the housing for as long as the " +
+                  "quiet holds, which is how the hold is seen."
+                : ""),
           },
           {
             label: "Muted output",
@@ -808,6 +853,7 @@ export async function applySpokenSetting(
     | "setVoiceSpeed"
     | "setVoiceCaptions"
     | "setDuckOtherMedia"
+    | "setQuietDuringMeetings"
     | "setShowInMenuBar"
     | "setShowInDock"
     | "setShowOnAllDisplays"
@@ -843,20 +889,22 @@ export async function applySpokenSetting(
       ? await bridge.setVoiceCaptions(enabled)
       : action.setting.id === APP_SETTING_ID.DUCK_OTHER_MEDIA
         ? await bridge.setDuckOtherMedia(enabled)
-        : action.setting.id === APP_SETTING_ID.SHOW_IN_MENU_BAR
-          ? await bridge.setShowInMenuBar(enabled)
-          : action.setting.id === APP_SETTING_ID.SHOW_IN_DOCK
-            ? await bridge.setShowInDock(enabled)
-            : action.setting.id === APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS
-              ? await bridge.setShowOnAllDisplays(enabled)
-              : action.setting.id === APP_SETTING_ID.VOICE_SPEED && speed !== undefined
-                ? await bridge.setVoiceSpeed(speed)
-                : action.setting.id === APP_SETTING_ID.VOICE && isRealtimeVoice(action.value)
-                  ? await bridge.setVoice(action.value)
-                  : action.setting.id === APP_SETTING_ID.FORM_FACTOR &&
-                      isPanelFormFactor(action.value)
-                    ? await bridge.setFormFactor(action.value)
-                    : undefined;
+        : action.setting.id === APP_SETTING_ID.QUIET_DURING_MEETINGS
+          ? await bridge.setQuietDuringMeetings(enabled)
+          : action.setting.id === APP_SETTING_ID.SHOW_IN_MENU_BAR
+            ? await bridge.setShowInMenuBar(enabled)
+            : action.setting.id === APP_SETTING_ID.SHOW_IN_DOCK
+              ? await bridge.setShowInDock(enabled)
+              : action.setting.id === APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS
+                ? await bridge.setShowOnAllDisplays(enabled)
+                : action.setting.id === APP_SETTING_ID.VOICE_SPEED && speed !== undefined
+                  ? await bridge.setVoiceSpeed(speed)
+                  : action.setting.id === APP_SETTING_ID.VOICE && isRealtimeVoice(action.value)
+                    ? await bridge.setVoice(action.value)
+                    : action.setting.id === APP_SETTING_ID.FORM_FACTOR &&
+                        isPanelFormFactor(action.value)
+                      ? await bridge.setFormFactor(action.value)
+                      : undefined;
   if (!result) {
     // An adjustable entry with no carrier is a guide ahead of its wiring;
     // refuse honestly rather than claim a change that never happened.

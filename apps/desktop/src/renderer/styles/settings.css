@@ -884,3 +884,92 @@
   color: #ff8c8c;
   font-size: 10px;
 }
+
+/* One connected calendar account: its address on one compact line, its
+   calendars as checkbox lines beneath it. The type sits a step below the
+   credential rows — these are that row's details, not more rows — which is
+   also what reads them as the account's own without an indent. */
+.calendar-account {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.calendar-account-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 22px;
+}
+
+.calendar-account-name {
+  font-size: 11px;
+  font-weight: 620;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Checkbox first, name after: the choice is what the line is for. The box is
+   drawn in the calendar's own colour where Google listed one, and in the
+   working accent — the same blue the dropdowns focus in — where it did not. */
+.calendar-choice {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 1px 0;
+  cursor: pointer;
+}
+
+/* Drawn by hand rather than by the user agent, because the unchecked state
+   has to say whose calendar it is too: the box's edge keeps the calendar's
+   colour empty, and fills with it when checked. */
+.calendar-choice input[type="checkbox"] {
+  appearance: none;
+  width: 11px;
+  height: 11px;
+  margin: 0;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 3px;
+  border: 1.5px solid var(--calendar-color, var(--state-working));
+  background: transparent;
+  cursor: pointer;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.calendar-choice input[type="checkbox"]:checked {
+  background: var(--calendar-color, var(--state-working));
+}
+
+/* The check, cut from the page's own dark so it reads on any calendar colour. */
+.calendar-choice input[type="checkbox"]:checked::after {
+  content: "";
+  width: 2.5px;
+  height: 5.5px;
+  margin-top: -1.5px;
+  border: solid #08090b;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+
+.calendar-choice input[type="checkbox"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--calendar-color, var(--state-working)) 35%, transparent);
+}
+
+.calendar-choice-name {
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-choice:hover .calendar-choice-name {
+  color: var(--text-primary);
+}

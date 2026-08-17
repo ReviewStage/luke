@@ -32,6 +32,7 @@ import type {
   AppBootstrap,
   AppSettings,
   DisplayDiagnostic,
+  ObservedAccountCalendars,
   OutputAudioState,
   SessionOpenResult,
   SettingsResetScope,
@@ -48,6 +49,7 @@ import type { FeedbackImage, FeedbackKind } from "../shared/feedback";
 import { FEEDBACK_KIND, FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from "../shared/feedback";
 import { voiceHotkeyLabel, voiceHotkeyToShow } from "../shared/voice-hotkey";
 import { ASK_LUKE_INPUT_ID, focusAskField } from "./ask-luke";
+import { type CalendarConnectEntry, CalendarConnectSlot } from "./calendar-connect-slot";
 import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";
 import { isSubmittable, removalEndsEntry } from "./credential-entry";
 import {
@@ -268,6 +270,7 @@ export function App(): React.JSX.Element {
   const [panelElement, panelHeight] = useShapeHeight();
   const [slotElement, slotHeight] = useShapeHeight();
   const [signInSlotElement, signInSlotHeight] = useShapeHeight();
+  const [connectElement, connectHeight] = useShapeHeight();
   const [feedbackElement, feedbackHeight] = useShapeHeight();
   const [captionTextElement, captionTextHeight] = useShapeHeight();
   const captionElement = useRef<HTMLSpanElement>(null);
@@ -296,6 +299,10 @@ export function App(): React.JSX.Element {
    * preference says, and a hint under them asks for volume.
    */
   const [outputAudio, setOutputAudio] = useState<OutputAudioState>();
+  /** Each connected account's calendars, for the settings rows' checkboxes. */
+  const [calendars, setCalendars] = useState<readonly ObservedAccountCalendars[]>([]);
+  /** Whether the calendar's quiet is holding announcements — the face sleeps on it. */
+  const [meetingQuiet, setMeetingQuiet] = useState(false);
   /**
    * Which stretch of unbroken silence is on screen, advanced each time one
    * begins. A "Got it" is remembered against the stretch it answered, so it
@@ -318,6 +325,14 @@ export function App(): React.JSX.Element {
    */
   const credentialPage = useRef<SettingsSubview>(SETTINGS_VIEW.CONNECTIONS);
   const feedbackHeld = useRef(false);
+  /** Whether a calendar sign-in holds the slot, mirrored like the other two. */
+  const calendarConnectHeld = useRef(false);
+  /**
+   * Which entry the slot shape is drawn around — a key being pasted, or a
+   * sign-in being waited out. One shape, two occupants, never both: beginning
+   * either is refused while the other is held.
+   */
+  const slotOccupant = useRef<"key" | "calendar">("key");
   const feedbackNoticeTimer = useRef<number | undefined>(undefined);
   /** How many sends landed before the one just delivered, from its reply. */
   const feedbackSequence = useRef(0);
@@ -504,7 +519,8 @@ export function App(): React.JSX.Element {
     // panel open for one that is not drawn would leave the pointer unable to
     // close a panel showing nothing but sessions.
     entryDrawn: () => credentialHeld.current && tabNow() === PANEL_TAB.SETTINGS,
-    composerHeld: () => credentialHeld.current || feedbackHeld.current,
+    composerHeld: () =>
+      credentialHeld.current || feedbackHeld.current || calendarConnectHeld.current,
     onNotPanel: () => setOptionsOpen(false),
     onCapsuleList: () => {
       // A search is a question about the list as it was, so it closes with
@@ -627,6 +643,70 @@ export function App(): React.JSX.Element {
     [applySettingsReply],
   );
 
+  const changeQuietDuringMeetings = useCallback(
+    async (enabled: boolean) =>
+      applySettingsReply(await window.sidecar.setQuietDuringMeetings(enabled)),
+    [applySettingsReply],
+  );
+
+  const removeCalendarAccount = useCallback(
+    async (accountId: string) =>
+      applySettingsReply(await window.sidecar.removeCalendarAccount(accountId)),
+    [applySettingsReply],
+  );
+
+  const toggleCalendarSelected = useCallback(
+    async (accountId: string, calendarId: string, selected: boolean) =>
+      applySettingsReply(await window.sidecar.setCalendarSelected(accountId, calendarId, selected)),
+    [applySettingsReply],
+  );
+
+  /**
+   * The calendar sign-in is asking for one thing too, so the panel gets out
+   * of the way of it the same way it does for a key: the shape goes down to a
+   * slot that says what it is waiting for. The flow itself runs in the
+   * browser and the main process; when the grant lands, the panel comes back
+   * around the newly connected account.
+   */
+  const calendarConnect = usePanelEntry<CalendarConnectEntry>({
+    aside: PANEL_PRESENTATION.SLOT,
+    // Giving up mid-wait leaves — the consent page is where the user is — but
+    // a sign-in that failed is read in the slot, so its Close restores the
+    // panel to try again from the row.
+    restoresPanel: (held) => held.rejection !== undefined,
+    isSendable: (entry): entry is CalendarConnectEntry => entry !== undefined && !entry.busy,
+    send: async () => {
+      const result = await window.sidecar.connectGoogleCalendar();
+      applySettings(result.settings);
+      return result.reason ? { rejection: result.reason } : {};
+    },
+    pointerInside: pointerIsInside,
+    presentation: presentationOf,
+    onReleasedWhileAway: onHitRegionLeave,
+    cancelHover,
+    applyPresentation,
+    restorePanel,
+    leave,
+    settle,
+    heldRef: calendarConnectHeld,
+  });
+
+  /** One press: stand down to the waiting slot and open the consent page. */
+  const beginCalendarSignIn = useCallback(() => {
+    // One slot, one occupant: a key mid-paste is not disturbed by a sign-in.
+    if (credentialHeld.current || calendarConnectHeld.current) return;
+    slotOccupant.current = "calendar";
+    calendarConnect.begin({ busy: false });
+    calendarConnect.commit();
+  }, [calendarConnect.begin, calendarConnect.commit]);
+
+  const cancelCalendarSignIn = useCallback(() => {
+    // Mid-wait, the loopback must stop listening too; after a failure there
+    // is nothing left to stop.
+    if (calendarConnect.latest()?.busy) window.sidecar.cancelGoogleCalendarSignIn();
+    calendarConnect.cancel();
+  }, [calendarConnect.cancel, calendarConnect.latest]);
+
   /**
    * Asking to write a key is asking for one thing, so the panel gets out of the
    * way of it: the shape goes down to the slot, which is the field and nothing
@@ -659,6 +739,7 @@ export function App(): React.JSX.Element {
       // Where the entry's row is drawn, remembered before the trip to the
       // slot so coming back lands on the page the entry began on.
       credentialPage.current = credentialSettingsPage(providerId);
+      slotOccupant.current = "key";
       credentialsEntry.begin({ providerId, draft: "", busy: false, away: false });
     },
     [credentialsEntry.begin],
@@ -1577,6 +1658,16 @@ export function App(): React.JSX.Element {
     (onChange) => window.sidecar.onOutputAudioChanged(onChange),
     setOutputAudio,
   );
+  // Each connected account's calendars, for the checkboxes on its rows.
+  const acceptCalendarsBootstrap = useBootstrapRacedChannel(
+    (onChange) => window.sidecar.onCalendarsChanged(onChange),
+    setCalendars,
+  );
+  // Whether the quiet is holding, for the face alone.
+  const acceptMeetingQuietBootstrap = useBootstrapRacedChannel(
+    (onChange) => window.sidecar.onMeetingQuietChanged(onChange),
+    setMeetingQuiet,
+  );
 
   /**
    * The two writes a row can ask for, handed to the main process by session
@@ -1651,6 +1742,8 @@ export function App(): React.JSX.Element {
       // not repeat a list it believes it already announced.
       acceptProjectsBootstrap(value.workspaceProjects);
       acceptIssuesBootstrap(value.issues);
+      acceptCalendarsBootstrap(value.calendars);
+      acceptMeetingQuietBootstrap(value.meetingQuiet);
       acceptSettingsBootstrap(value.settings);
       acceptAccountBootstrap(value.account);
       setDisplay(value.display);
@@ -1716,7 +1809,9 @@ export function App(): React.JSX.Element {
     };
   }, [
     acceptAccountBootstrap,
+    acceptCalendarsBootstrap,
     acceptIssuesBootstrap,
+    acceptMeetingQuietBootstrap,
     acceptOutputAudioBootstrap,
     acceptProjectsBootstrap,
     acceptSettingsBootstrap,
@@ -1854,10 +1949,11 @@ export function App(): React.JSX.Element {
       if (stopSpeaking()) return;
       // Escape out of the slot is the entry's own way out, wherever the caret
       // happens to be: the slot is the only thing on screen, so there is nothing
-      // else it could mean. The sign-in wait borrows the same shape, so the
-      // same key withdraws whichever of the two is holding it.
+      // else it could mean. The sign-in wait and the calendar connect borrow
+      // the same shape, so the same key withdraws whichever is holding it.
       if (presentation === PANEL_PRESENTATION.SLOT) {
         if (signInWaitNow() !== undefined) cancelSignIn();
+        else if (calendarConnect.latest()) cancelCalendarSignIn();
         else credentialsEntry.cancel();
         return;
       }
@@ -1886,6 +1982,8 @@ export function App(): React.JSX.Element {
     return () => window.removeEventListener("keydown", handleKey);
   }, [
     cancelSignIn,
+    calendarConnect.latest,
+    cancelCalendarSignIn,
     credentialsEntry.cancel,
     changeMode,
     changeTab,
@@ -2040,6 +2138,7 @@ export function App(): React.JSX.Element {
   const preferences: PreferenceWrites = {
     onVoiceCaptionsChange: changeVoiceCaptions,
     onDuckOtherMediaChange: changeDuckOtherMedia,
+    onQuietDuringMeetingsChange: changeQuietDuringMeetings,
     onVoiceChange: changeVoice,
     onVoiceSpeedChange: changeVoiceSpeed,
     onShowInMenuBarChange: changeShowInMenuBar,
@@ -2089,9 +2188,15 @@ export function App(): React.JSX.Element {
       data-capture={String(bootstrap.captureMode)}
       style={{
         ...notchStyle(display),
+        // One slot shape, three possible occupants: the surface follows the
+        // height of whichever is actually drawn.
         ...shapeHeightStyle(
           panelHeight,
-          signInWait !== undefined ? signInSlotHeight : slotHeight,
+          signInWait !== undefined
+            ? signInSlotHeight
+            : slotOccupant.current === "calendar"
+              ? connectHeight
+              : slotHeight,
           feedbackHeight,
         ),
         ...captionSizeStyle(captionTextHeight, volumeHint, captionPadding),
@@ -2143,6 +2248,14 @@ export function App(): React.JSX.Element {
               feedback: feedbackControl,
               panelOpen,
               workspaceProviders: workspaceProviderOptions,
+              calendar: {
+                choices: calendars,
+                held: credentialsEntry.entry !== undefined,
+                connecting: calendarConnect.entry !== undefined,
+                onSignIn: beginCalendarSignIn,
+                onRemoveAccount: removeCalendarAccount,
+                onToggleCalendar: toggleCalendarSelected,
+              },
               onQuit: () => window.sidecar.quit(),
               shortcuts,
             }}
@@ -2152,15 +2265,33 @@ export function App(): React.JSX.Element {
 
       {/* The panel stood down to its field. It shares the expanded window, so
           standing down to it costs no more than the peek does. */}
-      {/* The two shapes that borrow the slot never draw together: the gate and
-          the settings tab are never on screen at once, so whichever one is
-          holding the slot suppresses the other outright — a pill held through
-          an old exit must not resurface under the other's wait. */}
+      {/* The three shapes that borrow the slot never draw together: the
+          gate's sign-in wait suppresses the settings tab's two entries
+          outright — the two are never on screen at once — and the key and
+          calendar-connect pills split the remaining case by which entry
+          holds the slot. A pill held through an old exit must not resurface
+          under another's wait. */}
       {signInWait === undefined ? (
-        <KeySlot control={credentials} source={slotSource} drawn={slotOpen} measure={slotElement} />
+        <>
+          <KeySlot
+            control={credentials}
+            source={slotSource}
+            drawn={slotOpen && slotOccupant.current === "key"}
+            measure={slotElement}
+          />
+          {/* The panel stood down while a calendar sign-in waits on the
+              browser, on the key slot's exact terms. */}
+          <CalendarConnectSlot
+            entry={calendarConnect.entry}
+            drawn={slotOpen && slotOccupant.current === "calendar"}
+            onCancel={cancelCalendarSignIn}
+            onReopen={() => window.sidecar.reopenGoogleCalendarSignIn()}
+            measure={connectElement}
+          />
+        </>
       ) : null}
-      {credentialsEntry.entry === undefined ? (
-        /* The panel stood down to the sign-in it is waiting on. */
+      {credentialsEntry.entry === undefined && calendarConnect.entry === undefined ? (
+        /* The panel stood down to the account sign-in it is waiting on. */
         <SignInSlot
           {...(signInWait ? { provider: signInWait } : {})}
           drawn={slotOpen}
@@ -2190,6 +2321,7 @@ export function App(): React.JSX.Element {
         fixtureSpeaking={fixtureSpeaking}
         hasAudioSignal={hasAudioSignal}
         voiceOpening={talkOpening}
+        meetingQuiet={meetingQuiet}
         presentation={presentation}
         housingWidth={display.notch.housingWidth}
         accountGated={accountGated}

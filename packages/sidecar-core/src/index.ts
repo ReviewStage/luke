@@ -57,6 +57,17 @@ export {
   CREATED_WORKSPACE_OPEN_WINDOW_MS,
   CreatedWorkspaceOpenTracker,
 } from "./workspace-opens";
+export { MAXIMUM_HELD_NOTICES, SessionNoticeHold } from "./session-notice-hold";
+
+// Calendar — when meetings start and end, and nothing else about them.
+export {
+  activeMeetingEnd,
+  CALENDAR_LOOKAHEAD_MS,
+  MAXIMUM_CALENDAR_MEETINGS,
+  MAXIMUM_MEETING_LENGTH_MS,
+  type MeetingInterval,
+  meetingsFromBusyIntervals,
+} from "./calendar";
 
 // Providers — adapters and the acts they advertise.
 export {
@@ -272,6 +283,7 @@ export {
   COPILOT_PATH,
   CURSOR_PATH,
   DEVIN_PATH,
+  GOOGLE_CALENDAR_MARK_LAYERS,
   JULES_PATH,
   LINEAR_PATH,
   OPENAI_PATH,

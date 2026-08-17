@@ -6,6 +6,7 @@ import {
   COPILOT_PATH,
   CURSOR_PATH,
   DEVIN_PATH,
+  GOOGLE_CALENDAR_MARK_LAYERS,
   ISSUE_TRACKER_ID,
   JULES_PATH,
   LINEAR_PATH,
@@ -16,6 +17,7 @@ import {
 } from "@sidecar/core";
 import { useId } from "react";
 import { CREDENTIAL_PROVIDER_ID } from "../shared/credential-providers";
+import { GOOGLE_CALENDAR_ID } from "../shared/google-calendar";
 
 /**
  * The provider marks, and the one badge that rides them.
@@ -35,7 +37,8 @@ import { CREDENTIAL_PROVIDER_ID } from "../shared/credential-providers";
  * (MIT, sourced from https://primer.style/foundations/icons/copilot-24),
  * Cursor via Simple Icons (CC0-1.0, sourced from https://cursor.com/brand),
  * Devin's verbatim from the mark https://devin.ai serves as its own favicon
- * and site header, Jules via Simple Icons (CC0-1.0, sourced from
+ * and site header, Google Calendar via Simple Icons (CC0-1.0, sourced from
+ * https://developers.google.com/calendar), Jules via Simple Icons (CC0-1.0, sourced from
  * https://jules.google), OpenAI via Simple Icons (CC0-1.0), Linear via Simple Icons (CC0-1.0, sourced from
  * https://linear.app), and OpenCode's two-tone terminal mark verbatim from
  * the favicon https://opencode.ai serves. Each keeps its own brand colour
@@ -172,6 +175,27 @@ function JulesMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
+function GoogleCalendarMark({ className }: MarkProps): React.JSX.Element {
+  // The one mark that carries its own colours: Google's flat product icon is
+  // drawn as its published filled layers, offset the way the original artwork
+  // is, and never recoloured to a theme.
+  return (
+    <svg
+      className={className}
+      data-mark={GOOGLE_CALENDAR_ID}
+      viewBox="0 0 200 200"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <g transform="translate(3.75 3.75)">
+        {GOOGLE_CALENDAR_MARK_LAYERS.map((layer) => (
+          <path fill={layer.fill} d={layer.path} key={layer.path} />
+        ))}
+      </g>
+    </svg>
+  );
+}
+
 function LinearMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg
@@ -238,6 +262,7 @@ const PROVIDER_MARKS = new Map<string, (props: MarkProps) => React.JSX.Element>(
   [PROVIDER_ID.COPILOT, CopilotMark],
   [PROVIDER_ID.CURSOR, CursorMark],
   [PROVIDER_ID.DEVIN, DevinMark],
+  [GOOGLE_CALENDAR_ID, GoogleCalendarMark],
   [PROVIDER_ID.JULES, JulesMark],
   [ISSUE_TRACKER_ID.LINEAR, LinearMark],
   [CREDENTIAL_PROVIDER_ID.OPENAI, OpenAiMark],

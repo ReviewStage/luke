@@ -38,6 +38,8 @@ interface NotchWingsProps {
   hasAudioSignal: boolean;
   /** A pressed talk key still waiting for the call it asked to open. */
   voiceOpening: boolean;
+  /** Whether the calendar's quiet is holding announcements — the face sleeps on it. */
+  meetingQuiet: boolean;
   presentation: PanelPresentation;
   housingWidth: number;
   /**
@@ -176,6 +178,7 @@ export function NotchWings({
   fixtureSpeaking,
   hasAudioSignal,
   voiceOpening,
+  meetingQuiet,
   presentation,
   housingWidth,
   accountGated,
@@ -213,6 +216,7 @@ export function NotchWings({
         fixtureSpeaking,
         voiceActive,
       }),
+      meetingQuiet,
       attention: tally.attentionIds,
       working: tally.working,
       complete: tally.complete,

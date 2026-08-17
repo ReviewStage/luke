@@ -3,8 +3,11 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   ATTENTION_REQUEST_RESULT_STATUS,
+  ATTENTION_SPEECH_SOURCE,
   AttentionRequestRegistry,
   type AttentionRequestResult,
+  type AttentionSpeech,
+  activeMeetingEnd,
   attentionRequestText,
   attentionSpeechFromReviews,
   CompositeSessionProviderAdapter,
@@ -22,6 +25,7 @@ import {
   issueCommentText,
   isWorkspaceAgentCapableAdapter,
   isWorkspaceCapableAdapter,
+  type MeetingInterval,
   type NormalizedSession,
   normalizeObservedWorkspaceProjects,
   normalizeTrackedIssue,
@@ -37,6 +41,7 @@ import {
   SESSION_LOCATION,
   SessionAttentionReviewer,
   type SessionIdentity,
+  SessionNoticeHold,
   SessionNoticeTracker,
   type SessionProviderAdapter,
   sessionMessageText,
@@ -103,6 +108,8 @@ import { readCursorSessionTranscript } from "./cursor-transcript";
 import { DevinSessionAdapter } from "./devin-adapter";
 import { DockPresence } from "./dock-presence";
 import { feedbackDeliveryFromEnvironment } from "./feedback-delivery";
+import { GoogleCalendarReader } from "./google-calendar";
+import { GoogleCalendarSignIn } from "./google-calendar-oauth";
 import { HOTKEY_RANK, HotkeyRegistrar } from "./hotkey-registrar";
 import { JulesSessionAdapter } from "./jules-adapter";
 import { LinearIssueTracker } from "./linear-tracker";
@@ -131,6 +138,7 @@ import {
   channels,
   isSettingsResetScope,
   type MicrophoneStatus,
+  type ObservedAccountCalendars,
   type OutputAudioState,
   SESSION_OPEN_RESULT_STATUS,
   SESSION_TRANSCRIPT_RESULT_STATUS,
@@ -296,6 +304,63 @@ let issueRefreshRunning = false;
  * of dropping.
  */
 let issueRefreshQueued = false;
+// The calendar is not a session provider either: it feeds nothing to the
+// registry or the roster. Its meetings answer one question — is the user in a
+// meeting now — and the answer gates only when announcements are spoken.
+const googleCalendar = new GoogleCalendarReader({
+  readAccounts: () => settingsStore.readCalendarAccounts(),
+});
+// The sign-in behind the calendar row: it opens Google's own consent page in
+// the user's browser and hands back one grant, which the connect handler
+// stores. Offered only when this build carries an OAuth client.
+const googleCalendarSignIn = new GoogleCalendarSignIn({
+  openExternal: (url) => void shell.openExternal(url),
+});
+/** A diary changes at the pace of hands too; five minutes is current. */
+const CALENDAR_REFRESH_INTERVAL_MS = 5 * 60_000;
+/**
+ * How often held notices ask whether the meeting holding them has ended. The
+ * question is answered from meetings already in memory, so asking often costs
+ * nothing — and half a minute is how late after a meeting the backlog speaks.
+ */
+const HELD_NOTICE_RELEASE_INTERVAL_MS = 30_000;
+/**
+ * The meetings as last read; `undefined` says no calendar is connected, which
+ * can never hold a notice. A failed pass keeps the meetings it has — a
+ * calendar that cannot answer is not an empty diary.
+ */
+let calendarMeetings: readonly MeetingInterval[] | undefined;
+/**
+ * Each connected account's calendars as last observed — what the settings
+ * rows draw their choices from, and what a spoken-of or clicked selection is
+ * validated against before the store keeps it.
+ */
+let observedCalendars: readonly ObservedAccountCalendars[] = [];
+let calendarRefreshTimer: NodeJS.Timeout | undefined;
+let heldNoticeReleaseTimer: NodeJS.Timeout | undefined;
+let calendarRefreshRunning = false;
+/** A key save must reach the next pass, not be swallowed by one in flight. */
+let calendarRefreshQueued = false;
+// Notices decided while a meeting is on wait here, in the main process: the
+// hold has to outlive any renderer, and this is the one place notices are
+// decided. What releases them is the clock against observed intervals —
+// deterministic, like the edges that produced them.
+const heldNotices = new SessionNoticeHold();
+/**
+ * The other kind of announcement, held on the same terms: speech an answered
+ * standing ask produced, already worded. It waits out a meeting exactly as a
+ * status edge does — both break silence, and the quiet holds everything that
+ * does. Unbidden evaluator summaries are never held: they only ever ride a
+ * conversation the developer already has open, which is not silence to break.
+ */
+const heldRequestSpeech = new SessionNoticeHold<AttentionSpeech>();
+/**
+ * Whether the quiet is holding right now, as last computed — what the
+ * renderer draws Luke's sleeping face from. Kept and broadcast on change so
+ * every window agrees, and false the moment the meetings or the setting say
+ * so.
+ */
+let meetingQuietActive = false;
 // Notices come from status edges the registry observed, never from anything a
 // model decided, so they work — and matter most — with no evaluator configured.
 const sessionNoticeTracker = new SessionNoticeTracker();
@@ -455,11 +520,13 @@ async function startAccountCapabilities(generation = accountGeneration): Promise
   if (generation !== accountGeneration || !accountCapabilitiesActive()) return;
   startSessionObservation();
   startIssueObservation();
+  startCalendarObservation();
 }
 
 async function stopAccountCapabilities(): Promise<void> {
   stopSessionObservation();
   stopIssueObservation();
+  stopCalendarObservation();
   await applyVoiceCredential();
   await hotkeys.reapply(HOTKEY_RANK.TALK);
 }
@@ -870,6 +937,10 @@ function registerIpc(): void {
       ...(trackedIssues && runMode.observesProviders && accountCapabilitiesActive()
         ? { issues: trackedIssues }
         : {}),
+      // The calendar is a capability like the rosters: nothing of it is
+      // shown, or held quiet, before the account gate opens.
+      calendars: accountCapabilitiesActive() ? observedCalendars : [],
+      meetingQuiet: accountCapabilitiesActive() && meetingQuietActive,
       settings: await settingsStore.snapshot(),
     };
   });
@@ -1286,6 +1357,125 @@ function registerIpc(): void {
       }
     },
     refusal: "Could not reset those settings on this system.",
+  });
+
+  // The sign-in runs whole inside `save`: the browser trip, the loopback
+  // redirect, the exchange, and the one calendar-list read that names the
+  // account all happen in the main process, and the renderer's reply is the
+  // settings snapshot alone. A refusal or a closed browser tab comes back as
+  // the reason the row shows.
+  registerSettingHandler(channels.connectGoogleCalendar, {
+    validate() {
+      return undefined;
+    },
+    async save() {
+      const outcome = await googleCalendarSignIn.signIn();
+      if ("reason" in outcome) {
+        return { settings: await settingsStore.snapshot(), reason: outcome.reason };
+      }
+      // The account is named by its primary calendar — its address — which is
+      // also what starts out selected: the calendar meetings actually land on.
+      let primaryId: string | undefined;
+      try {
+        const calendars = await googleCalendar.listCalendars(outcome.accessToken);
+        primaryId = (calendars.find((calendar) => calendar.primary) ?? calendars[0])?.id;
+      } catch {
+        primaryId = undefined;
+      }
+      if (!primaryId) {
+        return {
+          settings: await settingsStore.snapshot(),
+          reason: "Google did not answer with the account's calendars.",
+        };
+      }
+      return settingsStore.addCalendarAccount(primaryId, outcome.refreshToken, [primaryId]);
+    },
+    apply(result) {
+      if (!result.reason) void refreshCalendarMeetings();
+    },
+    refusal: "Could not connect Google Calendar on this system.",
+  });
+
+  // Cancelling is a statement, not a request: the loopback stops listening
+  // and the pending connect answers with why. The browser tab stays where it
+  // is — closing another app's window is not Luke's to do.
+  ipcMain.on(channels.cancelGoogleCalendarSignIn, (event) => {
+    if (!trustedSender(event)) return;
+    googleCalendarSignIn.cancel();
+  });
+
+  // A lost consent tab reopened, on the key-page link's terms: the renderer
+  // names the intent, and the only page that can open is the one the waiting
+  // flow built and is already listening for.
+  ipcMain.on(channels.reopenGoogleCalendarSignIn, (event) => {
+    if (!trustedSender(event)) return;
+    googleCalendarSignIn.reopen();
+  });
+
+  registerSettingHandler(channels.removeCalendarAccount, {
+    validate(accountId: unknown) {
+      if (typeof accountId !== "string" || !accountId) {
+        throw new Error("Invalid calendar account request");
+      }
+      return accountId;
+    },
+    save: (accountId) => settingsStore.removeCalendarAccount(accountId),
+    apply(result) {
+      if (!result.reason) void refreshCalendarMeetings();
+    },
+    refusal: "Could not disconnect that account on this system.",
+  });
+
+  registerSettingHandler(channels.setCalendarSelected, {
+    async validate(accountId: unknown, calendarId: unknown, selected: unknown) {
+      if (typeof accountId !== "string" || !accountId) {
+        throw new Error("Invalid calendar selection request");
+      }
+      if (typeof calendarId !== "string" || !calendarId) {
+        throw new Error("Invalid calendar selection request");
+      }
+      if (typeof selected !== "boolean") throw new Error("Invalid calendar selection request");
+      // A calendar being switched on must be one its account's latest
+      // observation listed: the selection feeds the free/busy read document,
+      // and nothing enters that document but identifiers a pass reported.
+      // Switching one off needs no listing — a calendar Google stopped
+      // offering must still be deselectable.
+      if (selected) {
+        const listed = observedCalendars
+          .find((account) => account.accountId === accountId)
+          ?.calendars.some((calendar) => calendar.id === calendarId);
+        if (!listed) {
+          return new SettingsRefusal({
+            settings: await settingsStore.snapshot(),
+            reason: "That calendar is not one Google listed for the account.",
+          });
+        }
+      }
+      return { accountId, calendarId, selected };
+    },
+    save: ({ accountId, calendarId, selected }) =>
+      settingsStore.setCalendarSelected(accountId, calendarId, selected),
+    apply(result) {
+      if (!result.reason) void refreshCalendarMeetings();
+    },
+    refusal: "Could not save that calendar choice on this system.",
+  });
+
+  // Switching the quiet off mid-meeting is the meeting ending, as far as the
+  // backlog is concerned: the face wakes and anything held is said now, not
+  // on the next release tick — the user just asked to hear it.
+  registerSettingHandler(channels.setQuietDuringMeetings, {
+    validate(enabled: unknown) {
+      if (typeof enabled !== "boolean") throw new Error("Invalid meeting quiet request");
+      return enabled;
+    },
+    save: (enabled) => settingsStore.setQuietDuringMeetings(enabled),
+    apply(result) {
+      if (result.reason) return;
+      void refreshMeetingQuiet();
+      void releaseHeldNotices();
+    },
+    refusal: "Could not save that setting on this system.",
   });
 
   // A statement of state, not a request: the renderer says whether a spoken
@@ -2064,10 +2254,23 @@ async function reviewSessionAttention(generation = observationGeneration): Promi
     // `outcome` says whether to voice it now, which only these reviews do.
     const speech = attentionSpeechFromReviews(reviews);
     if (speech.length > 0) {
-      // Spoken once, by the one window that holds the voice: every display
-      // already shows the same session as needing attention, and the surface
-      // that speaks is the one that draws the announcement's pressable notice.
-      panels.voiceHost()?.webContents.send(channels.attentionSpeech, speech);
+      // An answered standing ask opens Luke's own call the way a status edge
+      // does, so the meeting quiet holds it the same way; the summaries that
+      // only ride an open conversation pass, because a developer mid-call is
+      // already talking to Luke, meeting or not. The pressable notice now
+      // anchors to the spoken announcement, so it waits out the quiet with it.
+      let sendable: readonly AttentionSpeech[] = speech;
+      if (await announcementsQuietNow(Date.now())) {
+        const held = speech.filter((item) => item.source !== ATTENTION_SPEECH_SOURCE.EVALUATOR);
+        heldRequestSpeech.hold(held);
+        sendable = speech.filter((item) => item.source === ATTENTION_SPEECH_SOURCE.EVALUATOR);
+      }
+      if (sendable.length > 0) {
+        // Spoken once, by the one window that holds the voice: every display
+        // already shows the same session as needing attention, and the surface
+        // that speaks is the one that draws the announcement's pressable notice.
+        panels.voiceHost()?.webContents.send(channels.attentionSpeech, sendable);
+      }
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -2087,7 +2290,7 @@ async function reviewSessionAttention(generation = observationGeneration): Promi
  * speak-only call when no conversation is up, so being heard needs no
  * talk-key press first.
  */
-function announceSessionNotices(sessions: readonly NormalizedSession[]): void {
+async function announceSessionNotices(sessions: readonly NormalizedSession[]): Promise<void> {
   // Asks about sessions no longer reported have nothing left to be about, and
   // this commit is the earliest that can be known. The rows marking asks are
   // told only when one was actually let go.
@@ -2099,6 +2302,8 @@ function announceSessionNotices(sessions: readonly NormalizedSession[]): void {
   // answers what was asked. When the evaluator answers the same edge the ask
   // named, the finish is said twice in a row — a cost worth the guarantee
   // that a deterministic alert is never traded away on a model's judgment.
+  // Fed before anything is awaited, so passes reach the tracker in order —
+  // the retain above included.
   const notices = sessionNoticeTracker.notices(sessions, now);
   if (notices.length === 0) return;
   // No voice, nothing to say it with: without a Realtime credential the
@@ -2106,6 +2311,13 @@ function announceSessionNotices(sessions: readonly NormalizedSession[]): void {
   // pressable notice is the spoken announcement's face, so it goes with the
   // speech rather than standing for news nobody is telling.
   if (!realtimeCredentials) return;
+  // A meeting on the connected calendar holds the sentence rather than
+  // dropping it; the release tick reads the backlog out once the meeting
+  // ends. The panel has shown every state the whole time either way.
+  if (await announcementsQuietNow(now)) {
+    heldNotices.hold(notices);
+    return;
+  }
   const speech = notices.map((notice) => sessionNoticeSpeech(notice, now));
   panels.voiceHost()?.webContents.send(channels.attentionSpeech, speech);
 }
@@ -2128,6 +2340,160 @@ function openCreatedWorkspaces(sessions: readonly NormalizedSession[]): void {
       const message = error instanceof Error ? error.message : String(error);
       process.stderr.write(`Created workspace could not be opened: ${message}\n`);
     });
+  }
+}
+
+/**
+ * Whether announcements should wait right now: a meeting on the connected
+ * calendar covers this instant, and the quiet is switched on. The meetings
+ * are consulted before the store so the common case — no calendar — costs no
+ * read at all; the store's answer comes from its cached file either way,
+ * never the keychain.
+ */
+async function announcementsQuietNow(now: number): Promise<boolean> {
+  if (!calendarMeetings || activeMeetingEnd(calendarMeetings, now) === undefined) return false;
+  return settingsStore.quietDuringMeetings();
+}
+
+/**
+ * Recomputes whether the quiet is holding and tells the renderer on change —
+ * the face sleeps beside the housing for exactly as long as this is true.
+ * Ridden by the same ticks that read the calendar and release the backlog,
+ * and by the setting's own toggle, so the face never says a quiet that ended.
+ */
+async function refreshMeetingQuiet(): Promise<void> {
+  const active = await announcementsQuietNow(Date.now());
+  if (active === meetingQuietActive) return;
+  meetingQuietActive = active;
+  panels.broadcast(channels.meetingQuietChanged, active);
+}
+
+/**
+ * Says what was held once the meeting holding it has ended. Deciding to speak
+ * is what happens here, so the sentences carry the release as `decidedAt` —
+ * a backlog re-stamped any earlier would be dropped as stale by the renderer
+ * before a word of it was read. Each notice is checked against the registry
+ * first: a session that moved on while the meeting ran is no longer news, and
+ * announcing its old state would be worse than silence.
+ */
+async function releaseHeldNotices(): Promise<void> {
+  if (heldNotices.count === 0 && heldRequestSpeech.count === 0) return;
+  const now = Date.now();
+  if (await announcementsQuietNow(now)) return;
+  // Voice went away while the backlog waited; there is nothing to say it
+  // with, and by the time a key returns the news is the panel's.
+  if (!realtimeCredentials) {
+    heldNotices.release();
+    heldRequestSpeech.release();
+    return;
+  }
+  const current = new Map<string, Map<string, string>>();
+  for (const session of sessionRegistry.list()) {
+    let provider = current.get(session.providerId);
+    if (!provider) {
+      provider = new Map();
+      current.set(session.providerId, provider);
+    }
+    provider.set(session.providerSessionId, session.status);
+  }
+  const released = heldNotices.release().filter((notice) => {
+    const status = current.get(notice.providerId)?.get(notice.providerSessionId);
+    // A session the registry no longer lists settled where the notice said —
+    // its parting words are still the answer to where the work stands.
+    return status === undefined || status === notice.status;
+  });
+  // An answered ask was explicit, so it is always still worth its sentence;
+  // like the notices it is re-stamped at release, because the decision to
+  // speak is what is fresh — held any older it would be dropped unread.
+  const releasedAsks = heldRequestSpeech.release().map((item) => ({ ...item, decidedAt: now }));
+  const speech = [...releasedAsks, ...released.map((notice) => sessionNoticeSpeech(notice, now))];
+  if (speech.length === 0) return;
+  panels.voiceHost()?.webContents.send(channels.attentionSpeech, speech);
+}
+
+/**
+ * Reads the meeting times from every connected account. An account that
+ * cannot answer keeps standing what it last showed — the reader holds that,
+ * per account, so one revoked grant never blinds the others — and a calendar
+ * with no account stays absent, which is what makes the quiet impossible to
+ * enter. Every pass ends by asking whether anything held can now be said: a
+ * meeting deleted mid-way is over the moment the feed says so.
+ */
+async function refreshCalendarMeetings(): Promise<void> {
+  if (!runMode.observesProviders || !accountCapabilitiesActive()) return;
+  if (calendarRefreshRunning) {
+    calendarRefreshQueued = true;
+    return;
+  }
+  calendarRefreshRunning = true;
+  try {
+    const observations = await googleCalendar.observe();
+    calendarMeetings = observations?.flatMap((account) => [...account.meetings]);
+    observedCalendars = (observations ?? []).map(({ accountId, calendars }) => ({
+      accountId,
+      calendars,
+    }));
+    panels.broadcast(channels.calendarsChanged, observedCalendars);
+    for (const account of observations ?? []) {
+      if (account.failure) {
+        process.stderr.write(`Calendar observation failed: ${account.failure}\n`);
+      }
+    }
+  } catch (error) {
+    // Nothing routine lands here — the reader answers a failing account with
+    // its last observation — so what does is a programming error, reported.
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`Calendar observation failed: ${message}\n`);
+  } finally {
+    calendarRefreshRunning = false;
+    if (calendarRefreshQueued) {
+      calendarRefreshQueued = false;
+      void refreshCalendarMeetings();
+    }
+  }
+  void refreshMeetingQuiet();
+  void releaseHeldNotices();
+}
+
+function startCalendarObservation(): void {
+  if (!runMode.observesProviders || !accountCapabilitiesActive() || calendarRefreshTimer) return;
+  void refreshCalendarMeetings();
+  calendarRefreshTimer = setInterval(() => {
+    void refreshCalendarMeetings();
+  }, CALENDAR_REFRESH_INTERVAL_MS);
+  calendarRefreshTimer.unref();
+  heldNoticeReleaseTimer = setInterval(() => {
+    // The quiet's edges move with the clock between calendar reads — a
+    // meeting starts, a meeting ends — so the face's answer refreshes on the
+    // release tick, not only when the feed is re-read.
+    void refreshMeetingQuiet();
+    void releaseHeldNotices();
+  }, HELD_NOTICE_RELEASE_INTERVAL_MS);
+  heldNoticeReleaseTimer.unref();
+}
+
+/**
+ * The sign-out mirror of the start: the timers go, the meetings and the
+ * backlog are forgotten, and the face wakes — a quiet cannot outlive the
+ * account whose calendars declared it. The stored grants stay: signing back
+ * in finds the same accounts connected, exactly like the provider keys.
+ */
+function stopCalendarObservation(): void {
+  if (calendarRefreshTimer) clearInterval(calendarRefreshTimer);
+  calendarRefreshTimer = undefined;
+  if (heldNoticeReleaseTimer) clearInterval(heldNoticeReleaseTimer);
+  heldNoticeReleaseTimer = undefined;
+  calendarMeetings = undefined;
+  observedCalendars = [];
+  // The reader forgets what it held for failing accounts too: a pass after
+  // signing back in starts from nothing, not from an era this stop ended.
+  googleCalendar.forget();
+  heldNotices.release();
+  heldRequestSpeech.release();
+  panels.broadcast(channels.calendarsChanged, observedCalendars);
+  if (meetingQuietActive) {
+    meetingQuietActive = false;
+    panels.broadcast(channels.meetingQuietChanged, false);
   }
 }
 
@@ -2175,7 +2541,7 @@ function startSessionObservation(): void {
     // The registry only speaks on an effective change, which is exactly when
     // a status edge can exist to announce. The notices read the unfiltered
     // snapshot: an edge is an edge wherever the session ends up on the roster.
-    announceSessionNotices(snapshot.sessions);
+    void announceSessionNotices(snapshot.sessions);
     // A commit is also the earliest a created workspace can have arrived with
     // the address to open it by — whether on the refresh the creation itself
     // fired or on an ordinary pass catching up.
@@ -2515,6 +2881,7 @@ if (!app.requestSingleInstanceLock()) {
     configurePermissions();
     startSessionObservation();
     startIssueObservation();
+    startCalendarObservation();
     // Reconcile in the background. Only an explicit invalid_grant removes the
     // stored account; network failures and service outages leave it active.
     void refreshStoredAccount();

@@ -24,6 +24,7 @@ function context(overrides: Partial<FaceContext> = {}): FaceContext {
   return {
     speaking: false,
     microphoneLive: false,
+    meetingQuiet: false,
     attention: [],
     working: 0,
     complete: 0,
@@ -81,6 +82,21 @@ test("sessions arriving and finishing are still counted rather than named", () =
   assert.equal(noticedMotion(two, observed([], { total: 3 })), FACE_MOTION.NOTIFICATION);
   // Sessions leaving are not an event: nothing has asked for anyone.
   assert.equal(noticedMotion(two, observed([], { total: 1 })), undefined);
+});
+
+test("a meeting the calendar is holding through puts the face to sleep", () => {
+  // The one visual report the quiet makes — and it holds whatever the
+  // sessions are doing, because the sessions are exactly what is being held.
+  assert.equal(
+    restingMotion(context({ meetingQuiet: true, attention: ["a"], working: 3, total: 5 })),
+    FACE_MOTION.SLEEPING,
+  );
+  // A developer who opens a turn mid-meeting is still talking to a face.
+  assert.equal(restingMotion(context({ meetingQuiet: true, speaking: true })), FACE_MOTION.TALKING);
+  assert.equal(
+    restingMotion(context({ meetingQuiet: true, microphoneLive: true })),
+    FACE_MOTION.LISTENING,
+  );
 });
 
 test("only what stays true for as long as it holds may hold the face", () => {

@@ -364,6 +364,133 @@ test("a settings reset never forgets how many sends have landed", async (t) => {
   assert.equal(await store.countFeedbackSend(), 2);
 });
 
+test("a calendar account stores its grant encrypted and survives a reopen", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  assert.deepEqual(await store.readCalendarAccounts(), []);
+  const stored = await store.addCalendarAccount("dev@example.com", "1//grant-from-sign-in", [
+    "dev@example.com",
+  ]);
+
+  assert.equal(stored.reason, undefined);
+  assert.deepEqual(stored.settings.calendarAccounts, [
+    { id: "dev@example.com", selectedCalendarIds: ["dev@example.com"] },
+  ]);
+  // At rest the grant is ciphertext, never the plain token.
+  const persisted = JSON.parse(await readSettingsFile(directory));
+  assert.equal(persisted.calendarAccounts[0].token, sealed("1//grant-from-sign-in"));
+  assert.ok(!JSON.stringify(persisted).includes("1//grant-from-sign-in"));
+  // The account outlives the run that stored it, grant and choices together.
+  assert.deepEqual(await storeIn(directory).readCalendarAccounts(), [
+    {
+      id: "dev@example.com",
+      refreshToken: "1//grant-from-sign-in",
+      selectedCalendarIds: ["dev@example.com"],
+    },
+  ]);
+});
+
+test("accounts stand side by side, and reconnecting one keeps its choices", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  await store.addCalendarAccount("work@example.com", "1//work-grant", ["work@example.com"]);
+  await store.addCalendarAccount("home@example.com", "1//home-grant", ["home@example.com"]);
+  await store.setCalendarSelected("work@example.com", "team-calendar", true);
+  // Signing into work again replaces the grant, not the user's choices.
+  await store.addCalendarAccount("work@example.com", "1//fresh-work-grant", ["work@example.com"]);
+
+  const accounts = await store.readCalendarAccounts();
+  assert.deepEqual(accounts, [
+    {
+      id: "work@example.com",
+      refreshToken: "1//fresh-work-grant",
+      selectedCalendarIds: ["work@example.com", "team-calendar"],
+    },
+    {
+      id: "home@example.com",
+      refreshToken: "1//home-grant",
+      selectedCalendarIds: ["home@example.com"],
+    },
+  ]);
+});
+
+test("selection changes one calendar on one account, and removal takes the grant with it", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+  await store.addCalendarAccount("dev@example.com", "1//grant", ["dev@example.com"]);
+
+  await store.setCalendarSelected("dev@example.com", "team-calendar", true);
+  await store.setCalendarSelected("dev@example.com", "dev@example.com", false);
+  const unknown = await store.setCalendarSelected("nobody@example.com", "team-calendar", true);
+  assert.equal(unknown.reason, "That calendar account is not connected.");
+
+  assert.deepEqual((await store.readCalendarAccounts())[0]?.selectedCalendarIds, ["team-calendar"]);
+
+  const removed = await store.removeCalendarAccount("dev@example.com");
+  assert.deepEqual(removed.settings.calendarAccounts, []);
+  assert.deepEqual(await store.readCalendarAccounts(), []);
+  // Nothing empty is written down: a file with no accounts carries no field.
+  assert.equal(JSON.parse(await readSettingsFile(directory)).calendarAccounts, undefined);
+});
+
+test("a calendar account never disturbs a stored key, nor a key an account", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
+  await store.addCalendarAccount("dev@example.com", "1//grant", ["dev@example.com"]);
+  await store.setApiKey(CONDUCTOR, undefined);
+
+  const reopened = storeIn(directory);
+  assert.equal(await reopened.readApiKey(CONDUCTOR), undefined);
+  assert.equal((await reopened.readCalendarAccounts()).length, 1);
+});
+
+test("announcements wait out meetings until asked otherwise, and the choice survives a reopen", async (t) => {
+  const directory = await temporaryDirectory(t);
+  // A preference is not a credential, so choosing it must reach the Keychain
+  // not at all — and the shallow reader main asks on every announcement pass
+  // must answer from the file alone.
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+
+  assert.equal((await store.snapshot()).quietDuringMeetings, true);
+  assert.equal(await store.quietDuringMeetings(), true);
+  const disabled = await store.setQuietDuringMeetings(false);
+
+  assert.equal(disabled.settings.quietDuringMeetings, false);
+  assert.equal(await storeIn(directory).quietDuringMeetings(), false);
+  assert.equal((await storeIn(directory).snapshot()).quietDuringMeetings, false);
+  assert.equal(cipher.calls.isAvailable, 0);
+  assert.equal(cipher.calls.encrypt, 0);
+});
+
+test("switching the meeting quiet never disturbs a stored key", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
+
+  await store.setQuietDuringMeetings(false);
+  const on = await store.setQuietDuringMeetings(true);
+
+  assert.equal(on.settings.quietDuringMeetings, true);
+  assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), TEST_API_KEY);
+});
+
+test("a corrupt meeting quiet value reads as the default rather than as off", async (t) => {
+  const directory = await temporaryDirectory(t);
+  // The media duck's rule: this one's default is on, so nonsense lands on on.
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({ version: 2, apiKeys: {}, quietDuringMeetings: "no" }),
+    "utf8",
+  );
+
+  assert.equal((await storeIn(directory).snapshot()).quietDuringMeetings, true);
+});
+
 test("keeps each provider's key, environment fallback, and reported source separate", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory, {
@@ -418,6 +545,7 @@ test("keeps both keys when two providers are saved at once", async (t) => {
     showInMenuBar: true,
     voiceCaptions: false,
     duckOtherMedia: true,
+    quietDuringMeetings: true,
     showOnAllDisplays: false,
   });
   const reopened = storeIn(directory, { providers: TEST_PROVIDERS });
@@ -618,6 +746,7 @@ test("keeps a Conductor key stored by an earlier version working", async (t) => 
     showInMenuBar: true,
     voiceCaptions: false,
     duckOtherMedia: true,
+    quietDuringMeetings: true,
     showOnAllDisplays: false,
   });
   assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), "conductor-replacement-key");
@@ -641,6 +770,7 @@ test("carries a key belonging to a provider this build does not know", async (t)
     showInMenuBar: true,
     voiceCaptions: false,
     duckOtherMedia: true,
+    quietDuringMeetings: true,
     showOnAllDisplays: false,
   });
 });
@@ -662,6 +792,7 @@ test("shows the menu bar item until asked otherwise, and remembers the answer", 
     showInMenuBar: false,
     voiceCaptions: false,
     duckOtherMedia: true,
+    quietDuringMeetings: true,
     showOnAllDisplays: false,
   });
   // The choice outlives the run that heard it.
@@ -744,6 +875,7 @@ test("keeps Luke out of the Dock until asked, and remembers the answer", async (
     showInMenuBar: true,
     voiceCaptions: false,
     duckOtherMedia: true,
+    quietDuringMeetings: true,
     showOnAllDisplays: false,
   });
   // The choice outlives the run that heard it.

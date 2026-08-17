@@ -33,14 +33,14 @@ export interface LoopbackPage {
  * from, so this copy cannot drift from the artwork. The tight viewBox is the
  * mark's own, as the landing page crops it.
  */
-function markSvg(): string {
+function markSvg(ink = "currentColor"): string {
   const { TILT, SMILE, STROKE_WIDTH, EYE_X, EYE_Y, EYE_RADIUS } = FACE_ART;
   return (
-    `<svg class="mark" viewBox="53.85 62.67 134.29 122.37" fill="none" aria-hidden="true">` +
+    `<svg class="mark" xmlns="http://www.w3.org/2000/svg" viewBox="53.85 62.67 134.29 122.37" fill="none" aria-hidden="true">` +
     `<g transform="${TILT}">` +
-    `<path d="${SMILE}" fill="none" stroke="currentColor" stroke-width="${STROKE_WIDTH}" stroke-linecap="round" stroke-linejoin="round"/>` +
-    `<circle cx="${EYE_X.LEFT}" cy="${EYE_Y}" r="${EYE_RADIUS}" fill="currentColor"/>` +
-    `<circle cx="${EYE_X.RIGHT}" cy="${EYE_Y}" r="${EYE_RADIUS}" fill="currentColor"/>` +
+    `<path d="${SMILE}" fill="none" stroke="${ink}" stroke-width="${STROKE_WIDTH}" stroke-linecap="round" stroke-linejoin="round"/>` +
+    `<circle cx="${EYE_X.LEFT}" cy="${EYE_Y}" r="${EYE_RADIUS}" fill="${ink}"/>` +
+    `<circle cx="${EYE_X.RIGHT}" cy="${EYE_Y}" r="${EYE_RADIUS}" fill="${ink}"/>` +
     `</g></svg>`
   );
 }
@@ -83,10 +83,15 @@ const PAGE_STYLE = `
 `;
 
 export function accountLoopbackPage(page: LoopbackPage): string {
+  // The same mark as the tab's icon, travelling inside the document like
+  // everything else on it: a data URL fetches nothing from anywhere. Inked
+  // outright, because `currentColor` resolves to black outside the page.
+  const favicon = encodeURIComponent(markSvg("#f5f5f7"));
   return (
     `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
     `<meta name="viewport" content="width=device-width, initial-scale=1">` +
     `<meta name="color-scheme" content="dark">` +
+    `<link rel="icon" href="data:image/svg+xml;utf8,${favicon}">` +
     `<title>${page.title}</title><style>${PAGE_STYLE}</style></head>` +
     `<body><main class="shell"><section class="card">` +
     markSvg() +

@@ -812,6 +812,13 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transform: scale(1.22);
 }
 
+/* Google Calendar's product icon carries its own published colours, so no
+   colour is set here; it fills its box the way Codex and Cursor do and takes
+   the same scale they do. */
+.provider-mark[data-mark="google-calendar"] {
+  transform: scale(0.94);
+}
+
 /* Jules fills its box top to bottom the way the Codex and Cursor marks do, so
    it takes the same scale they do. */
 .provider-mark[data-mark="jules"] {
@@ -2387,6 +2394,13 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .key-slot-label,
 .key-slot-foot {
   padding-left: calc(var(--slot-mark-size) + var(--slot-gutter-gap));
+}
+
+/* The connect slot's words take the room between the mark and the Cancel
+   beside them, so the one line holds all three. */
+.calendar-connect-copy {
+  flex: 1;
+  min-width: 0;
 }
 
 /* Larger than the mark on a settings line: here it is the only thing naming the
