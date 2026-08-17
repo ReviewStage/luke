@@ -60,13 +60,15 @@ jobs:
           APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
           MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
           MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET }}
         run: |
           for secret_name in \
             MACOS_CERTIFICATE_P12_BASE64 \
             MACOS_CERTIFICATE_PASSWORD \
             APPLE_API_KEY_P8_BASE64 \
             APPLE_API_KEY_ID \
-            APPLE_API_ISSUER_ID; do
+            APPLE_API_ISSUER_ID \
+            GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET; do
             if [[ -z "${!secret_name:-}" ]]; then
               echo "error: required GitHub Actions secret is missing: $secret_name" >&2
               exit 1
@@ -110,6 +112,10 @@ jobs:
         run: ./scripts/release/setup-keychain.sh
 
       - name: Package signed application
+        env:
+          # Injected into the main-process bundle by build.mjs; a release
+          # packaged without it would ship no calendar sign-in at all.
+          GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET }}
         run: pnpm package
 
       - name: Verify signed application

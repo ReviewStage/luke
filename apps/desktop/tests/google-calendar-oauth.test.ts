@@ -13,7 +13,11 @@ import { HTTP_STATUS, type RecordedRequest, recordingFetch } from "./support/htt
 const CLIENT_ID = "324871084874-test.apps.googleusercontent.com";
 
 function environment(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
-  return { GOOGLE_CALENDAR_OAUTH_CLIENT_ID: CLIENT_ID, ...overrides };
+  return {
+    GOOGLE_CALENDAR_OAUTH_CLIENT_ID: CLIENT_ID,
+    GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET: "GOCSPX-test-secret",
+    ...overrides,
+  };
 }
 
 /** Follows the redirect the browser would make, code and all. */
@@ -38,11 +42,23 @@ function tokenResponse(): Response {
   );
 }
 
-test("offers no sign-in without a client id", async () => {
+test("the sign-in is offered exactly when the whole registration is held", () => {
+  // A bare checkout holds the registered client id but no secret — packaging
+  // injects that — so it offers no sign-in rather than one that would fail
+  // mid-exchange.
   assert.equal(googleCalendarSignInConfig({}), undefined);
 
-  const signIn = new GoogleCalendarSignIn({ openExternal: () => undefined, environment: {} });
-  assert.deepEqual(await signIn.signIn(), { reason: "Sign-in is not configured in this build." });
+  // The registered id stands in source, so a secret alone — the one thing
+  // packaging injects — completes the registration.
+  const completed = googleCalendarSignInConfig({
+    GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET: "GOCSPX-supplied",
+  });
+  assert.match(completed?.clientId ?? "", /\.apps\.googleusercontent\.com$/);
+  assert.equal(completed?.clientSecret, "GOCSPX-supplied");
+
+  // The variables stand in for development against another registration.
+  const overridden = googleCalendarSignInConfig(environment());
+  assert.equal(overridden?.clientId, CLIENT_ID);
 });
 
 test("runs the documented installed-app flow end to end", async () => {

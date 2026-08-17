@@ -33,6 +33,15 @@ await Promise.all([
     format: "cjs",
     target: "node22",
     external: ["electron"],
+    define: {
+      // The Google Calendar client secret rides into the bundle from the
+      // packaging environment rather than sitting in source, where secret
+      // scanners cannot tell a desktop client's published "secret" from a
+      // real one; see google-calendar-oauth.ts.
+      PACKAGED_GOOGLE_CALENDAR_CLIENT_SECRET: JSON.stringify(
+        process.env.GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET ?? "",
+      ),
+    },
     sourcemap: true,
     logLevel: "info",
   }),
