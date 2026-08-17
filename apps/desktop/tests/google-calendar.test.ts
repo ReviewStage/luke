@@ -229,6 +229,29 @@ test("one bad account never blinds the others, and keeps what it last showed", a
   assert.equal(second?.[1]?.failure, undefined);
 });
 
+test("forgetting ends an era: a failing pass after it holds nothing up", async () => {
+  let broken = false;
+  const { reader } = readerWith(
+    (request) =>
+      request.url === CALENDAR_LIST_URL && broken
+        ? new Response("", { status: 500 })
+        : routes(request),
+    [WORK_ACCOUNT],
+  );
+
+  const first = await reader.observe();
+  assert.notEqual(first?.[0]?.meetings.length, 0);
+  // Sign-out forgets what observation held; a failing pass after signing
+  // back in must not resurrect meetings from the era the stop ended.
+  reader.forget();
+  broken = true;
+  const second = await reader.observe();
+
+  assert.match(second?.[0]?.failure ?? "", /work@example\.com/);
+  assert.deepEqual(second?.[0]?.meetings, []);
+  assert.deepEqual(second?.[0]?.calendars, []);
+});
+
 test("listCalendars names the primary first, then the rest by name", async () => {
   const { reader } = readerWith(routes, []);
 

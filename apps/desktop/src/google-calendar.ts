@@ -106,6 +106,17 @@ export class GoogleCalendarReader {
     this.#now = options.now ?? Date.now;
   }
 
+  /**
+   * Forgets every account's held observation — the sign-out's act, so a
+   * failing pass after signing back in cannot resurrect meetings from an
+   * era the stop already ended. The stored grants are the settings store's
+   * to keep; this clears only what observation itself held.
+   */
+  forget(): void {
+    this.#lastObservations.clear();
+    this.#accessTokens.clear();
+  }
+
   async observe(): Promise<readonly CalendarAccountObservation[] | undefined> {
     const accounts = await this.#readAccounts();
     // No accounts, no request: the calendar is not connected, which is a

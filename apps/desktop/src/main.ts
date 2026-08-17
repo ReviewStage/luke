@@ -2485,6 +2485,9 @@ function stopCalendarObservation(): void {
   heldNoticeReleaseTimer = undefined;
   calendarMeetings = undefined;
   observedCalendars = [];
+  // The reader forgets what it held for failing accounts too: a pass after
+  // signing back in starts from nothing, not from an era this stop ended.
+  googleCalendar.forget();
   heldNotices.release();
   heldRequestSpeech.release();
   panels.broadcast(channels.calendarsChanged, observedCalendars);
