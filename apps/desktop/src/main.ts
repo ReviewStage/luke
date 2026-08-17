@@ -444,17 +444,25 @@ async function stopAccountCapabilities(): Promise<void> {
   await hotkeys.reapply(HOTKEY_RANK.TALK);
 }
 
-async function signOutAccount(): Promise<AccountSnapshot> {
+async function signOutAccount(options: { revokeRemote?: boolean } = {}): Promise<AccountSnapshot> {
   accountGeneration += 1;
   observationGeneration += 1;
   // Close the gate synchronously, before the settings write yields. Otherwise
   // the observation timer can see the new generation with the old signed-in
   // account and start a pass that belongs to neither account lifecycle.
   account = { status: ACCOUNT_STATUS.SIGNED_OUT };
+  const storedAccount = options.revokeRemote ? settingsStore.readAccount() : undefined;
   const clearingAccount = settingsStore.clearAccount();
   await stopAccountCapabilities();
   account = await clearingAccount;
   broadcastAccount();
+  const refreshToken = (await storedAccount)?.refreshToken;
+  if (refreshToken) {
+    await accountClient.revoke(refreshToken).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`Account token revocation failed: ${message}\n`);
+    });
+  }
   return account;
 }
 
@@ -536,6 +544,10 @@ function beginAccountSignIn(provider: AccountProvider): Promise<AccountSnapshot>
         redirectUri: loopback.redirectUri,
       });
       const identity = await accountClient.userInfo(tokens.accessToken);
+      if (identity.provider !== provider) {
+        await accountClient.revoke(tokens.refreshToken).catch(() => undefined);
+        throw new Error(`Luke received a ${identity.provider} account instead of ${provider}`);
+      }
       if (!(await storeCurrentAccount(generation, { ...tokens, ...identity }))) {
         throw new Error("Sign-in was cancelled");
       }
@@ -806,7 +818,7 @@ function registerIpc(): void {
 
   ipcMain.handle(channels.signOut, async (event) => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
-    return signOutAccount();
+    return signOutAccount({ revokeRemote: true });
   });
 
   ipcMain.handle(channels.setExpanded, (event, expanded: unknown, focus: unknown) => {

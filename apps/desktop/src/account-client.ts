@@ -89,6 +89,7 @@ export class AccountClient {
       code_challenge: input.codeChallenge,
       code_challenge_method: "S256",
       scope: "openid profile email offline_access",
+      prompt: "login",
     }).toString();
     return url.toString();
   }
@@ -117,6 +118,21 @@ export class AccountClient {
     });
     const refreshed = tokensFrom({ ...body, refresh_token: body.refresh_token ?? refreshToken });
     return refreshed;
+  }
+
+  /** Revokes the long-lived credential; local sign-out never depends on this succeeding. */
+  async revoke(refreshToken: string): Promise<void> {
+    const response = await this.#fetch(`${this.#baseUrl}/oauth2/revoke`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: this.#clientId,
+        token: refreshToken,
+        token_type_hint: "refresh_token",
+      }),
+      signal: AbortSignal.timeout(this.#timeoutMs),
+    });
+    if (!response.ok) await responseRecord(response);
   }
 
   async userInfo(accessToken: string): Promise<AccountIdentity> {

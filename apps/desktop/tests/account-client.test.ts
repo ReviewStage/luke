@@ -31,6 +31,7 @@ test("the authorization URL carries the native public-client contract", () => {
   assert.equal(url.searchParams.get("code_challenge"), "challenge-value");
   assert.equal(url.searchParams.get("code_challenge_method"), "S256");
   assert.equal(url.searchParams.get("scope"), "openid profile email offline_access");
+  assert.equal(url.searchParams.get("prompt"), "login");
 });
 
 test("the code exchange sends the verifier and redirect as form fields", async () => {
@@ -81,6 +82,28 @@ test("a refresh keeps the existing refresh token when rotation omits one", async
     accessToken: "new-access",
     refreshToken: "existing-refresh",
   });
+});
+
+test("sign-out revokes the refresh token as a public client", async () => {
+  let request: Request | undefined;
+  const client = new AccountClient({
+    baseUrl: "https://tryluke.dev/api/auth",
+    clientId: "luke-desktop",
+    fetch: async (input, init) => {
+      request = new Request(input, init);
+      return new Response(null, { status: 200 });
+    },
+  });
+
+  await client.revoke("refresh-to-revoke");
+
+  assert.ok(request);
+  assert.equal(request.url, "https://tryluke.dev/api/auth/oauth2/revoke");
+  assert.equal(request.method, "POST");
+  const form = new URLSearchParams(await request.text());
+  assert.equal(form.get("client_id"), "luke-desktop");
+  assert.equal(form.get("token"), "refresh-to-revoke");
+  assert.equal(form.get("token_type_hint"), "refresh_token");
 });
 
 test("userinfo returns only the renderer-safe identity fields", async () => {
