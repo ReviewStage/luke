@@ -53,3 +53,26 @@ Google's callback is `${BETTER_AUTH_URL}/api/auth/callback/google`; GitHub's is
 
 `api/feedback.mjs` deliberately remains plain ESM so Vercel's builder has nothing
 to transpile.
+
+# Hosted voice and attention
+
+`api/voice/mint.ts` and `api/attention/review.ts` run Luke's voice and
+attention review on the deployment's own OpenAI key for a signed-in desktop.
+Both are exact-path files, so Vercel's zero-config `api/` detection routes
+them without a `routes` entry; only the bracketed auth catch-all needs one.
+The logic lives in `server/hosted/` behind injected seams, and each request is
+resolved to a user through the auth service's own `/oauth2/userinfo` endpoint,
+called in process.
+
+The endpoints need one secret: `OPENAI_API_KEY`. Without it both answer 503
+and the hosted tier is simply off — the same kill switch as the feedback
+endpoint — which is the intended state for Preview deployments, so a preview
+never spends the production key. `LUKE_REALTIME_MODEL` and
+`LUKE_ATTENTION_MODEL` optionally override the models, under the same names
+the desktop honours; a blank value is treated as absent.
+
+Use is metered per user per UTC day in the Luke-owned `hosted_usage` table —
+one atomic upsert before each upstream call, checked against the ceilings in
+`server/hosted/quota.ts`. The ceilings bound how often calls open, not how
+long they run; a spend limit on the OpenAI project behind the key is the
+backstop and should be configured with it.
