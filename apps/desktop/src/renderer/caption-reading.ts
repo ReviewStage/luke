@@ -34,8 +34,17 @@ export const CAPTION_LINE_READ_MS = 3_000;
  * the second an interval later — so the line at the top leaves exactly when
  * its turn has passed, and the newest words wait their turn below the clip
  * instead of shoving the unread ones off the screen.
+ *
+ * The clock paces lines, so only whole lines wait on it. The volume hint's
+ * row is not a whole number of lines, so a block it shares can overflow by
+ * less than one — a remainder that is spacing, not words: it tucks the text
+ * up into the block's own top padding and hides nothing. It settles at once,
+ * because words that shift after they were readable read as a stutter, not
+ * as a line leaving.
  */
 export function pacedCaptionScroll(overflowPx: number, elapsedMs: number): number {
+  const overflow = Math.max(0, overflowPx);
+  const remainder = overflow % CAPTION_LINE_HEIGHT;
   const readLines = Math.floor(Math.max(0, elapsedMs) / CAPTION_LINE_READ_MS);
-  return Math.min(Math.max(0, overflowPx), readLines * CAPTION_LINE_HEIGHT);
+  return Math.min(overflow, remainder + readLines * CAPTION_LINE_HEIGHT);
 }
