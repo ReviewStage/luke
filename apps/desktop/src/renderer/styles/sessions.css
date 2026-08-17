@@ -561,11 +561,15 @@ html[data-keyboard="true"] button.session-row:focus-visible {
 }
 
 /* The tray's name line: the workspace's name on the left, and at the far end
-   the glyph leading the checkout. Everything here is in the panel's own face —
-   the line is what the user calls the work, not an identifier to be
-   consulted. */
+   the glyph leading the checkout — then, past those, any act that belongs to
+   the workspace rather than to one chat, drawn as the same chip a row's
+   actions use. Everything else here is in the panel's own face — the line is
+   what the user calls the work, not an identifier to be consulted. The wrap
+   is for the outcome line a pressed act answers on, which takes the full
+   width below the header's own line. */
 .workspace-tray-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 7px;
   padding: 9px 14px 8px;
@@ -579,8 +583,12 @@ html[data-keyboard="true"] button.session-row:focus-visible {
   color: var(--text-tertiary);
 }
 
+/* The name grows from a zero basis so it soaks up the line's free space and
+   ellipsizes when long, rather than letting the wrap above break the meta or
+   an act onto a line of its own. */
 .workspace-tray-name {
   overflow: hidden;
+  flex: 1 1 0;
   color: var(--text-secondary);
   font-size: 11px;
   font-weight: 560;

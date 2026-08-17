@@ -6,11 +6,14 @@ import {
   normalizeSession,
   PROVIDER_ID,
   PROVIDER_ID_LIST,
+  SESSION_CONTROL_KIND,
   SESSION_LOCATION,
   SESSION_STATUS,
   SESSION_URGENCY,
+  type SessionControl,
 } from "@sidecar/core";
 import {
+  actsOnWorkspace,
   arrangeSessions,
   DEFAULT_SESSION_VIEW,
   displaySessions,
@@ -23,6 +26,7 @@ import {
   sessionTally,
   tallyCaption,
   tallySummary,
+  workspaceTrayActions,
 } from "../src/renderer/session-model";
 import type { AppBootstrap } from "../src/shared/contracts";
 
@@ -614,6 +618,65 @@ test("a lone chat is a run of one, and namesake workspaces never join", () => {
       { workspaceId: "workspace-two", indexes: [1] },
     ],
   );
+});
+
+test("an act aimed at the workspace is the tray's, said once", () => {
+  // Every settled chat advertises the same workspace archive; the tray offers
+  // it once, carried by the first chat that advertised it, while a chat's own
+  // acts — the stop, aimed at its run — stay on the row that owns them.
+  const archive = { id: "archive-workspace", label: "Archive", target: "workspace-lisbon" };
+  const stop = {
+    id: "cancel-run",
+    label: "Stop this run",
+    kind: SESSION_CONTROL_KIND.STOP,
+    target: "run-1",
+  };
+  const chatOf = (id: string, controls: readonly SessionControl[]) =>
+    normalizeSession(CONDUCTOR_PROVIDER, {
+      providerSessionId: id,
+      title: `Chat ${id}`,
+      status: SESSION_STATUS.COMPLETE,
+      observedAt: 1_000,
+      controls,
+      workspace: { providerWorkspaceId: "workspace-lisbon", name: "lisbon-v2" },
+    });
+
+  const rows = displaySessions(bootstrap(false), [
+    chatOf("chat-one", [stop, archive]),
+    chatOf("chat-two", [archive]),
+  ]);
+
+  const acts = workspaceTrayActions(rows);
+  assert.deepEqual(
+    acts.map((act) => ({ actionId: act.action.id, sessionId: act.session.id })),
+    [{ actionId: "archive-workspace", sessionId: "chat-one" }],
+  );
+
+  const [first] = rows;
+  assert.ok(first);
+  const [firstStop, firstArchive] = first.actions;
+  assert.ok(firstStop && firstArchive);
+  assert.equal(actsOnWorkspace(first, firstStop), false);
+  assert.equal(actsOnWorkspace(first, firstArchive), true);
+});
+
+test("an ungrouped session's acts never read as a workspace's", () => {
+  // A target can only say "the workspace" beside a workspace to say it of: a
+  // session no provider grouped keeps every act its own, whatever the target.
+  const [row] = displaySessions(bootstrap(false), [
+    normalizeSession(CONDUCTOR_PROVIDER, {
+      providerSessionId: "chat-alone",
+      title: "Chat alone",
+      status: SESSION_STATUS.COMPLETE,
+      observedAt: 1_000,
+      controls: [{ id: "archive-workspace", label: "Archive", target: "workspace-lisbon" }],
+    }),
+  ]);
+  assert.ok(row);
+  const [action] = row.actions;
+  assert.ok(action);
+  assert.equal(actsOnWorkspace(row, action), false);
+  assert.deepEqual(workspaceTrayActions([row]), []);
 });
 
 test("a row carries its workspace by name, falling back to the id", () => {
