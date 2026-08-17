@@ -96,6 +96,13 @@ const CLAUDE_ADAPTER_DEFAULTS = {
   READ_HEAD_BYTES: 64 * 1024,
   MAXIMUM_ACTIVITY_LENGTH: 80,
   /**
+   * How far the one deeper read may reach when the bounded tail carries no
+   * conversation clock at all — bookkeeping appended in bulk past the whole
+   * tail, or a single record larger than it. Past this bound the file's date
+   * is the only account left, and the mtime fallback stands.
+   */
+  CLOCK_RESCUE_TAIL_BYTES: 512 * 1024,
+  /**
    * How much older than the transcript's clock a hook event may run and still
    * describe the same moment. The hook fires as a turn boundary happens and
    * the closing records land moments later under their own timestamps, so a
@@ -252,6 +259,17 @@ function cwdFromRecord(record: Record<string, unknown>): string | undefined {
 }
 
 /**
+ * Whether a record belongs to the conversation itself rather than to the
+ * bookkeeping Claude Code writes beside it. Only the conversation may date the
+ * session: bookkeeping is appended in bulk long after a conversation settled,
+ * so its stamps say when something handled the file, not when the session last
+ * moved — the same distinction that keeps mtime from dating it.
+ */
+function isConversationRecord(record: Record<string, unknown>): boolean {
+  return record.type === CLAUDE_RECORD_TYPE.SYSTEM || eventTypeFromRecord(record) !== undefined;
+}
+
+/**
  * Whether a user record carries a tool's output rather than a person's prompt.
  * The two look alike at the top level and mean opposite things: one continues
  * the turn under way, the other opens a new one.
@@ -276,7 +294,9 @@ function turnEnded(parsed: ParsedClaudeSessionTail): boolean {
 function readClaudeRecord(record: Record<string, unknown>, parsed: ParsedClaudeSessionTail): void {
   parsed.cwd = cwdFromRecord(record) ?? parsed.cwd;
   parsed.branch = text(record.gitBranch) ?? parsed.branch;
-  parsed.timestampMs = timestampFromRecord(record) ?? parsed.timestampMs;
+  if (isConversationRecord(record)) {
+    parsed.timestampMs = timestampFromRecord(record) ?? parsed.timestampMs;
+  }
 
   if (record.type === CLAUDE_RECORD_TYPE.AI_TITLE) {
     parsed.aiTitle = oneLine(text(record.aiTitle), maximumSessionTitleLength) ?? parsed.aiTitle;
@@ -440,12 +460,13 @@ function observationFromSessionFile(
   activeSessionFreshnessMs: number,
   hookEvent?: ObservedClaudeHookEvent,
 ): ProviderSessionObservation {
-  // The transcript's own clock, not the file's. Claude Code touches session
+  // The conversation's own clock, not the file's. Claude Code touches session
   // files in bulk long after their conversations ended — appending bookkeeping
-  // records and bumping mtimes — so mtime says when something last handled the
-  // file, while the last timestamped record says when the session last moved.
-  // Trusting mtime made every touched session read as active just now. The
-  // file's date remains the fallback for a tail that carried no timestamp.
+  // records, stamped or not, and bumping mtimes — so mtime says when something
+  // last handled the file, while the last timestamped conversation record says
+  // when the session last moved. Trusting mtime made every touched session
+  // read as active just now. The file's date remains the fallback for a
+  // transcript in which no conversation clock could be found at all.
   const transcriptAt = parsed.timestampMs ?? candidate.mtimeMs;
   // A hook event trailing the transcript's clock by more than the tolerance
   // describes a turn the transcript already moved past, so it is ignored
@@ -521,7 +542,23 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
   async #parsedTail(candidate: SessionFileCandidate): Promise<ParsedClaudeSessionTail> {
     const cached = this.#parsedTails.get(candidate.filePath);
     if (cached && cached.mtimeMs === candidate.mtimeMs) return cached.parsed;
-    const parsed = parseClaudeSessionTail(await readTail(candidate.filePath, this.#readTailBytes));
+    const tail = await readTail(candidate.filePath, this.#readTailBytes);
+    let parsed = parseClaudeSessionTail(tail);
+    // A truncated tail holding no conversation clock says nothing about when
+    // the session last moved, and the file's date is exactly what a bulk
+    // touch falsifies — so one deeper read goes looking for the conversation
+    // before the fallback is trusted. A file read whole is never re-read:
+    // there is nothing further back to find.
+    if (
+      parsed.timestampMs === undefined &&
+      Buffer.byteLength(tail, "utf8") >= this.#readTailBytes &&
+      CLAUDE_ADAPTER_DEFAULTS.CLOCK_RESCUE_TAIL_BYTES > this.#readTailBytes
+    ) {
+      const rescued = parseClaudeSessionTail(
+        await readTail(candidate.filePath, CLAUDE_ADAPTER_DEFAULTS.CLOCK_RESCUE_TAIL_BYTES),
+      );
+      if (rescued.timestampMs !== undefined) parsed = rescued;
+    }
     if (!parsed.aiTitle) {
       parsed.aiTitle = titleFromHead(await readHead(candidate.filePath, this.#readHeadBytes));
     }
