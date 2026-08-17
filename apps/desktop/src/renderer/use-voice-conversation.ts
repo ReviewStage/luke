@@ -20,6 +20,7 @@ import { type RefObject, useCallback, useEffect, useRef, useState } from "react"
 import type { MicrophoneStatus, SessionOpenResult, VoiceHotkeyState } from "../shared/contracts";
 import { TALK_KEY_RELEASE, talkKeyRelease } from "../shared/voice-hotkey";
 import { askRefusal } from "./ask-luke";
+import { captionHoldMs } from "./caption-reading";
 import { type AppActionCarrier, RealtimeVoiceSession } from "./realtime-session";
 import { SpokenNoticeAnnouncer } from "./spoken-notices";
 import { useStateWithRef } from "./use-state-with-ref";
@@ -305,6 +306,12 @@ export interface VoiceConversationOptions {
    */
   voiceAvailable: boolean | undefined;
   outputSilent: boolean;
+  /**
+   * The caption text's measured height, from the surface that draws it. The
+   * reading clock is stated in lines, and only a measurement knows how many
+   * lines the wrapped words came to.
+   */
+  captionHeight: number | undefined;
   fixtureSpeaking: boolean;
   /**
    * True while a settings row is recording a chord. Both Luke keys stay
@@ -347,6 +354,20 @@ export interface VoiceConversation {
   askLuke: (text: string) => Promise<string | undefined>;
   voiceTurn: WaveformVoice | undefined;
   lukeCaption: string | undefined;
+  /**
+   * When the words now on screen first appeared, live or held. It is the
+   * reading clock's start: the surface paces a silent caption's scroll from
+   * it, so the words scroll as read rather than as generated. Absent whenever
+   * no words are drawn.
+   */
+  captionShownAt: number | undefined;
+  /**
+   * Whether the words on screen are held past their reply's end for a muted
+   * reader. The surface keeps pacing a held caption even if the output has
+   * come back — the words were delivered into silence, and a scroll leaping
+   * to the end mid-read is the thing the hold exists to prevent.
+   */
+  captionHeld: boolean;
   /**
    * The session the reply being spoken is announcing, or nothing for a
    * conversation reply. Present exactly as long as the announcement is — it is
@@ -404,6 +425,35 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    * developer chose. Cleared the moment the turn moves on.
    */
   const [typedAsk, setTypedAsk] = useState(false);
+  /**
+   * When the words now on screen first appeared — the reading clock a muted
+   * output is captioned against. It is the caption's clock, not the reply's:
+   * words first drawn mid-reply, by a mute landing while Luke was already
+   * speaking, start it then, because that is when reading could have started.
+   */
+  const [captionShownAt, setCaptionShownAt, captionShownAtNow] = useStateWithRef<
+    number | undefined
+  >(undefined);
+  /**
+   * Words kept drawn past their reply's end, because the output was silent
+   * and the reading clock says they could not all have been read yet. Into a
+   * mute the caption is the speech, and speech that vanishes mid-sentence was
+   * never delivered. Cleared by its own timer, by the next words arriving, by
+   * the developer taking the turn, or by a stop — read from a callback, so it
+   * shadows a ref.
+   */
+  const [heldCaption, setHeldCaption, heldCaptionNow] = useStateWithRef<string | undefined>(
+    undefined,
+  );
+  const holdTimer = useRef<number | undefined>(undefined);
+  /** The words as last drawn live, for the falling edge that decides a hold. */
+  const lastSpokenCaption = useRef<string | undefined>(undefined);
+  /**
+   * Whether the user themselves asked for quiet — the stop key, or Escape.
+   * Words they silenced are not owed a hold: stop means stop. Cleared when
+   * the next words appear.
+   */
+  const stopAsked = useRef(false);
 
   const audioContext = useRef<AudioContext | undefined>(undefined);
   const remoteAudio = useRef<HTMLAudioElement | null>(null);
@@ -718,7 +768,24 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     voiceSession.current?.stopListening(false);
   }, []);
 
-  const stopSpeaking = useCallback(() => voiceSession.current?.stopSpeaking() === true, []);
+  const stopSpeaking = useCallback(() => {
+    // Stop means stop: a reply cut mid-word is not owed a hold, and words
+    // already held for reading are dismissed by the same ask. Answering true
+    // for a dismissed hold lets the press be consumed by it, exactly as a
+    // press over live speech is.
+    stopAsked.current = true;
+    const dismissedHold = heldCaptionNow() !== undefined;
+    if (holdTimer.current !== undefined) {
+      window.clearTimeout(holdTimer.current);
+      holdTimer.current = undefined;
+    }
+    if (dismissedHold) {
+      setHeldCaption(undefined);
+      setCaptionShownAt(undefined);
+    }
+    const stoppedReply = voiceSession.current?.stopSpeaking() === true;
+    return stoppedReply || dismissedHold;
+  }, [heldCaptionNow, setHeldCaption, setCaptionShownAt]);
 
   const syncGuide = useCallback((guide: AppGuideSnapshot) => {
     guideRef.current = guide;
@@ -908,9 +975,11 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   useEffect(
     () =>
       window.sidecar.onStopHotkeyPress(() => {
-        if (!optionsRef.current.capturingShortcut()) voiceSession.current?.stopSpeaking();
+        // Through the wrapper, not the session: the same press that cuts a
+        // reply dismisses words held for a muted reader.
+        if (!optionsRef.current.capturingShortcut()) stopSpeaking();
       }),
-    [],
+    [stopSpeaking],
   );
 
   useEffect(
@@ -921,7 +990,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   );
 
   const voiceTurn = waveformVoice(voiceStatus);
-  const lukeCaption = lukeCaptionToShow({
+  const spokenCaption = lukeCaptionToShow({
     fixtureSpeaking: options.fixtureSpeaking,
     captionsEnabled: options.voiceCaptions,
     typedAsk,
@@ -929,6 +998,66 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     voice: voiceTurn,
     caption: voiceCaption.text,
   });
+
+  // The caption's edges drive the reading clock and the hold. Words arriving
+  // beat words held — one block of words at a time — and start the clock at
+  // the moment reading could have. Words leaving while the output is silent
+  // are held for whatever reading time the clock still owes, then leave the
+  // way they always did; a fall that arrived with the developer's own turn is
+  // an interruption, which is a choice the way a stop is, and holds nothing.
+  useEffect(() => {
+    const previous = lastSpokenCaption.current;
+    lastSpokenCaption.current = spokenCaption;
+    if (spokenCaption !== undefined && previous === undefined) {
+      if (holdTimer.current !== undefined) {
+        window.clearTimeout(holdTimer.current);
+        holdTimer.current = undefined;
+      }
+      setHeldCaption(undefined);
+      stopAsked.current = false;
+      setCaptionShownAt(Date.now());
+      return;
+    }
+    if (spokenCaption !== undefined || previous === undefined) return;
+    const shownAt = captionShownAtNow();
+    const hold = captionHoldMs({
+      outputSilent: optionsRef.current.outputSilent,
+      interrupted: stopAsked.current || voiceTurn === WAVEFORM_VOICE.DEVELOPER,
+      textHeight: optionsRef.current.captionHeight,
+      elapsedMs: shownAt === undefined ? Number.POSITIVE_INFINITY : Date.now() - shownAt,
+    });
+    if (hold <= 0) {
+      setCaptionShownAt(undefined);
+      return;
+    }
+    setHeldCaption(previous);
+    holdTimer.current = window.setTimeout(() => {
+      holdTimer.current = undefined;
+      setHeldCaption(undefined);
+      setCaptionShownAt(undefined);
+    }, hold);
+  }, [spokenCaption, voiceTurn, captionShownAtNow, setCaptionShownAt, setHeldCaption]);
+
+  // A held caption also yields to the developer taking the turn mid-hold:
+  // they are speaking now, and the exchange is the thing to read.
+  useEffect(() => {
+    if (voiceTurn !== WAVEFORM_VOICE.DEVELOPER || heldCaptionNow() === undefined) return;
+    if (holdTimer.current !== undefined) {
+      window.clearTimeout(holdTimer.current);
+      holdTimer.current = undefined;
+    }
+    setHeldCaption(undefined);
+    setCaptionShownAt(undefined);
+  }, [voiceTurn, heldCaptionNow, setCaptionShownAt, setHeldCaption]);
+
+  useEffect(
+    () => () => {
+      if (holdTimer.current !== undefined) window.clearTimeout(holdTimer.current);
+    },
+    [],
+  );
+
+  const lukeCaption = spokenCaption ?? heldCaption;
 
   return {
     analyser,
@@ -946,6 +1075,8 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     askLuke,
     voiceTurn,
     lukeCaption,
+    captionShownAt,
+    captionHeld: heldCaption !== undefined,
     announcedSession: voiceCaption.about,
     remoteAudio,
     discardListening,

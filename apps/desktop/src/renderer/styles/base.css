@@ -1323,9 +1323,12 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 
 /* The translate is how a reply that outgrows the block rolls its oldest lines
    up under the capsule band. The cut lands where black meets black, so lines
-   slide under the shape rather than being sliced in the open; the newest
-   words are always on screen, which is the half of the reply the voice has
-   not reached yet. */
+   slide under the shape rather than being sliced in the open. Heard words
+   keep the newest line on screen — the half of the reply the voice has not
+   reached yet; words landing on a silent output scroll at reading pace
+   instead, oldest unread line first, because there the caption is the speech.
+   The line height is mirrored by CAPTION_LINE_HEIGHT in caption-reading.ts —
+   the two must agree, or the reading clock releases part-lines. */
 .voice-caption-text {
   display: block;
   width: 100%;
