@@ -184,17 +184,28 @@ export function FeedbackSlot({
     heldPreview.current = undefined;
   }, [previewClosing]);
 
+  // The landing outlives the ask exactly as the entry does: the panel's
+  // return clears it upstream a beat before the presentation actually moves,
+  // and falling back to the held fields for those frames would flash the
+  // just-sent form and jump the measured height. It keeps drawing what it
+  // last held until the shape has left it behind — and a composer asked for
+  // again is the landing's end, so a held entry takes the shape back.
+  const heldLanding = useRef(confirming);
+  if (confirming) heldLanding.current = confirming;
+  if (control.entry) heldLanding.current = undefined;
+  const landing = confirming ?? heldLanding.current;
+
   // The landing takes the fields' place in the same shell: same stage, same
   // hit region, same measured height — so the surface takes one clean spring
   // to the landing's own smaller shape and one back when the panel returns.
   // Inert throughout: there is nothing here to press, only something to see.
-  if (confirming && drawn) {
+  if (landing) {
     return (
       <div className="feedback-stage" inert>
         <div className="feedback-slot" ref={measure} data-hit-region={HIT_REGION.FEEDBACK}>
           <FeedbackLanding
-            key={confirming.play}
-            confirming={confirming}
+            key={landing.play}
+            confirming={landing}
             kind={entry?.kind ?? FEEDBACK_KIND.FEEDBACK}
             still={still}
           />
