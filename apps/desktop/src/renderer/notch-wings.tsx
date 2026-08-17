@@ -1,5 +1,5 @@
 import { CAPSULE_SIDE_WIDTH, PANEL_WIDTH, PEEK_SIDE_GROWTH } from "@sidecar/core";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { errandOriginProps } from "./luke-errand";
 import { LukeFace } from "./luke-face";
 import {
@@ -69,6 +69,51 @@ export function wingMarkCapacity(sideWidth: number): number {
 }
 
 const PEEK_SIDE_WIDTH = CAPSULE_SIDE_WIDTH + PEEK_SIDE_GROWTH;
+
+/**
+ * What the count badge costs to draw, in the stylesheet's numbers:
+ * `--wing-inset` before the number starts, the caption's own margin between
+ * the number and its words, and the 0.88 the badge rests at outside the
+ * panel. The keep is the last two pixels before the shape's edge, where the
+ * black is already turning its corner.
+ */
+const COUNT_INSET = 9;
+const COUNT_CAPTION_GAP = 9;
+const COUNT_RESTING_SCALE = 0.88;
+const COUNT_EDGE_KEEP = 2;
+
+/**
+ * How much of its resting scale the count badge keeps so the text never
+ * crosses the shape's edge. The number grows with the sessions it counts and
+ * the shape beside the housing does not, so past the width the wing can hold
+ * the text scales down instead of being drawn onto the desktop. The widths
+ * arrive in layout pixels — measured before any transform — so the room is
+ * compared against them at the scale the stylesheet is about to apply; the
+ * factor multiplies that resting scale rather than replacing it, and is 1
+ * whenever the room already suffices. The caption unfolds only in the peek
+ * and the panel, so only those states have to fit it; every other state
+ * draws the number alone inside the capsule's own side.
+ */
+export function countBadgeFit(
+  presentation: PanelPresentation,
+  housingWidth: number,
+  valueWidth: number,
+  captionWidth: number,
+): number {
+  const captioned =
+    presentation === PANEL_PRESENTATION.PEEK || presentation === PANEL_PRESENTATION.PANEL;
+  const textWidth = captioned ? valueWidth + COUNT_CAPTION_GAP + captionWidth : valueWidth;
+  if (textWidth <= 0) return 1;
+  const sideWidth =
+    presentation === PANEL_PRESENTATION.PANEL
+      ? (PANEL_WIDTH - housingWidth) / 2
+      : presentation === PANEL_PRESENTATION.PEEK
+        ? PEEK_SIDE_WIDTH
+        : CAPSULE_SIDE_WIDTH;
+  const restingScale = presentation === PANEL_PRESENTATION.PANEL ? 1 : COUNT_RESTING_SCALE;
+  const room = Math.max(0, sideWidth - COUNT_INSET - COUNT_EDGE_KEEP);
+  return Math.min(1, room / (restingScale * textWidth));
+}
 
 /**
  * The wing's strip, as slots: each provider's mark, then — when the
@@ -173,6 +218,29 @@ export function NotchWings({
   const marksRef = useWingReorderMotion();
   const drawnSlots = useRoster(slots, marksRef);
 
+  // The count's text, measured in layout pixels: `offsetWidth` never sees the
+  // transform about to draw it, so the fit below can divide by the scale the
+  // stylesheet applies without measuring its own answer. No dependency list,
+  // the way the reorder motion measures — the words change with the tally, and
+  // a re-read per commit costs less than proving which commits reworded them —
+  // and the guard keeps an unchanged measurement from re-rendering anything.
+  const countValueElement = useRef<HTMLSpanElement>(null);
+  const countCaptionElement = useRef<HTMLSpanElement>(null);
+  const [countWidths, setCountWidths] = useState({ value: 0, caption: 0 });
+  useLayoutEffect(() => {
+    const value = countValueElement.current?.offsetWidth ?? 0;
+    const caption = countCaptionElement.current?.offsetWidth ?? 0;
+    setCountWidths((held) =>
+      held.value === value && held.caption === caption ? held : { value, caption },
+    );
+  });
+  const countFit = countBadgeFit(
+    presentation,
+    housingWidth,
+    countWidths.value,
+    countWidths.caption,
+  );
+
   return (
     <>
       <div className="wing wing-left" data-audio={String(meterShown)}>
@@ -246,16 +314,17 @@ export function NotchWings({
         <div className="wing-inner">
           <span
             className="count-badge"
+            style={{ "--count-fit": countFit } as React.CSSProperties}
             data-state={tally.urgency}
             data-empty={String(tally.total === 0)}
             role="status"
             aria-live="polite"
             aria-label={tallySummary(tally)}
           >
-            <span className="count-value" aria-hidden="true">
+            <span className="count-value" aria-hidden="true" ref={countValueElement}>
               {tally.total}
             </span>
-            <span className="count-caption" aria-hidden="true">
+            <span className="count-caption" aria-hidden="true" ref={countCaptionElement}>
               {tallyCaption(tally)}
             </span>
           </span>
