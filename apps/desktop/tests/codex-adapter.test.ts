@@ -653,3 +653,228 @@ test("returns an empty snapshot when node sqlite is unavailable", async (t) => {
 
   assert.deepEqual(await adapter.observe(), []);
 });
+
+// ---------------------------------------------------------------------------
+// Hook-event refinement. Every test here layers a spool the observation hook
+// would have written over the state database, because that is the arrangement
+// in production: the rows and rollouts are always read, and the event only
+// sharpens them.
+// ---------------------------------------------------------------------------
+
+async function temporaryHookSpool(t: TestContext): Promise<string> {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "luke-codex-spool-"));
+  t.after(async () => {
+    await fs.rm(directory, { recursive: true, force: true });
+  });
+  return directory;
+}
+
+async function writeHookEvent(
+  spoolDirectory: string,
+  providerSessionId: string,
+  event: string,
+  mtimeMs: number,
+): Promise<void> {
+  const filePath = path.join(spoolDirectory, `${providerSessionId}.json`);
+  await fs.writeFile(filePath, JSON.stringify({ event }));
+  await fs.utimes(filePath, mtimeMs / 1000, mtimeMs / 1000);
+}
+
+test("a permission request the database cannot show turns the row to waiting", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const spool = await temporaryHookSpool(t);
+  // Mid-turn by every record: a call holding for approval writes nothing
+  // further, so without the event this thread reads as working.
+  const rolloutPath = path.join(codexHome, "rollout-held.jsonl");
+  await writeCodexState(codexHome, [
+    {
+      id: "codex-held",
+      cwd: "/Users/test/luke",
+      observedAt: TEST_TIME - 5 * 60 * 1000,
+      rolloutPath,
+    },
+  ]);
+  await writeRollout(rolloutPath, [{ type: "event_msg", payload: { type: "task_started" } }]);
+  await writeHookEvent(spool, "codex-held", "notification", TEST_TIME - 60_000);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WAITING);
+  // The event also dates the session: the spool is written only by Luke's own
+  // script, so its clock is the moment the session actually moved.
+  assert.equal(observation?.observedAt, TEST_TIME - 60_000);
+});
+
+test("a session-end event settles a row the rollout would leave waiting", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const spool = await temporaryHookSpool(t);
+  const rolloutPath = path.join(codexHome, "rollout-ended.jsonl");
+  await writeCodexState(codexHome, [
+    {
+      id: "codex-ended",
+      cwd: "/Users/test/luke",
+      observedAt: TEST_TIME - 5 * 60 * 1000,
+      rolloutPath,
+    },
+  ]);
+  await writeRollout(rolloutPath, [
+    { type: "event_msg", payload: { type: "task_complete", last_agent_message: "Done." } },
+  ]);
+  await writeHookEvent(spool, "codex-ended", "session-end", TEST_TIME - 60_000);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.COMPLETE);
+});
+
+test("a stop event keeps a finished turn waiting past the freshness decay", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const spool = await temporaryHookSpool(t);
+  const rolloutPath = path.join(codexHome, "rollout-still-waiting.jsonl");
+  // Twenty minutes past the row's clock, the database alone decays to unknown.
+  await writeCodexState(codexHome, [
+    {
+      id: "codex-still-waiting",
+      cwd: "/Users/test/luke",
+      observedAt: TEST_TIME - 20 * 60 * 1000,
+      rolloutPath,
+    },
+  ]);
+  await writeRollout(rolloutPath, [
+    { type: "event_msg", payload: { type: "task_complete", last_agent_message: "Done." } },
+  ]);
+  await writeHookEvent(spool, "codex-still-waiting", "stop", TEST_TIME - 60_000);
+
+  const adapter = new CodexSessionAdapter({
+    activeSessionFreshnessMs: 15 * 60 * 1000,
+    codexHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60 * 60 * 1000,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WAITING);
+});
+
+test("an event the thread has moved past refines nothing", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const spool = await temporaryHookSpool(t);
+  const rolloutPath = path.join(codexHome, "rollout-moved-on.jsonl");
+  await writeCodexState(codexHome, [
+    { id: "codex-moved-on", cwd: "/Users/test/luke", observedAt: TEST_TIME - 60_000, rolloutPath },
+  ]);
+  await writeRollout(rolloutPath, [{ type: "event_msg", payload: { type: "task_started" } }]);
+  // A stop from a minute before the row's clock: hooks were off, or the write
+  // raced. The thread is demonstrably mid-turn again.
+  await writeHookEvent(spool, "codex-moved-on", "stop", TEST_TIME - 2 * 60 * 1000);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WORKING);
+  assert.equal(observation?.observedAt, TEST_TIME - 60_000);
+});
+
+test("a prompt event reads a fresh turn as working before the rollout shows it", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const spool = await temporaryHookSpool(t);
+  const rolloutPath = path.join(codexHome, "rollout-prompted.jsonl");
+  await writeCodexState(codexHome, [
+    { id: "codex-prompted", cwd: "/Users/test/luke", observedAt: TEST_TIME - 60_000, rolloutPath },
+  ]);
+  await writeRollout(rolloutPath, [
+    { type: "event_msg", payload: { type: "task_complete", last_agent_message: "Earlier." } },
+  ]);
+  await writeHookEvent(spool, "codex-prompted", "prompt", TEST_TIME - 5_000);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WORKING);
+});
+
+test("a notification the thread has answered stands down at once", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const spool = await temporaryHookSpool(t);
+  const rolloutPath = path.join(codexHome, "rollout-approved.jsonl");
+  // The approval was granted and the call ran: a row touched after the
+  // notification, though within the tolerance the other events enjoy.
+  await writeCodexState(codexHome, [
+    { id: "codex-approved", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000, rolloutPath },
+  ]);
+  await writeRollout(rolloutPath, [{ type: "event_msg", payload: { type: "task_started" } }]);
+  await writeHookEvent(spool, "codex-approved", "notification", TEST_TIME - 3_000);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WORKING);
+});
+
+test("a spool that cannot be read costs only the refinement", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  await writeCodexState(codexHome, [
+    { id: "codex-unrefined", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000 },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    hookEventsDirectory: () => path.join(codexHome, "no-such-spool"),
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WORKING);
+});
+
+test("a permission hold that outlives the freshness window never reads as work", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const spool = await temporaryHookSpool(t);
+  const rolloutPath = path.join(codexHome, "rollout-long-hold.jsonl");
+  // Codex deliberately holds a long open turn at working, so without this
+  // rule a hold past the window would flip from waiting back to active work.
+  await writeCodexState(codexHome, [
+    {
+      id: "codex-long-hold",
+      cwd: "/Users/test/luke",
+      observedAt: TEST_TIME - 30 * 60 * 1000,
+      rolloutPath,
+    },
+  ]);
+  await writeRollout(rolloutPath, [{ type: "event_msg", payload: { type: "task_started" } }]);
+  await writeHookEvent(spool, "codex-long-hold", "notification", TEST_TIME - 20 * 60 * 1000);
+
+  const adapter = new CodexSessionAdapter({
+    activeSessionFreshnessMs: 15 * 60 * 1000,
+    codexHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60 * 60 * 1000,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.UNKNOWN);
+});

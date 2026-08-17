@@ -28,10 +28,12 @@ import {
   PROVIDER_ACT_RESULT_STATUS,
   PROVIDER_ID,
   type ProviderControlResult,
+  type ProviderId,
   type ProviderMessageResult,
   type ProviderWorkspaceResult,
   realtimeMintExplanation,
   rosterRelevantSessions,
+  SESSION_LOCATION,
   SessionAttentionReviewer,
   type SessionIdentity,
   SessionNoticeTracker,
@@ -60,7 +62,7 @@ import {
   systemPreferences,
   Tray,
 } from "electron";
-import { ClaudeCodeSessionAdapter } from "./claude-code-adapter";
+import { CLAUDE_CODE_PROVIDER, ClaudeCodeSessionAdapter } from "./claude-code-adapter";
 import {
   CLAUDE_HOOK_SCRIPT_NAME,
   CLAUDE_HOOK_SPOOL_MAXIMUM_AGE_MS,
@@ -70,11 +72,20 @@ import {
   pruneClaudeHookSpool,
 } from "./claude-code-hooks";
 import { readClaudeSessionTranscript } from "./claude-code-transcript";
-import { CodexSessionAdapter } from "./codex-adapter";
+import { CODEX_PROVIDER, CodexSessionAdapter, defaultCodexHome } from "./codex-adapter";
+import {
+  CODEX_HOOK_SCRIPT_NAME,
+  CODEX_HOOK_SPOOL_MAXIMUM_AGE_MS,
+  type CodexHookInstallation,
+  installCodexObservationHooks,
+  pruneCodexHookSpool,
+} from "./codex-hooks";
+import { readCodexSessionTranscript } from "./codex-transcript";
 import { ConductorSessionAdapter } from "./conductor-adapter";
 import { CopilotSessionAdapter } from "./copilot-adapter";
 import { CURSOR_PROVIDER, CursorSessionAdapter } from "./cursor-adapter";
 import { CursorLocalSessionAdapter } from "./cursor-local-adapter";
+import { readCursorSessionTranscript } from "./cursor-transcript";
 import { DevinSessionAdapter } from "./devin-adapter";
 import { DockPresence } from "./dock-presence";
 import { feedbackDeliveryFromEnvironment } from "./feedback-delivery";
@@ -89,6 +100,7 @@ import {
   unavailableRealtimeDiagnostics,
 } from "./openai-realtime-credentials";
 import { OpenCodeSessionAdapter } from "./opencode-adapter";
+import { readOpenCodeSessionTranscript } from "./opencode-transcript";
 import { OutputVolumeWatcher } from "./output-volume";
 import { PanelManager } from "./panel-manager";
 import { runModeFor } from "./run-mode";
@@ -188,25 +200,36 @@ const adapterByCredentialProvider: ReadonlyMap<CredentialProviderId, SessionProv
     [CREDENTIAL_PROVIDER_ID.DEVIN, devinAdapter],
     [CREDENTIAL_PROVIDER_ID.JULES, julesAdapter],
   ]);
-// Luke's own corner of the application data, holding the observation hook
-// script and the spool it writes into. Resolved lazily like the settings
-// store's directory, and reproduced by `claudeHookInstallation()` whenever the
-// registration converges.
+// Luke's own corners of the application data, holding each provider's
+// observation hook script and the spool it writes into. Resolved lazily like
+// the settings store's directory, and reproduced by the installation
+// functions whenever the registrations converge.
 const CLAUDE_HOOKS_DIRECTORY_NAME = "claude-code-hooks";
-const CLAUDE_HOOK_SPOOL_DIRECTORY_NAME = "events";
+const CODEX_HOOKS_DIRECTORY_NAME = "codex-hooks";
+const HOOK_SPOOL_DIRECTORY_NAME = "events";
 function claudeHookInstallation(): ClaudeCodeHookInstallation {
   const directory = path.join(app.getPath("userData"), CLAUDE_HOOKS_DIRECTORY_NAME);
   return {
     claudeHome: defaultClaudeHome(),
     hookScriptPath: path.join(directory, CLAUDE_HOOK_SCRIPT_NAME),
-    spoolDirectory: path.join(directory, CLAUDE_HOOK_SPOOL_DIRECTORY_NAME),
+    spoolDirectory: path.join(directory, HOOK_SPOOL_DIRECTORY_NAME),
+  };
+}
+function codexHookInstallation(): CodexHookInstallation {
+  const directory = path.join(app.getPath("userData"), CODEX_HOOKS_DIRECTORY_NAME);
+  return {
+    codexHome: defaultCodexHome(),
+    hookScriptPath: path.join(directory, CODEX_HOOK_SCRIPT_NAME),
+    spoolDirectory: path.join(directory, HOOK_SPOOL_DIRECTORY_NAME),
   };
 }
 const sessionAdapters = [
   new ClaudeCodeSessionAdapter({
     hookEventsDirectory: () => claudeHookInstallation().spoolDirectory,
   }),
-  new CodexSessionAdapter(),
+  new CodexSessionAdapter({
+    hookEventsDirectory: () => codexHookInstallation().spoolDirectory,
+  }),
   conductorAdapter,
   copilotAdapter,
   cursorAdapter,
@@ -1010,36 +1033,70 @@ function registerIpc(): void {
   );
 
   // Reading a session's transcript is a conversational act that returns
-  // session content instead of performing anything: the file Claude Code
+  // session content instead of performing anything: the file its provider
   // wrote is read on this machine, rendered into a bounded conversation, and
   // discarded — nothing reaches a provider, and nothing is kept. The renderer
   // names a session rather than a path, validated here against the registry
   // like every session act, so the set of transcripts Luke can read is the
-  // set of sessions currently observed. Claude Code is the one provider this
-  // build reads a transcript for; the others answer honestly rather than
-  // guessing at files they never documented.
+  // set of sessions currently observed. The readers below are the providers
+  // whose local transcripts this build documents reading; everything else —
+  // above all a cloud session, whose conversation lives with its provider —
+  // answers honestly rather than guessing at files never documented.
+  const transcriptReaders: ReadonlyMap<
+    ProviderId,
+    (providerSessionId: string) => Promise<string | undefined>
+  > = new Map([
+    [
+      PROVIDER_ID.CLAUDE_CODE,
+      (providerSessionId: string) =>
+        readClaudeSessionTranscript({ claudeHome: defaultClaudeHome(), providerSessionId }),
+    ],
+    [
+      PROVIDER_ID.CODEX,
+      (providerSessionId: string) => readCodexSessionTranscript({ providerSessionId }),
+    ],
+    [
+      PROVIDER_ID.CURSOR,
+      (providerSessionId: string) => readCursorSessionTranscript({ providerSessionId }),
+    ],
+    [
+      PROVIDER_ID.OPENCODE,
+      (providerSessionId: string) => readOpenCodeSessionTranscript({ providerSessionId }),
+    ],
+  ]);
   ipcMain.handle(
     channels.readSessionTranscript,
     async (event, identity: unknown): Promise<SessionTranscriptResult> => {
       if (!trustedSender(event)) throw new Error("Untrusted renderer");
       if (!isSessionIdentity(identity)) throw new Error("Invalid transcript request");
-      if (!sessionRegistry.get(identity)) {
+      const session = sessionRegistry.get(identity);
+      if (!session) {
         return {
           status: SESSION_TRANSCRIPT_RESULT_STATUS.REJECTED,
           reason: "No observed session matches that identity.",
         };
       }
-      if (identity.providerId !== PROVIDER_ID.CLAUDE_CODE) {
+      // Checked here as well as in the reader's own lookup, because one
+      // provider observes both halves: a cloud Cursor agent shares its
+      // provider id with the sessions on this machine, and only the local
+      // half has a file here to read.
+      if (session.location !== SESSION_LOCATION.LOCAL) {
         return {
           status: SESSION_TRANSCRIPT_RESULT_STATUS.UNSUPPORTED,
-          reason: "Only Claude Code sessions keep a transcript this build can read.",
+          reason: "A cloud session's conversation lives with its provider, not on this machine.",
+        };
+      }
+      const readTranscript = isProviderId(identity.providerId)
+        ? transcriptReaders.get(identity.providerId)
+        : undefined;
+      if (!readTranscript) {
+        return {
+          status: SESSION_TRANSCRIPT_RESULT_STATUS.UNSUPPORTED,
+          reason: "That session's provider keeps no transcript this build can read.",
         };
       }
       try {
-        const transcript = await readClaudeSessionTranscript({
-          claudeHome: defaultClaudeHome(),
-          providerSessionId: identity.providerSessionId,
-        });
+        const transcript = await readTranscript(identity.providerSessionId);
         if (!transcript) {
           return {
             status: SESSION_TRANSCRIPT_RESULT_STATUS.REJECTED,
@@ -1517,22 +1574,56 @@ function observedWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
 }
 
 /**
- * Converges the Claude Code hook registration: the script, the spool, and the
- * settings entries are put in place, and spool files past the observation
- * window are dropped. Run once at every launch — the registration is part of
- * observing at all, like reading the transcripts, rather than a preference —
- * and never in a fixture or capture run: a deterministic run must not touch
- * the developer's real provider configuration. Failure costs only the sharper
- * status: the transcript tail is observed either way.
+ * Converges the local providers' hook registrations: each provider's script,
+ * spool, and configuration entries are put in place, and spool files past the
+ * observation window are dropped. Run once at every launch — the registration
+ * is part of observing at all, like reading the transcripts, rather than a
+ * preference — and never in a fixture or capture run: a deterministic run
+ * must not touch the developer's real provider configuration. Failure costs
+ * only the sharper status: the transcripts and state databases are observed
+ * either way, and one provider's failure never reaches the other's — that is
+ * the same independence the observation passes keep.
  */
 async function applyLocalSessionHooks(): Promise<void> {
   if (fixtureMode) return;
-  const installation = claudeHookInstallation();
-  await installClaudeCodeObservationHooks(installation);
-  await pruneClaudeHookSpool(
-    installation.spoolDirectory,
-    CLAUDE_HOOK_SPOOL_MAXIMUM_AGE_MS,
-    Date.now(),
+  const registrations = [
+    {
+      providerName: CLAUDE_CODE_PROVIDER.displayName,
+      register: async () => {
+        const installation = claudeHookInstallation();
+        await installClaudeCodeObservationHooks(installation);
+        await pruneClaudeHookSpool(
+          installation.spoolDirectory,
+          CLAUDE_HOOK_SPOOL_MAXIMUM_AGE_MS,
+          Date.now(),
+        );
+      },
+    },
+    {
+      providerName: CODEX_PROVIDER.displayName,
+      register: async () => {
+        const installation = codexHookInstallation();
+        await installCodexObservationHooks(installation);
+        await pruneCodexHookSpool(
+          installation.spoolDirectory,
+          CODEX_HOOK_SPOOL_MAXIMUM_AGE_MS,
+          Date.now(),
+        );
+      },
+    },
+  ];
+  // Failures are logged under the provider they belong to and absorbed here:
+  // one provider's broken configuration must neither reach the other's
+  // registration nor the launch, and either costs only the sharper status.
+  await Promise.all(
+    registrations.map(async ({ providerName, register }) => {
+      try {
+        await register();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        process.stderr.write(`${providerName} hook registration failed: ${message}\n`);
+      }
+    }),
   );
 }
 
@@ -1914,12 +2005,13 @@ if (!app.requestSingleInstanceLock()) {
       (enabled) => mediaDuck.setEnabled(enabled),
       () => mediaDuck.setEnabled(APP_SETTING_DEFAULTS.duckOtherMedia),
     );
-    // The hook registration converges at every launch. Failure here is logged
-    // and absorbed — a launch must never hang on another app's configuration
-    // file.
+    // The hook registrations converge at every launch. Each provider's
+    // failure is logged under its own name and absorbed inside — a launch
+    // must never hang on another app's configuration file — so this catch is
+    // only the backstop for the arrangement itself failing.
     void applyLocalSessionHooks().catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
-      process.stderr.write(`Claude Code hook registration failed: ${message}
+      process.stderr.write(`Local session hook registration failed: ${message}
 `);
     });
     // Awaited, so the key and the voice it speaks with are both in hand before

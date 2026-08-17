@@ -123,7 +123,7 @@ const OPENCODE_PLACEHOLDER_TITLE_PREFIX = "New session - ";
  * deliberately not in it, because a signed URL is a credential and no other
  * adapter sends one anywhere; a fetch is named by its tool alone.
  */
-const OPENCODE_TOOL_INPUT_KEY = [
+export const OPENCODE_TOOL_INPUT_KEY = [
   "description",
   "command",
   "filePath",
@@ -408,10 +408,32 @@ async function legacySessionFilesIn(projectDirectory: string): Promise<SessionFi
   );
 }
 
-function defaultDataDirectory(): string {
+export function defaultOpenCodeDataDirectory(): string {
   const dataHome = process.env[OPENCODE_ENVIRONMENT.DATA_HOME]?.trim();
   if (dataHome) return path.join(dataHome, OPENCODE_DATA_DIRECTORY_NAME);
   return path.join(os.homedir(), ...OPENCODE_DATA_HOME_SEGMENTS, OPENCODE_DATA_DIRECTORY_NAME);
+}
+
+/**
+ * Where the database may be, most authoritative first: wherever `OPENCODE_DB`
+ * points, then the file every release channel writes, then the one
+ * prod-channel builds briefly wrote.
+ */
+export function openCodeDatabasePaths(dataDirectory: string): string[] {
+  const configured = process.env[OPENCODE_ENVIRONMENT.DATABASE_FILE]?.trim();
+  const configuredPath =
+    configured && configured !== OPENCODE_MEMORY_DATABASE
+      ? path.isAbsolute(configured)
+        ? configured
+        : path.join(dataDirectory, configured)
+      : undefined;
+  return uniquePaths(
+    [
+      configuredPath,
+      path.join(dataDirectory, OPENCODE_DATABASE_FILE.CURRENT),
+      path.join(dataDirectory, OPENCODE_DATABASE_FILE.PROD_CHANNEL),
+    ].filter((candidate): candidate is string => candidate !== undefined),
+  );
 }
 
 /**
@@ -444,7 +466,7 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
   >();
 
   constructor(options: OpenCodeAdapterOptions = {}) {
-    this.#dataDirectory = options.dataDirectory ?? defaultDataDirectory();
+    this.#dataDirectory = options.dataDirectory ?? defaultOpenCodeDataDirectory();
     this.#now = options.now ?? Date.now;
     const resolved = resolveOptions(
       options,
@@ -460,7 +482,7 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
   }
 
   async observe(): Promise<readonly ProviderSessionObservation[]> {
-    for (const databasePath of this.#databasePaths()) {
+    for (const databasePath of openCodeDatabasePaths(this.#dataDirectory)) {
       const database = await openReadOnlyDatabase(this.#sqlite, databasePath);
       if (!database) continue;
       let snapshots: OpenCodeSessionSnapshot[] | undefined;
@@ -479,28 +501,6 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
       );
     }
     return this.#legacyObservations();
-  }
-
-  /**
-   * Where the database may be, most authoritative first: wherever
-   * `OPENCODE_DB` points, then the file every release channel writes, then the
-   * one prod-channel builds briefly wrote.
-   */
-  #databasePaths(): string[] {
-    const configured = process.env[OPENCODE_ENVIRONMENT.DATABASE_FILE]?.trim();
-    const configuredPath =
-      configured && configured !== OPENCODE_MEMORY_DATABASE
-        ? path.isAbsolute(configured)
-          ? configured
-          : path.join(this.#dataDirectory, configured)
-        : undefined;
-    return uniquePaths(
-      [
-        configuredPath,
-        path.join(this.#dataDirectory, OPENCODE_DATABASE_FILE.CURRENT),
-        path.join(this.#dataDirectory, OPENCODE_DATABASE_FILE.PROD_CHANNEL),
-      ].filter((candidate): candidate is string => candidate !== undefined),
-    );
   }
 
   /** The session rows, or nothing when neither query fits this database. */

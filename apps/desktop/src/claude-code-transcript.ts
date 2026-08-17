@@ -1,6 +1,7 @@
 import path from "node:path";
 import { isRecord, oneLine, text } from "@sidecar/core";
 import { readDirectory, readTail, statDirectoryEntry, tailRecords } from "./local-session-adapter";
+import { boundedTranscript, TRANSCRIPT_BOUNDS } from "./local-transcript";
 
 /**
  * On-demand reading of one Claude Code session's transcript, for a question
@@ -18,23 +19,6 @@ const CLAUDE_SESSION_FILE_EXTENSION = ".jsonl";
 
 /** The same shape the observation hook accepts: the ids Claude Code mints. */
 const CLAUDE_SESSION_ID_SHAPE = /^[0-9a-fA-F-]{8,64}$/;
-
-const TRANSCRIPT_BOUNDS = {
-  /** How much of the file's end one read may load. */
-  READ_TAIL_BYTES: 256 * 1024,
-  /** A rendered message line: enough to carry meaning, not a document. */
-  MAXIMUM_MESSAGE_LENGTH: 400,
-  /** A rendered tool call or its result: the gist, never the payload. */
-  MAXIMUM_TOOL_LENGTH: 200,
-  /**
-   * The whole rendering. It enters a live conversation as one tool output,
-   * so it is sized for answering a question about the session, not for
-   * carrying the session.
-   */
-  MAXIMUM_RENDERED_LENGTH: 8_000,
-} as const;
-
-const OMISSION_MARKER = "[earlier turns omitted]";
 
 /** Tool inputs whose value names the work, in the order they read best. */
 const TOOL_INPUT_KEYS = ["description", "file_path", "pattern", "command", "prompt"] as const;
@@ -176,9 +160,7 @@ async function transcriptFilePath(
 
 /**
  * Reads one session's recent transcript into a bounded rendering, or nothing
- * when no transcript file exists for that id. The newest turns win the space:
- * a question about a session is almost always about where it is now, so the
- * rendering is cut from the front, at a line, and says so.
+ * when no transcript file exists for that id.
  */
 export async function readClaudeSessionTranscript(
   request: ClaudeTranscriptRequest,
@@ -188,14 +170,8 @@ export async function readClaudeSessionTranscript(
 
   const tail = await readTail(filePath, request.readTailBytes ?? TRANSCRIPT_BOUNDS.READ_TAIL_BYTES);
   const lines = tailRecords(tail).flatMap(linesFromRecord);
-  if (lines.length === 0) return undefined;
-
-  const maximumLength = request.maximumRenderedLength ?? TRANSCRIPT_BOUNDS.MAXIMUM_RENDERED_LENGTH;
-  let rendered = lines.join("\n");
-  if (rendered.length > maximumLength) {
-    const kept = rendered.slice(rendered.length - maximumLength);
-    const firstWholeLine = kept.indexOf("\n");
-    rendered = `${OMISSION_MARKER}\n${firstWholeLine >= 0 ? kept.slice(firstWholeLine + 1) : kept}`;
-  }
-  return rendered;
+  return boundedTranscript(
+    lines,
+    request.maximumRenderedLength ?? TRANSCRIPT_BOUNDS.MAXIMUM_RENDERED_LENGTH,
+  );
 }

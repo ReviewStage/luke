@@ -17,6 +17,12 @@ import {
   text,
   wholeNumber,
 } from "@sidecar/core";
+import {
+  CODEX_HOOK_EVENT,
+  type CodexHookEvent,
+  type ObservedCodexHookEvent,
+  readCodexHookEvent,
+} from "./codex-hooks";
 import { readTail, readTextFile, uniquePaths, workspaceLabel } from "./local-session-adapter";
 import {
   canIgnoreSqliteError,
@@ -94,7 +100,7 @@ const CODEX_RESPONSE_PAYLOAD = {
  * best. `cmd` leads because `exec_command` is by far the most common call Codex
  * makes and that is what it calls its command line.
  */
-const CODEX_CALL_ARGUMENT_KEY = [
+export const CODEX_CALL_ARGUMENT_KEY = [
   "cmd",
   "command",
   "path",
@@ -110,6 +116,15 @@ const CODEX_ADAPTER_DEFAULTS = {
   /** Only the threads that can still change are worth a second file read. */
   MAXIMUM_ROLLOUT_READS: 12,
   MAXIMUM_ACTIVITY_LENGTH: 80,
+  /**
+   * How much older than the thread row's clock a hook event may run and still
+   * describe the same moment. The hook fires as a turn boundary happens and
+   * Codex touches the row moments later under its own clock, so a boundary's
+   * event usually trails the row it belongs with by a breath — never by more
+   * than this. An event further behind describes a turn the thread has
+   * already moved past, and refines nothing.
+   */
+  HOOK_EVENT_TOLERANCE_MS: 5_000,
 } as const;
 
 // Every column is read defensively from the row, so the projection stays `*`:
@@ -145,6 +160,14 @@ export interface CodexAdapterOptions {
   now?: () => number;
   activeSessionFreshnessMs?: number;
   sqlite?: SqliteModuleLoader;
+  /**
+   * Where the observation hook spools its events, when hooks are on at all.
+   * Read lazily like the cloud adapters' credentials, because the app decides
+   * the path after this adapter is declared. Absent — or answering nothing —
+   * the adapter reads the state database and rollouts alone, exactly as it
+   * always has: the hooks only ever sharpen what those already showed.
+   */
+  hookEventsDirectory?: () => string | undefined;
 }
 
 /**
@@ -153,7 +176,7 @@ export interface CodexAdapterOptions {
  * so a list of plain values is joined instead of dropped. A list of anything
  * else, such as a plan's steps, is not a phrase and is left alone.
  */
-function argumentPhrase(value: unknown): string | undefined {
+export function argumentPhrase(value: unknown): string | undefined {
   if (typeof value === "string") return text(value);
   if (typeof value === "number") return String(value);
   if (!Array.isArray(value) || value.length === 0) return undefined;
@@ -303,7 +326,12 @@ async function sqliteHomeFromConfig(codexHome: string): Promise<string | undefin
     : undefined;
 }
 
-async function stateDatabasePaths(
+/**
+ * Where Codex's state database may be, most authoritative first: an explicit
+ * home, then the one `config.toml` names, then wherever `CODEX_SQLITE_HOME`
+ * points, then the paths Codex writes by default.
+ */
+export async function stateDatabasePaths(
   codexHome: string,
   configuredSqliteHome: string | undefined,
 ): Promise<string[]> {
@@ -359,6 +387,41 @@ function statusFromRow(
   return isFresh ? SESSION_STATUS.WORKING : SESSION_STATUS.UNKNOWN;
 }
 
+/**
+ * Sharpens the row's verdict with what the observation hook last said, in the
+ * order the meanings bind. A closed session is definite: the hook saying so
+ * outranks the row, and an archived thread is never talked out of complete by
+ * a softer event. Past those, the events refine only a fresh session — the
+ * decay to `UNKNOWN` exists because a hook can go silent (a killed process
+ * fires no `SessionEnd`), so an old "waiting" must age the same way an old
+ * row does. What the refinement actually buys is the states the state
+ * database cannot show: a tool call holding for approval writes no records
+ * while it holds, and a turn's true end can sit past the rollout's read.
+ */
+function statusWithHookEvent(
+  status: ProviderSessionObservation["status"],
+  event: CodexHookEvent,
+  isFresh: boolean,
+): ProviderSessionObservation["status"] {
+  if (event === CODEX_HOOK_EVENT.SESSION_END) return SESSION_STATUS.COMPLETE;
+  if (status === SESSION_STATUS.COMPLETE) return status;
+  // A notification still standing means the approval is still open — its zero
+  // staleness tolerance drops it the moment the thread moves — so it outranks
+  // a mid-turn row however long the hold has run: Codex holds a long turn at
+  // working, and a long hold must not read as active work. It still ages the
+  // way every waiting verdict does, because a Codex killed mid-hold fires
+  // nothing further, and a hold that old is a session left behind.
+  if (event === CODEX_HOOK_EVENT.NOTIFICATION) {
+    return isFresh ? SESSION_STATUS.WAITING : SESSION_STATUS.UNKNOWN;
+  }
+  if (!isFresh) return status;
+  if (event === CODEX_HOOK_EVENT.PROMPT) return SESSION_STATUS.WORKING;
+  if (event === CODEX_HOOK_EVENT.STOP) return SESSION_STATUS.WAITING;
+  // A session that started or resumed proves only that it moved: the bumped
+  // clock above is the whole refinement, and the row says the rest.
+  return status;
+}
+
 function detailFromRow(
   row: CodexThreadRow,
   rollout: ParsedCodexRollout | undefined,
@@ -381,12 +444,30 @@ function observationFromThreadRow(
   rollout: ParsedCodexRollout | undefined,
   now: number,
   activeSessionFreshnessMs: number,
+  hookEvent?: ObservedCodexHookEvent,
 ): ProviderSessionObservation | undefined {
   const providerSessionId = textFromRow(row, CODEX_THREAD_COLUMN.ID);
   if (!providerSessionId) return undefined;
 
-  const observedAt = timestampFromRow(row);
-  const status = statusFromRow(row, rollout, observedAt, now, activeSessionFreshnessMs);
+  // A hook event trailing the row's clock by more than the tolerance
+  // describes a turn the thread has already moved past, so it is ignored
+  // whole. One that stands is proof the session moved — only Luke's own
+  // script writes the spool — and dates the session for the freshness decay
+  // as well. A notification alone gets no tolerance: it means the session is
+  // holding for approval, and holding writes nothing, so a row touched at or
+  // past the event is itself the news that the hold ended.
+  const rowAt = timestampFromRow(row);
+  const toleranceMs =
+    hookEvent?.event === CODEX_HOOK_EVENT.NOTIFICATION
+      ? 0
+      : CODEX_ADAPTER_DEFAULTS.HOOK_EVENT_TOLERANCE_MS;
+  const eventStands = hookEvent !== undefined && hookEvent.atMs + toleranceMs >= rowAt;
+  const observedAt = eventStands ? Math.max(rowAt, hookEvent.atMs) : rowAt;
+  let status = statusFromRow(row, rollout, observedAt, now, activeSessionFreshnessMs);
+  if (eventStands) {
+    const isFresh = now - observedAt <= activeSessionFreshnessMs;
+    status = statusWithHookEvent(status, hookEvent.event, isFresh);
+  }
   return {
     providerSessionId,
     title: titleFromRow(row),
@@ -397,7 +478,7 @@ function observationFromThreadRow(
   };
 }
 
-function defaultCodexHome(): string {
+export function defaultCodexHome(): string {
   const configuredHome = process.env[CODEX_ENVIRONMENT.CONFIG_DIRECTORY]?.trim();
   return configuredHome || path.join(os.homedir(), ".codex");
 }
@@ -410,6 +491,7 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
   readonly #now: () => number;
   readonly #activeSessionFreshnessMs: number;
   readonly #sqlite: SqliteModuleLoader;
+  readonly #hookEventsDirectory: (() => string | undefined) | undefined;
 
   constructor(options: CodexAdapterOptions = {}) {
     this.#codexHome = options.codexHome ?? defaultCodexHome();
@@ -426,6 +508,7 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
     );
     this.#activeSessionFreshnessMs = resolved.activeSessionFreshnessMs;
     this.#sqlite = options.sqlite ?? defaultSqliteModule;
+    this.#hookEventsDirectory = options.hookEventsDirectory;
   }
 
   async observe(): Promise<readonly ProviderSessionObservation[]> {
@@ -447,9 +530,11 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
         database.close();
       }
 
-      // The rollout read happens with the database already closed, so a slow
-      // disk never holds a read lock on state Codex itself is writing.
+      // The rollout and spool reads happen with the database already closed,
+      // so a slow disk never holds a read lock on state Codex itself is
+      // writing.
       const rollouts = await this.#rollouts(rows);
+      const hookEvents = await this.#hookEvents(rows);
       return rows
         .map((row) =>
           observationFromThreadRow(
@@ -457,6 +542,7 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
             rollouts.get(textFromRow(row, CODEX_THREAD_COLUMN.ID) ?? ""),
             now,
             this.#activeSessionFreshnessMs,
+            hookEvents.get(textFromRow(row, CODEX_THREAD_COLUMN.ID) ?? ""),
           ),
         )
         .filter(
@@ -494,5 +580,26 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
       }),
     );
     return new Map(parsed);
+  }
+
+  /**
+   * Reads what the observation hook last said about each thread. The spool is
+   * a refinement, never a dependency: a directory that is missing, unreadable,
+   * or holding something unexpected reads as no event, and the row's own
+   * verdict stands.
+   */
+  async #hookEvents(rows: readonly CodexThreadRow[]): Promise<Map<string, ObservedCodexHookEvent>> {
+    const events = new Map<string, ObservedCodexHookEvent>();
+    const hookEventsDirectory = this.#hookEventsDirectory?.();
+    if (!hookEventsDirectory) return events;
+    await Promise.all(
+      rows.map(async (row) => {
+        const id = textFromRow(row, CODEX_THREAD_COLUMN.ID);
+        if (!id) return;
+        const event = await readCodexHookEvent(hookEventsDirectory, id).catch(() => undefined);
+        if (event) events.set(id, event);
+      }),
+    );
+    return events;
   }
 }

@@ -12,15 +12,15 @@ the current implementation; it is not a promise about third-party services.
 - For OpenCode, Luke opens the local session database in read-only mode and
   reads session records plus the bookkeeping of a session's newest message and
   tool records — roles, timestamps, tool names and inputs, and recorded
-  errors — not the message text, which is never opened. Installs from before
-  OpenCode moved its sessions into that database are read from its session and
-  message JSON files with the same boundary.
+  errors — not the message text, which observation never opens. Installs from
+  before OpenCode moved its sessions into that database are read from its
+  session and message JSON files with the same boundary.
 - For the Cursor agents running on this machine, Luke finds recent transcripts,
   opens bounded tails read-only, and reads only the markers around a turn — its
-  end and how it ended. It does not read message content, and reports the fact
-  of a failed turn rather than the reason Cursor recorded for it. A session is
-  labelled by the folder it runs in, which Luke reads from Cursor's own record
-  of that folder, not from the chat's generated name.
+  end and how it ended. Observation does not read message content, and reports
+  the fact of a failed turn rather than the reason Cursor recorded for it. A
+  session is labelled by the folder it runs in, which Luke reads from Cursor's
+  own record of that folder, not from the chat's generated name.
 
 Luke processes bounded fields needed to identify and display a session:
 provider and session identifiers, provider-generated titles, the workspace
@@ -35,26 +35,34 @@ display. Observation itself never controls a provider session; see Optional
 cloud-provider reads and Optional issue-tracker reads and spoken acts below
 for the narrow, user-requested writes Luke makes elsewhere.
 
-One provider file is the exception to "does not modify", and it is
-configuration rather than session data: Luke merges an observation hook into
-Claude Code's user-level `settings.json` at every launch, preserving whatever
-the user put there and refusing to rewrite a file it cannot parse. The hook
-runs at a session's turn boundaries and writes one fixed status token — such
-as `stop` or `notification` — into a file named by the session's id under
-Luke's own application data. It reads the event envelope Claude Code pipes it
-only to find that id; no prompt text, message content, or transcript ever
-reaches the file. The registered command is a guarded no-op wherever Luke is
-gone, and removing the entries by hand costs only the sharper status:
-observation continues from the transcripts alone.
+One provider file per provider is the exception to "does not modify", and it
+is configuration rather than session data: Luke merges an observation hook
+into Claude Code's user-level `settings.json` and Codex's user-level
+`hooks.json` at every launch, preserving whatever the user put there and
+refusing to rewrite a file it cannot parse. Each hook runs at a session's turn
+boundaries and writes one fixed status token — such as `stop` or
+`notification` — into a file named by the session's id under Luke's own
+application data. It reads the event envelope the provider hands it only to
+find that id; no prompt text, message content, or transcript ever reaches the
+file. The registered command is a guarded no-op wherever Luke is gone, and
+removing the entries by hand costs only the sharper status: observation
+continues from the transcripts and state databases alone. Codex additionally
+shows a newly merged hook to you at its own startup and runs nothing until you
+trust it there; declining costs the same sharper status and nothing else.
 
-"Does not retain raw records or message history" has one bounded, on-demand
-counterpart: in a conversation you are holding with Luke, you can ask what a
-local session did, said, or is stuck on, and Luke reads that session's own
-transcript — Claude Code sessions today — from the provider's file on this
-machine. The read happens when you ask, is validated against the observed
-roster, renders a bounded excerpt into that conversation's reply, and keeps
-nothing: no history is stored, watched, or indexed, and nothing is fetched
-from any provider. Because the voice conversation runs on OpenAI's Realtime
+"Does not retain raw records or message history" — and, for OpenCode and
+Cursor, "observation never opens message content" — have one bounded,
+on-demand counterpart: in a conversation you are holding with Luke, you can
+ask what a local session did, said, or is stuck on, and Luke reads that
+session's own transcript — Claude Code, Codex, OpenCode, and Cursor's local
+agents today — from the provider's own file or database on this machine. The
+read happens when you ask, is validated against the observed roster, renders a
+bounded excerpt into that conversation's reply, and keeps nothing: no history
+is stored, watched, or indexed, and nothing is fetched from any provider.
+Observation passes stay content-blind exactly as described above; this read is
+the one path to a local session's words, and it renders only what the provider
+wrote down — Cursor stores no tool outputs in its transcripts, so a Cursor
+excerpt carries none. Because the voice conversation runs on OpenAI's Realtime
 API, an excerpt read into it leaves the machine the same way your spoken words
 do — only in the conversation you opened, never unbidden. The attention
 evaluator still never receives transcript content.
