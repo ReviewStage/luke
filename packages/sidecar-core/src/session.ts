@@ -349,7 +349,8 @@ function requiredText(value: string, field: string): string {
   return normalized;
 }
 
-function boundedText(value: string | undefined, maximumLength: number): string | undefined {
+/** Trims and cuts a provider-written field to its bound, or drops an empty one. */
+export function boundedText(value: string | undefined, maximumLength: number): string | undefined {
   const normalized = value?.trim();
   if (!normalized) return undefined;
   return normalized.slice(0, maximumLength);

@@ -128,7 +128,15 @@ export {
   type SessionNoticeAsk,
 } from "./attention";
 export {
+  ATTENTION_RESPONSES_PATH,
+  attentionResponsesMissingReason,
+  attentionResponsesOutputText,
+  attentionResponsesRequest,
+} from "./attention-openai";
+export {
+  type AttentionPromptUpdate,
   attentionInstructions,
+  attentionPromptUpdateFromWire,
   attentionUpdateInput,
 } from "./attention-prompt";
 
