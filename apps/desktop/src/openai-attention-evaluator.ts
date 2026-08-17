@@ -1,13 +1,12 @@
 import {
-  ATTENTION_DECISION_SCHEMA,
-  ATTENTION_DECISION_SCHEMA_NAME,
+  ATTENTION_RESPONSES_PATH,
   type AttentionDecision,
   type AttentionEvaluator,
   type AttentionUpdate,
   attentionDecisionFromModel,
-  attentionInstructions,
-  attentionUpdateInput,
-  isRecord,
+  attentionResponsesMissingReason,
+  attentionResponsesOutputText,
+  attentionResponsesRequest,
   positiveInteger,
   text,
 } from "@sidecar/core";
@@ -33,9 +32,6 @@ const OPENAI_DEFAULTS = {
   MAXIMUM_OUTPUT_TOKENS: 4096,
 } as const;
 
-const OPENAI_RESPONSES_PATH = "/responses";
-const OPENAI_TEXT_FORMAT_TYPE = "json_schema";
-const OPENAI_OUTPUT_TEXT_TYPE = "output_text";
 const OPENAI_RATE_LIMIT_STATUS = 429;
 const OPENAI_RETRY_AFTER_HEADER = "retry-after";
 
@@ -66,47 +62,6 @@ export type OpenAiAttentionOptions = Omit<OpenAiAttentionEvaluatorOptions, "apiK
 
 function withoutTrailingSlash(value: string): string {
   return value.endsWith("/") ? value.slice(0, -1) : value;
-}
-
-function outputTextFromContent(content: unknown): string {
-  if (!Array.isArray(content)) return "";
-  return content
-    .map((entry) =>
-      isRecord(entry) && entry.type === OPENAI_OUTPUT_TEXT_TYPE && typeof entry.text === "string"
-        ? entry.text
-        : "",
-    )
-    .join("");
-}
-
-/**
- * Reads the structured decision out of a Responses payload without depending on
- * where a given API version places it.
- */
-function outputText(payload: unknown): string | undefined {
-  if (!isRecord(payload)) return undefined;
-  if (typeof payload.output_text === "string") return text(payload.output_text);
-  if (!Array.isArray(payload.output)) return undefined;
-  return text(
-    payload.output
-      .map((item) => (isRecord(item) ? outputTextFromContent(item.content) : ""))
-      .join(""),
-  );
-}
-
-/**
- * Describes why a payload carried no decision. A model that spends its output
- * budget on reasoning returns `incomplete` with empty output, which would
- * otherwise look identical to a healthy silent pass.
- */
-function missingDecisionReason(payload: unknown): string {
-  if (!isRecord(payload)) return "";
-  const status = typeof payload.status === "string" ? payload.status : undefined;
-  const details = isRecord(payload.incomplete_details) ? payload.incomplete_details : undefined;
-  const reason = typeof details?.reason === "string" ? details.reason : undefined;
-  if (status && reason) return ` (${status}: ${reason})`;
-  if (status) return ` (${status})`;
-  return "";
 }
 
 function parsedJson(text: string): unknown {
@@ -187,10 +142,10 @@ export class OpenAiAttentionEvaluator implements AttentionEvaluator {
     const payload = await this.#payload(response);
     if (payload === undefined) return undefined;
 
-    const text = outputText(payload);
+    const text = attentionResponsesOutputText(payload);
     if (!text) {
       this.#report(
-        `OpenAI attention response carried no decision${missingDecisionReason(payload)}`,
+        `OpenAI attention response carried no decision${attentionResponsesMissingReason(payload)}`,
       );
       return undefined;
     }
@@ -202,27 +157,18 @@ export class OpenAiAttentionEvaluator implements AttentionEvaluator {
 
   async #request(update: AttentionUpdate): Promise<Response | undefined> {
     try {
-      return await this.#fetch(`${this.#baseUrl}${OPENAI_RESPONSES_PATH}`, {
+      return await this.#fetch(`${this.#baseUrl}${ATTENTION_RESPONSES_PATH}`, {
         method: "POST",
         headers: {
           authorization: `Bearer ${this.#apiKey}`,
           "content-type": "application/json",
         },
-        body: JSON.stringify({
-          model: this.#model,
-          instructions: attentionInstructions(),
-          input: attentionUpdateInput(update),
-          max_output_tokens: this.#maximumOutputTokens,
-          store: false,
-          text: {
-            format: {
-              type: OPENAI_TEXT_FORMAT_TYPE,
-              name: ATTENTION_DECISION_SCHEMA_NAME,
-              schema: ATTENTION_DECISION_SCHEMA,
-              strict: true,
-            },
-          },
-        }),
+        body: JSON.stringify(
+          attentionResponsesRequest(update, {
+            model: this.#model,
+            maximumOutputTokens: this.#maximumOutputTokens,
+          }),
+        ),
         signal: AbortSignal.timeout(this.#requestTimeoutMs),
       });
     } catch (error) {
