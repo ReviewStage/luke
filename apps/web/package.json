@@ -28,7 +28,6 @@
     "drizzle-orm": "0.45.2",
     "marked": "18.0.9",
     "pg": "8.23.0",
-    "posthog-node": "5.49.1",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },

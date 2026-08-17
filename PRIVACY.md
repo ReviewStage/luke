@@ -19,11 +19,6 @@ not make that identity a Copilot credential. Browser sign-out does not sign the
 desktop out; the desktop keeps its own refresh token until you sign out in
 Luke, or the auth service reports that token revoked or invalid.
 
-On first account creation, the auth service sends PostHog one server-side event
-containing Luke's internal user identifier and the sign-in provider. Luke sends
-no client-side telemetry or heartbeat, and no observed session material is
-included in that event.
-
 ## What Luke reads locally
 
 - For Claude Code, Luke finds recent session files, opens bounded tails

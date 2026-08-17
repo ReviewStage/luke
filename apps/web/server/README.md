@@ -24,8 +24,8 @@ are applied to the matching branch before Vite builds the application. No packag
 lifecycle hook runs migrations.
 
 The auth service also needs `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
-`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID`,
-`GITHUB_CLIENT_SECRET`, and optionally `POSTHOG_API_KEY`.
+`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID`, and
+`GITHUB_CLIENT_SECRET`.
 
 Each deployment build runs `pnpm auth:seed` after the migration and before Vite,
 so every database the application reaches already carries the client — including
