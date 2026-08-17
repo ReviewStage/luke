@@ -19,6 +19,42 @@ not make that identity a Copilot credential. Browser sign-out does not sign the
 desktop out; the desktop keeps its own refresh token until you sign out in
 Luke, or the auth service reports that token revoked or invalid.
 
+## Hosted voice and review
+
+A signed-in account includes Luke's voice and attention review under a daily
+allowance, run through two endpoints on the same service that holds the
+sign-in. They exist so voice works without an OpenAI key of your own;
+connecting one routes both features directly to OpenAI instead, and nothing in
+this section then applies. Both endpoints authenticate with the same
+short-lived access token the sign-in already holds and refuse everything else.
+
+The voice endpoint receives a request to start one call: at most the chosen
+voice and speaking pace, each a value from the fixed set the app offers, and
+nothing typed or spoken. The service builds the session request from
+definitions fixed at its build, sends it to OpenAI under Luke's own key, and
+returns the short-lived credential OpenAI minted. The call itself is then a
+direct WebRTC connection from your Mac to OpenAI — microphone audio and spoken
+replies never transit Luke's servers. At launch, Luke also sends this endpoint
+one request that carries nothing and authenticates nothing, purely so the
+serverless function is loaded before your first press needs it; the endpoint
+refuses it by design.
+
+The review endpoint receives the same bounded session fields the attention
+review section below lists — never message history, file content, command
+output, or provider session identifiers, which do not travel even to Luke's
+service. The service adds the same fixed instructions and synthetic examples
+the app itself would have sent — both sides are built from one shared
+definition — forwards the request to OpenAI under Luke's key with `store:
+false`, and returns the decision. The update is inspected in memory and
+discarded.
+
+What the service keeps is a counter: how many calls and how many reviews your
+account spent each UTC day, checked against the allowance and deleted with the
+account. Request content is not written to its logs; a failure is recorded as
+a status alone. What OpenAI receives on these paths is the same as on the
+keyed paths below, under Luke's key rather than yours, and OpenAI's policies
+govern it the same way.
+
 ## Update check
 
 Luke asks GitHub's public API for the name of this repository's latest
@@ -225,10 +261,10 @@ below.
 
 The microphone is optional.
 
-Without an OpenAI key there is nothing to talk to, so Luke never asks for the
-microphone and never opens it.
+While voice is unavailable — no signed-in account and no OpenAI key — there is
+nothing to talk to, so Luke never asks for the microphone and never opens it.
 
-With one, the spoken conversation described below sends microphone
+While voice is available, the spoken conversation described below sends microphone
 audio to OpenAI. That is the only thing Luke uses the microphone for; there is no
 local-only listening mode. Nothing is captured until you open a turn: the
 microphone track is created muted, server-side voice detection is disabled, and
@@ -237,12 +273,16 @@ microphone on its own.
 
 ## Optional spoken conversation
 
-Voice is off until Luke is given an OpenAI key, and no audio leaves your Mac
-without one. The key can be connected in Settings, under Integrations, or read
-from `OPENAI_API_KEY` in the environment when nothing is stored; a stored key is
-held encrypted through the macOS Keychain, is never sent to the panel, and can be
-deleted in the same place it was entered. Deleting it turns voice off at once,
-along with the attention review described below.
+Voice runs one of two ways. Signed in with no OpenAI key of your own, calls
+open through the hosted service described above, under its daily allowance.
+With a key connected, everything below runs on that key directly against
+OpenAI, and Luke's service sees none of it. The key can be connected in
+Settings, at the top of the Voice page, or read from `OPENAI_API_KEY` in the
+environment when nothing is stored; a stored key is held encrypted through the
+macOS Keychain, is never sent to the panel, and can be deleted in the same
+place it was entered. Deleting it returns voice to the hosted path while you
+are signed in, and turns voice off entirely otherwise — along with the
+attention review described below, which follows the same two paths.
 
 When you open a turn, Luke sends that turn's microphone audio to the OpenAI
 Realtime API over a direct WebRTC connection from your Mac, and plays back the
@@ -281,7 +321,7 @@ allows — so a question about your board can be answered and an ask validated
 against what Linear actually listed. No issue description or comment thread is
 ever included, because Luke never reads one.
 
-While voice is available — announcements do nothing without an OpenAI key —
+While voice is available — announcements do nothing while it is not —
 Luke also opens a call of his own to speak a session announcement when no
 conversation is up. That call is narrower in
 every direction: it receives audio and sends none (no microphone track exists
@@ -320,15 +360,23 @@ output device — its mute switch and its volume level — through a helper that
 can write nothing. That reading never leaves your Mac, is not logged, and Luke
 never changes the system volume.
 
-The standing API key stays in Luke's main process. The renderer receives only a
-short-lived client secret minted for one call, which expires on its own.
+The standing API key — or, on the hosted path, the account's access token —
+stays in Luke's main process. The renderer receives only a short-lived client
+secret minted for one call, which expires on its own; either way that secret
+is the only credential a call ever holds, and the call it opens goes straight
+to OpenAI.
 
 ## Optional external attention review
 
-Without an OpenAI key, Luke does not send an attention-review request.
+The attention review follows voice's two paths. While voice is unavailable,
+Luke sends no attention-review request at all. On the hosted path the same
+bounded fields listed below go to Luke's review endpoint instead, as the
+Hosted voice and review section describes, and the service forwards them to
+OpenAI under Luke's key with the same fixed instructions.
 
-With one — the same key the spoken conversation uses, from either place it can
-come from — Luke sends the configured Responses-compatible endpoint
+With a key of your own — the same key the spoken conversation uses, from
+either place it can come from — Luke sends the configured Responses-compatible
+endpoint
 the provider name, displayed session title, the name of the workspace a chat
 belongs to where its provider groups them, previous and current status, review
 trigger, repository, branch, current tool activity, reported error, and the
@@ -353,7 +401,8 @@ storage. This does not mean zero retention: ordinary provider abuse-monitoring
 retention may still apply according to the user's API provider and account
 controls.
 
-By default, requests go to OpenAI's API. If `OPENAI_BASE_URL` is changed, the
-same attention-review data goes to that configured third-party endpoint and is
-handled under that endpoint's policies. The bearer credential is also sent to
-that endpoint.
+By default, keyed requests go to OpenAI's API. If `OPENAI_BASE_URL` is
+changed, the same attention-review data goes to that configured third-party
+endpoint and is handled under that endpoint's policies. The bearer credential
+is also sent to that endpoint. The variable redirects only the keyed path: the
+hosted path's endpoints are fixed at build.
