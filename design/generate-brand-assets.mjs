@@ -1028,6 +1028,14 @@ emit(
   "Luke",
 );
 
+// Logo: the wordmark lockup as its own shareable set, per mode — the face-L
+// and the letters together on a transparent background, no tile and no
+// rounded corners, for the places that take a logo rather than an avatar.
+// Its PNG derivatives are cut smaller than the mark's 1024 square because a
+// lockup is handed to headers and docs, not enlarged into a tile — see
+// design/brand/README.md.
+emitModes("logo/luke-logo", wordSvg(wordmark()), "LUKE");
+
 // Menu-bar template source: pure black, macOS recolors it. Square canvas
 // with the artwork filling ~90% of it, per status-item conventions.
 const side = Math.max(bbox.w, bbox.h) * 1.1;

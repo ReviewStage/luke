@@ -26,6 +26,11 @@ for m in light dark; do
   rsvg-convert -w 1024 -h 1024 mark/luke-mark-square-transparent-$m.svg -o mark/luke-mark-square-transparent-$m-1024.png
 done
 rsvg-convert -w 1024 -h 1024 mark/luke-mark-square-black.svg -o mark/luke-mark-square-black-1024.png
+for m in light dark; do
+  for w in 256 512; do
+    rsvg-convert -w $w logo/luke-logo-$m.svg -o logo/luke-logo-$m-$w.png
+  done
+done
 rsvg-convert -w 18 -h 18 menubar/luke-menubar-template.svg -o menubar/lukeTemplate.png
 rsvg-convert -w 36 -h 36 menubar/luke-menubar-template.svg -o menubar/lukeTemplate@2x.png
 rsvg-convert -w 660 -h 400 dmg/luke-dmg-background.svg -o dmg/luke-dmg-background.png
@@ -89,6 +94,7 @@ keep the full 240×240 canvas — they need headroom to move.
 | `dmg/luke-dmg-background.svg` + `luke-dmg-background{,@2x}.png` | Neutral installer background with a branded drag-and-drop arrow |
 | `mark/luke-mark-square{,-transparent}-{light,dark}.svg` + `-1024.png` | The face at the static mark's tight fill on a square canvas, per mode: over the icon's gradient with square corners (the avatar shape for surfaces that round their own tiles, GitHub among them), and the same crop with no tile. A transparent avatar shows GitHub's badge background color instead — pair the dark set with `#1c1c1e`, the space-black end of the dark icon tile, which reads on either GitHub theme |
 | `mark/luke-mark-square-black.svg` + `-1024.png` | The dark mark once more over flat pure black (`#000000`) instead of the tile's gradient, for surfaces that want the mark on true black |
+| `logo/luke-logo-{light,dark}.svg` + `-{256,512}.png` | The wordmark lockup as a shareable logo set, per mode: transparent background, no tile and no rounded corners. The PNGs are cut at 256 and 512 wide — a lockup goes into headers and docs, not a 1024 avatar tile |
 | `motion/luke-<state>-{light,dark}.svg` | Animated state marks (below) |
 
 ## Motion states
