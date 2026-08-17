@@ -29,9 +29,12 @@ export function hostedVoiceNote(
   usage?: HostedUsageAnswer,
 ): string {
   const lift = "Connecting your own OpenAI key lifts the allowance and runs voice on it instead.";
-  const voiceSpent =
-    diagnostics?.lastOutcome === REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED ||
-    usage?.voice.remaining === 0;
+  // When a fresh read is in hand it alone decides spent-ness: the minter's
+  // last outcome survives midnight, and yesterday's refusal must not outrank
+  // today's full allowance.
+  const voiceSpent = usage
+    ? usage.voice.remaining === 0
+    : diagnostics?.lastOutcome === REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED;
   if (voiceSpent) {
     return `Today's included voice is used up — it returns at midnight UTC. ${lift}`;
   }

@@ -155,6 +155,15 @@ test("the usage read words both meters, and a spent voice reads the same from ei
     voice: { used: 50, limit: 50, remaining: 0, resetsAt: 1_800_003_600_000 },
   });
   assert.match(spentByUsage, /used up — it returns at midnight UTC/);
+
+  // Yesterday's refusal must not outrank today's full allowance: the minter's
+  // last outcome survives midnight, the fresh read decides.
+  const rolledOver = hostedVoiceNote(
+    diagnostics({ lastOutcome: REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED }),
+    usage,
+  );
+  assert.match(rolledOver, /47 of 50 calls/);
+  assert.doesNotMatch(rolledOver, /used up/);
 });
 
 test("the hosted note says whose allowance voice runs on, and what remains once known", () => {
