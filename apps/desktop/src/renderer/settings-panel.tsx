@@ -103,7 +103,6 @@ export interface WorkspaceProviderOption {
  */
 export interface MicrophoneControl {
   status: MicrophoneStatus;
-  error?: string;
   /** Whether there is anything to talk to, which is the microphone's only use. */
   voiceAvailable: boolean;
   /** Asks the system for access. Using the microphone is the talk key's job. */
@@ -1836,7 +1835,6 @@ export function SettingsPanel({
                 ) : null}
               </span>
             </div>
-            {microphone.error ? <p className="error-message">{microphone.error}</p> : null}
           </section>
 
           <FeedbackSection control={feedback} />

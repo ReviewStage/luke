@@ -11,7 +11,10 @@ test("a refused ask is diagnosed from how far the voice loop got", () => {
   // An open microphone is the developer's own turn, not a fault.
   assert.match(askRefusal(REALTIME_STATUS.LISTENING, "granted"), /microphone is open/i);
   assert.match(askRefusal(REALTIME_STATUS.CONNECTING, "granted"), /connecting/i);
-  assert.match(askRefusal(REALTIME_STATUS.FAILED, "granted"), /Settings/);
+  // The failure's own message lands on the caption strip directly below the
+  // field, so the refusal points there rather than at a settings page.
+  assert.match(askRefusal(REALTIME_STATUS.FAILED, "granted"), /below/);
+  assert.doesNotMatch(askRefusal(REALTIME_STATUS.FAILED, "granted"), /Settings/);
 });
 
 test("a missing microphone explains the conversation, not the keystroke", () => {

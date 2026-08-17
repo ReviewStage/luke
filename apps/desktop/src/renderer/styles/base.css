@@ -1275,6 +1275,13 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transition: transform var(--duration-fast) var(--spring-fast);
 }
 
+/* A voice failure borrows the caption's strip — same box, same travel — in
+   the `.error-message` red, because it is a fault being reported rather than
+   words being spoken. */
+.voice-caption[data-error="true"] .voice-caption-text {
+  color: #ff8c8c;
+}
+
 /* Volume hint ------------------------------------------------------------- */
 
 /* Why the words above are the only part of Luke arriving: the Mac's output is

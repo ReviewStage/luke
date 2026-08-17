@@ -91,6 +91,31 @@ export function voiceExchangeActive(status: RealtimeStatus): boolean {
 }
 
 /**
+ * How long a voice failure stays on the caption strip. The strip takes no
+ * pointer, so time is its only dismissal: long enough to be read twice, short
+ * enough that the shape does not wear a fault all afternoon. The next attempt
+ * clears it sooner — connecting starts by reporting nothing wrong.
+ */
+export const VOICE_ERROR_NOTICE_MS = 12_000;
+
+/**
+ * The failure drawn in the same strip the captions use. A fault is worth
+ * reading where the words it interrupted would have landed — at the shape's
+ * foot, under the field that asked — not on a settings page nobody is
+ * looking at. It yields to a live turn, because words being said are the
+ * thing to read over words that already failed, and a capture run never
+ * draws one: a fixture has no call to fail.
+ */
+export function voiceErrorToShow(input: {
+  fixtureSpeaking: boolean;
+  voice: WaveformVoice | undefined;
+  error: string | undefined;
+}): string | undefined {
+  if (input.fixtureSpeaking || input.voice !== undefined) return undefined;
+  return input.error;
+}
+
+/**
  * The words drawn under the shape. A capture run always draws the fixture's
  * words; otherwise Luke's caption is shown only when there is a reason to
  * read them and the reply they belong to is his turn: the captions preference,
@@ -255,7 +280,12 @@ export interface VoiceConversation {
   analyser: AnalyserNode | undefined;
   microphoneStatus: MicrophoneStatus;
   setMicrophoneStatus: (status: MicrophoneStatus) => void;
-  microphoneError: string | undefined;
+  /**
+   * Why the last call failed or ended, for the caption strip to show. Set by
+   * the session, cleared by the next attempt or by {@link VOICE_ERROR_NOTICE_MS}
+   * running out — whichever comes first.
+   */
+  voiceError: string | undefined;
   voiceStatus: RealtimeStatus;
   setVoiceStatus: (status: RealtimeStatus) => void;
   talkOpening: boolean;
@@ -287,7 +317,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
 
   const [analyser, setAnalyser] = useState<AnalyserNode>();
   const [microphoneStatus, setMicrophoneStatus] = useState<MicrophoneStatus>("not-determined");
-  const [microphoneError, setMicrophoneError] = useState<string>();
+  const [voiceError, setVoiceError] = useState<string>();
   const [voiceStatus, setVoiceStatus, voiceStatusNow] = useStateWithRef<RealtimeStatus>(
     REALTIME_STATUS.IDLE,
   );
@@ -373,7 +403,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       onStatus: setVoiceStatus,
       onLocalStream: setLocalStream,
       onRemoteStream: setRemoteStream,
-      onError: setMicrophoneError,
+      onError: setVoiceError,
       onCaption: setVoiceCaption,
     });
     return voiceSession.current;
@@ -436,7 +466,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    * why.
    */
   const startMicrophone = useCallback(async (): Promise<MicrophoneStatus> => {
-    setMicrophoneError(undefined);
+    setVoiceError(undefined);
     const session = ensureVoiceSession();
     const permission = await window.sidecar.requestMicrophone();
     setMicrophoneStatus(permission);
@@ -661,6 +691,23 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     }
   }, [voiceStatus]);
 
+  // The strip the error is drawn on takes no pointer, so nothing but time can
+  // dismiss it: a fault left up would sit on the desktop all afternoon. A new
+  // error re-arms the clock — it is a new thing to read.
+  useEffect(() => {
+    if (voiceError === undefined) return;
+    const timer = setTimeout(() => setVoiceError(undefined), VOICE_ERROR_NOTICE_MS);
+    return () => clearTimeout(timer);
+  }, [voiceError]);
+
+  // An exchange going live outranks the clock: the conversation has moved on,
+  // and a fault the turn hid must not come back once the words finish.
+  // `startMicrophone` clears the calls that have to reconnect; this clears the
+  // one that carried a mid-call error and never dropped.
+  useEffect(() => {
+    if (voiceExchangeActive(voiceStatus)) setVoiceError(undefined);
+  }, [voiceStatus]);
+
   useEffect(() => {
     window.sidecar.setVoiceExchangeActive(voiceExchangeActive(voiceStatus));
   }, [voiceStatus]);
@@ -759,7 +806,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     analyser,
     microphoneStatus,
     setMicrophoneStatus,
-    microphoneError,
+    voiceError,
     voiceStatus,
     setVoiceStatus,
     talkOpening,
