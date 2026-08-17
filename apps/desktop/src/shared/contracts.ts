@@ -11,6 +11,7 @@ import type {
   ProviderMessageResult,
   ProviderWorkspaceResult,
   RealtimeConnection,
+  RealtimeDiagnostics,
   RealtimeVoice,
   RealtimeVoiceSpeed,
   Rectangle,
@@ -746,6 +747,12 @@ export interface AppBridge {
   focusPanel(): void;
   /** Mints a short-lived Realtime credential; the standing API key never crosses. */
   requestRealtimeCredential(): Promise<RealtimeConnection | undefined>;
+  /**
+   * How voice stands right now — whose credential it runs on, why the last
+   * mint ended the way it did, and what remains of a hosted day's allowance.
+   * It carries no credential material, which is what lets it cross at all.
+   */
+  requestRealtimeDiagnostics(): Promise<RealtimeDiagnostics>;
   notifyReady(): void;
   quit(): void;
   onLifecycle(callback: (eventName: string) => void): () => void;
@@ -868,6 +875,7 @@ export const channels = {
   summonFeedback: "app:summon-feedback",
   focusPanel: "app:focus-panel",
   requestRealtimeCredential: "app:request-realtime-credential",
+  requestRealtimeDiagnostics: "app:request-realtime-diagnostics",
   attentionSpeech: "app:attention-speech",
   voiceHotkeyPress: "app:voice-hotkey-press",
   voiceHotkeyRelease: "app:voice-hotkey-release",

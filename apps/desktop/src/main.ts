@@ -395,6 +395,15 @@ const attentionRequests = new AttentionRequestRegistry();
  */
 let attentionReviewer: SessionAttentionReviewer | undefined;
 let realtimeCredentials: RealtimeCredentialMinter | undefined;
+/**
+ * What the diagnostics ask answers while no minter exists. Kept current by
+ * `applyVoiceCredential`, which is the only place that knows whether a key
+ * failed to resolve or a run refuses credentials outright.
+ */
+let voiceUnavailableDiagnostics = unavailableRealtimeDiagnostics({
+  fixtureMode: !runMode.sendsNetwork,
+  apiKeyConfigured: false,
+});
 // Quiets Music and Spotify while a spoken exchange is live. It lives here
 // rather than in the renderer because letting the players back up must survive
 // anything the renderer does — and only this process may run a helper.
@@ -853,6 +862,10 @@ async function applyVoiceCredential(): Promise<void> {
           ...(speed ? { speed } : {}),
         })
       : undefined;
+  voiceUnavailableDiagnostics = unavailableRealtimeDiagnostics({
+    fixtureMode: !runMode.sendsNetwork,
+    apiKeyConfigured: apiKey !== undefined,
+  });
   reportVoiceAvailability(apiKey !== undefined);
 }
 
@@ -2160,6 +2173,11 @@ function registerIpc(): void {
     // Returning nothing rather than throwing keeps "no credentials configured"
     // and "the mint failed" on the same explicit, non-fatal path.
     return realtimeCredentials?.mint();
+  });
+
+  ipcMain.handle(channels.requestRealtimeDiagnostics, (event) => {
+    if (!trustedSender(event)) throw new Error("Untrusted renderer");
+    return realtimeCredentials?.diagnostics() ?? voiceUnavailableDiagnostics;
   });
 
   ipcMain.on(channels.quit, (event) => {

@@ -1,13 +1,34 @@
+import { REALTIME_MINT_OUTCOME, type RealtimeDiagnostics } from "@sidecar/core";
 import type { MicrophoneStatus } from "../shared/contracts";
 
 /**
- * Why voice as a whole is off: the one key it runs on is not connected. One
- * sentence, shared by every mark that stands for the same missing key — the
+ * Why voice as a whole is off: nothing it can run on stands — no signed-in
+ * account carrying the hosted allowance, and no key of the developer's own.
+ * One sentence, shared by every mark that stands for the same absence — the
  * front page's Voice row, the key's own heading, and the shortcut rows whose
- * chords answer nothing without it — so the same absence never reads as two
- * different problems.
+ * chords answer nothing without it — so it never reads as two different
+ * problems.
  */
-export const VOICE_KEYLESS_NOTE = "Voice is off: it needs an OpenAI key.";
+export const VOICE_KEYLESS_NOTE = "Voice is off: sign in, or connect an OpenAI key.";
+
+/**
+ * What the key section says while voice runs on the signed-in account: whose
+ * allowance is speaking, how much of today's remains once a mint has said,
+ * and what connecting a key of one's own changes. The refusal a spent
+ * allowance answers with is a state here, not an error — nothing is broken,
+ * and the sentence says when voice returns on its own.
+ */
+export function hostedVoiceNote(diagnostics: RealtimeDiagnostics | undefined): string {
+  const lift = "Connecting your own OpenAI key lifts the allowance and runs voice on it instead.";
+  if (diagnostics?.lastOutcome === REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED) {
+    return `Today's included voice is used up — it returns at midnight UTC. ${lift}`;
+  }
+  const quota = diagnostics?.quota;
+  if (quota) {
+    return `Voice is included with your Luke account — ${quota.remaining} of ${quota.limit} calls left today. ${lift}`;
+  }
+  return `Voice is included with your Luke account, under a daily allowance. ${lift}`;
+}
 
 /** Why Luke can speak but not listen: the system's grant is still missing. */
 export const MICROPHONE_UNGRANTED_NOTE = "Luke cannot listen: the microphone is not allowed yet.";

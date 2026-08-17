@@ -1,6 +1,26 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { microphoneAccessRow, voiceAttentionNote } from "../src/renderer/microphone-access";
+import { REALTIME_DEFAULTS, REALTIME_MINT_OUTCOME, type RealtimeDiagnostics } from "@sidecar/core";
+import {
+  hostedVoiceNote,
+  microphoneAccessRow,
+  voiceAttentionNote,
+} from "../src/renderer/microphone-access";
+
+/** A hosted diagnostics report with only what a test wants to vary. */
+function diagnostics(overrides: Partial<RealtimeDiagnostics>): RealtimeDiagnostics {
+  return {
+    apiKeyConfigured: false,
+    hosted: true,
+    fixtureMode: false,
+    model: REALTIME_DEFAULTS.MODEL,
+    voice: REALTIME_DEFAULTS.VOICE,
+    speed: REALTIME_DEFAULTS.SPEED,
+    endpoint: "https://tryluke.dev/api/voice/mint",
+    lastOutcome: REALTIME_MINT_OUTCOME.NOT_ATTEMPTED,
+    ...overrides,
+  };
+}
 
 test("access is offered only where it can be used", () => {
   const offered = microphoneAccessRow({
@@ -112,4 +132,31 @@ test("the mark and the row agree on what ready means", () => {
       assert.equal(note === undefined, row.ready, `${voiceAvailable}/${status}`);
     }
   }
+});
+
+test("the hosted note says whose allowance voice runs on, and what remains once known", () => {
+  // Before any mint has answered, the note promises only the allowance.
+  assert.match(
+    hostedVoiceNote(undefined),
+    /included with your Luke account, under a daily allowance/,
+  );
+  assert.match(hostedVoiceNote(undefined), /your own OpenAI key lifts the allowance/i);
+
+  const counted = hostedVoiceNote(
+    diagnostics({
+      lastOutcome: REALTIME_MINT_OUTCOME.SUCCEEDED,
+      quota: { used: 3, limit: 50, remaining: 47, resetsAt: 1_800_003_600_000 },
+    }),
+  );
+  assert.match(counted, /47 of 50 calls left today/);
+
+  // A spent allowance is a state with its own return time, not an error.
+  const spent = hostedVoiceNote(
+    diagnostics({
+      lastOutcome: REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED,
+      quota: { used: 51, limit: 50, remaining: 0, resetsAt: 1_800_003_600_000 },
+    }),
+  );
+  assert.match(spent, /used up — it returns at midnight UTC/);
+  assert.doesNotMatch(spent, /left today/);
 });
