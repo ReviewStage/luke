@@ -224,7 +224,7 @@ export const BUBBLE_LIFT = ${SURFACE_GEOMETRY_PX.BUBBLE_LIFT};
 /** Tallest compact caption block the window holds. CSS: \`--caption-max\`. */
 export const VOICE_CAPTION_MAX_HEIGHT = ${SURFACE_GEOMETRY_PX.VOICE_CAPTION_MAX_HEIGHT};
 
-/** The notice popup's band, held below the caption room. CSS: \`--notice-size\`. */
+/** The session notice's band, held beside the caption room. CSS: \`--notice-size\`. */
 export const SESSION_NOTICE_HEIGHT = ${SURFACE_GEOMETRY_PX.SESSION_NOTICE_HEIGHT};
 
 /** Expanded panel width. CSS: \`--panel-width\`. */

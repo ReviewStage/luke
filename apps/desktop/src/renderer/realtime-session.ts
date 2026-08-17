@@ -1264,9 +1264,9 @@ export class RealtimeVoiceSession {
   /**
    * Tells the conversation what the most recent announcement said. The words
    * were often said on Luke's own speak-only call — the very call the
-   * talk-key press tears down on its way here — or only shown as the notice
-   * popup, so without this the developer's call is asked "what did you just
-   * say?" by someone it never said anything to. Context on the roster's own
+   * talk-key press tears down on its way here — so without this the
+   * developer's call is asked "what did you just say?" by someone it never
+   * said anything to. Context on the roster's own
    * terms: remembered here, flushed only at a developer-opened turn, and
    * carrying the same bounded payload the announcement already traveled as —
    * the words alone, never an identity, which [session under discussion]
