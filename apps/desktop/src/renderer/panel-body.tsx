@@ -18,6 +18,7 @@ import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
 import { CloudBadge, ProviderMark } from "./provider-marks";
 import {
   type ArrangedSessions,
+  actsOnWorkspace,
   type DisplaySession,
   observedAgoLabel,
   type SessionAction,
@@ -25,9 +26,12 @@ import {
   type SessionView,
   sessionListRuns,
   sessionRunKeys,
+  type WorkspaceTrayAction,
+  workspaceTrayActions,
 } from "./session-model";
 import {
   LEAVING_ATTRIBUTE,
+  type RosterRow,
   SESSION_ROW_ID_ATTRIBUTE,
   useRoster,
   useSessionReorderMotion,
@@ -139,9 +143,13 @@ function RowActionButton({
  */
 function SessionRowActions({
   session,
+  actions,
   writes,
 }: {
   session: DisplaySession;
+  /** The actions this row draws itself: inside a tray, the workspace-level
+   * ones have moved to the tray's own header. */
+  actions: readonly SessionAction[];
   writes: SessionWriteHandlers;
 }): React.JSX.Element {
   const [sending, setSending] = useState(false);
@@ -274,7 +282,7 @@ function SessionRowActions({
           </button>
         </form>
       ) : null}
-      {session.actions.map((action) => (
+      {actions.map((action) => (
         <RowActionButton
           key={action.id}
           action={action}
@@ -301,6 +309,68 @@ function SessionRowActions({
       ) : null}
       {feedback ? <small className="row-feedback">{feedback}</small> : null}
     </div>
+  );
+}
+
+/**
+ * The tray header's own acts: every workspace-level action the tray's chats
+ * advertise, drawn once where the workspace is named once. Archiving files
+ * away every chat in the tray, so the same chip repeated on each row read as
+ * several different acts when any press did the whole thing. The press still
+ * travels as a session write — through the first chat that advertised the act
+ * — so it is validated against the same roster row that promised it, and its
+ * outcome answers on the header's own line the way a row's writes do.
+ */
+function WorkspaceTrayActs({
+  acts,
+  writes,
+}: {
+  acts: readonly WorkspaceTrayAction[];
+  writes: SessionWriteHandlers;
+}): React.JSX.Element {
+  const [pendingAction, setPendingAction] = useState<string | undefined>(undefined);
+  const [feedback, setFeedback] = useState<string | undefined>(undefined);
+  /** One write at a time for the header, in a ref for the same same-tick
+   * reason a row keeps one: disabling only lands with the next render. */
+  const writeInFlight = useRef(false);
+
+  const run = useCallback(
+    async (act: WorkspaceTrayAction) => {
+      if (writeInFlight.current) return;
+      writeInFlight.current = true;
+      setPendingAction(act.action.id);
+      setFeedback(undefined);
+      try {
+        const result = await writes.runAction(act.session, act.action.id);
+        // An accepted act answers too: the tray will not look different until
+        // its provider is observed again, and a control that seems to have
+        // done nothing would be pressed a second time.
+        setFeedback(
+          result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED
+            ? `${act.session.provider} accepted`
+            : feedbackFor(result),
+        );
+      } finally {
+        writeInFlight.current = false;
+        setPendingAction(undefined);
+      }
+    },
+    [writes],
+  );
+
+  return (
+    <>
+      {acts.map((act) => (
+        <RowActionButton
+          key={act.action.id}
+          action={act.action}
+          pendingAction={pendingAction}
+          busy={pendingAction !== undefined}
+          onRun={() => void run(act)}
+        />
+      ))}
+      {feedback ? <small className="row-feedback">{feedback}</small> : null}
+    </>
   );
 }
 
@@ -350,7 +420,15 @@ function SessionRow({
   onOpen: (session: DisplaySession) => void;
   writes: SessionWriteHandlers;
 }): React.JSX.Element {
-  const withActions = session.canMessage || session.actions.length > 0 || session.hasChange;
+  // Inside a tray, an action aimed at the whole workspace is the tray
+  // header's to offer — drawn beside every chat it would file away, it read
+  // as several different acts — so the row keeps only the actions that are
+  // its own. A lone chat is its workspace here too: with no tray to carry the
+  // act, the row does.
+  const actions = inWorkspaceTray
+    ? session.actions.filter((action) => !actsOnWorkspace(session, action))
+    : session.actions;
+  const withActions = session.canMessage || actions.length > 0 || session.hasChange;
   const shared = {
     className: "session-row",
     "data-state": session.urgency,
@@ -456,7 +534,7 @@ function SessionRow({
       ) : (
         <div className="row-main">{content}</div>
       )}
-      <SessionRowActions session={session} writes={writes} />
+      <SessionRowActions session={session} actions={actions} writes={writes} />
     </article>
   );
 }
@@ -479,24 +557,35 @@ export function runDrawsTray(run: SessionListRun): boolean {
  * follow-up someone was typing into it. The chrome is a class, never a
  * different tree.
  *
- * The header is furniture rather than a session — it opens nothing and takes
- * nothing — and it names the tray in the reading order the same way it does
- * on screen: the workspace once, then its chats. A tray is a member of the
+ * The header opens nothing — the rows are what press through to a provider's
+ * window — but it does carry the acts that belong to the workspace rather
+ * than to any one chat: an archive files away every chat in the tray, so its
+ * chip sits where the workspace is named once instead of on each row it
+ * would empty. The header names the tray in the reading order the same way
+ * it does on screen: the workspace once, then its chats. A tray is a member of the
  * arrival stack in its rows' stead: it fans in at its lead row's turn, and
  * the rows ride it rather than fanning a second time inside it. A wrapper
  * that draws as nothing leaves its row in the stack exactly as before.
  */
 function SessionRun({
   run,
+  sessions,
   highlight,
+  writes,
   children,
 }: {
   run: SessionListRun;
+  /** The tray's living chats, in drawn order — what the header's acts are
+   * read from and carried through. A leaving row's session is already gone
+   * from the model, so it can neither offer an act nor carry one. */
+  sessions: readonly DisplaySession[];
   /** The search's words, marked on the tray's own header lines too. */
   highlight?: readonly string[] | undefined;
+  writes: SessionWriteHandlers;
   children: React.ReactNode;
 }): React.JSX.Element {
   const tray = runDrawsTray(run);
+  const acts = tray ? workspaceTrayActions(sessions) : [];
   return (
     <section
       className={tray ? "workspace-tray" : "session-run"}
@@ -525,6 +614,7 @@ function SessionRun({
               </span>
             ) : null}
           </span>
+          {acts.length > 0 ? <WorkspaceTrayActs acts={acts} writes={writes} /> : null}
         </header>
       ) : null}
       {children}
@@ -678,8 +768,20 @@ export function PanelBody({
               // the other runs of its workspace.
               runs.map((run, at) => {
                 const tray = runDrawsTray(run);
+                const living = run.indexes
+                  .map((index) => rows[index])
+                  .filter(
+                    (row): row is RosterRow<DisplaySession> => row !== undefined && !row.leaving,
+                  )
+                  .map((row) => row.item);
                 return (
-                  <SessionRun key={runKeys[at]} run={run} highlight={highlight}>
+                  <SessionRun
+                    key={runKeys[at]}
+                    run={run}
+                    sessions={living}
+                    highlight={highlight}
+                    writes={writes}
+                  >
                     {run.indexes.map((index) => {
                       const row = rows[index];
                       return row ? (

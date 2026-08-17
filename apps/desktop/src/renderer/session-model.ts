@@ -97,6 +97,13 @@ export interface SessionAction {
   label: string;
   /** A stop is drawn as the stop glyph; anything else is drawn by its label. */
   kind?: SessionControlKind;
+  /**
+   * The provider-owned identifier of the thing the action acts on, when that
+   * is not the session itself — carried through from the advertisement because
+   * an action aimed at the row's whole workspace is drawn on the tray, not on
+   * every chat inside it.
+   */
+  target?: string;
 }
 
 /**
@@ -574,6 +581,44 @@ export function sessionRunKeys(
     const lead = run.indexes[0];
     return (lead !== undefined ? rows[lead]?.item.id : undefined) ?? "";
   });
+}
+
+/**
+ * Whether an advertised action acts on the row's whole workspace rather than
+ * on the chat itself — a Conductor archive, whose target is the workspace id
+ * riding the advertisement. Only the target can say so: the label is the
+ * provider's own words, and words are not a contract.
+ */
+export function actsOnWorkspace(session: DisplaySession, action: SessionAction): boolean {
+  return session.workspace !== undefined && action.target === session.workspace.id;
+}
+
+/** One workspace-level act, and the chat whose advertisement carries it. */
+export interface WorkspaceTrayAction {
+  action: SessionAction;
+  session: DisplaySession;
+}
+
+/**
+ * The acts a tray's header offers: every workspace-level action its chats
+ * advertise, each once. A provider advertises the same archive on every chat
+ * of a settled workspace, and a tray drawing one chip per chat reads as
+ * several different acts when pressing any of them files the whole workspace
+ * away — so the tray says it once, where the workspace is named once. The
+ * first chat advertising an act is the one the press travels through, which
+ * keeps the write validated against the same roster row that advertised it.
+ */
+export function workspaceTrayActions(
+  sessions: readonly DisplaySession[],
+): readonly WorkspaceTrayAction[] {
+  const acts = new Map<string, WorkspaceTrayAction>();
+  for (const session of sessions) {
+    for (const action of session.actions) {
+      if (!actsOnWorkspace(session, action) || acts.has(action.id)) continue;
+      acts.set(action.id, { action, session });
+    }
+  }
+  return [...acts.values()];
 }
 
 export function sessionListRuns(sessions: readonly DisplaySession[]): readonly SessionListRun[] {
