@@ -701,6 +701,32 @@ test("a refusal with no newer pick behind it drops the sample and stops", async 
   assert.equal(session.connects, 1, "a spent sample does not reopen the call it lost");
 });
 
+test("a refused sample does not spend the backlog's tries", async () => {
+  const session = fakeSession();
+  session.connectOpens = false;
+  const timers = fakeTimers();
+  const subject = announcer(session, timers);
+
+  // A sample is refused. It has no retry clock of its own, so that is the end
+  // of it — and the attempts are the backlog's ledger, not the sample's.
+  subject.requestPreview();
+  await Promise.resolve();
+  assert.equal(session.connects, 1);
+
+  // News arriving afterwards is a fresh backlog, owed every try.
+  subject.enqueue([speech("a")]);
+  await Promise.resolve();
+  for (let attempt = 0; attempt < MAXIMUM_CONNECT_ATTEMPTS + 1; attempt += 1) {
+    timers.fire();
+    await Promise.resolve();
+  }
+  assert.equal(
+    session.connects,
+    1 + MAXIMUM_CONNECT_ATTEMPTS,
+    "the backlog kept the full budget a sample's refusal must not draw on",
+  );
+});
+
 test("a sentence that went stale in the queue is dropped, not read as news", () => {
   const session = fakeSession();
   session.setStatus(REALTIME_STATUS.RESPONDING);

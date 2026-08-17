@@ -270,7 +270,12 @@ export class SpokenNoticeAnnouncer {
     // way there is a call coming, and it is the one to say this on.
     if (session.isConnecting || this.#options.reopening?.() === true) return;
     // Silence, and something to say into it: open a call of Luke's own.
-    this.#connectAttempts += 1;
+    //
+    // The attempts are the backlog's ledger, so only a call with news behind it
+    // spends one. A sample opens calls too and answers to no retry clock of its
+    // own — a refused sample that drew on this would leave the news it never
+    // shared a queue with fewer tries than a transient refusal is owed.
+    if (this.#queue.length > 0) this.#connectAttempts += 1;
     this.#ownsCall = true;
     // Until a notice speaks on it, whatever this call is opened for, it has
     // said nothing that is owed the long linger.
