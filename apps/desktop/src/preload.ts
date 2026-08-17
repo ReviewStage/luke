@@ -43,6 +43,16 @@ const bridge: AppBridge = {
   setAskHotkey: invoke(channels.setAskHotkey),
   setStopHotkey: invoke(channels.setStopHotkey),
   setDuckOtherMedia: invoke(channels.setDuckOtherMedia),
+  setQuietDuringMeetings: invoke(channels.setQuietDuringMeetings),
+  connectGoogleCalendar: invoke(channels.connectGoogleCalendar),
+  cancelGoogleCalendarSignIn: () => {
+    ipcRenderer.send(channels.cancelGoogleCalendarSignIn);
+  },
+  reopenGoogleCalendarSignIn: () => {
+    ipcRenderer.send(channels.reopenGoogleCalendarSignIn);
+  },
+  removeCalendarAccount: invoke(channels.removeCalendarAccount),
+  setCalendarSelected: invoke(channels.setCalendarSelected),
   setVoiceExchangeActive: (active) => {
     ipcRenderer.send(channels.setVoiceExchange, active);
   },
@@ -70,6 +80,8 @@ const bridge: AppBridge = {
   onNoticeAsksChanged: subscribe(channels.noticeAsksChanged),
   onWorkspaceProjectsChanged: subscribe(channels.workspaceProjectsChanged),
   onIssuesChanged: subscribe(channels.issuesChanged),
+  onCalendarsChanged: subscribe(channels.calendarsChanged),
+  onMeetingQuietChanged: subscribe(channels.meetingQuietChanged),
   onVoiceHotkeyPress: subscribe(channels.voiceHotkeyPress),
   onVoiceHotkeyRelease: subscribe(channels.voiceHotkeyRelease),
   onVoiceHotkeyChanged: subscribe(channels.voiceHotkeyChanged),

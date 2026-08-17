@@ -165,6 +165,39 @@ decides on its own reaches either mutation.
 Changing `LINEAR_API_URL` sends the credential to that configured endpoint,
 whose policies then govern the request and response data.
 
+## Optional calendar reads
+
+Google Calendar is read the same way: without an account signed in, Luke sends
+Google no request and knows nothing about your calendars. The integration
+exists only in builds carrying a registered OAuth client; without one it is
+not offered at all.
+
+Connecting an account runs Google's own consent flow for an installed app: the
+browser opens Google's consent page, the grant returns over a loopback
+redirect on this machine (`127.0.0.1`), and the code is exchanged — with PKCE
+— at Google's token endpoint. Two scopes are requested and no more:
+`calendar.freebusy` (your availability) and `calendar.calendarlist.readonly`
+(the list of your calendars). Several accounts can be connected side by side;
+each refresh token is encrypted with Electron `safeStorage`, never returned to
+the renderer, and deleted when the account is disconnected. You can also
+revoke Luke's access at any time in your Google account's security settings.
+
+With an account connected, Luke reads two things every few minutes. The
+calendar list — each calendar's id, name, and colour — is what names the
+account and lets you choose, per account, which calendars count; the names and
+colours are shown in Settings on this machine and are never persisted or sent
+anywhere. For the
+chosen calendars, Luke `POST`s the Calendar API's free/busy query, and Google
+answers with busy intervals only — a title or an attendee cannot travel in
+that response at all. The query names only calendar ids the same pass's list
+reported. Events themselves are never read: Luke holds no event scope.
+
+The intervals gate exactly one behavior, on this machine: while a meeting is
+on and the "Quiet during meetings" switch is enabled, Luke's spoken
+announcements wait and are read out after the meeting ends. Nothing about the
+calendar leaves the machine — meeting times are never sent to the voice
+service, the attention evaluator, or anywhere else.
+
 ## Local display and microphone
 
 The local panel may show a session's provider-assigned title, status, current

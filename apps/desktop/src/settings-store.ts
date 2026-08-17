@@ -13,6 +13,7 @@ import {
   type RealtimeVoiceSpeed,
   type WorkspaceAgentSelection,
 } from "@sidecar/core";
+import { googleCalendarSignInConfig } from "./google-calendar-oauth";
 import { environmentRealtimeSpeed, environmentRealtimeVoice } from "./openai-realtime-credentials";
 import {
   ACCOUNT_PROVIDER,
@@ -49,12 +50,14 @@ const SETTINGS_FILE_MODE = 0o600;
 const SETTINGS_FIELD = {
   ACCOUNT: "account",
   API_KEYS: "apiKeys",
+  CALENDAR_ACCOUNTS: "calendarAccounts",
   ASK_HOTKEY: "askHotkey",
   DEFAULT_WORKSPACE_PROVIDER: "defaultWorkspaceProvider",
   DUCK_OTHER_MEDIA: "duckOtherMedia",
   FEEDBACK_SENDS: "feedbackSends",
   FORM_FACTOR: "formFactor",
   LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
+  QUIET_DURING_MEETINGS: "quietDuringMeetings",
   SHOW_IN_DOCK: "showInDock",
   SHOW_IN_MENU_BAR: "showInMenuBar",
   SHOW_ON_ALL_DISPLAYS: "showOnAllDisplays",
@@ -121,6 +124,12 @@ interface PersistedSettings {
     provider: AccountProvider;
   };
   /**
+   * The connected calendar accounts: each account's id, the grant its sign-in
+   * produced as ciphertext, and the calendar ids the user chose to count.
+   * Absent from the file while none are connected.
+   */
+  calendarAccounts?: readonly PersistedCalendarAccount[];
+  /**
    * Whether Luke stands in the Dock. Off unless the file says `true` outright,
    * so a missing field, an older file, and a corrupt value all land on the
    * accessory app Luke ships as rather than putting an icon somewhere new.
@@ -181,6 +190,13 @@ interface PersistedSettings {
    * missing field and a corrupt value both read as none yet.
    */
   feedbackSends?: number;
+  /**
+   * Whether announcements wait out calendar meetings. On unless the file says
+   * `false` outright, on the media duck's own reasoning: this is what Luke
+   * does with a connected calendar until the user asks otherwise, so a
+   * missing field and a corrupt value both land on doing it.
+   */
+  quietDuringMeetings: boolean;
   /**
    * Whether Luke stands on every connected display. Off unless the file says
    * `true` outright, like the Dock: a missing field, an older file, and a
@@ -259,6 +275,61 @@ function storedAccount(record: Record<string, unknown>): PersistedSettings["acco
       : {}),
     provider: account.provider,
   };
+}
+
+interface PersistedCalendarAccount {
+  id: string;
+  /** The sign-in's grant, encrypted like every credential. */
+  token: string;
+  /** The calendar ids the user chose to count toward meetings. */
+  calendars: readonly string[];
+}
+
+/** One connected account, grant decrypted — main-process eyes only. */
+export interface CalendarAccountCredential {
+  id: string;
+  refreshToken: string;
+  selectedCalendarIds: readonly string[];
+}
+
+/** An account or calendar id reads like one wire value; longer is not an id. */
+const MAXIMUM_CALENDAR_IDENTIFIER_LENGTH = 200;
+/** More accounts than one person signs into; a cap, not a plan. */
+const MAXIMUM_CALENDAR_ACCOUNTS = 10;
+/** More calendars than anyone counts meetings from. */
+const MAXIMUM_SELECTED_CALENDARS = 50;
+
+/** A calendar-world identifier as this store will keep it, or nothing. */
+function calendarIdentifierText(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim();
+  if (!normalized || normalized.length > MAXIMUM_CALENDAR_IDENTIFIER_LENGTH) return undefined;
+  return normalized;
+}
+
+/** Reads the stored calendar accounts, keeping only well-formed entries. */
+function storedCalendarAccounts(
+  record: Record<string, unknown>,
+): readonly PersistedCalendarAccount[] {
+  const persisted = record[SETTINGS_FIELD.CALENDAR_ACCOUNTS];
+  if (!Array.isArray(persisted)) return [];
+  const accounts: PersistedCalendarAccount[] = [];
+  for (const entry of persisted) {
+    if (accounts.length >= MAXIMUM_CALENDAR_ACCOUNTS) break;
+    if (entry === null || typeof entry !== "object") continue;
+    const { id, token, calendars } = entry as Record<string, unknown>;
+    const accountId = calendarIdentifierText(id);
+    if (!accountId || typeof token !== "string" || !token) continue;
+    if (accounts.some((held) => held.id === accountId)) continue;
+    const selected = Array.isArray(calendars)
+      ? calendars
+          .map(calendarIdentifierText)
+          .filter((value): value is string => value !== undefined)
+          .slice(0, MAXIMUM_SELECTED_CALENDARS)
+      : [];
+    accounts.push({ id: accountId, token, calendars: selected });
+  }
+  return accounts;
 }
 
 /**
@@ -396,6 +467,7 @@ function parsePersistedSettings(source: string): PersistedSettings {
   }
   const record = parsed as Record<string, unknown>;
   const version = record[SETTINGS_FIELD.VERSION];
+  const calendarAccounts = storedCalendarAccounts(record);
   const voice = record[SETTINGS_FIELD.VOICE];
   const voiceSpeed = record[SETTINGS_FIELD.VOICE_SPEED];
   const formFactor = record[SETTINGS_FIELD.FORM_FACTOR];
@@ -423,6 +495,7 @@ function parsePersistedSettings(source: string): PersistedSettings {
     version: typeof version === "number" ? version : SETTINGS_FILE_VERSION,
     apiKeys: storedApiKeys(record),
     ...(storedAccount(record) ? { account: storedAccount(record) } : {}),
+    ...(calendarAccounts.length > 0 ? { calendarAccounts } : {}),
     showInDock: booleanSetting(
       record[SETTINGS_FIELD.SHOW_IN_DOCK],
       APP_SETTING_DEFAULTS.showInDock,
@@ -451,6 +524,10 @@ function parsePersistedSettings(source: string): PersistedSettings {
     // A count that is not a whole non-negative number reads as none yet: the
     // worst a corrupt value can cost is replaying the first send's scene.
     ...(feedbackSends !== undefined ? { feedbackSends } : {}),
+    quietDuringMeetings: booleanSetting(
+      record[SETTINGS_FIELD.QUIET_DURING_MEETINGS],
+      APP_SETTING_DEFAULTS.quietDuringMeetings,
+    ),
     showOnAllDisplays: booleanSetting(
       record[SETTINGS_FIELD.SHOW_ON_ALL_DISPLAYS],
       APP_SETTING_DEFAULTS.showOnAllDisplays,
@@ -480,6 +557,8 @@ export class SettingsStore {
   readonly #credentialsUsable: boolean;
   #loading: Promise<PersistedSettings> | undefined;
   #resolved = new Map<CredentialProviderId, ResolvedApiKey>();
+  /** Decrypted accounts, cached like the keys so timers never drum the Keychain. */
+  #resolvedCalendarAccounts: readonly CalendarAccountCredential[] | undefined;
   #mutations: Promise<void> = Promise.resolve();
   #secretStorage: SecretStorage = SECRET_STORAGE.UNKNOWN;
 
@@ -513,6 +592,17 @@ export class SettingsStore {
       // actually happen — and it travels with every settings reply, so storing a
       // key is what turns voice on and deleting one is what turns it off.
       voiceAvailable: await this.#voiceAvailable(),
+      // Whether this build can offer the Google Calendar sign-in at all: a
+      // registered OAuth client resolved, and this run would use what it
+      // grants. Without one the row still takes the secret address.
+      calendarSignInAvailable:
+        this.#credentialsUsable && googleCalendarSignInConfig(this.#environment) !== undefined,
+      // The accounts without their grants: which are connected and which
+      // calendars count is the renderer's to draw; the tokens never travel.
+      calendarAccounts: (persisted.calendarAccounts ?? []).map((account) => ({
+        id: account.id,
+        selectedCalendarIds: account.calendars,
+      })),
       showInDock: persisted.showInDock,
       showInMenuBar: persisted.showInMenuBar,
       // Resolved the way the minter resolves it, so the panel marks the voice
@@ -528,6 +618,7 @@ export class SettingsStore {
       ...(persisted.askHotkey ? { askHotkey: persisted.askHotkey } : {}),
       ...(persisted.stopHotkey ? { stopHotkey: persisted.stopHotkey } : {}),
       duckOtherMedia: persisted.duckOtherMedia,
+      quietDuringMeetings: persisted.quietDuringMeetings,
       showOnAllDisplays: persisted.showOnAllDisplays,
       formFactor: persisted.formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
       ...(persisted.defaultWorkspaceProvider
@@ -809,6 +900,26 @@ export class SettingsStore {
   }
 
   /**
+   * Shallow like `duckOtherMedia()`: every announcement pass asks whether to
+   * hold, and asking must never be what wakes the OS keychain.
+   */
+  async quietDuringMeetings(): Promise<boolean> {
+    return (await this.#load()).quietDuringMeetings;
+  }
+
+  /**
+   * Turns the holding of announcements during meetings on or off. A plain
+   * preference like the media duck's: no cipher, no invalid value, so the
+   * write either lands or throws.
+   */
+  async setQuietDuringMeetings(enabled: boolean): Promise<SettingsUpdateResult> {
+    return this.#setField((persisted) => {
+      if (persisted.quietDuringMeetings === enabled) return;
+      return { ...persisted, quietDuringMeetings: enabled };
+    });
+  }
+
+  /**
    * Shallow like `showInDock()`: the displays Luke stands on are decided at
    * launch from the settings file alone, never the keychain.
    */
@@ -1004,6 +1115,145 @@ export class SettingsStore {
       this.#resolved.delete(providerId);
     });
     return { settings: await this.snapshot() };
+  }
+
+  /**
+   * Connects one calendar account: the grant its sign-in produced, encrypted
+   * at rest like every credential, under the account's own id. Signing into
+   * an account already connected replaces its grant and keeps its calendar
+   * choices — the choices are the user's, and a fresh grant is not a fresh
+   * mind about them.
+   */
+  async addCalendarAccount(
+    accountId: string,
+    refreshToken: string,
+    selectedCalendarIds: readonly string[],
+  ): Promise<SettingsUpdateResult> {
+    const id = calendarIdentifierText(accountId);
+    const normalized = refreshToken.trim();
+    const rejection = !id
+      ? "Google answered the sign-in without naming an account."
+      : !this.#secretStorageUsable()
+        ? "Encrypted credential storage is unavailable on this system."
+        : // The shape rules a pasted key answers to: a grant is Google's to
+          // shape, and only sendability is checked.
+          apiKeyRejection(normalized);
+    if (rejection || !id) return { settings: await this.snapshot(), reason: rejection };
+
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      const token = this.#cipher.encrypt(normalized).toString("base64");
+      const existing = persisted.calendarAccounts ?? [];
+      const held = existing.find((account) => account.id === id);
+      if (!held && existing.length >= MAXIMUM_CALENDAR_ACCOUNTS) {
+        throw new Error("More calendar accounts than the store keeps");
+      }
+      const account: PersistedCalendarAccount = {
+        id,
+        token,
+        calendars: held
+          ? held.calendars
+          : selectedCalendarIds
+              .map(calendarIdentifierText)
+              .filter((value): value is string => value !== undefined)
+              .slice(0, MAXIMUM_SELECTED_CALENDARS),
+      };
+      const calendarAccounts = held
+        ? existing.map((candidate) => (candidate.id === id ? account : candidate))
+        : [...existing, account];
+      await this.#writeCalendarAccounts(persisted, calendarAccounts);
+    });
+    return { settings: await this.snapshot() };
+  }
+
+  /** Disconnects one account, deleting its stored grant with it. */
+  async removeCalendarAccount(accountId: string): Promise<SettingsUpdateResult> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      const existing = persisted.calendarAccounts ?? [];
+      const calendarAccounts = existing.filter((account) => account.id !== accountId);
+      if (calendarAccounts.length === existing.length) return;
+      await this.#writeCalendarAccounts(persisted, calendarAccounts);
+    });
+    return { settings: await this.snapshot() };
+  }
+
+  /**
+   * Chooses whether one of an account's calendars counts toward meetings.
+   * Whether the calendar exists is answered where the list lives — the main
+   * process validates a selection against its latest observation — so only
+   * the value's shape is held here.
+   */
+  async setCalendarSelected(
+    accountId: string,
+    calendarId: string,
+    selected: boolean,
+  ): Promise<SettingsUpdateResult> {
+    const id = calendarIdentifierText(calendarId);
+    if (!id) return { settings: await this.snapshot(), reason: "That is not a calendar id." };
+    let unknownAccount = false;
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      const existing = persisted.calendarAccounts ?? [];
+      const held = existing.find((account) => account.id === accountId);
+      if (!held) {
+        unknownAccount = true;
+        return;
+      }
+      const calendars = held.calendars.filter((candidate) => candidate !== id);
+      if (selected) calendars.push(id);
+      if (calendars.length > MAXIMUM_SELECTED_CALENDARS) return;
+      if (calendars.length === held.calendars.length && held.calendars.includes(id) === selected) {
+        return;
+      }
+      const calendarAccounts = existing.map((account) =>
+        account.id === accountId ? { ...account, calendars } : account,
+      );
+      await this.#writeCalendarAccounts(persisted, calendarAccounts);
+    });
+    return {
+      settings: await this.snapshot(),
+      ...(unknownAccount ? { reason: "That calendar account is not connected." } : {}),
+    };
+  }
+
+  /**
+   * Main-process only, like the resolved keys: every connected account with
+   * its grant decrypted, for the reader. A grant that no longer decrypts —
+   * another OS account, a rotated Keychain — is skipped; its row still shows
+   * connected, and the failing read is what says to sign in again.
+   */
+  async readCalendarAccounts(): Promise<readonly CalendarAccountCredential[]> {
+    if (this.#resolvedCalendarAccounts) return this.#resolvedCalendarAccounts;
+    const persisted = await this.#load();
+    const accounts: CalendarAccountCredential[] = [];
+    for (const account of persisted.calendarAccounts ?? []) {
+      try {
+        const refreshToken = this.#cipher.decrypt(Buffer.from(account.token, "base64")).trim();
+        if (!refreshToken || apiKeyRejection(refreshToken)) continue;
+        accounts.push({ id: account.id, refreshToken, selectedCalendarIds: account.calendars });
+      } catch {
+        // Unrecoverable; the user signs into that account again.
+      }
+    }
+    this.#resolvedCalendarAccounts = accounts;
+    return accounts;
+  }
+
+  /** One place writes the account list, so the cache can never outlive it. */
+  async #writeCalendarAccounts(
+    persisted: PersistedSettings,
+    calendarAccounts: readonly PersistedCalendarAccount[],
+  ): Promise<void> {
+    const next: PersistedSettings = {
+      ...persisted,
+      version: SETTINGS_FILE_VERSION,
+    };
+    if (calendarAccounts.length > 0) next.calendarAccounts = calendarAccounts;
+    else delete next.calendarAccounts;
+    await this.#write(next);
+    this.#loading = Promise.resolve(next);
+    this.#resolvedCalendarAccounts = undefined;
   }
 
   /**

@@ -44,6 +44,9 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
     voiceSpeed: REALTIME_VOICE_SPEED.NORMAL,
     voiceCaptions: false,
     duckOtherMedia: true,
+    quietDuringMeetings: true,
+    calendarSignInAvailable: false,
+    calendarAccounts: [],
     showOnAllDisplays: false,
     formFactor: PANEL_FORM_FACTOR.BUBBLE,
     ...overrides,
@@ -187,6 +190,35 @@ test("the facts say what is connected, never what connects it", () => {
   // The tracker stands in its own fact, the way it stands in its own section.
   assert.match(rendered, /Linear \(not connected\)/);
   assert.match(rendered, /Integrations/);
+  // A build without the calendar sign-in draws no calendar row, so the guide
+  // says nothing about one — a capability the guide describes is one Luke
+  // will claim to have.
+  assert.doesNotMatch(rendered, /Google Calendar/);
+
+  // A build carrying the sign-in describes the calendar: what it reads —
+  // times, never titles — and how it connects.
+  const offered = JSON.stringify(
+    buildLukeGuide(guideInput({ settings: settings({ calendarSignInAvailable: true }) })).facts,
+  );
+  assert.match(offered, /Google Calendar \(not connected\)/);
+  assert.match(offered, /when meetings start and end/);
+  assert.match(offered, /signing in with Google/);
+
+  const connected = JSON.stringify(
+    buildLukeGuide(
+      guideInput({
+        settings: settings({
+          calendarSignInAvailable: true,
+          calendarAccounts: [
+            { id: "work@example.com", selectedCalendarIds: ["work@example.com"] },
+            { id: "home@example.com", selectedCalendarIds: [] },
+          ],
+        }),
+      }),
+    ).facts,
+  );
+  assert.match(connected, /Google Calendar \(2 accounts connected\)/);
+  assert.match(connected, /checkboxes under each account/);
   // The voice key stands in a fact of its own, saying what connecting it buys
   // and naming the page its row actually lives on — the Voice page, not the
   // Integrations section it once shared with Linear.
@@ -576,6 +608,10 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
       calls.push(`setDuckOtherMedia:${enabled}`);
       return answered;
     },
+    setQuietDuringMeetings: async (enabled: boolean) => {
+      calls.push(`setQuietDuringMeetings:${enabled}`);
+      return answered;
+    },
     setShowInMenuBar: async (show: boolean) => {
       calls.push(`setShowInMenuBar:${show}`);
       return answered;
@@ -614,6 +650,7 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
   assert.deepEqual(calls.sort(), [
     "setDuckOtherMedia:true",
     "setFormFactor:notch",
+    "setQuietDuringMeetings:true",
     "setShowInDock:true",
     "setShowInMenuBar:true",
     "setShowOnAllDisplays:true",

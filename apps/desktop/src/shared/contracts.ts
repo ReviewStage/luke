@@ -84,6 +84,31 @@ export const SECRET_STORAGE = {
 export type SecretStorage = (typeof SECRET_STORAGE)[keyof typeof SECRET_STORAGE];
 
 /**
+ * One connected Google Calendar account as a renderer may know it: which
+ * account, and which of its calendars the user chose to count. The grant
+ * behind it stays in the main process, like every credential.
+ */
+export interface CalendarAccount {
+  /** The account's primary calendar id — its address, which is its name. */
+  id: string;
+  selectedCalendarIds: readonly string[];
+}
+
+/** One calendar as its account's list names it, for a settings row. */
+export interface AccountCalendar {
+  id: string;
+  label: string;
+  /** The calendar's own colour as Google lists it, when it sent a sound one. */
+  color?: string;
+}
+
+/** The calendars one account offered on the latest observation pass. */
+export interface ObservedAccountCalendars {
+  accountId: string;
+  calendars: readonly AccountCalendar[];
+}
+
+/**
  * What each plain preference is until the user chooses otherwise. The store
  * falls back to these when the settings file has never said, and the app
  * guide carries the same values so a spoken ask for "the default" names a
@@ -96,6 +121,7 @@ export const APP_SETTING_DEFAULTS = {
   showInMenuBar: true,
   voiceCaptions: false,
   duckOtherMedia: true,
+  quietDuringMeetings: true,
   showOnAllDisplays: false,
 } as const satisfies Partial<Record<keyof AppSettings, boolean>>;
 
@@ -141,6 +167,17 @@ export interface AppSettings {
    * they learn a deleted key turned it back off.
    */
   voiceAvailable: boolean;
+  /**
+   * Whether this build can offer the Google Calendar sign-in: an OAuth client
+   * registered and usable this run. Without one the integration is not drawn
+   * at all — a row whose one act cannot run is not a row.
+   */
+  calendarSignInAvailable: boolean;
+  /**
+   * The connected Google Calendar accounts, each with the calendars the user
+   * chose to count. Empty until a sign-in lands one.
+   */
+  calendarAccounts: readonly CalendarAccount[];
   /**
    * Whether Luke stands in the Dock as well as at the notch. Off by default:
    * an accessory app is what Luke ships as, so an icon among the user's apps
@@ -196,6 +233,15 @@ export interface AppSettings {
    * the duck is left where the hand put it.
    */
   duckOtherMedia: boolean;
+  /**
+   * Whether announcements wait out the user's meetings. While the connected
+   * calendar shows a meeting on, a session's spoken notices are held and read
+   * out together once it ends. On by default: speaking into a meeting is the
+   * failure connecting a calendar exists to prevent, and the switch is what
+   * keeps the calendar readable without the quiet. It changes nothing until
+   * a calendar is connected, because without one there is no meeting to see.
+   */
+  quietDuringMeetings: boolean;
   /**
    * Whether Luke stands on every connected display at once. Off by default:
    * he keeps to the system's main display until asked, and turning this off
@@ -365,6 +411,10 @@ export interface AppBootstrap {
   workspaceProjects: readonly ObservedWorkspaceProject[];
   /** Absent while no issue tracker is connected, which is its own answer. */
   issues?: readonly TrackedIssue[];
+  /** Each connected account's calendars, as last observed. */
+  calendars: readonly ObservedAccountCalendars[];
+  /** Whether the calendar's quiet is holding announcements right now. */
+  meetingQuiet: boolean;
   settings: AppSettings;
 }
 
@@ -469,6 +519,44 @@ export interface AppBridge {
   resetSettings(scope: SettingsResetScope): Promise<SettingsUpdateResult>;
   /** Turns the quieting of Music and Spotify during a spoken exchange on or off. */
   setDuckOtherMedia(enabled: boolean): Promise<SettingsUpdateResult>;
+  /**
+   * Turns the holding of announcements during calendar meetings on or off.
+   * The hold itself lives in the main process, beside the calendar it reads.
+   */
+  setQuietDuringMeetings(enabled: boolean): Promise<SettingsUpdateResult>;
+  /**
+   * Runs the Google Calendar sign-in: the browser opens Google's own consent
+   * page, the grant comes back over a loopback redirect that never leaves the
+   * machine, and the main process stores the resulting token encrypted and
+   * connects the account it names. The renderer asks for the act and receives
+   * only the settings snapshot — no token, code, or address ever crosses this
+   * bridge.
+   */
+  connectGoogleCalendar(): Promise<SettingsUpdateResult>;
+  /**
+   * Ends a sign-in still waiting on the browser. The tab is left where it is;
+   * the loopback stops listening, so a grant given after lands nowhere.
+   */
+  cancelGoogleCalendarSignIn(): void;
+  /**
+   * Opens the waiting sign-in's consent page again, for a tab lost or closed
+   * by mistake. The renderer names the intent and never an address: the page
+   * is the one the main process built and is already listening for, and with
+   * no sign-in waiting nothing opens.
+   */
+  reopenGoogleCalendarSignIn(): void;
+  /** Disconnects one calendar account, deleting its stored grant. */
+  removeCalendarAccount(accountId: string): Promise<SettingsUpdateResult>;
+  /**
+   * Chooses whether one of an account's calendars counts toward meetings. A
+   * calendar being switched on must be one the account's latest observation
+   * listed; the main process validates that again before the store keeps it.
+   */
+  setCalendarSelected(
+    accountId: string,
+    calendarId: string,
+    selected: boolean,
+  ): Promise<SettingsUpdateResult>;
   /**
    * Whether a spoken exchange is live — a turn being held, a reply being
    * spoken, or the call coming up between them. It drives the media duck and
@@ -632,6 +720,17 @@ export interface AppBridge {
   ): () => void;
   /** The issue roster as last observed; `undefined` says no tracker is connected. */
   onIssuesChanged(callback: (issues: readonly TrackedIssue[] | undefined) => void): () => void;
+  /** Each connected account's calendars, whenever an observation changes them. */
+  onCalendarsChanged(
+    callback: (calendars: readonly ObservedAccountCalendars[]) => void,
+  ): () => void;
+  /**
+   * Whether the calendar's quiet is holding announcements right now — a
+   * meeting covers this instant and the setting is on. Deterministic, from
+   * the clock against observed intervals; the face sleeps on it and nothing
+   * else reads it.
+   */
+  onMeetingQuietChanged(callback: (active: boolean) => void): () => void;
   onAttentionSpeech(callback: (speech: readonly AttentionSpeech[]) => void): () => void;
   /** The talk key going down, from whatever app happened to be frontmost. */
   onVoiceHotkeyPress(callback: () => void): () => void;
@@ -685,6 +784,14 @@ export const channels = {
   setAskHotkey: "app:set-ask-hotkey",
   setStopHotkey: "app:set-stop-hotkey",
   setDuckOtherMedia: "app:set-duck-other-media",
+  setQuietDuringMeetings: "app:set-quiet-during-meetings",
+  connectGoogleCalendar: "app:connect-google-calendar",
+  cancelGoogleCalendarSignIn: "app:cancel-google-calendar-sign-in",
+  reopenGoogleCalendarSignIn: "app:reopen-google-calendar-sign-in",
+  removeCalendarAccount: "app:remove-calendar-account",
+  setCalendarSelected: "app:set-calendar-selected",
+  calendarsChanged: "app:calendars-changed",
+  meetingQuietChanged: "app:meeting-quiet-changed",
   setVoiceExchange: "app:set-voice-exchange",
   openProviderApiKeys: "app:open-provider-api-keys",
   setShowInMenuBar: "app:set-show-in-menu-bar",

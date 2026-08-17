@@ -124,6 +124,30 @@ Trust constraints:
   in the main process before the tracker client sees anything. Observation
   sends only the read document; the write documents are fixed by the build and
   issued only for a validated act.
+- The calendar is the same rule with no write path at all. Luke reads when
+  the user's meetings start and end, under accounts the user signed in, and
+  observes nothing without one. The integration exists only in a build
+  carrying a registered OAuth client — without one it is not drawn — and
+  connecting is Google's own consent flow for an installed app: PKCE over a
+  loopback redirect that never leaves the machine, asking for two read scopes
+  alone, availability and the calendar list. Each account's grant is stored
+  encrypted like a key, deleted by disconnecting the account, and revocable
+  in the user's own Google account; several accounts stand side by side. A
+  pass reads each account's calendar list — ids and names, which are what the
+  settings rows draw and the user chooses from — and then the Calendar API's
+  free/busy query, a POSTed read document fixed by the build that carries the
+  window's two instants and only calendar ids the same pass's list reported:
+  the user's selection steers it, but never past what the account just
+  offered. Google answers free/busy with intervals alone, so an event's title
+  cannot even travel, and no event scope is ever held. Only start and end
+  instants are kept beyond the pass, and the intervals never leave the
+  machine. What the intervals decide is bounded and deterministic — while a
+  meeting covers now and the setting is on, spoken announcements are held and
+  released once it ends, and the face beside the housing sleeps for as long
+  as the hold stands — a clock read against observed intervals, never
+  anything a model wrote, and holding is the whole power: a calendar entry
+  can delay an announcement and put a drawn face to sleep, never create,
+  reword, or act on one.
 - Quieting other media is bounded the way the talk key is: a native helper that
   can do one narrow thing. While a spoken exchange is live, Luke may lower the
   volume of the players the helper names — Music and Spotify, through their own

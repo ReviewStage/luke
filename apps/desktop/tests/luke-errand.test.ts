@@ -54,6 +54,9 @@ function settings(): AppSettings {
     voiceSpeed: REALTIME_VOICE_SPEED.NORMAL,
     voiceCaptions: false,
     duckOtherMedia: true,
+    quietDuringMeetings: true,
+    calendarSignInAvailable: false,
+    calendarAccounts: [],
     showOnAllDisplays: false,
     formFactor: PANEL_FORM_FACTOR.BUBBLE,
   };

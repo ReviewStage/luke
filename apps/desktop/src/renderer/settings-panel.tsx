@@ -16,10 +16,13 @@ import {
 } from "@sidecar/core";
 import { useEffect, useRef, useState } from "react";
 import type {
+  AccountCalendar,
   AccountSnapshot,
   AppSettings,
+  CalendarAccount,
   CredentialSource,
   MicrophoneStatus,
+  ObservedAccountCalendars,
   SettingsResetScope,
 } from "../shared/contracts";
 import {
@@ -37,6 +40,7 @@ import {
   providerRunsSessionsInCloud,
   VOICE_CREDENTIAL_PROVIDER,
 } from "../shared/credential-providers";
+import { GOOGLE_CALENDAR_ID, GOOGLE_CALENDAR_NAME } from "../shared/google-calendar";
 import {
   capturedVoiceHotkey,
   DEFAULT_ASK_HOTKEYS,
@@ -139,6 +143,12 @@ export interface PreferenceWrites {
   onVoiceCaptionsChange: (enabled: boolean) => Promise<string | undefined>;
   /** Turns the quieting of Music and Spotify during a spoken exchange on or off. */
   onDuckOtherMediaChange: (enabled: boolean) => Promise<string | undefined>;
+  /**
+   * Turns the holding of announcements during calendar meetings on or off.
+   * The store answers with why when it refuses, and the row is where that
+   * answer belongs.
+   */
+  onQuietDuringMeetingsChange: (enabled: boolean) => Promise<string | undefined>;
   /** Chooses the voice Luke speaks with, from the set fixed by this build. */
   onVoiceChange: (voice: RealtimeVoice) => void;
   /** Chooses the pace Luke speaks at, from the set fixed by this build. */
@@ -283,6 +293,8 @@ export interface SettingsPanelProps {
    * cannot show is one that can be neither seen nor cleared.
    */
   workspaceProviders: readonly WorkspaceProviderOption[];
+  /** Everything the Google Calendar block can do. */
+  calendar: CalendarControl;
   onQuit: () => void;
   shortcuts: ShortcutControl;
 }
@@ -1166,21 +1178,256 @@ function CredentialsSection({
   );
 }
 
+/** Everything the Google Calendar block can do, wired above the panel. */
+export interface CalendarControl {
+  /** Each connected account's calendars, as last observed. */
+  choices: readonly ObservedAccountCalendars[];
+  /** True while another entry holds the slot, which refuses a second act. */
+  held: boolean;
+  /** True while a sign-in is waiting on the browser. */
+  connecting: boolean;
+  /** Stands the panel down and opens Google's consent page. */
+  onSignIn: () => void;
+  onRemoveAccount: (accountId: string) => Promise<string | undefined>;
+  onToggleCalendar: (
+    accountId: string,
+    calendarId: string,
+    selected: boolean,
+  ) => Promise<string | undefined>;
+}
+
 /**
- * The services Luke connects to that are not agents: today, the issue tracker.
- * Each row is the same credential line an agent provider gets — same entry,
- * same trash, same environment fallback — with its own one-line answer to what
- * connecting it buys. The OpenAI key is not here: it lives at the top of the
- * Voice page, beside the feature it turns on.
+ * One connected account: its address, the trash that disconnects it, and a
+ * checkbox per calendar its list offered — checked meaning its meetings hold
+ * announcements. The names drawn here are the user's own calendar names, on
+ * the user's own screen, read under the list scope the sign-in asked for.
+ */
+function CalendarAccountRow({
+  account,
+  calendars,
+  onRemove,
+  onToggle,
+}: {
+  account: CalendarAccount;
+  calendars: readonly AccountCalendar[];
+  onRemove: () => Promise<string | undefined>;
+  onToggle: (calendarId: string, selected: boolean) => Promise<string | undefined>;
+}): React.JSX.Element {
+  // Disconnecting asks first, exactly like deleting a key: nothing here can
+  // hand the grant back, so a remove taken on the first press would cost a
+  // trip through Google's consent to undo.
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [rejection, setRejection] = useState<string>();
+
+  const removeAccount = async () => {
+    setBusy(true);
+    setRejection(await onRemove());
+    setBusy(false);
+    setAsking(false);
+  };
+
+  const toggleCalendar = async (calendarId: string, selected: boolean) => {
+    setBusy(true);
+    setRejection(await onToggle(calendarId, selected));
+    setBusy(false);
+  };
+
+  return (
+    <div className="calendar-account">
+      <div className="calendar-account-row">
+        <span className="calendar-account-name">{account.id}</span>
+        {/* The trash and the confirm that stands in for it share one grid
+            cell, exactly as the credential rows' do: the cell is as wide and
+            as tall as the larger of the two whichever is showing, so asking
+            the question never re-shapes the line. */}
+        <span className="credential-actions">
+          <span
+            className="settings-actions credential-controls"
+            data-drawn={String(!asking)}
+            aria-hidden={asking}
+            inert={asking}
+          >
+            <button
+              type="button"
+              className="icon-button credential-remove"
+              disabled={busy}
+              aria-label={`Disconnect ${account.id}`}
+              /* The ellipsis is the promise that it asks first. */
+              title="Disconnect…"
+              onClick={() => {
+                setRejection(undefined);
+                setAsking(true);
+              }}
+            >
+              <TrashIcon />
+            </button>
+          </span>
+          <fieldset
+            className="settings-actions credential-confirm"
+            aria-label={`Disconnect ${account.id}?`}
+            data-drawn={String(asking)}
+            aria-hidden={!asking}
+            inert={!asking}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape" || busy) return;
+              event.stopPropagation();
+              setAsking(false);
+            }}
+          >
+            <button
+              type="button"
+              className="quiet-button"
+              disabled={busy}
+              onClick={() => setAsking(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="danger-button"
+              disabled={busy}
+              onClick={() => void removeAccount()}
+            >
+              {busy ? "Disconnecting…" : "Disconnect"}
+            </button>
+          </fieldset>
+        </span>
+      </div>
+      {/* Which of the account's calendars count, one checkbox each — drawn in
+          the calendar's own colour where Google listed one, the panel's
+          working accent where it did not. A calendar the selection names but
+          the list no longer offers simply is not drawn — and never reaches a
+          read either way. */}
+      {calendars.map((calendar) => {
+        const selected = account.selectedCalendarIds.includes(calendar.id);
+        return (
+          <label
+            className="calendar-choice"
+            key={calendar.id}
+            {...(calendar.color
+              ? { style: { "--calendar-color": calendar.color } as React.CSSProperties }
+              : {})}
+          >
+            <input
+              type="checkbox"
+              checked={selected}
+              disabled={busy}
+              aria-label={`Count meetings on ${calendar.label}`}
+              onChange={() => void toggleCalendar(calendar.id, !selected)}
+            />
+            <span className="calendar-choice-name">{calendar.label}</span>
+          </label>
+        );
+      })}
+      {rejection ? <p className="error-message">{rejection}</p> : null}
+    </div>
+  );
+}
+
+/**
+ * The calendar integration: connected by signing in with Google, never by a
+ * pasted credential, and drawn at all only in a build that carries the OAuth
+ * client the sign-in runs on — a row whose one act cannot run is not a row.
+ */
+function GoogleCalendarIntegration({
+  settings,
+  calendar,
+  preferences,
+}: {
+  settings: AppSettings;
+  calendar: CalendarControl;
+  preferences: PreferenceWrites;
+}): React.JSX.Element | null {
+  if (!settings.calendarSignInAvailable) return null;
+  const accounts = settings.calendarAccounts;
+  return (
+    <div className="credential">
+      <div className="credential-row">
+        <span className="credential-identity">
+          <span className="credential-mark">
+            <ProviderMark providerId={GOOGLE_CALENDAR_ID} />
+          </span>
+          <span className="credential-name">{GOOGLE_CALENDAR_NAME}</span>
+          {accounts.length > 0 ? <CheckIcon /> : null}
+        </span>
+        <span className="settings-actions">
+          {/* The consent page does the connecting: the same word every other
+              integration's row uses, and a second account is the same act
+              worded for what it adds. */}
+          <button
+            type="button"
+            className="quiet-button"
+            disabled={calendar.held || calendar.connecting}
+            aria-label={
+              accounts.length > 0
+                ? "Add another Google account"
+                : "Connect Google Calendar by signing in"
+            }
+            title={calendar.held ? HELD_TITLE : undefined}
+            onClick={calendar.onSignIn}
+          >
+            {calendar.connecting
+              ? "Waiting for Google…"
+              : accounts.length > 0
+                ? "Add account"
+                : "Connect"}
+          </button>
+        </span>
+      </div>
+      <p className="settings-note">
+        Luke reads when your meetings start and end — never their titles — and can hold
+        announcements until they finish.
+      </p>
+      {accounts.map((account) => (
+        <CalendarAccountRow
+          key={account.id}
+          account={account}
+          calendars={
+            calendar.choices.find((choice) => choice.accountId === account.id)?.calendars ?? []
+          }
+          onRemove={() => calendar.onRemoveAccount(account.id)}
+          onToggle={(calendarId, selected) =>
+            calendar.onToggleCalendar(account.id, calendarId, selected)
+          }
+        />
+      ))}
+      {/* The quiet is a fact about the calendars above it, so it appears with
+          the first account and leaves with the last — a switch gating what a
+          disconnected calendar cannot do would be a control over nothing. */}
+      {accounts.length > 0 ? (
+        <SwitchRow
+          label="Quiet during meetings"
+          ariaLabel="Hold announcements while a calendar meeting is on"
+          errand={APP_SETTING_ID.QUIET_DURING_MEETINGS}
+          detail="While a meeting is on, spoken announcements wait and are read out together after it ends."
+          checked={settings.quietDuringMeetings}
+          onChange={preferences.onQuietDuringMeetingsChange}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The services Luke connects to that are not agents: the issue tracker and
+ * the calendar. Each row is the same credential line an agent provider gets —
+ * same entry, same trash, same environment fallback — with its own one-line
+ * answer to what connecting it buys. The OpenAI key is not here: it lives at
+ * the top of the Voice page, beside the feature it turns on.
  */
 function IntegrationsSection({
   settings,
   control,
   panelOpen,
+  preferences,
+  calendar,
 }: {
   settings: AppSettings;
   control: CredentialEntryControl;
   panelOpen: boolean;
+  preferences: PreferenceWrites;
+  calendar: CalendarControl;
 }): React.JSX.Element {
   const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
   return (
@@ -1199,6 +1446,11 @@ function IntegrationsSection({
           panelOpen={panelOpen}
         />
       ))}
+      <GoogleCalendarIntegration
+        settings={settings}
+        calendar={calendar}
+        preferences={preferences}
+      />
       {/* The same refusal the agents' section explains: a Connect stilled by
           missing storage needs its why in this section too. */}
       {storageUnavailable ? <p className="settings-note">{STORAGE_UNAVAILABLE_NOTE}</p> : null}
@@ -2011,6 +2263,7 @@ export function SettingsPanel({
   feedback,
   panelOpen,
   workspaceProviders,
+  calendar,
   onQuit,
   shortcuts,
 }: SettingsPanelProps): React.JSX.Element {
@@ -2117,7 +2370,13 @@ export function SettingsPanel({
             panelOpen={panelOpen}
             preferences={preferences}
           />
-          <IntegrationsSection settings={settings} control={credentials} panelOpen={panelOpen} />
+          <IntegrationsSection
+            settings={settings}
+            control={credentials}
+            panelOpen={panelOpen}
+            preferences={preferences}
+            calendar={calendar}
+          />
           <WorkspacesSection
             settings={settings}
             workspaceProviders={workspaceProviders}
