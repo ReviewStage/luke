@@ -1105,7 +1105,13 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 
 /* A number, not a badge. Seventeen sessions overflowed a pill, and a pill was
    never carrying meaning the colour and the caption were not already carrying.
-   The rounded system face is the one macOS uses for glanceable numerals. */
+   The rounded system face is the one macOS uses for glanceable numerals.
+   `--count-fit` is the component's answer to a number that outgrows the shape
+   it sits in: notch-wings measures the text and the wing's own room, and the
+   badge stands down from its resting scale just far enough to stay inside the
+   black — on transform, like everything else that moves, so a count crossing
+   a digit boundary re-shapes no text and rides the same spring as the
+   presentation's own scale change. */
 .count-badge {
   position: relative;
   display: flex;
@@ -1117,7 +1123,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   letter-spacing: -0.2px;
-  transform: scale(0.88);
+  transform: scale(calc(0.88 * var(--count-fit, 1)));
   transform-origin: left center;
   transition: transform var(--duration-shape) var(--spring);
   will-change: transform;
@@ -1135,7 +1141,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    not, and growing it there read as a second movement competing with the
    widening. */
 .app-stage[data-presentation="panel"] .count-badge {
-  transform: scale(1);
+  transform: scale(var(--count-fit, 1));
 }
 
 .count-caption {

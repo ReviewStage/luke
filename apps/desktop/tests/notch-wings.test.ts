@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CAPSULE_SIDE_WIDTH, PANEL_WIDTH, PEEK_SIDE_GROWTH } from "@sidecar/core";
-import { OVERFLOW_SLOT_ID, wingMarkCapacity, wingSlots } from "../src/renderer/notch-wings";
+import {
+  countBadgeFit,
+  OVERFLOW_SLOT_ID,
+  wingMarkCapacity,
+  wingSlots,
+} from "../src/renderer/notch-wings";
+import { PANEL_PRESENTATION } from "../src/renderer/panel-state";
 import type { ProviderTally } from "../src/renderer/session-model";
 
 const peekSideWidth = CAPSULE_SIDE_WIDTH + PEEK_SIDE_GROWTH;
@@ -63,4 +69,54 @@ test("exactly filling the wing needs no count", () => {
     slots.map((slot) => slot.id),
     ["a", "b", "c", "d"],
   );
+});
+
+// The badge's room in the arithmetic below: the capsule's 36px side minus the
+// wing's 9px inset and the 2px kept off the shape's edge, and the peek's 124px
+// side minus the same.
+const capsuleRoom = CAPSULE_SIDE_WIDTH - 11;
+const peekRoom = peekSideWidth - 11;
+
+test("a count that fits keeps its resting scale", () => {
+  // Two tabular digits: about 19 layout pixels, 17 once the 0.88 draws them.
+  assert.equal(countBadgeFit(PANEL_PRESENTATION.CAPSULE, 210, 19, 0), 1);
+});
+
+test("a number wider than the capsule's side stands down to fit it", () => {
+  // Five digits: about 47 layout pixels against the capsule's 25 of room.
+  const fit = countBadgeFit(PANEL_PRESENTATION.CAPSULE, 210, 47, 0);
+  assert.ok(fit < 1);
+  assert.ok(0.88 * fit * 47 <= capsuleRoom + 1e-9);
+});
+
+test("the capsule ignores the caption it never draws", () => {
+  assert.equal(
+    countBadgeFit(PANEL_PRESENTATION.CAPSULE, 210, 19, 400),
+    countBadgeFit(PANEL_PRESENTATION.CAPSULE, 210, 19, 0),
+  );
+});
+
+test("the peek fits the number and its caption together", () => {
+  // A three-digit count beside "121 need you": each fits the peek alone, and
+  // together they outgrow it.
+  const fit = countBadgeFit(PANEL_PRESENTATION.PEEK, 210, 29, 100);
+  assert.ok(fit < 1);
+  assert.ok(0.88 * fit * (29 + 9 + 100) <= peekRoom + 1e-9);
+});
+
+test("the panel's wider side stands the same text down less than the peek's", () => {
+  const peek = countBadgeFit(PANEL_PRESENTATION.PEEK, 210, 38, 160);
+  const panel = countBadgeFit(PANEL_PRESENTATION.PANEL, 210, 38, 160);
+  assert.ok(peek < panel);
+});
+
+test("the slot keeps the capsule's quiet wing, so it keeps the capsule's fit", () => {
+  assert.equal(
+    countBadgeFit(PANEL_PRESENTATION.SLOT, 210, 47, 0),
+    countBadgeFit(PANEL_PRESENTATION.CAPSULE, 210, 47, 0),
+  );
+});
+
+test("text not yet measured is not scaled", () => {
+  assert.equal(countBadgeFit(PANEL_PRESENTATION.CAPSULE, 210, 0, 0), 1);
 });
