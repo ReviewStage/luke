@@ -15,12 +15,15 @@ import {
   hdiutilConvertArguments,
   hdiutilCreateArguments,
   hdiutilDetachArguments,
+  NOTARY_CREDENTIAL_SOURCE,
   notaryLogArguments,
   notarySubmitArguments,
   parseHdiutilAttachPlist,
+  RELEASE_LATEST_DMG_FILE_NAME,
   releaseArtifactDirectory,
   releaseDmgFileName,
   releaseSignatureMatchesIdentity,
+  resolveNotaryCredentials,
   resolveReleaseSigning,
   stapleArguments,
   tiffutilHiDpiArguments,
@@ -273,8 +276,81 @@ test("release DMG store layout is branded and bounded", () => {
   assert.ok(DMG_WINDOW.BACKGROUND.DIRECTORY.startsWith("."));
 });
 
+test("the latest-DMG asset name carries no version, so its download URL never moves", () => {
+  assert.equal(RELEASE_LATEST_DMG_FILE_NAME, "Luke.dmg");
+  assert.ok(!RELEASE_LATEST_DMG_FILE_NAME.includes(PACKAGED_ARCHITECTURE));
+});
+
+test("notary credentials come from the keychain profile unless a key file is provided whole", () => {
+  assert.deepEqual(resolveNotaryCredentials({}), {
+    source: NOTARY_CREDENTIAL_SOURCE.KEYCHAIN_PROFILE,
+  });
+  assert.deepEqual(resolveNotaryCredentials({ APPLE_API_KEY_PATH: "  " }), {
+    source: NOTARY_CREDENTIAL_SOURCE.KEYCHAIN_PROFILE,
+  });
+  assert.deepEqual(
+    resolveNotaryCredentials({
+      APPLE_API_KEY_PATH: "/tmp/AuthKey_KEYID.p8",
+      APPLE_API_KEY_ID: "KEYID",
+      APPLE_API_ISSUER_ID: "issuer-id",
+    }),
+    {
+      source: NOTARY_CREDENTIAL_SOURCE.KEY_FILE,
+      keyPath: "/tmp/AuthKey_KEYID.p8",
+      keyId: "KEYID",
+      issuerId: "issuer-id",
+    },
+  );
+  assert.throws(() => resolveNotaryCredentials({ APPLE_API_KEY_ID: "KEYID" }), /together/);
+  assert.throws(
+    () =>
+      resolveNotaryCredentials({
+        APPLE_API_KEY_PATH: "/tmp/AuthKey_KEYID.p8",
+        APPLE_API_ISSUER_ID: "issuer-id",
+      }),
+    /together/,
+  );
+});
+
+test("release notarization commands carry key-file credentials", () => {
+  const credentials = {
+    source: NOTARY_CREDENTIAL_SOURCE.KEY_FILE,
+    keyPath: "/tmp/AuthKey_KEYID.p8",
+    keyId: "KEYID",
+    issuerId: "issuer-id",
+  };
+  assert.deepEqual(notarySubmitArguments("/tmp/Luke.dmg", credentials), [
+    "notarytool",
+    "submit",
+    "/tmp/Luke.dmg",
+    "--key",
+    "/tmp/AuthKey_KEYID.p8",
+    "--key-id",
+    "KEYID",
+    "--issuer",
+    "issuer-id",
+    "--wait",
+    "--timeout",
+    "20m",
+    "--output-format",
+    "json",
+  ]);
+  assert.deepEqual(notaryLogArguments("submission-id", credentials), [
+    "notarytool",
+    "log",
+    "submission-id",
+    "--key",
+    "/tmp/AuthKey_KEYID.p8",
+    "--key-id",
+    "KEYID",
+    "--issuer",
+    "issuer-id",
+  ]);
+});
+
 test("release notarization commands use the local keychain profile", () => {
-  assert.deepEqual(notarySubmitArguments("/tmp/Luke.dmg"), [
+  const credentials = { source: NOTARY_CREDENTIAL_SOURCE.KEYCHAIN_PROFILE };
+  assert.deepEqual(notarySubmitArguments("/tmp/Luke.dmg", credentials), [
     "notarytool",
     "submit",
     "/tmp/Luke.dmg",
@@ -286,7 +362,7 @@ test("release notarization commands use the local keychain profile", () => {
     "--output-format",
     "json",
   ]);
-  assert.deepEqual(notaryLogArguments("submission-id"), [
+  assert.deepEqual(notaryLogArguments("submission-id", credentials), [
     "notarytool",
     "log",
     "submission-id",
