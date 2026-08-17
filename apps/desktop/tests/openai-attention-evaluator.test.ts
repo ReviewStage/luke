@@ -165,16 +165,22 @@ test("a rate limit quiets requests for the cooldown instead of retrying at full 
   const { fetch, requests } = recordingFetch(() => new Response("rate limited", { status: 429 }));
   const evaluator = new OpenAiAttentionEvaluator({ apiKey: API_KEY, now: () => now, fetch });
 
+  assert.equal(evaluator.quietUntil(), undefined);
   assert.equal(await evaluator.evaluate(update()), undefined);
   assert.equal(requests.length, 1);
+
+  // The quiet is visible to the reviewer, so a pass can be skipped whole
+  // rather than spending per-session retries on refusals.
+  assert.equal(evaluator.quietUntil(), now + ATTENTION_RATE_LIMIT_COOLDOWN_MS);
 
   // Inside the cooldown nothing is even sent; the update stays derivable.
   now += ATTENTION_RATE_LIMIT_COOLDOWN_MS - 1;
   assert.equal(await evaluator.evaluate(update()), undefined);
   assert.equal(requests.length, 1);
 
-  // The cooldown over, requests resume.
+  // The cooldown over, requests resume and the quiet reads as lifted.
   now += 1;
+  assert.equal(evaluator.quietUntil(), undefined);
   assert.equal(await evaluator.evaluate(update()), undefined);
   assert.equal(requests.length, 2);
 });

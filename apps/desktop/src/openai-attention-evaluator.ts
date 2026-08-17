@@ -156,6 +156,15 @@ export class OpenAiAttentionEvaluator implements AttentionEvaluator {
     return this.#model;
   }
 
+  /**
+   * The moment rate-limited requests resume, for the reviewer to ask before a
+   * pass. A reviewer that asks skips the pass without spending anything; the
+   * guard inside {@link evaluate} still answers a caller that did not.
+   */
+  quietUntil(): number | undefined {
+    return this.#quietUntil > this.#now() ? this.#quietUntil : undefined;
+  }
+
   async evaluate(update: AttentionUpdate): Promise<AttentionDecision | undefined> {
     // Answering with nothing is how an evaluator stays silent, and staying
     // silent is free: the update stays derivable and returns once the API is
