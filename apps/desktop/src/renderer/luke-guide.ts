@@ -454,7 +454,9 @@ function askKeyFact(askKey: string | undefined): AppGuideFact {
 }
 
 const MICROPHONE_DETAIL: Record<MicrophoneStatus, string> = {
-  granted: "Granted. The microphone only opens while the talk key holds a turn.",
+  granted:
+    "Granted. The microphone opens with a conversation, sends nothing except while the talk " +
+    "key holds a turn, and is put away once the conversation sits quiet for about a minute.",
   denied:
     "Denied. It can only be granted back in System Settings, under Privacy & Security, Microphone.",
   restricted: "Restricted by a system policy, which only the system's manager can change.",

@@ -23,6 +23,7 @@ import {
 import {
   type AppActionCarrier,
   type IssueActionCarrier,
+  MICROPHONE_RELEASE_TIMEOUT_MS,
   quietIsLukesOwn,
   REMOTE_QUIET_MS,
   RealtimeVoiceSession,
@@ -59,13 +60,21 @@ interface Harness {
   /** The transceivers declared instead of tracks, as a speak-only call does. */
   transceivers: { kind: string; direction?: string }[];
   /**
-   * The idle retirement, held rather than run: every test connects and few
-   * close, so a real ten-minute timer would keep the run alive for ten minutes
-   * apiece. `fireIdle` runs whatever is currently armed, if anything.
+   * The idle retirement and the device release, held rather than run: every
+   * test connects and few close, so real timers would keep the run alive for
+   * minutes apiece. The two clocks are told apart by their delays, and firing
+   * one retires it the way the session's own re-arm would.
    */
   idleArmed: () => boolean;
   idleDelayMs: () => number | undefined;
   fireIdle: () => void;
+  releaseArmed: () => boolean;
+  releaseDelayMs: () => number | undefined;
+  fireRelease: () => void;
+  /** Every track handed to the sender, `null` standing for the device let go. */
+  replacedTracks: () => (object | null)[];
+  /** Makes the next device request refuse, as a vanished microphone would. */
+  failMicrophone: () => void;
 }
 
 interface HeldTimer {
@@ -105,10 +114,21 @@ function harness(
     carryAppAction?: AppActionCarrier;
     carryIssueAction?: IssueActionCarrier;
     idleTimeoutMs?: number;
+    microphoneReleaseTimeoutMs?: number;
   } = {},
 ): Harness {
   const timers: HeldTimer[] = [];
-  const armedTimer = (): HeldTimer | undefined => timers.findLast((timer) => !timer.cancelled);
+  const idleTimeoutMs = options.idleTimeoutMs ?? VOICE_IDLE_TIMEOUT_MS;
+  const releaseTimeoutMs = options.microphoneReleaseTimeoutMs ?? MICROPHONE_RELEASE_TIMEOUT_MS;
+  const armedTimer = (delayMs: number): HeldTimer | undefined =>
+    timers.findLast((timer) => !timer.cancelled && timer.delayMs === delayMs);
+  const fireTimer = (delayMs: number): void => {
+    const timer = armedTimer(delayMs);
+    if (!timer) return;
+    // A fired timer is spent: only a re-arm by the session makes a new one.
+    timer.cancelled = true;
+    timer.callback();
+  };
   const sent: Record<string, unknown>[] = [];
   const errors: (string | undefined)[] = [];
   const captions: (string | undefined)[] = [];
@@ -145,10 +165,16 @@ function harness(
 
   const remoteTrack = { enabled: true };
   const transceivers: { kind: string; direction?: string }[] = [];
+  const replacedTracks: (object | null)[] = [];
+  const sender = {
+    replaceTrack: async (next: object | null) => {
+      replacedTracks.push(next);
+    },
+  };
   const peer: Record<string, unknown> = {
     localDescription: { type: "offer", sdp: "v=0 local" },
     connectionState: "connected",
-    addTrack: () => undefined,
+    addTrack: () => sender,
     addTransceiver: (kind: string, init?: { direction?: string }) => {
       transceivers.push({ kind, ...(init?.direction ? { direction: init.direction } : {}) });
     },
@@ -170,6 +196,7 @@ function harness(
   };
 
   let connection = "connection" in options ? options.connection : CONNECTION;
+  let microphoneError = options.microphoneError;
   const session = new RealtimeVoiceSession({
     requestConnection: async () => {
       calls.push("credential-requested");
@@ -182,7 +209,7 @@ function harness(
     },
     requestMicrophoneStream: async () => {
       calls.push("microphone-requested");
-      if (options.microphoneError) throw options.microphoneError;
+      if (microphoneError) throw microphoneError;
       return stream as unknown as MediaStream;
     },
     createPeerConnection: () => peer as unknown as RTCPeerConnection,
@@ -198,6 +225,9 @@ function harness(
       : { connectTimeoutMs: options.connectTimeoutMs }),
     ...(options.now ? { now: options.now } : {}),
     ...(options.idleTimeoutMs === undefined ? {} : { idleTimeoutMs: options.idleTimeoutMs }),
+    ...(options.microphoneReleaseTimeoutMs === undefined
+      ? {}
+      : { microphoneReleaseTimeoutMs: options.microphoneReleaseTimeoutMs }),
     schedule: (callback, delayMs) => {
       const timer: HeldTimer = { callback, delayMs, cancelled: false };
       timers.push(timer);
@@ -255,10 +285,19 @@ function harness(
     },
     requests,
     calls,
-    idleArmed: () => armedTimer() !== undefined,
-    idleDelayMs: () => armedTimer()?.delayMs,
+    idleArmed: () => armedTimer(idleTimeoutMs) !== undefined,
+    idleDelayMs: () => armedTimer(idleTimeoutMs)?.delayMs,
     fireIdle: () => {
-      armedTimer()?.callback();
+      fireTimer(idleTimeoutMs);
+    },
+    releaseArmed: () => armedTimer(releaseTimeoutMs) !== undefined,
+    releaseDelayMs: () => armedTimer(releaseTimeoutMs)?.delayMs,
+    fireRelease: () => {
+      fireTimer(releaseTimeoutMs);
+    },
+    replacedTracks: () => replacedTracks,
+    failMicrophone: () => {
+      microphoneError = new Error("The microphone went away");
     },
     transceivers,
   };
@@ -3318,6 +3357,119 @@ test("Luke's own call is not on the developer's idle clock", async () => {
 
   // It holds no device and already puts itself away once its queue is quiet.
   assert.equal(context.idleArmed(), false);
+  assert.equal(context.releaseArmed(), false);
+});
+
+test("a settled call lets the capture device go and keeps the conversation", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  // Settled: the device is on its own, much shorter clock than the call. It
+  // is what keeps Bluetooth audio on the call codec and the indicator lit, so
+  // it must not ride out the ten minutes the conversation is worth.
+  assert.equal(context.releaseArmed(), true);
+  assert.equal(context.releaseDelayMs(), MICROPHONE_RELEASE_TIMEOUT_MS);
+
+  context.fireRelease();
+
+  // The device is closed — tracks stopped, the sender emptied, nothing sent —
+  // while the call, and the conversation on it, stay warm and stay the
+  // developer's: a later press must reopen the device, not replace the call.
+  assert.equal(context.microphoneStopped(), true);
+  assert.deepEqual(context.replacedTracks(), [null]);
+  assert.equal(context.session.isConnected, true);
+  assert.equal(context.session.microphoneCall, true);
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+  // The retirement still runs: a bare call is not kept forever either.
+  assert.equal(context.idleArmed(), true);
+});
+
+test("a turn under way keeps the device off the release clock", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  context.session.startListening();
+  assert.equal(context.releaseArmed(), false);
+  context.session.stopListening(false);
+  assert.equal(context.releaseArmed(), true);
+});
+
+test("a press after the device was let go reopens it on the same call", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.fireRelease();
+  const before = context.calls.length;
+
+  context.session.beginTurn();
+  // The press is an intention while the device reopens, not a turn yet.
+  assert.equal(context.session.turnPending, true);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(context.calls.slice(before), ["microphone-requested"]);
+  assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
+  assert.equal(context.microphoneEnabled(), true);
+  // The fresh track rode the sender the released one vacated: no new call.
+  assert.notEqual(context.replacedTracks().at(-1), null);
+  assert.equal(context.session.isConnected, true);
+});
+
+test("two presses while the device reopens ask for it once", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.fireRelease();
+  const before = context.calls.length;
+
+  context.session.beginTurn();
+  context.session.beginTurn();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(context.calls.slice(before), ["microphone-requested"]);
+  assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
+});
+
+test("a press let go while the device reopens drops the turn", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.fireRelease();
+
+  context.session.beginTurn();
+  context.session.endTurn(true);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  // Nothing was captured, so nothing is sent — and the device that arrived
+  // for the dropped press sits back on the settle clock.
+  assert.deepEqual(context.sent, []);
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+  assert.equal(context.microphoneEnabled(), false);
+  assert.equal(context.releaseArmed(), true);
+});
+
+test("typing while the device rests does not reopen it", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.fireRelease();
+  const before = context.calls.length;
+
+  assert.equal(context.session.sendText("How is the checkout fix going?"), true);
+
+  // A typed ask needs no capture device: the ask went, and the device — the
+  // part other audio can hear — stayed put away.
+  assert.equal(context.calls.length, before);
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+});
+
+test("a device that cannot reopen fails the call rather than listening to nothing", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.fireRelease();
+  context.failMicrophone();
+
+  context.session.beginTurn();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(context.session.status, REALTIME_STATUS.FAILED);
+  assert.equal(context.session.turnPending, false);
+  assert.ok(reportedErrors(context).some((message) => /microphone went away/i.test(message)));
 });
 
 test("a call that drops mid-conversation says the thread is lost", async () => {
