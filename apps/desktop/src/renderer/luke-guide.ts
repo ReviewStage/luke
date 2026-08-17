@@ -584,7 +584,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "chip that opens it in the browser; and a row the developer asked Luke to listen for — " +
         "“tell me when this finishes” — wears a small listening mark beside its age, whose hover " +
         "says the ask in the developer's own words. Luke's own composer at the foot of the list " +
-        "takes a typed ask. " +
+        "takes a typed ask — Enter sends it, Shift-Enter breaks the line, and the field grows " +
+        "with what it holds. " +
         "Where a provider nests chats in a workspace — Conductor today — each " +
         "chat is its own row: a workspace holding several draws them inside one tray named by " +
         "the workspace at its top, one holding a single chat stays one row titled by the " +
