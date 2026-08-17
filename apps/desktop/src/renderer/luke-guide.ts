@@ -592,10 +592,12 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "workspace, and every chat can be seen, opened, and messaged individually. Settings " +
         "holds a front page whose rows open its Voice, Appearance, Keyboard shortcuts, and " +
         "Connections pages — each led back out by its back button or Escape — and keeps the " +
-        "Feedback section and Quit on the front page itself; the microphone permission lives " +
-        "on the Voice page, under the OpenAI key it waits on, and the front page's Voice row " +
-        "wears a small exclamation mark while voice is still missing that key or the " +
-        "microphone permission; the " +
+        "Feedback section and Quit on the front page itself; the Voice page reveals itself in " +
+        "stages — the OpenAI key alone until one is connected, then the microphone permission " +
+        "under it, and the voice settings only once both stand — and a small exclamation mark " +
+        "sits on whichever stage still needs a hand, on the front page's Voice row while " +
+        "either does, and on the Keyboard shortcuts rows while voice is off, where each key's " +
+        "chord stays shown and changeable but answers nothing until the key connects; the " +
         "menu bar item's Settings… opens the same tab, and Command-comma switches to it while " +
         "the panel has the keyboard. A dot beside a settings row marks a value changed from " +
         "its default, and a page holding one ends its head with a reset, pressed by hand and " +
