@@ -283,6 +283,26 @@
   vertical-align: 2px;
 }
 
+/* The mark a front-page row wears while its page holds something that needs a
+   hand before its feature can run — today the Voice row, missing its key or
+   the microphone. The attention tint on purpose: unlike the changed dot this
+   is an urgency, the same standing a session waiting on a person has. The
+   words are the hover's and the hidden text's; the glyph alone is the mark. */
+.settings-attention {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--state-attention) 22%, transparent);
+  color: var(--state-attention);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .settings-copy small,
 .settings-note {
   margin: 0;

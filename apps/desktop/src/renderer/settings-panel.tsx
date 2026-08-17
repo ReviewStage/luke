@@ -66,7 +66,7 @@ import { FeedbackSection } from "./feedback-panel";
 import { Keycaps } from "./keycaps";
 import { type ErrandTarget, errandTargetProps } from "./luke-errand";
 import { APP_SETTING_ID } from "./luke-guide";
-import { microphoneAccessRow } from "./microphone-access";
+import { microphoneAccessRow, voiceAttentionNote } from "./microphone-access";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import { CloudBadge, ProviderMark } from "./provider-marks";
 import {
@@ -1235,14 +1235,20 @@ const SETTINGS_PAGE: Record<SettingsSubview, { title: string; icon: React.JSX.El
 /**
  * One front-page row per page: its glyph, its name, and the chevron that
  * promises a page rather than a control. The row is the whole press target,
- * the way a macOS settings row is.
+ * the way a macOS settings row is. The one thing a row may add is the
+ * attention mark: a state, not a sentence, saying the page holds something
+ * that needs a hand before its feature can run — the mark's words are the
+ * hover's, and the page itself is where they are explained.
  */
 function SettingsNavRow({
   view,
   onOpen,
+  attention,
 }: {
   view: SettingsSubview;
   onOpen: (view: SettingsSubview) => void;
+  /** Why the page needs a hand, absent while nothing on it does. */
+  attention?: string;
 }): React.JSX.Element {
   const page = SETTINGS_PAGE[view];
   return (
@@ -1258,6 +1264,12 @@ function SettingsNavRow({
       <span className="settings-copy">
         <strong>{page.title}</strong>
       </span>
+      {attention ? (
+        <span className="settings-attention" title={attention}>
+          <span aria-hidden="true">!</span>
+          <span className="visually-hidden">({attention})</span>
+        </span>
+      ) : null}
       <ChevronIcon />
     </button>
   );
@@ -1316,13 +1328,19 @@ function VoiceSection({
   preferences,
   credentials,
   panelOpen,
+  microphone,
 }: {
   settings: AppSettings;
   preferences: PreferenceWrites;
   credentials: CredentialEntryControl;
   panelOpen: boolean;
+  microphone: MicrophoneControl;
 }): React.JSX.Element {
   const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
+  const microphoneRow = microphoneAccessRow({
+    voiceAvailable: microphone.voiceAvailable,
+    status: microphone.status,
+  });
   return (
     <>
       <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
@@ -1356,6 +1374,47 @@ function VoiceSection({
           </p>
         )}
       </section>
+      <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
+        <h2>
+          <ShieldIcon />
+          Permissions
+        </h2>
+        {/* Access, not use. The talk key is what opens the microphone, so a
+            button here could only ever repeat what the key already does — the
+            line answers the one question it can: whether Luke is allowed. It
+            lives on this page, under the key it waits on, because the
+            microphone's one use is the voice that key turns on. */}
+        {/* Named and marked like a provider, because it is the same question in
+            the same words: what Luke has been let at, and whether it is on. */}
+        <div className="settings-row">
+          <span className="settings-copy">
+            <span className="settings-name">
+              <strong>Microphone</strong>
+              {microphoneRow.ready ? <CheckIcon /> : null}
+            </span>
+            <small>{microphoneRow.detail}</small>
+          </span>
+          <span className="settings-actions">
+            {microphoneRow.offerSystemSettings ? (
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Open Privacy & Security in System Settings"
+                /* The ellipsis is the promise that it opens somewhere else. */
+                title="System Settings…"
+                onClick={microphone.onOpenSettings}
+              >
+                <ExternalIcon />
+              </button>
+            ) : null}
+            {microphoneRow.offerAccess ? (
+              <button type="button" className="quiet-button" onClick={microphone.onRequest}>
+                Allow
+              </button>
+            ) : null}
+          </span>
+        </div>
+      </section>
       <VoiceControlsSection settings={settings} preferences={preferences} />
     </>
   );
@@ -1372,7 +1431,7 @@ function VoiceControlsSection({
   return (
     <section
       className="settings-section settings-plain"
-      style={{ "--row-index": 2 } as React.CSSProperties}
+      style={{ "--row-index": 3 } as React.CSSProperties}
     >
       <SelectRow
         label="Voice"
@@ -1863,7 +1922,7 @@ function AccountSection({
   };
 
   return (
-    <section className="settings-section" style={{ "--row-index": 4 } as React.CSSProperties}>
+    <section className="settings-section" style={{ "--row-index": 3 } as React.CSSProperties}>
       <h2>
         <UserIcon />
         Account
@@ -2014,7 +2073,11 @@ export function SettingsPanel({
   onQuit,
   shortcuts,
 }: SettingsPanelProps): React.JSX.Element {
-  const microphoneRow = microphoneAccessRow({
+  // Why the front page's Voice row wears its mark, or nothing while voice is
+  // fully set up. Judged here rather than on the Voice page because the mark
+  // has to stand while that page is not drawn: it is the front page saying a
+  // page one press away still needs a hand.
+  const voiceNote = voiceAttentionNote({
     voiceAvailable: microphone.voiceAvailable,
     status: microphone.status,
   });
@@ -2089,7 +2152,12 @@ export function SettingsPanel({
           style={{ "--row-index": 1 } as React.CSSProperties}
         >
           {SETTINGS_SUBVIEW_LIST.map((subview) => (
-            <SettingsNavRow key={subview} view={subview} onOpen={onViewChange} />
+            <SettingsNavRow
+              key={subview}
+              view={subview}
+              onOpen={onViewChange}
+              {...(subview === SETTINGS_VIEW.VOICE && voiceNote ? { attention: voiceNote } : {})}
+            />
           ))}
         </section>
       ) : null}
@@ -2100,6 +2168,7 @@ export function SettingsPanel({
           preferences={preferences}
           credentials={credentials}
           panelOpen={panelOpen}
+          microphone={microphone}
         />
       ) : null}
 
@@ -2128,48 +2197,6 @@ export function SettingsPanel({
 
       {drawnView !== SETTINGS_VIEW.ROOT ? null : (
         <>
-          <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
-            <h2>
-              <ShieldIcon />
-              Permissions
-            </h2>
-            {/* Access, not use. The talk key is what opens the microphone, so a
-            button here could only ever repeat what the key already does — the
-            line answers the one question it can: whether Luke is allowed. */}
-            {/* Named and marked like a provider, because it is the same question in
-            the same words: what Luke has been let at, and whether it is on.
-            Access, not use — the talk key is what opens the microphone, so a
-            control here could only repeat what the key already does. */}
-            <div className="settings-row">
-              <span className="settings-copy">
-                <span className="settings-name">
-                  <strong>Microphone</strong>
-                  {microphoneRow.ready ? <CheckIcon /> : null}
-                </span>
-                <small>{microphoneRow.detail}</small>
-              </span>
-              <span className="settings-actions">
-                {microphoneRow.offerSystemSettings ? (
-                  <button
-                    type="button"
-                    className="icon-button"
-                    aria-label="Open Privacy & Security in System Settings"
-                    /* The ellipsis is the promise that it opens somewhere else. */
-                    title="System Settings…"
-                    onClick={microphone.onOpenSettings}
-                  >
-                    <ExternalIcon />
-                  </button>
-                ) : null}
-                {microphoneRow.offerAccess ? (
-                  <button type="button" className="quiet-button" onClick={microphone.onRequest}>
-                    Allow
-                  </button>
-                ) : null}
-              </span>
-            </div>
-          </section>
-
           <FeedbackSection control={feedback} />
 
           {/* The account stands last before the way out: signing out and
@@ -2182,7 +2209,7 @@ export function SettingsPanel({
           <button
             type="button"
             className="quit-button"
-            style={{ "--row-index": 5 } as React.CSSProperties}
+            style={{ "--row-index": 4 } as React.CSSProperties}
             onClick={onQuit}
           >
             <PowerIcon />
