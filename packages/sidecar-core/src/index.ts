@@ -258,6 +258,7 @@ export {
   type WindowMode,
 } from "./geometry";
 export {
+  MOTION_DELAY_MS,
   MOTION_DURATION_MS,
   PANEL_WIDTH,
   SESSION_NOTICE_HEIGHT,

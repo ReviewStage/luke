@@ -1054,6 +1054,230 @@
   animation-duration: 2.4s;
 }
 
+/* shimmy — shaking it off (happy wiggle) */
+
+@keyframes luke-shimmy-1 {
+  0% {
+    transform: rotate(0deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  12% {
+    transform: rotate(-9deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  26% {
+    transform: rotate(8deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  40% {
+    transform: rotate(-5.5deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  52% {
+    transform: rotate(3deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  62% {
+    transform: rotate(-1.2deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  70% {
+    transform: rotate(0deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+.luke-face[data-motion="shimmy"] .luke-face-layer-1 {
+  transform-origin: 120px 124px;
+  animation-name: luke-shimmy-1;
+  animation-duration: 2.6s;
+}
+
+/* dizzy — woozy after a flight (decaying wobble) */
+
+@keyframes luke-dizzy-1 {
+  0% {
+    transform: rotate(0deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  10% {
+    transform: rotate(9deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  24% {
+    transform: rotate(-8deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  38% {
+    transform: rotate(6deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  52% {
+    transform: rotate(-4deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  66% {
+    transform: rotate(2deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  78% {
+    transform: rotate(0deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes luke-dizzy-2 {
+  0% {
+    transform: translate(0px, 0px);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  10% {
+    transform: translate(2px, 0px);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  24% {
+    transform: translate(-2px, 0px);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  38% {
+    transform: translate(1.5px, 0px);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  52% {
+    transform: translate(-1px, 0px);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  66% {
+    transform: translate(0.5px, 0px);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  78% {
+    transform: translate(0px, 0px);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  100% {
+    transform: translate(0px, 0px);
+  }
+}
+
+@keyframes luke-dizzy-eyes {
+  0% {
+    transform: scaleY(1);
+    animation-timing-function: linear;
+  }
+
+  15% {
+    transform: scaleY(0.55);
+    animation-timing-function: linear;
+  }
+
+  55% {
+    transform: scaleY(0.55);
+    animation-timing-function: linear;
+  }
+
+  75% {
+    transform: scaleY(1);
+    animation-timing-function: linear;
+  }
+
+  100% {
+    transform: scaleY(1);
+  }
+}
+
+.luke-face[data-motion="dizzy"] .luke-face-layer-1 {
+  transform-origin: 120px 150px;
+  animation-name: luke-dizzy-1;
+  animation-duration: 3.2s;
+}
+
+.luke-face[data-motion="dizzy"] .luke-face-layer-2 {
+  animation-name: luke-dizzy-2;
+  animation-duration: 3.2s;
+}
+
+.luke-face[data-motion="dizzy"] .luke-face-eye {
+  animation-name: luke-dizzy-eyes;
+  animation-duration: 3.2s;
+}
+
+/* glance — checking both ways (look around) */
+
+@keyframes luke-glance-1 {
+  0% {
+    transform: rotate(0deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  12% {
+    transform: rotate(0deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  24% {
+    transform: rotate(-7deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  42% {
+    transform: rotate(-7deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  56% {
+    transform: rotate(7deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  74% {
+    transform: rotate(7deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  86% {
+    transform: rotate(0deg);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+.luke-face[data-motion="glance"] .luke-face-layer-1 {
+  transform-origin: 120px 190px;
+  animation-name: luke-glance-1;
+  animation-duration: 3.4s;
+}
+
 /* The z's share one loop, each rising through its own window of it so they
    never rise as a group. The stagger is cut into the keyframes rather than
    carried as a delay: every glyph's first frame is invisible, so a paused

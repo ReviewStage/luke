@@ -53,6 +53,9 @@ export const FACE_MOTION = {
   FLYOFF: "flyoff",
   TEASE: "tease",
   WAITING: "waiting",
+  SHIMMY: "shimmy",
+  DIZZY: "dizzy",
+  GLANCE: "glance",
 } as const;
 
 export type FaceMotion = (typeof FACE_MOTION)[keyof typeof FACE_MOTION];
@@ -79,6 +82,9 @@ export const FACE_MOTION_CYCLE_MS: Record<FaceMotion, number> = {
   flyoff: 3000,
   tease: 4200,
   waiting: 2400,
+  shimmy: 2600,
+  dizzy: 3200,
+  glance: 3400,
 };
 
 /** What a motion needs drawn beyond the resting smile and eyes. */
@@ -106,4 +112,7 @@ export const FACE_MOTION_PARTS: Record<
   flyoff: { brows: false, lids: false, sleepZ: false },
   tease: { brows: true, lids: false, sleepZ: false },
   waiting: { brows: false, lids: false, sleepZ: false },
+  shimmy: { brows: false, lids: false, sleepZ: false },
+  dizzy: { brows: false, lids: false, sleepZ: false },
+  glance: { brows: false, lids: false, sleepZ: false },
 };

@@ -2198,6 +2198,138 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   font-weight: 640;
 }
 
+/* The landing: a delivered send answered in the shape the note left from.
+   Luke swoops down from above the slot's top edge — the slot's own overflow
+   clips him until he is inside, so he arrives through the shape — and the
+   thank-you rises under him on the arriving pair every element rides. The
+   room lands at once (the landing replaces the fields in the same measured
+   shell), so the surface takes one clean spring to the smaller shape. */
+.feedback-confirm {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 14px 0 10px;
+}
+
+.feedback-confirm-luke {
+  display: block;
+  width: 54px;
+  height: 54px;
+  color: var(--text-primary);
+  animation: feedback-confirm-swoop var(--duration-shape) var(--spring) var(--slot-delay) backwards;
+}
+
+.feedback-confirm-luke .luke-face {
+  width: 54px;
+  height: 54px;
+}
+
+@keyframes feedback-confirm-swoop {
+  from {
+    opacity: 0;
+    transform: translateY(-140px) scale(0.5) rotate(-16deg);
+  }
+
+  45% {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.feedback-confirm-msg {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 640;
+  color: var(--text-primary);
+  animation:
+    feedback-confirm-fade var(--duration-quick) var(--motion-exit)
+    calc(var(--slot-delay) + var(--row-stagger)) backwards,
+    feedback-confirm-rise var(--duration-shape) var(--spring)
+    calc(var(--slot-delay) + var(--row-stagger)) backwards;
+}
+
+.feedback-confirm-sub {
+  font-size: 11px;
+  color: var(--text-secondary);
+  animation:
+    feedback-confirm-fade var(--duration-quick) var(--motion-exit)
+    calc(var(--slot-delay) + 2 * var(--row-stagger)) backwards,
+    feedback-confirm-rise var(--duration-shape) var(--spring)
+    calc(var(--slot-delay) + 2 * var(--row-stagger)) backwards;
+}
+
+@keyframes feedback-confirm-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes feedback-confirm-rise {
+  from {
+    transform: translateY(8px);
+  }
+}
+
+/* The first landing's shockwave: the success motion lands its squash at 65%
+   of its 2s cycle, and the two text lines duck on that landing, the sub a
+   beat behind the headline. The delays and durations inside this block are
+   literal because they are the artwork's own timing — a face motion carries
+   literal seconds for the same reason — and they answer `--face-motion`
+   exactly as the gesture they follow does, so a capture run and reduced
+   motion hold them at their first frame, the resting pose. (Under reduced
+   motion the gesture is never asked for at all, so these never match.) */
+.feedback-confirm[data-scene="shockwave"][data-gesturing="true"] .feedback-confirm-msg {
+  animation: feedback-confirm-duck 520ms var(--spring-fast) 1280ms backwards;
+  animation-play-state: var(--face-motion);
+}
+
+.feedback-confirm[data-scene="shockwave"][data-gesturing="true"] .feedback-confirm-sub {
+  animation: feedback-confirm-duck 520ms var(--spring-fast) 1370ms backwards;
+  animation-play-state: var(--face-motion);
+}
+
+@keyframes feedback-confirm-duck {
+  30% {
+    transform: translateY(4px) scaleY(0.9);
+  }
+
+  65% {
+    transform: translateY(-2px);
+  }
+}
+
+/* The boop landing's punchline: the puff peaks just past 63% of its 3.2s
+   cycle, and the exclamation mark it is aimed at tips right over and springs
+   back upright. Literal timing under `--face-motion`, as above. */
+.feedback-confirm-bang {
+  display: inline-block;
+  transform-origin: 50% 100%;
+}
+
+.feedback-confirm[data-scene="boop"][data-gesturing="true"] .feedback-confirm-bang {
+  animation: feedback-confirm-bang 700ms var(--spring-fast) 2000ms backwards;
+  animation-play-state: var(--face-motion);
+}
+
+@keyframes feedback-confirm-bang {
+  25% {
+    transform: rotate(24deg);
+  }
+
+  55% {
+    transform: rotate(-9deg);
+  }
+
+  78% {
+    transform: rotate(4deg);
+  }
+}
+
 /* Key slot --------------------------------------------------------------- */
 
 /* Layered like the panel and animated like it, because it is the panel: the

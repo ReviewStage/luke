@@ -570,7 +570,9 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "composer and start it with the developer's own words — Luke offers exactly that, once, " +
         "after refusing something he cannot do — but a note already being written is never " +
         "overwritten, and sending is always the Send button's own press, by hand: no spoken ask " +
-        "can send one.",
+        "can send one. A landed send is answered in the composer's own shape before the panel " +
+        "returns: Luke swoops down beside “Sent — thank you!” and plays a little flourish, a " +
+        "different one each send.",
     },
     {
       label: "Reading a session's transcript",
