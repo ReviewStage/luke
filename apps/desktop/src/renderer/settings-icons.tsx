@@ -192,6 +192,17 @@ export function MicrophoneIcon(): React.JSX.Element {
 }
 
 /** Drawn rather than typed: a ↗ character depends on a font having one. */
+/** Heads the Updates section: the arrival a newer release waits as. */
+export function DownloadIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <path d="M12 4.2v9.6" />
+      <path d="m7.6 10 4.4 4.4L16.4 10" />
+      <path d="M4.8 19.2h14.4" />
+    </Glyph>
+  );
+}
+
 export function ExternalIcon(): React.JSX.Element {
   return (
     <Glyph className="link-icon">

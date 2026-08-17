@@ -612,6 +612,10 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
       calls.push(`setQuietDuringMeetings:${enabled}`);
       return answered;
     },
+    setAutomaticUpdates: async (enabled: boolean) => {
+      calls.push(`setAutomaticUpdates:${enabled}`);
+      return answered;
+    },
     setShowInMenuBar: async (show: boolean) => {
       calls.push(`setShowInMenuBar:${show}`);
       return answered;
@@ -648,6 +652,7 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
   }
 
   assert.deepEqual(calls.sort(), [
+    "setAutomaticUpdates:true",
     "setDuckOtherMedia:true",
     "setFormFactor:notch",
     "setQuietDuringMeetings:true",

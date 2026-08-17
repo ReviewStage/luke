@@ -53,6 +53,9 @@ const bridge: AppBridge = {
   },
   removeCalendarAccount: invoke(channels.removeCalendarAccount),
   setCalendarSelected: invoke(channels.setCalendarSelected),
+  setAutomaticUpdates: invoke(channels.setAutomaticUpdates),
+  checkForUpdates: invoke(channels.checkForUpdates),
+  openLatestRelease: () => ipcRenderer.send(channels.openLatestRelease),
   setVoiceExchangeActive: (active) => {
     ipcRenderer.send(channels.setVoiceExchange, active);
   },
@@ -76,6 +79,7 @@ const bridge: AppBridge = {
   onDisplayChanged: subscribe(channels.displayChanged),
   onSettingsChanged: subscribe(channels.settingsChanged),
   onAccountChanged: subscribe(channels.accountChanged),
+  onUpdateChanged: subscribe(channels.updateChanged),
   onSessionsChanged: subscribe(channels.sessionsChanged),
   onNoticeAsksChanged: subscribe(channels.noticeAsksChanged),
   onWorkspaceProjectsChanged: subscribe(channels.workspaceProjectsChanged),

@@ -24,6 +24,7 @@ import type {
   MicrophoneStatus,
   ObservedAccountCalendars,
   SettingsResetScope,
+  UpdateSnapshot,
 } from "../shared/contracts";
 import {
   ACCOUNT_PROVIDER,
@@ -79,6 +80,7 @@ import {
   ChevronIcon,
   CloseIcon,
   DisplayIcon,
+  DownloadIcon,
   ExternalIcon,
   FolderIcon,
   KeyboardIcon,
@@ -101,6 +103,7 @@ import {
   type SettingsView,
   settingsNavRowId,
 } from "./settings-views";
+import { UPDATE_ROW_ACTION, updateRow } from "./update-row";
 
 /** One provider the default-workspace rows can offer, by id and display name. */
 export interface WorkspaceProviderOption {
@@ -130,6 +133,20 @@ export interface MicrophoneControl {
 }
 
 /**
+ * Where the app stands against the latest release, and the two things the row
+ * can do about that: ask GitHub now, or open the newer release's page in the
+ * browser. Fetching an update stays the user's own act there — the row never
+ * changes the running build.
+ */
+export interface UpdateControl {
+  update: UpdateSnapshot;
+  /** Asks GitHub for the latest release name, right now. */
+  onCheck: () => Promise<void>;
+  /** Opens the latest release's page, fixed by the build, in the browser. */
+  onOpenLatest: () => void;
+}
+
+/**
  * The one way to write a stored preference. Every settings row that keeps a
  * choice travels through this, so the panel redraws from what was stored
  * rather than from the press — the same shape a credential's control is, for
@@ -149,6 +166,8 @@ export interface PreferenceWrites {
    * answer belongs.
    */
   onQuietDuringMeetingsChange: (enabled: boolean) => Promise<string | undefined>;
+  /** Turns the timed update check on or off. */
+  onAutomaticUpdatesChange: (enabled: boolean) => Promise<string | undefined>;
   /** Chooses the voice Luke speaks with, from the set fixed by this build. */
   onVoiceChange: (voice: RealtimeVoice) => void;
   /** Chooses the pace Luke speaks at, from the set fixed by this build. */
@@ -275,6 +294,7 @@ export interface SettingsPanelProps {
   view: SettingsView;
   onViewChange: (view: SettingsView) => void;
   microphone: MicrophoneControl;
+  updates: UpdateControl;
   settings?: AppSettings;
   preferences: PreferenceWrites;
   /** The one credential being entered anywhere, and everything that can be done to it. */
@@ -2174,7 +2194,7 @@ function AccountSection({
   };
 
   return (
-    <section className="settings-section" style={{ "--row-index": 3 } as React.CSSProperties}>
+    <section className="settings-section" style={{ "--row-index": 4 } as React.CSSProperties}>
       <h2>
         <UserIcon />
         Account
@@ -2310,12 +2330,63 @@ function pageResetControl(
   return undefined;
 }
 
+function UpdatesSection({
+  control,
+  automaticUpdates,
+  onAutomaticUpdatesChange,
+}: {
+  control: UpdateControl;
+  automaticUpdates: boolean;
+  onAutomaticUpdatesChange: (enabled: boolean) => Promise<string | undefined>;
+}): React.JSX.Element {
+  const row = updateRow(control.update);
+  return (
+    <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
+      <h2>
+        <DownloadIcon />
+        Updates
+      </h2>
+      <div className="settings-row">
+        <span className="settings-copy">
+          <span className="settings-name">
+            <strong>Version {control.update.currentVersion}</strong>
+            {row.current ? <CheckIcon /> : null}
+          </span>
+          <small>{row.detail}</small>
+        </span>
+        {row.action === UPDATE_ROW_ACTION.GET ? (
+          <button type="button" className="quiet-button" onClick={control.onOpenLatest}>
+            Download
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="quiet-button"
+            disabled={row.action === UPDATE_ROW_ACTION.CHECKING}
+            onClick={() => void control.onCheck()}
+          >
+            {row.action === UPDATE_ROW_ACTION.CHECKING ? "Checking…" : "Check for Updates"}
+          </button>
+        )}
+      </div>
+      <SwitchRow
+        label="Check for updates automatically"
+        detail="Asks GitHub for the latest release name a few times a day. Nothing about you or your sessions is sent."
+        errand={APP_SETTING_ID.AUTOMATIC_UPDATES}
+        checked={automaticUpdates}
+        onChange={onAutomaticUpdatesChange}
+      />
+    </section>
+  );
+}
+
 export function SettingsPanel({
   account,
   onSignOut,
   view,
   onViewChange,
   microphone,
+  updates,
   settings,
   preferences,
   credentials,
@@ -2456,6 +2527,14 @@ export function SettingsPanel({
 
       {drawnView !== SETTINGS_VIEW.ROOT ? null : (
         <>
+          {settings ? (
+            <UpdatesSection
+              control={updates}
+              automaticUpdates={settings.automaticUpdates}
+              onAutomaticUpdatesChange={preferences.onAutomaticUpdatesChange}
+            />
+          ) : null}
+
           <FeedbackSection control={feedback} />
 
           {/* The account stands last before the way out: signing out and
@@ -2468,7 +2547,7 @@ export function SettingsPanel({
           <button
             type="button"
             className="quit-button"
-            style={{ "--row-index": 4 } as React.CSSProperties}
+            style={{ "--row-index": 5 } as React.CSSProperties}
             onClick={onQuit}
           >
             <PowerIcon />

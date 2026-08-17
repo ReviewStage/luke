@@ -75,6 +75,7 @@ export const APP_SETTING_ID = {
   DEFAULT_WORKSPACE_PROVIDER: "default_workspace_provider",
   WORKSPACE_AGENT_MODEL: "workspace_agent_model",
   WORKSPACE_AGENT_EFFORT: "workspace_agent_effort",
+  AUTOMATIC_UPDATES: "automatic_updates",
 } as const;
 
 export type AppSettingId = (typeof APP_SETTING_ID)[keyof typeof APP_SETTING_ID];
@@ -99,6 +100,8 @@ const VOICE_PAGE = `${SETTINGS_TAB}, on its Voice page`;
 const APPEARANCE_PAGE = `${SETTINGS_TAB}, on its Appearance page`;
 const SHORTCUTS_PAGE = `${SETTINGS_TAB}, on its Keyboard shortcuts page`;
 const CONNECTIONS_PAGE = `${SETTINGS_TAB}, on its Connections page`;
+/* The one switch drawn on the front page itself, beside Feedback. */
+const FRONT_PAGE = `${SETTINGS_TAB}, on its front page`;
 
 /** Where the Conductor agent choices live, said once for both their entries. */
 const CONDUCTOR_ROW_PATH = `the Conductor row under Cloud Agent API keys, in ${CONNECTIONS_PAGE} — drawn once Conductor is connected`;
@@ -223,6 +226,19 @@ const SETTING_GUIDE: Record<
     defaultValue: appToggleText(APP_SETTING_DEFAULTS.quietDuringMeetings),
     adjustable: true,
     manual: `${CONNECTIONS_PAGE} — drawn once a calendar account is connected`,
+  }),
+  automaticUpdates: (settings) => ({
+    id: APP_SETTING_ID.AUTOMATIC_UPDATES,
+    label: "Automatic update checks",
+    description:
+      "Whether Luke asks GitHub for the latest release name a few times a day, so the Updates " +
+      "row can say a newer one exists. Nothing about the developer or their sessions is sent, " +
+      "and fetching an update stays a by-hand download in the browser.",
+    kind: APP_SETTING_KIND.TOGGLE,
+    value: appToggleText(settings.automaticUpdates),
+    defaultValue: appToggleText(APP_SETTING_DEFAULTS.automaticUpdates),
+    adjustable: true,
+    manual: FRONT_PAGE,
   }),
   showInMenuBar: (settings) => ({
     id: APP_SETTING_ID.SHOW_IN_MENU_BAR,
@@ -780,6 +796,14 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         ]
       : []),
     {
+      label: "Updates",
+      detail:
+        `The Updates section on ${FRONT_PAGE} says which version this is and whether a newer ` +
+        "release exists. Its button checks GitHub on the spot; with automatic checks on — the " +
+        "default — Luke also asks a few times a day. A newer release is fetched by hand in the " +
+        "browser, from the fixed releases page: Luke never changes the running build himself.",
+    },
+    {
       label: "Quitting",
       detail: `The Quit button at the foot of ${SETTINGS_TAB}, on the sign-in screen when it is shown, or the menu bar item when it is shown.`,
     },
@@ -855,6 +879,7 @@ export async function applySpokenSetting(
     | "setVoiceCaptions"
     | "setDuckOtherMedia"
     | "setQuietDuringMeetings"
+    | "setAutomaticUpdates"
     | "setShowInMenuBar"
     | "setShowInDock"
     | "setShowOnAllDisplays"
@@ -892,20 +917,22 @@ export async function applySpokenSetting(
         ? await bridge.setDuckOtherMedia(enabled)
         : action.setting.id === APP_SETTING_ID.QUIET_DURING_MEETINGS
           ? await bridge.setQuietDuringMeetings(enabled)
-          : action.setting.id === APP_SETTING_ID.SHOW_IN_MENU_BAR
-            ? await bridge.setShowInMenuBar(enabled)
-            : action.setting.id === APP_SETTING_ID.SHOW_IN_DOCK
-              ? await bridge.setShowInDock(enabled)
-              : action.setting.id === APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS
-                ? await bridge.setShowOnAllDisplays(enabled)
-                : action.setting.id === APP_SETTING_ID.VOICE_SPEED && speed !== undefined
-                  ? await bridge.setVoiceSpeed(speed)
-                  : action.setting.id === APP_SETTING_ID.VOICE && isRealtimeVoice(action.value)
-                    ? await bridge.setVoice(action.value)
-                    : action.setting.id === APP_SETTING_ID.FORM_FACTOR &&
-                        isPanelFormFactor(action.value)
-                      ? await bridge.setFormFactor(action.value)
-                      : undefined;
+          : action.setting.id === APP_SETTING_ID.AUTOMATIC_UPDATES
+            ? await bridge.setAutomaticUpdates(enabled)
+            : action.setting.id === APP_SETTING_ID.SHOW_IN_MENU_BAR
+              ? await bridge.setShowInMenuBar(enabled)
+              : action.setting.id === APP_SETTING_ID.SHOW_IN_DOCK
+                ? await bridge.setShowInDock(enabled)
+                : action.setting.id === APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS
+                  ? await bridge.setShowOnAllDisplays(enabled)
+                  : action.setting.id === APP_SETTING_ID.VOICE_SPEED && speed !== undefined
+                    ? await bridge.setVoiceSpeed(speed)
+                    : action.setting.id === APP_SETTING_ID.VOICE && isRealtimeVoice(action.value)
+                      ? await bridge.setVoice(action.value)
+                      : action.setting.id === APP_SETTING_ID.FORM_FACTOR &&
+                          isPanelFormFactor(action.value)
+                        ? await bridge.setFormFactor(action.value)
+                        : undefined;
   if (!result) {
     // An adjustable entry with no carrier is a guide ahead of its wiring;
     // refuse honestly rather than claim a change that never happened.
