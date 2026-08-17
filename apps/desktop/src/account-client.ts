@@ -1,4 +1,4 @@
-import { ACCOUNT_PROVIDER, type AccountProvider } from "./shared/contracts";
+import type { AccountProvider } from "./shared/contracts";
 
 export interface AccountTokens {
   accessToken: string;
@@ -60,10 +60,6 @@ function tokensFrom(body: Record<string, unknown>): AccountTokens {
     throw new AccountClientError("Account service did not return both tokens");
   }
   return { accessToken: body.access_token, refreshToken: body.refresh_token };
-}
-
-function isAccountProvider(value: unknown): value is AccountProvider {
-  return value === ACCOUNT_PROVIDER.GOOGLE || value === ACCOUNT_PROVIDER.GITHUB;
 }
 
 export class AccountClient {
@@ -135,19 +131,19 @@ export class AccountClient {
     if (!response.ok) await responseRecord(response);
   }
 
-  async userInfo(accessToken: string): Promise<AccountIdentity> {
+  async userInfo(accessToken: string, provider: AccountProvider): Promise<AccountIdentity> {
     const response = await this.#fetch(`${this.#baseUrl}/oauth2/userinfo`, {
       headers: { authorization: `Bearer ${accessToken}` },
       signal: AbortSignal.timeout(this.#timeoutMs),
     });
     const body = await responseRecord(response);
-    if (typeof body.email !== "string" || !isAccountProvider(body.provider)) {
+    if (typeof body.email !== "string") {
       throw new AccountClientError("Account service returned an invalid identity");
     }
     return {
       email: body.email,
       ...(typeof body.name === "string" && body.name ? { name: body.name } : {}),
-      provider: body.provider,
+      provider,
     };
   }
 

@@ -70,6 +70,7 @@ import {
   accountGateOpen,
 } from "./account-gate";
 import { startAccountLoopback } from "./account-loopback";
+import { withIssuedAccountTokens } from "./account-token-lifecycle";
 import { CLAUDE_CODE_PROVIDER, ClaudeCodeSessionAdapter } from "./claude-code-adapter";
 import {
   CLAUDE_HOOK_SCRIPT_NAME,
@@ -482,7 +483,7 @@ async function refreshStoredAccount(): Promise<void> {
   if (!stored || !runMode.requiresAccount) return;
   const generation = accountGeneration;
   try {
-    const identity = await accountClient.userInfo(stored.accessToken);
+    const identity = await accountClient.userInfo(stored.accessToken, stored.provider);
     if (
       identity.email !== stored.email ||
       identity.name !== stored.name ||
@@ -515,7 +516,7 @@ async function refreshStoredAccount(): Promise<void> {
     // that answer before asking for identity so a transient user-info failure
     // cannot strand the account with the now-revoked previous token.
     if (!(await storeCurrentAccount(generation, { ...stored, ...tokens }))) return;
-    const identity = await accountClient.userInfo(tokens.accessToken);
+    const identity = await accountClient.userInfo(tokens.accessToken, stored.provider);
     if (!(await storeCurrentAccount(generation, { ...tokens, ...identity }))) return;
     broadcastAccount();
   } catch {}
@@ -530,36 +531,40 @@ function beginAccountSignIn(provider: AccountProvider): Promise<AccountSnapshot>
   signInRunning = (async () => {
     let loopback: Awaited<ReturnType<typeof startAccountLoopback>> | undefined;
     try {
-      loopback = await startAccountLoopback({ providerHint: provider });
+      const activeLoopback = await startAccountLoopback({ providerHint: provider });
+      loopback = activeLoopback;
       const authorizeUrl = accountClient.authorizeUrl({
-        redirectUri: loopback.redirectUri,
-        state: loopback.state,
-        codeChallenge: loopback.codeChallenge,
+        redirectUri: activeLoopback.redirectUri,
+        state: activeLoopback.state,
+        codeChallenge: activeLoopback.codeChallenge,
       });
       await shell.openExternal(authorizeUrl);
       const code = await loopback.waitForCode;
-      const tokens = await accountClient.exchangeCode({
-        code,
-        codeVerifier: loopback.codeVerifier,
-        redirectUri: loopback.redirectUri,
+      await withIssuedAccountTokens({
+        issue: () =>
+          accountClient.exchangeCode({
+            code,
+            codeVerifier: activeLoopback.codeVerifier,
+            redirectUri: activeLoopback.redirectUri,
+          }),
+        use: async (tokens) => {
+          const identity = await accountClient.userInfo(tokens.accessToken, provider);
+          if (!(await storeCurrentAccount(generation, { ...tokens, ...identity }))) {
+            throw new Error("Sign-in was cancelled");
+          }
+          await startAccountCapabilities(generation);
+          if (generation !== accountGeneration) throw new Error("Sign-in was cancelled");
+        },
+        revoke: (refreshToken) => accountClient.revoke(refreshToken),
+        onRevokeFailure: (revokeError) => {
+          const message = revokeError instanceof Error ? revokeError.message : String(revokeError);
+          process.stderr.write(`Rejected account token revocation failed: ${message}\n`);
+        },
       });
-      const identity = await accountClient.userInfo(tokens.accessToken);
-      if (identity.provider !== provider) {
-        await accountClient.revoke(tokens.refreshToken).catch(() => undefined);
-        throw new Error(`Luke received a ${identity.provider} account instead of ${provider}`);
-      }
-      if (!(await storeCurrentAccount(generation, { ...tokens, ...identity }))) {
-        throw new Error("Sign-in was cancelled");
-      }
-      await startAccountCapabilities(generation);
-      if (generation !== accountGeneration) throw new Error("Sign-in was cancelled");
       broadcastAccount();
       return account;
     } catch (error) {
-      if (generation === accountGeneration) {
-        account = { status: ACCOUNT_STATUS.SIGNED_OUT };
-        broadcastAccount();
-      }
+      if (generation === accountGeneration) await signOutAccount();
       throw error;
     } finally {
       await loopback?.close();

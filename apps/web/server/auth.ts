@@ -61,9 +61,6 @@ export const auth = betterAuth({
       allowDynamicClientRegistration: false,
       cachedTrustedClients: new Set([DESKTOP_OAUTH_CLIENT_ID]),
       accessTokenExpiresIn: 60 * 60,
-      customUserInfoClaims: ({ user }) => ({
-        provider: typeof user.lastLoginMethod === "string" ? user.lastLoginMethod : "unknown",
-      }),
     }),
   ],
 });

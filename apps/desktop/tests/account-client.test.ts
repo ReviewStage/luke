@@ -113,7 +113,6 @@ test("userinfo returns only the renderer-safe identity fields", async () => {
       sub: "internal-user-id",
       email: "developer@example.com",
       name: "Developer",
-      provider: ACCOUNT_PROVIDER.GITHUB,
     });
   };
   const client = new AccountClient({
@@ -122,7 +121,7 @@ test("userinfo returns only the renderer-safe identity fields", async () => {
     fetch,
   });
 
-  assert.deepEqual(await client.userInfo("access-token"), {
+  assert.deepEqual(await client.userInfo("access-token", ACCOUNT_PROVIDER.GITHUB), {
     email: "developer@example.com",
     name: "Developer",
     provider: ACCOUNT_PROVIDER.GITHUB,
@@ -164,7 +163,10 @@ test("invalid token and identity responses are refused", async () => {
   const identityClient = new AccountClient({
     baseUrl: "https://tryluke.dev/api/auth",
     clientId: "luke-desktop",
-    fetch: async () => json({ email: "developer@example.com", provider: "unknown" }),
+    fetch: async () => json({ provider: "unknown" }),
   });
-  await assert.rejects(identityClient.userInfo("access"), /invalid identity/);
+  await assert.rejects(
+    identityClient.userInfo("access", ACCOUNT_PROVIDER.GOOGLE),
+    /invalid identity/,
+  );
 });
