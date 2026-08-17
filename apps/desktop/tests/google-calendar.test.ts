@@ -176,7 +176,7 @@ test("the access token is cached across passes under the same grant", async () =
   assert.equal(requests.filter((request) => request.url === TOKEN_URL).length, 1);
 });
 
-test("a revoked grant is an error naming the account, not a quieter calendar", async () => {
+test("a revoked grant is a failure naming the account, not a quieter calendar", async () => {
   const { reader } = readerWith(
     (request) =>
       request.url === TOKEN_URL
@@ -185,7 +185,48 @@ test("a revoked grant is an error naming the account, not a quieter calendar", a
     [WORK_ACCOUNT],
   );
 
-  await assert.rejects(() => reader.observe(), /work@example\.com.*connect the account again/);
+  const observed = await reader.observe();
+
+  assert.match(observed?.[0]?.failure ?? "", /work@example\.com.*connect the account again/);
+  assert.deepEqual(observed?.[0]?.meetings, []);
+});
+
+test("one bad account never blinds the others, and keeps what it last showed", async () => {
+  const home: CalendarAccountCredential = {
+    id: "home@example.com",
+    refreshToken: "1//home-grant",
+    selectedCalendarIds: [],
+  };
+  // Work reads fine on the first pass and stops answering on the second;
+  // home answers throughout.
+  let workBroken = false;
+  const { reader } = readerWith(
+    (request) => {
+      if (request.url === CALENDAR_LIST_URL && request.authorization?.includes("work")) {
+        if (workBroken) return new Response("", { status: 500 });
+        return routes(request);
+      }
+      if (request.url === CALENDAR_LIST_URL) {
+        return jsonOk({ items: [{ id: "home@example.com", summary: "Home", primary: true }] });
+      }
+      return routes(request);
+    },
+    [WORK_ACCOUNT, home],
+  );
+
+  const first = await reader.observe();
+  assert.equal(first?.[0]?.failure, undefined);
+  workBroken = true;
+  const second = await reader.observe();
+
+  assert.equal(second?.length, 2);
+  // Work answers with what it last showed, and why it cannot answer now.
+  assert.match(second?.[0]?.failure ?? "", /work@example\.com/);
+  assert.deepEqual(second?.[0]?.calendars, first?.[0]?.calendars);
+  assert.deepEqual(second?.[0]?.meetings, first?.[0]?.meetings);
+  // Home still reads, untouched by work's failure.
+  assert.equal(second?.[1]?.accountId, "home@example.com");
+  assert.equal(second?.[1]?.failure, undefined);
 });
 
 test("listCalendars names the primary first, then the rest by name", async () => {

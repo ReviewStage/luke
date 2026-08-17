@@ -56,6 +56,12 @@ export interface CalendarAccountCredential {
 /** What one pass learned about one account: its calendars, and the meetings. */
 export interface CalendarAccountObservation extends ObservedAccountCalendars {
   meetings: readonly MeetingInterval[];
+  /**
+   * Why this pass could not read the account, when it could not. The
+   * calendars and meetings beside it are what the account last showed — a
+   * calendar that cannot answer is not an empty diary.
+   */
+  failure?: string;
 }
 
 /** A calendar as the list endpoint names it, plus whether it is the primary. */
@@ -90,6 +96,8 @@ export class GoogleCalendarReader {
   readonly #now: () => number;
   /** Short-lived access tokens by account id, so passes never drum the minter. */
   readonly #accessTokens = new Map<string, CachedAccessToken>();
+  /** Each account's last good observation, which stands in when a pass fails. */
+  readonly #lastObservations = new Map<string, CalendarAccountObservation>();
 
   constructor(options: GoogleCalendarReaderOptions) {
     this.#readAccounts = options.readAccounts;
@@ -102,10 +110,35 @@ export class GoogleCalendarReader {
     const accounts = await this.#readAccounts();
     // No accounts, no request: the calendar is not connected, which is a
     // different answer from a connected calendar with no meetings.
-    if (accounts.length === 0) return undefined;
+    if (accounts.length === 0) {
+      this.#lastObservations.clear();
+      return undefined;
+    }
+    // An account disconnected since the last pass has nothing to stand.
+    const connected = new Set(accounts.map((account) => account.id));
+    for (const id of this.#lastObservations.keys()) {
+      if (!connected.has(id)) this.#lastObservations.delete(id);
+    }
     const observations: CalendarAccountObservation[] = [];
     for (const account of accounts) {
-      observations.push(await this.#observeAccount(account));
+      try {
+        const observation = await this.#observeAccount(account);
+        this.#lastObservations.set(account.id, observation);
+        observations.push(observation);
+      } catch (error) {
+        // One bad account must not blind the rest of the pass: the others
+        // still read, and this one answers with what it last showed and why
+        // it could not answer now. Which account failed is the whole fix —
+        // sign into that one again.
+        const message = error instanceof Error ? error.message : String(error);
+        const held = this.#lastObservations.get(account.id);
+        observations.push({
+          accountId: account.id,
+          calendars: held?.calendars ?? [],
+          meetings: held?.meetings ?? [],
+          failure: `${account.id}: ${message}`,
+        });
+      }
     }
     return observations;
   }
@@ -156,16 +189,8 @@ export class GoogleCalendarReader {
 
   async #observeAccount(account: CalendarAccountCredential): Promise<CalendarAccountObservation> {
     const now = this.#now();
-    let accessToken: string;
-    let calendars: readonly ListedCalendar[];
-    try {
-      accessToken = await this.#accessTokenFor(account, now);
-      calendars = await this.listCalendars(accessToken);
-    } catch (error) {
-      // Which account failed is the whole fix: sign in to that one again.
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`${account.id}: ${message}`);
-    }
+    const accessToken = await this.#accessTokenFor(account, now);
+    const calendars = await this.listCalendars(accessToken);
     // Only calendars this very pass listed may enter the read document; a
     // selection outlives the calendars it named, and a stale id steers
     // nothing until its calendar is listed again.

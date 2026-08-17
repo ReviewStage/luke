@@ -2412,11 +2412,12 @@ async function releaseHeldNotices(): Promise<void> {
 }
 
 /**
- * Reads the meeting times from the connected calendar. A failing pass keeps
- * the meetings it has rather than blanking them, and a calendar with no
- * address stays absent — which is what makes the quiet impossible to enter.
- * Every pass ends by asking whether anything held can now be said: a meeting
- * deleted mid-way is over the moment the feed says so.
+ * Reads the meeting times from every connected account. An account that
+ * cannot answer keeps standing what it last showed — the reader holds that,
+ * per account, so one revoked grant never blinds the others — and a calendar
+ * with no account stays absent, which is what makes the quiet impossible to
+ * enter. Every pass ends by asking whether anything held can now be said: a
+ * meeting deleted mid-way is over the moment the feed says so.
  */
 async function refreshCalendarMeetings(): Promise<void> {
   if (!runMode.observesProviders || !accountCapabilitiesActive()) return;
@@ -2433,7 +2434,14 @@ async function refreshCalendarMeetings(): Promise<void> {
       calendars,
     }));
     panels.broadcast(channels.calendarsChanged, observedCalendars);
+    for (const account of observations ?? []) {
+      if (account.failure) {
+        process.stderr.write(`Calendar observation failed: ${account.failure}\n`);
+      }
+    }
   } catch (error) {
+    // Nothing routine lands here — the reader answers a failing account with
+    // its last observation — so what does is a programming error, reported.
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`Calendar observation failed: ${message}\n`);
   } finally {
