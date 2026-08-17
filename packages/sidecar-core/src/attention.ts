@@ -64,6 +64,21 @@ const ATTENTION_REVIEW_DEFAULTS = {
 } as const;
 
 /**
+ * How recently a development must have happened to be worth a model call. The
+ * reviewer sees the difference between two readings, not the event itself, and
+ * on first sight it has no earlier reading at all: a launch reads the whole
+ * roster — sessions that settled, stopped, or asked their question hours ago —
+ * and every one of them derives an update as though it just happened. The same
+ * notice tracker that announces status edges already refuses an edge whose
+ * event is old; this is the identical rule for the evaluator's door, keyed on
+ * the same provider-written timestamp, so history arriving late is consumed
+ * silently instead of reviewed as news. The panel has shown the state the
+ * whole time. A development carrying the developer's standing ask is exempt:
+ * the ask is consent to hear its answer late rather than never.
+ */
+export const ATTENTION_EVENT_FRESH_AGE_MS = 5 * 60_000;
+
+/**
  * The decision contract an evaluator must satisfy. It is deliberately small so
  * a background model returns a disposition and, at most, one spoken sentence.
  */
@@ -215,6 +230,8 @@ export interface SessionAttentionReviewerOptions {
   maximumUpdatesPerReview?: number;
   /** How many extra passes may retry one update after an evaluator failure. */
   maximumUnavailableRetries?: number;
+  /** How recently a development must have happened to reach the evaluator. */
+  freshEventAgeMs?: number;
 }
 
 interface SpokenRecord {
@@ -486,11 +503,13 @@ export class AttentionRequestRegistry {
 
 /**
  * Turns registry snapshots into attention decisions. It reviews only sessions
- * that actually changed, bounds how many updates one pass may evaluate, keeps a
- * single evaluation in flight per session, discards a decision the session has
- * already moved past without consuming that development, and defaults to
- * silence whenever an evaluator fails or returns something outside the decision
- * contract.
+ * that actually changed and only while their events are fresh — a development
+ * older than {@link ATTENTION_EVENT_FRESH_AGE_MS} is consumed silently unless
+ * the developer's standing ask names its session — bounds how many updates one
+ * pass may evaluate, keeps a single evaluation in flight per session, discards
+ * a decision the session has already moved past without consuming that
+ * development, and defaults to silence whenever an evaluator fails or returns
+ * something outside the decision contract.
  */
 export class SessionAttentionReviewer {
   readonly #evaluator: AttentionEvaluator;
@@ -502,6 +521,7 @@ export class SessionAttentionReviewer {
   readonly #maximumUpdatesPerReview: number;
   readonly #ledger: AttentionSpeechLedger;
   readonly #maximumUnavailableRetries: number;
+  readonly #freshEventAgeMs: number;
   #observed = new Map<string, Map<string, NormalizedSession>>();
   readonly #pending = new Map<string, Set<string>>();
   readonly #unavailableRetries = new Map<string, Map<string, number>>();
@@ -519,6 +539,10 @@ export class SessionAttentionReviewer {
       options.maximumUnavailableRetries,
       ATTENTION_REVIEW_DEFAULTS.MAXIMUM_UNAVAILABLE_RETRIES,
     );
+    this.#freshEventAgeMs = nonNegativeNumber(
+      options.freshEventAgeMs,
+      ATTENTION_EVENT_FRESH_AGE_MS,
+    );
     this.#ledger = new AttentionSpeechLedger({
       ...(options.now ? { now: options.now } : {}),
       ...(options.repeatWindowMs !== undefined ? { repeatWindowMs: options.repeatWindowMs } : {}),
@@ -535,6 +559,10 @@ export class SessionAttentionReviewer {
     this.#ledger.retain(sessions);
 
     const candidates: AttentionCandidate[] = [];
+    // Developments whose events are already old: consumed without a model
+    // call, but their baselines still advance, so history never resurfaces.
+    const staleConsumed: AttentionCandidate[] = [];
+    const now = this.#now();
     for (const session of sessions) {
       if (this.#isPending(session)) continue;
       const update = attentionUpdate(
@@ -542,7 +570,17 @@ export class SessionAttentionReviewer {
         this.#observedSession(session),
         this.#noticeRequestFor?.(session),
       );
-      if (update) candidates.push({ session, update });
+      if (!update) continue;
+      // An event older than the freshness window is history arriving late — a
+      // launch reading yesterday's roster, a wake replaying the afternoon —
+      // and is never news, unless the developer's own standing ask is waiting
+      // on exactly this session: an ask answered late still beats one answered
+      // never.
+      if (!update.noticeRequest && now - update.observedAt > this.#freshEventAgeMs) {
+        staleConsumed.push({ session, update });
+        continue;
+      }
+      candidates.push({ session, update });
     }
 
     const selected = candidates
@@ -550,8 +588,10 @@ export class SessionAttentionReviewer {
       .slice(0, this.#maximumUpdatesPerReview);
 
     // Sessions left out of this pass keep their previous baseline so the same
-    // development is derived again once a slot frees up.
-    this.#observed = this.#nextObserved(sessions, selected);
+    // development is derived again once a slot frees up. A stale development
+    // advances its baseline exactly as a reviewed one does: it was decided —
+    // deterministically, to silence — not deferred.
+    this.#observed = this.#nextObserved(sessions, [...selected, ...staleConsumed]);
     for (const candidate of selected) this.#markPending(candidate.session);
 
     try {

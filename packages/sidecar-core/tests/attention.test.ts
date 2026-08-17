@@ -228,6 +228,97 @@ test("reviews only changed sessions and suppresses a repeated decision", async (
   assert.equal(evaluator.updates.length, 2);
 });
 
+test("history arriving late is consumed silently and never resurfaces", async () => {
+  const evaluator = evaluatorReturning(speakDecision());
+  const reviewer = new SessionAttentionReviewer({ evaluator, now: () => DECIDED_AT });
+
+  // A launch reads a roster whose sessions settled hours ago: one asked its
+  // question, one failed, one finished. The panel shows all of it; none is
+  // news, and none is worth a model call.
+  const asked = session(claude, "asked", {
+    status: SESSION_STATUS.WAITING,
+    observedAt: DECIDED_AT - 4 * 60 * 60 * 1000,
+  });
+  const failed = session(claude, "failed", {
+    status: SESSION_STATUS.ERROR,
+    observedAt: DECIDED_AT - 6 * 60 * 60 * 1000,
+  });
+  const finished = session(codex, "finished", {
+    status: SESSION_STATUS.COMPLETE,
+    observedAt: DECIDED_AT - 7 * 60 * 60 * 1000,
+  });
+
+  assert.deepEqual(await reviewer.review([asked, failed, finished]), []);
+  assert.equal(evaluator.updates.length, 0, "a stale development costs no model call");
+  assert.deepEqual(
+    await reviewer.review([asked, failed, finished]),
+    [],
+    "consumed, not deferred: the same history is not re-derived next pass",
+  );
+  assert.equal(evaluator.updates.length, 0);
+
+  // The baseline still advanced: the next real development is reviewed, and
+  // it honestly reports the stale state the session moved from.
+  const revived = session(claude, "asked", {
+    status: SESSION_STATUS.WORKING,
+    observedAt: DECIDED_AT,
+  });
+  const [review] = await reviewer.review([revived, failed, finished]);
+  assert.equal(review?.providerSessionId, "asked");
+  assert.equal(review?.update.previousStatus, SESSION_STATUS.WAITING);
+  assert.equal(evaluator.updates.length, 1);
+});
+
+test("a wake from hours of sleep reviews nothing about the evening it slept through", async () => {
+  let now = DECIDED_AT;
+  const evaluator = evaluatorReturning(speakDecision());
+  const reviewer = new SessionAttentionReviewer({ evaluator, now: () => now });
+
+  const working = session(claude, "overnight", { observedAt: DECIDED_AT });
+  await reviewer.review([working]);
+  assert.equal(evaluator.updates.length, 1, "a fresh first sight is still reviewed");
+
+  // The Mac sleeps for six hours; the session finished half an hour in. The
+  // edge is real, but its event is old — the finish already kept.
+  now = DECIDED_AT + 6 * 60 * 60 * 1000;
+  const finished = session(claude, "overnight", {
+    status: SESSION_STATUS.COMPLETE,
+    observedAt: DECIDED_AT + 30 * 60 * 1000,
+  });
+  assert.deepEqual(await reviewer.review([finished]), []);
+  assert.equal(evaluator.updates.length, 1, "the sleep-aged finish costs no model call");
+});
+
+test("a stale development the developer asked about still reaches the evaluator", async () => {
+  const requests = new AttentionRequestRegistry();
+  requests.set(
+    { providerId: codex.id, providerSessionId: "asked-about" },
+    "Tell me when this finishes.",
+  );
+  const evaluator = evaluatorReturning({
+    disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
+    decidedAt: DECIDED_AT,
+    summary: "Codex finished the release you asked about.",
+    answersAsk: true,
+  });
+  const reviewer = new SessionAttentionReviewer({
+    evaluator,
+    now: () => DECIDED_AT,
+    noticeRequestFor: (identity) => requests.get(identity),
+  });
+
+  // The ask is consent to hear its answer late rather than never: the finish
+  // aged past freshness — an evaluator quiet, a slow pass — but the developer
+  // is still owed the sentence.
+  const finished = session(codex, "asked-about", {
+    status: SESSION_STATUS.COMPLETE,
+    observedAt: DECIDED_AT - 5 * 60 * 60 * 1000,
+  });
+  const [review] = await reviewer.review([finished]);
+  assert.equal(review?.outcome, ATTENTION_REVIEW_OUTCOME.DECIDED);
+  assert.equal(evaluator.updates[0]?.noticeRequest, "Tell me when this finishes.");
+});
+
 test("keeps a second real development visible when Luke stays quiet about it", async () => {
   // Two turns finishing minutes apart produce the same sentence, so the ledger
   // suppresses the second one. The session still finished twice.
