@@ -63,14 +63,18 @@ import {
   systemPreferences,
   Tray,
 } from "electron";
-import { AccountClient, type AccountTokens } from "./account-client";
+import { AccountClient, type AccountIdentity, type AccountTokens } from "./account-client";
 import {
   ACCOUNT_FAILURE_ACTION,
   accessTokenNeedsRefresh,
   accountFailureAction,
   accountGateOpen,
 } from "./account-gate";
-import { startAccountLoopback } from "./account-loopback";
+import {
+  isSignInCancellation,
+  SIGN_IN_CANCELLED_MESSAGE,
+  startAccountLoopback,
+} from "./account-loopback";
 import { withIssuedAccountTokens } from "./account-token-lifecycle";
 import { CLAUDE_CODE_PROVIDER, ClaudeCodeSessionAdapter } from "./claude-code-adapter";
 import {
@@ -189,6 +193,12 @@ const settingsStore = new SettingsStore({
 const accountClient = new AccountClient({ baseUrl: ACCOUNT_BASE_URL, clientId: ACCOUNT_CLIENT_ID });
 let account: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
 let signInRunning: Promise<AccountSnapshot> | undefined;
+/**
+ * Withdraws the sign-in currently waiting on the browser, when there is one.
+ * Set for exactly the life of `signInRunning`: cancelling rejects the loopback
+ * wait, and the attempt's own error path signs the account back out.
+ */
+let signInCancel: (() => void) | undefined;
 let accountGeneration = 0;
 let observationGeneration = 0;
 const conductorAdapter = new ConductorSessionAdapter({
@@ -494,9 +504,12 @@ async function refreshStoredAccount(): Promise<void> {
     if (
       identity.email !== stored.email ||
       identity.name !== stored.name ||
+      identity.pictureUrl !== stored.pictureUrl ||
       identity.provider !== stored.provider
     ) {
-      if (!(await storeCurrentAccount(generation, { ...stored, ...identity }))) return;
+      if (!(await storeCurrentAccount(generation, mergedAccountIdentity(stored, identity)))) {
+        return;
+      }
       broadcastAccount();
     }
     return;
@@ -524,9 +537,29 @@ async function refreshStoredAccount(): Promise<void> {
     // cannot strand the account with the now-revoked previous token.
     if (!(await storeCurrentAccount(generation, { ...stored, ...tokens }))) return;
     const identity = await accountClient.userInfo(tokens.accessToken, stored.provider);
-    if (!(await storeCurrentAccount(generation, { ...tokens, ...identity }))) return;
+    if (
+      !(await storeCurrentAccount(
+        generation,
+        mergedAccountIdentity({ ...stored, ...tokens }, identity),
+      ))
+    ) {
+      return;
+    }
     broadcastAccount();
   } catch {}
+}
+
+/**
+ * A fresh identity replaces the stored one outright: a name or picture the
+ * provider no longer reports must fall away rather than surviving as a stale
+ * spread-over field.
+ */
+function mergedAccountIdentity(stored: StoredAccount, identity: AccountIdentity): StoredAccount {
+  return {
+    accessToken: stored.accessToken,
+    refreshToken: stored.refreshToken,
+    ...identity,
+  };
 }
 
 function beginAccountSignIn(provider: AccountProvider): Promise<AccountSnapshot> {
@@ -535,11 +568,20 @@ function beginAccountSignIn(provider: AccountProvider): Promise<AccountSnapshot>
   account = { status: ACCOUNT_STATUS.SIGNING_IN };
   const generation = ++accountGeneration;
   broadcastAccount();
+  // Cancellable from the first moment the renderer can ask: before the
+  // loopback exists the cancel is remembered, and once it exists the cancel
+  // rejects its wait — either way the attempt below ends as cancelled.
+  let cancelled = false;
+  signInCancel = () => {
+    cancelled = true;
+  };
   signInRunning = (async () => {
     let loopback: Awaited<ReturnType<typeof startAccountLoopback>> | undefined;
     try {
       const activeLoopback = await startAccountLoopback({ providerHint: provider });
       loopback = activeLoopback;
+      signInCancel = () => activeLoopback.cancel();
+      if (cancelled) activeLoopback.cancel();
       const authorizeUrl = accountClient.authorizeUrl({
         redirectUri: activeLoopback.redirectUri,
         state: activeLoopback.state,
@@ -557,10 +599,10 @@ function beginAccountSignIn(provider: AccountProvider): Promise<AccountSnapshot>
         use: async (tokens) => {
           const identity = await accountClient.userInfo(tokens.accessToken, provider);
           if (!(await storeCurrentAccount(generation, { ...tokens, ...identity }))) {
-            throw new Error("Sign-in was cancelled");
+            throw new Error(SIGN_IN_CANCELLED_MESSAGE);
           }
           await startAccountCapabilities(generation);
-          if (generation !== accountGeneration) throw new Error("Sign-in was cancelled");
+          if (generation !== accountGeneration) throw new Error(SIGN_IN_CANCELLED_MESSAGE);
         },
         revoke: (refreshToken) => accountClient.revoke(refreshToken),
         onRevokeFailure: (revokeError) => {
@@ -572,8 +614,13 @@ function beginAccountSignIn(provider: AccountProvider): Promise<AccountSnapshot>
       return account;
     } catch (error) {
       if (generation === accountGeneration) await signOutAccount();
+      // A withdrawn sign-in is a normal outcome, not a failure: it resolves
+      // with the signed-out account rather than rejecting the renderer's
+      // invoke, which Electron would otherwise report as a handler error.
+      if (isSignInCancellation(error)) return account;
       throw error;
     } finally {
+      signInCancel = undefined;
       await loopback?.close();
       signInRunning = undefined;
     }
@@ -830,6 +877,13 @@ function registerIpc(): void {
       throw new Error("Invalid sign-in request");
     }
     return beginAccountSignIn(provider);
+  });
+
+  ipcMain.handle(channels.cancelSignIn, (event) => {
+    if (!trustedSender(event)) throw new Error("Untrusted renderer");
+    // A cancel with nothing waiting is a no-op rather than an error: the
+    // sign-in it meant to withdraw may have just finished or failed on its own.
+    signInCancel?.();
   });
 
   ipcMain.handle(channels.signOut, async (event) => {

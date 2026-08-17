@@ -3,6 +3,7 @@ import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { createAuthClient } from "better-auth/react";
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { LukeMark } from "./SiteChrome";
 import {
   SOCIAL_PROVIDER_LABEL,
   type SocialProvider,
@@ -51,8 +52,7 @@ function SignIn(): React.JSX.Element {
     <main className="auth-shell">
       <section className="auth-card" aria-labelledby="auth-title">
         <div className="auth-mark" aria-hidden="true">
-          <span />
-          <span />
+          <LukeMark />
         </div>
         <h1 id="auth-title">Sign in to Luke</h1>
         <p>

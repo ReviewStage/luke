@@ -40,6 +40,13 @@ interface NotchWingsProps {
   voiceOpening: boolean;
   presentation: PanelPresentation;
   housingWidth: number;
+  /**
+   * True while sign-in stands between Luke and anything to watch. The strip
+   * stays deliberately bare — no face, no count — so the gate in the panel is
+   * the one thing introducing him, and a zero that means "not looking yet"
+   * never poses as a zero that means "nothing happening".
+   */
+  accountGated: boolean;
 }
 
 /**
@@ -83,6 +90,16 @@ const COUNT_RESTING_SCALE = 0.88;
 const COUNT_EDGE_KEEP = 2;
 
 /**
+ * The sign-in label's own margins, in the stylesheet's numbers. It starts at
+ * the housing's edge itself — black on black, the notch is indistinguishable
+ * from padding, so the inset a numeral keeps buys nothing here — and keeps
+ * more from the strip's outer end, where the shape is already turning its
+ * corner and words pressed into the curve read as clipped.
+ */
+const SIGN_IN_INSET = 0;
+const SIGN_IN_EDGE_KEEP = 6;
+
+/**
  * How much of its resting scale the count badge keeps so the text never
  * crosses the shape's edge. The number grows with the sessions it counts and
  * the shape beside the housing does not, so past the width the wing can hold
@@ -99,6 +116,8 @@ export function countBadgeFit(
   housingWidth: number,
   valueWidth: number,
   captionWidth: number,
+  /** True for the sign-in label, which starts flush at the housing's edge. */
+  flushToHousing = false,
 ): number {
   const captioned =
     presentation === PANEL_PRESENTATION.PEEK || presentation === PANEL_PRESENTATION.PANEL;
@@ -111,7 +130,9 @@ export function countBadgeFit(
         ? PEEK_SIDE_WIDTH
         : CAPSULE_SIDE_WIDTH;
   const restingScale = presentation === PANEL_PRESENTATION.PANEL ? 1 : COUNT_RESTING_SCALE;
-  const room = Math.max(0, sideWidth - COUNT_INSET - COUNT_EDGE_KEEP);
+  const inset = flushToHousing ? SIGN_IN_INSET : COUNT_INSET;
+  const keep = flushToHousing ? SIGN_IN_EDGE_KEEP : COUNT_EDGE_KEEP;
+  const room = Math.max(0, sideWidth - inset - keep);
   return Math.min(1, room / (restingScale * textWidth));
 }
 
@@ -157,6 +178,7 @@ export function NotchWings({
   voiceOpening,
   presentation,
   housingWidth,
+  accountGated,
 }: NotchWingsProps): React.JSX.Element {
   const [voiceActive, setVoiceActive] = useState(false);
   const reportVoiceActivity = useCallback(
@@ -239,6 +261,7 @@ export function NotchWings({
     housingWidth,
     countWidths.value,
     countWidths.caption,
+    accountGated,
   );
 
   return (
@@ -296,7 +319,7 @@ export function NotchWings({
               replay it on being handed the same one. The wrapper is what the
               hover is measured against, so it holds still across those
               remounts — and hovering it is a moment the face reacts to. */}
-          {yieldToMeter ? null : (
+          {yieldToMeter || accountGated ? null : (
             /* The wrapper is also where an errand sets off from, for the same
                reason the hover is measured against it: it holds still while a
                motion transforms layers inside the drawing, so a mark peeling
@@ -312,20 +335,29 @@ export function NotchWings({
 
       <div className="wing wing-right">
         <div className="wing-inner">
+          {/* While sign-in stands between Luke and anything to watch, the
+              badge's place says the one honest thing instead of a zero that
+              would pose as "nothing happening": why Luke is idle, and the one
+              act that wakes him. It shares the count's element and fit, so it
+              scales into the capsule's side exactly as a wide number does. */}
           <span
             className="count-badge"
             style={{ "--count-fit": countFit } as React.CSSProperties}
             data-state={tally.urgency}
-            data-empty={String(tally.total === 0)}
+            data-empty={String(accountGated || tally.total === 0)}
+            data-sign-in={String(accountGated)}
             role="status"
             aria-live="polite"
-            aria-label={tallySummary(tally)}
+            aria-label={accountGated ? "Sign in" : tallySummary(tally)}
           >
             <span className="count-value" aria-hidden="true" ref={countValueElement}>
-              {tally.total}
+              {accountGated ? "Sign in" : tally.total}
             </span>
             <span className="count-caption" aria-hidden="true" ref={countCaptionElement}>
-              {tallyCaption(tally)}
+              {/* No caption while signed out: the two words are the label
+                  entire, and with nothing beside them the fit keeps their
+                  natural size inside the peek's side. */}
+              {accountGated ? null : tallyCaption(tally)}
             </span>
           </span>
         </div>

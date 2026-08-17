@@ -202,6 +202,16 @@ export function ExternalIcon(): React.JSX.Element {
   );
 }
 
+/** A person: the account the app is signed in as. */
+export function UserIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <circle cx="12" cy="8.2" r="3.6" />
+      <path d="M5.4 19.8a6.6 6.6 0 0 1 13.2 0" />
+    </Glyph>
+  );
+}
+
 export function PowerIcon(): React.JSX.Element {
   return (
     <Glyph>

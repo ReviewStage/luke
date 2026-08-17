@@ -84,6 +84,7 @@ import {
   ShieldIcon,
   SpeakerIcon,
   TrashIcon,
+  UserIcon,
 } from "./settings-icons";
 import {
   pageExitMs,
@@ -1686,37 +1687,124 @@ function ShortcutSection({ shortcuts }: { shortcuts: ShortcutControl }): React.J
 function AccountSection({
   account,
   onSignOut,
+  panelOpen,
 }: {
   account: Extract<AccountSnapshot, { status: typeof ACCOUNT_STATUS.SIGNED_IN }>;
   onSignOut: () => Promise<void>;
+  panelOpen: boolean;
 }): React.JSX.Element {
+  // Signing out asks first, the way deleting a key does: getting back in costs
+  // a whole trip through the browser, so the button asks and only the answer
+  // acts. The question follows the removal confirm's one rule about surfaces —
+  // it does not survive the panel closing — corrected during the render that
+  // discovers it rather than from an effect.
+  const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
+  const keep = useRef<HTMLButtonElement | null>(null);
+  if (asking && !panelOpen && !busy) setAsking(false);
+
+  // The question takes the focus to the answer that changes nothing, exactly
+  // as the delete confirm does: the control that asked is inert by the time
+  // the confirm is drawn.
+  useStagedFocus(keep, asking && !busy);
+
+  const signOut = () => {
+    setBusy(true);
+    void onSignOut().finally(() => {
+      setBusy(false);
+      setAsking(false);
+    });
+  };
+
   return (
-    <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
+    <section className="settings-section" style={{ "--row-index": 4 } as React.CSSProperties}>
       <h2>
-        <CheckIcon />
-        Your account
+        <UserIcon />
+        Account
       </h2>
       <div className="settings-row">
-        <span className="settings-copy">
-          <span className="settings-name">
-            <strong>{account.email}</strong>
+        <span className="settings-copy account-identity">
+          {/* The provider's own picture of the person, when their identity
+              carried one from a host this build pins — otherwise the same
+              glyph the heading wears, so the line never shows a broken image. */}
+          {account.pictureUrl ? (
+            <img
+              className="account-avatar"
+              src={account.pictureUrl}
+              alt=""
+              referrerPolicy="no-referrer"
+              draggable={false}
+            />
+          ) : (
+            <span className="account-avatar account-avatar-fallback" aria-hidden="true">
+              <UserIcon />
+            </span>
+          )}
+          <span className="account-words">
+            <span className="settings-name">
+              <strong>{account.email}</strong>
+            </span>
+            <small>
+              Signed in with {account.provider === ACCOUNT_PROVIDER.GITHUB ? "GitHub" : "Google"}
+            </small>
           </span>
-          <small>
-            Signed in with {account.provider === ACCOUNT_PROVIDER.GITHUB ? "GitHub" : "Google"}
-          </small>
         </span>
-        <button
-          type="button"
-          className="quiet-button"
-          disabled={busy}
-          onClick={() => {
-            setBusy(true);
-            void onSignOut().finally(() => setBusy(false));
-          }}
-        >
-          {busy ? "Signing out…" : "Sign out"}
-        </button>
+        {/* The control and the confirm that stands in for it are the same cell
+            of one grid, exactly as a credential row's are, so the line never
+            re-shapes as they trade places. */}
+        <span className="credential-actions">
+          <span
+            className="settings-actions credential-controls"
+            data-drawn={String(!asking)}
+            aria-hidden={asking}
+            inert={asking}
+          >
+            <button
+              type="button"
+              className="quiet-button account-signout"
+              disabled={busy}
+              /* The ellipsis is the promise that it asks first. */
+              title="Sign out…"
+              onClick={() => setAsking(true)}
+            >
+              Sign out
+            </button>
+          </span>
+          <fieldset
+            className="settings-actions credential-confirm"
+            aria-label={`Sign out of ${account.email}?`}
+            data-drawn={String(asking)}
+            aria-hidden={!asking}
+            inert={!asking}
+            onKeyDown={(event) => {
+              // Escape withdraws the question rather than closing the panel it
+              // was asked on — but only while it is still a question.
+              if (event.key !== "Escape" || busy) return;
+              event.stopPropagation();
+              setAsking(false);
+            }}
+          >
+            <button
+              type="button"
+              ref={keep}
+              className="quiet-button"
+              style={answerOrder(REMOVAL_ANSWER_INDEX.KEEP)}
+              disabled={busy}
+              onClick={() => setAsking(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="danger-button"
+              style={answerOrder(REMOVAL_ANSWER_INDEX.DELETE)}
+              disabled={busy}
+              onClick={signOut}
+            >
+              {busy ? "Signing out…" : "Sign out"}
+            </button>
+          </fieldset>
+        </span>
       </div>
     </section>
   );
@@ -1848,10 +1936,7 @@ export function SettingsPanel({
 
       {drawnView !== SETTINGS_VIEW.ROOT ? null : (
         <>
-          {account.status === ACCOUNT_STATUS.SIGNED_IN ? (
-            <AccountSection account={account} onSignOut={onSignOut} />
-          ) : null}
-          <section className="settings-section" style={{ "--row-index": 3 } as React.CSSProperties}>
+          <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
             <h2>
               <ShieldIcon />
               Permissions
@@ -1894,6 +1979,13 @@ export function SettingsPanel({
           </section>
 
           <FeedbackSection control={feedback} />
+
+          {/* The account stands last before the way out: signing out and
+              quitting are the two acts that end the session, so they live
+              together at the foot rather than above the sections still in use. */}
+          {account.status === ACCOUNT_STATUS.SIGNED_IN ? (
+            <AccountSection account={account} onSignOut={onSignOut} panelOpen={panelOpen} />
+          ) : null}
 
           <button
             type="button"

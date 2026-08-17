@@ -77,6 +77,17 @@ test("exactly filling the wing needs no count", () => {
 const capsuleRoom = CAPSULE_SIDE_WIDTH - 11;
 const peekRoom = peekSideWidth - 11;
 
+test("the sign-in label starts at the housing and keeps clear of the strip's corner", () => {
+  // Flush to the housing, the label spends no inset and keeps more from the
+  // outer corner, so the same words render larger than a numeral's margins
+  // would allow — and still inside the capsule's side.
+  const width = 42;
+  const label = countBadgeFit(PANEL_PRESENTATION.CAPSULE, 180, width, 0, true);
+  const count = countBadgeFit(PANEL_PRESENTATION.CAPSULE, 180, width, 0);
+  assert.ok(label > count);
+  assert.ok(label * 0.88 * width <= 36 - 6);
+});
+
 test("a count that fits keeps its resting scale", () => {
   // Two tabular digits: about 19 layout pixels, 17 once the 0.88 draws them.
   assert.equal(countBadgeFit(PANEL_PRESENTATION.CAPSULE, 210, 19, 0), 1);

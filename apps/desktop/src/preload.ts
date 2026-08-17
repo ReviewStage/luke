@@ -16,6 +16,7 @@ function subscribe<T>(channel: string) {
 const bridge: AppBridge = {
   getBootstrap: invoke(channels.bootstrap),
   beginSignIn: invoke(channels.beginSignIn),
+  cancelSignIn: invoke(channels.cancelSignIn),
   signOut: invoke(channels.signOut),
   setExpanded: invoke(channels.setExpanded),
   setPointerInterception: (interceptsPointer) => {

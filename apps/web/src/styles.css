@@ -138,17 +138,35 @@ button {
   color: var(--text-secondary);
 }
 
+/* The full mark, not a pair of dots: the card is the one thing on the page,
+   so it carries the same face the product and the landing page wear. */
 .auth-mark {
   display: inline-flex;
-  gap: 22px;
-  transform: rotate(-8deg);
+  width: 52px;
+  color: var(--text);
 }
 
-.auth-mark span {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--text);
+.auth-mark svg {
+  width: 100%;
+  height: auto;
+}
+
+/* One word saying where things stand, in the state palette the product uses. */
+.auth-pill {
+  display: inline-block;
+  margin-top: var(--space-4);
+  padding: 3px 11px;
+  border-radius: var(--radius-pill);
+  background: rgba(111, 220, 164, 0.14);
+  color: var(--complete);
+  font-size: var(--text-xs);
+  font-weight: 650;
+  letter-spacing: 0.2px;
+}
+
+.auth-pill[data-tone="attention"] {
+  background: rgba(255, 160, 73, 0.14);
+  color: var(--attention);
 }
 
 .auth-actions {

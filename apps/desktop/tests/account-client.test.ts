@@ -128,6 +128,40 @@ test("userinfo returns only the renderer-safe identity fields", async () => {
   });
 });
 
+test("userinfo keeps a picture only from the hosts the renderer's policy pins", async () => {
+  const clientFor = (picture: string) =>
+    new AccountClient({
+      baseUrl: "https://tryluke.dev/api/auth",
+      clientId: "luke-desktop",
+      fetch: async () => json({ email: "developer@example.com", picture }),
+    });
+
+  const google = await clientFor("https://lh3.googleusercontent.com/a/portrait").userInfo(
+    "access",
+    ACCOUNT_PROVIDER.GOOGLE,
+  );
+  assert.equal(google.pictureUrl, "https://lh3.googleusercontent.com/a/portrait");
+
+  const github = await clientFor("https://avatars.githubusercontent.com/u/1?v=4").userInfo(
+    "access",
+    ACCOUNT_PROVIDER.GITHUB,
+  );
+  assert.equal(github.pictureUrl, "https://avatars.githubusercontent.com/u/1?v=4");
+
+  // Anywhere else — another host, a scheme downgrade, a suffix imposter, or
+  // no URL at all — the identity simply travels without a picture.
+  for (const refused of [
+    "https://example.com/avatar.png",
+    "http://lh3.googleusercontent.com/a/portrait",
+    "https://evilgoogleusercontent.com/a/portrait",
+    "https://avatars.githubusercontent.com.evil.example/u/1",
+    "not a url",
+  ]) {
+    const identity = await clientFor(refused).userInfo("access", ACCOUNT_PROVIDER.GOOGLE);
+    assert.equal(identity.pictureUrl, undefined, refused);
+  }
+});
+
 test("OAuth errors preserve their status and machine-readable code", async () => {
   const client = new AccountClient({
     baseUrl: "https://tryluke.dev/api/auth",

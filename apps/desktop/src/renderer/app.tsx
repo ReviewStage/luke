@@ -27,6 +27,7 @@ import {
   useState,
 } from "react";
 import type {
+  AccountProvider,
   AccountSnapshot,
   AppBootstrap,
   AppSettings,
@@ -35,7 +36,7 @@ import type {
   SessionOpenResult,
   SettingsUpdateResult,
 } from "../shared/contracts";
-import { CREDENTIAL_SOURCE, SESSION_OPEN_RESULT_STATUS } from "../shared/contracts";
+import { ACCOUNT_STATUS, CREDENTIAL_SOURCE, SESSION_OPEN_RESULT_STATUS } from "../shared/contracts";
 import type { CredentialProviderId } from "../shared/credential-providers";
 import {
   CREDENTIAL_PROVIDER_LIST,
@@ -75,6 +76,8 @@ import { encodeFeedbackImage } from "./feedback-images";
 import { FeedbackSlot } from "./feedback-slot";
 import { KeySlot } from "./key-slot";
 import { type Errand, errandTargets, LukeErrand } from "./luke-errand";
+import { LukeFace } from "./luke-face";
+import { usePrefersReducedMotion } from "./luke-face-mood";
 import { applySpokenSetting, buildLukeGuide, isAppSettingId } from "./luke-guide";
 import { NotchWings } from "./notch-wings";
 import { PanelBody, type SessionWriteHandlers } from "./panel-body";
@@ -104,6 +107,8 @@ import {
   type SettingsSubview,
   type SettingsView,
 } from "./settings-views";
+import { useSignInFaceCycle } from "./sign-in-gate";
+import { SignInSlot } from "./sign-in-slot";
 import { useBootstrapRacedChannel } from "./use-bootstrap-raced-channel";
 import { panelEntryOpen, usePanelEntry } from "./use-panel-entry";
 import { usePanelPresentation } from "./use-panel-presentation";
@@ -243,6 +248,7 @@ export function App(): React.JSX.Element {
   const [, setClock] = useState(0);
   const [panelElement, panelHeight] = useShapeHeight();
   const [slotElement, slotHeight] = useShapeHeight();
+  const [signInSlotElement, signInSlotHeight] = useShapeHeight();
   const [feedbackElement, feedbackHeight] = useShapeHeight();
   const [captionTextElement, captionTextHeight] = useShapeHeight();
   const captionElement = useRef<HTMLSpanElement>(null);
@@ -425,6 +431,27 @@ export function App(): React.JSX.Element {
     setSessionView(next);
     setOptionsOpen(false);
   }, []);
+
+  /**
+   * True while sign-in stands between Luke and anything to watch. The gate is
+   * then what the panel shows, the wings hide the face and the count, and the
+   * badge's place wears a quiet "Sign in" instead — the honest word for why
+   * Luke is idle, at capsule scale.
+   */
+  const accountGated =
+    bootstrap?.accountRequired === true &&
+    (account ?? bootstrap.account).status !== ACCOUNT_STATUS.SIGNED_IN;
+
+  /** Whether this window has already opened its one sign-in greeting. */
+  const greeted = useRef(false);
+
+  /**
+   * The one signed-out Luke's introduction cycle — sway, pirouette, double
+   * blink, curious tilt, nod — walking whichever pose the face is drawn at:
+   * large over the gate, small in the peek's strip. Still while signed in, so
+   * the timer is not left running under the roster.
+   */
+  const signInFace = useSignInFaceCycle(usePrefersReducedMotion() || !accountGated);
 
   const {
     presentation,
@@ -651,6 +678,67 @@ export function App(): React.JSX.Element {
     commit: credentialsEntry.commit,
     remove: removeProviderApiKey,
   };
+
+  /**
+   * Whose sign-in the surface is waiting on. Choosing a provider on the gate
+   * sends the browser to it and stands the panel down to a small waiting
+   * popup, the way fetching an API key stands it down to the slot: the real
+   * work is in the browser, and Luke floats above the page it needs. Held as
+   * app state with a ref because the attempt's own reply has to read whether
+   * it is still the one being waited on.
+   */
+  const [signInWait, setSignInWait, signInWaitNow] = useStateWithRef<AccountProvider | undefined>(
+    undefined,
+  );
+  /**
+   * Which attempt any reply answers. Cancel advances it, so the outcome of a
+   * sign-in already withdrawn is spent rather than moving the shape again.
+   */
+  const signInAttempt = useRef(0);
+  const [signInFailure, setSignInFailure] = useState<string>();
+
+  const beginSignIn = useCallback(
+    (provider: AccountProvider) => {
+      if (signInWaitNow() !== undefined) return;
+      const attempt = ++signInAttempt.current;
+      setSignInFailure(undefined);
+      setSignInWait(provider);
+      cancelHover();
+      applyPresentation(PANEL_PRESENTATION.SLOT);
+      window.sidecar.beginSignIn(provider).then(
+        () => {
+          if (signInAttempt.current !== attempt) return;
+          setSignInWait(undefined);
+          if (presentationOf() !== PANEL_PRESENTATION.SLOT) return;
+          // The panel comes forward around what was just unlocked — the
+          // session roster — and stays open like any other opened panel:
+          // signing in is an arrival, not an errand to settle and leave.
+          expand();
+        },
+        () => {
+          if (signInAttempt.current !== attempt) return;
+          setSignInWait(undefined);
+          setSignInFailure("Sign-in did not finish. Try again when you’re ready.");
+          if (presentationOf() === PANEL_PRESENTATION.SLOT) expand();
+        },
+      );
+    },
+    [applyPresentation, cancelHover, expand, presentationOf, setSignInWait, signInWaitNow],
+  );
+
+  /**
+   * Takes the wait back. The main process withdraws the loopback and signs the
+   * attempt back out; the panel returns to the gate at once rather than
+   * waiting for that round trip, and the attempt's eventual rejection finds
+   * itself already spent.
+   */
+  const cancelSignIn = useCallback(() => {
+    if (signInWaitNow() === undefined) return;
+    signInAttempt.current += 1;
+    setSignInWait(undefined);
+    void window.sidecar.cancelSignIn();
+    if (presentationOf() === PANEL_PRESENTATION.SLOT) expand();
+  }, [expand, presentationOf, setSignInWait, signInWaitNow]);
 
   /** Shows or hides the menu bar status item. */
   const changeShowInMenuBar = useCallback(
@@ -1534,6 +1622,19 @@ export function App(): React.JSX.Element {
     modeGenerationOf,
   ]);
 
+  // The one greeting an unauthed launch gets: the panel opens on the sign-in
+  // gate exactly once, then behaves like any panel — Escape, the pointer, and
+  // the capsule all close it, and it stays a hover away. Locking it open would
+  // fight what a sidecar is; after the greeting leaves, the peek's face and
+  // "Sign in" label are what keep the reason Luke is idle on screen. Signing
+  // out later opens no new greeting — the panel is already forward, showing
+  // the gate the sign-out left behind.
+  useEffect(() => {
+    if (!accountGated || greeted.current) return;
+    greeted.current = true;
+    void changeMode(true);
+  }, [accountGated, changeMode]);
+
   // Silence is counted in stretches — one per unbroken run of muted-or-zero —
   // because that is the unit a "Got it" answers. The edge into silence is the
   // only thing counted; every reading inside one stretch leaves it alone.
@@ -1641,9 +1742,11 @@ export function App(): React.JSX.Element {
       if (stopSpeaking()) return;
       // Escape out of the slot is the entry's own way out, wherever the caret
       // happens to be: the slot is the only thing on screen, so there is nothing
-      // else it could mean.
+      // else it could mean. The sign-in wait borrows the same shape, so the
+      // same key withdraws whichever of the two is holding it.
       if (presentation === PANEL_PRESENTATION.SLOT) {
-        credentialsEntry.cancel();
+        if (signInWaitNow() !== undefined) cancelSignIn();
+        else credentialsEntry.cancel();
         return;
       }
       // Escape out of the composer leaves the shape and keeps the draft: a
@@ -1670,6 +1773,7 @@ export function App(): React.JSX.Element {
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [
+    cancelSignIn,
     credentialsEntry.cancel,
     changeMode,
     changeTab,
@@ -1682,6 +1786,7 @@ export function App(): React.JSX.Element {
     searchOpen,
     setSettingsView,
     settingsView,
+    signInWaitNow,
     stopSpeaking,
     tab,
     voiceStatus,
@@ -1870,7 +1975,11 @@ export function App(): React.JSX.Element {
       data-capture={String(bootstrap.captureMode)}
       style={{
         ...notchStyle(display),
-        ...shapeHeightStyle(panelHeight, slotHeight, feedbackHeight),
+        ...shapeHeightStyle(
+          panelHeight,
+          signInWait !== undefined ? signInSlotHeight : slotHeight,
+          feedbackHeight,
+        ),
         ...captionSizeStyle(captionTextHeight, volumeHint, captionPadding),
       }}
     >
@@ -1886,6 +1995,8 @@ export function App(): React.JSX.Element {
           <PanelBody
             accountRequired={bootstrap.accountRequired}
             account={account ?? bootstrap.account}
+            onBeginSignIn={beginSignIn}
+            {...(signInFailure ? { signInFailure } : {})}
             list={list}
             view={sessionView}
             onViewChange={changeSessionView}
@@ -1927,7 +2038,22 @@ export function App(): React.JSX.Element {
 
       {/* The panel stood down to its field. It shares the expanded window, so
           standing down to it costs no more than the peek does. */}
-      <KeySlot control={credentials} source={slotSource} drawn={slotOpen} measure={slotElement} />
+      {/* The two shapes that borrow the slot never draw together: the gate and
+          the settings tab are never on screen at once, so whichever one is
+          holding the slot suppresses the other outright — a pill held through
+          an old exit must not resurface under the other's wait. */}
+      {signInWait === undefined ? (
+        <KeySlot control={credentials} source={slotSource} drawn={slotOpen} measure={slotElement} />
+      ) : null}
+      {credentialsEntry.entry === undefined ? (
+        /* The panel stood down to the sign-in it is waiting on. */
+        <SignInSlot
+          {...(signInWait ? { provider: signInWait } : {})}
+          drawn={slotOpen}
+          onCancel={cancelSignIn}
+          measure={signInSlotElement}
+        />
+      ) : null}
       {/* The panel stood down to the composer, on the same terms. */}
       <FeedbackSlot control={feedbackControl} drawn={feedbackOpen} measure={feedbackElement} />
       {/* Luke's own voice. Muted playback would defeat the point, so this is
@@ -1946,7 +2072,23 @@ export function App(): React.JSX.Element {
         voiceOpening={talkOpening}
         presentation={presentation}
         housingWidth={display.notch.housingWidth}
+        accountGated={accountGated}
       />
+
+      {/* The one signed-out Luke. Like the caption, he is a single element in
+          every state so the morph carries him instead of trading two copies:
+          over the gate's reserved box while the panel is up, and down to the
+          peek's strip — the wing spot the authed face holds — when it closes.
+          Keyed on the play so each gesture of the introduction cycle is a
+          fresh drawing, exactly as the wing remounts its own. */}
+      {accountGated ? (
+        <span className="sign-in-luke" aria-hidden="true">
+          <LukeFace
+            key={signInFace.play}
+            {...(signInFace.motion ? { motion: signInFace.motion } : {})}
+          />
+        </span>
+      ) : null}
 
       {/* Luke crossing his own panel to sign a control he moved. Drawn over
           everything, because it passes over the panel it is crossing, and

@@ -451,6 +451,50 @@
   gap: 7px;
 }
 
+/* The signed-in identity: the provider's picture of the person beside their
+   address, or our own glyph where no picture travelled. */
+.account-identity {
+  display: flex;
+  align-items: center;
+  flex-direction: row;
+  gap: 10px;
+}
+
+.account-avatar {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.account-avatar-fallback {
+  display: grid;
+  background: var(--raised);
+  color: var(--text-secondary);
+  place-items: center;
+}
+
+.account-avatar-fallback .settings-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.account-words {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Signing out is destructive the way deleting a key is — getting back in costs
+   a trip through the browser — so it says so on hover rather than sitting in
+   red beside the identity it would end. */
+.account-signout:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger-text);
+}
+
 /* Deleting a key is the one act in this panel that cannot be undone from inside
    it: nothing here can hand a key back, so a trash pressed by mistake costs a
    trip to the provider's own site. The trash asks instead of acting, and the

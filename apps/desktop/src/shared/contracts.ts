@@ -48,6 +48,11 @@ export type AccountSnapshot =
       status: typeof ACCOUNT_STATUS.SIGNED_IN;
       email: string;
       name?: string;
+      /**
+       * The provider's own avatar for the signed-in user, kept only when it
+       * lives on a host this build pins in the renderer's image policy.
+       */
+      pictureUrl?: string;
       provider: AccountProvider;
     };
 
@@ -351,6 +356,12 @@ export interface VoiceHotkeyState {
 export interface AppBridge {
   getBootstrap(): Promise<AppBootstrap>;
   beginSignIn(provider: AccountProvider): Promise<AccountSnapshot>;
+  /**
+   * Withdraws a sign-in still waiting on the browser. The attempt ends where
+   * it stands — the loopback closes and the account returns to signed-out —
+   * and a sign-in that already landed is left signed in.
+   */
+  cancelSignIn(): Promise<void>;
   signOut(): Promise<AccountSnapshot>;
   setExpanded(expanded: boolean, focus?: boolean): Promise<WindowMode>;
   setPointerInterception(interceptsPointer: boolean): void;
@@ -627,6 +638,7 @@ export interface AppBridge {
 export const channels = {
   bootstrap: "app:bootstrap",
   beginSignIn: "app:begin-sign-in",
+  cancelSignIn: "app:cancel-sign-in",
   signOut: "app:sign-out",
   accountChanged: "app:account-changed",
   setExpanded: "app:set-expanded",
