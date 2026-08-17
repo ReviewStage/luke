@@ -143,6 +143,23 @@
   --scroll-fade: 26px;
 }
 
+/* How every scroll container in the panel meets its bottom edge: content
+   dissolves into the surface over `--scroll-fade` rather than being sliced,
+   and the fade lifts as the last row arrives. A scroll timeline is exactly
+   the right tool: with nothing to scroll it never becomes active, so content
+   that fits is left alone without asking JavaScript whether it overflows.
+   Shared here because the session list and the settings tab must meet the
+   caption riding below them the same way. */
+@keyframes scroll-edge-fade {
+  from {
+    mask-image: linear-gradient(to bottom, #000 calc(100% - var(--scroll-fade)), transparent 100%);
+  }
+
+  to {
+    mask-image: linear-gradient(to bottom, #000 100%, transparent 100%);
+  }
+}
+
 .app-stage {
   /* Mirrors CAPSULE_SIDE_WIDTH and PEEK_SIDE_GROWTH in
      packages/sidecar-core/src/geometry.ts, so the drawn shapes match the window

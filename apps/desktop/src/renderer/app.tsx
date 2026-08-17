@@ -205,7 +205,12 @@ function useShapeHeight(): [(element: HTMLElement | null) => void, number | unde
     if (!element) return;
     const measure = () => setHeight(Math.ceil(element.getBoundingClientRect().height));
     const nextObserver = new ResizeObserver(measure);
-    nextObserver.observe(element);
+    // The border box, because that is the box the bounding rect reports: the
+    // caption's room arrives as padding on the panel, which grows the shape
+    // without ever touching the content box, and a content-box observer would
+    // sleep through it — leaving the surface and the caption's rest position
+    // sized to a height the panel no longer has.
+    nextObserver.observe(element, { box: "border-box" });
     observer.current = nextObserver;
     measure();
   }, []);
