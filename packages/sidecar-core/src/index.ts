@@ -162,6 +162,7 @@ export {
   type RealtimeVoiceSpeed,
 } from "./realtime-voice-settings";
 export {
+  announcementSummaryText,
   ATTENTION_SPEECH_SOURCE,
   type AttentionSpeech,
   attentionSpeechFromReviews,
@@ -207,6 +208,8 @@ export {
   issueContextEvents,
   issueContextText,
   issueTrackerDisconnectedEvents,
+  lastAnnouncementContextEvents,
+  lastAnnouncementContextText,
   SESSION_REFERENCE_WITHDRAWN_TEXT,
   sessionContextEvents,
   sessionContextText,

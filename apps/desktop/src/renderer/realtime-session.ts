@@ -22,6 +22,8 @@ import {
   issueContextText,
   issueToolAction,
   issueTrackerDisconnectedEvents,
+  lastAnnouncementContextEvents,
+  lastAnnouncementContextText,
   type NormalizedSession,
   type ObservedWorkspaceProject,
   outputSpeedUpdateEvents,
@@ -83,13 +85,14 @@ export const VOICE_IDLE_TIMEOUT_MS = 10 * 60_000;
 
 /**
  * The order context is flushed in, so a turn's items land the same way every
- * time: what Luke can see, then which session is under discussion, then where
- * he can create, then what he knows about himself, then what the tracker
- * lists.
+ * time: what Luke can see, then which session is under discussion, then what
+ * he last announced, then where he can create, then what he knows about
+ * himself, then what the tracker lists.
  */
 const CONTEXT_FLUSH_ORDER: readonly ContextItemKind[] = [
   CONTEXT_ITEM_KIND.SESSIONS,
   CONTEXT_ITEM_KIND.SESSION_REFERENCE,
+  CONTEXT_ITEM_KIND.LAST_ANNOUNCEMENT,
   CONTEXT_ITEM_KIND.WORKSPACE_PROJECTS,
   CONTEXT_ITEM_KIND.APP_GUIDE,
   CONTEXT_ITEM_KIND.ISSUES,
@@ -1226,6 +1229,25 @@ export class RealtimeVoiceSession {
       CONTEXT_ITEM_KIND.SESSION_REFERENCE,
       SESSION_REFERENCE_WITHDRAWN_TEXT,
       (itemId) => sessionReferenceWithdrawnEvents(itemId),
+    );
+  }
+
+  /**
+   * Tells the conversation what the most recent announcement said. The words
+   * were often said on Luke's own speak-only call — the very call the
+   * talk-key press tears down on its way here — or only shown as the notice
+   * popup, so without this the developer's call is asked "what did you just
+   * say?" by someone it never said anything to. Context on the roster's own
+   * terms: remembered here, flushed only at a developer-opened turn, and
+   * carrying the same bounded payload the announcement already traveled as —
+   * the words alone, never an identity, which [session under discussion]
+   * carries beside it.
+   */
+  updateLastAnnouncement(speech: AttentionSpeech): void {
+    const text = lastAnnouncementContextText(speech);
+    if (text === undefined) return;
+    this.#rememberContext(CONTEXT_ITEM_KIND.LAST_ANNOUNCEMENT, text, (itemId) =>
+      lastAnnouncementContextEvents(speech, itemId),
     );
   }
 

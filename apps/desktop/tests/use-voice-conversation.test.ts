@@ -15,6 +15,7 @@ import {
   carriedSessionIdentity,
   evaluatorSummaries,
   FIXTURE_SPEAKING_CAPTION,
+  latestSpeech,
   latestSpeechReference,
   liveSpeedApplies,
   lukeCaptionToShow,
@@ -294,6 +295,19 @@ test("the newest mention is what a bare 'that chat' points back at", () => {
   });
   // An empty batch moves the reference not at all.
   assert.equal(latestSpeechReference([]), undefined);
+});
+
+test("the newest announcement's words are what 'what did you just say?' points back at", () => {
+  // The same pick the reference makes, carrying the whole speech: the
+  // reference answers which session, this answers what was said, and the two
+  // must never come from different items of one batch.
+  const older = { ...speech(ATTENTION_SPEECH_SOURCE.STATUS_EDGE, "checkout"), decidedAt: 1_000 };
+  const newest = { ...speech(ATTENTION_SPEECH_SOURCE.EVALUATOR, "payments"), decidedAt: 3_000 };
+  const newer = { ...speech(ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST, "schema"), decidedAt: 2_000 };
+
+  assert.equal(latestSpeech([older, newest, newer]), newest);
+  // An empty batch keeps whatever announcement already stands.
+  assert.equal(latestSpeech([]), undefined);
 });
 
 test("a carried act aims the reference at its session; a creation aims at none", () => {
