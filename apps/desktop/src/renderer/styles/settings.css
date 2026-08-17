@@ -1,7 +1,9 @@
 /* The settings tab: pages of rows, credentials, and the controls that write them. */
 
 /* Scrolls on the same terms as the session list: contained, never chaining out
-   to the root, with the tab bar left outside the scrolling box. */
+   to the root, with the tab bar left outside the scrolling box, and dissolving
+   at its foot through the same shared fade — a page taller than the panel must
+   melt into the surface above Luke's caption, not be sliced off against it. */
 .settings {
   display: flex;
   min-height: 0;
@@ -13,6 +15,8 @@
   overscroll-behavior: contain;
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
   scrollbar-width: thin;
+  animation: scroll-edge-fade linear both;
+  animation-timeline: scroll(self block);
 }
 
 .settings-section {
