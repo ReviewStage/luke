@@ -4,7 +4,9 @@
  * Luke should have handled better. Both travel the same way — typed in the
  * panel, carried by the main process to one fixed endpoint, and forwarded from
  * there as email to the founders. Nothing observed ever rides along: a
- * submission holds only what the user typed and the screenshots they chose.
+ * submission holds only what the composer's fields showed the user — their
+ * words, the signature those fields started with from their own signed-in
+ * account and left theirs to edit or clear, and the screenshots they chose.
  */
 export const FEEDBACK_KIND = {
   FEEDBACK: "feedback",

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  accountSignature,
   type FeedbackEntry,
   feedbackImageUrl,
   freshFeedbackEntry,
@@ -8,6 +9,7 @@ import {
   openedFeedbackEntry,
 } from "../src/renderer/feedback-entry";
 import { IMAGE_INTAKE, imageIntake, recodedImageName } from "../src/renderer/feedback-images";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "../src/shared/contracts";
 import { FEEDBACK_KIND, FEEDBACK_LIMITS } from "../src/shared/feedback";
 
 function entry(overrides: Partial<FeedbackEntry> = {}): FeedbackEntry {
@@ -84,6 +86,58 @@ test("a note mid-send is not touched by an open", () => {
 
   assert.equal(opened.drafted, false);
   assert.equal(opened.entry, undefined);
+});
+
+test("a signed-in account signs a fresh note; signed out, it starts unsigned", () => {
+  const signature = accountSignature({
+    status: ACCOUNT_STATUS.SIGNED_IN,
+    email: "ada@example.com",
+    name: "Ada",
+    provider: ACCOUNT_PROVIDER.GITHUB,
+  });
+  assert.deepEqual(signature, { name: "Ada", email: "ada@example.com" });
+  assert.deepEqual(freshFeedbackEntry(FEEDBACK_KIND.FEEDBACK, true, signature), {
+    ...freshFeedbackEntry(FEEDBACK_KIND.FEEDBACK, true),
+    name: "Ada",
+    email: "ada@example.com",
+  });
+
+  // An account without a name still signs with its address.
+  assert.deepEqual(
+    accountSignature({
+      status: ACCOUNT_STATUS.SIGNED_IN,
+      email: "ada@example.com",
+      provider: ACCOUNT_PROVIDER.GOOGLE,
+    }),
+    { email: "ada@example.com" },
+  );
+
+  assert.equal(accountSignature(undefined), undefined);
+  assert.equal(accountSignature({ status: ACCOUNT_STATUS.SIGNED_OUT }), undefined);
+  assert.equal(accountSignature({ status: ACCOUNT_STATUS.SIGNING_IN }), undefined);
+});
+
+test("opening with nothing there starts the note signed with the account", () => {
+  const opened = openedFeedbackEntry(undefined, {
+    kind: FEEDBACK_KIND.FEEDBACK,
+    fromPanel: true,
+    signature: { name: "Ada", email: "ada@example.com" },
+  });
+
+  assert.equal(opened.entry?.name, "Ada");
+  assert.equal(opened.entry?.email, "ada@example.com");
+});
+
+test("a note already there keeps its fields as its author left them, cleared ones included", () => {
+  const cleared = entry({ message: "the capsule count is wrong", name: "", email: "" });
+  const opened = openedFeedbackEntry(cleared, {
+    kind: FEEDBACK_KIND.FEEDBACK,
+    fromPanel: true,
+    signature: { name: "Ada", email: "ada@example.com" },
+  });
+
+  assert.equal(opened.entry?.name, "");
+  assert.equal(opened.entry?.email, "");
 });
 
 test("a small screenshot in a native format rides untouched", () => {
