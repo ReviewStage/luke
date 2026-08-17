@@ -46,6 +46,21 @@ message, a control the provider advertised, or a new workspace, described
 below — sent through that provider's own documented endpoint and checked
 against the latest observed roster.
 
+The one registration Luke makes on top of that baseline is an observation
+hook for Claude Code, converged into `~/.claude/settings.json` at every
+launch beside whatever is already there. At each session's turn boundaries it
+writes a single fixed status token — never the conversation — into a spool
+under Luke's own application data, which is how a row can show a tool call
+holding for permission or settle the moment a session closes. The command is
+a guarded no-op wherever Luke is gone, and every session still observes from
+its transcript alone without it.
+
+Local sessions are also readable on request: ask Luke — out loud or typed —
+what a session did, said, or is stuck on, and he reads that session's own
+transcript on your machine (Claude Code sessions today) and answers from it.
+The read happens when you ask and is kept nowhere; see
+[Privacy](PRIVACY.md) for exactly what enters the conversation.
+
 ## Issue tracker support
 
 - Linear — reads the issues assigned to you after you supply a Linear personal

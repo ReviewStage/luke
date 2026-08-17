@@ -392,6 +392,8 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
               act.effort,
             ),
           [SESSION_TOOL_KIND.OPEN]: (act) => optionsRef.current.openSession(act.identity),
+          [SESSION_TOOL_KIND.READ_TRANSCRIPT]: (act) =>
+            window.sidecar.readSessionTranscript(act.identity),
         }),
       // The asks about Luke himself — a settings change, the panel shown —
       // behind the same gauntlet: validated against the guide before this is

@@ -912,3 +912,296 @@ test("falls back to the file's date when the tail carries no timestamp", async (
 
   assert.equal(observation?.observedAt, TEST_TIME - 5_000);
 });
+
+// ---------------------------------------------------------------------------
+// Hook-event refinement. Every test here layers a spool the observation hook
+// would have written over a transcript, because that is the arrangement in
+// production: the tail is always read, and the event only sharpens it.
+// ---------------------------------------------------------------------------
+
+async function temporaryHookSpool(t: TestContext): Promise<string> {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "luke-claude-spool-"));
+  t.after(async () => {
+    await fs.rm(directory, { recursive: true, force: true });
+  });
+  return directory;
+}
+
+async function writeHookEvent(
+  spoolDirectory: string,
+  providerSessionId: string,
+  event: string,
+  mtimeMs: number,
+): Promise<void> {
+  const filePath = path.join(spoolDirectory, `${providerSessionId}.json`);
+  await fs.writeFile(filePath, JSON.stringify({ event }));
+  await fs.utimes(filePath, mtimeMs / 1000, mtimeMs / 1000);
+}
+
+/** A transcript mid-turn: the assistant reached for a tool and has not returned. */
+function midTurnRecords(cwd: string, timestamp: string): Record<string, unknown>[] {
+  return [
+    {
+      type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
+      cwd,
+      timestamp,
+      message: {
+        stop_reason: "tool_use",
+        content: [{ type: TEST_CLAUDE_CONTENT_TYPE.TOOL_USE, name: "Bash" }],
+      },
+    },
+  ];
+}
+
+test("a permission prompt the transcript cannot show turns the row to waiting", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  const spool = await temporaryHookSpool(t);
+  // Mid-turn by every record: a tool call holding for permission writes
+  // nothing further, so without the event this session reads as working.
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-luke",
+    "held-for-permission",
+    midTurnRecords("/Users/test/luke", "2026-08-11T23:40:00.000Z"),
+    TEST_TIME - 5 * 60 * 1000,
+  );
+  await writeHookEvent(spool, "held-for-permission", "notification", TEST_TIME - 60_000);
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WAITING);
+  // The event also dates the session: the spool is written only by Luke's own
+  // script, so its clock cannot suffer the transcripts' bulk-touch problem.
+  assert.equal(observation?.observedAt, TEST_TIME - 60_000);
+});
+
+test("a session-end event settles a row the tail would leave waiting", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  const spool = await temporaryHookSpool(t);
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-luke",
+    "closed-session",
+    [
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:40:00.000Z",
+        message: { stop_reason: "end_turn", content: [] },
+      },
+    ],
+    TEST_TIME - 5 * 60 * 1000,
+  );
+  await writeHookEvent(spool, "closed-session", "session-end", TEST_TIME - 60_000);
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.COMPLETE);
+});
+
+test("a stop-failure event reports the error the tail was still suppressing", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  const spool = await temporaryHookSpool(t);
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-luke",
+    "gave-up",
+    [
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.SYSTEM,
+        subtype: "api_error",
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:40:00.000Z",
+        // Mid-backoff bookkeeping, which on its own is rightly suppressed.
+        retryAttempt: 1,
+        maxRetries: 10,
+        error: { message: "rate limited" },
+      },
+    ],
+    TEST_TIME - 5 * 60 * 1000,
+  );
+  await writeHookEvent(spool, "gave-up", "stop-failure", TEST_TIME - 60_000);
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.ERROR);
+});
+
+test("a stop event keeps a finished turn waiting past the freshness decay", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  const spool = await temporaryHookSpool(t);
+  // Twenty minutes past the last record, the tail alone decays to unknown.
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-luke",
+    "still-waiting",
+    [
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:25:00.000Z",
+        message: { stop_reason: "end_turn", content: [] },
+      },
+    ],
+    TEST_TIME - 20 * 60 * 1000,
+  );
+  await writeHookEvent(spool, "still-waiting", "stop", TEST_TIME - 60_000);
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    activeSessionFreshnessMs: 15 * 60 * 1000,
+    claudeHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60 * 60 * 1000,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WAITING);
+});
+
+test("an event the transcript has moved past refines nothing", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  const spool = await temporaryHookSpool(t);
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-luke",
+    "moved-on",
+    midTurnRecords("/Users/test/luke", "2026-08-11T23:44:00.000Z"),
+    TEST_TIME - 60_000,
+  );
+  // A stop from a minute before the transcript's last record: hooks were off,
+  // or the write raced. The session is demonstrably mid-turn again.
+  await writeHookEvent(spool, "moved-on", "stop", TEST_TIME - 2 * 60 * 1000);
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WORKING);
+  assert.equal(observation?.observedAt, Date.parse("2026-08-11T23:44:00.000Z"));
+});
+
+test("a stop event does not unsay a result the transcript recorded", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  const spool = await temporaryHookSpool(t);
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-luke",
+    "print-run",
+    [
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.RESULT,
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:44:00.000Z",
+      },
+    ],
+    TEST_TIME - 60_000,
+  );
+  // Stop fires beside the result record; the settled outcome outranks it.
+  await writeHookEvent(spool, "print-run", "stop", TEST_TIME - 59_000);
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.COMPLETE);
+});
+
+test("a session-start event bumps the clock without deciding the status", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  const spool = await temporaryHookSpool(t);
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-luke",
+    "resumed",
+    [
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:25:00.000Z",
+        message: { stop_reason: "end_turn", content: [] },
+      },
+    ],
+    TEST_TIME - 20 * 60 * 1000,
+  );
+  await writeHookEvent(spool, "resumed", "session-start", TEST_TIME - 60_000);
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    activeSessionFreshnessMs: 15 * 60 * 1000,
+    claudeHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60 * 60 * 1000,
+  });
+  const [observation] = await adapter.observe();
+
+  // Freshened by the resume, the tail's own verdict — a turn that ended is
+  // holding for the developer — stands again.
+  assert.equal(observation?.status, SESSION_STATUS.WAITING);
+  assert.equal(observation?.observedAt, TEST_TIME - 60_000);
+});
+
+test("a spool that cannot be read costs only the refinement", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-luke",
+    "unrefined",
+    midTurnRecords("/Users/test/luke", "2026-08-11T23:44:00.000Z"),
+    TEST_TIME - 60_000,
+  );
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    hookEventsDirectory: () => path.join(claudeHome, "no-such-spool"),
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WORKING);
+});
+
+test("a notification the transcript has answered stands down at once", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  const spool = await temporaryHookSpool(t);
+  // The permission was granted and the tool ran: a record newer than the
+  // notification, though within the tolerance the other events enjoy.
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-luke",
+    "granted",
+    midTurnRecords("/Users/test/luke", "2026-08-11T23:44:59.000Z"),
+    TEST_TIME - 1_000,
+  );
+  await writeHookEvent(spool, "granted", "notification", TEST_TIME - 3_000);
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WORKING);
+});

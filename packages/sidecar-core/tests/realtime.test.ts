@@ -39,6 +39,7 @@ import {
   realtimeClientSecretRequest,
   realtimeCredentialFromResponse,
   realtimeCredentialIsUsable,
+  SESSION_LOCATION,
   SESSION_STATUS,
   sessionContextEvents,
   sessionContextText,
@@ -200,7 +201,7 @@ test("a refused delete is read back with the event it names", () => {
 
 test("the standing instructions count the tools from the table", () => {
   const instructions = realtimeInstructions();
-  assert.equal(Object.keys(REALTIME_TOOLS).length, 12);
+  assert.equal(Object.keys(REALTIME_TOOLS).length, 13);
   assert.match(instructions, new RegExp(`You have ${spokenRealtimeToolCount()} tools:`));
 });
 
@@ -682,7 +683,7 @@ test("a resting-point update is voiced just like a blocking one", () => {
   assert.equal(speech[0]?.disposition, ATTENTION_DISPOSITION.SPEAK_AT_TURN_END);
 });
 
-test("the session is minted with the twelve acts and nothing wider", () => {
+test("the session is minted with the thirteen acts and nothing wider", () => {
   const config = realtimeSessionConfig();
 
   assert.deepEqual(
@@ -693,6 +694,7 @@ test("the session is minted with the twelve acts and nothing wider", () => {
       REALTIME_TOOL.OPEN_SESSION,
       REALTIME_TOOL.REQUEST_SESSION_NOTICE,
       REALTIME_TOOL.WITHDRAW_SESSION_NOTICE,
+      REALTIME_TOOL.READ_SESSION_TRANSCRIPT,
       REALTIME_TOOL.CREATE_WORKSPACE,
       REALTIME_TOOL.ADD_WORKSPACE_AGENT,
       REALTIME_TOOL.UPDATE_ISSUE_STATE,
@@ -920,6 +922,17 @@ test("a tool call can act only on a session Luke was shown, doing what it advert
     },
   );
 
+  // A transcript read carries the identity and nothing else — the main
+  // process locates the file in its own provider home — and is offered only
+  // for a session on this machine.
+  assert.deepEqual(
+    sessionToolAction(messageCall(`{${identity}}`, REALTIME_TOOL.READ_SESSION_TRANSCRIPT), roster),
+    {
+      kind: "read-transcript",
+      identity: { providerId: "devin", providerSessionId: "devin-1" },
+    },
+  );
+
   // Every way a call can point somewhere Luke was not shown is a refusal with
   // a reason he can say aloud, never a request that reaches a bridge.
   const refusals = [
@@ -959,6 +972,27 @@ test("a tool call can act only on a session Luke was shown, doing what it advert
     [quiet],
   );
   assert.equal(nowhereToOpen.kind, "refused");
+
+  // A cloud session's conversation lives with its provider, not on this
+  // machine, so a transcript read is refused rather than guessed at.
+  const cloudSession = normalizeSession(
+    { id: "devin", displayName: "Devin" },
+    {
+      providerSessionId: "devin-9",
+      title: "Devin: cloud",
+      status: SESSION_STATUS.WAITING,
+      observedAt: DECIDED_AT,
+      location: SESSION_LOCATION.CLOUD,
+    },
+  );
+  const nothingToRead = sessionToolAction(
+    messageCall(
+      '{"provider_id":"devin","provider_session_id":"devin-9"}',
+      REALTIME_TOOL.READ_SESSION_TRANSCRIPT,
+    ),
+    [cloudSession],
+  );
+  assert.equal(nothingToRead.kind, "refused");
 });
 
 const OFFERED_PROJECT: ObservedWorkspaceProject = {
