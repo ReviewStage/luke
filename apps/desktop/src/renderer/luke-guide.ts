@@ -510,7 +510,14 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "with its state, narrowable to all, local, " +
         "cloud, or one provider, and orderable by urgency (what needs the developer first) or " +
         "recency (what moved last first) — by its options button, or by the same ask that shows " +
-        "the tab; a row can be opened, messaged, or controlled where its " +
+        "the tab. The list is searchable by hand alone: the magnifier beside the options " +
+        "button, or Command-F while the panel has the keyboard, opens a field that keeps only " +
+        "rows saying every typed word in their title, status line, branch, repository, " +
+        "workspace, agent, or model, marks where the words landed, and counts what it left; a " +
+        "search that matches nothing says so — offering the matches a filter is hiding rather " +
+        "than pretending there are none — Escape clears the query and then closes the field, " +
+        "no spoken ask can search, and no search survives the panel closing. " +
+        "A row can be opened, messaged, or controlled where its " +
         "provider allows, and Luke's own composer at the foot of the list takes a typed ask. " +
         "Where a provider nests chats in a workspace — Conductor today — each " +
         "chat is its own row: a workspace holding several draws them inside one tray named by " +

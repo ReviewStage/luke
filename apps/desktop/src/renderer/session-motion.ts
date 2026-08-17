@@ -102,9 +102,19 @@ interface ReorderList {
    */
   groupAttribute?: string;
   /** The element's layout position along the axis the list stacks in. */
-  offset: (element: HTMLElement) => number;
+  offset: (element: HTMLElement, container: HTMLElement) => number;
   /** A transform moving an element by so many pixels along that axis. */
   translate: (px: number) => string;
+  /**
+   * The container's own seat along that axis, when the list wants a shove of
+   * the whole box run as one travel. Content arriving above the session list —
+   * the search field — moves the container out from under every row at once;
+   * rows measured within the container read that as stillness, and the
+   * container itself makes the one move. Rows translated one by one would
+   * cross the scrollport's top edge and be clipped mid-flight, which is why
+   * the box travels rather than its contents.
+   */
+  origin?: (container: HTMLElement) => number;
   /**
    * Whether an arrival also travels in from one `--row-fan` step back, the way
    * the row stack arrives. The wing's marks do not: an arriving mark already
@@ -114,12 +124,18 @@ interface ReorderList {
   arrivesFromFan: boolean;
 }
 
-/** The session list: rows stacked top to bottom, arriving the way the stack arrives. */
+/**
+ * The session list: rows stacked top to bottom, arriving the way the stack
+ * arrives. Rows are measured within their scroll container rather than from
+ * the shared offset parent, so the search field standing the container aside
+ * is the container's travel and never the rows'.
+ */
 const SESSION_LIST: ReorderList = {
   idAttribute: SESSION_ROW_ID_ATTRIBUTE,
   groupAttribute: WORKSPACE_TRAY_ID_ATTRIBUTE,
-  offset: (element) => element.offsetTop,
+  offset: (element, container) => element.offsetTop - container.offsetTop,
   translate: (px) => `translateY(${px}px)`,
+  origin: (container) => container.offsetTop,
   arrivesFromFan: true,
 };
 
@@ -137,7 +153,7 @@ const SESSION_LIST: ReorderList = {
  */
 const WING_STRIP: ReorderList = {
   idAttribute: WING_SLOT_ID_ATTRIBUTE,
-  offset: (element) => element.offsetLeft - (element.offsetParent?.clientWidth ?? 0),
+  offset: (element, _container) => element.offsetLeft - (element.offsetParent?.clientWidth ?? 0),
   translate: (px) => `translateX(${px}px)`,
   arrivesFromFan: false,
 };
@@ -225,6 +241,7 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
   const baseline = useRef<Map<string, number> | undefined>(undefined);
   const groupBaseline = useRef<Map<string, number> | undefined>(undefined);
   const baselineWidth = useRef<number | undefined>(undefined);
+  const baselineOrigin = useRef<number | undefined>(undefined);
   const wasLeaving = useRef<Set<string>>(new Set());
   const exitFades = useRef<Map<string, Animation>>(new Map());
 
@@ -237,6 +254,7 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
       baseline.current = undefined;
       groupBaseline.current = undefined;
       baselineWidth.current = undefined;
+      baselineOrigin.current = undefined;
       wasLeaving.current = new Set();
       exitFades.current.clear();
       return;
@@ -251,7 +269,7 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
       const id = element.getAttribute(list.idAttribute);
       if (id === null) continue;
       elements.set(id, element);
-      positions.set(id, list.offset(element));
+      positions.set(id, list.offset(element, container));
     }
 
     // The groups are slots too, measured in their own namespace: a group's
@@ -265,7 +283,7 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
         const id = element.getAttribute(list.groupAttribute);
         if (id === null) continue;
         groupElements.set(id, element);
-        groupPositions.set(id, list.offset(element));
+        groupPositions.set(id, list.offset(element, container));
       }
     }
 
@@ -307,12 +325,23 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
       baselineWidth.current !== undefined &&
       Math.abs(width - baselineWidth.current) > TRAVEL_EPSILON;
     baselineWidth.current = width;
+    // The container's own seat, for a list that asked to ride its shoves as
+    // one object. The first measurement is a baseline like every other: a
+    // freshly built list simply is where it is.
+    const origin = list.origin?.(container);
+    const originTravel =
+      origin !== undefined && baselineOrigin.current !== undefined
+        ? baselineOrigin.current - origin
+        : 0;
+    baselineOrigin.current = origin;
+    const containerShoved = Math.abs(originTravel) > TRAVEL_EPSILON;
     if (
       plan.travels.size === 0 &&
       groupPlan.travels.size === 0 &&
       plan.arrivals.length === 0 &&
       departed.length === 0 &&
-      returned.length === 0
+      returned.length === 0 &&
+      !containerShoved
     ) {
       return;
     }
@@ -376,6 +405,12 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
           });
         }
       }
+      // The shove itself: the box makes the one move its contents were
+      // spared, springing from where it sat to where it now is. Rows and
+      // trays ride it — any travel of their own below is movement within it —
+      // and nothing is ever drawn past the box's own edges, because the
+      // scrollport clips in the box's coordinates and moves with it.
+      if (containerShoved && elementVisible(container)) travel(container, originTravel, 0);
       for (const [id, from] of groupPlan.travels) {
         const element = groupElements.get(id);
         if (element !== undefined && elementVisible(element)) travel(element, from, 0);

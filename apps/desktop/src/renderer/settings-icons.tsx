@@ -225,6 +225,16 @@ function SliderMarks(): React.JSX.Element {
   );
 }
 
+/** A magnifier: the list read for the rows that say the typed words. */
+export function SearchIcon(): React.JSX.Element {
+  return (
+    <Glyph className="search-glyph">
+      <circle cx="10.6" cy="10.6" r="6.1" />
+      <path d="M15.2 15.2L20.2 20.2" />
+    </Glyph>
+  );
+}
+
 /**
  * Two sliders rather than a funnel: the control it opens holds an order as well
  * as a filter, and a funnel would promise only the second.

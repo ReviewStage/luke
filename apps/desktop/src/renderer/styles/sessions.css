@@ -21,6 +21,43 @@
   gap: 12px;
 }
 
+/* The two ways of narrowing the list, seated together at the header's end so
+   `space-between` keeps reading tab bar on the left, qualifiers on the right. */
+.header-controls {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+}
+
+/* The search button is the options button without a word: an icon that opens
+   a field, lit while the field is open so the control and its effect cannot be
+   read apart. */
+.search-button {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: 10px;
+  background: var(--raised);
+  color: var(--text-secondary);
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.search-button:hover,
+.search-button[data-active="true"] {
+  background: var(--raised-strong);
+  color: var(--text-primary);
+}
+
+.search-button .search-glyph {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
 .options-button {
   display: inline-flex;
   min-height: 28px;
@@ -246,6 +283,130 @@
   box-shadow: inset 0 0 0 1px var(--selected-edge);
   background: var(--selected);
   color: var(--text-primary);
+}
+
+/* The search field: the same pill every composer draws, holding a question
+   about the list instead of words for it, so it sits above the rows it
+   narrows. In the flow rather than floating — unlike the options sheet it is
+   not a menu to be put away by its own choice, and the surface follows the
+   measured height wherever content moves it. It arrives on the sheet's own
+   short curve — transform and opacity only, on the shared tokens — while the
+   list it shoved springs aside as one object (`session-motion` runs that
+   travel), so the top row slides out from beneath the arriving pill. The
+   pill is layered above that travel and its ground is the surface's own
+   opaque black — which over a black surface is exactly the recessed well the
+   composers draw — so a row mid-slide passes under it, never through it. */
+.session-search {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 9px;
+  padding: 4px 6px 4px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--surface-fill);
+  cursor: text;
+  animation: search-enter var(--duration-quick) var(--motion-exit) both;
+  transition: border-color var(--duration-hover) ease;
+}
+
+@keyframes search-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Focus answers in the panel's own neutral voice: searching is neither a
+   message to a session (the working blue) nor the developer's half of a
+   conversation (their green) — it is looking, and looking has no state. The
+   edge alone answers; the ground has to stay the surface's opaque black, or a
+   row travelling beneath a focused pill would show through it. */
+.session-search:focus-within {
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.session-search .search-glyph {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+}
+
+/* The field itself is bare: the pill around it is the drawn edge. */
+.session-search-input {
+  min-width: 0;
+  flex: 1;
+  padding: 5px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 11.5px;
+  outline: none;
+}
+
+.session-search-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* What the query left, said beside it: the count is the pill's honesty about
+   how far it has narrowed the list the capsule is still counting in full. */
+.session-search-count {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* The way out of a held query without leaving the field. Colour is the whole
+   hover: the button must not grow or move inside an element that reflows the
+   pill. Padding is zeroed by hand — the engine's own button padding is
+   asymmetric, and in a 20px disc it reads as the glyph leaning to one side. */
+.session-search-clear {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--text-tertiary);
+  place-items: center;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.session-search-clear:hover {
+  background: rgba(255, 255, 255, 0.22);
+  color: var(--text-primary);
+}
+
+.session-search-clear .icon-button-glyph {
+  width: 10px;
+  height: 10px;
+}
+
+/* Where the query's words landed, so a row says why it matched. A wash rather
+   than the engine's yellow: the mark identifies text, and the row's own
+   colours keep saying everything else. No padding — these lines ellipsize,
+   and a mark that widened its text would push the truncation around as the
+   query changed. */
+.row-match {
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.16);
+  color: inherit;
 }
 
 /* The one scroll container in the app. The root stays `overflow: clip` so a

@@ -17,6 +17,7 @@ import {
   type SessionListRun,
   type SessionView,
   sessionListRuns,
+  sessionRunKeys,
 } from "./session-model";
 import {
   LEAVING_ATTRIBUTE,
@@ -34,6 +35,13 @@ import {
   SessionsPanel,
   WorkspaceGlyph,
 } from "./session-parts";
+import {
+  Highlighted,
+  SearchEmptyState,
+  SessionSearch,
+  SessionSearchButton,
+  widenedView,
+} from "./session-search";
 import { SendIcon, StopIcon } from "./settings-icons";
 import { SettingsPanel, type SettingsPanelProps } from "./settings-panel";
 
@@ -285,6 +293,7 @@ function SessionRow({
   now,
   leaving,
   inWorkspaceTray = false,
+  highlight,
   onOpen,
   writes,
 }: {
@@ -294,6 +303,8 @@ function SessionRow({
   leaving: boolean;
   /** Whether this row is drawn inside its workspace's tray. */
   inWorkspaceTray?: boolean;
+  /** The search's words, marked on the row's lines so it says why it matched. */
+  highlight?: readonly string[] | undefined;
   onOpen: (session: DisplaySession) => void;
   writes: SessionWriteHandlers;
 }): React.JSX.Element {
@@ -332,7 +343,9 @@ function SessionRow({
         {session.location === SESSION_LOCATION.CLOUD ? <CloudBadge /> : null}
       </span>
       <span className="row-copy">
-        <strong>{title}</strong>
+        <strong>
+          <Highlighted text={title} tokens={highlight} />
+        </strong>
         <small className="row-doing">
           {session.urgency === SESSION_URGENCY.WORKING ? (
             <span className="row-spinner" aria-hidden="true" />
@@ -342,13 +355,15 @@ function SessionRow({
             {session.detail === session.label ? null : (
               <span className="visually-hidden">{session.label}. </span>
             )}
-            {session.detail}
+            <Highlighted text={session.detail} tokens={highlight} />
           </span>
         </small>
         {place ? (
           <small className="row-place">
             {session.branch ? <BranchGlyph /> : null}
-            <span>{place}</span>
+            <span>
+              <Highlighted text={place} tokens={highlight} />
+            </span>
           </small>
         ) : null}
       </span>
@@ -426,9 +441,12 @@ export function runDrawsTray(run: SessionListRun): boolean {
  */
 function SessionRun({
   run,
+  highlight,
   children,
 }: {
   run: SessionListRun;
+  /** The search's words, marked on the tray's own header lines too. */
+  highlight?: readonly string[] | undefined;
   children: React.ReactNode;
 }): React.JSX.Element {
   const tray = runDrawsTray(run);
@@ -449,10 +467,16 @@ function SessionRun({
           never reseat the keyed rows beside it. */}
       {tray ? (
         <header className="workspace-tray-header">
-          <span className="workspace-tray-name">{run.workspace?.name}</span>
+          <span className="workspace-tray-name">
+            <Highlighted text={run.workspace?.name ?? ""} tokens={highlight} />
+          </span>
           <span className="workspace-tray-meta">
             <WorkspaceGlyph />
-            {run.repository ? <span>{run.repository}</span> : null}
+            {run.repository ? (
+              <span>
+                <Highlighted text={run.repository} tokens={highlight} />
+              </span>
+            ) : null}
           </span>
         </header>
       ) : null}
@@ -489,6 +513,13 @@ export interface PanelBodyProps {
   offerOptions: boolean;
   optionsOpen: boolean;
   onOptionsToggle: () => void;
+  /** Whether there is anything to search, on the same terms as the options. */
+  offerSearch: boolean;
+  searchOpen: boolean;
+  /** Opens the field focused, or closes it and lets go of its query. */
+  onSearchToggle: () => void;
+  /** The field's own way out — Escape on an empty query — which also clears. */
+  onSearchClose: () => void;
   tab: PanelTab;
   onTabChange: (tab: PanelTab) => void;
   /**
@@ -512,21 +543,35 @@ export function PanelBody({
   offerOptions,
   optionsOpen,
   onOptionsToggle,
+  offerSearch,
+  searchOpen,
+  onSearchToggle,
+  onSearchClose,
   tab,
   onTabChange,
   settings,
 }: PanelBodyProps): React.JSX.Element {
   const sessionListRef = useSessionReorderMotion();
   const rows = useRoster(list.sessions, sessionListRef);
+  const highlight = list.search?.tokens;
+  const runs = sessionListRuns(rows.map((row) => row.item));
+  const runKeys = sessionRunKeys(runs, rows);
   return (
     <div className="body">
-      {/* The tab bar says what you are looking at; the options button says how
-          it is being shown. One line, because the second is only ever a
+      {/* The tab bar says what you are looking at; the buttons beside it say
+          how it is being shown. One line, because the second is only ever a
           qualifier on the first. */}
       <div className="panel-header">
         <TabBar tab={tab} onTabChange={onTabChange} />
-        {offerOptions ? (
-          <SessionOptionsButton list={list} open={optionsOpen} onToggle={onOptionsToggle} />
+        {offerSearch || offerOptions ? (
+          <span className="header-controls">
+            {offerSearch ? (
+              <SessionSearchButton open={searchOpen} onToggle={onSearchToggle} />
+            ) : null}
+            {offerOptions ? (
+              <SessionOptionsButton list={list} open={optionsOpen} onToggle={onOptionsToggle} />
+            ) : null}
+          </span>
         ) : null}
       </div>
       {tab === PANEL_TAB.SETTINGS ? (
@@ -536,23 +581,36 @@ export function PanelBody({
           {offerOptions && optionsOpen ? (
             <SessionOptions list={list} view={view} onViewChange={onViewChange} />
           ) : null}
+          {searchOpen ? (
+            <SessionSearch
+              list={list}
+              view={view}
+              onViewChange={onViewChange}
+              onClose={onSearchClose}
+              onEngagedChange={onAskEngaged}
+            />
+          ) : null}
           <div className="session-list" ref={sessionListRef}>
             {rows.length === 0 ? (
-              <EmptyState />
+              list.search ? (
+                <SearchEmptyState
+                  query={view.query}
+                  beyondFilter={list.search.beyondFilter}
+                  onWiden={() => onViewChange(widenedView(view))}
+                />
+              ) : (
+                <EmptyState />
+              )
             ) : (
               // Runs are read over the drawn order, leaving rows and all: a
               // fading chat still holds its slot in its tray, and the tray
-              // may not close around it until it has gone.
-              sessionListRuns(rows.map((row) => row.item)).map((run) => {
+              // may not close around it until it has gone. Keys are resolved
+              // over the whole list at once, because a run's key depends on
+              // the other runs of its workspace.
+              runs.map((run, at) => {
                 const tray = runDrawsTray(run);
-                const lead = rows[run.indexes[0] ?? 0];
-                // A workspace run is keyed by the workspace however many chats
-                // it holds, so crossing between one and several keeps the same
-                // wrapper — and the rows inside it — mounted. An ungrouped
-                // session is its own run, keyed by itself.
-                const runKey = run.workspace?.id ?? lead?.item.id ?? "";
                 return (
-                  <SessionRun key={runKey} run={run}>
+                  <SessionRun key={runKeys[at]} run={run} highlight={highlight}>
                     {run.indexes.map((index) => {
                       const row = rows[index];
                       return row ? (
@@ -563,6 +621,7 @@ export function PanelBody({
                           now={now}
                           leaving={row.leaving}
                           inWorkspaceTray={tray}
+                          highlight={highlight}
                           onOpen={onOpenSession}
                           writes={writes}
                         />

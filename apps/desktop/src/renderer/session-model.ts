@@ -73,17 +73,21 @@ export type SessionSort = SessionListSort;
 export interface SessionView {
   filter: SessionFilter;
   sort: SessionSort;
+  /** The words the list is searched by; empty when nothing is being searched. */
+  query: string;
 }
 
 /**
  * What the panel opens on, every time. A filter is not remembered across a
  * closing, because a remembered one could hide the very session the capsule is
  * reporting; the order is not remembered with it, so the top row keeps matching
- * the mark the capsule kept.
+ * the mark the capsule kept. A search is forgotten on the same terms — it is a
+ * question about the list as it was, not a standing way of viewing it.
  */
 export const DEFAULT_SESSION_VIEW: SessionView = {
   filter: SESSION_FILTER.ALL,
   sort: SESSION_SORT.URGENCY,
+  query: "",
 };
 
 /** One provider-advertised action, exactly as the adapter advertised it. */
@@ -155,6 +159,20 @@ export interface SessionFilterOption {
   providerId?: string;
 }
 
+/** What became of the query, reported so no narrowing is ever silent. */
+export interface SessionSearchOutcome {
+  /** The query's words, lowercased — what each row was actually read against. */
+  tokens: readonly string[];
+  /** How many sessions the query was read against: the filtered set. */
+  searched: number;
+  /**
+   * Sessions the query matches that the filter is hiding. The count is what
+   * lets an emptied search offer the matches instead of implying there are
+   * none anywhere.
+   */
+  beyondFilter: number;
+}
+
 export interface ArrangedSessions {
   /** The rows the list draws, narrowed and ordered. */
   sessions: readonly DisplaySession[];
@@ -163,6 +181,8 @@ export interface ArrangedSessions {
   /** The filter actually in force, which is All whenever the chosen one emptied. */
   filter: SessionFilter;
   options: readonly SessionFilterOption[];
+  /** Present only while a query is in force. */
+  search?: SessionSearchOutcome;
 }
 
 export interface ProviderTally {
@@ -220,6 +240,77 @@ function sessionUrgency(session: NormalizedSession): SessionUrgency {
   if (session.status === SESSION_STATUS.COMPLETE) return SESSION_URGENCY.COMPLETE;
   if (session.status === SESSION_STATUS.UNKNOWN) return SESSION_URGENCY.UNKNOWN;
   return SESSION_URGENCY.WORKING;
+}
+
+/**
+ * A query read into the words it asks for: lowercased and split on whitespace,
+ * because matching is case-blind and every word must be found somewhere. A
+ * blank query has no words, which is what makes it no search at all.
+ */
+function searchTokens(query: string): readonly string[] {
+  return query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((token) => token.length > 0);
+}
+
+/**
+ * The lines a query is read against: everything the row itself can say — its
+ * title, the sentence under it, the branch and repository, the workspace it is
+ * a chat of — plus identifiers the row does not always spend a line on: the
+ * agent's name and its model, kept on the mark's hover, and a chat's own name,
+ * which a lone chat cedes its title line to its workspace for. Those still
+ * find the session — each is a name the provider's own surface knows it by —
+ * so a row can match without a mark to show for it; the marks only ever land
+ * on the lines the row draws.
+ */
+function searchableLines(session: DisplaySession): readonly string[] {
+  const lines = [
+    session.title,
+    session.detail,
+    session.branch,
+    session.repository,
+    session.workspace?.name,
+    session.provider,
+    session.model,
+  ];
+  return lines.filter((line): line is string => line !== undefined);
+}
+
+/** Every word somewhere on the row: words narrow, they never widen. */
+function matchesQuery(session: DisplaySession, tokens: readonly string[]): boolean {
+  const lines = searchableLines(session).map((line) => line.toLowerCase());
+  return tokens.every((token) => lines.some((line) => line.includes(token)));
+}
+
+/** One stretch of a drawn line that a query's word landed on. */
+export interface MatchRange {
+  start: number;
+  end: number;
+}
+
+/**
+ * Where a query's words sit in one drawn line, so the row can show why it
+ * matched. Every occurrence of every word is taken and overlapping stretches
+ * are merged, because two words landing on one stretch of text should read as
+ * one mark rather than nested ones.
+ */
+export function matchRanges(text: string, tokens: readonly string[]): readonly MatchRange[] {
+  const lowered = text.toLowerCase();
+  const found: MatchRange[] = [];
+  for (const token of tokens) {
+    for (let from = lowered.indexOf(token); from !== -1; from = lowered.indexOf(token, from + 1)) {
+      found.push({ start: from, end: from + token.length });
+    }
+  }
+  found.sort((first, second) => first.start - second.start || first.end - second.end);
+  const merged: MatchRange[] = [];
+  for (const range of found) {
+    const last = merged.at(-1);
+    if (last && range.start <= last.end) last.end = Math.max(last.end, range.end);
+    else merged.push({ ...range });
+  }
+  return merged;
 }
 
 /** Most urgent first, and within one state the one that moved most recently. */
@@ -404,6 +495,39 @@ export interface SessionListRun {
   indexes: readonly number[];
 }
 
+/**
+ * One React key per run. A workspace run is keyed by the workspace so that a
+ * tray crossing between one chat and several keeps the same wrapper — and the
+ * rows inside it, and their half-typed drafts — mounted. But a workspace can
+ * briefly hold two runs at once: a chat fading out of a narrowed list keeps
+ * the slot it was seen in, and a stranger's slot between it and its living
+ * siblings splits the workspace in two. Two wrappers sharing a key would make
+ * React track one and abandon the other's DOM — a blank row left in the list —
+ * so the workspace's key belongs to one run at a time: the first with a
+ * living row, whose drafts are the thing worth keeping, or the first outright
+ * while every chat is leaving, so an undisturbed fade keeps its wrapper. Any
+ * other run of that workspace is keyed by its lead session instead.
+ */
+export function sessionRunKeys(
+  runs: readonly SessionListRun[],
+  rows: readonly { item: { id: string }; leaving: boolean }[],
+): readonly string[] {
+  const owner = new Map<string, { at: number; living: boolean }>();
+  runs.forEach((run, at) => {
+    if (!run.workspace) return;
+    const living = run.indexes.some((index) => rows[index]?.leaving === false);
+    const held = owner.get(run.workspace.id);
+    if (held === undefined || (living && !held.living)) {
+      owner.set(run.workspace.id, { at, living });
+    }
+  });
+  return runs.map((run, at) => {
+    if (run.workspace && owner.get(run.workspace.id)?.at === at) return run.workspace.id;
+    const lead = run.indexes[0];
+    return (lead !== undefined ? rows[lead]?.item.id : undefined) ?? "";
+  });
+}
+
 export function sessionListRuns(sessions: readonly DisplaySession[]): readonly SessionListRun[] {
   const runs: SessionListRun[] = [];
   for (let index = 0; index < sessions.length; index += 1) {
@@ -443,6 +567,13 @@ export function sessionListRuns(sessions: readonly DisplaySession[]): readonly S
  * asked to watch one. While the filter is chipless it hides nothing (every
  * session matches), and as soon as another value exists its chip and the
  * options button's "showing X only" badge both appear.
+ *
+ * A query is the one narrowing allowed to empty the list, because it is a
+ * question rather than a way of viewing: "nothing matches" is its honest
+ * answer, where a filter falling to nothing is a stale choice to be dropped.
+ * It reads within the filter — search narrows what is being shown — and what
+ * the filter hides is counted rather than swallowed, so an emptied search can
+ * offer the matches sitting behind the chip instead of denying they exist.
  */
 export function arrangeSessions(
   sessions: readonly DisplaySession[],
@@ -456,11 +587,29 @@ export function arrangeSessions(
   const filter = chosen.length > 0 ? view.filter : SESSION_FILTER.ALL;
   const matching = filter === view.filter ? chosen : sessions;
 
+  const tokens = searchTokens(view.query);
+  const found =
+    tokens.length === 0 ? matching : matching.filter((session) => matchesQuery(session, tokens));
+  const search: SessionSearchOutcome | undefined =
+    tokens.length === 0
+      ? undefined
+      : {
+          tokens,
+          searched: matching.length,
+          beyondFilter:
+            matching.length === sessions.length
+              ? 0
+              : sessions.filter(
+                  (session) => !matchesFilter(session, filter) && matchesQuery(session, tokens),
+                ).length,
+        };
+
   return {
-    sessions: seatWorkspacesTogether([...matching].sort(bySort(view.sort))),
+    sessions: seatWorkspacesTogether([...found].sort(bySort(view.sort))),
     total: sessions.length,
     filter,
     options,
+    ...(search ? { search } : {}),
   };
 }
 
