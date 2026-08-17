@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
-import { SESSION_STATUS } from "@sidecar/core";
+import { isRosterRelevant, SESSION_STATUS } from "@sidecar/core";
 import { CLAUDE_CODE_PROVIDER, ClaudeCodeSessionAdapter } from "../src/claude-code-adapter";
 
 const TEST_TIME = Date.parse("2026-08-11T23:45:00.000Z");
@@ -68,7 +68,6 @@ test("observes a Claude Code session file and labels it by its workspace", async
   const adapter = new ClaudeCodeSessionAdapter({
     claudeHome,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
   });
   const observations = await adapter.observe();
 
@@ -101,7 +100,6 @@ test("keeps stale user-tail sessions unknown instead of inventing activity", asy
     activeSessionFreshnessMs: 15 * 60 * 1000,
     claudeHome,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60 * 60 * 1000,
   });
   const observations = await adapter.observe();
 
@@ -129,7 +127,6 @@ test("keeps stale assistant-tail sessions from staying in attention", async (t) 
     activeSessionFreshnessMs: 15 * 60 * 1000,
     claudeHome,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60 * 60 * 1000,
   });
   const observations = await adapter.observe();
 
@@ -162,7 +159,6 @@ test("ignores trailing system records when finding Claude session status", async
   const adapter = new ClaudeCodeSessionAdapter({
     claudeHome,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
   });
   const observations = await adapter.observe();
 
@@ -197,7 +193,6 @@ test("treats fresh assistant tool use as active work", async (t) => {
   const adapter = new ClaudeCodeSessionAdapter({
     claudeHome,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
   });
   const observations = await adapter.observe();
 
@@ -241,7 +236,6 @@ test("keeps fresh sessions active when a large tail has no complete status event
   const adapter = new ClaudeCodeSessionAdapter({
     claudeHome,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
     readTailBytes: 128,
   });
   const observations = await adapter.observe();
@@ -388,7 +382,6 @@ test("surfaces the generated title, branch, model, and the tool being run", asyn
   const adapter = new ClaudeCodeSessionAdapter({
     claudeHome,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
   });
   const [observation] = await adapter.observe();
 
@@ -432,7 +425,6 @@ test("reports a failed request as an error once the retries are spent", async (t
   const adapter = new ClaudeCodeSessionAdapter({
     claudeHome,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
   });
   const [observation] = await adapter.observe();
 
@@ -470,7 +462,6 @@ test("stays working through a retry the session is still backing off from", asyn
   const adapter = new ClaudeCodeSessionAdapter({
     claudeHome,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
   });
   const [observation] = await adapter.observe();
 
@@ -504,7 +495,6 @@ test("keeps a spent failure at error after it goes stale", async (t) => {
     activeSessionFreshnessMs: 15 * 60 * 1000,
     claudeHome,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60 * 60 * 1000,
   });
   const [observation] = await adapter.observe();
 
@@ -541,7 +531,6 @@ test("clears a recorded error once the session gets past it", async (t) => {
   const adapter = new ClaudeCodeSessionAdapter({
     claudeHome,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
   });
   const [observation] = await adapter.observe();
 
@@ -576,7 +565,6 @@ test("recovers a title from a session too long to hold one in its tail", async (
   const adapter = new ClaudeCodeSessionAdapter({
     claudeHome,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
     // Small enough that the title is far behind the tail the status comes from.
     readTailBytes: 256,
   });
@@ -613,7 +601,6 @@ test("carries the away recap Claude Code writes for a developer who stepped out"
   const adapter = new ClaudeCodeSessionAdapter({
     claudeHome,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
   });
   const [observation] = await adapter.observe();
 
@@ -670,7 +657,6 @@ test("drops the previous turn's recap when a new prompt opens a turn", async (t)
   const adapter = new ClaudeCodeSessionAdapter({
     claudeHome,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
   });
   const [observation] = await adapter.observe();
 
@@ -701,7 +687,6 @@ test("reports no recap for a turn whose closing words are all it wrote", async (
   const adapter = new ClaudeCodeSessionAdapter({
     claudeHome,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
   });
   const [observation] = await adapter.observe();
 
@@ -762,7 +747,6 @@ test("stops reporting a tool once the turn that ran it has ended", async (t) => 
   const adapter = new ClaudeCodeSessionAdapter({
     claudeHome,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
   });
   const [observation] = await adapter.observe();
 
@@ -808,7 +792,6 @@ test("keeps reporting a tool between one call and the next", async (t) => {
   const adapter = new ClaudeCodeSessionAdapter({
     claudeHome,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60_000,
   });
   const [observation] = await adapter.observe();
 
@@ -911,6 +894,104 @@ test("falls back to the file's date when the tail carries no timestamp", async (
   const [observation] = await adapter.observe();
 
   assert.equal(observation?.observedAt, TEST_TIME - 5_000);
+});
+
+test("reads past a tail of appended bookkeeping to the conversation's own clock", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  const lastConversationTime = "2026-02-14T10:05:00.000Z";
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-backfilled",
+    "backfilled-session",
+    [
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.USER,
+        cwd: "/Users/test/backfilled",
+        timestamp: "2026-02-14T10:00:00.000Z",
+      },
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
+        cwd: "/Users/test/backfilled",
+        timestamp: lastConversationTime,
+        message: { stop_reason: "end_turn", content: [] },
+      },
+      // The bookkeeping a later Claude Code pass appended in bulk: enough of
+      // it to fill the whole bounded tail, with the same pass bumping mtime.
+      { type: "ai-title", aiTitle: "Old refactor" },
+      { type: "last-prompt", cwd: "/Users/test/backfilled", prompt: "x".repeat(120) },
+    ],
+    TEST_TIME,
+  );
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    now: () => TEST_TIME,
+    readTailBytes: 256,
+  });
+  const [observation] = await adapter.observe();
+
+  // A tail holding only bookkeeping says nothing about when the conversation
+  // last moved, and the touch must not answer for it: the second, deeper read
+  // finds the conversation's own clock months back, so the session reads as
+  // settled history rather than as work happening right now.
+  assert.equal(observation?.observedAt, Date.parse(lastConversationTime));
+  assert.equal(observation?.status, SESSION_STATUS.UNKNOWN);
+  assert.equal(observation?.title, "Old refactor");
+  assert.equal(
+    observation &&
+      isRosterRelevant(
+        { status: observation.status, observedAt: observation.observedAt },
+        TEST_TIME,
+      ),
+    false,
+  );
+});
+
+test("keeps a bookkeeping record's timestamp from re-dating the conversation", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  const lastConversationTime = "2026-02-14T10:05:00.000Z";
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-redated",
+    "redated-session",
+    [
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.USER,
+        cwd: "/Users/test/redated",
+        timestamp: "2026-02-14T10:00:00.000Z",
+      },
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
+        cwd: "/Users/test/redated",
+        timestamp: lastConversationTime,
+        message: { stop_reason: "end_turn", content: [] },
+      },
+      // Bookkeeping stamped with the moment it was appended rather than the
+      // moment the conversation moved.
+      { type: "queue-operation", operation: "enqueue", timestamp: "2026-08-11T23:44:59.000Z" },
+    ],
+    TEST_TIME,
+  );
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  // Only the conversation's own records may date the session: a settled turn
+  // from months ago must not read as waiting for the developer today just
+  // because the provider stamped a bookkeeping line beside it.
+  assert.equal(observation?.observedAt, Date.parse(lastConversationTime));
+  assert.equal(observation?.status, SESSION_STATUS.UNKNOWN);
+  assert.equal(
+    observation &&
+      isRosterRelevant(
+        { status: observation.status, observedAt: observation.observedAt },
+        TEST_TIME,
+      ),
+    false,
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -1067,7 +1148,6 @@ test("a stop event keeps a finished turn waiting past the freshness decay", asyn
     claudeHome,
     hookEventsDirectory: () => spool,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60 * 60 * 1000,
   });
   const [observation] = await adapter.observe();
 
@@ -1152,7 +1232,6 @@ test("a session-start event bumps the clock without deciding the status", async 
     claudeHome,
     hookEventsDirectory: () => spool,
     now: () => TEST_TIME,
-    maximumSessionAgeMs: 60 * 60 * 1000,
   });
   const [observation] = await adapter.observe();
 
