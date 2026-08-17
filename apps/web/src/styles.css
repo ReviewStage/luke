@@ -317,6 +317,39 @@ button {
   transform: translateY(1px);
 }
 
+.cta-secondary {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-3) var(--space-5);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 650;
+  gap: var(--space-2);
+  text-decoration: none;
+  transition:
+    border-color 140ms ease,
+    transform 180ms var(--swift);
+}
+
+.cta-secondary:hover {
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.cta-secondary:active {
+  transform: translateY(1px);
+}
+
+/* What the DMG runs on, said before the download rather than after a failed
+   launch: the app ships arm64-only against macOS 14. */
+.cta-fineprint {
+  margin: var(--space-3) auto 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
 /* Notch mock
    Ported from apps/desktop/src/renderer/styles/base.css and styles/sessions.css.
    The class names are the renderer's own so the two sheets stay diffable; the
@@ -1271,6 +1304,7 @@ button {
   .mock .session-row,
   .mock .panel-header,
   .cta-primary,
+  .cta-secondary,
   .nav-link {
     transition-duration: 1ms;
     transition-delay: 0ms;

@@ -1,5 +1,5 @@
 import { NotchMock } from "./NotchMock";
-import { GitHubMark, REPOSITORY_URL, SiteFooter, SiteHeader } from "./SiteChrome";
+import { GitHubMark, LATEST_DMG_URL, REPOSITORY_URL, SiteFooter, SiteHeader } from "./SiteChrome";
 
 export function App(): React.JSX.Element {
   return (
@@ -13,11 +13,15 @@ export function App(): React.JSX.Element {
             Luke watches your coding agent sessions and notifies you when they need your attention.
           </p>
           <div className="cta-row">
-            <a className="cta-primary" href={REPOSITORY_URL}>
+            <a className="cta-primary" href={LATEST_DMG_URL}>
+              Download for macOS
+            </a>
+            <a className="cta-secondary" href={REPOSITORY_URL}>
               <GitHubMark />
               View on GitHub
             </a>
           </div>
+          <p className="cta-fineprint">For Apple Silicon Macs running macOS 14 or later.</p>
 
           <NotchMock />
         </section>

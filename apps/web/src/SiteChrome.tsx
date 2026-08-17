@@ -1,6 +1,14 @@
 export const REPOSITORY_URL = "https://github.com/ReviewStage/luke";
 
 /**
+ * Every release uploads a version-free `Luke.dmg` beside the versioned one
+ * (`RELEASE_LATEST_DMG_FILE_NAME` in `apps/desktop/scripts/release-config.mjs`),
+ * so this link always fetches the latest release without the page knowing any
+ * version. The two names may not drift apart.
+ */
+export const LATEST_DMG_URL = `${REPOSITORY_URL}/releases/latest/download/Luke.dmg`;
+
+/**
  * GitHub's mark, drawn in `currentColor` so the stylesheet holds the color in
  * one place. Inlined for the same reason as the favicon: the page ships no
  * binary assets and fetches nothing at runtime.
