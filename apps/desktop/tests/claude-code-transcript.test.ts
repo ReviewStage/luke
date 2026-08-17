@@ -134,3 +134,20 @@ test("reports a spent error and a run's result in the session's own words", asyn
 
   assert.equal(rendered, ["Error: rate limited", "Result: Done: 3 files changed."].join("\n"));
 });
+
+test("reads a tool's answer from the bookkeeping shape that has no blocks", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  await writeTranscript(claudeHome, TEST_SESSION_ID, [
+    // The shape Claude Code often writes: toolUseResult only, no content
+    // blocks at all — which must render as the tool's answer, not vanish.
+    { type: "user", toolUseResult: { stdout: "2 passed, 0 failed" } },
+    { type: "user", toolUseResult: "plain string result" },
+  ]);
+
+  const rendered = await readClaudeSessionTranscript({
+    claudeHome,
+    providerSessionId: TEST_SESSION_ID,
+  });
+
+  assert.equal(rendered, ["← 2 passed, 0 failed", "← plain string result"].join("\n"));
+});

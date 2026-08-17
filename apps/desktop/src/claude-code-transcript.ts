@@ -75,20 +75,39 @@ function toolLine(block: Record<string, unknown>): string | undefined {
   return `→ ${name}`;
 }
 
-/** The words a tool answered with, wherever this build finds them. */
+/** The words inside one value, whether it is a string or text blocks. */
+function wordsFromContent(content: unknown): string | undefined {
+  if (typeof content === "string") return text(content);
+  if (Array.isArray(content)) {
+    const parts = content
+      .filter(isRecord)
+      .filter((part) => part.type === "text")
+      .map((part) => text(part.text))
+      .filter((part): part is string => part !== undefined);
+    if (parts.length > 0) return parts.join(" ");
+  }
+  return undefined;
+}
+
+/**
+ * The words a tool answered with, wherever this build finds them. The
+ * `tool_result` blocks carry what the model was shown and are preferred;
+ * `toolUseResult` is the fallback, because Claude Code often writes a record
+ * with only that bookkeeping shape — a string outright, or an object whose
+ * output rides `stdout`, `stderr`, or `content`.
+ */
 function toolResultText(record: Record<string, unknown>): string | undefined {
   for (const block of contentBlocks(record)) {
     if (block.type !== "tool_result") continue;
-    const content = block.content;
-    if (typeof content === "string") return text(content);
-    if (Array.isArray(content)) {
-      const parts = content
-        .filter(isRecord)
-        .filter((part) => part.type === "text")
-        .map((part) => text(part.text))
-        .filter((part): part is string => part !== undefined);
-      if (parts.length > 0) return parts.join(" ");
-    }
+    const words = wordsFromContent(block.content);
+    if (words) return words;
+  }
+  const result = record.toolUseResult;
+  if (typeof result === "string") return text(result);
+  if (isRecord(result)) {
+    return (
+      wordsFromContent(result.content) ?? text(result.stdout) ?? text(result.stderr) ?? undefined
+    );
   }
   return undefined;
 }
