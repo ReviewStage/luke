@@ -197,12 +197,14 @@ What Luke may show:
   call. The edge announcements speak whenever voice can; an answered ask
   speaks on the consent of the ask itself, for exactly as long as it stands.
   Widening either set is a product decision, not an implementation detail;
-  make it deliberately. The same announcements also stand briefly as a notice
-  popup on Luke's own surface, under the housing — worded and drawn on this
-  machine, leaving it never, fed by the same two deciders and nothing else,
-  and needing no voice credential. The popup's press is a row press at one
-  remove: the session's reported address goes to the operating system, or
-  Luke's own panel opens for a session that reported none.
+  make it deliberately. While an announcement is being spoken, a notice on
+  Luke's own surface under the housing names the session it is about —
+  drawn on this machine from the roster and the same roster-validated
+  identity the voice was handed, leaving it never, and living exactly as
+  long as the spoken reply, so it can never stand for news nobody is
+  telling. The notice's press is a row press at one remove: the session's
+  reported address goes to the operating system, or Luke's own panel opens
+  for a session that reported none.
 
 Before handoff, run `./scripts/check.sh` for portable-only changes. For any
 macOS or UI change, `./scripts/verify.sh` is the completion invariant. Report

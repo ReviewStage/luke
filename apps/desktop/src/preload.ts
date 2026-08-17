@@ -76,7 +76,6 @@ const bridge: AppBridge = {
   onStopHotkeyChanged: subscribe(channels.stopHotkeyChanged),
   onOutputAudioChanged: subscribe(channels.outputAudioChanged),
   onAttentionSpeech: subscribe(channels.attentionSpeech),
-  onSessionNotices: subscribe(channels.sessionNotices),
 };
 
 contextBridge.exposeInMainWorld("sidecar", bridge);

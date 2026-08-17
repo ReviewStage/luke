@@ -27,5 +27,8 @@ export const BUBBLE_LIFT = 4;
 /** Tallest compact caption block the window holds. CSS: `--caption-max`. */
 export const VOICE_CAPTION_MAX_HEIGHT = 70;
 
+/** The session notice's band, held beside the caption room. CSS: `--notice-size`. */
+export const SESSION_NOTICE_HEIGHT = 26;
+
 /** Expanded panel width. CSS: `--panel-width`. */
 export const PANEL_WIDTH = 620;

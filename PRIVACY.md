@@ -252,12 +252,12 @@ The session roster, workspace projects, app guide, and issue roster named
 above travel only on conversations you open yourself. The call closes itself
 shortly after the announcement is spoken.
 
-The same announcements also appear briefly as a notice popup drawn on Luke's
-own surface under the notch. The popup is worded and drawn entirely on your
-Mac and nothing about it leaves it: it rides no network service and needs no
-OpenAI key, and pressing it only hands the session's provider-reported address
-to macOS — the same thing pressing the session's row does — or opens Luke's
-own panel when the session reported none.
+While an announcement is being spoken, a pressable notice on Luke's own
+surface under the notch names the session it is about. The notice is drawn
+entirely on your Mac from what Luke already observed and nothing about it
+leaves it: pressing it only hands the session's provider-reported address to
+macOS — the same thing pressing the session's row does — or opens Luke's own
+panel when the session reported none.
 
 Luke does not record the conversation, write audio to disk, or keep a
 transcript. With captions enabled in Settings — they are off by default — the

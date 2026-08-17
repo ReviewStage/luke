@@ -264,20 +264,6 @@ export type SessionTranscriptResult =
   | { status: typeof SESSION_TRANSCRIPT_RESULT_STATUS.REJECTED; reason: string }
   | { status: typeof SESSION_TRANSCRIPT_RESULT_STATUS.UNSUPPORTED; reason: string };
 
-/**
- * One announcement on its way to the notice popup the surface draws under the
- * housing. It names the session and carries the line to draw beneath its name;
- * the renderer looks the name itself up in the roster it already holds, so a
- * popup for a session no longer worth a row simply finds nothing to draw.
- * `decidedAt` is when the announcement was decided on — a queued popup older
- * than the news it carries is dropped rather than shown as though it just
- * happened.
- */
-export interface SessionNoticePopup extends SessionIdentity {
-  body: string;
-  decidedAt: number;
-}
-
 export interface DisplayDiagnostic {
   id: number;
   label: string;
@@ -604,14 +590,6 @@ export interface AppBridge {
   /** The issue roster as last observed; `undefined` says no tracker is connected. */
   onIssuesChanged(callback: (issues: readonly TrackedIssue[] | undefined) => void): () => void;
   onAttentionSpeech(callback: (speech: readonly AttentionSpeech[]) => void): () => void;
-  /**
-   * The announcements the main process just decided on, for the notice popup
-   * the surface draws under the housing. The same two deciders that feed the
-   * spoken announcements — the deterministic status edges and the attention
-   * evaluator — and nothing else; unlike the speech, it needs no voice
-   * credential, so a session's news is pressable with no key at all.
-   */
-  onSessionNotices(callback: (popups: readonly SessionNoticePopup[]) => void): () => void;
   /** The talk key going down, from whatever app happened to be frontmost. */
   onVoiceHotkeyPress(callback: () => void): () => void;
   /** The same key being let go of, which is what ends a held turn. */
@@ -687,7 +665,6 @@ export const channels = {
   focusPanel: "app:focus-panel",
   requestRealtimeCredential: "app:request-realtime-credential",
   attentionSpeech: "app:attention-speech",
-  sessionNotices: "app:session-notices",
   voiceHotkeyPress: "app:voice-hotkey-press",
   voiceHotkeyRelease: "app:voice-hotkey-release",
   voiceHotkeyChanged: "app:voice-hotkey-changed",

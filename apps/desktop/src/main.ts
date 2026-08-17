@@ -114,11 +114,7 @@ import { readOpenCodeSessionTranscript } from "./opencode-transcript";
 import { OutputVolumeWatcher } from "./output-volume";
 import { PanelManager } from "./panel-manager";
 import { runModeFor } from "./run-mode";
-import {
-  attentionSpeechPopups,
-  sessionNoticePopup,
-  sessionNoticeSpeech,
-} from "./session-notifications";
+import { sessionNoticeSpeech } from "./session-notifications";
 import { createSettingsHandler, SettingsRefusal } from "./settings-handler";
 import { SettingsStore, type StoredAccount } from "./settings-store";
 import {
@@ -1954,11 +1950,9 @@ async function reviewSessionAttention(generation = observationGeneration): Promi
     // `outcome` says whether to voice it now, which only these reviews do.
     const speech = attentionSpeechFromReviews(reviews);
     if (speech.length > 0) {
-      // The same decisions, pressable: every display's surface draws the
-      // popup, so the sentence Luke says has somewhere to be pressed.
-      panels.broadcast(channels.sessionNotices, attentionSpeechPopups(speech));
       // Spoken once, by the one window that holds the voice: every display
-      // already shows the same session as needing attention.
+      // already shows the same session as needing attention, and the surface
+      // that speaks is the one that draws the announcement's pressable notice.
       panels.voiceHost()?.webContents.send(channels.attentionSpeech, speech);
     }
   } catch (error) {
@@ -1993,15 +1987,10 @@ function announceSessionNotices(sessions: readonly NormalizedSession[]): void {
   // that a deterministic alert is never traded away on a model's judgment.
   const notices = sessionNoticeTracker.notices(sessions, now);
   if (notices.length === 0) return;
-  // The pressable half of the announcement stands whether or not there is a
-  // voice to say it: the popup is drawn on Luke's own surface and needs no
-  // Realtime credential.
-  panels.broadcast(
-    channels.sessionNotices,
-    notices.map((notice) => sessionNoticePopup(notice, now)),
-  );
   // No voice, nothing to say it with: without a Realtime credential the
-  // renderer cannot open a call, and the panel still shows every state.
+  // renderer cannot open a call, and the panel still shows every state. The
+  // pressable notice is the spoken announcement's face, so it goes with the
+  // speech rather than standing for news nobody is telling.
   if (!realtimeCredentials) return;
   const speech = notices.map((notice) => sessionNoticeSpeech(notice, now));
   panels.voiceHost()?.webContents.send(channels.attentionSpeech, speech);

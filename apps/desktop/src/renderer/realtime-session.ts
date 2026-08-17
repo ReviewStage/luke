@@ -168,8 +168,11 @@ export interface RealtimeVoiceSessionCallbacks {
    * generated, or undefined once there is nothing being spoken. The session
    * owns the whole lifecycle — the caption clears when the reply ends, is cut
    * off, or the call closes — so the caller only ever draws what it is handed.
+   * `about` is the session a proactive announcement names, carried from the
+   * roster-validated update `speak()` was handed and living exactly as long as
+   * that reply; a conversation reply carries none.
    */
-  onCaption(text: string | undefined): void;
+  onCaption(text: string | undefined, about: SessionIdentity | undefined): void;
 }
 
 export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbacks {
@@ -378,6 +381,14 @@ export class RealtimeVoiceSession {
    * caption can never outlive the speech it captions.
    */
   #caption: string | undefined;
+  /**
+   * The session the reply under way is announcing, or nothing for a
+   * conversation reply. Set only by `speak()` from the identity the attention
+   * layer validated, and cleared wherever the caption is — so the pressable
+   * face the surface draws for it can never outlive the announcement, and
+   * nothing a model said can choose what it points at.
+   */
+  #captionAbout: SessionIdentity | undefined;
   /**
    * Whether this call has ever reported a reply's audio running out. Once it
    * has, silence stops being evidence of anything: the server says when Luke is
@@ -903,6 +914,14 @@ export class RealtimeVoiceSession {
     const events = proactiveSpeechEvents(speech);
     if (events.length === 0 || !this.isConnected || this.#turnBusy) return false;
     this.#startResponse(events);
+    // After the start, which clears the last reply's caption and subject: the
+    // announcement's reply is the one now under way, and everything it
+    // captions is about this session until the reply ends.
+    this.#captionAbout = {
+      providerId: speech.providerId,
+      providerSessionId: speech.providerSessionId,
+    };
+    this.#options.onCaption(this.#caption, this.#captionAbout);
     return true;
   }
 
@@ -1107,9 +1126,13 @@ export class RealtimeVoiceSession {
   }
 
   #setCaption(text: string | undefined): void {
-    if (this.#caption === text) return;
+    // The subject is of the reply, so the reply ending takes it too: every
+    // path that ends one clears the caption through here.
+    const about = text === undefined ? undefined : this.#captionAbout;
+    if (this.#caption === text && this.#captionAbout === about) return;
     this.#caption = text;
-    this.#options.onCaption(text);
+    this.#captionAbout = about;
+    this.#options.onCaption(text, about);
   }
 
   /** Ends the turn once the reply is done, so the next one can start. */
@@ -1241,9 +1264,9 @@ export class RealtimeVoiceSession {
   /**
    * Tells the conversation what the most recent announcement said. The words
    * were often said on Luke's own speak-only call — the very call the
-   * talk-key press tears down on its way here — or only shown as the notice
-   * popup, so without this the developer's call is asked "what did you just
-   * say?" by someone it never said anything to. Context on the roster's own
+   * talk-key press tears down on its way here — so without this the
+   * developer's call is asked "what did you just say?" by someone it never
+   * said anything to. Context on the roster's own
    * terms: remembered here, flushed only at a developer-opened turn, and
    * carrying the same bounded payload the announcement already traveled as —
    * the words alone, never an identity, which [session under discussion]

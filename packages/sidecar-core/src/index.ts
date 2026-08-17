@@ -260,6 +260,7 @@ export {
 export {
   MOTION_DURATION_MS,
   PANEL_WIDTH,
+  SESSION_NOTICE_HEIGHT,
   VOICE_CAPTION_MAX_HEIGHT,
 } from "./motion-tokens";
 export {

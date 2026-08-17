@@ -318,7 +318,7 @@ export function sessionReferenceWithdrawnEvents(
 
 /**
  * Renders the most recent proactive announcement — the words Luke already put
- * in front of the developer, spoken on a call or shown as the notice popup.
+ * in front of the developer by speaking them on a call.
  * It exists because the call that said them is often not the call being
  * asked: a speak-only readout is torn down by the very talk-key press that
  * asks "what did you just say?", so without this line the developer's own

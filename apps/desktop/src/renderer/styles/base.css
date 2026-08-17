@@ -188,13 +188,11 @@
      caption states below raise it, and every other state leaves the capsule's
      own height. */
   --caption-growth: 0px;
-  /* The notice popup's band under the housing: a session's name and the line
-     saying what just happened. Fixed rather than measured — the name and the
-     body both truncate into it — so the surface springs to one destination,
-     and small enough to fit inside the `--caption-max` room the compact
-     window already reserves: the popup borrows the caption's band, and the
-     two never draw together. */
-  --notice-size: 52px;
+  /* The notice band under the housing — one row for the chip naming the
+     session Luke is announcing — arrives as `--notice-size` from the shared
+     surface tokens, because the compact window reserves its room on top of the
+     caption's: the chip stands directly under the housing, and captioned
+     words drop below its band. */
   /* Wide enough for a key, a way out, and a way on, and no wider — the page the
      key was copied from is behind this and has to stay readable. The floor is
      what those three need on a display with no housing to grow from. */
@@ -1391,21 +1389,32 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   background: var(--raised-strong);
 }
 
-/* Session notice popup ----------------------------------------------------- */
+/* Session notice ----------------------------------------------------------- */
 
-/* An announcement standing under the housing: the surface grows the caption's
-   own band to hold the session's name and what just happened to it. The two
-   never draw together — the queue holds a popup back while words are being
-   spoken — so the band is borrowed, never contended, and the compact window
-   already holds the room. */
+/* The session Luke is announcing, pressable while he says it: the surface
+   grows a one-row band for the chip naming it, directly under the housing.
+   Captioned words drop below the chip's band; with captions off it stands
+   alone, so the announcement is pressable either way. The compact window
+   reserves room for both bands, so drawing them together costs no IPC.
+   `--caption-rest` is the caption block's own lift, the same variable the
+   panel's foot spends, so the words and the volume hint inside their block
+   both take the drop from one assignment. */
 .app-stage[data-presentation="capsule"][data-notice="true"],
 .app-stage[data-presentation="peek"][data-notice="true"] {
   --caption-growth: var(--notice-size);
+  --caption-rest: var(--notice-size);
+}
+
+/* Both at once: the caption keeps its measured room and the notice band adds
+   its own below. Stated after the single-band rules so it wins their tie. */
+.app-stage[data-presentation="capsule"][data-caption="true"][data-notice="true"],
+.app-stage[data-presentation="peek"][data-caption="true"][data-notice="true"] {
+  --caption-growth: calc(var(--caption-size, 28px) + var(--notice-size));
 }
 
 /* While a notice stands, the capsule holds the peek's width, exactly as the
-   caption's states do: the popup lays out at one width in every state, so a
-   pointer arriving mid-notice morphs the wings and moves the words not at
+   caption's states do: the chip lays out at one width in every state, so a
+   pointer arriving mid-notice morphs the wings and moves the name not at
    all. Growing leads — the base rule's delay is for leaving. */
 .app-stage[data-presentation="capsule"][data-notice="true"] .panel-surface {
   width: var(--peek-width);
@@ -1420,7 +1429,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 }
 
 /* The press target covers the notice band as well as the strip, for the
-   caption's reason: the popup is drawn on the shape, and a shape the pointer
+   caption's reason: the chip is drawn on the shape, and a shape the pointer
    is over must keep taking the pointer. */
 .app-stage[data-presentation="capsule"][data-notice="true"] .compact-hover-target,
 .app-stage[data-presentation="peek"][data-notice="true"] .compact-hover-target {
@@ -1433,96 +1442,63 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   height: calc(var(--capsule-height) - var(--shape-top) * 2 + var(--caption-growth));
 }
 
-/* The popup itself: one pressable block in the band the surface grew. The box
-   is the caption's twin — same berth under the housing, same lift carried in
-   the transform — and its reveal is the caption's too: the clip springs to
-   the same edge the surface's height does, so the words are uncovered by the
-   black arriving under them rather than drawn on the desktop. Above the hover
-   strip (z-index 4) because the whole block is the one button on the compact
-   shape besides the strip: the press has to open the session. */
+/* The chip itself: the one raised, pressable pill on the compact shape, named
+   like the session's row — its provider's mark and its title. It stands
+   still, directly under the housing, and the words are what move: a single
+   row wants a fade crossing the last of the shape's travel, not a clip or a
+   journey of its own. Above the hover strip (z-index 4) because the press
+   has to open the session. */
 .session-notice {
   position: absolute;
   z-index: 5;
   top: var(--capsule-height);
   left: 50%;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 3px;
-  width: calc(var(--peek-width) - var(--notch-convex-radius) * 2);
-  height: var(--notice-size);
-  padding: 0 0 6px;
-  background: none;
-  clip-path: inset(0 0 var(--notice-size) 0);
+  gap: 5px;
+  max-width: calc(var(--peek-width) - var(--notch-convex-radius) * 4);
+  height: 20px;
+  padding: 0 9px;
+  border-radius: 10px;
+  background: var(--raised);
+  color: var(--text-primary);
+  font-size: 10px;
+  font-weight: 640;
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, calc(0px - var(--shape-top, 0px)));
-  /* The clip waits out `--duration-exit` like the surface does: leaving, the
-     words fade first and the edge follows them up under the housing. */
+  transform: translate(-50%, calc(3px - var(--shape-top, 0px)));
   transition:
     opacity var(--duration-exit) var(--motion-exit),
-    clip-path var(--duration-shape) var(--spring) var(--duration-exit);
+    background-color var(--duration-hover) ease;
 }
 
 /* Arrives the way the caption's first words do — the fade crossing the last
-   of the shape's travel, the clip riding the shape's own spring with no
-   delay: it is the shape's twin, not content following it. Takes the pointer
-   only while it is drawn, because everything a hidden button covers is
-   desktop. */
+   of the shape's travel. Takes the pointer only while it is drawn, because
+   everything a hidden button covers is desktop. */
 .app-stage[data-presentation="capsule"][data-notice="true"] .session-notice,
 .app-stage[data-presentation="peek"][data-notice="true"] .session-notice {
-  clip-path: inset(0 0 0 0);
   opacity: 1;
   pointer-events: auto;
   transition:
     opacity var(--duration-quick) var(--motion-exit)
     calc(var(--duration-shape) - var(--duration-quick)),
-    clip-path var(--duration-shape) var(--spring);
+    background-color var(--duration-hover) ease;
 }
 
-/* The session's name, marked by its provider the way its row is. The mark
-   rides at the row's own size; the name truncates rather than wrapping, so
-   the band never asks for more height than the surface grew. */
-.session-notice-title {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  max-width: 100%;
-  color: var(--text-primary);
-  font-size: 11px;
-  font-weight: 640;
-  line-height: 14px;
+.session-notice:hover {
+  background: var(--raised-strong);
 }
 
-.session-notice-title .provider-mark {
+.session-notice .provider-mark {
   flex: 0 0 auto;
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
 }
 
 .session-notice-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* What just happened, in the caption's own quiet grey: the popup arriving is
-   what asks for the eye, and the session's name above already carries the
-   line's weight. An evaluator's sentence can run long, so it wraps once and
-   then truncates. */
-.session-notice-body {
-  display: -webkit-box;
-  overflow: hidden;
-  max-width: 100%;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  color: var(--text-secondary);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.1px;
-  line-height: 13px;
-  text-align: center;
 }
 
 /* Waveform --------------------------------------------------------------- */
