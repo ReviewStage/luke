@@ -27,15 +27,17 @@ The auth service also needs `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID`,
 `GITHUB_CLIENT_SECRET`, and optionally `POSTHOG_API_KEY`.
 
-After the first production deployment has applied the auth migration, run:
+Each deployment build runs `pnpm auth:seed` after the migration and before Vite,
+so every database the application reaches already carries the client — including
+the branch database Neon creates for a Preview deployment, which would otherwise
+be migrated but empty. The Drizzle seed is idempotent, upserting the one public
+OAuth client compiled into Luke, which is what makes running it on every build
+safe. To apply it by hand against production:
 
 ```sh
 vercel env run --environment production --scope stage-review -- \
   pnpm --filter @luke/web auth:seed
-```
-
-The Drizzle seed is idempotent and installs the one public OAuth client compiled
-into Luke. Dynamic client registration stays disabled; the client has no secret,
+``` Dynamic client registration stays disabled; the client has no secret,
 requires PKCE, accepts loopback callbacks, and skips consent as a trusted
 first-party app.
 
