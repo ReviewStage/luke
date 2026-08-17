@@ -130,6 +130,31 @@ test("the timer and the button share a check already in flight", async () => {
   await third;
 });
 
+test("a listener that throws neither fails the check nor jams the next one", async () => {
+  // The broadcast can outlive the window it reaches. A throw there must not
+  // park a dead check in flight — the row would say "checking" forever and
+  // every later ask would reuse the failure.
+  let requests = 0;
+  const service = new UpdateService({
+    currentVersion: "0.1.0",
+    onChange: () => {
+      throw new Error("window already torn down");
+    },
+    fetch: async () => {
+      requests += 1;
+      return releaseResponse({ tag_name: "v0.2.0" });
+    },
+  });
+
+  const first = await service.check();
+  assert.equal(first.status, UPDATE_STATUS.UPDATE_AVAILABLE);
+  assert.equal(service.snapshot().status, UPDATE_STATUS.UPDATE_AVAILABLE);
+
+  const second = await service.check();
+  assert.equal(second.status, UPDATE_STATUS.UPDATE_AVAILABLE);
+  assert.equal(requests, 2);
+});
+
 test("the timed check starts at once and stops when asked", async () => {
   let requests = 0;
   const service = new UpdateService({

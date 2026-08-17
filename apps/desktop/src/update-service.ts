@@ -80,11 +80,22 @@ export class UpdateService {
    * row's button land on the same read.
    */
   check(): Promise<UpdateSnapshot> {
-    this.#inFlight ??= this.#read().then((snapshot) => {
-      this.#inFlight = undefined;
-      this.#move(snapshot);
-      return snapshot;
-    });
+    this.#inFlight ??= this.#read()
+      .catch((error): UpdateSnapshot => {
+        // A throw anywhere in the read must not leave a dead check parked in
+        // flight, where every later ask would reuse the failure and the row
+        // would say "checking" forever. It lands on the same honest answer an
+        // unreachable service gives, and the next ask is a fresh read.
+        this.#report(
+          `Update check failed: ${error instanceof Error ? error.name : "unknown error"}`,
+        );
+        return { status: UPDATE_STATUS.UNREACHABLE, currentVersion: this.#currentVersion };
+      })
+      .then((snapshot) => {
+        this.#inFlight = undefined;
+        this.#move(snapshot);
+        return snapshot;
+      });
     return this.#inFlight;
   }
 
@@ -152,7 +163,12 @@ export class UpdateService {
 
   #move(snapshot: UpdateSnapshot): void {
     this.#snapshot = snapshot;
-    this.#onChange(snapshot);
+    try {
+      this.#onChange(snapshot);
+    } catch {
+      // A listener's failure is its own — a window torn down mid-broadcast
+      // must not fail the check whose snapshot has already moved.
+    }
   }
 
   #report(message: string): void {
