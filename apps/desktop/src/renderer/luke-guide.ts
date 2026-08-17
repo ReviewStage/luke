@@ -602,9 +602,12 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "chat is its own row: a workspace holding several draws them inside one tray named by " +
         "the workspace at its top, one holding a single chat stays one row titled by the " +
         "workspace, and every chat can be seen, opened, and messaged individually. Settings " +
-        "holds a front page whose rows open its Voice, Appearance, Keyboard shortcuts, and " +
-        "Connections pages — each led back out by its back button or Escape — and keeps the " +
-        "Feedback section and Quit on the front page itself; the Voice page reveals itself in " +
+        "holds a front page led by the Account section — who is signed in, and what the " +
+        "account is buying right now: the day's remaining voice calls and session reviews " +
+        "while voice runs on its included allowance, or a note that it runs on the " +
+        "developer's own key — then rows that open its Voice, Appearance, Keyboard " +
+        "shortcuts, and Connections pages — each led back out by its back button or Escape — " +
+        "and keeps the Feedback section and Quit on the front page itself; the Voice page reveals itself in " +
         "stages — the OpenAI key section alone until voice is available at all (the signed-in " +
         "account includes it, so for most people the page opens whole, with a note saying " +
         "whose allowance voice runs on and how much of today's remains), then the microphone " +
@@ -628,13 +631,13 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       label: "Account",
       detail:
         account.status === ACCOUNT_STATUS.SIGNED_IN
-          ? `Signed in as ${account.email} through ${account.provider === ACCOUNT_PROVIDER.GITHUB ? "GitHub" : "Google"}. Sign out by hand from Account, at the foot of the Settings tab's front page just above Quit — it asks before acting. The same section's Delete account row erases the account and everything Luke's service holds for it, cannot be undone, and is only ever done by hand — its button asks before acting, and no spoken ask can reach it.`
+          ? `Signed in as ${account.email} through ${account.provider === ACCOUNT_PROVIDER.GITHUB ? "GitHub" : "Google"}. Sign out by hand from Account, at the top of the Settings tab's front page — it asks before acting. The same section's Delete account row erases the account and everything Luke's service holds for it, cannot be undone, and is only ever done by hand — its button asks before acting, and no spoken ask can reach it.`
           : "Not signed in. The sign-in screen greets the launch once with Google and GitHub, then closes like any panel. While signed out the strip beside the housing keeps Luke's face and a small Sign in label in place of the session count, and hovering or pressing it brings the sign-in screen back. Live sessions and Luke's controls stay off until sign-in finishes. Choosing a provider stands the panel down to a small waiting popup with a Cancel button while the browser finishes, and the panel opens itself once the sign-in lands.",
     },
     {
       label: "Feedback and prompts",
       detail:
-        "The Feedback section near the foot of the Settings tab, just above the Account section and Quit — or the menu bar item's Send " +
+        "The Feedback section near the foot of the Settings tab, just above Quit — or the menu bar item's Send " +
         "Feedback… and Submit a Prompt… — opens a composer under the notch. Send feedback is for " +
         "bugs and ideas; Submit a prompt sends a prompt to a coding agent, and one the founders " +
         "like ships in the next release. Either goes by email to the founders with an optional " +

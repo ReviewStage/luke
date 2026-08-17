@@ -2301,11 +2301,21 @@ function AccountSection({
   onSignOut,
   onDeleteAccount,
   panelOpen,
+  hosted,
+  keyed,
+  voiceService,
+  hostedUsage,
 }: {
   account: Extract<AccountSnapshot, { status: typeof ACCOUNT_STATUS.SIGNED_IN }>;
   onSignOut: () => Promise<void>;
   onDeleteAccount: () => Promise<string | undefined>;
   panelOpen: boolean;
+  /** Whether voice currently runs on this account's included allowance. */
+  hosted: boolean;
+  /** Whether voice runs on the developer's own key instead. */
+  keyed: boolean;
+  voiceService?: RealtimeDiagnostics;
+  hostedUsage?: HostedUsageAnswer;
 }): React.JSX.Element {
   // Signing out asks first, the way deleting a key does: getting back in costs
   // a whole trip through the browser, so the button asks and only the answer
@@ -2357,7 +2367,7 @@ function AccountSection({
   };
 
   return (
-    <section className="settings-section" style={{ "--row-index": 4 } as React.CSSProperties}>
+    <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
       <h2>
         <UserIcon />
         Account
@@ -2440,6 +2450,19 @@ function AccountSection({
           </fieldset>
         </span>
       </div>
+      {/* What the account is buying right now, said where the account is: the
+          day's remaining allowance while voice runs on it, or whose key it
+          runs on instead. The wording is the Voice page's own note, worded
+          once, with the key row named because it is a page away from here. */}
+      {hosted ? (
+        <p className="settings-note">
+          {hostedVoiceNote(voiceService, hostedUsage, { namesKeyRow: true })}
+        </p>
+      ) : keyed ? (
+        <p className="settings-note">
+          Voice and session review run on your own OpenAI key, unmetered.
+        </p>
+      ) : null}
       <div className="settings-row">
         <span className="settings-copy">
           <strong>Delete account</strong>
@@ -2544,7 +2567,7 @@ function pageResetControl(
 function UpdatesSection({ control }: { control: UpdateControl }): React.JSX.Element {
   const row = updateRow(control.update);
   return (
-    <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
+    <section className="settings-section" style={{ "--row-index": 3 } as React.CSSProperties}>
       <h2>
         <DownloadIcon />
         Updates
@@ -2667,22 +2690,44 @@ export function SettingsPanel({
       ) : null}
 
       {drawnView === SETTINGS_VIEW.ROOT ? (
-        /* The front page: one row per page, then the sections that answer at
-           a glance — what Luke is allowed, the way to the founders, and the
-           way out. */
-        <section
-          className="settings-section settings-index"
-          style={{ "--row-index": 1 } as React.CSSProperties}
-        >
-          {SETTINGS_SUBVIEW_LIST.map((subview) => (
-            <SettingsNavRow
-              key={subview}
-              view={subview}
-              onOpen={onViewChange}
-              {...(subview === SETTINGS_VIEW.VOICE && voiceNote ? { attention: voiceNote } : {})}
+        /* The front page: whose account this is and what it is buying right
+           now, then one row per page, then the sections that answer at a
+           glance — what Luke is allowed, the way to the founders, and the way
+           out. The account leads because the allowance it carries is the first
+           thing worth knowing about a hosted run, and its sign-out asks before
+           it acts, so leading with it costs no accidental exits. */
+        <>
+          {account.status === ACCOUNT_STATUS.SIGNED_IN && settings ? (
+            <AccountSection
+              account={account}
+              onSignOut={onSignOut}
+              onDeleteAccount={onDeleteAccount}
+              panelOpen={panelOpen}
+              hosted={
+                settings.voiceAvailable &&
+                settings.credentialSources[VOICE_CREDENTIAL_PROVIDER.id] === CREDENTIAL_SOURCE.NONE
+              }
+              keyed={
+                settings.credentialSources[VOICE_CREDENTIAL_PROVIDER.id] !== CREDENTIAL_SOURCE.NONE
+              }
+              {...(voiceService ? { voiceService } : {})}
+              {...(hostedUsage ? { hostedUsage } : {})}
             />
-          ))}
-        </section>
+          ) : null}
+          <section
+            className="settings-section settings-index"
+            style={{ "--row-index": 2 } as React.CSSProperties}
+          >
+            {SETTINGS_SUBVIEW_LIST.map((subview) => (
+              <SettingsNavRow
+                key={subview}
+                view={subview}
+                onOpen={onViewChange}
+                {...(subview === SETTINGS_VIEW.VOICE && voiceNote ? { attention: voiceNote } : {})}
+              />
+            ))}
+          </section>
+        </>
       ) : null}
 
       {drawnView === SETTINGS_VIEW.VOICE && settings ? (
@@ -2737,18 +2782,6 @@ export function SettingsPanel({
           <UpdatesSection control={updates} />
 
           <FeedbackSection control={feedback} />
-
-          {/* The account stands last before the way out: signing out and
-              quitting are the two acts that end the session, so they live
-              together at the foot rather than above the sections still in use. */}
-          {account.status === ACCOUNT_STATUS.SIGNED_IN ? (
-            <AccountSection
-              account={account}
-              onSignOut={onSignOut}
-              onDeleteAccount={onDeleteAccount}
-              panelOpen={panelOpen}
-            />
-          ) : null}
 
           <button
             type="button"

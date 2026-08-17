@@ -27,8 +27,13 @@ export const VOICE_KEYLESS_NOTE = "Voice is off: sign in, or connect an OpenAI k
 export function hostedVoiceNote(
   diagnostics: RealtimeDiagnostics | undefined,
   usage?: HostedUsageAnswer,
+  options: { namesKeyRow?: boolean } = {},
 ): string {
-  const lift = "Connecting your own OpenAI key lifts the allowance and runs voice on it instead.";
+  // Away from the key's own row, the hint says where that row lives; beside
+  // it, naming the page would send the reader to where they already are.
+  const lift = options.namesKeyRow
+    ? "Connecting your own OpenAI key — on the Voice page — lifts the allowance and runs voice on it instead."
+    : "Connecting your own OpenAI key lifts the allowance and runs voice on it instead.";
   // When a fresh read is in hand it alone decides spent-ness: the minter's
   // last outcome survives midnight, and yesterday's refusal must not outrank
   // today's full allowance.

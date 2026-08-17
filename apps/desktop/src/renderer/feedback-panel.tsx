@@ -39,7 +39,7 @@ function FeedbackOffer({
  */
 export function FeedbackSection({ control }: { control: FeedbackEntryControl }): React.JSX.Element {
   return (
-    <section className="settings-section" style={{ "--row-index": 3 } as React.CSSProperties}>
+    <section className="settings-section" style={{ "--row-index": 4 } as React.CSSProperties}>
       <h2>
         <MegaphoneIcon />
         Feedback
