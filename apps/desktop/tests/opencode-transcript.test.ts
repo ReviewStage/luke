@@ -287,3 +287,50 @@ test("reads nothing when OpenCode has no database at all", async (t) => {
 
   assert.equal(rendered, undefined);
 });
+
+test("a turn that outgrows the part bound keeps its newest parts", async (t) => {
+  const dataDirectory = await temporaryDataDirectory(t);
+  // Forty tool calls and then the concluding words: the bound must cut the
+  // oldest calls, never the answer the turn actually ended on.
+  const toolParts = Array.from({ length: 40 }, (_, index) => ({
+    id: `prt_${String(index).padStart(3, "0")}`,
+    messageId: "msg_01",
+    time: index,
+    data: {
+      type: "tool",
+      callID: `call-${index}`,
+      tool: "bash",
+      state: {
+        status: "completed",
+        input: { command: `step ${index}` },
+        output: `output ${index}`,
+        title: `step ${index}`,
+        metadata: {},
+        time: { start: index, end: index },
+      },
+    },
+  }));
+  await writeOpenCodeState(
+    dataDirectory,
+    [{ id: "msg_01", time: 1, data: { role: "assistant", time: { created: 1, completed: 50 } } }],
+    [
+      ...toolParts,
+      {
+        id: "prt_999",
+        messageId: "msg_01",
+        time: 50,
+        data: { type: "text", text: "All forty steps passed." },
+      },
+    ],
+  );
+
+  const rendered = await readOpenCodeSessionTranscript({
+    dataDirectory,
+    providerSessionId: TEST_SESSION_ID,
+  });
+
+  assert.ok(rendered?.includes("OpenCode: All forty steps passed."));
+  const lines = rendered?.split("\n") ?? [];
+  assert.ok(lines.includes("→ bash: step 39"), "the newest call survives the cut");
+  assert.ok(!lines.includes("→ bash: step 0"), "the oldest call is what goes");
+});

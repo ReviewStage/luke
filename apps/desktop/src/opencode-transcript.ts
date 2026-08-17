@@ -70,11 +70,14 @@ const OPENCODE_RECENT_MESSAGE_QUERY = `
   LIMIT ?
 `;
 
+// Newest first here too: a tool-heavy turn can outgrow the bound, and the
+// concluding words sit on its newest parts. The rows are put back in the
+// order they were said before rendering.
 const OPENCODE_MESSAGE_PART_QUERY = `
   SELECT *
   FROM part
   WHERE message_id = ?
-  ORDER BY id ASC
+  ORDER BY id DESC
   LIMIT ?
 `;
 
@@ -194,7 +197,7 @@ function renderedFromDatabase(
     const parts = readRows(database, OPENCODE_MESSAGE_PART_QUERY, [
       messageId,
       OPENCODE_TRANSCRIPT_BOUNDS.MAXIMUM_PARTS,
-    ]);
+    ]).toReversed();
     return linesFromMessage(data, parts);
   });
   return boundedTranscript(lines, maximumLength);
