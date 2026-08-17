@@ -25,11 +25,13 @@ import {
 const RECAP_EXCERPT_LENGTH = 240;
 
 /**
- * The shortest excerpt cut worth keeping at a sentence boundary. Below this a
- * sentence cut would keep half a thought's worth of words, so the trim falls
- * through to the longer word cut instead.
+ * The least of the bound a sentence cut may keep. The parting words usually
+ * end on the question the session is waiting on, so a tidy boundary near the
+ * start — a short status line before one long question — must not win over
+ * carrying most of the words: below this the trim falls through to the word
+ * cut, which spends the whole bound.
  */
-const MINIMUM_EXCERPT_CUT = 24;
+const MINIMUM_SENTENCE_CUT = RECAP_EXCERPT_LENGTH / 2;
 
 /** One line of data: whatever whitespace the provider reported, flattened. */
 function flattened(text: string): string {
@@ -38,7 +40,7 @@ function flattened(text: string): string {
 
 /**
  * The parting words trimmed to their bound: whole when they fit, else cut at
- * the last sentence end, else at a word.
+ * the last sentence end when that keeps most of the room, else at a word.
  */
 function recapExcerpt(text: string): string {
   const line = flattened(text);
@@ -51,12 +53,12 @@ function recapExcerpt(text: string): string {
     window.lastIndexOf("? "),
     window.lastIndexOf("! "),
   );
-  if (sentenceEnd + 1 >= MINIMUM_EXCERPT_CUT) return window.slice(0, sentenceEnd + 1);
+  if (sentenceEnd + 1 >= MINIMUM_SENTENCE_CUT) return window.slice(0, sentenceEnd + 1);
   // The word cut spends one bounded character on the ellipsis; a sentence
   // cut ends on its own punctuation and spends nothing.
   const cut = line.slice(0, RECAP_EXCERPT_LENGTH - 1);
   const wordEnd = cut.lastIndexOf(" ");
-  return `${(wordEnd >= MINIMUM_EXCERPT_CUT ? cut.slice(0, wordEnd) : cut).trimEnd()}…`;
+  return `${(wordEnd > 0 ? cut.slice(0, wordEnd) : cut).trimEnd()}…`;
 }
 
 /** What happened, as data for the voice to word — not a sentence to read. */

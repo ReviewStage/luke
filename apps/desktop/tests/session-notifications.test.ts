@@ -155,6 +155,21 @@ test("an excerpt ending exactly at the bound's edge is still a sentence cut", ()
   assert.ok(!summary.includes("…"));
 });
 
+test("a short lead-in never costs the excerpt the question behind it", () => {
+  // The tidy boundary after the status line keeps almost none of the bound;
+  // the question the session is waiting on sits behind it and must survive.
+  const question = `Should the excerpt prefer ${"the tidy boundary ".repeat(12)}or the question itself?`;
+  const summary = sessionNoticeSpeech(
+    notice({
+      status: SESSION_NOTICE_STATUS.WAITING,
+      recap: `Tests pass. ${question}`,
+    }),
+    0,
+  ).summary;
+  assert.ok(summary.includes('parting words: "Tests pass. Should the excerpt prefer'));
+  assert.ok(summary.includes("…"));
+});
+
 test("parting words with no sentence break are cut at a word, never mid-word", () => {
   const summary = sessionNoticeSpeech(
     notice({
