@@ -141,7 +141,8 @@ const CONDUCTOR_ARCHIVE_WORKSPACE_CONTROL_ID = "archive-workspace";
 /**
  * The workspace-level control: Conductor documents archiving a workspace,
  * which files away every chat in it at once. It is advertised on a chat's row
- * only once every chat in that workspace was positively seen settled — a
+ * only once every still-open chat in that workspace was positively seen
+ * settled — a
  * workspace mid-turn has a stop to offer, not a filing away, and one whose
  * state could not be read is not known to have stopped — and the workspace it
  * acts on rides the advertisement as the control's target, so a press
@@ -355,11 +356,16 @@ interface ConductorWorkspace {
   lastActivityAt: number;
 }
 
+/**
+ * A chat still open on Conductor's own surface. An archived chat never becomes
+ * one of these, for the same reason an archived workspace never becomes a
+ * `ConductorWorkspace`: filing a chat away is how a user says that one
+ * conversation is done being watched, so the listing drops it before its
+ * status or transcript is ever asked for.
+ */
 interface ConductorSession {
   id: string;
   workspace: ConductorWorkspace;
-  archived: boolean;
-  archivedAt?: number;
   name?: string;
   model?: string;
   deepLink?: string;
@@ -368,9 +374,11 @@ interface ConductorSession {
 /**
  * Observes Conductor cloud sessions through the documented public API. It reads
  * only workspaces the authenticated user created and left open — a workspace
- * filed away on Conductor's own surface is dropped whole, its chats with it —
- * observation issues no request that can change provider state, and it reports
- * nothing at all without a credential. Beside the roster reads, one fixed query to Conductor's
+ * filed away on Conductor's own surface is dropped whole, its chats with it,
+ * and a chat filed away on its own is dropped the same way from a workspace
+ * that stays — observation issues no request that can change provider state,
+ * and it reports nothing at all without a credential. Beside the roster
+ * reads, one fixed query to Conductor's
  * transcripts view names the sessions the same pass observed and takes back
  * each chat's agent kind and the bounded tail its recap — the settled turn's
  * parting words — is read from; the history behind that tail is never asked
@@ -550,11 +558,7 @@ export class ConductorSessionAdapter
       this.#sessionTranscripts(request, sessions).catch(() => undefined),
       Promise.all(
         sessions.map((session) =>
-          // An archived session is a closed chat, so its state is already
-          // settled and no status request is needed.
-          session.archived
-            ? Promise.resolve(undefined)
-            : this.tolerateItemFailure(() => this.#sessionStatus(request, session.id)),
+          this.tolerateItemFailure(() => this.#sessionStatus(request, session.id)),
         ),
       ),
       Promise.all(
@@ -568,16 +572,16 @@ export class ConductorSessionAdapter
     ]);
 
     // The workspaces every observed chat of which was positively seen settled
-    // — closed, or reporting idle or errored — judged from this pass's own
-    // statuses. An archive is a workspace-level act, so it is offered only for
-    // these: a chat still working, and just as much one whose status could not
-    // be read at all, keeps the whole workspace off the list, because filing
-    // away a workspace whose state Luke has not actually seen stop could take
-    // a live turn with it.
+    // — reporting idle or errored — judged from this pass's own statuses. An
+    // archive is a workspace-level act, so it is offered only for these: a
+    // chat still working, and just as much one whose status could not be read
+    // at all, keeps the whole workspace off the list, because filing away a
+    // workspace whose state Luke has not actually seen stop could take a live
+    // turn with it. The chats already filed away never reached this pass, so
+    // they neither settle a workspace nor hold one open.
     const settledWorkspaceIds = new Set(sessions.map((session) => session.workspace.id));
     sessions.forEach((session, index) => {
       const settled =
-        session.archived ||
         reportedStatuses[index]?.status === CONDUCTOR_SESSION_STATUS.IDLE ||
         reportedStatuses[index]?.status === CONDUCTOR_SESSION_STATUS.ERROR;
       if (!settled) settledWorkspaceIds.delete(session.workspace.id);
@@ -682,40 +686,34 @@ export class ConductorSessionAdapter
       ],
       { [CONDUCTOR_QUERY.LIMIT]: String(CONDUCTOR_ADAPTER_DEFAULTS.SESSION_PAGE_SIZE) },
     );
-    return (
-      recordsFromPage(body, CONDUCTOR_FIELD.DATA)
-        .map((record): ConductorSession | undefined => {
-          const id = textFromRecord(record, CONDUCTOR_FIELD.ID);
-          if (!id) return undefined;
-          const archivedAt = timestampFromRecord(record, CONDUCTOR_FIELD.ARCHIVED_AT);
-          const model = modelLabel(record);
-          const deepLink = textFromRecord(record, CONDUCTOR_FIELD.DEEP_LINK);
-          // The chat's own name tells it from its siblings now that every chat
-          // is a row of its own; the workspace's name moved to the group.
-          const name = textFromRecord(record, CONDUCTOR_FIELD.NAME)?.slice(
-            0,
-            maximumSessionTitleLength,
-          );
-          return {
-            id,
-            workspace,
-            archived: archivedAt !== undefined,
-            ...(archivedAt === undefined ? {} : { archivedAt }),
-            ...(name ? { name } : {}),
-            ...(model ? { model } : {}),
-            ...(deepLink ? { deepLink } : {}),
-          };
-        })
-        .filter(isDefined)
-        // An open chat carries no timestamp until its status is read, so open
-        // chats are ordered before closed ones, then closed ones by how
-        // recently they closed.
-        .sort(
-          (first, second) =>
-            Number(first.archived) - Number(second.archived) ||
-            (second.archivedAt ?? 0) - (first.archivedAt ?? 0),
-        )
-    );
+    return recordsFromPage(body, CONDUCTOR_FIELD.DATA)
+      .map((record): ConductorSession | undefined => {
+        const id = textFromRecord(record, CONDUCTOR_FIELD.ID);
+        if (!id) return undefined;
+        // An archived chat was filed away on Conductor's own surface, so it
+        // does not belong on the roster any more than an archived workspace
+        // does: it is dropped here, before its status or transcript is ever
+        // asked for. Its workspace stays, carrying only the chats still open.
+        if (timestampFromRecord(record, CONDUCTOR_FIELD.ARCHIVED_AT) !== undefined) {
+          return undefined;
+        }
+        const model = modelLabel(record);
+        const deepLink = textFromRecord(record, CONDUCTOR_FIELD.DEEP_LINK);
+        // The chat's own name tells it from its siblings now that every chat
+        // is a row of its own; the workspace's name moved to the group.
+        const name = textFromRecord(record, CONDUCTOR_FIELD.NAME)?.slice(
+          0,
+          maximumSessionTitleLength,
+        );
+        return {
+          id,
+          workspace,
+          ...(name ? { name } : {}),
+          ...(model ? { model } : {}),
+          ...(deepLink ? { deepLink } : {}),
+        };
+      })
+      .filter(isDefined);
   }
 
   protected override workspaceAgentRoute(
@@ -811,38 +809,27 @@ export class ConductorSessionAdapter
   ): ProviderSessionObservation | undefined {
     // A workspace timestamp covers every chat in that workspace, so it would
     // make chats a user left hours ago look like they just stopped. The status
-    // timestamp is per-session, and a closed chat's archive time is the moment
-    // it settled; the workspace timestamp is only the last resort.
-    const observedAt =
-      reported?.updatedAt ?? session.archivedAt ?? session.workspace.lastActivityAt;
-    const status = this.#statusFor(session, reported?.status, observedAt, now);
+    // timestamp is per-session; the workspace timestamp is only the last
+    // resort.
+    const observedAt = reported?.updatedAt ?? session.workspace.lastActivityAt;
+    const status = this.#statusFor(reported?.status, observedAt, now);
     // The parting words are a recap only once the turn has actually parted:
-    // read for an idle or closed chat, they say where the agent left the work;
-    // read mid-turn they are half a sentence posing as an outcome, and read
-    // beside a failure they predate the thing the row now has to say.
+    // read for an idle chat, they say where the agent left the work; read
+    // mid-turn they are half a sentence posing as an outcome, and read beside
+    // a failure they predate the thing the row now has to say.
     const recap =
-      session.archived || reported?.status === CONDUCTOR_SESSION_STATUS.IDLE
-        ? transcript?.recap
-        : undefined;
+      reported?.status === CONDUCTOR_SESSION_STATUS.IDLE ? transcript?.recap : undefined;
     const model = agentAndModelLabel(transcript?.agentKind, session.model);
     // The workspace's own words for why its chats are quiet, and its own
-    // failure message when standing it up went wrong. Both belong only to the
-    // open chats: a closed one is settled, and the machinery around it must
-    // not bump its recap or dress a complete row as newly failed. A session's
-    // reported error is about the turn the user is watching, so it always
-    // outranks the machinery's.
-    const activity =
-      !session.archived && lifecycle?.status
-        ? CONDUCTOR_WORKSPACE_ACTIVITY[lifecycle.status]
-        : undefined;
-    const error = session.archived
-      ? undefined
-      : (reported?.errorMessage ?? lifecycle?.errorMessage);
+    // failure message when standing it up went wrong. A session's reported
+    // error is about the turn the user is watching, so it always outranks the
+    // machinery's.
+    const activity = lifecycle?.status ? CONDUCTOR_WORKSPACE_ACTIVITY[lifecycle.status] : undefined;
+    const error = reported?.errorMessage ?? lifecycle?.errorMessage;
     // The stop belongs to the turn and the archive to the workspace: a chat
     // mid-turn offers the stop alone — its own workspace is by definition
     // unsettled — and any chat of a positively settled workspace offers to
-    // file the whole workspace away, closed chats included, because a closed
-    // chat's row is exactly where tidying up happens. Every workspace here is
+    // file the whole workspace away. Every workspace and every chat here is
     // still open: the filed-away ones never made it past the listing.
     const controls = [
       ...(reported?.status === CONDUCTOR_SESSION_STATUS.WORKING ? [CONDUCTOR_CANCEL_CONTROL] : []),
@@ -869,12 +856,10 @@ export class ConductorSessionAdapter
       },
       // Conductor documents both halves of a send — queued while a session is
       // idle, steered into the turn while it works — so any open chat takes a
-      // message. A closed one is settled, and an errored one is documented for
-      // no writer.
+      // message. An errored one is documented for no writer.
       canReceiveMessage:
-        !session.archived &&
-        (reported?.status === CONDUCTOR_SESSION_STATUS.IDLE ||
-          reported?.status === CONDUCTOR_SESSION_STATUS.WORKING),
+        reported?.status === CONDUCTOR_SESSION_STATUS.IDLE ||
+        reported?.status === CONDUCTOR_SESSION_STATUS.WORKING,
       // Another agent lands in the workspace around this row, whatever state
       // the row's own chat is in: the workspace was observed this pass, and
       // that is the thing the creation endpoint takes. Its id rides the
@@ -895,12 +880,10 @@ export class ConductorSessionAdapter
   }
 
   #statusFor(
-    session: ConductorSession,
     reportedStatus: ConductorSessionStatus | undefined,
     observedAt: number,
     now: number,
   ): SessionStatus {
-    if (session.archived) return SESSION_STATUS.COMPLETE;
     if (!reportedStatus) return SESSION_STATUS.UNKNOWN;
     return agedStatus(
       SESSION_STATUS_BY_CONDUCTOR_STATUS[reportedStatus],
