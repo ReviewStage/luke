@@ -304,6 +304,12 @@ async function holdTurn(context: Harness): Promise<void> {
   await deviceArrives();
 }
 
+/** Ends the reply the server was producing, settling the exchange to READY. */
+function settleReply(context: Harness): void {
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
+  context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
+}
+
 /** The words one context item carries, or nothing when the event is not one. */
 function itemText(event: Record<string, unknown> | undefined): string {
   const item = event?.item as { content?: { text?: string }[] } | undefined;
@@ -404,8 +410,14 @@ test("push-to-talk opens the microphone only while held, then asks for a reply",
   context.session.stopListening(true);
   assert.equal(context.microphoneEnabled(), false);
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
-  // The turn's end is the device's end: the tracks stop and the sender is
-  // emptied, so nothing is held while Luke answers.
+  // The device is not closed at the commit — closing it is audible on shared
+  // hardware, and Luke is just starting to answer — but the track is off, so
+  // nothing is sent while he speaks.
+  assert.equal(context.microphoneStopped(), false);
+
+  settleReply(context);
+
+  // The exchange settling is what closes it, in the quiet after the reply.
   assert.equal(context.microphoneStopped(), true);
   assert.equal(context.replacedTracks().at(-1), null);
   assert.deepEqual(
@@ -3401,15 +3413,16 @@ test("Luke's own call is not on the developer's idle clock", async () => {
   assert.equal(context.idleArmed(), false);
 });
 
-test("the device closes with the turn and the conversation stays", async () => {
+test("the device closes with the exchange and the conversation stays", async () => {
   const context = harness();
   await context.session.connect();
   await holdTurn(context);
   assert.equal(context.microphoneEnabled(), true);
 
   context.session.stopListening(true);
+  settleReply(context);
 
-  // The turn's end is the device's end — tracks stopped, the sender emptied —
+  // The settle is the device's end — tracks stopped, the sender emptied —
   // while the call, and the conversation on it, stay warm and stay the
   // developer's: the next press reopens the device, never replaces the call.
   assert.equal(context.microphoneStopped(), true);
@@ -3418,11 +3431,12 @@ test("the device closes with the turn and the conversation stays", async () => {
   assert.equal(context.session.microphoneCall, true);
 });
 
-test("each turn opens its own device on the same call", async () => {
+test("each exchange opens its own device on the same call", async () => {
   const context = harness();
   await context.session.connect();
   await holdTurn(context);
   context.session.endTurn(true);
+  settleReply(context);
   const before = context.calls.length;
 
   context.session.beginTurn();
@@ -3483,6 +3497,7 @@ test("a device that vanishes mid-conversation fails the call at the press", asyn
   const context = harness();
   await context.session.connect();
   await armDeveloperTurn(context);
+  settleReply(context);
   context.failMicrophone();
 
   context.session.beginTurn();

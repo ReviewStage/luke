@@ -229,15 +229,19 @@ export function quietIsLukesOwn(input: { status: RealtimeStatus; heardLuke: bool
  * Drives one Realtime conversation over WebRTC.
  *
  * The capture device is the developer's, not the call's: it opens when a
- * press takes a turn and closes the moment the turn ends, and nothing else —
- * not connecting, not typing, not an announcement — ever touches it. The call
- * negotiates its sending half up front as a bare transceiver, so each turn's
- * fresh track rides the same sender without renegotiating. The press is held
- * as a pending intention while the device opens, exactly as a press that
- * beats the call's handshake is. What this buys is that the microphone
- * indicator and the capture are user-driven to the second — and that other
- * audio, Bluetooth codecs included, is never degraded by a device being held
- * while nobody is talking.
+ * press takes a turn and closes when the exchange that press started settles,
+ * and nothing else — not connecting, not typing, not an announcement — ever
+ * touches it. The call negotiates its sending half up front as a bare
+ * transceiver, so each turn's fresh track rides the same sender without
+ * renegotiating. The press is held as a pending intention while the device
+ * opens, exactly as a press that beats the call's handshake is. The close
+ * waits for the settle rather than the key coming up because closing a
+ * capture device is itself audible on shared hardware — a Bluetooth headset
+ * renegotiates its codec — and the key comes up exactly as Luke starts to
+ * answer; the track is disabled at that moment, and the device follows in
+ * the quiet after the reply. What this buys is that the microphone and its
+ * indicator are user-driven — one exchange, opened by one press — and that
+ * other audio is never degraded by a device held while nobody is talking.
  */
 export class RealtimeVoiceSession {
   readonly #options: RealtimeVoiceSessionOptions;
@@ -934,18 +938,19 @@ export class RealtimeVoiceSession {
     this.#microphone.enabled = false;
     if (!commit) {
       this.#send(clearInputAudioEvents());
-      // The turn is over, so the device is too: what was pressed for ends
-      // with the press.
-      this.#releaseMicrophone();
+      // Settling to READY is what releases the device: nothing is coming
+      // that its closing could talk over.
       this.#setStatus(REALTIME_STATUS.READY);
       return;
     }
     // A turn a tool may run in: the developer opened it and spoke into it, so
-    // a tool call it emits is the developer's own ask.
+    // a tool call it emits is the developer's own ask. The device is NOT
+    // released here, deliberately: closing a capture device is itself audible
+    // on shared hardware — a Bluetooth headset renegotiates its codec and
+    // playback drops out for a beat — and this is the very moment Luke starts
+    // to answer. The track is disabled, so nothing is sent; the device itself
+    // is let go when the exchange settles, in the quiet after the reply.
     this.#startResponse(pushToTalkCommitEvents(), true);
-    // Released after the commit is on its way. Everything spoken has already
-    // streamed live during the turn; the device has nothing left to add.
-    this.#releaseMicrophone();
   }
 
   /**
@@ -1847,6 +1852,13 @@ export class RealtimeVoiceSession {
     if (this.#status === status) return;
     this.#status = status;
     this.#restIdleTimer(status);
+    // The exchange settling is what closes the device the press opened — not
+    // the commit itself, because closing a capture device is audible on
+    // shared hardware (a Bluetooth headset renegotiates its codec), and at
+    // the commit Luke is just starting to answer. Here the reply is over and
+    // the blip lands in the quiet. A press already waiting keeps the device:
+    // its turn is about to reuse it.
+    if (status === REALTIME_STATUS.READY && !this.#pendingTurn) this.#releaseMicrophone();
     this.#options.onStatus(status);
   }
 
