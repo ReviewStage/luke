@@ -21,6 +21,13 @@ export function releaseDmgFileName(version) {
   return `Luke-${version}-${PACKAGED_ARCHITECTURE}.dmg`;
 }
 
+// The zip is the future auto-update path's food — Squirrel.Mac updates from
+// an archive of the app, never a DMG — so every release carries it beside the
+// DMG people actually open.
+export function releaseZipFileName(version) {
+  return `Luke-${version}-macos-${PACKAGED_ARCHITECTURE}.zip`;
+}
+
 export function releaseArtifactDirectory(repoRoot) {
   return path.join(repoRoot, "artifacts", "release");
 }

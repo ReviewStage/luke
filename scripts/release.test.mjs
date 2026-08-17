@@ -23,6 +23,7 @@ import {
   releaseArtifactDirectory,
   releaseDmgFileName,
   releaseSignatureMatchesIdentity,
+  releaseZipFileName,
   resolveNotaryCredentials,
   resolveReleaseSigning,
   stapleArguments,
@@ -274,6 +275,10 @@ test("release DMG store layout is branded and bounded", () => {
   assert.equal(DMG_WINDOW.BOUNDS.WIDTH, DMG_WINDOW.BACKGROUND.PNG.WIDTH);
   assert.equal(DMG_WINDOW.BOUNDS.HEIGHT, DMG_WINDOW.BACKGROUND.PNG.HEIGHT);
   assert.ok(DMG_WINDOW.BACKGROUND.DIRECTORY.startsWith("."));
+});
+
+test("release zip names include the desktop version and packaged architecture", () => {
+  assert.equal(releaseZipFileName("0.1.0"), "Luke-0.1.0-macos-arm64.zip");
 });
 
 test("the latest-DMG asset name carries no version, so its download URL never moves", () => {

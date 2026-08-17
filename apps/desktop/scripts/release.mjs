@@ -22,6 +22,7 @@ import {
   releaseArtifactDirectory,
   releaseDmgFileName,
   releaseSignatureMatchesIdentity,
+  releaseZipFileName,
   resolveNotaryCredentials,
   resolveReleaseSigning,
   stapleArguments,
@@ -236,6 +237,16 @@ try {
 
     execFileSync("xcrun", stapleArguments(dmgPath), { stdio: "inherit" });
     runVerificationCommands(verificationCommands);
+
+    // The DMG's notarization covers the app inside it, so the app can carry
+    // its own ticket too — and the zip archived from it is what Squirrel.Mac
+    // will one day update from, so it exists only on the notarized path: an
+    // archive that Gatekeeper would refuse is not a release asset.
+    execFileSync("xcrun", stapleArguments(appPath), { stdio: "inherit" });
+    const zipPath = path.join(artifactDirectory, releaseZipFileName(desktopPackage.version));
+    fs.rmSync(zipPath, { force: true });
+    execFileSync("ditto", ["-c", "-k", "--keepParent", appPath, zipPath], { stdio: "inherit" });
+    process.stdout.write(`Released macOS archive: ${zipPath}\n`);
   }
 
   const sizeInMegabytes = (fs.statSync(dmgPath).size / 1_000_000).toFixed(1);

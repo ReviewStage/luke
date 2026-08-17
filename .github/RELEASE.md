@@ -10,6 +10,10 @@ Pushing a `vX.Y.Z` tag publishes or updates a GitHub Release. A manual
 `workflow_dispatch` run performs the same release rehearsal without publishing; its zip,
 DMG, and checksums are retained as workflow artifacts for 14 days.
 
+While the Apple secrets below are not configured, a tag push skips the workflow cleanly
+and releases are cut by hand instead — see "Manual release" below. Configuring the
+secrets is what turns the tag push into the whole release.
+
 ## Required GitHub Actions secrets
 
 | Secret | Purpose | Source |
@@ -85,10 +89,31 @@ spctl -a -t exec -vv Luke.app
 
 A successful assessment identifies the source as `Notarized Developer ID`.
 
-## Local DMG release
+## Manual release
 
-The same DMG builder the workflow runs is available locally: `pnpm release:macos`
-produces the DMG under `artifacts/release/` using the `luke-notary` keychain
-profile where the workflow decodes the API-key secrets into a key file. The
-local flow does not upload or publish the DMG; distribution remains a separate
-deliberate step.
+Until the workflow's secrets exist, the whole release runs from a Mac holding the
+Developer ID identity and a stored `luke-notary` notarytool profile
+(`xcrun notarytool store-credentials luke-notary`), plus a `gh` login with write access.
+
+```sh
+export LUKE_CODESIGN_IDENTITY='Developer ID Application: …'
+pnpm release:macos                    # signs, notarizes, staples; writes the DMG and zip
+git tag v0.1.1 && git push origin v0.1.1
+./scripts/release/publish-github.sh   # creates the release and uploads every asset
+```
+
+The builder writes both distribution artifacts under `artifacts/release/`, and the
+publish script is what knows the asset set: the versioned DMG and zip with their
+checksums, plus the version-free `Luke.dmg` the website's download link depends on. It
+refuses to publish when the tag does not match `apps/desktop/package.json`, and it
+creates a published, non-draft release — the `releases/latest` link and the app's own
+update check both ignore drafts and prereleases, so a draft is a release nobody can
+reach. Re-running it is safe: assets are replaced with `--clobber`.
+
+Afterwards, confirm the two consumers see the build:
+
+```sh
+curl -sI -o /dev/null -w '%{http_code}\n' \
+  https://github.com/ReviewStage/luke/releases/latest/download/Luke.dmg
+curl -s https://api.github.com/repos/ReviewStage/luke/releases/latest | grep tag_name
+```
