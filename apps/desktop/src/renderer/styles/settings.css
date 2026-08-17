@@ -94,10 +94,12 @@
 }
 
 /* A page's head: the way back beside the page's own name, above the sections
-   it holds. */
+   it holds. It wraps so the reset's refusal, when there is one, lands on a
+   line of its own under the controls rather than crowding the title. */
 .settings-header {
   display: flex;
   flex: 0 0 auto;
+  flex-wrap: wrap;
   align-items: center;
   gap: 9px;
   padding: 0 2px;
@@ -107,6 +109,35 @@
   color: var(--text-primary);
   font-size: 12.5px;
   font-weight: 700;
+}
+
+/* The control that returns a group to its defaults rides the right edge,
+   wherever the group's name stands — a page's head or a section's heading. */
+.settings-reset {
+  margin-left: auto;
+}
+
+/* A group heading that carries the group's reset: the words keep their line
+   and the control keeps the right edge the page head's reset keeps. The
+   button is pulled toward the heading's own height with negative margins so
+   the heading keeps the section's rhythm rather than growing a row of its
+   own around one control. */
+.settings-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.settings-heading .settings-reset {
+  width: 22px;
+  height: 22px;
+  margin-top: -5px;
+  margin-bottom: -5px;
+}
+
+/* A reset's refusal takes the wrap's next line whole. */
+.settings-reset-refusal {
+  flex-basis: 100%;
 }
 
 /* The front page's list of pages. The rows sit at a menu's spacing rather
@@ -236,6 +267,20 @@
   color: var(--text-primary);
   font-size: 12px;
   font-weight: 620;
+}
+
+/* The mark a row wears while its value differs from the default: a small dot
+   riding the name's line, said in words for a reader by the hidden text
+   inside it. The secondary text colour rather than a state colour on
+   purpose — changed is a fact about a preference, never an urgency. */
+.settings-changed {
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  vertical-align: 2px;
 }
 
 .settings-copy small,

@@ -24,7 +24,9 @@ import {
   CREDENTIAL_SOURCE,
   type CredentialSource,
   SECRET_STORAGE,
+  SETTINGS_RESET_SCOPE,
   type SecretStorage,
+  type SettingsResetScope,
   type SettingsUpdateResult,
 } from "./shared/contracts";
 import {
@@ -982,6 +984,50 @@ export class SettingsStore {
     return this.#setField((persisted) => {
       if (persisted.showInDock === show) return;
       return { ...persisted, showInDock: show };
+    });
+  }
+
+  /**
+   * Returns one group of preferences to its defaults in a single write, by
+   * forgetting the choices rather than storing copies of the defaults: an
+   * optional field is deleted the way its own clear deletes it, and a plain
+   * boolean goes back to the value `APP_SETTING_DEFAULTS` states — so a
+   * default that moves in a later build moves these settings with it. The
+   * scopes are fixed by this build and none reaches a credential, an account,
+   * or the agent pairing, whose own row already offers the provider's default.
+   * A scope already at its defaults writes nothing, like any other setter
+   * asked for the value it holds.
+   */
+  async resetSettings(scope: SettingsResetScope): Promise<SettingsUpdateResult> {
+    return this.#setField((persisted) => {
+      const next: PersistedSettings = { ...persisted };
+      switch (scope) {
+        case SETTINGS_RESET_SCOPE.VOICE:
+          delete next.voice;
+          delete next.voiceSpeed;
+          next.voiceCaptions = APP_SETTING_DEFAULTS.voiceCaptions;
+          next.duckOtherMedia = APP_SETTING_DEFAULTS.duckOtherMedia;
+          break;
+        case SETTINGS_RESET_SCOPE.APPEARANCE:
+          next.showInMenuBar = APP_SETTING_DEFAULTS.showInMenuBar;
+          next.showInDock = APP_SETTING_DEFAULTS.showInDock;
+          next.showOnAllDisplays = APP_SETTING_DEFAULTS.showOnAllDisplays;
+          delete next.formFactor;
+          break;
+        case SETTINGS_RESET_SCOPE.SHORTCUTS:
+          delete next.voiceHotkey;
+          delete next.askHotkey;
+          delete next.stopHotkey;
+          break;
+        case SETTINGS_RESET_SCOPE.WORKSPACES:
+          delete next.defaultWorkspaceProvider;
+          delete next.workspaceProjectDefaults;
+          break;
+      }
+      const changed = (Object.keys(persisted) as (keyof PersistedSettings)[]).some(
+        (field) => next[field] !== persisted[field],
+      );
+      return changed ? next : undefined;
     });
   }
 

@@ -541,7 +541,12 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "Connections pages — each led back out by its back button or Escape — and keeps the " +
         "microphone permission, the Feedback section, and Quit on the front page itself; the " +
         "menu bar item's Settings… opens the same tab, and Command-comma switches to it while " +
-        "the panel has the keyboard. A " +
+        "the panel has the keyboard. A dot beside a settings row marks a value changed from " +
+        "its default, and a page holding one ends its head with a reset, pressed by hand and " +
+        "never spoken, that returns that page's settings to their defaults in one act — the " +
+        "Workspaces group on the Connections page carries its own reset on its heading, and " +
+        "no reset touches a key, an account, or the Conductor agent choice, whose own menu " +
+        "already offers Conductor's default. A " +
         "change Luke makes himself is shown as it is made: the panel comes forward on the tab, " +
         "and the page, the change belongs to, and his face leaves the strip beside the housing, " +
         "dives to the control that moved, and floats back.",

@@ -99,6 +99,30 @@ export const APP_SETTING_DEFAULTS = {
   showOnAllDisplays: false,
 } as const satisfies Partial<Record<keyof AppSettings, boolean>>;
 
+/**
+ * The groups of preferences a reset control returns to their defaults, each
+ * scoped to exactly the rows the control stands over: a settings page, or the
+ * Workspaces group on the Connections page. A fixed vocabulary rather than a
+ * field list on the wire, so a renderer can only ever name a grouping this
+ * build documents — and no scope reaches a credential, an account, or the
+ * Conductor agent pairing, whose own row already offers its default.
+ */
+export const SETTINGS_RESET_SCOPE = {
+  VOICE: "voice",
+  APPEARANCE: "appearance",
+  SHORTCUTS: "shortcuts",
+  WORKSPACES: "workspaces",
+} as const;
+
+export type SettingsResetScope = (typeof SETTINGS_RESET_SCOPE)[keyof typeof SETTINGS_RESET_SCOPE];
+
+const SETTINGS_RESET_SCOPE_LIST: readonly SettingsResetScope[] =
+  Object.values(SETTINGS_RESET_SCOPE);
+
+export function isSettingsResetScope(value: unknown): value is SettingsResetScope {
+  return SETTINGS_RESET_SCOPE_LIST.includes(value as SettingsResetScope);
+}
+
 /** Renderer-safe settings. Credentials are never sent to a renderer. */
 export interface AppSettings {
   /** Where each provider's key comes from, keyed by provider id. */
@@ -435,6 +459,14 @@ export interface AppBridge {
   ): Promise<SettingsUpdateResult>;
   /** Turns the on-screen caption of Luke's speech on or off. */
   setVoiceCaptions(enabled: boolean): Promise<SettingsUpdateResult>;
+  /**
+   * Returns one group of preferences to its defaults in a single stored write:
+   * the choices behind the named scope are forgotten, the way each row's own
+   * clear forgets one, so what stands afterwards is the default itself rather
+   * than a copy of it pinned down. The renderer names a scope from the set
+   * fixed by this build, never a field list, and no scope reaches a credential.
+   */
+  resetSettings(scope: SettingsResetScope): Promise<SettingsUpdateResult>;
   /** Turns the quieting of Music and Spotify during a spoken exchange on or off. */
   setDuckOtherMedia(enabled: boolean): Promise<SettingsUpdateResult>;
   /**
@@ -662,6 +694,7 @@ export const channels = {
   setDefaultWorkspaceProvider: "app:set-default-workspace-provider",
   setWorkspaceAgentDefault: "app:set-workspace-agent-default",
   setWorkspaceProjectDefault: "app:set-workspace-project-default",
+  resetSettings: "app:reset-settings",
   openSession: "app:open-session",
   openSessionChange: "app:open-session-change",
   readSessionTranscript: "app:read-session-transcript",

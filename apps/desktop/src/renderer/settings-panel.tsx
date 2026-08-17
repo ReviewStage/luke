@@ -20,12 +20,15 @@ import type {
   AppSettings,
   CredentialSource,
   MicrophoneStatus,
+  SettingsResetScope,
 } from "../shared/contracts";
 import {
   ACCOUNT_PROVIDER,
   ACCOUNT_STATUS,
+  APP_SETTING_DEFAULTS,
   CREDENTIAL_SOURCE,
   SECRET_STORAGE,
+  SETTINGS_RESET_SCOPE,
 } from "../shared/contracts";
 import type { CredentialProvider } from "../shared/credential-providers";
 import {
@@ -187,6 +190,13 @@ export interface PreferenceWrites {
     providerId: ProviderId,
     providerProjectId: string | undefined,
   ) => Promise<string | undefined>;
+  /**
+   * Returns one group of settings to its defaults, in one stored write: the
+   * scope names a page, or the Workspaces group, from the set fixed by this
+   * build, and no scope reaches a credential. The store answers with why when
+   * it refuses, and the control that asked is where that answer belongs.
+   */
+  onSettingsReset: (scope: SettingsResetScope) => Promise<string | undefined>;
 }
 
 /**
@@ -687,6 +697,95 @@ function formFactorOptionLabel(formFactor: PanelFormFactor): string {
 }
 
 /**
+ * The small mark beside a row's name while its value differs from the
+ * default: what a page's reset would change, said row by row rather than
+ * only by the reset appearing. A statement, not a control — the row's own
+ * control is where the value moves — so it carries its meaning as words for
+ * a reader and a hover alike.
+ */
+function ChangedMark(): React.JSX.Element {
+  return (
+    <span className="settings-changed" title="Changed from its default">
+      <span className="visually-hidden">(changed from its default)</span>
+    </span>
+  );
+}
+
+/* Whether each group holds a value its reset would change, judged from the
+   same resolved settings the rows draw — so the mark, the reset, and the row
+   always agree on what is standing. The voice and pace compare against the
+   shipped defaults the way their menus label them; a launch-environment
+   override reads as changed, which is what the row shows too. */
+function voiceSettingsChanged(settings: AppSettings): boolean {
+  return (
+    settings.voice !== REALTIME_DEFAULTS.VOICE ||
+    settings.voiceSpeed !== REALTIME_DEFAULTS.SPEED ||
+    settings.voiceCaptions !== APP_SETTING_DEFAULTS.voiceCaptions ||
+    settings.duckOtherMedia !== APP_SETTING_DEFAULTS.duckOtherMedia
+  );
+}
+
+function appearanceSettingsChanged(settings: AppSettings): boolean {
+  return (
+    settings.showInMenuBar !== APP_SETTING_DEFAULTS.showInMenuBar ||
+    settings.showInDock !== APP_SETTING_DEFAULTS.showInDock ||
+    settings.showOnAllDisplays !== APP_SETTING_DEFAULTS.showOnAllDisplays ||
+    settings.formFactor !== DEFAULT_PANEL_FORM_FACTOR
+  );
+}
+
+/* The keys' terms are the rows' own: a chord is changed while one is stored,
+   whatever key the row is showing for it. */
+function shortcutSettingsChanged(shortcuts: ShortcutControl): boolean {
+  return shortcuts.voiceChosen || shortcuts.askChosen || shortcuts.stopChosen;
+}
+
+/* Only the choices the Workspaces group itself draws: the Conductor agent
+   pairing lives on the Conductor row, whose own menu already offers the
+   provider's default, so no reset here may reach it. */
+function workspaceSettingsChanged(settings: AppSettings): boolean {
+  return (
+    settings.defaultWorkspaceProvider !== undefined ||
+    Object.keys(settings.workspaceProjectDefaults ?? {}).length > 0
+  );
+}
+
+/**
+ * The one control that returns a whole group to its defaults, drawn only
+ * while the group holds something to return — until then it could only offer
+ * to change nothing, the same reason a shortcut's own reset waits for a
+ * chord. One press is one ask of the store; the control rests until the
+ * store answers, and a refusal is worded where the press was.
+ */
+function ResetGroupButton({
+  scope,
+  label,
+  onReset,
+}: {
+  scope: SettingsResetScope;
+  /** The group as the button names it aloud: "the Voice page's settings". */
+  label: string;
+  onReset: (scope: SettingsResetScope) => Promise<string | undefined>;
+}): React.JSX.Element {
+  const { busy, rejection, run } = useSettingWrite(onReset);
+  return (
+    <>
+      <button
+        type="button"
+        className="icon-button settings-reset"
+        disabled={busy}
+        aria-label={`Reset ${label} to the defaults`}
+        title="Back to the defaults"
+        onClick={() => run(scope)}
+      >
+        <ResetIcon />
+      </button>
+      {rejection ? <p className="error-message settings-reset-refusal">{rejection}</p> : null}
+    </>
+  );
+}
+
+/**
  * The round trip a settings control waits on. Each change is asked of the
  * store, the control rests until it answers rather than claiming a state it
  * may not get, and a refusal is kept here — under this control — rather than
@@ -729,6 +828,7 @@ function SwitchRow({
   checked,
   ariaLabel,
   errand,
+  changed,
   onChange,
 }: {
   label: string;
@@ -738,6 +838,8 @@ function SwitchRow({
   ariaLabel?: string;
   /** The id a spoken change names this switch by, so an errand lands on it. */
   errand?: ErrandTarget;
+  /** Whether the stored value differs from the default, which earns the mark. */
+  changed?: boolean;
   onChange: (enabled: boolean) => Promise<string | undefined>;
 }): React.JSX.Element {
   const { busy, rejection, run } = useSettingWrite(onChange);
@@ -745,7 +847,10 @@ function SwitchRow({
     <>
       <div className="settings-row">
         <span className="settings-copy">
-          <strong>{label}</strong>
+          <strong>
+            {label}
+            {changed ? <ChangedMark /> : null}
+          </strong>
           {detail ? <small>{detail}</small> : null}
         </span>
         <button
@@ -782,6 +887,7 @@ function SelectRow<Value extends string | number>({
   parse,
   ariaLabel,
   errand,
+  changed,
   busy: restBusy,
   onChange,
 }: {
@@ -798,6 +904,8 @@ function SelectRow<Value extends string | number>({
    * and only the `select` is drawn with the corners that outline has to take.
    */
   errand?: ErrandTarget;
+  /** Whether the stored value differs from the default, which earns the mark. */
+  changed?: boolean;
   /**
    * A sibling write in flight. Two pop-ups that store one setting share a
    * rest so one save cannot finish behind the other.
@@ -811,7 +919,10 @@ function SelectRow<Value extends string | number>({
     <>
       <div className="settings-row">
         <span className="settings-copy">
-          <strong>{label}</strong>
+          <strong>
+            {label}
+            {changed ? <ChangedMark /> : null}
+          </strong>
           {detail ? <small>{detail}</small> : null}
         </span>
         <span className="voice-select">
@@ -926,6 +1037,7 @@ function WorkspaceAgentRow({
           // out of the select is a broken control rather than a choice.
           return choices[Number(raw)] ? raw : undefined;
         }}
+        changed={selection !== undefined}
         busy={write.busy}
         onChange={(next) => {
           if (next === PROVIDER_DEFAULT_VALUE) {
@@ -968,6 +1080,7 @@ function WorkspaceAgentRow({
             // stored selection is always one whole the table lists.
             return chosen.efforts.includes(raw) ? raw : undefined;
           }}
+          changed={selection?.effort !== undefined}
           busy={write.busy}
           onChange={(next) => {
             const effort = next !== PROVIDER_DEFAULT_VALUE ? next : undefined;
@@ -1153,16 +1266,21 @@ function SettingsNavRow({
 /**
  * A page's head: the way back beside the page's own name. The back button
  * returns to the front page and nothing else — a page holds no unsaved state
- * of its own, so leaving one never needs a warning.
+ * of its own, so leaving one never needs a warning. A page whose settings can
+ * be returned to their defaults ends the line with that reset, drawn only
+ * while something on the page differs from them.
  */
 function SettingsPageHeader({
   view,
   onBack,
   backControl,
+  reset,
 }: {
   view: SettingsSubview;
   onBack: () => void;
   backControl: React.RefObject<HTMLButtonElement | null>;
+  /** The page's reset control, absent while the page stands at its defaults. */
+  reset?: React.JSX.Element;
 }): React.JSX.Element {
   return (
     <div className="settings-header" style={{ "--row-index": 0 } as React.CSSProperties}>
@@ -1177,6 +1295,7 @@ function SettingsPageHeader({
         <BackIcon />
       </button>
       <strong>{SETTINGS_PAGE[view].title}</strong>
+      {reset}
     </div>
   );
 }
@@ -1258,6 +1377,7 @@ function VoiceControlsSection({
       <SelectRow
         label="Voice"
         errand={APP_SETTING_ID.VOICE}
+        changed={settings.voice !== REALTIME_DEFAULTS.VOICE}
         value={settings.voice}
         options={REALTIME_VOICE_LIST.map((candidate) => ({
           value: candidate,
@@ -1273,6 +1393,7 @@ function VoiceControlsSection({
       <SelectRow
         label="Speed"
         errand={APP_SETTING_ID.VOICE_SPEED}
+        changed={settings.voiceSpeed !== REALTIME_DEFAULTS.SPEED}
         value={settings.voiceSpeed}
         options={REALTIME_VOICE_SPEED_LIST.map((candidate) => ({
           value: candidate,
@@ -1290,6 +1411,7 @@ function VoiceControlsSection({
         label="Captions"
         ariaLabel="Caption Luke's speech on screen"
         errand={APP_SETTING_ID.VOICE_CAPTIONS}
+        changed={settings.voiceCaptions !== APP_SETTING_DEFAULTS.voiceCaptions}
         checked={settings.voiceCaptions}
         onChange={preferences.onVoiceCaptionsChange}
       />
@@ -1304,6 +1426,7 @@ function VoiceControlsSection({
              when macOS asks whether Luke may speak to each player at all. */
           "Their volume dips while you and Luke are talking, and returns after."
         }
+        changed={settings.duckOtherMedia !== APP_SETTING_DEFAULTS.duckOtherMedia}
         checked={settings.duckOtherMedia}
         onChange={preferences.onDuckOtherMediaChange}
       />
@@ -1333,24 +1456,28 @@ function AppearanceSection({
       <SwitchRow
         label="Show Luke in the menu bar"
         errand={APP_SETTING_ID.SHOW_IN_MENU_BAR}
+        changed={settings.showInMenuBar !== APP_SETTING_DEFAULTS.showInMenuBar}
         checked={settings.showInMenuBar}
         onChange={preferences.onShowInMenuBarChange}
       />
       <SwitchRow
         label="Show Luke in the Dock"
         errand={APP_SETTING_ID.SHOW_IN_DOCK}
+        changed={settings.showInDock !== APP_SETTING_DEFAULTS.showInDock}
         checked={settings.showInDock}
         onChange={preferences.onShowInDockChange}
       />
       <SwitchRow
         label="Show Luke on all displays"
         errand={APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS}
+        changed={settings.showOnAllDisplays !== APP_SETTING_DEFAULTS.showOnAllDisplays}
         checked={settings.showOnAllDisplays}
         onChange={preferences.onShowOnAllDisplaysChange}
       />
       <SelectRow
         label="Form factor"
         errand={APP_SETTING_ID.FORM_FACTOR}
+        changed={settings.formFactor !== DEFAULT_PANEL_FORM_FACTOR}
         detail={
           /* Where the choice applies, because on a notched display this row
              visibly does nothing: the real housing always wins. */
@@ -1388,10 +1515,22 @@ function WorkspacesSection({
 }): React.JSX.Element {
   return (
     <section className="settings-section" style={{ "--row-index": 3 } as React.CSSProperties}>
-      <h2>
-        <FolderIcon />
-        Workspaces
-      </h2>
+      {/* The heading and the group's reset share a line: the reset stands
+          over exactly the rows below it, and nothing else on the Connections
+          page — the keys above are not settings and are never reset. */}
+      <div className="settings-heading">
+        <h2>
+          <FolderIcon />
+          Workspaces
+        </h2>
+        {workspaceSettingsChanged(settings) ? (
+          <ResetGroupButton
+            scope={SETTINGS_RESET_SCOPE.WORKSPACES}
+            label="the workspace defaults"
+            onReset={preferences.onSettingsReset}
+          />
+        ) : null}
+      </div>
       <SelectRow
         label="Default workspace provider"
         detail={
@@ -1401,6 +1540,7 @@ function WorkspacesSection({
              that choice is seen, changed, or returned to asking. */
           "Where an ask that names no provider creates a workspace. Your first creation sets it."
         }
+        changed={settings.defaultWorkspaceProvider !== undefined}
         value={settings.defaultWorkspaceProvider ?? ASK_EACH_TIME}
         options={[
           { value: ASK_EACH_TIME, label: "Ask each time" },
@@ -1458,6 +1598,7 @@ function WorkspaceProjectRow({
       label={`Default ${provider.name} project`}
       ariaLabel={`The project a nameless ask creates ${provider.name} workspaces in`}
       detail="Where an ask that names no project creates a workspace. Your first creation there sets it."
+      changed={stored !== undefined}
       value={stored ?? FIRST_CREATION_SETS_IT}
       options={[
         { value: FIRST_CREATION_SETS_IT, label: "First creation sets it" },
@@ -1549,7 +1690,12 @@ function ShortcutRow({
   return (
     <div className="settings-row">
       <span className="settings-copy">
-        <strong>{title}</strong>
+        <strong>
+          {title}
+          {/* A stored chord is a changed value on the other rows' terms; the
+              flag that shows Reset is the flag that earns the mark. */}
+          {chosen ? <ChangedMark /> : null}
+        </strong>
         <small>{detail}</small>
       </span>
       <span className="shortcut-controls">
@@ -1810,6 +1956,49 @@ function AccountSection({
   );
 }
 
+/**
+ * The reset a page's header carries, absent while everything the page draws
+ * stands at its defaults. Voice, Appearance, and Keyboard shortcuts each
+ * offer their own; Connections offers none — the page holds keys and rows
+ * that are not settings, and its one resettable group, Workspaces, carries
+ * its own control on its own heading instead.
+ */
+function pageResetControl(
+  view: SettingsView,
+  settings: AppSettings | undefined,
+  shortcuts: ShortcutControl,
+  preferences: PreferenceWrites,
+): React.JSX.Element | undefined {
+  if (view === SETTINGS_VIEW.VOICE && settings && voiceSettingsChanged(settings)) {
+    return (
+      <ResetGroupButton
+        scope={SETTINGS_RESET_SCOPE.VOICE}
+        label="the Voice settings"
+        onReset={preferences.onSettingsReset}
+      />
+    );
+  }
+  if (view === SETTINGS_VIEW.APPEARANCE && settings && appearanceSettingsChanged(settings)) {
+    return (
+      <ResetGroupButton
+        scope={SETTINGS_RESET_SCOPE.APPEARANCE}
+        label="the Appearance settings"
+        onReset={preferences.onSettingsReset}
+      />
+    );
+  }
+  if (view === SETTINGS_VIEW.SHORTCUTS && shortcutSettingsChanged(shortcuts)) {
+    return (
+      <ResetGroupButton
+        scope={SETTINGS_RESET_SCOPE.SHORTCUTS}
+        label="the keyboard shortcuts"
+        onReset={preferences.onSettingsReset}
+      />
+    );
+  }
+  return undefined;
+}
+
 export function SettingsPanel({
   account,
   onSignOut,
@@ -1870,6 +2059,8 @@ export function SettingsPanel({
     }
     backControl.current?.focus();
   }, [drawnView, panelOpen]);
+  // The drawn page's reset, absent while that page stands at its defaults.
+  const pageReset = pageResetControl(drawnView, settings, shortcuts, preferences);
   return (
     <div
       ref={box}
@@ -1885,6 +2076,7 @@ export function SettingsPanel({
           view={drawnView}
           onBack={() => onViewChange(SETTINGS_VIEW.ROOT)}
           backControl={backControl}
+          {...(pageReset ? { reset: pageReset } : {})}
         />
       ) : null}
 
