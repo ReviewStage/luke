@@ -93,6 +93,12 @@ export function askRefusal(status: RealtimeStatus, microphone: MicrophoneStatus)
  * between the question and its answer. Only a refusal earns a sentence, and it
  * leaves the draft in place, because a refused ask is still the developer's
  * words.
+ *
+ * The field wraps rather than scrolls sideways: an ask long enough to re-read
+ * is worth seeing whole, so the pill grows a line at a time — each new line an
+ * instant layout change the surface answers with one spring — up to the
+ * stylesheet's cap, where the field starts scrolling instead. Enter still
+ * sends; Shift-Enter breaks the line.
  */
 export function AskLuke({
   ask,
@@ -120,7 +126,7 @@ export function AskLuke({
   const [draft, setDraft] = useState("");
   const [asking, setAsking] = useState(false);
   const [refusal, setRefusal] = useState<string>();
-  const field = useRef<HTMLInputElement | null>(null);
+  const field = useRef<HTMLTextAreaElement | null>(null);
   /**
    * One ask at a time, as a ref rather than state for the same reason the row
    * composer holds one: disabling only lands with the next render, and a
@@ -165,7 +171,7 @@ export function AskLuke({
         // someone reaching for the caret, so the caret is what they get.
         onClick={() => field.current?.focus()}
       >
-        <input
+        <textarea
           ref={field}
           id={ASK_LUKE_INPUT_ID}
           className="ask-luke-input"
@@ -174,6 +180,7 @@ export function AskLuke({
           placeholder={ASK_PLACEHOLDER}
           autoComplete="off"
           spellCheck={false}
+          rows={1}
           value={draft}
           onChange={(event) => {
             // Typing again answers the refusal, so the refusal goes.
@@ -193,6 +200,17 @@ export function AskLuke({
             if (event.key === "Escape") {
               event.stopPropagation();
               event.currentTarget.blur();
+              return;
+            }
+            // Enter is the send a one-line field taught, kept now the field
+            // wraps; Shift-Enter is the line break, the way every chat
+            // composer splits the two. A textarea's Enter no longer submits
+            // the form on its own, so the send is asked for here — but not
+            // mid-composition: an IME's Enter is choosing a character, not
+            // taking a turn.
+            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+              event.preventDefault();
+              void submit();
             }
           }}
         />

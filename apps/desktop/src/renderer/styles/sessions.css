@@ -983,15 +983,23 @@ html[data-keyboard="true"] button.row-main:focus-visible {
 
 /* The same pill every row composer draws, sized up a step because it addresses
    Luke rather than one session. A press anywhere in it lands the caret, so the
-   whole pill says text. */
+   whole pill says text.
+
+   The corner radius is written as the resting pill's half-height rather than
+   as the stadium shorthand, because the field inside wraps: at one line the
+   pill is the same stadium it always was, and a grown pill keeps that corner
+   instead of ballooning its ends around the send disc. Everything rides the
+   bottom edge — the field grows upward from the send disc's line, so the disc
+   never drifts away from the Enter it stands for. */
 .ask-luke {
+  position: relative;
   display: flex;
   min-width: 0;
-  align-items: center;
+  align-items: flex-end;
   gap: 7px;
   padding: 4px 4px 4px 14px;
   border: 1px solid var(--hairline);
-  border-radius: 999px;
+  border-radius: 19px;
   background: rgba(0, 0, 0, 0.4);
   cursor: text;
   transition:
@@ -1007,7 +1015,12 @@ html[data-keyboard="true"] button.row-main:focus-visible {
   background: rgba(0, 0, 0, 0.55);
 }
 
-/* The field itself is bare: the pill around it is the drawn edge. */
+/* The field itself is bare: the pill around it is the drawn edge. It sizes to
+   what it holds — each wrap or line break lands as an instant layout change,
+   which is what lets the surface take one clean spring to the new height
+   instead of chasing an animated field — until four lines, where the field
+   scrolls: the pill is a composer at the panel's foot, not a page. The line
+   height is written down because the cap is arithmetic on it. */
 .ask-luke-input {
   min-width: 0;
   flex: 1;
@@ -1015,9 +1028,15 @@ html[data-keyboard="true"] button.row-main:focus-visible {
   border: 0;
   background: transparent;
   color: var(--text-primary);
+  field-sizing: content;
   font-family: inherit;
   font-size: 12px;
+  line-height: 16px;
+  max-height: calc(4 * 16px + 12px);
   outline: none;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  resize: none;
 }
 
 .ask-luke-input::placeholder {
@@ -1026,9 +1045,15 @@ html[data-keyboard="true"] button.row-main:focus-visible {
 
 /* How the reach is learned: the keycaps surface while the pointer is over the
    pill and stand down again once the caret is in or a draft holds the field —
-   whoever they could teach already knows. They keep their layout box in every
-   state and only fade, so hovering re-shapes nothing, and they take no
-   pointer: a press on them is a press on the field they name.
+   whoever they could teach already knows. They overlay the field's tail
+   rather than taking a flex slot, so hovering re-shapes nothing and an idle
+   pill holds no blank room between its placeholder and the send disc; they
+   take no pointer: a press on them is a press on the field they name.
+
+   The offsets are the neighbours' own arithmetic: 37px clears the send disc
+   (4px inset + 26px disc + the pill's 7px gap), and 10px centres a 16px cap
+   on the field's 28px single line — the only line there ever is while the
+   caps can show, because a draft stands them down.
 
    A step smaller than a settings row's caps: these ride inside the composer
    beside its placeholder, where a full-size key would read as a control rather
@@ -1036,6 +1061,10 @@ html[data-keyboard="true"] button.row-main:focus-visible {
 .ask-luke-hint {
   --keycap-size: 16px;
   --keycap-text: 9.5px;
+
+  position: absolute;
+  right: 37px;
+  bottom: 10px;
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--duration-hover) ease;
