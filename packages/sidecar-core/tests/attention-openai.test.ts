@@ -104,11 +104,12 @@ test("a wire update outside the build's value sets is refused, not repaired", ()
 test("wire fields are cut to the bounds the local roster holds them to", () => {
   const parsed = attentionPromptUpdateFromWire({
     trigger: ATTENTION_TRIGGER.OBSERVED,
-    providerName: "Claude Code",
+    providerName: "p".repeat(maximumSessionTitleLength + 40),
     title: `  ${"t".repeat(maximumSessionTitleLength + 40)}  `,
     status: SESSION_STATUS.WORKING,
     recap: "r".repeat(maximumSessionRecapLength + 40),
   });
+  assert.equal(parsed?.providerName.length, maximumSessionTitleLength);
   assert.equal(parsed?.title.length, maximumSessionTitleLength);
   assert.equal(parsed?.recap?.length, maximumSessionRecapLength);
 });

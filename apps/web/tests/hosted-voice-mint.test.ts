@@ -93,6 +93,18 @@ test("an empty body mints the build's own defaults", async () => {
   assert.equal(sent.session.audio.output.speed, REALTIME_DEFAULTS.SPEED);
 });
 
+test("a configured model labels the credential even when the payload omits its own", async () => {
+  const call: UpstreamCall = {};
+  const response = await handleVoiceMint(
+    options({ model: "gpt-realtime-next", fetch: upstream(call, mintedPayload) }),
+  );
+
+  assert.equal(response.status, 200);
+  const sent = JSON.parse(String(call.init?.body));
+  assert.equal(sent.session.model, "gpt-realtime-next");
+  assert.equal((await response.json()).connection.model, "gpt-realtime-next");
+});
+
 test("a blank model override is no override at all", async () => {
   const call: UpstreamCall = {};
   const response = await handleVoiceMint(

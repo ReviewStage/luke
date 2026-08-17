@@ -125,7 +125,11 @@ export async function handleVoiceMint(options: VoiceMintOptions): Promise<Respon
   }
 
   const payload: unknown = await response.json().catch(() => undefined);
-  const credential = payload === undefined ? undefined : realtimeCredentialFromResponse(payload);
+  // The resolved model rides along as the fallback, like the desktop's own
+  // minter: a payload that omits its model still labels the credential with
+  // the model it was actually minted for.
+  const credential =
+    payload === undefined ? undefined : realtimeCredentialFromResponse(payload, model);
   const now = options.now ?? Date.now;
   if (!credential || !realtimeCredentialIsUsable(credential, now())) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR);

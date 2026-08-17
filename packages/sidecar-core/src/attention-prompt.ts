@@ -147,9 +147,10 @@ export function attentionPromptUpdateFromWire(value: unknown): AttentionPromptUp
 
   const trigger = attentionTriggerFromWire(value.trigger);
   const status = sessionStatusFromWire(value.status);
+  // The roster bounds a provider's display name like a title, so the wire does too.
   const providerName = boundedText(
     typeof value.providerName === "string" ? value.providerName : undefined,
-    maximumSessionDetailLength,
+    maximumSessionTitleLength,
   );
   const title = boundedText(
     typeof value.title === "string" ? value.title : undefined,
