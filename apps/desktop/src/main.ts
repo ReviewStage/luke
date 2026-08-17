@@ -166,7 +166,13 @@ const captureMode = captureOutput !== undefined;
 // the fixture snapshot and no provider is observed. Capture runs always imply it.
 const fixtureMode = captureMode || fixtureName !== undefined;
 const runMode = runModeFor({ capture: captureMode, fixture: fixtureName !== undefined });
-const ACCOUNT_BASE_URL = process.env.LUKE_ACCOUNT_BASE_URL ?? "https://tryluke.dev/api/auth";
+// A development build may be pointed at a local account service; a packaged one
+// may not. The override redirects the whole sign-in — including the identity
+// request that carries the access token — so it stops at the packaging boundary
+// rather than shipping inside a signed binary.
+const ACCOUNT_BASE_URL =
+  (app.isPackaged ? undefined : process.env.LUKE_ACCOUNT_BASE_URL) ??
+  "https://tryluke.dev/api/auth";
 const ACCOUNT_CLIENT_ID = "luke-desktop";
 const SESSION_REFRESH_INTERVAL_MS = 5_000;
 const sessionRegistry = new InMemorySessionRegistry();
