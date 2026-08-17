@@ -122,6 +122,7 @@ export const APP_SETTING_DEFAULTS = {
   showInMenuBar: true,
   voiceCaptions: false,
   duckOtherMedia: true,
+  preferBuiltInMicrophone: true,
   quietDuringMeetings: true,
   showOnAllDisplays: false,
 } as const satisfies Partial<Record<keyof AppSettings, boolean>>;
@@ -267,6 +268,15 @@ export interface AppSettings {
    * the duck is left where the hand put it.
    */
   duckOtherMedia: boolean;
+  /**
+   * Whether a press listens through the Mac's own microphone when the system
+   * input is a Bluetooth headset. On by default: capturing from a headset's
+   * microphone pulls the whole headset onto its call codec, so everything it
+   * plays turns phone-grade for the exchange. Off means the system default is
+   * used exactly as chosen. A shut lid keeps the headset microphone either
+   * way, because a muffled question is worse than a degraded song.
+   */
+  preferBuiltInMicrophone: boolean;
   /**
    * Whether announcements wait out the user's meetings. While the connected
    * calendar shows a meeting on, a session's spoken notices are held and read
@@ -469,6 +479,8 @@ export interface AppBootstrap {
    * arrives — or forever, where there is no helper to ask.
    */
   outputAudio?: OutputAudioState;
+  /** The capture route as first read, absent wherever it cannot be read. */
+  microphoneRoute?: MicrophoneRoute;
   display: DisplayDiagnostic;
   /** Where the app stands against the latest release, as last learned. */
   update: UpdateSnapshot;
@@ -598,6 +610,8 @@ export interface AppBridge {
   resetSettings(scope: SettingsResetScope): Promise<SettingsUpdateResult>;
   /** Turns the quieting of Music and Spotify during a spoken exchange on or off. */
   setDuckOtherMedia(enabled: boolean): Promise<SettingsUpdateResult>;
+  /** Turns the Mac-microphone-over-Bluetooth-headset preference on or off. */
+  setPreferBuiltInMicrophone(enabled: boolean): Promise<SettingsUpdateResult>;
   /**
    * Asks GitHub for the latest release name, right now, because the row's
    * button was pressed. The answer is the same snapshot the broadcast
@@ -863,6 +877,12 @@ export interface AppBridge {
    * unreadable, which arrives as `undefined` and must be drawn as audible.
    */
   onOutputAudioChanged(callback: (state: OutputAudioState | undefined) => void): () => void;
+  /**
+   * The capture route changing under the machine's own life — a headset
+   * connecting, a lid closing — or becoming unreadable, which arrives as
+   * `undefined` and must be drawn as the system's default microphone.
+   */
+  onMicrophoneRouteChanged(callback: (route: MicrophoneRoute | undefined) => void): () => void;
 }
 
 export const channels = {
@@ -884,6 +904,8 @@ export const channels = {
   setAskHotkey: "app:set-ask-hotkey",
   setStopHotkey: "app:set-stop-hotkey",
   setDuckOtherMedia: "app:set-duck-other-media",
+  setPreferBuiltInMicrophone: "app:set-prefer-built-in-microphone",
+  microphoneRouteChanged: "app:microphone-route-changed",
   setQuietDuringMeetings: "app:set-quiet-during-meetings",
   connectGoogleCalendar: "app:connect-google-calendar",
   cancelGoogleCalendarSignIn: "app:cancel-google-calendar-sign-in",

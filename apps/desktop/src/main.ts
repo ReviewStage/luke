@@ -495,9 +495,12 @@ function startMicrophoneRouteWatch(): void {
   microphoneRouteWatcher = new MicrophoneRouteWatcher({
     onRoute: (route) => {
       microphoneRoute = route;
+      // Every display's panel says the same "listens through", so all are told.
+      panels.broadcast(channels.microphoneRouteChanged, route);
     },
     onUnavailable: () => {
       microphoneRoute = undefined;
+      panels.broadcast(channels.microphoneRouteChanged, undefined);
     },
   });
   if (!microphoneRouteWatcher.start()) microphoneRouteWatcher = undefined;
@@ -1050,6 +1053,7 @@ function registerIpc(): void {
       ...(hotkeys.ask ? { askHotkey: hotkeys.ask } : {}),
       ...(hotkeys.stop ? { stopHotkey: hotkeys.stop } : {}),
       ...(outputAudio ? { outputAudio } : {}),
+      ...(microphoneRoute ? { microphoneRoute } : {}),
       display: panels.diagnostic(display),
       update: updateService.snapshot(),
       // Bootstrapped through the same relevance gate every broadcast passes:
@@ -1435,6 +1439,15 @@ function registerIpc(): void {
 
   // The duck follows the stored answer at once, like the menu bar item: off
   // must let a duck currently held go rather than waiting for the next launch.
+  registerSettingHandler(channels.setPreferBuiltInMicrophone, {
+    validate(enabled: unknown) {
+      if (typeof enabled !== "boolean") throw new Error("Invalid microphone preference request");
+      return enabled;
+    },
+    save: (enabled) => settingsStore.setPreferBuiltInMicrophone(enabled),
+    refusal: "Could not save that setting on this system.",
+  });
+
   registerSettingHandler(channels.setDuckOtherMedia, {
     validate(enabled: unknown) {
       if (typeof enabled !== "boolean") throw new Error("Invalid media duck request");

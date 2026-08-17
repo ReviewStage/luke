@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   type EnumeratedMicrophone,
+  listeningThroughDetail,
   MICROPHONE_PROCESSING,
   microphoneConstraints,
   openPreferredMicrophone,
@@ -132,6 +133,36 @@ test("an unreadable route is the browser's default, never a gate", async () => {
 
   assert.equal(result, stream);
   assert.deepEqual(asked, [{ ...MICROPHONE_PROCESSING }]);
+});
+
+test("the listens-through line says the same thing the choice does", () => {
+  assert.equal(
+    listeningThroughDetail(BLUETOOTH_DEFAULT, true),
+    "MacBook Pro Microphone, so the Bluetooth headset keeps its full music quality.",
+  );
+  assert.equal(
+    listeningThroughDetail({ ...BLUETOOTH_DEFAULT, lid: LID_STATE.SHUT }, true),
+    "The Bluetooth headset's microphone \u2014 the Mac's own sits under a shut lid.",
+  );
+  assert.equal(
+    listeningThroughDetail(BLUETOOTH_DEFAULT, false),
+    "The Bluetooth headset's microphone, exactly as the system default is set.",
+  );
+  assert.equal(
+    listeningThroughDetail(
+      { defaultTransport: MICROPHONE_TRANSPORT.BLUETOOTH, lid: LID_STATE.OPEN },
+      true,
+    ),
+    "The Bluetooth headset's microphone \u2014 this Mac has no microphone of its own.",
+  );
+  assert.equal(listeningThroughDetail(undefined, true), "The system's default microphone.");
+  assert.equal(
+    listeningThroughDetail(
+      { ...BLUETOOTH_DEFAULT, defaultTransport: MICROPHONE_TRANSPORT.BUILT_IN },
+      true,
+    ),
+    "The system's default microphone.",
+  );
 });
 
 test("a default already on the Mac's microphone never enumerates at all", async () => {

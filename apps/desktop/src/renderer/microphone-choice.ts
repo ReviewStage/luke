@@ -71,6 +71,31 @@ export function microphoneConstraints(
   return { ...MICROPHONE_PROCESSING, deviceId: { exact: device.deviceId } };
 }
 
+/**
+ * The sentence the settings page says under the Microphone row: which device
+ * a press would open right now, and why. Worded from the same facts the
+ * choice runs on, so the line and the behavior can never disagree.
+ */
+export function listeningThroughDetail(
+  route: MicrophoneRoute | undefined,
+  preferBuiltIn: boolean,
+): string {
+  if (!route) return "The system's default microphone.";
+  if (route.defaultTransport !== MICROPHONE_TRANSPORT.BLUETOOTH) {
+    return "The system's default microphone.";
+  }
+  if (!preferBuiltIn) {
+    return "The Bluetooth headset's microphone, exactly as the system default is set.";
+  }
+  if (!route.builtInName) {
+    return "The Bluetooth headset's microphone — this Mac has no microphone of its own.";
+  }
+  if (route.lid === LID_STATE.SHUT) {
+    return "The Bluetooth headset's microphone — the Mac's own sits under a shut lid.";
+  }
+  return `${route.builtInName}, so the Bluetooth headset keeps its full music quality.`;
+}
+
 /** The three browser and bridge acts the opener composes, injectable. */
 export interface MicrophoneOpener {
   route(): Promise<MicrophoneRoute | undefined>;

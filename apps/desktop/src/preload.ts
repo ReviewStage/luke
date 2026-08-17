@@ -44,6 +44,7 @@ const bridge: AppBridge = {
   setAskHotkey: invoke(channels.setAskHotkey),
   setStopHotkey: invoke(channels.setStopHotkey),
   setDuckOtherMedia: invoke(channels.setDuckOtherMedia),
+  setPreferBuiltInMicrophone: invoke(channels.setPreferBuiltInMicrophone),
   setQuietDuringMeetings: invoke(channels.setQuietDuringMeetings),
   connectGoogleCalendar: invoke(channels.connectGoogleCalendar),
   cancelGoogleCalendarSignIn: () => {
@@ -94,6 +95,7 @@ const bridge: AppBridge = {
   onStopHotkeyPress: subscribe(channels.stopHotkeyPress),
   onStopHotkeyChanged: subscribe(channels.stopHotkeyChanged),
   onOutputAudioChanged: subscribe(channels.outputAudioChanged),
+  onMicrophoneRouteChanged: subscribe(channels.microphoneRouteChanged),
   onAttentionSpeech: subscribe(channels.attentionSpeech),
 };
 

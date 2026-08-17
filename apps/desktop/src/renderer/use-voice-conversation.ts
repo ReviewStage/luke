@@ -286,6 +286,12 @@ export function evaluatorSummaries(speech: readonly AttentionSpeech[]): Attentio
 }
 
 export interface VoiceConversationOptions {
+  /**
+   * Whether a press may open the Mac's own microphone instead of a Bluetooth
+   * headset's. Off means the route is never even read: the system default is
+   * the user's exact choice.
+   */
+  preferBuiltInMicrophone: boolean;
   sessions: readonly NormalizedSession[];
   /**
    * The standing asks riding the roster they annotate, so a conversation can
@@ -480,9 +486,13 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       // The press's device, chosen by facts read natively: the Mac's own
       // microphone where a Bluetooth headset would otherwise pay for the
       // capture with its music codec, the browser's default everywhere else.
+      // The switch reads at the press, so flipping it needs no reconnect.
       requestMicrophoneStream: () =>
         openPreferredMicrophone({
-          route: () => window.sidecar.getMicrophoneRoute(),
+          route: () =>
+            optionsRef.current.preferBuiltInMicrophone
+              ? window.sidecar.getMicrophoneRoute()
+              : Promise.resolve(undefined),
           enumerate: () => navigator.mediaDevices.enumerateDevices(),
           open: (audio) => navigator.mediaDevices.getUserMedia({ audio, video: false }),
         }),
