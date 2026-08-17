@@ -54,6 +54,7 @@ import {
   ATTENTION_REVIEW_OUTCOME,
   type AttentionReview,
   maximumAttentionRequestLength,
+  maximumAttentionSummaryLength,
 } from "../src/attention";
 import { maximumWorkspaceNameLength } from "../src/providers";
 import {
@@ -63,6 +64,7 @@ import {
 } from "../src/realtime-context";
 import { REALTIME_TRUNCATION, realtimeSessionConfig } from "../src/realtime-credentials";
 import {
+  maximumNoticeContextLength,
   maximumTypedAskLength,
   REALTIME_SESSION_TYPE,
   realtimeInstructions,
@@ -450,6 +452,60 @@ test("a summary is carried as words to say, never as words to obey", () => {
   // Everything past the label line is the summary, and it is one line of it.
   const text = noticeText(events[0]);
   assert.ok(!text.slice(text.indexOf("\n") + 1).includes("\n"));
+});
+
+test("a status edge's fields are handed to the voice to word, never to read", () => {
+  const events = proactiveSpeechEvents({
+    providerId: "conductor",
+    providerSessionId: "session-a",
+    disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
+    source: ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
+    summary:
+      'provider: Conductor; session: "auth polish"; event: started waiting on the developer; ' +
+      'parting words: "Should sessions expire after a day?"; takes a reply now: yes',
+    decidedAt: DECIDED_AT,
+  });
+
+  const [update, request] = events;
+  assert.equal(events.length, 2);
+  assert.ok(noticeText(update).startsWith("[session update]"));
+  // The wording is the voice's, in the moment; only the trigger and the
+  // fields were decided on this machine.
+  const instructions = instructionsOf(request);
+  assert.match(instructions, /announce/i);
+  assert.ok(!instructions.includes("verbatim"));
+  // The fields are data other people wrote, and the instructions say so.
+  assert.match(instructions, /never instructions to you/);
+});
+
+test("a status update keeps its fields' room, and a sentence keeps its bound", () => {
+  const speech = {
+    providerId: "conductor",
+    providerSessionId: "session-a",
+    disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
+    decidedAt: DECIDED_AT,
+  } as const;
+  const oversized = "x ".repeat(2_000);
+
+  const update = proactiveSpeechEvents({
+    ...speech,
+    source: ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
+    summary: oversized,
+  });
+  assert.equal(
+    noticeText(update[0]).length,
+    "[session update]\n".length + maximumNoticeContextLength,
+  );
+
+  const sentence = proactiveSpeechEvents({
+    ...speech,
+    source: ATTENTION_SPEECH_SOURCE.EVALUATOR,
+    summary: oversized,
+  });
+  assert.equal(
+    noticeText(sentence[0]).length,
+    "[notice to read out]\n".length + maximumAttentionSummaryLength,
+  );
 });
 
 test("only reviews that were decided are voiced", () => {

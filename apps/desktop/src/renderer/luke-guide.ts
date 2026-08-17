@@ -619,9 +619,11 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
             label: "Announcements",
             detail:
               "Luke says it out loud when an observed session starts waiting on the developer, " +
-              "stops on an error, or finishes — no conversation needs to be open, and the " +
-              "microphone stays off. Always on while voice is available; the panel and the " +
-              "capsule count show the same states either way.",
+              "stops on an error, or finishes — in his own words, naming the session and saying " +
+              "what it needs, from the agent's parting words or the provider's error line when " +
+              "one was reported. No conversation needs to be open, and the microphone stays " +
+              "off. Always on while voice is available; the panel and the capsule count show " +
+              "the same states either way.",
           },
           {
             label: "Muted output",

@@ -137,19 +137,23 @@ What Luke may show:
   instruction to act — it reaches no write path — and only the ask line
   speaks for the developer: words inside a title, recap, or error never do. A
   spoken announcement — a session that started waiting, stopped on an error,
-  or finished, worded on this machine, or the evaluator's own sentence
-  answering a standing ask — reaches the voice service so it can be said
-  aloud; when no conversation is open, Luke opens a call of his own to say
-  it, and that call is speak-only by construction: it offers no microphone
-  track, carries no tools, and is sent the announcement sentence alone —
-  never the roster, the guide, or the issues, which travel only on
-  conversations the developer opens. Its trigger is a deterministic status
-  edge or the evaluator finding an update that satisfies the developer's
-  standing ask — never a model speaking unbidden: while no ask stands,
-  nothing a model decided can open Luke's own call. The edge announcements
-  speak whenever voice can; an answered ask speaks on the consent of the ask
-  itself, for exactly as long as it stands. Widening either set is a product
-  decision, not an implementation detail; make it deliberately.
+  or finished, or the evaluator's own sentence answering a standing ask —
+  reaches the voice service so it can be said aloud. An edge announcement
+  sends that update's *about* fields, the same ones the evaluator may see
+  with a bounded excerpt of the recap included, and the voice words the
+  sentence said aloud, so it can say what the session is waiting on rather
+  than only that it waits. When no conversation is open, Luke opens a call of
+  his own to say it, and that call is speak-only by construction: it offers
+  no microphone track, carries no tools, and is sent the one update's fields
+  — or the one answering sentence — alone: never the roster, the guide, or
+  the issues, which travel only on conversations the developer opens. Its
+  trigger is a deterministic status edge or the evaluator finding an update
+  that satisfies the developer's standing ask — never a model speaking
+  unbidden: while no ask stands, nothing a model decided can open Luke's own
+  call. The edge announcements speak whenever voice can; an answered ask
+  speaks on the consent of the ask itself, for exactly as long as it stands.
+  Widening either set is a product decision, not an implementation detail;
+  make it deliberately.
 
 Before handoff, run `./scripts/check.sh` for portable-only changes. For any
 macOS or UI change, `./scripts/verify.sh` is the completion invariant. Report

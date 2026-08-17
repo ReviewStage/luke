@@ -1498,10 +1498,11 @@ async function reviewSessionAttention(): Promise<void> {
  * Speaks each session that just arrived somewhere the user may be waiting on —
  * an answer wanted, an error, a finish. The trigger is a status edge the
  * registry observed, a deterministic fact like the media duck's, so nothing
- * Luke read or decided can reach it. The sentence travels the same channel the
- * evaluator's readouts do, to the one window that holds the voice; the
- * announcer there opens a speak-only call when no conversation is up, so
- * being heard needs no talk-key press first.
+ * Luke read or decided can reach it. The update's bounded fields travel the
+ * same channel the evaluator's readouts do, to the one window that holds the
+ * voice, which words the announcement itself; the announcer there opens a
+ * speak-only call when no conversation is up, so being heard needs no
+ * talk-key press first.
  */
 function announceSessionNotices(sessions: readonly NormalizedSession[]): void {
   // Asks about sessions no longer reported have nothing left to be about, and

@@ -65,12 +65,22 @@ export interface SessionNotice {
   providerSessionId: string;
   providerName: string;
   title: string;
+  /** The workspace the session is one chat of, by name, when its provider groups them. */
+  workspace?: string;
   status: SessionNoticeStatus;
   previousStatus: SessionStatus;
+  /**
+   * Where the settled turn left the work — provider-designated, or the agent's
+   * own parting words. For a session that started waiting this is usually the
+   * question it is waiting on, which is what makes the notice worth hearing.
+   */
+  recap?: string;
   /** Why the session stopped, when its provider said. */
   error?: string;
   repository?: string;
   branch?: string;
+  /** Whether the provider will take a reply for this session right now. */
+  canReceiveMessage: boolean;
   observedAt: number;
 }
 
@@ -92,11 +102,14 @@ function sessionNotice(session: NormalizedSession, previousStatus: SessionStatus
     providerSessionId: session.providerSessionId,
     providerName: session.provider.displayName,
     title: session.title,
+    ...(session.workspace?.name ? { workspace: session.workspace.name } : {}),
     status,
     previousStatus,
+    ...(session.recap ? { recap: session.recap } : {}),
     ...(session.detail.error ? { error: session.detail.error } : {}),
     ...(session.detail.repository ? { repository: session.detail.repository } : {}),
     ...(session.detail.branch ? { branch: session.detail.branch } : {}),
+    canReceiveMessage: session.canReceiveMessage,
     observedAt: session.observedAt,
   };
 }

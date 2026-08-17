@@ -164,6 +164,7 @@ export {
   clearInputAudioEvents,
   functionCallFollowUpEvents,
   functionCallOutputEvents,
+  maximumNoticeContextLength,
   outputSpeedUpdateEvents,
   parseRealtimeServerEvent,
   proactiveSpeechEvents,
