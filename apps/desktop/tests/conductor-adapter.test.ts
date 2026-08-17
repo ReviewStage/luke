@@ -380,14 +380,6 @@ test("words a workspace still being built onto its rows, ready and asleep say no
     sessions: [
       { id: "chat-building", workspaceId: "workspace-building", name: TEST_SESSION_NAME },
       { id: "chat-rebuilding", workspaceId: "workspace-rebuilding", name: TEST_SESSION_NAME },
-      // A closed chat beside the one being rebuilt is already settled: the
-      // machinery around it is not its news.
-      {
-        id: "chat-closed-beside",
-        workspaceId: "workspace-rebuilding",
-        name: TEST_SESSION_NAME,
-        archivedAt: isoTimestamp(TEST_TIME - 60_000),
-      },
       { id: "chat-ready", workspaceId: "workspace-ready", name: TEST_SESSION_NAME },
       { id: "chat-asleep", workspaceId: "workspace-asleep", name: TEST_SESSION_NAME },
     ],
@@ -401,7 +393,6 @@ test("words a workspace still being built onto its rows, ready and asleep say no
   // Conductor's own economy, so neither takes the activity slot from a recap.
   assert.equal(byId.get("chat-building")?.detail?.activity, "Workspace initializing");
   assert.equal(byId.get("chat-rebuilding")?.detail?.activity, "Workspace updating");
-  assert.equal(byId.get("chat-closed-beside")?.detail?.activity, undefined);
   assert.equal(byId.get("chat-ready")?.detail?.activity, undefined);
   assert.equal(byId.get("chat-asleep")?.detail?.activity, undefined);
 });
@@ -439,14 +430,6 @@ test("reports the failure that kept a workspace from coming up, behind the chat'
         status: TEST_CONDUCTOR_STATUS.ERROR,
         statusUpdatedAt: TEST_TIME - 1_000,
       },
-      // A closed chat is complete, and a complete row must not be dressed as
-      // newly failed by the workspace around it.
-      {
-        id: "chat-closed-in-failed",
-        workspaceId: "workspace-failed",
-        name: TEST_SESSION_NAME,
-        archivedAt: isoTimestamp(TEST_TIME - 60_000),
-      },
     ],
   });
 
@@ -458,8 +441,6 @@ test("reports the failure that kept a workspace from coming up, behind the chat'
     "The setup script exited with status 1",
   );
   assert.equal(byId.get("chat-loudly-failed")?.detail?.error, TEST_ERROR_MESSAGE);
-  assert.equal(byId.get("chat-closed-in-failed")?.status, SESSION_STATUS.COMPLETE);
-  assert.equal(byId.get("chat-closed-in-failed")?.detail?.error, undefined);
 });
 
 test("a failed lifecycle read costs the workspace's words, never the pass", async () => {
@@ -493,7 +474,7 @@ test("a failed lifecycle read costs the workspace's words, never the pass", asyn
 });
 
 const IDLE_SESSION_UUID = "11111111-1111-4111-8111-111111111111";
-const CLOSED_SESSION_UUID = "22222222-2222-4222-8222-222222222222";
+const SECOND_IDLE_SESSION_UUID = "22222222-2222-4222-8222-222222222222";
 const WORKING_SESSION_UUID = "33333333-3333-4333-8333-333333333333";
 const ERRORED_SESSION_UUID = "44444444-4444-4444-8444-444444444444";
 
@@ -509,7 +490,7 @@ test("reads a settled chat's parting words from the transcripts view as its reca
     projects: [LUKE_PROJECT],
     workspaces: [
       ownedWorkspace("workspace-idle", TEST_TIME - 30_000),
-      ownedWorkspace("workspace-closed", TEST_TIME - 40_000),
+      ownedWorkspace("workspace-second-idle", TEST_TIME - 40_000),
     ],
     sessions: [
       {
@@ -522,14 +503,15 @@ test("reads a settled chat's parting words from the transcripts view as its reca
         status: TEST_CONDUCTOR_STATUS.IDLE,
         statusUpdatedAt: TEST_TIME - 1_000,
       },
-      // A closed chat is settled too, so its parting words still stand.
+      // A settled chat with no model reported still names its agent kind.
       {
-        id: CLOSED_SESSION_UUID,
-        workspaceId: "workspace-closed",
+        id: SECOND_IDLE_SESSION_UUID,
+        workspaceId: "workspace-second-idle",
         name: TEST_SESSION_NAME,
         agentType: "claude",
         transcriptTail: TEST_TRANSCRIPT_TAIL,
-        archivedAt: isoTimestamp(TEST_TIME - 60_000),
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 2_000,
       },
     ],
   });
@@ -538,16 +520,16 @@ test("reads a settled chat's parting words from the transcripts view as its reca
 
   assert.equal(observations.length, 2);
   const idle = observations.find((candidate) => candidate.providerSessionId === IDLE_SESSION_UUID);
-  const closed = observations.find(
-    (candidate) => candidate.providerSessionId === CLOSED_SESSION_UUID,
+  const secondIdle = observations.find(
+    (candidate) => candidate.providerSessionId === SECOND_IDLE_SESSION_UUID,
   );
   // The recap is the last message's words alone: the elision mark is dropped,
   // the header is not part of it, and nothing earlier in the tail survives.
   assert.equal(idle?.recap, TEST_RECAP);
-  assert.equal(closed?.recap, TEST_RECAP);
+  assert.equal(secondIdle?.recap, TEST_RECAP);
   // The agent kind joins the model label, and stands alone when no model came.
   assert.equal(idle?.detail?.model, "codex · gpt-5.5");
-  assert.equal(closed?.detail?.model, "claude");
+  assert.equal(secondIdle?.detail?.model, "claude");
 
   // One read document for the whole pass, fixed by the build: the SELECT this
   // build wrote, naming exactly the observed session ids and nothing else.
@@ -565,7 +547,7 @@ test("reads a settled chat's parting words from the transcripts view as its reca
       "position(reverse(E'\\n## Assistant\\n') in reverse(transcript)) AS assistant_from_end, " +
       "position(reverse(E'\\n## User\\n') in reverse(transcript)) AS user_from_end " +
       "FROM session_transcripts_view WHERE session_id IN " +
-      `('${IDLE_SESSION_UUID}', '${CLOSED_SESSION_UUID}')) AS attributed`,
+      `('${IDLE_SESSION_UUID}', '${SECOND_IDLE_SESSION_UUID}')) AS attributed`,
   });
 });
 
@@ -635,7 +617,7 @@ test("reports no recap for a tail it cannot attribute to the agent", async () =>
       // returns at the final message's own header, so this is a misbehaving
       // answer — attribution is still refused rather than assumed.
       {
-        id: CLOSED_SESSION_UUID,
+        id: SECOND_IDLE_SESSION_UUID,
         workspaceId: "workspace-headerless",
         name: TEST_SESSION_NAME,
         transcriptTail: "words with no header anywhere above them",
@@ -919,51 +901,29 @@ test("titles each chat by its own name and its group by the workspace's", async 
   );
 });
 
-// An open chat idle past the staleness window decays to unknown while an
-// archived sibling reads as complete. Both rows stand: the closed chat may say
-// it finished, but it says so beside the quiet open chat the user would return
-// to, never instead of it.
-test("a closed chat reports beside a quiet open one, not instead of it", async () => {
+// Filing a chat away is how a user says that one conversation is done being
+// watched, so it earns no row at all — however recently it was filed, and
+// whatever it was doing when it was. Its open sibling keeps its own row, and
+// the drop happens before the pass ever asks after the filed chat, so it
+// costs no status request and never enters the transcripts read.
+test("leaves a filed-away chat off the roster while its workspace stays", async () => {
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
     projects: [LUKE_PROJECT],
     workspaces: [ownedWorkspace("workspace-quieted", TEST_TIME - 1_000)],
     sessions: [
       {
-        id: "session-open-stale",
+        id: "session-open",
         workspaceId: "workspace-quieted",
         name: TEST_SESSION_NAME,
         status: TEST_CONDUCTOR_STATUS.IDLE,
-        statusUpdatedAt: TEST_TIME - 2 * 60 * 60 * 1000,
+        statusUpdatedAt: TEST_TIME - 10_000,
       },
       {
         id: "session-archived",
         workspaceId: "workspace-quieted",
         name: TEST_SESSION_NAME,
         archivedAt: isoTimestamp(TEST_TIME - 10_000),
-      },
-    ],
-  });
-
-  const observations = await adapterFor(api.fetch).observe();
-  const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
-
-  assert.equal(observations.length, 2);
-  assert.equal(byId.get("session-open-stale")?.status, SESSION_STATUS.UNKNOWN);
-  assert.equal(byId.get("session-archived")?.status, SESSION_STATUS.COMPLETE);
-});
-
-test("reports an archived session as complete without requesting its status", async () => {
-  const api = fakeConductorApi({
-    userId: TEST_USER_ID,
-    projects: [LUKE_PROJECT],
-    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 30_000)],
-    sessions: [
-      {
-        id: "session-archived",
-        workspaceId: "workspace-active",
-        name: TEST_SESSION_NAME,
-        archivedAt: isoTimestamp(TEST_TIME - 20_000),
         status: TEST_CONDUCTOR_STATUS.WORKING,
       },
     ],
@@ -971,53 +931,21 @@ test("reports an archived session as complete without requesting its status", as
 
   const observations = await adapterFor(api.fetch).observe();
 
-  assert.equal(observations.length, 1);
-  assert.equal(observations[0]?.status, SESSION_STATUS.COMPLETE);
-  // The archive time is when the chat settled; the workspace timestamp would
-  // date it by whatever a sibling chat did since. The workspace's own
-  // lifecycle is still read; it is the chat's status that has nothing to ask.
-  assert.equal(observations[0]?.observedAt, TEST_TIME - 20_000);
+  assert.deepEqual(
+    observations.map((candidate) => candidate.providerSessionId),
+    ["session-open"],
+  );
+  // The filed-away chat neither settles the workspace nor holds it open: the
+  // open sibling's own settled turn is what offers the archive.
+  assert.deepEqual(observations[0]?.controls, [
+    { id: "archive-workspace", label: "Archive", target: "workspace-quieted" },
+  ]);
+  // Dropped before it is ever asked for: the filed-away chat costs no status
+  // request, not just no row.
   assert.equal(
-    api.requests.some(
-      (request) => request.pathname.includes("/sessions/") && request.pathname.endsWith("/status"),
-    ),
+    api.requests.some((request) => request.pathname.includes("session-archived")),
     false,
   );
-});
-
-test("keeps a long-closed chat beside an open one", async () => {
-  // A closed chat is never hidden for its age, and it costs the open chat in
-  // the quieter workspace nothing: both are rows.
-  const api = fakeConductorApi({
-    userId: TEST_USER_ID,
-    projects: [LUKE_PROJECT],
-    workspaces: [
-      ownedWorkspace("workspace-busy", TEST_TIME - 5_000),
-      ownedWorkspace("workspace-quiet", TEST_TIME - 60_000),
-    ],
-    sessions: [
-      {
-        id: "session-closed-days-ago",
-        workspaceId: "workspace-busy",
-        name: TEST_SESSION_NAME,
-        archivedAt: isoTimestamp(TEST_TIME - 3 * 24 * 60 * 60 * 1000),
-      },
-      {
-        id: "session-open",
-        workspaceId: "workspace-quiet",
-        name: TEST_SESSION_NAME,
-        status: TEST_CONDUCTOR_STATUS.IDLE,
-        statusUpdatedAt: TEST_TIME - 30_000,
-      },
-    ],
-  });
-
-  const observations = await adapterFor(api.fetch).observe();
-
-  assert.deepEqual(observations.map((candidate) => candidate.providerSessionId).sort(), [
-    "session-closed-days-ago",
-    "session-open",
-  ]);
 });
 
 test("keeps reporting a long turn as working", async () => {
@@ -1201,7 +1129,7 @@ test("lets a crowded workspace keep every chat beside its quiet neighbour", asyn
   assert.equal(observations.length, 9);
 });
 
-test("prefers open chats over closed ones inside one workspace", async () => {
+test("keeps only the open chats of a workspace that also holds filed-away ones", async () => {
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
     projects: [LUKE_PROJECT],
@@ -1224,16 +1152,14 @@ test("prefers open chats over closed ones inside one workspace", async () => {
   });
 
   const observations = await adapterFor(api.fetch).observe();
-  const observedIds = observations.map((observation) => observation.providerSessionId);
 
-  // Every chat is a row, and the open one is ordered first: it is the one
-  // that can still change.
-  assert.equal(observations.length, 5);
-  assert.equal(observedIds[0], "open-session");
-  assert.equal(
-    observations.find((entry) => entry.providerSessionId === "open-session")?.status,
-    SESSION_STATUS.WORKING,
+  // The filed-away chats earn no rows; the one still open is the workspace's
+  // only voice, and it reports its own state.
+  assert.deepEqual(
+    observations.map((observation) => observation.providerSessionId),
+    ["open-session"],
   );
+  assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
 });
 
 test("reports nothing and issues no request without an API key", async () => {
@@ -1443,7 +1369,6 @@ test("advertises a message for any open chat, a stop mid-turn, and an archive on
       ownedWorkspace("workspace-idle", TEST_TIME - 30_000),
       ownedWorkspace("workspace-working", TEST_TIME - 31_000),
       ownedWorkspace("workspace-failed", TEST_TIME - 32_000),
-      ownedWorkspace("workspace-closed", TEST_TIME - 33_000),
     ],
     sessions: [
       {
@@ -1467,12 +1392,6 @@ test("advertises a message for any open chat, a stop mid-turn, and an archive on
         status: TEST_CONDUCTOR_STATUS.ERROR,
         statusUpdatedAt: TEST_TIME - 7_000,
       },
-      {
-        id: "session-closed",
-        workspaceId: "workspace-closed",
-        name: TEST_SESSION_NAME,
-        archivedAt: new Date(TEST_TIME - 8_000).toISOString(),
-      },
     ],
   });
 
@@ -1481,19 +1400,17 @@ test("advertises a message for any open chat, a stop mid-turn, and an archive on
 
   assert.equal(byId.get("session-idle")?.canReceiveMessage, true);
   assert.equal(byId.get("session-working")?.canReceiveMessage, true);
-  // A failed chat is documented for no writer, and a closed one is settled.
+  // A failed chat is documented for no writer.
   assert.equal(byId.get("session-failed")?.canReceiveMessage, false);
-  assert.equal(byId.get("session-closed")?.canReceiveMessage, false);
   // A chat mid-turn offers its stop and nothing else; every chat of a settled,
-  // still-open workspace — idle, failed, or closed — offers to file that
-  // workspace away, each naming its own workspace as the target.
+  // still-open workspace — idle or failed — offers to file that workspace
+  // away, each naming its own workspace as the target.
   assert.deepEqual(byId.get("session-working")?.controls, [
     { id: "cancel-turn", label: "Stop this turn", kind: "stop" },
   ]);
   for (const [sessionId, workspaceId] of [
     ["session-idle", "workspace-idle"],
     ["session-failed", "workspace-failed"],
-    ["session-closed", "workspace-closed"],
   ] as const) {
     assert.deepEqual(byId.get(sessionId)?.controls, [
       { id: "archive-workspace", label: "Archive", target: workspaceId },
