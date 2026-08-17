@@ -27,18 +27,7 @@ export const URGENCY_LABEL = {
 
 /** The sentence a row states for this urgency when the provider reported nothing else. */
 export function urgencyLabel(urgency: SessionUrgency): string {
-  switch (urgency) {
-    case SESSION_URGENCY.WORKING:
-      return "Working";
-    case SESSION_URGENCY.ATTENTION:
-      return "Needs you";
-    case SESSION_URGENCY.COMPLETE:
-      return "Complete";
-    case SESSION_URGENCY.UNKNOWN:
-      return "Idle";
-    default:
-      throw new Error(`Unknown session urgency: ${String(urgency)}`);
-  }
+  return URGENCY_LABEL[urgency];
 }
 
 /** The urgency order the surface reads top-down and the badge collapses to. */
