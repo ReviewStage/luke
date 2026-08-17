@@ -27,6 +27,12 @@ The auth service also needs `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID`, and
 `GITHUB_CLIENT_SECRET`.
 
+`vercel.json` uses a legacy `routes` entry for `/api/auth/(.*)` because Vercel's
+zero-config `api/` detection treats `[...all].ts` as a single dynamic segment and
+adds a hard 404 for deeper API paths. A `rewrites` entry runs after that detected
+filesystem routing phase, so it cannot reach the Better Auth handler; keep this
+rule in `routes`, ahead of the detected routes.
+
 Each deployment build runs `pnpm auth:seed` after the migration and before Vite,
 so every database the application reaches already carries the client — including
 the branch database Neon creates for a Preview deployment, which would otherwise

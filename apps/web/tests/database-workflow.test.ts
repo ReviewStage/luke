@@ -26,3 +26,11 @@ test("Vercel migrates and seeds a deployment's database before it builds", () =>
   assert.equal(vercelConfig.buildCommand, "pnpm db:migrate && pnpm auth:seed && pnpm build");
   assert.doesNotMatch(vercelConfig.buildCommand, /drizzle-kit push/);
 });
+
+test("Vercel routes nested auth paths before its detected API 404", () => {
+  assert.deepEqual(vercelConfig.routes, [
+    { src: "/api/auth/(.*)", dest: "/api/auth/[...all].ts" },
+    { src: "/privacy", dest: "/privacy.html" },
+  ]);
+  assert.equal("rewrites" in vercelConfig, false);
+});

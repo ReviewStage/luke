@@ -1,10 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "pnpm db:migrate && pnpm auth:seed && pnpm build",
-  "rewrites": [
-    {
-      "source": "/privacy",
-      "destination": "/privacy.html"
-    }
+  "routes": [
+    { "src": "/api/auth/(.*)", "dest": "/api/auth/[...all].ts" },
+    { "src": "/privacy", "dest": "/privacy.html" }
   ]
 }
