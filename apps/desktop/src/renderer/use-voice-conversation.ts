@@ -51,6 +51,13 @@ export const VOICE_RESTART = {
   DROP: "drop",
   /** The call is idle enough to close and open again in the new voice. */
   RESTART: "restart",
+  /**
+   * The call up is Luke's own speak-only one, so closing it is the whole of
+   * the restart: the announcer opens the next one — in the new voice — for
+   * whatever is still waiting to be said, and reopening it here would ask for
+   * a microphone nobody pressed a key for.
+   */
+  RELEASE: "release",
 } as const;
 
 export type VoiceRestart = (typeof VOICE_RESTART)[keyof typeof VOICE_RESTART];
@@ -192,6 +199,13 @@ export function liveSpeedApplies(
  * What a changed voice should do to a call already up. A call being opened
  * counts as one to reopen: its credential may already have been minted in the
  * old voice. A call that ended on its own owes nothing.
+ *
+ * Whose call it is decides what a restart means. The developer's own comes
+ * back the way it went down, microphone and all — they are mid-conversation,
+ * and the new voice is what finishes it. Luke's own speak-only call is only
+ * closed: it is the announcer's to open again, for whatever is still waiting
+ * to be said, and bringing it back with a microphone would put a permission
+ * request in front of someone who changed a setting.
  */
 export function voiceRestartAction(input: {
   previous: RealtimeVoice | undefined;
@@ -199,6 +213,7 @@ export function voiceRestartAction(input: {
   live: boolean;
   due: boolean;
   status: RealtimeStatus;
+  microphoneCall: boolean;
 }): { due: boolean; action: VoiceRestart } {
   if (input.next === undefined) return { due: input.due, action: VOICE_RESTART.NONE };
   const due =
@@ -214,7 +229,25 @@ export function voiceRestartAction(input: {
   if (input.status !== REALTIME_STATUS.READY) {
     return { due: true, action: VOICE_RESTART.WAIT };
   }
-  return { due: false, action: VOICE_RESTART.RESTART };
+  return {
+    due: false,
+    action: input.microphoneCall ? VOICE_RESTART.RESTART : VOICE_RESTART.RELEASE,
+  };
+}
+
+/**
+ * Whether a voice-row write has earned a sample of what it stored. Two things
+ * have to be true and both are the write's own answer: it was stored as asked
+ * — a refusal changed nothing to hear — and voice is available, because with
+ * no key there is no call to open and the attempt would only fail quietly.
+ * Typed over the two fields it reads, like the rules around it, so it can be
+ * tested without a settings snapshot.
+ */
+export function voicePreviewFollows(result: {
+  reason?: string;
+  settings: { voiceAvailable: boolean };
+}): boolean {
+  return result.reason === undefined && result.settings.voiceAvailable;
 }
 
 /**
@@ -312,6 +345,16 @@ export interface VoiceConversationOptions {
    * state over a working key.
    */
   voiceAvailable: boolean | undefined;
+  /**
+   * Bumped when the developer changes the voice or the pace by hand, which is
+   * the ask to hear it. A counter rather than a callback on purpose: the same
+   * render that carries the new setting carries the request, and React runs
+   * this hook's effects in declaration order — so the pace update and the
+   * voice restart are both away before the sample is asked for, and the
+   * sample is spoken by the voice that was just chosen rather than the one
+   * being replaced.
+   */
+  voicePreviewRequest: number;
   outputSilent: boolean;
   fixtureSpeaking: boolean;
   /**
@@ -435,6 +478,13 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   const remoteAudio = useRef<HTMLAudioElement | null>(null);
   const voiceSession = useRef<RealtimeVoiceSession | undefined>(undefined);
   const announcer = useRef<SpokenNoticeAnnouncer | undefined>(undefined);
+  /**
+   * Whether the developer's own call is being closed and opened again in a
+   * changed voice. It is the one stretch where a session that answers "no call
+   * and none coming" is lying: one is coming, and it is the one anything
+   * waiting belongs on.
+   */
+  const callReopening = useRef(false);
   /** When the talk key went down, which is what tells a hold from a tap. */
   const talkPressedAt = useRef<number | undefined>(undefined);
   /** Whether a tap has left a turn open for a later press to end. */
@@ -566,6 +616,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   const ensureAnnouncer = useCallback((): SpokenNoticeAnnouncer => {
     announcer.current ??= new SpokenNoticeAnnouncer({
       session: () => ensureVoiceSession(),
+      reopening: () => callReopening.current,
     });
     return announcer.current;
   }, [ensureVoiceSession]);
@@ -789,15 +840,55 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
         voiceSession.current?.isConnected === true || voiceSession.current?.isConnecting === true,
       due: voiceRestartDue.current,
       status: voiceStatus,
+      microphoneCall: voiceSession.current?.microphoneCall === true,
     });
     if (options.voice !== undefined) heardVoice.current = options.voice;
     voiceRestartDue.current = decided.due;
+    // Luke's own call is closed and left closed: the announcer opens the next
+    // one, in the new voice, for the sample or the notice still waiting.
+    if (decided.action === VOICE_RESTART.RELEASE) {
+      void voiceSession.current?.close();
+      return;
+    }
     if (decided.action !== VOICE_RESTART.RESTART) return;
+    // The gap between the close and the call coming back is the announcer's to
+    // stay out of: it sees a session that is neither connected nor connecting,
+    // and a call of Luke's own opened into that gap is one the reopening
+    // microphone call tears down mid-sentence.
+    callReopening.current = true;
     void (async () => {
-      await voiceSession.current?.close();
-      await startMicrophone();
+      try {
+        await voiceSession.current?.close();
+        await startMicrophone();
+      } finally {
+        callReopening.current = false;
+        // Whatever was waiting flushes against the call that actually came
+        // back — or against the silence, if a refused microphone means none
+        // did. Nothing else would nudge it: the status the announcer follows
+        // may have settled while the hold was up.
+        announcer.current?.onStatus(voiceStatusNow());
+      }
     })();
-  }, [options.voice, startMicrophone, voiceStatus]);
+  }, [options.voice, startMicrophone, voiceStatus, voiceStatusNow]);
+
+  /**
+   * The sample a hand-changed voice or pace asks for.
+   *
+   * Declared last of the three on purpose: React runs effects in declaration
+   * order, so the pace update and the voice restart above are both in flight
+   * by the time this runs — and a sample asked for any earlier would be spoken
+   * by the voice being replaced. The announcer takes it from here, since
+   * "say this, opening a call if that is what it takes" is its job and not a
+   * second one racing it.
+   */
+  const heardPreviewRequest = useRef(options.voicePreviewRequest);
+  useEffect(() => {
+    // The mount pass is not a request: the ref starts at whatever count was
+    // already standing, so only a bump made while this hook was alive speaks.
+    if (options.voicePreviewRequest === heardPreviewRequest.current) return;
+    heardPreviewRequest.current = options.voicePreviewRequest;
+    ensureAnnouncer().requestPreview();
+  }, [ensureAnnouncer, options.voicePreviewRequest]);
 
   const activeStream = activeVoiceStream({
     status: voiceStatus,

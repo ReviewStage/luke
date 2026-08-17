@@ -507,6 +507,54 @@ test("a proactive update is spoken once the call is open", async () => {
   );
 });
 
+test("a sample waits for a call, and never talks over a turn", async () => {
+  const context = harness();
+
+  // Nothing to play a sample over yet.
+  assert.equal(context.session.speakPreview(), false);
+
+  await context.session.connect();
+  assert.equal(context.session.speakPreview(), true);
+  // One request and nothing else: the line is the build's own, so no words
+  // are handed over ahead of it.
+  assert.deepEqual(
+    context.sent.map((event) => event.type),
+    [REALTIME_CLIENT_EVENT.RESPONSE_CREATE],
+  );
+
+  // A second pick lands mid-reply and is refused rather than queued — the
+  // announcer decides what a refused sample is worth, and it is the one turn
+  // at a time rule that decides here.
+  assert.equal(context.session.speakPreview(), false);
+});
+
+test("a sample's caption is about no session, so it raises no notice", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  // An announcement first, so the subject the sample has to clear is real.
+  context.session.speak({
+    providerId: "claude-code",
+    providerSessionId: "session-a",
+    disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
+    source: ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
+    summary: "session: 'checkout'; event: finished",
+    decidedAt: 1_800_000_000_000,
+  });
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
+  context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
+
+  assert.equal(context.session.speakPreview(), true);
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    delta: "Hi, I'm Luke, your personal coding agent manager.",
+  });
+  // The words are drawn, and they stand for nobody: a sample is news about
+  // nothing, so the pressable notice under the housing has nothing to anchor.
+  assert.deepEqual(context.captions.at(-1), ["Hi, I'm Luke, your personal coding agent manager."]);
+  assert.equal(context.captionSubjects.at(-1), undefined);
+});
+
 test("a held turn lasts exactly as long as the key is down", async () => {
   const context = harness();
   await context.session.connect();

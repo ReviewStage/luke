@@ -25,6 +25,7 @@ import {
   VOICE_RESTART,
   voiceErrorToShow,
   voiceExchangeActive,
+  voicePreviewFollows,
   voiceRestartAction,
   waveformVoice,
 } from "../src/renderer/use-voice-conversation";
@@ -194,6 +195,7 @@ test("a changed voice on a live call waits for the turn to end, then restarts", 
     live: true,
     due: false,
     status: REALTIME_STATUS.RESPONDING,
+    microphoneCall: true,
   };
   assert.deepEqual(voiceRestartAction(change), { due: true, action: VOICE_RESTART.WAIT });
   assert.deepEqual(voiceRestartAction({ ...change, status: REALTIME_STATUS.LISTENING }), {
@@ -206,6 +208,39 @@ test("a changed voice on a live call waits for the turn to end, then restarts", 
   });
 });
 
+test("only a stored change with a key behind it is worth hearing", () => {
+  assert.equal(voicePreviewFollows({ settings: { voiceAvailable: true } }), true);
+  // A refused write changed nothing, so there is nothing new to hear.
+  assert.equal(
+    voicePreviewFollows({
+      reason: "That voice is not offered.",
+      settings: { voiceAvailable: true },
+    }),
+    false,
+  );
+  // No key, no call: the sample would be a connect attempt with nobody able
+  // to hear the answer.
+  assert.equal(voicePreviewFollows({ settings: { voiceAvailable: false } }), false);
+});
+
+test("a restart of Luke's own call closes it and asks for no microphone", () => {
+  // The developer never pressed a key here: the call up is the speak-only one
+  // Luke opened for himself, and the sample the voice change asked for is what
+  // the announcer will open the next one to play. Bringing it back with a
+  // microphone would put a permission request in front of a settings click.
+  assert.deepEqual(
+    voiceRestartAction({
+      previous: REALTIME_VOICE.CEDAR,
+      next: REALTIME_VOICE.MARIN,
+      live: true,
+      due: false,
+      status: REALTIME_STATUS.READY,
+      microphoneCall: false,
+    }),
+    { due: false, action: VOICE_RESTART.RELEASE },
+  );
+});
+
 test("a call that ended on its own owes the new voice nothing", () => {
   const owed = {
     previous: REALTIME_VOICE.CEDAR,
@@ -213,6 +248,7 @@ test("a call that ended on its own owes the new voice nothing", () => {
     live: false,
     due: true,
     status: REALTIME_STATUS.IDLE,
+    microphoneCall: false,
   };
   assert.deepEqual(voiceRestartAction(owed), { due: false, action: VOICE_RESTART.DROP });
   assert.deepEqual(voiceRestartAction({ ...owed, status: REALTIME_STATUS.FAILED }), {
@@ -233,6 +269,7 @@ test("the first snapshot of the voice is stored, not restarted", () => {
       live: true,
       due: false,
       status: REALTIME_STATUS.READY,
+      microphoneCall: true,
     }),
     { due: false, action: VOICE_RESTART.NONE },
   );
@@ -246,6 +283,7 @@ test("a voice change with no call up is not owed a restart", () => {
       live: false,
       due: false,
       status: REALTIME_STATUS.IDLE,
+      microphoneCall: false,
     }),
     { due: false, action: VOICE_RESTART.NONE },
   );
@@ -259,6 +297,7 @@ test("a connecting call counts as one to reopen: its credential may already be t
       live: true,
       due: false,
       status: REALTIME_STATUS.CONNECTING,
+      microphoneCall: true,
     }),
     { due: true, action: VOICE_RESTART.WAIT },
   );

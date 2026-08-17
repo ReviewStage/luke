@@ -206,6 +206,8 @@ export {
   type RealtimeStatus,
   truncateResponseEvents,
   typedAskEvents,
+  VOICE_PREVIEW_LINE,
+  voicePreviewEvents,
 } from "./realtime-protocol.js";
 export {
   HOSTED_API_ERROR,

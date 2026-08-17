@@ -12,8 +12,10 @@ import {
   ANNOUNCER_RETRY_DELAY_MS,
   type AnnouncerSession,
   MAXIMUM_CONNECT_ATTEMPTS,
+  PREVIEW_LINGER_MS,
   SPOKEN_NOTICE_MAX_AGE_MS,
   SpokenNoticeAnnouncer,
+  VOICE_PREVIEW_MAX_AGE_MS,
 } from "../src/renderer/spoken-notices";
 
 function speech(id: string, decidedAt = 1_000): AttentionSpeech {
@@ -29,6 +31,8 @@ function speech(id: string, decidedAt = 1_000): AttentionSpeech {
 
 interface FakeSession extends AnnouncerSession {
   spoken: AttentionSpeech[];
+  /** How many samples this call was asked to play. */
+  previews: number;
   connects: number;
   closes: number;
   /** What the next connect resolves to; the call opens when it does. */
@@ -40,6 +44,7 @@ interface FakeSession extends AnnouncerSession {
 function fakeSession(): FakeSession {
   const session: FakeSession = {
     spoken: [],
+    previews: 0,
     connects: 0,
     closes: 0,
     connectOpens: true,
@@ -65,6 +70,12 @@ function fakeSession(): FakeSession {
     speak(item: AttentionSpeech) {
       if (!this.isConnected || this.status === REALTIME_STATUS.RESPONDING) return false;
       this.spoken.push(item);
+      this.setStatus(REALTIME_STATUS.RESPONDING);
+      return true;
+    },
+    speakPreview() {
+      if (!this.isConnected || this.status === REALTIME_STATUS.RESPONDING) return false;
+      this.previews += 1;
       this.setStatus(REALTIME_STATUS.RESPONDING);
       return true;
     },
@@ -109,9 +120,15 @@ function fakeTimers(): Timers {
   };
 }
 
-function announcer(session: FakeSession, timers: Timers, now = () => 1_000) {
+function announcer(
+  session: FakeSession,
+  timers: Timers,
+  now = () => 1_000,
+  reopening: () => boolean = () => false,
+) {
   return new SpokenNoticeAnnouncer({
     session: () => session,
+    reopening,
     now,
     schedule: timers.schedule,
     cancel: timers.cancel,
@@ -338,6 +355,239 @@ test("a notice refused mid-reply keeps a clock of its own beside the READY edge"
     session.spoken.map((item) => item.providerSessionId),
     ["a"],
   );
+});
+
+test("a changed voice is heard: the sample opens a speak-only call of Luke's own", async () => {
+  const session = fakeSession();
+  const timers = fakeTimers();
+  const subject = announcer(session, timers);
+
+  subject.requestPreview();
+  await Promise.resolve();
+
+  assert.equal(session.connects, 1);
+  assert.equal(session.microphoneCall, false, "a sample never asks for the microphone");
+  assert.equal(session.previews, 1);
+});
+
+test("only the latest pick is heard: a second sample supersedes the first", async () => {
+  const session = fakeSession();
+  session.microphone = true;
+  session.setStatus(REALTIME_STATUS.RESPONDING);
+  const timers = fakeTimers();
+  const subject = announcer(session, timers);
+
+  // Both land while a reply is under way, so neither can speak yet.
+  subject.requestPreview();
+  subject.requestPreview();
+  assert.equal(session.previews, 0);
+
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  // One sample, not two: auditioning four voices quickly is one ask to hear
+  // the fourth, never four replies queued behind each other.
+  assert.equal(session.previews, 1);
+});
+
+test("a sample goes ahead of the news it arrived beside", async () => {
+  const session = fakeSession();
+  const timers = fakeTimers();
+  const subject = announcer(session, timers);
+
+  subject.enqueue([speech("a")]);
+  subject.requestPreview();
+  await Promise.resolve();
+
+  // The sample answers something the developer did a moment ago; the notice
+  // behind it is news, and news keeps.
+  assert.equal(session.previews, 1);
+  assert.deepEqual(session.spoken, []);
+
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  assert.deepEqual(
+    session.spoken.map((item) => item.providerSessionId),
+    ["a"],
+  );
+});
+
+test("a refused call drops the sample rather than opening one later", async () => {
+  const session = fakeSession();
+  session.connectOpens = false;
+  const timers = fakeTimers();
+  const subject = announcer(session, timers);
+
+  subject.requestPreview();
+  await Promise.resolve();
+  subject.onStatus(REALTIME_STATUS.UNAVAILABLE);
+
+  // No clock is left ticking: a call opening twenty seconds after a settings
+  // click is Luke introducing himself to someone who went back to work.
+  assert.equal(session.connects, 1);
+  assert.equal(timers.armed(), 0);
+
+  session.connectOpens = true;
+  timers.fire();
+  await Promise.resolve();
+  assert.equal(session.connects, 1);
+  assert.equal(session.previews, 0);
+});
+
+test("a sample that waited out a long reply is dropped, not played late", () => {
+  const session = fakeSession();
+  session.microphone = true;
+  session.setStatus(REALTIME_STATUS.RESPONDING);
+  const timers = fakeTimers();
+  let now = 10_000;
+  const subject = announcer(session, timers, () => now);
+
+  subject.requestPreview();
+  assert.equal(session.previews, 0);
+
+  now = 10_000 + VOICE_PREVIEW_MAX_AGE_MS + 1;
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  // The click it answered is long past; arriving now, it would interrupt
+  // rather than demonstrate.
+  assert.equal(session.previews, 0);
+});
+
+test("a call that only played samples puts itself away in seconds", async () => {
+  const session = fakeSession();
+  const timers = fakeTimers();
+  const subject = announcer(session, timers);
+
+  subject.requestPreview();
+  await Promise.resolve();
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+
+  assert.deepEqual(timers.delays, [PREVIEW_LINGER_MS]);
+  // Long enough to reuse while the next voice is picked.
+  subject.requestPreview();
+  assert.equal(timers.armed(), 0);
+  assert.equal(session.connects, 1);
+  assert.equal(session.previews, 2);
+
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  timers.fire();
+  assert.equal(session.closes, 1);
+});
+
+test("news spoken on the sample's call earns the call the full linger", async () => {
+  const session = fakeSession();
+  const timers = fakeTimers();
+  const subject = announcer(session, timers);
+
+  subject.requestPreview();
+  await Promise.resolve();
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  assert.deepEqual(timers.delays, [PREVIEW_LINGER_MS]);
+
+  // A session finishing while the call is still up: it is a cluster's first
+  // now, and the call waits for the stragglers as any announcing call does.
+  subject.enqueue([speech("a")]);
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  assert.deepEqual(timers.delays, [PREVIEW_LINGER_MS, ANNOUNCER_LINGER_MS]);
+});
+
+test("a sample rides the developer's own call and never closes it", () => {
+  const session = fakeSession();
+  session.microphone = true;
+  session.setStatus(REALTIME_STATUS.READY);
+  const timers = fakeTimers();
+  const subject = announcer(session, timers);
+
+  subject.requestPreview();
+  assert.equal(session.connects, 0, "the open call is used, not replaced");
+  assert.equal(session.previews, 1);
+
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  assert.equal(timers.armed(), 0);
+  timers.fire();
+  assert.equal(session.closes, 0);
+});
+
+test("a sample stranded by the voice restart is asked for again at once", async () => {
+  const session = fakeSession();
+  session.setStatus(REALTIME_STATUS.CONNECTING);
+  const timers = fakeTimers();
+  const subject = announcer(session, timers);
+
+  // The restart is already tearing the old call down, so there is nothing to
+  // speak on and nothing to wait for either.
+  subject.requestPreview();
+  assert.equal(session.previews, 0);
+
+  // The call the new voice is minted for opens from here — on the status,
+  // not on the queue's twenty-second retry clock, which nothing would arm
+  // for a sample anyway.
+  session.setStatus(REALTIME_STATUS.IDLE);
+  subject.onStatus(REALTIME_STATUS.IDLE);
+  await Promise.resolve();
+  assert.equal(session.connects, 1);
+  assert.equal(session.previews, 1);
+});
+
+test("the ending of the call it replaced does not orphan the call Luke just opened", async () => {
+  const session = fakeSession();
+  const timers = fakeTimers();
+  const subject = announcer(session, timers);
+
+  // The call opens while the one it replaced is still reporting its own
+  // ending — which is what a voice restart looks like from here.
+  subject.requestPreview();
+  subject.onStatus(REALTIME_STATUS.IDLE);
+  await Promise.resolve();
+  assert.equal(session.connects, 1);
+  assert.equal(session.previews, 1);
+
+  // The stale ending must not have taken ownership of the new call with it:
+  // a call nobody owns is a call nobody closes, and it would sit open until
+  // the session's own idle retirement instead of the seconds it is owed.
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  timers.fire();
+  assert.equal(session.closes, 1);
+});
+
+test("a sample waits for the developer's call to come back in the new voice", async () => {
+  const session = fakeSession();
+  session.microphone = true;
+  session.setStatus(REALTIME_STATUS.READY);
+  const timers = fakeTimers();
+  let reopening = false;
+  const subject = announcer(
+    session,
+    timers,
+    () => 1_000,
+    () => reopening,
+  );
+
+  // The voice change tore the developer's call down to mint the next one in
+  // the new voice. Across that gap the session answers "no call, none
+  // coming", and it is the one time that answer must not be believed.
+  reopening = true;
+  session.microphone = false;
+  session.setStatus(REALTIME_STATUS.IDLE);
+  subject.onStatus(REALTIME_STATUS.IDLE);
+  subject.requestPreview();
+  await Promise.resolve();
+  assert.equal(session.connects, 0, "a call opened into the gap is torn down mid-sentence");
+  assert.equal(session.previews, 0);
+
+  // The developer's call is back, in the new voice, and the sample rides it —
+  // which is where a sample belongs while a conversation is being held.
+  reopening = false;
+  session.microphone = true;
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  assert.equal(session.connects, 0);
+  assert.equal(session.previews, 1);
 });
 
 test("a sentence that went stale in the queue is dropped, not read as news", () => {

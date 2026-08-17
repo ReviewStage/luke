@@ -52,6 +52,7 @@ import {
   type TrackedIssue,
   truncateResponseEvents,
   typedAskEvents,
+  voicePreviewEvents,
   workspaceProjectContextEvents,
   workspaceProjectContextText,
 } from "@sidecar/core";
@@ -1124,6 +1125,23 @@ export class RealtimeVoiceSession {
       providerSessionId: speech.providerSessionId,
     };
     this.#emitCaption();
+    return true;
+  }
+
+  /**
+   * Plays the sample of the voice and pace now stored, reporting whether it
+   * could. Refused on the same terms as a notice — one turn at a time — and
+   * dropped rather than held when refused: a sample answers a click, and a
+   * click a reply later is not a click anyone is still waiting on.
+   *
+   * Nothing is assigned to the caption's subject, and that is the whole of it:
+   * `#startResponse` clears the last reply's subject, so a sample's words are
+   * about no session and raise no pressable notice under the housing. A sample
+   * is news about nothing.
+   */
+  speakPreview(): boolean {
+    if (!this.isConnected || this.#turnBusy) return false;
+    this.#startResponse(voicePreviewEvents());
     return true;
   }
 

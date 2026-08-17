@@ -17,6 +17,23 @@ export const SPOKEN_NOTICE_MAX_AGE_MS = 2 * 60_000;
  */
 export const ANNOUNCER_LINGER_MS = 60_000;
 
+/**
+ * How long Luke's own call lingers when a sample is all it has said. A sample
+ * answers a click on a settings row, and rows like that are clicked in runs —
+ * four voices tried against each other — so the call waits for the next pick
+ * rather than paying the handshake for each. Far shorter than a notice's
+ * linger all the same: hearing a voice is not news anyone is owed, and a
+ * settings tweak must not hold a call open for a minute.
+ */
+export const PREVIEW_LINGER_MS = 8_000;
+
+/**
+ * How long a sample stays worth playing. It answers an act the developer just
+ * performed; one that waited out a long reply is answering a click they have
+ * already moved on from, and arrives as an interruption rather than a sample.
+ */
+export const VOICE_PREVIEW_MAX_AGE_MS = 20_000;
+
 /** A backlog is stale news read in order; only this many notices ever wait. */
 export const MAXIMUM_QUEUED_NOTICES = 8;
 
@@ -48,11 +65,22 @@ export interface AnnouncerSession {
   readonly microphoneCall: boolean;
   connect(options: { microphone: false }): Promise<boolean>;
   speak(speech: AttentionSpeech): boolean;
+  /** Says the fixed sample line in the voice and at the pace now stored. */
+  speakPreview(): boolean;
   close(): Promise<void>;
 }
 
 export interface SpokenNoticeAnnouncerOptions {
   session: () => AnnouncerSession;
+  /**
+   * Whether the developer's own call is between a close and the reopen that
+   * follows it — what a changed voice does, since the voice is baked into the
+   * credential. The session answers "not connected, not connecting" across
+   * that gap, and it is the one time that answer must not be taken as silence:
+   * a call of Luke's own opened into it is torn down mid-sentence by the one
+   * coming back, which is also the call anything waiting belongs on.
+   */
+  reopening?: () => boolean;
   now?: () => number;
   schedule?: (callback: () => void, delayMs: number) => unknown;
   cancel?: (timer: unknown) => void;
@@ -75,12 +103,35 @@ export interface SpokenNoticeAnnouncerOptions {
  * per backlog, and every queued sentence ages out of being news regardless.
  * A backlog that outlives its attempts is dropped, because every notice is
  * still standing in the panel.
+ *
+ * The sample a changed voice or pace asks for is said the same way, and lives
+ * here for the same reason: "speak into silence, opening a call if that is
+ * what it takes, and close the call I opened" is one job, and a second owner
+ * racing this one for the same session would be a bug farm. It is not news,
+ * though, so it keeps none of the news rules — a single slot rather than a
+ * queue, since only the latest pick matters; no retry, since a call opening
+ * twenty seconds after a click is a call nobody asked for; and a shorter
+ * linger, since a settings tweak must not hold a call open for a minute.
  */
 export class SpokenNoticeAnnouncer {
   readonly #options: SpokenNoticeAnnouncerOptions;
   #queue: AttentionSpeech[] = [];
+  /**
+   * The sample waiting to be played, if one is. A slot rather than a queue
+   * entry: two picks in a row are one ask to hear the second one.
+   */
+  #preview: { requestedAt: number } | undefined;
   /** Whether the call now up is one this announcer opened, and so must close. */
   #ownsCall = false;
+  /**
+   * Whether the call Luke opened has said nothing but samples. It is what
+   * chooses the linger: a call opened to audition voices puts itself away in
+   * seconds, where one that read out news waits a minute for the cluster that
+   * usually follows. Set true by the connect that opens a call and false by
+   * the first notice spoken on it — the only two moments it can change,
+   * because it describes the call now up and nothing else.
+   */
+  #previewOnlyCall = false;
   #lingerTimer: unknown;
   /** How many times the backlog now queued has tried to open Luke's own call. */
   #connectAttempts = 0;
@@ -99,6 +150,18 @@ export class SpokenNoticeAnnouncer {
     if (this.#queue.length > MAXIMUM_QUEUED_NOTICES) {
       this.#queue = this.#queue.slice(this.#queue.length - MAXIMUM_QUEUED_NOTICES);
     }
+    this.#cancelLinger();
+    this.#flush();
+  }
+
+  /**
+   * Takes the ask to hear the voice and pace the developer just chose. The
+   * slot is filled rather than appended to: a pick made while the last one is
+   * still waiting supersedes it, because the only sample worth hearing is the
+   * one for the setting that now stands.
+   */
+  requestPreview(): void {
+    this.#preview = { requestedAt: this.#options.now?.() ?? Date.now() };
     this.#cancelLinger();
     this.#flush();
   }
@@ -126,6 +189,15 @@ export class SpokenNoticeAnnouncer {
     ) {
       this.#cancelLinger();
       this.#ownsCall = false;
+      // A sample waiting when a call ends is the voice restart's own path: the
+      // call was closed precisely so the next one could be minted in the new
+      // voice, and the sample is what is waiting to be heard in it. It is
+      // asked for again here rather than on the queue's retry clock, which is
+      // twenty seconds the developer would spend wondering.
+      if (this.#preview) {
+        this.#flush();
+        return;
+      }
       // The backlog survives the call it was waiting on — a developer's call
       // that ended mid-queue, or Luke's own that dropped — and the retry clock
       // is what picks it back up. The connect path arms the same clock when an
@@ -136,18 +208,27 @@ export class SpokenNoticeAnnouncer {
 
   #flush(): void {
     const now = this.#options.now?.() ?? Date.now();
+    if (this.#preview && now - this.#preview.requestedAt > VOICE_PREVIEW_MAX_AGE_MS) {
+      this.#preview = undefined;
+    }
     this.#queue = this.#queue.filter((item) => now - item.decidedAt <= SPOKEN_NOTICE_MAX_AGE_MS);
     const session = this.#options.session();
-    if (this.#queue.length === 0) {
+    if (this.#preview === undefined && this.#queue.length === 0) {
       this.#connectAttempts = 0;
       this.#armLinger();
       return;
     }
     if (session.isConnected) {
+      // The sample goes first. It answers something the developer did a moment
+      // ago; the notices behind it are news, and news keeps.
+      if (this.#preview && session.speakPreview()) this.#preview = undefined;
       // One reply at a time: the first speak takes the turn and the second is
       // refused, so the loop stops itself and READY resumes it.
       while (this.#queue.length > 0 && session.speak(this.#queue[0] as AttentionSpeech)) {
         this.#queue.shift();
+        // Something other than a sample has now been said on this call, so it
+        // has earned the full linger.
+        this.#previewOnlyCall = false;
       }
       // A backlog waiting on a refused speak is normally resumed by the READY
       // edge, but that edge is the session's promise, not this class's: the
@@ -157,15 +238,28 @@ export class SpokenNoticeAnnouncer {
       this.#armRetry();
       return;
     }
-    if (session.isConnecting) return;
+    // A call being opened, or one on its way back in a changed voice: either
+    // way there is a call coming, and it is the one to say this on.
+    if (session.isConnecting || this.#options.reopening?.() === true) return;
     // Silence, and something to say into it: open a call of Luke's own.
     this.#connectAttempts += 1;
     this.#ownsCall = true;
+    // Until a notice speaks on it, whatever this call is opened for, it has
+    // said nothing that is owed the long linger.
+    this.#previewOnlyCall = true;
     void session
       .connect({ microphone: false })
       .then((opened) => {
         if (opened) {
           this.#connectAttempts = 0;
+          // The call that just opened is the one this announcer asked for,
+          // whatever status arrived while it was opening: the call it replaced
+          // ending is not this call ending, and taking ownership away on that
+          // would leave the new one with nobody to close it — open for the
+          // session's own idle retirement rather than the few seconds it is
+          // owed. Unless what came up is the developer's own call, which is
+          // never Luke's to close.
+          this.#ownsCall = !session.microphoneCall;
           this.#flush();
           return;
         }
@@ -186,6 +280,11 @@ export class SpokenNoticeAnnouncer {
    * counter. What is dropped is still standing in the panel.
    */
   #retreatOrRetry(): void {
+    // The sample goes with the refusal, whatever the backlog does next. It is
+    // the answer to a click, and the retry clock is twenty seconds long: a
+    // call opening then would be Luke introducing himself to someone who has
+    // gone back to work.
+    this.#preview = undefined;
     if (this.#connectAttempts >= MAXIMUM_CONNECT_ATTEMPTS) {
       this.#queue = [];
       this.#connectAttempts = 0;
@@ -212,10 +311,13 @@ export class SpokenNoticeAnnouncer {
     const session = this.#options.session();
     if (!this.#ownsCall || !session.isConnected || session.microphoneCall) return;
     if (session.status !== REALTIME_STATUS.READY) return;
-    this.#lingerTimer ??= (this.#options.schedule ?? setTimeout)(() => {
-      this.#lingerTimer = undefined;
-      this.#closeOwnCall();
-    }, ANNOUNCER_LINGER_MS);
+    this.#lingerTimer ??= (this.#options.schedule ?? setTimeout)(
+      () => {
+        this.#lingerTimer = undefined;
+        this.#closeOwnCall();
+      },
+      this.#previewOnlyCall ? PREVIEW_LINGER_MS : ANNOUNCER_LINGER_MS,
+    );
   }
 
   #cancelLinger(): void {
@@ -230,7 +332,8 @@ export class SpokenNoticeAnnouncer {
     // long: the developer may have taken the call, or something new may be
     // queued and about to speak.
     if (!this.#ownsCall || !session.isConnected || session.microphoneCall) return;
-    if (this.#queue.length > 0 || session.status !== REALTIME_STATUS.READY) return;
+    if (this.#preview || this.#queue.length > 0) return;
+    if (session.status !== REALTIME_STATUS.READY) return;
     this.#ownsCall = false;
     void session.close();
   }

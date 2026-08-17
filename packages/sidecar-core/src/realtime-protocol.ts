@@ -433,6 +433,57 @@ export function proactiveSpeechEvents(speech: AttentionSpeech): readonly Record<
   ];
 }
 
+/**
+ * The line Luke says when the developer changes his voice or his pace by hand.
+ * Fixed by this build and written here, so the one sentence that can be spoken
+ * without anything having happened carries nothing anyone observed: no session,
+ * no roster, no provider's words. Long enough to hear a voice in, short enough
+ * that auditioning four of them is not a wait.
+ */
+export const VOICE_PREVIEW_LINE = "Hi, I'm Luke, your personal coding agent manager.";
+
+/**
+ * What Luke is told to do with a sample. The line is quoted straight into the
+ * instructions rather than travelling as a conversation item, which is exactly
+ * backwards from a proactive readout — and right, for the opposite reason: an
+ * announcement's payload is a provider's words, quarantined into the data
+ * channel so it cannot give orders, while this sentence is the build's own and
+ * has nothing to be quarantined from.
+ */
+const VOICE_PREVIEW_INSTRUCTIONS = [
+  `Say exactly this and nothing else: "${VOICE_PREVIEW_LINE}"`,
+  "Do not add a greeting, a follow-up question, or any other commentary.",
+].join("\n");
+
+/**
+ * Builds the events that play a sample of the voice and pace now stored.
+ *
+ * One request and no conversation item: there is no payload to hand over, only
+ * a sentence to say. `conversation: "none"` makes it an out-of-band response,
+ * so a sample riding the developer's own call is heard without ever becoming
+ * something the conversation can refer back to — the developer changed a
+ * setting, they did not say anything to Luke. The modalities are left to the
+ * session, which is audio: an out-of-band response that came back silent would
+ * be the one reason to drop that field, since a sample present in the
+ * transcript is harmless where a sample nobody hears is the whole feature.
+ */
+export function voicePreviewEvents(): readonly Record<string, unknown>[] {
+  return [
+    {
+      type: REALTIME_CLIENT_EVENT.RESPONSE_CREATE,
+      response: {
+        instructions: VOICE_PREVIEW_INSTRUCTIONS,
+        // Out-of-band: heard, and then not part of anything.
+        conversation: "none",
+        // A turn Luke opens himself carries no tools. Nothing decided this
+        // sample beyond a click on a settings row, and a click on a settings
+        // row is not permission to act on a session.
+        tool_choice: "none",
+      },
+    },
+  ];
+}
+
 /** One tool call the model made, as it arrives inside a finished response. */
 export interface RealtimeFunctionCall {
   name: string;

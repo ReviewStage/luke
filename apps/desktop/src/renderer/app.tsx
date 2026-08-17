@@ -135,7 +135,11 @@ import { useBootstrapRacedChannel } from "./use-bootstrap-raced-channel";
 import { panelEntryOpen, usePanelEntry } from "./use-panel-entry";
 import { usePanelPresentation } from "./use-panel-presentation";
 import { useStateWithRef } from "./use-state-with-ref";
-import { useVoiceConversation, voiceErrorToShow } from "./use-voice-conversation";
+import {
+  useVoiceConversation,
+  voiceErrorToShow,
+  voicePreviewFollows,
+} from "./use-voice-conversation";
 import {
   outputSilent,
   VOLUME_HINT_HEIGHT,
@@ -1219,21 +1223,40 @@ export function App(): React.JSX.Element {
     commit: feedbackEntry.commit,
   };
 
+  /**
+   * The ask to hear the voice and pace now stored. Changing either by hand is
+   * choosing blind from a list of names otherwise — what was picked is heard
+   * on Luke's next reply, which may be minutes away — so the pick is its own
+   * ask to hear it. It travels as a count rather than a call: the render that
+   * carries the new setting carries the request with it, and the voice
+   * conversation's own effects run in the order a sample needs.
+   */
+  const [voicePreviewRequest, setVoicePreviewRequest] = useState(0);
+
+  /** Applies a voice-row write and asks for the sample it earned, if any. */
+  const applyVoiceSettingsReply = useCallback(
+    (result: SettingsUpdateResult) => {
+      applySettingsReply(result);
+      if (voicePreviewFollows(result)) setVoicePreviewRequest((count) => count + 1);
+    },
+    [applySettingsReply],
+  );
+
   // The row marks the voice the main process reports rather than the one just
   // pressed, so what is shown as chosen is always what was actually saved.
   const changeVoice = useCallback(
     (voice: RealtimeVoice) => {
-      void window.sidecar.setVoice(voice).then(applySettingsReply);
+      void window.sidecar.setVoice(voice).then(applyVoiceSettingsReply);
     },
-    [applySettingsReply],
+    [applyVoiceSettingsReply],
   );
 
   // The pace, under the same rule as the voice above.
   const changeVoiceSpeed = useCallback(
     (speed: RealtimeVoiceSpeed) => {
-      void window.sidecar.setVoiceSpeed(speed).then(applySettingsReply);
+      void window.sidecar.setVoiceSpeed(speed).then(applyVoiceSettingsReply);
     },
-    [applySettingsReply],
+    [applyVoiceSettingsReply],
   );
 
   /**
@@ -1623,6 +1646,7 @@ export function App(): React.JSX.Element {
     voiceSpeed: settings?.voiceSpeed,
     voiceCaptions: settings?.voiceCaptions === true,
     voiceAvailable: settings?.voiceAvailable,
+    voicePreviewRequest,
     outputSilent: outputSilent(outputAudio),
     fixtureSpeaking: bootstrap?.profile === "speaking" || bootstrap?.profile === "muted",
     capturingShortcut: () => shortcutCapture.current,

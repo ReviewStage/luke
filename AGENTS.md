@@ -239,14 +239,22 @@ What Luke may show:
   — or the one answering sentence — alone: never the roster, the guide, the
   issues, or a transcript rendering, which travel only on conversations the
   developer opens, and the rendering only in the turn that asked for it. Its
-  trigger is a deterministic status edge or the evaluator finding an update
-  that satisfies the developer's standing ask — never a model speaking
+  trigger is a deterministic status edge, the evaluator finding an update
+  that satisfies the developer's standing ask, or the developer's own hand
+  changing the voice or the pace on the Voice page — never a model speaking
   unbidden: while no ask stands, nothing a model decided can open Luke's own
-  call. The edge announcements speak whenever voice can; an answered ask
-  speaks on the consent of the ask itself, for exactly as long as it stands.
-  Widening either set is a product decision, not an implementation detail;
-  make it deliberately. While an announcement is being spoken, a notice on
-  Luke's own surface under the housing names the session it is about —
+  call. The third is the narrowest of them and stays that way: choosing a
+  voice from a list of names is choosing blind until it is heard, so the pick
+  is its own ask to hear it, and what is said is one line fixed by this build
+  — who Luke is, and nothing else. No session material travels with a sample,
+  none is asked for, and a change asked for out loud plays none: the spoken
+  reply already confirms itself in words. The edge announcements speak
+  whenever voice can; an answered ask speaks on the consent of the ask
+  itself, for exactly as long as it stands; a sample speaks once, for the
+  hand that just moved the setting. Widening any of the three is a product
+  decision, not an implementation detail; make it deliberately. While an
+  announcement is being spoken, a notice on Luke's own surface under the
+  housing names the session it is about —
   drawn on this machine from the roster and the same roster-validated
   identity the voice was handed, leaving it never, and living exactly as
   long as the spoken reply, so it can never stand for news nobody is

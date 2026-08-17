@@ -53,6 +53,8 @@ import {
   sessionToolAction,
   truncateResponseEvents,
   typedAskEvents,
+  VOICE_PREVIEW_LINE,
+  voicePreviewEvents,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceAgentModels,
   workspaceProjectContextEvents,
@@ -1047,6 +1049,36 @@ test("a proactive turn is opened with its tools withheld", () => {
   // A notice is something to say, never a reason to act — and not only by
   // instruction: the turn itself has nothing to act with.
   assert.equal(responseCreate?.response?.tool_choice, "none");
+});
+
+test("a sample says the build's own line, and asks for nothing else", () => {
+  const events = voicePreviewEvents();
+
+  // One request and nothing before it: a sample hands over no payload, so
+  // there is nothing to quarantine into a conversation item the way an
+  // announcement's provider-written words are.
+  assert.equal(events.length, 1);
+  const [request] = events;
+  assert.equal(request?.type, REALTIME_CLIENT_EVENT.RESPONSE_CREATE);
+  const response = request?.response as {
+    instructions?: string;
+    conversation?: unknown;
+    tool_choice?: unknown;
+  };
+  assert.ok(response?.instructions?.includes(VOICE_PREVIEW_LINE));
+  // Out-of-band, so a sample riding the developer's own call is heard without
+  // becoming something the conversation can refer back to.
+  assert.equal(response?.conversation, "none");
+  // A turn Luke opens himself carries no tools, and a settings click is no
+  // more a reason to act than a notice is.
+  assert.equal(response?.tool_choice, "none");
+});
+
+test("the sample line carries nothing anyone observed", () => {
+  // Fixed by this build: it names Luke and nobody else, so the one sentence
+  // that can be spoken without anything having happened says nothing about a
+  // session, a workspace, or a provider.
+  assert.equal(VOICE_PREVIEW_LINE, "Hi, I'm Luke, your personal coding agent manager.");
 });
 
 test("tool calls are read whole from a finished response", () => {

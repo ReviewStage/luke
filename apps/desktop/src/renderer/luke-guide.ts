@@ -186,7 +186,7 @@ const SETTING_GUIDE: Record<
     id: APP_SETTING_ID.VOICE,
     label: "Voice",
     description:
-      "Which voice Luke speaks with; a change is heard right away — a conversation under way starts afresh in the new voice.",
+      "Which voice Luke speaks with; a change is heard right away — a conversation under way starts afresh in the new voice. Changing it by hand on the Voice page plays a short sample in the new voice.",
     kind: APP_SETTING_KIND.CHOICE,
     value: settings.voice,
     defaultValue: REALTIME_DEFAULTS.VOICE,
@@ -198,7 +198,7 @@ const SETTING_GUIDE: Record<
     id: APP_SETTING_ID.VOICE_SPEED,
     label: "Speed",
     description:
-      "How fast Luke talks — slow is 0.75×, normal 1×, quick 1.25×, fast 1.5× the voice's natural rate, and an ask may use the word or the multiple; a change is heard from the next reply on.",
+      "How fast Luke talks — slow is 0.75×, normal 1×, quick 1.25×, fast 1.5× the voice's natural rate, and an ask may use the word or the multiple; a change is heard from the next reply on. Changing it by hand on the Voice page plays a short sample at the new pace.",
     kind: APP_SETTING_KIND.CHOICE,
     value: voiceSpeedWord(settings.voiceSpeed),
     defaultValue: voiceSpeedWord(REALTIME_DEFAULTS.SPEED),
