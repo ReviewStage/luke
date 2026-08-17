@@ -1,7 +1,6 @@
 import {
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
-  nonNegativeNumber,
   positiveInteger,
   REALTIME_CALLS_PATH,
   REALTIME_CLIENT_SECRETS_PATH,
@@ -28,12 +27,6 @@ export const OPENAI_ENVIRONMENT = {
 const OPENAI_DEFAULTS = {
   BASE_URL: "https://api.openai.com/v1",
   REQUEST_TIMEOUT_MS: 10_000,
-  /**
-   * Re-mint slightly before a credential actually expires. The renderer still
-   * has to complete an SDP round trip after it receives one, and a secret that
-   * dies mid-handshake fails in a way that looks like a network fault.
-   */
-  EXPIRY_MARGIN_MS: 5_000,
 } as const;
 
 type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
@@ -47,7 +40,6 @@ export interface OpenAiRealtimeCredentialOptions {
   fetch?: FetchLike;
   now?: () => number;
   requestTimeoutMs?: number;
-  expiryMarginMs?: number;
 }
 
 export type OpenAiRealtimeMinterOptions = Omit<OpenAiRealtimeCredentialOptions, "apiKey">;
@@ -104,8 +96,6 @@ export class OpenAiRealtimeCredentialMinter {
   readonly #fetch: FetchLike;
   readonly #now: () => number;
   readonly #requestTimeoutMs: number;
-  readonly #expiryMarginMs: number;
-  #credential: RealtimeConnection | undefined;
   #lastOutcome: RealtimeMintOutcome = REALTIME_MINT_OUTCOME.NOT_ATTEMPTED;
   #lastDetail: string | undefined;
   #lastAttemptAt: number | undefined;
@@ -126,10 +116,6 @@ export class OpenAiRealtimeCredentialMinter {
       options.requestTimeoutMs,
       OPENAI_DEFAULTS.REQUEST_TIMEOUT_MS,
     );
-    this.#expiryMarginMs = nonNegativeNumber(
-      options.expiryMarginMs,
-      OPENAI_DEFAULTS.EXPIRY_MARGIN_MS,
-    );
   }
 
   get model(): string {
@@ -137,37 +123,31 @@ export class OpenAiRealtimeCredentialMinter {
   }
 
   /**
-   * Changes the voice new credentials are minted for. The outstanding
-   * credential was minted against the old voice, so it is discarded rather
-   * than served speaking the wrong one; a call already open keeps the voice it
-   * answered with, because a credential already handed out cannot be recalled.
+   * Changes the voice new credentials are minted for. A call already open
+   * keeps the voice it answered with, because a credential already handed out
+   * cannot be recalled.
    */
   setVoice(voice: string | undefined): void {
-    const next = text(voice) ?? this.#configuredVoice;
-    if (next === this.#voice) return;
-    this.#voice = next;
-    this.#credential = undefined;
+    this.#voice = text(voice) ?? this.#configuredVoice;
   }
 
   /**
    * Changes the pace new credentials are minted for, under the same rule as
-   * the voice: the outstanding credential is discarded, and a call already
-   * open keeps the pace it answered at.
+   * the voice: a call already open keeps the pace it answered at.
    */
   setSpeed(speed: number | undefined): void {
-    const next = positiveSpeed(speed) ?? this.#configuredSpeed;
-    if (next === this.#speed) return;
-    this.#speed = next;
-    this.#credential = undefined;
+    this.#speed = positiveSpeed(speed) ?? this.#configuredSpeed;
   }
 
-  /** Returns a usable credential, reusing the outstanding one until it nears expiry. */
+  /**
+   * Mints a fresh credential for every call. A minted secret is deliberately
+   * never kept to serve a later call: the service has been seen to refuse a
+   * reused secret at the calls endpoint (status 401) even inside its stated
+   * expiry, and a refused call in the announcer's path is an announcement
+   * lost. One extra POST per call open is cheap; a secret that answers only
+   * the call it was minted for cannot go stale in anyone's hands.
+   */
   async mint(): Promise<RealtimeConnection | undefined> {
-    const existing = this.#credential;
-    if (existing && realtimeCredentialIsUsable(existing, this.#now() + this.#expiryMarginMs)) {
-      return existing;
-    }
-    this.#credential = undefined;
     this.#lastAttemptAt = this.#now();
 
     const response = await this.#request();
@@ -202,7 +182,6 @@ export class OpenAiRealtimeCredentialMinter {
       ...credential,
       callsUrl: `${this.#baseUrl}${REALTIME_CALLS_PATH}`,
     };
-    this.#credential = connection;
     this.#record(REALTIME_MINT_OUTCOME.SUCCEEDED);
     return connection;
   }
