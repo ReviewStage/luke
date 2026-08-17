@@ -1,3 +1,4 @@
+import { ACCOUNT_STATUS, type AccountSnapshot } from "../shared/contracts";
 import type { FeedbackImage, FeedbackKind } from "../shared/feedback";
 import { FEEDBACK_KIND, FEEDBACK_LIMITS } from "../shared/feedback";
 
@@ -14,7 +15,11 @@ export interface FeedbackEntry {
   kind: FeedbackKind;
   /** What has been written so far. Empty until it has been. */
   message: string;
-  /** Optional credit, kept as typed; empty means unsigned. */
+  /**
+   * Optional credit. A fresh note starts signed with the account the user is
+   * signed in as; both fields stay theirs to edit or clear, and empty means
+   * unsigned. Kept as edited for the life of the note.
+   */
   name: string;
   email: string;
   images: readonly FeedbackImage[];
@@ -56,8 +61,39 @@ export interface FeedbackEntryControl {
   commit(): void;
 }
 
-export function freshFeedbackEntry(kind: FeedbackKind, fromPanel: boolean): FeedbackEntry {
-  return { kind, message: "", name: "", email: "", images: [], busy: false, fromPanel };
+/**
+ * The credit a fresh note starts with: the signed-in account's own name and
+ * address. It lands in the composer's visible fields rather than riding a
+ * send, so what a submission carries is always exactly what its fields
+ * showed — prefilled, but the user's to edit or clear before anything leaves.
+ */
+export interface FeedbackSignature {
+  name?: string;
+  email?: string;
+}
+
+/** What the account offers a fresh note as its signature: nothing, signed out. */
+export function accountSignature(
+  account: AccountSnapshot | undefined,
+): FeedbackSignature | undefined {
+  if (account?.status !== ACCOUNT_STATUS.SIGNED_IN) return undefined;
+  return { ...(account.name ? { name: account.name } : {}), email: account.email };
+}
+
+export function freshFeedbackEntry(
+  kind: FeedbackKind,
+  fromPanel: boolean,
+  signature?: FeedbackSignature,
+): FeedbackEntry {
+  return {
+    kind,
+    message: "",
+    name: signature?.name ?? "",
+    email: signature?.email ?? "",
+    images: [],
+    busy: false,
+    fromPanel,
+  };
 }
 
 /**
@@ -65,12 +101,16 @@ export function freshFeedbackEntry(kind: FeedbackKind, fromPanel: boolean): Feed
  * section's buttons, the tray, or a spoken ask carried through the same path.
  * `draft` is starting text for the note, and it is only ever the user's own
  * words: the section and the tray never send one, and the spoken tool's
- * contract forbids anything the user did not say.
+ * contract forbids anything the user did not say. `signature` is the
+ * signed-in account's credit, and it seeds only a note that does not exist
+ * yet: a note already there keeps its fields exactly as its author left
+ * them, cleared ones included.
  */
 export interface FeedbackOpenAsk {
   kind: FeedbackKind;
   fromPanel: boolean;
   draft?: string;
+  signature?: FeedbackSignature;
 }
 
 /**
@@ -91,7 +131,7 @@ export function openedFeedbackEntry(
   if (current?.busy) return { drafted: false };
   const blank = (current?.message ?? "").trim().length === 0;
   const drafted = ask.draft !== undefined && blank;
-  const base = current ?? freshFeedbackEntry(ask.kind, ask.fromPanel);
+  const base = current ?? freshFeedbackEntry(ask.kind, ask.fromPanel, ask.signature);
   return {
     entry: {
       ...base,

@@ -66,6 +66,7 @@ import {
   supersedeErrandSettings,
 } from "./errand-queue";
 import {
+  accountSignature,
   type FeedbackEntry,
   type FeedbackEntryControl,
   IMAGE_REFUSAL,
@@ -220,7 +221,10 @@ function useShapeHeight(): [(element: HTMLElement | null) => void, number | unde
 
 export function App(): React.JSX.Element {
   const [bootstrap, setBootstrap] = useState<AppBootstrap>();
-  const [account, setAccount] = useState<AccountSnapshot>();
+  // Readable from a callback as well as rendered: opening the feedback
+  // composer signs a fresh note from the account without re-wiring the
+  // lifecycle subscription to every sign-in change.
+  const [account, setAccount, accountNow] = useStateWithRef<AccountSnapshot | undefined>(undefined);
   const [sessions, setSessions] = useState<readonly NormalizedSession[]>([]);
   const [noticeAsks, setNoticeAsks] = useState<readonly SessionNoticeAsk[]>([]);
   const [workspaceProjects, setWorkspaceProjects] = useState<readonly ObservedWorkspaceProject[]>(
@@ -897,12 +901,15 @@ export function App(): React.JSX.Element {
         kind,
         fromPanel,
         ...(draft !== undefined ? { draft } : {}),
+        // A fresh note starts signed with the account; a note already there
+        // keeps its fields as its author left them, cleared ones included.
+        signature: accountSignature(accountNow()),
       });
       if (opened.entry) feedbackEntry.apply(opened.entry);
       feedbackEntry.standDown();
       return opened.drafted;
     },
-    [feedbackEntry.apply, feedbackEntry.latest, feedbackEntry.standDown],
+    [accountNow, feedbackEntry.apply, feedbackEntry.latest, feedbackEntry.standDown],
   );
 
   /**
@@ -1261,6 +1268,7 @@ export function App(): React.JSX.Element {
             kind,
             fromPanel: false,
             ...(action.draft === undefined ? {} : { draft: action.draft }),
+            signature: accountSignature(accountNow()),
           }).drafted;
           spokenFeedbackDraft.current = action.draft;
           try {
@@ -1334,6 +1342,7 @@ export function App(): React.JSX.Element {
         },
       }),
     [
+      accountNow,
       armErrandFlight,
       changeMode,
       settingsNow,
