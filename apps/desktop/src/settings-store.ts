@@ -15,6 +15,10 @@ import {
 } from "@sidecar/core";
 import { environmentRealtimeSpeed, environmentRealtimeVoice } from "./openai-realtime-credentials";
 import {
+  ACCOUNT_PROVIDER,
+  ACCOUNT_STATUS,
+  type AccountProvider,
+  type AccountSnapshot,
   APP_SETTING_DEFAULTS,
   type AppSettings,
   CREDENTIAL_SOURCE,
@@ -41,6 +45,7 @@ const SETTINGS_FILE_VERSION = 2;
 const SETTINGS_FILE_MODE = 0o600;
 
 const SETTINGS_FIELD = {
+  ACCOUNT: "account",
   API_KEYS: "apiKeys",
   ASK_HOTKEY: "askHotkey",
   DEFAULT_WORKSPACE_PROVIDER: "defaultWorkspaceProvider",
@@ -104,6 +109,13 @@ interface PersistedSettings {
    * through untouched so an older build cannot discard a newer one's key.
    */
   apiKeys: Readonly<Record<string, string>>;
+  /** Account tokens encrypted together; only display identity stays plaintext. */
+  account?: {
+    tokenCipher: string;
+    email: string;
+    name?: string;
+    provider: AccountProvider;
+  };
   /**
    * Whether Luke stands in the Dock. Off unless the file says `true` outright,
    * so a missing field, an older file, and a corrupt value all land on the
@@ -198,6 +210,39 @@ interface PersistedSettings {
 interface ResolvedApiKey {
   apiKey?: string;
   source: CredentialSource;
+}
+
+export interface StoredAccount {
+  accessToken: string;
+  refreshToken: string;
+  email: string;
+  name?: string;
+  provider: AccountProvider;
+}
+
+function isAccountProvider(value: unknown): value is AccountProvider {
+  return value === ACCOUNT_PROVIDER.GOOGLE || value === ACCOUNT_PROVIDER.GITHUB;
+}
+
+function storedAccount(record: Record<string, unknown>): PersistedSettings["account"] {
+  const value = record[SETTINGS_FIELD.ACCOUNT];
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const account = value as Record<string, unknown>;
+  if (
+    typeof account.tokenCipher !== "string" ||
+    !account.tokenCipher ||
+    typeof account.email !== "string" ||
+    !account.email ||
+    !isAccountProvider(account.provider)
+  ) {
+    return undefined;
+  }
+  return {
+    tokenCipher: account.tokenCipher,
+    email: account.email,
+    ...(typeof account.name === "string" && account.name ? { name: account.name } : {}),
+    provider: account.provider,
+  };
 }
 
 /**
@@ -354,6 +399,7 @@ function parsePersistedSettings(source: string): PersistedSettings {
   return {
     version: typeof version === "number" ? version : SETTINGS_FILE_VERSION,
     apiKeys: storedApiKeys(record),
+    ...(storedAccount(record) ? { account: storedAccount(record) } : {}),
     showInDock: booleanSetting(
       record[SETTINGS_FIELD.SHOW_IN_DOCK],
       APP_SETTING_DEFAULTS.showInDock,
@@ -468,6 +514,84 @@ export class SettingsStore {
         ? { workspaceProjectDefaults: persisted.workspaceProjectDefaults }
         : {}),
     };
+  }
+
+  /** Returns account credentials only to the main process. */
+  async readAccount(): Promise<StoredAccount | undefined> {
+    const account = (await this.#load()).account;
+    if (!account) return undefined;
+    try {
+      const tokens: unknown = JSON.parse(
+        this.#cipher.decrypt(Buffer.from(account.tokenCipher, "base64")),
+      );
+      if (tokens === null || typeof tokens !== "object" || Array.isArray(tokens)) return undefined;
+      const { accessToken, refreshToken } = tokens as Record<string, unknown>;
+      if (typeof accessToken !== "string" || typeof refreshToken !== "string") return undefined;
+      return {
+        accessToken,
+        refreshToken,
+        email: account.email,
+        ...(account.name ? { name: account.name } : {}),
+        provider: account.provider,
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
+  async accountSnapshot(): Promise<AccountSnapshot> {
+    const account = await this.readAccount();
+    return account
+      ? {
+          status: ACCOUNT_STATUS.SIGNED_IN,
+          email: account.email,
+          ...(account.name ? { name: account.name } : {}),
+          provider: account.provider,
+        }
+      : { status: ACCOUNT_STATUS.SIGNED_OUT };
+  }
+
+  /** Stores both OAuth tokens under one Keychain-backed ciphertext. */
+  async setAccount(account: StoredAccount): Promise<AccountSnapshot> {
+    if (!this.#secretStorageUsable()) {
+      throw new Error("Encrypted credential storage is unavailable on this system.");
+    }
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      const tokenCipher = this.#cipher
+        .encrypt(
+          JSON.stringify({
+            accessToken: account.accessToken,
+            refreshToken: account.refreshToken,
+          }),
+        )
+        .toString("base64");
+      const next: PersistedSettings = {
+        ...persisted,
+        version: SETTINGS_FILE_VERSION,
+        account: {
+          tokenCipher,
+          email: account.email,
+          ...(account.name ? { name: account.name } : {}),
+          provider: account.provider,
+        },
+      };
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+    });
+    return this.accountSnapshot();
+  }
+
+  async clearAccount(): Promise<AccountSnapshot> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (!persisted.account) return;
+      const { account: _account, ...withoutAccount } = persisted;
+      const next: PersistedSettings = { ...withoutAccount, version: SETTINGS_FILE_VERSION };
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+    });
+    return { status: ACCOUNT_STATUS.SIGNED_OUT };
   }
 
   /**

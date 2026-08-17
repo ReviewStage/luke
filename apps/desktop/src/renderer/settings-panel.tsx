@@ -15,8 +15,18 @@ import {
   type WorkspaceAgentSelection,
 } from "@sidecar/core";
 import { useEffect, useRef, useState } from "react";
-import type { AppSettings, CredentialSource, MicrophoneStatus } from "../shared/contracts";
-import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "../shared/contracts";
+import type {
+  AccountSnapshot,
+  AppSettings,
+  CredentialSource,
+  MicrophoneStatus,
+} from "../shared/contracts";
+import {
+  ACCOUNT_PROVIDER,
+  ACCOUNT_STATUS,
+  CREDENTIAL_SOURCE,
+  SECRET_STORAGE,
+} from "../shared/contracts";
 import type { CredentialProvider } from "../shared/credential-providers";
 import {
   CLOUD_AGENT_PROVIDER_LIST,
@@ -233,6 +243,8 @@ export interface ShortcutControl {
  * panel, the body, or the app's settings object growing a new field.
  */
 export interface SettingsPanelProps {
+  account: AccountSnapshot;
+  onSignOut: () => Promise<void>;
   /**
    * Which settings page is showing: the front page, or one of the pages a
    * front-page row opens. Held by the app rather than here because Escape
@@ -1671,7 +1683,48 @@ function ShortcutSection({ shortcuts }: { shortcuts: ShortcutControl }): React.J
   );
 }
 
+function AccountSection({
+  account,
+  onSignOut,
+}: {
+  account: Extract<AccountSnapshot, { status: typeof ACCOUNT_STATUS.SIGNED_IN }>;
+  onSignOut: () => Promise<void>;
+}): React.JSX.Element {
+  const [busy, setBusy] = useState(false);
+  return (
+    <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
+      <h2>
+        <CheckIcon />
+        Your account
+      </h2>
+      <div className="settings-row">
+        <span className="settings-copy">
+          <span className="settings-name">
+            <strong>{account.email}</strong>
+          </span>
+          <small>
+            Signed in with {account.provider === ACCOUNT_PROVIDER.GITHUB ? "GitHub" : "Google"}
+          </small>
+        </span>
+        <button
+          type="button"
+          className="quiet-button"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            void onSignOut().finally(() => setBusy(false));
+          }}
+        >
+          {busy ? "Signing out…" : "Sign out"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export function SettingsPanel({
+  account,
+  onSignOut,
   view,
   onViewChange,
   microphone,
@@ -1795,7 +1848,10 @@ export function SettingsPanel({
 
       {drawnView !== SETTINGS_VIEW.ROOT ? null : (
         <>
-          <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
+          {account.status === ACCOUNT_STATUS.SIGNED_IN ? (
+            <AccountSection account={account} onSignOut={onSignOut} />
+          ) : null}
+          <section className="settings-section" style={{ "--row-index": 3 } as React.CSSProperties}>
             <h2>
               <ShieldIcon />
               Permissions
@@ -1842,7 +1898,7 @@ export function SettingsPanel({
           <button
             type="button"
             className="quit-button"
-            style={{ "--row-index": 4 } as React.CSSProperties}
+            style={{ "--row-index": 5 } as React.CSSProperties}
             onClick={onQuit}
           >
             <PowerIcon />

@@ -27,6 +27,7 @@ import {
   useState,
 } from "react";
 import type {
+  AccountSnapshot,
   AppBootstrap,
   AppSettings,
   DisplayDiagnostic,
@@ -217,6 +218,7 @@ function useShapeHeight(): [(element: HTMLElement | null) => void, number | unde
 
 export function App(): React.JSX.Element {
   const [bootstrap, setBootstrap] = useState<AppBootstrap>();
+  const [account, setAccount] = useState<AccountSnapshot>();
   const [sessions, setSessions] = useState<readonly NormalizedSession[]>([]);
   const [workspaceProjects, setWorkspaceProjects] = useState<readonly ObservedWorkspaceProject[]>(
     [],
@@ -1469,6 +1471,10 @@ export function App(): React.JSX.Element {
       }),
     applySettings,
   );
+  const acceptAccountBootstrap = useBootstrapRacedChannel(
+    (onChange) => window.sidecar.onAccountChanged(onChange),
+    setAccount,
+  );
   const acceptOutputAudioBootstrap = useBootstrapRacedChannel(
     (onChange) => window.sidecar.onOutputAudioChanged(onChange),
     setOutputAudio,
@@ -1542,6 +1548,7 @@ export function App(): React.JSX.Element {
       acceptProjectsBootstrap(value.workspaceProjects);
       acceptIssuesBootstrap(value.issues);
       acceptSettingsBootstrap(value.settings);
+      acceptAccountBootstrap(value.account);
       setDisplay(value.display);
       if (modeGenerationOf() === bootstrapGeneration) {
         applyAuthoritativeMode(value.mode);
@@ -1602,6 +1609,7 @@ export function App(): React.JSX.Element {
       void stopMicrophone();
     };
   }, [
+    acceptAccountBootstrap,
     acceptIssuesBootstrap,
     acceptOutputAudioBootstrap,
     acceptProjectsBootstrap,
@@ -1653,6 +1661,7 @@ export function App(): React.JSX.Element {
       // the keys the panel draws apart.
       const talkKey = voiceHotkeyToShow(bootstrap, voiceHotkey);
       const guide = buildLukeGuide({
+        account: account ?? bootstrap.account,
         settings: current,
         voiceAvailable: current.voiceAvailable,
         microphoneStatus,
@@ -1665,7 +1674,15 @@ export function App(): React.JSX.Element {
       });
       syncGuide(guide);
     },
-    [bootstrap, microphoneStatus, voiceHotkey, askHotkeyChange, stopHotkeyChange, syncGuide],
+    [
+      bootstrap,
+      account,
+      microphoneStatus,
+      voiceHotkey,
+      askHotkeyChange,
+      stopHotkeyChange,
+      syncGuide,
+    ],
   );
   useEffect(() => {
     if (!bootstrap) return;
@@ -1960,6 +1977,8 @@ export function App(): React.JSX.Element {
       <div className="expanded-stage" aria-hidden={!panelOpen} inert={!panelOpen}>
         <section className="expanded-panel" ref={panelElement} data-hit-region={HIT_REGION.PANEL}>
           <PanelBody
+            accountRequired={bootstrap.accountRequired}
+            account={account ?? bootstrap.account}
             list={list}
             view={sessionView}
             onViewChange={changeSessionView}
@@ -1979,6 +1998,10 @@ export function App(): React.JSX.Element {
             tab={tab}
             onTabChange={changeTab}
             settings={{
+              account: account ?? bootstrap.account,
+              onSignOut: async () => {
+                setAccount(await window.sidecar.signOut());
+              },
               view: settingsView,
               onViewChange: setSettingsView,
               microphone,

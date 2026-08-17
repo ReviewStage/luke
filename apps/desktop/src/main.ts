@@ -62,6 +62,15 @@ import {
   systemPreferences,
   Tray,
 } from "electron";
+import { AccountClient, type AccountTokens } from "./account-client";
+import {
+  ACCOUNT_FAILURE_ACTION,
+  accessTokenNeedsRefresh,
+  accountFailureAction,
+  accountGateOpen,
+} from "./account-gate";
+import { startAccountLoopback } from "./account-loopback";
+import { withIssuedAccountTokens } from "./account-token-lifecycle";
 import { CLAUDE_CODE_PROVIDER, ClaudeCodeSessionAdapter } from "./claude-code-adapter";
 import {
   CLAUDE_HOOK_SCRIPT_NAME,
@@ -110,8 +119,12 @@ import {
   sessionNoticeSpeech,
 } from "./session-notifications";
 import { createSettingsHandler, SettingsRefusal } from "./settings-handler";
-import { SettingsStore } from "./settings-store";
+import { SettingsStore, type StoredAccount } from "./settings-store";
 import {
+  ACCOUNT_PROVIDER,
+  ACCOUNT_STATUS,
+  type AccountProvider,
+  type AccountSnapshot,
   APP_SETTING_DEFAULTS,
   type AppBootstrap,
   channels,
@@ -153,6 +166,14 @@ const captureMode = captureOutput !== undefined;
 // the fixture snapshot and no provider is observed. Capture runs always imply it.
 const fixtureMode = captureMode || fixtureName !== undefined;
 const runMode = runModeFor({ capture: captureMode, fixture: fixtureName !== undefined });
+// A development build may be pointed at a local account service; a packaged one
+// may not. The override redirects the whole sign-in — including the identity
+// request that carries the access token — so it stops at the packaging boundary
+// rather than shipping inside a signed binary.
+const ACCOUNT_BASE_URL =
+  (app.isPackaged ? undefined : process.env.LUKE_ACCOUNT_BASE_URL) ??
+  "https://tryluke.dev/api/auth";
+const ACCOUNT_CLIENT_ID = "luke-desktop";
 const SESSION_REFRESH_INTERVAL_MS = 5_000;
 const sessionRegistry = new InMemorySessionRegistry();
 // `directory` and the cipher are read lazily so the store can be declared before
@@ -168,6 +189,11 @@ const settingsStore = new SettingsStore({
     decrypt: (cipherText) => safeStorage.decryptString(cipherText),
   },
 });
+const accountClient = new AccountClient({ baseUrl: ACCOUNT_BASE_URL, clientId: ACCOUNT_CLIENT_ID });
+let account: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
+let signInRunning: Promise<AccountSnapshot> | undefined;
+let accountGeneration = 0;
+let observationGeneration = 0;
 const conductorAdapter = new ConductorSessionAdapter({
   readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.CONDUCTOR),
 });
@@ -348,7 +374,8 @@ function startOutputVolumeWatch(): void {
 
 let tray: Tray | undefined;
 let sessionRefreshTimer: NodeJS.Timeout | undefined;
-let sessionRefreshRunning = false;
+let unsubscribeSessions: (() => void) | undefined;
+let sessionRefreshGeneration: number | undefined;
 let attentionReviewRunning = false;
 /**
  * The projects last announced to the renderer, serialized for comparison.
@@ -393,6 +420,164 @@ async function requestMicrophone(): Promise<MicrophoneStatus> {
 function trustedSender(event: IpcMainEvent | IpcMainInvokeEvent): boolean {
   const url = event.senderFrame?.url ?? event.sender.getURL();
   return url === rendererUrl();
+}
+
+function isAccountProvider(value: unknown): value is AccountProvider {
+  return value === ACCOUNT_PROVIDER.GOOGLE || value === ACCOUNT_PROVIDER.GITHUB;
+}
+
+function accountCapabilitiesActive(): boolean {
+  return accountGateOpen(runMode, account.status === ACCOUNT_STATUS.SIGNED_IN);
+}
+
+function broadcastAccount(): void {
+  panels.broadcast(channels.accountChanged, account);
+}
+
+async function startAccountCapabilities(generation = accountGeneration): Promise<void> {
+  if (generation !== accountGeneration || !accountCapabilitiesActive()) return;
+  await applyVoiceCredential();
+  if (generation !== accountGeneration || !accountCapabilitiesActive()) return;
+  await hotkeys.reapply(HOTKEY_RANK.TALK);
+  if (generation !== accountGeneration || !accountCapabilitiesActive()) return;
+  startSessionObservation();
+  startIssueObservation();
+}
+
+async function stopAccountCapabilities(): Promise<void> {
+  stopSessionObservation();
+  stopIssueObservation();
+  await applyVoiceCredential();
+  await hotkeys.reapply(HOTKEY_RANK.TALK);
+}
+
+async function signOutAccount(options: { revokeRemote?: boolean } = {}): Promise<AccountSnapshot> {
+  accountGeneration += 1;
+  observationGeneration += 1;
+  // Close the gate synchronously, before the settings write yields. Otherwise
+  // the observation timer can see the new generation with the old signed-in
+  // account and start a pass that belongs to neither account lifecycle.
+  account = { status: ACCOUNT_STATUS.SIGNED_OUT };
+  const storedAccount = options.revokeRemote ? settingsStore.readAccount() : undefined;
+  const clearingAccount = settingsStore.clearAccount();
+  await stopAccountCapabilities();
+  account = await clearingAccount;
+  broadcastAccount();
+  const refreshToken = (await storedAccount)?.refreshToken;
+  if (refreshToken) {
+    await accountClient.revoke(refreshToken).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`Account token revocation failed: ${message}\n`);
+    });
+  }
+  return account;
+}
+
+/** Stores credentials only while the account lifecycle that produced them is current. */
+async function storeCurrentAccount(generation: number, stored: StoredAccount): Promise<boolean> {
+  if (generation !== accountGeneration) return false;
+  const next = await settingsStore.setAccount(stored);
+  // The store serializes this write with clearAccount(), so a sign-out that
+  // arrived during the await owns the final disk state. It must own memory too.
+  if (generation !== accountGeneration) return false;
+  account = next;
+  return true;
+}
+
+async function refreshStoredAccount(): Promise<void> {
+  const stored = await settingsStore.readAccount();
+  if (!stored || !runMode.requiresAccount) return;
+  const generation = accountGeneration;
+  try {
+    const identity = await accountClient.userInfo(stored.accessToken, stored.provider);
+    if (
+      identity.email !== stored.email ||
+      identity.name !== stored.name ||
+      identity.provider !== stored.provider
+    ) {
+      if (!(await storeCurrentAccount(generation, { ...stored, ...identity }))) return;
+      broadcastAccount();
+    }
+    return;
+  } catch (error) {
+    if (!accessTokenNeedsRefresh(error)) return;
+  }
+
+  let tokens: AccountTokens;
+  try {
+    tokens = await accountClient.refresh(stored.refreshToken);
+  } catch (error) {
+    // Only the token endpoint can definitively revoke the account. User-info
+    // failures below are identity refresh failures and never clear the stored
+    // refresh token, regardless of what shape their response happens to take.
+    if (accountFailureAction(error) === ACCOUNT_FAILURE_ACTION.SIGN_OUT) {
+      if (generation !== accountGeneration) return;
+      await signOutAccount();
+    }
+    return;
+  }
+
+  try {
+    // A refresh token may rotate as soon as the token endpoint answers. Keep
+    // that answer before asking for identity so a transient user-info failure
+    // cannot strand the account with the now-revoked previous token.
+    if (!(await storeCurrentAccount(generation, { ...stored, ...tokens }))) return;
+    const identity = await accountClient.userInfo(tokens.accessToken, stored.provider);
+    if (!(await storeCurrentAccount(generation, { ...tokens, ...identity }))) return;
+    broadcastAccount();
+  } catch {}
+}
+
+function beginAccountSignIn(provider: AccountProvider): Promise<AccountSnapshot> {
+  if (account.status === ACCOUNT_STATUS.SIGNED_IN) return Promise.resolve(account);
+  if (signInRunning) return signInRunning;
+  account = { status: ACCOUNT_STATUS.SIGNING_IN };
+  const generation = ++accountGeneration;
+  broadcastAccount();
+  signInRunning = (async () => {
+    let loopback: Awaited<ReturnType<typeof startAccountLoopback>> | undefined;
+    try {
+      const activeLoopback = await startAccountLoopback({ providerHint: provider });
+      loopback = activeLoopback;
+      const authorizeUrl = accountClient.authorizeUrl({
+        redirectUri: activeLoopback.redirectUri,
+        state: activeLoopback.state,
+        codeChallenge: activeLoopback.codeChallenge,
+      });
+      await shell.openExternal(authorizeUrl);
+      const code = await loopback.waitForCode;
+      await withIssuedAccountTokens({
+        issue: () =>
+          accountClient.exchangeCode({
+            code,
+            codeVerifier: activeLoopback.codeVerifier,
+            redirectUri: activeLoopback.redirectUri,
+          }),
+        use: async (tokens) => {
+          const identity = await accountClient.userInfo(tokens.accessToken, provider);
+          if (!(await storeCurrentAccount(generation, { ...tokens, ...identity }))) {
+            throw new Error("Sign-in was cancelled");
+          }
+          await startAccountCapabilities(generation);
+          if (generation !== accountGeneration) throw new Error("Sign-in was cancelled");
+        },
+        revoke: (refreshToken) => accountClient.revoke(refreshToken),
+        onRevokeFailure: (revokeError) => {
+          const message = revokeError instanceof Error ? revokeError.message : String(revokeError);
+          process.stderr.write(`Rejected account token revocation failed: ${message}\n`);
+        },
+      });
+      broadcastAccount();
+      return account;
+    } catch (error) {
+      if (generation === accountGeneration) await signOutAccount();
+      throw error;
+    } finally {
+      await loopback?.close();
+      signInRunning = undefined;
+    }
+  })();
+  return signInRunning;
 }
 
 /**
@@ -474,9 +659,10 @@ async function applyVoiceCredential(): Promise<void> {
   // Keychain decrypt, which a run that would refuse to use it has no business
   // asking for. That is also why the report says no key resolved — for this run,
   // none did.
-  const apiKey = runMode.sendsNetwork
-    ? await settingsStore.readApiKey(VOICE_CREDENTIAL_PROVIDER_ID)
-    : undefined;
+  const apiKey =
+    runMode.sendsNetwork && accountCapabilitiesActive()
+      ? await settingsStore.readApiKey(VOICE_CREDENTIAL_PROVIDER_ID)
+      : undefined;
   const evaluator = openAiAttentionEvaluator(apiKey);
   attentionReviewer = evaluator
     ? new SessionAttentionReviewer({
@@ -602,6 +788,8 @@ function registerIpc(): void {
       fixture,
       captureMode,
       fixtureMode,
+      accountRequired: runMode.requiresAccount,
+      account,
       packaged: app.isPackaged,
       platform: process.platform,
       electronVersion: process.versions.electron,
@@ -620,13 +808,28 @@ function registerIpc(): void {
       // Bootstrapped through the same relevance gate every broadcast passes:
       // a panel that opens late must not learn of rows the roster has already
       // let go and then hold them past the next broadcast's dedupe.
-      sessions: runMode.observesProviders
-        ? rosterRelevantSessions(sessionRegistry.snapshot().sessions, Date.now())
-        : [],
-      workspaceProjects: observedWorkspaceProjects(),
-      ...(trackedIssues && runMode.observesProviders ? { issues: trackedIssues } : {}),
+      sessions:
+        runMode.observesProviders && accountCapabilitiesActive()
+          ? rosterRelevantSessions(sessionRegistry.snapshot().sessions, Date.now())
+          : [],
+      workspaceProjects: accountCapabilitiesActive() ? observedWorkspaceProjects() : [],
+      ...(trackedIssues && runMode.observesProviders && accountCapabilitiesActive()
+        ? { issues: trackedIssues }
+        : {}),
       settings: await settingsStore.snapshot(),
     };
+  });
+
+  ipcMain.handle(channels.beginSignIn, (event, provider: unknown) => {
+    if (!trustedSender(event) || !isAccountProvider(provider)) {
+      throw new Error("Invalid sign-in request");
+    }
+    return beginAccountSignIn(provider);
+  });
+
+  ipcMain.handle(channels.signOut, async (event) => {
+    if (!trustedSender(event)) throw new Error("Untrusted renderer");
+    return signOutAccount({ revokeRemote: true });
   });
 
   ipcMain.handle(channels.setExpanded, (event, expanded: unknown, focus: unknown) => {
@@ -1632,8 +1835,15 @@ async function applyLocalSessionHooks(): Promise<void> {
 }
 
 async function refreshProviderSessions(): Promise<void> {
-  if (!runMode.observesProviders || sessionRefreshRunning) return;
-  sessionRefreshRunning = true;
+  const generation = observationGeneration;
+  if (
+    !runMode.observesProviders ||
+    !accountCapabilitiesActive() ||
+    sessionRefreshGeneration === generation
+  ) {
+    return;
+  }
+  sessionRefreshGeneration = generation;
   try {
     // Providers are observed concurrently and reported independently: the
     // registry commits each provider atomically, so one that is slow or failing
@@ -1650,17 +1860,26 @@ async function refreshProviderSessions(): Promise<void> {
       }),
     );
   } finally {
-    sessionRefreshRunning = false;
+    if (sessionRefreshGeneration === generation) sessionRefreshGeneration = undefined;
+  }
+  if (generation !== observationGeneration || !accountCapabilitiesActive()) {
+    // stopSessionObservation() already invalidated every old provider attempt
+    // through the registry's mutation epochs. Do not clear a newer account's
+    // pass when this orphan finishes; only make sure a current pass exists.
+    if (accountCapabilitiesActive() && sessionRefreshGeneration === undefined) {
+      void refreshProviderSessions();
+    }
+    return;
   }
   // The registry only spoke if the sessions themselves changed, and a pass can
   // change the project list while leaving them exactly as they were.
   broadcastWorkspaceProjects();
   // Attention review runs outside the observation guard so a slow model call
   // never delays the next provider snapshot.
-  void reviewSessionAttention();
+  void reviewSessionAttention(generation);
 }
 
-async function reviewSessionAttention(): Promise<void> {
+async function reviewSessionAttention(generation = observationGeneration): Promise<void> {
   if (!attentionReviewer || attentionReviewRunning) return;
   attentionReviewRunning = true;
   try {
@@ -1672,6 +1891,7 @@ async function reviewSessionAttention(): Promise<void> {
     const reviews = await attentionReviewer.review(
       rosterRelevantSessions(sessionRegistry.list(), Date.now()),
     );
+    if (generation !== observationGeneration || !accountCapabilitiesActive()) return;
     for (const review of reviews) {
       sessionRegistry.setAttention(review, review.decision);
     }
@@ -1760,8 +1980,8 @@ function broadcastRelevantSessions(): void {
 }
 
 function startSessionObservation(): void {
-  if (!runMode.observesProviders) return;
-  sessionRegistry.subscribe((snapshot) => {
+  if (!runMode.observesProviders || !accountCapabilitiesActive() || unsubscribeSessions) return;
+  unsubscribeSessions = sessionRegistry.subscribe((snapshot) => {
     broadcastRelevantSessions();
     // The registry only speaks on an effective change, which is exactly when
     // a status edge can exist to announce. The notices read the unfiltered
@@ -1782,6 +2002,17 @@ function startSessionObservation(): void {
   sessionRefreshTimer.unref();
 }
 
+function stopSessionObservation(): void {
+  if (sessionRefreshTimer) clearInterval(sessionRefreshTimer);
+  sessionRefreshTimer = undefined;
+  unsubscribeSessions?.();
+  unsubscribeSessions = undefined;
+  for (const adapter of sessionAdapters) sessionRegistry.replaceProvider(adapter.provider, []);
+  panels.broadcast(channels.sessionsChanged, []);
+  panels.broadcast(channels.workspaceProjectsChanged, []);
+  lastWorkspaceProjects = undefined;
+}
+
 /**
  * Reads the issue roster from every connected tracker. A failing pass keeps
  * the roster it has rather than blanking it — a tracker that cannot answer is
@@ -1789,11 +2020,12 @@ function startSessionObservation(): void {
  * which is how the renderer knows there is nothing to advertise.
  */
 async function refreshTrackedIssues(): Promise<void> {
-  if (!runMode.observesProviders) return;
+  if (!runMode.observesProviders || !accountCapabilitiesActive()) return;
   if (issueRefreshRunning) {
     issueRefreshQueued = true;
     return;
   }
+  const generation = observationGeneration;
   issueRefreshRunning = true;
   try {
     const collected: TrackedIssue[] = [];
@@ -1807,8 +2039,10 @@ async function refreshTrackedIssues(): Promise<void> {
         if (issue) collected.push(issue);
       }
     }
-    trackedIssues = connected ? collected : undefined;
-    panels.broadcast(channels.issuesChanged, trackedIssues);
+    if (generation === observationGeneration && accountCapabilitiesActive()) {
+      trackedIssues = connected ? collected : undefined;
+      panels.broadcast(channels.issuesChanged, trackedIssues);
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`Issue observation failed: ${message}\n`);
@@ -1822,12 +2056,19 @@ async function refreshTrackedIssues(): Promise<void> {
 }
 
 function startIssueObservation(): void {
-  if (!runMode.observesProviders) return;
+  if (!runMode.observesProviders || !accountCapabilitiesActive() || issueRefreshTimer) return;
   void refreshTrackedIssues();
   issueRefreshTimer = setInterval(() => {
     void refreshTrackedIssues();
   }, ISSUE_REFRESH_INTERVAL_MS);
   issueRefreshTimer.unref();
+}
+
+function stopIssueObservation(): void {
+  if (issueRefreshTimer) clearInterval(issueRefreshTimer);
+  issueRefreshTimer = undefined;
+  trackedIssues = undefined;
+  panels.broadcast(channels.issuesChanged, undefined);
 }
 
 function configurePermissions(): void {
@@ -1990,6 +2231,11 @@ if (!app.requestSingleInstanceLock()) {
   void app.whenReady().then(async () => {
     if (process.platform === "darwin") app.setActivationPolicy("accessory");
     Menu.setApplicationMenu(null);
+    // A stored refresh token is the account gate. No network request stands
+    // between an offline launch and Luke's local capabilities.
+    account = runMode.requiresAccount
+      ? await settingsStore.accountSnapshot()
+      : { status: ACCOUNT_STATUS.SIGNED_OUT };
     panels.refreshGeometry();
     registerIpc();
     // Resolving settings touches the filesystem, and the OS keychain only for a
@@ -2076,6 +2322,9 @@ if (!app.requestSingleInstanceLock()) {
     configurePermissions();
     startSessionObservation();
     startIssueObservation();
+    // Reconcile in the background. Only an explicit invalid_grant removes the
+    // stored account; network failures and service outages leave it active.
+    void refreshStoredAccount();
 
     screen.on("display-added", handleDisplayChange);
     screen.on("display-removed", handleDisplayChange);

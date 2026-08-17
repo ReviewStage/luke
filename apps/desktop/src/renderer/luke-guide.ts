@@ -39,12 +39,19 @@ import {
   type WorkspaceAgentSelection,
 } from "@sidecar/core";
 import type {
+  AccountSnapshot,
   AppBridge,
   AppSettings,
   CredentialSource,
   MicrophoneStatus,
 } from "../shared/contracts";
-import { APP_SETTING_DEFAULTS, CREDENTIAL_SOURCE, SECRET_STORAGE } from "../shared/contracts";
+import {
+  ACCOUNT_PROVIDER,
+  ACCOUNT_STATUS,
+  APP_SETTING_DEFAULTS,
+  CREDENTIAL_SOURCE,
+  SECRET_STORAGE,
+} from "../shared/contracts";
 import {
   CLOUD_AGENT_PROVIDER_LIST,
   CREDENTIAL_PROVIDERS,
@@ -369,6 +376,8 @@ const SETTING_GUIDE: Record<
 
 /** What the guide needs from the app to describe the current state of it. */
 export interface LukeGuideInput {
+  /** Optional only for pure callers that predate accounts; the app always supplies it. */
+  account?: AccountSnapshot;
   settings: AppSettings;
   /** Whether a Realtime credential can be minted at all. */
   voiceAvailable: boolean;
@@ -490,6 +499,7 @@ function voiceKeyFact(settings: AppSettings): AppGuideFact {
  * conversation always describes the app as it is, not as it launched.
  */
 export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
+  const account = input.account ?? { status: ACCOUNT_STATUS.SIGNED_OUT };
   const facts: AppGuideFact[] = [
     {
       label: "What Luke is",
@@ -531,6 +541,13 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "change Luke makes himself is shown as it is made: the panel comes forward on the tab, " +
         "and the page, the change belongs to, and his face leaves the strip beside the housing, " +
         "dives to the control that moved, and floats back.",
+    },
+    {
+      label: "Your account",
+      detail:
+        account.status === ACCOUNT_STATUS.SIGNED_IN
+          ? `Signed in as ${account.email} through ${account.provider === ACCOUNT_PROVIDER.GITHUB ? "GitHub" : "Google"}. Sign out by hand from Your account on the Settings tab's front page.`
+          : "Not signed in. Live sessions and Luke's controls stay off until Google or GitHub sign-in finishes.",
     },
     {
       label: "Feedback and prompts",
@@ -707,7 +724,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       : []),
     {
       label: "Quitting",
-      detail: `The Quit button at the foot of ${SETTINGS_TAB}, or the menu bar item when it is shown.`,
+      detail: `The Quit button at the foot of ${SETTINGS_TAB}, on the sign-in screen when it is shown, or the menu bar item when it is shown.`,
     },
   ];
 

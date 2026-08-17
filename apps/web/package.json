@@ -8,18 +8,23 @@
     "node": "22.x"
   },
   "scripts": {
+    "auth:generate": "DATABASE_URL=${DATABASE_URL:-postgresql://schema:generate@127.0.0.1:5432/luke} pnpm dlx @better-auth/cli@1.4.21 generate --config server/auth.ts --output server/db/auth-schema.ts --yes && pnpm exec biome check --write server/db/auth-schema.ts",
+    "auth:seed": "tsx server/seed-desktop-client.ts",
     "build": "vite build",
     "db:check": "drizzle-kit check",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:migrate": "tsx server/db/migrate.ts",
     "dev": "vite",
     "preview": "vite preview",
     "test": "tsx --test tests/**/*.test.ts",
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
+    "@better-auth/drizzle-adapter": "1.6.29",
+    "@better-auth/oauth-provider": "1.6.29",
     "@fontsource-variable/bricolage-grotesque": "5.3.0",
     "@sidecar/core": "workspace:*",
+    "better-auth": "1.6.29",
     "drizzle-orm": "0.45.2",
     "marked": "18.0.9",
     "pg": "8.23.0",
@@ -27,14 +32,14 @@
     "react-dom": "19.2.8"
   },
   "devDependencies": {
-    "@types/node": "26.2.0",
+    "@types/node": "22.20.1",
     "@types/pg": "8.21.0",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "@vitejs/plugin-react": "5.1.2",
     "drizzle-kit": "0.31.10",
     "tsx": "4.23.12",
-    "typescript": "7.0.2",
+    "typescript": "6.0.3",
     "vite": "7.3.1"
   }
 }

@@ -1,5 +1,3 @@
-/**
- * Source of truth for Luke-owned database structure. The first tables arrive
- * with the account and authentication work.
- */
-export {};
+// Better Auth owns its generated schema; Luke-owned tables can join this
+// aggregate from their own schema modules without being overwritten by it.
+export * from "./auth-schema.js";

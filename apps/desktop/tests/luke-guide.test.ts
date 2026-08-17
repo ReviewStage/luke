@@ -18,7 +18,12 @@ import {
   type LukeGuideInput,
 } from "../src/renderer/luke-guide";
 import type { AppSettings, SettingsUpdateResult } from "../src/shared/contracts";
-import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "../src/shared/contracts";
+import {
+  ACCOUNT_PROVIDER,
+  ACCOUNT_STATUS,
+  CREDENTIAL_SOURCE,
+  SECRET_STORAGE,
+} from "../src/shared/contracts";
 import { CREDENTIAL_PROVIDER_ID } from "../src/shared/credential-providers";
 
 function settings(overrides: Partial<AppSettings> = {}): AppSettings {
@@ -62,6 +67,11 @@ function guideSetting(id: string, input: LukeGuideInput = guideInput()): AppGuid
   assert.ok(setting, `the guide lists ${id}`);
   return setting;
 }
+
+test("the guide keeps the signed-out escape path explicit", () => {
+  const quitting = buildLukeGuide(guideInput()).facts.find((fact) => fact.label === "Quitting");
+  assert.match(quitting?.detail ?? "", /sign-in screen/);
+});
 
 test("the guide describes every spoken-adjustable setting with its current value", () => {
   const captionsOff = guideSetting(APP_SETTING_ID.VOICE_CAPTIONS);
@@ -187,6 +197,23 @@ test("the facts say what is connected, never what connects it", () => {
   // The guide leaves the machine, so no key, prefix, or environment variable
   // value has any business in it.
   assert.doesNotMatch(rendered, /API key:/);
+});
+
+test("the guide names the signed-in identity and keeps sign-out manual", () => {
+  const facts = buildLukeGuide(
+    guideInput({
+      account: {
+        status: ACCOUNT_STATUS.SIGNED_IN,
+        email: "developer@example.com",
+        provider: ACCOUNT_PROVIDER.GITHUB,
+      },
+    }),
+  ).facts;
+  const account = facts.find((fact) => fact.label === "Your account");
+
+  assert.match(account?.detail ?? "", /developer@example.com/);
+  assert.match(account?.detail ?? "", /GitHub/);
+  assert.match(account?.detail ?? "", /by hand/);
 });
 
 test("the facts describe creating a workspace, so Luke does not deny the capability", () => {

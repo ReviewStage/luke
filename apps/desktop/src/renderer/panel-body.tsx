@@ -6,6 +6,7 @@ import {
   SESSION_URGENCY,
 } from "@sidecar/core";
 import { useCallback, useRef, useState } from "react";
+import { ACCOUNT_STATUS, type AccountSnapshot } from "../shared/contracts";
 import { type AskHandler, AskLuke } from "./ask-luke";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
 import { CloudBadge, ProviderMark } from "./provider-marks";
@@ -44,6 +45,7 @@ import {
 } from "./session-search";
 import { SendIcon, StopIcon } from "./settings-icons";
 import { SettingsPanel, type SettingsPanelProps } from "./settings-panel";
+import { SignInGate } from "./sign-in-gate";
 
 /** Handed up rather than performed here: the row knows sessions, not IPC. */
 export interface SessionWriteHandlers {
@@ -486,6 +488,8 @@ function SessionRun({
 }
 
 export interface PanelBodyProps {
+  accountRequired: boolean;
+  account: AccountSnapshot;
   list: ArrangedSessions;
   view: SessionView;
   onViewChange: (view: SessionView) => void;
@@ -531,6 +535,8 @@ export interface PanelBodyProps {
 
 /** Full-width rows that unfold out of the capsule, one session per line. */
 export function PanelBody({
+  accountRequired,
+  account,
   list,
   view,
   onViewChange,
@@ -553,6 +559,13 @@ export function PanelBody({
 }: PanelBodyProps): React.JSX.Element {
   const sessionListRef = useSessionReorderMotion();
   const rows = useRoster(list.sessions, sessionListRef);
+  if (accountRequired && account.status !== ACCOUNT_STATUS.SIGNED_IN) {
+    return (
+      <div className="body">
+        <SignInGate account={account} onQuit={settings.onQuit} />
+      </div>
+    );
+  }
   const highlight = list.search?.tokens;
   const runs = sessionListRuns(rows.map((row) => row.item));
   const runKeys = sessionRunKeys(runs, rows);

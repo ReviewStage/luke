@@ -13,7 +13,7 @@ test("migrations stay out of package lifecycle and application scripts", () => {
     assert.doesNotMatch(scripts[scriptName] ?? "", /drizzle-kit|migrate/);
   }
 
-  assert.equal(scripts["db:migrate"], "drizzle-kit migrate");
+  assert.equal(scripts["db:migrate"], "tsx server/db/migrate.ts");
   assert.deepEqual(
     Object.entries(scripts)
       .filter(([, command]) => /\bmigrate\b/.test(command))
@@ -22,7 +22,7 @@ test("migrations stay out of package lifecycle and application scripts", () => {
   );
 });
 
-test("Vercel applies committed migrations before it builds a deployment", () => {
-  assert.equal(vercelConfig.buildCommand, "pnpm db:migrate && pnpm build");
+test("Vercel migrates and seeds a deployment's database before it builds", () => {
+  assert.equal(vercelConfig.buildCommand, "pnpm db:migrate && pnpm auth:seed && pnpm build");
   assert.doesNotMatch(vercelConfig.buildCommand, /drizzle-kit push/);
 });

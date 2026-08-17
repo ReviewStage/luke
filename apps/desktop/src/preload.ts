@@ -15,6 +15,8 @@ function subscribe<T>(channel: string) {
 
 const bridge: AppBridge = {
   getBootstrap: invoke(channels.bootstrap),
+  beginSignIn: invoke(channels.beginSignIn),
+  signOut: invoke(channels.signOut),
   setExpanded: invoke(channels.setExpanded),
   setPointerInterception: (interceptsPointer) => {
     ipcRenderer.send(channels.setPointerInterception, interceptsPointer);
@@ -60,6 +62,7 @@ const bridge: AppBridge = {
   onLifecycle: subscribe(channels.lifecycle),
   onDisplayChanged: subscribe(channels.displayChanged),
   onSettingsChanged: subscribe(channels.settingsChanged),
+  onAccountChanged: subscribe(channels.accountChanged),
   onSessionsChanged: subscribe(channels.sessionsChanged),
   onWorkspaceProjectsChanged: subscribe(channels.workspaceProjectsChanged),
   onIssuesChanged: subscribe(channels.issuesChanged),
