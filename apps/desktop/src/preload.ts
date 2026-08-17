@@ -37,6 +37,7 @@ const bridge: AppBridge = {
   setWorkspaceAgentDefault: invoke(channels.setWorkspaceAgentDefault),
   setWorkspaceProjectDefault: invoke(channels.setWorkspaceProjectDefault),
   setVoiceCaptions: invoke(channels.setVoiceCaptions),
+  resetSettings: invoke(channels.resetSettings),
   setVoiceHotkey: invoke(channels.setVoiceHotkey),
   setAskHotkey: invoke(channels.setAskHotkey),
   setStopHotkey: invoke(channels.setStopHotkey),

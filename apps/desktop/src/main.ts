@@ -125,10 +125,12 @@ import {
   APP_SETTING_DEFAULTS,
   type AppBootstrap,
   channels,
+  isSettingsResetScope,
   type MicrophoneStatus,
   type OutputAudioState,
   SESSION_OPEN_RESULT_STATUS,
   SESSION_TRANSCRIPT_RESULT_STATUS,
+  SETTINGS_RESET_SCOPE,
   type SessionOpenResult,
   type SessionTranscriptResult,
 } from "./shared/contracts";
@@ -1178,6 +1180,58 @@ function registerIpc(): void {
     save: (enabled) => settingsStore.setDuckOtherMedia(enabled),
     apply: (result) => mediaDuck.setEnabled(result.settings.duckOtherMedia),
     refusal: "Could not save that setting on this system.",
+  });
+
+  // One group of preferences returned to its defaults in a single stored
+  // write. The renderer names a scope from the set fixed by this build —
+  // never a field list — and the store forgets the choices behind it, so
+  // what stands afterwards is the default itself rather than a copy of it.
+  // No scope reaches a credential or an account. The side effects each row's
+  // own save runs are re-run here from the stored answer, so a reset takes
+  // effect at once the way every other settings change does.
+  registerSettingHandler(channels.resetSettings, {
+    validate(scope: unknown) {
+      if (!isSettingsResetScope(scope)) throw new Error("Invalid settings reset request");
+      return scope;
+    },
+    save: (scope) => settingsStore.resetSettings(scope),
+    async apply(result, scope, event) {
+      if (result.reason) return;
+      switch (scope) {
+        case SETTINGS_RESET_SCOPE.VOICE:
+          // The next credential is minted for the default voice and pace; the
+          // renderer carries the change onto a conversation already open the
+          // same way it does for the rows' own saves.
+          realtimeCredentials?.setVoice(result.settings.voice);
+          realtimeCredentials?.setSpeed(result.settings.voiceSpeed);
+          mediaDuck.setEnabled(result.settings.duckOtherMedia);
+          break;
+        case SETTINGS_RESET_SCOPE.APPEARANCE:
+          applyMenuBarVisibility(result.settings.showInMenuBar);
+          dock.apply(result.settings.showInDock, panels.displayIdFor(event.sender));
+          panels.setShowOnAllDisplays(result.settings.showOnAllDisplays);
+          panels.reconcile();
+          panels.setFormFactor(result.settings.formFactor);
+          panels.positionAll();
+          break;
+        case SETTINGS_RESET_SCOPE.SHORTCUTS:
+          // All three keys back to their defaults, re-registered in rank
+          // order and awaited, so the renderer's controls stay at rest until
+          // the keys the rows are about to show have actually answered.
+          hotkeys.setChosen(HOTKEY_RANK.TALK, undefined);
+          hotkeys.setChosen(HOTKEY_RANK.ASK, undefined);
+          hotkeys.setChosen(HOTKEY_RANK.STOP, undefined);
+          await hotkeys.reapply(HOTKEY_RANK.TALK);
+          await hotkeys.reapply(HOTKEY_RANK.ASK);
+          await hotkeys.reapply(HOTKEY_RANK.STOP);
+          break;
+        case SETTINGS_RESET_SCOPE.WORKSPACES:
+          // Nothing to re-run: the workspace defaults only steer the next
+          // creation ask, which reads the store when it happens.
+          break;
+      }
+    },
+    refusal: "Could not reset those settings on this system.",
   });
 
   // A statement of state, not a request: the renderer says whether a spoken

@@ -11,7 +11,12 @@ import {
   REALTIME_VOICE_SPEED,
 } from "@sidecar/core";
 import { type SecretCipher, SettingsStore } from "../src/settings-store";
-import { ACCOUNT_STATUS, CREDENTIAL_SOURCE, SECRET_STORAGE } from "../src/shared/contracts";
+import {
+  ACCOUNT_STATUS,
+  CREDENTIAL_SOURCE,
+  SECRET_STORAGE,
+  SETTINGS_RESET_SCOPE,
+} from "../src/shared/contracts";
 import {
   CREDENTIAL_PROVIDER_ID,
   type CredentialProvider,
@@ -1312,5 +1317,152 @@ test("recovers from a corrupt settings file", async (t) => {
   const { settings } = await store.setApiKey(CONDUCTOR, TEST_API_KEY);
 
   assert.equal(settings.credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.ENCRYPTED_FILE);
+  assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
+});
+
+test("a voice reset forgets the voice, pace, captions, and duck in one act", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+  await store.setVoice(REALTIME_VOICE.MARIN);
+  await store.setVoiceSpeed(REALTIME_VOICE_SPEED.QUICK);
+  await store.setVoiceCaptions(true);
+  await store.setDuckOtherMedia(false);
+
+  const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
+
+  assert.equal(reason, undefined);
+  assert.equal(settings.voice, REALTIME_DEFAULTS.VOICE);
+  assert.equal(settings.voiceSpeed, REALTIME_DEFAULTS.SPEED);
+  assert.equal(settings.voiceCaptions, false);
+  assert.equal(settings.duckOtherMedia, true);
+  // The choices are forgotten rather than restated, so a default that moves
+  // in a later build moves these settings with it.
+  assert.equal(await storeIn(directory).readVoice(), undefined);
+  assert.equal(await storeIn(directory).readVoiceSpeed(), undefined);
+});
+
+test("a voice reset returns to the environment's voice where one stands behind the choice", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory, {
+    environment: { LUKE_REALTIME_VOICE: REALTIME_VOICE.SAGE },
+  });
+  await store.setVoice(REALTIME_VOICE.MARIN);
+
+  const { settings } = await store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
+
+  // Forgetting the choice is the reset's whole meaning: what stands afterwards
+  // is whatever would have stood had none been made.
+  assert.equal(settings.voice, REALTIME_VOICE.SAGE);
+  assert.equal(await store.readVoice(), undefined);
+});
+
+test("an appearance reset returns Luke's stances without touching the voice page", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+  await store.setShowInMenuBar(false);
+  await store.setShowInDock(true);
+  await store.setShowOnAllDisplays(true);
+  await store.setFormFactor(PANEL_FORM_FACTOR.NOTCH);
+  await store.setVoice(REALTIME_VOICE.MARIN);
+
+  const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.APPEARANCE);
+
+  assert.equal(reason, undefined);
+  assert.equal(settings.showInMenuBar, true);
+  assert.equal(settings.showInDock, false);
+  assert.equal(settings.showOnAllDisplays, false);
+  assert.equal(settings.formFactor, PANEL_FORM_FACTOR.BUBBLE);
+  assert.equal(await storeIn(directory).readFormFactor(), undefined);
+  // One scope's reset is that scope's alone.
+  assert.equal(settings.voice, REALTIME_VOICE.MARIN);
+});
+
+test("a shortcuts reset forgets all three chords at once", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+  await store.setVoiceHotkey("Shift+Command+L");
+  await store.setAskHotkey("Control+Alt+K");
+  await store.setStopHotkey("Control+Alt+X");
+
+  const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.SHORTCUTS);
+
+  assert.equal(reason, undefined);
+  assert.equal(settings.voiceHotkey, undefined);
+  assert.equal(settings.askHotkey, undefined);
+  assert.equal(settings.stopHotkey, undefined);
+  assert.equal(await storeIn(directory).readVoiceHotkey(), undefined);
+  assert.equal(await storeIn(directory).readAskHotkey(), undefined);
+  assert.equal(await storeIn(directory).readStopHotkey(), undefined);
+});
+
+test("a workspaces reset forgets the provider and project defaults but never the agent pairing", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+  const pairing = { agent: "claude", model: "sonnet" };
+  await store.setDefaultWorkspaceProvider(PROVIDER_ID.CONDUCTOR);
+  await store.setWorkspaceProjectDefault(PROVIDER_ID.CONDUCTOR, "proj-1");
+  await store.setWorkspaceAgentDefault(PROVIDER_ID.CONDUCTOR, pairing);
+
+  const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.WORKSPACES);
+
+  assert.equal(reason, undefined);
+  assert.equal(settings.defaultWorkspaceProvider, undefined);
+  assert.equal(settings.workspaceProjectDefaults, undefined);
+  // The pairing lives on the Conductor row, whose own menu already offers the
+  // provider's default — no reset here may reach it.
+  assert.deepEqual(settings.workspaceAgentDefaults, { [PROVIDER_ID.CONDUCTOR]: pairing });
+});
+
+test("a reset of settings already at their defaults writes nothing", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
+
+  assert.equal(reason, undefined);
+  assert.equal(settings.voice, REALTIME_DEFAULTS.VOICE);
+  // Nothing changed, so no file was created — the same silence every setter
+  // keeps when asked for the value it already holds.
+  await assert.rejects(readSettingsFile(directory));
+});
+
+test("a reset never touches the cipher", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+  await store.setVoiceCaptions(true);
+
+  await store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
+
+  // A preference is not a credential, so resetting a page of them never
+  // reaches the Keychain — and never raises its permission dialog.
+  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
+});
+
+test("a reset leaves a stored key standing", async (t) => {
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({
+      version: 2,
+      apiKeys: { [CONDUCTOR]: sealed(TEST_API_KEY) },
+      voiceCaptions: true,
+      duckOtherMedia: true,
+      showInDock: false,
+      showInMenuBar: true,
+      showOnAllDisplays: false,
+    }),
+  );
+  const store = storeIn(directory);
+
+  await store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
+
+  // No scope reaches a credential: the ciphertext rides the write untouched.
+  const contents = JSON.parse(await readSettingsFile(directory)) as {
+    apiKeys: Record<string, string>;
+    voiceCaptions: boolean;
+  };
+  assert.deepEqual(contents.apiKeys, { [CONDUCTOR]: sealed(TEST_API_KEY) });
+  assert.equal(contents.voiceCaptions, false);
   assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
 });

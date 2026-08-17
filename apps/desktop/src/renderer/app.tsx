@@ -33,6 +33,7 @@ import type {
   DisplayDiagnostic,
   OutputAudioState,
   SessionOpenResult,
+  SettingsResetScope,
   SettingsUpdateResult,
 } from "../shared/contracts";
 import { CREDENTIAL_SOURCE, SESSION_OPEN_RESULT_STATUS } from "../shared/contracts";
@@ -686,6 +687,15 @@ export function App(): React.JSX.Element {
   const changeWorkspaceAgentDefault = useCallback(
     async (providerId: ProviderId, selection: WorkspaceAgentSelection | undefined) =>
       applySettingsReply(await window.sidecar.setWorkspaceAgentDefault(providerId, selection)),
+    [applySettingsReply],
+  );
+
+  // One group of settings back to its defaults — the same store forgetting
+  // each row's own clear performs, done as one write so a page's reset is one
+  // act rather than a race of four.
+  const changeSettingsReset = useCallback(
+    async (scope: SettingsResetScope) =>
+      applySettingsReply(await window.sidecar.resetSettings(scope)),
     [applySettingsReply],
   );
 
@@ -1831,6 +1841,7 @@ export function App(): React.JSX.Element {
     onDefaultWorkspaceProviderChange: changeDefaultWorkspaceProvider,
     onWorkspaceAgentDefaultChange: changeWorkspaceAgentDefault,
     onWorkspaceProjectDefaultChange: changeWorkspaceProjectDefault,
+    onSettingsReset: changeSettingsReset,
   };
   const shortcuts: ShortcutControl = {
     ...(shownHotkey.hotkey ? { voiceHotkey: shownHotkey.hotkey } : {}),
