@@ -283,11 +283,12 @@
   vertical-align: 2px;
 }
 
-/* The mark a front-page row wears while its page holds something that needs a
-   hand before its feature can run — today the Voice row, missing its key or
-   the microphone. The attention tint on purpose: unlike the changed dot this
-   is an urgency, the same standing a session waiting on a person has. The
-   words are the hover's and the hidden text's; the glyph alone is the mark. */
+/* The mark a name wears while the feature it belongs to still needs a hand —
+   the front-page Voice row, the key or permission that supplies the missing
+   thing, and a shortcut whose chord answers nothing until it is supplied. The
+   attention tint on purpose: unlike the changed dot this is an urgency, the
+   same standing a session waiting on a person has. The words are the hover's
+   and the hidden text's; the glyph alone is the mark. */
 .settings-attention {
   display: inline-flex;
   width: 14px;
@@ -301,6 +302,14 @@
   font-size: 10px;
   font-weight: 700;
   line-height: 1;
+}
+
+/* Inside a running name — a shortcut row's title — the mark is a word in the
+   line rather than a flex sibling, so it carries the spacing the flex gaps
+   give it everywhere else, and sits on the text's own middle. */
+.settings-copy strong .settings-attention {
+  margin-left: 6px;
+  vertical-align: -3px;
 }
 
 .settings-copy small,

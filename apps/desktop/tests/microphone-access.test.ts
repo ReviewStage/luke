@@ -22,9 +22,10 @@ test("access is offered only where it can be used", () => {
   });
   assert.equal(unavailable.offerAccess, false);
   assert.ok(!unavailable.detail.includes("macOS will ask"));
-  // The row names the way out as well as the reason: the key's own row, at
-  // the top of the same page the row now lives on.
-  assert.match(unavailable.detail, /OpenAI key at the top of this page/);
+  // The panel never draws this row while voice is off — the Voice page holds
+  // the key row alone then — so the detail only has to stay honest, and it
+  // names no other setting.
+  assert.ok(!unavailable.detail.includes("OpenAI"));
 });
 
 test("a permission already granted is not a microphone in use", () => {

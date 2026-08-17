@@ -70,7 +70,12 @@ import { FeedbackSection } from "./feedback-panel";
 import { Keycaps } from "./keycaps";
 import { type ErrandTarget, errandTargetProps } from "./luke-errand";
 import { APP_SETTING_ID } from "./luke-guide";
-import { microphoneAccessRow, voiceAttentionNote } from "./microphone-access";
+import {
+  MICROPHONE_UNGRANTED_NOTE,
+  microphoneAccessRow,
+  VOICE_KEYLESS_NOTE,
+  voiceAttentionNote,
+} from "./microphone-access";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import { CloudBadge, ProviderMark } from "./provider-marks";
 import {
@@ -719,6 +724,23 @@ function ChangedMark(): React.JSX.Element {
   return (
     <span className="settings-changed" title="Changed from its default">
       <span className="visually-hidden">(changed from its default)</span>
+    </span>
+  );
+}
+
+/**
+ * The small mark beside a name while the feature it belongs to still needs a
+ * hand — the same mark wherever it stands, so one urgency reads the same on
+ * the front page's Voice row, on the row that supplies the missing thing, and
+ * on a shortcut whose key answers nothing until it is supplied. A statement,
+ * not a control: the words are the hover's and the screen reader's, and the
+ * page around it is where the missing thing is explained.
+ */
+function AttentionMark({ note }: { note: string }): React.JSX.Element {
+  return (
+    <span className="settings-attention" title={note}>
+      <span aria-hidden="true">!</span>
+      <span className="visually-hidden">({note})</span>
     </span>
   );
 }
@@ -1516,12 +1538,7 @@ function SettingsNavRow({
       <span className="settings-copy">
         <strong>{page.title}</strong>
       </span>
-      {attention ? (
-        <span className="settings-attention" title={attention}>
-          <span aria-hidden="true">!</span>
-          <span className="visually-hidden">({attention})</span>
-        </span>
-      ) : null}
+      {attention ? <AttentionMark note={attention} /> : null}
       <ChevronIcon />
     </button>
   );
@@ -1568,12 +1585,19 @@ function SettingsPageHeader({
  * How Luke sounds and what he says unprompted — led by the key it all runs
  * on. The OpenAI credential stands at the top of this page rather than under
  * Connections because voice is what the key turns on: the page that goes
- * quiet without one is where its absence has to be explained, or every
- * control below reads as broken rather than as waiting. The voice he speaks
- * with comes next — it is what Luke *is* to the ear — offered the way macOS
- * offers one value from a small fixed set: a pop-up button whose closed face
- * is drawn here and whose open menu is the system's, which also lets it
- * escape a window sized to the panel rather than being clipped by it.
+ * quiet without one is where its absence has to be explained. The page
+ * reveals itself in stages rather than all at once: the key alone until one
+ * is connected, the microphone permission beneath it once there is a voice
+ * for the microphone to reach, and the voice controls only once both stand —
+ * a page of settings for a feature two steps from running reads as work
+ * already done, and the one thing to do next reads clearest standing alone.
+ * Whichever stage is missing wears the same exclamation mark the front
+ * page's Voice row wears, so the mark that brought someone here is the mark
+ * they land on. The voice Luke speaks with leads the controls — it is what
+ * Luke *is* to the ear — offered the way macOS offers one value from a small
+ * fixed set: a pop-up button whose closed face is drawn here and whose open
+ * menu is the system's, which also lets it escape a window sized to the
+ * panel rather than being clipped by it.
  */
 function VoiceSection({
   settings,
@@ -1599,6 +1623,10 @@ function VoiceSection({
         <h2>
           <KeyIcon />
           OpenAI API key
+          {/* The same mark, for the same missing key, as the front page's
+              Voice row wears: the row someone pressed a mark to reach is the
+              row that has to carry it. */}
+          {settings.voiceAvailable ? null : <AttentionMark note={VOICE_KEYLESS_NOTE} />}
         </h2>
         <ProviderCredential
           provider={VOICE_CREDENTIAL_PROVIDER}
@@ -1622,52 +1650,68 @@ function VoiceSection({
         ) : settings.voiceAvailable ? null : (
           <p className="settings-note">
             Voice is off until a key is connected — Luke cannot talk, listen, or announce sessions.
-            The settings below will take effect once it is.
           </p>
         )}
       </section>
-      <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
-        <h2>
-          <ShieldIcon />
-          Permissions
-        </h2>
-        {/* Access, not use. The talk key is what opens the microphone, so a
-            button here could only ever repeat what the key already does — the
-            line answers the one question it can: whether Luke is allowed. It
-            lives on this page, under the key it waits on, because the
-            microphone's one use is the voice that key turns on. */}
-        {/* Named and marked like a provider, because it is the same question in
-            the same words: what Luke has been let at, and whether it is on. */}
-        <div className="settings-row">
-          <span className="settings-copy">
-            <span className="settings-name">
-              <strong>Microphone</strong>
-              {microphoneRow.ready ? <CheckIcon /> : null}
+      {/* Drawn only once there is a voice for the microphone to reach: until
+          the key connects, the permission guards a feature that cannot run,
+          and the page holds the one thing to do next rather than a queue of
+          them. */}
+      {settings.voiceAvailable ? (
+        <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
+          <h2>
+            <ShieldIcon />
+            Permissions
+          </h2>
+          {/* Access, not use. The talk key is what opens the microphone, so a
+              button here could only ever repeat what the key already does — the
+              line answers the one question it can: whether Luke is allowed. It
+              lives on this page, under the key it waits on, because the
+              microphone's one use is the voice that key turns on. */}
+          {/* Named and marked like a provider, because it is the same question in
+              the same words: what Luke has been let at, and whether it is on. The
+              check and the attention mark trade the same spot: allowed, or the
+              next thing needing a hand. */}
+          <div className="settings-row">
+            <span className="settings-copy">
+              <span className="settings-name">
+                <strong>Microphone</strong>
+                {microphoneRow.ready ? (
+                  <CheckIcon />
+                ) : (
+                  <AttentionMark note={MICROPHONE_UNGRANTED_NOTE} />
+                )}
+              </span>
+              <small>{microphoneRow.detail}</small>
             </span>
-            <small>{microphoneRow.detail}</small>
-          </span>
-          <span className="settings-actions">
-            {microphoneRow.offerSystemSettings ? (
-              <button
-                type="button"
-                className="icon-button"
-                aria-label="Open Privacy & Security in System Settings"
-                /* The ellipsis is the promise that it opens somewhere else. */
-                title="System Settings…"
-                onClick={microphone.onOpenSettings}
-              >
-                <ExternalIcon />
-              </button>
-            ) : null}
-            {microphoneRow.offerAccess ? (
-              <button type="button" className="quiet-button" onClick={microphone.onRequest}>
-                Allow
-              </button>
-            ) : null}
-          </span>
-        </div>
-      </section>
-      <VoiceControlsSection settings={settings} preferences={preferences} />
+            <span className="settings-actions">
+              {microphoneRow.offerSystemSettings ? (
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label="Open Privacy & Security in System Settings"
+                  /* The ellipsis is the promise that it opens somewhere else. */
+                  title="System Settings…"
+                  onClick={microphone.onOpenSettings}
+                >
+                  <ExternalIcon />
+                </button>
+              ) : null}
+              {microphoneRow.offerAccess ? (
+                <button type="button" className="quiet-button" onClick={microphone.onRequest}>
+                  Allow
+                </button>
+              ) : null}
+            </span>
+          </div>
+        </section>
+      ) : null}
+      {/* `ready` already folds the key in — a microphone with no voice to
+          reach never reports itself ready — so the controls stand exactly
+          while both halves do. */}
+      {microphoneRow.ready ? (
+        <VoiceControlsSection settings={settings} preferences={preferences} />
+      ) : null}
     </>
   );
 }
@@ -1960,6 +2004,7 @@ function ShortcutRow({
   shown,
   chosen,
   defaultKey,
+  attention,
   onChange,
   onCapture,
 }: {
@@ -1971,6 +2016,8 @@ function ShortcutRow({
   chosen: boolean;
   /** The first default, which is what the reset offers to return to. */
   defaultKey: string;
+  /** Why the key answers nothing right now, absent while it answers. */
+  attention?: string;
   onChange: (accelerator: string | undefined) => Promise<string | undefined>;
   onCapture: (capturing: boolean) => void;
 }): React.JSX.Element {
@@ -2006,6 +2053,10 @@ function ShortcutRow({
           {/* A stored chord is a changed value on the other rows' terms; the
               flag that shows Reset is the flag that earns the mark. */}
           {chosen ? <ChangedMark /> : null}
+          {/* The same mark the Voice page wears, because it is the same
+              missing key: the chord is still shown and still changeable, the
+              mark only says pressing it does nothing yet. */}
+          {attention ? <AttentionMark note={attention} /> : null}
         </strong>
         <small>{detail}</small>
       </span>
@@ -2097,7 +2148,29 @@ function ShortcutRow({
   );
 }
 
-function ShortcutSection({ shortcuts }: { shortcuts: ShortcutControl }): React.JSX.Element {
+function ShortcutSection({
+  shortcuts,
+  settings,
+  voiceAvailable,
+}: {
+  shortcuts: ShortcutControl;
+  settings?: AppSettings;
+  voiceAvailable: boolean;
+}): React.JSX.Element {
+  // While voice is off the system keys are deliberately not taken — a global
+  // chord answering nothing is a key stolen from every other app — so no
+  // registered chord ever arrives here. The rows still show the chord each
+  // key will hold once voice is on — the stored choice, or the first default
+  // — wearing the same mark the Voice page does instead of an "Unavailable"
+  // that reads as broken. A key that is genuinely unregistered while voice is
+  // on — another app owns the chord — keeps the honest "Unavailable".
+  const attention = voiceAvailable ? undefined : VOICE_KEYLESS_NOTE;
+  const promisedTalk = settings?.voiceHotkey ?? DEFAULT_VOICE_HOTKEYS[0];
+  const promisedAsk = settings?.askHotkey ?? DEFAULT_ASK_HOTKEYS[0];
+  const promisedStop = settings?.stopHotkey ?? DEFAULT_STOP_HOTKEYS[0];
+  const shownTalk = shortcuts.voiceHotkey ?? (voiceAvailable ? undefined : promisedTalk);
+  const shownAsk = shortcuts.askHotkey ?? (voiceAvailable ? undefined : promisedAsk);
+  const shownStop = shortcuts.stopHotkey ?? (voiceAvailable ? undefined : promisedStop);
   return (
     <section
       className="settings-section settings-plain"
@@ -2113,27 +2186,30 @@ function ShortcutSection({ shortcuts }: { shortcuts: ShortcutControl }): React.J
             ? "Hold to talk, let go to send. Tap instead to keep it open."
             : "Press to talk, again to send, again to interrupt."
         }
-        {...(shortcuts.voiceHotkey ? { shown: shortcuts.voiceHotkey } : {})}
+        {...(shownTalk ? { shown: shownTalk } : {})}
         chosen={shortcuts.voiceChosen}
         defaultKey={DEFAULT_VOICE_HOTKEYS[0] ?? ""}
+        {...(attention ? { attention } : {})}
         onChange={shortcuts.onVoiceHotkeyChange}
         onCapture={shortcuts.onCapture}
       />
       <ShortcutRow
         title="Ask Luke"
         detail="Press to type to Luke from any app. The same key puts it away."
-        {...(shortcuts.askHotkey ? { shown: shortcuts.askHotkey } : {})}
+        {...(shownAsk ? { shown: shownAsk } : {})}
         chosen={shortcuts.askChosen}
         defaultKey={DEFAULT_ASK_HOTKEYS[0] ?? ""}
+        {...(attention ? { attention } : {})}
         onChange={shortcuts.onAskHotkeyChange}
         onCapture={shortcuts.onCapture}
       />
       <ShortcutRow
         title="Stop Luke"
         detail="Press to cut off a reply mid-sentence, from any app. Escape does the same here."
-        {...(shortcuts.stopHotkey ? { shown: shortcuts.stopHotkey } : {})}
+        {...(shownStop ? { shown: shownStop } : {})}
         chosen={shortcuts.stopChosen}
         defaultKey={DEFAULT_STOP_HOTKEYS[0] ?? ""}
+        {...(attention ? { attention } : {})}
         onChange={shortcuts.onStopHotkeyChange}
         onCapture={shortcuts.onCapture}
       />
@@ -2429,7 +2505,13 @@ export function SettingsPanel({
         <AppearanceSection settings={settings} preferences={preferences} />
       ) : null}
 
-      {drawnView === SETTINGS_VIEW.SHORTCUTS ? <ShortcutSection shortcuts={shortcuts} /> : null}
+      {drawnView === SETTINGS_VIEW.SHORTCUTS ? (
+        <ShortcutSection
+          shortcuts={shortcuts}
+          {...(settings ? { settings } : {})}
+          voiceAvailable={microphone.voiceAvailable}
+        />
+      ) : null}
 
       {drawnView === SETTINGS_VIEW.CONNECTIONS && settings ? (
         <>

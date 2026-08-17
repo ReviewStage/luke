@@ -1,5 +1,17 @@
 import type { MicrophoneStatus } from "../shared/contracts";
 
+/**
+ * Why voice as a whole is off: the one key it runs on is not connected. One
+ * sentence, shared by every mark that stands for the same missing key — the
+ * front page's Voice row, the key's own heading, and the shortcut rows whose
+ * chords answer nothing without it — so the same absence never reads as two
+ * different problems.
+ */
+export const VOICE_KEYLESS_NOTE = "Voice is off: it needs an OpenAI key.";
+
+/** Why Luke can speak but not listen: the system's grant is still missing. */
+export const MICROPHONE_UNGRANTED_NOTE = "Luke cannot listen: the microphone is not allowed yet.";
+
 /** What the row says beneath its name, once the system has answered. */
 const MICROPHONE_STATUS_DETAIL: Record<MicrophoneStatus, string> = {
   granted: "Speech is sent only while a turn is open, and never recorded.",
@@ -40,10 +52,10 @@ export function microphoneAccessRow(input: {
 }): MicrophoneAccessRow {
   if (!input.voiceAvailable) {
     return {
-      // Names what to do rather than what is missing, and what to do is
-      // something this same page offers: the OpenAI key, at its top.
-      detail:
-        "Luke opens the microphone only to talk, which needs the OpenAI key at the top of this page.",
+      // The Voice page holds the key row alone while voice is off, so this
+      // detail is never drawn there — it only has to stay honest, not send
+      // anyone anywhere, and it names no other setting.
+      detail: "Luke opens the microphone only to talk.",
       offerAccess: false,
       offerSystemSettings: false,
       ready: false,
@@ -70,10 +82,10 @@ export function voiceAttentionNote(input: {
   status: MicrophoneStatus;
 }): string | undefined {
   if (!input.voiceAvailable) {
-    return "Voice is off: it needs an OpenAI key.";
+    return VOICE_KEYLESS_NOTE;
   }
   if (!microphoneAccessRow(input).ready) {
-    return "Luke cannot listen: the microphone is not allowed yet.";
+    return MICROPHONE_UNGRANTED_NOTE;
   }
   return undefined;
 }
