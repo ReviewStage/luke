@@ -341,14 +341,18 @@ interface ConductorProject {
   repositoryLabel: string;
 }
 
+/**
+ * A workspace still open on Conductor's own surface. An archived workspace
+ * never becomes one of these: filing a workspace away is how a user says its
+ * chats are done being watched, so the listing drops it before its sessions
+ * are ever asked for.
+ */
 interface ConductorWorkspace {
   id: string;
   name?: string;
   repositoryLabel: string;
   creatorId?: string;
   lastActivityAt: number;
-  /** A workspace already filed away has nothing left to archive. */
-  archived: boolean;
 }
 
 interface ConductorSession {
@@ -363,9 +367,10 @@ interface ConductorSession {
 
 /**
  * Observes Conductor cloud sessions through the documented public API. It reads
- * only workspaces the authenticated user created, observation issues no request
- * that can change provider state, and it reports nothing at all without a
- * credential. Beside the roster reads, one fixed query to Conductor's
+ * only workspaces the authenticated user created and left open — a workspace
+ * filed away on Conductor's own surface is dropped whole, its chats with it —
+ * observation issues no request that can change provider state, and it reports
+ * nothing at all without a credential. Beside the roster reads, one fixed query to Conductor's
  * transcripts view names the sessions the same pass observed and takes back
  * each chat's agent kind and the bounded tail its recap — the settled turn's
  * parting words — is read from; the history behind that tail is never asked
@@ -537,10 +542,10 @@ export class ConductorSessionAdapter
     // reads the roster, and the roster reads above are what judge the
     // credential — so this one read swallows everything rather than letting
     // an enrichment 403 clear every observed row. The lifecycle reads ride
-    // the same way, one per still-open workspace — a filed-away workspace's
-    // state is settled — and a failed one costs that workspace's activity
-    // words and failure message, never the pass.
-    const openWorkspaces = workspaces.filter((workspace) => !workspace.archived);
+    // the same way, one per workspace — every listed workspace is open,
+    // because the listing dropped the filed-away ones — and a failed one
+    // costs that workspace's activity words and failure message, never the
+    // pass.
     const [transcripts, reportedStatuses, workspaceLifecycles] = await Promise.all([
       this.#sessionTranscripts(request, sessions).catch(() => undefined),
       Promise.all(
@@ -553,7 +558,7 @@ export class ConductorSessionAdapter
         ),
       ),
       Promise.all(
-        openWorkspaces.map(async (workspace) => {
+        workspaces.map(async (workspace) => {
           const lifecycle = await this.tolerateItemFailure(() =>
             this.#workspaceLifecycle(request, workspace.id),
           );
@@ -641,6 +646,13 @@ export class ConductorSessionAdapter
           timestampFromRecord(record, CONDUCTOR_FIELD.LAST_ACTIVITY_AT) ??
           timestampFromRecord(record, CONDUCTOR_FIELD.CREATED_AT);
         if (!id || lastActivityAt === undefined) return undefined;
+        // An archived workspace was filed away on Conductor's own surface, so
+        // none of its chats belongs on the roster: it is dropped here, before
+        // its sessions are ever asked for. This is what makes a press of the
+        // archive control actually clear the rows it acted on.
+        if (timestampFromRecord(record, CONDUCTOR_FIELD.ARCHIVED_AT) !== undefined) {
+          return undefined;
+        }
         const creatorId = textFromRecord(record, CONDUCTOR_FIELD.CREATOR_ID);
         const name = textFromRecord(record, CONDUCTOR_FIELD.NAME)?.slice(
           0,
@@ -650,7 +662,6 @@ export class ConductorSessionAdapter
           id,
           repositoryLabel: project.repositoryLabel,
           lastActivityAt,
-          archived: timestampFromRecord(record, CONDUCTOR_FIELD.ARCHIVED_AT) !== undefined,
           ...(name ? { name } : {}),
           ...(creatorId ? { creatorId } : {}),
         };
@@ -829,12 +840,13 @@ export class ConductorSessionAdapter
       : (reported?.errorMessage ?? lifecycle?.errorMessage);
     // The stop belongs to the turn and the archive to the workspace: a chat
     // mid-turn offers the stop alone — its own workspace is by definition
-    // unsettled — and any chat of a positively settled, still-open workspace
-    // offers to file the whole workspace away, closed chats included, because
-    // a closed chat's row is exactly where tidying up happens.
+    // unsettled — and any chat of a positively settled workspace offers to
+    // file the whole workspace away, closed chats included, because a closed
+    // chat's row is exactly where tidying up happens. Every workspace here is
+    // still open: the filed-away ones never made it past the listing.
     const controls = [
       ...(reported?.status === CONDUCTOR_SESSION_STATUS.WORKING ? [CONDUCTOR_CANCEL_CONTROL] : []),
-      ...(!session.workspace.archived && settledWorkspaceIds.has(session.workspace.id)
+      ...(settledWorkspaceIds.has(session.workspace.id)
         ? [conductorArchiveWorkspaceControl(session.workspace.id)]
         : []),
     ];
