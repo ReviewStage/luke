@@ -348,6 +348,13 @@ export interface VoiceConversation {
   voiceTurn: WaveformVoice | undefined;
   lukeCaption: string | undefined;
   /**
+   * When the words now on screen first appeared. It is the reading clock's
+   * start: the surface paces a silent caption's scroll from it, so the words
+   * scroll as read rather than as generated. Absent whenever no words are
+   * drawn.
+   */
+  captionShownAt: number | undefined;
+  /**
    * The session the reply being spoken is announcing, or nothing for a
    * conversation reply. Present exactly as long as the announcement is — it is
    * what the surface anchors the pressable notice to — and independent of the
@@ -404,6 +411,13 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    * developer chose. Cleared the moment the turn moves on.
    */
   const [typedAsk, setTypedAsk] = useState(false);
+  /**
+   * When the words now on screen first appeared — the reading clock a muted
+   * output is captioned against. It is the caption's clock, not the reply's:
+   * words first drawn mid-reply, by a mute landing while Luke was already
+   * speaking, start it then, because that is when reading could have started.
+   */
+  const [captionShownAt, setCaptionShownAt] = useState<number>();
 
   const audioContext = useRef<AudioContext | undefined>(undefined);
   const remoteAudio = useRef<HTMLAudioElement | null>(null);
@@ -930,6 +944,14 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     caption: voiceCaption.text,
   });
 
+  // The reading clock starts when words appear and ends when they leave; the
+  // text growing between those edges is the same block of words, still on its
+  // own clock, however fast the deltas behind it streamed in.
+  const captionDrawn = lukeCaption !== undefined;
+  useEffect(() => {
+    setCaptionShownAt(captionDrawn ? Date.now() : undefined);
+  }, [captionDrawn]);
+
   return {
     analyser,
     microphoneStatus,
@@ -946,6 +968,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     askLuke,
     voiceTurn,
     lukeCaption,
+    captionShownAt,
     announcedSession: voiceCaption.about,
     remoteAudio,
     discardListening,

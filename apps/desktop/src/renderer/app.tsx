@@ -50,6 +50,7 @@ import { FEEDBACK_KIND, FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from ".
 import { voiceHotkeyLabel, voiceHotkeyToShow } from "../shared/voice-hotkey";
 import { ASK_LUKE_INPUT_ID, focusAskField } from "./ask-luke";
 import { type CalendarConnectEntry, CalendarConnectSlot } from "./calendar-connect-slot";
+import { CAPTION_LINE_READ_MS, pacedCaptionScroll } from "./caption-reading";
 import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";
 import { isSubmittable, removalEndsEntry } from "./credential-entry";
 import {
@@ -164,12 +165,19 @@ function captionSizeStyle(
   textHeight: number | undefined,
   volumeHint: boolean,
   padding: number,
+  readingElapsedMs: number | undefined,
 ): CSSProperties {
   if (!textHeight) return {};
   const hintHeight = volumeHint ? VOLUME_HINT_HEIGHT : 0;
+  const overflow = Math.max(0, textHeight - (VOICE_CAPTION_MAX_HEIGHT - padding - hintHeight));
+  // Heard words keep the newest line on screen — the half of the reply the
+  // voice has not reached yet. Words landing on a silent output are read, not
+  // heard, so the oldest unread line holds instead, leaving at reading pace.
+  const scroll =
+    readingElapsedMs === undefined ? overflow : pacedCaptionScroll(overflow, readingElapsedMs);
   return {
     "--caption-size": `${Math.min(VOICE_CAPTION_MAX_HEIGHT, textHeight + hintHeight + padding)}px`,
-    "--caption-scroll": `${Math.max(0, textHeight - (VOICE_CAPTION_MAX_HEIGHT - padding - hintHeight))}px`,
+    "--caption-scroll": `${scroll}px`,
   } as CSSProperties;
 }
 
@@ -1554,6 +1562,7 @@ export function App(): React.JSX.Element {
     askLuke,
     voiceTurn,
     lukeCaption,
+    captionShownAt,
     announcedSession,
     remoteAudio,
     discardListening,
@@ -1852,6 +1861,20 @@ export function App(): React.JSX.Element {
   }, [outputAudio]);
 
   /**
+   * The reading clock as last glanced at. Words paced across a silent output
+   * scroll on elapsed time, and a quiet stretch between deltas re-renders
+   * nothing else — so a tick at half the line pace keeps the scroll honest
+   * without chasing every frame.
+   */
+  const [readingNow, setReadingNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!outputSilent(outputAudio) || captionShownAt === undefined) return;
+    setReadingNow(Date.now());
+    const timer = window.setInterval(() => setReadingNow(Date.now()), CAPTION_LINE_READ_MS / 2);
+    return () => window.clearInterval(timer);
+  }, [outputAudio, captionShownAt]);
+
+  /**
    * The hint's own button. It quiets the hint, never the captions: the words
    * stay for as long as the silence does, because they are what "got it"
    * leaves the user reading Luke by.
@@ -2111,6 +2134,12 @@ export function App(): React.JSX.Element {
   });
   const captionText = lukeCaption ?? voiceErrorNotice;
   const captionIsError = lukeCaption === undefined && voiceErrorNotice !== undefined;
+  // How long the words on screen have been readable, or nothing while the
+  // output is audible: the reading clock only paces words nobody can hear.
+  const captionReadingElapsed =
+    outputIsSilent && captionShownAt !== undefined
+      ? Math.max(0, readingNow - captionShownAt)
+      : undefined;
   // The hint rides the caption it explains, and only over a silence the
   // helper actually reported. "Got it" quiets it for this stretch of silence
   // and any that follows too soon; the captions above it stay either way.
@@ -2199,7 +2228,7 @@ export function App(): React.JSX.Element {
               : slotHeight,
           feedbackHeight,
         ),
-        ...captionSizeStyle(captionTextHeight, volumeHint, captionPadding),
+        ...captionSizeStyle(captionTextHeight, volumeHint, captionPadding, captionReadingElapsed),
       }}
     >
       {/* Capsule, peek, slot and panel are all this one shape at different
