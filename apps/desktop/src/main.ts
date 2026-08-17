@@ -1461,10 +1461,9 @@ function registerIpc(): void {
     refusal: "Could not save that calendar choice on this system.",
   });
 
-  // The announcement path asks the store on every pass, and switching the
-  // quiet off releases anything held on the next release tick; the one thing
-  // applied at once is the face, which must not sleep on into a quiet the
-  // user just switched off.
+  // Switching the quiet off mid-meeting is the meeting ending, as far as the
+  // backlog is concerned: the face wakes and anything held is said now, not
+  // on the next release tick — the user just asked to hear it.
   registerSettingHandler(channels.setQuietDuringMeetings, {
     validate(enabled: unknown) {
       if (typeof enabled !== "boolean") throw new Error("Invalid meeting quiet request");
@@ -1472,7 +1471,9 @@ function registerIpc(): void {
     },
     save: (enabled) => settingsStore.setQuietDuringMeetings(enabled),
     apply(result) {
-      if (!result.reason) void refreshMeetingQuiet();
+      if (result.reason) return;
+      void refreshMeetingQuiet();
+      void releaseHeldNotices();
     },
     refusal: "Could not save that setting on this system.",
   });
