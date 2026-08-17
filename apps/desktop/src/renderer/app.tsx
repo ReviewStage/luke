@@ -92,6 +92,7 @@ import {
 } from "./session-model";
 import { parsePixels } from "./session-motion";
 import { SESSION_OPTIONS_BUTTON_ID, SESSION_OPTIONS_ID } from "./session-parts";
+import { focusSearchField } from "./session-search";
 import type { MicrophoneControl, PreferenceWrites, ShortcutControl } from "./settings-panel";
 import {
   credentialSettingsPage,
@@ -220,6 +221,7 @@ export function App(): React.JSX.Element {
   );
   const [sessionView, setSessionView] = useState<SessionView>(DEFAULT_SESSION_VIEW);
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   // The latest is needed from the spoken-settings carrier, which cannot wait
   // a render: two changes asked for in one breath arrive as two calls in one
   // turn, and the second composes against whatever the first just stored.
@@ -437,7 +439,13 @@ export function App(): React.JSX.Element {
     entryDrawn: () => credentialHeld.current && tabNow() === PANEL_TAB.SETTINGS,
     composerHeld: () => credentialHeld.current || feedbackHeld.current,
     onNotPanel: () => setOptionsOpen(false),
-    onCapsuleList: () => setSessionView(DEFAULT_SESSION_VIEW),
+    onCapsuleList: () => {
+      // A search is a question about the list as it was, so it closes with
+      // the panel on the same terms the filter does — a remembered query
+      // could hide the very session the capsule is reporting.
+      setSessionView(DEFAULT_SESSION_VIEW);
+      setSearchOpen(false);
+    },
     onCapsuleTab: () => changeTab(PANEL_TAB.SESSIONS),
   });
 
@@ -988,6 +996,28 @@ export function App(): React.JSX.Element {
   }, [cancelHover, changeMode, changeTab, presentationOf]);
 
   /**
+   * The search summons, from its button or Command-F. It lands on the Sessions
+   * tab whatever is showing — the field it opens is that list's — and the
+   * caret follows the same frame-by-frame seek the ask field needs, because
+   * the field may not be drawn until React has answered.
+   */
+  const openSearch = useCallback(() => {
+    changeTab(PANEL_TAB.SESSIONS);
+    setSearchOpen(true);
+    focusSearchField();
+  }, [changeTab]);
+
+  /**
+   * Closing the search lets go of its query in the same act: a field that
+   * left its narrowing in force behind no visible control would be hiding
+   * sessions with nothing on screen admitting it.
+   */
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false);
+    setSessionView((view) => (view.query === "" ? view : { ...view, query: "" }));
+  }, []);
+
+  /**
    * The panel standing back down once an errand it stood up is over. The same
    * rule a saved key follows, for the same reason: the shape was brought
    * forward to show an answer, the answer has been shown, and nothing else
@@ -1504,6 +1534,15 @@ export function App(): React.JSX.Element {
         changeTab(PANEL_TAB.SETTINGS);
         return;
       }
+      // Find, the way every macOS list answers it. Claimed on the same terms
+      // as Command-comma: only while the panel has the keyboard. The lowercase
+      // key is deliberate — with Shift held this is some other app's chord.
+      if (event.key === "f" && (event.metaKey || event.ctrlKey)) {
+        if (presentation !== PANEL_PRESENTATION.PANEL) return;
+        event.preventDefault();
+        openSearch();
+        return;
+      }
       if (event.key !== "Escape") return;
       // Discarding an open turn comes before any of it. Closing the panel
       // or a sheet mid-sentence would strand the microphone open.
@@ -1537,9 +1576,13 @@ export function App(): React.JSX.Element {
       }
       if (presentation !== PANEL_PRESENTATION.PANEL) return;
       // Otherwise it closes the nearest thing that is open, one layer at a
-      // time: the options sheet, then a settings page back to the front page,
-      // then the settings tab, then the panel itself.
+      // time: the options sheet, then the search field, then a settings page
+      // back to the front page, then the settings tab, then the panel itself.
+      // The search field answers its own Escapes while the caret is in it —
+      // clearing before closing — so the press that lands here is one made
+      // from elsewhere in the panel, and it closes the field outright.
       if (optionsOpen) setOptionsOpen(false);
+      else if (tab === PANEL_TAB.SESSIONS && searchOpen) closeSearch();
       else if (tab === PANEL_TAB.SETTINGS && settingsView !== SETTINGS_VIEW.ROOT) {
         setSettingsView(SETTINGS_VIEW.ROOT);
       } else if (tab === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.SESSIONS);
@@ -1551,10 +1594,13 @@ export function App(): React.JSX.Element {
     credentialsEntry.cancel,
     changeMode,
     changeTab,
+    closeSearch,
     dismissFeedback,
     discardListening,
+    openSearch,
     optionsOpen,
     presentation,
+    searchOpen,
     setSettingsView,
     settingsView,
     stopSpeaking,
@@ -1636,6 +1682,18 @@ export function App(): React.JSX.Element {
   // the next session to arrive would open it again with nothing pressed.
   const offerOptions = tab === PANEL_TAB.SESSIONS && list.total > 1;
   if (optionsOpen && !offerOptions) setOptionsOpen(false);
+  // Search is offered on the options' own terms: one session leaves nothing
+  // to find that is not already on screen. Its being open goes when its button
+  // does — and the query goes with it, by the same rule the emptied filter
+  // follows, because a narrowing left in force behind no visible control would
+  // hide sessions with nothing admitting it. The tab is not part of this gate:
+  // a search held while Settings shows is still the sessions tab's own state,
+  // waiting where the developer left it.
+  const offerSearch = tab === PANEL_TAB.SESSIONS && list.total > 1;
+  if (searchOpen && list.total <= 1) {
+    setSearchOpen(false);
+    if (sessionView.query !== "") setSessionView({ ...sessionView, query: "" });
+  }
   // Which clock the rows' ages are honest against. Fixture observations are
   // measured back from the fixture's own epoch precisely so that no capture
   // run reads them against the time it happened to run at.
@@ -1755,6 +1813,10 @@ export function App(): React.JSX.Element {
             offerOptions={offerOptions}
             optionsOpen={optionsOpen}
             onOptionsToggle={() => setOptionsOpen((open) => !open)}
+            offerSearch={offerSearch}
+            searchOpen={searchOpen}
+            onSearchToggle={() => (searchOpen ? closeSearch() : openSearch())}
+            onSearchClose={closeSearch}
             tab={tab}
             onTabChange={changeTab}
             settings={{

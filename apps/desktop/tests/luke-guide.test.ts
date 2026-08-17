@@ -496,6 +496,23 @@ test("the panel fact says the tabs answer an ask as well as a press", () => {
   assert.match(fact.detail, /Settings holds/);
 });
 
+test("the panel fact describes the search, and says it is by hand alone", () => {
+  const fact = buildLukeGuide(guideInput()).facts.find(
+    (candidate) => candidate.label === "The panel",
+  );
+
+  assert.ok(fact);
+  // A capability the guide does not describe is one Luke will deny having —
+  // and a search Luke claimed he could run himself would be a capability the
+  // spoken tools deliberately do not have.
+  assert.match(fact.detail, /searchable by hand alone/);
+  assert.match(fact.detail, /magnifier/);
+  assert.match(fact.detail, /Command-F/);
+  assert.match(fact.detail, /title, status line, branch, repository, workspace, agent, or model/);
+  assert.match(fact.detail, /no spoken ask can search/);
+  assert.match(fact.detail, /no search survives the panel closing/);
+});
+
 test("the feedback fact says what a spoken open may do, and that sending stays by hand", () => {
   const fact = buildLukeGuide(guideInput()).facts.find(
     (candidate) => candidate.label === "Feedback and prompts",

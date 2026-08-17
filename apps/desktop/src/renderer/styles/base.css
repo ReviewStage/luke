@@ -1599,6 +1599,27 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   font-size: 10px;
 }
 
+/* The way out of an emptied search whose matches sit behind the filter: one
+   quiet chip in the same voice the filter chips speak, because pressing it is
+   pressing All. */
+.empty-state-action {
+  margin-top: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: var(--raised);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 620;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.empty-state-action:hover {
+  background: var(--raised-strong);
+  color: var(--text-primary);
+}
+
 /* Content arrives behind the surface, never in front of it, and it arrives on
    the same spring the surface is riding. Each row starts further up than the
    one above it, so the stack is compressed and the gaps spring open — the

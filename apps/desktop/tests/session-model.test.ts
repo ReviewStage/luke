@@ -14,10 +14,12 @@ import {
   arrangeSessions,
   DEFAULT_SESSION_VIEW,
   displaySessions,
+  matchRanges,
   observedAgoLabel,
   SESSION_FILTER,
   SESSION_SORT,
   sessionListRuns,
+  sessionRunKeys,
   sessionTally,
   tallyCaption,
   tallySummary,
@@ -518,6 +520,7 @@ test("the two orderings answer different questions about the same sessions", () 
 
 test("filtering leaves the chosen ordering in force", () => {
   const recentCloud = arrangeSessions(FIXTURE_SESSIONS, {
+    ...DEFAULT_SESSION_VIEW,
     filter: SESSION_FILTER.CLOUD,
     sort: SESSION_SORT.RECENCY,
   });
@@ -672,4 +675,206 @@ test("a row offers writes only where its provider promised them", () => {
     if (row.id === "devin-session") continue;
     assert.equal(row.canMessage, false);
   }
+});
+
+test("a query keeps only rows saying every word, wherever each word lands", () => {
+  const rows = displaySessions(bootstrap(false), [
+    normalizeSession(CLAUDE_PROVIDER, {
+      providerSessionId: "parser",
+      title: "Rework the parser",
+      status: SESSION_STATUS.WORKING,
+      observedAt: 1_000,
+      detail: { branch: "feat/LUKE-123-parser" },
+    }),
+    normalizeSession(CLAUDE_PROVIDER, {
+      providerSessionId: "login",
+      title: "Fix the login flow",
+      status: SESSION_STATUS.WORKING,
+      observedAt: 2_000,
+    }),
+  ]);
+
+  // The words match together across fields — the ticket sits on the branch and
+  // the noun in the title — and case never matters: a query is typed, not
+  // quoted back at the row.
+  const found = arrangeSessions(rows, { ...DEFAULT_SESSION_VIEW, query: "Parser LUKE-123" });
+
+  assert.deepEqual(
+    found.sessions.map((session) => session.id),
+    ["parser"],
+  );
+  assert.equal(found.total, 2);
+  assert.deepEqual(found.search, {
+    tokens: ["parser", "luke-123"],
+    searched: 2,
+    beyondFilter: 0,
+  });
+});
+
+test("a query is read against everything the row can say", () => {
+  const rows = displaySessions(bootstrap(false), [
+    normalizeSession(CONDUCTOR_PROVIDER, {
+      providerSessionId: "chat",
+      title: "Chat chat",
+      status: SESSION_STATUS.ERROR,
+      observedAt: 1_000,
+      detail: { repository: "sidecar", model: "claude-opus-5", error: "The build broke" },
+      workspace: { providerWorkspaceId: "workspace-1", name: "lisbon-v2" },
+    }),
+    liveSession(CODEX_PROVIDER, "other", SESSION_STATUS.WORKING),
+  ]);
+
+  // The repository, the model on the mark's hover, the workspace the row is a
+  // chat of, the agent's own name, and the failure worded under the title.
+  for (const query of ["sidecar", "OPUS", "lisbon", "conductor", "build broke"]) {
+    const found = arrangeSessions(rows, { ...DEFAULT_SESSION_VIEW, query });
+    assert.deepEqual(
+      found.sessions.map((session) => session.id),
+      ["chat"],
+      `query: ${query}`,
+    );
+  }
+});
+
+test("a blank query is no search at all", () => {
+  const list = arrangeSessions(FIXTURE_SESSIONS, { ...DEFAULT_SESSION_VIEW, query: "   " });
+
+  assert.equal(list.search, undefined);
+  assert.equal(list.sessions.length, FIXTURE_SESSIONS.length);
+});
+
+test("a query that matches nothing empties the list and says so", () => {
+  const list = arrangeSessions(FIXTURE_SESSIONS, { ...DEFAULT_SESSION_VIEW, query: "zanzibar" });
+
+  // The one narrowing allowed to empty the list: "nothing matches" is a
+  // search's honest answer, where a filter falling to nothing is a stale
+  // choice to be dropped. What is tracked is still counted in full.
+  assert.deepEqual(list.sessions, []);
+  assert.equal(list.total, FIXTURE_SESSIONS.length);
+  assert.deepEqual(list.search, {
+    tokens: ["zanzibar"],
+    searched: FIXTURE_SESSIONS.length,
+    beyondFilter: 0,
+  });
+});
+
+test("a query reads within the filter and counts what the filter hides", () => {
+  const rows = displaySessions(bootstrap(false), [
+    normalizeSession(CLAUDE_PROVIDER, {
+      providerSessionId: "claude-alpha",
+      title: "Alpha rework",
+      status: SESSION_STATUS.WORKING,
+      observedAt: 1_000,
+    }),
+    normalizeSession(CODEX_PROVIDER, {
+      providerSessionId: "codex-alpha",
+      title: "Alpha cleanup",
+      status: SESSION_STATUS.WORKING,
+      observedAt: 2_000,
+    }),
+    liveSession(CODEX_PROVIDER, "codex-other", SESSION_STATUS.WORKING, 3_000),
+  ]);
+
+  const narrowed = arrangeSessions(rows, {
+    ...DEFAULT_SESSION_VIEW,
+    filter: PROVIDER_ID.CLAUDE_CODE,
+    query: "alpha",
+  });
+  assert.deepEqual(
+    narrowed.sessions.map((session) => session.id),
+    ["claude-alpha"],
+  );
+  // The Codex match is not shown, but it is never swallowed either.
+  assert.deepEqual(narrowed.search, { tokens: ["alpha"], searched: 1, beyondFilter: 1 });
+
+  const emptied = arrangeSessions(rows, {
+    ...DEFAULT_SESSION_VIEW,
+    filter: PROVIDER_ID.CLAUDE_CODE,
+    query: "cleanup",
+  });
+  assert.deepEqual(emptied.sessions, []);
+  assert.deepEqual(emptied.search, { tokens: ["cleanup"], searched: 1, beyondFilter: 1 });
+});
+
+test("searching leaves the chosen ordering and the workspace seating in force", () => {
+  // The agent's name finds both Conductor chats, in the order the sort chose.
+  const recent = arrangeSessions(FIXTURE_SESSIONS, {
+    ...DEFAULT_SESSION_VIEW,
+    sort: SESSION_SORT.RECENCY,
+    query: "conductor",
+  });
+  assert.deepEqual(
+    recent.sessions.map((session) => session.id),
+    ["conductor-chat-tidy", "conductor-chat-package"],
+  );
+
+  // Seated as one tray run, exactly as they would be unsearched.
+  assert.deepEqual(
+    sessionListRuns(recent.sessions).map((run) => ({
+      workspaceId: run.workspace?.id,
+      indexes: run.indexes,
+    })),
+    [{ workspaceId: "conductor-lisbon", indexes: [0, 1] }],
+  );
+});
+
+test("match ranges are found case-blind and merged where words overlap", () => {
+  // Two words landing on one stretch read as one mark, not nested ones.
+  assert.deepEqual(matchRanges("Feat/LUKE-123-parser", ["luke", "ke-123"]), [
+    { start: 5, end: 13 },
+  ]);
+  // Every occurrence is marked, not only the first.
+  assert.deepEqual(matchRanges("alpha alpha", ["alpha"]), [
+    { start: 0, end: 5 },
+    { start: 6, end: 11 },
+  ]);
+  // A line the words did not land on yields nothing to mark.
+  assert.deepEqual(matchRanges("nothing here", ["zeta"]), []);
+});
+
+// A chat fading out of a narrowed list keeps the slot it was seen in, and a
+// stranger's held slot can split it from its workspace's living siblings —
+// two runs of one workspace, drawn at once. React abandons the DOM of a child
+// whose key another child also wears, which is a blank row left in the list,
+// so the keys have to come apart exactly there.
+test("a workspace split by a held slot gets one key per run", () => {
+  const workspace = { id: "ws-da-nang", name: "da-nang" };
+  const rows = [
+    { item: { id: "chat-a1" }, leaving: true },
+    { item: { id: "codex-1" }, leaving: false },
+    { item: { id: "chat-a2" }, leaving: false },
+  ];
+  const runs = [{ workspace, indexes: [0] }, { indexes: [1] }, { workspace, indexes: [2] }];
+
+  // The living run keeps the workspace's key — the wrapper whose rows hold
+  // half-typed drafts is the one that must survive the split healing — and
+  // the fading run is keyed by its own chat.
+  assert.deepEqual(sessionRunKeys(runs, rows), ["chat-a1", "codex-1", "ws-da-nang"]);
+});
+
+test("an unsplit workspace and a lone fading chat both keep the workspace key", () => {
+  const workspace = { id: "ws-1", name: "lisbon-v2" };
+
+  // The tray, with one chat mid-fade: still one run, still the workspace's.
+  assert.deepEqual(
+    sessionRunKeys(
+      [{ workspace, indexes: [0, 1] }],
+      [
+        { item: { id: "chat-1" }, leaving: false },
+        { item: { id: "chat-2" }, leaving: true },
+      ],
+    ),
+    ["ws-1"],
+  );
+  // A workspace whose only chat is leaving keeps its key too, so the fade
+  // finishes in the wrapper it started in.
+  assert.deepEqual(
+    sessionRunKeys([{ workspace, indexes: [0] }], [{ item: { id: "chat-1" }, leaving: true }]),
+    ["ws-1"],
+  );
+  // Ungrouped sessions are their own keys, as they always were.
+  assert.deepEqual(
+    sessionRunKeys([{ indexes: [0] }], [{ item: { id: "codex-1" }, leaving: false }]),
+    ["codex-1"],
+  );
 });
