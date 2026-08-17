@@ -7,11 +7,7 @@ import {
   SESSION_STATUS,
   type SessionNotice,
 } from "@sidecar/core";
-import {
-  attentionSpeechPopups,
-  sessionNoticePopup,
-  sessionNoticeSpeech,
-} from "../src/session-notifications";
+import { sessionNoticeSpeech } from "../src/session-notifications";
 
 function notice(overrides: Partial<SessionNotice> = {}): SessionNotice {
   return {
@@ -215,52 +211,4 @@ test("a value cannot close its own quotes to forge a field", () => {
   // The build's own fields still say what the observation said.
   assert.ok(summary.includes("event: started waiting on the developer"));
   assert.match(summary, /takes a reply now: no$/);
-});
-
-test("a notice becomes a popup whose line leaves the naming to the title", () => {
-  assert.deepEqual(sessionNoticePopup(notice({ repository: "luke" }), 5_000), {
-    providerId: "claude-code",
-    providerSessionId: "run:1",
-    body: "Finished on luke.",
-    decidedAt: 5_000,
-  });
-  assert.equal(
-    sessionNoticePopup(notice({ status: SESSION_NOTICE_STATUS.WAITING, branch: "algiers" }), 0)
-      .body,
-    "Waiting on you on algiers.",
-  );
-  assert.equal(
-    sessionNoticePopup(notice({ status: SESSION_NOTICE_STATUS.ERROR }), 0).body,
-    "Stopped on an error.",
-  );
-  // The provider's own reason rides along when it gave one — already bounded
-  // by normalization, never a transcript.
-  assert.equal(
-    sessionNoticePopup(notice({ status: SESSION_NOTICE_STATUS.ERROR, error: "API rate limit" }), 0)
-      .body,
-    "Stopped: API rate limit",
-  );
-});
-
-test("evaluator speech becomes popups carrying the decided sentence", () => {
-  assert.deepEqual(
-    attentionSpeechPopups([
-      {
-        providerId: "conductor",
-        providerSessionId: "workspace:9",
-        disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END,
-        source: ATTENTION_SPEECH_SOURCE.EVALUATOR,
-        summary: "The tests are failing and the session is waiting on a decision.",
-        decidedAt: 1_000,
-      },
-    ]),
-    [
-      {
-        providerId: "conductor",
-        providerSessionId: "workspace:9",
-        body: "The tests are failing and the session is waiting on a decision.",
-        decidedAt: 1_000,
-      },
-    ],
-  );
 });

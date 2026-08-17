@@ -30,8 +30,8 @@ Visit [tryluke.dev](https://tryluke.dev) to see Luke in action.
 - Filter and sort sessions by location, provider, urgency, or recency.
 - Ask Luke about supported local sessions by voice or text.
 - Send messages and supported controls only when you explicitly ask Luke to.
-- Receive optional spoken announcements — and a pressable notice at the
-  notch — when a session needs you.
+- Receive optional spoken announcements — with a pressable notice at the
+  notch naming the session Luke is talking about — when a session needs you.
 - View assigned Linear issues and, when asked, update their state or add a
   comment.
 

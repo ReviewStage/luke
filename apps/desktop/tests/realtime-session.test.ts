@@ -42,6 +42,8 @@ interface Harness {
   sent: Record<string, unknown>[];
   errors: (string | undefined)[];
   captions: (string | undefined)[];
+  /** The announced session each caption emission carried, by session id. */
+  captionSubjects: (string | undefined)[];
   microphoneEnabled: () => boolean;
   microphoneStopped: () => boolean;
   emit: (event: unknown) => void;
@@ -110,6 +112,7 @@ function harness(
   const sent: Record<string, unknown>[] = [];
   const errors: (string | undefined)[] = [];
   const captions: (string | undefined)[] = [];
+  const captionSubjects: (string | undefined)[] = [];
   const requests: { url: string; init: RequestInit }[] = [];
   const calls: string[] = [];
   let enabled = false;
@@ -210,7 +213,10 @@ function harness(
     onLocalStream: () => undefined,
     onRemoteStream: () => undefined,
     onError: (message) => errors.push(message),
-    onCaption: (text) => captions.push(text),
+    onCaption: (text, about) => {
+      captions.push(text);
+      captionSubjects.push(about?.providerSessionId);
+    },
   });
 
   return {
@@ -218,6 +224,7 @@ function harness(
     sent,
     errors,
     captions,
+    captionSubjects,
     microphoneEnabled: () => enabled,
     microphoneStopped: () => stopped,
     lukeAudible: () => remoteTrack.enabled,
@@ -2443,6 +2450,46 @@ test("the caption leaves when the reply does", async () => {
   context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
 
   assert.deepEqual(context.captions, ["All quiet.", undefined]);
+});
+
+test("an announcement's caption names its session; a conversation's names none", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  // The subject stands from the moment the announcement's reply is asked for
+  // — the pressable notice may precede the first word — and every caption of
+  // that reply carries it.
+  context.session.speak({
+    providerId: "claude-code",
+    providerSessionId: "session-a",
+    disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
+    source: ATTENTION_SPEECH_SOURCE.STATUS_EDGE,
+    summary: "session: 'checkout'; event: finished",
+    decidedAt: 1_800_000_000_000,
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    delta: "Checkout just finished.",
+  });
+  assert.deepEqual(context.captions, [undefined, "Checkout just finished."]);
+  assert.deepEqual(context.captionSubjects, ["session-a", "session-a"]);
+
+  // The reply ending takes the subject with the words: the notice can never
+  // outlive the announcement it stands for.
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
+  context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
+  assert.equal(context.captions.at(-1), undefined);
+  assert.equal(context.captionSubjects.at(-1), undefined);
+
+  // A conversation reply is nobody's announcement, whatever was said before.
+  context.session.beginTurn();
+  context.session.endTurn(true);
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    delta: "Two sessions need review.",
+  });
+  assert.equal(context.captions.at(-1), "Two sessions need review.");
+  assert.equal(context.captionSubjects.at(-1), undefined);
 });
 
 test("taking the turn cuts the caption with the audio", async () => {

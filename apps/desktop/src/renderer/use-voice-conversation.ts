@@ -347,6 +347,13 @@ export interface VoiceConversation {
   askLuke: (text: string) => Promise<string | undefined>;
   voiceTurn: WaveformVoice | undefined;
   lukeCaption: string | undefined;
+  /**
+   * The session the reply being spoken is announcing, or nothing for a
+   * conversation reply. Present exactly as long as the announcement is — it is
+   * what the surface anchors the pressable notice to — and independent of the
+   * captions preference, which only governs whether the words are drawn.
+   */
+  announcedSession: SessionIdentity | undefined;
   remoteAudio: RefObject<HTMLAudioElement | null>;
   /** Escape out of an open turn: forget the press and the latch, and stop listening. */
   discardListening: () => void;
@@ -382,7 +389,13 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   const [voiceHotkey, setVoiceHotkey] = useState<VoiceHotkeyState>();
   const [localStream, setLocalStream] = useState<MediaStream>();
   const [remoteStream, setRemoteStream] = useState<MediaStream>();
-  const [voiceCaption, setVoiceCaption] = useState<string>();
+  // One state for the words and their subject, set together by the session so
+  // the notice the surface anchors to the subject can never draw against a
+  // caption from a different reply.
+  const [voiceCaption, setVoiceCaption] = useState<{
+    text: string | undefined;
+    about: SessionIdentity | undefined;
+  }>({ text: undefined, about: undefined });
   /**
    * Whether the reply under way answers an ask the developer typed. A typed
    * ask is read, not only heard, so its reply draws the caption whatever the
@@ -500,7 +513,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       onLocalStream: setLocalStream,
       onRemoteStream: setRemoteStream,
       onError: setVoiceError,
-      onCaption: setVoiceCaption,
+      onCaption: (text, about) => setVoiceCaption({ text, about }),
     });
     return voiceSession.current;
   }, [rememberSessionReference, setVoiceStatus]);
@@ -914,7 +927,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     typedAsk,
     outputSilent: options.outputSilent,
     voice: voiceTurn,
-    caption: voiceCaption,
+    caption: voiceCaption.text,
   });
 
   return {
@@ -933,6 +946,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     askLuke,
     voiceTurn,
     lukeCaption,
+    announcedSession: voiceCaption.about,
     remoteAudio,
     discardListening,
     stopSpeaking,

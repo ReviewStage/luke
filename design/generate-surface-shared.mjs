@@ -66,6 +66,12 @@ const ROW_FAN_LIMIT = 5;
 const SURFACE_GEOMETRY_PX = {
   BUBBLE_LIFT: 4,
   VOICE_CAPTION_MAX_HEIGHT: 70,
+  // The notice band under the housing: one row for the pressable chip naming
+  // the session Luke is announcing. Fixed rather than measured — the name
+  // truncates into it — so the surface springs to one destination. The
+  // compact window reserves this on top of the caption room, because
+  // captioned speech drops below the chip's band.
+  SESSION_NOTICE_HEIGHT: 26,
   PANEL_WIDTH: 620,
 };
 
@@ -184,6 +190,7 @@ function motionTokensCss() {
   --slot-delay: calc(var(--duration-exit) + var(--peek-delay));
   --bubble-lift: ${px(SURFACE_GEOMETRY_PX.BUBBLE_LIFT)};
   --caption-max: ${px(SURFACE_GEOMETRY_PX.VOICE_CAPTION_MAX_HEIGHT)};
+  --notice-size: ${px(SURFACE_GEOMETRY_PX.SESSION_NOTICE_HEIGHT)};
   --panel-width: ${px(SURFACE_GEOMETRY_PX.PANEL_WIDTH)};
 }
 `;
@@ -216,6 +223,9 @@ export const BUBBLE_LIFT = ${SURFACE_GEOMETRY_PX.BUBBLE_LIFT};
 
 /** Tallest compact caption block the window holds. CSS: \`--caption-max\`. */
 export const VOICE_CAPTION_MAX_HEIGHT = ${SURFACE_GEOMETRY_PX.VOICE_CAPTION_MAX_HEIGHT};
+
+/** The notice popup's band, held below the caption room. CSS: \`--notice-size\`. */
+export const SESSION_NOTICE_HEIGHT = ${SURFACE_GEOMETRY_PX.SESSION_NOTICE_HEIGHT};
 
 /** Expanded panel width. CSS: \`--panel-width\`. */
 export const PANEL_WIDTH = ${SURFACE_GEOMETRY_PX.PANEL_WIDTH};
