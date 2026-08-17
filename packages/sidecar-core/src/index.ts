@@ -320,6 +320,7 @@ export {
   OPENAI_PATH,
   OPENCODE_BLOCK_PATH,
   OPENCODE_FRAME_PATH,
+  ORCA_PATH,
 } from "./provider-mark-paths.js";
 export {
   compareSessionsByUrgency,

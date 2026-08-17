@@ -14,6 +14,7 @@ export const PROVIDER_ID = {
   DEVIN: "devin",
   JULES: "jules",
   OPENCODE: "opencode",
+  ORCA: "orca",
 } as const;
 
 export type ProviderId = (typeof PROVIDER_ID)[keyof typeof PROVIDER_ID];

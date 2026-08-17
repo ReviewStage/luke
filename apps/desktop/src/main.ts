@@ -126,6 +126,7 @@ import {
 } from "./openai-realtime-credentials";
 import { OpenCodeSessionAdapter } from "./opencode-adapter";
 import { readOpenCodeSessionTranscript } from "./opencode-transcript";
+import { OrcaSessionAdapter } from "./orca-adapter";
 import { OutputVolumeWatcher } from "./output-volume";
 import { PanelManager } from "./panel-manager";
 import type { RealtimeCredentialMinter } from "./realtime-minter";
@@ -312,6 +313,7 @@ const sessionAdapters = [
   devinAdapter,
   julesAdapter,
   new OpenCodeSessionAdapter(),
+  new OrcaSessionAdapter(),
 ] as const;
 // The issue tracker is not a session provider: its issues feed the voice
 // roster rather than the registry, so it stands beside the adapters rather

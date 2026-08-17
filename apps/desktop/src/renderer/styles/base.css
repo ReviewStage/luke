@@ -38,6 +38,7 @@
   --mark-linear: #5e6ad2;
   --mark-opencode: #ffffff;
   --mark-opencode-block: #5a5858;
+  --mark-orca: #ffffff;
 
   /* The one destructive colour, in the two weights a control that destroys
      something needs: a ground it can sit on and a text colour that reads on
@@ -848,6 +849,14 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .provider-mark[data-mark="opencode"] {
   color: var(--mark-opencode);
   transform: scale(0.94);
+}
+
+/* Orca's mark is wider than it is tall, so fitted by width it sits short in
+   the box; scaled up like the Claude Code glyph it reads at the same optical
+   weight as the full-bleed marks. */
+.provider-mark[data-mark="orca"] {
+  color: var(--mark-orca);
+  transform: scale(1.16);
 }
 
 /* The work is happening somewhere the user cannot see. The badge overhangs the
