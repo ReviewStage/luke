@@ -278,6 +278,36 @@ test("stays silent when an evaluator fails or answers outside the contract", asy
   assert.equal(emptyReview?.outcome, ATTENTION_REVIEW_OUTCOME.UNAVAILABLE);
 });
 
+test("a quiet evaluator skips the pass whole, spending nothing", async () => {
+  let now = DECIDED_AT;
+  const quietUntil = DECIDED_AT + 60_000;
+  const updates: AttentionUpdate[] = [];
+  const reviewer = new SessionAttentionReviewer({
+    evaluator: {
+      quietUntil: () => quietUntil,
+      evaluate: async (update) => {
+        updates.push(update);
+        return speakDecision();
+      },
+    },
+    now: () => now,
+    // With no retries budgeted, one pass counted as unavailable would drop
+    // the development — which is exactly what a skipped pass must not do.
+    maximumUnavailableRetries: 0,
+  });
+
+  const waiting = session(claude, "review", { status: SESSION_STATUS.WAITING });
+  await reviewer.review([waiting]);
+  await reviewer.review([waiting]);
+  assert.equal(updates.length, 0, "nothing is sent while the evaluator is quiet");
+
+  // The quiet over, the development that waited through it is reviewed.
+  now = quietUntil;
+  const [review] = await reviewer.review([waiting]);
+  assert.equal(review?.outcome, ATTENTION_REVIEW_OUTCOME.DECIDED);
+  assert.equal(updates.length, 1);
+});
+
 test("drops a decision about a failure the session has already replaced", async () => {
   const rateLimited = session(claude, "review", {
     status: SESSION_STATUS.ERROR,

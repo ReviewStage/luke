@@ -85,47 +85,30 @@ test("the standing key authorizes the mint and never appears in the response", a
   assert.ok(!JSON.stringify(credential).includes(API_KEY));
 });
 
-test("an outstanding credential is reused until it nears expiry", async () => {
-  let now = NOW;
-  const { minter: instance, requests } = minter([mintResponse(), mintResponse()], {
-    now: () => now,
-  });
+test("every call is minted its own credential, never a reused one", async () => {
+  const { minter: instance, requests } = minter([mintResponse(), mintResponse()]);
 
-  await instance.mint();
-  await instance.mint();
-  assert.equal(requests.length, 1);
-
-  // Inside the expiry margin the credential can no longer survive a handshake.
-  now = EXPIRES_AT_SECONDS * 1000 - 1_000;
-  await instance.mint();
+  // The service has been seen to refuse a reused secret at the calls endpoint
+  // (status 401) even inside its stated expiry, so a secret answers only the
+  // call it was minted for.
+  assert.equal((await instance.mint())?.value, "ek_test_secret");
+  assert.equal((await instance.mint())?.value, "ek_test_secret");
   assert.equal(requests.length, 2);
 });
 
-test("changing the voice discards the outstanding credential and mints for the new one", async () => {
+test("changing the voice mints the next credential for the new one", async () => {
   const { minter: instance, requests } = minter([mintResponse(), mintResponse()]);
   await instance.mint();
 
   instance.setVoice(REALTIME_VOICE.MARIN);
   await instance.mint();
 
-  // The first credential was minted against the old voice, so serving it after
-  // the change would answer the next conversation with the wrong one.
   assert.equal(requests.length, 2);
   const body = JSON.parse(String(requests[1]?.init.body)) as {
     session: { audio: { output: { voice: string } } };
   };
   assert.equal(body.session.audio.output.voice, REALTIME_VOICE.MARIN);
   assert.equal(instance.diagnostics().voice, REALTIME_VOICE.MARIN);
-});
-
-test("the same voice again keeps the outstanding credential", async () => {
-  const { minter: instance, requests } = minter([mintResponse(), mintResponse()]);
-  await instance.mint();
-
-  instance.setVoice(REALTIME_DEFAULTS.VOICE);
-  await instance.mint();
-
-  assert.equal(requests.length, 1);
 });
 
 test("clearing the voice returns to the one the minter was built with", () => {
@@ -137,31 +120,19 @@ test("clearing the voice returns to the one the minter was built with", () => {
   assert.equal(instance.diagnostics().voice, REALTIME_DEFAULTS.VOICE);
 });
 
-test("changing the pace discards the outstanding credential and mints for the new one", async () => {
+test("changing the pace mints the next credential for the new one", async () => {
   const { minter: instance, requests } = minter([mintResponse(), mintResponse()]);
   await instance.mint();
 
   instance.setSpeed(REALTIME_VOICE_SPEED.FAST);
   await instance.mint();
 
-  // The first credential was minted at the old pace, so serving it after the
-  // change would answer the next conversation at the wrong one.
   assert.equal(requests.length, 2);
   const body = JSON.parse(String(requests[1]?.init.body)) as {
     session: { audio: { output: { speed: number } } };
   };
   assert.equal(body.session.audio.output.speed, REALTIME_VOICE_SPEED.FAST);
   assert.equal(instance.diagnostics().speed, REALTIME_VOICE_SPEED.FAST);
-});
-
-test("the same pace again keeps the outstanding credential", async () => {
-  const { minter: instance, requests } = minter([mintResponse(), mintResponse()]);
-  await instance.mint();
-
-  instance.setSpeed(REALTIME_DEFAULTS.SPEED);
-  await instance.mint();
-
-  assert.equal(requests.length, 1);
 });
 
 test("clearing the pace returns to the one the minter was built with", () => {

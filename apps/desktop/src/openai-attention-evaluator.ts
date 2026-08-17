@@ -36,6 +36,19 @@ const OPENAI_DEFAULTS = {
 const OPENAI_RESPONSES_PATH = "/responses";
 const OPENAI_TEXT_FORMAT_TYPE = "json_schema";
 const OPENAI_OUTPUT_TEXT_TYPE = "output_text";
+const OPENAI_RATE_LIMIT_STATUS = 429;
+const OPENAI_RETRY_AFTER_HEADER = "retry-after";
+
+/**
+ * How long attention requests stay quiet after the API rate-limits one, when
+ * the refusal names no wait of its own. Reviews run four to a pass and a pass
+ * every few seconds, so without this one 429 becomes a sustained storm: every
+ * failed review stays derivable and is re-sent at full rate, which starves
+ * the same key the voice opens calls with — the announcement that cannot get
+ * through is the visible half of that. An update held back here is not lost;
+ * it stays derivable and is reviewed once the quiet ends.
+ */
+export const ATTENTION_RATE_LIMIT_COOLDOWN_MS = 60_000;
 
 type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
@@ -118,6 +131,8 @@ export class OpenAiAttentionEvaluator implements AttentionEvaluator {
   readonly #now: () => number;
   readonly #requestTimeoutMs: number;
   readonly #maximumOutputTokens: number;
+  /** Until when rate-limited requests stay unsent, as epoch milliseconds. */
+  #quietUntil = 0;
 
   constructor(options: OpenAiAttentionEvaluatorOptions) {
     const apiKey = text(options.apiKey);
@@ -141,11 +156,28 @@ export class OpenAiAttentionEvaluator implements AttentionEvaluator {
     return this.#model;
   }
 
+  /**
+   * The moment rate-limited requests resume, for the reviewer to ask before a
+   * pass. A reviewer that asks skips the pass without spending anything; the
+   * guard inside {@link evaluate} still answers a caller that did not.
+   */
+  quietUntil(): number | undefined {
+    return this.#quietUntil > this.#now() ? this.#quietUntil : undefined;
+  }
+
   async evaluate(update: AttentionUpdate): Promise<AttentionDecision | undefined> {
+    // Answering with nothing is how an evaluator stays silent, and staying
+    // silent is free: the update stays derivable and returns once the API is
+    // taking requests again.
+    if (this.#now() < this.#quietUntil) return undefined;
     const response = await this.#request(update);
     if (!response) return undefined;
 
     if (!response.ok) {
+      if (response.status === OPENAI_RATE_LIMIT_STATUS) {
+        this.#quiet(response);
+        return undefined;
+      }
       // Status alone is enough to diagnose credentials or rate limits without
       // writing the request, the key, or any session material to the log.
       this.#report(`OpenAI attention request failed with status ${response.status}`);
@@ -199,6 +231,23 @@ export class OpenAiAttentionEvaluator implements AttentionEvaluator {
       );
       return undefined;
     }
+  }
+
+  /**
+   * Starts the quiet a rate limit asked for, taking the API's own word for
+   * how long when it gives one. Reported once, at the moment the quiet
+   * begins: the requests held back during it are not failures to log.
+   */
+  #quiet(response: Response): void {
+    const retryAfterSeconds = Number(response.headers.get(OPENAI_RETRY_AFTER_HEADER));
+    const waitMs =
+      Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+        ? retryAfterSeconds * 1000
+        : ATTENTION_RATE_LIMIT_COOLDOWN_MS;
+    this.#quietUntil = this.#now() + waitMs;
+    this.#report(
+      `OpenAI attention requests are rate limited; pausing reviews for ${Math.round(waitMs / 1000)}s`,
+    );
   }
 
   async #payload(response: Response): Promise<unknown> {

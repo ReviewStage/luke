@@ -21,6 +21,22 @@ export const ANNOUNCER_LINGER_MS = 60_000;
 export const MAXIMUM_QUEUED_NOTICES = 8;
 
 /**
+ * How long a backlog waits after a refused call before trying again. The
+ * refusal this exists for is the transient kind — a rate limit at the voice
+ * service, a network mid-blink — where seconds are the difference between an
+ * announcement arriving late and not arriving at all.
+ */
+export const ANNOUNCER_RETRY_DELAY_MS = 20_000;
+
+/**
+ * How many times one backlog may try to open Luke's own call. Together with
+ * {@link SPOKEN_NOTICE_MAX_AGE_MS} this is what keeps a persistent refusal
+ * from becoming a loop: the attempts run out, and anything still queued has
+ * aged out of being news long before a fourth try could matter.
+ */
+export const MAXIMUM_CONNECT_ATTEMPTS = 3;
+
+/**
  * The slice of the voice session the announcer drives. `microphoneCall` is the
  * ownership question: true means the call up or coming is the developer's own,
  * which the announcer may speak on but must never close.
@@ -50,9 +66,15 @@ export interface SpokenNoticeAnnouncerOptions {
  * exists for: it opens a call of Luke's own — speak-only, no microphone, no
  * context — reads the queue out one reply at a time, lingers briefly for the
  * cluster of finishes that usually follows the first, and closes the call it
- * opened. It never closes the developer's call, and it never retries a
- * connection that answered: a queue that cannot be delivered is dropped,
- * because every notice is still standing in the panel.
+ * opened. It never closes the developer's call.
+ *
+ * A call that is refused keeps the backlog and tries again on a short clock,
+ * because the refusal this path actually meets is transient — a rate limit,
+ * a network mid-blink — and a first-try-only announcer turns each one into
+ * permanent silence. The retry cannot become a loop: the attempts are capped
+ * per backlog, and every queued sentence ages out of being news regardless.
+ * A backlog that outlives its attempts is dropped, because every notice is
+ * still standing in the panel.
  */
 export class SpokenNoticeAnnouncer {
   readonly #options: SpokenNoticeAnnouncerOptions;
@@ -60,6 +82,9 @@ export class SpokenNoticeAnnouncer {
   /** Whether the call now up is one this announcer opened, and so must close. */
   #ownsCall = false;
   #lingerTimer: unknown;
+  /** How many times the backlog now queued has tried to open Luke's own call. */
+  #connectAttempts = 0;
+  #retryTimer: unknown;
 
   constructor(options: SpokenNoticeAnnouncerOptions) {
     this.#options = options;
@@ -101,9 +126,11 @@ export class SpokenNoticeAnnouncer {
     ) {
       this.#cancelLinger();
       this.#ownsCall = false;
-      // A call that failed or was refused is not retried into a loop; the
-      // notices it would have carried are still shown in the panel.
-      if (status !== REALTIME_STATUS.IDLE) this.#queue = [];
+      // The backlog survives the call it was waiting on — a developer's call
+      // that ended mid-queue, or Luke's own that dropped — and the retry clock
+      // is what picks it back up. The connect path arms the same clock when an
+      // open is refused, so arming here is idempotent.
+      this.#armRetry();
     }
   }
 
@@ -112,6 +139,7 @@ export class SpokenNoticeAnnouncer {
     this.#queue = this.#queue.filter((item) => now - item.decidedAt <= SPOKEN_NOTICE_MAX_AGE_MS);
     const session = this.#options.session();
     if (this.#queue.length === 0) {
+      this.#connectAttempts = 0;
       this.#armLinger();
       return;
     }
@@ -125,21 +153,53 @@ export class SpokenNoticeAnnouncer {
     }
     if (session.isConnecting) return;
     // Silence, and something to say into it: open a call of Luke's own.
+    this.#connectAttempts += 1;
     this.#ownsCall = true;
     void session
       .connect({ microphone: false })
       .then((opened) => {
         if (opened) {
+          this.#connectAttempts = 0;
           this.#flush();
           return;
         }
         this.#ownsCall = false;
-        this.#queue = [];
+        this.#retreatOrRetry();
       })
       .catch(() => {
         this.#ownsCall = false;
-        this.#queue = [];
+        this.#retreatOrRetry();
       });
+  }
+
+  /**
+   * Decides what a refused connect leaves behind. A backlog still owed a try
+   * keeps it, on the retry clock; one that has had its tries is dropped here,
+   * at the moment of the final refusal, so notices arriving afterwards start
+   * a fresh backlog with tries of its own rather than dying against a spent
+   * counter. What is dropped is still standing in the panel.
+   */
+  #retreatOrRetry(): void {
+    if (this.#connectAttempts >= MAXIMUM_CONNECT_ATTEMPTS) {
+      this.#queue = [];
+      this.#connectAttempts = 0;
+      return;
+    }
+    this.#armRetry();
+  }
+
+  /**
+   * Starts the clock on another try at a backlog whose call could not open or
+   * did not last. Idempotent, because a refused connect and the failed status
+   * it causes both land here; the queue's own age filter and the attempt cap
+   * in {@link #retreatOrRetry} are what keep the clock from ticking forever.
+   */
+  #armRetry(): void {
+    if (this.#queue.length === 0) return;
+    this.#retryTimer ??= (this.#options.schedule ?? setTimeout)(() => {
+      this.#retryTimer = undefined;
+      this.#flush();
+    }, ANNOUNCER_RETRY_DELAY_MS);
   }
 
   #armLinger(): void {

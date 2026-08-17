@@ -155,6 +155,14 @@ export function attentionContext(detail: SessionDetail): AttentionContext | unde
 /** Reviews one bounded update and decides whether Luke should speak. */
 export interface AttentionEvaluator {
   evaluate(update: AttentionUpdate): Promise<AttentionDecision | undefined>;
+  /**
+   * When the evaluator has stood itself down — a rate limit's quiet — the
+   * moment it will take requests again, as epoch milliseconds. A reviewer
+   * that asks first skips the pass whole: nothing is sent, no baseline
+   * advances, and no per-session retry is spent on a refusal that was never
+   * about the session. Absent or in the past means requests are welcome.
+   */
+  quietUntil?(): number | undefined;
 }
 
 /** Why a reviewed update ended up with the decision it carries. */
@@ -518,6 +526,12 @@ export class SessionAttentionReviewer {
   }
 
   async review(sessions: readonly NormalizedSession[]): Promise<readonly AttentionReview[]> {
+    // An evaluator in its own quiet would answer every update with nothing,
+    // and each nothing costs a per-session retry budgeted for real failures.
+    // Skipping the pass before any baseline advances spends none of them:
+    // every development stays derivable and is reviewed once the quiet ends.
+    const quietUntil = this.#evaluator.quietUntil?.();
+    if (quietUntil !== undefined && quietUntil > this.#now()) return [];
     this.#ledger.retain(sessions);
 
     const candidates: AttentionCandidate[] = [];

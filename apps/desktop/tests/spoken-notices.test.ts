@@ -9,7 +9,9 @@ import {
 } from "@sidecar/core";
 import {
   ANNOUNCER_LINGER_MS,
+  ANNOUNCER_RETRY_DELAY_MS,
   type AnnouncerSession,
+  MAXIMUM_CONNECT_ATTEMPTS,
   SPOKEN_NOTICE_MAX_AGE_MS,
   SpokenNoticeAnnouncer,
 } from "../src/renderer/spoken-notices";
@@ -203,7 +205,7 @@ test("a notice riding the developer's call never closes it", () => {
   assert.equal(session.closes, 0);
 });
 
-test("a call that cannot open drops the queue rather than retrying into a loop", async () => {
+test("a refused call keeps the backlog and speaks it on the retry", async () => {
   const session = fakeSession();
   session.connectOpens = false;
   const timers = fakeTimers();
@@ -213,13 +215,103 @@ test("a call that cannot open drops the queue rather than retrying into a loop",
   await Promise.resolve();
   subject.onStatus(REALTIME_STATUS.UNAVAILABLE);
 
-  // A later notice tries again fresh; the stale queue did not accumulate.
+  // The refusal armed the retry clock instead of emptying the queue.
+  assert.equal(session.connects, 1);
+  assert.equal(timers.armed(), 1);
+  assert.deepEqual(timers.delays, [ANNOUNCER_RETRY_DELAY_MS]);
+
+  // The rate limit lifted; the retry delivers the same notice.
+  session.connectOpens = true;
+  timers.fire();
+  await Promise.resolve();
+  assert.equal(session.connects, 2);
+  assert.deepEqual(
+    session.spoken.map((item) => item.providerSessionId),
+    ["a"],
+  );
+});
+
+test("a backlog that outlives its attempts is dropped, not retried into a loop", async () => {
+  const session = fakeSession();
+  session.connectOpens = false;
+  const timers = fakeTimers();
+  const subject = announcer(session, timers);
+
+  subject.enqueue([speech("a")]);
+  await Promise.resolve();
+  subject.onStatus(REALTIME_STATUS.UNAVAILABLE);
+  for (let attempt = 1; attempt < MAXIMUM_CONNECT_ATTEMPTS; attempt += 1) {
+    timers.fire();
+    await Promise.resolve();
+    subject.onStatus(REALTIME_STATUS.UNAVAILABLE);
+  }
+  assert.equal(session.connects, MAXIMUM_CONNECT_ATTEMPTS);
+
+  // The final refusal spent the attempts: the backlog is already dropped and
+  // no clock is left ticking for it.
+  assert.equal(timers.armed(), 0);
+  timers.fire();
+  await Promise.resolve();
+  assert.equal(session.connects, MAXIMUM_CONNECT_ATTEMPTS);
+
+  // A later notice is a fresh backlog with fresh attempts.
   session.connectOpens = true;
   subject.enqueue([speech("b")]);
   await Promise.resolve();
   assert.deepEqual(
     session.spoken.map((item) => item.providerSessionId),
     ["b"],
+  );
+});
+
+test("a notice arriving right after a spent backlog is kept, not dropped with it", async () => {
+  const session = fakeSession();
+  session.connectOpens = false;
+  const timers = fakeTimers();
+  const subject = announcer(session, timers);
+
+  subject.enqueue([speech("a")]);
+  await Promise.resolve();
+  for (let attempt = 1; attempt < MAXIMUM_CONNECT_ATTEMPTS; attempt += 1) {
+    timers.fire();
+    await Promise.resolve();
+  }
+  assert.equal(session.connects, MAXIMUM_CONNECT_ATTEMPTS);
+
+  // Fresh news arriving before any clock ticks must find a fresh counter,
+  // not die against the one the spent backlog left behind.
+  session.connectOpens = true;
+  subject.enqueue([speech("b")]);
+  await Promise.resolve();
+  assert.deepEqual(
+    session.spoken.map((item) => item.providerSessionId),
+    ["b"],
+  );
+});
+
+test("a backlog stranded by a call that ended is picked up by the retry clock", async () => {
+  const session = fakeSession();
+  session.microphone = true;
+  session.setStatus(REALTIME_STATUS.RESPONDING);
+  const timers = fakeTimers();
+  const subject = announcer(session, timers);
+
+  // Arrives mid-reply on the developer's call and waits its turn.
+  subject.enqueue([speech("a")]);
+  assert.deepEqual(session.spoken, []);
+
+  // The developer hangs up before the turn ends; the backlog survives.
+  session.microphone = false;
+  session.setStatus(REALTIME_STATUS.IDLE);
+  subject.onStatus(REALTIME_STATUS.IDLE);
+  assert.equal(timers.armed(), 1);
+
+  timers.fire();
+  await Promise.resolve();
+  assert.equal(session.connects, 1);
+  assert.deepEqual(
+    session.spoken.map((item) => item.providerSessionId),
+    ["a"],
   );
 });
 

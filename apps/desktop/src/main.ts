@@ -1660,7 +1660,14 @@ async function reviewSessionAttention(): Promise<void> {
   if (!attentionReviewer || attentionReviewRunning) return;
   attentionReviewRunning = true;
   try {
-    const reviews = await attentionReviewer.review(sessionRegistry.list());
+    // Only sessions still worth a row are worth a model call: an attention
+    // decision about a session with no row surfaces nowhere, and the registry
+    // holds every conversation ever observed — reviewing all of it sent an
+    // update about each one to OpenAI on every launch, hundreds of requests
+    // that rate-limited the same key the voice opens calls with.
+    const reviews = await attentionReviewer.review(
+      rosterRelevantSessions(sessionRegistry.list(), Date.now()),
+    );
     for (const review of reviews) {
       sessionRegistry.setAttention(review, review.decision);
     }
