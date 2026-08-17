@@ -232,6 +232,39 @@ export function announcerNotices(speech: readonly AttentionSpeech[]): AttentionS
 }
 
 /**
+ * The session one batch of attention speech leaves under discussion: the
+ * newest mention, because it is the one a bare "that chat" a moment later
+ * points back at. Every item counts, however it reached the developer —
+ * spoken on an open call, read out on Luke's own, or only shown as a popup —
+ * since each is a session Luke just told them about. Deterministic on both
+ * sides: the deciders behind the speech are the status edge and the standing
+ * ask, and picking the newest is arithmetic, so no model output chooses what
+ * the reference points at.
+ */
+export function latestSpeechReference(
+  speech: readonly AttentionSpeech[],
+): SessionIdentity | undefined {
+  let latest: AttentionSpeech | undefined;
+  for (const item of speech) {
+    if (latest === undefined || item.decidedAt >= latest.decidedAt) latest = item;
+  }
+  return latest
+    ? { providerId: latest.providerId, providerSessionId: latest.providerSessionId }
+    : undefined;
+}
+
+/**
+ * The session one carried act is aimed at, when it is aimed at one at all. An
+ * act the developer just asked of a session makes it the session under
+ * discussion as surely as an announcement does — "read me that transcript"
+ * is followed by "open that chat" often enough — and a workspace creation
+ * aims at no session, so it moves the reference not at all.
+ */
+export function carriedSessionIdentity(action: CarriedSessionAction): SessionIdentity | undefined {
+  return "identity" in action ? action.identity : undefined;
+}
+
+/**
  * The other half of {@link announcerNotices}: an unbidden evaluator summary is
  * a model's words on a session nobody asked about, so it keeps its original
  * bound — spoken only on a call the developer opened themselves.
@@ -357,6 +390,25 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   const workspaceProjectDefaultsRef = useRef(options.workspaceProjectDefaults);
   const guideRef = useRef<AppGuideSnapshot>(EMPTY_APP_GUIDE);
   const issuesRef = useRef<readonly TrackedIssue[] | undefined>(undefined);
+  /**
+   * The session under discussion, surviving here across calls: an announcement
+   * is often read out on Luke's own speak-only call, which the talk-key press
+   * tears down on its way to opening the developer's — and "open that chat"
+   * arrives on the call that never heard the announcement. The session's own
+   * copy goes with its teardown; this one re-feeds the next call.
+   */
+  const sessionReferenceRef = useRef<SessionIdentity | undefined>(undefined);
+
+  /**
+   * Moves the session under discussion, when there is somewhere to move it.
+   * Nothing here ever clears it — a reference whose session stops being
+   * observed withdraws itself against the roster instead.
+   */
+  const rememberSessionReference = useCallback((identity: SessionIdentity | undefined) => {
+    if (!identity) return;
+    sessionReferenceRef.current = identity;
+    voiceSession.current?.updateSessionReference(identity);
+  }, []);
 
   const ensureVoiceSession = useCallback((): RealtimeVoiceSession => {
     voiceSession.current ??= new RealtimeVoiceSession({
@@ -364,8 +416,12 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       // The same bridge calls the rows use — the composer, the chips, and the
       // press that opens a session: a spoken ask is a third way to ask for the
       // same act, behind the same gauntlet in the main process.
-      carryAction: (action: CarriedSessionAction) =>
-        dispatchByKind(action, {
+      carryAction: (action: CarriedSessionAction) => {
+        // The act's target becomes the session under discussion before the
+        // outcome is known: a refusal still leaves the developer talking
+        // about that session, and the next turn may point back at it.
+        rememberSessionReference(carriedSessionIdentity(action));
+        return dispatchByKind(action, {
           [SESSION_TOOL_KIND.MESSAGE]: (act) =>
             window.sidecar.sendSessionMessage(act.identity, act.text),
           [SESSION_TOOL_KIND.CONTROL]: (act) =>
@@ -394,7 +450,8 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
           [SESSION_TOOL_KIND.OPEN]: (act) => optionsRef.current.openSession(act.identity),
           [SESSION_TOOL_KIND.READ_TRANSCRIPT]: (act) =>
             window.sidecar.readSessionTranscript(act.identity),
-        }),
+        });
+      },
       // The asks about Luke himself — a settings change, the panel shown —
       // behind the same gauntlet: validated against the guide before this is
       // called, and performed by the same handlers the panel's controls use.
@@ -410,7 +467,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       onCaption: setVoiceCaption,
     });
     return voiceSession.current;
-  }, [setVoiceStatus]);
+  }, [rememberSessionReference, setVoiceStatus]);
 
   /**
    * The announcer that lets Luke speak into silence: it queues the notices the
@@ -483,6 +540,10 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     }
     if (await session.connect()) {
       session.updateSessions(sessionsRef.current);
+      // After the roster, which it is rendered against. The reference outlives
+      // the calls themselves on purpose: the announcement it points back at
+      // may have been read out on the speak-only call this one just replaced.
+      session.updateSessionReference(sessionReferenceRef.current);
       session.updateWorkspaceProjects(
         workspaceProjectsRef.current,
         defaultWorkspaceProviderRef.current,
@@ -744,13 +805,17 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
 
   useEffect(() => {
     return window.sidecar.onAttentionSpeech((speech) => {
+      // However the mention reaches the developer — spoken on this call, read
+      // out on Luke's own, or only shown as a popup — its session is now the
+      // one under discussion, and the next turn may say just "that chat".
+      rememberSessionReference(latestSpeechReference(speech));
       const notices = announcerNotices(speech);
       if (notices.length > 0) ensureAnnouncer().enqueue(notices);
       const session = voiceSession.current;
       if (!session?.microphoneCall) return;
       for (const item of evaluatorSummaries(speech)) session.speak(item);
     });
-  }, [ensureAnnouncer]);
+  }, [ensureAnnouncer, rememberSessionReference]);
 
   // The announcer paces itself by the session's status: READY is when a queued
   // sentence can speak and when an empty queue starts the walk toward closing

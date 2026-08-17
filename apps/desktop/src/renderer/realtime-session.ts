@@ -38,8 +38,13 @@ import {
   type RealtimeStatus,
   type RealtimeToolFamily,
   realtimeToolFamily,
+  SESSION_REFERENCE_WITHDRAWN_TEXT,
+  type SessionIdentity,
   sessionContextEvents,
   sessionContextText,
+  sessionReferenceContextEvents,
+  sessionReferenceContextText,
+  sessionReferenceWithdrawnEvents,
   sessionToolAction,
   type TrackedIssue,
   truncateResponseEvents,
@@ -78,11 +83,13 @@ export const VOICE_IDLE_TIMEOUT_MS = 10 * 60_000;
 
 /**
  * The order context is flushed in, so a turn's items land the same way every
- * time: what Luke can see, then where he can create, then what he knows about
- * himself, then what the tracker lists.
+ * time: what Luke can see, then which session is under discussion, then where
+ * he can create, then what he knows about himself, then what the tracker
+ * lists.
  */
 const CONTEXT_FLUSH_ORDER: readonly ContextItemKind[] = [
   CONTEXT_ITEM_KIND.SESSIONS,
+  CONTEXT_ITEM_KIND.SESSION_REFERENCE,
   CONTEXT_ITEM_KIND.WORKSPACE_PROJECTS,
   CONTEXT_ITEM_KIND.APP_GUIDE,
   CONTEXT_ITEM_KIND.ISSUES,
@@ -242,6 +249,16 @@ export class RealtimeVoiceSession {
    * session Luke was actually shown.
    */
   #sessions: readonly NormalizedSession[] = [];
+  /**
+   * The session under discussion, as the caller last reported it: the one Luke
+   * most recently announced or was asked to act on. Only an identity — the
+   * words a turn reads are rendered from the roster at flush time, so a
+   * renamed session is described as it is now. The caller keeps its own copy
+   * and re-reports it after a reconnect, because an announcement is often made
+   * on Luke's own speak-only call and the ask that points back at it arrives
+   * on the developer's call that replaces it.
+   */
+  #sessionReference: SessionIdentity | undefined;
   /**
    * The app guide as last provided, kept whole for the same reason the roster
    * is: it is what a spoken ask about Luke himself is validated against, and a
@@ -925,6 +942,7 @@ export class RealtimeVoiceSession {
     });
     this.#stream = undefined;
     this.#sessions = [];
+    this.#sessionReference = undefined;
     this.#guide = EMPTY_APP_GUIDE;
     this.#workspaceProjects = [];
     this.#issues = undefined;
@@ -1156,6 +1174,58 @@ export class RealtimeVoiceSession {
     this.#sessions = sessions;
     this.#rememberContext(CONTEXT_ITEM_KIND.SESSIONS, sessionContextText(sessions), (itemId) =>
       sessionContextEvents(sessions, itemId),
+    );
+    // The reference is rendered from the roster, so a fresh roster re-renders
+    // it: a renamed session keeps its line true, and one that left the roster
+    // withdraws it.
+    this.#rememberSessionReference();
+  }
+
+  /**
+   * Tells the conversation which session is under discussion — the one Luke
+   * most recently announced to the developer or acted on at their ask. It is
+   * what lets a bare "that chat" resolve to an identity a tool call can name:
+   * the mention it points back at carried only a title, and may have been
+   * spoken on Luke's own call, which the developer's own replaced. Context on
+   * the roster's own terms, flushed with it at the turn that reads it.
+   */
+  updateSessionReference(reference: SessionIdentity | undefined): void {
+    this.#sessionReference = reference;
+    this.#rememberSessionReference();
+  }
+
+  /**
+   * Renders the reference against the roster as both now stand. A reference
+   * whose session is not observed points at nothing a call could name: a
+   * conversation never told of one is told nothing, and one holding a line is
+   * told the line no longer stands — the issues roster's own withdrawal rule.
+   */
+  #rememberSessionReference(): void {
+    const reference = this.#sessionReference;
+    const session = reference
+      ? this.#sessions.find(
+          (candidate) =>
+            candidate.providerId === reference.providerId &&
+            candidate.providerSessionId === reference.providerSessionId,
+        )
+      : undefined;
+    if (session) {
+      this.#rememberContext(
+        CONTEXT_ITEM_KIND.SESSION_REFERENCE,
+        sessionReferenceContextText(session),
+        (itemId) => sessionReferenceContextEvents(session, itemId),
+      );
+      return;
+    }
+    if (!this.#contextPending.has(CONTEXT_ITEM_KIND.SESSION_REFERENCE)) return;
+    if (!this.#contextLive.has(CONTEXT_ITEM_KIND.SESSION_REFERENCE)) {
+      this.#contextPending.delete(CONTEXT_ITEM_KIND.SESSION_REFERENCE);
+      return;
+    }
+    this.#rememberContext(
+      CONTEXT_ITEM_KIND.SESSION_REFERENCE,
+      SESSION_REFERENCE_WITHDRAWN_TEXT,
+      (itemId) => sessionReferenceWithdrawnEvents(itemId),
     );
   }
 

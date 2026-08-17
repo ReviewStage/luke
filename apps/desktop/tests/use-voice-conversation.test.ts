@@ -7,12 +7,15 @@ import {
   REALTIME_STATUS,
   REALTIME_VOICE,
   REALTIME_VOICE_SPEED,
+  SESSION_TOOL_KIND,
 } from "@sidecar/core";
 import {
   activeVoiceStream,
   announcerNotices,
+  carriedSessionIdentity,
   evaluatorSummaries,
   FIXTURE_SPEAKING_CAPTION,
+  latestSpeechReference,
   liveSpeedApplies,
   lukeCaptionToShow,
   talkKeyPress,
@@ -275,4 +278,38 @@ test("edges and answered asks go to the announcer; unbidden summaries keep to an
   const mixed = [edge, answered, summary];
   assert.deepEqual(announcerNotices(mixed), [edge, answered]);
   assert.deepEqual(evaluatorSummaries(mixed), [summary]);
+});
+
+test("the newest mention is what a bare 'that chat' points back at", () => {
+  // Every source counts — the evaluator's readout here is as much a mention as
+  // the edges around it — and the newest by decision wins, whatever order the
+  // batch arrived in.
+  const older = { ...speech(ATTENTION_SPEECH_SOURCE.STATUS_EDGE, "checkout"), decidedAt: 1_000 };
+  const newest = { ...speech(ATTENTION_SPEECH_SOURCE.EVALUATOR, "payments"), decidedAt: 3_000 };
+  const newer = { ...speech(ATTENTION_SPEECH_SOURCE.NOTICE_REQUEST, "schema"), decidedAt: 2_000 };
+
+  assert.deepEqual(latestSpeechReference([older, newest, newer]), {
+    providerId: "claude-code",
+    providerSessionId: "payments",
+  });
+  // An empty batch moves the reference not at all.
+  assert.equal(latestSpeechReference([]), undefined);
+});
+
+test("a carried act aims the reference at its session; a creation aims at none", () => {
+  const identity = { providerId: "claude-code", providerSessionId: "session-a" };
+
+  assert.deepEqual(carriedSessionIdentity({ kind: SESSION_TOOL_KIND.OPEN, identity }), identity);
+  assert.deepEqual(
+    carriedSessionIdentity({ kind: SESSION_TOOL_KIND.MESSAGE, identity, text: "carry on" }),
+    identity,
+  );
+  assert.equal(
+    carriedSessionIdentity({
+      kind: SESSION_TOOL_KIND.CREATE_WORKSPACE,
+      providerId: "conductor",
+      providerProjectId: "project-1",
+    }),
+    undefined,
+  );
 });
