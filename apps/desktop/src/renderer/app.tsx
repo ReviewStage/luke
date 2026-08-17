@@ -104,7 +104,7 @@ import { useBootstrapRacedChannel } from "./use-bootstrap-raced-channel";
 import { panelEntryOpen, usePanelEntry } from "./use-panel-entry";
 import { usePanelPresentation } from "./use-panel-presentation";
 import { useStateWithRef } from "./use-state-with-ref";
-import { useVoiceConversation } from "./use-voice-conversation";
+import { useVoiceConversation, voiceErrorToShow } from "./use-voice-conversation";
 import {
   outputSilent,
   VOLUME_HINT_HEIGHT,
@@ -1222,7 +1222,7 @@ export function App(): React.JSX.Element {
     analyser,
     microphoneStatus,
     setMicrophoneStatus,
-    microphoneError,
+    voiceError,
     voiceStatus,
     talkOpening,
     voiceHotkey,
@@ -1649,6 +1649,16 @@ export function App(): React.JSX.Element {
   const fixtureSpeaking = bootstrap.profile === "speaking" || fixtureMuted;
   const hasAudioSignal = fixtureSpeaking || analyser !== undefined;
   const outputIsSilent = outputSilent(outputAudio);
+  // A failed call is reported where its reply would have landed: on the
+  // caption strip, under the field or the key press that asked. It yields to
+  // live words, so it can never be drawn over a reply being spoken.
+  const voiceErrorNotice = voiceErrorToShow({
+    fixtureSpeaking,
+    voice: voiceTurn,
+    error: voiceError,
+  });
+  const captionText = lukeCaption ?? voiceErrorNotice;
+  const captionIsError = lukeCaption === undefined && voiceErrorNotice !== undefined;
   // The hint rides the caption it explains, and only over a silence the
   // helper actually reported. "Got it" quiets it for this stretch of silence
   // and any that follows too soon; the captions above it stay either way.
@@ -1668,7 +1678,6 @@ export function App(): React.JSX.Element {
       : CREDENTIAL_SOURCE.NONE;
   const microphone: MicrophoneControl = {
     status: microphoneStatus,
-    ...(microphoneError ? { error: microphoneError } : {}),
     voiceAvailable: (settings ?? bootstrap.settings).voiceAvailable,
     onRequest: () => void requestMicrophoneAccess(),
     onOpenSettings: () => window.sidecar.openMicrophoneSettings(),
@@ -1708,9 +1717,10 @@ export function App(): React.JSX.Element {
       // Whose turn it is, so the capsule can make room for a meter it has to
       // draw beside the face rather than in place of it.
       data-voice={voiceTurn}
-      // Whether there are words to draw under the shape, so the surface can
-      // grow the room they are drawn in.
-      data-caption={String(Boolean(lukeCaption))}
+      // Whether there are words to draw under the shape — a caption or a
+      // failure borrowing its strip — so the surface can grow the room they
+      // are drawn in.
+      data-caption={String(Boolean(captionText))}
       // Whether those words need the volume hint under them, which shares the
       // caption block's room.
       data-volume-hint={String(volumeHint)}
@@ -1806,11 +1816,17 @@ export function App(): React.JSX.Element {
           capsule's height — and always mounted, like the count's caption, so
           both edges of its fade can run. The inner text is what is measured:
           its wrapped height is the only honest answer to how much room the
-          words need. Hidden from readers: it duplicates what is already
-          audible. */}
-      <span className="voice-caption" ref={captionElement} aria-hidden="true">
+          words need. Hidden from readers while it captions speech — it
+          duplicates what is already audible — and announced as a status line
+          when it carries a failure, which was never audible at all. */}
+      <span
+        className="voice-caption"
+        ref={captionElement}
+        data-error={String(captionIsError)}
+        {...(captionIsError ? { role: "status" } : { "aria-hidden": true })}
+      >
         <span className="voice-caption-text" ref={captionTextElement}>
-          {lukeCaption}
+          {captionText}
         </span>
       </span>
 

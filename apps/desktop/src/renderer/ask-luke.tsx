@@ -59,7 +59,8 @@ export type AskHandler = (text: string) => Promise<string | undefined>;
  * The refusal is diagnosed from the same two facts the settings rows draw —
  * how far the voice loop got, and what the system said about the microphone —
  * so the sentence under the field and the rows in settings can never tell two
- * different stories.
+ * different stories. A failure's own message is not repeated here: it lands
+ * on the caption strip directly below, where the reply would have.
  */
 export function askRefusal(status: RealtimeStatus, microphone: MicrophoneStatus): string {
   if (status === REALTIME_STATUS.LISTENING) {
@@ -75,7 +76,7 @@ export function askRefusal(status: RealtimeStatus, microphone: MicrophoneStatus)
     return "Luke answers out loud, so the conversation needs the microphone — allow it in Settings.";
   }
   if (status === REALTIME_STATUS.FAILED) {
-    return "The conversation could not be opened — Settings says why.";
+    return "The conversation could not be opened — the notice below says why.";
   }
   return "Luke could not take that just now.";
 }

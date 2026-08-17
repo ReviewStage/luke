@@ -644,6 +644,13 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
               "conversation says so rather than quietly forgetting. Nothing is written down " +
               "between conversations.",
           },
+          {
+            label: "When a call fails",
+            detail:
+              "Why a call failed or ended is shown for a few seconds where the captions are " +
+              "drawn — under the housing, or at the open panel's foot — and then fades. " +
+              "Nothing about it lives in Settings; trying again is the only fix to reach for.",
+          },
         ]
       : [
           {

@@ -19,6 +19,7 @@ import {
   talkOpeningHolds,
   typedAskHolds,
   VOICE_RESTART,
+  voiceErrorToShow,
   voiceExchangeActive,
   voiceRestartAction,
   waveformVoice,
@@ -95,6 +96,31 @@ test("Luke's caption is drawn only on his turn, and only with a reason to read i
     lukeCaptionToShow({ ...shown, captionsEnabled: false }),
     undefined,
     "the preference is about speech being duplicated, and with it off there is no reason to read",
+  );
+});
+
+test("a voice failure is drawn on the strip, but never over a live turn or a fixture", () => {
+  const failure = {
+    fixtureSpeaking: false,
+    voice: undefined,
+    error: "The voice service refused the call (status 401).",
+  };
+  assert.equal(voiceErrorToShow(failure), failure.error);
+  assert.equal(voiceErrorToShow({ ...failure, error: undefined }), undefined);
+  assert.equal(
+    voiceErrorToShow({ ...failure, voice: WAVEFORM_VOICE.LUKE }),
+    undefined,
+    "words being said are the thing to read over words that already failed",
+  );
+  assert.equal(
+    voiceErrorToShow({ ...failure, voice: WAVEFORM_VOICE.DEVELOPER }),
+    undefined,
+    "the developer's own turn is not the moment to report an old fault",
+  );
+  assert.equal(
+    voiceErrorToShow({ ...failure, fixtureSpeaking: true }),
+    undefined,
+    "a fixture has no call to fail, so a capture run never draws one",
   );
 });
 
