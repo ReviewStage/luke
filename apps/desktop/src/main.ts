@@ -117,6 +117,7 @@ import { HOTKEY_RANK, HotkeyRegistrar } from "./hotkey-registrar";
 import { JulesSessionAdapter } from "./jules-adapter";
 import { LinearIssueTracker } from "./linear-tracker";
 import { MediaDuckController } from "./media-duck";
+import { MicrophoneRouteWatcher } from "./microphone-route";
 import { openAiAttentionEvaluator } from "./openai-attention-evaluator";
 import {
   openAiRealtimeCredentials,
@@ -140,6 +141,7 @@ import {
   type AppBootstrap,
   channels,
   isSettingsResetScope,
+  type MicrophoneRoute,
   type MicrophoneStatus,
   type ObservedAccountCalendars,
   type OutputAudioState,
@@ -425,6 +427,14 @@ const updateService = new UpdateService({
  */
 let outputAudio: OutputAudioState | undefined;
 let outputVolumeWatcher: OutputVolumeWatcher | undefined;
+/**
+ * Where the developer's voice would be captured from, as last read, and the
+ * helper that reads it. The state lives here so the renderer's ask can be
+ * answered at once while a fresh probe rides behind it; `undefined` is
+ * "cannot be read", which the renderer must take as the browser's default.
+ */
+let microphoneRoute: MicrophoneRoute | undefined;
+let microphoneRouteWatcher: MicrophoneRouteWatcher | undefined;
 
 function rendererUrl(): string {
   return pathToFileURL(path.join(__dirname, "renderer", "index.html")).href;
@@ -472,6 +482,25 @@ function startOutputVolumeWatch(): void {
     onUnavailable: () => send(undefined),
   });
   if (!outputVolumeWatcher.start()) outputVolumeWatcher = undefined;
+}
+
+/**
+ * Starts watching where the developer's voice would be captured from, under
+ * the same rule as the output watch: read-only, and not in a fixture or
+ * capture run. What it learns decides only which device the renderer asks the
+ * browser to open when a press takes a turn.
+ */
+function startMicrophoneRouteWatch(): void {
+  if (!runMode.observesProviders) return;
+  microphoneRouteWatcher = new MicrophoneRouteWatcher({
+    onRoute: (route) => {
+      microphoneRoute = route;
+    },
+    onUnavailable: () => {
+      microphoneRoute = undefined;
+    },
+  });
+  if (!microphoneRouteWatcher.start()) microphoneRouteWatcher = undefined;
 }
 
 let tray: Tray | undefined;
@@ -1106,6 +1135,14 @@ function registerIpc(): void {
   ipcMain.handle(channels.requestMicrophone, async (event) => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
     return requestMicrophone();
+  });
+
+  ipcMain.handle(channels.microphoneRoute, (event) => {
+    if (!trustedSender(event)) throw new Error("Untrusted renderer");
+    // Answer with what is known and ask again behind the answer: the next
+    // press then sees a lid that closed with no device change to announce it.
+    microphoneRouteWatcher?.probe();
+    return microphoneRoute;
   });
 
   // The renderer can replace or clear a provider's credential but never reads
@@ -3004,6 +3041,7 @@ if (!app.requestSingleInstanceLock()) {
     // Read-only, like everything else that watches: what it learns decides
     // what the renderer draws while Luke speaks unheard, and nothing more.
     startOutputVolumeWatch();
+    startMicrophoneRouteWatch();
     panels.reconcile();
     configurePermissions();
     startSessionObservation();
@@ -3040,6 +3078,8 @@ app.on("will-quit", () => {
   // The same rule: a process of Luke's own does not outlive the app.
   outputVolumeWatcher?.stop();
   outputVolumeWatcher = undefined;
+  microphoneRouteWatcher?.stop();
+  microphoneRouteWatcher = undefined;
   // The duck helper outlives this by one fade: closing its stdin is what asks
   // it to bring the players back up, so quitting mid-sentence costs the user
   // nothing.

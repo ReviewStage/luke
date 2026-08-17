@@ -20,6 +20,7 @@ import { type RefObject, useCallback, useEffect, useRef, useState } from "react"
 import type { MicrophoneStatus, SessionOpenResult, VoiceHotkeyState } from "../shared/contracts";
 import { TALK_KEY_RELEASE, talkKeyRelease } from "../shared/voice-hotkey";
 import { askRefusal } from "./ask-luke";
+import { openPreferredMicrophone } from "./microphone-choice";
 import { type AppActionCarrier, RealtimeVoiceSession } from "./realtime-session";
 import { SpokenNoticeAnnouncer } from "./spoken-notices";
 import { useStateWithRef } from "./use-state-with-ref";
@@ -476,6 +477,15 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   const ensureVoiceSession = useCallback((): RealtimeVoiceSession => {
     voiceSession.current ??= new RealtimeVoiceSession({
       requestConnection: () => window.sidecar.requestRealtimeCredential(),
+      // The press's device, chosen by facts read natively: the Mac's own
+      // microphone where a Bluetooth headset would otherwise pay for the
+      // capture with its music codec, the browser's default everywhere else.
+      requestMicrophoneStream: () =>
+        openPreferredMicrophone({
+          route: () => window.sidecar.getMicrophoneRoute(),
+          enumerate: () => navigator.mediaDevices.enumerateDevices(),
+          open: (audio) => navigator.mediaDevices.getUserMedia({ audio, video: false }),
+        }),
       // The same bridge calls the rows use — the composer, the chips, and the
       // press that opens a session: a spoken ask is a third way to ask for the
       // same act, behind the same gauntlet in the main process.

@@ -456,7 +456,9 @@ function askKeyFact(askKey: string | undefined): AppGuideFact {
 const MICROPHONE_DETAIL: Record<MicrophoneStatus, string> = {
   granted:
     "Granted. The microphone opens only when the talk key takes a turn, sends nothing after " +
-    "the key comes up, and closes once the exchange settles. Typing to Luke never opens it.",
+    "the key comes up, and closes once the exchange settles. Typing to Luke never opens it. " +
+    "When the system input is a Bluetooth headset and the Mac's lid is open, Luke listens " +
+    "through the Mac's own microphone so the headset keeps its full music quality.",
   denied:
     "Denied. It can only be granted back in System Settings, under Privacy & Security, Microphone.",
   restricted: "Restricted by a system policy, which only the system's manager can change.",

@@ -165,6 +165,18 @@ Trust constraints:
   paced for reading rather than for the voice, because into a mute the caption
   is the speech — and a hint asking for volume. Luke never changes the system
   volume himself; turning it up stays the user's own act on their own keys.
+- The input side is read the same way: a native helper reports where the
+  developer's voice would be captured from — the default input device's
+  transport, whether the machine has a built-in microphone and what it is
+  named, and whether the lid over it is open — nothing else, and it can write
+  nothing. No audio is ever read. What it learns decides exactly one act:
+  which device the renderer asks the browser to open when a press takes a
+  turn, so a Bluetooth headset is not pulled onto its call codec while the
+  Mac's own microphone can listen, and is listened to itself when a shut lid
+  would muffle the Mac's. The capture device itself stays bound to the turn
+  the press opened — opened by the press, closed when the exchange settles —
+  and never outlives it; typed asks never open one at all. An unreadable
+  route means the browser's default device, never a refusal to listen.
 - The update check is the one request Luke makes with no user-supplied key at
   all: an unauthenticated read of this repository's latest release name from
   GitHub's public API, on a timer of its own — always on, like the

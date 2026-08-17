@@ -23,6 +23,7 @@ const bridge: AppBridge = {
     ipcRenderer.send(channels.setPointerInterception, interceptsPointer);
   },
   requestMicrophone: invoke(channels.requestMicrophone),
+  getMicrophoneRoute: invoke(channels.microphoneRoute),
   openMicrophoneSettings: () => ipcRenderer.send(channels.openMicrophoneSettings),
   setProviderApiKey: invoke(channels.setProviderApiKey),
   setVoice: invoke(channels.setVoice),

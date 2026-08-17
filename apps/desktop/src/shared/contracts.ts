@@ -328,6 +328,42 @@ export interface OutputAudioState {
   volume: number;
 }
 
+/** How the default input device reaches the Mac, as CoreAudio classifies it. */
+export const MICROPHONE_TRANSPORT = {
+  BUILT_IN: "built-in",
+  BLUETOOTH: "bluetooth",
+  OTHER: "other",
+  /** No input device at all. */
+  NONE: "none",
+} as const;
+
+export type MicrophoneTransport = (typeof MICROPHONE_TRANSPORT)[keyof typeof MICROPHONE_TRANSPORT];
+
+/** The lid over the built-in microphone. A desktop keeps no lid: `unknown`. */
+export const LID_STATE = {
+  OPEN: "open",
+  SHUT: "shut",
+  UNKNOWN: "unknown",
+} as const;
+
+export type LidState = (typeof LID_STATE)[keyof typeof LID_STATE];
+
+/**
+ * Where the developer's voice would be captured from: the default input's
+ * transport, the built-in microphone's name when the machine has one, and
+ * whether the lid over it is open. Read by a helper that reads nothing else
+ * and can write nothing. What it decides is bounded to one act — which device
+ * the renderer asks the browser to open when a press takes a turn, so a
+ * Bluetooth headset keeps its music codec while the Mac's own microphone
+ * listens, and is listened to itself when a shut lid would muffle the Mac's.
+ * Absent wherever it cannot be read, and absence means the browser's default.
+ */
+export interface MicrophoneRoute {
+  defaultTransport: MicrophoneTransport;
+  lid: LidState;
+  builtInName?: string;
+}
+
 /** A rejected update reports why without echoing the submitted value. */
 export interface SettingsUpdateResult {
   settings: AppSettings;
@@ -476,6 +512,13 @@ export interface AppBridge {
   setExpanded(expanded: boolean, focus?: boolean): Promise<WindowMode>;
   setPointerInterception(interceptsPointer: boolean): void;
   requestMicrophone(): Promise<MicrophoneStatus>;
+  /**
+   * Where the developer's voice would be captured from, as last read — and a
+   * fresh read is asked for behind the answer, so the next press sees a lid
+   * that has closed meanwhile. `undefined` wherever the route cannot be read,
+   * which the caller must take as "use the browser's default".
+   */
+  getMicrophoneRoute(): Promise<MicrophoneRoute | undefined>;
   /**
    * Opens Privacy & Security in System Settings, where the system's own grant
    * lives. Luke can ask for the microphone and stop using it; only the user can
@@ -831,6 +874,7 @@ export const channels = {
   setExpanded: "app:set-expanded",
   setPointerInterception: "app:set-pointer-interception",
   requestMicrophone: "app:request-microphone",
+  microphoneRoute: "app:microphone-route",
   openMicrophoneSettings: "app:open-microphone-settings",
   setProviderApiKey: "app:set-provider-api-key",
   setVoice: "app:set-voice",

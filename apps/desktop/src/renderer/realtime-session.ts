@@ -56,6 +56,7 @@ import {
   workspaceProjectContextText,
 } from "@sidecar/core";
 import { workspaceAgentModels } from "../shared/workspace-agents";
+import { MICROPHONE_PROCESSING } from "./microphone-choice";
 
 const SDP_CONTENT_TYPE = "application/sdp";
 
@@ -640,26 +641,16 @@ export class RealtimeVoiceSession {
     return false;
   }
 
-  /** How the device is asked for — only ever on behalf of a press. */
+  /**
+   * How the device is asked for — only ever on behalf of a press. The caller
+   * usually injects the route-aware opener; the fallback opens the browser's
+   * default with the same processing (`MICROPHONE_PROCESSING` says why echo
+   * cancellation is off), so a bare session still captures correctly.
+   */
   #requestStream(): Promise<MediaStream> {
     return (
       this.#options.requestMicrophoneStream?.() ??
-      navigator.mediaDevices.getUserMedia({
-        // Echo cancellation is deliberately off. Push-to-talk is half-duplex
-        // by construction — a press interrupts the reply before the track
-        // enables, and `speak` refuses a busy turn — so Luke is never audible
-        // while the microphone is, and there is no echo to cancel. What the
-        // constraint would buy instead is Chromium's system echo canceller,
-        // which on macOS runs the capture through the OS's own voice
-        // processing — and the OS then ducks and thins every other app's
-        // audio for as long as the device is open. That processing, not the
-        // media duck (which only moves a volume and puts it back), is what
-        // made music sound degraded from the moment a conversation began, so
-        // the capture stays on the plain path. Gain and noise handling are
-        // Chromium's own in-process passes and touch nothing but this stream.
-        audio: { autoGainControl: true, echoCancellation: false, noiseSuppression: true },
-        video: false,
-      })
+      navigator.mediaDevices.getUserMedia({ audio: { ...MICROPHONE_PROCESSING }, video: false })
     );
   }
 
