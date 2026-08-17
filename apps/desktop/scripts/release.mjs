@@ -22,6 +22,8 @@ import {
   releaseArtifactDirectory,
   releaseDmgFileName,
   releaseSignatureMatchesIdentity,
+  releaseZipFileName,
+  resolveNotaryCredentials,
   resolveReleaseSigning,
   stapleArguments,
   tiffutilHiDpiArguments,
@@ -43,6 +45,7 @@ if (unknownArguments.length > 0) {
 
 const skipNotarization = process.argv.includes("--skip-notarization");
 const signing = resolveReleaseSigning(process.env);
+const notaryCredentials = skipNotarization ? undefined : resolveNotaryCredentials(process.env);
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(scriptDirectory, "..");
 const repoRoot = path.resolve(appRoot, "../..");
@@ -203,7 +206,7 @@ try {
   } else {
     let notaryOutput;
     try {
-      notaryOutput = execFileSync("xcrun", notarySubmitArguments(dmgPath), {
+      notaryOutput = execFileSync("xcrun", notarySubmitArguments(dmgPath, notaryCredentials), {
         encoding: "utf8",
         stdio: ["ignore", "pipe", "inherit"],
       });
@@ -218,20 +221,32 @@ try {
     } catch {
       process.stderr.write(notaryOutput);
       throw new Error(
-        "Could not parse the notarization response. Configure credentials with: xcrun notarytool store-credentials luke-notary",
+        "Could not parse the notarization response. Configure credentials with: xcrun notarytool store-credentials luke-notary, or set APPLE_API_KEY_PATH, APPLE_API_KEY_ID, and APPLE_API_ISSUER_ID",
       );
     }
 
     if (submission.status !== "Accepted") {
       process.stderr.write(`Notarization failed with status: ${submission.status ?? "unknown"}\n`);
       if (submission.id) {
-        execFileSync("xcrun", notaryLogArguments(submission.id), { stdio: "inherit" });
+        execFileSync("xcrun", notaryLogArguments(submission.id, notaryCredentials), {
+          stdio: "inherit",
+        });
       }
       throw new Error("Apple did not accept the DMG for notarization");
     }
 
     execFileSync("xcrun", stapleArguments(dmgPath), { stdio: "inherit" });
     runVerificationCommands(verificationCommands);
+
+    // The DMG's notarization covers the app inside it, so the app can carry
+    // its own ticket too — and the zip archived from it is what Squirrel.Mac
+    // will one day update from, so it exists only on the notarized path: an
+    // archive that Gatekeeper would refuse is not a release asset.
+    execFileSync("xcrun", stapleArguments(appPath), { stdio: "inherit" });
+    const zipPath = path.join(artifactDirectory, releaseZipFileName(desktopPackage.version));
+    fs.rmSync(zipPath, { force: true });
+    execFileSync("ditto", ["-c", "-k", "--keepParent", appPath, zipPath], { stdio: "inherit" });
+    process.stdout.write(`Released macOS archive: ${zipPath}\n`);
   }
 
   const sizeInMegabytes = (fs.statSync(dmgPath).size / 1_000_000).toFixed(1);

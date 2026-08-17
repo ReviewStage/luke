@@ -3,6 +3,13 @@ import { DMG_WINDOW } from "../../../design/dmg-window.mjs";
 import { PACKAGED_ARCHITECTURE, resolveSigningMode, SIGNING_MODE } from "./package-config.mjs";
 
 export const NOTARY_KEYCHAIN_PROFILE = "luke-notary";
+// The version-free asset name every release carries beside the versioned DMG,
+// so the download link on the website can point at the latest release forever.
+export const RELEASE_LATEST_DMG_FILE_NAME = "Luke.dmg";
+export const NOTARY_CREDENTIAL_SOURCE = {
+  KEYCHAIN_PROFILE: "keychain-profile",
+  KEY_FILE: "key-file",
+};
 export const RELEASE_VOLUME_NAME = "Luke";
 export const DMG_MOUNT_POINT = `/Volumes/${RELEASE_VOLUME_NAME}`;
 export const DMG_STAGING_ENTRIES = [
@@ -12,6 +19,13 @@ export const DMG_STAGING_ENTRIES = [
 
 export function releaseDmgFileName(version) {
   return `Luke-${version}-${PACKAGED_ARCHITECTURE}.dmg`;
+}
+
+// The zip is the future auto-update path's food — Squirrel.Mac updates from
+// an archive of the app, never a DMG — so every release carries it beside the
+// DMG people actually open.
+export function releaseZipFileName(version) {
+  return `Luke-${version}-macos-${PACKAGED_ARCHITECTURE}.zip`;
 }
 
 export function releaseArtifactDirectory(repoRoot) {
@@ -169,13 +183,45 @@ export function dmgCodesignArguments(identity, dmgPath) {
   return ["--sign", identity, "--timestamp", dmgPath];
 }
 
-export function notarySubmitArguments(dmgPath) {
+// A developer's Mac holds a stored notarytool profile; a CI runner has only
+// the repository secrets, decoded into a key file for the run. Either form
+// names the same App Store Connect key — the env only says where it lives.
+export function resolveNotaryCredentials(env) {
+  const keyPath = env.APPLE_API_KEY_PATH?.trim();
+  const keyId = env.APPLE_API_KEY_ID?.trim();
+  const issuerId = env.APPLE_API_ISSUER_ID?.trim();
+  const provided = [keyPath, keyId, issuerId].filter(Boolean);
+  if (provided.length === 0) {
+    return { source: NOTARY_CREDENTIAL_SOURCE.KEYCHAIN_PROFILE };
+  }
+  if (provided.length < 3) {
+    throw new Error(
+      "APPLE_API_KEY_PATH, APPLE_API_KEY_ID, and APPLE_API_ISSUER_ID must be provided together",
+    );
+  }
+  return { source: NOTARY_CREDENTIAL_SOURCE.KEY_FILE, keyPath, keyId, issuerId };
+}
+
+function notaryCredentialArguments(credentials) {
+  if (credentials.source === NOTARY_CREDENTIAL_SOURCE.KEY_FILE) {
+    return [
+      "--key",
+      credentials.keyPath,
+      "--key-id",
+      credentials.keyId,
+      "--issuer",
+      credentials.issuerId,
+    ];
+  }
+  return ["--keychain-profile", NOTARY_KEYCHAIN_PROFILE];
+}
+
+export function notarySubmitArguments(dmgPath, credentials) {
   return [
     "notarytool",
     "submit",
     dmgPath,
-    "--keychain-profile",
-    NOTARY_KEYCHAIN_PROFILE,
+    ...notaryCredentialArguments(credentials),
     "--wait",
     "--timeout",
     "20m",
@@ -184,8 +230,8 @@ export function notarySubmitArguments(dmgPath) {
   ];
 }
 
-export function notaryLogArguments(submissionId) {
-  return ["notarytool", "log", submissionId, "--keychain-profile", NOTARY_KEYCHAIN_PROFILE];
+export function notaryLogArguments(submissionId, credentials) {
+  return ["notarytool", "log", submissionId, ...notaryCredentialArguments(credentials)];
 }
 
 export function stapleArguments(dmgPath) {
