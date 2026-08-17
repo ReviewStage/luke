@@ -162,9 +162,8 @@ Trust constraints:
   native helper reads the default output device's mute switch and volume —
   nothing else — and can write nothing. What it learns decides only what the
   renderer draws while Luke speaks into that silence: his captions forced on —
-  paced for reading rather than for the voice, and kept on screen after the
-  reply until they could have been read, because into a mute the caption is
-  the speech — and a hint asking for volume. Luke never changes the system
+  paced for reading rather than for the voice, because into a mute the caption
+  is the speech — and a hint asking for volume. Luke never changes the system
   volume himself; turning it up stays the user's own act on their own keys.
 - Keep unsupported capabilities explicit; do not invent fallback controls.
 - Keep Electron renderers sandboxed with context isolation and narrow IPC.

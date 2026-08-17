@@ -1563,7 +1563,6 @@ export function App(): React.JSX.Element {
     voiceTurn,
     lukeCaption,
     captionShownAt,
-    captionHeld,
     announcedSession,
     remoteAudio,
     discardListening,
@@ -1581,7 +1580,6 @@ export function App(): React.JSX.Element {
     voiceCaptions: settings?.voiceCaptions === true,
     voiceAvailable: settings?.voiceAvailable,
     outputSilent: outputSilent(outputAudio),
-    captionHeight: captionTextHeight,
     fixtureSpeaking: bootstrap?.profile === "speaking" || bootstrap?.profile === "muted",
     capturingShortcut: () => shortcutCapture.current,
     openSession: openSessionAloud,
@@ -1864,17 +1862,17 @@ export function App(): React.JSX.Element {
 
   /**
    * The reading clock as last glanced at. Words paced across a silent output
-   * scroll on elapsed time, and between deltas nothing else re-renders — the
-   * hold after a reply is exactly such a stretch — so a tick at half the line
-   * pace keeps the scroll honest without chasing every frame.
+   * scroll on elapsed time, and a quiet stretch between deltas re-renders
+   * nothing else — so a tick at half the line pace keeps the scroll honest
+   * without chasing every frame.
    */
   const [readingNow, setReadingNow] = useState(() => Date.now());
   useEffect(() => {
-    if ((!outputSilent(outputAudio) && !captionHeld) || captionShownAt === undefined) return;
+    if (!outputSilent(outputAudio) || captionShownAt === undefined) return;
     setReadingNow(Date.now());
     const timer = window.setInterval(() => setReadingNow(Date.now()), CAPTION_LINE_READ_MS / 2);
     return () => window.clearInterval(timer);
-  }, [outputAudio, captionShownAt, captionHeld]);
+  }, [outputAudio, captionShownAt]);
 
   /**
    * The hint's own button. It quiets the hint, never the captions: the words
@@ -1967,11 +1965,10 @@ export function App(): React.JSX.Element {
       }
       // Stopping Luke mid-sentence is the same shape one layer on: a reply
       // being spoken is the most open thing there is, and Escape asks for
-      // quiet without opening a turn in its place. Words held for a muted
-      // reader are the tail of a reply and answer the same ask. The session
-      // itself answers whether there was anything to stop, so a press that
-      // found none falls through to the layers below rather than being
-      // swallowed by a reply that had already ended.
+      // quiet without opening a turn in its place. The session itself answers
+      // whether there was a reply to stop, so a press that found none falls
+      // through to the layers below rather than being swallowed by a reply
+      // that had already ended.
       if (stopSpeaking()) return;
       // Escape out of the slot is the entry's own way out, wherever the caret
       // happens to be: the slot is the only thing on screen, so there is nothing
@@ -2138,17 +2135,14 @@ export function App(): React.JSX.Element {
   const captionText = lukeCaption ?? voiceErrorNotice;
   const captionIsError = lukeCaption === undefined && voiceErrorNotice !== undefined;
   // How long the words on screen have been readable, or nothing while the
-  // output is audible: the reading clock only paces words nobody can hear. A
-  // held caption keeps its pace even once the output is back — those words
-  // were delivered into silence, and an unmute mid-read must not leap them.
+  // output is audible: the reading clock only paces words nobody can hear.
   const captionReadingElapsed =
-    (outputIsSilent || captionHeld) && captionShownAt !== undefined
+    outputIsSilent && captionShownAt !== undefined
       ? Math.max(0, readingNow - captionShownAt)
       : undefined;
-  // The hint rides the caption it explains — held words included, which keep
-  // reading Luke by it — and only over a silence the helper actually
-  // reported. "Got it" quiets it for this stretch of silence and any that
-  // follows too soon; the captions above it stay either way.
+  // The hint rides the caption it explains, and only over a silence the
+  // helper actually reported. "Got it" quiets it for this stretch of silence
+  // and any that follows too soon; the captions above it stay either way.
   const volumeHint =
     fixtureMuted ||
     (outputIsSilent &&
