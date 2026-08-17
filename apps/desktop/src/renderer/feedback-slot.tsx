@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { FeedbackImage } from "../shared/feedback";
-import { FEEDBACK_LIMITS } from "../shared/feedback";
+import { FEEDBACK_KIND, FEEDBACK_LIMITS } from "../shared/feedback";
 import { useStagedFocus } from "./credential-entry";
+import { CONFIRMATION_ENTRANCE_MS, type FeedbackConfirmation } from "./feedback-confirmation";
 import {
   FEEDBACK_COPY,
   type FeedbackEntryControl,
@@ -9,11 +10,64 @@ import {
   isSendable,
 } from "./feedback-entry";
 import { imageFiles } from "./feedback-images";
+import { LukeFace } from "./luke-face";
 import { HIT_REGION } from "./panel-state";
 import { parseMilliseconds, parsePixels, STILL_MS } from "./session-motion";
 import { ImageIcon, RemoveIcon } from "./settings-icons";
 
 const MESSAGE_FIELD_ID = "feedback-message";
+
+/**
+ * The landing a delivered send plays in the composer's shape: Luke swoops
+ * down from above the slot's top edge — the shape clips him until he is
+ * inside, so he arrives through it the way the artwork's flyoff leaves — and
+ * lands over "Sent — thank you!" to play this send's gesture. The gesture
+ * begins on the entrance's own end, told by the same token mirror the main
+ * process uses for the collapse, and under reduced motion it never begins:
+ * the face rests and the words alone say it.
+ */
+function FeedbackLanding({
+  confirming,
+  kind,
+  still,
+}: {
+  confirming: { confirmation: FeedbackConfirmation; play: number };
+  kind: (typeof FEEDBACK_KIND)[keyof typeof FEEDBACK_KIND];
+  still: boolean;
+}): React.JSX.Element {
+  // Keyed on the landing's play by the caller, so each send mounts a fresh
+  // landing and this begins at rest without watching the play itself.
+  const [gesturing, setGesturing] = useState(false);
+  useEffect(() => {
+    setGesturing(false);
+    if (still) return;
+    const timer = window.setTimeout(() => setGesturing(true), CONFIRMATION_ENTRANCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [still]);
+
+  return (
+    <div
+      className="feedback-confirm"
+      data-scene={confirming.confirmation.scene}
+      data-gesturing={String(gesturing)}
+    >
+      <span className="feedback-confirm-luke">
+        <LukeFace
+          key={gesturing ? confirming.play : 0}
+          {...(gesturing ? { motion: confirming.confirmation.motion } : {})}
+        />
+      </span>
+      <p className="feedback-confirm-msg" role="status">
+        Sent — thank you<span className="feedback-confirm-bang">!</span>
+      </p>
+      <small className="feedback-confirm-sub">
+        {kind === FEEDBACK_KIND.PROMPT
+          ? "Your prompt is on its way to the founders."
+          : "Your note is on its way to the founders."}
+      </small>
+    </div>
+  );
+}
 
 /**
  * The panel stood down to the composer, the way it stands down to the key
@@ -30,12 +84,18 @@ export function FeedbackSlot({
   control,
   drawn,
   measure,
+  confirming,
+  still,
 }: {
   control: FeedbackEntryControl;
   /** True while the composer is the shape the surface is drawn as. */
   drawn: boolean;
   /** Reports the composer's height, so the surface can end where it does. */
   measure: (element: HTMLElement | null) => void;
+  /** The landing being played after a delivered send, replacing the fields. */
+  confirming?: { confirmation: FeedbackConfirmation; play: number };
+  /** Reduced motion: the landing shows its words with the face at rest. */
+  still: boolean;
 }): React.JSX.Element | null {
   const field = useRef<HTMLTextAreaElement | null>(null);
   const filePicker = useRef<HTMLInputElement | null>(null);
@@ -123,6 +183,36 @@ export function FeedbackSlot({
     setPreviewMounted(false);
     heldPreview.current = undefined;
   }, [previewClosing]);
+
+  // The landing outlives the ask exactly as the entry does: the panel's
+  // return clears it upstream a beat before the presentation actually moves,
+  // and falling back to the held fields for those frames would flash the
+  // just-sent form and jump the measured height. It keeps drawing what it
+  // last held until the shape has left it behind — and a composer asked for
+  // again is the landing's end, so a held entry takes the shape back.
+  const heldLanding = useRef(confirming);
+  if (confirming) heldLanding.current = confirming;
+  if (control.entry) heldLanding.current = undefined;
+  const landing = confirming ?? heldLanding.current;
+
+  // The landing takes the fields' place in the same shell: same stage, same
+  // hit region, same measured height — so the surface takes one clean spring
+  // to the landing's own smaller shape and one back when the panel returns.
+  // Inert throughout: there is nothing here to press, only something to see.
+  if (landing) {
+    return (
+      <div className="feedback-stage" inert>
+        <div className="feedback-slot" ref={measure} data-hit-region={HIT_REGION.FEEDBACK}>
+          <FeedbackLanding
+            key={landing.play}
+            confirming={landing}
+            kind={entry?.kind ?? FEEDBACK_KIND.FEEDBACK}
+            still={still}
+          />
+        </div>
+      </div>
+    );
+  }
 
   if (!entry) return null;
 

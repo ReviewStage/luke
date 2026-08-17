@@ -128,6 +128,15 @@ export interface UsePanelEntryOptions<T extends PanelEntryBase> extends PanelEnt
   send: (entry: T) => Promise<{ rejection?: string }>;
   /** After a send lands, before the panel is restored — the "Sent" line. */
   onDelivered?: () => void;
+  /**
+   * Owns the moment between a landed send and the panel's return. A host with
+   * something to show — the feedback confirmation — holds `finish` and calls
+   * it when the showing is done, or drops it if the shape was asked for again
+   * meanwhile; a host with nothing to show leaves this out and the panel
+   * returns at once. `finish` re-reads the presentation when it runs, so a
+   * finish that outlived its moment restores nothing.
+   */
+  afterDelivery?: (finish: () => void) => void;
 }
 
 export interface PanelEntry<T extends PanelEntryBase> {
@@ -221,11 +230,19 @@ export function usePanelEntry<T extends PanelEntryBase>(
       }
       apply(undefined);
       host.onDelivered?.();
-      if (host.presentation() !== host.aside) return;
-      host.restorePanel();
-      if (!panelEntrySettles({ aside: true, pointerInside: host.pointerInside() })) return;
-      host.cancelHover();
-      host.settle();
+      // Everything after the delivery reads the host at the moment it runs,
+      // not the moment the send landed: a host that holds `finish` through a
+      // confirmation hands back a panel whose pointer may have moved.
+      const finish = () => {
+        const now = optionsRef.current;
+        if (now.presentation() !== now.aside) return;
+        now.restorePanel();
+        if (!panelEntrySettles({ aside: true, pointerInside: now.pointerInside() })) return;
+        now.cancelHover();
+        now.settle();
+      };
+      if (host.afterDelivery) host.afterDelivery(finish);
+      else finish();
     });
   }, [apply, latest]);
 

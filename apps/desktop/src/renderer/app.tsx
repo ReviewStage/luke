@@ -67,6 +67,11 @@ import {
   supersedeErrandSettings,
 } from "./errand-queue";
 import {
+  confirmationHoldMs,
+  type FeedbackConfirmation,
+  feedbackConfirmation,
+} from "./feedback-confirmation";
+import {
   accountSignature,
   type FeedbackEntry,
   type FeedbackEntryControl,
@@ -248,6 +253,15 @@ export function App(): React.JSX.Element {
   const [settings, setSettings, settingsNow] = useStateWithRef<AppSettings | undefined>(undefined);
   const [errand, setErrand] = useState<Errand>();
   const [feedbackNotice, setFeedbackNotice] = useState<string>();
+  /**
+   * The landing being played in the composer's shape after a send, keyed by
+   * play so a second send restarts the swoop rather than reusing a finished
+   * one. Undefined is the composer as it always was.
+   */
+  const [feedbackConfirming, setFeedbackConfirming] = useState<{
+    confirmation: FeedbackConfirmation;
+    play: number;
+  }>();
   // Counts for nothing except having changed: each tick re-renders the rows so
   // their "how long ago" labels stay honest while they are on screen.
   const [, setClock] = useState(0);
@@ -305,6 +319,17 @@ export function App(): React.JSX.Element {
   const credentialPage = useRef<SettingsSubview>(SETTINGS_VIEW.CONNECTIONS);
   const feedbackHeld = useRef(false);
   const feedbackNoticeTimer = useRef<number | undefined>(undefined);
+  /** How many sends landed before the one just delivered, from its reply. */
+  const feedbackSequence = useRef(0);
+  /** Counts confirmations so each landing's swoop is replayed, not reused. */
+  const feedbackConfirmPlays = useRef(0);
+  const feedbackConfirmTimer = useRef<number | undefined>(undefined);
+  /**
+   * The panel's deferred return, held for as long as the confirmation plays.
+   * Running it is the confirmation ending on time; dropping it is the shape
+   * being asked for again — or left — before the celebration finished.
+   */
+  const feedbackFinish = useRef<(() => void) | undefined>(undefined);
   /**
    * The words a spoken open asked to start the note with, waiting for the
    * composer's lifecycle event to consume them. A ref rather than an event
@@ -858,6 +883,30 @@ export function App(): React.JSX.Element {
 
   useEffect(() => () => window.clearTimeout(feedbackNoticeTimer.current), []);
 
+  /**
+   * Ends the confirmation without restoring anything: the shape was asked for
+   * again, or left, so the finish it held is dropped rather than run.
+   */
+  const dropFeedbackConfirmation = useCallback(() => {
+    if (feedbackConfirmTimer.current !== undefined) {
+      window.clearTimeout(feedbackConfirmTimer.current);
+      feedbackConfirmTimer.current = undefined;
+    }
+    feedbackFinish.current = undefined;
+    setFeedbackConfirming(undefined);
+  }, []);
+
+  useEffect(() => () => window.clearTimeout(feedbackConfirmTimer.current), []);
+
+  // A confirmation lives exactly as long as the shape it is drawn in: the
+  // presentation moving on ends it and drops the unrun finish it held.
+  useEffect(() => {
+    if (presentation === PANEL_PRESENTATION.FEEDBACK) return;
+    dropFeedbackConfirmation();
+  }, [presentation, dropFeedbackConfirmation]);
+
+  const stillMotion = usePrefersReducedMotion();
+
   const feedbackEntry = usePanelEntry<FeedbackEntry>({
     aside: PANEL_PRESENTATION.FEEDBACK,
     restoresPanel: (held) => held.fromPanel === true,
@@ -876,12 +925,39 @@ export function App(): React.JSX.Element {
         if (!result.delivered) {
           return { rejection: result.reason ?? "Could not send that. Try again." };
         }
+        feedbackSequence.current = result.sequence ?? 0;
         return {};
       } catch {
         return { rejection: "Could not send that. Try again." };
       }
     },
-    onDelivered: () => showFeedbackNotice("Sent — thank you."),
+    onDelivered: () => {
+      showFeedbackNotice("Sent — thank you.");
+      // The landing plays in the shape the note left from: Luke swoops down
+      // beside the thank-you and plays this send's gesture from the ring.
+      feedbackConfirmPlays.current += 1;
+      setFeedbackConfirming({
+        confirmation: feedbackConfirmation(feedbackSequence.current),
+        play: feedbackConfirmPlays.current,
+      });
+    },
+    afterDelivery: (finish) => {
+      feedbackFinish.current = finish;
+      const { motion } = feedbackConfirmation(feedbackSequence.current);
+      if (feedbackConfirmTimer.current !== undefined) {
+        window.clearTimeout(feedbackConfirmTimer.current);
+      }
+      feedbackConfirmTimer.current = window.setTimeout(
+        () => {
+          feedbackConfirmTimer.current = undefined;
+          setFeedbackConfirming(undefined);
+          const held = feedbackFinish.current;
+          feedbackFinish.current = undefined;
+          held?.();
+        },
+        confirmationHoldMs({ motion, still: stillMotion }),
+      );
+    },
     pointerInside: pointerIsInside,
     presentation: presentationOf,
     onReleasedWhileAway: onHitRegionLeave,
@@ -907,6 +983,9 @@ export function App(): React.JSX.Element {
   const beginFeedback = useCallback(
     (kind: FeedbackKind, fromPanel: boolean, draft?: string): boolean => {
       setFeedbackNotice(undefined);
+      // Asking to write again is the confirmation's end: the composer takes
+      // the shape back, and the return the landing held is dropped unrun.
+      dropFeedbackConfirmation();
       const opened = openedFeedbackEntry(feedbackEntry.latest(), {
         kind,
         fromPanel,
@@ -919,7 +998,13 @@ export function App(): React.JSX.Element {
       feedbackEntry.standDown();
       return opened.drafted;
     },
-    [accountNow, feedbackEntry.apply, feedbackEntry.latest, feedbackEntry.standDown],
+    [
+      accountNow,
+      dropFeedbackConfirmation,
+      feedbackEntry.apply,
+      feedbackEntry.latest,
+      feedbackEntry.standDown,
+    ],
   );
 
   /**
@@ -931,9 +1016,17 @@ export function App(): React.JSX.Element {
    */
   const dismissFeedback = useCallback(() => {
     if (presentationOf() !== PANEL_PRESENTATION.FEEDBACK) return;
+    // Escape during the landing skips the celebration, never the return: the
+    // finish the confirmation held runs now instead of later.
+    if (feedbackFinish.current) {
+      const finish = feedbackFinish.current;
+      dropFeedbackConfirmation();
+      finish();
+      return;
+    }
     if (feedbackEntry.latest()?.fromPanel === true) restorePanel();
     else leave();
-  }, [feedbackEntry.latest, leave, presentationOf, restorePanel]);
+  }, [dropFeedbackConfirmation, feedbackEntry.latest, leave, presentationOf, restorePanel]);
 
   /**
    * Takes picked or pasted files aboard. Encoding happens here on the user's
@@ -1931,6 +2024,7 @@ export function App(): React.JSX.Element {
   const panelOpen = presentation === PANEL_PRESENTATION.PANEL;
   const slotOpen = presentation === PANEL_PRESENTATION.SLOT;
   const feedbackOpen = presentation === PANEL_PRESENTATION.FEEDBACK;
+
   // What the slot's field is for depends on what answers for that provider now,
   // and settings resolve after the first render.
   const slotSource =
@@ -2075,7 +2169,13 @@ export function App(): React.JSX.Element {
         />
       ) : null}
       {/* The panel stood down to the composer, on the same terms. */}
-      <FeedbackSlot control={feedbackControl} drawn={feedbackOpen} measure={feedbackElement} />
+      <FeedbackSlot
+        control={feedbackControl}
+        drawn={feedbackOpen}
+        measure={feedbackElement}
+        confirming={feedbackConfirming}
+        still={stillMotion}
+      />
       {/* Luke's own voice. Muted playback would defeat the point, so this is
           the one element allowed to make sound. */}
       <audio ref={remoteAudio} autoPlay hidden>

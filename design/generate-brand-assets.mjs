@@ -574,6 +574,75 @@ const MOTIONS = {
       },
     ],
   },
+  // A relaxed side-to-side wiggle that eases out — shaking something off,
+  // happily. The same decaying shape as the error shimmy, but spread over most
+  // of the cycle at a lower tempo, so it reads as loosening up rather than
+  // agitation; the two must not share artwork, because one carries a failure
+  // and the other must never.
+  shimmy: {
+    moment: "shaking it off (happy wiggle)",
+    layers: [
+      {
+        type: "rotate",
+        pivot: [120, 124],
+        values: [0, -9, 8, -5.5, 3, -1.2, 0, 0],
+        keyTimes: [0, 0.12, 0.26, 0.4, 0.52, 0.62, 0.7, 1],
+        dur: 2.6,
+      },
+    ],
+  },
+  // A woozy wobble that settles: the head rolls in decaying arcs while a small
+  // counter-sway keeps it off balance, and the eyes sit half-lidded until the
+  // world stops moving. Both layers and the eyes share the period, as every
+  // one-shot must.
+  dizzy: {
+    moment: "woozy after a flight (decaying wobble)",
+    layers: [
+      {
+        type: "rotate",
+        pivot: [120, 150],
+        values: [0, 9, -8, 6, -4, 2, 0, 0],
+        keyTimes: [0, 0.1, 0.24, 0.38, 0.52, 0.66, 0.78, 1],
+        dur: 3.2,
+      },
+      {
+        type: "translate",
+        values: [
+          [0, 0],
+          [2, 0],
+          [-2, 0],
+          [1.5, 0],
+          [-1, 0],
+          [0.5, 0],
+          [0, 0],
+          [0, 0],
+        ],
+        keyTimes: [0, 0.1, 0.24, 0.38, 0.52, 0.66, 0.78, 1],
+        dur: 3.2,
+      },
+    ],
+    eyes: {
+      kind: "squeeze",
+      factors: [1, 0.55, 0.55, 1, 1],
+      keyTimes: [0, 0.15, 0.55, 0.75, 1],
+      dur: 3.2,
+    },
+  },
+  // A look to one side, a hold, a sweep to the other, and back — checking both
+  // ways. The eyes cannot travel (they only ever scale), so the glance is the
+  // whole head's, leaning from a pivot near the chin the way the nod does.
+  glance: {
+    moment: "checking both ways (look around)",
+    layers: [
+      {
+        type: "rotate",
+        pivot: [120, 190],
+        values: [0, 0, -7, -7, 7, 7, 0, 0],
+        keyTimes: [0, 0.12, 0.24, 0.42, 0.56, 0.74, 0.86, 1],
+        dur: 3.4,
+      },
+    ],
+  },
 };
 
 const MOTION_NAMES = Object.keys(MOTIONS);
