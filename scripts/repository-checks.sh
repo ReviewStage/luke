@@ -22,6 +22,8 @@ required_files=(
     apps/desktop/scripts/release.mjs
     apps/desktop/native/macos/ScreenGeometry.swift
     apps/desktop/native/macos/TalkKey.swift
+    apps/web/drizzle.config.ts
+    apps/web/server/db/schema.ts
     packages/sidecar-core/package.json
     scripts/release-macos.sh
     scripts/verify.sh

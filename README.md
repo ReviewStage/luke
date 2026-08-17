@@ -300,7 +300,7 @@ host. See [PRIVACY.md](PRIVACY.md) before enabling either feature.
 
 - `apps/desktop/` — Electron main and preload processes, React renderer, native
   macOS helper, and packaging
-- `apps/web/` — public landing page
+- `apps/web/` — public landing page and Drizzle/Neon server module
 - `packages/sidecar-core/` — platform-independent session and attention models
 - `scripts/` — canonical development and validation commands
 
