@@ -1,6 +1,6 @@
 import { defineConfig } from "drizzle-kit";
 
-const connectionString = process.env.DATABASE_URL;
+const connectionString = process.env.DATABASE_URL_UNPOOLED;
 
 export default defineConfig({
   dialect: "postgresql",

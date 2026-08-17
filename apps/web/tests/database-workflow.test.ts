@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import packageManifest from "../package.json";
+import vercelConfig from "../vercel.json";
 
-test("migrations run only through the explicit database script", () => {
+test("migrations stay out of package lifecycle and application scripts", () => {
   const scripts: Record<string, string> = packageManifest.scripts;
 
   assert.equal(scripts.postinstall, undefined);
@@ -19,4 +20,9 @@ test("migrations run only through the explicit database script", () => {
       .map(([name]) => name),
     ["db:migrate"],
   );
+});
+
+test("Vercel applies committed migrations before it builds a deployment", () => {
+  assert.equal(vercelConfig.buildCommand, "pnpm db:migrate && pnpm build");
+  assert.doesNotMatch(vercelConfig.buildCommand, /drizzle-kit push/);
 });

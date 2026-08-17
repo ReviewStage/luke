@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "pnpm db:migrate && pnpm build",
   "rewrites": [
     {
       "source": "/privacy",
