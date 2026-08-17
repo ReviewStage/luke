@@ -165,6 +165,16 @@ Trust constraints:
   paced for reading rather than for the voice, because into a mute the caption
   is the speech — and a hint asking for volume. Luke never changes the system
   volume himself; turning it up stays the user's own act on their own keys.
+- The update check is the one request Luke makes with no user-supplied key at
+  all: an unauthenticated read of this repository's latest release name from
+  GitHub's public API, on a timer the `automaticUpdates` setting owns and at
+  the press of the Updates row's button — never in a fixture or capture run.
+  It carries nothing about the user, their sessions, or their keys; only the
+  release's version name is read back, and what a check learns changes only
+  what the row says. The way to a newer build is the browser, at the releases
+  page fixed by the build — nothing read from the network chooses that
+  address — and Luke never modifies the running app. Widening what the check
+  sends, reads, or does is a product decision, not an implementation detail.
 - Keep unsupported capabilities explicit; do not invent fallback controls.
 - Keep Electron renderers sandboxed with context isolation and narrow IPC.
 - Commit only synthetic fixtures and repository-relative paths. This binds

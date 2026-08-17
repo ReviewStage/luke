@@ -162,6 +162,7 @@ import {
 } from "./shared/feedback";
 import { parseVoiceHotkey } from "./shared/voice-hotkey";
 import { isWorkspaceAgentSelection } from "./shared/workspace-agents";
+import { UPDATE_ENDPOINT, UpdateService } from "./update-service";
 
 const captureOutput = argumentValue("--capture-evidence");
 const profile = argumentValue("--profile") ?? "idle";
@@ -393,6 +394,13 @@ let realtimeCredentials: OpenAiRealtimeCredentialMinter | undefined;
 // anything the renderer does — and only this process may run a helper.
 const mediaDuck = new MediaDuckController();
 const feedbackDelivery = feedbackDeliveryFromEnvironment();
+// Learns whether a newer release exists, and nothing else. It lives here
+// rather than in a renderer because the timer must survive every window, and
+// what it learns reaches them all through the same broadcast settings use.
+const updateService = new UpdateService({
+  currentVersion: app.getVersion(),
+  onChange: (update) => panels.broadcast(channels.updateChanged, update),
+});
 /**
  * The output's switches as last read, and the helper that reads them. The
  * state lives here rather than in the renderer so bootstrap can carry the
@@ -922,6 +930,7 @@ function registerIpc(): void {
       ...(hotkeys.stop ? { stopHotkey: hotkeys.stop } : {}),
       ...(outputAudio ? { outputAudio } : {}),
       display: panels.diagnostic(display),
+      update: updateService.snapshot(),
       // Bootstrapped through the same relevance gate every broadcast passes:
       // a panel that opens late must not learn of rows the roster has already
       // let go and then hold them past the next broadcast's dedupe.
@@ -1476,6 +1485,37 @@ function registerIpc(): void {
       void releaseHeldNotices();
     },
     refusal: "Could not save that setting on this system.",
+  });
+
+  // The check follows the stored answer at once, like the duck: off must stop
+  // the timer now rather than at the next launch. A run that sends no network
+  // never arms it, whatever the file says.
+  registerSettingHandler(channels.setAutomaticUpdates, {
+    validate(enabled: unknown) {
+      if (typeof enabled !== "boolean") throw new Error("Invalid update check request");
+      return enabled;
+    },
+    save: (enabled) => settingsStore.setAutomaticUpdates(enabled),
+    apply: (result) =>
+      updateService.setAutomatic(result.settings.automaticUpdates && runMode.sendsNetwork),
+    refusal: "Could not save that setting on this system.",
+  });
+
+  // The row's button. Answered rather than fire-and-forget so the row that
+  // asked and the broadcast never disagree; a run that sends no network
+  // answers with the standing snapshot rather than make a request it must not.
+  ipcMain.handle(channels.checkForUpdates, (event) => {
+    if (!trustedSender(event)) throw new Error("Untrusted renderer");
+    if (!runMode.sendsNetwork) return updateService.snapshot();
+    return updateService.check();
+  });
+
+  // The newest release's page, in the browser. The address is fixed here like
+  // the microphone pane's, so nothing an update check read can steer where a
+  // press goes.
+  ipcMain.on(channels.openLatestRelease, (event) => {
+    if (!trustedSender(event)) return;
+    void shell.openExternal(UPDATE_ENDPOINT.LATEST_RELEASE_PAGE_URL);
   });
 
   // A statement of state, not a request: the renderer says whether a spoken
@@ -2831,6 +2871,15 @@ if (!app.requestSingleInstanceLock()) {
       (enabled) => mediaDuck.setEnabled(enabled),
       () => mediaDuck.setEnabled(APP_SETTING_DEFAULTS.duckOtherMedia),
     );
+    // Armed from the settings file alone, like the duck — and never in a run
+    // that must stay deterministic: a fixture or capture run sends no network,
+    // so it never asks GitHub anything.
+    if (runMode.sendsNetwork) {
+      void settingsStore.automaticUpdates().then(
+        (enabled) => updateService.setAutomatic(enabled),
+        () => updateService.setAutomatic(APP_SETTING_DEFAULTS.automaticUpdates),
+      );
+    }
     // The hook registrations converge at every launch. Each provider's
     // failure is logged under its own name and absorbed inside — a launch
     // must never hang on another app's configuration file — so this catch is

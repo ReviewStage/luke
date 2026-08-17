@@ -55,6 +55,7 @@ const SETTINGS_FIELD = {
   API_KEYS: "apiKeys",
   CALENDAR_ACCOUNTS: "calendarAccounts",
   ASK_HOTKEY: "askHotkey",
+  AUTOMATIC_UPDATES: "automaticUpdates",
   DEFAULT_WORKSPACE_PROVIDER: "defaultWorkspaceProvider",
   DUCK_OTHER_MEDIA: "duckOtherMedia",
   FEEDBACK_SENDS: "feedbackSends",
@@ -207,6 +208,13 @@ interface PersistedSettings {
    * windows somewhere new.
    */
   showOnAllDisplays: boolean;
+  /**
+   * Whether the timed update check runs. On unless the file says `false`
+   * outright, like the media duck: a missing field and a corrupt value both
+   * land on checking, because a build left silently behind is the failure
+   * this setting exists to prevent.
+   */
+  automaticUpdates: boolean;
   /**
    * How Luke stands on a display without a housing, absent until the user has
    * chosen. Held to the offered set like the voice: a value this build does
@@ -528,6 +536,10 @@ function parsePersistedSettings(source: string): PersistedSettings {
       record[SETTINGS_FIELD.SHOW_ON_ALL_DISPLAYS],
       APP_SETTING_DEFAULTS.showOnAllDisplays,
     ),
+    automaticUpdates: booleanSetting(
+      record[SETTINGS_FIELD.AUTOMATIC_UPDATES],
+      APP_SETTING_DEFAULTS.automaticUpdates,
+    ),
     // A form this build does not draw is dropped like an unknown voice.
     ...(isPanelFormFactor(formFactor) ? { formFactor } : {}),
     // A provider this build does not know is dropped the same way: it names
@@ -616,6 +628,7 @@ export class SettingsStore {
       duckOtherMedia: persisted.duckOtherMedia,
       quietDuringMeetings: persisted.quietDuringMeetings,
       showOnAllDisplays: persisted.showOnAllDisplays,
+      automaticUpdates: persisted.automaticUpdates,
       formFactor: persisted.formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
       ...(persisted.defaultWorkspaceProvider
         ? { defaultWorkspaceProvider: persisted.defaultWorkspaceProvider }
@@ -734,6 +747,14 @@ export class SettingsStore {
    */
   async duckOtherMedia(): Promise<boolean> {
     return (await this.#load()).duckOtherMedia;
+  }
+
+  /**
+   * Shallow for the same reason `duckOtherMedia()` is: the update check arms
+   * at startup, and arming it must never be what wakes the OS keychain.
+   */
+  async automaticUpdates(): Promise<boolean> {
+    return (await this.#load()).automaticUpdates;
   }
 
   /**
@@ -912,6 +933,17 @@ export class SettingsStore {
     return this.#setField((persisted) => {
       if (persisted.quietDuringMeetings === enabled) return;
       return { ...persisted, quietDuringMeetings: enabled };
+    });
+  }
+
+  /**
+   * Turns the timed update check on or off. A plain preference like the media
+   * duck's: no cipher, no invalid value, so the write either lands or throws.
+   */
+  async setAutomaticUpdates(enabled: boolean): Promise<SettingsUpdateResult> {
+    return this.#setField((persisted) => {
+      if (persisted.automaticUpdates === enabled) return;
+      return { ...persisted, automaticUpdates: enabled };
     });
   }
 

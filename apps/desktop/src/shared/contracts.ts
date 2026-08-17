@@ -123,6 +123,7 @@ export const APP_SETTING_DEFAULTS = {
   duckOtherMedia: true,
   quietDuringMeetings: true,
   showOnAllDisplays: false,
+  automaticUpdates: true,
 } as const satisfies Partial<Record<keyof AppSettings, boolean>>;
 
 /**
@@ -148,6 +149,39 @@ const SETTINGS_RESET_SCOPE_LIST: readonly SettingsResetScope[] =
 export function isSettingsResetScope(value: unknown): value is SettingsResetScope {
   return SETTINGS_RESET_SCOPE_LIST.includes(value as SettingsResetScope);
 }
+
+/**
+ * Where the app stands against the latest published release, as last learned.
+ * `UNKNOWN` is the state before any check has answered — at launch, and
+ * forever in a run that sends no network — and must be drawn as an offer to
+ * check rather than as an answer.
+ */
+export const UPDATE_STATUS = {
+  UNKNOWN: "unknown",
+  CHECKING: "checking",
+  UP_TO_DATE: "up-to-date",
+  UPDATE_AVAILABLE: "update-available",
+  UNREACHABLE: "unreachable",
+} as const;
+
+export type UpdateStatus = (typeof UPDATE_STATUS)[keyof typeof UPDATE_STATUS];
+
+/**
+ * What the update row draws from. The latest version travels only on the one
+ * state that learned it, and no address ever travels: the page an update is
+ * fetched from is fixed in the main process, so nothing a check read can
+ * steer where a press goes.
+ */
+export type UpdateSnapshot =
+  | { status: typeof UPDATE_STATUS.UNKNOWN; currentVersion: string }
+  | { status: typeof UPDATE_STATUS.CHECKING; currentVersion: string }
+  | { status: typeof UPDATE_STATUS.UP_TO_DATE; currentVersion: string }
+  | {
+      status: typeof UPDATE_STATUS.UPDATE_AVAILABLE;
+      currentVersion: string;
+      latestVersion: string;
+    }
+  | { status: typeof UPDATE_STATUS.UNREACHABLE; currentVersion: string };
 
 /** Renderer-safe settings. Credentials are never sent to a renderer. */
 export interface AppSettings {
@@ -248,6 +282,14 @@ export interface AppSettings {
    * again is what brings him back to it.
    */
   showOnAllDisplays: boolean;
+  /**
+   * Whether Luke asks GitHub for the latest release name on a timer, so the
+   * settings row can say an update exists. On by default and bounded on every
+   * side: the check carries nothing about the user or their sessions, learns
+   * only a version name, and changes only what the row says. Off, the only
+   * check is the row's own button being pressed.
+   */
+  automaticUpdates: boolean;
   /**
    * How Luke stands on a display without a camera housing: a drawn notch
    * pressed into the top edge, or the free-floating bubble every such display
@@ -400,6 +442,8 @@ export interface AppBootstrap {
    */
   outputAudio?: OutputAudioState;
   display: DisplayDiagnostic;
+  /** Where the app stands against the latest release, as last learned. */
+  update: UpdateSnapshot;
   sessions: readonly NormalizedSession[];
   /**
    * The standing asks the developer has made about sessions, so a panel that
@@ -519,6 +563,20 @@ export interface AppBridge {
   resetSettings(scope: SettingsResetScope): Promise<SettingsUpdateResult>;
   /** Turns the quieting of Music and Spotify during a spoken exchange on or off. */
   setDuckOtherMedia(enabled: boolean): Promise<SettingsUpdateResult>;
+  /** Turns the timed update check on or off, and remembers the choice. */
+  setAutomaticUpdates(enabled: boolean): Promise<SettingsUpdateResult>;
+  /**
+   * Asks GitHub for the latest release name, right now, because the row's
+   * button was pressed. The answer is the same snapshot the broadcast
+   * carries, so the row that asked and every other window agree.
+   */
+  checkForUpdates(): Promise<UpdateSnapshot>;
+  /**
+   * Opens the latest release's page in the default browser. The renderer
+   * names an intent and never an address — the page is fixed in the main
+   * process, so nothing an update check read can steer where this goes.
+   */
+  openLatestRelease(): void;
   /**
    * Turns the holding of announcements during calendar meetings on or off.
    * The hold itself lives in the main process, beside the calendar it reads.
@@ -711,6 +769,8 @@ export interface AppBridge {
    */
   onSettingsChanged(callback: (settings: AppSettings) => void): () => void;
   onAccountChanged(callback: (account: AccountSnapshot) => void): () => void;
+  /** Where the app stands against the latest release, whenever that changes. */
+  onUpdateChanged(callback: (update: UpdateSnapshot) => void): () => void;
   onSessionsChanged(callback: (sessions: readonly NormalizedSession[]) => void): () => void;
   /** The standing asks as they change — made, withdrawn, or let go with their sessions. */
   onNoticeAsksChanged(callback: (noticeAsks: readonly SessionNoticeAsk[]) => void): () => void;
@@ -792,6 +852,10 @@ export const channels = {
   setCalendarSelected: "app:set-calendar-selected",
   calendarsChanged: "app:calendars-changed",
   meetingQuietChanged: "app:meeting-quiet-changed",
+  setAutomaticUpdates: "app:set-automatic-updates",
+  checkForUpdates: "app:check-for-updates",
+  openLatestRelease: "app:open-latest-release",
+  updateChanged: "app:update-changed",
   setVoiceExchange: "app:set-voice-exchange",
   openProviderApiKeys: "app:open-provider-api-keys",
   setShowInMenuBar: "app:set-show-in-menu-bar",

@@ -19,6 +19,22 @@ not make that identity a Copilot credential. Browser sign-out does not sign the
 desktop out; the desktop keeps its own refresh token until you sign out in
 Luke, or the auth service reports that token revoked or invalid.
 
+## Update check
+
+Luke asks GitHub's public API for the name of this repository's latest
+published release, so the Settings tab's Updates row can say whether a newer
+build exists. The request is unauthenticated and carries no account, session,
+transcript, or key material — GitHub sees what any HTTPS request shows it,
+such as the network address it came from, under GitHub's own policies. Only
+the release's version name is read from the answer.
+
+With automatic checks on — the default — Luke asks at launch and a few times a
+day; turning the Updates section's switch off stops the timed check entirely,
+leaving only the row's own Check for Updates button. Fixture and evidence runs
+never check. What a check learns changes only what the row says: fetching an
+update is your own download in the browser, from the repository's releases
+page, and Luke never modifies the running app.
+
 ## What Luke reads locally
 
 - For Claude Code, Luke finds recent session files, opens bounded tails

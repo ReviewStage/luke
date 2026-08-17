@@ -37,6 +37,7 @@ import type {
   SessionOpenResult,
   SettingsResetScope,
   SettingsUpdateResult,
+  UpdateSnapshot,
 } from "../shared/contracts";
 import { ACCOUNT_STATUS, CREDENTIAL_SOURCE, SESSION_OPEN_RESULT_STATUS } from "../shared/contracts";
 import type { CredentialProviderId } from "../shared/credential-providers";
@@ -109,7 +110,12 @@ import {
 import { parsePixels } from "./session-motion";
 import { SESSION_OPTIONS_BUTTON_ID, SESSION_OPTIONS_ID } from "./session-parts";
 import { focusSearchField } from "./session-search";
-import type { MicrophoneControl, PreferenceWrites, ShortcutControl } from "./settings-panel";
+import type {
+  MicrophoneControl,
+  PreferenceWrites,
+  ShortcutControl,
+  UpdateControl,
+} from "./settings-panel";
 import {
   credentialSettingsPage,
   SETTING_PAGE,
@@ -311,6 +317,11 @@ export function App(): React.JSX.Element {
   const [calendars, setCalendars] = useState<readonly ObservedAccountCalendars[]>([]);
   /** Whether the calendar's quiet is holding announcements — the face sleeps on it. */
   const [meetingQuiet, setMeetingQuiet] = useState(false);
+  /**
+   * Where the app stands against the latest release, as last pushed or
+   * answered. Absent until bootstrap carries the main process's snapshot.
+   */
+  const [update, setUpdate] = useState<UpdateSnapshot>();
   /**
    * Which stretch of unbroken silence is on screen, advanced each time one
    * begins. A "Got it" is remembered against the stretch it answered, so it
@@ -714,6 +725,12 @@ export function App(): React.JSX.Element {
     if (calendarConnect.latest()?.busy) window.sidecar.cancelGoogleCalendarSignIn();
     calendarConnect.cancel();
   }, [calendarConnect.cancel, calendarConnect.latest]);
+
+  const changeAutomaticUpdates = useCallback(
+    async (enabled: boolean) =>
+      applySettingsReply(await window.sidecar.setAutomaticUpdates(enabled)),
+    [applySettingsReply],
+  );
 
   /**
    * Asking to write a key is asking for one thing, so the panel gets out of the
@@ -1416,9 +1433,11 @@ export function App(): React.JSX.Element {
           const opening = presentationOf() !== PANEL_PRESENTATION.PANEL;
           // The guide's ids travel as plain text, so one that names no setting
           // of Luke's names no page either — and nothing will fly to it.
-          const page = isAppSettingId(action.setting.id)
+          const settingPage = isAppSettingId(action.setting.id)
             ? SETTING_PAGE[action.setting.id]
             : undefined;
+          // A front-page setting opens no page at all: the tab is the flight.
+          const page = settingPage === SETTINGS_VIEW.ROOT ? undefined : settingPage;
           try {
             await changeMode(true);
             // Queued rather than flown at once. The tab, the page and the wait
@@ -1663,6 +1682,12 @@ export function App(): React.JSX.Element {
     (onChange) => window.sidecar.onAccountChanged(onChange),
     setAccount,
   );
+  // Where the app stands against the latest release: the timed check's
+  // pushes beat a bootstrap snapshot still in flight, like the settings'.
+  const acceptUpdateBootstrap = useBootstrapRacedChannel(
+    (onChange) => window.sidecar.onUpdateChanged(onChange),
+    setUpdate,
+  );
   const acceptOutputAudioBootstrap = useBootstrapRacedChannel(
     (onChange) => window.sidecar.onOutputAudioChanged(onChange),
     setOutputAudio,
@@ -1755,6 +1780,7 @@ export function App(): React.JSX.Element {
       acceptMeetingQuietBootstrap(value.meetingQuiet);
       acceptSettingsBootstrap(value.settings);
       acceptAccountBootstrap(value.account);
+      acceptUpdateBootstrap(value.update);
       setDisplay(value.display);
       if (modeGenerationOf() === bootstrapGeneration) {
         applyAuthoritativeMode(value.mode);
@@ -1824,6 +1850,7 @@ export function App(): React.JSX.Element {
     acceptOutputAudioBootstrap,
     acceptProjectsBootstrap,
     acceptSettingsBootstrap,
+    acceptUpdateBootstrap,
     applyAuthoritativeMode,
     applyPresentation,
     beginEntry,
@@ -2164,10 +2191,20 @@ export function App(): React.JSX.Element {
     onRequest: () => void requestMicrophoneAccess(),
     onOpenSettings: () => window.sidecar.openMicrophoneSettings(),
   };
+  const updates: UpdateControl = {
+    update: update ?? bootstrap.update,
+    // Answered rather than fire-and-forget so the row that asked redraws from
+    // the same snapshot the broadcast carries to every other window.
+    onCheck: async () => {
+      setUpdate(await window.sidecar.checkForUpdates());
+    },
+    onOpenLatest: () => window.sidecar.openLatestRelease(),
+  };
   const preferences: PreferenceWrites = {
     onVoiceCaptionsChange: changeVoiceCaptions,
     onDuckOtherMediaChange: changeDuckOtherMedia,
     onQuietDuringMeetingsChange: changeQuietDuringMeetings,
+    onAutomaticUpdatesChange: changeAutomaticUpdates,
     onVoiceChange: changeVoice,
     onVoiceSpeedChange: changeVoiceSpeed,
     onShowInMenuBarChange: changeShowInMenuBar,
@@ -2271,6 +2308,7 @@ export function App(): React.JSX.Element {
               view: settingsView,
               onViewChange: setSettingsView,
               microphone,
+              updates,
               settings,
               preferences,
               credentials,

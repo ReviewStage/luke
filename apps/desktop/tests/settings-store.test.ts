@@ -467,6 +467,22 @@ test("announcements wait out meetings until asked otherwise, and the choice surv
   assert.equal(cipher.calls.encrypt, 0);
 });
 
+test("updates are checked for until asked otherwise, and the choice survives a reopen", async (t) => {
+  const directory = await temporaryDirectory(t);
+  // A preference is not a credential, so choosing it must reach the Keychain
+  // not at all.
+  const cipher = countingCipher();
+  const store = storeIn(directory, { cipher });
+
+  assert.equal((await store.snapshot()).automaticUpdates, true);
+  const disabled = await store.setAutomaticUpdates(false);
+
+  assert.equal(disabled.settings.automaticUpdates, false);
+  assert.equal((await storeIn(directory).snapshot()).automaticUpdates, false);
+  assert.equal(cipher.calls.isAvailable, 0);
+  assert.equal(cipher.calls.encrypt, 0);
+});
+
 test("switching the meeting quiet never disturbs a stored key", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
@@ -489,6 +505,20 @@ test("a corrupt meeting quiet value reads as the default rather than as off", as
   );
 
   assert.equal((await storeIn(directory).snapshot()).quietDuringMeetings, true);
+});
+
+test("a corrupt update check value reads as the default rather than as off", async (t) => {
+  const directory = await temporaryDirectory(t);
+  // The media duck's rule: each lands on its own default, and this one's
+  // default is on — a build left silently behind is the failure the setting
+  // exists to prevent.
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({ version: 2, apiKeys: {}, automaticUpdates: "no" }),
+    "utf8",
+  );
+
+  assert.equal((await storeIn(directory).snapshot()).automaticUpdates, true);
 });
 
 test("keeps each provider's key, environment fallback, and reported source separate", async (t) => {
@@ -547,6 +577,7 @@ test("keeps both keys when two providers are saved at once", async (t) => {
     duckOtherMedia: true,
     quietDuringMeetings: true,
     showOnAllDisplays: false,
+    automaticUpdates: true,
   });
   const reopened = storeIn(directory, { providers: TEST_PROVIDERS });
   assert.equal(await reopened.readApiKey(FIRST_CLOUD), "first-cloud-key");
@@ -748,6 +779,7 @@ test("keeps a Conductor key stored by an earlier version working", async (t) => 
     duckOtherMedia: true,
     quietDuringMeetings: true,
     showOnAllDisplays: false,
+    automaticUpdates: true,
   });
   assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), "conductor-replacement-key");
 });
@@ -772,6 +804,7 @@ test("carries a key belonging to a provider this build does not know", async (t)
     duckOtherMedia: true,
     quietDuringMeetings: true,
     showOnAllDisplays: false,
+    automaticUpdates: true,
   });
 });
 
@@ -794,6 +827,7 @@ test("shows the menu bar item until asked otherwise, and remembers the answer", 
     duckOtherMedia: true,
     quietDuringMeetings: true,
     showOnAllDisplays: false,
+    automaticUpdates: true,
   });
   // The choice outlives the run that heard it.
   assert.equal((await storeIn(directory).snapshot()).showInMenuBar, false);
@@ -877,6 +911,7 @@ test("keeps Luke out of the Dock until asked, and remembers the answer", async (
     duckOtherMedia: true,
     quietDuringMeetings: true,
     showOnAllDisplays: false,
+    automaticUpdates: true,
   });
   // The choice outlives the run that heard it.
   assert.equal((await storeIn(directory).snapshot()).showInDock, true);
