@@ -226,6 +226,9 @@ test("the spoken instructions state what Luke cannot see, and when he may act", 
   assert.match(instructions, /speaks to you or types to you/i);
   // Spoken references stay human: a hash or an id is noise read aloud.
   assert.match(instructions, /identifiers no one says aloud/i);
+  // A broad "what are we working on?" spans the roster: Luke answers across
+  // every observed session rather than asking the developer to pick one.
+  assert.match(instructions, /about every observed session/i);
   // A bare "that chat" has a stated resolution order — this conversation's own
   // most recent mention, then the session under discussion — so the reference
   // is followed rather than guessed at.
