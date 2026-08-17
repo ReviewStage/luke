@@ -64,10 +64,12 @@ two things only — your availability (`calendar.freebusy`) and your calendar
 list — so Google answers Luke with busy intervals, and meeting titles cannot
 even reach the machine. Several accounts can be connected side by side with
 **Add account**, and under each account a checkbox per calendar chooses which
-ones count. The integration appears only in builds carrying a registered
-Google OAuth client (set `GOOGLE_CALENDAR_OAUTH_CLIENT_ID` — and
-`GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET` — to supply your own in development).
-Register that Desktop-app client in the **same Google Cloud project** as the
+ones count. The project's registered client id stands in the source, and packaging a
+release injects its secret from the release environment — so shipped builds
+always offer the integration, while a bare checkout offers it once
+`GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET` is set (with
+`GOOGLE_CALENDAR_OAUTH_CLIENT_ID` to develop against your own registration).
+Register such a Desktop-app client in the **same Google Cloud project** as the
 Luke sign-in's web client: Google's consent-screen branding — the app name,
 logo, and links — is configured per project, so one project is what makes
 both consent pages introduce themselves identically as Luke. The clients

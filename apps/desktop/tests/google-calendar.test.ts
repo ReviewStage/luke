@@ -60,7 +60,10 @@ function readerWith(
   const { fetch, requests } = recordingFetch(respond);
   const reader = new GoogleCalendarReader({
     readAccounts: async () => accounts,
-    signInConfig: () => ({ clientId: "test-client.apps.googleusercontent.com" }),
+    signInConfig: () => ({
+      clientId: "test-client.apps.googleusercontent.com",
+      clientSecret: "GOCSPX-test-secret",
+    }),
     fetchImplementation: fetch as typeof globalThis.fetch,
     now: () => NOW,
   });

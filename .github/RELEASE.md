@@ -23,6 +23,7 @@ secrets is what turns the tag push into the whole release.
 | `APPLE_API_KEY_P8_BASE64` | Base64-encoded App Store Connect API private key | The downloaded `.p8` file from App Store Connect |
 | `APPLE_API_KEY_ID` | Identifies the App Store Connect API key | App Store Connect, Users and Access, Integrations |
 | `APPLE_API_ISSUER_ID` | Identifies the App Store Connect API key issuer | App Store Connect, Users and Access, Integrations |
+| `GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET` | Google Calendar desktop OAuth client secret, baked into the app bundle at package time — a build without it ships no calendar sign-in | Google Cloud console, the Luke project's Desktop client under APIs & Services → Credentials |
 
 ### Export the signing certificate
 
@@ -43,6 +44,7 @@ printf '%s' 'the-p12-password' | gh secret set MACOS_CERTIFICATE_PASSWORD
 base64 -i AuthKey_KEYID.p8 | gh secret set APPLE_API_KEY_P8_BASE64
 printf '%s' 'KEYID' | gh secret set APPLE_API_KEY_ID
 printf '%s' 'issuer-uuid' | gh secret set APPLE_API_ISSUER_ID
+gh secret set GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET
 ```
 
 The commands use macOS `base64`, where `-i` names an input file. Entering the certificate
@@ -97,10 +99,17 @@ Developer ID identity and a stored `luke-notary` notarytool profile
 
 ```sh
 export LUKE_CODESIGN_IDENTITY='Developer ID Application: …'
+export GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET='GOCSPX-…'   # from the Google Cloud console
 pnpm release:macos                    # signs, notarizes, staples; writes the DMG and zip
 git tag v0.1.1 && git push origin v0.1.1
 ./scripts/release/publish-github.sh   # creates the release and uploads every asset
 ```
+
+The calendar secret is baked into the app bundle while packaging — the Google Calendar
+sign-in exists only in builds carrying it, so the builder refuses to run without the
+variable rather than shipping a DMG the integration is silently missing from. It is the
+same value the Actions secret holds; take it from the Luke project's Desktop OAuth
+client under **APIs & Services → Credentials**.
 
 The builder writes both distribution artifacts under `artifacts/release/`, and the
 publish script is what knows the asset set: the versioned DMG and zip with their

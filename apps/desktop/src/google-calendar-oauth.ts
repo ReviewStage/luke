@@ -17,20 +17,20 @@ import { codeChallenge, createCodeVerifier } from "./account-pkce";
  * this build; what the flow produces is a grant scoped to availability and
  * the calendar list alone, and storing it is the caller's act, not this one's.
  *
- * The flow exists only when a build carries an OAuth client id. A client id
- * is an app registration rather than a secret — installed apps publish theirs
- * in every authorization URL — but registering one is a release act, so a
- * build without one does not offer the integration at all.
+ * The flow exists only when a run holds the whole registration: the client id
+ * standing in source below, and the client secret packaging injects — or the
+ * environment variables that stand in for either during development. A bare
+ * checkout with neither offers the integration not at all.
  */
 
 export interface GoogleCalendarSignInConfig {
   clientId: string;
   /**
    * Google issues desktop OAuth clients a "secret" it documents as not
-   * confidential — every installed copy carries it — but the token endpoint
-   * still expects it for that client type, so it rides along when configured.
+   * confidential — every installed copy carries it — and the token endpoint
+   * expects it for that client type, so a config without one is not offered.
    */
-  clientSecret?: string;
+  clientSecret: string;
 }
 
 const SIGN_IN_ENVIRONMENT = {
@@ -39,22 +39,42 @@ const SIGN_IN_ENVIRONMENT = {
 } as const;
 
 /**
- * The OAuth client a release bakes in. Empty until the project registers one
- * with Google — the environment variables above stand in for development —
- * and while it is empty the sign-in button is not offered at all.
+ * The Google Calendar OAuth client this project registered with Google — the
+ * "Luke" desktop client in the project's own Google Cloud console. A client
+ * id is published in every authorization URL, so it stands in source; the
+ * environment variable above overrides it for development against another
+ * registration.
  */
-const BUILD_CLIENT_ID = "";
-const BUILD_CLIENT_SECRET = "";
+const REGISTERED_GOOGLE_CALENDAR_CLIENT_ID =
+  "346664327893-mg16fmbgb2qtt41fe4kn860kbv6bsaaf.apps.googleusercontent.com";
+
+/**
+ * The registration's secret half. Google documents a desktop client's secret
+ * as not confidential — every installed copy carries it, and PKCE over the
+ * loopback is what actually protects the flow — but repository scanners
+ * cannot tell it from a web client's real one, so it never sits in source:
+ * `build.mjs` defines this identifier from the packaging environment, and a
+ * build packaged without it offers the sign-in only where the environment
+ * variables supply one.
+ */
+declare const PACKAGED_GOOGLE_CALENDAR_CLIENT_SECRET: string | undefined;
+const packagedClientSecret =
+  typeof PACKAGED_GOOGLE_CALENDAR_CLIENT_SECRET === "string"
+    ? PACKAGED_GOOGLE_CALENDAR_CLIENT_SECRET
+    : "";
 
 /** The sign-in this run can offer, or nothing — which hides the button. */
 export function googleCalendarSignInConfig(
   environment: NodeJS.ProcessEnv = process.env,
 ): GoogleCalendarSignInConfig | undefined {
-  const clientId = environment[SIGN_IN_ENVIRONMENT.CLIENT_ID]?.trim() || BUILD_CLIENT_ID;
-  if (!clientId) return undefined;
+  const clientId =
+    environment[SIGN_IN_ENVIRONMENT.CLIENT_ID]?.trim() || REGISTERED_GOOGLE_CALENDAR_CLIENT_ID;
   const clientSecret =
-    environment[SIGN_IN_ENVIRONMENT.CLIENT_SECRET]?.trim() || BUILD_CLIENT_SECRET;
-  return { clientId, ...(clientSecret ? { clientSecret } : {}) };
+    environment[SIGN_IN_ENVIRONMENT.CLIENT_SECRET]?.trim() || packagedClientSecret;
+  // Google's token endpoint expects a desktop client's secret; a flow that
+  // would fail mid-exchange is not offered at all.
+  if (!clientId || !clientSecret) return undefined;
+  return { clientId, clientSecret };
 }
 
 /** Google's documented endpoints for an installed app, fixed by this build. */
@@ -270,7 +290,7 @@ export class GoogleCalendarSignIn {
     const body = new URLSearchParams({
       code,
       client_id: config.clientId,
-      ...(config.clientSecret ? { client_secret: config.clientSecret } : {}),
+      client_secret: config.clientSecret,
       redirect_uri: redirectUri,
       grant_type: "authorization_code",
       code_verifier: verifier,

@@ -275,7 +275,7 @@ export class GoogleCalendarReader {
       grant_type: "refresh_token",
       refresh_token: account.refreshToken,
       client_id: config.clientId,
-      ...(config.clientSecret ? { client_secret: config.clientSecret } : {}),
+      client_secret: config.clientSecret,
     });
     const response = await this.#fetch(GOOGLE_TOKEN_URL, {
       method: "POST",
