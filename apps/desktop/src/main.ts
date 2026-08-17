@@ -80,7 +80,7 @@ import {
   SIGN_IN_CANCELLED_MESSAGE,
   startAccountLoopback,
 } from "./account-loopback";
-import { withIssuedAccountTokens } from "./account-token-lifecycle";
+import { singleFlight, withIssuedAccountTokens } from "./account-token-lifecycle";
 import { CLAUDE_CODE_PROVIDER, ClaudeCodeSessionAdapter } from "./claude-code-adapter";
 import {
   CLAUDE_HOOK_SCRIPT_NAME,
@@ -791,12 +791,17 @@ function reportVoiceAvailability(apiKeyConfigured: boolean): void {
  * The seams the hosted clients reach the account through. The token is read
  * fresh from the store on every use — the lifecycle owns rotation — and a 401
  * asks that same lifecycle for a refresh rather than growing a second one.
+ * The refresh is single-flighted because its token rotates when spent: a mint
+ * and a review both answering 401 at the hour mark must share one refresh, or
+ * the loser's spent token reads as revocation and signs the account out.
  */
+const refreshStoredAccountOnce = singleFlight(() => refreshStoredAccount());
+
 function hostedServiceSeams() {
   return {
     serviceBaseUrl: HOSTED_SERVICE_BASE_URL,
     readAccessToken: async () => (await settingsStore.readAccount())?.accessToken,
-    refreshAccount: () => refreshStoredAccount(),
+    refreshAccount: refreshStoredAccountOnce,
   };
 }
 
@@ -2953,7 +2958,7 @@ if (!app.requestSingleInstanceLock()) {
     startCalendarObservation();
     // Reconcile in the background. Only an explicit invalid_grant removes the
     // stored account; network failures and service outages leave it active.
-    void refreshStoredAccount();
+    void refreshStoredAccountOnce();
 
     screen.on("display-added", handleDisplayChange);
     screen.on("display-removed", handleDisplayChange);
