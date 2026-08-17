@@ -485,6 +485,15 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    * waiting belongs on.
    */
   const callReopening = useRef(false);
+  /**
+   * Whether a changed voice is owed against the call now up or coming, and
+   * still waiting for it to settle before it can be paid. Declared beside
+   * {@link callReopening} because it is the same kind of fact and told to the
+   * same listener: both are things the announcer cannot see from the session
+   * alone, and both decide whether the call in front of it is the one a sample
+   * belongs on.
+   */
+  const voiceRestartDue = useRef(false);
   /** When the talk key went down, which is what tells a hold from a tap. */
   const talkPressedAt = useRef<number | undefined>(undefined);
   /** Whether a tap has left a turn open for a later press to end. */
@@ -617,6 +626,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     announcer.current ??= new SpokenNoticeAnnouncer({
       session: () => ensureVoiceSession(),
       reopening: () => callReopening.current,
+      revoicing: () => voiceRestartDue.current,
     });
     return announcer.current;
   }, [ensureVoiceSession]);
@@ -831,7 +841,6 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   }, [options.voiceSpeed]);
 
   const heardVoice = useRef<RealtimeVoice | undefined>(undefined);
-  const voiceRestartDue = useRef(false);
   useEffect(() => {
     const decided = voiceRestartAction({
       previous: heardVoice.current,

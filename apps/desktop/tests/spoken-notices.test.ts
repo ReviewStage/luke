@@ -37,17 +37,27 @@ interface FakeSession extends AnnouncerSession {
   closes: number;
   /** What the next connect resolves to; the call opens when it does. */
   connectOpens: boolean;
+  /**
+   * Whether a connect leaves the call CONNECTING and waits, rather than
+   * settling as it is asked. It is what lets a test put a pick inside a
+   * handshake — the stretch a credential is minted across.
+   */
+  slowHandshake: boolean;
+  /** Settles the handshake now waiting, as {@link connectOpens} says. */
+  settleHandshake(): void;
   setStatus(status: RealtimeStatus): void;
   microphone: boolean;
 }
 
 function fakeSession(): FakeSession {
+  let settle: ((opened: boolean) => void) | undefined;
   const session: FakeSession = {
     spoken: [],
     previews: 0,
     connects: 0,
     closes: 0,
     connectOpens: true,
+    slowHandshake: false,
     microphone: false,
     status: REALTIME_STATUS.IDLE,
     get isConnected() {
@@ -64,8 +74,19 @@ function fakeSession(): FakeSession {
     },
     async connect() {
       this.connects += 1;
+      if (this.slowHandshake) {
+        this.setStatus(REALTIME_STATUS.CONNECTING);
+        return await new Promise<boolean>((resolve) => {
+          settle = resolve;
+        });
+      }
       this.setStatus(this.connectOpens ? REALTIME_STATUS.READY : REALTIME_STATUS.UNAVAILABLE);
       return this.connectOpens;
+    },
+    settleHandshake() {
+      this.setStatus(this.connectOpens ? REALTIME_STATUS.READY : REALTIME_STATUS.UNAVAILABLE);
+      settle?.(this.connectOpens);
+      settle = undefined;
     },
     speak(item: AttentionSpeech) {
       if (!this.isConnected || this.status === REALTIME_STATUS.RESPONDING) return false;
@@ -123,13 +144,17 @@ function fakeTimers(): Timers {
 function announcer(
   session: FakeSession,
   timers: Timers,
-  now = () => 1_000,
-  reopening: () => boolean = () => false,
+  told: {
+    now?: () => number;
+    reopening?: () => boolean;
+    revoicing?: () => boolean;
+  } = {},
 ) {
   return new SpokenNoticeAnnouncer({
     session: () => session,
-    reopening,
-    now,
+    reopening: told.reopening ?? (() => false),
+    revoicing: told.revoicing ?? (() => false),
+    now: told.now ?? (() => 1_000),
     schedule: timers.schedule,
     cancel: timers.cancel,
   });
@@ -439,7 +464,7 @@ test("a sample that waited out a long reply is dropped, not played late", () => 
   session.setStatus(REALTIME_STATUS.RESPONDING);
   const timers = fakeTimers();
   let now = 10_000;
-  const subject = announcer(session, timers, () => now);
+  const subject = announcer(session, timers, { now: () => now });
 
   subject.requestPreview();
   assert.equal(session.previews, 0);
@@ -561,12 +586,7 @@ test("a sample waits for the developer's call to come back in the new voice", as
   session.setStatus(REALTIME_STATUS.READY);
   const timers = fakeTimers();
   let reopening = false;
-  const subject = announcer(
-    session,
-    timers,
-    () => 1_000,
-    () => reopening,
-  );
+  const subject = announcer(session, timers, { reopening: () => reopening });
 
   // The voice change tore the developer's call down to mint the next one in
   // the new voice. Across that gap the session answers "no call, none
@@ -590,13 +610,104 @@ test("a sample waits for the developer's call to come back in the new voice", as
   assert.equal(session.previews, 1);
 });
 
+test("a pick made inside the handshake is heard in its own voice, not the replaced one", async () => {
+  const session = fakeSession();
+  session.slowHandshake = true;
+  const timers = fakeTimers();
+  // What the voice restart holds while it waits: a changed voice owed against
+  // the call coming up, which cannot be paid until that call settles.
+  let revoicing = false;
+  const subject = announcer(session, timers, { revoicing: () => revoicing });
+
+  // The first pick opens a call, and its credential is minted for that voice
+  // across the whole handshake.
+  subject.requestPreview();
+  await Promise.resolve();
+  assert.equal(session.connects, 1);
+  assert.equal(session.status, REALTIME_STATUS.CONNECTING);
+
+  // A second pick lands inside that stretch. The restart can only wait — there
+  // is no settled call to tear down yet — so the voice now stored and the voice
+  // the call is coming up in have come apart.
+  revoicing = true;
+  subject.requestPreview();
+
+  // The call opens in the voice being replaced. Auditioning the new pick on it
+  // would play the wrong voice and spend the ask doing it.
+  session.settleHandshake();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(session.previews, 0, "the voice being replaced never speaks the sample");
+
+  // The restart pays what it owed: the call is released, and the sample is
+  // still waiting for the one that replaces it.
+  revoicing = false;
+  session.setStatus(REALTIME_STATUS.IDLE);
+  subject.onStatus(REALTIME_STATUS.IDLE);
+  await Promise.resolve();
+  session.settleHandshake();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(session.connects, 2, "the voice now stored gets a call minted for it");
+  assert.equal(session.previews, 1, "and is heard once, on that call");
+});
+
+test("a refused handshake keeps the pick made while it was going", async () => {
+  const session = fakeSession();
+  session.slowHandshake = true;
+  session.connectOpens = false;
+  const timers = fakeTimers();
+  const subject = announcer(session, timers);
+
+  subject.requestPreview();
+  await Promise.resolve();
+  assert.equal(session.connects, 1);
+
+  // A newer click lands inside the handshake, and then the handshake is
+  // refused. The sample that refusal belonged to goes with it; this one is a
+  // different click, and still owed an answer.
+  subject.requestPreview();
+  session.settleHandshake();
+  await Promise.resolve();
+  await Promise.resolve();
+
+  session.connectOpens = true;
+  subject.onStatus(REALTIME_STATUS.UNAVAILABLE);
+  await Promise.resolve();
+  assert.equal(session.connects, 2, "the newer pick is tried on its own");
+  session.settleHandshake();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(session.previews, 1);
+});
+
+test("a refusal with no newer pick behind it drops the sample and stops", async () => {
+  const session = fakeSession();
+  session.slowHandshake = true;
+  session.connectOpens = false;
+  const timers = fakeTimers();
+  const subject = announcer(session, timers);
+
+  subject.requestPreview();
+  await Promise.resolve();
+  session.settleHandshake();
+  await Promise.resolve();
+  await Promise.resolve();
+
+  // Nothing superseded the sample this call was opened for, so the refusal
+  // takes it — the status it raises must not start the attempt over.
+  subject.onStatus(REALTIME_STATUS.UNAVAILABLE);
+  await Promise.resolve();
+  assert.equal(session.connects, 1, "a spent sample does not reopen the call it lost");
+});
+
 test("a sentence that went stale in the queue is dropped, not read as news", () => {
   const session = fakeSession();
   session.setStatus(REALTIME_STATUS.RESPONDING);
   session.microphone = true;
   const timers = fakeTimers();
   let now = 10_000;
-  const subject = announcer(session, timers, () => now);
+  const subject = announcer(session, timers, { now: () => now });
 
   // Arrives during a long reply and waits.
   subject.enqueue([speech("a", 10_000)]);

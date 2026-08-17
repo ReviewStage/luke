@@ -70,6 +70,15 @@ export interface AnnouncerSession {
   close(): Promise<void>;
 }
 
+/**
+ * An ask to hear the voice and pace now stored. Identity is what distinguishes
+ * two of them: every ask is its own object, so a slot still holding the one a
+ * call was opened for is a slot nothing has superseded.
+ */
+interface VoicePreviewRequest {
+  readonly requestedAt: number;
+}
+
 export interface SpokenNoticeAnnouncerOptions {
   session: () => AnnouncerSession;
   /**
@@ -81,6 +90,20 @@ export interface SpokenNoticeAnnouncerOptions {
    * coming back, which is also the call anything waiting belongs on.
    */
   reopening?: () => boolean;
+  /**
+   * Whether the call now up, or the one still coming up, was minted for a
+   * voice that no longer stands. A voice change owed against a call cannot be
+   * paid until the call settles, so between the pick and the teardown there is
+   * a live call speaking in the voice being replaced.
+   *
+   * News may ride such a call: a session that finished is the same news in any
+   * voice. A sample may not, because the sample *is* the voice — played there
+   * it would audition the voice the developer just moved off, and be spent by
+   * the time the call it was actually owed opens. Held instead, it is asked for
+   * again the moment that call ends, which is the path a stranded sample
+   * already takes.
+   */
+  revoicing?: () => boolean;
   now?: () => number;
   schedule?: (callback: () => void, delayMs: number) => unknown;
   cancel?: (timer: unknown) => void;
@@ -120,7 +143,7 @@ export class SpokenNoticeAnnouncer {
    * The sample waiting to be played, if one is. A slot rather than a queue
    * entry: two picks in a row are one ask to hear the second one.
    */
-  #preview: { requestedAt: number } | undefined;
+  #preview: VoicePreviewRequest | undefined;
   /** Whether the call now up is one this announcer opened, and so must close. */
   #ownsCall = false;
   /**
@@ -220,8 +243,13 @@ export class SpokenNoticeAnnouncer {
     }
     if (session.isConnected) {
       // The sample goes first. It answers something the developer did a moment
-      // ago; the notices behind it are news, and news keeps.
-      if (this.#preview && session.speakPreview()) this.#preview = undefined;
+      // ago; the notices behind it are news, and news keeps. Unless this call
+      // is the one a changed voice is already owed against, in which case the
+      // sample waits for the call that replaces it — the voice it exists to
+      // play is not the voice this one would say it in.
+      if (this.#preview && this.#options.revoicing?.() !== true && session.speakPreview()) {
+        this.#preview = undefined;
+      }
       // One reply at a time: the first speak takes the turn and the second is
       // refused, so the loop stops itself and READY resumes it.
       while (this.#queue.length > 0 && session.speak(this.#queue[0] as AttentionSpeech)) {
@@ -247,6 +275,9 @@ export class SpokenNoticeAnnouncer {
     // Until a notice speaks on it, whatever this call is opened for, it has
     // said nothing that is owed the long linger.
     this.#previewOnlyCall = true;
+    // Which sample this call is being opened for, so a refusal can tell it from
+    // one the developer picked while the handshake was still going.
+    const attempted = this.#preview;
     void session
       .connect({ microphone: false })
       .then((opened) => {
@@ -264,11 +295,11 @@ export class SpokenNoticeAnnouncer {
           return;
         }
         this.#ownsCall = false;
-        this.#retreatOrRetry();
+        this.#retreatOrRetry(attempted);
       })
       .catch(() => {
         this.#ownsCall = false;
-        this.#retreatOrRetry();
+        this.#retreatOrRetry(attempted);
       });
   }
 
@@ -279,12 +310,16 @@ export class SpokenNoticeAnnouncer {
    * a fresh backlog with tries of its own rather than dying against a spent
    * counter. What is dropped is still standing in the panel.
    */
-  #retreatOrRetry(): void {
-    // The sample goes with the refusal, whatever the backlog does next. It is
-    // the answer to a click, and the retry clock is twenty seconds long: a
-    // call opening then would be Luke introducing himself to someone who has
-    // gone back to work.
-    this.#preview = undefined;
+  #retreatOrRetry(attempted: VoicePreviewRequest | undefined): void {
+    // The sample this call was opened for goes with the refusal, whatever the
+    // backlog does next. It is the answer to a click, and the retry clock is
+    // twenty seconds long: a call opening then would be Luke introducing
+    // himself to someone who has gone back to work.
+    //
+    // A pick made while the handshake was still going is a different ask, and
+    // not this refusal's to drop — it is the newer click, still waiting on an
+    // answer, and the status this refusal raises is what asks for it again.
+    if (this.#preview === attempted) this.#preview = undefined;
     if (this.#connectAttempts >= MAXIMUM_CONNECT_ATTEMPTS) {
       this.#queue = [];
       this.#connectAttempts = 0;
