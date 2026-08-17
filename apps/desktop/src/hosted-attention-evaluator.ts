@@ -152,6 +152,10 @@ export class HostedAttentionEvaluator implements AttentionEvaluator {
   }
 
   async #request(token: string, update: AttentionUpdate): Promise<Response | undefined> {
+    // The kind of call and nothing else: the update, the token, and the
+    // decision stay out of the log. The model is the service's choice, so it
+    // has no name to log.
+    console.log("AI call: hosted attention review");
     try {
       return await this.#fetch(this.#endpoint, {
         method: "POST",

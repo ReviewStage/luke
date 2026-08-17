@@ -191,6 +191,10 @@ export class HostedRealtimeCredentialMinter implements RealtimeCredentialMinter 
   }
 
   async #request(token: string): Promise<Response | undefined> {
+    // The kind of call and nothing else: the token, the preferences, and the
+    // minted secret stay out of the log. The model is the service's choice, so
+    // it has no name to log until the answer arrives.
+    console.log("AI call: hosted realtime voice credential mint");
     try {
       return await this.#fetch(this.#endpoint, {
         method: "POST",
