@@ -646,8 +646,10 @@ const MOTIONS = {
 };
 
 const MOTION_NAMES = Object.keys(MOTIONS);
-const layerSplines = (layer) => layer.splines ?? Array(layer.values.length - 1).fill(EASE);
-const partSplines = (part) => Array(part.values.length - 1).fill(EASE);
+// Per-interval easing for anything with `values`: its own splines, or the
+// default ease on every interval. Eyes are the exception — they animate with
+// no splines at all, which SMIL and CSS both read as linear.
+const motionSplines = (part) => part.splines ?? Array(part.values.length - 1).fill(EASE);
 /** The longest loop in a motion: how long a caller must wait to see all of it. */
 function motionCycleMs(motion) {
   const durations = [
@@ -681,7 +683,7 @@ function svgBrows(motion) {
     brow(c1) + brow(c2),
     animT("translate", values.map((pair) => pair.join(" ")).join(";"), dur, {
       keyTimes: keyTimes.join(";"),
-      spline: partSplines(motion.brows).join(";"),
+      spline: motionSplines(motion.brows).join(";"),
     }),
   );
 }
@@ -695,7 +697,7 @@ function motionSvg(motion) {
     }
     const opts = {
       keyTimes: layer.keyTimes ? layer.keyTimes.join(";") : undefined,
-      spline: layerSplines(layer).join(";"),
+      spline: motionSplines(layer).join(";"),
     };
     if (layer.type === "scale") {
       body = scaleAbout(
@@ -719,86 +721,95 @@ function motionSvg(motion) {
 // ---------- Motions as CSS ----------
 // The app cannot use the SMIL above: it needs the renderer's `--face-motion`
 // token to be able to stop every loop at once, which only CSS animation offers.
-// Each layer, each eye, and each brow becomes one @keyframes, and the interval
-// easings become per-keyframe timing functions, which is the only way CSS can
-// express a keySplines list.
+// Each layer, each eye, and each brow becomes one @keyframes and one rule that
+// names it. A part that eases every interval with one curve carries it on the
+// rule; only mixed curves become per-keyframe timing functions, which is the
+// only way CSS can express a keySplines list. No curve at all is linear, which
+// the wiring in base.css already says.
 const cssTime = (fraction) => `${+(fraction * 100).toFixed(4)}%`;
 
-function cssKeyframes(name, steps, splines) {
+// How each transform a part can play is written. Eye factors are scalars: a
+// widen scales the whole eye and everything else squeezes it vertically.
+const TRANSFORM_CSS = {
+  rotate: (angle) => `rotate(${angle}deg)`,
+  scale: ([x, y]) => `scale(${x}, ${y})`,
+  translate: ([x, y]) => `translate(${x}px, ${y}px)`,
+};
+
+const evenTimes = (count) => Array.from({ length: count }, (_, index) => index / (count - 1));
+
+function cssKeyframes(name, steps, easings = []) {
   const blocks = steps.map(({ at, declaration }, index) => {
-    const easing =
-      index < steps.length - 1
-        ? `\n    animation-timing-function: ${splines[index] ? bezier(splines[index]) : "linear"};`
-        : "";
+    const easing = easings[index] ? `\n    animation-timing-function: ${easings[index]};` : "";
     return `  ${cssTime(at)} {\n    ${declaration}${easing}\n  }`;
   });
   return `@keyframes ${name} {\n${blocks.join("\n\n")}\n}`;
 }
 
-const evenTimes = (count) => Array.from({ length: count }, (_, index) => index / (count - 1));
+const originCss = (pivot) =>
+  pivot ? `\n  transform-origin: ${pivot.map((n) => `${n}px`).join(" ")};` : "";
 
-function layerSteps(layer) {
-  const times = layer.keyTimes ?? evenTimes(layer.values.length);
-  return layer.values.map((value, index) => ({
+// One moving part: its @keyframes, and the rule that plays them on `target`.
+// `splines` is per-interval SMIL easing, or undefined for a part with none.
+function partCss({ target, name, part, transform, splines, pivot }) {
+  const times = part.keyTimes ?? evenTimes(part.values.length);
+  const steps = part.values.map((value, index) => ({
     at: times[index],
-    declaration:
-      layer.type === "rotate"
-        ? `transform: rotate(${value}deg);`
-        : layer.type === "scale"
-          ? `transform: scale(${value[0]}, ${value[1]});`
-          : `transform: translate(${value[0]}px, ${value[1]}px);`,
+    declaration: `transform: ${transform(value)};`,
   }));
+  const uniform = splines === undefined || splines.every((spline) => spline === splines[0]);
+  const block = cssKeyframes(name, steps, uniform ? [] : splines.map(bezier));
+  const easing = uniform && splines ? `\n  animation-timing-function: ${bezier(splines[0])};` : "";
+  const rule = `${target} {${originCss(pivot)}\n  animation-name: ${name};\n  animation-duration: ${part.dur}s;${easing}\n}`;
+  return { block, rule };
 }
 
 function motionCss(name, motion) {
   const selector = `.luke-face[data-motion="${name}"]`;
   const blocks = [];
   const rules = [];
+  const emit = (part) => {
+    const { block, rule } = partCss(part);
+    blocks.push(block);
+    rules.push(rule);
+  };
 
   motion.layers.forEach((layer, index) => {
     const target = `${selector} .luke-face-layer-${index + 1}`;
-    const origin =
-      layer.type === "translate"
-        ? ""
-        : `\n  transform-origin: ${(layer.pivot ?? [120, 124]).map((n) => `${n}px`).join(" ")};`;
+    const pivot = layer.type === "translate" ? undefined : (layer.pivot ?? [120, 124]);
     if (layer.hold !== undefined) {
-      rules.push(`${target} {${origin}\n  transform: rotate(${layer.hold}deg);\n}`);
+      rules.push(`${target} {${originCss(pivot)}\n  transform: rotate(${layer.hold}deg);\n}`);
       return;
     }
-    const animation = `luke-${name}-${index + 1}`;
-    blocks.push(cssKeyframes(animation, layerSteps(layer), layerSplines(layer)));
-    rules.push(
-      `${target} {${origin}\n  animation-name: ${animation};\n  animation-duration: ${layer.dur}s;\n}`,
-    );
+    emit({
+      target,
+      name: `luke-${name}-${index + 1}`,
+      part: layer,
+      transform: TRANSFORM_CSS[layer.type],
+      splines: motionSplines(layer),
+      pivot,
+    });
   });
 
   const eyes = motion.eyes;
   if (eyes && eyes.kind !== "lids") {
-    const animation = `luke-${name}-eyes`;
-    const steps = eyes.factors.map((factor, index) => ({
-      at: eyes.keyTimes[index],
-      declaration:
-        eyes.kind === "widen" ? `transform: scale(${factor});` : `transform: scaleY(${factor});`,
-    }));
-    // No keySplines on the SVG's eye animations, so every interval is linear.
-    blocks.push(cssKeyframes(animation, steps, []));
-    // The wink closes one eye; every other motion moves both.
-    const target = eyes.kind === "wink" ? ".luke-face-eye-right" : ".luke-face-eye";
-    rules.push(
-      `${selector} ${target} {\n  animation-name: ${animation};\n  animation-duration: ${eyes.dur}s;\n}`,
-    );
+    emit({
+      // The wink closes one eye; every other motion moves both.
+      target: `${selector} ${eyes.kind === "wink" ? ".luke-face-eye-right" : ".luke-face-eye"}`,
+      name: `luke-${name}-eyes`,
+      part: { values: eyes.factors, keyTimes: eyes.keyTimes, dur: eyes.dur },
+      transform: (factor) => (eyes.kind === "widen" ? `scale(${factor})` : `scaleY(${factor})`),
+    });
   }
 
   if (motion.brows) {
-    const animation = `luke-${name}-brows`;
-    const steps = motion.brows.values.map((pair, index) => ({
-      at: motion.brows.keyTimes[index],
-      declaration: `transform: translate(${pair[0]}px, ${pair[1]}px);`,
-    }));
-    blocks.push(cssKeyframes(animation, steps, partSplines(motion.brows)));
-    rules.push(
-      `${selector} .luke-face-brows {\n  animation-name: ${animation};\n  animation-duration: ${motion.brows.dur}s;\n}`,
-    );
+    emit({
+      target: `${selector} .luke-face-brows`,
+      name: `luke-${name}-brows`,
+      part: motion.brows,
+      transform: TRANSFORM_CSS.translate,
+      splines: motionSplines(motion.brows),
+    });
   }
 
   return [`/* ${name} — ${motion.moment} */`, ...blocks, ...rules].join("\n\n");
@@ -816,7 +827,7 @@ function faceMotionCss() {
       { at: end, declaration: drifted },
       ...(end < 1 ? [{ at: 1, declaration: drifted }] : []),
     ];
-    return cssKeyframes(`luke-sleep-z-${index + 1}`, steps, []);
+    return cssKeyframes(`luke-sleep-z-${index + 1}`, steps);
   });
   const zRules = [
     `.luke-face-z {\n  animation-duration: ${SLEEP_Z_DURATION}s;\n}`,

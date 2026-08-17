@@ -909,19 +909,19 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   color: var(--voice-luke);
 }
 
-/* Everything the artwork moves. Which keyframes each part plays, at what
-   duration and about which pivot, is generated into face-motion.css from the
-   same table the SVGs in design/brand/ are cut from; this is only the wiring
-   those rules assume — how long they run, and what can stop them.
+/* Everything the artwork moves wears `luke-face-part`. Which keyframes each
+   part plays, at what duration and about which pivot, is generated into
+   face-motion.css from the same table the SVGs in design/brand/ are cut from;
+   this is only the wiring those rules assume — how long they run, and what can
+   stop them.
 
    Pivots arrive as points on the artwork's canvas, so the layers measure against
    the viewBox. The eyes squeeze about their own centres instead, which is what
-   `fill-box` means here. Easing is carried per keyframe, because a keySplines
+   `fill-box` means here. Linear is the easing of a part that names none; a part
+   that eases every interval alike carries the curve on its generated rule, and
+   only mixed curves become per-keyframe timing functions, because a keySplines
    list is a curve per interval and `animation-timing-function` is only one. */
-.luke-face-layer,
-.luke-face-eye,
-.luke-face-brows,
-.luke-face-z {
+.luke-face-part {
   animation-play-state: var(--face-motion);
   /* A gesture is something that happens rather than something that is: it plays
      once and leaves the face at the pose it started from, which is the drawn
@@ -934,10 +934,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 /* The exception, and the whole of it: a motion that says something continuously
    true has to keep saying it. An open microphone and a sleeping face are states
    rather than moments, so they repeat for as long as they hold. */
-.luke-face[data-repeat="true"] .luke-face-layer,
-.luke-face[data-repeat="true"] .luke-face-eye,
-.luke-face[data-repeat="true"] .luke-face-brows,
-.luke-face[data-repeat="true"] .luke-face-z {
+.luke-face[data-repeat="true"] .luke-face-part {
   animation-iteration-count: infinite;
 }
 
