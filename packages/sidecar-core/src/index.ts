@@ -202,8 +202,12 @@ export {
   issueContextEvents,
   issueContextText,
   issueTrackerDisconnectedEvents,
+  SESSION_REFERENCE_WITHDRAWN_TEXT,
   sessionContextEvents,
   sessionContextText,
+  sessionReferenceContextEvents,
+  sessionReferenceContextText,
+  sessionReferenceWithdrawnEvents,
   workspaceProjectContextEvents,
   workspaceProjectContextText,
 } from "./realtime-context";

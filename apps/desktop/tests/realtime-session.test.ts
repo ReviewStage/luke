@@ -998,6 +998,101 @@ test("an unchanged session roster is not resent", async () => {
   );
 });
 
+test("the session under discussion travels with the roster, carrying its identity", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  context.session.updateSessions([
+    observedSession("session-a"),
+    observedSession("session-b", { title: "Claude Code: payments" }),
+  ]);
+  // The announcement this points back at named the session only by title —
+  // and may have been read out on a call this one replaced. The reference is
+  // what carries the identity into the turn that says "open that chat".
+  context.session.updateSessionReference({
+    providerId: "claude-code",
+    providerSessionId: "session-b",
+  });
+  assert.deepEqual(context.sent, []);
+
+  armDeveloperTurn(context);
+
+  const items = contextItems(context, "[session under discussion");
+  assert.equal(items.length, 1);
+  assert.match(itemText(items[0]), /provider_id=claude-code provider_session_id=session-b/);
+  assert.match(itemText(items[0]), /payments/);
+  // After the roster it is resolved against, on a channel that keeps order.
+  const rosterIndex = context.sent.findIndex((event) =>
+    itemText(event).startsWith("[observed session status"),
+  );
+  assert.ok(rosterIndex >= 0 && rosterIndex < context.sent.indexOf(items[0] ?? {}));
+});
+
+test("a reference to a session Luke was never shown says nothing", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  context.session.updateSessions([observedSession("session-a")]);
+  context.session.updateSessionReference({
+    providerId: "claude-code",
+    providerSessionId: "session-unknown",
+  });
+  armDeveloperTurn(context);
+
+  assert.deepEqual(contextItems(context, "[session under discussion"), []);
+});
+
+test("the reference is rendered from the roster as it now stands", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  context.session.updateSessions([observedSession("session-a")]);
+  context.session.updateSessionReference({
+    providerId: "claude-code",
+    providerSessionId: "session-a",
+  });
+  armDeveloperTurn(context);
+
+  // Providers rewrite titles as work moves — the very churn that makes a
+  // title a bad anchor — so the line is re-rendered rather than kept as the
+  // words it was first said in.
+  context.session.updateSessions([
+    observedSession("session-a", { title: "Claude Code: checkout-service — review" }),
+  ]);
+  context.session.stopSpeaking();
+  const sentBefore = context.sent.length;
+  armDeveloperTurn(context);
+
+  const items = contextItems(context, "[session under discussion", sentBefore);
+  assert.equal(items.length, 1);
+  assert.match(itemText(items[0]), /checkout-service — review/);
+  assert.match(itemText(items[0]), /provider_session_id=session-a/);
+});
+
+test("a reference whose session leaves the roster is withdrawn", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  context.session.updateSessions([observedSession("session-a")]);
+  context.session.updateSessionReference({
+    providerId: "claude-code",
+    providerSessionId: "session-a",
+  });
+  armDeveloperTurn(context);
+
+  context.session.updateSessions([]);
+  context.session.stopSpeaking();
+  const sentBefore = context.sent.length;
+  armDeveloperTurn(context);
+
+  // The conversation held a line pointing at the session, so it is told the
+  // line no longer stands rather than left resolving "that chat" to an
+  // identity whose validation can only refuse.
+  const items = contextItems(context, "[session under discussion", sentBefore);
+  assert.equal(items.length, 1);
+  assert.match(itemText(items[0]), /no longer observed/);
+});
+
 test("a refused call still reads as failed after the channel finishes closing", async () => {
   const context = harness({ sdpResponse: new Response("nope", { status: 403 }) });
 
@@ -3024,6 +3119,10 @@ test("the rosters and the guide never travel on Luke's own call", async () => {
   const before = context.sent.length;
 
   context.session.updateSessions([observedSession("session-a")]);
+  context.session.updateSessionReference({
+    providerId: "claude-code",
+    providerSessionId: "session-a",
+  });
   context.session.updateGuide({
     facts: [{ label: "What Luke is", detail: "A sidecar." }],
     settings: [],

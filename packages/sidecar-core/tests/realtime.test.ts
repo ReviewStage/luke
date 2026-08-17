@@ -40,9 +40,13 @@ import {
   realtimeCredentialFromResponse,
   realtimeCredentialIsUsable,
   SESSION_LOCATION,
+  SESSION_REFERENCE_WITHDRAWN_TEXT,
   SESSION_STATUS,
   sessionContextEvents,
   sessionContextText,
+  sessionReferenceContextEvents,
+  sessionReferenceContextText,
+  sessionReferenceWithdrawnEvents,
   sessionToolAction,
   truncateResponseEvents,
   typedAskEvents,
@@ -219,6 +223,11 @@ test("the spoken instructions state what Luke cannot see, and when he may act", 
   assert.match(instructions, /speaks to you or types to you/i);
   // Spoken references stay human: a hash or an id is noise read aloud.
   assert.match(instructions, /identifiers no one says aloud/i);
+  // A bare "that chat" has a stated resolution order — this conversation's own
+  // most recent mention, then the session under discussion — so the reference
+  // is followed rather than guessed at.
+  assert.match(instructions, /\[session under discussion\]/);
+  assert.match(instructions, /named most recently/);
 });
 
 test("a mint response yields a credential with a millisecond expiry", () => {
@@ -628,6 +637,61 @@ test("a chat carries its workspace in the roster, so siblings read apart out lou
 
 test("an empty roster says so rather than implying Luke sees nothing at all", () => {
   assert.match(sessionContextText([]), /No coding-agent sessions/);
+});
+
+test("the session under discussion carries the identity a bare reference resolves to", () => {
+  const chat = normalizeSession(
+    { id: "conductor", displayName: "Conductor" },
+    {
+      providerSessionId: "chat-1",
+      title: "Revamp the notch panel",
+      status: SESSION_STATUS.WAITING,
+      observedAt: DECIDED_AT,
+      workspace: { providerWorkspaceId: "workspace-1", name: "lisbon-v2" },
+      detail: { link: "https://conductor.build/w/lisbon-v2" },
+      recap: "Waiting on a review of the spring table.",
+    },
+  );
+
+  const text = sessionReferenceContextText(chat);
+
+  // The whole point of the line: the mention a "that chat" points back at
+  // carried only a title, so this is where the identity a tool call must name
+  // survives across turns and across calls.
+  assert.match(text, /provider_id=conductor provider_session_id=chat-1/);
+  assert.match(text, /Conductor/);
+  assert.match(text, /Revamp the notch panel/);
+  assert.match(text, /a chat in workspace lisbon-v2/);
+  // Naming fields only: status and recap are the roster's answer, and an
+  // address has no business in a conversation.
+  assert.doesNotMatch(text, /waiting/i);
+  assert.doesNotMatch(text, /spring table/);
+  assert.doesNotMatch(text, /https:/);
+});
+
+test("the session under discussion is context, never a prompt", () => {
+  const chat = normalizeSession(
+    { id: "claude-code", displayName: "Claude Code" },
+    {
+      providerSessionId: "session-a",
+      title: "checkout-service",
+      status: SESSION_STATUS.WORKING,
+      observedAt: DECIDED_AT,
+    },
+  );
+
+  for (const events of [
+    sessionReferenceContextEvents(chat, "luke_ctx_session-reference_1"),
+    sessionReferenceWithdrawnEvents("luke_ctx_session-reference_2"),
+  ]) {
+    assert.equal(events.length, 1);
+    assert.equal(events[0]?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE);
+    assert.ok(
+      events.every((event) => event.type !== REALTIME_CLIENT_EVENT.RESPONSE_CREATE),
+      "learning what 'that chat' means must not open Luke's mouth",
+    );
+  }
+  assert.match(SESSION_REFERENCE_WITHDRAWN_TEXT, /no longer observed/);
 });
 
 test("session context never asks Luke to start talking", () => {

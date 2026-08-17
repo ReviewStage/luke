@@ -86,8 +86,9 @@ export function sessionContextText(sessions: readonly NormalizedSession[]): stri
 
 /**
  * The kinds of context a conversation is told, each of which answers exactly
- * one standing question: what Luke can see, where he can create, what he knows
- * about himself, and what the tracker lists.
+ * one standing question: what Luke can see, which session is under discussion,
+ * where he can create, what he knows about himself, and what the tracker
+ * lists.
  *
  * A kind holds one live item at a time. Saying it again replaces the item that
  * said it before rather than adding a second answer beside the first, because
@@ -96,6 +97,7 @@ export function sessionContextText(sessions: readonly NormalizedSession[]): stri
  */
 export const CONTEXT_ITEM_KIND = {
   SESSIONS: "sessions",
+  SESSION_REFERENCE: "session-reference",
   WORKSPACE_PROJECTS: "workspace-projects",
   APP_GUIDE: "app-guide",
   ISSUES: "issues",
@@ -182,6 +184,72 @@ export function sessionContextEvents(
     labeledContextEvent(
       "observed session status, sent automatically",
       sessionContextText(sessions),
+      itemId,
+    ),
+  ];
+}
+
+/**
+ * Renders the session under discussion: the one Luke most recently announced
+ * to the developer or acted on at their ask. It exists because the mention a
+ * bare "that chat" points back at rarely carries an identity of its own — an
+ * announcement names a session only by title, and the roster item the title
+ * was resolved against is replaced at every turn — so without this line the
+ * only anchor across turns is a title, which providers rewrite as work moves.
+ *
+ * The same bounded fields the roster already carries, for one session: name,
+ * workspace, and the identity a tool call names it by. Deliberately no status
+ * or recap — the roster answers those, and repeating them here would let the
+ * two items disagree.
+ */
+export function sessionReferenceContextText(session: NormalizedSession): string {
+  return [
+    "The session under discussion — the one most recently announced to the developer or acted on at their ask:",
+    [
+      `- ${session.provider.displayName}`,
+      session.title,
+      ...(session.workspace?.name ? [`a chat in workspace ${session.workspace.name}`] : []),
+      `[provider_id=${session.providerId} provider_session_id=${session.providerSessionId}]`,
+    ].join(" — "),
+    'A bare "that chat" or "that session" means the session this conversation named most recently — and when it has named none, this one.',
+  ].join("\n");
+}
+
+/**
+ * Builds the event that tells the conversation which session is under
+ * discussion. Context on the roster's own terms: never a prompt, so learning
+ * what "that chat" means must not open Luke's mouth.
+ */
+export function sessionReferenceContextEvents(
+  session: NormalizedSession,
+  itemId: string,
+): readonly Record<string, unknown>[] {
+  return [
+    labeledContextEvent(
+      "session under discussion, sent automatically",
+      sessionReferenceContextText(session),
+      itemId,
+    ),
+  ];
+}
+
+/**
+ * Builds the event that withdraws the session under discussion. A session that
+ * left the roster is one no tool call may name any more, and a conversation
+ * still holding the old line would keep resolving "that chat" to an identity
+ * whose validation can only refuse — so the reference going stale is news the
+ * same way the reference was.
+ */
+export const SESSION_REFERENCE_WITHDRAWN_TEXT =
+  "The session that was under discussion is no longer observed.";
+
+export function sessionReferenceWithdrawnEvents(
+  itemId: string,
+): readonly Record<string, unknown>[] {
+  return [
+    labeledContextEvent(
+      "session under discussion, sent automatically",
+      SESSION_REFERENCE_WITHDRAWN_TEXT,
       itemId,
     ),
   ];
