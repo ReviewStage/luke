@@ -6,6 +6,7 @@ import {
   type SessionNotice,
   type SessionNoticeStatus,
 } from "@sidecar/core";
+import type { SessionNoticePopup } from "./shared/contracts";
 
 /**
  * Carries one notice to the voice as the bounded fields it was observed as —
@@ -138,4 +139,59 @@ export function sessionNoticeSpeech(notice: SessionNotice, decidedAt: number): A
     summary: noticeUpdateContext(notice),
     decidedAt,
   };
+}
+
+/** Where the session runs, the way the popup's line takes it, or nothing. */
+function noticePlace(notice: SessionNotice): string {
+  const place = notice.repository ?? notice.branch;
+  return place ? ` on ${flattened(place)}` : "";
+}
+
+/**
+ * The line the notice popup draws under the session's name. The popup titles
+ * itself with the name and the provider from the roster the renderer already
+ * holds, so — unlike the spoken update, which arrives with nothing else on
+ * screen — this line says only what just happened.
+ */
+function noticePopupBody(notice: SessionNotice): string {
+  switch (notice.status) {
+    case SESSION_NOTICE_STATUS.WAITING:
+      return `Waiting on you${noticePlace(notice)}.`;
+    case SESSION_NOTICE_STATUS.ERROR:
+      // The provider's own reason when it gave one — already bounded by
+      // normalization, never a transcript.
+      return notice.error
+        ? `Stopped: ${notice.error}`
+        : `Stopped on an error${noticePlace(notice)}.`;
+    case SESSION_NOTICE_STATUS.COMPLETE:
+      return `Finished${noticePlace(notice)}.`;
+    default:
+      throw new Error(`Unknown notice status: ${String(notice.status)}`);
+  }
+}
+
+/** One status edge as the popup the surface draws under the housing. */
+export function sessionNoticePopup(notice: SessionNotice, decidedAt: number): SessionNoticePopup {
+  return {
+    providerId: notice.providerId,
+    providerSessionId: notice.providerSessionId,
+    body: noticePopupBody(notice),
+    decidedAt,
+  };
+}
+
+/**
+ * An evaluator's speaking decisions as popups. The decided sentence was worded
+ * to be said aloud, so it already carries its own subject; the popup's title
+ * above it only makes the session it names pressable.
+ */
+export function attentionSpeechPopups(
+  speech: readonly AttentionSpeech[],
+): readonly SessionNoticePopup[] {
+  return speech.map((item) => ({
+    providerId: item.providerId,
+    providerSessionId: item.providerSessionId,
+    body: item.summary,
+    decidedAt: item.decidedAt,
+  }));
 }
