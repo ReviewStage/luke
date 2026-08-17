@@ -1,7 +1,7 @@
-import { isRecord } from "./json";
-import { REALTIME_SESSION_TYPE, realtimeInstructions } from "./realtime-protocol";
-import { realtimeToolDefinitions } from "./realtime-tools";
-import { REALTIME_DEFAULTS } from "./realtime-voice-settings";
+import { isRecord } from "./json.js";
+import { REALTIME_SESSION_TYPE, realtimeInstructions } from "./realtime-protocol.js";
+import { realtimeToolDefinitions } from "./realtime-tools.js";
+import { REALTIME_DEFAULTS } from "./realtime-voice-settings.js";
 
 /**
  * Minting an ephemeral Realtime credential and diagnosing why voice is or is

@@ -18,8 +18,8 @@ import {
   type WorkspaceAgentCapableSessionProviderAdapter,
   type WorkspaceCapableSessionProviderAdapter,
   type WorkspaceProject,
-} from "./providers";
-import type { ProviderSessionObservation, SessionProvider } from "./session";
+} from "./providers.js";
+import type { ProviderSessionObservation, SessionProvider } from "./session.js";
 
 export interface CompositeProviderAdapterOptions {
   provider: SessionProvider;

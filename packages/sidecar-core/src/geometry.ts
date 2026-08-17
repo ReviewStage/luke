@@ -3,7 +3,7 @@ import {
   PANEL_WIDTH,
   SESSION_NOTICE_HEIGHT,
   VOICE_CAPTION_MAX_HEIGHT,
-} from "./motion-tokens";
+} from "./motion-tokens.js";
 
 export interface Rectangle {
   x: number;

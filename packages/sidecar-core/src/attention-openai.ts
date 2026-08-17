@@ -1,10 +1,10 @@
-import { ATTENTION_DECISION_SCHEMA, ATTENTION_DECISION_SCHEMA_NAME } from "./attention";
+import { ATTENTION_DECISION_SCHEMA, ATTENTION_DECISION_SCHEMA_NAME } from "./attention.js";
 import {
   type AttentionPromptUpdate,
   attentionInstructions,
   attentionUpdateInput,
-} from "./attention-prompt";
-import { isRecord, text } from "./json";
+} from "./attention-prompt.js";
+import { isRecord, text } from "./json.js";
 
 /**
  * The one OpenAI Responses request an attention review may be. The desktop

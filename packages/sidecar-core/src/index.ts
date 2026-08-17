@@ -16,7 +16,7 @@ export {
   resolveOptions,
   text,
   wholeNumber,
-} from "./json";
+} from "./json.js";
 
 // Sessions — observed state, identity, and the registry that holds them.
 export {
@@ -45,19 +45,19 @@ export {
   type SessionStatus,
   sessionMessageText,
   UNKNOWN_WORKSPACE_LABEL,
-} from "./session";
-export { InMemorySessionRegistry } from "./session-registry";
+} from "./session.js";
+export { InMemorySessionRegistry } from "./session-registry.js";
 export {
   SESSION_NOTICE_STATUS,
   type SessionNotice,
   type SessionNoticeStatus,
   SessionNoticeTracker,
-} from "./session-notices";
+} from "./session-notices.js";
 export {
   CREATED_WORKSPACE_OPEN_WINDOW_MS,
   CreatedWorkspaceOpenTracker,
-} from "./workspace-opens";
-export { MAXIMUM_HELD_NOTICES, SessionNoticeHold } from "./session-notice-hold";
+} from "./workspace-opens.js";
+export { MAXIMUM_HELD_NOTICES, SessionNoticeHold } from "./session-notice-hold.js";
 
 // Calendar — when meetings start and end, and nothing else about them.
 export {
@@ -67,7 +67,7 @@ export {
   MAXIMUM_MEETING_LENGTH_MS,
   type MeetingInterval,
   meetingsFromBusyIntervals,
-} from "./calendar";
+} from "./calendar.js";
 
 // Providers — adapters and the acts they advertise.
 export {
@@ -101,8 +101,8 @@ export {
   type WorkspaceCapableSessionProviderAdapter,
   type WorkspaceProject,
   workspaceNameText,
-} from "./providers";
-export { CompositeSessionProviderAdapter } from "./composite-provider-adapter";
+} from "./providers.js";
+export { CompositeSessionProviderAdapter } from "./composite-provider-adapter.js";
 
 // Issues — tracked work and the two acts a tracker takes.
 export {
@@ -119,7 +119,7 @@ export {
   type TrackerActionResult,
   type TrackerIssueAction,
   type TrackerIssueObservation,
-} from "./issues";
+} from "./issues.js";
 
 // Attention — whether a session change is worth voicing.
 export {
@@ -137,19 +137,19 @@ export {
   maximumAttentionRequestLength,
   SessionAttentionReviewer,
   type SessionNoticeAsk,
-} from "./attention";
+} from "./attention.js";
 export {
   ATTENTION_RESPONSES_PATH,
   attentionResponsesMissingReason,
   attentionResponsesOutputText,
   attentionResponsesRequest,
-} from "./attention-openai";
+} from "./attention-openai.js";
 export {
   type AttentionPromptUpdate,
   attentionInstructions,
   attentionPromptUpdateFromWire,
   attentionUpdateInput,
-} from "./attention-prompt";
+} from "./attention-prompt.js";
 
 // Guide — what the app knows about itself.
 export {
@@ -167,7 +167,7 @@ export {
   type FeedbackComposerKind,
   SESSION_LIST_SORT,
   type SessionListSort,
-} from "./guide";
+} from "./guide.js";
 
 // Voice — Realtime settings, protocol, credentials, context, and tools.
 export {
@@ -180,7 +180,7 @@ export {
   REALTIME_VOICE_SPEED_LIST,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
-} from "./realtime-voice-settings";
+} from "./realtime-voice-settings.js";
 export {
   announcementSummaryText,
   ATTENTION_SPEECH_SOURCE,
@@ -203,7 +203,7 @@ export {
   type RealtimeStatus,
   truncateResponseEvents,
   typedAskEvents,
-} from "./realtime-protocol";
+} from "./realtime-protocol.js";
 export {
   REALTIME_CALLS_PATH,
   REALTIME_CLIENT_SECRETS_PATH,
@@ -216,7 +216,7 @@ export {
   realtimeCredentialFromResponse,
   realtimeCredentialIsUsable,
   realtimeMintExplanation,
-} from "./realtime-credentials";
+} from "./realtime-credentials.js";
 export {
   appGuideContextEvents,
   CONTEXT_ITEM_KIND,
@@ -238,7 +238,7 @@ export {
   sessionReferenceWithdrawnEvents,
   workspaceProjectContextEvents,
   workspaceProjectContextText,
-} from "./realtime-context";
+} from "./realtime-context.js";
 export {
   type AppToolAction,
   APP_TOOL_KIND,
@@ -258,7 +258,7 @@ export {
   SESSION_TOOL_KIND,
   type SessionToolAction,
   sessionToolAction,
-} from "./realtime-tools";
+} from "./realtime-tools.js";
 
 // Surface — geometry, motion, marks, and labels.
 export {
@@ -275,14 +275,14 @@ export {
   type ResolvedNotchGeometry,
   resolveNotchGeometry,
   type WindowMode,
-} from "./geometry";
+} from "./geometry.js";
 export {
   MOTION_DELAY_MS,
   MOTION_DURATION_MS,
   PANEL_WIDTH,
   SESSION_NOTICE_HEIGHT,
   VOICE_CAPTION_MAX_HEIGHT,
-} from "./motion-tokens";
+} from "./motion-tokens.js";
 export {
   CLAUDE_CODE_PATH,
   CLOUD_BADGE_PATH,
@@ -297,17 +297,17 @@ export {
   OPENAI_PATH,
   OPENCODE_BLOCK_PATH,
   OPENCODE_FRAME_PATH,
-} from "./provider-mark-paths";
+} from "./provider-mark-paths.js";
 export {
   compareSessionsByUrgency,
   SESSION_URGENCY,
   type SessionUrgency,
   urgencyLabel,
-} from "./session-display";
+} from "./session-display.js";
 
 // Fixtures — synthetic snapshots for evidence runs.
 export {
   FIXTURE_EPOCH_MS,
   type FixtureSnapshot,
   fixtureSnapshot,
-} from "./fixtures";
+} from "./fixtures.js";

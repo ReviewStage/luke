@@ -6,7 +6,7 @@ import {
   attentionResponsesOutputText,
   attentionResponsesRequest,
   text as trimmedText,
-} from "@sidecar/core";
+} from "../core.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 import { type FetchLike, postOpenAi } from "./openai.js";
 import type { HostedSpend } from "./quota.js";

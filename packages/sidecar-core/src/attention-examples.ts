@@ -1,5 +1,5 @@
-import { ATTENTION_TRIGGER, type AttentionUpdate } from "./attention";
-import { ATTENTION_DISPOSITION, type AttentionDisposition, SESSION_STATUS } from "./session";
+import { ATTENTION_TRIGGER, type AttentionUpdate } from "./attention.js";
+import { ATTENTION_DISPOSITION, type AttentionDisposition, SESSION_STATUS } from "./session.js";
 
 /**
  * One redacted update paired with the decision Luke should reach for it. The

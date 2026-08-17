@@ -1,4 +1,4 @@
-import { nonNegativeNumber, positiveInteger } from "./json";
+import { nonNegativeNumber, positiveInteger } from "./json.js";
 import {
   ATTENTION_DISPOSITION,
   type AttentionDecision,
@@ -10,7 +10,7 @@ import {
   type SessionIdentity,
   type SessionStatus,
   silentAttention,
-} from "./session";
+} from "./session.js";
 
 export const ATTENTION_TRIGGER = {
   OBSERVED: "observed",
