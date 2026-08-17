@@ -47,6 +47,7 @@ import {
   CREDENTIAL_PROVIDER_LIST,
   CREDENTIAL_PROVIDERS,
   isCredentialProviderId,
+  VOICE_CREDENTIAL_PROVIDER,
 } from "../shared/credential-providers";
 import type { FeedbackImage, FeedbackKind } from "../shared/feedback";
 import { FEEDBACK_KIND, FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from "../shared/feedback";
@@ -2129,13 +2130,21 @@ export function App(): React.JSX.Element {
         if (!stale) setVoiceService(report);
       })
       .catch(() => undefined);
-    // Nothing on a keyed or signed-out run clears the numbers rather than
-    // holding the last hosted day's: an allowance no longer in play must not
-    // keep being shown.
+    // An empty answer means two different things, told apart by the settings
+    // in hand: with no allowance in play — a key connected, or voice off — it
+    // clears the numbers, because an allowance no longer bought must not keep
+    // being shown; while the account is still hosted it is a failed refresh,
+    // and the meters keep the last read rather than collapsing to prose over
+    // one dropped request.
+    const snapshot = settings ?? bootstrap.settings;
+    const hostedNow =
+      snapshot.voiceAvailable &&
+      snapshot.credentialSources[VOICE_CREDENTIAL_PROVIDER.id] === CREDENTIAL_SOURCE.NONE;
     void window.sidecar
       .requestHostedUsage()
       .then((usage) => {
-        if (!stale) setHostedUsage(usage);
+        if (stale) return;
+        setHostedUsage((held) => usage ?? (hostedNow ? held : undefined));
       })
       .catch(() => undefined);
     return () => {

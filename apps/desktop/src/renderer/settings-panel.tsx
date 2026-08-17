@@ -2488,20 +2488,30 @@ function AccountSection({
         </span>
       </div>
       {/* What the account is buying right now, said where the account is: the
-          day's allowance drawn as two meters while voice runs on it — the
-          note beneath them keeps only what the bars cannot say — or whose key
-          it runs on instead. The wording is the Voice page's own, worded
-          once, with the key row named because it is a page away from here. */}
-      {hosted && hostedUsage ? (
+          day's allowance drawn as meters while voice runs on it — both from
+          the usage read, or the voice meter alone from the quota the last
+          mint carried while no read has answered — with the note beneath
+          keeping only what the bars cannot say. A key of the developer's own
+          is named instead. The wording is the Voice page's own, worded once,
+          with the key row named because it is a page away from here. */}
+      {hosted && (hostedUsage || voiceService?.quota) ? (
         <>
-          <UsageMeter label="Voice calls" quota={hostedUsage.voice} />
-          <UsageMeter label="Session reviews" quota={hostedUsage.attention} />
           {(() => {
+            const voiceQuota = hostedUsage?.voice ?? voiceService?.quota;
+            if (!voiceQuota) return null;
             const parts = [
-              ...(hostedUsage.voice.remaining === 0 ? [HOSTED_VOICE_SPENT_NOTE] : []),
+              ...(voiceQuota.remaining === 0 ? [HOSTED_VOICE_SPENT_NOTE] : []),
               ...(storageLocked ? [] : [hostedVoiceLift({ namesKeyRow: true })]),
             ];
-            return parts.length > 0 ? <p className="settings-note">{parts.join(" ")}</p> : null;
+            return (
+              <>
+                <UsageMeter label="Voice calls" quota={voiceQuota} />
+                {hostedUsage ? (
+                  <UsageMeter label="Session reviews" quota={hostedUsage.attention} />
+                ) : null}
+                {parts.length > 0 ? <p className="settings-note">{parts.join(" ")}</p> : null}
+              </>
+            );
           })()}
         </>
       ) : hosted ? (
