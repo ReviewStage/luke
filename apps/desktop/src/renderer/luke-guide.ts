@@ -528,7 +528,11 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "than pretending there are none — Escape clears the query and then closes the field, " +
         "no spoken ask can search, and no search survives the panel closing. " +
         "A row can be opened, messaged, or controlled where its " +
-        "provider allows, and Luke's own composer at the foot of the list takes a typed ask. " +
+        "provider allows; a session whose provider reported a pull request grows a Pull request " +
+        "chip that opens it in the browser; and a row the developer asked Luke to listen for — " +
+        "“tell me when this finishes” — wears a small listening mark beside its age, whose hover " +
+        "says the ask in the developer's own words. Luke's own composer at the foot of the list " +
+        "takes a typed ask. " +
         "Where a provider nests chats in a workspace — Conductor today — each " +
         "chat is its own row: a workspace holding several draws them inside one tray named by " +
         "the workspace at its top, one holding a single chat stays one row titled by the " +
@@ -630,7 +634,9 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "words. Luke's background review weighs each of that session's updates against the ask " +
         "and speaks when one satisfies it, opening a speak-only call if no conversation is up; " +
         "the ask itself is the consent. One ask stands per session, a new one replaces it, asking Luke to drop " +
-        "it withdraws it, and an ask ends with the session it was about. It needs the OpenAI connection, " +
+        "it withdraws it, and an ask ends with the session it was about. A row with an ask standing wears a " +
+        "small listening mark beside its age, and the conversation roster carries each standing ask, so Luke " +
+        "can say what he is already listening for. It needs the OpenAI connection, " +
         "changes nothing about the session itself, and is never sent to a provider.",
     },
     talkKeyFact(input.hotkey),

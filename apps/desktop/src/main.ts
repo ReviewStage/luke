@@ -817,6 +817,10 @@ function registerIpc(): void {
         runMode.observesProviders && accountCapabilitiesActive()
           ? rosterRelevantSessions(sessionRegistry.snapshot().sessions, Date.now())
           : [],
+      // Asks are about observed sessions, so they ride the same gate the
+      // roster does: a panel shown no sessions is shown no asks about them.
+      noticeAsks:
+        runMode.observesProviders && accountCapabilitiesActive() ? attentionRequests.list() : [],
       workspaceProjects: accountCapabilitiesActive() ? observedWorkspaceProjects() : [],
       ...(trackedIssues && runMode.observesProviders && accountCapabilitiesActive()
         ? { issues: trackedIssues }
@@ -1244,6 +1248,29 @@ function registerIpc(): void {
     },
   );
 
+  // Opening a session's pull request is the same act one field over: the
+  // renderer names a session it is already drawing, and the address handed to
+  // the system is read back out of the registry, where normalization admitted
+  // nothing but a bounded https address. Nothing reaches the provider.
+  ipcMain.handle(
+    channels.openSessionChange,
+    async (event, identity: unknown): Promise<SessionOpenResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (!isSessionIdentity(identity)) throw new Error("Invalid session open request");
+      const change = sessionRegistry.get(identity)?.detail.change;
+      if (!change) return { status: SESSION_OPEN_RESULT_STATUS.UNSUPPORTED };
+      try {
+        await shell.openExternal(change);
+        return { status: SESSION_OPEN_RESULT_STATUS.OPENED };
+      } catch {
+        return {
+          status: SESSION_OPEN_RESULT_STATUS.REJECTED,
+          reason: "The system could not open that pull request.",
+        };
+      }
+    },
+  );
+
   // Reading a session's transcript is a conversational act that returns
   // session content instead of performing anything: the file its provider
   // wrote is read on this machine, rendered into a bounded conversation, and
@@ -1428,6 +1455,7 @@ function registerIpc(): void {
         };
       }
       attentionRequests.set(identity, ask);
+      broadcastNoticeAsks();
       // The status rides the acceptance because the ask may already be
       // answered: a session asked about after it finished has no later finish
       // coming, and the reply should say so rather than promise one.
@@ -1453,6 +1481,7 @@ function registerIpc(): void {
           reason: "No ask was standing for that session.",
         };
       }
+      broadcastNoticeAsks();
       return { status: ATTENTION_REQUEST_RESULT_STATUS.ACCEPTED, sessionStatus: session.status };
     },
   );
@@ -1952,8 +1981,9 @@ async function reviewSessionAttention(generation = observationGeneration): Promi
  */
 function announceSessionNotices(sessions: readonly NormalizedSession[]): void {
   // Asks about sessions no longer reported have nothing left to be about, and
-  // this commit is the earliest that can be known.
-  attentionRequests.retain(sessions);
+  // this commit is the earliest that can be known. The rows marking asks are
+  // told only when one was actually let go.
+  if (attentionRequests.retain(sessions)) broadcastNoticeAsks();
   const now = Date.now();
   // A standing ask never quiets an edge. The ask licenses more speech about
   // its session, not less: an edge the ask did not name — an error under a
@@ -2014,6 +2044,15 @@ let lastRosterIds = "";
  * no longer age out or cap anything, so this one gate is where a session that
  * settled long ago stops being a row.
  */
+/**
+ * Hands every panel the standing asks as they now stand, so the rows marking
+ * them never describe an ask already withdrawn or let go. The words are the
+ * developer's own; nothing here reaches a provider or leaves the machine.
+ */
+function broadcastNoticeAsks(): void {
+  panels.broadcast(channels.noticeAsksChanged, attentionRequests.list());
+}
+
 function broadcastRelevantSessions(): void {
   const snapshot = sessionRegistry.snapshot();
   const roster = rosterRelevantSessions(snapshot.sessions, Date.now());

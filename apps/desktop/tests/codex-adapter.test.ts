@@ -360,6 +360,136 @@ test("drops the previous turn's call when a new Codex turn starts", async (t) =>
   assert.equal(observation?.recap, undefined);
 });
 
+test("reports a Codex turn that stopped on an error", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const rolloutPath = path.join(codexHome, "rollout-error-event.jsonl");
+  await writeCodexState(codexHome, [
+    { id: "codex-errored", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000, rolloutPath },
+  ]);
+  await writeRollout(rolloutPath, [
+    { type: "event_msg", payload: { type: "task_started" } },
+    {
+      type: "event_msg",
+      payload: { type: "error", message: "stream disconnected before completion" },
+    },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.ERROR);
+  assert.equal(observation?.detail?.error, "stream disconnected before completion");
+});
+
+test("reports a failed turn's error instead of its parting words", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const rolloutPath = path.join(codexHome, "rollout-failed-complete.jsonl");
+  await writeCodexState(codexHome, [
+    { id: "codex-failed", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000, rolloutPath },
+  ]);
+  await writeRollout(rolloutPath, [
+    { type: "event_msg", payload: { type: "task_started" } },
+    {
+      type: "event_msg",
+      payload: {
+        type: "task_complete",
+        // Parting words beside a failure predate what went wrong, so the row
+        // must carry the error and no recap at all.
+        last_agent_message: "I was about to run the tests.",
+        error: { message: "exceeded usage quota" },
+      },
+    },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.ERROR);
+  assert.equal(observation?.detail?.error, "exceeded usage quota");
+  assert.equal(observation?.recap, undefined);
+});
+
+test("keeps a failed Codex turn at error past the freshness decay", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const rolloutPath = path.join(codexHome, "rollout-stale-error.jsonl");
+  // A failed turn is stuck until someone comes back to it, and going stale is
+  // exactly what waiting on a rescue looks like.
+  await writeCodexState(codexHome, [
+    {
+      id: "codex-stale-error",
+      cwd: "/Users/test/luke",
+      observedAt: TEST_TIME - 20 * 60 * 1000,
+      rolloutPath,
+    },
+  ]);
+  await writeRollout(rolloutPath, [
+    { type: "event_msg", payload: { type: "task_started" } },
+    { type: "event_msg", payload: { type: "error", message: "stream disconnected" } },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    activeSessionFreshnessMs: 15 * 60 * 1000,
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60 * 60 * 1000,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.ERROR);
+});
+
+test("drops the previous turn's error when a new Codex turn starts", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const rolloutPath = path.join(codexHome, "rollout-error-retried.jsonl");
+  await writeCodexState(codexHome, [
+    { id: "codex-retried", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000, rolloutPath },
+  ]);
+  await writeRollout(rolloutPath, [
+    { type: "event_msg", payload: { type: "task_started" } },
+    { type: "event_msg", payload: { type: "error", message: "stream disconnected" } },
+    { type: "event_msg", payload: { type: "task_started" } },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.WORKING);
+  assert.equal(observation?.detail?.error, undefined);
+});
+
+test("bounds a Codex error to one row-sized line", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const rolloutPath = path.join(codexHome, "rollout-long-error.jsonl");
+  await writeCodexState(codexHome, [
+    { id: "codex-long-error", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000, rolloutPath },
+  ]);
+  await writeRollout(rolloutPath, [
+    { type: "event_msg", payload: { type: "task_started" } },
+    { type: "event_msg", payload: { type: "error", message: "x".repeat(200) } },
+  ]);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    maximumSessionAgeMs: 60_000,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.detail?.error, `${"x".repeat(79)}…`);
+});
+
 test("holds a long Codex turn at working however stale its row is", async (t) => {
   const codexHome = await temporaryCodexHome(t);
   const rolloutPath = path.join(codexHome, "rollout-long.jsonl");
@@ -765,6 +895,40 @@ test("a stop event keeps a finished turn waiting past the freshness decay", asyn
   const [observation] = await adapter.observe();
 
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
+});
+
+test("a stop event does not talk a failed turn out of its error", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const spool = await temporaryHookSpool(t);
+  const rolloutPath = path.join(codexHome, "rollout-stopped-error.jsonl");
+  await writeCodexState(codexHome, [
+    {
+      id: "codex-stopped-error",
+      cwd: "/Users/test/luke",
+      observedAt: TEST_TIME - 60_000,
+      rolloutPath,
+    },
+  ]);
+  await writeRollout(rolloutPath, [
+    { type: "event_msg", payload: { type: "task_started" } },
+    {
+      type: "event_msg",
+      payload: { type: "task_complete", error: { message: "exceeded usage quota" } },
+    },
+  ]);
+  // Codex fires no failure hook, so `stop` fires for the failed turn too: an
+  // event standing for the same turn must not read the failure as waiting.
+  await writeHookEvent(spool, "codex-stopped-error", "stop", TEST_TIME - 30_000);
+
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    hookEventsDirectory: () => spool,
+    now: () => TEST_TIME,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.status, SESSION_STATUS.ERROR);
+  assert.equal(observation?.detail?.error, "exceeded usage quota");
 });
 
 test("an event the thread has moved past refines nothing", async (t) => {

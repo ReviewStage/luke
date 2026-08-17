@@ -166,6 +166,30 @@ test("keeps only the addresses Luke would open, and never a shortened one", () =
   assert.equal(linkFor(`https://example.com/${"a".repeat(maximumSessionLinkLength)}`), undefined);
 });
 
+test("a change is held to the web alone, and never a shortened one", () => {
+  const registry = new InMemorySessionRegistry();
+  const changeFor = (change: string) =>
+    registry.upsert(codex, observation("run:change", 100, { detail: { change } })).detail.change;
+
+  // The pull-request chip acts on this field the way pressing a row acts on
+  // the link, so the same rule guards it — narrowed to https because every
+  // pull request a provider reports lives on the web.
+  assert.equal(
+    changeFor("https://github.com/example/luke/pull/7"),
+    "https://github.com/example/luke/pull/7",
+  );
+  for (const change of [
+    "codex://threads/019ff315-8735-7382-9fbe-16b0ea8ad990",
+    "file:///Users/dean/luke/pull.diff",
+    "javascript:void 0",
+    "not a url",
+    "",
+  ]) {
+    assert.equal(changeFor(change), undefined, `${change} is not a change Luke may open`);
+  }
+  assert.equal(changeFor(`https://example.com/${"a".repeat(maximumSessionLinkLength)}`), undefined);
+});
+
 test("a session runs on this machine unless its provider observed it elsewhere", () => {
   const registry = new InMemorySessionRegistry();
   const local = registry.upsert(codex, observation("local", 100));

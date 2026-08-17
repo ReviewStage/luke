@@ -770,6 +770,117 @@ test("the last announcement is context, never a prompt", () => {
   assert.match(item.content?.[0]?.text ?? "", /^\[last announcement, sent automatically\]\n/);
 });
 
+test("the roster says what a session is doing and where, in the attention update's own fields", () => {
+  const working = normalizeSession(
+    { id: "claude-code", displayName: "Claude Code" },
+    {
+      providerSessionId: "session-doing",
+      title: "checkout-service",
+      status: SESSION_STATUS.WORKING,
+      observedAt: DECIDED_AT,
+      detail: {
+        repository: "luke",
+        branch: "dean/desktop-shell",
+        activity: "Bash: pnpm test",
+        error: "The request failed",
+      },
+    },
+  );
+
+  const text = sessionContextText([working]);
+  // The branch outranks the repository the way the row's own place line reads:
+  // one identifier per line, the most specific one.
+  assert.match(text, /on branch dean\/desktop-shell/);
+  assert.doesNotMatch(text, /in repository luke/);
+  assert.match(text, /running Bash: pnpm test/);
+  assert.match(text, /error: The request failed/);
+
+  const bare = normalizeSession(
+    { id: "claude-code", displayName: "Claude Code" },
+    {
+      providerSessionId: "session-bare",
+      title: "checkout-service",
+      status: SESSION_STATUS.WORKING,
+      observedAt: DECIDED_AT,
+      detail: { repository: "luke" },
+    },
+  );
+  const bareText = sessionContextText([bare]);
+  assert.match(bareText, /in repository luke/);
+  assert.doesNotMatch(bareText, /running/);
+  assert.doesNotMatch(bareText, /error:/);
+});
+
+test("the roster says which sessions keep a readable transcript and a pull request, never an address", () => {
+  const local = normalizeSession(
+    { id: "codex", displayName: "Codex" },
+    {
+      providerSessionId: "thread-local",
+      title: "luke",
+      status: SESSION_STATUS.WAITING,
+      observedAt: DECIDED_AT,
+    },
+  );
+  assert.match(sessionContextText([local]), /local, transcript readable on ask/);
+
+  const cloud = normalizeSession(
+    { id: "devin", displayName: "Devin" },
+    {
+      providerSessionId: "devin-1",
+      title: "luke",
+      status: SESSION_STATUS.WAITING,
+      observedAt: DECIDED_AT,
+      location: SESSION_LOCATION.CLOUD,
+      detail: { change: "https://github.com/example/luke/pull/7" },
+    },
+  );
+  const cloudText = sessionContextText([cloud]);
+  assert.match(cloudText, /cloud, no transcript to read/);
+  // The pull request travels as a fact, like openability: the row is where it
+  // opens from, and no address belongs in a conversation.
+  assert.match(cloudText, /has a pull request/);
+  assert.doesNotMatch(cloudText, /github\.com/);
+  assert.doesNotMatch(sessionContextText([local]), /has a pull request/);
+});
+
+test("a standing ask rides its own session's roster line, in the developer's words", () => {
+  const watched = normalizeSession(
+    { id: "claude-code", displayName: "Claude Code" },
+    {
+      providerSessionId: "session-watched",
+      title: "checkout-service",
+      status: SESSION_STATUS.WORKING,
+      observedAt: DECIDED_AT,
+    },
+  );
+  const unwatched = normalizeSession(
+    { id: "claude-code", displayName: "Claude Code" },
+    {
+      providerSessionId: "session-unwatched",
+      title: "billing-service",
+      status: SESSION_STATUS.WORKING,
+      observedAt: DECIDED_AT,
+    },
+  );
+
+  const text = sessionContextText(
+    [watched, unwatched],
+    [
+      {
+        providerId: "claude-code",
+        providerSessionId: "session-watched",
+        ask: "Tell me when this finishes.",
+      },
+    ],
+  );
+
+  const lines = text.split("\n");
+  const watchedLine = lines.find((line) => line.includes("session-watched"));
+  const unwatchedLine = lines.find((line) => line.includes("session-unwatched"));
+  assert.match(watchedLine ?? "", /the developer's standing ask: "Tell me when this finishes\."/);
+  assert.doesNotMatch(unwatchedLine ?? "", /standing ask/);
+});
+
 test("session context never asks Luke to start talking", () => {
   const events = sessionContextEvents([], "luke_ctx_sessions_1");
 

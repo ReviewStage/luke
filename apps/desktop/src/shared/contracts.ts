@@ -16,6 +16,7 @@ import type {
   Rectangle,
   ResolvedNotchGeometry,
   SessionIdentity,
+  SessionNoticeAsk,
   TrackedIssue,
   TrackerActionResult,
   WindowMode,
@@ -339,6 +340,12 @@ export interface AppBootstrap {
   outputAudio?: OutputAudioState;
   display: DisplayDiagnostic;
   sessions: readonly NormalizedSession[];
+  /**
+   * The standing asks the developer has made about sessions, so a panel that
+   * opens late still marks the rows Luke is listening for. The words are the
+   * developer's own and never a provider's.
+   */
+  noticeAsks: readonly SessionNoticeAsk[];
   /** Where a new workspace can be created, as the adapters currently offer it. */
   workspaceProjects: readonly ObservedWorkspaceProject[];
   /** Absent while no issue tracker is connected, which is its own answer. */
@@ -469,6 +476,13 @@ export interface AppBridge {
    */
   openSession(identity: SessionIdentity): Promise<SessionOpenResult>;
   /**
+   * Opens the pull request an observed session published, on the row's own
+   * terms: the renderer names the session, never the address, and the main
+   * process reads the change back out of its registry — an address that never
+   * passed normalization never reached it.
+   */
+  openSessionChange(identity: SessionIdentity): Promise<SessionOpenResult>;
+  /**
    * Reads the recent transcript of one observed local session into a bounded
    * rendering, for a conversation the developer is holding. The renderer
    * names a session it was shown; the main process validates it against its
@@ -581,6 +595,8 @@ export interface AppBridge {
   onSettingsChanged(callback: (settings: AppSettings) => void): () => void;
   onAccountChanged(callback: (account: AccountSnapshot) => void): () => void;
   onSessionsChanged(callback: (sessions: readonly NormalizedSession[]) => void): () => void;
+  /** The standing asks as they change — made, withdrawn, or let go with their sessions. */
+  onNoticeAsksChanged(callback: (noticeAsks: readonly SessionNoticeAsk[]) => void): () => void;
   /** The projects a workspace can be created in, whenever the set changes. */
   onWorkspaceProjectsChanged(
     callback: (projects: readonly ObservedWorkspaceProject[]) => void,
@@ -657,6 +673,7 @@ export const channels = {
   setWorkspaceAgentDefault: "app:set-workspace-agent-default",
   setWorkspaceProjectDefault: "app:set-workspace-project-default",
   openSession: "app:open-session",
+  openSessionChange: "app:open-session-change",
   readSessionTranscript: "app:read-session-transcript",
   sendSessionMessage: "app:send-session-message",
   executeSessionControl: "app:execute-session-control",
@@ -683,6 +700,7 @@ export const channels = {
   displayChanged: "app:display-changed",
   settingsChanged: "app:settings-changed",
   sessionsChanged: "app:sessions-changed",
+  noticeAsksChanged: "app:notice-asks-changed",
   workspaceProjectsChanged: "app:workspace-projects-changed",
   issuesChanged: "app:issues-changed",
   quit: "app:quit",

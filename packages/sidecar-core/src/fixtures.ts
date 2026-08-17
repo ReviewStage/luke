@@ -42,6 +42,10 @@ export interface SessionSnapshot {
   canMessage?: boolean;
   /** Drawn only, like the composer: the controls a live session would show. */
   actions?: readonly SessionControl[];
+  /** Drawn only: the pull-request chip a live session's published work earns. */
+  hasChange?: boolean;
+  /** Drawn only: the standing ask a live row would be marked as listened for. */
+  noticeAsk?: string;
   /** The workspace this row is one chat of, when its provider nests them. */
   workspace?: WorkspaceSnapshot;
 }
@@ -81,6 +85,9 @@ const smokeFixture: FixtureSnapshot = {
       urgency: SESSION_URGENCY.WORKING,
       location: SESSION_LOCATION.LOCAL,
       observedAt: minutesBeforeEpoch(4),
+      // A synthetic standing ask, so the one screenshot the evidence is
+      // reviewed from also proves the listening mark is drawn.
+      noticeAsk: "Tell me when the build finishes.",
     },
     {
       id: "claude-review",
@@ -142,8 +149,10 @@ const smokeFixture: FixtureSnapshot = {
       location: SESSION_LOCATION.CLOUD,
       observedAt: minutesBeforeEpoch(18),
       // What a working Cursor agent advertises live, so the one screenshot the
-      // evidence is reviewed from also proves the stop control is drawn.
+      // evidence is reviewed from also proves the stop control is drawn — and
+      // the pull-request chip beside it, on the row whose sentence names one.
       actions: [{ id: "cancel-run", label: "Stop this run", kind: SESSION_CONTROL_KIND.STOP }],
+      hasChange: true,
     },
     // A fifth session keeps every state and every provider mark visible in the
     // one screenshot the visual evidence is reviewed from. It is also one more

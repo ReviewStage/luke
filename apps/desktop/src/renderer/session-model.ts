@@ -12,6 +12,7 @@ import {
   type SessionControlKind,
   type SessionListSort,
   type SessionLocation,
+  type SessionNoticeAsk,
   type SessionUrgency,
   urgencyLabel,
 } from "@sidecar/core";
@@ -143,6 +144,18 @@ export interface DisplaySession {
   canMessage: boolean;
   /** Actions the provider advertised for this session, in its own words. */
   actions: readonly SessionAction[];
+  /**
+   * Whether the provider reported published work — a pull request — for this
+   * session. Like the session's own address, the URL stays in the main
+   * process; the row only has to know the chip would open something.
+   */
+  hasChange: boolean;
+  /**
+   * The developer's standing ask about this session, when one stands, so the
+   * row can mark that Luke is listening for it. The words are the developer's
+   * own, drawn only on this machine.
+   */
+  noticeAsk?: string;
   /** The workspace this row is one chat of, when its provider nests them. */
   workspace?: DisplayWorkspace;
 }
@@ -223,8 +236,11 @@ function sessionNeedsAttention(session: NormalizedSession): boolean {
 }
 
 /**
- * The line under the title. What stopped a session outranks what it was doing,
- * and what it was doing outranks the recap of a turn that has already ended.
+ * The line under the title. What stopped a session outranks everything; while
+ * the evaluator has flagged the session, its one-line reason outranks what the
+ * session was doing — the row lit up for that reason, and a stale recap under
+ * an attention colour says the wrong thing — and what a session was doing
+ * outranks the recap of a turn that has already ended.
  *
  * When a provider reported none of them, the line says the state in so many
  * words. This sentence is the one place the row states it — there is no chip at
@@ -232,7 +248,33 @@ function sessionNeedsAttention(session: NormalizedSession): boolean {
  * as Working or Complete rather than as a row with a line missing.
  */
 function sessionDetail(session: NormalizedSession, urgency: SessionUrgency): string {
-  return session.detail.error ?? session.detail.activity ?? session.recap ?? urgencyLabel(urgency);
+  const flaggedSummary =
+    session.attention.disposition === ATTENTION_DISPOSITION.SILENT
+      ? undefined
+      : session.attention.summary;
+  return (
+    session.detail.error ??
+    flaggedSummary ??
+    session.detail.activity ??
+    session.recap ??
+    urgencyLabel(urgency)
+  );
+}
+
+/**
+ * The standing asks by the identity each is about — nested maps rather than a
+ * composed key — so each row can pick up the one ask that names it.
+ */
+function noticeAsksByIdentity(
+  noticeAsks: readonly SessionNoticeAsk[],
+): ReadonlyMap<string, ReadonlyMap<string, string>> {
+  const byProvider = new Map<string, Map<string, string>>();
+  for (const noticeAsk of noticeAsks) {
+    const providerAsks = byProvider.get(noticeAsk.providerId) ?? new Map<string, string>();
+    providerAsks.set(noticeAsk.providerSessionId, noticeAsk.ask);
+    byProvider.set(noticeAsk.providerId, providerAsks);
+  }
+  return byProvider;
 }
 
 function sessionUrgency(session: NormalizedSession): SessionUrgency {
@@ -329,7 +371,9 @@ function bySort(sort: SessionSort): (first: DisplaySession, second: DisplaySessi
 export function displaySessions(
   bootstrap: AppBootstrap,
   sessions: readonly NormalizedSession[],
+  noticeAsks: readonly SessionNoticeAsk[] = [],
 ): readonly DisplaySession[] {
+  const asks = noticeAsksByIdentity(noticeAsks);
   const visible: readonly DisplaySession[] = bootstrap.fixtureMode
     ? bootstrap.fixture.sessions.map((session) => ({
         ...session,
@@ -347,9 +391,11 @@ export function displaySessions(
         openable: false,
         canMessage: session.canMessage === true,
         actions: session.actions ?? [],
+        hasChange: session.hasChange === true,
       }))
     : sessions.map((session) => {
         const urgency = sessionUrgency(session);
+        const noticeAsk = asks.get(session.providerId)?.get(session.providerSessionId);
         return {
           id: session.providerSessionId,
           title: session.title,
@@ -366,6 +412,8 @@ export function displaySessions(
           openable: session.detail.link !== undefined,
           canMessage: session.canReceiveMessage,
           actions: session.controls,
+          hasChange: session.detail.change !== undefined,
+          ...(noticeAsk ? { noticeAsk } : {}),
           // A workspace the provider left unnamed still groups its chats; the
           // id is at least stable, where a made-up name would claim knowledge
           // the provider never reported.

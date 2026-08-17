@@ -14,6 +14,7 @@ import {
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
   type SessionIdentity,
+  type SessionNoticeAsk,
   VOICE_CAPTION_MAX_HEIGHT,
   type WorkspaceAgentSelection,
 } from "@sidecar/core";
@@ -225,6 +226,7 @@ export function App(): React.JSX.Element {
   const [bootstrap, setBootstrap] = useState<AppBootstrap>();
   const [account, setAccount] = useState<AccountSnapshot>();
   const [sessions, setSessions] = useState<readonly NormalizedSession[]>([]);
+  const [noticeAsks, setNoticeAsks] = useState<readonly SessionNoticeAsk[]>([]);
   const [workspaceProjects, setWorkspaceProjects] = useState<readonly ObservedWorkspaceProject[]>(
     [],
   );
@@ -1287,6 +1289,7 @@ export function App(): React.JSX.Element {
     syncIssues,
   } = useVoiceConversation({
     sessions,
+    noticeAsks,
     workspaceProjects,
     defaultWorkspaceProvider,
     workspaceProjectDefaults,
@@ -1502,6 +1505,11 @@ export function App(): React.JSX.Element {
           { providerId: session.providerId, providerSessionId: session.id },
           actionId,
         ),
+      openChange: (session) =>
+        window.sidecar.openSessionChange({
+          providerId: session.providerId,
+          providerSessionId: session.id,
+        }),
     }),
     [],
   );
@@ -1547,6 +1555,7 @@ export function App(): React.JSX.Element {
     void window.sidecar.getBootstrap().then((value) => {
       setBootstrap(value);
       setSessions(value.sessions);
+      setNoticeAsks(value.noticeAsks);
       // Only fill in what no push has said yet: the bootstrap snapshot is
       // older than any change that raced past it, and the main process will
       // not repeat a list it believes it already announced.
@@ -1606,11 +1615,13 @@ export function App(): React.JSX.Element {
     });
     const removeDisplay = window.sidecar.onDisplayChanged(setDisplay);
     const removeSessions = window.sidecar.onSessionsChanged(setSessions);
+    const removeNoticeAsks = window.sidecar.onNoticeAsksChanged(setNoticeAsks);
     return () => {
       cancelHover();
       removeLifecycle();
       removeDisplay();
       removeSessions();
+      removeNoticeAsks();
       void stopMicrophone();
     };
   }, [
@@ -1839,7 +1850,7 @@ export function App(): React.JSX.Element {
 
   if (!bootstrap || !display) return <div />;
 
-  const visibleSessions = displaySessions(bootstrap, sessions);
+  const visibleSessions = displaySessions(bootstrap, sessions, noticeAsks);
   // The tally is taken before the list is narrowed — the capsule reports what
   // Luke is watching, not what the panel is currently showing — but it reads
   // in the list's own sort, so the wing's marks sit in the order the rows do.

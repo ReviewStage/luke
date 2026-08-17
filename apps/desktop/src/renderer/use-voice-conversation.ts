@@ -13,6 +13,7 @@ import {
   type RealtimeVoiceSpeed,
   SESSION_TOOL_KIND,
   type SessionIdentity,
+  type SessionNoticeAsk,
   type TrackedIssue,
 } from "@sidecar/core";
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
@@ -285,6 +286,11 @@ export function evaluatorSummaries(speech: readonly AttentionSpeech[]): Attentio
 
 export interface VoiceConversationOptions {
   sessions: readonly NormalizedSession[];
+  /**
+   * The standing asks riding the roster they annotate, so a conversation can
+   * say — and withdraw — what Luke is already listening for.
+   */
+  noticeAsks: readonly SessionNoticeAsk[];
   workspaceProjects: readonly ObservedWorkspaceProject[];
   defaultWorkspaceProvider: string | undefined;
   /** The per-provider default projects, riding the projects context they steer. */
@@ -395,6 +401,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   /** Whether a tap has left a turn open for a later press to end. */
   const talkLatched = useRef(false);
   const sessionsRef = useRef(options.sessions);
+  const noticeAsksRef = useRef(options.noticeAsks);
   const workspaceProjectsRef = useRef(options.workspaceProjects);
   const defaultWorkspaceProviderRef = useRef(options.defaultWorkspaceProvider);
   const workspaceProjectDefaultsRef = useRef(options.workspaceProjectDefaults);
@@ -568,7 +575,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       return permission;
     }
     if (await session.connect()) {
-      session.updateSessions(sessionsRef.current);
+      session.updateSessions(sessionsRef.current, noticeAsksRef.current);
       // After the roster, which it is rendered against. The reference outlives
       // the calls themselves on purpose: the announcement it points back at
       // may have been read out on the speak-only call this one just replaced.
@@ -820,8 +827,9 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
 
   useEffect(() => {
     sessionsRef.current = options.sessions;
-    voiceSession.current?.updateSessions(options.sessions);
-  }, [options.sessions]);
+    noticeAsksRef.current = options.noticeAsks;
+    voiceSession.current?.updateSessions(options.sessions, options.noticeAsks);
+  }, [options.sessions, options.noticeAsks]);
 
   useEffect(() => {
     workspaceProjectsRef.current = options.workspaceProjects;
