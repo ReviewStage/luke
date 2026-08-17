@@ -835,7 +835,9 @@ test("launches a new agent through Cursor's documented creation endpoint", async
     task: "Add a README with setup instructions",
   });
 
-  assert.deepEqual(result, { status: "accepted" });
+  // The acceptance names the agent the launch response did, so the surface
+  // can open it once observation reports it — an id, never an address.
+  assert.deepEqual(result, { status: "accepted", providerSessionId: "bc-new-agent" });
   const write = api.requests.at(-1);
   assert.equal(write?.method, "POST");
   assert.equal(write?.pathname, "/v1/agents");

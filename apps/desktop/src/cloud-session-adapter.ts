@@ -543,16 +543,26 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
     const route = this.workspaceCreationRoute(project, name, task, request.agentSelection);
     if (!route) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
     const created = await this.#postWriteDetailed(apiKey, route, WRITE_SUBJECT.PROJECT);
-    if (created.outcome.status !== PROVIDER_ACT_RESULT_STATUS.ACCEPTED || !task) {
+    if (created.outcome.status !== PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
       return created.outcome;
     }
+    // The id the response named rides the acceptance — an identifier only,
+    // never an address — so the surface can open the workspace once an
+    // observation pass reports that session itself. The body it was read
+    // from still never leaves the adapter.
+    const createdSessionId = this.createdWorkspaceSessionId(created.body ?? {});
+    const landed: ProviderWorkspaceResult = {
+      status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
+      ...(createdSessionId ? { providerSessionId: createdSessionId } : {}),
+    };
+    if (!task) return landed;
 
     // The workspace stands; what is left is the task. A provider whose
     // creation request already carried it has nothing to answer here, and one
     // that hands tasks somewhere the creation response names answers with
     // that route — built from what the provider itself just returned.
     const followUp = this.workspaceTaskRoute(created.body ?? {}, task);
-    if (followUp === undefined) return created.outcome;
+    if (followUp === undefined) return landed;
     if ("undeliverable" in followUp) {
       return {
         status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
@@ -561,7 +571,7 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
     }
     const delivered = await this.#postWriteDetailed(apiKey, followUp, WRITE_SUBJECT.SESSION);
     if (delivered.outcome.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
-      return created.outcome;
+      return landed;
     }
     return {
       status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
@@ -587,6 +597,19 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
     _task: string | undefined,
     _agentSelection: WorkspaceAgentSelection | undefined,
   ): CloudWriteRoute | undefined {
+    return undefined;
+  }
+
+  /**
+   * The id of the session a creation response names, for a provider whose
+   * documented response names one. It is the one thing read out of the body
+   * that outlives the adapter — an identifier the next observation pass will
+   * report on its own, never an address — and it exists so the surface can
+   * open the created workspace once that pass has. The default is that a
+   * provider names none, so an acceptance stays a plain acceptance and the
+   * workspace is simply left where it was made.
+   */
+  protected createdWorkspaceSessionId(_creationBody: Record<string, unknown>): string | undefined {
     return undefined;
   }
 

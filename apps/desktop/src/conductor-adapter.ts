@@ -490,6 +490,15 @@ export class ConductorSessionAdapter
     };
   }
 
+  protected override createdWorkspaceSessionId(
+    creationBody: Record<string, unknown>,
+  ): string | undefined {
+    // The same field the opening task is routed by: the creation response
+    // documents the first session's id, and that session is what the next
+    // observation pass will report — deep link and all.
+    return textFromRecord(creationBody, CONDUCTOR_WORKSPACE_FIELD.SESSION_ID);
+  }
+
   protected override workspaceTaskRoute(
     creationBody: Record<string, unknown>,
     task: string,
