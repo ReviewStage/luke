@@ -547,16 +547,16 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "dives to the control that moved, and floats back.",
     },
     {
-      label: "Your account",
+      label: "Account",
       detail:
         account.status === ACCOUNT_STATUS.SIGNED_IN
-          ? `Signed in as ${account.email} through ${account.provider === ACCOUNT_PROVIDER.GITHUB ? "GitHub" : "Google"}. Sign out by hand from Your account on the Settings tab's front page.`
-          : "Not signed in. Live sessions and Luke's controls stay off until Google or GitHub sign-in finishes.",
+          ? `Signed in as ${account.email} through ${account.provider === ACCOUNT_PROVIDER.GITHUB ? "GitHub" : "Google"}. Sign out by hand from Account, at the foot of the Settings tab's front page just above Quit — it asks before acting.`
+          : "Not signed in. The sign-in screen greets the launch once with Google and GitHub, then closes like any panel. While signed out the strip beside the housing keeps Luke's face and a small Sign in label in place of the session count, and hovering or pressing it brings the sign-in screen back. Live sessions and Luke's controls stay off until sign-in finishes. Choosing a provider stands the panel down to a small waiting popup with a Cancel button while the browser finishes, and the panel opens itself once the sign-in lands.",
     },
     {
       label: "Feedback and prompts",
       detail:
-        "The Feedback section near the foot of the Settings tab, just above Quit — or the menu bar item's Send " +
+        "The Feedback section near the foot of the Settings tab, just above the Account section and Quit — or the menu bar item's Send " +
         "Feedback… and Submit a Prompt… — opens a composer under the notch. Send feedback is for " +
         "bugs and ideas; Submit a prompt sends a prompt to a coding agent, and one the founders " +
         "like ships in the next release. Either goes by email to the founders with an optional " +

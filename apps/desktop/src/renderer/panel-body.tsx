@@ -8,6 +8,7 @@ import {
 import { useCallback, useRef, useState } from "react";
 import {
   ACCOUNT_STATUS,
+  type AccountProvider,
   type AccountSnapshot,
   SESSION_OPEN_RESULT_STATUS,
   type SessionOpenResult,
@@ -534,6 +535,10 @@ function SessionRun({
 export interface PanelBodyProps {
   accountRequired: boolean;
   account: AccountSnapshot;
+  /** Starts a sign-in; the app stands the panel down to the waiting popup. */
+  onBeginSignIn: (provider: AccountProvider) => void;
+  /** Why the last sign-in ended without landing, for the gate to show. */
+  signInFailure?: string;
   list: ArrangedSessions;
   view: SessionView;
   onViewChange: (view: SessionView) => void;
@@ -581,6 +586,8 @@ export interface PanelBodyProps {
 export function PanelBody({
   accountRequired,
   account,
+  onBeginSignIn,
+  signInFailure,
   list,
   view,
   onViewChange,
@@ -606,7 +613,12 @@ export function PanelBody({
   if (accountRequired && account.status !== ACCOUNT_STATUS.SIGNED_IN) {
     return (
       <div className="body">
-        <SignInGate account={account} onQuit={settings.onQuit} />
+        <SignInGate
+          account={account}
+          {...(signInFailure ? { failure: signInFailure } : {})}
+          onBegin={onBeginSignIn}
+          onQuit={settings.onQuit}
+        />
       </div>
     );
   }

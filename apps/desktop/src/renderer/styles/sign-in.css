@@ -1,9 +1,11 @@
+/* The panel's own padding already clears the housing by `--notch-top-inset`
+   plus a margin, so the gate adds almost nothing of its own on top. */
 .sign-in-gate {
   display: grid;
   justify-items: center;
   gap: 10px;
   min-height: 250px;
-  padding: 28px 24px 26px;
+  padding: 4px 24px 18px;
   text-align: center;
 }
 
@@ -21,18 +23,77 @@
   color: var(--text-secondary);
 }
 
-.sign-in-eyes {
-  display: flex;
-  gap: 24px;
-  padding: 7px 0;
-  transform: rotate(-8deg);
+/* The face's reserved room on the gate. The face itself is `.sign-in-luke`,
+   drawn once on the stage so the same Luke can travel between the gate and
+   the peek's strip; this box is where he rests while the panel is up. */
+.sign-in-face {
+  width: 56px;
+  height: 56px;
+  margin: 4px 0 2px;
 }
 
-.sign-in-eyes span {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: currentColor;
+/* The one signed-out Luke, like the caption a single element in every state so
+   the morph carries him rather than trading two copies. At rest he stands over
+   the gate's reserved box — `--sign-in-face-rest` is that box's top, restated
+   from the panel's own padding (14px) plus the gate's (4px) and the box's
+   margin (4px) — and in the compact shapes he takes the wing spot the authed
+   face holds: against the housing, past `--wing-inset` and half his drawn
+   width, at the strip's centre. Only `transform` and `opacity` move him, on
+   the caption's own beat: leaving a state, he travels with the shape rather
+   than ahead of it. 0.3214 is 18/56 — the wing face's size over the gate's. */
+.sign-in-luke {
+  --sign-in-face-rest: calc(var(--capsule-height) + 22px);
+
+  position: absolute;
+  z-index: 3;
+  top: var(--sign-in-face-rest);
+  left: calc(50% - 28px);
+  display: flex;
+  width: 56px;
+  height: 56px;
+  pointer-events: none;
+  transform-origin: center;
+  transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-shape) var(--spring) var(--duration-exit);
+  will-change: transform;
+}
+
+/* A notchless display shifts the drawn shapes down by `--shape-top`; the rest
+   pose follows the panel it stands over. */
+.app-stage[data-notch="false"] .sign-in-luke {
+  --sign-in-face-rest: calc(var(--capsule-height) + 22px + var(--shape-top, 0px));
+}
+
+.sign-in-luke .luke-face {
+  width: 56px;
+  height: 56px;
+}
+
+/* He keeps the panel's own ink through every gesture: the wing recolours
+   listening and talking because there the colour reports whose turn a
+   conversation is, and here there is no conversation for it to report. */
+.sign-in-luke .luke-face[data-motion="listening"],
+.sign-in-luke .luke-face[data-motion="talking"] {
+  color: var(--text-primary);
+}
+
+/* The compact pose, shared by the capsule and the peek: the wing spot, at the
+   wing face's size — where the authed strip keeps Luke in the same states. */
+.app-stage[data-presentation="capsule"] .sign-in-luke,
+.app-stage[data-presentation="peek"] .sign-in-luke {
+  transform: translate(
+      calc(var(--notch-housing-width) / -2 - 18px),
+      calc(var(--capsule-height) / 2 - var(--sign-in-face-rest) - 28px)
+    )
+    scale(0.3214);
+}
+
+/* The waiting popup has its own words; the face steps out of their way and
+   comes back when the panel does. */
+.app-stage[data-presentation="slot"] .sign-in-luke,
+.app-stage[data-presentation="feedback"] .sign-in-luke {
+  opacity: 0;
 }
 
 .sign-in-actions {
@@ -42,28 +103,83 @@
   margin-top: 8px;
 }
 
-.sign-in-actions button {
+.sign-in-provider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
   min-height: 38px;
   border: 1px solid var(--hairline);
   border-radius: 10px;
   background: var(--raised);
-  color: var(--text);
+  color: var(--text-primary);
   font-weight: 650;
 }
 
-.sign-in-actions button:hover:not(:disabled) {
+.sign-in-provider:hover:not(:disabled) {
   background: var(--raised-strong);
 }
 
-.sign-in-actions button:disabled {
+.sign-in-provider:disabled {
   opacity: 0.55;
+}
+
+/* The provider's own mark, at the size its guidelines draw beside a label. */
+.account-mark {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
 }
 
 .sign-in-gate .sign-in-error {
   color: var(--state-attention);
 }
 
+/* Quiet on purpose: leaving is the one act here that is not the reason the
+   screen exists, so it reads as a footnote until it is asked after — and then
+   admits what it is the way every destructive control does. */
 .sign-in-quit {
-  width: 100%;
-  margin-top: 8px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  margin-top: 4px;
+  background: none;
+  color: var(--text-tertiary);
+  font-size: 10.5px;
+  font-weight: 620;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.sign-in-quit:hover {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger-text);
+}
+
+/* The waiting popup's one line: whose sign-in, what is being waited for, and
+   the way to take it back. */
+.sign-in-slot-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+
+.sign-in-slot-copy strong {
+  color: var(--text-primary);
+  font-size: 11.5px;
+  font-weight: 650;
+}
+
+.sign-in-slot-copy small {
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.sign-in-slot-mark .account-mark {
+  width: 16px;
+  height: 16px;
 }

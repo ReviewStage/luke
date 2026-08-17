@@ -209,7 +209,7 @@ test("the guide names the signed-in identity and keeps sign-out manual", () => {
       },
     }),
   ).facts;
-  const account = facts.find((fact) => fact.label === "Your account");
+  const account = facts.find((fact) => fact.label === "Account");
 
   assert.match(account?.detail ?? "", /developer@example.com/);
   assert.match(account?.detail ?? "", /GitHub/);

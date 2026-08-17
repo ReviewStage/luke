@@ -1,10 +1,73 @@
 import { randomBytes } from "node:crypto";
-import { createServer, type Server } from "node:http";
+import { createServer, type Server, type ServerResponse } from "node:http";
+import { accountLoopbackPage, LOOPBACK_PAGE_TONE } from "./account-loopback-page";
 import { codeChallenge, createCodeVerifier } from "./account-pkce";
 import type { AccountProvider } from "./shared/contracts";
 
 const CALLBACK_PATH = "/callback";
 const LOOPBACK_HOST = "127.0.0.1";
+
+/**
+ * Every answer the callback can give, drawn as the same card the landing page
+ * would draw it. The words are fixed by the build; nothing the redirect
+ * carried reaches the document.
+ */
+const LOOPBACK_ANSWER = {
+  SIGNED_IN: {
+    status: 200,
+    page: {
+      tone: LOOPBACK_PAGE_TONE.SETTLED,
+      badge: "Signed in",
+      title: "Signed in to Luke",
+      body: "You can close this tab and return to Luke.",
+    },
+  },
+  NOT_VERIFIED: {
+    status: 400,
+    page: {
+      tone: LOOPBACK_PAGE_TONE.ATTENTION,
+      badge: "Not verified",
+      title: "Luke could not verify this sign-in",
+      body: "Return to Luke and try again.",
+    },
+  },
+  NOT_COMPLETED: {
+    status: 400,
+    page: {
+      tone: LOOPBACK_PAGE_TONE.ATTENTION,
+      badge: "Not completed",
+      title: "Sign-in was not completed",
+      body: "Return to Luke and try again.",
+    },
+  },
+  ALREADY_USED: {
+    status: 409,
+    page: {
+      tone: LOOPBACK_PAGE_TONE.SETTLED,
+      badge: "Already used",
+      title: "This sign-in has already been used",
+      body: "You can close this tab and return to Luke.",
+    },
+  },
+} as const;
+
+function answer(
+  response: ServerResponse,
+  { status, page }: (typeof LOOPBACK_ANSWER)[keyof typeof LOOPBACK_ANSWER],
+): void {
+  response.writeHead(status, { "content-type": "text/html; charset=utf-8" });
+  response.end(accountLoopbackPage(page));
+}
+
+/**
+ * The one message a withdrawn sign-in ends with, so the flow's owner can tell
+ * a cancellation — a normal outcome — from a failure worth reporting.
+ */
+export const SIGN_IN_CANCELLED_MESSAGE = "Sign-in was cancelled";
+
+export function isSignInCancellation(error: unknown): boolean {
+  return error instanceof Error && error.message === SIGN_IN_CANCELLED_MESSAGE;
+}
 
 export interface AccountLoopback {
   redirectUri: string;
@@ -12,6 +75,12 @@ export interface AccountLoopback {
   codeVerifier: string;
   codeChallenge: string;
   waitForCode: Promise<string>;
+  /**
+   * Withdraws the wait: `waitForCode` rejects as cancelled and the server
+   * closes. A code that already arrived has settled the promise, so a late
+   * cancel changes nothing.
+   */
+  cancel(): void;
   close(): Promise<void>;
 }
 
@@ -41,31 +110,26 @@ export async function startAccountLoopback(
     const oauthError = url.searchParams.get("error");
     const returnedState = url.searchParams.get("state");
     if (url.pathname !== CALLBACK_PATH || returnedState !== state) {
-      response.writeHead(400, { "content-type": "text/plain; charset=utf-8" });
-      response.end("Luke could not verify this sign-in. Return to Luke and try again.");
+      answer(response, LOOPBACK_ANSWER.NOT_VERIFIED);
       return;
     }
     if (accepted) {
-      response.writeHead(409, { "content-type": "text/plain; charset=utf-8" });
-      response.end("This sign-in has already been used.");
+      answer(response, LOOPBACK_ANSWER.ALREADY_USED);
       return;
     }
     if (oauthError) {
       accepted = true;
-      response.writeHead(400, { "content-type": "text/plain; charset=utf-8" });
-      response.end("Sign-in was not completed. Return to Luke and try again.");
+      answer(response, LOOPBACK_ANSWER.NOT_COMPLETED);
       reject?.(new Error(`Sign-in was not completed (${oauthError})`));
       reject = undefined;
       return;
     }
     if (!code) {
-      response.writeHead(400, { "content-type": "text/plain; charset=utf-8" });
-      response.end("Luke could not verify this sign-in. Return to Luke and try again.");
+      answer(response, LOOPBACK_ANSWER.NOT_VERIFIED);
       return;
     }
     accepted = true;
-    response.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
-    response.end("Signed in to Luke. You can close this window.");
+    answer(response, LOOPBACK_ANSWER.SIGNED_IN);
     settle?.(code);
     settle = undefined;
   });
@@ -94,6 +158,11 @@ export async function startAccountLoopback(
     codeVerifier,
     codeChallenge: codeChallenge(codeVerifier),
     waitForCode,
+    cancel: () => {
+      reject?.(new Error(SIGN_IN_CANCELLED_MESSAGE));
+      reject = undefined;
+      void closeServer(server);
+    },
     close: () => closeServer(server),
   };
 }

@@ -1160,6 +1160,34 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   color: var(--text-tertiary);
 }
 
+/* The signed-out label wears words, not a numeral: the count's rounded
+   tabular face at label length reads as a button that is not one, so it
+   steps down to the panel's own text voice at a quieter size. It reads in
+   both compact shapes — inside the capsule's side it stands down to fit,
+   exactly as a wide count does — and hides over the open panel, where the
+   gate itself says it larger. The base rule declares only the transform
+   pair, so this restates it beside the fade rather than adding to it. */
+.count-badge[data-sign-in="true"] {
+  /* Flush to the housing's edge: the notch is black on black, so the inset a
+     numeral keeps reads as nothing here, and every pixel of it is room the
+     words need. The fit arithmetic mirrors this with `SIGN_IN_INSET`. */
+  margin-left: calc(-1 * var(--wing-inset));
+  font-family: inherit;
+  font-size: 12px;
+  font-variant-numeric: normal;
+  font-weight: 640;
+  letter-spacing: 0.1px;
+  opacity: 0;
+  transition:
+    transform var(--duration-shape) var(--spring),
+    opacity var(--duration-quick) var(--motion-exit);
+}
+
+.app-stage[data-presentation="capsule"] .count-badge[data-sign-in="true"],
+.app-stage[data-presentation="peek"] .count-badge[data-sign-in="true"] {
+  opacity: 1;
+}
+
 /* The panel has room for it to sit at full size; the capsule and the peek do
    not, and growing it there read as a second movement competing with the
    widening. */

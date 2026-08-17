@@ -114,6 +114,7 @@ interface PersistedSettings {
     tokenCipher: string;
     email: string;
     name?: string;
+    pictureUrl?: string;
     provider: AccountProvider;
   };
   /**
@@ -217,6 +218,7 @@ export interface StoredAccount {
   refreshToken: string;
   email: string;
   name?: string;
+  pictureUrl?: string;
   provider: AccountProvider;
 }
 
@@ -241,6 +243,9 @@ function storedAccount(record: Record<string, unknown>): PersistedSettings["acco
     tokenCipher: account.tokenCipher,
     email: account.email,
     ...(typeof account.name === "string" && account.name ? { name: account.name } : {}),
+    ...(typeof account.pictureUrl === "string" && account.pictureUrl
+      ? { pictureUrl: account.pictureUrl }
+      : {}),
     provider: account.provider,
   };
 }
@@ -532,6 +537,7 @@ export class SettingsStore {
         refreshToken,
         email: account.email,
         ...(account.name ? { name: account.name } : {}),
+        ...(account.pictureUrl ? { pictureUrl: account.pictureUrl } : {}),
         provider: account.provider,
       };
     } catch {
@@ -546,6 +552,7 @@ export class SettingsStore {
           status: ACCOUNT_STATUS.SIGNED_IN,
           email: account.email,
           ...(account.name ? { name: account.name } : {}),
+          ...(account.pictureUrl ? { pictureUrl: account.pictureUrl } : {}),
           provider: account.provider,
         }
       : { status: ACCOUNT_STATUS.SIGNED_OUT };
@@ -573,6 +580,7 @@ export class SettingsStore {
           tokenCipher,
           email: account.email,
           ...(account.name ? { name: account.name } : {}),
+          ...(account.pictureUrl ? { pictureUrl: account.pictureUrl } : {}),
           provider: account.provider,
         },
       };
