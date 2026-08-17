@@ -167,11 +167,11 @@ test("the timed check starts at once and stops when asked", async () => {
     },
   });
 
-  service.setAutomatic(true);
+  service.start();
   await sleep(35);
   assert.ok(requests >= 2, `expected the timer to have checked again, saw ${requests}`);
 
-  service.setAutomatic(false);
+  service.stop();
   const settled = requests;
   await sleep(30);
   assert.equal(requests, settled);

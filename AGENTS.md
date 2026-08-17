@@ -167,8 +167,9 @@ Trust constraints:
   volume himself; turning it up stays the user's own act on their own keys.
 - The update check is the one request Luke makes with no user-supplied key at
   all: an unauthenticated read of this repository's latest release name from
-  GitHub's public API, on a timer the `automaticUpdates` setting owns and at
-  the press of the Updates row's button — never in a fixture or capture run.
+  GitHub's public API, on a timer of its own — always on, like the
+  announcements, answering only to the run mode — and at the press of the
+  Updates row's button; never in a fixture or capture run.
   It carries nothing about the user, their sessions, or their keys; only the
   release's version name is read back, and what a check learns changes only
   what the row says. The way to a newer build is the browser, at the releases

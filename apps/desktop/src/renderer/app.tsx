@@ -726,12 +726,6 @@ export function App(): React.JSX.Element {
     calendarConnect.cancel();
   }, [calendarConnect.cancel, calendarConnect.latest]);
 
-  const changeAutomaticUpdates = useCallback(
-    async (enabled: boolean) =>
-      applySettingsReply(await window.sidecar.setAutomaticUpdates(enabled)),
-    [applySettingsReply],
-  );
-
   /**
    * Asking to write a key is asking for one thing, so the panel gets out of the
    * way of it: the shape goes down to the slot, which is the field and nothing
@@ -1433,11 +1427,9 @@ export function App(): React.JSX.Element {
           const opening = presentationOf() !== PANEL_PRESENTATION.PANEL;
           // The guide's ids travel as plain text, so one that names no setting
           // of Luke's names no page either — and nothing will fly to it.
-          const settingPage = isAppSettingId(action.setting.id)
+          const page = isAppSettingId(action.setting.id)
             ? SETTING_PAGE[action.setting.id]
             : undefined;
-          // A front-page setting opens no page at all: the tab is the flight.
-          const page = settingPage === SETTINGS_VIEW.ROOT ? undefined : settingPage;
           try {
             await changeMode(true);
             // Queued rather than flown at once. The tab, the page and the wait
@@ -2204,7 +2196,6 @@ export function App(): React.JSX.Element {
     onVoiceCaptionsChange: changeVoiceCaptions,
     onDuckOtherMediaChange: changeDuckOtherMedia,
     onQuietDuringMeetingsChange: changeQuietDuringMeetings,
-    onAutomaticUpdatesChange: changeAutomaticUpdates,
     onVoiceChange: changeVoice,
     onVoiceSpeedChange: changeVoiceSpeed,
     onShowInMenuBarChange: changeShowInMenuBar,

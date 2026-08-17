@@ -123,7 +123,6 @@ export const APP_SETTING_DEFAULTS = {
   duckOtherMedia: true,
   quietDuringMeetings: true,
   showOnAllDisplays: false,
-  automaticUpdates: true,
 } as const satisfies Partial<Record<keyof AppSettings, boolean>>;
 
 /**
@@ -282,14 +281,6 @@ export interface AppSettings {
    * again is what brings him back to it.
    */
   showOnAllDisplays: boolean;
-  /**
-   * Whether Luke asks GitHub for the latest release name on a timer, so the
-   * settings row can say an update exists. On by default and bounded on every
-   * side: the check carries nothing about the user or their sessions, learns
-   * only a version name, and changes only what the row says. Off, the only
-   * check is the row's own button being pressed.
-   */
-  automaticUpdates: boolean;
   /**
    * How Luke stands on a display without a camera housing: a drawn notch
    * pressed into the top edge, or the free-floating bubble every such display
@@ -563,8 +554,6 @@ export interface AppBridge {
   resetSettings(scope: SettingsResetScope): Promise<SettingsUpdateResult>;
   /** Turns the quieting of Music and Spotify during a spoken exchange on or off. */
   setDuckOtherMedia(enabled: boolean): Promise<SettingsUpdateResult>;
-  /** Turns the timed update check on or off, and remembers the choice. */
-  setAutomaticUpdates(enabled: boolean): Promise<SettingsUpdateResult>;
   /**
    * Asks GitHub for the latest release name, right now, because the row's
    * button was pressed. The answer is the same snapshot the broadcast
@@ -852,7 +841,6 @@ export const channels = {
   setCalendarSelected: "app:set-calendar-selected",
   calendarsChanged: "app:calendars-changed",
   meetingQuietChanged: "app:meeting-quiet-changed",
-  setAutomaticUpdates: "app:set-automatic-updates",
   checkForUpdates: "app:check-for-updates",
   openLatestRelease: "app:open-latest-release",
   updateChanged: "app:update-changed",

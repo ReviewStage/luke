@@ -1487,20 +1487,6 @@ function registerIpc(): void {
     refusal: "Could not save that setting on this system.",
   });
 
-  // The check follows the stored answer at once, like the duck: off must stop
-  // the timer now rather than at the next launch. A run that sends no network
-  // never arms it, whatever the file says.
-  registerSettingHandler(channels.setAutomaticUpdates, {
-    validate(enabled: unknown) {
-      if (typeof enabled !== "boolean") throw new Error("Invalid update check request");
-      return enabled;
-    },
-    save: (enabled) => settingsStore.setAutomaticUpdates(enabled),
-    apply: (result) =>
-      updateService.setAutomatic(result.settings.automaticUpdates && runMode.sendsNetwork),
-    refusal: "Could not save that setting on this system.",
-  });
-
   // The row's button. Answered rather than fire-and-forget so the row that
   // asked and the broadcast never disagree; a run that sends no network
   // answers with the standing snapshot rather than make a request it must not.
@@ -2871,15 +2857,10 @@ if (!app.requestSingleInstanceLock()) {
       (enabled) => mediaDuck.setEnabled(enabled),
       () => mediaDuck.setEnabled(APP_SETTING_DEFAULTS.duckOtherMedia),
     );
-    // Armed from the settings file alone, like the duck — and never in a run
-    // that must stay deterministic: a fixture or capture run sends no network,
+    // Always on, like the announcements: the timed check answers to no
+    // setting, only to the run — a fixture or capture run sends no network,
     // so it never asks GitHub anything.
-    if (runMode.sendsNetwork) {
-      void settingsStore.automaticUpdates().then(
-        (enabled) => updateService.setAutomatic(enabled),
-        () => updateService.setAutomatic(APP_SETTING_DEFAULTS.automaticUpdates),
-      );
-    }
+    if (runMode.sendsNetwork) updateService.start();
     // The hook registrations converge at every launch. Each provider's
     // failure is logged under its own name and absorbed inside — a launch
     // must never hang on another app's configuration file — so this catch is
