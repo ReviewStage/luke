@@ -1,0 +1,941 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Luke — sneak peek</title>
+<!-- The product's own generated motion: the springs the surface rides and
+     every face gesture, linked from the repo so nothing here can drift. -->
+<link rel="stylesheet" href="../../packages/sidecar-core/src/motion-tokens.css" />
+<link rel="stylesheet" href="../../apps/desktop/src/renderer/styles/face-motion.css" />
+<style>
+  /* == Stage ============================================================= */
+  :root {
+    color-scheme: dark;
+    --page: #08090b;
+    --frame-top: #14171c;
+    --frame-bottom: #0a0b0e;
+    --text: rgba(255, 255, 255, 0.92);
+    --text-primary: rgba(255, 255, 255, 0.95);
+    --text-secondary: rgba(255, 255, 255, 0.56);
+    --text-tertiary: rgba(255, 255, 255, 0.34);
+    --hairline: rgba(255, 255, 255, 0.08);
+    --hairline-strong: rgba(255, 255, 255, 0.09);
+    --raised: rgba(255, 255, 255, 0.05);
+    --raised-strong: rgba(255, 255, 255, 0.09);
+    --voice-developer: #7fe0ac;
+    --voice-luke: #5cd5ff;
+    --swift: cubic-bezier(0.2, 0.8, 0.2, 1);
+    --face-motion: running;
+    --loop-motion: running;
+    font-family: -apple-system, "SF Pro Display", "Noto Sans", "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; }
+  body { background: var(--page); color: var(--text); -webkit-font-smoothing: antialiased; }
+
+  .stage {
+    position: relative;
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+  }
+
+  .mock-pin {
+    position: absolute;
+    top: 44px;
+    left: 50%;
+    transform: translateX(-50%);
+    transition: opacity 700ms var(--swift), filter 700ms var(--swift);
+  }
+  .stage[data-end="true"] .mock-pin { opacity: 0.10; filter: blur(6px); }
+
+  /* == The product surface, as the marketing mock recreates it =========== */
+  .mock {
+    --notch-housing-width: 210px;
+    --notch-top-inset: 38px;
+
+    --state-working: #5cd5ff;
+    --state-attention: #ffa049;
+    --state-complete: #6fdca4;
+    --state-idle: rgba(255, 255, 255, 0.44);
+
+    --mark-claude-code: #d97757;
+    --mark-codex-top: #b1a7ff;
+    --mark-codex-middle: #7a9dff;
+    --mark-codex-bottom: #3941ff;
+    --mark-conductor: #eae8e6;
+    --mark-cursor: #ffffff;
+    --mark-devin: #ffffff;
+
+    --surface-fill: #000;
+    --surface-shadow: 0 10px 26px rgba(0, 0, 0, 0.46), 0 2px 7px rgba(0, 0, 0, 0.3);
+
+    --panel-radius: 30px;
+    --wing-inset: 9px;
+
+    --capsule-width: calc(var(--notch-housing-width) + 72px);
+    --capsule-height: max(var(--notch-top-inset), 32px);
+    --peek-width: calc(var(--notch-housing-width) + 248px);
+    --notch-convex-radius: calc(var(--capsule-height) * 0.348);
+    --notch-concave-radius: calc(var(--capsule-height) * 0.17);
+    --wing-bound: var(--peek-width);
+
+    position: relative;
+    width: 1080px;
+    height: 560px;
+    transform: scale(1.5);
+    transform-origin: top center;
+    line-height: normal;
+    user-select: none;
+  }
+
+  .mock[data-mode="panel"] {
+    --notch-concave-radius: calc(var(--panel-radius) * 0.489);
+    --wing-bound: var(--panel-width);
+  }
+
+  .mock [data-state="working"] { --accent: var(--state-working); }
+  .mock [data-state="attention"] { --accent: var(--state-attention); }
+  .mock [data-state="complete"] { --accent: var(--state-complete); }
+  .mock [data-state="unknown"] { --accent: var(--state-idle); }
+
+  .mock-frame {
+    position: absolute;
+    z-index: 0;
+    inset: 0;
+    border: 1px solid var(--hairline-strong);
+    border-bottom: 0;
+    border-radius: 18px 18px 0 0;
+    background: linear-gradient(180deg, var(--frame-top) 0%, var(--frame-bottom) 55%, var(--page) 100%);
+    -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 18%, transparent 62%);
+    mask-image: linear-gradient(180deg, #000 0%, #000 18%, transparent 62%);
+  }
+
+  .mock .panel-surface {
+    position: absolute;
+    z-index: 1;
+    top: 0;
+    left: 50%;
+    width: var(--capsule-width);
+    height: var(--capsule-height);
+    min-width: var(--notch-housing-width);
+    min-height: var(--capsule-height);
+    border-radius: 0 0 var(--notch-convex-radius) var(--notch-convex-radius);
+    background: var(--surface-fill);
+    transform: translateX(-50%);
+    transition:
+      width var(--duration-shape) var(--spring) var(--duration-exit),
+      height var(--duration-shape) var(--spring) var(--duration-exit),
+      border-radius var(--duration-shape) var(--spring) var(--duration-exit),
+      background-color var(--duration-shape) var(--motion-exit),
+      box-shadow var(--duration-quick) var(--motion-exit),
+      transform var(--duration-shape) var(--spring) var(--duration-exit);
+  }
+
+  .mock .panel-surface::before,
+  .mock .panel-surface::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    width: var(--notch-concave-radius);
+    height: var(--notch-concave-radius);
+    transition:
+      width var(--duration-shape) var(--spring) var(--duration-exit),
+      height var(--duration-shape) var(--spring) var(--duration-exit);
+  }
+  .mock .panel-surface::before {
+    right: 100%;
+    background: radial-gradient(ellipse 100% 100% at 0 100%, transparent calc(100% - 0.5px), var(--surface-fill) 100%);
+  }
+  .mock .panel-surface::after {
+    left: 100%;
+    background: radial-gradient(ellipse 100% 100% at 100% 100%, transparent calc(100% - 0.5px), var(--surface-fill) 100%);
+  }
+  .mock[data-mode="panel"] .panel-surface::before,
+  .mock[data-mode="panel"] .panel-surface::after { transition-delay: 0s, 0s; }
+
+  /* Before Luke arrives: the bare housing itself, no wider than the hardware. */
+  .mock[data-mode="housing"] .panel-surface {
+    width: var(--notch-housing-width);
+  }
+
+  .mock[data-mode="peek"] .panel-surface,
+  .mock[data-mode="panel"] .panel-surface { box-shadow: var(--surface-shadow); }
+
+  .mock[data-mode="peek"] .panel-surface {
+    width: var(--peek-width);
+    transition-duration: var(--duration-shape);
+    transition-timing-function: var(--spring), var(--spring), var(--spring), var(--motion-exit), var(--motion-exit), var(--spring);
+    transition-delay: 0s;
+  }
+
+  .mock[data-mode="panel"] .panel-surface {
+    width: var(--panel-width);
+    height: var(--panel-height, 520px);
+    border-radius: 0 0 var(--panel-radius) var(--panel-radius);
+    transition-duration: var(--duration-shape);
+    transition-timing-function: var(--spring), var(--spring), var(--spring), var(--motion-exit), var(--motion-exit), var(--spring);
+    transition-delay: 0s, 0s, 0s, 0s, var(--duration-shape), 0s;
+  }
+
+  /* == Wings ============================================================== */
+  .mock .wing {
+    position: absolute;
+    z-index: 3;
+    top: 0;
+    display: flex;
+    height: var(--capsule-height);
+    align-items: center;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .mock .wing-left {
+    right: calc(50% + var(--notch-housing-width) / 2);
+    left: calc(50% - var(--wing-bound) / 2);
+    justify-content: flex-end;
+  }
+  .mock .wing-right {
+    right: calc(50% - var(--wing-bound) / 2);
+    left: calc(50% + var(--notch-housing-width) / 2);
+    justify-content: flex-start;
+  }
+  .mock .wing-inner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 var(--wing-inset);
+  }
+  .mock .wing-marks {
+    display: flex;
+    height: 22px;
+    flex-direction: row-reverse;
+    align-items: center;
+    gap: 7px;
+  }
+  .mock .wing-mark {
+    display: flex;
+    align-items: center;
+    color: var(--text-secondary);
+  }
+  .mock .wing-mark,
+  .mock .wing-more {
+    opacity: 0;
+    transform: translateX(8px);
+    transition:
+      opacity var(--duration-exit) var(--motion-exit),
+      transform var(--duration-shape) var(--spring);
+  }
+  .mock[data-mode="peek"] .wing-mark,
+  .mock[data-mode="peek"] .wing-more,
+  .mock[data-mode="panel"] .wing-mark,
+  .mock[data-mode="panel"] .wing-more {
+    opacity: 1;
+    transform: none;
+    transition-duration: var(--duration-quick), var(--duration-shape);
+    transition-timing-function: var(--motion-exit), var(--spring);
+    transition-delay: var(--peek-delay);
+  }
+  @starting-style {
+    .mock[data-mode="peek"] .wing-mark,
+    .mock[data-mode="peek"] .wing-more,
+    .mock[data-mode="panel"] .wing-mark,
+    .mock[data-mode="panel"] .wing-more {
+      opacity: 0;
+      transform: translateX(8px);
+    }
+  }
+  .mock .wing-mark[hidden], .mock .wing-more[hidden] { display: none; }
+  .mock .wing-more {
+    flex: 0 0 auto;
+    color: var(--text-tertiary);
+    font-size: 9.5px;
+    font-weight: 660;
+    letter-spacing: -0.2px;
+  }
+
+  .mock .provider-mark { width: 14px; height: 14px; flex: 0 0 auto; }
+  .mock .provider-mark[data-mark="claude-code"] { color: var(--mark-claude-code); transform: scale(1.12); }
+  .mock .provider-mark[data-mark="codex"] { transform: scale(0.94); }
+  .mock .provider-mark[data-mark="conductor"] { color: var(--mark-conductor); transform: scale(0.93); }
+  .mock .provider-mark[data-mark="cursor"] { color: var(--mark-cursor); transform: scale(0.94); }
+  .mock .provider-mark[data-mark="devin"] { color: var(--mark-devin); transform: scale(1.22); }
+
+  /* == Luke himself ======================================================= */
+  .mock .luke-face {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+    overflow: visible;
+    color: var(--text-primary);
+    transition:
+      color var(--duration-quick) var(--motion-exit),
+      opacity var(--duration-quick) var(--motion-exit),
+      transform var(--duration-shape) var(--spring);
+  }
+  .luke-face[data-motion="listening"] { color: var(--voice-developer); }
+  .luke-face[data-motion="talking"] { color: var(--voice-luke); }
+
+  /* Before the capsule exists there is no Luke to draw. */
+  .mock[data-mode="housing"] .luke-face,
+  .mock[data-mode="housing"] .count-badge {
+    opacity: 0;
+    transform: scale(0.4) translateY(5px);
+  }
+
+  /* The wiring face-motion.css assumes, from the renderer's base.css. */
+  .luke-face-layer,
+  .luke-face-eye,
+  .luke-face-brows,
+  .luke-face-z {
+    animation-play-state: var(--face-motion);
+    animation-iteration-count: 1;
+    animation-timing-function: linear;
+  }
+  .luke-face[data-repeat="true"] .luke-face-layer,
+  .luke-face[data-repeat="true"] .luke-face-eye,
+  .luke-face[data-repeat="true"] .luke-face-brows,
+  .luke-face[data-repeat="true"] .luke-face-z {
+    animation-iteration-count: infinite;
+  }
+  .luke-face-layer { transform-box: view-box; }
+  .luke-face-eye { transform-box: fill-box; transform-origin: center; }
+
+  /* Only the motions that mean something with brows draw them. */
+  .luke-face .luke-face-brows { display: none; }
+  .luke-face[data-motion="notification"] .luke-face-brows,
+  .luke-face[data-motion="tease"] .luke-face-brows { display: block; }
+
+  /* == Count badge ======================================================== */
+  .mock .count-badge {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent);
+    font-family: ui-rounded, "SF Pro Rounded", "Noto Sans", sans-serif;
+    font-size: 16px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+    transform: scale(0.88);
+    transform-origin: left center;
+    transition:
+      transform var(--duration-shape) var(--spring),
+      opacity var(--duration-quick) var(--motion-exit);
+    will-change: transform;
+  }
+  .mock .count-badge[data-state="attention"] {
+    text-shadow: 0 0 14px color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  .mock[data-mode="panel"] .count-badge { transform: scale(1); }
+  .mock .count-caption {
+    position: absolute;
+    top: 50%;
+    left: 100%;
+    margin-left: 9px;
+    color: var(--text-secondary);
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    opacity: 0;
+    text-transform: uppercase;
+    transform: translate(-8px, -50%);
+    transition:
+      opacity var(--duration-exit) var(--motion-exit),
+      transform var(--duration-shape) var(--spring);
+    white-space: nowrap;
+  }
+  .mock[data-mode="peek"] .count-caption,
+  .mock[data-mode="panel"] .count-caption {
+    opacity: 1;
+    transform: translate(0, -50%);
+    transition-duration: var(--duration-quick), var(--duration-shape);
+    transition-timing-function: var(--motion-exit), var(--spring);
+    transition-delay: var(--peek-delay);
+  }
+
+  /* == Expanded panel ===================================================== */
+  .mock .expanded-stage {
+    position: absolute;
+    z-index: 2;
+    top: 0;
+    left: 50%;
+    width: var(--panel-width);
+    max-height: 520px;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateX(-50%) translateY(-10px);
+    transition:
+      opacity var(--duration-exit) var(--motion-exit),
+      transform var(--duration-shape) var(--spring),
+      visibility 0s linear var(--duration-exit);
+    will-change: opacity, transform;
+  }
+  .mock[data-mode="panel"] .expanded-stage {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+    transition:
+      opacity var(--duration-quick) var(--motion-exit) var(--expand-delay),
+      transform var(--duration-shape) var(--spring) var(--expand-delay),
+      visibility 0s linear var(--expand-delay);
+  }
+  .mock .expanded-panel {
+    display: flex;
+    max-height: 520px;
+    flex-direction: column;
+    padding: calc(max(var(--notch-top-inset), 32px) + 14px) 20px 18px;
+    border-radius: 0 0 var(--panel-radius) var(--panel-radius);
+    text-align: left;
+  }
+  .mock .body {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .mock .panel-header {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .mock .tab-bar {
+    position: relative;
+    display: flex;
+    width: calc(var(--tab-count) * 92px);
+    flex: 0 0 auto;
+    padding: 3px;
+    border-radius: 11px;
+    background: var(--raised);
+  }
+  .mock .tab-thumb {
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    left: 3px;
+    width: calc((100% - 6px) / var(--tab-count));
+    border-radius: 8px;
+    background: var(--raised-strong);
+    transform: translateX(calc(var(--tab-index) * 100%));
+    transition: transform var(--duration-fast) var(--spring-fast);
+  }
+  .mock .tab {
+    position: relative;
+    flex: 1;
+    padding: 6px 0;
+    color: var(--text-secondary);
+    font-size: 10.5px;
+    font-weight: 620;
+    text-align: center;
+  }
+  .mock .tab[data-active="true"] { color: var(--text-primary); }
+  .mock .options-button {
+    display: inline-flex;
+    min-height: 28px;
+    align-items: center;
+    gap: 7px;
+    padding: 0 10px;
+    border-radius: 10px;
+    background: var(--raised);
+    color: var(--text-secondary);
+  }
+  .mock .options-glyph { width: 14px; height: 14px; flex: 0 0 auto; }
+
+  .mock .session-list {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+    gap: 9px;
+  }
+  .mock .session-row,
+  .mock .panel-header {
+    --row-delay: 0s;
+    opacity: 0;
+    transform: translateY(calc((min(var(--row-index, 0), var(--row-fan-limit)) + 1) * var(--row-fan) * -1));
+    transition:
+      opacity var(--duration-exit) var(--motion-exit) var(--row-delay),
+      transform var(--duration-shape) var(--spring) var(--row-delay);
+  }
+  .mock[data-mode="panel"] .session-row,
+  .mock[data-mode="panel"] .panel-header {
+    --row-delay: calc(var(--expand-delay) + min(var(--row-index, 0), var(--row-fan-limit)) * var(--row-stagger));
+    opacity: 1;
+    transform: none;
+  }
+  .mock .session-row {
+    display: flex;
+    width: 100%;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 14px;
+    border: 1px solid var(--hairline);
+    border-radius: 15px;
+    background: rgba(255, 255, 255, 0.028);
+    margin: 0;
+    text-align: left;
+  }
+  .mock .session-row[data-state="attention"] {
+    border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+    background: color-mix(in srgb, var(--accent) 9%, transparent);
+  }
+  .mock .row-mark {
+    position: relative;
+    display: grid;
+    width: 30px;
+    height: 30px;
+    flex: 0 0 auto;
+    place-items: center;
+  }
+  .mock .row-mark .provider-mark { width: 20px; height: 20px; }
+  .mock .cloud-badge {
+    position: absolute;
+    right: -2px;
+    bottom: -1px;
+    display: grid;
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    background: var(--surface-fill);
+    box-shadow: inset 0 0 0 1px var(--hairline);
+    color: var(--text-secondary);
+    place-items: center;
+  }
+  .mock .cloud-badge svg { width: 8.5px; height: auto; }
+  .mock .row-copy {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+    gap: 3.5px;
+  }
+  .mock .row-copy strong {
+    overflow: hidden;
+    color: var(--text-primary);
+    font-size: 12.5px;
+    font-weight: 640;
+    letter-spacing: -0.1px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mock .row-doing {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+    font-size: 10.5px;
+  }
+  .mock .row-doing-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mock .session-row[data-state="attention"] .row-doing { color: var(--accent); font-weight: 560; }
+  .mock .session-row[data-state="unknown"] .row-doing { color: var(--text-tertiary); }
+  .mock .row-spinner {
+    width: 10px;
+    height: 10px;
+    flex: 0 0 auto;
+    border: 1.5px solid rgba(255, 255, 255, 0.15);
+    border-radius: 50%;
+    border-top-color: rgba(255, 255, 255, 0.62);
+    animation: row-spin 900ms linear infinite;
+    animation-play-state: var(--loop-motion);
+  }
+  @keyframes row-spin { to { transform: rotate(1turn); } }
+  .mock .row-check { width: 11px; height: 11px; flex: 0 0 auto; color: var(--state-complete); opacity: 0.85; }
+  .mock .row-place {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 4.5px;
+    color: var(--text-tertiary);
+    font-family: ui-monospace, "SF Mono", "Liberation Mono", Menlo, monospace;
+    font-size: 9.5px;
+  }
+  .mock .row-place span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mock .row-branch-glyph { width: 10px; height: 10px; flex: 0 0 auto; }
+  .mock .row-when {
+    flex: 0 0 auto;
+    align-self: flex-start;
+    padding-top: 2px;
+    color: var(--text-tertiary);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  /* == The spoken notice under the housing ================================ */
+  .notice {
+    position: absolute;
+    z-index: 4;
+    top: calc(var(--capsule-height) + 12px);
+    left: 50%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 13px;
+    border: 1px solid var(--hairline-strong);
+    border-radius: 999px;
+    background: var(--surface-fill);
+    box-shadow: var(--surface-shadow);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    opacity: 0;
+    transform: translateX(-50%) translateY(-6px);
+    transition:
+      opacity var(--duration-quick) var(--motion-exit),
+      transform var(--duration-shape) var(--spring);
+  }
+  .notice[data-open="true"] {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  .notice .notice-dot {
+    width: 6px;
+    height: 6px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background: var(--state-attention);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--state-attention) 60%, transparent);
+  }
+  .notice strong { color: var(--text-primary); font-weight: 640; }
+
+  /* == Captions =========================================================== */
+  .caption {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 108px;
+    display: flex;
+    justify-content: center;
+    pointer-events: none;
+  }
+  .caption span {
+    display: inline-block;
+    font-size: 40px;
+    font-weight: 620;
+    letter-spacing: -0.4px;
+    color: var(--text);
+    opacity: 0;
+    transform: translateY(14px);
+    transition:
+      opacity 480ms var(--swift),
+      transform 560ms var(--swift);
+  }
+  .caption[data-open="true"] span { opacity: 1; transform: none; }
+
+  /* == End card =========================================================== */
+  .endcard {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 34px;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 800ms var(--swift), transform 900ms var(--swift);
+    pointer-events: none;
+  }
+  .stage[data-end="true"] .endcard { opacity: 1; transform: none; }
+  .endcard .wordmark { width: 330px; height: auto; }
+  .endcard .tagline {
+    font-size: 19px;
+    font-weight: 500;
+    letter-spacing: -0.1px;
+    color: var(--text-secondary);
+  }
+  .endcard .soon {
+    font-size: 13px;
+    font-weight: 640;
+    letter-spacing: 3.5px;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+  }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <div class="mock-pin">
+    <div class="mock" id="mock" data-mode="housing" role="img" aria-label="Luke's notch capsule, peeking and expanding beside a MacBook notch.">
+      <span class="mock-frame"></span>
+      <span class="panel-surface"></span>
+
+      <div class="expanded-stage" inert>
+        <section class="expanded-panel" id="expandedPanel">
+          <div class="body">
+            <div class="panel-header" style="--row-index: 0">
+              <div class="tab-bar" style="--tab-count: 2; --tab-index: 0">
+                <span class="tab-thumb"></span>
+                <span class="tab" data-active="true">Sessions</span>
+                <span class="tab" data-active="false">Settings</span>
+              </div>
+              <span class="options-button">
+                <svg class="options-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M3.6 8.4h5.2" /><path d="M13.2 8.4h7.2" /><circle cx="11" cy="8.4" r="2.2" />
+                  <path d="M3.6 15.6h2.6" /><path d="M10.6 15.6h9.8" /><circle cx="8.4" cy="15.6" r="2.2" />
+                </svg>
+              </span>
+            </div>
+            <div class="session-list" id="sessionList"></div>
+          </div>
+        </section>
+      </div>
+
+      <div class="wing wing-left">
+        <div class="wing-inner">
+          <span class="wing-marks" id="wingMarks"></span>
+          <!-- Luke's face: markup mirrors apps/desktop/src/renderer/luke-face.tsx -->
+          <svg class="luke-face" id="face" data-repeat="false" viewBox="48 51 146 146" fill="none" aria-hidden="true">
+            <g class="luke-face-layer luke-face-layer-2">
+              <g class="luke-face-layer luke-face-layer-1">
+                <g transform="rotate(-8 120 124)">
+                  <path d="M 104 84 V 150 Q 104 164 118 164 Q 140 164 168 142" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" />
+                  <ellipse class="luke-face-eye luke-face-eye-left" cx="78" cy="92" rx="12" ry="12" fill="currentColor" />
+                  <ellipse class="luke-face-eye luke-face-eye-right" cx="162" cy="92" rx="12" ry="12" fill="currentColor" />
+                  <g class="luke-face-brows">
+                    <path d="M 67.8 71 Q 78 65 88.2 71" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" />
+                    <path d="M 151.8 71 Q 162 65 172.2 71" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" />
+                  </g>
+                </g>
+              </g>
+            </g>
+          </svg>
+        </div>
+      </div>
+
+      <div class="wing wing-right">
+        <div class="wing-inner">
+          <span class="count-badge" data-state="attention">
+            <span class="count-value">6</span>
+            <span class="count-caption">1 needs you</span>
+          </span>
+        </div>
+      </div>
+
+      <div class="notice" id="notice" data-open="false">
+        <span class="notice-dot"></span>
+        <span><strong>Review trust constraints</strong>&nbsp;is waiting on a decision</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="caption" id="caption"><span id="captionText"></span></div>
+
+  <div class="endcard">
+    <svg class="wordmark" viewBox="0 16.24 588.5 183.08" fill="none" aria-hidden="true"><g transform="translate(-82.3 -84.2) scale(1.55)"><g transform="rotate(-8 120 124)"><path d="M 104 84 V 150 Q 104 164 118 164 Q 140 164 168 142" fill="none" stroke="#f5f5f7" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/><circle cx="78" cy="92" r="12" fill="#f5f5f7"/><circle cx="162" cy="92" r="12" fill="#f5f5f7"/></g></g><path d="M 204.5 44 V 124 Q 204.5 170 250.5 170 H 250.5 Q 296.5 170 296.5 124 V 44" fill="none" stroke="#f5f5f7" stroke-width="24.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M 350.5 44 V 170 M 350.5 112 L 414.5 44 M 350.5 112 L 418.5 170" fill="none" stroke="#f5f5f7" stroke-width="24.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M 538.5 44 H 468.5 V 170 H 538.5 M 468.5 107 H 518.9" fill="none" stroke="#f5f5f7" stroke-width="24.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span class="tagline">The sidecar for your coding agents.</span>
+    <span class="soon">Coming soon</span>
+  </div>
+</div>
+
+<script>
+  /* Provider marks, traced from packages/sidecar-core/src/provider-mark-paths.ts. */
+  const CLAUDE_CODE_PATH = "M21 10.5h3v3h-3v3h-1.5v3H18v-3h-1.5v3H15v-3H9v3H7.5v-3H6v3H4.5v-3H3v-3H0v-3h3v-6h18Zm-15 0h1.5v-3H6Zm10.5 0H18v-3h-1.5z";
+  const CODEX_PATH = "M8.086.457a6.105 6.105 0 013.046-.415c1.333.153 2.521.72 3.564 1.7a.117.117 0 00.107.029c1.408-.346 2.762-.224 4.061.366l.063.03.154.076c1.357.703 2.33 1.77 2.918 3.198.278.679.418 1.388.421 2.126a5.655 5.655 0 01-.18 1.631.167.167 0 00.04.155 5.982 5.982 0 011.578 2.891c.385 1.901-.01 3.615-1.183 5.14l-.182.22a6.063 6.063 0 01-2.934 1.851.162.162 0 00-.108.102c-.255.736-.511 1.364-.987 1.992-1.199 1.582-2.962 2.462-4.948 2.451-1.583-.008-2.986-.587-4.21-1.736a.145.145 0 00-.14-.032c-.518.167-1.04.191-1.604.185a5.924 5.924 0 01-2.595-.622 6.058 6.058 0 01-2.146-1.781c-.203-.269-.404-.522-.551-.821a7.74 7.74 0 01-.495-1.283 6.11 6.11 0 01-.017-3.064.166.166 0 00.008-.074.115.115 0 00-.037-.064 5.958 5.958 0 01-1.38-2.202 5.196 5.196 0 01-.333-1.589 6.915 6.915 0 01.188-2.132c.45-1.484 1.309-2.648 2.577-3.493.282-.188.55-.334.802-.438.286-.12.573-.22.861-.304a.129.129 0 00.087-.087A6.016 6.016 0 015.635 2.31C6.315 1.464 7.132.846 8.086.457zm-.804 7.85a.848.848 0 00-1.473.842l1.694 2.965-1.688 2.848a.849.849 0 001.46.864l1.94-3.272a.849.849 0 00.007-.854l-1.94-3.393zm5.446 6.24a.849.849 0 000 1.695h4.848a.849.849 0 000-1.696h-4.848z";
+  const CURSOR_PATH = "M11.503.131 1.891 5.678a.84.84 0 0 0-.42.726v11.188c0 .3.162.575.42.724l9.609 5.55a1 1 0 0 0 .998 0l9.61-5.55a.84.84 0 0 0 .42-.724V6.404a.84.84 0 0 0-.42-.726L12.497.131a1.01 1.01 0 0 0-.996 0M2.657 6.338h18.55c.263 0 .43.287.297.515L12.23 22.918c-.062.107-.229.064-.229-.06V12.335a.59.59 0 0 0-.295-.51l-9.11-5.257c-.109-.063-.064-.23.061-.23";
+  const DEVIN_PATH = "M70 159.333V91.3471C70 88.3592 71.594 85.5983 74.1816 84.1044L133.043 50.1205C135.631 48.6265 138.819 48.6265 141.407 50.1205L200.269 84.1044C202.856 85.5983 204.45 88.3592 204.45 91.3471V126.068C204.708 137.606 210.806 148.734 221.531 154.926C232.256 161.117 244.942 160.834 255.063 155.289L285.132 137.929C287.719 136.435 290.907 136.435 293.495 137.929L352.357 171.913C354.944 173.406 356.538 176.167 356.538 179.155V247.123C356.538 250.111 354.944 252.872 352.357 254.366L293.495 288.35C290.907 289.844 287.719 289.844 285.132 288.35L255.306 271.13C245.146 265.456 232.344 265.117 221.534 271.358C210.809 277.55 204.711 288.678 204.453 300.215V334.926C204.453 337.914 202.859 340.675 200.271 342.169L141.41 376.153C138.822 377.647 135.634 377.647 133.046 376.153L74.1845 342.169C71.5969 340.675 70.0028 337.914 70.0028 334.926V266.959C70.0029 263.971 71.5969 261.21 74.1845 259.716L133.046 225.732C135.634 224.238 138.822 224.238 141.41 225.732L171.547 243.132C181.656 248.638 194.306 248.906 205.005 242.729C215.815 236.488 221.922 225.231 222.088 213.595C221.83 202.057 215.732 189.737 205.008 183.545C194.283 177.353 181.597 177.636 171.476 183.181L141.269 200.72C138.67 202.229 135.461 202.228 132.864 200.716L74.1576 166.562C71.5835 165.065 70 162.311 70 159.333Z";
+  const CONDUCTOR_MARK_PATHS = ["M4.57422 63.6992H22.373V37.251H4.57422C3.58785 37.2511 2.78711 38.0517 2.78711 39.0381V61.9121C2.78725 62.8984 3.58794 63.6991 4.57422 63.6992Z","M36.5977 63.6992H18.7988V37.251H36.5977C37.584 37.2511 38.3848 38.0517 38.3848 39.0381V61.9121C38.3846 62.8984 37.5839 63.6991 36.5977 63.6992Z","M4.57422 100.297H22.373V73.8486H4.57422C3.58785 73.8488 2.78711 74.6493 2.78711 75.6357V98.5098C2.78725 99.496 3.58794 100.297 4.57422 100.297Z","M36.5977 100.297H18.7988V73.8486H36.5977C37.584 73.8488 38.3848 74.6493 38.3848 75.6357V98.5098C38.3846 99.496 37.5839 100.297 36.5977 100.297Z","M4.57422 136.896H22.373V110.447H4.57422C3.58785 110.447 2.78711 111.248 2.78711 112.234V135.108C2.78725 136.095 3.58794 136.895 4.57422 136.896Z","M36.5977 136.896H18.7988V110.447H36.5977C37.584 110.447 38.3848 111.248 38.3848 112.234V135.108C38.3846 136.095 37.5839 136.895 36.5977 136.896Z","M22.873 173.493H40.6719V147.045H22.873C21.8867 147.045 21.0859 147.846 21.0859 148.832V171.706C21.0861 172.692 21.8868 173.493 22.873 173.493Z","M37.0967 173.493V147.045H58.9707V173.493H37.0967Z","M55.3955 173.493V147.045H77.2695V173.493H55.3955Z","M91.4941 173.493H73.6953V147.045H91.4941C92.4805 147.045 93.2812 147.846 93.2812 148.832V171.706C93.2811 172.692 92.4804 173.493 91.4941 173.493Z","M77.7695 136.896H95.5684V110.447H77.7695C76.7832 110.447 75.9824 111.248 75.9824 112.234V135.108C75.9826 136.095 76.7833 136.895 77.7695 136.896Z","M109.793 136.896H91.9941V110.447H109.793C110.779 110.447 111.58 111.248 111.58 112.234V135.108C111.58 136.095 110.779 136.895 109.793 136.896Z","M22.873 27.1006H40.6719V0.652344H22.873C21.8867 0.652488 21.0859 1.45305 21.0859 2.43945V25.3135C21.0861 26.2998 21.8868 27.1004 22.873 27.1006Z","M37.0967 27.1006V0.652344H58.9707V27.1006H37.0967Z","M55.3955 27.1006V0.652344H77.2695V27.1006H55.3955Z","M73.6963 27.1006V0.652344H95.5703V27.1006H73.6963Z","M109.793 27.1006H91.9941V0.652344H109.793C110.779 0.652488 111.58 1.45305 111.58 2.43945V25.3135C111.58 26.2998 110.779 27.1004 109.793 27.1006Z","M77.7695 63.6992H95.5684V37.251H77.7695C76.7832 37.2511 75.9824 38.0517 75.9824 39.0381V61.9121C75.9826 62.8984 76.7833 63.6991 77.7695 63.6992Z","M109.793 63.6992H91.9941V37.251H109.793C110.779 37.2511 111.58 38.0517 111.58 39.0381V61.9121C111.58 62.8984 110.779 63.6991 109.793 63.6992Z"];
+  const CLOUD_BADGE_PATH = "M4.5 14a4.5 4.5 0 0 1-1.259-8.82 7 7 0 0 1 13.518 0A4.5 4.5 0 0 1 15.5 14z";
+
+  const SVG_NS = "http://www.w3.org/2000/svg";
+
+  let codexMarkCount = 0;
+
+  function markSvg(providerId) {
+    const svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("class", "provider-mark");
+    svg.setAttribute("data-mark", providerId);
+    svg.setAttribute("aria-hidden", "true");
+    if (providerId === "claude-code") {
+      svg.setAttribute("viewBox", "0 0 24 24");
+      svg.innerHTML = `<path fill="currentColor" d="${CLAUDE_CODE_PATH}"/>`;
+    } else if (providerId === "codex") {
+      svg.setAttribute("viewBox", "0 0 24 24");
+      codexMarkCount += 1;
+      const id = `codex-mark-${codexMarkCount}`;
+      svg.innerHTML = `<defs><linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="12" x2="12" y1="3" y2="21"><stop stop-color="#b1a7ff"/><stop offset="0.5" stop-color="#7a9dff"/><stop offset="1" stop-color="#3941ff"/></linearGradient></defs><path fill="url(#${id})" fill-rule="evenodd" clip-rule="evenodd" d="${CODEX_PATH}"/>`;
+    } else if (providerId === "conductor") {
+      svg.setAttribute("viewBox", "0 0 115 174");
+      svg.innerHTML = CONDUCTOR_MARK_PATHS.map((p) => `<path fill="currentColor" d="${p}"/>`).join("");
+    } else if (providerId === "cursor") {
+      svg.setAttribute("viewBox", "0 0 24 24");
+      svg.innerHTML = `<path fill="currentColor" d="${CURSOR_PATH}"/>`;
+    } else {
+      svg.setAttribute("viewBox", "0 0 425 425");
+      svg.innerHTML = `<path fill="currentColor" d="${DEVIN_PATH}"/>`;
+    }
+    return svg;
+  }
+
+  /* The smoke fixture's sessions, ordered most urgent first as the product
+     orders them. Synthetic data only — packages/sidecar-core/src/fixtures.ts. */
+  const SESSIONS = [
+    { title: "Review trust constraints", provider: "claude-code", state: "attention",
+      doing: "Both adapters observe read-only; next, say whether to ship it.",
+      place: "dean/trust-constraints", branch: true, cloud: false, when: "9m" },
+    { title: "Bootstrap the desktop shell", provider: "codex", state: "working",
+      doing: "exec_command: pnpm --filter @luke/desktop build",
+      place: "dean/desktop-shell", branch: true, cloud: false, when: "4m" },
+    { title: "amber-shoal", provider: "conductor", state: "working",
+      doing: "Packaging the macOS build.",
+      place: "luke", branch: false, cloud: true, when: "6m" },
+    { title: "Follow a cloud agent", provider: "cursor", state: "working",
+      doing: "Opened a pull request against sidecar.",
+      place: "cursor/follow-agent-a1b2", branch: true, cloud: true, when: "18m" },
+    { title: "gentle-cove", provider: "conductor", state: "complete",
+      doing: "Complete", place: "luke", branch: false, cloud: true, when: "1m" },
+    { title: "Watch a cloud session", provider: "devin", state: "unknown",
+      doing: "Suspended before it opened a pull request.",
+      place: "sidecar-native", branch: false, cloud: true, when: "41m" },
+  ];
+
+  const sessionList = document.getElementById("sessionList");
+  for (const [index, session] of SESSIONS.entries()) {
+    const row = document.createElement("article");
+    row.className = "session-row";
+    row.dataset.state = session.state;
+    row.style.setProperty("--row-index", String(index + 1));
+
+    const mark = document.createElement("span");
+    mark.className = "row-mark";
+    mark.append(markSvg(session.provider));
+    if (session.cloud) {
+      const badge = document.createElement("span");
+      badge.className = "cloud-badge";
+      badge.innerHTML = `<svg viewBox="0 0 20 14" fill="currentColor" aria-hidden="true"><path d="${CLOUD_BADGE_PATH}"/></svg>`;
+      mark.append(badge);
+    }
+
+    const copy = document.createElement("span");
+    copy.className = "row-copy";
+    const title = document.createElement("strong");
+    title.textContent = session.title;
+    const doing = document.createElement("small");
+    doing.className = "row-doing";
+    if (session.state === "working") doing.innerHTML = `<span class="row-spinner" aria-hidden="true"></span>`;
+    if (session.state === "complete") doing.innerHTML = `<svg class="row-check" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.4 6.6l2.5 2.5 4.7-5.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    const doingText = document.createElement("span");
+    doingText.className = "row-doing-text";
+    doingText.textContent = session.doing;
+    doing.append(doingText);
+    const placeLine = document.createElement("small");
+    placeLine.className = "row-place";
+    if (session.branch) {
+      placeLine.innerHTML = `<svg class="row-branch-glyph" viewBox="0 0 16 16" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="4.2" cy="3.4" r="1.55"/><circle cx="4.2" cy="12.6" r="1.55"/><circle cx="11.8" cy="5.2" r="1.55"/><path d="M4.2 5v6M11.8 6.9c0 2.5-2.6 3-5.4 3.4"/></g></svg>`;
+    }
+    const placeText = document.createElement("span");
+    placeText.textContent = session.place;
+    placeLine.append(placeText);
+    copy.append(title, doing, placeLine);
+
+    const when = document.createElement("small");
+    when.className = "row-when";
+    when.textContent = session.when;
+
+    row.append(mark, copy, when);
+    sessionList.append(row);
+  }
+
+  /* Wing marks: one per provider, first to need a person nearest the face.
+     The peek holds four slots (three marks and the remainder); the panel all. */
+  const WING_PROVIDERS = ["claude-code", "codex", "conductor", "cursor", "devin"];
+  const PEEK_MARKS = 3;
+  const wingMarks = document.getElementById("wingMarks");
+  const wingMarkEls = WING_PROVIDERS.map((providerId) => {
+    const holder = document.createElement("span");
+    holder.className = "wing-mark";
+    holder.append(markSvg(providerId));
+    wingMarks.append(holder);
+    return holder;
+  });
+  const wingMore = document.createElement("span");
+  wingMore.className = "wing-more";
+  wingMore.textContent = `+${WING_PROVIDERS.length - PEEK_MARKS}`;
+  wingMarks.append(wingMore);
+
+  function setWingCapacity(mode) {
+    const showAll = mode === "panel";
+    wingMarkEls.forEach((el, index) => { el.hidden = !showAll && index >= PEEK_MARKS; });
+    wingMore.hidden = showAll;
+  }
+
+  /* == Direction ========================================================== */
+  const stage = document.getElementById("stage");
+  const mock = document.getElementById("mock");
+  const face = document.getElementById("face");
+  const notice = document.getElementById("notice");
+  const caption = document.getElementById("caption");
+  const captionText = document.getElementById("captionText");
+
+  function setMode(mode) {
+    setWingCapacity(mode);
+    mock.dataset.mode = mode;
+  }
+
+  function gesture(name, repeat = false) {
+    face.removeAttribute("data-motion");
+    void face.getBoundingClientRect();
+    if (name) {
+      face.dataset.motion = name;
+      face.dataset.repeat = String(repeat);
+    }
+  }
+
+  function say(text) {
+    if (!text) { caption.dataset.open = "false"; return; }
+    captionText.textContent = text;
+    caption.dataset.open = "true";
+  }
+
+  const TIMELINE = [
+    [600,   () => say("There's something new in your notch.")],
+    [1900,  () => say(null)],
+    [2000,  () => { setMode("capsule"); gesture("appear"); }],
+    [2400,  () => say("Meet Luke.")],
+    [6100,  () => gesture("boop")],
+    [6300,  () => say(null)],
+    [6600,  () => say("He keeps an eye on your coding agents.")],
+    [7000,  () => setMode("peek")],
+    [7400,  () => gesture("monitoring")],
+    [10200, () => say(null)],
+    [10500, () => { say("Every session, at a glance."); setMode("panel"); }],
+    [11800, () => gesture("idle")],
+    [15200, () => say(null)],
+    [15500, () => { say("And he says it out loud when one needs you."); setMode("peek"); }],
+    [16100, () => setMode("capsule")],
+    [16600, () => { gesture("talking", true); notice.dataset.open = "true"; }],
+    [20200, () => { gesture(null); notice.dataset.open = "false"; }],
+    [20400, () => gesture("wink")],
+    [23600, () => { say(null); stage.dataset.end = "true"; }],
+  ];
+  const DURATION_MS = 26000;
+
+  /* The panel surface ends where its content does, as the product measures it. */
+  const panelHeight = document.getElementById("expandedPanel").offsetHeight;
+  mock.style.setProperty("--panel-height", `${panelHeight}px`);
+  setWingCapacity("housing");
+
+  window.__DURATION_MS = DURATION_MS;
+  let started = false;
+  window.__start = () => {
+    if (started) return true;
+    started = true;
+    for (const [at, act] of TIMELINE) setTimeout(act, at);
+    return true;
+  };
+
+  // Opened by a person, the page plays itself once; the recorder passes
+  // ?capture and owns the start so virtual time can drive it instead.
+  if (!new URLSearchParams(window.location.search).has("capture")) {
+    setTimeout(() => window.__start(), 400);
+  }
+</script>
+</body>
+</html>
