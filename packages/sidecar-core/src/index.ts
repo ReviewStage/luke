@@ -19,7 +19,7 @@ export {
 } from "./json.js";
 
 // App updates — naming a newer published release than the running build.
-export { isNewerVersion, parseReleaseVersion } from "./app-update";
+export { isNewerVersion, parseReleaseVersion } from "./app-update.js";
 
 // Sessions — observed state, identity, and the registry that holds them.
 export {
