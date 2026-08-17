@@ -635,9 +635,9 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   }, []);
 
   /**
-   * Asks the system for access and nothing else. Opening a call here would hold
-   * the capture device and light the microphone indicator without anyone having
-   * pressed the talk key, which is not what the row offers.
+   * Asks the system for access and nothing else. The capture device itself is
+   * the talk key's own act: it opens with a press and closes with the turn,
+   * and this row must not be a second way to it.
    */
   const requestMicrophoneAccess = useCallback(async () => {
     setMicrophoneStatus(await window.sidecar.requestMicrophone());
@@ -649,8 +649,8 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    * the panel ever being visited.
    *
    * The talk key going down. Every press goes to the session, including the one
-   * that has no call to press against yet: the microphone opens with the call,
-   * so a press before then is remembered and applied when it comes up.
+   * that has no call to press against yet: the microphone opens for the press,
+   * so one that beats the call is remembered and applied when it comes up.
    */
   const beginTalk = useCallback(async () => {
     talkPressedAt.current = performance.now();
