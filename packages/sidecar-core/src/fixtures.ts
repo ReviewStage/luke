@@ -1,11 +1,11 @@
-import { PROVIDER_ID, type ProviderId } from "./providers";
+import { PROVIDER_ID, type ProviderId } from "./providers.js";
 import {
   SESSION_CONTROL_KIND,
   SESSION_LOCATION,
   type SessionControl,
   type SessionLocation,
-} from "./session";
-import { SESSION_URGENCY, type SessionUrgency } from "./session-display";
+} from "./session.js";
+import { SESSION_URGENCY, type SessionUrgency } from "./session-display.js";
 
 /** The workspace a fixture row is one chat of, shaped as the surface draws it. */
 export interface WorkspaceSnapshot {

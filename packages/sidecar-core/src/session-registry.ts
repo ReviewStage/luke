@@ -1,4 +1,4 @@
-import type { SessionProviderAdapter } from "./providers";
+import type { SessionProviderAdapter } from "./providers.js";
 import {
   type AttentionDecision,
   type NormalizedSession,
@@ -11,7 +11,7 @@ import {
   type SessionIdentity,
   type SessionProvider,
   type SessionWorkspace,
-} from "./session";
+} from "./session.js";
 
 export interface SessionRegistrySnapshot {
   revision: number;

@@ -18,7 +18,7 @@
  * for the main process's. Luke is another way to ask, never a wider one.
  */
 
-import { attentionRequestText, maximumAttentionRequestLength } from "./attention";
+import { attentionRequestText, maximumAttentionRequestLength } from "./attention.js";
 import {
   APP_PANEL_TAB,
   APP_SETTING_KIND,
@@ -34,14 +34,14 @@ import {
   isSessionListSort,
   SESSION_LIST_SORT,
   type SessionListSort,
-} from "./guide";
+} from "./guide.js";
 import {
   type IssueIdentity,
   type IssueTransition,
   issueCommentText,
   type TrackedIssue,
-} from "./issues";
-import { isRecord } from "./json";
+} from "./issues.js";
+import { isRecord } from "./json.js";
 import {
   maximumWorkspaceNameLength,
   type ObservedWorkspaceProject,
@@ -49,8 +49,8 @@ import {
   type WorkspaceAgentModels,
   type WorkspaceAgentSelection,
   workspaceNameText,
-} from "./providers";
-import type { RealtimeFunctionCall } from "./realtime-protocol";
+} from "./providers.js";
+import type { RealtimeFunctionCall } from "./realtime-protocol.js";
 import {
   maximumSessionMessageLength,
   type NormalizedSession,
@@ -59,7 +59,7 @@ import {
   type SessionIdentity,
   sessionMessageText,
   supportsSessionControl,
-} from "./session";
+} from "./session.js";
 
 /** Which process a tool call is about: a session, an issue, or Luke himself. */
 export const REALTIME_TOOL_FAMILY = {

@@ -2,15 +2,15 @@ import {
   ATTENTION_REVIEW_OUTCOME,
   type AttentionReview,
   maximumAttentionSummaryLength,
-} from "./attention";
-import { isRecord } from "./json";
-import { spokenRealtimeToolCount } from "./realtime-tools";
+} from "./attention.js";
+import { isRecord } from "./json.js";
+import { spokenRealtimeToolCount } from "./realtime-tools.js";
 import {
   ATTENTION_DISPOSITION,
   type AttentionDisposition,
   maximumSessionMessageLength,
   type SessionIdentity,
-} from "./session";
+} from "./session.js";
 
 /**
  * The Realtime protocol: how far a call has progressed, the events both sides

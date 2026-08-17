@@ -1,4 +1,4 @@
-import type { ProviderSessionObservation, SessionControl, SessionProvider } from "./session";
+import type { ProviderSessionObservation, SessionControl, SessionProvider } from "./session.js";
 
 /**
  * Stable provider identifiers shared by adapters, the registry, and the UI.

@@ -1,5 +1,5 @@
-import type { NormalizedSession, SessionStatus } from "./session";
-import { SESSION_STATUS } from "./session";
+import type { NormalizedSession, SessionStatus } from "./session.js";
+import { SESSION_STATUS } from "./session.js";
 
 /**
  * The statuses worth telling the user about when a session arrives at one.

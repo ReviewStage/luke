@@ -1,14 +1,14 @@
-import type { SessionNoticeAsk } from "./attention";
-import { type AppGuideSnapshot, appGuideContextText } from "./guide";
-import type { TrackedIssue } from "./issues";
-import { type ObservedWorkspaceProject, WORKSPACE_TASK_SUPPORT } from "./providers";
+import type { SessionNoticeAsk } from "./attention.js";
+import { type AppGuideSnapshot, appGuideContextText } from "./guide.js";
+import type { TrackedIssue } from "./issues.js";
+import { type ObservedWorkspaceProject, WORKSPACE_TASK_SUPPORT } from "./providers.js";
 import {
   ATTENTION_SPEECH_SOURCE,
   type AttentionSpeech,
   announcementSummaryText,
   REALTIME_CLIENT_EVENT,
-} from "./realtime-protocol";
-import { type NormalizedSession, SESSION_LOCATION } from "./session";
+} from "./realtime-protocol.js";
+import { type NormalizedSession, SESSION_LOCATION } from "./session.js";
 
 /**
  * Roster context serialization: the bounded, redacted view of sessions, issues,

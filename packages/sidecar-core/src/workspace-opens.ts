@@ -1,4 +1,4 @@
-import type { NormalizedSession, SessionIdentity } from "./session";
+import type { NormalizedSession, SessionIdentity } from "./session.js";
 
 /**
  * How long a created workspace stays worth opening. The identity arrives the

@@ -5,9 +5,9 @@ import {
   attentionRequestText,
   DISPOSITION_GUIDANCE,
   maximumAttentionSummaryLength,
-} from "./attention";
-import { ATTENTION_TUNING_EXAMPLES, type AttentionTuningExample } from "./attention-examples";
-import { isRecord } from "./json";
+} from "./attention.js";
+import { ATTENTION_TUNING_EXAMPLES, type AttentionTuningExample } from "./attention-examples.js";
+import { isRecord } from "./json.js";
 import {
   ATTENTION_DISPOSITION,
   boundedText,
@@ -16,7 +16,7 @@ import {
   maximumSessionTitleLength,
   SESSION_STATUS,
   type SessionStatus,
-} from "./session";
+} from "./session.js";
 
 const NONE_LABEL = "none";
 

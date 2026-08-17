@@ -1,4 +1,4 @@
-import type { SessionNotice } from "./session-notices";
+import type { SessionNotice } from "./session-notices.js";
 
 /**
  * The most notices a hold keeps. It matches the announcer's own backlog

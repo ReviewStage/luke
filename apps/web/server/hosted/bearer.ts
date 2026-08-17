@@ -1,4 +1,4 @@
-import { isRecord } from "@sidecar/core";
+import { isRecord } from "../core.js";
 
 /**
  * The auth service's own userinfo endpoint, called in process. It is the same
