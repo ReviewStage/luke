@@ -2455,11 +2455,6 @@ function UpdatesSection({ control }: { control: UpdateControl }): React.JSX.Elem
           </button>
         )}
       </div>
-      {/* Always on, like the announcements — stated rather than switched, so
-          the disclosure the retired switch carried is still on the row. */}
-      <p className="settings-note">
-        Luke checks on his own a few times a day. Nothing about you or your sessions is sent.
-      </p>
     </section>
   );
 }
