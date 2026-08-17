@@ -3,6 +3,11 @@ import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { createAuthClient } from "better-auth/react";
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import {
+  SOCIAL_PROVIDER_LABEL,
+  type SocialProvider,
+  socialProviderFromState,
+} from "./sign-in-provider";
 import "./styles.css";
 
 // The provider client forwards the authorization server's signed `oauth_query`
@@ -10,27 +15,17 @@ import "./styles.css";
 // desktop authorization request when Google or GitHub returns.
 const authClient = createAuthClient({ plugins: [oauthProviderClient()] });
 
-const SOCIAL_PROVIDER = {
-  GOOGLE: "google",
-  GITHUB: "github",
-} as const;
-
-type SocialProvider = (typeof SOCIAL_PROVIDER)[keyof typeof SOCIAL_PROVIDER];
-
 function providerHint(): SocialProvider | undefined {
-  const state = new URLSearchParams(window.location.search).get("state");
-  if (state?.startsWith(`${SOCIAL_PROVIDER.GOOGLE}.`)) return SOCIAL_PROVIDER.GOOGLE;
-  if (state?.startsWith(`${SOCIAL_PROVIDER.GITHUB}.`)) return SOCIAL_PROVIDER.GITHUB;
-  return undefined;
+  return socialProviderFromState(new URLSearchParams(window.location.search).get("state"));
 }
 
 function SignIn(): React.JSX.Element {
+  const [provider] = useState(providerHint);
   const [pending, setPending] = useState<SocialProvider>();
   const [failure, setFailure] = useState<string>();
   const startedFromHint = useRef(false);
 
   useEffect(() => {
-    const provider = providerHint();
     if (!provider || startedFromHint.current) return;
     startedFromHint.current = true;
     setPending(provider);
@@ -39,10 +34,10 @@ function SignIn(): React.JSX.Element {
       setPending(undefined);
       setFailure("Sign-in could not start. Please try again.");
     });
-  }, []);
+  }, [provider]);
 
-  const begin = async (provider: SocialProvider) => {
-    if (pending) return;
+  const begin = async () => {
+    if (!provider || pending) return;
     setPending(provider);
     setFailure(undefined);
     const result = await authClient.signIn.social({ provider });
@@ -60,23 +55,18 @@ function SignIn(): React.JSX.Element {
           <span />
         </div>
         <h1 id="auth-title">Sign in to Luke</h1>
-        <p>Choose the account you want Luke to know you by.</p>
-        <div className="auth-actions">
-          <button
-            type="button"
-            disabled={pending !== undefined}
-            onClick={() => void begin(SOCIAL_PROVIDER.GOOGLE)}
-          >
-            {pending === SOCIAL_PROVIDER.GOOGLE ? "Opening Google…" : "Continue with Google"}
-          </button>
-          <button
-            type="button"
-            disabled={pending !== undefined}
-            onClick={() => void begin(SOCIAL_PROVIDER.GITHUB)}
-          >
-            {pending === SOCIAL_PROVIDER.GITHUB ? "Opening GitHub…" : "Continue with GitHub"}
-          </button>
-        </div>
+        <p>
+          {provider
+            ? `Continue with the ${SOCIAL_PROVIDER_LABEL[provider]} account you want Luke to know you by.`
+            : "Luke could not verify which provider you chose. Return to Luke and try again."}
+        </p>
+        {provider ? (
+          <div className="auth-actions">
+            <button type="button" disabled={pending !== undefined} onClick={() => void begin()}>
+              {pending ? "Opening…" : `Continue with ${SOCIAL_PROVIDER_LABEL[provider]}`}
+            </button>
+          </div>
+        ) : null}
         {failure ? <p className="auth-error">{failure}</p> : null}
         <small>You can close this window after Luke confirms the sign-in.</small>
       </section>

@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { getTableName } from "drizzle-orm";
 import {
+  ACCOUNT_TOKEN_STORAGE,
+  denyOAuthClientPrivileges,
+  JWT_KEY_STORAGE,
+} from "../server/auth-policy";
+import {
   account,
   jwks,
   oauthAccessToken,
@@ -42,6 +47,12 @@ test("the generated schema carries every table the auth service uses", () => {
     ].map(getTableName),
     Object.values(AUTH_TABLE_NAME),
   );
+});
+
+test("the auth service encrypts credentials and refuses user-provisioned OAuth clients", () => {
+  assert.equal(ACCOUNT_TOKEN_STORAGE.encryptOAuthTokens, true);
+  assert.equal(JWT_KEY_STORAGE.jwks.disablePrivateKeyEncryption, false);
+  assert.equal(denyOAuthClientPrivileges(), false);
 });
 
 test("the desktop client stays public, secretless, trusted, and bound to PKCE", () => {

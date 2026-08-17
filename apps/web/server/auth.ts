@@ -3,6 +3,11 @@ import { oauthProvider } from "@better-auth/oauth-provider";
 import { betterAuth } from "better-auth";
 import { jwt, lastLoginMethod } from "better-auth/plugins";
 import { PostHog } from "posthog-node";
+import {
+  ACCOUNT_TOKEN_STORAGE,
+  denyOAuthClientPrivileges,
+  JWT_KEY_STORAGE,
+} from "./auth-policy.js";
 import { getDatabase } from "./db/index.js";
 import * as schema from "./db/schema.js";
 import { DESKTOP_OAUTH_CLIENT } from "./desktop-oauth-client.js";
@@ -20,6 +25,7 @@ export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:5173",
   secret: process.env.BETTER_AUTH_SECRET,
   database: drizzleAdapter(getDatabase(), { provider: "pg", schema }),
+  account: ACCOUNT_TOKEN_STORAGE,
   disabledPaths: ["/token"],
   socialProviders: {
     google: {
@@ -53,12 +59,13 @@ export const auth = betterAuth({
     },
   },
   plugins: [
-    jwt(),
+    jwt(JWT_KEY_STORAGE),
     lastLoginMethod({ storeInDatabase: true }),
     oauthProvider({
       loginPage: "/sign-in.html",
       consentPage: "/consent.html",
       allowDynamicClientRegistration: false,
+      clientPrivileges: denyOAuthClientPrivileges,
       cachedTrustedClients: new Set([DESKTOP_OAUTH_CLIENT_ID]),
       accessTokenExpiresIn: 60 * 60,
     }),
