@@ -7,6 +7,7 @@ import {
   SESSION_STATUS,
 } from "@sidecar/core";
 import {
+  ATTENTION_RATE_LIMIT_COOLDOWN_MS,
   OpenAiAttentionEvaluator,
   openAiAttentionEvaluator,
 } from "../src/openai-attention-evaluator";
@@ -156,6 +157,44 @@ test("stays silent when the API is unavailable or answers outside the contract",
     const { evaluator } = evaluatorWith(failure);
     assert.equal(await evaluator.evaluate(update()), undefined);
   }
+});
+
+test("a rate limit quiets requests for the cooldown instead of retrying at full rate", async (t) => {
+  silenceStderr(t);
+  let now = DECIDED_AT;
+  const { fetch, requests } = recordingFetch(() => new Response("rate limited", { status: 429 }));
+  const evaluator = new OpenAiAttentionEvaluator({ apiKey: API_KEY, now: () => now, fetch });
+
+  assert.equal(await evaluator.evaluate(update()), undefined);
+  assert.equal(requests.length, 1);
+
+  // Inside the cooldown nothing is even sent; the update stays derivable.
+  now += ATTENTION_RATE_LIMIT_COOLDOWN_MS - 1;
+  assert.equal(await evaluator.evaluate(update()), undefined);
+  assert.equal(requests.length, 1);
+
+  // The cooldown over, requests resume.
+  now += 1;
+  assert.equal(await evaluator.evaluate(update()), undefined);
+  assert.equal(requests.length, 2);
+});
+
+test("a rate limit that names its own wait is taken at its word", async (t) => {
+  silenceStderr(t);
+  let now = DECIDED_AT;
+  const { fetch, requests } = recordingFetch(
+    () => new Response("rate limited", { status: 429, headers: { "retry-after": "5" } }),
+  );
+  const evaluator = new OpenAiAttentionEvaluator({ apiKey: API_KEY, now: () => now, fetch });
+
+  assert.equal(await evaluator.evaluate(update()), undefined);
+  now += 4_999;
+  await evaluator.evaluate(update());
+  assert.equal(requests.length, 1);
+
+  now += 1;
+  await evaluator.evaluate(update());
+  assert.equal(requests.length, 2);
 });
 
 test("reports a response that carried no decision instead of failing quietly", async (t) => {
