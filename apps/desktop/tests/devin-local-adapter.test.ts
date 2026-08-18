@@ -498,6 +498,18 @@ test("names the open tool call a working session is running", async (t) => {
             rawInput: { command: `./scripts/check.sh ${SECRET_TRANSCRIPT_TEXT}` },
           },
         },
+        // Newer than the running call, but an interrupted session left it
+        // settled without its update — passed over rather than reported.
+        {
+          sessionId: "swift-gorge",
+          toolCallId: "call-2",
+          call: {
+            toolCallId: "call-2",
+            title: "Read the interrupted file",
+            kind: "read",
+            status: "completed",
+          },
+        },
       ],
     },
   );

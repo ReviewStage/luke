@@ -63,7 +63,6 @@ const DEVIN_NODE_COLUMN = {
 
 const DEVIN_TOOL_CALL_COLUMN = {
   CALL: "tool_call_json",
-  UPDATE: "tool_call_update_json",
 } as const;
 
 /**
@@ -149,10 +148,18 @@ const DEVIN_NEWEST_NODES_QUERY = `
   LIMIT ?2
 `;
 
+// The open tool calls, newest first. Openness is asked of the database — the
+// update column a settled call's output lands in is named only in the WHERE
+// clause, so its contents are never selected — and the projection carries the
+// call record alone. This is also the one query that must name its columns
+// rather than read them defensively, because leaving the output column out of
+// the projection is the point; a schema it does not fit costs the activity
+// field, never the pass.
 const DEVIN_TOOL_CALL_QUERY = `
-  SELECT *
+  SELECT tool_call_json
   FROM tool_call_state
-  WHERE session_id = ?1
+  WHERE session_id = ?1 AND tool_call_update_json IS NULL
+  ORDER BY rowid DESC
 `;
 
 type DevinRow = Record<string, unknown>;
@@ -263,13 +270,14 @@ function statusFromTurn(
 }
 
 /**
- * Names the work a still-open tool call is doing, from the call's own ACP
- * record: the title the CLI wrote for it, or failing that its kind. The
- * call's output lands in the update column, which is never read here.
+ * Names the work the newest still-open tool call is doing, from the call's
+ * own ACP record: the title the CLI wrote for it, or failing that its kind.
+ * The rows arrive newest first and already hold only open calls, so the one
+ * check left to code is the settled status an interrupted session can leave
+ * inside a call whose update never landed.
  */
 function activityFromToolCallRows(rows: readonly DevinRow[]): string | undefined {
-  for (const row of rows.toReversed()) {
-    if (textFromRow(row, DEVIN_TOOL_CALL_COLUMN.UPDATE)) continue;
+  for (const row of rows) {
     const call = recordFromJsonLine(textFromRow(row, DEVIN_TOOL_CALL_COLUMN.CALL) ?? "");
     if (!call) continue;
     const status = text(call.status);
