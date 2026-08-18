@@ -200,29 +200,11 @@ export function errandBorrowedPanel(borrowed: boolean, launch: PendingErrand): b
 }
 
 /**
- * What a flight has to wait out before it can measure anything, read off what
- * the panel is drawing at the moment the act comes up rather than at the
- * moment it was asked for. In a run of several, the page drawn when the second
- * act was spoken is the first act's page, and by the time the second flies it
- * may be a third — only the reading taken as it launches says what the mark
- * will actually land on.
- *
- * A panel that had to open is a whole page of content arriving. A control
- * already drawn owes nothing but a beat. Anything else is a page being turned:
- * the leaving one goes first and the arriving one lands on the panel's own
- * fan, which is the longest trail of the three.
+ * A panel that had to open is a whole page of content arriving. Settings pages
+ * swap without motion, but a page whose height changes still has to wait for
+ * the black surface to reach its newly mounted control.
  */
-export function errandWait(input: {
-  opening: boolean;
-  tab: PanelTab;
-  page?: SettingsView;
-  drawnTab: PanelTab;
-  drawnPage: SettingsView;
-}): ErrandWait {
+export function errandWait(input: { opening: boolean; surfaceChanging: boolean }): ErrandWait {
   if (input.opening) return ERRAND_WAIT.CONTENT;
-  // The tab bar and the list's own options button are drawn outside the
-  // settings pages, so there is no page to turn to for them.
-  if (input.page === undefined) return ERRAND_WAIT.AT_ONCE;
-  if (input.drawnTab === input.tab && input.drawnPage === input.page) return ERRAND_WAIT.AT_ONCE;
-  return ERRAND_WAIT.PAGE;
+  return input.surfaceChanging ? ERRAND_WAIT.SURFACE : ERRAND_WAIT.AT_ONCE;
 }

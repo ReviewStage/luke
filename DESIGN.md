@@ -8,10 +8,11 @@ that review is to build from them.
 
 ## The vocabulary
 
-One spring drives everything: `--spring` for the surface and anything that
-travels with it, `--spring-fast` — the same damping ratio at a higher
-frequency — for small elements like the tab thumb and switch thumbs. Durations
-and delays come only from the tokens in
+One spring drives everything that needs to travel: `--spring` for the surface
+and anything that travels with it, `--spring-fast` — the same damping ratio at
+a higher frequency — for small elements like switch thumbs. Settings pages and
+the tab selection indicator change at once; task navigation does not travel.
+Durations and delays come only from the tokens in
 `packages/sidecar-core/src/motion-tokens.css` (`--duration-shape`,
 `--duration-exit`, `--duration-quick`, `--duration-fast`, `--expand-delay`,
 `--peek-delay`, `--slot-delay`, `--row-stagger`). Never write a literal

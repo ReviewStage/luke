@@ -162,50 +162,6 @@
   background: none;
 }
 
-/* Turning a settings page follows the shape contract. Leaving: the old page's
-   content goes first, over `--duration-exit` and with no delay — the state
-   being entered declares its own `--row-delay` — and only its end releases
-   the room, so the surface never resizes out from under something still
-   drawn. The swap is timed off this same token, read live off the element
-   (`pageExitMs`), so a capture run or reduced motion — which zero it — swap
-   as fast as they stilled the fade. */
-.settings[data-page-leaving="true"] .settings-header,
-.settings[data-page-leaving="true"] .settings-section,
-.settings[data-page-leaving="true"] .quit-button {
-  --row-delay: 0s;
-
-  opacity: 0;
-}
-
-/* Arriving: the new page's room lands at once — the surface takes one clean
-   spring — and its content becomes visible only over black, riding the pair
-   every arriving element rides on the same `--row-delay` the panel's own
-   arrival fans out with. A mount animation with `backwards` fill rather than
-   a transition, because an element cannot transition from a style it never
-   held. Scoped to a panel that has actually turned a page, so the tab's
-   first draw stays the panel-arrival transition's alone. */
-@keyframes settings-page-fade {
-  from {
-    opacity: 0;
-  }
-}
-
-@keyframes settings-page-travel {
-  from {
-    transform: translateY(
-      calc((min(var(--row-index, 0), var(--row-fan-limit)) + 1) * var(--row-fan) * -1)
-    );
-  }
-}
-
-.settings[data-page-turned="true"] .settings-header,
-.settings[data-page-turned="true"] .settings-section,
-.settings[data-page-turned="true"] .quit-button {
-  animation:
-    settings-page-fade var(--duration-quick) var(--motion-exit) var(--row-delay) backwards,
-    settings-page-travel var(--duration-shape) var(--spring) var(--row-delay) backwards;
-}
-
 /* A front-page row that opens a page rather than holding a control: glyph,
    name, what the page holds, and the chevron that promises somewhere to go.
    The hover bleeds to the section's padding so the pill reads as the row. */

@@ -1742,6 +1742,13 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   flex-direction: column;
   padding: calc(max(var(--notch-top-inset), 32px) + 14px) var(--panel-inset) 18px;
   border-radius: 0 0 var(--panel-radius) var(--panel-radius);
+  /* A page lands in layout at once, while the black surface takes one spring
+     to its new height. The panel follows that same edge so newly mounted rows
+     cannot paint onto the transparent window below it. */
+  clip-path: inset(
+    0 0 calc(100% - var(--panel-height, 520px)) 0 round 0 0 var(--panel-radius) var(--panel-radius)
+  );
+  transition: clip-path var(--duration-shape) var(--spring);
 }
 
 .app-stage[data-presentation="panel"] .expanded-panel {
@@ -1777,7 +1784,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   border-radius: 8px;
   background: var(--raised-strong);
   transform: translateX(calc(var(--tab-index) * 100%));
-  transition: transform var(--duration-fast) var(--spring-fast);
 }
 
 /* The radius is the thumb's, not a shape of its own: the tab draws no
@@ -2603,7 +2609,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   .wing-meter,
   .count-badge,
   .count-caption,
-  .tab-thumb,
   .session-row {
     transition-duration: 1ms;
     transition-delay: 0ms;

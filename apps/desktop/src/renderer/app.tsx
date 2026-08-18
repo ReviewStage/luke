@@ -260,9 +260,6 @@ export function App(): React.JSX.Element {
   );
   const [display, setDisplay] = useState<DisplayDiagnostic>();
   const [tab, setTab, tabNow] = useStateWithRef<PanelTab>(PANEL_TAB.SESSIONS);
-  // The drawn page has to be readable from a callback as well as rendered: an
-  // errand coming up for its turn reads it to decide whether a page still has
-  // to be turned before the mark can be measured against anything.
   const [settingsView, setSettingsView, settingsViewNow] = useStateWithRef<SettingsView>(
     SETTINGS_VIEW.ROOT,
   );
@@ -592,15 +589,11 @@ export function App(): React.JSX.Element {
       const { run, launch } = nextErrand(errandRun.current);
       errandRun.current = run;
       if (launch === undefined) return;
-      // What the flight has to wait out, read off the panel as it is drawn
-      // this moment — which is the last moment it is true, because turning the
-      // tab and the page below is the very thing being waited for.
       const wait = errandWait({
         opening: launch.opening,
-        tab: launch.tab,
-        ...(launch.page === undefined ? {} : { page: launch.page }),
-        drawnTab: tabNow(),
-        drawnPage: settingsViewNow(),
+        surfaceChanging:
+          launch.page !== undefined &&
+          (tabNow() !== launch.tab || settingsViewNow() !== launch.page),
       });
       // The control has to be drawn to be flown to, and a settings page that is
       // not open is not drawn at all — so the tab comes forward and then the
