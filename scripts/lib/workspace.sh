@@ -57,16 +57,24 @@ sidecar_wait_for_exit() {
 # itself. That is the process to replace even when it belongs to another
 # worktree: the lock is keyed on the app name, which every checkout shares.
 #
-# That name has to be derived the way Electron derives it, since Electron is what
-# chose the directory: `productName` when the manifest sets one, and the package
-# name only when it does not.
-sidecar_app_lock_holder_pid() {
+# The app chooses its own name at launch — the product name for a Developer ID
+# release, and "<product name> Dev" for every development run, so the two never
+# share a Keychain entry (see apps/desktop/src/app-identity.ts). Each name keeps
+# a lock of its own, so a caller replacing "the running instance" asks about
+# both. The product name is still derived the way Electron derives its default,
+# from the manifest: `productName` when it sets one, the package name otherwise.
+sidecar_app_names() {
     local app_name
     if ! app_name=$(cd "$SIDECAR_DESKTOP_APP_ROOT" &&
         node -p 'const manifest = require("./package.json"); manifest.productName ?? manifest.name'); then
         printf 'error: could not read the desktop app name\n' >&2
         return 1
     fi
+    printf '%s Dev\n%s\n' "$app_name" "$app_name"
+}
+
+sidecar_app_lock_holder_pid() {
+    local app_name=$1
 
     local lock_target
     lock_target=$(readlink "$HOME/Library/Application Support/$app_name/SingletonLock" 2>/dev/null || true)
@@ -86,35 +94,42 @@ sidecar_app_lock_holder_pid() {
         printf '%s\n' "$pid"
         ;;
     *)
-        printf 'error: pid %s holds the Luke lock but is not Luke: %s\n' "$pid" "$command_line" >&2
+        printf 'error: pid %s holds the "%s" lock but is not Luke: %s\n' "$pid" "$app_name" "$command_line" >&2
         return 1
         ;;
     esac
 }
 
-# Stopping the holder has to wait for it to exit, because the lock is released
-# as that process goes away rather than when it is signalled.
+# Stopping a holder has to wait for it to exit, because the lock is released
+# as that process goes away rather than when it is signalled. Development and
+# release instances hold separate locks, so both are stopped: a launch means
+# "this build owns the screen now", whichever build was there before.
 sidecar_stop_running_app() {
-    local pid
-    pid=$(sidecar_app_lock_holder_pid) || return 1
-    if [[ -z $pid ]]; then
-        return 0
-    fi
+    local app_names
+    app_names=$(sidecar_app_names) || return 1
 
-    # The path tells you which checkout the older instance came from.
-    printf 'Stopping the running Luke instance (pid %s: %s)\n' "$pid" "$(ps -o comm= -p "$pid")"
-    kill "$pid" 2>/dev/null || true
-    if sidecar_wait_for_exit 5 "$pid"; then
-        return 0
-    fi
+    local app_name pid
+    while IFS= read -r app_name; do
+        pid=$(sidecar_app_lock_holder_pid "$app_name") || return 1
+        if [[ -z $pid ]]; then
+            continue
+        fi
 
-    kill -KILL "$pid" 2>/dev/null || true
-    if sidecar_wait_for_exit 3 "$pid"; then
-        return 0
-    fi
+        # The path tells you which checkout the older instance came from.
+        printf 'Stopping the running %s instance (pid %s: %s)\n' "$app_name" "$pid" "$(ps -o comm= -p "$pid")"
+        kill "$pid" 2>/dev/null || true
+        if sidecar_wait_for_exit 5 "$pid"; then
+            continue
+        fi
 
-    printf 'error: the running Luke instance did not exit; quit it and retry\n' >&2
-    return 1
+        kill -KILL "$pid" 2>/dev/null || true
+        if sidecar_wait_for_exit 3 "$pid"; then
+            continue
+        fi
+
+        printf 'error: the running %s instance did not exit; quit it and retry\n' "$app_name" >&2
+        return 1
+    done <<<"$app_names"
 }
 
 sidecar_require_macos() {

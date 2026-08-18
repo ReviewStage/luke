@@ -83,6 +83,7 @@ import {
   startAccountLoopback,
 } from "./account-loopback";
 import { singleFlight, withIssuedAccountTokens } from "./account-token-lifecycle";
+import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
 import { CLAUDE_CODE_PROVIDER, ClaudeCodeSessionAdapter } from "./claude-code-adapter";
 import {
   CLAUDE_HOOK_SCRIPT_NAME,
@@ -172,6 +173,23 @@ import {
 import { parseVoiceHotkey } from "./shared/voice-hotkey";
 import { isWorkspaceAgentSelection } from "./shared/workspace-agents";
 import { UPDATE_ENDPOINT, UpdateService } from "./update-service";
+
+// Which Luke this process is decides where its state lives and which Keychain
+// entry protects its credentials; see app-identity.ts for why a development
+// run must never share the release's. Applied before anything derives a path:
+// the single-instance lock, the settings store, and the hook spools all live
+// under this name.
+const appName = resolveAppName({
+  packaged: app.isPackaged,
+  developerIdSigned: buildCarriesDeveloperIdSigning(),
+});
+app.setName(appName);
+// `setName` renames the app, not the paths Electron already derived from the
+// manifest name, so the state directory is pointed at the chosen name by
+// hand — and session data alongside it, since its default only follows a
+// `userData` that has not been resolved yet.
+app.setPath("userData", path.join(app.getPath("appData"), appName));
+app.setPath("sessionData", path.join(app.getPath("appData"), appName));
 
 const captureOutput = argumentValue("--capture-evidence");
 const profile = argumentValue("--profile") ?? "idle";

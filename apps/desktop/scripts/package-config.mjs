@@ -75,6 +75,22 @@ export function resolveSigningMode(env) {
   return identity ? { mode: SIGNING_MODE.DEVELOPER_ID, identity } : { mode: SIGNING_MODE.AD_HOC };
 }
 
+/**
+ * The esbuild define telling the bundle whether it was built alongside
+ * Developer ID packaging, read by app-identity.ts to decide which name — and
+ * so which state directory and Keychain entry — the run answers to. Derived
+ * from the same environment `resolveSigningMode` reads so the flag and the
+ * signature it stands for come from one place; only the fact travels, never
+ * the identity's name.
+ */
+export function signingModeDefine(env) {
+  return {
+    PACKAGED_WITH_DEVELOPER_ID_SIGNING: JSON.stringify(
+      resolveSigningMode(env).mode === SIGNING_MODE.DEVELOPER_ID,
+    ),
+  };
+}
+
 export function createPackagerOptions({
   appRoot,
   outputRoot,
