@@ -66,14 +66,21 @@ const ROW_FAN_LIMIT = 5;
 const SURFACE_GEOMETRY_PX = {
   BUBBLE_LIFT: 4,
   VOICE_CAPTION_MAX_HEIGHT: 70,
-  // The notice band under the housing: one row for the pressable chip naming
-  // the session Luke is announcing. Fixed rather than measured — the name
-  // truncates into it — so the surface springs to one destination. The
-  // compact window reserves this on top of the caption room, because
-  // captioned speech drops below the chip's band.
+  // The notice band under the housing: one row of the pressable chips naming
+  // the sessions the reply being spoken is about. The chips size to their
+  // names and wrap naturally, so the renderer measures the rows they made
+  // and grows the shape by that, the caption block's own pattern. The
+  // compact window reserves `SESSION_NOTICE_MAX_ROWS` of these on top of
+  // the caption room, because captioned speech drops below the chips' band
+  // and a reply may name more sessions than one row holds.
   SESSION_NOTICE_HEIGHT: 26,
   PANEL_WIDTH: 620,
 };
+
+// How many chip rows the notice band may grow to before the chips scroll
+// inside it instead. A count, not pixels: the window reserves this many
+// `SESSION_NOTICE_HEIGHT` rows, and the band clamps its own growth to it.
+const SESSION_NOTICE_MAX_ROWS = 3;
 
 // ---------- Session display ----------
 // How the surface ranks a row, not what the provider observed. Keys are the
@@ -238,6 +245,7 @@ function motionTokensCss() {
   --bubble-lift: ${px(SURFACE_GEOMETRY_PX.BUBBLE_LIFT)};
   --caption-max: ${px(SURFACE_GEOMETRY_PX.VOICE_CAPTION_MAX_HEIGHT)};
   --notice-size: ${px(SURFACE_GEOMETRY_PX.SESSION_NOTICE_HEIGHT)};
+  --notice-max-rows: ${SESSION_NOTICE_MAX_ROWS};
   --panel-width: ${px(SURFACE_GEOMETRY_PX.PANEL_WIDTH)};
 }
 `;
@@ -271,8 +279,11 @@ export const BUBBLE_LIFT = ${SURFACE_GEOMETRY_PX.BUBBLE_LIFT};
 /** Tallest compact caption block the window holds. CSS: \`--caption-max\`. */
 export const VOICE_CAPTION_MAX_HEIGHT = ${SURFACE_GEOMETRY_PX.VOICE_CAPTION_MAX_HEIGHT};
 
-/** The session notice's band, held beside the caption room. CSS: \`--notice-size\`. */
+/** One chip row of the session notice band. CSS: \`--notice-size\`. */
 export const SESSION_NOTICE_HEIGHT = ${SURFACE_GEOMETRY_PX.SESSION_NOTICE_HEIGHT};
+
+/** Chip rows the band may grow to before scrolling. CSS: \`--notice-max-rows\`. */
+export const SESSION_NOTICE_MAX_ROWS = ${SESSION_NOTICE_MAX_ROWS};
 
 /** Expanded panel width. CSS: \`--panel-width\`. */
 export const PANEL_WIDTH = ${SURFACE_GEOMETRY_PX.PANEL_WIDTH};

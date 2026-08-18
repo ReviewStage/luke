@@ -4,9 +4,13 @@ import {
   ATTENTION_DISPOSITION,
   ATTENTION_SPEECH_SOURCE,
   type AttentionSpeech,
+  type NormalizedSession,
+  normalizeSession,
   REALTIME_STATUS,
   REALTIME_VOICE,
   REALTIME_VOICE_SPEED,
+  SESSION_MENTION_KIND,
+  SESSION_STATUS,
   SESSION_TOOL_KIND,
 } from "@sidecar/core";
 import {
@@ -19,6 +23,7 @@ import {
   latestSpeechReference,
   liveSpeedApplies,
   lukeCaptionsToShow,
+  replyMentions,
   talkKeyPress,
   talkOpeningHolds,
   typedAskHolds,
@@ -311,6 +316,105 @@ test("the newest announcement's words are what 'what did you just say?' points b
   assert.equal(latestSpeech([older, newest, newer]), newest);
   // An empty batch keeps whatever announcement already stands.
   assert.equal(latestSpeech([]), undefined);
+});
+
+function rosterSession(
+  providerSessionId: string,
+  title: string,
+  workspace?: { providerWorkspaceId: string; name?: string },
+): NormalizedSession {
+  return normalizeSession(
+    { id: "conductor", displayName: "Conductor" },
+    {
+      providerSessionId,
+      title,
+      status: SESSION_STATUS.WORKING,
+      observedAt: 100,
+      ...(workspace ? { workspace } : {}),
+      detail: {},
+    },
+  );
+}
+
+test("an announcement's one validated subject is the whole answer", () => {
+  const roster = [rosterSession("a", "Checkout service"), rosterSession("b", "Payments schema")];
+  assert.deepEqual(
+    replyMentions({
+      fixtureSpeaking: false,
+      about: { providerId: "conductor", providerSessionId: "b" },
+      // The sentence brushes past another roster title; the update was still
+      // about one session, and the chip must say so.
+      captions: ["Payments schema finished, right after Checkout service did."],
+      sessions: roster,
+    }),
+    [
+      {
+        kind: SESSION_MENTION_KIND.SESSION,
+        providerId: "conductor",
+        providerSessionId: "b",
+      },
+    ],
+  );
+});
+
+test("a conversation reply's previews are what its words name off the roster", () => {
+  const roster = [
+    rosterSession("a", "Checkout service"),
+    rosterSession("b", "Payments schema"),
+    rosterSession("c", "amber-shoal", { providerWorkspaceId: "ws-lisbon", name: "lisbon-v2" }),
+  ];
+  // Back-to-back replies stack their captions, and every caption still on
+  // screen feeds the chips: the first names one session, the second another.
+  assert.deepEqual(
+    replyMentions({
+      fixtureSpeaking: false,
+      about: undefined,
+      captions: ["Payments schema is migrating.", "And lisbon-v2 is waiting on you."],
+      sessions: roster,
+    }),
+    [
+      { kind: SESSION_MENTION_KIND.SESSION, providerId: "conductor", providerSessionId: "b" },
+      { kind: SESSION_MENTION_KIND.WORKSPACE, providerId: "conductor", providerSessionId: "c" },
+    ],
+  );
+  assert.deepEqual(
+    replyMentions({
+      fixtureSpeaking: false,
+      about: undefined,
+      captions: undefined,
+      sessions: roster,
+    }),
+    [],
+  );
+});
+
+test("a capture run's chips are earned by the fixture's own words", () => {
+  // The fixture sentence names this title and this workspace on purpose: the
+  // chips they earn are what the speaking evidence photographs.
+  const roster = [
+    rosterSession("fixture", "Bootstrap the desktop shell"),
+    rosterSession("chat", "gentle-cove", { providerWorkspaceId: "ws-lisbon", name: "lisbon-v2" }),
+  ];
+  assert.deepEqual(
+    replyMentions({
+      fixtureSpeaking: true,
+      about: undefined,
+      captions: undefined,
+      sessions: roster,
+    }),
+    [
+      {
+        kind: SESSION_MENTION_KIND.SESSION,
+        providerId: "conductor",
+        providerSessionId: "fixture",
+      },
+      {
+        kind: SESSION_MENTION_KIND.WORKSPACE,
+        providerId: "conductor",
+        providerSessionId: "chat",
+      },
+    ],
+  );
 });
 
 test("a carried act aims the reference at its session; a creation aims at none", () => {

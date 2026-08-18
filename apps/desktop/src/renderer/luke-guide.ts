@@ -814,7 +814,11 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
               "off. While he says it, a pressable notice names the session he is talking " +
               "about — under the housing, or at the open panel's foot: pressing it opens the " +
               "session where its provider keeps it, or opens the panel for a local session " +
-              "with no page of its own. " +
+              "with no page of its own. The same chips appear while a conversation reply " +
+              "names observed sessions by title, or a workspace of grouped chats by its " +
+              "name — asking what is being worked on draws one chip per thing named, up to " +
+              "a dozen, a workspace's opening its most recent chat. Past three rows the " +
+              "chips scroll in place, and each presses the same way. " +
               "Always on while voice is available; the panel and the capsule count show the " +
               "same states either way." +
               // Only a build that offers the calendar may describe the quiet:
