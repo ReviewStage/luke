@@ -2120,9 +2120,13 @@ export function App(): React.JSX.Element {
   // answer can be seen.
   const [voiceService, setVoiceService] = useState<RealtimeDiagnostics | undefined>();
   const [hostedUsage, setHostedUsage] = useState<HostedUsageAnswer | undefined>();
+  // Asked as soon as the app knows itself and again on every settings change,
+  // not on the first Settings visit: the answer is one cheap read, and the
+  // meters must be standing when the tab opens rather than arriving a blink
+  // after it.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the settings snapshot is not read here — its arrival is the signal the held answers went stale, because the key or the account may have moved with it.
   useEffect(() => {
-    if (tab !== PANEL_TAB.SETTINGS || !bootstrap) return;
+    if (!bootstrap) return;
     let stale = false;
     void window.sidecar
       .requestRealtimeDiagnostics()
