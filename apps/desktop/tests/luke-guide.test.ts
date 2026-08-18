@@ -38,7 +38,6 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
       [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.NONE,
     },
     secretStorage: SECRET_STORAGE.UNKNOWN,
-    showInMenuBar: true,
     showInDock: false,
     voice: REALTIME_VOICE.CEDAR,
     voiceSpeed: REALTIME_VOICE_SPEED.NORMAL,
@@ -96,10 +95,6 @@ test("the guide describes every spoken-adjustable setting with its current value
   // The guide states the same default the settings row marks, so a spoken
   // "back to the default voice" names the value the row calls (default).
   assert.equal(voice.defaultValue, REALTIME_DEFAULTS.VOICE);
-
-  const menuBar = guideSetting(APP_SETTING_ID.SHOW_IN_MENU_BAR);
-  assert.equal(menuBar.value, "on");
-  assert.equal(menuBar.defaultValue, "on");
 
   const dock = guideSetting(APP_SETTING_ID.SHOW_IN_DOCK);
   assert.equal(dock.value, "off");
@@ -716,10 +711,6 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
       calls.push(`setQuietDuringMeetings:${enabled}`);
       return answered;
     },
-    setShowInMenuBar: async (show: boolean) => {
-      calls.push(`setShowInMenuBar:${show}`);
-      return answered;
-    },
     setShowInDock: async (show: boolean) => {
       calls.push(`setShowInDock:${show}`);
       return answered;
@@ -757,7 +748,6 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
     "setPreferBuiltInMicrophone:true",
     "setQuietDuringMeetings:true",
     "setShowInDock:true",
-    "setShowInMenuBar:true",
     "setShowOnAllDisplays:true",
     "setVoice",
     "setVoiceCaptions:true",
@@ -799,7 +789,6 @@ test("the store's refusal comes back as the spoken outcome", async () => {
       settings: settings(),
       reason: "The settings file could not be written.",
     }),
-    setShowInMenuBar: async () => ({ settings: settings() }),
   };
 
   const outcome = await applySpokenSetting(

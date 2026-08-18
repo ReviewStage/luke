@@ -71,7 +71,6 @@ export const APP_SETTING_ID = {
   DUCK_OTHER_MEDIA: "duck_other_media",
   PREFER_BUILT_IN_MICROPHONE: "prefer_built_in_microphone",
   QUIET_DURING_MEETINGS: "quiet_during_meetings",
-  SHOW_IN_MENU_BAR: "show_in_menu_bar",
   SHOW_IN_DOCK: "show_in_dock",
   SHOW_ON_ALL_DISPLAYS: "show_on_all_displays",
   FORM_FACTOR: "form_factor",
@@ -256,16 +255,6 @@ const SETTING_GUIDE: Record<
     defaultValue: appToggleText(APP_SETTING_DEFAULTS.quietDuringMeetings),
     adjustable: true,
     manual: `${CONNECTIONS_PAGE} — drawn once a calendar account is connected`,
-  }),
-  showInMenuBar: (settings) => ({
-    id: APP_SETTING_ID.SHOW_IN_MENU_BAR,
-    label: "Show Luke in the menu bar",
-    description: "Whether Luke also stands in the menu bar as a status item.",
-    kind: APP_SETTING_KIND.TOGGLE,
-    value: appToggleText(settings.showInMenuBar),
-    defaultValue: appToggleText(APP_SETTING_DEFAULTS.showInMenuBar),
-    adjustable: true,
-    manual: APPEARANCE_PAGE,
   }),
   showInDock: (settings) => ({
     id: APP_SETTING_ID.SHOW_IN_DOCK,
@@ -681,7 +670,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "while the permission is ungranted, and the Keyboard shortcuts rows while voice is off, " +
         "where each key's chord stays shown and changeable but answers nothing until voice is " +
         "available; the " +
-        "menu bar item's Settings… opens the same tab, and Command-comma switches to it while " +
+        "Command-comma switches to it while " +
         "the panel has the keyboard. A dot beside a settings row marks a value changed from " +
         "its default, and a page holding one ends its head with a reset, pressed by hand and " +
         "never spoken, that returns that page's settings to their defaults in one act — the " +
@@ -702,9 +691,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "Feedback and prompts",
       detail:
-        "The Feedback section near the foot of the Settings tab, just above Quit — or the menu bar item's Send " +
-        "Feedback… and Submit a Prompt… — opens a composer under the notch. Send feedback is for " +
-        "bugs and ideas; Submit a prompt sends a prompt to a coding agent, and one the founders " +
+        "The Feedback section near the foot of the Settings tab, just above Quit, opens a composer under the notch. " +
+        "Send feedback is for bugs and ideas; Submit a prompt sends a prompt to a coding agent, and one the founders " +
         "like ships in the next release. Either goes by email to the founders with an optional " +
         "name and email for credit — a fresh note starts them from the signed-in account, and " +
         "both stay free to edit or clear before sending — and up to three screenshots. A spoken ask can open the " +
@@ -902,7 +890,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     },
     {
       label: "Quitting",
-      detail: `The Quit button at the foot of ${SETTINGS_TAB}, on the sign-in screen when it is shown, or the menu bar item when it is shown.`,
+      detail: `The Quit button at the foot of ${SETTINGS_TAB} or on the sign-in screen when it is shown.`,
     },
   ];
 
@@ -997,7 +985,6 @@ export async function applySpokenSetting(
     | "setDuckOtherMedia"
     | "setPreferBuiltInMicrophone"
     | "setQuietDuringMeetings"
-    | "setShowInMenuBar"
     | "setShowInDock"
     | "setShowOnAllDisplays"
     | "setFormFactor"
@@ -1042,20 +1029,18 @@ export async function applySpokenSetting(
           ? await bridge.setPreferBuiltInMicrophone(enabled)
           : action.setting.id === APP_SETTING_ID.QUIET_DURING_MEETINGS
             ? await bridge.setQuietDuringMeetings(enabled)
-            : action.setting.id === APP_SETTING_ID.SHOW_IN_MENU_BAR
-              ? await bridge.setShowInMenuBar(enabled)
-              : action.setting.id === APP_SETTING_ID.SHOW_IN_DOCK
-                ? await bridge.setShowInDock(enabled)
-                : action.setting.id === APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS
-                  ? await bridge.setShowOnAllDisplays(enabled)
-                  : action.setting.id === APP_SETTING_ID.VOICE_SPEED && speed !== undefined
-                    ? await bridge.setVoiceSpeed(speed)
-                    : action.setting.id === APP_SETTING_ID.VOICE && isRealtimeVoice(action.value)
-                      ? await bridge.setVoice(action.value)
-                      : action.setting.id === APP_SETTING_ID.FORM_FACTOR &&
-                          isPanelFormFactor(action.value)
-                        ? await bridge.setFormFactor(action.value)
-                        : undefined;
+            : action.setting.id === APP_SETTING_ID.SHOW_IN_DOCK
+              ? await bridge.setShowInDock(enabled)
+              : action.setting.id === APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS
+                ? await bridge.setShowOnAllDisplays(enabled)
+                : action.setting.id === APP_SETTING_ID.VOICE_SPEED && speed !== undefined
+                  ? await bridge.setVoiceSpeed(speed)
+                  : action.setting.id === APP_SETTING_ID.VOICE && isRealtimeVoice(action.value)
+                    ? await bridge.setVoice(action.value)
+                    : action.setting.id === APP_SETTING_ID.FORM_FACTOR &&
+                        isPanelFormFactor(action.value)
+                      ? await bridge.setFormFactor(action.value)
+                      : undefined;
   if (!result) {
     // An adjustable entry with no carrier is a guide ahead of its wiring;
     // refuse honestly rather than claim a change that never happened.

@@ -104,8 +104,8 @@ export class DockPresence {
 
   /**
    * Puts Luke in the Dock or takes him back out, to match the setting. He ships
-   * as an accessory app — the notch is his fixed point — so the icon is a second
-   * door like the status item, losing nothing when it is hidden. `askedFrom` is
+   * as an accessory app — the notch is his fixed point — so the icon is an
+   * optional second door. `askedFrom` is
    * the display whose panel held the switch, so the caret goes back where the
    * press was made rather than to whichever panel stands first.
    */

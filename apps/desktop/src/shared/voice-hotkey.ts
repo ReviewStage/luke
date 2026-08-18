@@ -79,8 +79,7 @@ export function askHotkeyCandidates(
 /**
  * The modifiers a talk key may carry, written the way Electron accelerators
  * name them. Their order here is the order macOS writes a chord in — ⌃⌥⇧⌘ —
- * so every accelerator this module produces reads the way the menu bar would
- * print it.
+ * so every accelerator this module produces follows macOS's chord order.
  */
 export const VOICE_HOTKEY_MODIFIER = {
   CONTROL: "Control",

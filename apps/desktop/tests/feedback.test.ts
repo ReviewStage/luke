@@ -100,7 +100,7 @@ test("an image past the byte cap is refused", () => {
   );
 });
 
-test("the tray's lifecycle events name their kinds and nothing else answers", () => {
+test("feedback lifecycle events name their kinds and nothing else answers", () => {
   assert.equal(
     feedbackKindForLifecycleEvent(FEEDBACK_LIFECYCLE_EVENT[FEEDBACK_KIND.FEEDBACK]),
     FEEDBACK_KIND.FEEDBACK,

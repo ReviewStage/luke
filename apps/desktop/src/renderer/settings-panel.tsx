@@ -203,11 +203,6 @@ export interface PreferenceWrites {
   /** Chooses the pace Luke speaks at, from the set fixed by this build. */
   onVoiceSpeedChange: (speed: RealtimeVoiceSpeed) => void;
   /**
-   * Shows or hides the menu bar status item. The store answers with why when it
-   * refuses, and the row is where that answer belongs.
-   */
-  onShowInMenuBarChange: (show: boolean) => Promise<string | undefined>;
-  /**
    * Shows or hides the Dock icon. The store answers with why when it refuses,
    * and the row is where that answer belongs.
    */
@@ -825,7 +820,6 @@ function voiceSettingsChanged(settings: AppSettings): boolean {
 
 function appearanceSettingsChanged(settings: AppSettings): boolean {
   return (
-    settings.showInMenuBar !== APP_SETTING_DEFAULTS.showInMenuBar ||
     settings.showInDock !== APP_SETTING_DEFAULTS.showInDock ||
     settings.showOnAllDisplays !== APP_SETTING_DEFAULTS.showOnAllDisplays ||
     settings.formFactor !== DEFAULT_PANEL_FORM_FACTOR
@@ -1849,9 +1843,8 @@ function VoiceControlsSection({
 }
 
 /**
- * Where Luke stands and how he is drawn: the menu bar and the Dock as second
- * doors — Settings and Quit live in this panel, so neither is the only one —
- * every display or just the main one, and the form he takes on a display
+ * Where Luke stands and how he is drawn: the Dock as a second door, every
+ * display or just the main one, and the form he takes on a display
  * without a housing. Switches and one pop-up, because nothing rides on any
  * answer here.
  */
@@ -1867,13 +1860,6 @@ function AppearanceSection({
       className="settings-section settings-plain"
       style={{ "--row-index": 1 } as React.CSSProperties}
     >
-      <SwitchRow
-        label="Show Luke in the menu bar"
-        errand={APP_SETTING_ID.SHOW_IN_MENU_BAR}
-        changed={settings.showInMenuBar !== APP_SETTING_DEFAULTS.showInMenuBar}
-        checked={settings.showInMenuBar}
-        onChange={preferences.onShowInMenuBarChange}
-      />
       <SwitchRow
         label="Show Luke in the Dock"
         errand={APP_SETTING_ID.SHOW_IN_DOCK}

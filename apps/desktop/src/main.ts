@@ -60,14 +60,12 @@ import {
   type IpcMainInvokeEvent,
   ipcMain,
   Menu,
-  nativeImage,
   powerMonitor,
   safeStorage,
   screen,
   session,
   shell,
   systemPreferences,
-  Tray,
 } from "electron";
 import { AccountClient, type AccountIdentity, type AccountTokens } from "./account-client";
 import { deleteHostedAccount } from "./account-deletion";
@@ -164,7 +162,6 @@ import {
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "./shared/credential-providers";
 import {
-  FEEDBACK_KIND,
   FEEDBACK_LIFECYCLE_EVENT,
   type FeedbackResult,
   feedbackSubmission,
@@ -527,7 +524,6 @@ function startMicrophoneRouteWatch(): void {
   if (!microphoneRouteWatcher.start()) microphoneRouteWatcher = undefined;
 }
 
-let tray: Tray | undefined;
 let sessionRefreshTimer: NodeJS.Timeout | undefined;
 let unsubscribeSessions: (() => void) | undefined;
 let sessionRefreshGeneration: number | undefined;
@@ -1178,10 +1174,9 @@ function registerIpc(): void {
     return panels.setMode(displayId, expanded ? "expanded" : "compact", focus === true);
   });
 
-  // The tray items' feedback gesture, asked for from a renderer — the spoken
-  // open rides this so the ordering stays owned here for every caller: the
-  // mode event the panel manager sends and the composer event that follows travel
-  // the same lifecycle channel, so the shape that wins is always the
+  // The spoken feedback gesture uses this ordered path so the mode event the
+  // panel manager sends and the composer event that follows travel the same
+  // lifecycle channel, so the shape that wins is always the
   // composer, never a panel racing it in from another channel. Opening is all
   // this does; a note still arrives only through channels.sendFeedback, from
   // the composer's own Send button.
@@ -1255,19 +1250,7 @@ function registerIpc(): void {
     refusal: "Could not save that API key on this system.",
   });
 
-  // The status item follows the stored answer at once: a setting that only
-  // took effect on the next launch would read as a toggle that does nothing.
-  registerSettingHandler(channels.setShowInMenuBar, {
-    validate(show: unknown) {
-      if (typeof show !== "boolean") throw new Error("Invalid menu bar request");
-      return show;
-    },
-    save: (show) => settingsStore.setShowInMenuBar(show),
-    apply: (result) => applyMenuBarVisibility(result.settings.showInMenuBar),
-    refusal: "Could not save that setting on this system.",
-  });
-
-  // The Dock icon follows the stored answer at once, like the status item: a
+  // The Dock icon follows the stored answer at once: a
   // setting that only took effect on the next launch would read as a toggle
   // that does nothing.
   registerSettingHandler(channels.setShowInDock, {
@@ -1281,7 +1264,7 @@ function registerIpc(): void {
     refusal: "Could not save that setting on this system.",
   });
 
-  // The windows follow the stored answer at once, like the status item: on
+  // The windows follow the stored answer at once: on
   // raises a panel on every connected display, off brings Luke back to the
   // main one alone.
   registerSettingHandler(channels.setShowOnAllDisplays, {
@@ -1506,7 +1489,7 @@ function registerIpc(): void {
     refusal: "Could not save that shortcut on this system.",
   });
 
-  // The duck follows the stored answer at once, like the menu bar item: off
+  // The duck follows the stored answer at once: off
   // must let a duck currently held go rather than waiting for the next launch.
   registerSettingHandler(channels.setPreferBuiltInMicrophone, {
     validate(enabled: unknown) {
@@ -1567,7 +1550,6 @@ function registerIpc(): void {
           mediaDuck.setEnabled(result.settings.duckOtherMedia);
           break;
         case SETTINGS_RESET_SCOPE.APPEARANCE:
-          applyMenuBarVisibility(result.settings.showInMenuBar);
           dock.apply(result.settings.showInDock, panels.displayIdFor(event.sender));
           panels.setShowOnAllDisplays(result.settings.showOnAllDisplays);
           panels.reconcile();
@@ -2909,110 +2891,6 @@ function configurePermissions(): void {
   );
 }
 
-function trayMenu(): Electron.Menu {
-  return Menu.buildFromTemplate([
-    {
-      // The ellipsis is the macOS convention for an item that opens somewhere
-      // rather than acting, and the accelerator is shown rather than registered:
-      // Command-, belongs to whichever app is frontmost, so Luke claims it only
-      // inside its own window, where the renderer handles it.
-      //
-      // No icon: a menu item takes a NativeImage sized in points, and the
-      // system's named gear arrives at its natural size, which draws far too
-      // large beside the text. Apple's own menu bar menus label these items
-      // rather than picture them, so this follows them.
-      label: "Settings…",
-      accelerator: "CommandOrControl+,",
-      registerAccelerator: false,
-      click: () => {
-        // The menu bar item lives on whichever display the user opened it
-        // from, but the panel it opens is the voice host's: one Settings, on
-        // the same window every other app-level ask lands in.
-        const host = panels.voiceHost();
-        const displayId = host ? panels.displayIdFor(host.webContents) : undefined;
-        if (displayId === undefined) return;
-        panels.setMode(displayId, "expanded", true);
-        host?.webContents.send(channels.lifecycle, "tab:settings");
-      },
-    },
-    { type: "separator" },
-    {
-      // The same door the bottom of the settings tab offers, for whoever lives
-      // in the menu bar instead: the panel comes up on the composer, already
-      // set to the kind that was asked for — on the voice host's window, the
-      // same one every other app-level ask lands in.
-      label: "Send Feedback…",
-      click: () => {
-        const host = panels.voiceHost();
-        const displayId = host ? panels.displayIdFor(host.webContents) : undefined;
-        if (displayId === undefined) return;
-        panels.setMode(displayId, "expanded", true);
-        host?.webContents.send(
-          channels.lifecycle,
-          FEEDBACK_LIFECYCLE_EVENT[FEEDBACK_KIND.FEEDBACK],
-        );
-      },
-    },
-    {
-      label: "Submit a Prompt…",
-      click: () => {
-        const host = panels.voiceHost();
-        const displayId = host ? panels.displayIdFor(host.webContents) : undefined;
-        if (displayId === undefined) return;
-        panels.setMode(displayId, "expanded", true);
-        host?.webContents.send(channels.lifecycle, FEEDBACK_LIFECYCLE_EVENT[FEEDBACK_KIND.PROMPT]);
-      },
-    },
-    { type: "separator" },
-    { label: "Quit Luke", role: "quit" },
-  ]);
-}
-
-/**
- * Luke's face, as macOS wants a status item drawn: a template image, which is
- * pure black plus alpha and is recoloured by the system rather than by us, so it
- * follows the menu bar through light, dark, and the inverted highlight a press
- * draws. The `@2x` file beside it is picked up from the same call, which is what
- * keeps the item sharp on a Retina display.
- */
-function trayImage(): Electron.NativeImage {
-  const image = nativeImage.createFromPath(path.join(__dirname, "menubar", "lukeTemplate.png"));
-  image.setTemplateImage(true);
-  return image;
-}
-
-function createTray(): void {
-  if (process.platform !== "darwin") return;
-  const image = trayImage();
-  tray = new Tray(image);
-  // A status item that draws nothing is a status item no one can find, and this
-  // one is the quickest way to reach Settings or to quit. If the artwork is
-  // ever missing from a build, the name it used to carry stands in for it.
-  if (image.isEmpty()) tray.setTitle("Luke");
-  tray.setToolTip("Luke");
-  // Clicking opens the menu and nothing else. The capsule is how the panel is
-  // opened; a menu bar item that also toggled it made one of them a surprise.
-  tray.setContextMenu(trayMenu());
-}
-
-function destroyTray(): void {
-  tray?.destroy();
-  tray = undefined;
-}
-
-/**
- * Draws or removes the status item to match the setting. Hiding it loses no
- * capability — Settings and Quit are both in the panel — which is what makes
- * this the user's choice rather than Luke's.
- */
-function applyMenuBarVisibility(show: boolean): void {
-  if (show) {
-    if (!tray) createTray();
-    return;
-  }
-  destroyTray();
-}
-
 function handleDisplayChange(): void {
   setTimeout(() => {
     panels.refreshGeometry();
@@ -3060,14 +2938,6 @@ if (!app.requestSingleInstanceLock()) {
     // that work off the renderer's first paint, which blocks on the bootstrap
     // reply.
     void settingsStore.snapshot();
-    // The status item waits only for the settings file, never for the keychain
-    // behind the stored keys: a locked or slow Keychain must not delay the one
-    // fixed point Luke has outside the notch. A file that cannot be read
-    // leaves the item shown, the same answer a file that has never said gives.
-    void settingsStore.showInMenuBar().then(
-      (show) => applyMenuBarVisibility(show),
-      () => applyMenuBarVisibility(APP_SETTING_DEFAULTS.showInMenuBar),
-    );
     // The Dock wears Luke's own face from the start, and keeps wearing the
     // right one as the desktop changes mode — whether the icon is shown yet
     // is a separate question, answered by the setting below.

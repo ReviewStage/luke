@@ -13,12 +13,11 @@
 //   apps/desktop/src/renderer/styles/face-motion.css the motions, as @keyframes
 //
 // The app draws the face itself rather than loading these SVGs, because it needs
-// what a baked asset cannot give it: `currentColor`, so one drawing serves the
-// menu bar and the notch, and CSS animation, so the renderer's own motion tokens
+// what a baked asset cannot give it: `currentColor` and CSS animation, so the renderer's own motion tokens
 // can hold every loop still for a capture run or for reduced motion. Emitting
 // its two inputs from here keeps that second copy from being a second source.
 //
-// PNG derivatives (app icon sizes, menu-bar template) are rasterized
+// PNG derivatives (app icon sizes) are rasterized
 // separately — see design/brand/README.md.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -1130,12 +1129,6 @@ emit(
 // lockup is handed to headers and docs, not enlarged into a tile — see
 // design/brand/README.md.
 emitModes("logo/luke-logo", wordSvg(wordmark()), "LUKE");
-
-// Menu-bar template source: pure black, macOS recolors it. Square canvas
-// with the artwork filling ~90% of it, per status-item conventions.
-const side = Math.max(bbox.w, bbox.h) * 1.1;
-const menubar = `${svgOpenAt(bbox.cx - side / 2, bbox.cy - side / 2, side, side)}${face()}</svg>`;
-emit("menubar/luke-menubar-template.svg", menubar.replaceAll("currentColor", "#000000"), "Luke");
 
 // DMG background: a quiet field with the same rounded monoline language as the
 // face. Shared window geometry keeps the arrow centered between the two icons.

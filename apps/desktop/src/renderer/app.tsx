@@ -897,12 +897,6 @@ export function App(): React.JSX.Element {
     if (presentationOf() === PANEL_PRESENTATION.SLOT) expand();
   }, [expand, presentationOf, setSignInWait, signInWaitNow]);
 
-  /** Shows or hides the menu bar status item. */
-  const changeShowInMenuBar = useCallback(
-    async (show: boolean) => applySettingsReply(await window.sidecar.setShowInMenuBar(show)),
-    [applySettingsReply],
-  );
-
   const changeShowInDock = useCallback(
     async (show: boolean) => applySettingsReply(await window.sidecar.setShowInDock(show)),
     [applySettingsReply],
@@ -1099,8 +1093,8 @@ export function App(): React.JSX.Element {
   });
 
   /**
-   * Opens the composer for a kind — from the section's own buttons, from the
-   * tray, or asked of Luke out loud — and stands the panel down to its shape,
+   * Opens the composer for a kind — from the section's own buttons or asked of
+   * Luke out loud — and stands the panel down to its shape,
    * the way beginning a key entry stands it down to the slot: writing one
    * note is one act. What opening does to a note already there is
    * {@link openedFeedbackEntry}'s to decide — a half-written note is brought
@@ -1144,7 +1138,7 @@ export function App(): React.JSX.Element {
    * longer than a key, and a key is the only thing Escape is allowed to
    * discard; the way back in is the same button, now reading "keep writing".
    * Where it returns you is where the composer was last asked for from: the
-   * panel, or — from the tray — nothing at all.
+   * panel, or — from a spoken ask — nothing at all.
    */
   const dismissFeedback = useCallback(() => {
     if (presentationOf() !== PANEL_PRESENTATION.FEEDBACK) return;
@@ -1404,8 +1398,8 @@ export function App(): React.JSX.Element {
    * same bridge calls the settings rows use, and the snapshot that comes back
    * redraws the panel's switches; showing the panel is the capsule's press
    * with a tab — or, already open, that tab's own press — and optionally a
-   * narrowing, chosen out loud; opening the composer is the tray item's press,
-   * run through the tray's own path. All were validated against their fixed
+   * narrowing, chosen out loud; opening the composer follows the spoken-ask
+   * path. All were validated against their fixed
    * vocabularies before they arrive here, so this only performs and reports.
    *
    * A settings change and a change of view are also the two acts nobody
@@ -1487,9 +1481,9 @@ export function App(): React.JSX.Element {
         },
         [APP_TOOL_KIND.FEEDBACK]: async (action) => {
           // The main process expands the window and sends the composer's
-          // lifecycle event down the same ordered channel as the mode event —
-          // exactly the tray items' gesture — so the composer's shape can never
-          // lose a race to the panel apply the expansion causes. The draft
+          // lifecycle event down the same ordered channel as the mode event,
+          // so the composer's shape can never lose a race to the panel apply
+          // the expansion causes. The draft
           // rides this ref because the lifecycle channel carries event names,
           // not payloads: set before the ask, consumed when the event lands.
           // Whether it will be placed is decided here with the same pure
@@ -1511,7 +1505,7 @@ export function App(): React.JSX.Element {
           } catch (error) {
             // The composer is not coming, so the event that would consume the
             // draft is not coming either; a stale one must not season some
-            // later tray press.
+            // later spoken request.
             spokenFeedbackDraft.current = undefined;
             throw error;
           }
@@ -1845,8 +1839,7 @@ export function App(): React.JSX.Element {
       // Held while a shortcut row is recording, for the same reason the talk
       // key's press is: the chord just typed is an entry, not an ask.
       if (eventName === "ask:focus" && !shortcutCapture.current) summonAsk();
-      // The tray's feedback items — and a spoken open, which rides the same
-      // gesture through the main process — stand the surface straight down to
+      // A spoken feedback request stands the surface straight down to
       // the composer's shape, on the kind that was asked for. The window was
       // expanded before this event was sent; this is the renderer's half. The
       // tab still moves to settings so that coming back to the panel later
@@ -1991,9 +1984,9 @@ export function App(): React.JSX.Element {
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
-      // The shortcut the tray menu advertises. It is claimed here rather than
-      // globally, because Command-, belongs to whichever app is frontmost and
-      // Luke is only that while its panel has the keyboard.
+      // Command-comma is claimed here rather than globally, because it belongs
+      // to whichever app is frontmost and Luke is only that while its panel has
+      // the keyboard.
       if (event.key === "," && (event.metaKey || event.ctrlKey)) {
         if (presentation !== PANEL_PRESENTATION.PANEL) return;
         event.preventDefault();
@@ -2288,7 +2281,6 @@ export function App(): React.JSX.Element {
     onQuietDuringMeetingsChange: changeQuietDuringMeetings,
     onVoiceChange: changeVoice,
     onVoiceSpeedChange: changeVoiceSpeed,
-    onShowInMenuBarChange: changeShowInMenuBar,
     onShowInDockChange: changeShowInDock,
     onShowOnAllDisplaysChange: changeShowOnAllDisplays,
     onFormFactorChange: changeFormFactor,

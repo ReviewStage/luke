@@ -143,7 +143,6 @@ export function isVoiceSource(value: unknown): value is VoiceSource {
 
 export const APP_SETTING_DEFAULTS = {
   showInDock: false,
-  showInMenuBar: true,
   voiceCaptions: false,
   duckOtherMedia: true,
   preferBuiltInMicrophone: true,
@@ -251,12 +250,6 @@ export interface AppSettings {
    * is opted into rather than discovered.
    */
   showInDock: boolean;
-  /**
-   * Whether Luke stands in the menu bar as well as at the notch. Hiding the
-   * status item costs nothing it alone provides — Settings and Quit are both in
-   * the panel — so the choice is the user's to make and to keep.
-   */
-  showInMenuBar: boolean;
   /**
    * The voice Luke speaks with, as the settings resolve it: the one the user
    * chose, else the launch environment's, else the default — so the panel
@@ -596,8 +589,6 @@ export interface AppBridge {
    * fixed by this build.
    */
   openProviderApiKeys(providerId: CredentialProviderId): void;
-  /** Shows or hides the menu bar status item, and remembers the choice. */
-  setShowInMenuBar(show: boolean): Promise<SettingsUpdateResult>;
   /** Shows or hides the Dock icon, and remembers the choice. */
   setShowInDock(show: boolean): Promise<SettingsUpdateResult>;
   /**
@@ -835,7 +826,7 @@ export interface AppBridge {
    */
   sendFeedback(submission: FeedbackSubmission): Promise<FeedbackResult>;
   /**
-   * Brings the composer up on a kind, through the tray items' own gesture:
+   * Brings the composer up on a kind through the spoken-ask gesture:
    * the main process expands the window and sends the composer's lifecycle
    * event down the same ordered channel as the mode event, so the shape that
    * wins is always the composer — the ordering stays owned by setWindowMode
@@ -963,7 +954,6 @@ export const channels = {
   updateChanged: "app:update-changed",
   setVoiceExchange: "app:set-voice-exchange",
   openProviderApiKeys: "app:open-provider-api-keys",
-  setShowInMenuBar: "app:set-show-in-menu-bar",
   setShowInDock: "app:set-show-in-dock",
   setShowOnAllDisplays: "app:set-show-on-all-displays",
   setFormFactor: "app:set-form-factor",

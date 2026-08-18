@@ -27,9 +27,8 @@ export interface FeedbackEntry {
   busy: boolean;
   /**
    * Whether the composer was last asked for from inside the panel. It is the
-   * difference between someone partway down the settings tab and someone who
-   * came straight from the menu bar, so it decides where leaving the shape
-   * returns them: to the panel, or to nothing at all.
+   * difference between someone partway down the settings tab and a spoken ask,
+   * so it decides whether leaving the shape returns to the panel or nothing.
    */
   fromPanel: boolean;
   /** Why the last attempt was refused, if it was. */
@@ -98,9 +97,9 @@ export function freshFeedbackEntry(
 
 /**
  * One request to open the composer, wherever it came from — the settings
- * section's buttons, the tray, or a spoken ask carried through the same path.
+ * section's buttons or a spoken ask carried through the same path.
  * `draft` is starting text for the note, and it is only ever the user's own
- * words: the section and the tray never send one, and the spoken tool's
+ * words: the section never sends one, and the spoken tool's
  * contract forbids anything the user did not say. `signature` is the
  * signed-in account's credit, and it seeds only a note that does not exist
  * yet: a note already there keeps its fields exactly as its author left

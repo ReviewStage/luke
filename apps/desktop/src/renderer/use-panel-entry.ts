@@ -19,7 +19,7 @@ export const PANEL_ENTRY_CANCEL = {
   NONE: "none",
   /** Return to the panel this was opened from. */
   RESTORE: "restore",
-  /** Leave entirely — the tray, a browser, nothing of Luke's. */
+  /** Leave entirely — a browser or nothing of Luke's. */
   LEAVE: "leave",
 } as const;
 
@@ -121,7 +121,7 @@ export interface PanelEntryHost {
 export interface UsePanelEntryOptions<T extends PanelEntryBase> extends PanelEntryHost {
   /**
    * Whether giving up from the aside shape returns to the panel. A key page
-   * that was opened, or a composer asked for from the tray, leaves instead.
+   * that was opened, or a composer asked for by voice, leaves instead.
    */
   restoresPanel: (entry: T) => boolean;
   isSendable: (entry: T | undefined) => entry is T;

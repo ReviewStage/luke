@@ -28,10 +28,6 @@ test("packaging excludes source and workspace-only inputs", () => {
 
   assert.equal(isIgnored("/dist/main.js"), false);
   assert.equal(isIgnored("/package.json"), false);
-  // The menu bar item is the one piece of artwork read from disk at runtime, so
-  // it has to reach the bundle alongside the code that reads it.
-  assert.equal(isIgnored("/dist/menubar/lukeTemplate.png"), false);
-  assert.equal(isIgnored("/dist/menubar/lukeTemplate@2x.png"), false);
 });
 
 test("recording resolves the packaged app for the current architecture", () => {

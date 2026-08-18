@@ -22,7 +22,7 @@ export function isFeedbackKind(value: unknown): value is FeedbackKind {
 }
 
 /**
- * The tray's ask to open the composer, carried on the lifecycle bus the way
+ * A spoken ask to open the composer, carried on the lifecycle bus the way
  * `tab:settings` is. Keyed by kind rather than composed from one, so no
  * identifier is ever interpolated into an event name.
  */
