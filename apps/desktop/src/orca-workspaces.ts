@@ -18,15 +18,22 @@ import {
  * the pull request linked to it. This index reads exactly that, and the local
  * adapters wear it as an annotation on the rows they were already reporting.
  *
- * The one file read is Orca's own `orca-data.json`. Released Orca builds flush
- * it on quit rather than continuously, which is why it can annotate but never
- * carry a session's liveness: identity keeps between quits, status does not.
- * The scrollback snapshots stored beside these fields are transcript content
- * and are never read, and the worktrees the file names are never opened.
+ * The files read are Orca's own `orca-data.json` state files. Orca builds with
+ * profiles keep one per profile under `profiles/<id>/`, found through the ids
+ * in `orca-profile-index.json`; builds from before keep the single legacy
+ * file, which a migrated install leaves behind frozen at the migration — so
+ * the legacy file is read only while no profile index exists, never merged
+ * with one. Orca flushes these files coarsely rather than continuously, which
+ * is why they can annotate but never carry a session's liveness: identity
+ * keeps between quits, status does not. The scrollback snapshots stored beside
+ * these fields are transcript content and are never read, and the worktrees
+ * the files name are never opened.
  */
 
 const ORCA_DATA_DIRECTORY_SEGMENTS = ["Library", "Application Support", "orca"] as const;
 const ORCA_DATA_FILE = "orca-data.json";
+const ORCA_PROFILE_INDEX_FILE = "orca-profile-index.json";
+const ORCA_PROFILES_DIRECTORY = "profiles";
 
 /** How Orca forms a worktree's id: its repo's id and its path, joined fixed. */
 const ORCA_WORKTREE_ID_SEPARATOR = "::";
@@ -53,6 +60,37 @@ export function defaultOrcaDataDirectory(): string {
 /** Exported so a test can point the index at a directory it wrote. */
 export function orcaDataFilePath(dataDirectory: string): string {
   return path.join(dataDirectory, ORCA_DATA_FILE);
+}
+
+/** Exported so a test can write the profile index the way Orca lays it out. */
+export function orcaProfileIndexFilePath(dataDirectory: string): string {
+  return path.join(dataDirectory, ORCA_PROFILE_INDEX_FILE);
+}
+
+/** Exported so a test can write a profile's state file where Orca keeps it. */
+export function orcaProfileDataDirectory(dataDirectory: string, profileId: string): string {
+  return path.join(dataDirectory, ORCA_PROFILES_DIRECTORY, profileId);
+}
+
+/**
+ * The profiles the index lists, the active one first so its answer wins when
+ * two profiles claim the same worktree. An id is joined into a path, so one
+ * that names anything but a single directory is refused rather than followed.
+ */
+function profileIdsFrom(state: Record<string, unknown>): readonly string[] {
+  const listed = Array.isArray(state.profiles) ? state.profiles : [];
+  const ids: string[] = [];
+  for (const profile of listed) {
+    if (!isRecord(profile)) continue;
+    const id = text(profile.id);
+    if (!id || id === "." || id === ".." || id.includes("/") || id.includes(path.sep)) continue;
+    if (!ids.includes(id)) ids.push(id);
+  }
+  const active = text(state.activeProfileId);
+  if (active && ids.includes(active)) {
+    return [active, ...ids.filter((id) => id !== active)];
+  }
+  return ids;
 }
 
 /** The path half of a worktree id, which is where the id keeps it. */
@@ -141,17 +179,25 @@ function annotationsFrom(state: Record<string, unknown>): Map<string, WorkspaceA
   return annotations;
 }
 
+interface ParsedFile<T> {
+  mtimeMs: number;
+  size: number;
+  value: T;
+}
+
 /**
  * Reads Orca's worktree index and answers, for a session's working directory,
- * which Orca workspace it runs in. One stat per observation pass, one parse
- * per write of the file, no rows of its own.
+ * which Orca workspace it runs in. One stat per observation pass for the
+ * profile index and one per state file it names, one parse per write of each,
+ * no rows of its own.
  */
 export class OrcaWorkspaceIndex {
-  readonly #dataFilePath: string;
-  #parsed?: { mtimeMs: number; size: number; annotations: Map<string, WorkspaceAnnotation> };
+  readonly #dataDirectory: string;
+  #parsedProfileIndex?: ParsedFile<readonly string[]>;
+  #parsedData = new Map<string, ParsedFile<Map<string, WorkspaceAnnotation>>>();
 
   constructor(options: OrcaWorkspaceIndexOptions = {}) {
-    this.#dataFilePath = orcaDataFilePath(options.dataDirectory ?? defaultOrcaDataDirectory());
+    this.#dataDirectory = options.dataDirectory ?? defaultOrcaDataDirectory();
   }
 
   /**
@@ -177,25 +223,68 @@ export class OrcaWorkspaceIndex {
   }
 
   async #currentAnnotations(): Promise<Map<string, WorkspaceAnnotation>> {
-    const stats = await fileStats(this.#dataFilePath);
+    const dataFilePaths = await this.#dataFilePaths();
+    for (const cachedPath of this.#parsedData.keys()) {
+      if (!dataFilePaths.includes(cachedPath)) this.#parsedData.delete(cachedPath);
+    }
+    const merged = new Map<string, WorkspaceAnnotation>();
+    for (const dataFilePath of dataFilePaths) {
+      for (const [worktreePath, annotation] of await this.#annotationsIn(dataFilePath)) {
+        if (!merged.has(worktreePath)) merged.set(worktreePath, annotation);
+      }
+    }
+    return merged;
+  }
+
+  /**
+   * Which state files this pass reads: each listed profile's own, or the
+   * legacy single file while no profile index exists. A profile index present
+   * but unreadable is no index this pass — never a reason to fall back to the
+   * legacy file, which the migration to profiles left frozen behind.
+   */
+  async #dataFilePaths(): Promise<readonly string[]> {
+    const indexFilePath = orcaProfileIndexFilePath(this.#dataDirectory);
+    const stats = await fileStats(indexFilePath);
     if (!stats?.isFile()) {
-      this.#parsed = undefined;
-      return new Map();
+      this.#parsedProfileIndex = undefined;
+      return [orcaDataFilePath(this.#dataDirectory)];
     }
     if (
-      this.#parsed === undefined ||
-      this.#parsed.mtimeMs !== stats.mtimeMs ||
-      this.#parsed.size !== stats.size
+      this.#parsedProfileIndex === undefined ||
+      this.#parsedProfileIndex.mtimeMs !== stats.mtimeMs ||
+      this.#parsedProfileIndex.size !== stats.size
     ) {
-      // A file mid-replacement or from a build this one cannot read is no
-      // index this pass; Orca's next write is a fresh answer.
-      const state = recordFromJsonLine((await readTextFile(this.#dataFilePath)) ?? "");
-      this.#parsed = {
+      const state = recordFromJsonLine((await readTextFile(indexFilePath)) ?? "");
+      this.#parsedProfileIndex = {
         mtimeMs: stats.mtimeMs,
         size: stats.size,
-        annotations: state ? annotationsFrom(state) : new Map(),
+        value: state ? profileIdsFrom(state) : [],
       };
     }
-    return this.#parsed.annotations;
+    return this.#parsedProfileIndex.value.map((profileId) =>
+      orcaDataFilePath(orcaProfileDataDirectory(this.#dataDirectory, profileId)),
+    );
+  }
+
+  async #annotationsIn(dataFilePath: string): Promise<Map<string, WorkspaceAnnotation>> {
+    const stats = await fileStats(dataFilePath);
+    if (!stats?.isFile()) {
+      this.#parsedData.delete(dataFilePath);
+      return new Map();
+    }
+    const cached = this.#parsedData.get(dataFilePath);
+    if (cached && cached.mtimeMs === stats.mtimeMs && cached.size === stats.size) {
+      return cached.value;
+    }
+    // A file mid-replacement or from a build this one cannot read is no
+    // index this pass; Orca's next write is a fresh answer.
+    const state = recordFromJsonLine((await readTextFile(dataFilePath)) ?? "");
+    const parsed: ParsedFile<Map<string, WorkspaceAnnotation>> = {
+      mtimeMs: stats.mtimeMs,
+      size: stats.size,
+      value: state ? annotationsFrom(state) : new Map(),
+    };
+    this.#parsedData.set(dataFilePath, parsed);
+    return parsed.value;
   }
 }

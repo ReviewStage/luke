@@ -3,7 +3,12 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
-import { OrcaWorkspaceIndex, orcaDataFilePath } from "../src/orca-workspaces";
+import {
+  OrcaWorkspaceIndex,
+  orcaDataFilePath,
+  orcaProfileDataDirectory,
+  orcaProfileIndexFilePath,
+} from "../src/orca-workspaces";
 
 const TEST_TIME = Date.parse("2026-08-18T21:30:00.000Z");
 
@@ -70,6 +75,24 @@ async function writeOrcaState(
   };
   await fs.mkdir(dataDirectory, { recursive: true });
   await fs.writeFile(orcaDataFilePath(dataDirectory), JSON.stringify(state), "utf8");
+}
+
+/** Writes an `orca-profile-index.json` shaped the way Orca lays it out. */
+async function writeOrcaProfileIndex(
+  dataDirectory: string,
+  activeProfileId: string,
+  profileIds: readonly string[],
+): Promise<void> {
+  await fs.mkdir(dataDirectory, { recursive: true });
+  await fs.writeFile(
+    orcaProfileIndexFilePath(dataDirectory),
+    JSON.stringify({
+      schemaVersion: 1,
+      activeProfileId,
+      profiles: profileIds.map((id) => ({ id, name: id, kind: "local" })),
+    }),
+    "utf8",
+  );
 }
 
 test("annotates a session running in a worktree Orca created", async (t) => {
@@ -227,4 +250,87 @@ test("re-reads the file Orca rewrote and drops workspaces it no longer holds", a
     (await index.annotations())("/Users/dev/orca/workspaces/checkout/renamed"),
     undefined,
   );
+});
+
+test("reads each profile's own state file and leaves the pre-profile file frozen", async (t) => {
+  const dataDirectory = await temporaryDataDirectory(t);
+  const worktree = "/Users/dev/orca/workspaces/checkout/fix-login";
+  // The migration to profiles leaves the legacy file behind with the names it
+  // held at that moment; reading it beside the profiles would resurrect them.
+  await writeOrcaState(dataDirectory, [
+    { directory: worktree, displayName: "Frozen at migration", orcaCreatedAt: TEST_TIME },
+    {
+      directory: "/Users/dev/orca/workspaces/checkout/gone",
+      displayName: "Removed since migration",
+      orcaCreatedAt: TEST_TIME,
+    },
+  ]);
+  await writeOrcaProfileIndex(dataDirectory, "personal", ["personal"]);
+  await writeOrcaState(orcaProfileDataDirectory(dataDirectory, "personal"), [
+    { directory: worktree, displayName: "Named since migration", orcaCreatedAt: TEST_TIME },
+  ]);
+
+  const lookup = await new OrcaWorkspaceIndex({ dataDirectory }).annotations();
+  assert.equal(lookup(worktree)?.workspace?.name, "Named since migration");
+  assert.equal(lookup("/Users/dev/orca/workspaces/checkout/gone"), undefined);
+});
+
+test("merges profiles with the active profile's answer winning", async (t) => {
+  const dataDirectory = await temporaryDataDirectory(t);
+  const shared = "/Users/dev/orca/workspaces/checkout/shared";
+  // The third listed profile has no state file yet and must cost nothing.
+  await writeOrcaProfileIndex(dataDirectory, "work", ["personal", "work", "fresh"]);
+  await writeOrcaState(orcaProfileDataDirectory(dataDirectory, "personal"), [
+    { directory: shared, displayName: "Personal's name", orcaCreatedAt: TEST_TIME },
+    {
+      directory: "/Users/dev/orca/workspaces/checkout/personal-only",
+      displayName: "Personal only",
+      orcaCreatedAt: TEST_TIME,
+    },
+  ]);
+  await writeOrcaState(orcaProfileDataDirectory(dataDirectory, "work"), [
+    { directory: shared, displayName: "Work's name", orcaCreatedAt: TEST_TIME },
+  ]);
+
+  const lookup = await new OrcaWorkspaceIndex({ dataDirectory }).annotations();
+  assert.equal(lookup(shared)?.workspace?.name, "Work's name");
+  assert.equal(
+    lookup("/Users/dev/orca/workspaces/checkout/personal-only")?.workspace?.name,
+    "Personal only",
+  );
+});
+
+test("a profile index it cannot read is no index, not a fall back to the frozen file", async (t) => {
+  const dataDirectory = await temporaryDataDirectory(t);
+  const worktree = "/Users/dev/orca/workspaces/checkout/fix-login";
+  await writeOrcaState(dataDirectory, [
+    { directory: worktree, displayName: "Frozen at migration", orcaCreatedAt: TEST_TIME },
+  ]);
+  await fs.writeFile(orcaProfileIndexFilePath(dataDirectory), "not json at all", "utf8");
+
+  const lookup = await new OrcaWorkspaceIndex({ dataDirectory }).annotations();
+  assert.equal(lookup(worktree), undefined);
+});
+
+test("follows the profile index Orca rewrote", async (t) => {
+  const dataDirectory = await temporaryDataDirectory(t);
+  const shared = "/Users/dev/orca/workspaces/checkout/shared";
+  await writeOrcaState(orcaProfileDataDirectory(dataDirectory, "personal"), [
+    { directory: shared, displayName: "Personal's name", orcaCreatedAt: TEST_TIME },
+  ]);
+  await writeOrcaState(orcaProfileDataDirectory(dataDirectory, "work"), [
+    { directory: shared, displayName: "Work's name", orcaCreatedAt: TEST_TIME },
+  ]);
+
+  const index = new OrcaWorkspaceIndex({ dataDirectory });
+  await writeOrcaProfileIndex(dataDirectory, "personal", ["personal", "work"]);
+  assert.equal((await index.annotations())(shared)?.workspace?.name, "Personal's name");
+
+  await writeOrcaProfileIndex(dataDirectory, "work", ["personal", "work"]);
+  await fs.utimes(
+    orcaProfileIndexFilePath(dataDirectory),
+    new Date(TEST_TIME),
+    new Date(TEST_TIME),
+  );
+  assert.equal((await index.annotations())(shared)?.workspace?.name, "Work's name");
 });

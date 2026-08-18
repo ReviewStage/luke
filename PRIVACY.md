@@ -96,14 +96,16 @@ Luke never modifies the running app.
   the fact of a failed turn rather than the reason Cursor recorded for it. A
   session is labelled by the folder it runs in, which Luke reads from Cursor's
   own record of that folder, not from the chat's generated name.
-- For Orca, Luke opens the one state file Orca persists itself into, read-only,
-  and reads only what identifies the worktrees Orca manages: their paths, the
-  name Orca gave each workspace, and a linked pull or merge request's address.
-  Orca gets no sessions of its own — the agents it launches are the same
-  Claude Code, Codex, OpenCode, and Cursor sessions observed above — so these
-  fields only annotate those sessions, matched by the directory each runs in.
-  The terminal scrollback snapshots stored in that same file are transcript
-  content and are never read, and the worktree folders the file names are
+- For Orca, Luke opens the state files Orca persists itself into — one per
+  Orca profile, found through the profile ids in Orca's own profile index, or
+  the single file of a build from before profiles — read-only, and reads only
+  what identifies the worktrees Orca manages: their paths, the name Orca gave
+  each workspace, and a linked pull or merge request's address. Orca gets no
+  sessions of its own — the agents it launches are the same Claude Code,
+  Codex, OpenCode, and Cursor sessions observed above — so these fields only
+  annotate those sessions, matched by the directory each runs in. The
+  terminal scrollback snapshots stored in those same files are transcript
+  content and are never read, and the worktree folders the files name are
   never opened.
 
 Luke processes bounded fields needed to identify and display a session:
