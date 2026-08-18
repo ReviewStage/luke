@@ -188,10 +188,16 @@
      same number the compact window already holds below the capsule, so growing
      into it costs no IPC. `--caption-size` is the block's height right now —
      measured off the wrapped text by the renderer, padding included, never
-     past the max. How much of that room the shape is currently using: the
-     caption states below raise it, and every other state leaves the capsule's
-     own height. */
+     past the max less the volume hint's band while one stands. How much of
+     that room the shape is currently using: the caption states below raise
+     it, and every other state leaves the capsule's own height. */
   --caption-growth: 0px;
+  /* The volume hint's band below the caption block, 0 until the hint stands.
+     The hint's own rule raises it, and every place that spends
+     `--caption-size` adds this beside it — the block and the band are two
+     stacked elements partitioning the reserved room, never one shared
+     height. */
+  --volume-hint-size: 0px;
   /* The notice band under the housing — one row for the chip naming the
      session Luke is announcing — arrives as `--notice-size` from the shared
      surface tokens, because the compact window reserves its room on top of the
@@ -486,7 +492,7 @@ button:disabled {
    reply starts and a shape grown around nothing reads as a twitch. */
 .app-stage[data-presentation="capsule"][data-caption="true"],
 .app-stage[data-presentation="peek"][data-caption="true"] {
-  --caption-growth: var(--caption-size, 28px);
+  --caption-growth: calc(var(--caption-size, 28px) + var(--volume-hint-size));
 }
 
 /* While there are words, the capsule holds the peek's width whatever the
@@ -1247,9 +1253,10 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    compact states, riding down to the panel's foot when the shape opens.
 
    The box is always the full block the window reserves; what tracks the text
-   is the clip. It springs to the same edge the surface's height does, from
-   the same `--caption-size`, so a line that wraps into existence is revealed
-   by the black arriving under it rather than being drawn on the desktop. The
+   is the clip. It springs on the same `--caption-size` the surface's height
+   does — meeting the surface's edge, or the volume hint's band when one
+   stands between them — so a line that wraps into existence is revealed by
+   the black arriving under it rather than being drawn on the desktop. The
    lift off the top edge rides in the transform rather than in `top` for the
    same reason the surface carries it there: it changes between states, and
    only a transform travels on the spring. It takes no pointer — the surface
@@ -1300,7 +1307,8 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   --caption-rest: calc(
     var(--panel-height, 520px) -
     var(--capsule-height) -
-    var(--caption-size, 28px)
+    var(--caption-size, 28px) -
+    var(--volume-hint-size)
   );
 }
 
@@ -1319,7 +1327,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    the panel is up, so the height the panel reports is already right when a
    captioned expand begins. */
 .app-stage[data-caption="true"] .expanded-panel {
-  padding-bottom: calc(18px + var(--caption-size, 28px));
+  padding-bottom: calc(18px + var(--caption-size, 28px) + var(--volume-hint-size));
 }
 
 /* The stack holds one block per response, so two responses spoken
@@ -1364,14 +1372,32 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 /* Volume hint ------------------------------------------------------------- */
 
 /* Why the words above are the only part of Luke arriving: the Mac's output is
-   muted or at zero. It sits on the caption block's bottom edge — the height
-   here mirrors VOLUME_HINT_HEIGHT in app.tsx, and the renderer adds that row
-   to `--caption-size` while the hint is drawn, so it rides inside the same
-   reserved room the caption does and the words scroll a row sooner. The
-   travel is the caption's own transform plus the block's current size, so the
-   row springs down the shape's edge exactly as the shape grows for new lines.
-   Above the hover strip (z-index 4) because it holds the one button on the
-   compact shape that is not the strip: Got it has to answer the press. */
+   muted or at zero. It stands in a band of its own directly below the caption
+   block: `--volume-hint-size` mirrors VOLUME_HINT_BAND_HEIGHT in
+   volume-hint.ts — the 22px row this element draws plus the caption's 9px
+   bottom inset, which the rule below moves under the row — and the renderer
+   takes the band off the block's maximum, so the words scroll a row sooner.
+   The block and the band partition the reserved room rather than layering in
+   it: the caption's clip ends where the band begins, so no pace of scroll can
+   reveal a line over the hint. The travel is the caption's own transform plus
+   the block's current size, so the row springs down the shape's edge exactly
+   as the shape grows for new lines. Above the hover strip (z-index 4) because
+   it holds the one button on the compact shape that is not the strip: Got it
+   has to answer the press. */
+.app-stage[data-volume-hint="true"] {
+  --volume-hint-size: 31px;
+}
+
+/* While the hint stands, the block's bottom inset belongs below the hint —
+   the hint is what meets the shape's bottom edge then. The renderer measures
+   the caption's padding off the computed style, so the words' budget follows
+   this move by measurement rather than by a restated number. */
+.app-stage[data-volume-hint="true"] .voice-caption {
+  padding-bottom: 0;
+}
+
+/* The row's height mirrors VOLUME_HINT_HEIGHT in volume-hint.ts — the two
+   must agree. */
 .volume-hint {
   position: absolute;
   z-index: 5;
@@ -1387,7 +1413,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   pointer-events: none;
   transform: translate(
     -50%,
-    calc(var(--caption-rest, 0px) - var(--shape-top, 0px) + var(--caption-size, 28px) - 31px)
+    calc(var(--caption-rest, 0px) - var(--shape-top, 0px) + var(--caption-size, 28px))
   );
   /* The transform waits out `--duration-exit` like the caption's does, so
      leaving a state the row travels with the shape rather than ahead of it. */
@@ -1459,7 +1485,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    its own below. Stated after the single-band rules so it wins their tie. */
 .app-stage[data-presentation="capsule"][data-caption="true"][data-notice="true"],
 .app-stage[data-presentation="peek"][data-caption="true"][data-notice="true"] {
-  --caption-growth: calc(var(--caption-size, 28px) + var(--notice-size));
+  --caption-growth: calc(var(--caption-size, 28px) + var(--volume-hint-size) + var(--notice-size));
 }
 
 /* While a notice stands, the capsule holds the peek's width, exactly as the
@@ -1558,6 +1584,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
     var(--panel-height, 520px) -
     var(--capsule-height) -
     var(--caption-size, 28px) -
+    var(--volume-hint-size) -
     var(--notice-size)
   );
 }
@@ -1582,7 +1609,12 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 }
 
 .app-stage[data-caption="true"][data-notice="true"] .expanded-panel {
-  padding-bottom: calc(18px + var(--caption-size, 28px) + var(--notice-size));
+  padding-bottom: calc(
+    18px +
+    var(--caption-size, 28px) +
+    var(--volume-hint-size) +
+    var(--notice-size)
+  );
 }
 
 .session-notice:hover {

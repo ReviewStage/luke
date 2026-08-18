@@ -42,8 +42,8 @@ capture_evidence slot --expanded --slot --capture-evidence "$SIDECAR_SLOT_EVIDEN
 # peek is the narrowest state that shows both, which is what has to be checked.
 capture_evidence speaking --profile speaking --compact --peek --capture-evidence "$SIDECAR_SPEAKING_EVIDENCE_PATH"
 # The speaking run with the Mac's output off: the captions are forced on and
-# the volume hint sits on the caption block's bottom edge with its Got it
-# button. The state is the profile's own — a capture run reads no system
+# the volume hint stands in its own band below the caption block with its Got
+# it button. The state is the profile's own — a capture run reads no system
 # volume — so the frame is deterministic like every other.
 capture_evidence muted --profile muted --compact --peek --capture-evidence "$SIDECAR_MUTED_EVIDENCE_PATH"
 
