@@ -156,8 +156,8 @@ const smokeFixture: FixtureSnapshot = {
     },
     // A fifth session keeps every state and every provider mark visible in the
     // one screenshot the visual evidence is reviewed from. It is also one more
-    // provider than the wings hold now that the face has the place nearest the
-    // housing, so the same screenshot proves the remainder is counted rather
+    // provider than the wings hold — the face has the place nearest the
+    // housing — so the same screenshot proves the remainder is counted rather
     // than dropped. Reporting a repository and no branch, it is also the row
     // that shows the identifier line falling back.
     {

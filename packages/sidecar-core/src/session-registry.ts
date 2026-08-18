@@ -40,9 +40,9 @@ function copySession(session: NormalizedSession): NormalizedSession {
  * over `T` on purpose: a new field does not compile until someone decides how
  * it compares.
  *
- * Comparators are collected once at module load, then walked with the same
- * short-circuit as the old `&&` chain, so `#commit` still does one field
- * compare per key rather than serializing the session on every observation.
+ * Comparators are collected once at module load, then walked with an `&&`
+ * chain's short-circuit, so `#commit` does one field compare per key rather
+ * than serializing the session on every observation.
  */
 function exhaustiveSame<T extends object>(
   equality: Record<keyof T, (first: T, second: T) => boolean>,

@@ -67,7 +67,7 @@ export function currentQuota(quota: HostedQuota | undefined, now: number): Hoste
 
 /**
  * How a meter reads at a glance: running, getting close, or gone. Three
- * states rather than the two a spent flag carried, because a ceiling nobody
+ * states rather than a spent-or-not flag's two, because a ceiling nobody
  * saw coming is the one thing a meter exists to prevent — the warning has to
  * arrive while there is still something left to spend differently.
  */
@@ -188,7 +188,7 @@ export function hostedVoiceNote(
     diagnostics?.lastOutcome === REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED &&
     (diagnostics.quota === undefined || currentQuota(diagnostics.quota, now) !== undefined);
   if (spentStands) return hostedVoiceSpentNote();
-  // What a key of your own would change is not said here any more: the toggle
+  // What a key of your own would change is not said here: the toggle
   // above draws both sources side by side, with what each costs on its face,
   // and a sentence repeating one of them would be selling the other.
   return "Talking and session checks are included free with your account, up to a daily amount.";

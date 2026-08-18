@@ -575,7 +575,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   }, []);
 
   // Voice arriving and voice going away. It is not read from bootstrap, because
-  // it is no longer only true of a launch: a key entered in the panel turns a
+  // it is not only true of a launch: a key entered in the panel turns a
   // session that reported itself unavailable into one that can connect, without a
   // relaunch — and deleting that key has to close whatever call is open rather
   // than leave a live microphone answering a talk key the main process has
@@ -733,7 +733,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       // Luke's own speak-only call cannot carry a typed ask — it was sent no
       // roster to validate one against — so it counts as no call here, and
       // `connect` inside stands it down for the developer's own. A microphone
-      // call still connecting is awaited exactly as before.
+      // call still connecting is awaited, not doubled.
       if (!session.isConnected || !session.microphoneCall) {
         microphone = await startMicrophone();
       }

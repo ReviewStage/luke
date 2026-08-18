@@ -11,10 +11,9 @@
  *
  * Option-Space is where a macOS user reaches for a voice assistant —
  * Superwhisper, the ChatGPT desktop app and Alfred all sit there. It stands
- * alone: Option-S used to be its fallback, and was given to the stop key
- * instead — S is for stop, and a talk key that sometimes lands on the stop
- * key's chord would make which key does what depend on what else is
- * installed.
+ * alone, with no fallback chord: S is for stop, and a talk key that sometimes
+ * lands on the stop key's chord would make which key does what depend on what
+ * else is installed.
  */
 export const DEFAULT_VOICE_HOTKEYS: readonly string[] = ["Alt+Space"];
 

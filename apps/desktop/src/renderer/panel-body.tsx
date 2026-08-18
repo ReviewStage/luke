@@ -150,7 +150,7 @@ function SessionRowActions({
 }: {
   session: DisplaySession;
   /** The actions this row draws itself: inside a tray, the workspace-level
-   * ones have moved to the tray's own header. */
+   * ones live in the tray's own header. */
   actions: readonly SessionAction[];
   writes: SessionWriteHandlers;
 }): React.JSX.Element {

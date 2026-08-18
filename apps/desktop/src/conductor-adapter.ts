@@ -621,12 +621,10 @@ export class ConductorSessionAdapter
       if (!settled) settledWorkspaceIds.delete(session.workspace.id);
     });
 
-    // One row per chat, each grouped under its workspace. Two chats used to
-    // collapse into one row because their generated names drew as identical
-    // lines — but the workspace grouping now names the group once, which
-    // leaves each chat free to say what it alone is doing, be opened where it
-    // alone lives, and take the message meant for it rather than for whichever
-    // sibling most needed a person.
+    // One row per chat, each grouped under its workspace. The grouping names
+    // the workspace once, which leaves each chat free to say what it alone is
+    // doing, be opened where it alone lives, and take the message meant for it
+    // rather than for whichever sibling most needed a person.
     return sessions
       .map((session, index) =>
         this.#observationFor(
@@ -733,8 +731,8 @@ export class ConductorSessionAdapter
         }
         const model = modelLabel(record);
         const deepLink = textFromRecord(record, CONDUCTOR_FIELD.DEEP_LINK);
-        // The chat's own name tells it from its siblings now that every chat
-        // is a row of its own; the workspace's name moved to the group.
+        // The chat's own name tells it from its siblings; the workspace's
+        // name belongs to the group.
         const name = textFromRecord(record, CONDUCTOR_FIELD.NAME)?.slice(
           0,
           maximumSessionTitleLength,
@@ -935,8 +933,7 @@ export class ConductorSessionAdapter
       sessionId,
       CONDUCTOR_ROUTE_SEGMENT.STATUS,
     ]);
-    // A session that failed says why, and dropping that left the panel showing
-    // a failed chat as though nothing had happened to it. `lastError` is the
+    // A session that failed says why. `lastError` is the
     // last failure this session ever had rather than its current state, so both
     // are read only while the session is actually reporting an error: otherwise
     // a chat that recovered hours ago would keep showing the failure it

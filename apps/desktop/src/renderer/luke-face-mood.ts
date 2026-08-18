@@ -195,8 +195,8 @@ const IDLE_ASIDES: readonly WeightedAside[] = [
 
 /**
  * The sway is the one gesture in the pool that means something, so it is in the
- * pool only while what it means is true. It is how work still reads on the face
- * now that nothing rocks for as long as work runs: often enough to notice that
+ * pool only while what it means is true. It is how work reads on a face that
+ * plays no continuous motion while work runs: often enough to notice that
  * something is happening, seldom enough that the face is mostly still.
  */
 const WORKING_ASIDE: WeightedAside = { motion: FACE_MOTION.MONITORING, weight: 18 };

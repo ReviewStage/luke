@@ -200,7 +200,7 @@ test("the numberless note stays short, and withholds the key from a machine that
   // What a key of the developer's own would change is the toggle's to say,
   // drawn directly above with the price on its face. A sentence here repeating
   // it would be the panel selling one half of a choice it is already showing
-  // whole — and it was worded for a key row that no longer stands alone.
+  // whole.
   assert.doesNotMatch(hostedVoiceNote(undefined), /OpenAI/);
 
   // Only the minter's last outcome can speak here — a spent allowance is a

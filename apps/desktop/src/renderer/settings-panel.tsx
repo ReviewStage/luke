@@ -1682,7 +1682,7 @@ function VoiceSection({
   });
   return (
     <>
-      {/* The key row lives with the account on the front page now — voice's
+      {/* The key row lives with the account on the front page — voice's
           two ways in stand together there. This page holds what voice does
           once it runs; while it cannot run, the one section says where to
           turn it on rather than drawing settings for a feature two steps

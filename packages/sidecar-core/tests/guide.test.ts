@@ -144,7 +144,7 @@ test("the standing instructions promise the guide the context actually delivers"
   const instructions = realtimeInstructions();
   assert.match(instructions, /\[app guide\]/);
   assert.match(instructions, /change_app_setting/);
-  // The guide now carries each setting's default, and the instructions must
+  // The guide carries each setting's default, and the instructions must
   // say what it is for: an ask for the default is a change to that value.
   assert.match(instructions, /its current value, its default/);
   assert.match(instructions, /a change to the default the guide lists/);

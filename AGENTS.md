@@ -425,6 +425,28 @@ Rules the guide must keep:
   whether a provider is connected. The guide leaves the machine, so nothing in
   it may carry a key, a key's shape, or an environment variable's value.
 
+## Code comments
+
+No unnecessary comments. Make the code obvious and immediately understandable
+on its own — prefer explicit over clever — and let a comment carry only what
+the code cannot: a constraint, a boundary, or the reason the obvious
+alternative is wrong. The rationale prose already throughout this repository is
+the bar; a comment that meets it earns its line, and one that does not is
+noise.
+
+- Never narrate. A comment that restates the adjacent code — what the next
+  line does, what a function is named, what a parameter takes — repeats what
+  the reader can already see. Delete it, or make the code say what it was
+  trying to say.
+- Describe the code as it stands, never the edit that produced it. A comment
+  about what moved, what it replaced, or why the change is correct is
+  addressed to a reviewer and goes stale the moment it lands; that story
+  belongs in the commit message.
+- No commented-out code. Delete it; history keeps it.
+- A comment the toolchain demands must still explain: a `biome-ignore` states
+  why the rule is wrong at that line, and a `SETTING_GUIDE` entry returning
+  `undefined` states how the guide covers the setting instead.
+
 ## TypeScript value sets and keys
 
 - Do not use stringly typed fixed value sets. Define `as const`

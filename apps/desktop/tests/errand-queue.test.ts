@@ -91,8 +91,8 @@ test("a second act waits its turn rather than taking the first out of the air", 
   assert.equal(armed.launch, first);
   assert.equal(armed.run.flying, first);
 
-  // The whole of the fix: while one is out, nothing else is handed to the
-  // flight. A second errand handed over here re-identifies the one in the air,
+  // While one is out, nothing else is handed to the flight. A second errand
+  // handed over here re-identifies the one in the air,
   // which ends it before it has left the strip.
   const overtaking = nextErrand(armed.run);
   assert.equal(overtaking.launch, undefined);

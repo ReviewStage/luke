@@ -337,7 +337,7 @@ export function NotchMock(): React.JSX.Element {
   return (
     <div className="mock-scroll" ref={scrollSection}>
       <div className="mock-pin" ref={pin}>
-        {/* One labelled image, like the old mock: nothing inside is a control,
+        {/* One labelled image: nothing inside is a control,
             so the whole recreation reads as a single illustration. The hidden
             stage stays inert so find-in-page cannot match invisible titles and
             a drag cannot select text nobody can see. */}
