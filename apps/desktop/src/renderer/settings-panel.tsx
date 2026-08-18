@@ -2418,10 +2418,7 @@ function AccountSection({
       <div className="settings-row">
         <span className="settings-copy">
           <strong>Delete account</strong>
-          <small>
-            Erases your account and everything Luke's service holds for it. Keys and settings on
-            this Mac stay until cleared here.
-          </small>
+          <small>Erases your account and everything Luke's service holds for it.</small>
         </span>
         <span className="credential-actions">
           <span
