@@ -97,13 +97,14 @@ Luke never modifies the running app.
   session is labelled by the folder it runs in, which Luke reads from Cursor's
   own record of that folder, not from the chat's generated name.
 - For Orca, Luke opens the one state file Orca persists itself into, read-only,
-  and reads the fields that identify its workspaces and agent sessions:
-  repository names, workspace names, unread flags and activity times, terminal
-  tab titles, which coding agent each tab runs, and a linked pull request's
-  address. The terminal scrollback snapshots stored in that same file are
-  transcript content and are never read, the worktree folders the file names
-  are never opened, and Orca's live agent status never reaches disk at all —
-  so Luke reports what the file honestly holds and no more.
+  and reads only what identifies the worktrees Orca manages: their paths, the
+  name Orca gave each workspace, and a linked pull or merge request's address.
+  Orca gets no sessions of its own — the agents it launches are the same
+  Claude Code, Codex, OpenCode, and Cursor sessions observed above — so these
+  fields only annotate those sessions, matched by the directory each runs in.
+  The terminal scrollback snapshots stored in that same file are transcript
+  content and are never read, and the worktree folders the file names are
+  never opened.
 
 Luke processes bounded fields needed to identify and display a session:
 provider and session identifiers, provider-generated titles, the workspace

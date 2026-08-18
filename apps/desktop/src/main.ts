@@ -126,7 +126,7 @@ import {
 } from "./openai-realtime-credentials";
 import { OpenCodeSessionAdapter } from "./opencode-adapter";
 import { readOpenCodeSessionTranscript } from "./opencode-transcript";
-import { OrcaSessionAdapter } from "./orca-adapter";
+import { OrcaWorkspaceIndex } from "./orca-workspaces";
 import { OutputVolumeWatcher } from "./output-volume";
 import { PanelManager } from "./panel-manager";
 import type { RealtimeCredentialMinter } from "./realtime-minter";
@@ -252,10 +252,18 @@ const copilotAdapter = new CopilotSessionAdapter({
 // in its cloud, which needs a key. They are one provider wherever they ran, so
 // they are observed as one adapter — a provider's sessions are replaced in a
 // single commit, and two adapters sharing an id would retire each other's.
+// Orca manages agents in git worktrees, and the agents it launches are the
+// same Claude Code, Codex, OpenCode, and Cursor sessions the adapters below
+// already observe from their own files. So Orca is not an adapter: it is the
+// workspace context those adapters wear — the worktree Orca created, the name
+// it gave the work, the pull request it linked — read from Orca's own state
+// file and matched to each session by the directory it runs in.
+const orcaWorkspaces = new OrcaWorkspaceIndex();
+const orcaWorkspaceAnnotations = () => orcaWorkspaces.annotations();
 const cursorAdapter = new CompositeSessionProviderAdapter({
   provider: CURSOR_PROVIDER,
   adapters: [
-    new CursorLocalSessionAdapter(),
+    new CursorLocalSessionAdapter({ workspaceAnnotations: orcaWorkspaceAnnotations }),
     new CursorSessionAdapter({
       readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.CURSOR),
     }),
@@ -303,17 +311,18 @@ function codexHookInstallation(): CodexHookInstallation {
 const sessionAdapters = [
   new ClaudeCodeSessionAdapter({
     hookEventsDirectory: () => claudeHookInstallation().spoolDirectory,
+    workspaceAnnotations: orcaWorkspaceAnnotations,
   }),
   new CodexSessionAdapter({
     hookEventsDirectory: () => codexHookInstallation().spoolDirectory,
+    workspaceAnnotations: orcaWorkspaceAnnotations,
   }),
   conductorAdapter,
   copilotAdapter,
   cursorAdapter,
   devinAdapter,
   julesAdapter,
-  new OpenCodeSessionAdapter(),
-  new OrcaSessionAdapter(),
+  new OpenCodeSessionAdapter({ workspaceAnnotations: orcaWorkspaceAnnotations }),
 ] as const;
 // The issue tracker is not a session provider: its issues feed the voice
 // roster rather than the registry, so it stands beside the adapters rather

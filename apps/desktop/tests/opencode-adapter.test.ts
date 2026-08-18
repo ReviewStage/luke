@@ -833,3 +833,41 @@ test("returns an empty snapshot when OpenCode has no local state", async (t) => 
 
   assert.deepEqual(await adapter.observe(), []);
 });
+
+test("wears a manager's workspace and its linked pull request", async (t) => {
+  const dataDirectory = await temporaryDataDirectory(t);
+  const worktree = "/Users/test/orca/workspaces/checkout/fix-login";
+  await writeOpenCodeState(dataDirectory, [
+    {
+      id: "session-annotated",
+      directory: worktree,
+      observedAt: TEST_TIME - 1_000,
+      title: "Fix the login redirect",
+    },
+    {
+      id: "session-elsewhere",
+      directory: "/Users/test/luke",
+      observedAt: TEST_TIME - 1_000,
+      title: "Unrelated work",
+    },
+  ]);
+
+  const annotation = {
+    workspace: { providerWorkspaceId: worktree, name: "Fix login flow" },
+    change: "https://github.com/example/checkout/pull/42",
+  };
+  const adapter = new OpenCodeSessionAdapter({
+    dataDirectory,
+    now: () => TEST_TIME,
+    workspaceAnnotations: async () => (directory) =>
+      directory === worktree ? annotation : undefined,
+  });
+  const observations = await adapter.observe();
+  const annotated = observations.find((o) => o.providerSessionId === "session-annotated");
+  const elsewhere = observations.find((o) => o.providerSessionId === "session-elsewhere");
+
+  assert.deepEqual(annotated?.workspace, annotation.workspace);
+  assert.equal(annotated?.detail?.change, annotation.change);
+  assert.equal(elsewhere?.workspace, undefined);
+  assert.equal(elsewhere?.detail?.change, undefined);
+});

@@ -13,7 +13,6 @@ import {
   OPENAI_PATH,
   OPENCODE_BLOCK_PATH,
   OPENCODE_FRAME_PATH,
-  ORCA_PATH,
   PROVIDER_ID,
 } from "@sidecar/core";
 import { useId } from "react";
@@ -42,14 +41,11 @@ import { GOOGLE_CALENDAR_ID } from "../shared/google-calendar";
  * https://developers.google.com/calendar), Jules via Simple Icons (CC0-1.0, sourced from
  * https://jules.google), OpenAI via Simple Icons (CC0-1.0), Linear via Simple Icons (CC0-1.0, sourced from
  * https://linear.app), OpenCode's two-tone terminal mark verbatim from
- * the favicon https://opencode.ai serves, and Orca's leaping-orca mark
- * verbatim from the `resources/logo.svg` its own repository ships
- * (https://github.com/stablyai/orca, MIT), with only the file's translate
- * flattened into the path. Each keeps its own brand colour
+ * the favicon https://opencode.ai serves. Each keeps its own brand colour
  * (see the `--mark-*` custom properties), so a mark says which provider a
  * session belongs to while the chips and row tints say what state it is in.
- * Copilot, Cursor, Devin, and Orca each publish one silhouette rather than a
- * colour, so all four are drawn in the light form their brand uses on a dark
+ * Copilot, Cursor, and Devin each publish one silhouette rather than a
+ * colour, so all three are drawn in the light form their brand uses on a dark
  * surface. They are trademarks of their respective owners. Do not restyle the
  * geometry or recolour them; swap the path in the generator if a provider
  * publishes an updated mark.
@@ -249,22 +245,6 @@ function OpenCodeMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-function OrcaMark({ className }: MarkProps): React.JSX.Element {
-  /* Orca's logo is wider than it is tall, so like Conductor's letter mark the
-     box keeps the artwork's own proportions and the glyph fits by width. */
-  return (
-    <svg
-      className={className}
-      data-mark={PROVIDER_ID.ORCA}
-      viewBox="0 0 318.61 202.67"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path fill="currentColor" d={ORCA_PATH} />
-    </svg>
-  );
-}
-
 /** Drawn here, not a brand: a provider Luke has no mark for still needs a slot. */
 function UnknownProviderMark({ className }: MarkProps): React.JSX.Element {
   return (
@@ -287,7 +267,6 @@ const PROVIDER_MARKS = new Map<string, (props: MarkProps) => React.JSX.Element>(
   [ISSUE_TRACKER_ID.LINEAR, LinearMark],
   [CREDENTIAL_PROVIDER_ID.OPENAI, OpenAiMark],
   [PROVIDER_ID.OPENCODE, OpenCodeMark],
-  [PROVIDER_ID.ORCA, OrcaMark],
 ]);
 
 export function ProviderMark({

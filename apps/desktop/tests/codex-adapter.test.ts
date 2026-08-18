@@ -1062,3 +1062,41 @@ test("a permission hold that outlives the freshness window never reads as work",
 
   assert.equal(observation?.status, SESSION_STATUS.UNKNOWN);
 });
+
+test("wears a manager's workspace and its linked pull request", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const worktree = "/Users/test/orca/workspaces/checkout/fix-login";
+  await writeCodexState(codexHome, [
+    {
+      id: "codex-annotated",
+      cwd: worktree,
+      observedAt: TEST_TIME - 1_000,
+      title: "Fix the login redirect",
+    },
+    {
+      id: "codex-elsewhere",
+      cwd: "/Users/test/luke",
+      observedAt: TEST_TIME - 1_000,
+      title: "Unrelated work",
+    },
+  ]);
+
+  const annotation = {
+    workspace: { providerWorkspaceId: worktree, name: "Fix login flow" },
+    change: "https://github.com/example/checkout/pull/42",
+  };
+  const adapter = new CodexSessionAdapter({
+    codexHome,
+    now: () => TEST_TIME,
+    workspaceAnnotations: async () => (directory) =>
+      directory === worktree ? annotation : undefined,
+  });
+  const observations = await adapter.observe();
+  const annotated = observations.find((o) => o.providerSessionId === "codex-annotated");
+  const elsewhere = observations.find((o) => o.providerSessionId === "codex-elsewhere");
+
+  assert.deepEqual(annotated?.workspace, annotation.workspace);
+  assert.equal(annotated?.detail?.change, annotation.change);
+  assert.equal(elsewhere?.workspace, undefined);
+  assert.equal(elsewhere?.detail?.change, undefined);
+});

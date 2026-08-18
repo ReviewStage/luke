@@ -1,7 +1,7 @@
 import type { Dirent, Stats } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { recordFromJsonLine, UNKNOWN_WORKSPACE_LABEL } from "@sidecar/core";
+import { recordFromJsonLine, type SessionWorkspace, UNKNOWN_WORKSPACE_LABEL } from "@sidecar/core";
 
 /**
  * The shared half of every adapter that observes sessions on this machine:
@@ -13,6 +13,33 @@ import { recordFromJsonLine, UNKNOWN_WORKSPACE_LABEL } from "@sidecar/core";
 export const LOCAL_ADAPTER_DEFAULTS = {
   READ_TAIL_BYTES: 64 * 1024,
 } as const;
+
+/**
+ * What a workspace manager on this machine knows about the place a session
+ * runs: the workspace it groups the work under, and the pull request it links
+ * the work to. An annotation adds context around a row another adapter already
+ * observes — it is identity, never status, and it never makes a row of its own.
+ * Each field stands alone, and the session's own provider always wins: an
+ * annotation fills what the observation left empty and never overwrites it.
+ */
+export interface WorkspaceAnnotation {
+  workspace?: SessionWorkspace;
+  /** The published address the manager links the workspace to, when one is linked. */
+  change?: string;
+}
+
+/** Answers, for one session's working directory, the workspace around it. */
+export type WorkspaceAnnotationLookup = (
+  directory: string | undefined,
+) => WorkspaceAnnotation | undefined;
+
+/**
+ * How an adapter is handed manager context: asked once per observation pass,
+ * so the source pays one freshness check however many sessions the pass
+ * reports. An adapter without one, or a lookup that answers nothing, reports
+ * exactly what it did before annotations existed.
+ */
+export type WorkspaceAnnotationSource = () => Promise<WorkspaceAnnotationLookup>;
 
 export interface DirectoryEntry {
   directoryPath: string;

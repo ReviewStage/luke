@@ -26,6 +26,8 @@ import {
   type SessionFileCandidate,
   statDirectoryEntry,
   uniquePaths,
+  type WorkspaceAnnotation,
+  type WorkspaceAnnotationSource,
   workspaceLabel,
 } from "./local-session-adapter";
 import {
@@ -187,6 +189,13 @@ export interface OpenCodeAdapterOptions {
   now?: () => number;
   activeSessionFreshnessMs?: number;
   sqlite?: SqliteModuleLoader;
+  /**
+   * The workspace context a manager on this machine keeps around sessions,
+   * matched by working directory. A refinement, never a dependency: absent —
+   * or answering nothing — the adapter reports exactly what OpenCode's own
+   * state says.
+   */
+  workspaceAnnotations?: WorkspaceAnnotationSource;
 }
 
 /**
@@ -328,13 +337,19 @@ function activityFromPartRows(rows: readonly OpenCodeRow[]): string | undefined 
  * The share page is the one address OpenCode publishes that names this exact
  * session, and only a session its own user chose to share carries one.
  */
-function detailFromSnapshot(snapshot: OpenCodeSessionSnapshot): SessionDetail {
+function detailFromSnapshot(
+  snapshot: OpenCodeSessionSnapshot,
+  annotation?: WorkspaceAnnotation,
+): SessionDetail {
   return {
     ...(snapshot.activity ? { activity: snapshot.activity } : {}),
     repository: workspaceLabel(snapshot.directory),
     ...(snapshot.model ? { model: snapshot.model } : {}),
     ...(snapshot.turn?.failure ? { error: snapshot.turn.failure } : {}),
     ...(snapshot.shareUrl ? { link: snapshot.shareUrl } : {}),
+    // OpenCode records no pull request of its own, so the one the session's
+    // workspace manager linked is the only address the work has.
+    ...(annotation?.change ? { change: annotation.change } : {}),
   };
 }
 
@@ -342,13 +357,15 @@ function observationFromSnapshot(
   snapshot: OpenCodeSessionSnapshot,
   now: number,
   activeSessionFreshnessMs: number,
+  annotation?: WorkspaceAnnotation,
 ): ProviderSessionObservation {
   return {
     providerSessionId: snapshot.providerSessionId,
     title: sessionTitle(snapshot.title, snapshot.directory),
     status: statusFromTurn(snapshot.turn, snapshot.observedAt, now, activeSessionFreshnessMs),
     observedAt: snapshot.observedAt,
-    detail: detailFromSnapshot(snapshot),
+    detail: detailFromSnapshot(snapshot, annotation),
+    ...(annotation?.workspace ? { workspace: annotation.workspace } : {}),
   };
 }
 
@@ -464,6 +481,7 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
     string,
     { filePath: string; mtimeMs: number; turn: OpenCodeTurn | undefined }
   >();
+  readonly #workspaceAnnotations: WorkspaceAnnotationSource | undefined;
 
   constructor(options: OpenCodeAdapterOptions = {}) {
     this.#dataDirectory = options.dataDirectory ?? defaultOpenCodeDataDirectory();
@@ -479,6 +497,7 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
     );
     this.#activeSessionFreshnessMs = resolved.activeSessionFreshnessMs;
     this.#sqlite = options.sqlite ?? defaultSqliteModule;
+    this.#workspaceAnnotations = options.workspaceAnnotations;
   }
 
   async observe(): Promise<readonly ProviderSessionObservation[]> {
@@ -496,8 +515,17 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
       // A database whose schema was unusable answers nothing; the next
       // candidate, or the legacy files, may still answer.
       if (snapshots === undefined) continue;
+      // Resolved with the database already closed, and a refinement either
+      // way: a source that is absent or fails to read costs the context, not
+      // the pass.
+      const annotationFor = await this.#workspaceAnnotations?.().catch(() => undefined);
       return snapshots.map((snapshot) =>
-        observationFromSnapshot(snapshot, now, this.#activeSessionFreshnessMs),
+        observationFromSnapshot(
+          snapshot,
+          now,
+          this.#activeSessionFreshnessMs,
+          annotationFor?.(snapshot.directory),
+        ),
       );
     }
     return this.#legacyObservations();
@@ -577,6 +605,7 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
 
   async #legacyObservations(): Promise<readonly ProviderSessionObservation[]> {
     const now = this.#now();
+    const annotationFor = await this.#workspaceAnnotations?.().catch(() => undefined);
     const storageDirectory = path.join(this.#dataDirectory, OPENCODE_STORAGE_DIRECTORY);
     const candidates = await discoverSessionFiles({
       projectsDirectory: path.join(storageDirectory, OPENCODE_STORAGE_SEGMENT.SESSION),
@@ -611,7 +640,12 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
       snapshot.turn = await this.#legacyTurn(storageDirectory, candidate.providerSessionId);
       observations.set(
         candidate.providerSessionId,
-        observationFromSnapshot(snapshot, now, this.#activeSessionFreshnessMs),
+        observationFromSnapshot(
+          snapshot,
+          now,
+          this.#activeSessionFreshnessMs,
+          annotationFor?.(snapshot.directory),
+        ),
       );
     }
 

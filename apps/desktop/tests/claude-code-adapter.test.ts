@@ -1286,3 +1286,88 @@ test("a notification the transcript has answered stands down at once", async (t)
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
 });
+
+test("wears a manager's workspace and keeps its own pull request over the linked one", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  const worktree = "/Users/test/orca/workspaces/checkout/fix-login";
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-orca-workspaces-checkout-fix-login",
+    "session-own-pr",
+    [
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
+        cwd: worktree,
+        timestamp: "2026-08-11T23:44:55.000Z",
+        message: { content: SECRET_TRANSCRIPT_TEXT },
+      },
+      { type: "pr-link", prUrl: "https://github.com/example/checkout/pull/7" },
+    ],
+    TEST_TIME - 2_000,
+  );
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-orca-workspaces-checkout-fix-login",
+    "session-no-pr",
+    [
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
+        cwd: worktree,
+        timestamp: "2026-08-11T23:44:56.000Z",
+        message: { content: SECRET_TRANSCRIPT_TEXT },
+      },
+    ],
+    TEST_TIME - 1_000,
+  );
+
+  const annotation = {
+    workspace: { providerWorkspaceId: worktree, name: "Fix login flow" },
+    change: "https://github.com/example/checkout/pull/42",
+  };
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    now: () => TEST_TIME,
+    workspaceAnnotations: async () => (directory) =>
+      directory === worktree ? annotation : undefined,
+  });
+  const observations = await adapter.observe();
+  const withOwnPr = observations.find((o) => o.providerSessionId === "session-own-pr");
+  const withoutPr = observations.find((o) => o.providerSessionId === "session-no-pr");
+
+  assert.deepEqual(withOwnPr?.workspace, annotation.workspace);
+  assert.deepEqual(withoutPr?.workspace, annotation.workspace);
+  // The transcript's own pull request is about this conversation; the linked
+  // one is about the worktree around it, and fills in only where the
+  // transcript says nothing.
+  assert.equal(withOwnPr?.detail?.change, "https://github.com/example/checkout/pull/7");
+  assert.equal(withoutPr?.detail?.change, "https://github.com/example/checkout/pull/42");
+});
+
+test("a workspace annotation source that fails costs the context, not the pass", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-luke",
+    "session-unannotated",
+    [
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:44:55.000Z",
+        message: { content: SECRET_TRANSCRIPT_TEXT },
+      },
+    ],
+    TEST_TIME - 1_000,
+  );
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    now: () => TEST_TIME,
+    workspaceAnnotations: async () => {
+      throw new Error("annotation source unavailable");
+    },
+  });
+  const observations = await adapter.observe();
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.workspace, undefined);
+});

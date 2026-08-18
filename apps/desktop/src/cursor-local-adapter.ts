@@ -23,6 +23,8 @@ import {
   readTextFile,
   type SessionFileCandidate,
   tailRecords,
+  type WorkspaceAnnotationLookup,
+  type WorkspaceAnnotationSource,
   workspaceLabel,
 } from "./local-session-adapter";
 
@@ -89,6 +91,13 @@ export interface CursorLocalAdapterOptions {
   maximumProjectDirectories?: number;
   activeSessionFreshnessMs?: number;
   readTailBytes?: number;
+  /**
+   * The workspace context a manager on this machine keeps around sessions,
+   * matched by the folder Cursor recorded for the session's project. A
+   * refinement, never a dependency: absent — or answering nothing — the
+   * adapter reports exactly what Cursor's own state says.
+   */
+  workspaceAnnotations?: WorkspaceAnnotationSource;
 }
 
 interface CursorTranscriptCandidate extends SessionFileCandidate {
@@ -141,7 +150,8 @@ function folderPathFromWorkspaceRecord(source: string): string | undefined {
  */
 class CursorWorkspaceLabels {
   readonly #directory: string;
-  readonly #labelsByProjectName = new Map<string, string | undefined>();
+  /** An empty entry is a poisoned one: two folders reduced alike, name neither. */
+  readonly #foldersByProjectName = new Map<string, { label?: string; folderPath?: string }>();
   readonly #readWorkspaceRecords = new Set<string>();
 
   constructor(directory: string) {
@@ -156,7 +166,7 @@ class CursorWorkspaceLabels {
   async resolve(projectDirectoryNames: readonly string[]): Promise<void> {
     if (
       projectDirectoryNames.every((name) =>
-        this.#labelsByProjectName.has(canonicalProjectName(name)),
+        this.#foldersByProjectName.has(canonicalProjectName(name)),
       )
     ) {
       return;
@@ -174,23 +184,34 @@ class CursorWorkspaceLabels {
 
   label(projectDirectoryName: string): string {
     return (
-      this.#labelsByProjectName.get(canonicalProjectName(projectDirectoryName)) ??
+      this.#foldersByProjectName.get(canonicalProjectName(projectDirectoryName))?.label ??
       UNKNOWN_WORKSPACE_LABEL
     );
   }
 
+  /** The folder itself, for matching against a workspace manager's worktrees. */
+  folderPath(projectDirectoryName: string): string | undefined {
+    return this.#foldersByProjectName.get(canonicalProjectName(projectDirectoryName))?.folderPath;
+  }
+
   #record(folderPath: string): void {
     const projectName = canonicalProjectName(folderPath);
-    const label = workspaceLabel(folderPath);
-    if (!this.#labelsByProjectName.has(projectName)) {
-      this.#labelsByProjectName.set(projectName, label);
+    const existing = this.#foldersByProjectName.get(projectName);
+    if (!existing) {
+      this.#foldersByProjectName.set(projectName, {
+        label: workspaceLabel(folderPath),
+        folderPath,
+      });
       return;
     }
-    // Two folders can reduce to one project name. When they disagree about
-    // what to call it, Luke names neither.
-    if (this.#labelsByProjectName.get(projectName) !== label) {
-      this.#labelsByProjectName.set(projectName, undefined);
-    }
+    // Two folders can reduce to one project name. Whatever the two disagree
+    // about, Luke keeps neither side's answer — field by field, because two
+    // folders that share a basename still agree on what to call the project
+    // while agreeing on nothing about where it is.
+    this.#foldersByProjectName.set(projectName, {
+      ...(existing.label === workspaceLabel(folderPath) ? { label: existing.label } : {}),
+      ...(existing.folderPath === folderPath ? { folderPath } : {}),
+    });
   }
 }
 
@@ -307,6 +328,7 @@ export class CursorLocalSessionAdapter implements SessionProviderAdapter {
 
   readonly #cursorHome: string;
   readonly #workspaceLabels: CursorWorkspaceLabels;
+  readonly #workspaceAnnotations: WorkspaceAnnotationSource | undefined;
   readonly #now: () => number;
   readonly #maximumProjectDirectories: number;
   readonly #activeSessionFreshnessMs: number;
@@ -327,6 +349,7 @@ export class CursorLocalSessionAdapter implements SessionProviderAdapter {
     this.#workspaceLabels = new CursorWorkspaceLabels(
       options.workspaceStorageDirectory ?? defaultWorkspaceStorageDirectory(),
     );
+    this.#workspaceAnnotations = options.workspaceAnnotations;
     this.#now = options.now ?? Date.now;
     const resolved = resolveOptions(
       options,
@@ -357,11 +380,17 @@ export class CursorLocalSessionAdapter implements SessionProviderAdapter {
     await this.#workspaceLabels.resolve(
       candidates.map((candidate) => candidate.projectDirectoryName),
     );
+    // A refinement like the labels themselves: a source that is absent or
+    // fails to read costs the context, not the pass.
+    const annotationFor = await this.#workspaceAnnotations?.().catch(() => undefined);
 
     const observations = new Map<string, ProviderSessionObservation>();
     for (const candidate of candidates) {
       if (observations.has(candidate.providerSessionId)) continue;
-      observations.set(candidate.providerSessionId, await this.#observationFor(candidate, now));
+      observations.set(
+        candidate.providerSessionId,
+        await this.#observationFor(candidate, now, annotationFor),
+      );
     }
 
     // A file no longer discovered was deleted, so its parse must not outlive it.
@@ -392,6 +421,7 @@ export class CursorLocalSessionAdapter implements SessionProviderAdapter {
   async #observationFor(
     candidate: CursorTranscriptCandidate,
     now: number,
+    annotationFor?: WorkspaceAnnotationLookup,
   ): Promise<ProviderSessionObservation> {
     const label = this.#workspaceLabels.label(candidate.projectDirectoryName);
     const status = statusFromTurn(
@@ -400,6 +430,10 @@ export class CursorLocalSessionAdapter implements SessionProviderAdapter {
       now,
       this.#activeSessionFreshnessMs,
     );
+    const annotation = annotationFor?.(
+      this.#workspaceLabels.folderPath(candidate.projectDirectoryName),
+    );
+    const detail = detailFor(label, status);
     return {
       providerSessionId: candidate.providerSessionId,
       title: label,
@@ -408,7 +442,10 @@ export class CursorLocalSessionAdapter implements SessionProviderAdapter {
       // written is the only account Cursor keeps of when this session last did
       // anything.
       observedAt: candidate.mtimeMs,
-      detail: detailFor(label, status),
+      // Cursor records no pull request of its own, so the one the session's
+      // workspace manager linked is the only address the work has.
+      detail: annotation?.change ? { ...detail, change: annotation.change } : detail,
+      ...(annotation?.workspace ? { workspace: annotation.workspace } : {}),
     };
   }
 }

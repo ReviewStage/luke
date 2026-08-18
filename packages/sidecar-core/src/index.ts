@@ -48,6 +48,7 @@ export {
   type SessionLocation,
   type SessionProvider,
   type SessionStatus,
+  type SessionWorkspace,
   sessionChangeNumber,
   sessionMessageText,
   UNKNOWN_WORKSPACE_LABEL,
@@ -320,7 +321,6 @@ export {
   OPENAI_PATH,
   OPENCODE_BLOCK_PATH,
   OPENCODE_FRAME_PATH,
-  ORCA_PATH,
 } from "./provider-mark-paths.js";
 export {
   compareSessionsByUrgency,

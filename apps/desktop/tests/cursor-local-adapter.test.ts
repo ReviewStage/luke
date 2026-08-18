@@ -579,3 +579,32 @@ test("returns an empty snapshot when Cursor has no local sessions", async (t) =>
 
   assert.deepEqual(await adapterFor(state).observe(), []);
 });
+
+test("wears a manager's workspace, matched through Cursor's own folder record", async (t) => {
+  const state = await temporaryCursorState(t);
+  const worktree = "/Users/test/orca/workspaces/checkout/fix-login";
+  await writeWorkspaceRecord(state, "9f1c", worktree);
+  await writeTranscript(
+    state,
+    "Users-test-orca-workspaces-checkout-fix-login",
+    "session-annotated",
+    [messageRecord(TEST_ROLE.ASSISTANT, TEST_CONTENT_TYPE.TEXT)],
+    TEST_TIME - 1_000,
+  );
+
+  const annotation = {
+    workspace: { providerWorkspaceId: worktree, name: "Fix login flow" },
+    change: "https://github.com/example/checkout/pull/42",
+  };
+  const adapter = new CursorLocalSessionAdapter({
+    ...state,
+    now: () => TEST_TIME,
+    workspaceAnnotations: async () => (directory) =>
+      directory === worktree ? annotation : undefined,
+  });
+  const observations = await adapter.observe();
+
+  assert.equal(observations.length, 1);
+  assert.deepEqual(observations[0]?.workspace, annotation.workspace);
+  assert.equal(observations[0]?.detail?.change, annotation.change);
+});

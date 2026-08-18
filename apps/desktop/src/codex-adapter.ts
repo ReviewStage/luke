@@ -25,7 +25,14 @@ import {
   type ObservedCodexHookEvent,
   readCodexHookEvent,
 } from "./codex-hooks";
-import { readTail, readTextFile, uniquePaths, workspaceLabel } from "./local-session-adapter";
+import {
+  readTail,
+  readTextFile,
+  uniquePaths,
+  type WorkspaceAnnotation,
+  type WorkspaceAnnotationSource,
+  workspaceLabel,
+} from "./local-session-adapter";
 import {
   canIgnoreSqliteError,
   defaultSqliteModule,
@@ -181,6 +188,13 @@ export interface CodexAdapterOptions {
    * always has: the hooks only ever sharpen what those already showed.
    */
   hookEventsDirectory?: () => string | undefined;
+  /**
+   * The workspace context a manager on this machine keeps around sessions,
+   * matched by working directory. Read lazily like the hook spool, and a
+   * refinement the same way: absent — or answering nothing — the adapter
+   * reports exactly what the database and rollouts alone say.
+   */
+  workspaceAnnotations?: WorkspaceAnnotationSource;
 }
 
 /**
@@ -472,6 +486,7 @@ function statusWithHookEvent(
 function detailFromRow(
   row: CodexThreadRow,
   rollout: ParsedCodexRollout | undefined,
+  annotation?: WorkspaceAnnotation,
 ): SessionDetail {
   const activity = rollout?.activity;
   const branch = textFromRow(row, CODEX_THREAD_COLUMN.GIT_BRANCH);
@@ -485,6 +500,9 @@ function detailFromRow(
     ...(model ? { model } : {}),
     ...(error ? { error } : {}),
     ...(threadId ? { link: `${CODEX_THREAD_LINK_PREFIX}${encodeURIComponent(threadId)}` } : {}),
+    // Codex records no pull request of its own, so the one the session's
+    // workspace manager linked is the only address the work has.
+    ...(annotation?.change ? { change: annotation.change } : {}),
   };
 }
 
@@ -494,6 +512,7 @@ function observationFromThreadRow(
   now: number,
   activeSessionFreshnessMs: number,
   hookEvent?: ObservedCodexHookEvent,
+  annotation?: WorkspaceAnnotation,
 ): ProviderSessionObservation | undefined {
   const providerSessionId = textFromRow(row, CODEX_THREAD_COLUMN.ID);
   if (!providerSessionId) return undefined;
@@ -530,7 +549,8 @@ function observationFromThreadRow(
     ...(completionCause ? { completionCause } : {}),
     observedAt,
     ...(rollout?.lastAgentMessage ? { recap: rollout.lastAgentMessage } : {}),
-    detail: detailFromRow(row, rollout),
+    detail: detailFromRow(row, rollout, annotation),
+    ...(annotation?.workspace ? { workspace: annotation.workspace } : {}),
   };
 }
 
@@ -548,6 +568,7 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
   readonly #activeSessionFreshnessMs: number;
   readonly #sqlite: SqliteModuleLoader;
   readonly #hookEventsDirectory: (() => string | undefined) | undefined;
+  readonly #workspaceAnnotations: WorkspaceAnnotationSource | undefined;
 
   constructor(options: CodexAdapterOptions = {}) {
     this.#codexHome = options.codexHome ?? defaultCodexHome();
@@ -565,6 +586,7 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
     this.#activeSessionFreshnessMs = resolved.activeSessionFreshnessMs;
     this.#sqlite = options.sqlite ?? defaultSqliteModule;
     this.#hookEventsDirectory = options.hookEventsDirectory;
+    this.#workspaceAnnotations = options.workspaceAnnotations;
   }
 
   async observe(): Promise<readonly ProviderSessionObservation[]> {
@@ -586,11 +608,13 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
         database.close();
       }
 
-      // The rollout and spool reads happen with the database already closed,
-      // so a slow disk never holds a read lock on state Codex itself is
-      // writing.
+      // The rollout, spool, and annotation reads happen with the database
+      // already closed, so a slow disk never holds a read lock on state Codex
+      // itself is writing. Annotations are a refinement like the spool: a
+      // source that is absent or fails to read costs the context, not the pass.
       const rollouts = await this.#rollouts(rows);
       const hookEvents = await this.#hookEvents(rows);
+      const annotationFor = await this.#workspaceAnnotations?.().catch(() => undefined);
       return rows
         .map((row) =>
           observationFromThreadRow(
@@ -599,6 +623,7 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
             now,
             this.#activeSessionFreshnessMs,
             hookEvents.get(textFromRow(row, CODEX_THREAD_COLUMN.ID) ?? ""),
+            annotationFor?.(textFromRow(row, CODEX_THREAD_COLUMN.CWD)),
           ),
         )
         .filter(

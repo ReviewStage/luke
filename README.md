@@ -51,7 +51,7 @@ Visit [tryluke.dev](https://tryluke.dev) to see Luke in action.
 | Devin | Cloud sessions | Yes |
 | Jules | Cloud sessions | Yes |
 | OpenCode | Local sessions | No |
-| Orca | Local sessions | No |
+| Orca | Workspace context on local sessions | No |
 | Linear | Assigned issues | Yes |
 | Google Calendar | Meeting busy times | Yes (sign-in) |
 

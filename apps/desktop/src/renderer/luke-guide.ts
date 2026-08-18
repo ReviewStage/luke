@@ -543,7 +543,9 @@ function providersFact(settings: AppSettings): AppGuideFact {
     detail:
       `${roster.join(", ")}. Connecting one takes the key its row names, typed by hand into ` +
       `${CONNECTIONS_PAGE}, under Cloud Agent API keys — never spoken, and never repeated back. ` +
-      "Local providers such as Claude Code need no key and are observed on their own.",
+      "Local providers such as Claude Code need no key and are observed on their own. A local " +
+      "session running in a worktree the Orca app manages also carries the workspace name and " +
+      "linked pull request Orca keeps for it, read from Orca's own state file, also with no key.",
   };
 }
 

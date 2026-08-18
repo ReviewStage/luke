@@ -34,6 +34,8 @@ import {
   type SessionFileCandidate,
   statDirectoryEntry,
   tailRecords,
+  type WorkspaceAnnotation,
+  type WorkspaceAnnotationSource,
   workspaceLabel,
 } from "./local-session-adapter";
 
@@ -134,6 +136,13 @@ export interface ClaudeCodeAdapterOptions {
    * hooks only ever sharpen what the tail already showed.
    */
   hookEventsDirectory?: () => string | undefined;
+  /**
+   * The workspace context a manager on this machine keeps around sessions,
+   * matched by working directory. Read lazily like the hook spool, and a
+   * refinement the same way: absent — or answering nothing — the adapter
+   * reports exactly what the transcripts alone say.
+   */
+  workspaceAnnotations?: WorkspaceAnnotationSource;
 }
 
 interface ParsedClaudeSessionTail {
@@ -443,14 +452,21 @@ function titleFromTail(parsed: ParsedClaudeSessionTail): string {
  * when it does not match. A row that opened a new chat instead of the one it
  * named would be worse than a row that opens nothing.
  */
-function detailFromTail(parsed: ParsedClaudeSessionTail): SessionDetail {
+function detailFromTail(
+  parsed: ParsedClaudeSessionTail,
+  annotation?: WorkspaceAnnotation,
+): SessionDetail {
+  // The session's own pull request wins over the one its workspace manager
+  // linked: the transcript's record is about this conversation, the manager's
+  // about the worktree around it.
+  const change = parsed.pullRequestUrl ?? annotation?.change;
   return {
     ...(parsed.activity ? { activity: parsed.activity } : {}),
     repository: workspaceLabel(parsed.cwd),
     ...(parsed.branch ? { branch: parsed.branch } : {}),
     ...(parsed.model ? { model: parsed.model } : {}),
     ...(parsed.apiError ? { error: parsed.apiError } : {}),
-    ...(parsed.pullRequestUrl ? { change: parsed.pullRequestUrl } : {}),
+    ...(change ? { change } : {}),
   };
 }
 
@@ -460,6 +476,7 @@ function observationFromSessionFile(
   now: number,
   activeSessionFreshnessMs: number,
   hookEvent?: ObservedClaudeHookEvent,
+  annotation?: WorkspaceAnnotation,
 ): ProviderSessionObservation {
   // The conversation's own clock, not the file's. Claude Code touches session
   // files in bulk long after their conversations ended — appending bookkeeping
@@ -504,7 +521,8 @@ function observationFromSessionFile(
     ...(completionCause ? { completionCause } : {}),
     observedAt,
     ...(parsed.awaySummary ? { recap: parsed.awaySummary } : {}),
-    detail: detailFromTail(parsed),
+    detail: detailFromTail(parsed, annotation),
+    ...(annotation?.workspace ? { workspace: annotation.workspace } : {}),
   };
 }
 
@@ -525,6 +543,7 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
    */
   readonly #parsedTails = new Map<string, { mtimeMs: number; parsed: ParsedClaudeSessionTail }>();
   readonly #hookEventsDirectory: (() => string | undefined) | undefined;
+  readonly #workspaceAnnotations: WorkspaceAnnotationSource | undefined;
 
   constructor(options: ClaudeCodeAdapterOptions = {}) {
     this.#claudeHome = options.claudeHome ?? defaultClaudeHome();
@@ -547,6 +566,7 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
     this.#readTailBytes = resolved.readTailBytes;
     this.#readHeadBytes = resolved.readHeadBytes;
     this.#hookEventsDirectory = options.hookEventsDirectory;
+    this.#workspaceAnnotations = options.workspaceAnnotations;
   }
 
   async #parsedTail(candidate: SessionFileCandidate): Promise<ParsedClaudeSessionTail> {
@@ -579,6 +599,9 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
   async observe(): Promise<readonly ProviderSessionObservation[]> {
     const now = this.#now();
     const hookEventsDirectory = this.#hookEventsDirectory?.();
+    // Like the spool, a refinement and never a dependency: a source that is
+    // absent or fails to read costs the context, not the pass.
+    const annotationFor = await this.#workspaceAnnotations?.().catch(() => undefined);
     const candidates = await discoverSessionFiles({
       projectsDirectory: path.join(this.#claudeHome, CLAUDE_PROJECTS_DIRECTORY),
       maximumProjectDirectories: this.#maximumProjectDirectories,
@@ -595,12 +618,14 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
             () => undefined,
           )
         : undefined;
+      const parsed = await this.#parsedTail(candidate);
       const observation = observationFromSessionFile(
         candidate,
-        await this.#parsedTail(candidate),
+        parsed,
         now,
         this.#activeSessionFreshnessMs,
         hookEvent,
+        annotationFor?.(parsed.cwd),
       );
       if (!observations.has(observation.providerSessionId)) {
         observations.set(observation.providerSessionId, observation);
