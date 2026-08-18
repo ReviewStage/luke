@@ -718,6 +718,12 @@ test("keeps archived Codex threads as closed completed rows", async (t) => {
       archived: 1,
     },
     {
+      id: "expired-archived-session",
+      cwd: "/Users/test/expired-archived",
+      observedAt: TEST_TIME - 3 * 24 * 60 * 60 * 1000,
+      archived: 1,
+    },
+    {
       id: "new-session",
       cwd: "/Users/test/new",
       observedAt: TEST_TIME - 10_000,
