@@ -119,10 +119,6 @@
   --space-8: 64px;
   --space-9: 96px;
 
-  /* The renderer's expansion easing. Reused for every page transition so the
-     page and the product feel like the same software. */
-  --swift: cubic-bezier(0.2, 0.8, 0.2, 1);
-
   /* The mock renders at true product geometry and scales as a unit. Stepped
      rather than fluid so the interior never lands on a half pixel. The height
      is the 520px expanded panel plus the product's own SURFACE_MARGIN for the
