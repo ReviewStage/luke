@@ -378,34 +378,29 @@
    two, drawn open rather than as a pop-up because seeing both at once — with
    what each costs on its face — is the entire point of the control.
 
-   Two buttons rather than a segmented control in a well of its own: they are
-   the same pair of offers the Feedback section makes a few rows down, so they
-   are drawn in the same vocabulary — the quiet button's ground and radius at
-   rest, lifting to the ground and edge a chosen filter chip takes for the one
-   that is live. Chosen is a state, not an act: the accent belongs to the
+   The Feedback section offers its own pair a few rows down, and these are
+   drawn as that pair: the same flexed row at the same gap, each half wearing
+   `quiet-button` itself rather than a copy of its padding, radius, ground and
+   type. What is added here is only what a choice needs and an offer does not —
+   a second line, and the ground and edge a chosen filter chip takes for the
+   half that is live. Chosen is a state, not an act: the accent belongs to the
    meters below, which say what the choice is costing, and a button wearing it
    too would read as the thing to press rather than the thing already true. */
 .source-toggle {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  gap: 7px;
 }
 
 .source-choice {
   display: flex;
   min-width: 0;
+  flex: 1 1 0;
   flex-direction: column;
-  /* The quiet button's box, opened up for a second line. The edge is carried
-     transparent at rest so taking one on the live half re-shapes nothing. */
-  padding: 8px 11px;
+  /* The edge is carried transparent at rest so taking one on the live half
+     re-shapes nothing. */
   border: 1px solid transparent;
-  border-radius: 10px;
-  background: var(--raised);
-  color: var(--text-secondary);
-  font-family: inherit;
   gap: 2px;
   text-align: left;
-  cursor: pointer;
   /* Ground, edge and colour only — the box never re-shapes as the choice
      moves, so the words inside it are laid out once. */
   transition:
@@ -414,26 +409,26 @@
     color var(--duration-hover) ease;
 }
 
-.source-choice:hover:not([data-live="true"]):not(:has(input:disabled)) {
-  background: var(--raised-strong);
-  color: var(--text-primary);
-}
-
-.source-choice[data-live="true"] {
-  border-color: var(--selected-edge);
-  background: var(--selected);
-  color: var(--text-primary);
-}
-
 .source-choice:has(input:disabled) {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* Both states hold their own ground under the pointer: the offer lifts the
+   way its Feedback twin does, and the live half stays exactly where it is,
+   because pressing it does nothing. */
+.source-choice[data-live="true"],
+.source-choice[data-live="true"]:hover {
+  border-color: var(--selected-edge);
+  background: var(--selected);
+  color: var(--text-primary);
 }
 
 .source-choice small {
   overflow: hidden;
   color: var(--text-tertiary);
   font-size: 9.5px;
+  font-weight: 500;
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -450,10 +445,6 @@
   min-width: 0;
   align-items: center;
   gap: 5px;
-  /* The button's own weight, at the size a two-line button's first line
-     wants. */
-  font-size: 10.5px;
-  font-weight: 640;
 }
 
 /* What the half costs, as a tag rather than a sentence: two words that have

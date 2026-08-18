@@ -2433,7 +2433,11 @@ function VoiceSourceToggle({
           return (
             <label
               key={candidate}
-              className="source-choice"
+              /* The Feedback section's own button, wearing its class rather
+                 than a copy of its measurements: the two sections offer the
+                 same kind of pair a few rows apart, and one that drifted from
+                 the other would be the drift nobody notices. */
+              className="quiet-button source-choice"
               data-live={String(live)}
               title={blocked ? STORAGE_UNAVAILABLE_NOTE : undefined}
             >
