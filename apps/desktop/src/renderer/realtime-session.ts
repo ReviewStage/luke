@@ -138,6 +138,14 @@ interface LiveContext {
 export const REMOTE_QUIET_MS = 2_500;
 
 /**
+ * How many back-to-back responses the caption keeps on screen at once. Two is
+ * the shape the surface stacks — the words just settled and the words now
+ * arriving — and a third response starting simply retires the oldest, the way
+ * a long reply's oldest lines already roll up under the shape.
+ */
+export const CAPTION_SEGMENT_LIMIT = 2;
+
+/**
  * Carries one validated action to the process that can perform it, answering
  * with what became of it. The renderer validates a tool call against the
  * observed roster before this is called, and the main process validates it
@@ -166,15 +174,19 @@ export interface RealtimeVoiceSessionCallbacks {
   onRemoteStream(stream: MediaStream | undefined): void;
   onError(message: string | undefined): void;
   /**
-   * The text of the reply Luke is currently speaking, growing as it is
-   * generated, or undefined once there is nothing being spoken. The session
-   * owns the whole lifecycle — the caption clears when the reply ends, is cut
-   * off, or the call closes — so the caller only ever draws what it is handed.
-   * `about` is the session a proactive announcement names, carried from the
-   * roster-validated update `speak()` was handed and living exactly as long as
-   * that reply; a conversation reply carries none.
+   * The words Luke is currently speaking, growing as they are generated, or
+   * undefined once there is nothing being spoken. Each entry is one response's
+   * words: a turn that speaks twice — a sentence before a tool call and the
+   * outcome after it, or a reply the model split into two messages — hands
+   * over both, oldest first, so the surface can stack them apart instead of
+   * running two sentences together. The session owns the whole lifecycle —
+   * the captions clear when the reply ends, is cut off, or the call closes —
+   * so the caller only ever draws what it is handed. `about` is the session a
+   * proactive announcement names, carried from the roster-validated update
+   * `speak()` was handed and living exactly as long as that reply; a
+   * conversation reply carries none.
    */
-  onCaption(text: string | undefined, about: SessionIdentity | undefined): void;
+  onCaption(texts: readonly string[] | undefined, about: SessionIdentity | undefined): void;
 }
 
 export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbacks {
@@ -424,12 +436,17 @@ export class RealtimeVoiceSession {
   #activeResponseId: string | undefined;
   #audibleSince: number | undefined;
   /**
-   * The words of the reply being spoken, as far as they have arrived. Kept
-   * here rather than in the caller so every path that ends a reply — finishing,
+   * The words of the turn being spoken, as far as they have arrived — one
+   * segment per output item, oldest first, each remembering which item spoke
+   * it. A turn that speaks twice back-to-back — a second message item, or the
+   * follow-up after a tool call — starts a new segment rather than running
+   * its words onto the last one's, and an item's own final transcript can
+   * still land on its own segment after the turn has moved on. Kept here
+   * rather than in the caller so every path that ends a reply — finishing,
    * being talked over, the call dropping — clears the words with it, and a
    * caption can never outlive the speech it captions.
    */
-  #caption: string | undefined;
+  #captionSegments: { itemId: string | undefined; text: string }[] = [];
   /**
    * The session the reply under way is announcing, or nothing for a
    * conversation reply. Set only by `speak()` from the identity the attention
@@ -994,7 +1011,7 @@ export class RealtimeVoiceSession {
     // playback drops out for a beat — and this is the very moment Luke starts
     // to answer. The track is disabled, so nothing is sent; the device itself
     // is let go when the exchange settles, in the quiet after the reply.
-    this.#startResponse(pushToTalkCommitEvents(), true);
+    this.#startResponse(pushToTalkCommitEvents(), { toolsArmed: true });
   }
 
   /**
@@ -1020,7 +1037,7 @@ export class RealtimeVoiceSession {
     const events = typedAskEvents(text);
     if (events.length === 0) return false;
     if (this.#status === REALTIME_STATUS.RESPONDING) this.#interruptReply();
-    this.#startResponse(events, true);
+    this.#startResponse(events, { toolsArmed: true });
     return true;
   }
 
@@ -1036,7 +1053,7 @@ export class RealtimeVoiceSession {
     // The caption is cut with the audio. It already held words the room
     // never heard — the text runs ahead of the speech — and leaving them up
     // would show Luke finishing a sentence he was just stopped from saying.
-    this.#setCaption(undefined);
+    this.#clearCaption();
     this.#send(cancelResponseEvents());
     // Then correct what Luke believes he said, or the next answer is free to
     // refer back to a sentence that never reached the room.
@@ -1106,7 +1123,7 @@ export class RealtimeVoiceSession {
       providerId: speech.providerId,
       providerSessionId: speech.providerSessionId,
     };
-    this.#options.onCaption(this.#caption, this.#captionAbout);
+    this.#emitCaption();
     return true;
   }
 
@@ -1176,7 +1193,7 @@ export class RealtimeVoiceSession {
     this.#responseItemId = undefined;
     this.#activeResponseId = undefined;
     this.#audibleSince = undefined;
-    this.#setCaption(undefined);
+    this.#clearCaption();
     // Learned about this call, so it does not outlive it.
     this.#audioEndingsReported = false;
     this.#clearSettleTimer();
@@ -1184,7 +1201,13 @@ export class RealtimeVoiceSession {
     this.#options.onRemoteStream(undefined);
   }
 
-  #startResponse(events: readonly Record<string, unknown>[], toolsArmed = false): void {
+  #startResponse(
+    events: readonly Record<string, unknown>[],
+    {
+      toolsArmed = false,
+      keepCaption = false,
+    }: { toolsArmed?: boolean; keepCaption?: boolean } = {},
+  ): void {
     // A pace still waiting from the last reply lands here, ahead of the
     // request: the channel is ordered and no response is in progress — a
     // cancel for the reply being talked over was sent before this — so the
@@ -1226,7 +1249,9 @@ export class RealtimeVoiceSession {
     // follow-up still awaiting from the last turn will see this and stand down.
     this.#toolTurnArmed = toolsArmed;
     this.#turnEpoch += 1;
-    this.#setCaption(undefined);
+    // A new turn starts with a clean strip; a follow-up continuing the same
+    // exchange keeps the words just said, and its own words stack under them.
+    if (!keepCaption) this.#clearCaption();
     this.#clearSettleTimer();
     // Every reply request passes through here, so this one line logs each
     // voice-model turn. The turn's kind and nothing else: what was said stays
@@ -1334,14 +1359,55 @@ export class RealtimeVoiceSession {
     this.#quietTimer = undefined;
   }
 
-  #setCaption(text: string | undefined): void {
+  #clearCaption(): void {
     // The subject is of the reply, so the reply ending takes it too: every
     // path that ends one clears the caption through here.
-    const about = text === undefined ? undefined : this.#captionAbout;
-    if (this.#caption === text && this.#captionAbout === about) return;
-    this.#caption = text;
-    this.#captionAbout = about;
-    this.#options.onCaption(text, about);
+    if (this.#captionSegments.length === 0 && this.#captionAbout === undefined) return;
+    this.#captionSegments = [];
+    this.#captionAbout = undefined;
+    this.#options.onCaption(undefined, undefined);
+  }
+
+  /** What the caption currently says, or undefined with nothing to say. */
+  #captionTexts(): readonly string[] | undefined {
+    if (this.#captionSegments.length === 0) return undefined;
+    return this.#captionSegments.map((segment) => segment.text);
+  }
+
+  #emitCaption(): void {
+    this.#options.onCaption(this.#captionTexts(), this.#captionAbout);
+  }
+
+  /**
+   * Grows the caption with the words just generated. The current item's words
+   * grow its own segment; an item taking over from another — the reply's
+   * second message, or the follow-up after a tool call — starts a segment of
+   * its own, so two responses stack instead of running together. Only the
+   * newest {@link CAPTION_SEGMENT_LIMIT} stay up.
+   */
+  #appendCaptionDelta(itemId: string | undefined, delta: string): void {
+    const last = this.#captionSegments.at(-1);
+    if (last && last.itemId === itemId) {
+      last.text += delta;
+    } else {
+      this.#captionSegments.push({ itemId, text: delta });
+      this.#captionSegments = this.#captionSegments.slice(-CAPTION_SEGMENT_LIMIT);
+    }
+    this.#emitCaption();
+  }
+
+  /**
+   * Lands an item's final transcript on the segment its deltas built — even
+   * after a later item has taken the turn on, which is what keeps a settled
+   * response's words whole while the next one streams under them. A transcript
+   * whose item holds no segment is a cancelled reply's straggler, and writes
+   * nothing.
+   */
+  #settleCaptionTranscript(itemId: string | undefined, transcript: string): void {
+    const segment = this.#captionSegments.find((candidate) => candidate.itemId === itemId);
+    if (!segment || segment.text === transcript) return;
+    segment.text = transcript;
+    this.#emitCaption();
   }
 
   /** Ends the turn once the reply is done, so the next one can start. */
@@ -1366,7 +1432,7 @@ export class RealtimeVoiceSession {
     // The caption is of speech, and the speech is over. Whatever ended the
     // reply — the audio draining, an error, the settle timer — the words leave
     // with the meter and the face rather than lingering under a quiet capsule.
-    this.#setCaption(undefined);
+    this.#clearCaption();
     // Whatever ended the reply — an error, the settle timer, Luke simply
     // stopping — the next one has to be audible. Without this a reply that
     // failed before it started would leave Luke silenced with nothing to
@@ -1708,17 +1774,18 @@ export class RealtimeVoiceSession {
         // would draw the words Luke was just stopped from saying, or splice them
         // onto the next reply's.
         if (event.itemId === this.#responseItemId && event.delta) {
-          this.#setCaption((this.#caption ?? "") + event.delta);
+          this.#appendCaptionDelta(event.itemId, event.delta);
         }
         return;
       case REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE:
-        // The server's own rendering of the whole reply, which the deltas only
+        // The server's own rendering of the whole item, which the deltas only
         // approximate: a delta lost to the channel would otherwise leave a hole
-        // in the sentence for as long as it stayed up. Held to the same item as
-        // the deltas, because the cancelled reply's `done` is the likeliest
-        // straggler of all.
-        if (event.itemId === this.#responseItemId && event.transcript) {
-          this.#setCaption(event.transcript);
+        // in the sentence for as long as it stayed up. It lands on the segment
+        // the item's deltas built — even one the turn has already moved past —
+        // and a cancelled reply's `done`, the likeliest straggler of all, finds
+        // its segments cleared and writes nothing.
+        if (event.transcript) {
+          this.#settleCaptionTranscript(event.itemId, event.transcript);
         }
         return;
       case REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED:
@@ -1885,7 +1952,10 @@ export class RealtimeVoiceSession {
     // developer took the turn, started another, or the call is gone. The
     // outcomes were still delivered as items, so the next turn has them.
     if (!this.isConnected || this.#turnEpoch !== epoch) return;
-    this.#startResponse(functionCallFollowUpEvents());
+    // The follow-up continues the exchange the developer opened, so whatever
+    // the reply said before its tool call stays on the strip and the outcome
+    // stacks under it, rather than replacing words still being read.
+    this.#startResponse(functionCallFollowUpEvents(), { keepCaption: true });
   }
 
   async #toolCallOutput(

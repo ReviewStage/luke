@@ -118,26 +118,27 @@ export function voiceErrorToShow(input: {
 }
 
 /**
- * The words drawn under the shape. A capture run always draws the fixture's
- * words; otherwise Luke's caption is shown only when there is a reason to
- * read them and the reply they belong to is his turn: the captions preference,
- * a reply answering an ask the developer typed, or an output that would
- * swallow the speech.
+ * The words drawn under the shape, one entry per response so back-to-back
+ * responses stack apart instead of running together. A capture run always
+ * draws the fixture's words; otherwise Luke's captions are shown only when
+ * there is a reason to read them and the reply they belong to is his turn:
+ * the captions preference, a reply answering an ask the developer typed, or
+ * an output that would swallow the speech.
  */
-export function lukeCaptionToShow(input: {
+export function lukeCaptionsToShow(input: {
   fixtureSpeaking: boolean;
   captionsEnabled: boolean;
   typedAsk: boolean;
   outputSilent: boolean;
   voice: WaveformVoice | undefined;
-  caption: string | undefined;
-}): string | undefined {
-  if (input.fixtureSpeaking) return FIXTURE_SPEAKING_CAPTION;
+  captions: readonly string[] | undefined;
+}): readonly string[] | undefined {
+  if (input.fixtureSpeaking) return [FIXTURE_SPEAKING_CAPTION];
   if (
     (input.captionsEnabled || input.typedAsk || input.outputSilent) &&
     input.voice === WAVEFORM_VOICE.LUKE
   ) {
-    return input.caption;
+    return input.captions;
   }
   return undefined;
 }
@@ -353,7 +354,11 @@ export interface VoiceConversation {
   stopMicrophone: () => Promise<void>;
   askLuke: (text: string) => Promise<string | undefined>;
   voiceTurn: WaveformVoice | undefined;
-  lukeCaption: string | undefined;
+  /**
+   * The words being spoken, one entry per response: a turn that speaks twice
+   * back-to-back keeps both on screen, stacked oldest first.
+   */
+  lukeCaptions: readonly string[] | undefined;
   /**
    * When the words now on screen first appeared. It is the reading clock's
    * start: the surface paces a silent caption's scroll from it, so the words
@@ -407,9 +412,9 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   // the notice the surface anchors to the subject can never draw against a
   // caption from a different reply.
   const [voiceCaption, setVoiceCaption] = useState<{
-    text: string | undefined;
+    texts: readonly string[] | undefined;
     about: SessionIdentity | undefined;
-  }>({ text: undefined, about: undefined });
+  }>({ texts: undefined, about: undefined });
   /**
    * Whether the reply under way answers an ask the developer typed. A typed
    * ask is read, not only heard, so its reply draws the caption whatever the
@@ -547,7 +552,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       onLocalStream: setLocalStream,
       onRemoteStream: setRemoteStream,
       onError: setVoiceError,
-      onCaption: (text, about) => setVoiceCaption({ text, about }),
+      onCaption: (texts, about) => setVoiceCaption({ texts, about }),
     });
     return voiceSession.current;
   }, [rememberSessionReference, setVoiceStatus]);
@@ -955,19 +960,20 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   );
 
   const voiceTurn = waveformVoice(voiceStatus);
-  const lukeCaption = lukeCaptionToShow({
+  const lukeCaptions = lukeCaptionsToShow({
     fixtureSpeaking: options.fixtureSpeaking,
     captionsEnabled: options.voiceCaptions,
     typedAsk,
     outputSilent: options.outputSilent,
     voice: voiceTurn,
-    caption: voiceCaption.text,
+    captions: voiceCaption.texts,
   });
 
   // The reading clock starts when words appear and ends when they leave; the
   // text growing between those edges is the same block of words, still on its
-  // own clock, however fast the deltas behind it streamed in.
-  const captionDrawn = lukeCaption !== undefined;
+  // own clock, however fast the deltas behind it streamed in — a second
+  // response stacking under the first grows the block the same way.
+  const captionDrawn = lukeCaptions !== undefined;
   useEffect(() => {
     setCaptionShownAt(captionDrawn ? Date.now() : undefined);
   }, [captionDrawn]);
@@ -987,7 +993,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     stopMicrophone,
     askLuke,
     voiceTurn,
-    lukeCaption,
+    lukeCaptions,
     captionShownAt,
     announcedSession: voiceCaption.about,
     remoteAudio,

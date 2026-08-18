@@ -45,7 +45,8 @@ interface Harness {
   session: RealtimeVoiceSession;
   sent: Record<string, unknown>[];
   errors: (string | undefined)[];
-  captions: (string | undefined)[];
+  /** Each caption emission: one text per stacked response, or a clear. */
+  captions: (readonly string[] | undefined)[];
   /** The announced session each caption emission carried, by session id. */
   captionSubjects: (string | undefined)[];
   microphoneEnabled: () => boolean;
@@ -131,7 +132,7 @@ function harness(
   };
   const sent: Record<string, unknown>[] = [];
   const errors: (string | undefined)[] = [];
-  const captions: (string | undefined)[] = [];
+  const captions: (readonly string[] | undefined)[] = [];
   const captionSubjects: (string | undefined)[] = [];
   const requests: { url: string; init: RequestInit }[] = [];
   const calls: string[] = [];
@@ -249,8 +250,8 @@ function harness(
     onLocalStream: () => undefined,
     onRemoteStream: () => undefined,
     onError: (message) => errors.push(message),
-    onCaption: (text, about) => {
-      captions.push(text);
+    onCaption: (texts, about) => {
+      captions.push(texts);
       captionSubjects.push(about?.providerSessionId);
     },
   });
@@ -2934,10 +2935,118 @@ test("the caption grows with the deltas and the final text supersedes them", asy
   });
 
   assert.deepEqual(context.captions, [
-    "Two sessions ",
-    "Two sessions need review.",
-    "Two sessions need review, and one failed.",
+    ["Two sessions "],
+    ["Two sessions need review."],
+    ["Two sessions need review, and one failed."],
   ]);
+});
+
+test("back-to-back responses stack as two captions instead of running together", async () => {
+  const context = harness();
+  await context.session.connect();
+  await holdTurn(context);
+  context.session.endTurn(true);
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
+    item: { id: "item-one" },
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    item_id: "item-one",
+    delta: "First response.",
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
+    item: { id: "item-two" },
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    item_id: "item-two",
+    delta: "Second response.",
+  });
+
+  // The second response's words start a caption of their own rather than
+  // being spliced onto the first's without so much as a space.
+  assert.deepEqual(context.captions.at(-1), ["First response.", "Second response."]);
+
+  // The first response's own final rendering lands on its own caption — even
+  // though the turn has moved on — instead of erasing the pair.
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE,
+    item_id: "item-one",
+    transcript: "First response, corrected.",
+  });
+  assert.deepEqual(context.captions.at(-1), ["First response, corrected.", "Second response."]);
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE,
+    item_id: "item-two",
+    transcript: "Second response, finished.",
+  });
+  assert.deepEqual(context.captions.at(-1), [
+    "First response, corrected.",
+    "Second response, finished.",
+  ]);
+
+  // A third response retires the oldest: only two ever stack.
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
+    item: { id: "item-three" },
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    item_id: "item-three",
+    delta: "Third.",
+  });
+  assert.deepEqual(context.captions.at(-1), ["Second response, finished.", "Third."]);
+});
+
+test("a tool follow-up keeps the words said before the call and stacks the outcome", async () => {
+  const context = harness({ carryAction: async () => ({ status: "accepted" }) });
+  await context.session.connect();
+  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
+  await armDeveloperTurn(context);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
+    item: { id: "item-ask" },
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    item_id: "item-ask",
+    delta: "Sending that now.",
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      id: "resp-1",
+      output: [
+        {
+          type: "function_call",
+          name: "send_session_message",
+          call_id: "call-1",
+          arguments:
+            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"add tests"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  // The follow-up continues the exchange, so the sentence spoken before the
+  // call stays on the strip and the outcome's words stack under it, instead
+  // of the outcome erasing words still being read.
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
+    item: { id: "item-outcome" },
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    item_id: "item-outcome",
+    delta: "Sent.",
+  });
+  assert.deepEqual(context.captions.at(-1), ["Sending that now.", "Sent."]);
 });
 
 test("the caption leaves when the reply does", async () => {
@@ -2952,11 +3061,11 @@ test("the caption leaves when the reply does", async () => {
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
   // Generation finishing is not speech finishing: the words stay up while
   // Luke is still saying them.
-  assert.deepEqual(context.captions, ["All quiet."]);
+  assert.deepEqual(context.captions, [["All quiet."]]);
 
   context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
 
-  assert.deepEqual(context.captions, ["All quiet.", undefined]);
+  assert.deepEqual(context.captions, [["All quiet."], undefined]);
 });
 
 test("an announcement's caption names its session; a conversation's names none", async () => {
@@ -2978,7 +3087,7 @@ test("an announcement's caption names its session; a conversation's names none",
     type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
     delta: "Checkout just finished.",
   });
-  assert.deepEqual(context.captions, [undefined, "Checkout just finished."]);
+  assert.deepEqual(context.captions, [undefined, ["Checkout just finished."]]);
   assert.deepEqual(context.captionSubjects, ["session-a", "session-a"]);
 
   // The reply ending takes the subject with the words: the notice can never
@@ -2995,7 +3104,7 @@ test("an announcement's caption names its session; a conversation's names none",
     type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
     delta: "Two sessions need review.",
   });
-  assert.equal(context.captions.at(-1), "Two sessions need review.");
+  assert.deepEqual(context.captions.at(-1), ["Two sessions need review."]);
   assert.equal(context.captionSubjects.at(-1), undefined);
 });
 
@@ -3062,10 +3171,15 @@ test("a cancelled reply's late transcript cannot pollute the next caption", asyn
     delta: "The second reply",
   });
 
-  assert.equal(context.captions.at(-1), "The second reply");
-  assert.equal(context.captions.includes("The first reply, finished anyway."), false);
+  assert.deepEqual(context.captions.at(-1), ["The second reply"]);
   assert.equal(
-    context.captions.some((caption) => caption?.includes("still streaming in")),
+    context.captions.some((caption) => caption?.includes("The first reply, finished anyway.")),
+    false,
+  );
+  assert.equal(
+    context.captions.some((caption) =>
+      caption?.some((text) => text.includes("still streaming in")),
+    ),
     false,
   );
 });

@@ -18,7 +18,7 @@ import {
   latestSpeech,
   latestSpeechReference,
   liveSpeedApplies,
-  lukeCaptionToShow,
+  lukeCaptionsToShow,
   talkKeyPress,
   talkOpeningHolds,
   typedAskHolds,
@@ -68,36 +68,39 @@ test("the media duck follows the exchange, not a settled call", () => {
 });
 
 test("a capture run always captions the fixture's words", () => {
-  assert.equal(
-    lukeCaptionToShow({
+  assert.deepEqual(
+    lukeCaptionsToShow({
       fixtureSpeaking: true,
       captionsEnabled: false,
       typedAsk: false,
       outputSilent: false,
       voice: WAVEFORM_VOICE.LUKE,
-      caption: "live words",
+      captions: ["live words"],
     }),
-    FIXTURE_SPEAKING_CAPTION,
+    [FIXTURE_SPEAKING_CAPTION],
   );
 });
 
-test("Luke's caption is drawn only on his turn, and only with a reason to read it", () => {
+test("Luke's captions are drawn only on his turn, and only with a reason to read them", () => {
   const shown = {
     fixtureSpeaking: false,
     captionsEnabled: true,
     typedAsk: false,
     outputSilent: false,
     voice: WAVEFORM_VOICE.LUKE,
-    caption: "two sessions are waiting on you.",
+    captions: ["two sessions are waiting on you.", "and the build just finished."],
   };
-  assert.equal(lukeCaptionToShow(shown), "two sessions are waiting on you.");
+  assert.deepEqual(lukeCaptionsToShow(shown), [
+    "two sessions are waiting on you.",
+    "and the build just finished.",
+  ]);
   assert.equal(
-    lukeCaptionToShow({ ...shown, voice: WAVEFORM_VOICE.DEVELOPER }),
+    lukeCaptionsToShow({ ...shown, voice: WAVEFORM_VOICE.DEVELOPER }),
     undefined,
     "a caption that raced a status change must not be drawn on the developer's turn",
   );
   assert.equal(
-    lukeCaptionToShow({ ...shown, captionsEnabled: false }),
+    lukeCaptionsToShow({ ...shown, captionsEnabled: false }),
     undefined,
     "the preference is about speech being duplicated, and with it off there is no reason to read",
   );
@@ -135,10 +138,10 @@ test("a typed ask, or an output that would swallow the reply, captions whatever 
     typedAsk: false,
     outputSilent: false,
     voice: WAVEFORM_VOICE.LUKE,
-    caption: "the words",
+    captions: ["the words"],
   };
-  assert.equal(lukeCaptionToShow({ ...hidden, typedAsk: true }), "the words");
-  assert.equal(lukeCaptionToShow({ ...hidden, outputSilent: true }), "the words");
+  assert.deepEqual(lukeCaptionsToShow({ ...hidden, typedAsk: true }), ["the words"]);
+  assert.deepEqual(lukeCaptionsToShow({ ...hidden, outputSilent: true }), ["the words"]);
 });
 
 test("a latched press is the release's to answer, and does not open a second call", () => {
