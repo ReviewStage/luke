@@ -10,6 +10,7 @@ import {
   type ProviderSessionObservation,
   recordFromJsonLine,
   resolveOptions,
+  SESSION_COMPLETION_CAUSE,
   SESSION_STATUS,
   type SessionDetail,
   type SessionProvider,
@@ -139,8 +140,7 @@ const CODEX_ADAPTER_DEFAULTS = {
 const CODEX_THREAD_QUERY = `
   SELECT *
   FROM threads
-  WHERE archived = 0
-    AND id <> ''
+  WHERE id <> ''
     AND cwd <> ''
   ORDER BY
     CASE
@@ -510,10 +510,17 @@ function observationFromThreadRow(
     const isFresh = now - observedAt <= activeSessionFreshnessMs;
     status = statusWithHookEvent(status, hookEvent.event, isFresh);
   }
+  const archived = (numberFromRow(row, CODEX_THREAD_COLUMN.ARCHIVED) ?? 0) !== 0;
+  const completionCause =
+    status === SESSION_STATUS.COMPLETE &&
+    (archived || (eventStands && hookEvent.event === CODEX_HOOK_EVENT.SESSION_END))
+      ? SESSION_COMPLETION_CAUSE.SESSION_CLOSED
+      : undefined;
   return {
     providerSessionId,
     title: titleFromRow(row),
     status,
+    ...(completionCause ? { completionCause } : {}),
     observedAt,
     ...(rollout?.lastAgentMessage ? { recap: rollout.lastAgentMessage } : {}),
     detail: detailFromRow(row, rollout),

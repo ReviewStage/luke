@@ -125,6 +125,7 @@ const sameSession = exhaustiveSame<NormalizedSession>({
   provider: (first, second) => sameProvider(first.provider, second.provider),
   title: (first, second) => first.title === second.title,
   status: (first, second) => first.status === second.status,
+  completionCause: (first, second) => first.completionCause === second.completionCause,
   observedAt: (first, second) => first.observedAt === second.observedAt,
   location: (first, second) => first.location === second.location,
   recap: (first, second) => first.recap === second.recap,

@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
-import { isRosterRelevant, SESSION_STATUS } from "@sidecar/core";
+import { isRosterRelevant, SESSION_COMPLETION_CAUSE, SESSION_STATUS } from "@sidecar/core";
 import { CLAUDE_CODE_PROVIDER, ClaudeCodeSessionAdapter } from "../src/claude-code-adapter";
 
 const TEST_TIME = Date.parse("2026-08-11T23:45:00.000Z");
@@ -269,6 +269,7 @@ test("re-reads a transcript once it has been written to again", async (t) => {
   // new mtime and re-read rather than serving the first parse back.
   assert.equal(before?.status, SESSION_STATUS.WAITING);
   assert.equal(after?.status, SESSION_STATUS.COMPLETE);
+  assert.equal(after?.completionCause, SESSION_COMPLETION_CAUSE.WORK_FINISHED);
   assert.equal(after?.observedAt, TEST_TIME - 5_000);
 });
 
@@ -1088,6 +1089,7 @@ test("a session-end event settles a row the tail would leave waiting", async (t)
   const [observation] = await adapter.observe();
 
   assert.equal(observation?.status, SESSION_STATUS.COMPLETE);
+  assert.equal(observation?.completionCause, SESSION_COMPLETION_CAUSE.SESSION_CLOSED);
 });
 
 test("a stop-failure event reports the error the tail was still suppressing", async (t) => {

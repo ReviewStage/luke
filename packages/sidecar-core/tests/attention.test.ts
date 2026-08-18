@@ -12,6 +12,7 @@ import {
   type NormalizedSession,
   normalizeSession,
   type ProviderSessionObservation,
+  SESSION_COMPLETION_CAUSE,
   SESSION_STATUS,
   SessionAttentionReviewer,
   type SessionProvider,
@@ -933,6 +934,70 @@ test("a standing ask rides the update of the session it was made about, and no o
   const unwatched = evaluator.updates.find((update) => update.providerSessionId === "unwatched");
   assert.equal(watched?.noticeRequest, "Tell me when this finishes.");
   assert.equal(unwatched?.noticeRequest, undefined);
+});
+
+test("a closed session never reaches the evaluator, even with a standing finish ask", async () => {
+  const requests = new AttentionRequestRegistry();
+  const identity = { providerId: claude.id, providerSessionId: "watched" };
+  requests.set(identity, "Tell me when this finishes.");
+  const evaluator = evaluatorReturning(speakDecision());
+  const reviewer = new SessionAttentionReviewer({
+    evaluator,
+    noticeRequestFor: (candidate) => requests.get(candidate),
+    now: () => DECIDED_AT,
+  });
+
+  await reviewer.review([session(claude, "watched", { status: SESSION_STATUS.WAITING })]);
+  evaluator.updates.length = 0;
+
+  const reviews = await reviewer.review([
+    session(claude, "watched", {
+      status: SESSION_STATUS.COMPLETE,
+      completionCause: SESSION_COMPLETION_CAUSE.SESSION_CLOSED,
+    }),
+  ]);
+
+  assert.deepEqual(reviews, []);
+  assert.deepEqual(evaluator.updates, []);
+});
+
+test("a work-finished completion still reaches the evaluator", async () => {
+  const evaluator = evaluatorReturning(speakDecision());
+  const reviewer = new SessionAttentionReviewer({ evaluator, now: () => DECIDED_AT });
+
+  await reviewer.review([session(claude, "finished")]);
+  evaluator.updates.length = 0;
+  await reviewer.review([
+    session(claude, "finished", {
+      status: SESSION_STATUS.COMPLETE,
+      completionCause: SESSION_COMPLETION_CAUSE.WORK_FINISHED,
+    }),
+  ]);
+
+  assert.equal(evaluator.updates.length, 1);
+  assert.equal(evaluator.updates[0]?.status, SESSION_STATUS.COMPLETE);
+});
+
+test("closure supersedes an in-flight work-finished review", async () => {
+  const closed = session(claude, "finished", {
+    status: SESSION_STATUS.COMPLETE,
+    completionCause: SESSION_COMPLETION_CAUSE.SESSION_CLOSED,
+  });
+  const reviewer = new SessionAttentionReviewer({
+    evaluator: evaluatorReturning(speakDecision()),
+    currentSession: () => closed,
+    now: () => DECIDED_AT,
+  });
+
+  const [review] = await reviewer.review([
+    session(claude, "finished", {
+      status: SESSION_STATUS.COMPLETE,
+      completionCause: SESSION_COMPLETION_CAUSE.WORK_FINISHED,
+    }),
+  ]);
+
+  assert.equal(review?.outcome, ATTENTION_REVIEW_OUTCOME.SUPERSEDED);
+  assert.equal(review?.decision.disposition, ATTENTION_DISPOSITION.SILENT);
 });
 
 test("answering an ask is earned by a literal true, and never by a silent decision", () => {

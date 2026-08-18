@@ -1,5 +1,5 @@
 import type { NormalizedSession, SessionStatus } from "./session.js";
-import { SESSION_STATUS } from "./session.js";
+import { SESSION_COMPLETION_CAUSE, SESSION_STATUS } from "./session.js";
 
 /**
  * The statuses worth telling the user about when a session arrives at one.
@@ -159,6 +159,7 @@ export class SessionNoticeTracker {
 
       // First sight seeds silently; an unchanged status is not an edge.
       if (!previous || previous.status === session.status) continue;
+      if (session.completionCause === SESSION_COMPLETION_CAUSE.SESSION_CLOSED) continue;
       const status = noticeStatus(session.status);
       if (!status) continue;
       // The edge is still tracked above — it just is not news any more.

@@ -10,6 +10,7 @@ import {
   type ProviderSessionObservation,
   recordFromJsonLine,
   resolveOptions,
+  SESSION_COMPLETION_CAUSE,
   SESSION_STATUS,
   type SessionDetail,
   type SessionProvider,
@@ -488,10 +489,19 @@ function observationFromSessionFile(
     const isFresh = now - observedAt <= activeSessionFreshnessMs;
     status = statusWithHookEvent(status, hookEvent.event, isFresh);
   }
+  const completionCause =
+    status === SESSION_STATUS.COMPLETE
+      ? eventStands && hookEvent.event === CLAUDE_HOOK_EVENT.SESSION_END
+        ? SESSION_COMPLETION_CAUSE.SESSION_CLOSED
+        : parsed.eventType === CLAUDE_EVENT_TYPE.RESULT
+          ? SESSION_COMPLETION_CAUSE.WORK_FINISHED
+          : undefined
+      : undefined;
   return {
     providerSessionId: candidate.providerSessionId,
     title: titleFromTail(parsed),
     status,
+    ...(completionCause ? { completionCause } : {}),
     observedAt,
     ...(parsed.awaySummary ? { recap: parsed.awaySummary } : {}),
     detail: detailFromTail(parsed),
