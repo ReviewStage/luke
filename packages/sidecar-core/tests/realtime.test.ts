@@ -256,7 +256,7 @@ test("a bare ask for a new agent defaults to a new workspace", () => {
   // tools lands on the same side of it.
   assert.match(
     REALTIME_TOOLS.CREATE_WORKSPACE.schema.description,
-    /unless its own words name the existing workspace/,
+    /unless its own words name the existing workspace or session/,
   );
   assert.match(
     REALTIME_TOOLS.ADD_WORKSPACE_AGENT.schema.description,

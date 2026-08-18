@@ -279,6 +279,10 @@ test("the facts describe creating a workspace, so Luke does not deny the capabil
   // explains the default the same way the conversation acts on it: a new
   // workspace, unless the ask itself names the existing one to join.
   assert.match(rendered, /bare ask for a new agent lands here/);
+  // The join exception names both handles a developer might say — the
+  // workspace and a session in it — so a named session is not steered into
+  // a fresh workspace it did not ask for.
+  assert.match(rendered, /names the existing workspace or session/);
   assert.match(rendered, /bare ask for a new agent creates a new workspace instead/);
 });
 

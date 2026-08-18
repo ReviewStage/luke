@@ -892,8 +892,8 @@ export const REALTIME_TOOLS = {
       description:
         "Create a new workspace — a new agent — the developer just asked for, in one project " +
         "a provider listed. An ask for a new agent means this unless its own words name the " +
-        "existing workspace it should join. Only projects the [workspace projects] context " +
-        "lists exist.",
+        "existing workspace or session the agent should join. Only projects the " +
+        "[workspace projects] context lists exist.",
       parameters: {
         type: "object",
         properties: {

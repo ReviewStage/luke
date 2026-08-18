@@ -734,7 +734,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "projects that provider reports, optionally under a name the developer chose, and can " +
         "hand the new agent an opening task in the developer's own words where the project takes " +
         "one. A bare ask for a new agent lands here: only an ask that itself names the existing " +
-        "workspace the agent should join adds one beside a session instead. Only reported " +
+        "workspace or session the agent should join adds one beside it instead. Only reported " +
         "projects can be named, a project that needs a task cannot be created " +
         "without one, and a provider that reports none takes no ask. An ask that names no " +
         "provider goes to the default workspace provider; until one is chosen Luke asks when " +
