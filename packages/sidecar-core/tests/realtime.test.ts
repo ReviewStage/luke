@@ -234,6 +234,12 @@ test("the spoken instructions state what Luke cannot see, and when he may act", 
   // is followed rather than guessed at.
   assert.match(instructions, /\[session under discussion\]/);
   assert.match(instructions, /named most recently/);
+  // Back-to-back replies must not repeat each other, and an act the developer
+  // asked for is not narrated twice: no announced intent, and a success is
+  // silence or a bare "Done." rather than a restatement.
+  assert.match(instructions, /Never say the same thing twice in a row/);
+  assert.match(instructions, /Do not announce what you are about to do/);
+  assert.match(instructions, /never restate the intent or the result/);
 });
 
 test("a mint response yields a credential with a millisecond expiry", () => {
