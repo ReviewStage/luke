@@ -673,6 +673,48 @@ test("an empty roster says so rather than implying Luke sees nothing at all", ()
   assert.match(sessionContextText([]), /No coding-agent sessions/);
 });
 
+test("the roster carries how long ago each session was last seen, measured against the supplied clock", () => {
+  const minute = 60_000;
+  const now = DECIDED_AT;
+  const session = normalizeSession(
+    { id: "claude-code", displayName: "Claude Code" },
+    {
+      providerSessionId: "session-a",
+      title: "Bootstrap the desktop shell",
+      status: SESSION_STATUS.WORKING,
+      observedAt: now - 4 * minute,
+    },
+  );
+
+  const text = sessionContextText([session], [], now);
+
+  assert.match(text, /updated 4 minutes ago/);
+
+  // Under a minute reads as "just now".
+  const fresh = normalizeSession(
+    { id: "claude-code", displayName: "Claude Code" },
+    {
+      providerSessionId: "session-b",
+      title: "Fresh session",
+      status: SESSION_STATUS.WORKING,
+      observedAt: now - 30_000,
+    },
+  );
+  assert.match(sessionContextText([fresh], [], now), /updated just now/);
+
+  // Provider clock skew (observedAt ahead of now) also reads as "just now".
+  const ahead = normalizeSession(
+    { id: "claude-code", displayName: "Claude Code" },
+    {
+      providerSessionId: "session-c",
+      title: "Clock-skewed session",
+      status: SESSION_STATUS.WORKING,
+      observedAt: now + minute,
+    },
+  );
+  assert.match(sessionContextText([ahead], [], now), /updated just now/);
+});
+
 test("the session under discussion carries the identity a bare reference resolves to", () => {
   const chat = normalizeSession(
     { id: "conductor", displayName: "Conductor" },
