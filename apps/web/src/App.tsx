@@ -1,15 +1,5 @@
-import { PROVIDER_ID } from "@sidecar/core";
 import { NotchMock } from "./NotchMock";
-import { ProviderMark } from "./provider-marks";
 import { DMG_URL, GitHubMark, REPOSITORY_URL, SiteFooter, SiteHeader } from "./SiteChrome";
-
-const OBSERVED_PROVIDERS = [
-  { id: PROVIDER_ID.CLAUDE_CODE, label: "Claude Code" },
-  { id: PROVIDER_ID.CODEX, label: "Codex" },
-  { id: PROVIDER_ID.CONDUCTOR, label: "Conductor" },
-  { id: PROVIDER_ID.CURSOR, label: "Cursor" },
-  { id: PROVIDER_ID.DEVIN, label: "Devin" },
-] as const;
 
 export function App(): React.JSX.Element {
   return (
@@ -54,23 +44,6 @@ export function App(): React.JSX.Element {
           </p>
 
           <NotchMock />
-
-          <section className="hairline mt-12 pt-6" aria-labelledby="providers-title">
-            <h2 id="providers-title" className="m-0 text-lg leading-tight font-semibold">
-              Your agents, one place.
-            </h2>
-            <p className="mt-2 mb-0 text-sm text-muted-foreground">
-              Luke observes the tools you already use.
-            </p>
-            <ul className="mt-8 flex list-none flex-wrap gap-x-6 gap-y-4 p-0 text-muted-foreground">
-              {OBSERVED_PROVIDERS.map((provider) => (
-                <li key={provider.id} className="flex min-w-0 items-center gap-2 font-mono text-xs">
-                  <ProviderMark providerId={provider.id} className="size-5 shrink-0" />
-                  <span>{provider.label}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
         </section>
       </main>
 
