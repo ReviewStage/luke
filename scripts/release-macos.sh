@@ -17,6 +17,7 @@ if [[ -z "${GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET:-}" ]]; then
     exit 1
 fi
 
+"$SCRIPT_DIRECTORY/bootstrap.sh"
 "$SCRIPT_DIRECTORY/check.sh"
 
 cd "$SIDECAR_REPO_ROOT"
