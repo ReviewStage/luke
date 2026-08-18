@@ -32,15 +32,59 @@ export function isProviderId(value: string): value is ProviderId {
   return PROVIDER_IDS.has(value);
 }
 
-/** A provider adapter has no dependency on Electron, a renderer, or live UI state. */
+/**
+ * A provider adapter has no dependency on Electron, a renderer, or live UI
+ * state. Every adapter answers every act, because unsupported is already an
+ * answer rather than a failure: one whose provider documents no way to do a
+ * thing inherits that answer from `SessionProviderAdapterBase` and says so,
+ * where a missing method would leave each caller asking whether the question
+ * could be put at all. Overriding one is what taking on its constraint means.
+ */
 export interface SessionProviderAdapter {
   readonly provider: SessionProvider;
   observe(): Promise<readonly ProviderSessionObservation[]>;
+
+  /**
+   * Runs a control against a session the adapter has already observed.
+   * Adapters must reject any request whose control that session's latest
+   * observation did not advertise.
+   */
   executeControl(request: ProviderControlRequest): Promise<ProviderControlResult>;
+
+  /**
+   * Hands a message to an already-observed session through the provider's own
+   * documented endpoint. It is one of the three places an adapter may change
+   * provider state, and only ever with text a user chose to send: adapters
+   * must refuse any session that did not advertise `canReceiveMessage` on its
+   * latest observation, and nothing that decides on the user's behalf — the
+   * attention evaluator above all — may reach it.
+   */
   sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult>;
+
+  /** The projects the latest observation pass reported, or none. */
   workspaceProjects(): readonly WorkspaceProject[];
+
+  /**
+   * Creates a workspace in a project the latest observation pass reported. The
+   * same rules bind it that bind a message: it acts only on what a user just
+   * asked for, through the provider's own documented endpoint, and nothing
+   * that decides on the user's behalf may reach it.
+   */
   createWorkspace(request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult>;
+
+  /**
+   * Starts another agent in the workspace an observed session already runs in,
+   * under the same rules and one more: the agent must be one of the kinds that
+   * session's latest observation listed.
+   */
   spawnWorkspaceAgent(request: ProviderWorkspaceAgentRequest): Promise<ProviderWorkspaceResult>;
+
+  /**
+   * Renders one observed session's own transcript, read from the provider's
+   * file on this machine, into a bounded conversation kept nowhere. The read
+   * performs nothing and reaches no provider; an adapter whose stored shape
+   * this build cannot render faithfully reports nothing rather than guessing.
+   */
   readTranscript(providerSessionId: string): Promise<string | undefined>;
 }
 
@@ -305,8 +349,10 @@ export interface ProviderWorkspaceAgentRequest {
 }
 
 /**
- * Shared explicit answers for capabilities a provider does not document.
- * Concrete adapters override only the operations their provider routes.
+ * The explicit answers an adapter gives for acts its provider does not
+ * document: unsupported for every write, no projects, and no transcript.
+ * Concrete adapters override only the acts their provider routes, and an
+ * override takes on that act's constraint above along with it.
  */
 export abstract class SessionProviderAdapterBase implements SessionProviderAdapter {
   abstract readonly provider: SessionProvider;
