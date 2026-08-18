@@ -162,7 +162,13 @@ export type CarriedIssueAction = Exclude<IssueToolAction, { kind: "refused" }>;
  * composer holds leaves only by its own Send button — no action here sends.
  */
 export type AppToolAction =
-  | { kind: typeof APP_TOOL_KIND.SETTING; setting: AppGuideSetting; value: string }
+  | {
+      kind: typeof APP_TOOL_KIND.SETTING;
+      setting: AppGuideSetting;
+      value: string;
+      /** The effort riding the new value, when the developer named both. */
+      effort?: string;
+    }
   | { kind: typeof APP_TOOL_KIND.PANEL; tab: AppPanelTab; filter?: string; sort?: SessionListSort }
   | { kind: typeof APP_TOOL_KIND.FEEDBACK; composer: FeedbackComposerKind; draft?: string }
   | { kind: "refused"; reason: string };
@@ -689,7 +695,28 @@ function validateChangeAppSetting(
       setting.kind === APP_SETTING_KIND.TOGGLE ? "on or off" : (setting.choices ?? []).join(", ");
     return { kind: "refused", reason: `${setting.label} takes ${accepted}.` };
   }
-  return { kind: APP_TOOL_KIND.SETTING, setting, value };
+  // An effort may ride only a value the guide lists levels for, so both
+  // halves of one stored pairing can be asked for in one change — matched
+  // like the value: case retold rather than copied, answered in the guide's
+  // own casing.
+  const effortWord = textArgument(parsed, "effort");
+  if (effortWord === undefined) return { kind: APP_TOOL_KIND.SETTING, setting, value };
+  const levels = setting.efforts?.[value] ?? [];
+  if (levels.length === 0) {
+    return {
+      kind: "refused",
+      reason:
+        setting.efforts === undefined
+          ? `${setting.label} takes no effort level.`
+          : `${value} takes no effort level.`,
+    };
+  }
+  const normalizedEffort = effortWord.trim().toLowerCase();
+  const effort = levels.find((candidate) => candidate.toLowerCase() === normalizedEffort);
+  if (effort === undefined) {
+    return { kind: "refused", reason: `${value}'s effort is one of ${levels.join(", ")}.` };
+  }
+  return { kind: APP_TOOL_KIND.SETTING, setting, value, effort };
 }
 
 function validateShowPanel(
@@ -1011,6 +1038,13 @@ export const REALTIME_TOOLS = {
             type: "string",
             description:
               "The new value: on or off for a switch, or one of the choices the guide lists.",
+          },
+          effort: {
+            type: "string",
+            description:
+              "The effort level riding the new value, only when the developer named both and " +
+              "the guide lists levels for that choice — a model and its effort are one change, " +
+              "not two; never on any other setting.",
           },
         },
         required: ["setting_id", "value"],

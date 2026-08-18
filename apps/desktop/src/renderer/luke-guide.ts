@@ -273,11 +273,15 @@ const SETTING_GUIDE: Record<
   }),
   // One stored value, spoken of as two choices: the model, and — only while a
   // model whose agent documents levels is chosen — its effort, because a
-  // level with no model to ride has nowhere documented to go. Both are
-  // changeable by voice, but only at the developer's own naming: the standing
-  // instructions forbid asking or suggesting either, so the ask is always
-  // theirs to bring up. Conductor is the one provider the build documents a
-  // table for; a second provider growing one is the moment this generalizes.
+  // level with no model to ride has nowhere documented to go. The model entry
+  // also lists the levels each choice takes, so a model and its effort named
+  // in one breath are one change riding one call — the only way to set both
+  // while nothing is chosen yet, since the effort entry does not exist to be
+  // named. Both are changeable by voice, but only at the developer's own
+  // naming: the standing instructions forbid asking or suggesting either, so
+  // the ask is always theirs to bring up. Conductor is the one provider the
+  // build documents a table for; a second provider growing one is the moment
+  // this generalizes.
   workspaceAgentDefaults: (settings) => {
     const chosen = settings.workspaceAgentDefaults?.[PROVIDER_ID.CONDUCTOR];
     const chosenAgent = chosen
@@ -289,7 +293,8 @@ const SETTING_GUIDE: Record<
         label: "New Conductor agents run",
         description:
           "Which model a Conductor workspace or agent created through Luke starts with. Unset, " +
-          "Conductor's own defaults decide.",
+          "Conductor's own defaults decide. An effort the model's agent documents may be named " +
+          "in the same change.",
         kind: APP_SETTING_KIND.CHOICE,
         // Said by the name people know the model by, the way its row draws
         // it; the id stays on the wire where only endpoints read it.
@@ -302,6 +307,17 @@ const SETTING_GUIDE: Record<
             entry.models.map((model) => model.label),
           ),
         ],
+        // Each model's documented levels, keyed by the label the choice is
+        // said by, so an effort can ride the model's own change — the guide
+        // never lists a level nowhere documented, and a model whose agent
+        // takes none is simply absent.
+        efforts: Object.fromEntries(
+          workspaceAgentModels(PROVIDER_ID.CONDUCTOR).flatMap((entry) =>
+            entry.efforts.length > 0
+              ? entry.models.map((model) => [model.label, entry.efforts] as const)
+              : [],
+          ),
+        ),
         // The default is itself one of the choices, so an ask to restore it
         // is an ordinary change to the value listed.
         defaultValue: CONDUCTOR_DEFAULT_CHOICE,
@@ -846,19 +862,26 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
 
 /**
  * Composes the stored Conductor selection a spoken model or effort change
- * asks for. A model is named by its label and carries the current effort
- * forward only where the new model's agent documents it; an effort rides the
- * model already chosen, which is why the effort entry only exists while one
- * is. Naming the default returns that half to Conductor: the whole selection
- * for a model, the effort alone otherwise.
+ * asks for. A model is named by its label; an effort named beside it rides
+ * that same change, and one left unsaid carries the current effort forward
+ * only where the new model's agent documents it. An effort change alone
+ * rides the model already chosen, which is why the effort entry only exists
+ * while one is. Naming the default returns that half to Conductor: the whole
+ * selection for a model, the effort alone otherwise.
  */
 function spokenWorkspaceAgentSelection(
   settingId: string,
   value: string,
+  namedEffort: string | undefined,
   current: WorkspaceAgentSelection | undefined,
 ): { selection: WorkspaceAgentSelection | undefined } | { refused: string } {
   if (settingId === APP_SETTING_ID.WORKSPACE_AGENT_MODEL) {
-    if (value === CONDUCTOR_DEFAULT_CHOICE) return { selection: undefined };
+    if (value === CONDUCTOR_DEFAULT_CHOICE) {
+      if (namedEffort !== undefined) {
+        return { refused: "Conductor's own default takes no effort level." };
+      }
+      return { selection: undefined };
+    }
     const named = workspaceAgentModels(PROVIDER_ID.CONDUCTOR)
       .flatMap((entry) =>
         entry.models.map((model) => ({
@@ -870,6 +893,19 @@ function spokenWorkspaceAgentSelection(
       )
       .find((candidate) => candidate.label === value);
     if (!named) return { refused: "No documented Conductor model goes by that name." };
+    if (namedEffort !== undefined) {
+      // Composed against the table itself, not the guide the call was
+      // validated against: this half answers to what an endpoint takes.
+      if (!named.efforts.includes(namedEffort)) {
+        return {
+          refused:
+            named.efforts.length > 0
+              ? `That model's effort is one of ${named.efforts.join(", ")}.`
+              : "That model takes no effort level.",
+        };
+      }
+      return { selection: { agent: named.agent, model: named.model, effort: namedEffort } };
+    }
     const effort =
       current?.effort && named.efforts.includes(current.effort) ? current.effort : undefined;
     return {
@@ -912,7 +948,7 @@ export async function applySpokenSetting(
     | "setFormFactor"
     | "setWorkspaceAgentDefault"
   >,
-  action: { setting: AppGuideSetting; value: string },
+  action: { setting: AppGuideSetting; value: string; effort?: string },
   onSettings: (settings: AppSettings) => void,
   current?: AppSettings,
 ): Promise<Record<string, unknown>> {
@@ -923,6 +959,7 @@ export async function applySpokenSetting(
     const composed = spokenWorkspaceAgentSelection(
       action.setting.id,
       action.value,
+      action.effort,
       current?.workspaceAgentDefaults?.[PROVIDER_ID.CONDUCTOR],
     );
     if ("refused" in composed) return { status: "refused", reason: composed.refused };
@@ -932,7 +969,12 @@ export async function applySpokenSetting(
     );
     onSettings(answered.settings);
     if (answered.reason) return { status: "refused", reason: answered.reason };
-    return { status: "changed", setting: action.setting.label, value: action.value };
+    return {
+      status: "changed",
+      setting: action.setting.label,
+      value: action.value,
+      ...(action.effort !== undefined ? { effort: action.effort } : {}),
+    };
   }
   const enabled = action.value === APP_TOGGLE_VALUE.ON;
   const speed = voiceSpeedFromWord(action.value);

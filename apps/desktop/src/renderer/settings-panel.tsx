@@ -356,9 +356,10 @@ const ASK_EACH_TIME = "";
 /* The agent row's word for no choice at all: the provider's own default. */
 const PROVIDER_DEFAULT_VALUE = "";
 
-/* The default-project rows' word for no default at all. An empty value for
-   the ASK_EACH_TIME reason: no provider's project id can collide with it. */
-const FIRST_CREATION_SETS_IT = "";
+/* The default-project rows' word for no default at all — the provider row's
+   own phrase, so the two rows say the same state the same way. An empty value
+   for the ASK_EACH_TIME reason: no provider's project id can collide with it. */
+const PROJECT_ASK_EACH_TIME = "";
 
 /* The safe answer arrives first and the one that cannot be taken back lands a
    beat behind it, on the same stagger the panel's rows fan open with. Their
@@ -2014,13 +2015,16 @@ function WorkspaceProjectRow({
       ariaLabel={`The project a nameless ask creates ${provider.name} workspaces in`}
       detail="Where an ask that names no project creates a workspace. Your first creation there sets it."
       changed={stored !== undefined}
-      value={stored ?? FIRST_CREATION_SETS_IT}
+      value={stored ?? PROJECT_ASK_EACH_TIME}
       options={[
-        { value: FIRST_CREATION_SETS_IT, label: "First creation sets it" },
+        // The provider row's own words for the same state: until a default
+        // exists, an ambiguous ask is asked about, and the two rows should
+        // say that identically.
+        { value: PROJECT_ASK_EACH_TIME, label: "Ask each time" },
         ...provider.projects.map((project) => ({ value: project.id, label: project.label })),
       ]}
       parse={(raw) => {
-        if (raw === FIRST_CREATION_SETS_IT) return raw;
+        if (raw === PROJECT_ASK_EACH_TIME) return raw;
         // The set is the one this row offered, so anything else arriving out
         // of the select is a broken control rather than a choice.
         return provider.projects.some((project) => project.id === raw) ? raw : undefined;
@@ -2028,7 +2032,7 @@ function WorkspaceProjectRow({
       onChange={(next) =>
         preferences.onWorkspaceProjectDefaultChange(
           providerId,
-          next === FIRST_CREATION_SETS_IT ? undefined : next,
+          next === PROJECT_ASK_EACH_TIME ? undefined : next,
         )
       }
     />

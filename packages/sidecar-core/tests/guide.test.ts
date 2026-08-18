@@ -58,6 +58,20 @@ const GUIDE: AppGuideSnapshot = {
       adjustable: false,
       manual: "System Settings, under Privacy & Security",
     },
+    {
+      id: "agent_model",
+      label: "New agents run",
+      description: "Which model a new agent starts with.",
+      kind: APP_SETTING_KIND.CHOICE,
+      value: "Provider default",
+      defaultValue: "Provider default",
+      choices: ["Provider default", "Fable 5", "GPT", "Cursor Auto"],
+      // Two choices share their levels and one takes none, mirroring the
+      // shape the app's own table produces.
+      efforts: { "Fable 5": ["low", "high", "max"], GPT: ["low", "high", "max"] },
+      adjustable: true,
+      manual: "the provider's own row",
+    },
   ],
 };
 
@@ -98,6 +112,14 @@ test("the guide's text carries the facts and every setting's id, value, and by-h
   // A system permission has no default of the app's own, so its line honestly
   // carries none rather than inventing one.
   assert.match(text, /Microphone access[^\n]*currently on; not changeable/);
+  // The levels each choice takes are printed with the choices, said once per
+  // distinct list, so a value and its effort can be asked for in one breath.
+  assert.match(
+    text,
+    /a change may name an effort with the value: Fable 5, GPT take low\/high\/max/,
+  );
+  // A choice that takes none is not listed taking any.
+  assert.doesNotMatch(text, /Cursor Auto take/);
 });
 
 test("an empty guide says so rather than describing an app it was never told about", () => {
@@ -195,6 +217,42 @@ test("a spoken change can name only a setting the guide lists, to a value it acc
   const badChoice = change('{"setting_id":"voice","value":"basso"}');
   assert.equal(badChoice.kind, "refused");
   assert.match((badChoice as { reason: string }).reason, /cedar, marin/);
+});
+
+test("a value and its effort named in one change are validated as the pair they are", () => {
+  const change = (argumentsJson: string) =>
+    appToolAction(call(REALTIME_TOOL.CHANGE_APP_SETTING, argumentsJson), GUIDE, []);
+
+  // The pair rides one action, the effort matched like the value: case
+  // retold rather than copied, answered in the guide's own casing.
+  assert.deepEqual(change('{"setting_id":"agent_model","value":"Fable 5","effort":"High"}'), {
+    kind: "setting",
+    setting: GUIDE.settings[3],
+    value: "Fable 5",
+    effort: "high",
+  });
+
+  // Unnamed, nothing rides: the action carries no effort at all.
+  assert.deepEqual(change('{"setting_id":"agent_model","value":"Fable 5"}'), {
+    kind: "setting",
+    setting: GUIDE.settings[3],
+    value: "Fable 5",
+  });
+
+  // A level the choice's own list does not carry is refused with that list.
+  const wrongLevel = change('{"setting_id":"agent_model","value":"Fable 5","effort":"ultra"}');
+  assert.equal(wrongLevel.kind, "refused");
+  assert.match((wrongLevel as { reason: string }).reason, /low, high, max/);
+
+  // A choice the guide lists no levels for takes none.
+  const levelless = change('{"setting_id":"agent_model","value":"Cursor Auto","effort":"high"}');
+  assert.equal(levelless.kind, "refused");
+  assert.match((levelless as { reason: string }).reason, /Cursor Auto takes no effort level/);
+
+  // And a setting with no levels anywhere refuses by its own name.
+  const toggled = change('{"setting_id":"voice_captions","value":"on","effort":"high"}');
+  assert.equal(toggled.kind, "refused");
+  assert.match((toggled as { reason: string }).reason, /Captions takes no effort level/);
 });
 
 test("a by-hand-only setting is refused with the path to it, so the refusal is the guidance", () => {

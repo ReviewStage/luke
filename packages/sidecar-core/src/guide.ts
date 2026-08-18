@@ -52,6 +52,15 @@ export interface AppGuideSetting {
   defaultValue?: string;
   /** Every value a choice accepts, in the order settings offers them. */
   choices?: readonly string[];
+  /**
+   * For a choice whose values each take a companion effort level — a model
+   * whose agent documents levels — the levels riding each choice, keyed by
+   * the choice exactly as `choices` lists it. A choice absent here takes no
+   * level. This is what lets one spoken change name both halves of a stored
+   * pairing at once: `change_app_setting` accepts an effort only for a value
+   * this field lists levels for, and refuses it everywhere else.
+   */
+  efforts?: Readonly<Partial<Record<string, readonly string[]>>>;
   /** Whether a spoken ask may change it; false means describe, never act. */
   adjustable: boolean;
   /** Where the same change is made by hand. */
@@ -172,12 +181,40 @@ export function appGuideSetting(
   return guide.settings.find((setting) => setting.id === settingId);
 }
 
+/**
+ * The effort levels a setting's choices take, said once per distinct list
+ * rather than once per choice: the agents behind the choices share their
+ * levels, so grouping is what keeps the line sayable.
+ */
+function settingEffortsText(setting: AppGuideSetting): string | undefined {
+  const efforts = setting.efforts;
+  if (!efforts || !setting.choices) return undefined;
+  const groups: { levels: readonly string[]; choices: string[] }[] = [];
+  for (const choice of setting.choices) {
+    const levels = efforts[choice];
+    if (!levels || levels.length === 0) continue;
+    const group = groups.find(
+      (candidate) =>
+        candidate.levels.length === levels.length &&
+        candidate.levels.every((level, index) => level === levels[index]),
+    );
+    if (group) group.choices.push(choice);
+    else groups.push({ levels, choices: [choice] });
+  }
+  if (groups.length === 0) return undefined;
+  return `a change may name an effort with the value: ${groups
+    .map((group) => `${group.choices.join(", ")} take ${group.levels.join("/")}`)
+    .join("; ")}`;
+}
+
 function settingLine(setting: AppGuideSetting): string {
+  const efforts = settingEffortsText(setting);
   const parts = [
     `- ${setting.label} — ${setting.description}`,
     `currently ${setting.value}`,
     ...(setting.defaultValue !== undefined ? [`default: ${setting.defaultValue}`] : []),
     ...(setting.choices ? [`choices: ${setting.choices.join(", ")}`] : []),
+    ...(efforts !== undefined ? [efforts] : []),
     setting.adjustable
       ? `changeable by voice [setting_id=${setting.id}]`
       : "not changeable by voice",
