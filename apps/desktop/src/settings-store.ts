@@ -1,18 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import {
-  DEFAULT_PANEL_FORM_FACTOR,
-  isPanelFormFactor,
-  isProviderId,
-  isRealtimeVoice,
-  isRealtimeVoiceSpeed,
-  type PanelFormFactor,
-  type ProviderId,
-  REALTIME_DEFAULTS,
-  type RealtimeVoice,
-  type RealtimeVoiceSpeed,
-  type WorkspaceAgentSelection,
-} from "@sidecar/core";
+import { DEFAULT_PANEL_FORM_FACTOR, REALTIME_DEFAULTS } from "@sidecar/core";
 // The reader owns the shape it is fed: what this store resolves a stored
 // account into is exactly what `readAccounts` promises it.
 import type { CalendarAccountCredential } from "./google-calendar";
@@ -23,13 +11,10 @@ import {
   ACCOUNT_STATUS,
   type AccountProvider,
   type AccountSnapshot,
-  APP_SETTING_DEFAULTS,
   type AppSettings,
   CREDENTIAL_SOURCE,
   type CredentialSource,
-  isVoiceSource,
   SECRET_STORAGE,
-  SETTINGS_RESET_SCOPE,
   type SecretStorage,
   type SettingsResetScope,
   type SettingsUpdateResult,
@@ -44,8 +29,16 @@ import {
   type CredentialProviderId,
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "./shared/credential-providers";
-import { parseVoiceHotkey } from "./shared/voice-hotkey";
-import { isWorkspaceAgentSelection } from "./shared/workspace-agents";
+import {
+  APP_SETTING_FIELDS,
+  APP_SETTING_SCHEMA,
+  type AppSettingField,
+  type AppSettingValue,
+  type KeyedAppSettingField,
+  type SettingEntryValue,
+  type StoredAppSettings,
+  sameSettingEntry,
+} from "./shared/settings-schema";
 
 const SETTINGS_FILE_NAME = "settings.json";
 const SETTINGS_TEMPORARY_FILE_NAME = "settings.json.tmp";
@@ -57,24 +50,8 @@ const SETTINGS_FIELD = {
   ACCOUNT: "account",
   API_KEYS: "apiKeys",
   CALENDAR_ACCOUNTS: "calendarAccounts",
-  ASK_HOTKEY: "askHotkey",
-  DEFAULT_WORKSPACE_PROVIDER: "defaultWorkspaceProvider",
-  DUCK_OTHER_MEDIA: "duckOtherMedia",
-  PREFER_BUILT_IN_MICROPHONE: "preferBuiltInMicrophone",
-  FORM_FACTOR: "formFactor",
   LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
-  QUIET_DURING_MEETINGS: "quietDuringMeetings",
-  SHOW_IN_DOCK: "showInDock",
-  SHOW_ON_ALL_DISPLAYS: "showOnAllDisplays",
-  STOP_HOTKEY: "stopHotkey",
   VERSION: "version",
-  VOICE: "voice",
-  VOICE_CAPTIONS: "voiceCaptions",
-  VOICE_SOURCE: "voiceSource",
-  VOICE_SPEED: "voiceSpeed",
-  VOICE_HOTKEY: "voiceHotkey",
-  WORKSPACE_AGENT_DEFAULTS: "workspaceAgentDefaults",
-  WORKSPACE_PROJECT_DEFAULTS: "workspaceProjectDefaults",
 } as const;
 
 const API_KEY_LENGTH = {
@@ -114,7 +91,7 @@ export interface SettingsStoreOptions {
   credentialsUsable?: boolean;
 }
 
-interface PersistedSettings {
+interface PersistedSettings extends StoredAppSettings {
   version: number;
   /**
    * Ciphertext by provider id. A provider this build does not know is carried
@@ -135,105 +112,6 @@ interface PersistedSettings {
    * Absent from the file while none are connected.
    */
   calendarAccounts?: readonly PersistedCalendarAccount[];
-  /**
-   * Whether Luke stands in the Dock. Off unless the file says `true` outright,
-   * so a missing field, an older file, and a corrupt value all land on the
-   * accessory app Luke ships as rather than putting an icon somewhere new.
-   */
-  showInDock: boolean;
-  /**
-   * The voice the user chose, absent until one has been. A preference rather
-   * than a credential, so it is stored plainly and never touches the cipher.
-   */
-  voice?: RealtimeVoice;
-  /**
-   * The pace the user chose for Luke's speech, absent until one has been.
-   * Stored plainly like the voice, and held to the same offered set.
-   */
-  voiceSpeed?: RealtimeVoiceSpeed;
-  /**
-   * Whether Luke's speech is captioned on screen. Off unless the file says
-   * `true` outright, so a missing field, an older file, and a corrupt value
-   * all land on the default rather than switching something on.
-   */
-  voiceCaptions: boolean;
-  /**
-   * The talk-key chord the user chose, absent while the defaults stand. A
-   * preference like the voice, stored plainly — and like the voice, a value
-   * this build cannot register is dropped rather than carried, because
-   * honouring it would claim a system key nothing was ever told about.
-   */
-  voiceHotkey?: string;
-  /**
-   * The ask-key chord the user chose, held to everything the talk key's is:
-   * stored plainly, absent while the defaults stand, and dropped rather than
-   * carried when this build cannot register it.
-   */
-  askHotkey?: string;
-  /**
-   * The stop-key chord the user chose, held to the same terms as the other
-   * two keys' choices.
-   */
-  stopHotkey?: string;
-  /**
-   * Whether Music and Spotify are turned down while a spoken exchange is
-   * live. On unless the file says `false` outright: this is what Luke does
-   * until the user asks otherwise, so a missing field
-   * and a corrupt value both land on doing it.
-   */
-  duckOtherMedia: boolean;
-  /**
-   * Which credential the user chose to speak and review on, absent until they
-   * choose. Absent means "whichever is there, the key first", which is what
-   * connecting a key meant before the choice existed — so an install that
-   * never touches the toggle behaves exactly as it always did, and only an
-   * explicit choice of the account holds a stored key back.
-   */
-  voiceSource?: VoiceSource;
-  preferBuiltInMicrophone: boolean;
-  /**
-   * Whether announcements wait out calendar meetings. On unless the file says
-   * `false` outright, on the media duck's own reasoning: this is what Luke
-   * does with a connected calendar until the user asks otherwise, so a
-   * missing field and a corrupt value both land on doing it.
-   */
-  quietDuringMeetings: boolean;
-  /**
-   * Whether Luke stands on every connected display. Off unless the file says
-   * `true` outright, like the Dock: a missing field, an older file, and a
-   * corrupt value all land on the main display alone rather than raising
-   * windows somewhere new.
-   */
-  showOnAllDisplays: boolean;
-  /**
-   * How Luke stands on a display without a housing, absent until the user has
-   * chosen. Held to the offered set like the voice: a value this build does
-   * not draw is dropped rather than honoured.
-   */
-  formFactor?: PanelFormFactor;
-  /**
-   * The provider a conversational ask creates a workspace in when it names
-   * none, absent until the user's first creation chooses it. Held to the
-   * providers this build knows: an unknown id is dropped rather than steered
-   * by, because it names nowhere an ask could actually go.
-   */
-  defaultWorkspaceProvider?: ProviderId;
-  /**
-   * The agent kind and model new workspaces start with, per provider, each
-   * entry absent while that provider's own defaults stand. Held to the
-   * build's documented table twice over: an unknown provider and an unlisted
-   * pairing are both dropped, because each names something no endpoint takes.
-   */
-  workspaceAgentDefaults?: Readonly<Partial<Record<ProviderId, WorkspaceAgentSelection>>>;
-  /**
-   * The project a nameless creation ask lands in, per provider, each entry
-   * absent until the user's first creation there chooses it. Projects are
-   * observed rather than build-fixed, so only the value's shape can be held
-   * here — an unknown provider or a malformed id is dropped, and whether the
-   * project is still offered is answered where the list lives: the id only
-   * ever steers, and every creation is validated against the observed list.
-   */
-  workspaceProjectDefaults?: Readonly<Partial<Record<ProviderId, string>>>;
 }
 
 interface ResolvedApiKey {
@@ -326,15 +204,6 @@ function storedCalendarAccounts(
   return accounts;
 }
 
-/**
- * Reads a stored switch: a boolean is honoured, and anything else — a missing
- * field, an older file, a corrupt value — lands on the stated default rather
- * than switching anything on or off by accident.
- */
-function booleanSetting(value: unknown, fallback: boolean): boolean {
-  return typeof value === "boolean" ? value : fallback;
-}
-
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
 }
@@ -399,61 +268,6 @@ function storedApiKeys(record: Record<string, unknown>): Record<string, string> 
  * with a model this one does not know; honouring it would send a value no
  * documented endpoint takes, so it is dropped the way an unknown voice is.
  */
-function storedWorkspaceAgentDefaults(
-  record: Record<string, unknown>,
-): Partial<Record<ProviderId, WorkspaceAgentSelection>> | undefined {
-  const persisted = record[SETTINGS_FIELD.WORKSPACE_AGENT_DEFAULTS];
-  if (persisted === null || typeof persisted !== "object" || Array.isArray(persisted)) {
-    return undefined;
-  }
-  const defaults: Partial<Record<ProviderId, WorkspaceAgentSelection>> = {};
-  for (const [providerId, value] of Object.entries(persisted)) {
-    if (!isProviderId(providerId)) continue;
-    if (!isWorkspaceAgentSelection(providerId, value)) continue;
-    defaults[providerId] = {
-      agent: value.agent,
-      model: value.model,
-      ...(value.effort !== undefined ? { effort: value.effort } : {}),
-    };
-  }
-  return Object.keys(defaults).length > 0 ? defaults : undefined;
-}
-
-/** A stored project id reads like one wire value; anything longer is not an id. */
-const MAXIMUM_WORKSPACE_PROJECT_ID_LENGTH = 200;
-
-/** A provider's project id as this store will keep it, or nothing. */
-function workspaceProjectIdText(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const normalized = value.trim();
-  if (!normalized || normalized.length > MAXIMUM_WORKSPACE_PROJECT_ID_LENGTH) return undefined;
-  return normalized;
-}
-
-/**
- * Reads the stored per-provider project choices, keeping only entries whose
- * provider this build knows and whose value has an id's shape. Whether the
- * project is still offered cannot be answered here — the list is observed at
- * run time — so a stale id is carried and simply steers nothing until its
- * provider offers that project again.
- */
-function storedWorkspaceProjectDefaults(
-  record: Record<string, unknown>,
-): Partial<Record<ProviderId, string>> | undefined {
-  const persisted = record[SETTINGS_FIELD.WORKSPACE_PROJECT_DEFAULTS];
-  if (persisted === null || typeof persisted !== "object" || Array.isArray(persisted)) {
-    return undefined;
-  }
-  const defaults: Partial<Record<ProviderId, string>> = {};
-  for (const [providerId, value] of Object.entries(persisted)) {
-    if (!isProviderId(providerId)) continue;
-    const providerProjectId = workspaceProjectIdText(value);
-    if (!providerProjectId) continue;
-    defaults[providerId] = providerProjectId;
-  }
-  return Object.keys(defaults).length > 0 ? defaults : undefined;
-}
-
 function parsePersistedSettings(source: string): PersistedSettings {
   const parsed: unknown = JSON.parse(source);
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
@@ -462,75 +276,18 @@ function parsePersistedSettings(source: string): PersistedSettings {
   const record = parsed as Record<string, unknown>;
   const version = record[SETTINGS_FIELD.VERSION];
   const calendarAccounts = storedCalendarAccounts(record);
-  const voice = record[SETTINGS_FIELD.VOICE];
-  const voiceSource = record[SETTINGS_FIELD.VOICE_SOURCE];
-  const voiceSpeed = record[SETTINGS_FIELD.VOICE_SPEED];
-  const formFactor = record[SETTINGS_FIELD.FORM_FACTOR];
-  const defaultWorkspaceProvider = record[SETTINGS_FIELD.DEFAULT_WORKSPACE_PROVIDER];
-  const workspaceAgentDefaults = storedWorkspaceAgentDefaults(record);
-  const workspaceProjectDefaults = storedWorkspaceProjectDefaults(record);
-  const storedHotkey = record[SETTINGS_FIELD.VOICE_HOTKEY];
-  // Read through the same gate a submitted chord passes, so a hand-edited
-  // value is either the one spelling the rest of the app uses or nothing.
-  const voiceHotkey = typeof storedHotkey === "string" ? parseVoiceHotkey(storedHotkey) : undefined;
-  const storedAskHotkey = record[SETTINGS_FIELD.ASK_HOTKEY];
-  const askHotkey =
-    typeof storedAskHotkey === "string" ? parseVoiceHotkey(storedAskHotkey) : undefined;
-  const storedStopHotkey = record[SETTINGS_FIELD.STOP_HOTKEY];
-  const stopHotkey =
-    typeof storedStopHotkey === "string" ? parseVoiceHotkey(storedStopHotkey) : undefined;
+  const settings = Object.fromEntries(
+    APP_SETTING_FIELDS.map((field) => [
+      field,
+      APP_SETTING_SCHEMA[field].guard(record[field]).value,
+    ]),
+  ) as unknown as StoredAppSettings;
   return {
+    ...settings,
     version: typeof version === "number" ? version : SETTINGS_FILE_VERSION,
     apiKeys: storedApiKeys(record),
     ...(storedAccount(record) ? { account: storedAccount(record) } : {}),
     ...(calendarAccounts.length > 0 ? { calendarAccounts } : {}),
-    showInDock: booleanSetting(
-      record[SETTINGS_FIELD.SHOW_IN_DOCK],
-      APP_SETTING_DEFAULTS.showInDock,
-    ),
-    // A voice this build does not offer is dropped rather than carried: unlike
-    // a credential it has a default to fall back to, and honouring an unknown
-    // one would mint sessions the API refuses.
-    ...(isRealtimeVoice(voice) ? { voice } : {}),
-    // A pace outside the offered set is dropped for the same reason.
-    ...(isRealtimeVoiceSpeed(voiceSpeed) ? { voiceSpeed } : {}),
-    voiceCaptions: booleanSetting(
-      record[SETTINGS_FIELD.VOICE_CAPTIONS],
-      APP_SETTING_DEFAULTS.voiceCaptions,
-    ),
-    ...(voiceHotkey ? { voiceHotkey } : {}),
-    ...(askHotkey ? { askHotkey } : {}),
-    ...(stopHotkey ? { stopHotkey } : {}),
-    duckOtherMedia: booleanSetting(
-      record[SETTINGS_FIELD.DUCK_OTHER_MEDIA],
-      APP_SETTING_DEFAULTS.duckOtherMedia,
-    ),
-    // A source this build does not offer is dropped rather than carried, the
-    // way an unknown voice is: absent is a meaning of its own here — take
-    // whichever credential is there — so there is always somewhere safe to
-    // land.
-    ...(isVoiceSource(voiceSource) ? { voiceSource } : {}),
-    preferBuiltInMicrophone: booleanSetting(
-      record[SETTINGS_FIELD.PREFER_BUILT_IN_MICROPHONE],
-      APP_SETTING_DEFAULTS.preferBuiltInMicrophone,
-    ),
-    quietDuringMeetings: booleanSetting(
-      record[SETTINGS_FIELD.QUIET_DURING_MEETINGS],
-      APP_SETTING_DEFAULTS.quietDuringMeetings,
-    ),
-    showOnAllDisplays: booleanSetting(
-      record[SETTINGS_FIELD.SHOW_ON_ALL_DISPLAYS],
-      APP_SETTING_DEFAULTS.showOnAllDisplays,
-    ),
-    // A form this build does not draw is dropped like an unknown voice.
-    ...(isPanelFormFactor(formFactor) ? { formFactor } : {}),
-    // A provider this build does not know is dropped the same way: it names
-    // nowhere a creation ask could go, so honouring it would steer nothing.
-    ...(typeof defaultWorkspaceProvider === "string" && isProviderId(defaultWorkspaceProvider)
-      ? { defaultWorkspaceProvider }
-      : {}),
-    ...(workspaceAgentDefaults ? { workspaceAgentDefaults } : {}),
-    ...(workspaceProjectDefaults ? { workspaceProjectDefaults } : {}),
   };
 }
 
@@ -550,6 +307,67 @@ export class SettingsStore {
   /** Decrypted accounts, cached like the keys so timers never drum the Keychain. */
   #resolvedCalendarAccounts: readonly CalendarAccountCredential[] | undefined;
   #mutations: Promise<void> = Promise.resolve();
+
+  async get<Field extends AppSettingField>(field: Field): Promise<AppSettingValue<Field>> {
+    return (await this.#load())[field];
+  }
+
+  async set<Field extends AppSettingField>(
+    field: Field,
+    value: AppSettingValue<Field>,
+  ): Promise<SettingsUpdateResult>;
+  async set(
+    field: AppSettingField,
+    value: StoredAppSettings[AppSettingField],
+  ): Promise<SettingsUpdateResult>;
+  async set(
+    field: AppSettingField,
+    value: StoredAppSettings[AppSettingField],
+  ): Promise<SettingsUpdateResult> {
+    return this.#setField((persisted) => {
+      if (persisted[field] === value) return;
+      const next: PersistedSettings = { ...persisted };
+      if (value === undefined) delete next[field];
+      else Object.assign(next, { [field]: value });
+      return next;
+    });
+  }
+
+  /**
+   * Writes one entry of a map-valued setting, or forgets it when the value is
+   * omitted. The merge happens inside the mutation rather than in the caller so
+   * one key's write cannot drop another's: a caller holding the map it read
+   * before an overlapping write landed would put the stale copy back. A map
+   * left with no entries is deleted, so an emptied setting reads as unset
+   * rather than as an empty object.
+   */
+  async setEntry<Field extends KeyedAppSettingField>(
+    field: Field,
+    key: string,
+    value: SettingEntryValue<Field> | undefined,
+  ): Promise<SettingsUpdateResult>;
+  async setEntry(
+    field: KeyedAppSettingField,
+    key: string,
+    value: unknown,
+  ): Promise<SettingsUpdateResult>;
+  async setEntry(
+    field: KeyedAppSettingField,
+    key: string,
+    value: unknown,
+  ): Promise<SettingsUpdateResult> {
+    return this.#setField((persisted) => {
+      const current = persisted[field] as Record<string, unknown> | undefined;
+      if (sameSettingEntry(field, current?.[key], value)) return;
+      const entries = { ...current };
+      if (value === undefined) delete entries[key];
+      else entries[key] = value;
+      const next: PersistedSettings = { ...persisted };
+      if (Object.keys(entries).length > 0) Object.assign(next, { [field]: entries });
+      else delete next[field];
+      return next;
+    });
+  }
   #secretStorage: SecretStorage = SECRET_STORAGE.UNKNOWN;
 
   constructor(options: SettingsStoreOptions) {
@@ -708,318 +526,6 @@ export class SettingsStore {
   }
 
   /**
-   * The Dock icon is decided
-   * at launch from the settings file alone, never the keychain behind the
-   * stored keys.
-   */
-  async showInDock(): Promise<boolean> {
-    return (await this.#load()).showInDock;
-  }
-
-  /**
-   * Shallow so the media duck arms at
-   * startup, and arming it must never be what wakes the OS keychain.
-   */
-  async duckOtherMedia(): Promise<boolean> {
-    return (await this.#load()).duckOtherMedia;
-  }
-
-  /**
-   * Main-process only, like the resolved keys: the voice the user chose, for
-   * the minter at startup. Nothing chosen resolves to nothing — the minter
-   * already carries the environment's voice and the default.
-   */
-  async readVoice(): Promise<RealtimeVoice | undefined> {
-    return (await this.#load()).voice;
-  }
-
-  /** Stores the chosen voice, or returns to the default when omitted. */
-  async setVoice(voice: RealtimeVoice | undefined): Promise<SettingsUpdateResult> {
-    return this.#setField((persisted) => {
-      if (persisted.voice === voice) return;
-      const next: PersistedSettings = { ...persisted };
-      if (voice) next.voice = voice;
-      else delete next.voice;
-      return next;
-    });
-  }
-
-  /**
-   * Main-process only, like the voice: the pace the user chose, for the minter
-   * at startup. Nothing chosen resolves to nothing — the minter already
-   * carries the environment's pace and the default.
-   */
-  async readVoiceSpeed(): Promise<RealtimeVoiceSpeed | undefined> {
-    return (await this.#load()).voiceSpeed;
-  }
-
-  /** Stores the chosen pace, or returns to the default when omitted. */
-  async setVoiceSpeed(speed: RealtimeVoiceSpeed | undefined): Promise<SettingsUpdateResult> {
-    return this.#setField((persisted) => {
-      if (persisted.voiceSpeed === speed) return;
-      const next: PersistedSettings = { ...persisted };
-      if (speed) next.voiceSpeed = speed;
-      else delete next.voiceSpeed;
-      return next;
-    });
-  }
-
-  /**
-   * Turns the on-screen caption of Luke's speech on or off. Nothing here needs
-   * the cipher, and there is no way to enter an invalid value, so the write
-   * either lands or throws.
-   */
-  async setVoiceCaptions(enabled: boolean): Promise<SettingsUpdateResult> {
-    return this.#setField((persisted) => {
-      if (persisted.voiceCaptions === enabled) return;
-      return { ...persisted, voiceCaptions: enabled };
-    });
-  }
-
-  /**
-   * Main-process only, for registration at startup: the talk-key chord the
-   * user chose, or nothing while the defaults stand — the registrar already
-   * carries those.
-   */
-  async readVoiceHotkey(): Promise<string | undefined> {
-    return (await this.#load()).voiceHotkey;
-  }
-
-  /**
-   * Stores the chosen talk-key chord, or returns to the defaults when
-   * omitted. The caller hands in a chord already read into its one canonical
-   * spelling; what arrives here is written as given, so resetting is the
-   * absence of a choice rather than a second stored value.
-   */
-  async setVoiceHotkey(accelerator: string | undefined): Promise<SettingsUpdateResult> {
-    return this.#setField((persisted) => {
-      if (persisted.voiceHotkey === accelerator) return;
-      const next: PersistedSettings = { ...persisted };
-      if (accelerator) next.voiceHotkey = accelerator;
-      else delete next.voiceHotkey;
-      return next;
-    });
-  }
-
-  /**
-   * Main-process only, like the talk key's: the ask-key chord the user chose,
-   * for registration at startup, or nothing while the defaults stand.
-   */
-  async readAskHotkey(): Promise<string | undefined> {
-    return (await this.#load()).askHotkey;
-  }
-
-  /**
-   * Stores the chosen ask-key chord, or returns to the defaults when omitted,
-   * on the talk key's exact terms: the chord arrives already read into its one
-   * canonical spelling, and resetting is the absence of a choice.
-   */
-  async setAskHotkey(accelerator: string | undefined): Promise<SettingsUpdateResult> {
-    return this.#setField((persisted) => {
-      if (persisted.askHotkey === accelerator) return;
-      const next: PersistedSettings = { ...persisted };
-      if (accelerator) next.askHotkey = accelerator;
-      else delete next.askHotkey;
-      return next;
-    });
-  }
-
-  /**
-   * Main-process only, like the other two keys': the stop-key chord the user
-   * chose, for registration at startup, or nothing while the default stands.
-   */
-  async readStopHotkey(): Promise<string | undefined> {
-    return (await this.#load()).stopHotkey;
-  }
-
-  /**
-   * Stores the chosen stop-key chord, or returns to the default when omitted,
-   * on the other two keys' exact terms: the chord arrives already read into
-   * its one canonical spelling, and resetting is the absence of a choice.
-   */
-  async setStopHotkey(accelerator: string | undefined): Promise<SettingsUpdateResult> {
-    return this.#setField((persisted) => {
-      if (persisted.stopHotkey === accelerator) return;
-      const next: PersistedSettings = { ...persisted };
-      if (accelerator) next.stopHotkey = accelerator;
-      else delete next.stopHotkey;
-      return next;
-    });
-  }
-
-  /**
-   * Turns the quieting of Music and Spotify during a spoken exchange on or
-   * off. A plain preference like the caption's: no cipher, no invalid value,
-   * so the write either lands or throws.
-   */
-  async setPreferBuiltInMicrophone(enabled: boolean): Promise<SettingsUpdateResult> {
-    return this.#setField((persisted) => {
-      if (persisted.preferBuiltInMicrophone === enabled) return;
-      return { ...persisted, preferBuiltInMicrophone: enabled };
-    });
-  }
-
-  async setDuckOtherMedia(enabled: boolean): Promise<SettingsUpdateResult> {
-    return this.#setField((persisted) => {
-      if (persisted.duckOtherMedia === enabled) return;
-      return { ...persisted, duckOtherMedia: enabled };
-    });
-  }
-
-  /**
-   * Shallow like `duckOtherMedia()`: every announcement pass asks whether to
-   * hold, and asking must never be what wakes the OS keychain.
-   */
-  async quietDuringMeetings(): Promise<boolean> {
-    return (await this.#load()).quietDuringMeetings;
-  }
-
-  /**
-   * Turns the holding of announcements during meetings on or off. A plain
-   * preference like the media duck's: no cipher, no invalid value, so the
-   * write either lands or throws.
-   */
-  async setQuietDuringMeetings(enabled: boolean): Promise<SettingsUpdateResult> {
-    return this.#setField((persisted) => {
-      if (persisted.quietDuringMeetings === enabled) return;
-      return { ...persisted, quietDuringMeetings: enabled };
-    });
-  }
-
-  /**
-   * Shallow like `showInDock()`: the displays Luke stands on are decided at
-   * launch from the settings file alone, never the keychain.
-   */
-  async readShowOnAllDisplays(): Promise<boolean> {
-    return (await this.#load()).showOnAllDisplays;
-  }
-
-  /**
-   * Remembers whether Luke stands on every display or the main one alone. A
-   * preference like the Dock's, and held to the same rule: nothing here
-   * touches the cipher.
-   */
-  async setShowOnAllDisplays(show: boolean): Promise<SettingsUpdateResult> {
-    return this.#setField((persisted) => {
-      if (persisted.showOnAllDisplays === show) return;
-      return { ...persisted, showOnAllDisplays: show };
-    });
-  }
-
-  /**
-   * Shallow for the same reason as `readShowOnAllDisplays()`: the windows are
-   * placed at launch from the settings file alone, never the keychain.
-   */
-  async readFormFactor(): Promise<PanelFormFactor | undefined> {
-    return (await this.#load()).formFactor;
-  }
-
-  /** Stores the chosen form, or returns to the default when omitted. */
-  async setFormFactor(formFactor: PanelFormFactor | undefined): Promise<SettingsUpdateResult> {
-    return this.#setField((persisted) => {
-      if (persisted.formFactor === formFactor) return;
-      const next: PersistedSettings = { ...persisted };
-      if (formFactor) next.formFactor = formFactor;
-      else delete next.formFactor;
-      return next;
-    });
-  }
-
-  /**
-   * Shallow like `readFormFactor()`: whether a default provider has been
-   * chosen decides only whether a creation saves one, and that answer must
-   * never wake the keychain behind the stored keys.
-   */
-  async readDefaultWorkspaceProvider(): Promise<ProviderId | undefined> {
-    return (await this.#load()).defaultWorkspaceProvider;
-  }
-
-  /**
-   * Stores the provider a nameless creation ask goes to, or returns to asking
-   * each time when omitted. A preference like the form factor's: no cipher,
-   * and the absence of a choice is itself the stored state.
-   */
-  async setDefaultWorkspaceProvider(
-    providerId: ProviderId | undefined,
-  ): Promise<SettingsUpdateResult> {
-    return this.#setField((persisted) => {
-      if (persisted.defaultWorkspaceProvider === providerId) return;
-      const next: PersistedSettings = { ...persisted };
-      if (providerId) next.defaultWorkspaceProvider = providerId;
-      else delete next.defaultWorkspaceProvider;
-      return next;
-    });
-  }
-
-  /**
-   * Shallow like the default provider's read, and read at the same moment: a
-   * creation ask must not wake the keychain to learn which model it carries.
-   */
-  async readWorkspaceAgentDefault(
-    providerId: ProviderId,
-  ): Promise<WorkspaceAgentSelection | undefined> {
-    return (await this.#load()).workspaceAgentDefaults?.[providerId];
-  }
-
-  /**
-   * Stores the agent kind and model one provider starts new workspaces with,
-   * or returns to that provider's own defaults when omitted. One provider's
-   * choice never disturbs another's, the way one provider's key never
-   * disturbs another's ciphertext.
-   */
-  async setWorkspaceAgentDefault(
-    providerId: ProviderId,
-    selection: WorkspaceAgentSelection | undefined,
-  ): Promise<SettingsUpdateResult> {
-    return this.#setField((persisted) => {
-      const current = persisted.workspaceAgentDefaults?.[providerId];
-      if (
-        current?.agent === selection?.agent &&
-        current?.model === selection?.model &&
-        current?.effort === selection?.effort
-      ) {
-        return;
-      }
-      const defaults = { ...persisted.workspaceAgentDefaults };
-      if (selection) defaults[providerId] = selection;
-      else delete defaults[providerId];
-      const next: PersistedSettings = { ...persisted };
-      if (Object.keys(defaults).length > 0) next.workspaceAgentDefaults = defaults;
-      else delete next.workspaceAgentDefaults;
-      return next;
-    });
-  }
-
-  /**
-   * Shallow like the agent default's read, and read at the same moment: a
-   * creation ask must not wake the keychain to learn which project it prefers.
-   */
-  async readWorkspaceProjectDefault(providerId: ProviderId): Promise<string | undefined> {
-    return (await this.#load()).workspaceProjectDefaults?.[providerId];
-  }
-
-  /**
-   * Stores the project one provider creates nameless-ask workspaces in, or
-   * returns to letting the first creation choose when omitted. One provider's
-   * choice never disturbs another's, the way the agent defaults keep apart.
-   */
-  async setWorkspaceProjectDefault(
-    providerId: ProviderId,
-    providerProjectId: string | undefined,
-  ): Promise<SettingsUpdateResult> {
-    return this.#setField((persisted) => {
-      if (persisted.workspaceProjectDefaults?.[providerId] === providerProjectId) return;
-      const defaults = { ...persisted.workspaceProjectDefaults };
-      if (providerProjectId) defaults[providerId] = providerProjectId;
-      else delete defaults[providerId];
-      const next: PersistedSettings = { ...persisted };
-      if (Object.keys(defaults).length > 0) next.workspaceProjectDefaults = defaults;
-      else delete next.workspaceProjectDefaults;
-      return next;
-    });
-  }
-
-  /**
    * Whether the credential Luke speaks through resolved to something this run
    * would use. A run that refuses its credentials does not ask for the key at
    * all: reading a stored one means a Keychain decrypt, which a run that would
@@ -1061,19 +567,6 @@ export class SettingsStore {
   /** Main-process only: the source the minter and the reviewer are built for. */
   async readVoiceSource(): Promise<VoiceSource> {
     return this.#resolveVoiceSource();
-  }
-
-  /**
-   * Chooses which credential Luke runs on. Stored as asked even where it
-   * cannot be honoured yet — choosing the account before signing in is a
-   * standing preference, not a refusal — because the resolution above is what
-   * decides what actually runs, every time it is asked.
-   */
-  async setVoiceSource(source: VoiceSource): Promise<SettingsUpdateResult> {
-    return this.#setField((persisted) => {
-      if (persisted.voiceSource === source) return;
-      return { ...persisted, voiceSource: source };
-    });
   }
 
   /**
@@ -1283,17 +776,6 @@ export class SettingsStore {
   }
 
   /**
-   * Remembers whether Luke stands in the Dock. A preference that never touches
-   * the cipher.
-   */
-  async setShowInDock(show: boolean): Promise<SettingsUpdateResult> {
-    return this.#setField((persisted) => {
-      if (persisted.showInDock === show) return;
-      return { ...persisted, showInDock: show };
-    });
-  }
-
-  /**
    * Returns one group of preferences to its defaults in a single write, by
    * forgetting the choices rather than storing copies of the defaults: an
    * optional field is deleted the way its own clear deletes it, and a plain
@@ -1307,28 +789,11 @@ export class SettingsStore {
   async resetSettings(scope: SettingsResetScope): Promise<SettingsUpdateResult> {
     return this.#setField((persisted) => {
       const next: PersistedSettings = { ...persisted };
-      switch (scope) {
-        case SETTINGS_RESET_SCOPE.VOICE:
-          delete next.voice;
-          delete next.voiceSpeed;
-          next.voiceCaptions = APP_SETTING_DEFAULTS.voiceCaptions;
-          next.duckOtherMedia = APP_SETTING_DEFAULTS.duckOtherMedia;
-          next.preferBuiltInMicrophone = APP_SETTING_DEFAULTS.preferBuiltInMicrophone;
-          break;
-        case SETTINGS_RESET_SCOPE.APPEARANCE:
-          next.showInDock = APP_SETTING_DEFAULTS.showInDock;
-          next.showOnAllDisplays = APP_SETTING_DEFAULTS.showOnAllDisplays;
-          delete next.formFactor;
-          break;
-        case SETTINGS_RESET_SCOPE.SHORTCUTS:
-          delete next.voiceHotkey;
-          delete next.askHotkey;
-          delete next.stopHotkey;
-          break;
-        case SETTINGS_RESET_SCOPE.WORKSPACES:
-          delete next.defaultWorkspaceProvider;
-          delete next.workspaceProjectDefaults;
-          break;
+      for (const field of APP_SETTING_FIELDS) {
+        const definition = APP_SETTING_SCHEMA[field];
+        if (!("resetScope" in definition) || definition.resetScope !== scope) continue;
+        if (definition.guard(undefined).valid) delete next[field];
+        else Object.assign(next, { [field]: definition.default });
       }
       const changed = (Object.keys(persisted) as (keyof PersistedSettings)[]).some(
         (field) => next[field] !== persisted[field],
@@ -1448,7 +913,12 @@ export class SettingsStore {
     let persisted: PersistedSettings = {
       version: SETTINGS_FILE_VERSION,
       apiKeys: {},
-      ...APP_SETTING_DEFAULTS,
+      ...(Object.fromEntries(
+        APP_SETTING_FIELDS.map((field) => [
+          field,
+          APP_SETTING_SCHEMA[field].guard(undefined).value,
+        ]),
+      ) as unknown as StoredAppSettings),
     };
     if (source) {
       try {

@@ -9,33 +9,20 @@
  * spoken ask can touch, so adding either to the app means adding it here in
  * the same change.
  *
- * The settings half is compile-enforced: `SETTING_GUIDE` is a `Record` over
- * every key of `AppSettings`, so a new settings field does not build until a
- * decision is written down — a spoken entry, or `undefined` with a comment
- * saying how the guide covers it instead. The facts have no such lever, which
- * is why the agent guide states the rule in words.
+ * The settings half is built from the exhaustive schema in
+ * `shared/settings-schema.ts`, so a new stored setting does not build until its
+ * guide entry is declared there. The facts have no such lever, which is why
+ * the agent guide states the rule in words.
  *
  * Nothing here may carry a credential, a key's shape, or any part of one:
  * the guide says whether a provider is connected, and no more.
  */
 
 import {
-  APP_SETTING_KIND,
-  APP_TOGGLE_VALUE,
   type AppGuideFact,
   type AppGuideSetting,
   type AppGuideSnapshot,
-  appToggleText,
-  DEFAULT_PANEL_FORM_FACTOR,
-  isPanelFormFactor,
-  isRealtimeVoice,
-  PANEL_FORM_FACTOR_LIST,
   PROVIDER_ID,
-  type ProviderId,
-  REALTIME_DEFAULTS,
-  REALTIME_VOICE_LIST,
-  REALTIME_VOICE_SPEED,
-  type RealtimeVoiceSpeed,
   type WorkspaceAgentSelection,
 } from "@sidecar/core";
 import type {
@@ -44,73 +31,45 @@ import type {
   AppSettings,
   CredentialSource,
   MicrophoneStatus,
-  VoiceSource,
+  SettingsUpdateResult,
 } from "../shared/contracts";
 import {
   ACCOUNT_PROVIDER,
   ACCOUNT_STATUS,
-  APP_SETTING_DEFAULTS,
   CREDENTIAL_SOURCE,
   SECRET_STORAGE,
-  VOICE_SOURCE,
 } from "../shared/contracts";
 import {
   CLOUD_AGENT_PROVIDER_LIST,
   CREDENTIAL_PROVIDERS,
   INTEGRATION_PROVIDER_LIST,
-  isCredentialProviderId,
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "../shared/credential-providers";
-import { workspaceAgentModelLabel, workspaceAgentModels } from "../shared/workspace-agents";
+import {
+  APP_SETTING_ID,
+  APP_SETTING_SCHEMA,
+  type AppSettingId,
+  settingFieldForGuideId,
+  settingGuideEntries,
+  spokenSettingValue,
+} from "../shared/settings-schema";
+import { workspaceAgentModels } from "../shared/workspace-agents";
 
+export type { AppSettingId } from "../shared/settings-schema";
 /** The ids a spoken change names Luke's settings by. */
-export const APP_SETTING_ID = {
-  VOICE: "voice",
-  VOICE_SPEED: "voice_speed",
-  VOICE_CAPTIONS: "voice_captions",
-  DUCK_OTHER_MEDIA: "duck_other_media",
-  PREFER_BUILT_IN_MICROPHONE: "prefer_built_in_microphone",
-  QUIET_DURING_MEETINGS: "quiet_during_meetings",
-  SHOW_IN_DOCK: "show_in_dock",
-  SHOW_ON_ALL_DISPLAYS: "show_on_all_displays",
-  FORM_FACTOR: "form_factor",
-  DEFAULT_WORKSPACE_PROVIDER: "default_workspace_provider",
-  WORKSPACE_AGENT_MODEL: "workspace_agent_model",
-  WORKSPACE_AGENT_EFFORT: "workspace_agent_effort",
-  VOICE_SOURCE: "voice_source",
-} as const;
-
-export type AppSettingId = (typeof APP_SETTING_ID)[keyof typeof APP_SETTING_ID];
-
-const APP_SETTING_ID_LIST: readonly AppSettingId[] = Object.values(APP_SETTING_ID);
-
-/**
- * Whether an id read back off a guide entry is one of Luke's own settings. A
- * guide entry carries its id as plain text — the snapshot is data on its way
- * out to a conversation — so anything reading one back has to ask.
- */
-export function isAppSettingId(value: string): value is AppSettingId {
-  return APP_SETTING_ID_LIST.includes(value as AppSettingId);
-}
+export { APP_SETTING_ID, isAppSettingId } from "../shared/settings-schema";
 
 /** Where the switches live, said once so every entry words it the same way. */
 const SETTINGS_TAB = "the panel's Settings tab";
 
-/* The tab's front page opens pages, and each setting is changed by hand on
-   one of them — so every by-hand path names its page, worded once each. */
-const VOICE_PAGE = `${SETTINGS_TAB}, on its Voice page`;
 /** Where the allowance meters and the OpenAI key row both live. */
 const VOICE_SOURCE_SECTION = `${SETTINGS_TAB}, on its front page, in the What Luke runs on section at the top`;
 /** Where the signed-in identity and the two ways out of it live. */
 const ACCOUNT_SECTION = `the Account section, at the foot of ${SETTINGS_TAB}'s front page`;
-const APPEARANCE_PAGE = `${SETTINGS_TAB}, on its Appearance page`;
 const SHORTCUTS_PAGE = `${SETTINGS_TAB}, on its Keyboard shortcuts page`;
 const CONNECTIONS_PAGE = `${SETTINGS_TAB}, on its Connections page`;
 /* Where the Updates section stands, for the fact that describes it. */
 const FRONT_PAGE = `${SETTINGS_TAB}, on its front page`;
-
-/** Where the Conductor agent choices live, said once for both their entries. */
-const CONDUCTOR_ROW_PATH = `the Conductor row under Cloud Agent API keys, in ${CONNECTIONS_PAGE} — drawn once Conductor is connected`;
 
 /**
  * The word both Conductor agent entries use for no choice at all. It is a
@@ -118,342 +77,6 @@ const CONDUCTOR_ROW_PATH = `the Conductor row under Cloud Agent API keys, in ${C
  * half to Conductor's own default.
  */
 const CONDUCTOR_DEFAULT_CHOICE = "Conductor's default";
-
-/**
- * The provider entry's word for no default at all, the same words its row
- * offers: while nothing is chosen, Luke asks which provider each time.
- */
-const ASK_EACH_TIME_CHOICE = "ask each time";
-
-/**
- * How the two sources are named in the guide — the toggle's own words, minus
- * the price tag beside them, because a spoken value is read aloud and "(you
- * pay)" is a label rather than a name.
- */
-const VOICE_SOURCE_CHOICE: Record<VoiceSource, string> = {
-  [VOICE_SOURCE.ACCOUNT]: "your Luke account",
-  [VOICE_SOURCE.KEY]: "your OpenAI key",
-};
-
-/**
- * The words a pace is asked for in, slowest to fastest, each paired with the
- * multiple it means. A conversation offers both spellings: the word because
- * "quick" survives speech where "1.25×" does not, and the multiple because it
- * is the label the settings row shows, so it is the name a reader of the row
- * will ask by.
- */
-const VOICE_SPEED_WORDS: readonly { word: string; speed: RealtimeVoiceSpeed }[] = [
-  { word: "slow", speed: REALTIME_VOICE_SPEED.SLOW },
-  { word: "normal", speed: REALTIME_VOICE_SPEED.NORMAL },
-  { word: "quick", speed: REALTIME_VOICE_SPEED.QUICK },
-  { word: "fast", speed: REALTIME_VOICE_SPEED.FAST },
-];
-
-/** A pace spelt the way its settings row labels it. */
-function voiceSpeedMultiple(speed: RealtimeVoiceSpeed): string {
-  return `${speed}×`;
-}
-
-function voiceSpeedWord(speed: RealtimeVoiceSpeed): string {
-  return VOICE_SPEED_WORDS.find((candidate) => candidate.speed === speed)?.word ?? "normal";
-}
-
-function voiceSpeedFromWord(word: string): RealtimeVoiceSpeed | undefined {
-  return VOICE_SPEED_WORDS.find(
-    (candidate) => candidate.word === word || voiceSpeedMultiple(candidate.speed) === word,
-  )?.speed;
-}
-
-/** The name a provider is known by on its rows, falling back to its id. */
-function workspaceProviderName(providerId: ProviderId): string {
-  return isCredentialProviderId(providerId)
-    ? CREDENTIAL_PROVIDERS[providerId].displayName
-    : providerId;
-}
-
-/**
- * One guide entry per settings field — or several, where one stored value is
- * spoken of as more than one choice — or an explicit nothing. Exhaustive over
- * `AppSettings` on purpose: this `Record` failing to compile is how a new
- * setting is prevented from shipping unknown to Luke.
- */
-const SETTING_GUIDE: Record<
-  keyof AppSettings,
-  (settings: AppSettings) => AppGuideSetting | readonly AppGuideSetting[] | undefined
-> = {
-  voice: (settings) => ({
-    id: APP_SETTING_ID.VOICE,
-    label: "Voice",
-    description:
-      "Which voice Luke speaks with; a change is heard right away — a conversation under way starts afresh in the new voice.",
-    kind: APP_SETTING_KIND.CHOICE,
-    value: settings.voice,
-    defaultValue: REALTIME_DEFAULTS.VOICE,
-    choices: REALTIME_VOICE_LIST,
-    adjustable: true,
-    manual: VOICE_PAGE,
-  }),
-  voiceSpeed: (settings) => ({
-    id: APP_SETTING_ID.VOICE_SPEED,
-    label: "Speed",
-    description:
-      "How fast Luke talks — slow is 0.75×, normal 1×, quick 1.25×, fast 1.5× the voice's natural rate, and an ask may use the word or the multiple; a change is heard from the next reply on.",
-    kind: APP_SETTING_KIND.CHOICE,
-    value: voiceSpeedWord(settings.voiceSpeed),
-    defaultValue: voiceSpeedWord(REALTIME_DEFAULTS.SPEED),
-    choices: VOICE_SPEED_WORDS.flatMap((candidate) => [
-      candidate.word,
-      voiceSpeedMultiple(candidate.speed),
-    ]),
-    adjustable: true,
-    manual: VOICE_PAGE,
-  }),
-  voiceCaptions: (settings) => ({
-    id: APP_SETTING_ID.VOICE_CAPTIONS,
-    label: "Captions",
-    description:
-      "Luke's words on screen while he speaks; nothing is kept. They also appear on their own, " +
-      "whatever this says, for a reply answering a typed ask and while the Mac's output is " +
-      "muted or at zero.",
-    kind: APP_SETTING_KIND.TOGGLE,
-    value: appToggleText(settings.voiceCaptions),
-    defaultValue: appToggleText(APP_SETTING_DEFAULTS.voiceCaptions),
-    adjustable: true,
-    manual: VOICE_PAGE,
-  }),
-  duckOtherMedia: (settings) => ({
-    id: APP_SETTING_ID.DUCK_OTHER_MEDIA,
-    label: "Quiet Music and Spotify",
-    description:
-      "Whether Music and Spotify are turned down while a spoken exchange is live, and back up after.",
-    kind: APP_SETTING_KIND.TOGGLE,
-    value: appToggleText(settings.duckOtherMedia),
-    defaultValue: appToggleText(APP_SETTING_DEFAULTS.duckOtherMedia),
-    adjustable: true,
-    manual: VOICE_PAGE,
-  }),
-  preferBuiltInMicrophone: (settings) => ({
-    id: APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE,
-    label: "Prefer the Mac's microphone",
-    description:
-      "Whether Luke listens through the Mac's own microphone when the system input is a " +
-      "Bluetooth headset, so the headset keeps its full music quality. A shut lid keeps the " +
-      "headset's microphone either way.",
-    kind: APP_SETTING_KIND.TOGGLE,
-    value: appToggleText(settings.preferBuiltInMicrophone),
-    defaultValue: appToggleText(APP_SETTING_DEFAULTS.preferBuiltInMicrophone),
-    adjustable: true,
-    manual: VOICE_PAGE,
-  }),
-  quietDuringMeetings: (settings) => ({
-    id: APP_SETTING_ID.QUIET_DURING_MEETINGS,
-    label: "Quiet during meetings",
-    description:
-      "Whether spoken announcements wait while a connected calendar shows a meeting on, and are read out together once it ends. It changes nothing until a Google Calendar account is connected.",
-    kind: APP_SETTING_KIND.TOGGLE,
-    value: appToggleText(settings.quietDuringMeetings),
-    defaultValue: appToggleText(APP_SETTING_DEFAULTS.quietDuringMeetings),
-    adjustable: true,
-    manual: `${CONNECTIONS_PAGE} — drawn once a calendar account is connected`,
-  }),
-  showInDock: (settings) => ({
-    id: APP_SETTING_ID.SHOW_IN_DOCK,
-    label: "Show Luke in the Dock",
-    description: "Whether Luke also stands in the Dock as an app icon.",
-    kind: APP_SETTING_KIND.TOGGLE,
-    value: appToggleText(settings.showInDock),
-    defaultValue: appToggleText(APP_SETTING_DEFAULTS.showInDock),
-    adjustable: true,
-    manual: APPEARANCE_PAGE,
-  }),
-  showOnAllDisplays: (settings) => ({
-    id: APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS,
-    label: "Show Luke on all displays",
-    description:
-      "Whether Luke stands on every connected display at once; off keeps him to the main display alone.",
-    kind: APP_SETTING_KIND.TOGGLE,
-    value: appToggleText(settings.showOnAllDisplays),
-    defaultValue: appToggleText(APP_SETTING_DEFAULTS.showOnAllDisplays),
-    adjustable: true,
-    manual: APPEARANCE_PAGE,
-  }),
-  // One stored value, spoken of as two choices: the model, and — only while a
-  // model whose agent documents levels is chosen — its effort, because a
-  // level with no model to ride has nowhere documented to go. The model entry
-  // also lists the levels each choice takes, so a model and its effort named
-  // in one breath are one change riding one call — the only way to set both
-  // while nothing is chosen yet, since the effort entry does not exist to be
-  // named. Both are changeable by voice, but only at the developer's own
-  // naming: the standing instructions forbid asking or suggesting either, so
-  // the ask is always theirs to bring up. Conductor is the one provider the
-  // build documents a table for; a second provider growing one is the moment
-  // this generalizes.
-  workspaceAgentDefaults: (settings) => {
-    const chosen = settings.workspaceAgentDefaults?.[PROVIDER_ID.CONDUCTOR];
-    const chosenAgent = chosen
-      ? workspaceAgentModels(PROVIDER_ID.CONDUCTOR).find((entry) => entry.agent === chosen.agent)
-      : undefined;
-    return [
-      {
-        id: APP_SETTING_ID.WORKSPACE_AGENT_MODEL,
-        label: "New Conductor agents run",
-        description:
-          "Which model a Conductor workspace or agent created through Luke starts with. Unset, " +
-          "Conductor's own defaults decide. An effort the model's agent documents may be named " +
-          "in the same change.",
-        kind: APP_SETTING_KIND.CHOICE,
-        // Said by the name people know the model by, the way its row draws
-        // it; the id stays on the wire where only endpoints read it.
-        value: chosen
-          ? workspaceAgentModelLabel(PROVIDER_ID.CONDUCTOR, chosen)
-          : CONDUCTOR_DEFAULT_CHOICE,
-        choices: [
-          CONDUCTOR_DEFAULT_CHOICE,
-          ...workspaceAgentModels(PROVIDER_ID.CONDUCTOR).flatMap((entry) =>
-            entry.models.map((model) => model.label),
-          ),
-        ],
-        // Each model's documented levels, keyed by the label the choice is
-        // said by, so an effort can ride the model's own change — the guide
-        // never lists a level nowhere documented, and a model whose agent
-        // takes none is simply absent.
-        efforts: Object.fromEntries(
-          workspaceAgentModels(PROVIDER_ID.CONDUCTOR).flatMap((entry) =>
-            entry.efforts.length > 0
-              ? entry.models.map((model) => [model.label, entry.efforts] as const)
-              : [],
-          ),
-        ),
-        // The default is itself one of the choices, so an ask to restore it
-        // is an ordinary change to the value listed.
-        defaultValue: CONDUCTOR_DEFAULT_CHOICE,
-        adjustable: true,
-        manual: CONDUCTOR_ROW_PATH,
-      },
-      ...(chosen && chosenAgent && chosenAgent.efforts.length > 0
-        ? [
-            {
-              id: APP_SETTING_ID.WORKSPACE_AGENT_EFFORT,
-              label: "New Conductor agents' effort",
-              description:
-                "How hard the chosen model thinks. Unset, Conductor's own default decides.",
-              kind: APP_SETTING_KIND.CHOICE,
-              value: chosen.effort ?? CONDUCTOR_DEFAULT_CHOICE,
-              choices: [CONDUCTOR_DEFAULT_CHOICE, ...chosenAgent.efforts],
-              defaultValue: CONDUCTOR_DEFAULT_CHOICE,
-              adjustable: true,
-              manual: CONDUCTOR_ROW_PATH,
-            },
-          ]
-        : []),
-    ];
-  },
-  // Described but kept by hand: the value's own story is conversational — the
-  // first workspace created saves its provider — so a spoken "change it"
-  // would shadow the same act the setting exists to record, and the refusal
-  // Luke voices carries the by-hand path. The projects context, not this
-  // entry, is what steers a live creation ask.
-  defaultWorkspaceProvider: (settings) => ({
-    id: APP_SETTING_ID.DEFAULT_WORKSPACE_PROVIDER,
-    label: "Default workspace provider",
-    description:
-      "Which provider a conversational ask creates a new workspace in when the ask names none. " +
-      "Until one is chosen Luke asks when more than one provider could take it, and the first " +
-      "workspace created saves its provider as the default.",
-    kind: APP_SETTING_KIND.CHOICE,
-    value: settings.defaultWorkspaceProvider
-      ? workspaceProviderName(settings.defaultWorkspaceProvider)
-      : ASK_EACH_TIME_CHOICE,
-    // Descriptive, never a spoken vocabulary — the entry is by-hand-only.
-    // The two named providers are the two that document a creation endpoint,
-    // the same two the "Creating workspaces" fact names; a third gaining one
-    // updates both.
-    choices: [
-      ASK_EACH_TIME_CHOICE,
-      workspaceProviderName(PROVIDER_ID.CONDUCTOR),
-      workspaceProviderName(PROVIDER_ID.CURSOR),
-    ],
-    // Every install starts with no provider chosen: asking each time is the
-    // default, and the first creation is what ends it.
-    defaultValue: ASK_EACH_TIME_CHOICE,
-    adjustable: false,
-    manual: `${CONNECTIONS_PAGE}, under Workspaces`,
-  }),
-  // Described in the workspace projects context instead, for a reason the
-  // provider entry does not have: projects are observed rather than
-  // build-fixed, so the guide's settings half holds only their ids, while the
-  // projects context names each provider's default by the repository a person
-  // knows it as. Kept by hand for the provider default's own reason — the
-  // first creation in a provider saves its project — and the Creating
-  // workspaces fact carries the by-hand path.
-  workspaceProjectDefaults: () => undefined,
-  formFactor: (settings) => ({
-    id: APP_SETTING_ID.FORM_FACTOR,
-    label: "Form factor",
-    description:
-      "How Luke stands on a display without a camera housing — notch draws him one pressed into the top edge, bubble floats him just under it. A display with a real notch ignores this.",
-    kind: APP_SETTING_KIND.CHOICE,
-    value: settings.formFactor,
-    defaultValue: DEFAULT_PANEL_FORM_FACTOR,
-    choices: PANEL_FORM_FACTOR_LIST,
-    adjustable: true,
-    manual: APPEARANCE_PAGE,
-  }),
-  // Described in the talk-key fact instead, which carries the key that
-  // actually registered — this field is only the stored choice, absent on the
-  // defaults and silently outbid when another app owns the chord. Not spoken-
-  // changeable either way: a chord is recorded by typing it, so the fact says
-  // where.
-  voiceHotkey: () => undefined,
-  // Described in the ask-key fact instead, for exactly the talk key's
-  // reasons: the fact carries the key that registered, and a chord is
-  // recorded by typing it rather than saying it.
-  askHotkey: () => undefined,
-  // Described in the stopping-a-reply fact instead, on the same terms as the
-  // other two keys' stored choices.
-  stopHotkey: () => undefined,
-  voiceSource: (settings) => ({
-    id: APP_SETTING_ID.VOICE_SOURCE,
-    label: "What Luke runs on",
-    description:
-      "Which credential Luke speaks and reviews sessions on: the signed-in Luke account, free " +
-      "and metered daily, or the developer's own OpenAI key, unmetered and billed to them by " +
-      "OpenAI. A key stays stored either way, so the free allowance can be used without " +
-      "deleting it.",
-    kind: APP_SETTING_KIND.CHOICE,
-    value: VOICE_SOURCE_CHOICE[settings.voiceSource],
-    // Every install begins on the account: the allowance is what a sign-in
-    // carries, and a key is something the developer goes and gets.
-    defaultValue: VOICE_SOURCE_CHOICE[VOICE_SOURCE.ACCOUNT],
-    choices: Object.values(VOICE_SOURCE_CHOICE),
-    // By hand only, and deliberately: this is the one switch that decides
-    // whose money is spent. It is not a credential, so the guide may describe
-    // it — but moving it is the developer's own act on their own bill, and a
-    // spoken ask that could start spending their key is exactly the shape of
-    // thing the refusal exists for.
-    adjustable: false,
-    manual: VOICE_SOURCE_SECTION,
-  }),
-  // Not a switch but a set of keys, so it is described in the facts instead:
-  // which providers are connected, and that a key is only ever typed by hand.
-  credentialSources: () => undefined,
-  // Only worth a word when it has refused a key, which the facts carry.
-  secretStorage: () => undefined,
-  /* Not a setting: it is whether the OpenAI key resolved, which the credential
-     row is where anyone changes. Luke is told whether he can speak at all by
-     the voice facts built from `LukeGuideInput.voiceAvailable`, so a spoken
-     ask about it is already answered without a settings entry to adjust. */
-  voiceAvailable: () => undefined,
-  /* Not a setting either: whether this build carries the OAuth client the
-     Google Calendar sign-in runs on. The integrations fact says whether the
-     calendar is connected, which is the question anyone actually asks. */
-  calendarSignInAvailable: () => undefined,
-  /* Connections rather than settings: accounts are signed into and
-     disconnected on their own rows, and which calendars count is chosen
-     there too. The integrations fact carries the counts; nothing here is a
-     value a spoken change could set. */
-  calendarAccounts: () => undefined,
-};
 
 /** What the guide needs from the app to describe the current state of it. */
 export interface LukeGuideInput {
@@ -903,11 +526,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     },
   ];
 
-  const settings = Object.values(SETTING_GUIDE).flatMap((entry) => {
-    const setting = entry(input.settings);
-    if (setting === undefined) return [];
-    return Array.isArray(setting) ? setting : [setting as AppGuideSetting];
-  });
+  const settings = settingGuideEntries(input.settings);
 
   return { facts, settings };
 }
@@ -986,23 +605,12 @@ function spokenWorkspaceAgentSelection(
  * so a model or effort change composes against the selection actually stored.
  */
 export async function applySpokenSetting(
-  bridge: Pick<
-    AppBridge,
-    | "setVoice"
-    | "setVoiceSpeed"
-    | "setVoiceCaptions"
-    | "setDuckOtherMedia"
-    | "setPreferBuiltInMicrophone"
-    | "setQuietDuringMeetings"
-    | "setShowInDock"
-    | "setShowOnAllDisplays"
-    | "setFormFactor"
-    | "setWorkspaceAgentDefault"
-  >,
+  bridge: Pick<AppBridge, "updateSetting" | "updateSettingEntry">,
   action: { setting: AppGuideSetting; value: string; effort?: string },
   onSettings: (settings: AppSettings) => void,
   current?: AppSettings,
 ): Promise<Record<string, unknown>> {
+  let result: SettingsUpdateResult;
   if (
     action.setting.id === APP_SETTING_ID.WORKSPACE_AGENT_MODEL ||
     action.setting.id === APP_SETTING_ID.WORKSPACE_AGENT_EFFORT
@@ -1014,46 +622,21 @@ export async function applySpokenSetting(
       current?.workspaceAgentDefaults?.[PROVIDER_ID.CONDUCTOR],
     );
     if ("refused" in composed) return { status: "refused", reason: composed.refused };
-    const answered = await bridge.setWorkspaceAgentDefault(
+    result = await bridge.updateSettingEntry(
+      APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
       PROVIDER_ID.CONDUCTOR,
       composed.selection,
     );
-    onSettings(answered.settings);
-    if (answered.reason) return { status: "refused", reason: answered.reason };
-    return {
-      status: "changed",
-      setting: action.setting.label,
-      value: action.value,
-      ...(action.effort !== undefined ? { effort: action.effort } : {}),
-    };
-  }
-  const enabled = action.value === APP_TOGGLE_VALUE.ON;
-  const speed = voiceSpeedFromWord(action.value);
-  const result =
-    action.setting.id === APP_SETTING_ID.VOICE_CAPTIONS
-      ? await bridge.setVoiceCaptions(enabled)
-      : action.setting.id === APP_SETTING_ID.DUCK_OTHER_MEDIA
-        ? await bridge.setDuckOtherMedia(enabled)
-        : action.setting.id === APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE
-          ? await bridge.setPreferBuiltInMicrophone(enabled)
-          : action.setting.id === APP_SETTING_ID.QUIET_DURING_MEETINGS
-            ? await bridge.setQuietDuringMeetings(enabled)
-            : action.setting.id === APP_SETTING_ID.SHOW_IN_DOCK
-              ? await bridge.setShowInDock(enabled)
-              : action.setting.id === APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS
-                ? await bridge.setShowOnAllDisplays(enabled)
-                : action.setting.id === APP_SETTING_ID.VOICE_SPEED && speed !== undefined
-                  ? await bridge.setVoiceSpeed(speed)
-                  : action.setting.id === APP_SETTING_ID.VOICE && isRealtimeVoice(action.value)
-                    ? await bridge.setVoice(action.value)
-                    : action.setting.id === APP_SETTING_ID.FORM_FACTOR &&
-                        isPanelFormFactor(action.value)
-                      ? await bridge.setFormFactor(action.value)
-                      : undefined;
-  if (!result) {
-    // An adjustable entry with no carrier is a guide ahead of its wiring;
-    // refuse honestly rather than claim a change that never happened.
-    return { status: "refused", reason: "That setting cannot be changed from here." };
+  } else {
+    const field = settingFieldForGuideId(action.setting.id as AppSettingId);
+    if (!field) {
+      return { status: "refused", reason: "That setting cannot be changed from here." };
+    }
+    const value = spokenSettingValue(field, action.value);
+    if (value === undefined) {
+      return { status: "refused", reason: "That setting cannot be changed from here." };
+    }
+    result = await bridge.updateSetting(field, value);
   }
   onSettings(result.settings);
   if (result.reason) return { status: "refused", reason: result.reason };
@@ -1061,10 +644,7 @@ export async function applySpokenSetting(
     status: "changed",
     setting: action.setting.label,
     value: action.value,
-    // What each change means for the call now open, so the outcome Luke
-    // voices matches what actually happens. The API locks a session's voice
-    // once the model has spoken, so a changed voice is heard by starting the
-    // conversation afresh; a pace rides a session update and needs no restart.
+    ...(action.effort !== undefined ? { effort: action.effort } : {}),
     ...(action.setting.id === APP_SETTING_ID.VOICE
       ? {
           note: "The new voice takes over as soon as this reply ends, and the conversation starts afresh in it.",

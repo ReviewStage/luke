@@ -366,11 +366,9 @@ test("the guide offers what a new Conductor agent runs, by the names people know
 test("a spoken model or effort change composes the one stored selection", async () => {
   const carried: (WorkspaceAgentSelection | undefined)[] = [];
   const bridge = {
-    setWorkspaceAgentDefault: async (
-      _providerId: string,
-      selection: WorkspaceAgentSelection | undefined,
-    ) => {
-      carried.push(selection);
+    updateSettingEntry: async (_field: string, key: string, value: unknown) => {
+      assert.equal(key, PROVIDER_ID.CONDUCTOR);
+      carried.push(value as WorkspaceAgentSelection | undefined);
       return { settings: settings() };
     },
   } as unknown as Parameters<typeof applySpokenSetting>[0];
@@ -438,11 +436,9 @@ test("a spoken model or effort change composes the one stored selection", async 
 test("a model and its effort named in one change land as one stored pairing", async () => {
   const carried: (WorkspaceAgentSelection | undefined)[] = [];
   const bridge = {
-    setWorkspaceAgentDefault: async (
-      _providerId: string,
-      selection: WorkspaceAgentSelection | undefined,
-    ) => {
-      carried.push(selection);
+    updateSettingEntry: async (_field: string, key: string, value: unknown) => {
+      assert.equal(key, PROVIDER_ID.CONDUCTOR);
+      carried.push(value as WorkspaceAgentSelection | undefined);
       return { settings: settings() };
     },
   } as unknown as Parameters<typeof applySpokenSetting>[0];
@@ -501,10 +497,9 @@ test("a model and its effort named in one change land as one stored pairing", as
 test("a model and its effort asked in one breath compose through the held answer", async () => {
   const carried: (WorkspaceAgentSelection | undefined)[] = [];
   const bridge = {
-    setWorkspaceAgentDefault: async (
-      _providerId: string,
-      selection: WorkspaceAgentSelection | undefined,
-    ) => {
+    updateSettingEntry: async (_field: string, key: string, value: unknown) => {
+      assert.equal(key, PROVIDER_ID.CONDUCTOR);
+      const selection = value as WorkspaceAgentSelection | undefined;
       carried.push(selection);
       return {
         settings: settings(
@@ -687,47 +682,13 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
   const calls: string[] = [];
   const answered: SettingsUpdateResult = { settings: settings() };
   const bridge = {
-    setVoice: async () => {
-      calls.push("setVoice");
+    updateSetting: async (field: string, value: unknown) => {
+      calls.push(`${field}:${String(value)}`);
       return answered;
     },
-    setVoiceSpeed: async (speed: number) => {
-      calls.push(`setVoiceSpeed:${speed}`);
-      return answered;
-    },
-    setVoiceCaptions: async (enabled: boolean) => {
-      calls.push(`setVoiceCaptions:${enabled}`);
-      return answered;
-    },
-    setDuckOtherMedia: async (enabled: boolean) => {
-      calls.push(`setDuckOtherMedia:${enabled}`);
-      return answered;
-    },
-    setPreferBuiltInMicrophone: async (enabled: boolean) => {
-      calls.push(`setPreferBuiltInMicrophone:${enabled}`);
-      return answered;
-    },
-    setQuietDuringMeetings: async (enabled: boolean) => {
-      calls.push(`setQuietDuringMeetings:${enabled}`);
-      return answered;
-    },
-    setShowInDock: async (show: boolean) => {
-      calls.push(`setShowInDock:${show}`);
-      return answered;
-    },
-    setShowOnAllDisplays: async (show: boolean) => {
-      calls.push(`setShowOnAllDisplays:${show}`);
-      return answered;
-    },
-    setFormFactor: async (formFactor: string) => {
-      calls.push(`setFormFactor:${formFactor}`);
-      return answered;
-    },
-    setWorkspaceAgentDefault: async (
-      _providerId: string,
-      selection: WorkspaceAgentSelection | undefined,
-    ) => {
-      calls.push(`setWorkspaceAgentDefault:${selection ? selection.model : "default"}`);
+    updateSettingEntry: async (field: string, _key: string, value: unknown) => {
+      const selection = value as WorkspaceAgentSelection | undefined;
+      calls.push(`${field}:${selection?.model ?? "default"}`);
       return answered;
     },
   };
@@ -743,18 +704,18 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
   }
 
   assert.deepEqual(calls.sort(), [
-    "setDuckOtherMedia:true",
-    "setFormFactor:notch",
-    "setPreferBuiltInMicrophone:true",
-    "setQuietDuringMeetings:true",
-    "setShowInDock:true",
-    "setShowOnAllDisplays:true",
-    "setVoice",
-    "setVoiceCaptions:true",
+    "duckOtherMedia:true",
+    "formFactor:notch",
+    "preferBuiltInMicrophone:true",
+    "quietDuringMeetings:true",
+    "showInDock:true",
+    "showOnAllDisplays:true",
+    "voice:alloy",
+    "voiceCaptions:true",
     // The first choice offered is "slow", which is the 0.75 multiple.
-    "setVoiceSpeed:0.75",
+    "voiceSpeed:0.75",
     // The first choice offered is "Conductor's default", which clears.
-    "setWorkspaceAgentDefault:default",
+    "workspaceAgentDefaults:default",
   ]);
   // The snapshot the store answered with is handed back either way, so the
   // panel's switches redraw from what was actually stored.
@@ -764,8 +725,8 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
 test("a pace asked for by its multiple carries the same as its word", async () => {
   const calls: string[] = [];
   const bridge = {
-    setVoiceSpeed: async (speed: number) => {
-      calls.push(`setVoiceSpeed:${speed}`);
+    updateSetting: async (field: string, value: unknown) => {
+      calls.push(`${field}:${value}`);
       return { settings: settings() };
     },
   };
@@ -779,13 +740,12 @@ test("a pace asked for by its multiple carries the same as its word", async () =
     assert.equal(outcome.status, "changed");
   }
 
-  assert.deepEqual(calls, ["setVoiceSpeed:1.25", "setVoiceSpeed:1.25"]);
+  assert.deepEqual(calls, ["voiceSpeed:1.25", "voiceSpeed:1.25"]);
 });
 
 test("the store's refusal comes back as the spoken outcome", async () => {
   const bridge = {
-    setVoice: async () => ({ settings: settings() }),
-    setVoiceCaptions: async () => ({
+    updateSetting: async () => ({
       settings: settings(),
       reason: "The settings file could not be written.",
     }),

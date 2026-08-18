@@ -47,6 +47,7 @@ import {
   VOICE_CREDENTIAL_PROVIDER,
 } from "../shared/credential-providers";
 import { GOOGLE_CALENDAR_ID, GOOGLE_CALENDAR_NAME } from "../shared/google-calendar";
+import { settingsScopeChanged } from "../shared/settings-schema";
 import {
   capturedVoiceHotkey,
   DEFAULT_ASK_HOTKEYS,
@@ -807,40 +808,6 @@ function AttentionMark({ note }: { note: string }): React.JSX.Element {
    always agree on what is standing. The voice and pace compare against the
    shipped defaults the way their menus label them; a launch-environment
    override reads as changed, which is what the row shows too. */
-function voiceSettingsChanged(settings: AppSettings): boolean {
-  return (
-    settings.voice !== REALTIME_DEFAULTS.VOICE ||
-    settings.voiceSpeed !== REALTIME_DEFAULTS.SPEED ||
-    settings.voiceCaptions !== APP_SETTING_DEFAULTS.voiceCaptions ||
-    settings.duckOtherMedia !== APP_SETTING_DEFAULTS.duckOtherMedia ||
-    settings.preferBuiltInMicrophone !== APP_SETTING_DEFAULTS.preferBuiltInMicrophone
-  );
-}
-
-function appearanceSettingsChanged(settings: AppSettings): boolean {
-  return (
-    settings.showInDock !== APP_SETTING_DEFAULTS.showInDock ||
-    settings.showOnAllDisplays !== APP_SETTING_DEFAULTS.showOnAllDisplays ||
-    settings.formFactor !== DEFAULT_PANEL_FORM_FACTOR
-  );
-}
-
-/* The keys' terms are the rows' own: a chord is changed while one is stored,
-   whatever key the row is showing for it. */
-function shortcutSettingsChanged(shortcuts: ShortcutControl): boolean {
-  return shortcuts.voiceChosen || shortcuts.askChosen || shortcuts.stopChosen;
-}
-
-/* Only the choices the Workspaces group itself draws: the Conductor agent
-   pairing lives on the Conductor row, whose own menu already offers the
-   provider's default, so no reset here may reach it. */
-function workspaceSettingsChanged(settings: AppSettings): boolean {
-  return (
-    settings.defaultWorkspaceProvider !== undefined ||
-    Object.keys(settings.workspaceProjectDefaults ?? {}).length > 0
-  );
-}
-
 /**
  * The one control that returns a whole group to its defaults, drawn only
  * while the group holds something to return — until then it could only offer
@@ -1922,7 +1889,7 @@ function WorkspacesSection({
           <FolderIcon />
           Workspaces
         </h2>
-        {workspaceSettingsChanged(settings) ? (
+        {settingsScopeChanged(settings, SETTINGS_RESET_SCOPE.WORKSPACES) ? (
           <ResetGroupButton
             scope={SETTINGS_RESET_SCOPE.WORKSPACES}
             label="the workspace defaults"
@@ -2806,10 +2773,13 @@ function AccountSection({
 function pageResetControl(
   view: SettingsView,
   settings: AppSettings | undefined,
-  shortcuts: ShortcutControl,
   preferences: PreferenceWrites,
 ): React.JSX.Element | undefined {
-  if (view === SETTINGS_VIEW.VOICE && settings && voiceSettingsChanged(settings)) {
+  if (
+    view === SETTINGS_VIEW.VOICE &&
+    settings &&
+    settingsScopeChanged(settings, SETTINGS_RESET_SCOPE.VOICE)
+  ) {
     return (
       <ResetGroupButton
         scope={SETTINGS_RESET_SCOPE.VOICE}
@@ -2818,7 +2788,11 @@ function pageResetControl(
       />
     );
   }
-  if (view === SETTINGS_VIEW.APPEARANCE && settings && appearanceSettingsChanged(settings)) {
+  if (
+    view === SETTINGS_VIEW.APPEARANCE &&
+    settings &&
+    settingsScopeChanged(settings, SETTINGS_RESET_SCOPE.APPEARANCE)
+  ) {
     return (
       <ResetGroupButton
         scope={SETTINGS_RESET_SCOPE.APPEARANCE}
@@ -2827,7 +2801,11 @@ function pageResetControl(
       />
     );
   }
-  if (view === SETTINGS_VIEW.SHORTCUTS && shortcutSettingsChanged(shortcuts)) {
+  if (
+    view === SETTINGS_VIEW.SHORTCUTS &&
+    settings &&
+    settingsScopeChanged(settings, SETTINGS_RESET_SCOPE.SHORTCUTS)
+  ) {
     return (
       <ResetGroupButton
         scope={SETTINGS_RESET_SCOPE.SHORTCUTS}
@@ -2924,7 +2902,7 @@ export function SettingsPanel({
     backControl.current?.focus();
   }, [view, panelOpen]);
   // The drawn page's reset, absent while that page stands at its defaults.
-  const pageReset = pageResetControl(view, settings, shortcuts, preferences);
+  const pageReset = pageResetControl(view, settings, preferences);
   return (
     <div
       className="settings"

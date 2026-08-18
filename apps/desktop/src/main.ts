@@ -20,10 +20,7 @@ import {
   type IssueIdentity,
   isControllableAdapter,
   isMessageCapableAdapter,
-  isPanelFormFactor,
   isProviderId,
-  isRealtimeVoice,
-  isRealtimeVoiceSpeed,
   issueCommentText,
   isWorkspaceAgentCapableAdapter,
   isWorkspaceCapableAdapter,
@@ -143,16 +140,15 @@ import {
   type AccountSnapshot,
   APP_SETTING_DEFAULTS,
   type AppBootstrap,
+  type AppSettings,
   channels,
   isSettingsResetScope,
-  isVoiceSource,
   type MicrophoneRoute,
   type MicrophoneStatus,
   type ObservedAccountCalendars,
   type OutputAudioState,
   SESSION_OPEN_RESULT_STATUS,
   SESSION_TRANSCRIPT_RESULT_STATUS,
-  SETTINGS_RESET_SCOPE,
   type SessionOpenResult,
   type SessionTranscriptResult,
   VOICE_SOURCE,
@@ -170,7 +166,17 @@ import {
   feedbackSubmission,
   isFeedbackKind,
 } from "./shared/feedback";
-import { parseVoiceHotkey } from "./shared/voice-hotkey";
+import {
+  APP_SETTING_FIELDS,
+  APP_SETTING_SCHEMA,
+  type AppSettingField,
+  type AppSettingValue,
+  isAppSettingField,
+  isKeyedAppSettingField,
+  isSettingEntryKey,
+  SETTING_SIDE_EFFECT,
+  settingEntryGuard,
+} from "./shared/settings-schema";
 import { isWorkspaceAgentSelection } from "./shared/workspace-agents";
 import { UPDATE_ENDPOINT, UpdateService } from "./update-service";
 
@@ -1000,8 +1006,8 @@ async function applyVoiceCredential(): Promise<void> {
   // cannot be read means no choice was kept, and the environment or the defaults
   // answer inside the factory.
   const [voice, speed] = await Promise.all([
-    settingsStore.readVoice().catch(() => undefined),
-    settingsStore.readVoiceSpeed().catch(() => undefined),
+    settingsStore.get(APP_SETTING_SCHEMA.voice.field).catch(() => undefined),
+    settingsStore.get(APP_SETTING_SCHEMA.voiceSpeed.field).catch(() => undefined),
   ]);
   realtimeCredentials = apiKey
     ? openAiRealtimeCredentials(apiKey, {
@@ -1025,21 +1031,6 @@ async function applyVoiceCredential(): Promise<void> {
   reportVoiceAvailability(apiKey !== undefined);
 }
 
-/**
- * The renderer records chords through the same reader, so one that does
- * not parse is a malformed request rather than a choice to answer.
- */
-function parsedVoiceHotkey(accelerator: unknown): string | undefined {
-  if (accelerator !== undefined && typeof accelerator !== "string") {
-    throw new Error("Invalid shortcut request");
-  }
-  const chosen = accelerator === undefined ? undefined : parseVoiceHotkey(accelerator);
-  if (accelerator !== undefined && chosen === undefined) {
-    throw new Error("Invalid shortcut request");
-  }
-  return chosen;
-}
-
 function adapterFor(providerId: string) {
   return sessionAdapters.find((candidate) => candidate.provider.id === providerId);
 }
@@ -1057,6 +1048,15 @@ function boundedField(
   return value === undefined ? { ok: false } : { ok: true, value };
 }
 
+/** Whether a provider is currently offering the project a default would name. */
+function workspaceProjectOffered(providerId: string, providerProjectId: string): boolean {
+  const adapter = adapterFor(providerId);
+  if (!adapter || !isWorkspaceCapableAdapter(adapter)) return false;
+  return adapter
+    .workspaceProjects()
+    .some((project) => project.providerProjectId === providerProjectId);
+}
+
 /**
  * The first workspace that lands chooses the default provider — and its
  * project, and a model named for that creation, the default agent — only
@@ -1072,8 +1072,13 @@ async function rememberWorkspaceDefaults(
   if (!isProviderId(adapter.provider.id)) return;
   const providerId = adapter.provider.id;
   try {
-    if ((await settingsStore.readDefaultWorkspaceProvider()) === undefined) {
-      const saved = await settingsStore.setDefaultWorkspaceProvider(providerId);
+    if (
+      (await settingsStore.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field)) === undefined
+    ) {
+      const saved = await settingsStore.set(
+        APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
+        providerId,
+      );
       panels.broadcast(channels.settingsChanged, saved.settings);
     }
     // The project the workspace landed in becomes that provider's default on
@@ -1081,8 +1086,15 @@ async function rememberWorkspaceDefaults(
     // the model below. The id was validated against the adapter's offered
     // projects before the creation ran, so what is remembered is one the
     // provider itself listed.
-    if ((await settingsStore.readWorkspaceProjectDefault(providerId)) === undefined) {
-      const saved = await settingsStore.setWorkspaceProjectDefault(providerId, providerProjectId);
+    if (
+      (await settingsStore.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field))?.[providerId] ===
+      undefined
+    ) {
+      const saved = await settingsStore.setEntry(
+        APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+        providerId,
+        providerProjectId,
+      );
       panels.broadcast(channels.settingsChanged, saved.settings);
     }
     // A model named for this creation becomes the default on the same
@@ -1094,9 +1106,14 @@ async function rememberWorkspaceDefaults(
     // held, and must not lose to the request it overlapped.
     if (
       namedSelection !== undefined &&
-      (await settingsStore.readWorkspaceAgentDefault(providerId)) === undefined
+      (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[providerId] ===
+        undefined
     ) {
-      const saved = await settingsStore.setWorkspaceAgentDefault(providerId, namedSelection);
+      const saved = await settingsStore.setEntry(
+        APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
+        providerId,
+        namedSelection,
+      );
       panels.broadcast(channels.settingsChanged, saved.settings);
     }
   } catch {
@@ -1278,278 +1295,120 @@ function registerIpc(): void {
     refusal: "Could not save that API key on this system.",
   });
 
-  // The Dock icon follows the stored answer at once: a
-  // setting that only took effect on the next launch would read as a toggle
-  // that does nothing.
-  registerSettingHandler(channels.setShowInDock, {
-    validate(show: unknown) {
-      if (typeof show !== "boolean") throw new Error("Invalid Dock request");
-      return show;
-    },
-    save: (show) => settingsStore.setShowInDock(show),
-    apply: (result, _show, event) =>
-      dock.apply(result.settings.showInDock, panels.displayIdFor(event.sender)),
-    refusal: "Could not save that setting on this system.",
-  });
-
-  // The windows follow the stored answer at once: on
-  // raises a panel on every connected display, off brings Luke back to the
-  // main one alone.
-  registerSettingHandler(channels.setShowOnAllDisplays, {
-    validate(show: unknown) {
-      if (typeof show !== "boolean") throw new Error("Invalid display request");
-      return show;
-    },
-    save: (show) => settingsStore.setShowOnAllDisplays(show),
-    apply(result) {
-      panels.setShowOnAllDisplays(result.settings.showOnAllDisplays);
-      panels.reconcile();
-    },
-    refusal: "Could not save that setting on this system.",
-  });
-
-  // The form follows the stored answer at once, for the same reason: every
-  // window resizes around the housing the shape is about to draw or drop.
-  registerSettingHandler(channels.setFormFactor, {
-    validate(formFactor: unknown) {
-      if (!isPanelFormFactor(formFactor)) throw new Error("Invalid form factor request");
-      return formFactor;
-    },
-    save: (formFactor) => settingsStore.setFormFactor(formFactor),
-    apply(result) {
-      panels.setFormFactor(result.settings.formFactor);
-      panels.positionAll();
-    },
-    refusal: "Could not save that setting on this system.",
-  });
-
-  // The default workspace provider is a preference about where a nameless
-  // creation ask goes, never a wider write path: it steers which project list
-  // the conversation is told to prefer, and every creation is still validated
-  // against what the adapters actually offer.
-  registerSettingHandler(channels.setDefaultWorkspaceProvider, {
-    validate(providerId: unknown) {
-      if (
-        providerId !== undefined &&
-        (typeof providerId !== "string" || !isProviderId(providerId))
-      ) {
-        throw new Error("Unknown workspace provider");
-      }
-      return typeof providerId === "string" ? providerId : undefined;
-    },
-    save: (providerId) => settingsStore.setDefaultWorkspaceProvider(providerId),
-    refusal: "Could not save that setting on this system.",
-  });
-
-  // The agent and model new workspaces start with, per provider. The pairing
-  // travels the form factor's road — a value from a set fixed by this build —
-  // it is just a documented table per provider rather than one enum: anything
-  // outside the table is refused here, so the store never holds a value no
-  // endpoint takes.
-  registerSettingHandler(channels.setWorkspaceAgentDefault, {
-    validate(providerId: unknown, selection: unknown) {
-      if (typeof providerId !== "string" || !isProviderId(providerId)) {
-        throw new Error("Unknown workspace provider");
-      }
-      if (selection !== undefined && !isWorkspaceAgentSelection(providerId, selection)) {
-        throw new Error("Unknown workspace agent");
-      }
-      return { providerId, selection };
-    },
-    save: ({ providerId, selection }) =>
-      settingsStore.setWorkspaceAgentDefault(providerId, selection),
-    refusal: "Could not save that setting on this system.",
-  });
-
-  // The project one provider creates nameless-ask workspaces in. Projects are
-  // observed rather than build-fixed, so the value is held to the list the
-  // provider's adapter currently offers — the same list every creation act is
-  // validated against — and clearing needs no list at all.
-  registerSettingHandler(channels.setWorkspaceProjectDefault, {
-    validate(providerId: unknown, providerProjectId: unknown) {
-      if (typeof providerId !== "string" || !isProviderId(providerId)) {
-        throw new Error("Unknown workspace provider");
-      }
-      if (providerProjectId === undefined) {
-        return { providerId, providerProjectId: undefined };
-      }
-      if (typeof providerProjectId !== "string" || !providerProjectId.trim()) {
-        throw new Error("Invalid workspace project");
-      }
-      const adapter = adapterFor(providerId);
-      const offered =
-        adapter && isWorkspaceCapableAdapter(adapter)
-          ? adapter
-              .workspaceProjects()
-              .some((project) => project.providerProjectId === providerProjectId)
-          : false;
-      if (!offered) throw new Error("Unknown workspace project");
-      return { providerId, providerProjectId };
-    },
-    save: ({ providerId, providerProjectId }) =>
-      settingsStore.setWorkspaceProjectDefault(providerId, providerProjectId),
-    refusal: "Could not save that setting on this system.",
-  });
-
-  // The voice is a preference rather than a credential, but it travels the
-  // same road: the renderer names a value from a set fixed by this build and
-  // hears back the settings as they now stand.
-  registerSettingHandler(channels.setVoice, {
-    validate(voice: unknown) {
-      if (!isRealtimeVoice(voice)) throw new Error("Unknown voice");
-      return voice;
-    },
-    save: (voice) => settingsStore.setVoice(voice),
-    apply(result, voice) {
-      // The next credential is minted for the new voice; the renderer makes
-      // the change heard now by reopening any conversation already up.
-      if (!result.reason) realtimeCredentials?.setVoice(voice);
-    },
-    refusal: "Could not save that voice on this system.",
-  });
-  // The pace travels the voice's road: a value from the set fixed by this
-  // build, stored, and handed to the minter for the next conversation.
-  registerSettingHandler(channels.setVoiceSpeed, {
-    validate(speed: unknown) {
-      if (!isRealtimeVoiceSpeed(speed)) throw new Error("Unknown voice speed");
-      return speed;
-    },
-    save: (speed) => settingsStore.setVoiceSpeed(speed),
-    apply(result, speed) {
-      // The next credential is minted for the new pace; the renderer
-      // carries the change onto a conversation already open itself.
-      if (!result.reason) realtimeCredentials?.setSpeed(speed);
-    },
-    refusal: "Could not save that speed on this system.",
-  });
-  // A plain preference, validated to a boolean the way every renderer value
-  // is validated at this boundary. The reply reports what was actually
-  // stored, so the switch redraws from the settings rather than the press.
-  registerSettingHandler(channels.setVoiceCaptions, {
-    validate(enabled: unknown) {
-      if (typeof enabled !== "boolean") throw new Error("Invalid caption request");
-      return enabled;
-    },
-    save: (enabled) => settingsStore.setVoiceCaptions(enabled),
-    refusal: "Could not save that setting on this system.",
-  });
-
-  // The talk key is the user's to move — a chord another tool already holds,
-  // or a hand that does not reach ⌥Space. What arrives is read through the
-  // same gate the stored value passes, so only a chord the registrars can
-  // actually take is ever stored; omitting one returns the defaults, making
-  // reset the absence of a choice rather than a second stored value. The new
-  // chord is registered at once — a shortcut that only moved on the next
-  // launch would read as a control that does nothing.
-  registerSettingHandler(channels.setVoiceHotkey, {
-    validate: parsedVoiceHotkey,
-    save: (chosen) => settingsStore.setVoiceHotkey(chosen),
-    async apply(result, chosen) {
-      if (!result.reason) {
-        hotkeys.setChosen(HOTKEY_RANK.TALK, chosen);
-        // Awaited so the renderer's controls stay at rest until the swap has
-        // finished and the helper's own registration line can say the truth.
+  async function applySettingSideEffect(
+    field: AppSettingField,
+    value: AppSettingValue<AppSettingField>,
+    settings: AppSettings,
+    event: IpcMainInvokeEvent,
+    waitForDeferredEffects = false,
+  ): Promise<void> {
+    switch (APP_SETTING_SCHEMA[field].mainProcessSideEffect) {
+      case SETTING_SIDE_EFFECT.DOCK:
+        dock.apply(settings.showInDock, panels.displayIdFor(event.sender));
+        break;
+      case SETTING_SIDE_EFFECT.DISPLAYS:
+        panels.setShowOnAllDisplays(settings.showOnAllDisplays);
+        panels.reconcile();
+        break;
+      case SETTING_SIDE_EFFECT.FORM_FACTOR:
+        panels.setFormFactor(settings.formFactor);
+        panels.positionAll();
+        break;
+      case SETTING_SIDE_EFFECT.VOICE:
+        realtimeCredentials?.setVoice(settings.voice);
+        break;
+      case SETTING_SIDE_EFFECT.VOICE_SPEED:
+        realtimeCredentials?.setSpeed(settings.voiceSpeed);
+        break;
+      case SETTING_SIDE_EFFECT.TALK_HOTKEY:
+        hotkeys.setChosen(HOTKEY_RANK.TALK, value as string | undefined);
         await hotkeys.reapply(HOTKEY_RANK.TALK);
-      }
-    },
-    refusal: "Could not save that shortcut on this system.",
-  });
+        break;
+      case SETTING_SIDE_EFFECT.ASK_HOTKEY:
+        hotkeys.setChosen(HOTKEY_RANK.ASK, value as string | undefined);
+        if (waitForDeferredEffects) await hotkeys.reapply(HOTKEY_RANK.ASK);
+        else void hotkeys.reapply(HOTKEY_RANK.ASK);
+        break;
+      case SETTING_SIDE_EFFECT.STOP_HOTKEY:
+        hotkeys.setChosen(HOTKEY_RANK.STOP, value as string | undefined);
+        if (waitForDeferredEffects) await hotkeys.reapply(HOTKEY_RANK.STOP);
+        else void hotkeys.reapply(HOTKEY_RANK.STOP);
+        break;
+      case SETTING_SIDE_EFFECT.MEDIA_DUCK:
+        mediaDuck.setEnabled(settings.duckOtherMedia);
+        break;
+      case SETTING_SIDE_EFFECT.VOICE_SOURCE:
+        void applyVoiceCredential();
+        break;
+      case SETTING_SIDE_EFFECT.MEETING_QUIET:
+        void refreshMeetingQuiet();
+        void releaseHeldNotices();
+        break;
+      case SETTING_SIDE_EFFECT.NONE:
+        break;
+    }
+  }
 
-  // The ask key is the user's to move on the talk key's exact terms, read
-  // through the same gate and registered at once. The one extra rule is the
-  // standing one — the two Luke keys must never compete for a chord — so a
-  // chord the talk key sits on is refused with words rather than stored and
-  // silently outbid.
-  registerSettingHandler<string | undefined>(channels.setAskHotkey, {
-    async validate(accelerator: unknown) {
-      const chosen = parsedVoiceHotkey(accelerator);
-      // The talk key's whole candidate list is refused, not just the chord it
-      // holds now: its helper may fall back to any of them on a later launch,
-      // and an ask key stored on one would race it there.
-      if (chosen && hotkeys.reserve(chosen, HOTKEY_RANK.ASK) === HOTKEY_RANK.TALK) {
-        return new SettingsRefusal({
-          settings: await settingsStore.snapshot(),
-          reason: "That chord is reserved for the talk key.",
-        });
+  registerSettingHandler(channels.updateSetting, {
+    async validate(field: unknown, value: unknown) {
+      if (!isAppSettingField(field)) throw new Error("Unknown setting");
+      // A map-valued setting is written one entry at a time. Its own guard drops
+      // entries it cannot hold rather than refusing them — right for reading a
+      // stored file, wrong for a write, where a whole map of unholdable entries
+      // would read as valid and silently clear what is stored.
+      if (isKeyedAppSettingField(field)) throw new Error("Setting takes one entry at a time");
+      const parsed = APP_SETTING_SCHEMA[field].guard(value);
+      if (!parsed.valid) throw new Error("Invalid setting value");
+      if (field === APP_SETTING_SCHEMA.askHotkey.field && typeof parsed.value === "string") {
+        if (hotkeys.reserve(parsed.value, HOTKEY_RANK.ASK) === HOTKEY_RANK.TALK) {
+          return new SettingsRefusal({
+            settings: await settingsStore.snapshot(),
+            reason: "That chord is reserved for the talk key.",
+          });
+        }
       }
-      return chosen;
-    },
-    save: (chosen) => settingsStore.setAskHotkey(chosen),
-    apply(result, chosen) {
-      if (!result.reason) {
-        hotkeys.setChosen(HOTKEY_RANK.ASK, chosen);
-        void hotkeys.reapply(HOTKEY_RANK.ASK);
+      if (field === APP_SETTING_SCHEMA.stopHotkey.field && typeof parsed.value === "string") {
+        const owner = hotkeys.reserve(parsed.value, HOTKEY_RANK.STOP);
+        if (owner === HOTKEY_RANK.TALK || owner === HOTKEY_RANK.ASK) {
+          return new SettingsRefusal({
+            settings: await settingsStore.snapshot(),
+            reason: `That chord is reserved for the ${owner === HOTKEY_RANK.TALK ? "talk" : "ask"} key.`,
+          });
+        }
       }
+      return { field, value: parsed.value };
     },
-    refusal: "Could not save that shortcut on this system.",
-  });
-
-  // The stop key is the user's to move on the other two keys' exact terms,
-  // read through the same gate and registered at once. It sits at the bottom
-  // of the pecking order, so both standing rules point up: a chord the talk
-  // key or the ask key sits on — or could fall back to — is refused with
-  // words rather than stored and silently outbid.
-  registerSettingHandler<string | undefined>(channels.setStopHotkey, {
-    async validate(accelerator: unknown) {
-      const chosen = parsedVoiceHotkey(accelerator);
-      const owner = chosen ? hotkeys.reserve(chosen, HOTKEY_RANK.STOP) : undefined;
-      if (owner === HOTKEY_RANK.TALK) {
-        return new SettingsRefusal({
-          settings: await settingsStore.snapshot(),
-          reason: "That chord is reserved for the talk key.",
-        });
-      }
-      if (owner === HOTKEY_RANK.ASK) {
-        return new SettingsRefusal({
-          settings: await settingsStore.snapshot(),
-          reason: "That chord is reserved for the ask key.",
-        });
-      }
-      return chosen;
+    save: ({ field, value }) => settingsStore.set(field, value),
+    async apply(result, { field, value }, event) {
+      if (result.reason) return;
+      await applySettingSideEffect(field, value, result.settings, event);
     },
-    save: (chosen) => settingsStore.setStopHotkey(chosen),
-    apply(result, chosen) {
-      if (!result.reason) {
-        hotkeys.setChosen(HOTKEY_RANK.STOP, chosen);
-        void hotkeys.reapply(HOTKEY_RANK.STOP);
-      }
-    },
-    refusal: "Could not save that shortcut on this system.",
-  });
-
-  // The duck follows the stored answer at once: off
-  // must let a duck currently held go rather than waiting for the next launch.
-  registerSettingHandler(channels.setPreferBuiltInMicrophone, {
-    validate(enabled: unknown) {
-      if (typeof enabled !== "boolean") throw new Error("Invalid microphone preference request");
-      return enabled;
-    },
-    save: (enabled) => settingsStore.setPreferBuiltInMicrophone(enabled),
     refusal: "Could not save that setting on this system.",
   });
 
-  registerSettingHandler(channels.setDuckOtherMedia, {
-    validate(enabled: unknown) {
-      if (typeof enabled !== "boolean") throw new Error("Invalid media duck request");
-      return enabled;
+  // One key of a map-valued preference. The merge belongs to the store, so what
+  // arrives here is the single entry and the renderer never sends back a map it
+  // read before an overlapping write landed.
+  registerSettingHandler(channels.updateSettingEntry, {
+    async validate(field: unknown, key: unknown, value: unknown) {
+      if (!isKeyedAppSettingField(field)) throw new Error("Unknown setting");
+      if (!isSettingEntryKey(field, key)) throw new Error("Unknown setting entry");
+      const parsed = settingEntryGuard(field, key, value);
+      if (!parsed.valid) throw new Error("Invalid setting value");
+      if (
+        field === APP_SETTING_SCHEMA.workspaceProjectDefaults.field &&
+        typeof parsed.value === "string" &&
+        !workspaceProjectOffered(key, parsed.value)
+      ) {
+        throw new Error("Unknown workspace project");
+      }
+      return { field, key, value: parsed.value };
     },
-    save: (enabled) => settingsStore.setDuckOtherMedia(enabled),
-    apply: (result) => mediaDuck.setEnabled(result.settings.duckOtherMedia),
-    refusal: "Could not save that setting on this system.",
-  });
-
-  // Which credential Luke runs on, rebuilt at once rather than at the next
-  // launch: the whole point of the choice is that the next thing said runs on
-  // what was just chosen. The rebuild is the same one a key being saved or
-  // deleted triggers, so the minter, the reviewer, and the usage reader can
-  // never be left built for the source that was just switched away from.
-  registerSettingHandler(channels.setVoiceSource, {
-    validate(source: unknown) {
-      if (!isVoiceSource(source)) throw new Error("Invalid voice source request");
-      return source;
+    save: ({ field, key, value }) => settingsStore.setEntry(field, key, value),
+    async apply(result, { field }, event) {
+      if (result.reason) return;
+      await applySettingSideEffect(field, result.settings[field], result.settings, event);
     },
-    save: (source) => settingsStore.setVoiceSource(source),
-    apply: () => void applyVoiceCredential(),
     refusal: "Could not save that setting on this system.",
   });
 
@@ -1568,37 +1427,10 @@ function registerIpc(): void {
     save: (scope) => settingsStore.resetSettings(scope),
     async apply(result, scope, event) {
       if (result.reason) return;
-      switch (scope) {
-        case SETTINGS_RESET_SCOPE.VOICE:
-          // The next credential is minted for the default voice and pace; the
-          // renderer carries the change onto a conversation already open the
-          // same way it does for the rows' own saves.
-          realtimeCredentials?.setVoice(result.settings.voice);
-          realtimeCredentials?.setSpeed(result.settings.voiceSpeed);
-          mediaDuck.setEnabled(result.settings.duckOtherMedia);
-          break;
-        case SETTINGS_RESET_SCOPE.APPEARANCE:
-          dock.apply(result.settings.showInDock, panels.displayIdFor(event.sender));
-          panels.setShowOnAllDisplays(result.settings.showOnAllDisplays);
-          panels.reconcile();
-          panels.setFormFactor(result.settings.formFactor);
-          panels.positionAll();
-          break;
-        case SETTINGS_RESET_SCOPE.SHORTCUTS:
-          // All three keys back to their defaults, re-registered in rank
-          // order and awaited, so the renderer's controls stay at rest until
-          // the keys the rows are about to show have actually answered.
-          hotkeys.setChosen(HOTKEY_RANK.TALK, undefined);
-          hotkeys.setChosen(HOTKEY_RANK.ASK, undefined);
-          hotkeys.setChosen(HOTKEY_RANK.STOP, undefined);
-          await hotkeys.reapply(HOTKEY_RANK.TALK);
-          await hotkeys.reapply(HOTKEY_RANK.ASK);
-          await hotkeys.reapply(HOTKEY_RANK.STOP);
-          break;
-        case SETTINGS_RESET_SCOPE.WORKSPACES:
-          // Nothing to re-run: the workspace defaults only steer the next
-          // creation ask, which reads the store when it happens.
-          break;
+      for (const field of APP_SETTING_FIELDS) {
+        const definition = APP_SETTING_SCHEMA[field];
+        if (!("resetScope" in definition) || definition.resetScope !== scope) continue;
+        await applySettingSideEffect(field, result.settings[field], result.settings, event, true);
       }
     },
     refusal: "Could not reset those settings on this system.",
@@ -1704,23 +1536,6 @@ function registerIpc(): void {
       if (!result.reason) void refreshCalendarMeetings();
     },
     refusal: "Could not save that calendar choice on this system.",
-  });
-
-  // Switching the quiet off mid-meeting is the meeting ending, as far as the
-  // backlog is concerned: the face wakes and anything held is said now, not
-  // on the next release tick — the user just asked to hear it.
-  registerSettingHandler(channels.setQuietDuringMeetings, {
-    validate(enabled: unknown) {
-      if (typeof enabled !== "boolean") throw new Error("Invalid meeting quiet request");
-      return enabled;
-    },
-    save: (enabled) => settingsStore.setQuietDuringMeetings(enabled),
-    apply(result) {
-      if (result.reason) return;
-      void refreshMeetingQuiet();
-      void releaseHeldNotices();
-    },
-    refusal: "Could not save that setting on this system.",
   });
 
   // The row's button. Answered rather than fire-and-forget so the row that
@@ -2109,7 +1924,7 @@ function registerIpc(): void {
       // the stored one when it was written — and the adapter holds whichever
       // rides to its own table again before anything reaches the network.
       const stored = isProviderId(providerId)
-        ? await settingsStore.readWorkspaceAgentDefault(providerId)
+        ? (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[providerId]
         : undefined;
       const agentSelection = namedSelection ?? stored;
       const result = await adapter.createWorkspace({
@@ -2321,7 +2136,9 @@ function registerIpc(): void {
       // preference, so "add a codex agent" is never quietly re-modelled by a
       // choice made about claude.
       const stored: WorkspaceAgentSelection | undefined = isProviderId(identity.providerId)
-        ? await settingsStore.readWorkspaceAgentDefault(identity.providerId)
+        ? (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[
+            identity.providerId
+          ]
         : undefined;
       const fallback = stored?.agent === advertised ? stored : undefined;
       const model = namedModel ?? fallback?.model;
@@ -2654,7 +2471,7 @@ function openCreatedWorkspaces(sessions: readonly NormalizedSession[]): void {
  */
 async function announcementsQuietNow(now: number): Promise<boolean> {
   if (!calendarMeetings || activeMeetingEnd(calendarMeetings, now) === undefined) return false;
-  return settingsStore.quietDuringMeetings();
+  return settingsStore.get(APP_SETTING_SCHEMA.quietDuringMeetings.field);
 }
 
 /**
@@ -3008,7 +2825,7 @@ if (!app.requestSingleInstanceLock()) {
     // The Dock icon reads the same file under the opposite default: it is
     // opt-in, so a file that cannot be read leaves Luke out of the Dock — the
     // accessory app the launch just asserted. Nothing to do until it says so.
-    void settingsStore.showInDock().then(
+    void settingsStore.get(APP_SETTING_SCHEMA.showInDock.field).then(
       (show) => {
         if (show) dock.apply(true);
       },
@@ -3017,7 +2834,7 @@ if (!app.requestSingleInstanceLock()) {
     // Armed from the settings file alone, like the status item, and for the
     // same reason. A file that cannot be read leaves the duck on, the same
     // answer a file that has never said gives.
-    void settingsStore.duckOtherMedia().then(
+    void settingsStore.get(APP_SETTING_SCHEMA.duckOtherMedia.field).then(
       (enabled) => mediaDuck.setEnabled(enabled),
       () => mediaDuck.setEnabled(APP_SETTING_DEFAULTS.duckOtherMedia),
     );
@@ -3045,11 +2862,12 @@ if (!app.requestSingleInstanceLock()) {
     // the default form — and must not keep the panels from starting.
     panels.setShowOnAllDisplays(
       await settingsStore
-        .readShowOnAllDisplays()
+        .get(APP_SETTING_SCHEMA.showOnAllDisplays.field)
         .catch(() => APP_SETTING_DEFAULTS.showOnAllDisplays),
     );
     panels.setFormFactor(
-      (await settingsStore.readFormFactor().catch(() => undefined)) ?? DEFAULT_PANEL_FORM_FACTOR,
+      (await settingsStore.get(APP_SETTING_SCHEMA.formFactor.field).catch(() => undefined)) ??
+        DEFAULT_PANEL_FORM_FACTOR,
     );
     // Awaited for the same reason the voice is: the chosen chord has to be in
     // hand before the key is registered, or the first registration would take
@@ -3057,12 +2875,15 @@ if (!app.requestSingleInstanceLock()) {
     // read means no choice was kept, and the defaults answer.
     hotkeys.setChosen(
       HOTKEY_RANK.TALK,
-      await settingsStore.readVoiceHotkey().catch(() => undefined),
+      await settingsStore.get(APP_SETTING_SCHEMA.voiceHotkey.field).catch(() => undefined),
     );
-    hotkeys.setChosen(HOTKEY_RANK.ASK, await settingsStore.readAskHotkey().catch(() => undefined));
+    hotkeys.setChosen(
+      HOTKEY_RANK.ASK,
+      await settingsStore.get(APP_SETTING_SCHEMA.askHotkey.field).catch(() => undefined),
+    );
     hotkeys.setChosen(
       HOTKEY_RANK.STOP,
-      await settingsStore.readStopHotkey().catch(() => undefined),
+      await settingsStore.get(APP_SETTING_SCHEMA.stopHotkey.field).catch(() => undefined),
     );
     // The report is not made here: the helper answers over its own stdout a
     // moment later, and a line printed now would state an absence that only

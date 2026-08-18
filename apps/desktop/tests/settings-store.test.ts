@@ -6,9 +6,11 @@ import test, { type TestContext } from "node:test";
 import {
   PANEL_FORM_FACTOR,
   PROVIDER_ID,
+  type ProviderId,
   REALTIME_DEFAULTS,
   REALTIME_VOICE,
   REALTIME_VOICE_SPEED,
+  type WorkspaceAgentSelection,
 } from "@sidecar/core";
 import { type SecretCipher, SettingsStore } from "../src/settings-store";
 import {
@@ -23,6 +25,12 @@ import {
   type CredentialProvider,
   type CredentialProviderId,
 } from "../src/shared/credential-providers";
+import {
+  APP_SETTING_FIELDS,
+  APP_SETTING_SCHEMA,
+  isKeyedAppSettingField,
+  settingEntryGuard,
+} from "../src/shared/settings-schema";
 
 const TEST_API_KEY = "conductor-live-key";
 const SETTINGS_FILE_NAME = "settings.json";
@@ -144,6 +152,34 @@ function storeIn(
   });
 }
 
+async function readWorkspaceAgentDefault(store: SettingsStore, providerId: ProviderId) {
+  return (await store.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[providerId];
+}
+
+async function setWorkspaceAgentDefault(
+  store: SettingsStore,
+  providerId: ProviderId,
+  selection: WorkspaceAgentSelection | undefined,
+) {
+  return store.setEntry(APP_SETTING_SCHEMA.workspaceAgentDefaults.field, providerId, selection);
+}
+
+async function readWorkspaceProjectDefault(store: SettingsStore, providerId: ProviderId) {
+  return (await store.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field))?.[providerId];
+}
+
+async function setWorkspaceProjectDefault(
+  store: SettingsStore,
+  providerId: ProviderId,
+  providerProjectId: string | undefined,
+) {
+  return store.setEntry(
+    APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+    providerId,
+    providerProjectId,
+  );
+}
+
 async function readSettingsFile(directory: string): Promise<string> {
   return fs.readFile(path.join(directory, SETTINGS_FILE_NAME), "utf8");
 }
@@ -254,7 +290,7 @@ test("captions are off until switched on, and the choice survives a reopen", asy
   const store = storeIn(directory, { cipher });
 
   assert.equal((await store.snapshot()).voiceCaptions, false);
-  const enabled = await store.setVoiceCaptions(true);
+  const enabled = await store.set(APP_SETTING_SCHEMA.voiceCaptions.field, true);
 
   assert.equal(enabled.settings.voiceCaptions, true);
   assert.equal((await storeIn(directory).snapshot()).voiceCaptions, true);
@@ -267,8 +303,8 @@ test("switching captions never disturbs a stored key", async (t) => {
   const store = storeIn(directory);
   await store.setApiKey(CONDUCTOR, TEST_API_KEY);
 
-  await store.setVoiceCaptions(true);
-  const off = await store.setVoiceCaptions(false);
+  await store.set(APP_SETTING_SCHEMA.voiceCaptions.field, true);
+  const off = await store.set(APP_SETTING_SCHEMA.voiceCaptions.field, false);
 
   assert.equal(off.settings.voiceCaptions, false);
   assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), TEST_API_KEY);
@@ -293,7 +329,7 @@ test("other media is quieted until asked otherwise, and the choice survives a re
   const store = storeIn(directory, { cipher });
 
   assert.equal((await store.snapshot()).duckOtherMedia, true);
-  const disabled = await store.setDuckOtherMedia(false);
+  const disabled = await store.set(APP_SETTING_SCHEMA.duckOtherMedia.field, false);
 
   assert.equal(disabled.settings.duckOtherMedia, false);
   assert.equal((await storeIn(directory).snapshot()).duckOtherMedia, false);
@@ -306,8 +342,8 @@ test("switching the media duck never disturbs a stored key", async (t) => {
   const store = storeIn(directory);
   await store.setApiKey(CONDUCTOR, TEST_API_KEY);
 
-  await store.setDuckOtherMedia(false);
-  const on = await store.setDuckOtherMedia(true);
+  await store.set(APP_SETTING_SCHEMA.duckOtherMedia.field, false);
+  const on = await store.set(APP_SETTING_SCHEMA.duckOtherMedia.field, true);
 
   assert.equal(on.settings.duckOtherMedia, true);
   assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), TEST_API_KEY);
@@ -331,7 +367,7 @@ test("the microphone preference persists, defaults on, and shrugs off corruption
   const store = storeIn(directory);
 
   assert.equal((await store.snapshot()).preferBuiltInMicrophone, true);
-  const disabled = await store.setPreferBuiltInMicrophone(false);
+  const disabled = await store.set(APP_SETTING_SCHEMA.preferBuiltInMicrophone.field, false);
 
   assert.equal(disabled.settings.preferBuiltInMicrophone, false);
   assert.equal((await storeIn(directory).snapshot()).preferBuiltInMicrophone, false);
@@ -441,11 +477,11 @@ test("announcements wait out meetings until asked otherwise, and the choice surv
   const store = storeIn(directory, { cipher });
 
   assert.equal((await store.snapshot()).quietDuringMeetings, true);
-  assert.equal(await store.quietDuringMeetings(), true);
-  const disabled = await store.setQuietDuringMeetings(false);
+  assert.equal(await store.get(APP_SETTING_SCHEMA.quietDuringMeetings.field), true);
+  const disabled = await store.set(APP_SETTING_SCHEMA.quietDuringMeetings.field, false);
 
   assert.equal(disabled.settings.quietDuringMeetings, false);
-  assert.equal(await storeIn(directory).quietDuringMeetings(), false);
+  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.quietDuringMeetings.field), false);
   assert.equal((await storeIn(directory).snapshot()).quietDuringMeetings, false);
   assert.equal(cipher.calls.isAvailable, 0);
   assert.equal(cipher.calls.encrypt, 0);
@@ -456,8 +492,8 @@ test("switching the meeting quiet never disturbs a stored key", async (t) => {
   const store = storeIn(directory);
   await store.setApiKey(CONDUCTOR, TEST_API_KEY);
 
-  await store.setQuietDuringMeetings(false);
-  const on = await store.setQuietDuringMeetings(true);
+  await store.set(APP_SETTING_SCHEMA.quietDuringMeetings.field, false);
+  const on = await store.set(APP_SETTING_SCHEMA.quietDuringMeetings.field, true);
 
   assert.equal(on.settings.quietDuringMeetings, true);
   assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), TEST_API_KEY);
@@ -767,7 +803,7 @@ test("drops the retired menu bar preference on the next settings write", async (
   );
   const store = storeIn(directory);
 
-  await store.setShowInDock(true);
+  await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
 
   const persisted = JSON.parse(await readSettingsFile(directory));
   assert.equal(persisted.showInMenuBar, undefined);
@@ -780,7 +816,7 @@ test("keeps Luke out of the Dock until asked, and remembers the answer", async (
 
   assert.equal((await store.snapshot()).showInDock, false);
 
-  const { settings, reason } = await store.setShowInDock(true);
+  const { settings, reason } = await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
 
   assert.equal(reason, undefined);
   assert.equal(settings.showInDock, true);
@@ -805,7 +841,7 @@ test("changes the Dock preference without touching the cipher", async (t) => {
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  const { settings } = await store.setShowInDock(true);
+  const { settings } = await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
 
   assert.equal(settings.showInDock, true);
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
@@ -828,7 +864,7 @@ test("decides the Dock icon from the file alone, never the keychain", async (t) 
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  assert.equal(await store.showInDock(), true);
+  assert.equal(await store.get(APP_SETTING_SCHEMA.showInDock.field), true);
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
 });
 
@@ -847,7 +883,7 @@ test("reports the default voice until one is chosen", async (t) => {
   const store = storeIn(directory);
 
   assert.equal((await store.snapshot()).voice, REALTIME_DEFAULTS.VOICE);
-  assert.equal(await store.readVoice(), undefined);
+  assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), undefined);
 });
 
 test("stores the chosen voice plainly and reads it back from a new store instance", async (t) => {
@@ -855,14 +891,17 @@ test("stores the chosen voice plainly and reads it back from a new store instanc
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  const { settings, reason } = await store.setVoice(REALTIME_VOICE.MARIN);
+  const { settings, reason } = await store.set(
+    APP_SETTING_SCHEMA.voice.field,
+    REALTIME_VOICE.MARIN,
+  );
 
   assert.equal(reason, undefined);
   assert.equal(settings.voice, REALTIME_VOICE.MARIN);
   // A preference is not a credential, so choosing one never reaches the
   // Keychain — and never raises its permission dialog.
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
-  assert.equal(await storeIn(directory).readVoice(), REALTIME_VOICE.MARIN);
+  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.voice.field), REALTIME_VOICE.MARIN);
 });
 
 test("prefers the chosen voice over the environment, and the environment over the default", async (t) => {
@@ -874,12 +913,12 @@ test("prefers the chosen voice over the environment, and the environment over th
   assert.equal((await store.snapshot()).voice, REALTIME_VOICE.SAGE);
   // The environment names the voice only until the user does, so it is
   // reported in the snapshot but never as something the user stored.
-  assert.equal(await store.readVoice(), undefined);
+  assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), undefined);
 
-  await store.setVoice(REALTIME_VOICE.MARIN);
+  await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.MARIN);
   assert.equal((await store.snapshot()).voice, REALTIME_VOICE.MARIN);
 
-  await store.setVoice(undefined);
+  await store.set(APP_SETTING_SCHEMA.voice.field, undefined);
   assert.equal((await store.snapshot()).voice, REALTIME_VOICE.SAGE);
 });
 
@@ -891,7 +930,7 @@ test("ignores a stored or environment voice this build does not offer", async (t
   );
   const store = storeIn(directory, { environment: { LUKE_REALTIME_VOICE: "baritone" } });
 
-  assert.equal(await store.readVoice(), undefined);
+  assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), undefined);
   assert.equal((await store.snapshot()).voice, REALTIME_DEFAULTS.VOICE);
 });
 
@@ -900,7 +939,7 @@ test("reports the natural pace until one is chosen", async (t) => {
   const store = storeIn(directory);
 
   assert.equal((await store.snapshot()).voiceSpeed, REALTIME_DEFAULTS.SPEED);
-  assert.equal(await store.readVoiceSpeed(), undefined);
+  assert.equal(await store.get(APP_SETTING_SCHEMA.voiceSpeed.field), undefined);
 });
 
 test("stores the chosen pace plainly and reads it back from a new store instance", async (t) => {
@@ -908,14 +947,20 @@ test("stores the chosen pace plainly and reads it back from a new store instance
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  const { settings, reason } = await store.setVoiceSpeed(REALTIME_VOICE_SPEED.QUICK);
+  const { settings, reason } = await store.set(
+    APP_SETTING_SCHEMA.voiceSpeed.field,
+    REALTIME_VOICE_SPEED.QUICK,
+  );
 
   assert.equal(reason, undefined);
   assert.equal(settings.voiceSpeed, REALTIME_VOICE_SPEED.QUICK);
   // A preference is not a credential, so choosing one never reaches the
   // Keychain — and never raises its permission dialog.
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
-  assert.equal(await storeIn(directory).readVoiceSpeed(), REALTIME_VOICE_SPEED.QUICK);
+  assert.equal(
+    await storeIn(directory).get(APP_SETTING_SCHEMA.voiceSpeed.field),
+    REALTIME_VOICE_SPEED.QUICK,
+  );
 });
 
 test("prefers the chosen pace over the environment, and the environment over the default", async (t) => {
@@ -925,12 +970,12 @@ test("prefers the chosen pace over the environment, and the environment over the
   });
 
   assert.equal((await store.snapshot()).voiceSpeed, REALTIME_VOICE_SPEED.SLOW);
-  assert.equal(await store.readVoiceSpeed(), undefined);
+  assert.equal(await store.get(APP_SETTING_SCHEMA.voiceSpeed.field), undefined);
 
-  await store.setVoiceSpeed(REALTIME_VOICE_SPEED.FAST);
+  await store.set(APP_SETTING_SCHEMA.voiceSpeed.field, REALTIME_VOICE_SPEED.FAST);
   assert.equal((await store.snapshot()).voiceSpeed, REALTIME_VOICE_SPEED.FAST);
 
-  await store.setVoiceSpeed(undefined);
+  await store.set(APP_SETTING_SCHEMA.voiceSpeed.field, undefined);
   assert.equal((await store.snapshot()).voiceSpeed, REALTIME_VOICE_SPEED.SLOW);
 });
 
@@ -942,7 +987,7 @@ test("ignores a stored or environment pace this build does not offer", async (t)
   );
   const store = storeIn(directory, { environment: { LUKE_REALTIME_SPEED: "0.1" } });
 
-  assert.equal(await store.readVoiceSpeed(), undefined);
+  assert.equal(await store.get(APP_SETTING_SCHEMA.voiceSpeed.field), undefined);
   assert.equal((await store.snapshot()).voiceSpeed, REALTIME_DEFAULTS.SPEED);
 });
 
@@ -950,7 +995,7 @@ test("reports no talk-key chord until one is chosen", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  assert.equal(await store.readVoiceHotkey(), undefined);
+  assert.equal(await store.get(APP_SETTING_SCHEMA.voiceHotkey.field), undefined);
   assert.equal((await store.snapshot()).voiceHotkey, undefined);
 });
 
@@ -959,27 +1004,33 @@ test("stores the chosen talk-key chord plainly and reads it back from a new stor
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  const { settings, reason } = await store.setVoiceHotkey("Shift+Command+L");
+  const { settings, reason } = await store.set(
+    APP_SETTING_SCHEMA.voiceHotkey.field,
+    "Shift+Command+L",
+  );
 
   assert.equal(reason, undefined);
   assert.equal(settings.voiceHotkey, "Shift+Command+L");
   // A preference is not a credential, so choosing one never reaches the
   // Keychain — and never raises its permission dialog.
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
-  assert.equal(await storeIn(directory).readVoiceHotkey(), "Shift+Command+L");
+  assert.equal(
+    await storeIn(directory).get(APP_SETTING_SCHEMA.voiceHotkey.field),
+    "Shift+Command+L",
+  );
 });
 
 test("clearing the talk-key chord returns to no choice at all", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  await store.setVoiceHotkey("Shift+Command+L");
-  const { settings } = await store.setVoiceHotkey(undefined);
+  await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, "Shift+Command+L");
+  const { settings } = await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, undefined);
 
   assert.equal(settings.voiceHotkey, undefined);
   // Absent from the file rather than stored as an empty value: reset is the
   // absence of a choice, and a reopened store must read it the same way.
-  assert.equal(await storeIn(directory).readVoiceHotkey(), undefined);
+  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.voiceHotkey.field), undefined);
 });
 
 test("ignores a stored talk-key chord this build cannot register", async (t) => {
@@ -992,7 +1043,7 @@ test("ignores a stored talk-key chord this build cannot register", async (t) => 
 
   // A hand-edited chord the registrars would refuse is dropped rather than
   // carried: honouring it would claim a key nothing was ever told about.
-  assert.equal(await store.readVoiceHotkey(), undefined);
+  assert.equal(await store.get(APP_SETTING_SCHEMA.voiceHotkey.field), undefined);
   assert.equal((await store.snapshot()).voiceHotkey, undefined);
 });
 
@@ -1001,30 +1052,30 @@ test("stores the chosen ask-key chord on the talk key's terms and reads it back"
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  assert.equal(await store.readAskHotkey(), undefined);
+  assert.equal(await store.get(APP_SETTING_SCHEMA.askHotkey.field), undefined);
   assert.equal((await store.snapshot()).askHotkey, undefined);
 
-  const { settings, reason } = await store.setAskHotkey("Control+Alt+K");
+  const { settings, reason } = await store.set(APP_SETTING_SCHEMA.askHotkey.field, "Control+Alt+K");
 
   assert.equal(reason, undefined);
   assert.equal(settings.askHotkey, "Control+Alt+K");
   // A preference is not a credential, so choosing one never reaches the
   // Keychain — and never raises its permission dialog.
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
-  assert.equal(await storeIn(directory).readAskHotkey(), "Control+Alt+K");
+  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.askHotkey.field), "Control+Alt+K");
 });
 
 test("clearing the ask-key chord returns to no choice at all", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  await store.setAskHotkey("Control+Alt+K");
-  const { settings } = await store.setAskHotkey(undefined);
+  await store.set(APP_SETTING_SCHEMA.askHotkey.field, "Control+Alt+K");
+  const { settings } = await store.set(APP_SETTING_SCHEMA.askHotkey.field, undefined);
 
   assert.equal(settings.askHotkey, undefined);
   // Absent from the file rather than stored as an empty value: reset is the
   // absence of a choice, and a reopened store must read it the same way.
-  assert.equal(await storeIn(directory).readAskHotkey(), undefined);
+  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.askHotkey.field), undefined);
 });
 
 test("ignores a stored ask-key chord this build cannot register", async (t) => {
@@ -1037,7 +1088,7 @@ test("ignores a stored ask-key chord this build cannot register", async (t) => {
 
   // A hand-edited chord the registrar would refuse is dropped rather than
   // carried: honouring it would claim a key nothing was ever told about.
-  assert.equal(await store.readAskHotkey(), undefined);
+  assert.equal(await store.get(APP_SETTING_SCHEMA.askHotkey.field), undefined);
   assert.equal((await store.snapshot()).askHotkey, undefined);
 });
 
@@ -1046,30 +1097,33 @@ test("stores the chosen stop-key chord on the other keys' terms and reads it bac
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  assert.equal(await store.readStopHotkey(), undefined);
+  assert.equal(await store.get(APP_SETTING_SCHEMA.stopHotkey.field), undefined);
   assert.equal((await store.snapshot()).stopHotkey, undefined);
 
-  const { settings, reason } = await store.setStopHotkey("Control+Alt+X");
+  const { settings, reason } = await store.set(
+    APP_SETTING_SCHEMA.stopHotkey.field,
+    "Control+Alt+X",
+  );
 
   assert.equal(reason, undefined);
   assert.equal(settings.stopHotkey, "Control+Alt+X");
   // A preference is not a credential, so choosing one never reaches the
   // Keychain — and never raises its permission dialog.
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
-  assert.equal(await storeIn(directory).readStopHotkey(), "Control+Alt+X");
+  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.stopHotkey.field), "Control+Alt+X");
 });
 
 test("clearing the stop-key chord returns to no choice at all", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  await store.setStopHotkey("Control+Alt+X");
-  const { settings } = await store.setStopHotkey(undefined);
+  await store.set(APP_SETTING_SCHEMA.stopHotkey.field, "Control+Alt+X");
+  const { settings } = await store.set(APP_SETTING_SCHEMA.stopHotkey.field, undefined);
 
   assert.equal(settings.stopHotkey, undefined);
   // Absent from the file rather than stored as an empty value: reset is the
   // absence of a choice, and a reopened store must read it the same way.
-  assert.equal(await storeIn(directory).readStopHotkey(), undefined);
+  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.stopHotkey.field), undefined);
 });
 
 test("ignores a stored stop-key chord this build cannot register", async (t) => {
@@ -1082,7 +1136,7 @@ test("ignores a stored stop-key chord this build cannot register", async (t) => 
 
   // A hand-edited chord the registrar would refuse is dropped rather than
   // carried: honouring it would claim a key nothing was ever told about.
-  assert.equal(await store.readStopHotkey(), undefined);
+  assert.equal(await store.get(APP_SETTING_SCHEMA.stopHotkey.field), undefined);
   assert.equal((await store.snapshot()).stopHotkey, undefined);
 });
 
@@ -1090,14 +1144,14 @@ test("the three Luke keys survive each other's writes", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  await store.setVoiceHotkey("Control+Alt+Space");
-  await store.setAskHotkey("Control+Alt+K");
-  await store.setStopHotkey("Control+Alt+X");
+  await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, "Control+Alt+Space");
+  await store.set(APP_SETTING_SCHEMA.askHotkey.field, "Control+Alt+K");
+  await store.set(APP_SETTING_SCHEMA.stopHotkey.field, "Control+Alt+X");
 
   const reopened = storeIn(directory);
-  assert.equal(await reopened.readVoiceHotkey(), "Control+Alt+Space");
-  assert.equal(await reopened.readAskHotkey(), "Control+Alt+K");
-  assert.equal(await reopened.readStopHotkey(), "Control+Alt+X");
+  assert.equal(await reopened.get(APP_SETTING_SCHEMA.voiceHotkey.field), "Control+Alt+Space");
+  assert.equal(await reopened.get(APP_SETTING_SCHEMA.askHotkey.field), "Control+Alt+K");
+  assert.equal(await reopened.get(APP_SETTING_SCHEMA.stopHotkey.field), "Control+Alt+X");
 });
 
 test("the talk-key chord and a stored key survive each other's writes", async (t) => {
@@ -1105,12 +1159,12 @@ test("the talk-key chord and a stored key survive each other's writes", async (t
   const store = storeIn(directory);
 
   await store.setApiKey(CONDUCTOR, TEST_API_KEY);
-  await store.setVoiceHotkey("Control+Alt+Space");
+  await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, "Control+Alt+Space");
   await store.setApiKey(CONDUCTOR, "conductor-replacement-key");
 
   const reopened = storeIn(directory);
   assert.equal(await reopened.readApiKey(CONDUCTOR), "conductor-replacement-key");
-  assert.equal(await reopened.readVoiceHotkey(), "Control+Alt+Space");
+  assert.equal(await reopened.get(APP_SETTING_SCHEMA.voiceHotkey.field), "Control+Alt+Space");
 });
 
 test("keeps Luke to the main display until asked, and remembers the answer", async (t) => {
@@ -1118,14 +1172,14 @@ test("keeps Luke to the main display until asked, and remembers the answer", asy
   const store = storeIn(directory);
 
   assert.equal((await store.snapshot()).showOnAllDisplays, false);
-  assert.equal(await store.readShowOnAllDisplays(), false);
+  assert.equal(await store.get(APP_SETTING_SCHEMA.showOnAllDisplays.field), false);
 
-  const { settings, reason } = await store.setShowOnAllDisplays(true);
+  const { settings, reason } = await store.set(APP_SETTING_SCHEMA.showOnAllDisplays.field, true);
 
   assert.equal(reason, undefined);
   assert.equal(settings.showOnAllDisplays, true);
   // The choice outlives the run that heard it.
-  assert.equal(await storeIn(directory).readShowOnAllDisplays(), true);
+  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.showOnAllDisplays.field), true);
 });
 
 test("changes the displays preference without touching the cipher", async (t) => {
@@ -1135,7 +1189,7 @@ test("changes the displays preference without touching the cipher", async (t) =>
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  const { settings } = await store.setShowOnAllDisplays(true);
+  const { settings } = await store.set(APP_SETTING_SCHEMA.showOnAllDisplays.field, true);
 
   assert.equal(settings.showOnAllDisplays, true);
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
@@ -1148,7 +1202,7 @@ test("keeps Luke to the main display when the file says something a boolean is n
     JSON.stringify({ version: 2, apiKeys: {}, showOnAllDisplays: "every one of them" }),
   );
 
-  assert.equal(await storeIn(directory).readShowOnAllDisplays(), false);
+  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.showOnAllDisplays.field), false);
 });
 
 test("draws the bubble until a form is chosen, and remembers the choice", async (t) => {
@@ -1156,14 +1210,20 @@ test("draws the bubble until a form is chosen, and remembers the choice", async 
   const store = storeIn(directory);
 
   assert.equal((await store.snapshot()).formFactor, PANEL_FORM_FACTOR.BUBBLE);
-  assert.equal(await store.readFormFactor(), undefined);
+  assert.equal(await store.get(APP_SETTING_SCHEMA.formFactor.field), undefined);
 
-  const { settings, reason } = await store.setFormFactor(PANEL_FORM_FACTOR.NOTCH);
+  const { settings, reason } = await store.set(
+    APP_SETTING_SCHEMA.formFactor.field,
+    PANEL_FORM_FACTOR.NOTCH,
+  );
 
   assert.equal(reason, undefined);
   assert.equal(settings.formFactor, PANEL_FORM_FACTOR.NOTCH);
   // The choice outlives the run that heard it.
-  assert.equal(await storeIn(directory).readFormFactor(), PANEL_FORM_FACTOR.NOTCH);
+  assert.equal(
+    await storeIn(directory).get(APP_SETTING_SCHEMA.formFactor.field),
+    PANEL_FORM_FACTOR.NOTCH,
+  );
 });
 
 test("changes the form without touching the cipher", async (t) => {
@@ -1171,7 +1231,10 @@ test("changes the form without touching the cipher", async (t) => {
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  const { settings } = await store.setFormFactor(PANEL_FORM_FACTOR.NOTCH);
+  const { settings } = await store.set(
+    APP_SETTING_SCHEMA.formFactor.field,
+    PANEL_FORM_FACTOR.NOTCH,
+  );
 
   assert.equal(settings.formFactor, PANEL_FORM_FACTOR.NOTCH);
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
@@ -1184,7 +1247,7 @@ test("ignores a stored form this build does not draw", async (t) => {
     JSON.stringify({ version: 2, apiKeys: {}, formFactor: "hexagon" }),
   );
 
-  assert.equal(await storeIn(directory).readFormFactor(), undefined);
+  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.formFactor.field), undefined);
   assert.equal((await storeIn(directory).snapshot()).formFactor, PANEL_FORM_FACTOR.BUBBLE);
 });
 
@@ -1195,19 +1258,28 @@ test("asks each time until a default workspace provider is chosen, and remembers
   // Unset on purpose: the default is always a choice the user made — by hand
   // or by their first creation — never one made for them.
   assert.equal((await store.snapshot()).defaultWorkspaceProvider, undefined);
-  assert.equal(await store.readDefaultWorkspaceProvider(), undefined);
+  assert.equal(await store.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field), undefined);
 
-  const { settings, reason } = await store.setDefaultWorkspaceProvider(PROVIDER_ID.CONDUCTOR);
+  const { settings, reason } = await store.set(
+    APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
+    PROVIDER_ID.CONDUCTOR,
+  );
 
   assert.equal(reason, undefined);
   assert.equal(settings.defaultWorkspaceProvider, PROVIDER_ID.CONDUCTOR);
   // The choice outlives the run that heard it.
-  assert.equal(await storeIn(directory).readDefaultWorkspaceProvider(), PROVIDER_ID.CONDUCTOR);
+  assert.equal(
+    await storeIn(directory).get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field),
+    PROVIDER_ID.CONDUCTOR,
+  );
 
   // Clearing is returning to asking each time, not storing an answer.
-  const cleared = await store.setDefaultWorkspaceProvider(undefined);
+  const cleared = await store.set(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field, undefined);
   assert.equal(cleared.settings.defaultWorkspaceProvider, undefined);
-  assert.equal(await storeIn(directory).readDefaultWorkspaceProvider(), undefined);
+  assert.equal(
+    await storeIn(directory).get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field),
+    undefined,
+  );
 });
 
 test("changes the default workspace provider without touching the cipher", async (t) => {
@@ -1215,7 +1287,10 @@ test("changes the default workspace provider without touching the cipher", async
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  const { settings } = await store.setDefaultWorkspaceProvider(PROVIDER_ID.CURSOR);
+  const { settings } = await store.set(
+    APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
+    PROVIDER_ID.CURSOR,
+  );
 
   assert.equal(settings.defaultWorkspaceProvider, PROVIDER_ID.CURSOR);
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
@@ -1228,7 +1303,10 @@ test("ignores a stored default provider this build does not know", async (t) => 
     JSON.stringify({ version: 2, apiKeys: {}, defaultWorkspaceProvider: "someone-else" }),
   );
 
-  assert.equal(await storeIn(directory).readDefaultWorkspaceProvider(), undefined);
+  assert.equal(
+    await storeIn(directory).get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field),
+    undefined,
+  );
   assert.equal((await storeIn(directory).snapshot()).defaultWorkspaceProvider, undefined);
 });
 
@@ -1237,24 +1315,24 @@ test("starts new workspaces on the provider's defaults until a pairing is chosen
   const store = storeIn(directory);
 
   assert.equal((await store.snapshot()).workspaceAgentDefaults, undefined);
-  assert.equal(await store.readWorkspaceAgentDefault(PROVIDER_ID.CONDUCTOR), undefined);
+  assert.equal(await readWorkspaceAgentDefault(store, PROVIDER_ID.CONDUCTOR), undefined);
 
   const chosen = { agent: "claude", model: "sonnet", effort: "max" };
-  const { settings, reason } = await store.setWorkspaceAgentDefault(PROVIDER_ID.CONDUCTOR, chosen);
+  const { settings, reason } = await setWorkspaceAgentDefault(store, PROVIDER_ID.CONDUCTOR, chosen);
 
   assert.equal(reason, undefined);
   assert.deepEqual(settings.workspaceAgentDefaults, { [PROVIDER_ID.CONDUCTOR]: chosen });
   // The choice outlives the run that heard it.
   assert.deepEqual(
-    await storeIn(directory).readWorkspaceAgentDefault(PROVIDER_ID.CONDUCTOR),
+    await readWorkspaceAgentDefault(storeIn(directory), PROVIDER_ID.CONDUCTOR),
     chosen,
   );
 
   // Clearing returns that one provider to its own defaults.
-  const cleared = await store.setWorkspaceAgentDefault(PROVIDER_ID.CONDUCTOR, undefined);
+  const cleared = await setWorkspaceAgentDefault(store, PROVIDER_ID.CONDUCTOR, undefined);
   assert.equal(cleared.settings.workspaceAgentDefaults, undefined);
   assert.equal(
-    await storeIn(directory).readWorkspaceAgentDefault(PROVIDER_ID.CONDUCTOR),
+    await readWorkspaceAgentDefault(storeIn(directory), PROVIDER_ID.CONDUCTOR),
     undefined,
   );
 });
@@ -1264,7 +1342,7 @@ test("changes a workspace agent pairing without touching the cipher", async (t) 
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  const { settings } = await store.setWorkspaceAgentDefault(PROVIDER_ID.CONDUCTOR, {
+  const { settings } = await setWorkspaceAgentDefault(store, PROVIDER_ID.CONDUCTOR, {
     agent: "codex",
     model: "gpt-5.6-sol",
   });
@@ -1283,9 +1361,10 @@ test("lets the first creation choose each provider's project until one is chosen
   // Unset on purpose, the provider default's own terms: the default is always
   // a choice the user made — by hand or by their first creation there.
   assert.equal((await store.snapshot()).workspaceProjectDefaults, undefined);
-  assert.equal(await store.readWorkspaceProjectDefault(PROVIDER_ID.CONDUCTOR), undefined);
+  assert.equal(await readWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR), undefined);
 
-  const { settings, reason } = await store.setWorkspaceProjectDefault(
+  const { settings, reason } = await setWorkspaceProjectDefault(
+    store,
     PROVIDER_ID.CONDUCTOR,
     "proj-1",
   );
@@ -1294,15 +1373,15 @@ test("lets the first creation choose each provider's project until one is chosen
   assert.deepEqual(settings.workspaceProjectDefaults, { [PROVIDER_ID.CONDUCTOR]: "proj-1" });
   // The choice outlives the run that heard it.
   assert.equal(
-    await storeIn(directory).readWorkspaceProjectDefault(PROVIDER_ID.CONDUCTOR),
+    await readWorkspaceProjectDefault(storeIn(directory), PROVIDER_ID.CONDUCTOR),
     "proj-1",
   );
 
   // Clearing returns that one provider to its first creation choosing.
-  const cleared = await store.setWorkspaceProjectDefault(PROVIDER_ID.CONDUCTOR, undefined);
+  const cleared = await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, undefined);
   assert.equal(cleared.settings.workspaceProjectDefaults, undefined);
   assert.equal(
-    await storeIn(directory).readWorkspaceProjectDefault(PROVIDER_ID.CONDUCTOR),
+    await readWorkspaceProjectDefault(storeIn(directory), PROVIDER_ID.CONDUCTOR),
     undefined,
   );
 });
@@ -1312,7 +1391,7 @@ test("changes a default project without touching the cipher", async (t) => {
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  const { settings } = await store.setWorkspaceProjectDefault(PROVIDER_ID.CURSOR, "proj-2");
+  const { settings } = await setWorkspaceProjectDefault(store, PROVIDER_ID.CURSOR, "proj-2");
 
   assert.deepEqual(settings.workspaceProjectDefaults, { [PROVIDER_ID.CURSOR]: "proj-2" });
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
@@ -1322,16 +1401,102 @@ test("keeps one provider's default project apart from another's", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
 
-  await store.setWorkspaceProjectDefault(PROVIDER_ID.CONDUCTOR, "proj-1");
-  const { settings } = await store.setWorkspaceProjectDefault(PROVIDER_ID.CURSOR, "proj-2");
+  await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-1");
+  const { settings } = await setWorkspaceProjectDefault(store, PROVIDER_ID.CURSOR, "proj-2");
 
   assert.deepEqual(settings.workspaceProjectDefaults, {
     [PROVIDER_ID.CONDUCTOR]: "proj-1",
     [PROVIDER_ID.CURSOR]: "proj-2",
   });
 
-  const cleared = await store.setWorkspaceProjectDefault(PROVIDER_ID.CONDUCTOR, undefined);
+  const cleared = await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, undefined);
   assert.deepEqual(cleared.settings.workspaceProjectDefaults, {
+    [PROVIDER_ID.CURSOR]: "proj-2",
+  });
+});
+
+test("an entry the field cannot hold is refused rather than quietly dropped", () => {
+  // The map guards drop what they cannot hold, which is right when reading a
+  // stored file and wrong for a write: a whole map of unholdable entries would
+  // read as valid and clear what is stored. Every write goes one entry at a
+  // time so the refusal is the guard's own answer.
+  assert.equal(
+    settingEntryGuard(
+      APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+      PROVIDER_ID.CONDUCTOR,
+      "   ",
+    ).valid,
+    false,
+  );
+  assert.equal(
+    settingEntryGuard(APP_SETTING_SCHEMA.workspaceAgentDefaults.field, PROVIDER_ID.CONDUCTOR, {
+      agent: "codex",
+      model: "no-such-model",
+    }).valid,
+    false,
+  );
+
+  // Clearing carries no value to check, and a holdable entry comes back whole.
+  assert.equal(
+    settingEntryGuard(
+      APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+      PROVIDER_ID.CONDUCTOR,
+      undefined,
+    ).valid,
+    true,
+  );
+  assert.deepEqual(
+    settingEntryGuard(APP_SETTING_SCHEMA.workspaceAgentDefaults.field, PROVIDER_ID.CONDUCTOR, {
+      agent: "codex",
+      model: "gpt-5.6-sol",
+    }),
+    { valid: true, value: { agent: "codex", model: "gpt-5.6-sol" } },
+  );
+});
+
+test("every map-valued setting is written one entry at a time", () => {
+  // The keyed set is what the whole-map write path refuses, so a new map field
+  // that forgot its entry declaration would be writable as a whole map again.
+  for (const field of APP_SETTING_FIELDS) {
+    const holdsMap =
+      field === APP_SETTING_SCHEMA.workspaceAgentDefaults.field ||
+      field === APP_SETTING_SCHEMA.workspaceProjectDefaults.field;
+    assert.equal(isKeyedAppSettingField(field), holdsMap, field);
+  }
+});
+
+test("overlapping default projects each survive the other's write", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  // Both start before either lands, the way two provider rows saved in quick
+  // succession do. The merge belongs to the store for exactly this reason: a
+  // caller holding the map it read before the first write would put that stale
+  // copy back, and the later write would drop the other provider's choice.
+  await Promise.all([
+    setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-1"),
+    setWorkspaceProjectDefault(store, PROVIDER_ID.CURSOR, "proj-2"),
+  ]);
+
+  assert.deepEqual((await storeIn(directory).snapshot()).workspaceProjectDefaults, {
+    [PROVIDER_ID.CONDUCTOR]: "proj-1",
+    [PROVIDER_ID.CURSOR]: "proj-2",
+  });
+});
+
+test("an overlapping clear forgets its own entry and no other", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+  await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-1");
+
+  // A row cleared while another row is being saved forgets one entry, never
+  // the map the clear was composed against.
+  await Promise.all([
+    setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, undefined),
+    setWorkspaceProjectDefault(store, PROVIDER_ID.CURSOR, "proj-2"),
+  ]);
+
+  assert.deepEqual((await storeIn(directory).snapshot()).workspaceProjectDefaults, {
     [PROVIDER_ID.CURSOR]: "proj-2",
   });
 });
@@ -1356,7 +1521,7 @@ test("ignores stored default projects this store cannot hold", async (t) => {
   );
 
   const store = storeIn(directory);
-  assert.equal(await store.readWorkspaceProjectDefault(PROVIDER_ID.CONDUCTOR), undefined);
+  assert.equal(await readWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR), undefined);
   assert.equal((await store.snapshot()).workspaceProjectDefaults, undefined);
 });
 
@@ -1379,7 +1544,7 @@ test("ignores a stored pairing this build's table does not list", async (t) => {
   );
 
   const store = storeIn(directory);
-  assert.equal(await store.readWorkspaceAgentDefault(PROVIDER_ID.CONDUCTOR), undefined);
+  assert.equal(await readWorkspaceAgentDefault(store, PROVIDER_ID.CONDUCTOR), undefined);
   assert.equal((await store.snapshot()).workspaceAgentDefaults, undefined);
 });
 
@@ -1388,12 +1553,12 @@ test("the voice and a stored key survive each other's writes", async (t) => {
   const store = storeIn(directory);
 
   await store.setApiKey(CONDUCTOR, TEST_API_KEY);
-  await store.setVoice(REALTIME_VOICE.MARIN);
+  await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.MARIN);
   await store.setApiKey(CONDUCTOR, "conductor-replacement-key");
 
   const reopened = storeIn(directory);
   assert.equal(await reopened.readApiKey(CONDUCTOR), "conductor-replacement-key");
-  assert.equal(await reopened.readVoice(), REALTIME_VOICE.MARIN);
+  assert.equal(await reopened.get(APP_SETTING_SCHEMA.voice.field), REALTIME_VOICE.MARIN);
 });
 
 test("recovers from a corrupt settings file", async (t) => {
@@ -1410,10 +1575,10 @@ test("recovers from a corrupt settings file", async (t) => {
 test("a voice reset forgets the voice, pace, captions, and duck in one act", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
-  await store.setVoice(REALTIME_VOICE.MARIN);
-  await store.setVoiceSpeed(REALTIME_VOICE_SPEED.QUICK);
-  await store.setVoiceCaptions(true);
-  await store.setDuckOtherMedia(false);
+  await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.MARIN);
+  await store.set(APP_SETTING_SCHEMA.voiceSpeed.field, REALTIME_VOICE_SPEED.QUICK);
+  await store.set(APP_SETTING_SCHEMA.voiceCaptions.field, true);
+  await store.set(APP_SETTING_SCHEMA.duckOtherMedia.field, false);
 
   const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
 
@@ -1424,8 +1589,8 @@ test("a voice reset forgets the voice, pace, captions, and duck in one act", asy
   assert.equal(settings.duckOtherMedia, true);
   // The choices are forgotten rather than restated, so a default that moves
   // in a later build moves these settings with it.
-  assert.equal(await storeIn(directory).readVoice(), undefined);
-  assert.equal(await storeIn(directory).readVoiceSpeed(), undefined);
+  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.voice.field), undefined);
+  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.voiceSpeed.field), undefined);
 });
 
 test("a voice reset returns to the environment's voice where one stands behind the choice", async (t) => {
@@ -1433,23 +1598,23 @@ test("a voice reset returns to the environment's voice where one stands behind t
   const store = storeIn(directory, {
     environment: { LUKE_REALTIME_VOICE: REALTIME_VOICE.SAGE },
   });
-  await store.setVoice(REALTIME_VOICE.MARIN);
+  await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.MARIN);
 
   const { settings } = await store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
 
   // Forgetting the choice is the reset's whole meaning: what stands afterwards
   // is whatever would have stood had none been made.
   assert.equal(settings.voice, REALTIME_VOICE.SAGE);
-  assert.equal(await store.readVoice(), undefined);
+  assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), undefined);
 });
 
 test("an appearance reset returns Luke's stances without touching the voice page", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
-  await store.setShowInDock(true);
-  await store.setShowOnAllDisplays(true);
-  await store.setFormFactor(PANEL_FORM_FACTOR.NOTCH);
-  await store.setVoice(REALTIME_VOICE.MARIN);
+  await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
+  await store.set(APP_SETTING_SCHEMA.showOnAllDisplays.field, true);
+  await store.set(APP_SETTING_SCHEMA.formFactor.field, PANEL_FORM_FACTOR.NOTCH);
+  await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.MARIN);
 
   const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.APPEARANCE);
 
@@ -1457,7 +1622,7 @@ test("an appearance reset returns Luke's stances without touching the voice page
   assert.equal(settings.showInDock, false);
   assert.equal(settings.showOnAllDisplays, false);
   assert.equal(settings.formFactor, PANEL_FORM_FACTOR.BUBBLE);
-  assert.equal(await storeIn(directory).readFormFactor(), undefined);
+  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.formFactor.field), undefined);
   // One scope's reset is that scope's alone.
   assert.equal(settings.voice, REALTIME_VOICE.MARIN);
 });
@@ -1465,9 +1630,9 @@ test("an appearance reset returns Luke's stances without touching the voice page
 test("a shortcuts reset forgets all three chords at once", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
-  await store.setVoiceHotkey("Shift+Command+L");
-  await store.setAskHotkey("Control+Alt+K");
-  await store.setStopHotkey("Control+Alt+X");
+  await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, "Shift+Command+L");
+  await store.set(APP_SETTING_SCHEMA.askHotkey.field, "Control+Alt+K");
+  await store.set(APP_SETTING_SCHEMA.stopHotkey.field, "Control+Alt+X");
 
   const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.SHORTCUTS);
 
@@ -1475,18 +1640,18 @@ test("a shortcuts reset forgets all three chords at once", async (t) => {
   assert.equal(settings.voiceHotkey, undefined);
   assert.equal(settings.askHotkey, undefined);
   assert.equal(settings.stopHotkey, undefined);
-  assert.equal(await storeIn(directory).readVoiceHotkey(), undefined);
-  assert.equal(await storeIn(directory).readAskHotkey(), undefined);
-  assert.equal(await storeIn(directory).readStopHotkey(), undefined);
+  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.voiceHotkey.field), undefined);
+  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.askHotkey.field), undefined);
+  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.stopHotkey.field), undefined);
 });
 
 test("a workspaces reset forgets the provider and project defaults but never the agent pairing", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
   const pairing = { agent: "claude", model: "sonnet" };
-  await store.setDefaultWorkspaceProvider(PROVIDER_ID.CONDUCTOR);
-  await store.setWorkspaceProjectDefault(PROVIDER_ID.CONDUCTOR, "proj-1");
-  await store.setWorkspaceAgentDefault(PROVIDER_ID.CONDUCTOR, pairing);
+  await store.set(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field, PROVIDER_ID.CONDUCTOR);
+  await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-1");
+  await setWorkspaceAgentDefault(store, PROVIDER_ID.CONDUCTOR, pairing);
 
   const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.WORKSPACES);
 
@@ -1515,7 +1680,7 @@ test("a reset never touches the cipher", async (t) => {
   const directory = await temporaryDirectory(t);
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
-  await store.setVoiceCaptions(true);
+  await store.set(APP_SETTING_SCHEMA.voiceCaptions.field, true);
 
   await store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
 
@@ -1571,7 +1736,7 @@ test("with no key stored there is only one source to run on", async (t) => {
   // Choosing the key with none stored changes nothing about what runs: there
   // is nothing there to spend, and a resolution that answered otherwise would
   // send the minter to a credential that does not exist.
-  await store.setVoiceSource(VOICE_SOURCE.KEY);
+  await store.set(APP_SETTING_SCHEMA.voiceSource.field, VOICE_SOURCE.KEY);
   assert.equal(await store.readVoiceSource(), VOICE_SOURCE.ACCOUNT);
 });
 
@@ -1586,7 +1751,7 @@ test("connecting the voice key chooses it, and the allowance can take it back", 
 
   // And back again, with the key still stored — the whole point of the
   // choice: changing sources never costs a credential.
-  await store.setVoiceSource(VOICE_SOURCE.ACCOUNT);
+  await store.set(APP_SETTING_SCHEMA.voiceSource.field, VOICE_SOURCE.ACCOUNT);
   assert.equal(await store.readVoiceSource(), VOICE_SOURCE.ACCOUNT);
   assert.equal(
     (await store.snapshot()).credentialSources[CREDENTIAL_PROVIDER_ID.OPENAI],
@@ -1603,7 +1768,7 @@ test("a choice that would start spending a key is never made by fallback", async
   const store = storeIn(directory);
   await store.setAccount(TEST_ACCOUNT);
   await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-developers-own");
-  await store.setVoiceSource(VOICE_SOURCE.ACCOUNT);
+  await store.set(APP_SETTING_SCHEMA.voiceSource.field, VOICE_SOURCE.ACCOUNT);
   assert.equal(await store.readVoiceSource(), VOICE_SOURCE.ACCOUNT);
 
   // Signed out, the allowance they chose cannot answer. The stored key is
@@ -1623,7 +1788,7 @@ test("the chosen source survives a reopen, and a corrupt one reads as no choice"
   const store = storeIn(directory);
   await store.setAccount(TEST_ACCOUNT);
   await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-developers-own");
-  await store.setVoiceSource(VOICE_SOURCE.ACCOUNT);
+  await store.set(APP_SETTING_SCHEMA.voiceSource.field, VOICE_SOURCE.ACCOUNT);
   assert.equal(await storeIn(directory).readVoiceSource(), VOICE_SOURCE.ACCOUNT);
 
   // A source this build does not offer is dropped rather than carried, and
@@ -1642,7 +1807,7 @@ test("pasting a key back while parked on the allowance is still choosing it", as
   const store = storeIn(await temporaryDirectory(t));
   await store.setAccount(TEST_ACCOUNT);
   await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-developers-own");
-  await store.setVoiceSource(VOICE_SOURCE.ACCOUNT);
+  await store.set(APP_SETTING_SCHEMA.voiceSource.field, VOICE_SOURCE.ACCOUNT);
   assert.equal(await store.readVoiceSource(), VOICE_SOURCE.ACCOUNT);
 
   // The same key again is no change to what is stored, but it is still the

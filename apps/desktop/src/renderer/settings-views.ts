@@ -2,8 +2,13 @@ import {
   type CredentialProviderId,
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "../shared/credential-providers";
-import { APP_SETTING_ID, type AppSettingId } from "./luke-guide";
+import {
+  SETTING_PAGE,
+  SETTINGS_PAGE as SETTINGS_VIEW,
+  type SettingsPage as SettingsView,
+} from "../shared/settings-schema";
 
+export type { SettingsView };
 /**
  * Where inside the Settings tab the panel currently is: its front page, or one
  * of the pages a front-page row opens. App state rather than panel state for
@@ -11,15 +16,7 @@ import { APP_SETTING_ID, type AppSettingId } from "./luke-guide";
  * app's own key handler, and a credential entry begun on a settings page has
  * to bring the panel back to that page after its trip to the key slot.
  */
-export const SETTINGS_VIEW = {
-  ROOT: "root",
-  VOICE: "voice",
-  APPEARANCE: "appearance",
-  SHORTCUTS: "shortcuts",
-  CONNECTIONS: "connections",
-} as const;
-
-export type SettingsView = (typeof SETTINGS_VIEW)[keyof typeof SETTINGS_VIEW];
+export { SETTINGS_VIEW };
 
 /** The pages the front page opens, in the order its rows offer them. */
 export const SETTINGS_SUBVIEW_LIST = [
@@ -44,31 +41,7 @@ export type SettingsSubview = (typeof SETTINGS_SUBVIEW_LIST)[number];
  * each setting. That the two agree is a test rather than a type, because one
  * is a sentence and the other is a page.
  */
-export const SETTING_PAGE: Record<AppSettingId, SettingsView> = {
-  [APP_SETTING_ID.VOICE]: SETTINGS_VIEW.VOICE,
-  [APP_SETTING_ID.VOICE_SPEED]: SETTINGS_VIEW.VOICE,
-  [APP_SETTING_ID.VOICE_CAPTIONS]: SETTINGS_VIEW.VOICE,
-  [APP_SETTING_ID.DUCK_OTHER_MEDIA]: SETTINGS_VIEW.VOICE,
-  [APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE]: SETTINGS_VIEW.VOICE,
-  // Beside the calendar row whose connection gives it meaning, not with the
-  // voice switches: the quiet is a fact about the calendar integration.
-  [APP_SETTING_ID.QUIET_DURING_MEETINGS]: SETTINGS_VIEW.CONNECTIONS,
-  [APP_SETTING_ID.SHOW_IN_DOCK]: SETTINGS_VIEW.APPEARANCE,
-  [APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS]: SETTINGS_VIEW.APPEARANCE,
-  [APP_SETTING_ID.FORM_FACTOR]: SETTINGS_VIEW.APPEARANCE,
-  // The three the guide describes but marks by-hand-only. Nothing flies to
-  // them — a spoken ask is refused before it reaches a page — but where they
-  // are drawn is a fact about the settings either way, and answering it here
-  // is what keeps the answer right if one of them is ever opened up.
-  [APP_SETTING_ID.DEFAULT_WORKSPACE_PROVIDER]: SETTINGS_VIEW.CONNECTIONS,
-  [APP_SETTING_ID.WORKSPACE_AGENT_MODEL]: SETTINGS_VIEW.CONNECTIONS,
-  [APP_SETTING_ID.WORKSPACE_AGENT_EFFORT]: SETTINGS_VIEW.CONNECTIONS,
-  // The front page itself, which is why the value type is a view rather than
-  // a subview: the choice of what Luke runs on leads the page rather than
-  // living on one the page opens. By-hand-only like the three above, so
-  // nothing ever flies to it — but where it is drawn is a fact either way.
-  [APP_SETTING_ID.VOICE_SOURCE]: SETTINGS_VIEW.ROOT,
-};
+export { SETTING_PAGE };
 
 /**
  * Which page draws a provider's credential row. Every key lives under
