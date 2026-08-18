@@ -811,25 +811,42 @@ export class RealtimeVoiceSession {
     if (this.#acquiring) return;
     this.#acquiring = this.#openMicrophone().finally(() => {
       this.#acquiring = undefined;
+      // A press that arrived while a stale open was still in flight was told
+      // to wait by the guard above; with the flight over, it is served now.
+      if (this.#pendingTurn && !this.#microphone) this.#acquireMicrophone();
     });
   }
 
   async #openMicrophone(): Promise<void> {
+    // The sender names the call this open belongs to, captured before the
+    // wait: a call closed and replaced while the device was opening keeps its
+    // own fresh sender, which is how this open knows it has gone stale.
+    const sender = this.#microphoneSender;
     let stream: MediaStream;
     try {
       stream = await this.#requestStream();
     } catch (error) {
-      // A microphone call that cannot open its microphone is failed rather
-      // than left looking able to listen, and `FAILED` offers "Start voice"
-      // again.
-      this.#fail(errorMessage(error));
+      // A refusal belongs to the call whose press asked for the device. If
+      // that call is gone — closed, or replaced mid-open — the refusal died
+      // with it, and the call now up must not be torn down for it. For the
+      // call still standing, it is failed rather than left looking able to
+      // listen, and `FAILED` offers "Start voice" again.
+      if (!this.#closed && this.isConnected && sender === this.#microphoneSender) {
+        this.#fail(errorMessage(error));
+      }
       return;
     }
-    // The call may have gone away — or been replaced, bringing its own device
-    // — while this one was opening. A device nobody adopts is released here,
-    // or it would hold the indicator lit with nothing left to close it.
-    const sender = this.#microphoneSender;
-    if (this.#closed || !this.isConnected || !sender || this.#microphone) {
+    // The call may have gone away — or been replaced, bringing a fresh
+    // sender — while this one was opening. A device nobody adopts is
+    // released here, or it would hold the indicator lit with nothing left to
+    // close it.
+    if (
+      this.#closed ||
+      !this.isConnected ||
+      !sender ||
+      sender !== this.#microphoneSender ||
+      this.#microphone
+    ) {
       for (const track of stream.getTracks()) track.stop();
       return;
     }
@@ -850,7 +867,11 @@ export class RealtimeVoiceSession {
       // renegotiation, the same line, the same call.
       await sender.replaceTrack(microphone);
     } catch (error) {
-      this.#fail(errorMessage(error));
+      // Guarded like the open's own refusal: a sender that rejected because
+      // its call was torn down mid-replace is not the live call's fault.
+      if (!this.#closed && this.isConnected && sender === this.#microphoneSender) {
+        this.#fail(errorMessage(error));
+      }
       return;
     }
     if (this.#closed || !this.isConnected) return;

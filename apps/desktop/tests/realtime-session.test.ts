@@ -70,6 +70,9 @@ interface Harness {
   replacedTracks: () => (object | null)[];
   /** Makes the next device request refuse, as a vanished microphone would. */
   failMicrophone: () => void;
+  /** Holds device opens in flight until `ungateMicrophone` lets them land. */
+  gateMicrophone: () => void;
+  ungateMicrophone: () => void;
 }
 
 interface HeldTimer {
@@ -157,19 +160,20 @@ function harness(
   const remoteTrack = { enabled: true };
   const transceivers: { kind: string; direction?: string }[] = [];
   const replacedTracks: (object | null)[] = [];
-  const sender = {
-    replaceTrack: async (next: object | null) => {
-      replacedTracks.push(next);
-    },
-  };
   const peer: Record<string, unknown> = {
     localDescription: { type: "offer", sdp: "v=0 local" },
     connectionState: "connected",
-    addTrack: () => sender,
     addTransceiver: (kind: string, init?: { direction?: string }) => {
       transceivers.push({ kind, ...(init?.direction ? { direction: init.direction } : {}) });
-      // The sending half the session keeps: each turn's track rides it.
-      return { sender };
+      // A fresh sender per call, exactly as a fresh peer would give: sender
+      // identity is how a device opened for a closed call is told apart.
+      return {
+        sender: {
+          replaceTrack: async (next: object | null) => {
+            replacedTracks.push(next);
+          },
+        },
+      };
     },
     createDataChannel: () => {
       // A fresh channel per connect, so a call opened after another was torn
@@ -190,6 +194,7 @@ function harness(
 
   let connection = "connection" in options ? options.connection : CONNECTION;
   let microphoneError = options.microphoneError;
+  let microphoneGate: (() => void)[] | undefined;
   const session = new RealtimeVoiceSession({
     requestConnection: async () => {
       calls.push("credential-requested");
@@ -203,6 +208,11 @@ function harness(
     requestMicrophoneStream: async () => {
       calls.push("microphone-requested");
       if (microphoneError) throw microphoneError;
+      if (microphoneGate) {
+        await new Promise<void>((resolve) => {
+          microphoneGate?.push(resolve);
+        });
+      }
       return stream as unknown as MediaStream;
     },
     createPeerConnection: () => peer as unknown as RTCPeerConnection,
@@ -283,6 +293,14 @@ function harness(
     replacedTracks: () => replacedTracks,
     failMicrophone: () => {
       microphoneError = new Error("The microphone went away");
+    },
+    gateMicrophone: () => {
+      microphoneGate = [];
+    },
+    ungateMicrophone: () => {
+      const held = microphoneGate ?? [];
+      microphoneGate = undefined;
+      for (const release of held) release();
     },
     transceivers,
   };
@@ -3491,6 +3509,57 @@ test("typing never opens the device", async () => {
   // part other audio can hear — was never touched.
   assert.ok(!context.calls.includes("microphone-requested"));
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+});
+
+test("a device that arrives for a replaced call is stopped, not adopted", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.gateMicrophone();
+  context.session.beginTurn();
+  // The call is closed and a fresh one opened while the device is still on
+  // its way; the old press's device belongs to nobody.
+  await context.session.close();
+  await context.session.connect();
+  context.ungateMicrophone();
+  await deviceArrives();
+
+  assert.equal(context.microphoneStopped(), true);
+  assert.equal(context.microphoneEnabled(), false);
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+  // Nothing rode the fresh call's sender: no track, not even a release.
+  assert.deepEqual(context.replacedTracks(), []);
+});
+
+test("a device refused after its call was replaced fails nothing", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.failMicrophone();
+  context.session.beginTurn();
+  await context.session.close();
+  await context.session.connect();
+  await deviceArrives();
+
+  // The refusal belonged to the closed call and died with it: the call now
+  // up keeps standing, ready for its own press.
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+  assert.ok(!reportedErrors(context).some((message) => /microphone went away/i.test(message)));
+});
+
+test("a press against a fresh call is served once a stale open clears", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.gateMicrophone();
+  context.session.beginTurn();
+  await context.session.close();
+  await context.session.connect();
+  // The new call's own press lands while the stale open still holds the
+  // single-flight slot; it must wait its turn, not be dropped.
+  context.session.beginTurn();
+  context.ungateMicrophone();
+  await deviceArrives();
+
+  assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
+  assert.equal(context.microphoneEnabled(), true);
 });
 
 test("a device that vanishes mid-conversation fails the call at the press", async () => {
