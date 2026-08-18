@@ -1767,21 +1767,23 @@ export function App(): React.JSX.Element {
    * nothing, so nothing dismissed before the hover began is ever resurrected.
    */
   const [stripHovered, setStripHovered] = useState(false);
-  const [stripHold, setStripHold] = useState<SpokenStripContent>();
   /** When the words now held first appeared, surviving the reply for the hold. */
   const heldCaptionShownAt = useRef<number | undefined>(undefined);
-  useEffect(() => {
-    setStripHold((held) =>
-      stripHoldNext({
-        hovered: stripHovered,
-        drawn:
-          liveCaptionTexts === undefined && !chipsDrawn
-            ? undefined
-            : { texts: liveCaptionTexts, isError: captionLiveIsError, chips: chipsDrawn },
-        held,
-      }),
-    );
-  }, [stripHovered, liveCaptionTexts, captionLiveIsError, chipsDrawn]);
+  // Derived in the render, never advanced after paint: the frame that brings
+  // a new reply's content composes the hold against that same content, so a
+  // held snapshot can never paint one frame beside live words it should have
+  // yielded to. The ref carries the previous frame's answer, the way
+  // `lastMentioned` carries the band's.
+  const stripHoldRef = useRef<SpokenStripContent | undefined>(undefined);
+  const stripHold = stripHoldNext({
+    hovered: stripHovered,
+    drawn:
+      liveCaptionTexts === undefined && !chipsDrawn
+        ? undefined
+        : { texts: liveCaptionTexts, isError: captionLiveIsError, chips: chipsDrawn },
+    held: stripHoldRef.current,
+  });
+  stripHoldRef.current = stripHold;
 
   /**
    * The strip's hoverable boxes, kept current for the window's move listener:

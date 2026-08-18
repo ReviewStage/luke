@@ -33,9 +33,10 @@ export interface SpokenStripContent {
  * reply's words replace whatever was held — and the hold survives only from
  * one drawn frame to the next under an unbroken hover: the moment the pointer
  * leaves, the strip goes back to saying only what is live. A hold that would
- * say the same thing keeps its identity, because the caller stores it as
- * state and the live content's own identity churns per render: words rebuilt
- * around an unchanged sentence must not read as a change.
+ * say the same thing keeps its identity, because the caller re-derives it
+ * every render against the last frame's answer and the live content's own
+ * identity churns per render: words rebuilt around an unchanged sentence must
+ * not read as a change.
  */
 export function stripHoldNext(input: {
   hovered: boolean;
