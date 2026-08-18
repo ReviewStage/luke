@@ -1134,7 +1134,19 @@ export class SettingsStore {
       const ciphertext = normalized
         ? this.#cipher.encrypt(normalized).toString("base64")
         : undefined;
-      if (persisted.apiKeys[providerId] === ciphertext) return;
+      // Connecting the key voice runs on is choosing it: someone who parked on
+      // the free allowance and later pastes a key means to use that key, and a
+      // stored preference quietly ignoring it would look like the key failed
+      // to save. Deleting one leaves the choice alone — there is nothing left
+      // for it to hold back, and it says where to land if another key arrives.
+      const chooses =
+        providerId === VOICE_CREDENTIAL_PROVIDER_ID &&
+        ciphertext !== undefined &&
+        persisted.voiceSource !== VOICE_SOURCE.KEY;
+      // A key that is already stored is not a write — unless it is also the
+      // act of choosing it, which pasting the same key back while parked on
+      // the allowance is.
+      if (persisted.apiKeys[providerId] === ciphertext && !chooses) return;
       // Every other provider's ciphertext is carried over, so saving one key
       // never disturbs another.
       const apiKeys = { ...persisted.apiKeys };
@@ -1145,15 +1157,7 @@ export class SettingsStore {
         version: SETTINGS_FILE_VERSION,
         apiKeys,
       };
-      // Connecting the key voice runs on is choosing it: someone who parked on
-      // the free allowance and later pastes a fresh key means to use that key,
-      // and a stored preference quietly ignoring it would look like the key
-      // failed to save. Deleting one leaves the choice alone — there is
-      // nothing left for it to hold back, and it says where to land if another
-      // key ever arrives.
-      if (providerId === VOICE_CREDENTIAL_PROVIDER_ID && ciphertext) {
-        next.voiceSource = VOICE_SOURCE.KEY;
-      }
+      if (chooses) next.voiceSource = VOICE_SOURCE.KEY;
       await this.#write(next);
       this.#loading = Promise.resolve(next);
       this.#resolved.delete(providerId);

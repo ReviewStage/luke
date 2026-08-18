@@ -1714,3 +1714,17 @@ test("the chosen source survives a reopen, and a corrupt one reads as no choice"
   );
   assert.equal(await storeIn(directory).readVoiceSource(), VOICE_SOURCE.KEY);
 });
+
+test("pasting a key back while parked on the allowance is still choosing it", async (t) => {
+  const store = storeIn(await temporaryDirectory(t));
+  await store.setAccount(TEST_ACCOUNT);
+  await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-developers-own");
+  await store.setVoiceSource(VOICE_SOURCE.ACCOUNT);
+  assert.equal(await store.readVoiceSource(), VOICE_SOURCE.ACCOUNT);
+
+  // The same key again is no change to what is stored, but it is still the
+  // act of connecting one — and a save that quietly changed nothing would
+  // read as a key that failed to take.
+  await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-developers-own");
+  assert.equal(await store.readVoiceSource(), VOICE_SOURCE.KEY);
+});

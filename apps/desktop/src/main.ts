@@ -925,13 +925,13 @@ async function applyVoiceCredential(): Promise<void> {
   // asking for. That is also why the report says no key resolved — for this run,
   // none did.
   // Which of the two the store resolved — the user's choice where it can be
-  // honoured — decides whether the key is read at all. Asked before the read
-  // for the reason above: a run that would not use the key has no business
-  // decrypting it, and a developer parked on the free allowance is such a run.
-  const runsOnKey =
-    runMode.sendsNetwork && (await settingsStore.readVoiceSource()) === VOICE_SOURCE.KEY;
+  // honoured — decides whether the key is read at all, and it is asked last of
+  // the three for the reason above: every gate a run can fail is checked
+  // before anything reaches the Keychain.
   const apiKey =
-    runsOnKey && accountCapabilitiesActive()
+    runMode.sendsNetwork &&
+    accountCapabilitiesActive() &&
+    (await settingsStore.readVoiceSource()) === VOICE_SOURCE.KEY
       ? await settingsStore.readApiKey(VOICE_CREDENTIAL_PROVIDER_ID)
       : undefined;
   // The hosted service stands in exactly where a key could have: a run that
