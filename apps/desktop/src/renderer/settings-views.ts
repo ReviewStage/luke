@@ -96,15 +96,15 @@ export const SETTING_PAGE: Record<AppSettingId, SettingsSubview> = {
 
 /**
  * Which page draws a provider's credential row. Every key lives under
- * Connections except the one voice runs on: the OpenAI row stands at the top
- * of the Voice page, beside the feature it turns on. This is what brings a
- * credential entry back from the key slot to the page it began on — restoring
- * Connections around an entry begun on Voice would land the answer on a page
- * nobody was looking at.
+ * Connections except the one voice runs on: the OpenAI BYOK row stands in the
+ * Account and usage section on the Settings front page, beside the allowance
+ * it lifts. This is what brings a credential entry back from the key slot to
+ * the page it began on — restoring Connections around an entry begun on the
+ * front page would land the answer on a page nobody was looking at.
  */
-export function credentialSettingsPage(providerId: CredentialProviderId): SettingsSubview {
+export function credentialSettingsPage(providerId: CredentialProviderId): SettingsView {
   return providerId === VOICE_CREDENTIAL_PROVIDER_ID
-    ? SETTINGS_VIEW.VOICE
+    ? SETTINGS_VIEW.ROOT
     : SETTINGS_VIEW.CONNECTIONS;
 }
 

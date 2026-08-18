@@ -32,15 +32,14 @@ test("a token that cannot be read falls back to the resting exit, not to none", 
 
 test("a credential entry returns to the page its row is drawn on", () => {
   // The OpenAI row lives at the top of the Voice page — it is what turns
-  // voice on — and every other key lives under Connections. An entry's trip
-  // to the key slot has to end back on the page it began on, or the check
-  // beside the provider lands on a page nobody is looking at.
+  // voice on — its OpenAI BYOK row lives in Account and usage on the front
+  // page — and every other key lives under Connections. An entry's trip to
+  // the key slot has to end back on the page it began on, or the check beside
+  // the provider lands on a page nobody is looking at.
   for (const provider of CREDENTIAL_PROVIDER_LIST) {
     assert.equal(
       credentialSettingsPage(provider.id),
-      provider.id === VOICE_CREDENTIAL_PROVIDER_ID
-        ? SETTINGS_VIEW.VOICE
-        : SETTINGS_VIEW.CONNECTIONS,
+      provider.id === VOICE_CREDENTIAL_PROVIDER_ID ? SETTINGS_VIEW.ROOT : SETTINGS_VIEW.CONNECTIONS,
       provider.id,
     );
   }

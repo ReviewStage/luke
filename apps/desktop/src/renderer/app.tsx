@@ -123,7 +123,6 @@ import {
   credentialSettingsPage,
   SETTING_PAGE,
   SETTINGS_VIEW,
-  type SettingsSubview,
   type SettingsView,
 } from "./settings-views";
 import { useSignInFaceCycle } from "./sign-in-gate";
@@ -345,7 +344,7 @@ export function App(): React.JSX.Element {
    * ends back on the page it began on. A ref rather than state: it is read
    * only when the panel is restored, by a callback that has to stay stable.
    */
-  const credentialPage = useRef<SettingsSubview>(SETTINGS_VIEW.CONNECTIONS);
+  const credentialPage = useRef<SettingsView>(SETTINGS_VIEW.CONNECTIONS);
   const feedbackHeld = useRef(false);
   /** Whether a calendar sign-in holds the slot, mirrored like the other two. */
   const calendarConnectHeld = useRef(false);
