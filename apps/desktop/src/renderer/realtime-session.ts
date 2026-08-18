@@ -460,11 +460,13 @@ export class RealtimeVoiceSession {
    */
   #toolTurnArmed = false;
   /**
-   * A monotonic id for the turn now under way, bumped whenever a new one
-   * begins. A tool follow-up captures it before awaiting the write and refuses
-   * to open if it has changed — the developer has taken the turn, or started
-   * another — so Luke never speaks the outcome over a live microphone or over
-   * a reply the developer is already hearing.
+   * A monotonic id for the turn now under way, bumped at every boundary a
+   * turn crosses — a new one beginning, or the old one declared over. A tool
+   * follow-up captures it before awaiting the write and refuses to open if it
+   * has changed — the developer has taken the turn, started another, or the
+   * turn ended without it, the settle backstop giving up on a hung write —
+   * so Luke never speaks the outcome over a live microphone, over a reply the
+   * developer is already hearing, or out of a silence already declared.
    */
   #turnEpoch = 0;
   /**
@@ -1351,6 +1353,10 @@ export class RealtimeVoiceSession {
     this.#responseOutstanding = false;
     this.#audioDrained = false;
     this.#followUpPending = false;
+    // The turn is over, and everything of it is spent — a write still in
+    // flight from it finds this boundary and stands down, rather than opening
+    // its follow-up out of a silence already declared.
+    this.#turnEpoch += 1;
     // No reply is current once the turn is over, and the arming went with the
     // turn: a `done` that outlives the settle backstop reads as a stranger's,
     // its calls answered refused rather than run as writes out of a turn the

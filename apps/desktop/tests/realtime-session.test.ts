@@ -2801,6 +2801,59 @@ test("audio draining mid-write holds the turn the same way", async () => {
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
 });
 
+test("a write that outlives the backstop cannot speak out of the spent turn", async (t) => {
+  let resolveWrite: ((output: Record<string, unknown>) => void) | undefined;
+  const context = harness({
+    carryAction: () =>
+      new Promise<Record<string, unknown>>((resolve) => {
+        resolveWrite = resolve;
+      }),
+  });
+  await context.session.connect();
+  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
+  await armDeveloperTurn(context);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
+
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      id: "resp-1",
+      output: [
+        {
+          type: "function_call",
+          name: "send_session_message",
+          call_id: "call-1",
+          arguments:
+            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"add tests"}',
+        },
+      ],
+    },
+  });
+  await Promise.resolve();
+
+  // The write hangs past the whole window; the backstop declares the turn
+  // over, and the developer has been shown the silence.
+  t.mock.timers.tick(REALTIME_SETTLE_TIMEOUT_MS);
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+  t.mock.timers.reset();
+
+  const sentBefore = context.sent.length;
+  resolveWrite?.({ status: "accepted" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  // The outcome is still delivered as an item, so the next turn has it...
+  const events = context.sent.slice(sentBefore);
+  assert.ok(
+    events.some(
+      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+    ),
+  );
+  // ...but no reply opens out of a silence already declared.
+  assert.ok(!events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE));
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+});
+
 test("a done that outlives the settle backstop cannot act with the spent turn's arming", async (t) => {
   const carried: unknown[] = [];
   const context = harness({
