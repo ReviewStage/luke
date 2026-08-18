@@ -34,6 +34,15 @@ import { DMG_WINDOW } from "../design/dmg-window.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
+test("manual releases install the locked dependencies before checking the workspace", () => {
+  const releaseScript = fs.readFileSync(path.join(repoRoot, "scripts", "release-macos.sh"), "utf8");
+  const bootstrapCall = releaseScript.indexOf('"$SCRIPT_DIRECTORY/bootstrap.sh"');
+  const checkCall = releaseScript.indexOf('"$SCRIPT_DIRECTORY/check.sh"');
+
+  assert.notEqual(bootstrapCall, -1);
+  assert.ok(bootstrapCall < checkCall);
+});
+
 test("release DMG names include the desktop version and packaged architecture", () => {
   const desktopPackage = JSON.parse(
     fs.readFileSync(path.join(repoRoot, "apps", "desktop", "package.json"), "utf8"),
