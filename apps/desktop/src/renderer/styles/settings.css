@@ -368,6 +368,17 @@
 
 .voice-select select {
   appearance: none;
+  /* Every pop-up shares one width, like a column of macOS pop-up buttons:
+     the control sizes the face, not whichever value happens to be chosen,
+     so the settings read as one aligned column and a change of value cannot
+     re-shape its row. The width fits the longest faces a build ships —
+     "Conductor's default" and "GPT-5.3 Codex Spark" — and a face only
+     observation could lengthen, a project's name, ellipsizes rather than
+     growing. */
+  width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   padding: 6px 27px 6px 11px;
   border: 1px solid var(--hairline);
   border-radius: 7px;

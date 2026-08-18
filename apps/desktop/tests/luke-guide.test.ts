@@ -290,6 +290,24 @@ test("the guide offers what a new Conductor agent runs, by the names people know
   // The by-hand path names the provider's own row, not the Preferences list.
   assert.match(unset.manual, /Conductor row under Cloud Agent API keys/);
 
+  // The levels each model takes ride the model entry itself, keyed by the
+  // labels the choices are said by, so a model and its effort can be asked
+  // for in one change even while nothing is chosen yet.
+  assert.deepEqual(unset.efforts?.["Fable 5"], ["low", "medium", "high", "xhigh", "max"]);
+  assert.deepEqual(unset.efforts?.["GPT-5.6 Sol"], [
+    "none",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+    "ultra",
+  ]);
+  // A model whose agent documents no levels — Cursor's — is absent, and so is
+  // the default word: neither has a level anywhere documented to take.
+  assert.equal(unset.efforts?.["Cursor Auto"], undefined);
+  assert.equal(unset.efforts?.["Conductor's default"], undefined);
+
   // No model chosen means no effort entry at all: a level with no model to
   // ride has nowhere documented to go, so nothing offers one.
   const withoutModel = buildLukeGuide(guideInput()).settings.find(
@@ -410,6 +428,69 @@ test("a spoken model or effort change composes the one stored selection", async 
   );
   assert.equal(carried.at(-1), undefined);
   assert.equal(carried.length, 5);
+});
+
+test("a model and its effort named in one change land as one stored pairing", async () => {
+  const carried: (WorkspaceAgentSelection | undefined)[] = [];
+  const bridge = {
+    setWorkspaceAgentDefault: async (
+      _providerId: string,
+      selection: WorkspaceAgentSelection | undefined,
+    ) => {
+      carried.push(selection);
+      return { settings: settings() };
+    },
+  } as unknown as Parameters<typeof applySpokenSetting>[0];
+
+  // Nothing chosen yet — the state the effort entry does not exist in — and
+  // the pair still lands whole, in one act riding one bridge call.
+  const unset = settings();
+  const model = guideSetting(APP_SETTING_ID.WORKSPACE_AGENT_MODEL, guideInput({ settings: unset }));
+  const outcome = await applySpokenSetting(
+    bridge,
+    { setting: model, value: "Fable 5", effort: "high" },
+    () => undefined,
+    unset,
+  );
+  assert.equal(outcome.status, "changed");
+  assert.equal(outcome.effort, "high");
+  assert.deepEqual(carried.at(-1), { agent: "claude", model: "fable-5", effort: "high" });
+
+  // A named effort is the developer's word over the stored one, not beside it.
+  const stored = settings({
+    workspaceAgentDefaults: {
+      [PROVIDER_ID.CONDUCTOR]: { agent: "codex", model: "gpt-5.6-sol", effort: "xhigh" },
+    },
+  });
+  await applySpokenSetting(
+    bridge,
+    { setting: model, value: "Fable 5", effort: "low" },
+    () => undefined,
+    stored,
+  );
+  assert.deepEqual(carried.at(-1), { agent: "claude", model: "fable-5", effort: "low" });
+
+  // A level the named model's agent does not document is refused with the
+  // documented ones, and nothing reaches the bridge.
+  const refusedLevel = await applySpokenSetting(
+    bridge,
+    { setting: model, value: "Cursor Auto", effort: "high" },
+    () => undefined,
+    unset,
+  );
+  assert.equal(refusedLevel.status, "refused");
+  assert.match(String(refusedLevel.reason), /takes no effort level/);
+
+  // The default word names no model, so no effort has anywhere to ride.
+  const refusedDefault = await applySpokenSetting(
+    bridge,
+    { setting: model, value: "Conductor's default", effort: "high" },
+    () => undefined,
+    unset,
+  );
+  assert.equal(refusedDefault.status, "refused");
+  assert.match(String(refusedDefault.reason), /default takes no effort level/);
+  assert.equal(carried.length, 2);
 });
 
 test("a model and its effort asked in one breath compose through the held answer", async () => {
