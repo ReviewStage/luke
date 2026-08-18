@@ -6,56 +6,109 @@
  * paths, and state labels are generated into `@sidecar/core` and imported
  * here, so they cannot drift from the product they advertise.
  *
- * Deliberately not ported from the renderer: `overflow: clip` on the root,
- * `user-select: none`, and the transparent body. Those exist so an Electron
- * notch window can never scroll its capsule off screen, and a scrolling web
- * page needs the opposite of all three.
+ * The page chrome around the mock is Tailwind, written at its call sites.
+ * What stays in this file is what utilities cannot hold: the theme, the
+ * privacy document's generated HTML, and the mock. The mock stays
+ * hand-written CSS deliberately — its class names are the renderer's own and
+ * it is the one part of the page that has to stay diffable against
+ * `apps/desktop/src/renderer/styles/base.css` and `styles/sessions.css`.
+ *
+ * Deliberately not ported from the renderer: the root's `overflow: clip` on
+ * both axes, `user-select: none`, and the transparent body. Those exist so an
+ * Electron notch window can never scroll its capsule off screen, and a
+ * scrolling web page needs the opposite of all three. The root clips `x`
+ * alone here for a reason of the page's own, written where it is set.
  */
 
+@import "tailwindcss";
 @import "@sidecar/core/motion-tokens.css";
 
+/* The three faces the page loads, declared beside the stack that names them
+   rather than at each of the four HTML entry points. */
+@import "@fontsource-variable/geist/wght.css";
+@import "@fontsource-variable/jetbrains-mono/wght.css";
+@import "@fontsource-variable/bricolage-grotesque/wght.css";
+
+/* Only the tokens the page actually draws with. shadcn/ui's contract is a
+   superset — popover, secondary, destructive, sidebar, chart — and a token
+   nothing reads is drift waiting to happen. Every value is declared in
+   `:root` below and merely aliased here, so the plain-CSS blocks further down
+   read the same vocabulary the utilities do. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent-ink: var(--accent-ink);
+  --color-attention: var(--attention);
+  --color-attention-tint: var(--attention-tint);
+  --color-complete: var(--complete);
+  --color-complete-tint: var(--complete-tint);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 4px);
+
+  --font-sans: var(--font-page);
+  --font-mono: var(--font-code);
+  --font-brand: var(--font-wordmark);
+}
+
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 
-  /* Product surfaces are pure black. The page sits a shade off it so the notch
-     housing and the session panel read as objects instead of holes. */
-  --page: #08090b;
-  --surface: #000;
-  --frame-top: #14171c;
-  --frame-bottom: #0a0b0e;
+  /* shadcn/ui's stock light theme, with one deliberate change: the ground is
+     warmed off pure white. It cannot be warmed further without darkening
+     `--muted-foreground` with it — shadcn's stock `oklch(0.556 0 0)` is
+     4.58:1 here and 4.43:1 on #f7f7f7, which is under AA for body text. */
+  --background: #fbfbfa;
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --border: oklch(0.922 0 0);
 
-  --accent: #5cd5ff;
-  --accent-strong: #72dcff;
-  --attention: #ffa049;
-  --complete: #6fdca4;
-  /* `unknown` is the product's idle accent: a session Luke can still see but
-     has no current activity for. Matches `--state-idle` in the renderer. */
-  --idle: rgba(255, 255, 255, 0.44);
+  /* Luke's accent carries the one filled control on the page. #04121a on
+     #5cd5ff is 11.2:1, so the pairing the dark page used survives the
+     inversion untouched: a filled button owns its own ground. */
+  --primary: #5cd5ff;
+  --primary-foreground: #04121a;
 
-  --text: rgba(255, 255, 255, 0.92);
-  --text-secondary: rgba(255, 255, 255, 0.56);
-  --text-muted: rgba(255, 255, 255, 0.4);
-  --text-faint: rgba(255, 255, 255, 0.32);
+  /* The same accent at text weight. #5cd5ff is 1.4:1 on this ground — fine
+     behind near-black, unreadable as ink — so links and inline accents get a
+     darkened member of the same hue family at 5.7:1. */
+  --accent-ink: #0d6e80;
 
-  --hairline: rgba(255, 255, 255, 0.08);
-  --hairline-strong: rgba(255, 255, 255, 0.09);
-  --raised: rgba(255, 255, 255, 0.05);
-  --raised-strong: rgba(255, 255, 255, 0.09);
+  /* The focus ring is a non-text indicator and owes 3:1 against the ground
+     (WCAG 2.2, 1.4.11), which the accent cannot pay on a light page. */
+  --ring: var(--foreground);
 
-  --radius-card: 17px;
-  --radius-control: 10px;
-  --radius-panel: 30px;
-  --radius-pill: 999px;
+  /* The product's state palette, restated for a light ground: the dark-page
+     values are pastels here. Ink passes AA against the page, tint carries it
+     as a pill. */
+  --attention: #9a5300;
+  --attention-tint: #fdf0e2;
+  --complete: #0f7a4e;
+  --complete-tint: #e6f5ed;
 
-  /* Type scale. The hero is the only fluid step; everything below it is fixed
-     so the rhythm does not shift with the viewport. */
-  --text-xs: 0.75rem;
-  --text-sm: 0.875rem;
-  --text-base: 1rem;
-  --text-lg: 1.125rem;
-  --text-hero: clamp(1rem, 5.5vw, 3.5rem);
+  --radius: 0.5rem;
 
-  /* Space scale, 4px grid. */
+  /* Prose and headings are the sans; mono is reserved for code, commands, and
+     the small technical labels that read as tokens rather than as sentences.
+     The wordmark keeps its own face, and the mock keeps the product's. */
+  --font-page: "Geist Variable", -apple-system, blinkmacsystemfont, "Segoe UI", sans-serif;
+  --font-code: "JetBrains Mono Variable", ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  --font-wordmark: "Bricolage Grotesque Variable", "Arial Narrow", sans-serif;
+  --font-product: -apple-system, blinkmacsystemfont, "SF Pro Display", "Segoe UI", sans-serif;
+
+  /* Space scale, 4px grid. Read by the two blocks that stay plain CSS — the
+     mock and the privacy document — and mirrored by Tailwind's own scale for
+     everything written at a call site. */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -66,12 +119,6 @@
   --space-8: 64px;
   --space-9: 96px;
 
-  /* The renderer's expansion easing. Reused for every page transition so the
-     page and the product feel like the same software. */
-  --swift: cubic-bezier(0.2, 0.8, 0.2, 1);
-
-  --font-brand: "Bricolage Grotesque Variable", "Arial Narrow", sans-serif;
-  --font-product: -apple-system, blinkmacsystemfont, "SF Pro Display", "Segoe UI", sans-serif;
   /* The mock renders at true product geometry and scales as a unit. Stepped
      rather than fluid so the interior never lands on a half pixel. The height
      is the 520px expanded panel plus the product's own SURFACE_MARGIN for the
@@ -81,258 +128,77 @@
   --mock-scale: 1;
   --mock-height: 560px;
 
-  font-family: var(--font-brand);
   font-optical-sizing: auto;
   font-synthesis: none;
 }
 
-* {
-  box-sizing: border-box;
+@layer base {
+  html {
+    font-family: var(--font-page);
+  }
+
+  /* Two places deliberately draw wider than the measure — the full-bleed
+     hairline and the mock's stage — and both size themselves in `vw`, which
+     counts a classic scrollbar's gutter that `100%` does not. Left alone that
+     gutter is a horizontal scrollbar on every page anywhere scrollbars take
+     space, which is everywhere the visitor is not on a Mac.
+
+     It has to be `clip` and not `hidden`, for the reason `.mock-pin` gives
+     below: `hidden` makes a scroll container, and a scroll container ancestor
+     is exactly what stops the pin from sticking. `overflow-y` is left alone,
+     which a `clip` on the other axis permits, so the page still scrolls down.
+
+     And it has to name both elements. The root's overflow propagates to the
+     viewport and the root itself is then drawn as `visible`, so `html` alone
+     clips nothing; `body` alone is likewise skipped while the root carries a
+     value. Only the pair actually holds. */
+  html,
+  body {
+    overflow-x: clip;
+  }
+
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 3px;
+  }
 }
 
-body {
-  margin: 0;
-  background: var(--page);
-  color: var(--text);
-  font-size: var(--text-base);
-  line-height: 1.6;
-  -webkit-font-smoothing: antialiased;
-}
-
-a {
-  color: inherit;
-}
-
-button {
-  border: 0;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-}
-
-.auth-shell {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: var(--space-5);
-}
-
-.auth-card {
-  width: min(100%, 390px);
-  padding: var(--space-7) var(--space-6);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-card);
-  background: var(--surface);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
-  text-align: center;
-}
-
-.auth-card h1 {
-  margin: var(--space-4) 0 var(--space-2);
-  font-size: 1.75rem;
-  line-height: 1.15;
-}
-
-.auth-card p {
-  margin: 0;
-  color: var(--text-secondary);
-}
-
-/* The full mark, not a pair of dots: the card is the one thing on the page,
-   so it carries the same face the product and the landing page wear. */
-.auth-mark {
-  display: inline-flex;
-  width: 52px;
-  color: var(--text);
-}
-
-.auth-mark svg {
+/* The column every page shares. Narrow and left-aligned: the references this
+   page is drawn against run 625–720px, and a measure that wide reads as a
+   document rather than as a poster. */
+@utility shell {
   width: 100%;
-  height: auto;
+  max-width: 700px;
+  margin-inline: auto;
+  padding-inline: var(--space-5);
+
+  @media (width < 520px) {
+    padding-inline: var(--space-4);
+  }
 }
 
-/* One word saying where things stand, in the state palette the product uses. */
-.auth-pill {
-  display: inline-block;
-  margin-top: var(--space-4);
-  padding: 3px 11px;
-  border-radius: var(--radius-pill);
-  background: rgba(111, 220, 164, 0.14);
-  color: var(--complete);
-  font-size: var(--text-xs);
-  font-weight: 650;
-  letter-spacing: 0.2px;
-}
+/* A full-bleed rule that escapes the column it is written in, so a section
+   break reads across the whole page rather than stopping at the measure. */
+@utility hairline {
+  position: relative;
 
-.auth-pill[data-tone="attention"] {
-  background: rgba(255, 160, 73, 0.14);
-  color: var(--attention);
-}
-
-.auth-actions {
-  display: grid;
-  gap: var(--space-3);
-  margin: var(--space-6) 0 var(--space-4);
-}
-
-.auth-actions button {
-  min-height: 46px;
-  border: 1px solid var(--hairline-strong);
-  border-radius: var(--radius-control);
-  background: var(--raised);
-  font-weight: 650;
-  transition:
-    background 140ms ease,
-    transform 140ms ease;
-}
-
-.auth-actions button:hover:not(:disabled) {
-  background: var(--raised-strong);
-  transform: translateY(-1px);
-}
-
-.auth-actions button:disabled {
-  cursor: wait;
-  opacity: 0.56;
-}
-
-.auth-card .auth-error {
-  color: var(--attention);
-}
-
-.auth-card small {
-  color: var(--text-muted);
-}
-
-:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
-}
-
-/* Page shell
-   ------------------------------------------------------------------------- */
-
-.shell {
-  width: 100%;
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 0 var(--space-5);
-}
-
-/* Navigation
-   ------------------------------------------------------------------------- */
-
-.site-nav {
-  display: flex;
-  height: var(--space-8);
-  align-items: center;
-  justify-content: space-between;
-}
-
-.wordmark {
-  display: inline-flex;
-  align-items: center;
-  font-size: var(--text-base);
-  font-weight: 700;
-  gap: var(--space-2);
-  letter-spacing: -0.01em;
-  text-decoration: none;
-}
-
-/* Wider than tall, and the default `xMidYMid meet` letterboxes it inside the
-   box rather than stretching the face. */
-.luke-mark {
-  display: block;
-  width: 20px;
-  height: 18px;
-}
-
-/* Icon-only, so the padding buys a comfortable hit target and a focus ring
-   with room around the mark. The matching negative margin keeps the mark
-   optically aligned with the wordmark's edge rather than inset from it. */
-.nav-link {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px;
-  margin-right: -6px;
-  border-radius: 8px;
-  color: var(--text-secondary);
-  transition: color 140ms ease;
-}
-
-.nav-link:hover {
-  color: var(--text);
-}
-
-.github-mark {
-  display: block;
-  width: 16px;
-  height: 16px;
-}
-
-.nav-link .github-mark {
-  width: 18px;
-  height: 18px;
-}
-
-/* Hero
-   ------------------------------------------------------------------------- */
-
-.hero {
-  /* A notch belongs at the horizontal center of a display, so the art and the
-     copy that introduces it intentionally share the same centered axis. */
-  padding: var(--space-7) 0 var(--space-8);
-  text-align: center;
-}
-
-.hero h1 {
-  margin: 0 auto var(--space-5);
-  font-size: var(--text-hero);
-  font-weight: 650;
-  letter-spacing: -0.02em;
-  line-height: 1.05;
-  white-space: nowrap;
-}
-
-.hero-subhead {
-  max-width: 620px;
-  margin: 0 auto;
-  color: var(--text-secondary);
-  font-size: var(--text-lg);
-  text-wrap: pretty;
-}
-
-.cta-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  margin-top: var(--space-6);
-  gap: var(--space-3);
-}
-
-.cta-primary {
-  display: inline-flex;
-  align-items: center;
-  padding: var(--space-3) var(--space-5);
-  border-radius: var(--radius-control);
-  background: var(--accent);
-  color: #04121a;
-  font-size: var(--text-sm);
-  font-weight: 650;
-  gap: var(--space-2);
-  text-decoration: none;
-  transition:
-    background 140ms ease,
-    transform 180ms var(--swift);
-}
-
-.cta-primary:hover {
-  background: var(--accent-strong);
-}
-
-.cta-primary:active {
-  transform: translateY(1px);
+  &::before {
+    position: absolute;
+    top: calc(var(--space-5) * -1);
+    left: 50%;
+    width: 100vw;
+    height: 1px;
+    background: var(--border);
+    content: "";
+    transform: translateX(-50%);
+  }
 }
 
 /* Notch mock
@@ -362,6 +228,10 @@ button {
   top: max(72px, 14svh);
   display: flex;
   justify-content: center;
+  /* The stage is wider than the shell's content box, whose padding belongs to
+     the prose. Give the display the viewport width at every breakpoint so the
+     clip keeps its rounded corners instead of shaving them to the measure. */
+  margin-inline: calc(50% - 50vw);
   /* `transform: scale()` leaves the layout box at full size, so the pin
      tracks the scale itself or a phone reserves 560px for a 300px visual.
      `clip` keeps the untransformed art width from opening a horizontal
@@ -385,6 +255,20 @@ button {
   --state-idle: rgba(255, 255, 255, 0.44);
   --text-primary: rgba(255, 255, 255, 0.95);
   --text-tertiary: rgba(255, 255, 255, 0.34);
+
+  /* Luke's surface is pure black and the page around it is not, so the mock is
+     the one dark object on a light page and every token it draws with has to
+     be declared here. These were the page's until the page went light:
+     inherited now, white-on-white becomes black-on-black and the interior
+     disappears. The frame is the display the capsule is cut into, which is why
+     it alone is allowed to end on the page's own ground. */
+  --text-secondary: rgba(255, 255, 255, 0.56);
+  --hairline: rgba(255, 255, 255, 0.08);
+  --hairline-strong: rgba(255, 255, 255, 0.09);
+  --raised: rgba(255, 255, 255, 0.05);
+  --raised-strong: rgba(255, 255, 255, 0.09);
+  --frame-top: #14171c;
+  --frame-bottom: #101318;
 
   /* Provider brand colours, used only by the marks and ported with them:
      Claude Code's published coral, the vertical gradient Codex draws its mark
@@ -452,24 +336,16 @@ button {
   --accent: var(--state-idle);
 }
 
-/* The display the capsule is cut into, kept as its own layer so it can fade
-   out well before the mock's bottom edge: the capsule reads as the top of a
-   screen rather than as a container with nothing in it. */
+/* The persistent display the capsule is cut into. It stays in place while the
+   surface grows, so the panel remains inside the same rounded stage instead
+   of exposing the square ends of a narrower strip. */
 .mock-frame {
   position: absolute;
   z-index: 0;
   inset: 0;
   border: 1px solid var(--hairline-strong);
-  border-bottom: 0;
-  border-radius: 18px 18px 0 0;
-  background: linear-gradient(
-    180deg,
-    var(--frame-top) 0%,
-    var(--frame-bottom) 55%,
-    var(--page) 100%
-  );
-  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 18%, transparent 62%);
-  mask-image: linear-gradient(180deg, #000 0%, #000 18%, transparent 62%);
+  border-radius: 18px;
+  background: linear-gradient(180deg, var(--frame-top) 0%, var(--frame-bottom) 100%);
 }
 
 /* The black surface is the whole animation: one leaf element with no children
@@ -1098,45 +974,14 @@ button {
   white-space: nowrap;
 }
 
-/* Footer
-   ------------------------------------------------------------------------- */
-
-.site-footer {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: var(--space-7) 0 var(--space-8);
-  border-top: 1px solid var(--hairline-strong);
-  color: var(--text-secondary);
-  font-size: var(--text-xs);
-  text-align: center;
-}
-
-.footer-meta {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--space-2);
-}
-
-.footer-meta > * + *::before {
-  margin-right: var(--space-2);
-  content: "·";
-}
-
-.footer-link {
-  text-decoration: none;
-  transition: color 140ms ease;
-}
-
-.footer-link:hover {
-  color: var(--text);
-}
-
 /* Privacy
    A legal document read start to finish, so it gets a narrower measure and
    more vertical rhythm than the marketing copy above: constrained width,
    a clear step between h1/h2, and generous paragraph spacing.
+
+   Plain CSS rather than utilities because the markup is generated: the page
+   parses PRIVACY.md at build time and hands the result to
+   `dangerouslySetInnerHTML`, so there is no call site to write a class on.
    ------------------------------------------------------------------------- */
 
 .privacy {
@@ -1155,20 +1000,23 @@ button {
 
 .privacy h2 {
   margin: var(--space-8) 0 var(--space-4);
-  font-size: var(--text-lg);
+  font-size: 1.125rem;
   font-weight: 650;
   letter-spacing: -0.01em;
 }
 
 .privacy p {
   margin: 0 0 var(--space-4);
-  color: var(--text-secondary);
+  color: var(--muted-foreground);
 }
 
+/* Tailwind's preflight strips list markers from every `ul`. The generated
+   document has real lists in it, so they come back here. */
 .privacy ul {
   margin: 0 0 var(--space-4);
   padding-left: var(--space-5);
-  color: var(--text-secondary);
+  color: var(--muted-foreground);
+  list-style: disc;
 }
 
 .privacy li {
@@ -1180,41 +1028,37 @@ button {
 }
 
 .privacy strong {
-  color: var(--text);
+  color: var(--foreground);
 }
 
 .privacy a {
-  color: var(--accent);
+  color: var(--accent-ink);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
 .privacy code {
   padding: 0.15em 0.4em;
-  border-radius: 4px;
-  background: var(--raised);
+  border-radius: var(--radius-sm);
+  background: var(--muted);
+  font-family: var(--font-code);
   font-size: 0.9em;
 }
 
 /* Responsive
+   The mock's scale steps. Everything else the page draws answers to Tailwind
+   variants at its own call site.
    ------------------------------------------------------------------------- */
 
-@media (max-width: 900px) {
+@media (width < 900px) {
   :root {
     --mock-scale: 0.8;
   }
 }
 
-@media (max-width: 700px) {
+@media (width < 700px) {
   :root {
     --mock-scale: 0.75;
-  }
-
-  /* A notch lives on an edge-to-edge display, and a phone has one: the pin
-     escapes the shell's column so the art is sized by the screen rather than
-     by the text measure. The copy above keeps the shell's padding. */
-  .mock-pin {
-    margin-inline: calc(50% - 50vw);
   }
 
   /* The 700px box exists for the desktop shadow's room, and a phone spends
@@ -1229,17 +1073,9 @@ button {
 /* Each step is the largest scale whose 660px art still clears the screen at
    the step's floor, so the mock fills a phone instead of floating in it and
    the pin's clip never eats the frame's edges. */
-@media (max-width: 520px) {
+@media (width < 520px) {
   :root {
     --mock-scale: 0.58;
-  }
-
-  .shell {
-    padding: 0 var(--space-4);
-  }
-
-  .hero {
-    padding: var(--space-6) 0 0;
   }
 
   .mock-scroll {
@@ -1247,13 +1083,13 @@ button {
   }
 }
 
-@media (max-width: 384px) {
+@media (width < 384px) {
   :root {
     --mock-scale: 0.54;
   }
 }
 
-@media (max-width: 356px) {
+@media (width < 356px) {
   :root {
     --mock-scale: 0.5;
   }
@@ -1287,9 +1123,7 @@ button {
   .mock .count-caption,
   .mock .tab-thumb,
   .mock .session-row,
-  .mock .panel-header,
-  .cta-primary,
-  .nav-link {
+  .mock .panel-header {
     transition-duration: 1ms;
     transition-delay: 0ms;
   }

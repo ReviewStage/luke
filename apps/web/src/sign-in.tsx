@@ -1,8 +1,8 @@
-import "@fontsource-variable/bricolage-grotesque/wght.css";
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { createAuthClient } from "better-auth/react";
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { AUTH_BUTTON, AUTH_CARD, AUTH_SHELL, AUTH_TITLE } from "./auth-surface";
 import { LukeMark } from "./SiteChrome";
 import {
   SOCIAL_PROVIDER_LABEL,
@@ -49,26 +49,40 @@ function SignIn(): React.JSX.Element {
   };
 
   return (
-    <main className="auth-shell">
-      <section className="auth-card" aria-labelledby="auth-title">
-        <div className="auth-mark" aria-hidden="true">
-          <LukeMark />
+    <main className={AUTH_SHELL}>
+      <section className={AUTH_CARD} aria-labelledby="auth-title">
+        {/* The full mark, not a pair of dots: the card is the one thing on the
+            page, so it carries the same face the product and the landing page
+            wear. */}
+        <div className="inline-flex w-13" aria-hidden="true">
+          <LukeMark className="h-auto w-full" />
         </div>
-        <h1 id="auth-title">Sign in to Luke</h1>
-        <p>
+        <h1 id="auth-title" className={AUTH_TITLE}>
+          Sign in to Luke
+        </h1>
+        <p className="m-0 text-muted-foreground">
           {provider
             ? `Continue with the ${SOCIAL_PROVIDER_LABEL[provider]} account you want Luke to know you by.`
             : "Luke could not verify which provider you chose. Return to Luke and try again."}
         </p>
         {provider ? (
-          <div className="auth-actions">
-            <button type="button" disabled={pending !== undefined} onClick={() => void begin()}>
+          <div className="mt-8 mb-4 grid gap-3">
+            <button
+              type="button"
+              className={AUTH_BUTTON}
+              disabled={pending !== undefined}
+              onClick={() => void begin()}
+            >
               {pending ? "Opening…" : `Continue with ${SOCIAL_PROVIDER_LABEL[provider]}`}
             </button>
           </div>
         ) : null}
-        {failure ? <p className="auth-error">{failure}</p> : null}
-        <small>You can close this window after Luke confirms the sign-in.</small>
+        {failure ? <p className="m-0 text-attention">{failure}</p> : null}
+        {/* Its own line rather than a run-on: with no provider to continue
+            with there is no action block between it and the copy above. */}
+        <small className="mt-4 block text-muted-foreground">
+          You can close this window after Luke confirms the sign-in.
+        </small>
       </section>
     </main>
   );
