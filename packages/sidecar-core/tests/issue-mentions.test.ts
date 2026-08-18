@@ -77,6 +77,29 @@ test("a title reading exactly like another issue's identifier stands for neither
   assert.deepEqual(mentionedIssues("Have a look at LUKE-1 today.", board), []);
 });
 
+test("names that sound alike across the hyphen die together, spelt either way", () => {
+  // The identifier's spaced form and another issue's title are one spoken
+  // phrase; a chip that might open the wrong issue is worse than no chip.
+  const spacedTitle = [issue("LUKE-1", "Fix login"), issue("LUKE-2", "luke 1")];
+  assert.deepEqual(mentionedIssues("Have a look at luke 1 today.", spacedTitle), []);
+  assert.deepEqual(mentionedIssues("Have a look at LUKE-1 today.", spacedTitle), []);
+  // A title merely containing another issue's identifier is not a collision:
+  // the phrase names the identifier whole and the title whole, and both are
+  // attributable — the session mentions' own containment behavior.
+  const hyphenTitle = [issue("LUKE-1", "Fix login"), issue("LUKE-2", "luke-1 fallout")];
+  assert.deepEqual(identifiers(mentionedIssues("luke-1 fallout again.", hyphenTitle)), [
+    "LUKE-1",
+    "LUKE-2",
+  ]);
+});
+
+test("a short key never claims the ordinary speech its spaced form reads as", () => {
+  const board = [issue("IT-1", "Fix login"), issue("A-1", "Ship captions")];
+  assert.deepEqual(mentionedIssues("Give it 1 more try, then a 1 line fix.", board), []);
+  // The literal hyphenated form stays precise at any length.
+  assert.deepEqual(identifiers(mentionedIssues("IT-1 is waiting on A-1.", board)), ["IT-1", "A-1"]);
+});
+
 test("an issue named by identifier and title at once counts once, at its first hearing", () => {
   const board = [issue("LUKE-1", "Fix login"), issue("LUKE-2", "Ship captions")];
   assert.deepEqual(
