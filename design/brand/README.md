@@ -31,26 +31,19 @@ for m in light dark; do
     rsvg-convert -w $w logo/luke-logo-$m.svg -o logo/luke-logo-$m-$w.png
   done
 done
-rsvg-convert -w 18 -h 18 menubar/luke-menubar-template.svg -o menubar/lukeTemplate.png
-rsvg-convert -w 36 -h 36 menubar/luke-menubar-template.svg -o menubar/lukeTemplate@2x.png
 rsvg-convert -w 660 -h 400 dmg/luke-dmg-background.svg -o dmg/luke-dmg-background.png
 rsvg-convert -w 1320 -h 800 dmg/luke-dmg-background.svg -o dmg/luke-dmg-background@2x.png
 ```
 
 ## In the app
 
-`menubar/lukeTemplate{,@2x}.png` is copied into the desktop app's `dist/menubar/`
-by `apps/desktop/scripts/build.mjs` and handed to `Tray`, and
 `icon/luke-icon-{light,dark}-512.png` are copied into `dist/icon/` and handed to
-`app.dock.setIcon` — the two pieces of artwork the app loads from files, because
-macOS status items and the Dock take a `NativeImage` rather than markup. The
-menu-bar template is recolored by the system; the Dock tile is not, so the app
-swaps it between the two mode icons as the theme changes.
+`app.dock.setIcon`. The Dock tile is swapped between the two mode icons as the
+theme changes.
 
 The notch panel draws the face itself rather than loading these SVGs, because it
-needs two things a baked asset cannot give it: `currentColor`, so one drawing
-serves the menu bar and the notch and can take the microphone's colour, and CSS
-animation, so the renderer's `--face-motion` token can hold every loop still for
+needs two things a baked asset cannot give it: `currentColor`, so it can take the
+microphone's colour, and CSS animation, so the renderer's `--face-motion` token can hold every loop still for
 a capture run or for reduced motion. SMIL answers to neither without JavaScript.
 
 So the generator emits its two inputs as well, from the same table these SVGs are
@@ -77,10 +70,9 @@ Dock image between the two.
 ## Sizing
 
 Asset viewBoxes are computed from the artwork's bounding box, not the drawing canvas:
-static marks and wordmarks are trimmed tight (+6 units padding), the app-icon glyph
-spans ~58% of the tile width (typical macOS glyph-in-tile proportion), and the
-menu-bar template fills ~90% of its square canvas. Only the animated `motion/` marks
-keep the full 240×240 canvas — they need headroom to move.
+static marks and wordmarks are trimmed tight (+6 units padding), and the app-icon glyph
+spans ~58% of the tile width (typical macOS glyph-in-tile proportion). Only the animated
+`motion/` marks keep the full 240×240 canvas — they need headroom to move.
 
 ## Files
 
@@ -90,7 +82,6 @@ keep the full 240×240 canvas — they need headroom to move.
 | `luke-wordmark-{light,dark}.svg` | Face-first caps LUKE wordmark |
 | `luke-wordmark-talking-{light,dark}.svg` | Animated hero: the face talks mid-word |
 | `icon/luke-icon-{light,dark}.svg` + `luke-icon-{light,dark}-{16…1024}.png` | App icon (squircle tile), per mode |
-| `menubar/luke-menubar-template.svg` + `lukeTemplate{,@2x}.png` | macOS menu-bar template image (pure black + alpha; macOS recolors it). Packaging builds `Luke.icns` from the dark icon PNGs automatically in `apps/desktop/scripts/package.mjs`; no `.icns` is committed |
 | `dmg/luke-dmg-background.svg` + `luke-dmg-background{,@2x}.png` | Neutral installer background with a branded drag-and-drop arrow |
 | `mark/luke-mark-square{,-transparent}-{light,dark}.svg` + `-1024.png` | The face at the static mark's tight fill on a square canvas, per mode: over the icon's gradient with square corners (the avatar shape for surfaces that round their own tiles, GitHub among them), and the same crop with no tile. A transparent avatar shows GitHub's badge background color instead — pair the dark set with `#1c1c1e`, the space-black end of the dark icon tile, which reads on either GitHub theme |
 | `mark/luke-mark-square-black.svg` + `-1024.png` | The dark mark once more over flat pure black (`#000000`) instead of the tile's gradient, for surfaces that want the mark on true black |

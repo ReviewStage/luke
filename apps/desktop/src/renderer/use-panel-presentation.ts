@@ -139,7 +139,7 @@ function usePointerPassthrough(
   }, [presentation, testLastPoint, update]);
 
   // The shape can change under a pointer that never moves — Escape closes the
-  // panel, and the tray opens it — and what the pointer is over changes with it.
+  // panel, and a spoken ask opens it — and what the pointer is over changes with it.
   // Without this the window keeps intercepting clicks for a shape that is no
   // longer drawn, and the window is always larger than the shape.
   useEffect(() => {
@@ -236,7 +236,7 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
   const applyAuthoritativeMode = useCallback(
     (nextMode: WindowMode) => {
       // A lifecycle notification can originate outside this renderer (for
-      // example from the tray). Ignore an older IPC result that arrives later.
+      // example from a spoken ask). Ignore an older IPC result that arrives later.
       modeGeneration.current += 1;
       applyPresentation(presentationForMode(nextMode));
     },

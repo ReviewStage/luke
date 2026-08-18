@@ -65,7 +65,6 @@ const SETTINGS_FIELD = {
   LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
   QUIET_DURING_MEETINGS: "quietDuringMeetings",
   SHOW_IN_DOCK: "showInDock",
-  SHOW_IN_MENU_BAR: "showInMenuBar",
   SHOW_ON_ALL_DISPLAYS: "showOnAllDisplays",
   STOP_HOTKEY: "stopHotkey",
   VERSION: "version",
@@ -143,12 +142,6 @@ interface PersistedSettings {
    */
   showInDock: boolean;
   /**
-   * Whether the menu bar status item is drawn. A file that has never said —
-   * written before the choice existed, or hand-edited into nonsense — means the
-   * item is shown, because until the user hides it that is what Luke does.
-   */
-  showInMenuBar: boolean;
-  /**
    * The voice the user chose, absent until one has been. A preference rather
    * than a credential, so it is stored plainly and never touches the cipher.
    */
@@ -184,8 +177,8 @@ interface PersistedSettings {
   stopHotkey?: string;
   /**
    * Whether Music and Spotify are turned down while a spoken exchange is
-   * live. On unless the file says `false` outright — like the menu bar item,
-   * this is what Luke does until the user asks otherwise, so a missing field
+   * live. On unless the file says `false` outright: this is what Luke does
+   * until the user asks otherwise, so a missing field
    * and a corrupt value both land on doing it.
    */
   duckOtherMedia: boolean;
@@ -495,10 +488,6 @@ function parsePersistedSettings(source: string): PersistedSettings {
       record[SETTINGS_FIELD.SHOW_IN_DOCK],
       APP_SETTING_DEFAULTS.showInDock,
     ),
-    showInMenuBar: booleanSetting(
-      record[SETTINGS_FIELD.SHOW_IN_MENU_BAR],
-      APP_SETTING_DEFAULTS.showInMenuBar,
-    ),
     // A voice this build does not offer is dropped rather than carried: unlike
     // a credential it has a default to fall back to, and honouring an unknown
     // one would mint sessions the API refuses.
@@ -608,7 +597,6 @@ export class SettingsStore {
         selectedCalendarIds: account.calendars,
       })),
       showInDock: persisted.showInDock,
-      showInMenuBar: persisted.showInMenuBar,
       // Resolved the way the minter resolves it, so the panel marks the voice
       // that would actually be heard.
       voice:
@@ -720,16 +708,7 @@ export class SettingsStore {
   }
 
   /**
-   * Deliberately shallower than `snapshot()`: the answer comes from the
-   * settings file alone, so a caller deciding whether to draw the status item
-   * never waits on — or wakes — the OS keychain behind the stored keys.
-   */
-  async showInMenuBar(): Promise<boolean> {
-    return (await this.#load()).showInMenuBar;
-  }
-
-  /**
-   * Shallow for the same reason as `showInMenuBar()`: the Dock icon is decided
+   * The Dock icon is decided
    * at launch from the settings file alone, never the keychain behind the
    * stored keys.
    */
@@ -738,7 +717,7 @@ export class SettingsStore {
   }
 
   /**
-   * Shallow for the same reason `showInMenuBar()` is: the media duck arms at
+   * Shallow so the media duck arms at
    * startup, and arming it must never be what wakes the OS keychain.
    */
   async duckOtherMedia(): Promise<boolean> {
@@ -786,10 +765,9 @@ export class SettingsStore {
   }
 
   /**
-   * Turns the on-screen caption of Luke's speech on or off. A plain preference
-   * like the menu bar's, and the same shape of change: nothing here needs the
-   * cipher, and there is no way to enter an invalid value, so the write either
-   * lands or throws.
+   * Turns the on-screen caption of Luke's speech on or off. Nothing here needs
+   * the cipher, and there is no way to enter an invalid value, so the write
+   * either lands or throws.
    */
   async setVoiceCaptions(enabled: boolean): Promise<SettingsUpdateResult> {
     return this.#setField((persisted) => {
@@ -1305,20 +1283,8 @@ export class SettingsStore {
   }
 
   /**
-   * Remembers whether the menu bar status item is drawn. A preference is not a
-   * credential, so nothing here touches the cipher: storing this choice must
-   * never be the reason the Keychain dialog appears.
-   */
-  async setShowInMenuBar(show: boolean): Promise<SettingsUpdateResult> {
-    return this.#setField((persisted) => {
-      if (persisted.showInMenuBar === show) return;
-      return { ...persisted, showInMenuBar: show };
-    });
-  }
-
-  /**
-   * Remembers whether Luke stands in the Dock. A preference like the menu
-   * bar's, and held to the same rule: nothing here touches the cipher.
+   * Remembers whether Luke stands in the Dock. A preference that never touches
+   * the cipher.
    */
   async setShowInDock(show: boolean): Promise<SettingsUpdateResult> {
     return this.#setField((persisted) => {
@@ -1350,7 +1316,6 @@ export class SettingsStore {
           next.preferBuiltInMicrophone = APP_SETTING_DEFAULTS.preferBuiltInMicrophone;
           break;
         case SETTINGS_RESET_SCOPE.APPEARANCE:
-          next.showInMenuBar = APP_SETTING_DEFAULTS.showInMenuBar;
           next.showInDock = APP_SETTING_DEFAULTS.showInDock;
           next.showOnAllDisplays = APP_SETTING_DEFAULTS.showOnAllDisplays;
           delete next.formFactor;

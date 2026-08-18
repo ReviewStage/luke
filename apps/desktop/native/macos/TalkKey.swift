@@ -77,8 +77,7 @@ private struct TalkKeyCommand {
     static func main() {
         // A background app rather than a command-line tool: hot keys are
         // delivered to a process the window server knows about. `.prohibited`
-        // keeps it out of the Dock and the menu bar, so nothing about Luke
-        // gains a second icon.
+        // keeps it out of the Dock and menu bar, so this helper adds no icon.
         let application = NSApplication.shared
         application.setActivationPolicy(.prohibited)
 

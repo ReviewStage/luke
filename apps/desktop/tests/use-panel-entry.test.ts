@@ -32,7 +32,7 @@ test("giving up from the aside shape returns you where you were", () => {
   assert.equal(
     panelEntryCancel({ aside: true, restore: false }),
     PANEL_ENTRY_CANCEL.LEAVE,
-    "a key page that was opened, or a composer from the tray, leaves entirely",
+    "a key page that was opened, or a composer opened by voice, leaves entirely",
   );
   assert.equal(
     panelEntryCancel({ aside: false, restore: true }),

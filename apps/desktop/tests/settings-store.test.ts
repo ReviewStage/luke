@@ -526,7 +526,6 @@ test("keeps both keys when two providers are saved at once", async (t) => {
     // Written even at their defaults, so the file states what they are rather
     // than leaving them to be inferred from an absence.
     showInDock: false,
-    showInMenuBar: true,
     voiceCaptions: false,
     duckOtherMedia: true,
     preferBuiltInMicrophone: true,
@@ -728,7 +727,6 @@ test("keeps a Conductor key stored by an earlier version working", async (t) => 
     version: 2,
     apiKeys: { [CONDUCTOR]: sealed("conductor-replacement-key") },
     showInDock: false,
-    showInMenuBar: true,
     voiceCaptions: false,
     duckOtherMedia: true,
     preferBuiltInMicrophone: true,
@@ -753,7 +751,6 @@ test("carries a key belonging to a provider this build does not know", async (t)
     version: 2,
     apiKeys: { "later-cloud": sealed("later-cloud-key"), [CONDUCTOR]: sealed(TEST_API_KEY) },
     showInDock: false,
-    showInMenuBar: true,
     voiceCaptions: false,
     duckOtherMedia: true,
     preferBuiltInMicrophone: true,
@@ -762,88 +759,19 @@ test("carries a key belonging to a provider this build does not know", async (t)
   });
 });
 
-test("shows the menu bar item until asked otherwise, and remembers the answer", async (t) => {
+test("drops the retired menu bar preference on the next settings write", async (t) => {
   const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({ version: 2, apiKeys: {}, showInMenuBar: false }),
+  );
   const store = storeIn(directory);
 
-  assert.equal((await store.snapshot()).showInMenuBar, true);
+  await store.setShowInDock(true);
 
-  const { settings, reason } = await store.setShowInMenuBar(false);
-
-  assert.equal(reason, undefined);
-  assert.equal(settings.showInMenuBar, false);
-  assert.deepEqual(JSON.parse(await readSettingsFile(directory)), {
-    version: 2,
-    apiKeys: {},
-    showInDock: false,
-    showInMenuBar: false,
-    voiceCaptions: false,
-    duckOtherMedia: true,
-    preferBuiltInMicrophone: true,
-    quietDuringMeetings: true,
-    showOnAllDisplays: false,
-  });
-  // The choice outlives the run that heard it.
-  assert.equal((await storeIn(directory).snapshot()).showInMenuBar, false);
-});
-
-test("changes the menu bar preference without touching the cipher", async (t) => {
-  // A preference is not a credential, so storing one must never be the reason
-  // the Keychain dialog appears.
-  const directory = await temporaryDirectory(t);
-  const cipher = countingCipher();
-  const store = storeIn(directory, { cipher });
-
-  const { settings } = await store.setShowInMenuBar(false);
-
-  assert.equal(settings.showInMenuBar, false);
-  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
-  assert.equal(settings.secretStorage, SECRET_STORAGE.UNKNOWN);
-});
-
-test("keeps stored keys when the menu bar preference changes beside them", async (t) => {
-  // The preference and a key share the settings file, so a save of one racing a
-  // save of the other must drop neither.
-  const directory = await temporaryDirectory(t);
-  const store = storeIn(directory, { providers: TEST_PROVIDERS });
-
-  await Promise.all([
-    store.setApiKey(FIRST_CLOUD, "first-cloud-key"),
-    store.setShowInMenuBar(false),
-  ]);
-
-  assert.equal(await store.readApiKey(FIRST_CLOUD), "first-cloud-key");
-  assert.equal((await store.snapshot()).showInMenuBar, false);
-});
-
-test("decides the menu bar item from the file alone, never the keychain", async (t) => {
-  // The status item is drawn at launch from this answer, so a locked or slow
-  // Keychain — which decrypting a stored key can wait on — must not be able to
-  // delay it.
-  const directory = await temporaryDirectory(t);
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({
-      version: 2,
-      apiKeys: { [CONDUCTOR]: sealed(TEST_API_KEY) },
-      showInMenuBar: false,
-    }),
-  );
-  const cipher = countingCipher();
-  const store = storeIn(directory, { cipher });
-
-  assert.equal(await store.showInMenuBar(), false);
-  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
-});
-
-test("shows the menu bar item when the file says something a boolean is not", async (t) => {
-  const directory = await temporaryDirectory(t);
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 2, apiKeys: {}, showInMenuBar: "sometimes" }),
-  );
-
-  assert.equal((await storeIn(directory).snapshot()).showInMenuBar, true);
+  const persisted = JSON.parse(await readSettingsFile(directory));
+  assert.equal(persisted.showInMenuBar, undefined);
+  assert.equal(persisted.showInDock, true);
 });
 
 test("keeps Luke out of the Dock until asked, and remembers the answer", async (t) => {
@@ -860,7 +788,6 @@ test("keeps Luke out of the Dock until asked, and remembers the answer", async (
     version: 2,
     apiKeys: {},
     showInDock: true,
-    showInMenuBar: true,
     voiceCaptions: false,
     duckOtherMedia: true,
     preferBuiltInMicrophone: true,
@@ -1519,7 +1446,6 @@ test("a voice reset returns to the environment's voice where one stands behind t
 test("an appearance reset returns Luke's stances without touching the voice page", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
-  await store.setShowInMenuBar(false);
   await store.setShowInDock(true);
   await store.setShowOnAllDisplays(true);
   await store.setFormFactor(PANEL_FORM_FACTOR.NOTCH);
@@ -1528,7 +1454,6 @@ test("an appearance reset returns Luke's stances without touching the voice page
   const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.APPEARANCE);
 
   assert.equal(reason, undefined);
-  assert.equal(settings.showInMenuBar, true);
   assert.equal(settings.showInDock, false);
   assert.equal(settings.showOnAllDisplays, false);
   assert.equal(settings.formFactor, PANEL_FORM_FACTOR.BUBBLE);
@@ -1610,7 +1535,6 @@ test("a reset leaves a stored key standing", async (t) => {
       duckOtherMedia: true,
       preferBuiltInMicrophone: true,
       showInDock: false,
-      showInMenuBar: true,
       showOnAllDisplays: false,
     }),
   );

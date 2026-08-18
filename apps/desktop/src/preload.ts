@@ -32,7 +32,6 @@ const bridge: AppBridge = {
   openProviderApiKeys: (providerId) => {
     ipcRenderer.send(channels.openProviderApiKeys, providerId);
   },
-  setShowInMenuBar: invoke(channels.setShowInMenuBar),
   setShowInDock: invoke(channels.setShowInDock),
   setShowOnAllDisplays: invoke(channels.setShowOnAllDisplays),
   setFormFactor: invoke(channels.setFormFactor),

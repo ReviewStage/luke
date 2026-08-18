@@ -81,7 +81,6 @@ export const SETTING_PAGE: Record<AppSettingId, SettingsView> = {
   // Beside the calendar row whose connection gives it meaning, not with the
   // voice switches: the quiet is a fact about the calendar integration.
   [APP_SETTING_ID.QUIET_DURING_MEETINGS]: SETTINGS_VIEW.CONNECTIONS,
-  [APP_SETTING_ID.SHOW_IN_MENU_BAR]: SETTINGS_VIEW.APPEARANCE,
   [APP_SETTING_ID.SHOW_IN_DOCK]: SETTINGS_VIEW.APPEARANCE,
   [APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS]: SETTINGS_VIEW.APPEARANCE,
   [APP_SETTING_ID.FORM_FACTOR]: SETTINGS_VIEW.APPEARANCE,

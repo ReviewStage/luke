@@ -828,7 +828,7 @@ export function LukeErrand({ errand, onLanded, onReturned }: LukeErrandProps): R
       settle = window.setTimeout(returnHome, beats.duration);
 
       // The shape can go while he is out over it. Escape, the pointer leaving,
-      // the capsule pressed, a tray item, another window's lifecycle event —
+      // the capsule pressed, a spoken request, another window's lifecycle event —
       // any of them collapses the panel to the capsule, and a flight measured
       // against the shape it set off from would carry on across a surface that
       // is no longer under it and be drawn on the desktop. Nothing else here
