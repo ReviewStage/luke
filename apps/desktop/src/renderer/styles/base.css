@@ -1291,6 +1291,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .app-stage[data-presentation="capsule"][data-caption="true"] .voice-caption,
 .app-stage[data-presentation="peek"][data-caption="true"] .voice-caption {
   opacity: 1;
+  pointer-events: auto;
   transition:
     opacity var(--duration-quick) var(--motion-exit)
     calc(var(--duration-shape) - var(--duration-quick)),
@@ -1314,6 +1315,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 
 .app-stage[data-presentation="panel"][data-caption="true"] .voice-caption {
   opacity: 1;
+  pointer-events: auto;
   transition:
     opacity var(--duration-quick) var(--motion-exit)
     calc(var(--duration-shape) - var(--duration-quick)),

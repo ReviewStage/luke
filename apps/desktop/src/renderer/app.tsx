@@ -2603,6 +2603,7 @@ export function App(): React.JSX.Element {
       <span
         className="voice-caption"
         ref={captionElement}
+        data-hit-region={HIT_REGION.CAPSULE}
         data-error={String(captionIsError)}
         {...(captionIsError ? { role: "status" } : { "aria-hidden": true })}
       >
