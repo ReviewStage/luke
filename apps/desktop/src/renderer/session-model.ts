@@ -14,6 +14,7 @@ import {
   type SessionLocation,
   type SessionNoticeAsk,
   type SessionUrgency,
+  sessionChangeNumber,
   urgencyLabel,
 } from "@sidecar/core";
 import type { AppBootstrap } from "../shared/contracts";
@@ -157,6 +158,12 @@ export interface DisplaySession {
    * process; the row only has to know the chip would open something.
    */
   hasChange: boolean;
+  /**
+   * The pull request's own number, when the address's shape names one, so the
+   * chip can say "#245" the way the host does. A number and never the address:
+   * absent, the chip keeps the generic words rather than guessing.
+   */
+  changeNumber?: number;
   /**
    * The developer's standing ask about this session, when one stands, so the
    * row can mark that Luke is listening for it. The words are the developer's
@@ -403,6 +410,9 @@ export function displaySessions(
     : sessions.map((session) => {
         const urgency = sessionUrgency(session);
         const noticeAsk = asks.get(session.providerId)?.get(session.providerSessionId);
+        const changeNumber = session.detail.change
+          ? sessionChangeNumber(session.detail.change)
+          : undefined;
         return {
           id: session.providerSessionId,
           title: session.title,
@@ -420,6 +430,7 @@ export function displaySessions(
           canMessage: session.canReceiveMessage,
           actions: session.controls,
           hasChange: session.detail.change !== undefined,
+          ...(changeNumber !== undefined ? { changeNumber } : {}),
           ...(noticeAsk ? { noticeAsk } : {}),
           // A workspace the provider left unnamed still groups its chats; the
           // id is at least stable, where a made-up name would claim knowledge

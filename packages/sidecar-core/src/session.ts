@@ -394,6 +394,26 @@ function sessionChange(value: string | undefined): string | undefined {
   }
 }
 
+/**
+ * The pull request's own number, read from the published work's address so a
+ * surface can name the work the way its host does — "#245" — instead of the
+ * generic words. Every host this build has seen a change from ends the
+ * address with the number (GitHub's `/pull/245`, GitLab's
+ * `/-/merge_requests/3`, Bitbucket's `/pull-requests/9`), so the final path
+ * segment is the number or the address names none. Nothing but the number
+ * ever leaves this read: an address whose tail is not one yields nothing,
+ * and the surface keeps the generic words rather than guessing.
+ */
+export function sessionChangeNumber(change: string): number | undefined {
+  let tail: string | undefined;
+  try {
+    tail = new URL(change).pathname.split("/").filter(Boolean).at(-1);
+  } catch {
+    return undefined;
+  }
+  return tail !== undefined && /^\d+$/.test(tail) ? Number(tail) : undefined;
+}
+
 function timestamp(value: number, field: string): number {
   if (!Number.isFinite(value) || value < 0) {
     throw new Error(`${field} must be a non-negative finite timestamp`);

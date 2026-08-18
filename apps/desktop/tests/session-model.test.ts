@@ -153,6 +153,41 @@ test("the line under the title says the state when the provider said nothing", (
   assert.equal(conductor?.detail, "Complete");
 });
 
+test("a row carries the pull request's number when its address names one", () => {
+  const live = displaySessions(bootstrap(false), [
+    normalizeSession(CODEX_PROVIDER, {
+      providerSessionId: "codex-published",
+      title: "Session codex-published",
+      status: SESSION_STATUS.WORKING,
+      observedAt: 1_000,
+      detail: { change: "https://github.com/reviewstage/luke/pull/245" },
+    }),
+    normalizeSession(CLAUDE_PROVIDER, {
+      providerSessionId: "claude-unnumbered",
+      title: "Session claude-unnumbered",
+      status: SESSION_STATUS.WORKING,
+      observedAt: 1_000,
+      detail: { change: "https://github.com/reviewstage/luke/pulls" },
+    }),
+  ]);
+
+  const published = live.find((session) => session.id === "codex-published");
+  assert.equal(published?.hasChange, true);
+  assert.equal(published?.changeNumber, 245);
+
+  // An address naming no number still earns the chip — only its title falls
+  // back to the generic words.
+  const unnumbered = live.find((session) => session.id === "claude-unnumbered");
+  assert.equal(unnumbered?.hasChange, true);
+  assert.equal(unnumbered?.changeNumber, undefined);
+
+  // The fixture's chip carries a number too, so the visual evidence shows the
+  // label a live address would earn.
+  const cursor = FIXTURE_SESSIONS.find((session) => session.id === "cursor-agent");
+  assert.equal(cursor?.hasChange, true);
+  assert.equal(cursor?.changeNumber, 31);
+});
+
 test("a row carries the identifiers that tell it from its neighbours", () => {
   const [live] = displaySessions(bootstrap(false), [
     normalizeSession(CODEX_PROVIDER, {

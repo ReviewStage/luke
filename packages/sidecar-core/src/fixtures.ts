@@ -44,6 +44,8 @@ export interface SessionSnapshot {
   actions?: readonly SessionControl[];
   /** Drawn only: the pull-request chip a live session's published work earns. */
   hasChange?: boolean;
+  /** Drawn only: the number the chip is titled by when the address names one. */
+  changeNumber?: number;
   /** Drawn only: the standing ask a live row would be marked as listened for. */
   noticeAsk?: string;
   /** The workspace this row is one chat of, when its provider nests them. */
@@ -150,9 +152,11 @@ const smokeFixture: FixtureSnapshot = {
       observedAt: minutesBeforeEpoch(18),
       // What a working Cursor agent advertises live, so the one screenshot the
       // evidence is reviewed from also proves the stop control is drawn — and
-      // the pull-request chip beside it, on the row whose sentence names one.
+      // the pull-request chip beside it, on the row whose sentence names one,
+      // titled by a synthetic number the way a live address would title it.
       actions: [{ id: "cancel-run", label: "Stop this run", kind: SESSION_CONTROL_KIND.STOP }],
       hasChange: true,
+      changeNumber: 31,
     },
     // A fifth session keeps every state and every provider mark visible in the
     // one screenshot the visual evidence is reviewed from. It is also one more

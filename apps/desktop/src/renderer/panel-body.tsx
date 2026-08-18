@@ -306,7 +306,7 @@ function SessionRowActions({
             void openChange();
           }}
         >
-          Pull request
+          {session.changeNumber !== undefined ? `#${session.changeNumber}` : "Pull request"}
         </button>
       ) : null}
       {feedback ? <small className="row-feedback">{feedback}</small> : null}
