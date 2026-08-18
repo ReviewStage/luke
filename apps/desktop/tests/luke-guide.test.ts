@@ -45,6 +45,7 @@ function settings(overrides: Partial<AppSettings> = {}): AppSettings {
     duckOtherMedia: true,
     quietDuringMeetings: true,
     calendarSignInAvailable: false,
+    linearSignInAvailable: false,
     calendarAccounts: [],
     showOnAllDisplays: false,
     formFactor: PANEL_FORM_FACTOR.BUBBLE,
@@ -182,13 +183,24 @@ test("the facts say what is connected, never what connects it", () => {
   assert.match(rendered, /Conductor \(connected\)/);
   assert.match(rendered, /Copilot \(not connected\)/);
   assert.match(rendered, /Devin \(connected from the environment\)/);
-  // The tracker stands in its own fact, the way it stands in its own section.
-  assert.match(rendered, /Linear \(not connected\)/);
   assert.match(rendered, /Integrations/);
-  // A build without the calendar sign-in draws no calendar row, so the guide
-  // says nothing about one — a capability the guide describes is one Luke
-  // will claim to have.
+  // A build carrying neither registration draws neither integration row, so
+  // the guide says nothing about either — a capability the guide describes is
+  // one Luke will claim to have.
   assert.doesNotMatch(rendered, /Google Calendar/);
+  assert.doesNotMatch(rendered, /Linear/);
+
+  // A build carrying the Linear registration describes the tracker: that it
+  // is signed into rather than typed into, and what connecting it allows.
+  const tracker = JSON.stringify(
+    buildLukeGuide(guideInput({ settings: settings({ linearSignInAvailable: true }) })).facts,
+  );
+  assert.match(tracker, /Linear \(not connected\)/);
+  assert.match(tracker, /signing in with Linear/);
+  assert.match(tracker, /move one to another state or comment on it/);
+  // Nothing in the guide may send anyone to a key page for Linear: there is
+  // no key, and describing one would be describing a row that is not drawn.
+  assert.doesNotMatch(tracker, /Linear[^"]*API key/);
 
   // A build carrying the sign-in describes the calendar: what it reads —
   // times, never titles — and how it connects.

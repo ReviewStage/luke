@@ -21,6 +21,7 @@ import {
   VOICE_SOURCE,
 } from "../src/shared/contracts";
 import {
+  CREDENTIAL_CONNECTION,
   CREDENTIAL_PROVIDER_ID,
   type CredentialProvider,
   type CredentialProviderId,
@@ -52,6 +53,7 @@ const TEST_ENVIRONMENT_VARIABLE = {
 const FIRST_CLOUD_PROVIDER: CredentialProvider = {
   id: "first-cloud" as CredentialProviderId,
   displayName: "First Cloud",
+  connection: CREDENTIAL_CONNECTION.KEY,
   hint: "Create a key in First Cloud.",
   environmentVariables: [TEST_ENVIRONMENT_VARIABLE.FIRST_CLOUD_API_KEY],
 };
@@ -59,6 +61,7 @@ const FIRST_CLOUD_PROVIDER: CredentialProvider = {
 const SECOND_CLOUD_PROVIDER: CredentialProvider = {
   id: "second-cloud" as CredentialProviderId,
   displayName: "Second Cloud",
+  connection: CREDENTIAL_CONNECTION.KEY,
   hint: "Create a key in Second Cloud.",
   environmentVariables: [TEST_ENVIRONMENT_VARIABLE.SECOND_CLOUD_API_KEY],
 };
@@ -67,6 +70,7 @@ const SECOND_CLOUD_PROVIDER: CredentialProvider = {
 const THIRD_CLOUD_PROVIDER: CredentialProvider = {
   id: "third-cloud" as CredentialProviderId,
   displayName: "Third Cloud",
+  connection: CREDENTIAL_CONNECTION.KEY,
   hint: "Create a key in Third Cloud.",
   environmentVariables: [TEST_ENVIRONMENT_VARIABLE.THIRD_CLOUD_API_KEY],
   keyFormat: {
@@ -75,7 +79,21 @@ const THIRD_CLOUD_PROVIDER: CredentialProvider = {
   },
 };
 
-const TEST_PROVIDERS = [FIRST_CLOUD_PROVIDER, SECOND_CLOUD_PROVIDER, THIRD_CLOUD_PROVIDER];
+/** Connected on the provider's own consent page rather than by a pasted key. */
+const CONSENT_PROVIDER: CredentialProvider = {
+  id: "consent-service" as CredentialProviderId,
+  displayName: "Consent Service",
+  connection: CREDENTIAL_CONNECTION.CONSENT,
+  environmentVariables: [],
+};
+
+const TEST_PROVIDERS = [
+  FIRST_CLOUD_PROVIDER,
+  SECOND_CLOUD_PROVIDER,
+  THIRD_CLOUD_PROVIDER,
+  CONSENT_PROVIDER,
+];
+const CONSENT_SERVICE = CONSENT_PROVIDER.id;
 const FIRST_CLOUD = FIRST_CLOUD_PROVIDER.id;
 const SECOND_CLOUD = SECOND_CLOUD_PROVIDER.id;
 const THIRD_CLOUD = THIRD_CLOUD_PROVIDER.id;
@@ -1815,4 +1833,81 @@ test("pasting a key back while parked on the allowance is still choosing it", as
   // read as a key that failed to take.
   await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-developers-own");
   assert.equal(await store.readVoiceSource(), VOICE_SOURCE.KEY);
+});
+
+test("a grant is stored encrypted, and read back only in the main process", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory, { providers: TEST_PROVIDERS });
+
+  const { settings } = await store.setGrant(CONSENT_SERVICE, {
+    accessToken: "granted-access",
+    refreshToken: "granted-refresh",
+    expiresAt: 1_760_000_000_000,
+  });
+
+  // The row says connected the way every other credential's row does.
+  assert.equal(settings.credentialSources[CONSENT_SERVICE], CREDENTIAL_SOURCE.ENCRYPTED_FILE);
+  // Neither token is anywhere in what a renderer receives.
+  const rendered = JSON.stringify(settings);
+  assert.doesNotMatch(rendered, /granted-access/);
+  assert.doesNotMatch(rendered, /granted-refresh/);
+
+  // Both tokens travel under one ciphertext; only the expiry stays readable,
+  // which is what lets a pass skip a refresh it does not need.
+  const file = JSON.parse(await readSettingsFile(directory));
+  assert.equal(file.grants[CONSENT_SERVICE].expiresAt, 1_760_000_000_000);
+  assert.doesNotMatch(file.grants[CONSENT_SERVICE].tokenCipher, /granted-access/);
+
+  assert.deepEqual(await store.readGrant(CONSENT_SERVICE), {
+    accessToken: "granted-access",
+    refreshToken: "granted-refresh",
+    expiresAt: 1_760_000_000_000,
+  });
+
+  // A stored grant outlives the process that made it.
+  const reopened = storeIn(directory, { providers: TEST_PROVIDERS });
+  assert.equal((await reopened.readGrant(CONSENT_SERVICE))?.accessToken, "granted-access");
+});
+
+test("clearing a grant leaves nothing behind, and keys alone", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory, { providers: TEST_PROVIDERS });
+  await store.setApiKey(FIRST_CLOUD, "first-cloud-key");
+  await store.setGrant(CONSENT_SERVICE, { accessToken: "granted-access", expiresAt: 1 });
+
+  const { settings } = await store.clearGrant(CONSENT_SERVICE);
+  assert.equal(settings.credentialSources[CONSENT_SERVICE], CREDENTIAL_SOURCE.NONE);
+  assert.equal(await store.readGrant(CONSENT_SERVICE), undefined);
+  // Disconnecting one service never disturbs another's credential.
+  assert.equal(await store.readApiKey(FIRST_CLOUD), "first-cloud-key");
+  assert.doesNotMatch(await readSettingsFile(directory), /granted-access/);
+});
+
+test("a key left by a build that asked for one is dropped, never carried", async (t) => {
+  const directory = await temporaryDirectory(t);
+  // What an installation upgraded from a build that pasted this service's key
+  // would hold: a credential this build can never send anywhere.
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({
+      version: 2,
+      apiKeys: {
+        [CONSENT_SERVICE]: sealed("stale-pasted-key"),
+        [FIRST_CLOUD]: sealed("first-cloud-key"),
+      },
+    }),
+    "utf8",
+  );
+  const store = storeIn(directory, { providers: TEST_PROVIDERS });
+
+  const settings = await store.snapshot();
+  assert.equal(settings.credentialSources[CONSENT_SERVICE], CREDENTIAL_SOURCE.NONE);
+  assert.equal(await store.readApiKey(CONSENT_SERVICE), undefined);
+
+  // A provider this build does know, and knows takes no key, has its key let
+  // go on the next write — a credential Luke will not use is not one to keep.
+  await store.setApiKey(FIRST_CLOUD, "replaced-key");
+  const file = JSON.parse(await readSettingsFile(directory));
+  assert.equal(file.apiKeys[CONSENT_SERVICE], undefined);
+  assert.ok(file.apiKeys[FIRST_CLOUD]);
 });

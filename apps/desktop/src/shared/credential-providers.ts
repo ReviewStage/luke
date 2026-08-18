@@ -4,7 +4,8 @@ import { ISSUE_TRACKER_ID, PROVIDER_ID } from "@sidecar/core";
  * The services Luke can hold a credential for: the subset of the observed
  * providers whose sessions live in a cloud service with no local state to
  * read, plus the issue tracker Luke reads the same way — each of which must
- * observe nothing at all until the user supplies a key. Most ids are core's,
+ * observe nothing at all until the user connects it, by pasting a key or by
+ * granting one on the provider's own consent page. Most ids are core's,
  * so a credential row names the same service a session row or the issue
  * roster does — that is what lets one mark registry serve them all.
  *
@@ -27,6 +28,23 @@ export const CREDENTIAL_PROVIDER_ID = {
 
 export type CredentialProviderId =
   (typeof CREDENTIAL_PROVIDER_ID)[keyof typeof CREDENTIAL_PROVIDER_ID];
+
+/**
+ * How a service's credential is come by, which is the whole difference between
+ * the two rows Settings draws for one. A key is the user's to fetch and paste,
+ * so its row is a field and a page to go and get one from. A consent grant is
+ * the provider's to issue over its own page in the user's browser, so its row
+ * is a button and nothing to type. What is stored is the same either way —
+ * encrypted at rest, read only in the main process — because a credential is a
+ * credential however it arrived.
+ */
+export const CREDENTIAL_CONNECTION = {
+  KEY: "key",
+  CONSENT: "consent",
+} as const;
+
+export type CredentialConnection =
+  (typeof CREDENTIAL_CONNECTION)[keyof typeof CREDENTIAL_CONNECTION];
 
 /**
  * `<PROVIDER>_API_KEY` is the convention every provider follows. A provider may
@@ -53,10 +71,6 @@ const JULES_ENVIRONMENT = {
   API_KEY: "JULES_API_KEY",
 } as const;
 
-const LINEAR_ENVIRONMENT = {
-  API_KEY: "LINEAR_API_KEY",
-} as const;
-
 /**
  * The only kind of credential Luke will hold for a provider that issues more
  * than one. Only a provider that publishes a format declares this; the rest
@@ -78,15 +92,23 @@ export interface CredentialFormat {
 export interface CredentialProvider {
   id: CredentialProviderId;
   displayName: string;
-  /** Where the user creates a key, shown beside that provider's field. */
-  hint: string;
+  /** How this provider's credential is come by, which decides what its row is. */
+  connection: CredentialConnection;
+  /**
+   * Where the user creates a key, shown in the editor its row opens. Absent
+   * for a provider connected by consent: there is no editor to say it in, and
+   * nothing for the user to go and fetch — what such a row says under itself
+   * is `description`, the same line every integration carries.
+   */
+  hint?: string;
   /**
    * The page that issues this provider's keys. It is opened by provider id
    * rather than by a URL the renderer supplies, so the only addresses Luke can
-   * ever open are the ones in this file.
+   * ever open are the ones in this file. Absent for a provider whose credential
+   * is granted rather than pasted: there is no key page to send anyone to.
    */
-  apiKeysUrl: string;
-  /** Read in order when nothing is stored for this provider. */
+  apiKeysUrl?: string;
+  /** Read in order when nothing is stored for this provider. Empty for a grant. */
   environmentVariables: readonly string[];
   /** Present only for a provider that publishes more than one kind of key. */
   keyFormat?: CredentialFormat;
@@ -102,6 +124,7 @@ export interface CredentialProvider {
 export const CREDENTIAL_PROVIDERS: Readonly<Record<CredentialProviderId, CredentialProvider>> = {
   [CREDENTIAL_PROVIDER_ID.CONDUCTOR]: {
     id: CREDENTIAL_PROVIDER_ID.CONDUCTOR,
+    connection: CREDENTIAL_CONNECTION.KEY,
     displayName: "Conductor",
     hint: "Create a key in Conductor under Settings · API keys.",
     apiKeysUrl: "https://app.conductor.build/users/api-keys",
@@ -109,6 +132,7 @@ export const CREDENTIAL_PROVIDERS: Readonly<Record<CredentialProviderId, Credent
   },
   [CREDENTIAL_PROVIDER_ID.COPILOT]: {
     id: CREDENTIAL_PROVIDER_ID.COPILOT,
+    connection: CREDENTIAL_CONNECTION.KEY,
     displayName: "Copilot",
     // GitHub's agent-tasks endpoints answer only user tokens. The copy names
     // the kind to create because the wrong kinds also come from GitHub: a
@@ -123,6 +147,7 @@ export const CREDENTIAL_PROVIDERS: Readonly<Record<CredentialProviderId, Credent
   },
   [CREDENTIAL_PROVIDER_ID.CURSOR]: {
     id: CREDENTIAL_PROVIDER_ID.CURSOR,
+    connection: CREDENTIAL_CONNECTION.KEY,
     displayName: "Cursor",
     hint: "Create a key in the Cursor dashboard under Integrations · API keys.",
     apiKeysUrl: "https://cursor.com/dashboard/api",
@@ -130,6 +155,7 @@ export const CREDENTIAL_PROVIDERS: Readonly<Record<CredentialProviderId, Credent
   },
   [CREDENTIAL_PROVIDER_ID.DEVIN]: {
     id: CREDENTIAL_PROVIDER_ID.DEVIN,
+    connection: CREDENTIAL_CONNECTION.KEY,
     displayName: "Devin",
     hint: "Create one on the Devin API settings page, under PATs.",
     // Not the Settings · API keys page, which issues the deprecated `apk_`
@@ -153,6 +179,7 @@ export const CREDENTIAL_PROVIDERS: Readonly<Record<CredentialProviderId, Credent
   },
   [CREDENTIAL_PROVIDER_ID.JULES]: {
     id: CREDENTIAL_PROVIDER_ID.JULES,
+    connection: CREDENTIAL_CONNECTION.KEY,
     displayName: "Jules",
     // Jules shows a key once, on creation, and allows at most three at a time.
     hint: "Create a key in Jules under Settings · API key. It is shown only once.",
@@ -161,23 +188,19 @@ export const CREDENTIAL_PROVIDERS: Readonly<Record<CredentialProviderId, Credent
   },
   [CREDENTIAL_PROVIDER_ID.LINEAR]: {
     id: CREDENTIAL_PROVIDER_ID.LINEAR,
+    connection: CREDENTIAL_CONNECTION.CONSENT,
     displayName: "Linear",
     description: "Luke reads your issues and can move or comment on them when you ask.",
-    hint: "Create a personal API key in Linear under Settings · Security & access.",
-    apiKeysUrl: "https://linear.app/settings/account/security",
-    environmentVariables: [LINEAR_ENVIRONMENT.API_KEY],
-    // Linear issues its personal API keys under one prefix; an OAuth access
-    // token belongs to an application acting for a workspace, which is not
-    // what Luke is, so a credential without the prefix would only mislead.
-    keyFormat: {
-      label: "Personal API key",
-      prefix: "lin_api_",
-      rejection:
-        "Linear's personal API keys start with lin_api_. OAuth tokens belong to an application rather than to Luke.",
-    },
+    // No key page and no environment variable, alone among the providers:
+    // nothing is pasted here, so there is nowhere to send anyone to fetch a
+    // credential and nothing for a launch environment to supply. What the
+    // consent page hands back is Linear's to shape, and it is withdrawn in
+    // Linear's own settings as well as by disconnecting the row.
+    environmentVariables: [],
   },
   [CREDENTIAL_PROVIDER_ID.OPENAI]: {
     id: CREDENTIAL_PROVIDER_ID.OPENAI,
+    connection: CREDENTIAL_CONNECTION.KEY,
     // The service, plainly. The row stands inside the section that already
     // says what it is for — the other way voice can run — so the name has no
     // acronym to carry: "BYOK" named the choice for anyone who already knew
@@ -233,7 +256,12 @@ export const CLOUD_AGENT_PROVIDER_LIST: readonly CredentialProvider[] =
     (provider) => !INTEGRATION_IDS.has(provider.id) && provider.id !== VOICE_CREDENTIAL_PROVIDER_ID,
   );
 
-/** The services beyond the agents, in the order the Integrations section lists them. */
+/**
+ * The services beyond the agents. The Integrations section draws each as its
+ * own block rather than from this list — a consent row and a key row are not
+ * the same line — so this stands for what belongs in that section, which is
+ * what keeps the three lists together covering the whole registry.
+ */
 export const INTEGRATION_PROVIDER_LIST: readonly CredentialProvider[] =
   CREDENTIAL_PROVIDER_LIST.filter((provider) => INTEGRATION_IDS.has(provider.id));
 

@@ -37,7 +37,7 @@ test("every stand-down comes back to the page its own row is drawn on", () => {
 
   // The Google Calendar block stands under Integrations, so a cancelled or
   // refused sign-in returns to the row that can try it again.
-  assert.equal(standDownReturnPage({ kind: PANEL_STAND_DOWN.CALENDAR }), SETTINGS_VIEW.CONNECTIONS);
+  assert.equal(standDownReturnPage({ kind: PANEL_STAND_DOWN.CONSENT }), SETTINGS_VIEW.CONNECTIONS);
 
   // A key follows its own provider's row, wherever that is drawn — which is
   // the one stand-down whose answer is not fixed.
@@ -53,7 +53,7 @@ test("every stand-down comes back to the page its own row is drawn on", () => {
   // remembered page cannot stand in for three.
   const pages = new Set([
     standDownReturnPage({ kind: PANEL_STAND_DOWN.FEEDBACK }),
-    standDownReturnPage({ kind: PANEL_STAND_DOWN.CALENDAR }),
+    standDownReturnPage({ kind: PANEL_STAND_DOWN.CONSENT }),
   ]);
   assert.equal(pages.size, 2, "a note and a calendar sign-in do not share a page");
 });

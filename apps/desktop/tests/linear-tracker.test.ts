@@ -23,7 +23,7 @@ function graphqlDocument(request: RecordedRequest | undefined): {
 
 function trackerWith(
   payloads: readonly unknown[],
-  options: { apiKey?: string; status?: number } = {},
+  options: { accessToken?: string; status?: number } = {},
 ): { tracker: LinearIssueTracker; requests: RecordedRequest[] } {
   let call = 0;
   const { fetch, requests } = recordingFetch(() => {
@@ -32,7 +32,7 @@ function trackerWith(
     return jsonResponse(payload, options.status ?? HTTP_STATUS.OK);
   });
   const tracker = new LinearIssueTracker({
-    readApiKey: async () => options.apiKey,
+    readAccessToken: async () => options.accessToken,
     now: () => OBSERVED_AT,
     fetchImplementation: fetch as typeof fetch,
   });
@@ -71,7 +71,7 @@ function assignedIssuesPayload() {
   };
 }
 
-test("no key means no request and a tracker that is not connected", async () => {
+test("no token means no request and a tracker that is not connected", async () => {
   const { tracker, requests } = trackerWith([assignedIssuesPayload()]);
 
   assert.equal(await tracker.observe(), undefined);
@@ -89,7 +89,7 @@ test("no key means no request and a tracker that is not connected", async () => 
 
 test("observing reads the assigned issues and advertises the rest of the workflow", async () => {
   const { tracker, requests } = trackerWith([assignedIssuesPayload()], {
-    apiKey: "lin_api_test",
+    accessToken: "linear-access-token",
   });
 
   const observations = await tracker.observe();
@@ -111,8 +111,9 @@ test("observing reads the assigned issues and advertises the rest of the workflo
     canComment: true,
   });
 
-  // The key authorizes as itself: a personal API key takes no Bearer prefix.
-  assert.equal(requests[0]?.authorization, "lin_api_test");
+  // What the consent page granted is an OAuth access token, sent under the
+  // scheme every OAuth token is sent with.
+  assert.equal(requests[0]?.authorization, "Bearer linear-access-token");
   // An observation pass sends the one read document and nothing else.
   assert.equal(requests.length, 1);
   assert.match(graphqlDocument(requests[0]).query, /^query AssignedIssues/);
@@ -120,18 +121,21 @@ test("observing reads the assigned issues and advertises the rest of the workflo
 });
 
 test("a failed or malformed read is an error, never a quieter roster", async () => {
-  const failed = trackerWith([{}], { apiKey: "lin_api_test", status: HTTP_STATUS.SERVER_ERROR });
+  const failed = trackerWith([{}], {
+    accessToken: "linear-access-token",
+    status: HTTP_STATUS.SERVER_ERROR,
+  });
   await assert.rejects(() => failed.tracker.observe());
 
   const errored = trackerWith([{ errors: [{ message: "rate limited" }] }], {
-    apiKey: "lin_api_test",
+    accessToken: "linear-access-token",
   });
   await assert.rejects(() => errored.tracker.observe());
 });
 
 test("moving an issue posts the one documented write and reads its answer", async () => {
   const { tracker, requests } = trackerWith([{ data: { issueUpdate: { success: true } } }], {
-    apiKey: "lin_api_test",
+    accessToken: "linear-access-token",
   });
 
   const result = await tracker.execute({
@@ -151,7 +155,7 @@ test("moving an issue posts the one documented write and reads its answer", asyn
 
 test("a comment posts the other documented write", async () => {
   const { tracker, requests } = trackerWith([{ data: { commentCreate: { success: true } } }], {
-    apiKey: "lin_api_test",
+    accessToken: "linear-access-token",
   });
 
   const result = await tracker.execute({
@@ -180,13 +184,13 @@ test("a write Linear turns down is a rejection with a reason, never a throw", as
     { data: { issueUpdate: { success: false } } },
     { data: {} },
   ]) {
-    const { tracker } = trackerWith([payload], { apiKey: "lin_api_test" });
+    const { tracker } = trackerWith([payload], { accessToken: "linear-access-token" });
     const result = await tracker.execute(setState);
     assert.equal(result.status, TRACKER_ACTION_RESULT_STATUS.REJECTED);
     assert.ok("reason" in result && result.reason.length > 0);
   }
 
-  const failed = trackerWith([{}], { apiKey: "lin_api_test", status: 401 });
+  const failed = trackerWith([{}], { accessToken: "linear-access-token", status: 401 });
   const result = await failed.tracker.execute(setState);
   assert.equal(result.status, TRACKER_ACTION_RESULT_STATUS.REJECTED);
 });

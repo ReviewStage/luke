@@ -116,6 +116,8 @@ import { HostedRealtimeCredentialMinter } from "./hosted-realtime-credentials";
 import { HostedUsageReader } from "./hosted-usage";
 import { HOTKEY_RANK, HotkeyRegistrar } from "./hotkey-registrar";
 import { JulesSessionAdapter } from "./jules-adapter";
+import { LinearCredentials } from "./linear-credentials";
+import { LinearSignIn } from "./linear-oauth";
 import { LinearIssueTracker } from "./linear-tracker";
 import { MediaDuckController } from "./media-duck";
 import { MicrophoneRouteWatcher } from "./microphone-route";
@@ -334,8 +336,30 @@ const sessionAdapters = [
 // The issue tracker is not a session provider: its issues feed the voice
 // roster rather than the registry, so it stands beside the adapters rather
 // than among them.
+// What authorizes a read is minted rather than stored ready to send: Linear's
+// access tokens last a day, so the grant behind the row is renewed here, and
+// only Linear refusing that renewal disconnects anything.
+const linearCredentials = new LinearCredentials({
+  readGrant: () => settingsStore.readGrant(CREDENTIAL_PROVIDER_ID.LINEAR),
+  writeGrant: async (grant) => {
+    await settingsStore.setGrant(CREDENTIAL_PROVIDER_ID.LINEAR, grant);
+  },
+  forgetGrant: async () => {
+    const cleared = await settingsStore.clearGrant(CREDENTIAL_PROVIDER_ID.LINEAR);
+    // Nobody pressed anything to end this connection — Linear refused the
+    // renewal — so no settings reply is on its way to say so. A row left
+    // saying connected would be a row about a grant that no longer exists.
+    panels.broadcast(channels.settingsChanged, cleared.settings);
+  },
+});
 const linearTracker = new LinearIssueTracker({
-  readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.LINEAR),
+  readAccessToken: () => linearCredentials.accessToken(),
+});
+// The sign-in behind the Linear row: it opens Linear's own consent page in the
+// user's browser and hands back one grant, which the connect handler stores.
+// Offered only when this build carries an OAuth client.
+const linearSignIn = new LinearSignIn({
+  openExternal: (url) => void shell.openExternal(url),
 });
 const issueTrackers = [linearTracker] as const;
 /** A board changes at the pace of hands, not of models; a minute is current. */
@@ -1489,6 +1513,58 @@ function registerIpc(): void {
     googleCalendarSignIn.reopen();
   });
 
+  // The Linear sign-in runs whole inside `save`, exactly as the calendar's
+  // does: the browser trip, the loopback redirect and the exchange all happen
+  // in the main process, and the renderer's reply is the settings snapshot
+  // alone. A refusal or a closed browser tab comes back as the reason the row
+  // shows.
+  registerSettingHandler(channels.connectLinear, {
+    validate() {
+      return undefined;
+    },
+    async save() {
+      const outcome = await linearSignIn.signIn();
+      if ("reason" in outcome) {
+        return { settings: await settingsStore.snapshot(), reason: outcome.reason };
+      }
+      return settingsStore.setGrant(CREDENTIAL_PROVIDER_ID.LINEAR, outcome);
+    },
+    apply(result) {
+      // The board is a minute stale at worst, but a row that just connected
+      // and shows nothing reads as a connection that failed.
+      if (!result.reason) void refreshTrackedIssues();
+    },
+    refusal: "Could not connect Linear on this system.",
+  });
+
+  ipcMain.on(channels.cancelLinearSignIn, (event) => {
+    if (!trustedSender(event)) return;
+    linearSignIn.cancel();
+  });
+
+  ipcMain.on(channels.reopenLinearSignIn, (event) => {
+    if (!trustedSender(event)) return;
+    linearSignIn.reopen();
+  });
+
+  registerSettingHandler(channels.disconnectLinear, {
+    validate() {
+      return undefined;
+    },
+    async save() {
+      // Revoked with Linear as well as forgotten here, so disconnecting ends
+      // the access rather than only losing sight of it.
+      await linearCredentials.disconnect();
+      return { settings: await settingsStore.snapshot() };
+    },
+    apply(result) {
+      // The roster is about a board Luke can no longer read, so it goes with
+      // the grant rather than sitting there until the next pass.
+      if (!result.reason) void refreshTrackedIssues();
+    },
+    refusal: "Could not disconnect Linear on this system.",
+  });
+
   registerSettingHandler(channels.removeCalendarAccount, {
     validate(accountId: unknown) {
       if (typeof accountId !== "string" || !accountId) {
@@ -1584,7 +1660,10 @@ function registerIpc(): void {
   // registry, and no URL crosses this boundary.
   ipcMain.on(channels.openProviderApiKeys, (event, providerId: unknown) => {
     if (!trustedSender(event) || !isCredentialProviderId(providerId)) return;
-    void shell.openExternal(CREDENTIAL_PROVIDERS[providerId].apiKeysUrl);
+    // A provider connected by consent issues no key and publishes no page to
+    // fetch one from, so there is nowhere to send anyone.
+    const apiKeysUrl = CREDENTIAL_PROVIDERS[providerId].apiKeysUrl;
+    if (apiKeysUrl) void shell.openExternal(apiKeysUrl);
   });
 
   // Pressing a session — on its row, or out loud — hands its provider's own

@@ -3,6 +3,7 @@ import test from "node:test";
 import { HOSTED_METER_LABEL, KEY_USE_NOTE } from "../src/renderer/microphone-access";
 import {
   CLOUD_AGENT_PROVIDER_LIST,
+  CREDENTIAL_CONNECTION,
   CREDENTIAL_PROVIDER_ID,
   CREDENTIAL_PROVIDER_LIST,
   CREDENTIAL_PROVIDERS,
@@ -31,14 +32,30 @@ test("describes every provider it lists", () => {
   for (const provider of CREDENTIAL_PROVIDER_LIST) {
     assert.equal(CREDENTIAL_PROVIDERS[provider.id], provider, "a provider is filed under its id");
     assert.ok(provider.displayName.length > 0);
-    assert.ok(provider.hint.length > 0);
+    // A pasted key has an editor to say where to fetch one, and a page to
+    // fetch it from. A consent grant has neither: nothing is fetched by hand.
+    if (provider.connection === CREDENTIAL_CONNECTION.KEY) {
+      assert.ok(provider.hint, provider.id);
+      assert.ok(provider.apiKeysUrl, provider.id);
+    } else {
+      assert.equal(provider.hint, undefined, provider.id);
+      assert.equal(provider.apiKeysUrl, undefined, provider.id);
+    }
     // The environment fallback is `<PROVIDER>_API_KEY` — except OpenAI, which
-    // deliberately offers none: a key that costs money and moves the review
-    // path is connected by hand or not at all.
-    if (provider.id === CREDENTIAL_PROVIDER_ID.OPENAI) {
+    // deliberately offers none (a key that costs money and moves the review
+    // path is connected by hand or not at all), and except a provider
+    // connected by consent, where there is no key for an environment to hold.
+    if (
+      provider.id === CREDENTIAL_PROVIDER_ID.OPENAI ||
+      provider.connection === CREDENTIAL_CONNECTION.CONSENT
+    ) {
       assert.deepEqual(provider.environmentVariables, [], provider.id);
     } else {
       assert.ok(provider.environmentVariables[0]?.endsWith("_API_KEY"), provider.id);
+    }
+    // A consent grant is never typed, so no format could refuse one.
+    if (provider.connection === CREDENTIAL_CONNECTION.CONSENT) {
+      assert.equal(provider.keyFormat, undefined, provider.id);
     }
     // A declared format has to say what it wants as well as refuse, because
     // the reason is the only thing the user has to act on.
@@ -125,17 +142,19 @@ test("takes only the Devin credentials its API version issues", () => {
   }
 });
 
-test("takes only the Linear key kind a person holds", () => {
+test("connects Linear by consent rather than by a key", () => {
   const linear = CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.LINEAR];
 
   assert.equal(linear.displayName, "Linear");
-  assert.deepEqual(linear.environmentVariables, ["LINEAR_API_KEY"]);
-  // Luke reads the tracker as the user, with the key kind Linear issues to a
-  // person. An OAuth token names an application acting for a workspace, which
-  // is a different actor and would be refused where it matters least.
-  assert.equal(linear.keyFormat?.prefix, "lin_api_");
-  assert.equal(linear.keyFormat?.label, "Personal API key");
-  assert.match(linear.apiKeysUrl, /^https:\/\/linear\.app\/settings\//);
+  assert.equal(linear.connection, CREDENTIAL_CONNECTION.CONSENT);
+  // Nothing is pasted for Linear, so there is nothing for a launch
+  // environment to supply, no page to send anyone to, and no shape to refuse:
+  // what authorizes a read is granted on Linear's own consent page and
+  // withdrawn there or from the row.
+  assert.deepEqual(linear.environmentVariables, []);
+  assert.equal(linear.hint, undefined);
+  assert.equal(linear.apiKeysUrl, undefined);
+  assert.equal(linear.keyFormat, undefined);
 });
 
 test("holds the key Luke speaks through, apart from the agents he observes", () => {
