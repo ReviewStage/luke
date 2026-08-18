@@ -4,14 +4,17 @@ import {
   ATTENTION_DISPOSITION,
   ATTENTION_SPEECH_SOURCE,
   type AttentionSpeech,
+  ISSUE_TRACKER_ID,
   type NormalizedSession,
   normalizeSession,
+  normalizeTrackedIssue,
   REALTIME_STATUS,
   REALTIME_VOICE,
   REALTIME_VOICE_SPEED,
   SESSION_MENTION_KIND,
   SESSION_STATUS,
   SESSION_TOOL_KIND,
+  type TrackedIssue,
 } from "@sidecar/core";
 import {
   activeVoiceStream,
@@ -23,6 +26,7 @@ import {
   latestSpeechReference,
   liveSpeedApplies,
   lukeCaptionsToShow,
+  replyIssueMentions,
   replyMentions,
   talkKeyPress,
   talkOpeningHolds,
@@ -414,6 +418,70 @@ test("a capture run's chips are earned by the fixture's own words", () => {
         providerSessionId: "chat",
       },
     ],
+  );
+});
+
+function trackedIssue(identifier: string, title: string): TrackedIssue {
+  const issue = normalizeTrackedIssue(
+    { id: ISSUE_TRACKER_ID.LINEAR, displayName: "Linear" },
+    {
+      trackerIssueId: `issue-uuid-${identifier}`,
+      identifier,
+      title,
+      stateName: "Todo",
+      observedAt: 1_800_000_000_000,
+    },
+  );
+  assert.ok(issue);
+  return issue;
+}
+
+test("a conversation reply's issue previews are what its words name off the tracker", () => {
+  const board = [trackedIssue("LUKE-1", "Fix login"), trackedIssue("LUKE-2", "Ship captions")];
+  // Back-to-back replies stack their captions, exactly as the session
+  // mentions read them: everything still on screen feeds the chips.
+  assert.deepEqual(
+    replyIssueMentions({
+      fixtureSpeaking: false,
+      about: undefined,
+      captions: ["LUKE-2 is nearly done.", "And Fix login is still waiting."],
+      issues: board,
+    }),
+    [board[1], board[0]],
+  );
+  assert.deepEqual(
+    replyIssueMentions({
+      fixtureSpeaking: false,
+      about: undefined,
+      captions: undefined,
+      issues: board,
+    }),
+    [],
+  );
+});
+
+test("an announcement's session subject leaves issue identifiers unclaimed", () => {
+  const board = [trackedIssue("LUKE-1", "Fix login")];
+  assert.deepEqual(
+    replyIssueMentions({
+      fixtureSpeaking: false,
+      about: { providerId: "conductor", providerSessionId: "b" },
+      captions: ["Checkout service finished LUKE-1."],
+      issues: board,
+    }),
+    [],
+  );
+});
+
+test("a capture run observes no tracker, so its fixture words draw no issue chips", () => {
+  assert.deepEqual(
+    replyIssueMentions({
+      fixtureSpeaking: true,
+      about: undefined,
+      captions: undefined,
+      issues: undefined,
+    }),
+    [],
   );
 });
 

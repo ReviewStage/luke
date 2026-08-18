@@ -17,6 +17,7 @@ import {
   HOSTED_SERVICE_PATH,
   InMemorySessionRegistry,
   ISSUE_ACTION_KIND,
+  type IssueIdentity,
   isControllableAdapter,
   isMessageCapableAdapter,
   isPanelFormFactor,
@@ -836,6 +837,22 @@ function isSessionIdentity(value: unknown): value is SessionIdentity {
     providerId.trim().length > 0 &&
     typeof providerSessionId === "string" &&
     providerSessionId.trim().length > 0
+  );
+}
+
+/**
+ * Whether a renderer message names an issue, on the session identity's own
+ * terms: both halves present, and everything it names re-resolved against the
+ * latest observation before anything is done with it.
+ */
+function isIssueIdentity(value: unknown): value is IssueIdentity {
+  if (value === null || typeof value !== "object") return false;
+  const { trackerId, identifier } = value as Partial<IssueIdentity>;
+  return (
+    typeof trackerId === "string" &&
+    trackerId.trim().length > 0 &&
+    typeof identifier === "string" &&
+    identifier.trim().length > 0
   );
 }
 
@@ -2186,6 +2203,36 @@ function registerIpc(): void {
         void refreshTrackedIssues();
       }
       return result;
+    },
+  );
+
+  // Pressing an issue — the notice under the housing while Luke names it —
+  // hands its tracker's own address to the system, exactly as pressing a
+  // session's row does. The renderer names an issue rather than an address,
+  // so the pages Luke can send you to are the issues currently observed: the
+  // URL is read back out of the roster, where normalization admitted nothing
+  // but a bounded https address, and nothing reaches the tracker. A fixture
+  // run observes no tracker and so opens nothing.
+  ipcMain.handle(
+    channels.openIssue,
+    async (event, identity: unknown): Promise<SessionOpenResult> => {
+      if (!trustedSender(event)) throw new Error("Untrusted renderer");
+      if (!isIssueIdentity(identity)) throw new Error("Invalid issue open request");
+      const url = trackedIssues?.find(
+        (candidate) =>
+          candidate.trackerId === identity.trackerId &&
+          candidate.identifier === identity.identifier,
+      )?.url;
+      if (!url) return { status: SESSION_OPEN_RESULT_STATUS.UNSUPPORTED };
+      try {
+        await shell.openExternal(url);
+        return { status: SESSION_OPEN_RESULT_STATUS.OPENED };
+      } catch {
+        return {
+          status: SESSION_OPEN_RESULT_STATUS.REJECTED,
+          reason: "The system could not open that issue.",
+        };
+      }
     },
   );
 

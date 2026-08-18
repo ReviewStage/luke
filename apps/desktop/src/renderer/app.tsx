@@ -5,6 +5,7 @@ import {
   type FeedbackComposerKind,
   FIXTURE_EPOCH_MS,
   type HostedUsageAnswer,
+  type IssueIdentity,
   isProviderId,
   type NormalizedSession,
   type ObservedWorkspaceProject,
@@ -222,6 +223,35 @@ function notchStyle(display: DisplayDiagnostic): CSSProperties {
     "--notch-housing-width": `${display.notch.housingWidth}px`,
   } as CSSProperties;
 }
+
+/** The two rosters a mention chip can stand for, deciding what its press does. */
+const MENTION_CHIP_KIND = {
+  SESSION: "session",
+  ISSUE: "issue",
+} as const;
+
+/**
+ * One pressable chip of the notice band: the mark and words it draws, and the
+ * identity its press hands to the main process — where it is validated
+ * against the observed roster again before any address reaches the system.
+ * Resolved onto the chip when its mention is, so the band held through its
+ * fade-out keeps saying what it said.
+ */
+type MentionChip =
+  | {
+      kind: typeof MENTION_CHIP_KIND.SESSION;
+      id: string;
+      markId: string;
+      title: string;
+      identity: SessionIdentity;
+    }
+  | {
+      kind: typeof MENTION_CHIP_KIND.ISSUE;
+      id: string;
+      markId: string;
+      title: string;
+      identity: IssueIdentity;
+    };
 
 function shapeHeightStyle(
   panelHeight: number | undefined,
@@ -1617,6 +1647,7 @@ export function App(): React.JSX.Element {
     lukeCaptions,
     captionShownAt,
     mentionedSessions,
+    mentionedIssues,
     remoteAudio,
     discardListening,
     stopSpeaking,
@@ -1640,33 +1671,60 @@ export function App(): React.JSX.Element {
     carryAppAction,
   });
 
-  // The notices: the pressable faces of the sessions the reply being spoken
-  // is about — an announcement's one subject, or the several a conversation
-  // reply names when "what are we working on?" is answered with a walk
-  // through the roster: a chat by its title, or a whole workspace by name,
-  // fronted by its freshest chat. Derived, not queued — the subjects arrive
-  // with the captions and die with the reply, so a chip can never lag the
-  // words or stand for news Luke is not saying — and each draws only for a
-  // session the roster still titles, because a press is a row press at one
-  // remove and needs a row to stand for. A workspace chip wears the
-  // workspace's name, read off the same roster row, so the chip says what
-  // the words said. The resting shapes draw the band under the housing, and
-  // the open panel keeps it at its foot: the rows are up in the list, but
-  // the chips are what say which of them Luke is talking about. Only the
-  // slot and the composer go without — those are shapes someone asked for.
-  const spokenOf = mentionedSessions.flatMap((mention) => {
-    const session = sessions.find(
-      (candidate) =>
-        candidate.providerId === mention.providerId &&
-        candidate.providerSessionId === mention.providerSessionId,
-    );
-    if (!session) return [];
-    const title =
-      mention.kind === SESSION_MENTION_KIND.WORKSPACE && session.workspace?.name !== undefined
-        ? session.workspace.name
-        : session.title;
-    return [{ title, providerId: session.providerId, id: session.providerSessionId }];
-  });
+  // The notices: the pressable faces of what the reply being spoken is about
+  // — an announcement's one subject, or the several a conversation reply
+  // names when "what are we working on?" is answered with a walk through the
+  // roster: a chat by its title, a whole workspace by name fronted by its
+  // freshest chat, or a tracked issue by identifier or title. Derived, not
+  // queued — the subjects arrive with the captions and die with the reply,
+  // so a chip can never lag the words or stand for news Luke is not saying —
+  // and each draws only for a session the roster still titles or an issue
+  // the tracker still lists, because a press is a row press at one remove
+  // and needs a row to stand for. A workspace chip wears the workspace's
+  // name, read off the same roster row, so the chip says what the words
+  // said; an issue chip wears its identifier and title, because the
+  // identifier is what was mentioned. The issues follow the sessions rather
+  // than interleaving, because each half keeps its own first-heard order and
+  // one band cannot honestly claim an order across the two rosters. The
+  // resting shapes draw the band under the housing, and the open panel keeps
+  // it at its foot: the rows are up in the list, but the chips are what say
+  // which of them Luke is talking about. Only the slot and the composer go
+  // without — those are shapes someone asked for.
+  const spokenOf: readonly MentionChip[] = [
+    ...mentionedSessions.flatMap((mention): readonly MentionChip[] => {
+      const session = sessions.find(
+        (candidate) =>
+          candidate.providerId === mention.providerId &&
+          candidate.providerSessionId === mention.providerSessionId,
+      );
+      if (!session) return [];
+      const title =
+        mention.kind === SESSION_MENTION_KIND.WORKSPACE && session.workspace?.name !== undefined
+          ? session.workspace.name
+          : session.title;
+      return [
+        {
+          kind: MENTION_CHIP_KIND.SESSION,
+          id: session.providerSessionId,
+          markId: session.providerId,
+          title,
+          identity: {
+            providerId: session.providerId,
+            providerSessionId: session.providerSessionId,
+          },
+        },
+      ];
+    }),
+    ...mentionedIssues.map(
+      (issue): MentionChip => ({
+        kind: MENTION_CHIP_KIND.ISSUE,
+        id: issue.identifier,
+        markId: issue.trackerId,
+        title: `${issue.identifier} — ${issue.title}`,
+        identity: { trackerId: issue.trackerId, identifier: issue.identifier },
+      }),
+    ),
+  ];
   const noticeShown =
     spokenOf.length > 0 &&
     (presentation === PANEL_PRESENTATION.CAPSULE ||
@@ -1674,7 +1732,7 @@ export function App(): React.JSX.Element {
       presentation === PANEL_PRESENTATION.PANEL);
   // The last mentioned fields, held so the notices fade out still worded
   // rather than emptying on the frame the reply ends.
-  const lastMentioned = useRef<readonly { title: string; providerId: string; id: string }[]>([]);
+  const lastMentioned = useRef<readonly MentionChip[]>([]);
   if (spokenOf.length > 0) {
     lastMentioned.current = spokenOf;
   }
@@ -2668,14 +2726,18 @@ export function App(): React.JSX.Element {
             // Keeps the press from moving focus here, like the capsule strip's
             // own button, so a focused settings field keeps the caret.
             onMouseDown={(event) => event.preventDefault()}
+            // An issue chip is the same press one roster over: the identity
+            // goes to the main process, which reads the tracker's own address
+            // back out of its observation and hands it to the system — and an
+            // issue that reported none is taken nowhere, because no panel
+            // surface holds a row to fall back to.
             onClick={() =>
-              openMentionedSession({
-                providerId: mention.providerId,
-                providerSessionId: mention.id,
-              })
+              mention.kind === MENTION_CHIP_KIND.SESSION
+                ? openMentionedSession(mention.identity)
+                : void window.sidecar.openIssue(mention.identity)
             }
           >
-            <ProviderMark providerId={mention.providerId} />
+            <ProviderMark providerId={mention.markId} />
             <span className="session-notice-name">{mention.title}</span>
           </button>
         ))}

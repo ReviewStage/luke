@@ -55,8 +55,10 @@ function boundaryAt(text: string, index: number): boolean {
  * Where a name is first mentioned whole in the caption, or nowhere. Whole
  * means bounded on both sides by something other than a letter or digit, so a
  * short name cannot ride inside a longer word that merely contains it.
+ * Exported for the issue mentions, which hold titles to exactly this rule —
+ * one definition of "named whole", however many rosters offer names.
  */
-function firstMentionIndex(caption: string, name: string): number | undefined {
+export function firstWholeNameIndex(caption: string, name: string): number | undefined {
   let from = 0;
   while (from + name.length <= caption.length) {
     const at = caption.indexOf(name, from);
@@ -165,7 +167,7 @@ export function mentionedSessions(
   const mentions: { at: number; kind: SessionMentionKind; session: NormalizedSession }[] = [];
   for (const [name, candidate] of mentionCandidates(sessions)) {
     if (candidate.ambiguous) continue;
-    const at = firstMentionIndex(spoken, name);
+    const at = firstWholeNameIndex(spoken, name);
     if (at === undefined) continue;
     mentions.push({ at, kind: candidate.kind, session: candidate.session });
   }

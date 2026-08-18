@@ -3,6 +3,7 @@ import type {
   AttentionSpeech,
   FixtureSnapshot,
   HostedUsageAnswer,
+  IssueIdentity,
   IssueToolAction,
   NormalizedSession,
   ObservedWorkspaceProject,
@@ -739,6 +740,15 @@ export interface AppBridge {
    */
   openSessionChange(identity: SessionIdentity): Promise<SessionOpenResult>;
   /**
+   * Opens an observed issue where its tracker keeps it, on the session
+   * press's own terms: the renderer names an issue the latest observation
+   * listed, never an address, and the main process reads the tracker-reported
+   * URL back out of its own roster — an address that never passed
+   * normalization never reached it. The answer shares the open vocabulary,
+   * because the act is the same act one roster over.
+   */
+  openIssue(identity: IssueIdentity): Promise<SessionOpenResult>;
+  /**
    * Reads the recent transcript of one observed local session into a bounded
    * rendering, for a conversation the developer is holding. The renderer
    * names a session it was shown; the main process validates it against its
@@ -971,6 +981,7 @@ export const channels = {
   createSessionWorkspace: "app:create-session-workspace",
   addWorkspaceAgent: "app:add-workspace-agent",
   executeIssueAction: "app:execute-issue-action",
+  openIssue: "app:open-issue",
   sendFeedback: "app:send-feedback",
   summonFeedback: "app:summon-feedback",
   focusPanel: "app:focus-panel",

@@ -252,7 +252,20 @@ What Luke may show:
   long as the spoken reply, so it can never stand for news nobody is
   telling. The notice's press is a row press at one remove: the session's
   reported address goes to the operating system, or Luke's own panel opens
-  for a session that reported none.
+  for a session that reported none. The same band previews tracked issues
+  while a spoken reply names them: the reply's own words are matched against
+  the identifiers and whole titles the latest tracker observation listed —
+  arithmetic against observed state, under the session mentions' own
+  minimum-length and ambiguity rules, so nothing a model said can conjure an
+  issue the tracker does not track — and each named issue draws a chip
+  beside the session chips, its identifier and title read on this machine
+  from that roster, living exactly as long as the words, with an
+  announcement's one session subject still the whole answer. An issue chip's
+  press hands the issue's tracker-reported address to the operating system
+  exactly as a session's would, validated against the observed roster again
+  in the main process; it reaches none of the tracker's write paths, and an
+  issue that reported none is taken nowhere, because no panel surface holds
+  a row to fall back to.
 
 Before handoff, run `./scripts/check.sh` for portable-only changes. For any
 macOS or UI change, `./scripts/verify.sh` is the completion invariant. Report
