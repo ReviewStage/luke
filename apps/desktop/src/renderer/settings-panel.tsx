@@ -133,8 +133,11 @@ export interface MicrophoneControl {
   status: MicrophoneStatus;
   /** Whether there is anything to talk to, which is the microphone's only use. */
   voiceAvailable: boolean;
-  /** Which device a press would open right now, and why, in one sentence. */
-  listensThrough: string;
+  /**
+   * One added clause for the row's small text while a Bluetooth headset is
+   * the system input — the only moment the routing is worth a word.
+   */
+  listensThrough?: string;
   /** Asks the system for access. Using the microphone is the talk key's job. */
   onRequest: () => void;
   /** Opens the one place the system's own grant can be changed. */
@@ -1834,9 +1837,9 @@ function VoiceControlsSection({
         errand={APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE}
         detail={
           /* The why is the headset's music codec: capturing from its own
-             microphone turns everything it plays phone-grade. The Permissions
-             section above says which device would actually open right now. */
-          "With a Bluetooth headset connected, Luke listens through the Mac so the headset keeps its music quality."
+             microphone turns everything it plays phone-grade. The Microphone
+             row above says so while the case is live. */
+          "Keeps Bluetooth headphones on their full music quality while you talk."
         }
         changed={settings.preferBuiltInMicrophone !== APP_SETTING_DEFAULTS.preferBuiltInMicrophone}
         checked={settings.preferBuiltInMicrophone}

@@ -135,34 +135,33 @@ test("an unreadable route is the browser's default, never a gate", async () => {
   assert.deepEqual(asked, [{ ...MICROPHONE_PROCESSING }]);
 });
 
-test("the listens-through line says the same thing the choice does", () => {
+test("the listens-through clause speaks only while the routing is in play", () => {
   assert.equal(
     listeningThroughDetail(BLUETOOTH_DEFAULT, true),
-    "MacBook Pro Microphone, so the Bluetooth headset keeps its full music quality.",
+    "With a Bluetooth headset connected, Luke listens through the Mac's own microphone.",
   );
   assert.equal(
     listeningThroughDetail({ ...BLUETOOTH_DEFAULT, lid: LID_STATE.SHUT }, true),
-    "The Bluetooth headset's microphone \u2014 the Mac's own sits under a shut lid.",
+    "With the lid shut, Luke listens through the Bluetooth headset.",
   );
+  // Everywhere else the row reads exactly as it always did: the switch off,
+  // no headset in play, no Mac microphone to stand in, or no route at all.
+  assert.equal(listeningThroughDetail(BLUETOOTH_DEFAULT, false), undefined);
   assert.equal(
-    listeningThroughDetail(BLUETOOTH_DEFAULT, false),
-    "The Bluetooth headset's microphone, exactly as the system default is set.",
+    listeningThroughDetail(
+      { ...BLUETOOTH_DEFAULT, defaultTransport: MICROPHONE_TRANSPORT.BUILT_IN },
+      true,
+    ),
+    undefined,
   );
   assert.equal(
     listeningThroughDetail(
       { defaultTransport: MICROPHONE_TRANSPORT.BLUETOOTH, lid: LID_STATE.OPEN },
       true,
     ),
-    "The Bluetooth headset's microphone \u2014 this Mac has no microphone of its own.",
+    undefined,
   );
-  assert.equal(listeningThroughDetail(undefined, true), "The system's default microphone.");
-  assert.equal(
-    listeningThroughDetail(
-      { ...BLUETOOTH_DEFAULT, defaultTransport: MICROPHONE_TRANSPORT.BUILT_IN },
-      true,
-    ),
-    "The system's default microphone.",
-  );
+  assert.equal(listeningThroughDetail(undefined, true), undefined);
 });
 
 test("a default already on the Mac's microphone never enumerates at all", async () => {

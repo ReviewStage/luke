@@ -2219,13 +2219,14 @@ export function App(): React.JSX.Element {
     credentialsEntry.entry && settings
       ? settings.credentialSources[credentialsEntry.entry.providerId]
       : CREDENTIAL_SOURCE.NONE;
+  const listensThrough = listeningThroughDetail(
+    microphoneRoute,
+    (settings ?? bootstrap.settings).preferBuiltInMicrophone,
+  );
   const microphone: MicrophoneControl = {
     status: microphoneStatus,
     voiceAvailable: (settings ?? bootstrap.settings).voiceAvailable,
-    listensThrough: listeningThroughDetail(
-      microphoneRoute,
-      (settings ?? bootstrap.settings).preferBuiltInMicrophone,
-    ),
+    ...(listensThrough ? { listensThrough } : {}),
     onRequest: () => void requestMicrophoneAccess(),
     onOpenSettings: () => window.sidecar.openMicrophoneSettings(),
   };

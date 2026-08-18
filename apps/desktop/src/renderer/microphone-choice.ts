@@ -72,28 +72,24 @@ export function microphoneConstraints(
 }
 
 /**
- * The sentence the settings page says under the Microphone row: which device
- * a press would open right now, and why. Worded from the same facts the
- * choice runs on, so the line and the behavior can never disagree.
+ * One added clause for the Microphone row's small text, said only while the
+ * routing decision is actually in play — a Bluetooth headset standing as the
+ * system input with the preference on. Everywhere else the row stays exactly
+ * as it always read: a page should not narrate the obvious. Worded from the
+ * same facts the choice runs on, so the clause and the behavior can never
+ * disagree.
  */
 export function listeningThroughDetail(
   route: MicrophoneRoute | undefined,
   preferBuiltIn: boolean,
-): string {
-  if (!route) return "The system's default microphone.";
-  if (route.defaultTransport !== MICROPHONE_TRANSPORT.BLUETOOTH) {
-    return "The system's default microphone.";
-  }
-  if (!preferBuiltIn) {
-    return "The Bluetooth headset's microphone, exactly as the system default is set.";
-  }
-  if (!route.builtInName) {
-    return "The Bluetooth headset's microphone — this Mac has no microphone of its own.";
-  }
+): string | undefined {
+  if (!preferBuiltIn) return undefined;
+  if (route?.defaultTransport !== MICROPHONE_TRANSPORT.BLUETOOTH) return undefined;
+  if (!route.builtInName) return undefined;
   if (route.lid === LID_STATE.SHUT) {
-    return "The Bluetooth headset's microphone — the Mac's own sits under a shut lid.";
+    return "With the lid shut, Luke listens through the Bluetooth headset.";
   }
-  return `${route.builtInName}, so the Bluetooth headset keeps its full music quality.`;
+  return "With a Bluetooth headset connected, Luke listens through the Mac's own microphone.";
 }
 
 /** The three browser and bridge acts the opener composes, injectable. */
