@@ -3,10 +3,11 @@ import { FACE_ART } from "./renderer/luke-face-art";
 /**
  * The page the browser is left on after the OAuth redirect lands on the
  * loopback. It is the last thing the sign-in shows, so it dresses like the
- * landing page — one dark card, the mark, a status pill, and a line saying
- * where things stand — rather than a line of bare text. Self-contained on
- * purpose: the ephemeral 127.0.0.1 server serves exactly one document, so
- * nothing here may fetch a font, a script, or an image from anywhere.
+ * sign-in and consent pages before it — one dark card, the mark, a status
+ * pill, and a line saying where things stand — rather than a line of bare
+ * text. Self-contained on purpose: the ephemeral 127.0.0.1 server serves
+ * exactly one document, so nothing here may fetch a font, a script, or an
+ * image from anywhere.
  *
  * Every string on the page is fixed by the build. Nothing the redirect
  * carried — code, state, error — is ever interpolated into the document.

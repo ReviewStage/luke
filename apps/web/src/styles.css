@@ -132,6 +132,31 @@
   font-synthesis: none;
 }
 
+/* The sign-in and consent pages opt in with `class="dark"` on their root
+   element: they are the browser moments of the desktop sign-in, and the flow
+   ends on the loopback's dark card, so the theme holds from the first card to
+   the last instead of flashing light in the middle. The values are the
+   loopback page's own (`apps/desktop/src/account-loopback-page.ts`), restated
+   only for the tokens those two pages actually read — everything else stays
+   the light page's, unread here and drift waiting to happen if copied. */
+.dark {
+  color-scheme: dark;
+
+  --background: #08090b;
+  --foreground: rgba(255, 255, 255, 0.92);
+  --card: #000;
+  --muted: rgba(255, 255, 255, 0.05);
+  --muted-foreground: rgba(255, 255, 255, 0.56);
+  --border: rgba(255, 255, 255, 0.08);
+
+  /* The product's state palette needs no pastel restatement on its own dark
+     ground: ink and tint are the loopback pill's values verbatim. */
+  --attention: #ffa049;
+  --attention-tint: rgba(255, 160, 73, 0.14);
+  --complete: #6fdca4;
+  --complete-tint: rgba(111, 220, 164, 0.14);
+}
+
 @layer base {
   html {
     font-family: var(--font-page);

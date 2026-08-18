@@ -11,8 +11,14 @@
 /** A single card, centered in the window, with nothing else on the page. */
 export const AUTH_SHELL = "grid min-h-screen place-items-center p-6";
 
+/**
+ * The shadow is the loopback page's, not the landing page's: both pages here
+ * run dark (`class="dark"` on their HTML roots), where a light-page shadow at
+ * a few percent black disappears, and the flow should end on the same card it
+ * ran on.
+ */
 export const AUTH_CARD =
-  "w-full max-w-[390px] rounded-lg border border-border bg-card px-8 py-12 text-center shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.06)]";
+  "w-full max-w-[390px] rounded-lg border border-border bg-card px-8 py-12 text-center shadow-[0_24px_80px_rgba(0,0,0,0.42)]";
 
 export const AUTH_TITLE = "mt-4 mb-2 text-[1.75rem] leading-[1.15] font-semibold";
 
