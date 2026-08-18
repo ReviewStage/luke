@@ -219,6 +219,13 @@ export interface AppSettings {
    */
   calendarSignInAvailable: boolean;
   /**
+   * The same for Linear, whose row is a sign-in rather than a field: the
+   * issues are read under a grant Linear's own consent page issues, so a
+   * build carrying no registration draws no Linear row at all. Whether one is
+   * connected is `credentialSources`, as it is for every other service.
+   */
+  linearSignInAvailable: boolean;
+  /**
    * The connected Google Calendar accounts, each with the calendars the user
    * chose to count. Empty until a sign-in lands one.
    */
@@ -615,6 +622,23 @@ export interface AppBridge {
   /** Disconnects one calendar account, deleting its stored grant. */
   removeCalendarAccount(accountId: string): Promise<SettingsUpdateResult>;
   /**
+   * Runs the Linear sign-in, on exactly the terms the calendar's runs on:
+   * Linear's own consent page in the user's browser, the code back over a
+   * loopback that never leaves the machine, and the grant stored encrypted by
+   * the main process. The renderer asks for the act and receives only the
+   * settings snapshot — no token, code, or address ever crosses this bridge.
+   */
+  connectLinear(): Promise<SettingsUpdateResult>;
+  /** Ends a Linear sign-in still waiting on the browser, like the calendar's. */
+  cancelLinearSignIn(): void;
+  /** Opens the waiting Linear sign-in's consent page again, for a lost tab. */
+  reopenLinearSignIn(): void;
+  /**
+   * Disconnects Linear: the grant is revoked with Linear so the access ends
+   * there too, and deleted here either way.
+   */
+  disconnectLinear(): Promise<SettingsUpdateResult>;
+  /**
    * Chooses whether one of an account's calendars counts toward meetings. A
    * calendar being switched on must be one the account's latest observation
    * listed; the main process validates that again before the store keeps it.
@@ -855,6 +879,10 @@ export const channels = {
   cancelGoogleCalendarSignIn: "app:cancel-google-calendar-sign-in",
   reopenGoogleCalendarSignIn: "app:reopen-google-calendar-sign-in",
   removeCalendarAccount: "app:remove-calendar-account",
+  connectLinear: "app:connect-linear",
+  cancelLinearSignIn: "app:cancel-linear-sign-in",
+  reopenLinearSignIn: "app:reopen-linear-sign-in",
+  disconnectLinear: "app:disconnect-linear",
   setCalendarSelected: "app:set-calendar-selected",
   calendarsChanged: "app:calendars-changed",
   meetingQuietChanged: "app:meeting-quiet-changed",

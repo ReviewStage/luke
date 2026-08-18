@@ -1,31 +1,38 @@
 import { useRef } from "react";
-import { GOOGLE_CALENDAR_ID } from "../shared/google-calendar";
+import { CONSENT_SERVICE_NAME, type ConsentServiceId } from "../shared/consent-services";
 import { HIT_REGION } from "./panel-state";
 import { ProviderMark } from "./provider-marks";
 import { ExternalIcon } from "./settings-icons";
 
-/** What the connect entry holds: nothing to type, only the wait and its end. */
-export interface CalendarConnectEntry {
+/**
+ * What the connect entry holds: nothing to type, only which service's page is
+ * open, the wait, and its end.
+ */
+export interface ConsentConnectEntry {
+  serviceId: ConsentServiceId;
   busy: boolean;
   rejection?: string;
 }
 
 /**
- * The panel stood down while a sign-in waits on the browser — the same
- * courtesy the key slot pays: Luke floats above every window, including
- * Google's consent page, so the shape shrinks to a line that says what it is
- * waiting for and the one way to stop waiting. The flow finishes in the
+ * The panel stood down while a consent sign-in waits on the browser — the
+ * same courtesy the key slot pays: Luke floats above every window, including
+ * the provider's consent page, so the shape shrinks to a line that says what
+ * it is waiting for and the one way to stop waiting. The flow finishes in the
  * browser and the main process; when it does, the panel comes back on its own
- * around the newly connected account.
+ * around the newly connected service.
+ *
+ * One slot serves every consent flow, so no two of them can introduce
+ * themselves differently: only the mark and the service's name change.
  */
-export function CalendarConnectSlot({
+export function ConsentConnectSlot({
   entry,
   drawn,
   onCancel,
   onReopen,
   measure,
 }: {
-  entry: CalendarConnectEntry | undefined;
+  entry: ConsentConnectEntry | undefined;
   /** True while this slot is the shape the surface is drawn as. */
   drawn: boolean;
   onCancel: () => void;
@@ -48,14 +55,18 @@ export function CalendarConnectSlot({
       <div className="key-slot sign-in-slot" ref={measure} data-hit-region={HIT_REGION.SLOT}>
         {/* One line, worded and dressed like the account sign-in's wait: the
             mark, what is being waited for, and the one way to stop waiting —
-            only the calendar mark and the way back to a lost tab tell the two
+            only the service's mark and the way back to a lost tab tell the
             popups apart. */}
         <div className="key-slot-row">
           <span className="key-slot-mark">
-            <ProviderMark providerId={GOOGLE_CALENDAR_ID} />
+            <ProviderMark providerId={held.serviceId} />
           </span>
           <span className="sign-in-slot-copy" role="status">
-            <strong>{held.rejection ? "Not connected" : "Waiting for Google…"}</strong>
+            <strong>
+              {held.rejection
+                ? "Not connected"
+                : `Waiting for ${CONSENT_SERVICE_NAME[held.serviceId]}…`}
+            </strong>
             <small>
               {held.rejection ?? "Finish signing in in your browser."}{" "}
               {/* The lost-tab way back in, on the key slot's own terms: a

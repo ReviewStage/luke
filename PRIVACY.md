@@ -215,14 +215,29 @@ response data.
 
 ## Optional issue-tracker reads and spoken acts
 
-Linear is read the way the cloud providers are: without a key, Luke sends
-Linear no request and knows nothing about your board. With a key — from Luke's
-Settings or `LINEAR_API_KEY` — Luke sends it in the `Authorization` header of
-GraphQL `POST` requests to Linear's API and reads the issues assigned to the
-authenticated user: identifiers, titles, current state, issue links, and the
-team's workflow states. Completed and cancelled issues are not requested, and
-issue descriptions and comment threads are never read. Returned metadata is
-held in memory; response bodies are not persisted.
+Linear is read the way the cloud providers are, but connected the way the
+calendar is: without a connection, Luke sends Linear no request and knows
+nothing about your board. Connecting runs Linear's own OAuth flow for a public
+client — Linear's consent page opens in your browser, the authorization code
+comes back over a loopback redirect that never leaves the machine, and the
+exchange is verified with PKCE. No API key is ever typed, read from your
+environment, or held by Luke. The integration exists only in builds carrying a
+registered OAuth client; without one it is not offered at all.
+
+The grant is stored encrypted at rest and read only in the main process.
+Linear's access tokens last a day, so Luke renews the grant with the refresh
+token Linear issued alongside it; Linear consumes a refresh token when it is
+spent, so each renewal is written before it is used. Only Linear refusing a
+renewal disconnects the integration — a network that could not carry the
+request leaves the grant untouched. Disconnecting revokes the grant with
+Linear as well as deleting it here.
+
+Under that grant, Luke sends `Bearer` GraphQL `POST` requests to Linear's API
+and reads the issues assigned to the authenticated user: identifiers, titles,
+current state, issue links, and the team's workflow states. Completed and
+cancelled issues are not requested, and issue descriptions and comment threads
+are never read. Returned metadata is held in memory; response bodies are not
+persisted.
 
 Reading and acting are separate GraphQL documents, and observation only ever
 sends the read. Luke calls Linear's two write mutations — moving an issue to
@@ -230,6 +245,12 @@ another of its team's states, and adding a comment — only to carry out
 something you just asked for in a turn you opened — spoken or typed — and only
 against an issue and a state the latest read actually listed. Nothing Luke
 decides on its own reaches either mutation.
+
+The consent page asks for Linear's `read` and `write` scopes, which are the
+narrowest pair carrying both acts: Linear publishes no scope for moving an
+issue between states. What bounds the acts is not the scope but the validation
+above it — only an issue and a state the latest read listed, and only in a turn
+you opened.
 
 Changing `LINEAR_API_URL` sends the credential to that configured endpoint,
 whose policies then govern the request and response data.
@@ -347,7 +368,7 @@ a spoken question about Luke can be answered and a spoken ask can change a
 setting. The guide never includes an API key, any part of one, or any value
 read from your environment beyond whether one exists.
 
-With a Linear key saved, the conversation also carries the issue roster — each
+With Linear connected, the conversation also carries the issue roster — each
 assigned issue's identifier, title, state, and the states its team's workflow
 allows — so a question about your board can be answered and an ask validated
 against what Linear actually listed. No issue description or comment thread is

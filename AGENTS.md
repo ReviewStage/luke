@@ -115,16 +115,27 @@ Trust constraints:
   outputs out of its transcripts, so a Cursor reading carries none — and a
   provider whose stored shape this build cannot render faithfully keeps the
   honest refusal instead.
-- The issue tracker follows the same rule at one remove. Luke reads the issues
-  a tracker lists for the user under a user-supplied key and observes nothing
-  without one, exactly like a cloud session provider. The two acts a tracker
-  takes — moving an issue to a state its latest observation listed, adding a
-  comment — happen only as the direct product of a turn the developer opened
-  themselves, through the tracker's own documented endpoint under the same
-  key, validated against the observed issue roster in the renderer and again
-  in the main process before the tracker client sees anything. Observation
-  sends only the read document; the write documents are fixed by the build and
-  issued only for a validated act.
+- The issue tracker follows the same rule at one remove, and is connected the
+  way the calendar is rather than the way a cloud provider is. Luke reads the
+  issues a tracker lists for the user under a grant the tracker's own consent
+  page issued, and observes nothing without one. The integration exists only
+  in a build carrying a registered OAuth client — without one it is not drawn
+  — and connecting is the tracker's own flow for a public client: PKCE over a
+  loopback redirect that never leaves the machine, carrying no client secret,
+  asking for the narrowest scopes the acts need. No key is ever typed, and
+  none is read from the environment: a tracker connected by consent has no
+  environment variable at all. The grant is stored encrypted like a key, is
+  renewed before it lapses — the renewal written before it is used, because a
+  consumed refresh token is spent — and is deleted only when the tracker
+  itself refuses the renewal, never when the network merely could not carry
+  it. Disconnecting revokes the grant with the tracker as well as deleting it
+  here. The two acts a tracker takes — moving an issue to a state its latest
+  observation listed, adding a comment — happen only as the direct product of
+  a turn the developer opened themselves, through the tracker's own documented
+  endpoint under the same grant, validated against the observed issue roster
+  in the renderer and again in the main process before the tracker client sees
+  anything. Observation sends only the read document; the write documents are
+  fixed by the build and issued only for a validated act.
 - The calendar is the same rule with no write path at all. Luke reads when
   the user's meetings start and end, under accounts the user signed in, and
   observes nothing without one. The integration exists only in a build

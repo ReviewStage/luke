@@ -42,6 +42,14 @@ const bridge: AppBridge = {
   },
   removeCalendarAccount: invoke(channels.removeCalendarAccount),
   setCalendarSelected: invoke(channels.setCalendarSelected),
+  connectLinear: invoke(channels.connectLinear),
+  cancelLinearSignIn: () => {
+    ipcRenderer.send(channels.cancelLinearSignIn);
+  },
+  reopenLinearSignIn: () => {
+    ipcRenderer.send(channels.reopenLinearSignIn);
+  },
+  disconnectLinear: invoke(channels.disconnectLinear),
   checkForUpdates: invoke(channels.checkForUpdates),
   openLatestRelease: () => ipcRenderer.send(channels.openLatestRelease),
   setVoiceExchangeActive: (active) => {

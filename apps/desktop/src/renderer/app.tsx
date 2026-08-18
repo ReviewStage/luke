@@ -32,6 +32,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { CONSENT_SERVICE_ID, type ConsentServiceId } from "../shared/consent-services";
 import type {
   AccountProvider,
   AccountSnapshot,
@@ -59,8 +60,8 @@ import { FEEDBACK_KIND, FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from ".
 import { APP_SETTING_SCHEMA } from "../shared/settings-schema";
 import { voiceHotkeyLabel, voiceHotkeyToShow } from "../shared/voice-hotkey";
 import { ASK_LUKE_INPUT_ID, focusAskField } from "./ask-luke";
-import { type CalendarConnectEntry, CalendarConnectSlot } from "./calendar-connect-slot";
 import { CAPTION_LINE_READ_MS, pacedCaptionScroll } from "./caption-reading";
+import { type ConsentConnectEntry, ConsentConnectSlot } from "./consent-connect-slot";
 import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";
 import { isSubmittable, removalEndsEntry } from "./credential-entry";
 import {
@@ -418,7 +419,7 @@ export function App(): React.JSX.Element {
   const standDownPage = useRef<SettingsView>(SETTINGS_VIEW.ROOT);
   const feedbackHeld = useRef(false);
   /** Whether a calendar sign-in holds the slot, mirrored like the other two. */
-  const calendarConnectHeld = useRef(false);
+  const consentConnectHeld = useRef(false);
   /**
    * Which entry the slot shape is drawn around — a key being pasted, or a
    * sign-in being waited out. One shape, two occupants, never both: beginning
@@ -616,7 +617,7 @@ export function App(): React.JSX.Element {
     // close a panel showing nothing but sessions.
     entryDrawn: () => credentialHeld.current && tabNow() === PANEL_TAB.SETTINGS,
     composerHeld: () =>
-      credentialHeld.current || feedbackHeld.current || calendarConnectHeld.current,
+      credentialHeld.current || feedbackHeld.current || consentConnectHeld.current,
     onNotPanel: () => setOptionsOpen(false),
     onCapsuleList: () => {
       // A search is a question about the list as it was, so it closes with
@@ -779,22 +780,34 @@ export function App(): React.JSX.Element {
     [applySettingsReply],
   );
 
+  const disconnectLinear = useCallback(
+    async () => applySettingsReply(await window.sidecar.disconnectLinear()),
+    [applySettingsReply],
+  );
+
   /**
-   * The calendar sign-in is asking for one thing too, so the panel gets out
-   * of the way of it the same way it does for a key: the shape goes down to a
+   * A consent sign-in is asking for one thing too, so the panel gets out of
+   * the way of it the same way it does for a key: the shape goes down to a
    * slot that says what it is waiting for. The flow itself runs in the
    * browser and the main process; when the grant lands, the panel comes back
-   * around the newly connected account.
+   * around the newly connected service. One entry serves every such sign-in,
+   * because only one consent page can be open at a time and there is only one
+   * slot for it to stand in.
    */
-  const calendarConnect = usePanelEntry<CalendarConnectEntry>({
+  const consentConnect = usePanelEntry<ConsentConnectEntry>({
     aside: PANEL_PRESENTATION.SLOT,
     // Giving up mid-wait leaves — the consent page is where the user is — but
     // a sign-in that failed is read in the slot, so its Close restores the
     // panel to try again from the row.
     restoresPanel: (held) => held.rejection !== undefined,
-    isSendable: (entry): entry is CalendarConnectEntry => entry !== undefined && !entry.busy,
-    send: async () => {
-      const result = await window.sidecar.connectGoogleCalendar();
+    isSendable: (entry): entry is ConsentConnectEntry => entry !== undefined && !entry.busy,
+    send: async (sending) => {
+      // Which service is being connected decides which documented act runs,
+      // and nothing else does: the entry names one of the two the build knows.
+      const result =
+        sending.serviceId === CONSENT_SERVICE_ID.LINEAR
+          ? await window.sidecar.connectLinear()
+          : await window.sidecar.connectGoogleCalendar();
       applySettings(result.settings);
       return result.reason ? { rejection: result.reason } : {};
     },
@@ -806,27 +819,35 @@ export function App(): React.JSX.Element {
     restorePanel,
     leave,
     settle,
-    heldRef: calendarConnectHeld,
+    heldRef: consentConnectHeld,
   });
 
   /** One press: stand down to the waiting slot and open the consent page. */
-  const beginCalendarSignIn = useCallback(() => {
-    // One slot, one occupant: a key mid-paste is not disturbed by a sign-in.
-    if (credentialHeld.current || calendarConnectHeld.current) return;
-    slotOccupant.current = PANEL_STAND_DOWN.CALENDAR;
-    // The calendar's block stands under Integrations, so that is where a
-    // cancelled or refused sign-in comes back to.
-    standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.CALENDAR });
-    calendarConnect.begin({ busy: false });
-    calendarConnect.commit();
-  }, [calendarConnect.begin, calendarConnect.commit]);
+  const beginConsentSignIn = useCallback(
+    (serviceId: ConsentServiceId) => {
+      // One slot, one occupant: a key mid-paste is not disturbed by a
+      // sign-in, and neither is another sign-in already waiting.
+      if (credentialHeld.current || consentConnectHeld.current) return;
+      slotOccupant.current = PANEL_STAND_DOWN.CONSENT;
+      // Every consent block stands under Integrations, so that is where a
+      // cancelled or refused sign-in comes back to.
+      standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.CONSENT });
+      consentConnect.begin({ serviceId, busy: false });
+      consentConnect.commit();
+    },
+    [consentConnect.begin, consentConnect.commit],
+  );
 
-  const cancelCalendarSignIn = useCallback(() => {
+  const cancelConsentSignIn = useCallback(() => {
     // Mid-wait, the loopback must stop listening too; after a failure there
     // is nothing left to stop.
-    if (calendarConnect.latest()?.busy) window.sidecar.cancelGoogleCalendarSignIn();
-    calendarConnect.cancel();
-  }, [calendarConnect.cancel, calendarConnect.latest]);
+    const waiting = consentConnect.latest();
+    if (waiting?.busy) {
+      if (waiting.serviceId === CONSENT_SERVICE_ID.LINEAR) window.sidecar.cancelLinearSignIn();
+      else window.sidecar.cancelGoogleCalendarSignIn();
+    }
+    consentConnect.cancel();
+  }, [consentConnect.cancel, consentConnect.latest]);
 
   /**
    * Asking to write a key is asking for one thing, so the panel gets out of the
@@ -2308,11 +2329,11 @@ export function App(): React.JSX.Element {
       if (stopSpeaking()) return;
       // Escape out of the slot is the entry's own way out, wherever the caret
       // happens to be: the slot is the only thing on screen, so there is nothing
-      // else it could mean. The sign-in wait and the calendar connect borrow
+      // else it could mean. The sign-in wait and the consent connect borrow
       // the same shape, so the same key withdraws whichever is holding it.
       if (presentation === PANEL_PRESENTATION.SLOT) {
         if (signInWaitNow() !== undefined) cancelSignIn();
-        else if (calendarConnect.latest()) cancelCalendarSignIn();
+        else if (consentConnect.latest()) cancelConsentSignIn();
         else credentialsEntry.cancel();
         return;
       }
@@ -2341,8 +2362,8 @@ export function App(): React.JSX.Element {
     return () => window.removeEventListener("keydown", handleKey);
   }, [
     cancelSignIn,
-    calendarConnect.latest,
-    cancelCalendarSignIn,
+    consentConnect.latest,
+    cancelConsentSignIn,
     credentialsEntry.cancel,
     changeMode,
     changeTab,
@@ -2623,7 +2644,7 @@ export function App(): React.JSX.Element {
           panelHeight,
           signInWait !== undefined
             ? signInSlotHeight
-            : slotOccupant.current === PANEL_STAND_DOWN.CALENDAR
+            : slotOccupant.current === PANEL_STAND_DOWN.CONSENT
               ? connectHeight
               : slotHeight,
           feedbackHeight,
@@ -2693,11 +2714,21 @@ export function App(): React.JSX.Element {
               workspaceProviders: workspaceProviderOptions,
               calendar: {
                 choices: calendars,
-                held: credentialsEntry.entry !== undefined,
-                connecting: calendarConnect.entry !== undefined,
-                onSignIn: beginCalendarSignIn,
+                held:
+                  credentialsEntry.entry !== undefined ||
+                  consentConnect.entry?.serviceId === CONSENT_SERVICE_ID.LINEAR,
+                connecting: consentConnect.entry?.serviceId === CONSENT_SERVICE_ID.GOOGLE_CALENDAR,
+                onSignIn: () => beginConsentSignIn(CONSENT_SERVICE_ID.GOOGLE_CALENDAR),
                 onRemoveAccount: removeCalendarAccount,
                 onToggleCalendar: toggleCalendarSelected,
+              },
+              linear: {
+                held:
+                  credentialsEntry.entry !== undefined ||
+                  consentConnect.entry?.serviceId === CONSENT_SERVICE_ID.GOOGLE_CALENDAR,
+                connecting: consentConnect.entry?.serviceId === CONSENT_SERVICE_ID.LINEAR,
+                onSignIn: () => beginConsentSignIn(CONSENT_SERVICE_ID.LINEAR),
+                onDisconnect: disconnectLinear,
               },
               onQuit: () => window.sidecar.quit(),
               shortcuts,
@@ -2711,7 +2742,7 @@ export function App(): React.JSX.Element {
       {/* The three shapes that borrow the slot never draw together: the
           gate's sign-in wait suppresses the settings tab's two entries
           outright — the two are never on screen at once — and the key and
-          calendar-connect pills split the remaining case by which entry
+          consent-connect pills split the remaining case by which entry
           holds the slot. A pill held through an old exit must not resurface
           under another's wait. */}
       {signInWait === undefined ? (
@@ -2722,18 +2753,26 @@ export function App(): React.JSX.Element {
             drawn={slotOpen && slotOccupant.current === PANEL_STAND_DOWN.KEY}
             measure={slotElement}
           />
-          {/* The panel stood down while a calendar sign-in waits on the
+          {/* The panel stood down while a consent sign-in waits on the
               browser, on the key slot's exact terms. */}
-          <CalendarConnectSlot
-            entry={calendarConnect.entry}
-            drawn={slotOpen && slotOccupant.current === PANEL_STAND_DOWN.CALENDAR}
-            onCancel={cancelCalendarSignIn}
-            onReopen={() => window.sidecar.reopenGoogleCalendarSignIn()}
+          <ConsentConnectSlot
+            entry={consentConnect.entry}
+            drawn={slotOpen && slotOccupant.current === PANEL_STAND_DOWN.CONSENT}
+            onCancel={cancelConsentSignIn}
+            onReopen={() => {
+              // The page reopened is the one the waiting flow built, named by
+              // the service the entry says is waiting — no address from here.
+              if (consentConnect.latest()?.serviceId === CONSENT_SERVICE_ID.LINEAR) {
+                window.sidecar.reopenLinearSignIn();
+              } else {
+                window.sidecar.reopenGoogleCalendarSignIn();
+              }
+            }}
             measure={connectElement}
           />
         </>
       ) : null}
-      {credentialsEntry.entry === undefined && calendarConnect.entry === undefined ? (
+      {credentialsEntry.entry === undefined && consentConnect.entry === undefined ? (
         /* The panel stood down to the account sign-in it is waiting on. */
         <SignInSlot
           {...(signInWait ? { provider: signInWait } : {})}

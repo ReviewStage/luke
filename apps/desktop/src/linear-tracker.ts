@@ -72,10 +72,12 @@ const LINEAR_WRITE = {
 
 export interface LinearTrackerOptions {
   /**
-   * Resolved at observation time, so a key saved or cleared in settings takes
-   * effect on the next pass without the tracker being rebuilt.
+   * Resolved at observation time, so a connection made or ended in settings
+   * takes effect on the next pass without the tracker being rebuilt. Nothing
+   * here knows how the token was come by or when it lapses: it arrives
+   * already renewed, or it does not arrive.
    */
-  readApiKey: () => Promise<string | undefined>;
+  readAccessToken: () => Promise<string | undefined>;
   /** Injectable so tests exercise the client without a network. */
   fetchImplementation?: typeof fetch;
   now?: () => number;
@@ -124,25 +126,25 @@ export class LinearIssueTracker implements IssueTrackerAdapter {
     displayName: LINEAR_TRACKER_NAME,
   };
 
-  readonly #readApiKey: () => Promise<string | undefined>;
+  readonly #readAccessToken: () => Promise<string | undefined>;
   readonly #fetch: typeof fetch;
   readonly #now: () => number;
   readonly #endpoint: string;
 
   constructor(options: LinearTrackerOptions) {
-    this.#readApiKey = options.readApiKey;
+    this.#readAccessToken = options.readAccessToken;
     this.#fetch = options.fetchImplementation ?? fetch;
     this.#now = options.now ?? Date.now;
     this.#endpoint = process.env[LINEAR_ENVIRONMENT.API_URL]?.trim() || LINEAR_DEFAULT_API_URL;
   }
 
   async observe(): Promise<readonly TrackerIssueObservation[] | undefined> {
-    const apiKey = await this.#readApiKey();
-    // No key, no request: the tracker is not connected, which is a different
+    const accessToken = await this.#readAccessToken();
+    // No token, no request: the tracker is not connected, which is a different
     // answer from a connected tracker listing nothing.
-    if (!apiKey) return undefined;
+    if (!accessToken) return undefined;
 
-    const payload = await this.#post(apiKey, LINEAR_READ_ASSIGNED_ISSUES, {
+    const payload = await this.#post(accessToken, LINEAR_READ_ASSIGNED_ISSUES, {
       first: ISSUE_PAGE_SIZE,
     });
     if (payload.errors) throw new Error("Linear answered the read with errors");
@@ -178,8 +180,8 @@ export class LinearIssueTracker implements IssueTrackerAdapter {
   }
 
   async execute(action: TrackerIssueAction): Promise<TrackerActionResult> {
-    const apiKey = await this.#readApiKey();
-    if (!apiKey) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
+    const accessToken = await this.#readAccessToken();
+    if (!accessToken) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
 
     const [document, variables, resultField] =
       action.kind === ISSUE_ACTION_KIND.SET_STATE
@@ -198,7 +200,7 @@ export class LinearIssueTracker implements IssueTrackerAdapter {
     // throw: the developer asked for something, and the reply has to say.
     let payload: GraphQlPayload;
     try {
-      payload = await this.#post(apiKey, document, variables);
+      payload = await this.#post(accessToken, document, variables);
     } catch {
       return {
         status: TRACKER_ACTION_RESULT_STATUS.REJECTED,
@@ -222,16 +224,16 @@ export class LinearIssueTracker implements IssueTrackerAdapter {
   }
 
   async #post(
-    apiKey: string,
+    accessToken: string,
     document: string,
     variables: Record<string, unknown>,
   ): Promise<GraphQlPayload> {
     const response = await this.#fetch(this.#endpoint, {
       method: "POST",
       headers: {
-        // A personal API key is its own authorization; only an OAuth token
-        // takes a Bearer prefix, and the credential registry refuses those.
-        authorization: apiKey,
+        // What the consent page granted is an OAuth access token, which
+        // Linear reads under the scheme every OAuth token is sent with.
+        authorization: `Bearer ${accessToken}`,
         "content-type": "application/json",
       },
       body: JSON.stringify({ query: document, variables }),

@@ -65,7 +65,7 @@ export function credentialSettingsPage(providerId: CredentialProviderId): Settin
  */
 export const PANEL_STAND_DOWN = {
   KEY: "key",
-  CALENDAR: "calendar",
+  CONSENT: "consent",
   FEEDBACK: "feedback",
 } as const;
 
@@ -75,12 +75,12 @@ export type PanelStandDown = (typeof PANEL_STAND_DOWN)[keyof typeof PANEL_STAND_
  * The two of those three the slot shape is drawn around, never both at once.
  * A note is not one of them: the composer is its own shape, at its own size.
  */
-export type SlotOccupant = typeof PANEL_STAND_DOWN.KEY | typeof PANEL_STAND_DOWN.CALENDAR;
+export type SlotOccupant = typeof PANEL_STAND_DOWN.KEY | typeof PANEL_STAND_DOWN.CONSENT;
 
 /** What stood the panel down, and — for a key — whose row it was begun from. */
 export type StoodDown =
   | { kind: typeof PANEL_STAND_DOWN.KEY; providerId: CredentialProviderId }
-  | { kind: typeof PANEL_STAND_DOWN.CALENDAR }
+  | { kind: typeof PANEL_STAND_DOWN.CONSENT }
   | { kind: typeof PANEL_STAND_DOWN.FEEDBACK };
 
 /**
@@ -89,7 +89,7 @@ export type StoodDown =
  * one remembered page shared by all three lands a cancelled note on whichever
  * page the last key entry happened to belong to.
  *
- * A key's row is its provider's; the calendar's block stands under
+ * A key's row is its provider's; every consent sign-in's block stands under
  * Integrations on Connections; the feedback composer's section is on the front
  * page itself, which is also where a return that knows nothing else belongs.
  */
@@ -97,7 +97,7 @@ export function standDownReturnPage(stood: StoodDown): SettingsView {
   switch (stood.kind) {
     case PANEL_STAND_DOWN.KEY:
       return credentialSettingsPage(stood.providerId);
-    case PANEL_STAND_DOWN.CALENDAR:
+    case PANEL_STAND_DOWN.CONSENT:
       return SETTINGS_VIEW.CONNECTIONS;
     case PANEL_STAND_DOWN.FEEDBACK:
       return SETTINGS_VIEW.ROOT;

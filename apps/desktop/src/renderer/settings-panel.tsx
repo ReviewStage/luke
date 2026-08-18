@@ -42,7 +42,8 @@ import {
 import type { CredentialProvider } from "../shared/credential-providers";
 import {
   CLOUD_AGENT_PROVIDER_LIST,
-  INTEGRATION_PROVIDER_LIST,
+  CREDENTIAL_PROVIDER_ID,
+  CREDENTIAL_PROVIDERS,
   providerRunsSessionsInCloud,
   VOICE_CREDENTIAL_PROVIDER,
 } from "../shared/credential-providers";
@@ -357,6 +358,8 @@ export interface SettingsPanelProps {
   workspaceProviders: readonly WorkspaceProviderOption[];
   /** Everything the Google Calendar block can do. */
   calendar: CalendarControl;
+  /** Everything the Linear block can do. */
+  linear: LinearControl;
   onQuit: () => void;
   shortcuts: ShortcutControl;
 }
@@ -1455,25 +1458,154 @@ function GoogleCalendarIntegration({
   );
 }
 
+/** What the Linear row can be asked for, which is connecting and ending it. */
+export interface LinearControl {
+  /** True while another entry holds the slot, which refuses a second act. */
+  held: boolean;
+  /** True while a sign-in is waiting on the browser. */
+  connecting: boolean;
+  /** Stands the panel down and opens Linear's consent page. */
+  onSignIn: () => void;
+  onDisconnect: () => Promise<string | undefined>;
+}
+
+/**
+ * The issue tracker: connected by signing in with Linear, never by a pasted
+ * credential, and drawn at all only in a build that carries the OAuth client
+ * the sign-in runs on — a row whose one act cannot run is not a row.
+ */
+function LinearIntegration({
+  settings,
+  linear,
+}: {
+  settings: AppSettings;
+  linear: LinearControl;
+}): React.JSX.Element | null {
+  const provider = CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.LINEAR];
+  // Disconnecting asks first, exactly like deleting a key: nothing here can
+  // hand the grant back, so a disconnect taken on the first press would cost
+  // a trip through Linear's consent to undo.
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [rejection, setRejection] = useState<string>();
+
+  if (!settings.linearSignInAvailable) return null;
+  const connected = settings.credentialSources[provider.id] !== CREDENTIAL_SOURCE.NONE;
+
+  const disconnect = async () => {
+    setBusy(true);
+    setRejection(await linear.onDisconnect());
+    setBusy(false);
+    setAsking(false);
+  };
+
+  return (
+    <div className="credential">
+      <div className="credential-row">
+        <span className="credential-identity">
+          <span className="credential-mark">
+            <ProviderMark providerId={provider.id} />
+          </span>
+          <span className="credential-name">{provider.displayName}</span>
+          {connected ? <CheckIcon /> : null}
+        </span>
+        {connected ? (
+          /* The trash and the confirm that stands in for it share one grid
+             cell, exactly as the credential rows' do: the cell is as wide and
+             as tall as the larger of the two whichever is showing, so asking
+             the question never re-shapes the line. */
+          <span className="credential-actions">
+            <span
+              className="settings-actions credential-controls"
+              data-drawn={String(!asking)}
+              aria-hidden={asking}
+              inert={asking}
+            >
+              <button
+                type="button"
+                className="icon-button credential-remove"
+                disabled={busy}
+                aria-label={`Disconnect ${provider.displayName}`}
+                /* The ellipsis is the promise that it asks first. */
+                title="Disconnect…"
+                onClick={() => {
+                  setRejection(undefined);
+                  setAsking(true);
+                }}
+              >
+                <TrashIcon />
+              </button>
+            </span>
+            <fieldset
+              className="settings-actions credential-confirm"
+              aria-label={`Disconnect ${provider.displayName}?`}
+              data-drawn={String(asking)}
+              aria-hidden={!asking}
+              inert={!asking}
+              onKeyDown={(event) => {
+                if (event.key !== "Escape" || busy) return;
+                event.stopPropagation();
+                setAsking(false);
+              }}
+            >
+              <button
+                type="button"
+                className="quiet-button"
+                disabled={busy}
+                onClick={() => setAsking(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="danger-button"
+                disabled={busy}
+                onClick={() => void disconnect()}
+              >
+                {busy ? "Disconnecting…" : "Disconnect"}
+              </button>
+            </fieldset>
+          </span>
+        ) : (
+          <span className="settings-actions">
+            {/* The consent page does the connecting: the same word every
+                other integration's row uses. */}
+            <button
+              type="button"
+              className="quiet-button"
+              disabled={linear.held || linear.connecting}
+              aria-label={`Connect ${provider.displayName} by signing in`}
+              title={linear.held ? HELD_TITLE : undefined}
+              onClick={linear.onSignIn}
+            >
+              {linear.connecting ? "Waiting for Linear…" : "Connect"}
+            </button>
+          </span>
+        )}
+      </div>
+      <p className="settings-note">{provider.description}</p>
+      {rejection ? <p className="error-message">{rejection}</p> : null}
+    </div>
+  );
+}
+
 /**
  * The services Luke connects to that are not agents: the issue tracker and
- * the calendar. Each row is the same credential line an agent provider gets —
- * same entry, same trash, same environment fallback — with its own one-line
- * answer to what connecting it buys. The OpenAI key is not here: it lives at
- * the top of the Voice page, beside the feature it turns on.
+ * the calendar. Both are signed into rather than pasted into, so each is a
+ * mark, a name and one button, with its own one-line answer to what
+ * connecting it buys. The OpenAI key is not here: it lives at the top of the
+ * Voice page, beside the feature it turns on.
  */
 function IntegrationsSection({
   settings,
-  control,
-  panelOpen,
   preferences,
   calendar,
+  linear,
 }: {
   settings: AppSettings;
-  control: CredentialEntryControl;
-  panelOpen: boolean;
   preferences: PreferenceWrites;
   calendar: CalendarControl;
+  linear: LinearControl;
 }): React.JSX.Element {
   const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
   return (
@@ -1482,16 +1614,7 @@ function IntegrationsSection({
         <PlugIcon />
         Integrations
       </h2>
-      {INTEGRATION_PROVIDER_LIST.map((provider) => (
-        <ProviderCredential
-          key={provider.id}
-          provider={provider}
-          source={settings.credentialSources[provider.id]}
-          storageUnavailable={storageUnavailable}
-          control={control}
-          panelOpen={panelOpen}
-        />
-      ))}
+      <LinearIntegration settings={settings} linear={linear} />
       <GoogleCalendarIntegration
         settings={settings}
         calendar={calendar}
@@ -2869,6 +2992,7 @@ export function SettingsPanel({
   panelOpen,
   workspaceProviders,
   calendar,
+  linear,
   onQuit,
   shortcuts,
 }: SettingsPanelProps): React.JSX.Element {
@@ -2980,10 +3104,9 @@ export function SettingsPanel({
           />
           <IntegrationsSection
             settings={settings}
-            control={credentials}
-            panelOpen={panelOpen}
             preferences={preferences}
             calendar={calendar}
+            linear={linear}
           />
           <WorkspacesSection
             settings={settings}

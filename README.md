@@ -51,11 +51,12 @@ Visit [tryluke.dev](https://tryluke.dev) to see Luke in action.
 | Devin | Local and cloud sessions | Cloud only |
 | Jules | Cloud sessions | Yes |
 | OpenCode | Local sessions | No |
-| Linear | Assigned issues | Yes |
+| Linear | Assigned issues | Yes (sign-in) |
 | Google Calendar | Meeting busy times | Yes (sign-in) |
 
 Cloud integrations remain inactive until you add their credentials in Luke's
-Settings. Voice and the optional attention review are included with the
+Settings. Linear and Google Calendar are connected by signing in on the
+provider's own consent page rather than by pasting a key. Voice and the optional attention review are included with the
 signed-in account under a daily allowance; connecting your own OpenAI API key
 lifts the allowance and runs both on that key instead.
 

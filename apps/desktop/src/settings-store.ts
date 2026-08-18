@@ -5,6 +5,9 @@ import { DEFAULT_PANEL_FORM_FACTOR, REALTIME_DEFAULTS } from "@sidecar/core";
 // account into is exactly what `readAccounts` promises it.
 import type { CalendarAccountCredential } from "./google-calendar";
 import { googleCalendarSignInConfig } from "./google-calendar-oauth";
+// The same ownership the calendar reader has over its credential shape: what
+// this store resolves a stored grant into is what the sign-in produced.
+import { type LinearGrant, linearSignInConfig } from "./linear-oauth";
 import { environmentRealtimeSpeed, environmentRealtimeVoice } from "./openai-realtime-credentials";
 import {
   ACCOUNT_PROVIDER,
@@ -22,6 +25,7 @@ import {
   type VoiceSource,
 } from "./shared/contracts";
 import {
+  CREDENTIAL_CONNECTION,
   CREDENTIAL_PROVIDER_ID,
   CREDENTIAL_PROVIDER_LIST,
   type CredentialFormat,
@@ -50,6 +54,7 @@ const SETTINGS_FIELD = {
   ACCOUNT: "account",
   API_KEYS: "apiKeys",
   CALENDAR_ACCOUNTS: "calendarAccounts",
+  GRANTS: "grants",
   LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
   VERSION: "version",
 } as const;
@@ -98,6 +103,13 @@ interface PersistedSettings extends StoredAppSettings {
    * through untouched so an older build cannot discard a newer one's key.
    */
   apiKeys: Readonly<Record<string, string>>;
+  /**
+   * The consent grants, by provider id, kept apart from the pasted keys
+   * because what is inside is not a credential the user could type back in:
+   * two tokens and the moment the shorter-lived one lapses. Carried through
+   * untouched for a provider this build does not know, exactly as a key is.
+   */
+  grants?: Readonly<Record<string, PersistedGrant>>;
   /** Account tokens encrypted together; only display identity stays plaintext. */
   account?: {
     tokenCipher: string;
@@ -204,6 +216,38 @@ function storedCalendarAccounts(
   return accounts;
 }
 
+/**
+ * One provider's consent grant at rest. The tokens travel together under one
+ * ciphertext, the way the account's do — they are useless apart, and a single
+ * decryption is a single trip to the Keychain. The expiry stays in plaintext
+ * beside it: when a token lapses is not a secret, and knowing it without
+ * decrypting is what lets a pass skip the refresh it does not need.
+ */
+interface PersistedGrant {
+  tokenCipher: string;
+  expiresAt: number;
+}
+
+/** Reads the stored grants, keeping only well-formed entries. */
+function storedGrants(record: Record<string, unknown>): Record<string, PersistedGrant> {
+  const grants: Record<string, PersistedGrant> = {};
+  const persisted = record[SETTINGS_FIELD.GRANTS];
+  if (persisted === null || typeof persisted !== "object" || Array.isArray(persisted)) {
+    return grants;
+  }
+  for (const [providerId, entry] of Object.entries(persisted)) {
+    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const { tokenCipher, expiresAt } = entry as Record<string, unknown>;
+    if (typeof tokenCipher !== "string" || !tokenCipher) continue;
+    // A grant whose expiry did not survive the file is treated as lapsed
+    // rather than as eternal, so the next pass refreshes it before riding it.
+    grants[providerId] = {
+      tokenCipher,
+      expiresAt: typeof expiresAt === "number" ? expiresAt : 0,
+    };
+  }
+  return grants;
+}
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
 }
@@ -245,12 +289,24 @@ function environmentApiKey(
   return undefined;
 }
 
-function storedApiKeys(record: Record<string, unknown>): Record<string, string> {
+function storedApiKeys(
+  record: Record<string, unknown>,
+  providers: readonly CredentialProvider[],
+): Record<string, string> {
   const apiKeys: Record<string, string> = {};
   const persisted = record[SETTINGS_FIELD.API_KEYS];
   if (persisted !== null && typeof persisted === "object" && !Array.isArray(persisted)) {
     for (const [providerId, ciphertext] of Object.entries(persisted)) {
-      if (typeof ciphertext === "string" && ciphertext) apiKeys[providerId] = ciphertext;
+      if (typeof ciphertext !== "string" || !ciphertext) continue;
+      // A provider this build connects by consent takes no key, so a key left
+      // by a build that asked for one is dropped rather than carried: it can
+      // never authorize anything again, and a credential Luke will not use is
+      // not a credential Luke should keep. A provider this build does not
+      // know is still carried through untouched — that is an older build
+      // meeting a newer one's key, which is the opposite case.
+      const provider = providers.find((candidate) => candidate.id === providerId);
+      if (provider?.connection === CREDENTIAL_CONNECTION.CONSENT) continue;
+      apiKeys[providerId] = ciphertext;
     }
   }
   // An installation upgraded from version 1 keeps its Conductor key: the
@@ -268,7 +324,10 @@ function storedApiKeys(record: Record<string, unknown>): Record<string, string> 
  * with a model this one does not know; honouring it would send a value no
  * documented endpoint takes, so it is dropped the way an unknown voice is.
  */
-function parsePersistedSettings(source: string): PersistedSettings {
+function parsePersistedSettings(
+  source: string,
+  providers: readonly CredentialProvider[],
+): PersistedSettings {
   const parsed: unknown = JSON.parse(source);
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error("Settings file is not an object");
@@ -276,6 +335,7 @@ function parsePersistedSettings(source: string): PersistedSettings {
   const record = parsed as Record<string, unknown>;
   const version = record[SETTINGS_FIELD.VERSION];
   const calendarAccounts = storedCalendarAccounts(record);
+  const grants = storedGrants(record);
   const settings = Object.fromEntries(
     APP_SETTING_FIELDS.map((field) => [
       field,
@@ -285,7 +345,8 @@ function parsePersistedSettings(source: string): PersistedSettings {
   return {
     ...settings,
     version: typeof version === "number" ? version : SETTINGS_FILE_VERSION,
-    apiKeys: storedApiKeys(record),
+    apiKeys: storedApiKeys(record, providers),
+    ...(Object.keys(grants).length > 0 ? { grants } : {}),
     ...(storedAccount(record) ? { account: storedAccount(record) } : {}),
     ...(calendarAccounts.length > 0 ? { calendarAccounts } : {}),
   };
@@ -306,6 +367,8 @@ export class SettingsStore {
   #resolved = new Map<CredentialProviderId, ResolvedApiKey>();
   /** Decrypted accounts, cached like the keys so timers never drum the Keychain. */
   #resolvedCalendarAccounts: readonly CalendarAccountCredential[] | undefined;
+  /** Decrypted grants, cached for the same reason and cleared by the same writes. */
+  #resolvedGrants = new Map<CredentialProviderId, LinearGrant | undefined>();
   #mutations: Promise<void> = Promise.resolve();
 
   async get<Field extends AppSettingField>(field: Field): Promise<AppSettingValue<Field>> {
@@ -408,6 +471,11 @@ export class SettingsStore {
       // grants. Without one the integration is not drawn at all.
       calendarSignInAvailable:
         this.#credentialsUsable && googleCalendarSignInConfig(this.#environment) !== undefined,
+      // The same question for Linear, answered the same way: without a
+      // registered OAuth client there is no consent page to open, so the row
+      // is not drawn rather than drawn refusing.
+      linearSignInAvailable:
+        this.#credentialsUsable && linearSignInConfig(this.#environment) !== undefined,
       // The accounts without their grants: which are connected and which
       // calendars count is the renderer's to draw; the tokens never travel.
       calendarAccounts: (persisted.calendarAccounts ?? []).map((account) => ({
@@ -634,6 +702,109 @@ export class SettingsStore {
       this.#resolved.delete(providerId);
     });
     return { settings: await this.snapshot() };
+  }
+
+  /**
+   * Main-process only, like the resolved keys: one provider's grant with its
+   * tokens decrypted, for the reader that mints requests from it. A grant
+   * that no longer decrypts — another OS account, a rotated Keychain — reads
+   * as absent, and the row it draws says to connect again.
+   */
+  async readGrant(providerId: CredentialProviderId): Promise<LinearGrant | undefined> {
+    if (this.#resolvedGrants.has(providerId)) return this.#resolvedGrants.get(providerId);
+    const held = (await this.#load()).grants?.[providerId];
+    const grant = held ? this.#decryptGrant(held) : undefined;
+    this.#resolvedGrants.set(providerId, grant);
+    return grant;
+  }
+
+  /**
+   * Stores one provider's grant encrypted at rest. Every refresh comes back
+   * through here as well as every connection, because Linear consumes the
+   * refresh token it is given: a grant refreshed and not written is a grant
+   * the user has to make again.
+   */
+  async setGrant(
+    providerId: CredentialProviderId,
+    grant: LinearGrant,
+  ): Promise<SettingsUpdateResult> {
+    const accessToken = grant.accessToken.trim();
+    const rejection = !this.#secretStorageUsable()
+      ? "Encrypted credential storage is unavailable on this system."
+      : // The shape rules a pasted key answers to. What is inside is the
+        // provider's to shape, so only sendability is checked.
+        apiKeyRejection(accessToken);
+    if (rejection) return { settings: await this.snapshot(), reason: rejection };
+
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      const tokenCipher = this.#cipher
+        .encrypt(
+          JSON.stringify({
+            accessToken,
+            ...(grant.refreshToken ? { refreshToken: grant.refreshToken } : {}),
+          }),
+        )
+        .toString("base64");
+      // Every other provider's grant is carried over, so connecting one never
+      // disturbs another.
+      const grants = { ...(persisted.grants ?? {}) };
+      grants[providerId] = { tokenCipher, expiresAt: grant.expiresAt };
+      await this.#writeGrants(persisted, grants, providerId);
+    });
+    return { settings: await this.snapshot() };
+  }
+
+  /** Disconnects one provider, deleting its stored grant with it. */
+  async clearGrant(providerId: CredentialProviderId): Promise<SettingsUpdateResult> {
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (!persisted.grants?.[providerId]) return;
+      const grants = { ...persisted.grants };
+      delete grants[providerId];
+      await this.#writeGrants(persisted, grants, providerId);
+    });
+    return { settings: await this.snapshot() };
+  }
+
+  /** One place writes the grants, so neither cache can outlive the file. */
+  async #writeGrants(
+    persisted: PersistedSettings,
+    grants: Readonly<Record<string, PersistedGrant>>,
+    providerId: CredentialProviderId,
+  ): Promise<void> {
+    const next: PersistedSettings = {
+      ...persisted,
+      version: SETTINGS_FILE_VERSION,
+    };
+    if (Object.keys(grants).length > 0) next.grants = grants;
+    else delete next.grants;
+    await this.#write(next);
+    this.#loading = Promise.resolve(next);
+    this.#resolvedGrants.delete(providerId);
+    // The row's own source is resolved from the same file, so it is stale now
+    // for exactly the same reason.
+    this.#resolved.delete(providerId);
+  }
+
+  /** Recovers one stored grant's tokens, or nothing if they cannot be read. */
+  #decryptGrant(held: PersistedGrant): LinearGrant | undefined {
+    try {
+      const tokens: unknown = JSON.parse(
+        this.#cipher.decrypt(Buffer.from(held.tokenCipher, "base64")),
+      );
+      if (tokens === null || typeof tokens !== "object" || Array.isArray(tokens)) return undefined;
+      const { accessToken, refreshToken } = tokens as Record<string, unknown>;
+      if (typeof accessToken !== "string" || !accessToken) return undefined;
+      return {
+        accessToken,
+        ...(typeof refreshToken === "string" && refreshToken ? { refreshToken } : {}),
+        expiresAt: held.expiresAt,
+      };
+    } catch {
+      // Unrecoverable; the user connects that provider again.
+      return undefined;
+    }
   }
 
   /**
@@ -869,6 +1040,19 @@ export class SettingsStore {
   async #resolveApiKey(provider: CredentialProvider): Promise<ResolvedApiKey> {
     const cached = this.#resolved.get(provider.id);
     if (cached) return cached;
+    // A consent grant is not a key and is never handed out as one: what
+    // authorizes a request is minted from it, by the reader that holds it.
+    // Only whether one is stored belongs here, because that is what the
+    // provider's row draws — and a grant can only ever have come from this
+    // file, never from a launch environment.
+    if (provider.connection === CREDENTIAL_CONNECTION.CONSENT) {
+      const held = (await this.#load()).grants?.[provider.id];
+      const resolved: ResolvedApiKey = {
+        source: held ? CREDENTIAL_SOURCE.ENCRYPTED_FILE : CREDENTIAL_SOURCE.NONE,
+      };
+      this.#resolved.set(provider.id, resolved);
+      return resolved;
+    }
     const stored = await this.#storedApiKey(provider);
     const fromEnvironment = stored ? undefined : environmentApiKey(provider, this.#environment);
     const resolved: ResolvedApiKey = stored
@@ -922,7 +1106,7 @@ export class SettingsStore {
     };
     if (source) {
       try {
-        persisted = parsePersistedSettings(source);
+        persisted = parsePersistedSettings(source, this.#providers);
       } catch {
         // A corrupt settings file is replaced by the next write rather than
         // failing app start.
