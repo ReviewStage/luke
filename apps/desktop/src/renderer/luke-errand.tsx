@@ -478,6 +478,7 @@ const MOTION_TOKEN = {
   ROW_FAN_LIMIT: "--row-fan-limit",
   CAPTION_SIZE: "--caption-size",
   CAPTION_MAX: "--caption-max",
+  VOLUME_HINT_SIZE: "--volume-hint-size",
 } as const;
 
 type MotionToken = (typeof MOTION_TOKEN)[keyof typeof MOTION_TOKEN];
@@ -669,7 +670,12 @@ export function LukeErrand({ errand, onLanded, onReturned }: LukeErrandProps): R
       // the foot that the captions still to come cannot take the view back.
       // An already-visible control with room to spare is left exactly where it
       // is, which is the usual case.
-      const captionSize = parsePixels(token(MOTION_TOKEN.CAPTION_SIZE));
+      // The room the reply takes off the panel's foot is the caption block
+      // plus the volume hint's band below it — two stacked elements, summed
+      // here the same way the shape's growth sums them.
+      const captionSize =
+        parsePixels(token(MOTION_TOKEN.CAPTION_SIZE)) +
+        parsePixels(token(MOTION_TOKEN.VOLUME_HINT_SIZE));
       keepInView(
         stage,
         target,

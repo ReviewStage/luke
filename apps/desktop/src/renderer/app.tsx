@@ -138,7 +138,7 @@ import { useStateWithRef } from "./use-state-with-ref";
 import { useVoiceConversation, voiceErrorToShow } from "./use-voice-conversation";
 import {
   outputSilent,
-  VOLUME_HINT_HEIGHT,
+  VOLUME_HINT_BAND_HEIGHT,
   type VolumeHintDismissal,
   volumeHintDismissed,
   volumeHintText,
@@ -167,11 +167,14 @@ const FEEDBACK_KIND_FOR_COMPOSER: Record<FeedbackComposerKind, FeedbackKind> = {
  * only a measurement can say how tall it is; the size drives the surface's
  * growth and the clip that reveals the text, and past the reserved maximum
  * the remainder becomes scroll, rolling the oldest lines up under the shape.
- * The volume hint shares the block's reserved room: while it is drawn, its
- * row is added to the size and taken from the words' budget, so the block
- * never asks for more height than the window holds. Padding is the caption's
- * own computed padding, not a restated number, so a retune in the stylesheet
- * grows the surface by exactly what the text is inset.
+ * The volume hint stands in a band of its own below the block: while it is
+ * drawn, the band comes off the block's maximum — and off the words' budget
+ * with it — so the block and the band partition the reserved room instead of
+ * sharing it, and the stack never asks for more height than the window holds.
+ * Padding is the caption's own computed padding, not a restated number, so a
+ * retune in the stylesheet grows the surface by exactly what the text is
+ * inset — including the bottom inset the stylesheet hands to the band while
+ * the hint stands.
  */
 function captionSizeStyle(
   textHeight: number | undefined,
@@ -180,15 +183,15 @@ function captionSizeStyle(
   readingElapsedMs: number | undefined,
 ): CSSProperties {
   if (!textHeight) return {};
-  const hintHeight = volumeHint ? VOLUME_HINT_HEIGHT : 0;
-  const overflow = Math.max(0, textHeight - (VOICE_CAPTION_MAX_HEIGHT - padding - hintHeight));
+  const hintBand = volumeHint ? VOLUME_HINT_BAND_HEIGHT : 0;
+  const overflow = Math.max(0, textHeight - (VOICE_CAPTION_MAX_HEIGHT - padding - hintBand));
   // Heard words keep the newest line on screen — the half of the reply the
   // voice has not reached yet. Words landing on a silent output are read, not
   // heard, so the oldest unread line holds instead, leaving at reading pace.
   const scroll =
     readingElapsedMs === undefined ? overflow : pacedCaptionScroll(overflow, readingElapsedMs);
   return {
-    "--caption-size": `${Math.min(VOICE_CAPTION_MAX_HEIGHT, textHeight + hintHeight + padding)}px`,
+    "--caption-size": `${Math.min(VOICE_CAPTION_MAX_HEIGHT - hintBand, textHeight + padding)}px`,
     "--caption-scroll": `${scroll}px`,
   } as CSSProperties;
 }
@@ -2308,8 +2311,8 @@ export function App(): React.JSX.Element {
       // failure borrowing its strip — so the surface can grow the room they
       // are drawn in.
       data-caption={String(Boolean(captionTexts))}
-      // Whether those words need the volume hint under them, which shares the
-      // caption block's room.
+      // Whether those words need the volume hint under them, which stands in
+      // a band of its own below the caption block.
       data-volume-hint={String(volumeHint)}
       // Whether the announcement being spoken has its pressable notice under
       // the housing. Captioned words drop below it; with captions off it
@@ -2528,9 +2531,11 @@ export function App(): React.JSX.Element {
       </span>
 
       {/* The one reason the words above might be the only part of Luke
-          arriving: the Mac's own output is off. It sits on the caption
-          block's bottom edge, inside the same reserved room, and is drawn
-          only while Luke speaks into a silence the helper reported. Always
+          arriving: the Mac's own output is off. It stands in a band of its
+          own directly below the caption block — the block's clip ends where
+          the band begins, so the words above can never be drawn over it —
+          and is drawn only while Luke speaks into a silence the helper
+          reported. Always
           mounted, like the caption, so both edges of its fade can run, and
           inert while hidden so its button cannot be tabbed to. It carries a
           hit region of its own and sits above the hover strip, so Got it
