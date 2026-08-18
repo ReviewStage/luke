@@ -446,33 +446,6 @@
   align-items: center;
   gap: 5px;
 }
-
-/* What the half costs, as a tag rather than a sentence: two words that have
-   to be read before the name is chosen, not after. Free wears the same green
-   the meters and the switches wear for a state that is simply on. */
-.source-price {
-  flex: 0 0 auto;
-  padding: 1px 5px;
-  border-radius: 999px;
-  background: var(--raised-strong);
-  color: var(--text-tertiary);
-  font-size: 8.5px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.source-choice:first-child .source-price {
-  background: color-mix(in srgb, var(--state-complete) 20%, transparent);
-  color: color-mix(in srgb, var(--state-complete) 85%, white);
-}
-
-/* The check sits beside the price, not at the end of the line: what this half
-   costs and that it is the one running are the two things a glance is after,
-   and they read fastest as one mark. Sized to the words rather than to the
-   12px a credential row's check takes, because here it is a letter in a
-   label — and it keeps that row's green, which is the one accent on a button
-   that is otherwise the surface's own grays. */
 .source-choice .credential-check {
   width: 10px;
   height: 10px;

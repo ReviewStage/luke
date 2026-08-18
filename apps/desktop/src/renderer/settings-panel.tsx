@@ -92,7 +92,6 @@ import {
   VOICE_KEYLESS_NOTE,
   VOICE_SOURCE_DETAIL,
   VOICE_SOURCE_LABEL,
-  VOICE_SOURCE_PRICE,
   voiceAttentionNote,
   voiceSourceLabel,
 } from "./microphone-access";
@@ -2388,9 +2387,9 @@ function KeyUseDisclosure(): React.JSX.Element {
 }
 
 /**
- * The choice itself: two halves side by side, each carrying its own name and
- * its own price, with the live one marked. A radio group rather than two
- * buttons, because it is one value from a small fixed set — the same thing a
+ * The choice itself: two halves side by side, each carrying its own name, with
+ * the live one marked. A radio group rather than two buttons, because it is
+ * one value from a small fixed set — the same thing a
  * pop-up would be, drawn open because there are only two and the whole point
  * is seeing them together.
  *
@@ -2463,17 +2462,6 @@ function VoiceSourceToggle({
               />
               <span className="source-name">
                 {VOICE_SOURCE_LABEL[candidate]}
-                {/* Hidden from the reading because the radio's own name
-                    already carries the price; drawn because it is the fact
-                    worth seeing before choosing. */}
-                <span className="source-price" aria-hidden="true">
-                  {VOICE_SOURCE_PRICE[candidate]}
-                </span>
-                {/* The check rides beside the price rather than at the end of
-                    the line: the two facts a glance wants — what this costs,
-                    and that it is the one running — read as one mark. The
-                    radio already says it to a reader, so this is the drawing
-                    alone. */}
                 {live ? <CheckIcon /> : null}
               </span>
               <small>
