@@ -252,47 +252,7 @@ test("a panel asked for out loud is nobody's to take away afterwards", () => {
   assert.equal(errandBorrowedPanel(false, shows(true)), false);
 });
 
-test("a flight waits out whatever the act it signs has set in motion", () => {
-  const drawn = { drawnTab: PANEL_TAB.SETTINGS, drawnPage: SETTINGS_VIEW.VOICE };
-
-  // A panel that had to open is a whole page of content arriving, whatever
-  // else is true.
-  assert.equal(
-    errandWait({ ...drawn, opening: true, tab: PANEL_TAB.SETTINGS, page: SETTINGS_VIEW.VOICE }),
-    ERRAND_WAIT.CONTENT,
-  );
-  // The page the control is on is already the drawn one: a beat, and go.
-  assert.equal(
-    errandWait({ ...drawn, opening: false, tab: PANEL_TAB.SETTINGS, page: SETTINGS_VIEW.VOICE }),
-    ERRAND_WAIT.AT_ONCE,
-  );
-  // The second of two settings, on a page the first was not on: the leaving
-  // page goes before the arriving one is drawn at all.
-  assert.equal(
-    errandWait({
-      ...drawn,
-      opening: false,
-      tab: PANEL_TAB.SETTINGS,
-      page: SETTINGS_VIEW.APPEARANCE,
-    }),
-    ERRAND_WAIT.PAGE,
-  );
-  // Same page, but the panel is showing the sessions: the tab has to come
-  // forward, and it arrives on its own front page first.
-  assert.equal(
-    errandWait({
-      drawnTab: PANEL_TAB.SESSIONS,
-      drawnPage: SETTINGS_VIEW.ROOT,
-      opening: false,
-      tab: PANEL_TAB.SETTINGS,
-      page: SETTINGS_VIEW.VOICE,
-    }),
-    ERRAND_WAIT.PAGE,
-  );
-  // The tab bar and the list's options button are drawn outside the settings
-  // pages, so an act landing on one waits for no page at all.
-  assert.equal(
-    errandWait({ ...drawn, opening: false, tab: PANEL_TAB.SESSIONS }),
-    ERRAND_WAIT.AT_ONCE,
-  );
+test("a flight waits only when it had to open the panel", () => {
+  assert.equal(errandWait(true), ERRAND_WAIT.CONTENT);
+  assert.equal(errandWait(false), ERRAND_WAIT.AT_ONCE);
 });

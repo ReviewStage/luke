@@ -1777,7 +1777,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   border-radius: 8px;
   background: var(--raised-strong);
   transform: translateX(calc(var(--tab-index) * 100%));
-  transition: transform var(--duration-fast) var(--spring-fast);
 }
 
 /* The radius is the thumb's, not a shape of its own: the tab draws no
@@ -2603,7 +2602,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   .wing-meter,
   .count-badge,
   .count-caption,
-  .tab-thumb,
   .session-row {
     transition-duration: 1ms;
     transition-delay: 0ms;

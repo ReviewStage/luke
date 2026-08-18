@@ -198,23 +198,6 @@ test("an errand that opened the panel trails the whole opening", () => {
   assert.equal(errandBeats(TOKENS, ERRAND_WAIT.CONTENT).delay, 200 + 32 * 5 + 460);
 });
 
-test("an errand that turned a settings page waits for the page it turned to", () => {
-  // A settings page is not drawn until the page it replaced has finished
-  // leaving, and then it arrives on the very fan the panel's own content
-  // does — so the wait is that arrival with the leaving page's exit in front
-  // of it. Measured any sooner, the mark lands where a row was passing.
-  assert.equal(
-    errandBeats(TOKENS, ERRAND_WAIT.PAGE).delay,
-    90 + errandBeats(TOKENS, ERRAND_WAIT.CONTENT).delay,
-  );
-  // Only the wait changes: the flight itself is one flight however it started.
-  const page = errandBeats(TOKENS, ERRAND_WAIT.PAGE);
-  const content = errandBeats(TOKENS, ERRAND_WAIT.CONTENT);
-  assert.equal(page.duration, content.duration);
-  assert.equal(page.arrival, content.arrival);
-  assert.equal(page.home, content.home);
-});
-
 /** The window, and the black drawn in the middle of it: a 620-wide open panel. */
 const STAGE = { left: 0, top: 0, width: 1512, height: 600 };
 const SURFACE = { left: 446, top: 0, width: 620, height: 520 };

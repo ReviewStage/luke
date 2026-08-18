@@ -320,11 +320,13 @@ nothing.
 
 One spring for everything that moves. `--spring` drives the surface;
 `--spring-fast` is the same damping ratio at a higher frequency for small
-elements like the tab thumb, so the bounce profile is identical and only the
-scale differs. Panel content arrives as one stack: the tab bar is index 0 and
-each row below it starts further up, so the gaps spring open rather than the
-rows sliding in as a block. The fan and the stagger stop accumulating past
-`--row-fan-limit`, because only about five rows are ever on screen.
+elements like switch thumbs, so the bounce profile is identical and only the
+scale differs. Settings pages and the tab selection indicator change at once;
+task navigation does not travel. Panel content arrives as one stack: the tab
+bar is index 0 and each row below it starts further up, so the gaps spring open
+rather than the rows sliding in as a block. The fan and the stagger stop
+accumulating past `--row-fan-limit`, because only about five rows are ever on
+screen.
 
 In either direction the shape and its content must not cross, or content is
 left drawn on the desktop: growing, the surface leads and content follows;

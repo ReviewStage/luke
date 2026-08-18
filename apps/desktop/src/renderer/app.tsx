@@ -260,12 +260,7 @@ export function App(): React.JSX.Element {
   );
   const [display, setDisplay] = useState<DisplayDiagnostic>();
   const [tab, setTab, tabNow] = useStateWithRef<PanelTab>(PANEL_TAB.SESSIONS);
-  // The drawn page has to be readable from a callback as well as rendered: an
-  // errand coming up for its turn reads it to decide whether a page still has
-  // to be turned before the mark can be measured against anything.
-  const [settingsView, setSettingsView, settingsViewNow] = useStateWithRef<SettingsView>(
-    SETTINGS_VIEW.ROOT,
-  );
+  const [settingsView, setSettingsView] = useState<SettingsView>(SETTINGS_VIEW.ROOT);
   const [sessionView, setSessionView] = useState<SessionView>(DEFAULT_SESSION_VIEW);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -496,7 +491,7 @@ export function App(): React.JSX.Element {
       // starts in it — set their page right after this reset.
       setSettingsView(SETTINGS_VIEW.ROOT);
     },
-    [setSettingsView, setTab],
+    [setTab],
   );
 
   // A choice made in the sheet puts the sheet away. It is drawn over the list
@@ -592,16 +587,7 @@ export function App(): React.JSX.Element {
       const { run, launch } = nextErrand(errandRun.current);
       errandRun.current = run;
       if (launch === undefined) return;
-      // What the flight has to wait out, read off the panel as it is drawn
-      // this moment — which is the last moment it is true, because turning the
-      // tab and the page below is the very thing being waited for.
-      const wait = errandWait({
-        opening: launch.opening,
-        tab: launch.tab,
-        ...(launch.page === undefined ? {} : { page: launch.page }),
-        drawnTab: tabNow(),
-        drawnPage: settingsViewNow(),
-      });
+      const wait = errandWait(launch.opening);
       // The control has to be drawn to be flown to, and a settings page that is
       // not open is not drawn at all — so the tab comes forward and then the
       // page the setting lives on, in that order, because arriving at the tab
@@ -626,7 +612,7 @@ export function App(): React.JSX.Element {
       errandRun.current = finished.run;
       drawErrandHold(finished.hold);
     }
-  }, [changeTab, drawErrandHold, presentationOf, setSettingsView, settingsViewNow, tabNow]);
+  }, [changeTab, drawErrandHold, presentationOf]);
 
   /** Adds an act to the run, and sends Luke off if he is not already out. */
   const armErrandFlight = useCallback(
@@ -650,7 +636,7 @@ export function App(): React.JSX.Element {
     // note was written — would land on a page nobody is looking at.
     setSettingsView(standDownPage.current);
     expand();
-  }, [changeTab, expand, setSettingsView]);
+  }, [changeTab, expand]);
 
   /**
    * Applies a settings write's reply: the snapshot the store actually holds,
@@ -1880,7 +1866,6 @@ export function App(): React.JSX.Element {
     cancelHover,
     changeTab,
     setMicrophoneStatus,
-    setSettingsView,
     startMicrophone,
     stopMicrophone,
     summonAsk,
@@ -2066,7 +2051,6 @@ export function App(): React.JSX.Element {
     optionsOpen,
     presentation,
     searchOpen,
-    setSettingsView,
     settingsView,
     signInWaitNow,
     stopSpeaking,

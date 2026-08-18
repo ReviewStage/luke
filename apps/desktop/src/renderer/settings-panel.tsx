@@ -120,7 +120,6 @@ import {
   UserIcon,
 } from "./settings-icons";
 import {
-  pageExitMs,
   SETTINGS_SUBVIEW_LIST,
   SETTINGS_VIEW,
   type SettingsSubview,
@@ -2904,69 +2903,45 @@ export function SettingsPanel({
   const voiceNote = microphone.voiceAvailable
     ? voiceAttentionNote({ voiceAvailable: true, status: microphone.status })
     : undefined;
-  // The page as drawn, trailing the page as asked: turning one is a leave and
-  // then an arrival, and the leaving page must be held mounted through its own
-  // exit — the surface never resizes out from under something still drawn.
-  // The swap is timed off the token the stylesheet fades with, read live off
-  // the element: a capture run and reduced motion zero it, and the drawn page
-  // has to swap as fast as the fade they stilled.
-  const box = useRef<HTMLDivElement | null>(null);
-  const [drawnView, setDrawnView] = useState(view);
-  // Whether a page has turned since this panel mounted, which is what scopes
-  // the arrival animation: the tab's first draw belongs to the panel-arrival
-  // transition alone.
-  const [turned, setTurned] = useState(false);
-  const leaving = drawnView !== view;
-  useEffect(() => {
-    if (!leaving) return;
-    const timer = window.setTimeout(() => {
-      setDrawnView(view);
-      setTurned(true);
-    }, pageExitMs(box.current));
-    return () => window.clearTimeout(timer);
-  }, [leaving, view]);
   // Moving between pages moves the keyboard with it: into a page, onto its
   // back button; back out, onto the row that opened the page just left. Keyed
-  // to the drawn page, because the control being reached for only exists once
-  // the new page is mounted. Only while the panel is the shape on screen — a
+  // to the page, because the control being reached for only exists once the
+  // new page is mounted. Only while the panel is the shape on screen — a
   // view reset behind a closed panel is housekeeping, and reaching into an
   // inert stage would find nothing focusable anyway.
   const backControl = useRef<HTMLButtonElement | null>(null);
-  const heldView = useRef(drawnView);
+  const heldView = useRef(view);
   useEffect(() => {
     const previous = heldView.current;
-    heldView.current = drawnView;
-    if (previous === drawnView || !panelOpen) return;
-    if (drawnView === SETTINGS_VIEW.ROOT) {
+    heldView.current = view;
+    if (previous === view || !panelOpen) return;
+    if (view === SETTINGS_VIEW.ROOT) {
       if (previous !== SETTINGS_VIEW.ROOT) {
         document.getElementById(settingsNavRowId(previous))?.focus();
       }
       return;
     }
     backControl.current?.focus();
-  }, [drawnView, panelOpen]);
+  }, [view, panelOpen]);
   // The drawn page's reset, absent while that page stands at its defaults.
-  const pageReset = pageResetControl(drawnView, settings, shortcuts, preferences);
+  const pageReset = pageResetControl(view, settings, shortcuts, preferences);
   return (
     <div
-      ref={box}
       className="settings"
       role="tabpanel"
       id={panelPanelId(PANEL_TAB.SETTINGS)}
       aria-labelledby={panelTabId(PANEL_TAB.SETTINGS)}
-      data-page-leaving={String(leaving)}
-      data-page-turned={String(turned)}
     >
-      {drawnView !== SETTINGS_VIEW.ROOT ? (
+      {view !== SETTINGS_VIEW.ROOT ? (
         <SettingsPageHeader
-          view={drawnView}
+          view={view}
           onBack={() => onViewChange(SETTINGS_VIEW.ROOT)}
           backControl={backControl}
           {...(pageReset ? { reset: pageReset } : {})}
         />
       ) : null}
 
-      {drawnView === SETTINGS_VIEW.ROOT ? (
+      {view === SETTINGS_VIEW.ROOT ? (
         /* The front page: what voice runs on and what is left of it today,
            then one row per page, then the sections that answer at a glance —
            what Luke is allowed, the way to the founders, whose account this
@@ -3001,15 +2976,15 @@ export function SettingsPanel({
         </>
       ) : null}
 
-      {drawnView === SETTINGS_VIEW.VOICE && settings ? (
+      {view === SETTINGS_VIEW.VOICE && settings ? (
         <VoiceSection settings={settings} preferences={preferences} microphone={microphone} />
       ) : null}
 
-      {drawnView === SETTINGS_VIEW.APPEARANCE && settings ? (
+      {view === SETTINGS_VIEW.APPEARANCE && settings ? (
         <AppearanceSection settings={settings} preferences={preferences} />
       ) : null}
 
-      {drawnView === SETTINGS_VIEW.SHORTCUTS ? (
+      {view === SETTINGS_VIEW.SHORTCUTS ? (
         <ShortcutSection
           shortcuts={shortcuts}
           {...(settings ? { settings } : {})}
@@ -3017,7 +2992,7 @@ export function SettingsPanel({
         />
       ) : null}
 
-      {drawnView === SETTINGS_VIEW.CONNECTIONS && settings ? (
+      {view === SETTINGS_VIEW.CONNECTIONS && settings ? (
         <>
           <CredentialsSection
             settings={settings}
@@ -3040,7 +3015,7 @@ export function SettingsPanel({
         </>
       ) : null}
 
-      {drawnView !== SETTINGS_VIEW.ROOT ? null : (
+      {view !== SETTINGS_VIEW.ROOT ? null : (
         <>
           <UpdatesSection control={updates} />
 
