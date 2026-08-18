@@ -77,6 +77,7 @@ export const SETTING_PAGE: Record<AppSettingId, SettingsSubview> = {
   [APP_SETTING_ID.VOICE_SPEED]: SETTINGS_VIEW.VOICE,
   [APP_SETTING_ID.VOICE_CAPTIONS]: SETTINGS_VIEW.VOICE,
   [APP_SETTING_ID.DUCK_OTHER_MEDIA]: SETTINGS_VIEW.VOICE,
+  [APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE]: SETTINGS_VIEW.VOICE,
   // Beside the calendar row whose connection gives it meaning, not with the
   // voice switches: the quiet is a fact about the calendar integration.
   [APP_SETTING_ID.QUIET_DURING_MEETINGS]: SETTINGS_VIEW.CONNECTIONS,

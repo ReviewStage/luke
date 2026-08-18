@@ -617,6 +617,10 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
       calls.push(`setDuckOtherMedia:${enabled}`);
       return answered;
     },
+    setPreferBuiltInMicrophone: async (enabled: boolean) => {
+      calls.push(`setPreferBuiltInMicrophone:${enabled}`);
+      return answered;
+    },
     setQuietDuringMeetings: async (enabled: boolean) => {
       calls.push(`setQuietDuringMeetings:${enabled}`);
       return answered;
@@ -659,6 +663,7 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
   assert.deepEqual(calls.sort(), [
     "setDuckOtherMedia:true",
     "setFormFactor:notch",
+    "setPreferBuiltInMicrophone:true",
     "setQuietDuringMeetings:true",
     "setShowInDock:true",
     "setShowInMenuBar:true",

@@ -24,6 +24,7 @@ const bridge: AppBridge = {
     ipcRenderer.send(channels.setPointerInterception, interceptsPointer);
   },
   requestMicrophone: invoke(channels.requestMicrophone),
+  getMicrophoneRoute: invoke(channels.microphoneRoute),
   openMicrophoneSettings: () => ipcRenderer.send(channels.openMicrophoneSettings),
   setProviderApiKey: invoke(channels.setProviderApiKey),
   setVoice: invoke(channels.setVoice),
@@ -44,6 +45,7 @@ const bridge: AppBridge = {
   setAskHotkey: invoke(channels.setAskHotkey),
   setStopHotkey: invoke(channels.setStopHotkey),
   setDuckOtherMedia: invoke(channels.setDuckOtherMedia),
+  setPreferBuiltInMicrophone: invoke(channels.setPreferBuiltInMicrophone),
   setQuietDuringMeetings: invoke(channels.setQuietDuringMeetings),
   connectGoogleCalendar: invoke(channels.connectGoogleCalendar),
   cancelGoogleCalendarSignIn: () => {

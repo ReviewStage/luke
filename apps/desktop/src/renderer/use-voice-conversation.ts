@@ -20,6 +20,7 @@ import { type RefObject, useCallback, useEffect, useRef, useState } from "react"
 import type { MicrophoneStatus, SessionOpenResult, VoiceHotkeyState } from "../shared/contracts";
 import { TALK_KEY_RELEASE, talkKeyRelease } from "../shared/voice-hotkey";
 import { askRefusal } from "./ask-luke";
+import { openPreferredMicrophone } from "./microphone-choice";
 import { type AppActionCarrier, RealtimeVoiceSession } from "./realtime-session";
 import { SpokenNoticeAnnouncer } from "./spoken-notices";
 import { useStateWithRef } from "./use-state-with-ref";
@@ -285,6 +286,12 @@ export function evaluatorSummaries(speech: readonly AttentionSpeech[]): Attentio
 }
 
 export interface VoiceConversationOptions {
+  /**
+   * Whether a press may open the Mac's own microphone instead of a Bluetooth
+   * headset's. Off means the route is never even read: the system default is
+   * the user's exact choice.
+   */
+  preferBuiltInMicrophone: boolean;
   sessions: readonly NormalizedSession[];
   /**
    * The standing asks riding the roster they annotate, so a conversation can
@@ -476,6 +483,19 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   const ensureVoiceSession = useCallback((): RealtimeVoiceSession => {
     voiceSession.current ??= new RealtimeVoiceSession({
       requestConnection: () => window.sidecar.requestRealtimeCredential(),
+      // The press's device, chosen by facts read natively: the Mac's own
+      // microphone where a Bluetooth headset would otherwise pay for the
+      // capture with its music codec, the browser's default everywhere else.
+      // The switch reads at the press, so flipping it needs no reconnect.
+      requestMicrophoneStream: () =>
+        openPreferredMicrophone({
+          route: () =>
+            optionsRef.current.preferBuiltInMicrophone
+              ? window.sidecar.getMicrophoneRoute()
+              : Promise.resolve(undefined),
+          enumerate: () => navigator.mediaDevices.enumerateDevices(),
+          open: (audio) => navigator.mediaDevices.getUserMedia({ audio, video: false }),
+        }),
       // The same bridge calls the rows use — the composer, the chips, and the
       // press that opens a session: a spoken ask is a third way to ask for the
       // same act, behind the same gauntlet in the main process.
@@ -635,9 +655,9 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   }, []);
 
   /**
-   * Asks the system for access and nothing else. Opening a call here would hold
-   * the capture device and light the microphone indicator without anyone having
-   * pressed the talk key, which is not what the row offers.
+   * Asks the system for access and nothing else. The capture device itself is
+   * the talk key's own act: it opens with a press and closes with the turn,
+   * and this row must not be a second way to it.
    */
   const requestMicrophoneAccess = useCallback(async () => {
     setMicrophoneStatus(await window.sidecar.requestMicrophone());
@@ -649,8 +669,8 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    * the panel ever being visited.
    *
    * The talk key going down. Every press goes to the session, including the one
-   * that has no call to press against yet: the microphone opens with the call,
-   * so a press before then is remembered and applied when it comes up.
+   * that has no call to press against yet: the microphone opens for the press,
+   * so one that beats the call is remembered and applied when it comes up.
    */
   const beginTalk = useCallback(async () => {
     talkPressedAt.current = performance.now();

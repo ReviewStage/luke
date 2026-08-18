@@ -60,12 +60,19 @@ interface Harness {
   transceivers: { kind: string; direction?: string }[];
   /**
    * The idle retirement, held rather than run: every test connects and few
-   * close, so a real ten-minute timer would keep the run alive for ten minutes
-   * apiece. `fireIdle` runs whatever is currently armed, if anything.
+   * close, so a real ten-minute timer would keep the run alive for ten
+   * minutes apiece. Firing one retires it the way the session's re-arm would.
    */
   idleArmed: () => boolean;
   idleDelayMs: () => number | undefined;
   fireIdle: () => void;
+  /** Every track handed to the sender, `null` standing for the device let go. */
+  replacedTracks: () => (object | null)[];
+  /** Makes the next device request refuse, as a vanished microphone would. */
+  failMicrophone: () => void;
+  /** Holds device opens in flight until `ungateMicrophone` lets them land. */
+  gateMicrophone: () => void;
+  ungateMicrophone: () => void;
 }
 
 interface HeldTimer {
@@ -109,6 +116,13 @@ function harness(
 ): Harness {
   const timers: HeldTimer[] = [];
   const armedTimer = (): HeldTimer | undefined => timers.findLast((timer) => !timer.cancelled);
+  const fireTimer = (): void => {
+    const timer = armedTimer();
+    if (!timer) return;
+    // A fired timer is spent: only a re-arm by the session makes a new one.
+    timer.cancelled = true;
+    timer.callback();
+  };
   const sent: Record<string, unknown>[] = [];
   const errors: (string | undefined)[] = [];
   const captions: (string | undefined)[] = [];
@@ -145,12 +159,21 @@ function harness(
 
   const remoteTrack = { enabled: true };
   const transceivers: { kind: string; direction?: string }[] = [];
+  const replacedTracks: (object | null)[] = [];
   const peer: Record<string, unknown> = {
     localDescription: { type: "offer", sdp: "v=0 local" },
     connectionState: "connected",
-    addTrack: () => undefined,
     addTransceiver: (kind: string, init?: { direction?: string }) => {
       transceivers.push({ kind, ...(init?.direction ? { direction: init.direction } : {}) });
+      // A fresh sender per call, exactly as a fresh peer would give: sender
+      // identity is how a device opened for a closed call is told apart.
+      return {
+        sender: {
+          replaceTrack: async (next: object | null) => {
+            replacedTracks.push(next);
+          },
+        },
+      };
     },
     createDataChannel: () => {
       // A fresh channel per connect, so a call opened after another was torn
@@ -170,6 +193,8 @@ function harness(
   };
 
   let connection = "connection" in options ? options.connection : CONNECTION;
+  let microphoneError = options.microphoneError;
+  let microphoneGate: (() => void)[] | undefined;
   const session = new RealtimeVoiceSession({
     requestConnection: async () => {
       calls.push("credential-requested");
@@ -182,7 +207,12 @@ function harness(
     },
     requestMicrophoneStream: async () => {
       calls.push("microphone-requested");
-      if (options.microphoneError) throw options.microphoneError;
+      if (microphoneError) throw microphoneError;
+      if (microphoneGate) {
+        await new Promise<void>((resolve) => {
+          microphoneGate?.push(resolve);
+        });
+      }
       return stream as unknown as MediaStream;
     },
     createPeerConnection: () => peer as unknown as RTCPeerConnection,
@@ -258,13 +288,45 @@ function harness(
     idleArmed: () => armedTimer() !== undefined,
     idleDelayMs: () => armedTimer()?.delayMs,
     fireIdle: () => {
-      armedTimer()?.callback();
+      fireTimer();
+    },
+    replacedTracks: () => replacedTracks,
+    failMicrophone: () => {
+      microphoneError = new Error("The microphone went away");
+    },
+    gateMicrophone: () => {
+      microphoneGate = [];
+    },
+    ungateMicrophone: () => {
+      const held = microphoneGate ?? [];
+      microphoneGate = undefined;
+      for (const release of held) release();
     },
     transceivers,
   };
 }
 
 const CONVERSATION_ITEM_DELETE = REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_DELETE;
+
+/** Lets the device a press asked for arrive: one macrotask drains the open. */
+function deviceArrives(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+/**
+ * Presses the talk key and waits for the device it opens. The microphone is
+ * the developer's, not the call's, so every turn starts with this ask.
+ */
+async function holdTurn(context: Harness): Promise<void> {
+  context.session.beginTurn();
+  await deviceArrives();
+}
+
+/** Ends the reply the server was producing, settling the exchange to READY. */
+function settleReply(context: Harness): void {
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
+  context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
+}
 
 /** The words one context item carries, or nothing when the event is not one. */
 function itemText(event: Record<string, unknown> | undefined): string {
@@ -293,8 +355,10 @@ test("connecting opens the call and leaves the microphone closed", async () => {
 
   assert.equal(await context.session.connect(), true);
   assert.equal(context.session.status, REALTIME_STATUS.READY);
-  // Connected is not the same as listening. Nothing is sent until asked.
+  // Connected is not the same as listening: the device is the developer's,
+  // not the call's, so connecting asks for no microphone at all.
   assert.equal(context.microphoneEnabled(), false);
+  assert.ok(!context.calls.includes("microphone-requested"));
 
   const request = context.requests[0];
   assert.equal(request?.url, CONNECTION.callsUrl);
@@ -310,23 +374,22 @@ test("no credential leaves the voice experience explicitly unavailable", async (
   assert.equal(await context.session.connect(), false);
   assert.equal(context.session.status, REALTIME_STATUS.UNAVAILABLE);
   assert.deepEqual(context.sent, []);
-  // The device was opened alongside the mint that came back empty, and nothing
-  // else is left to let go of it.
-  assert.equal(context.microphoneStopped(), true);
+  // No device was opened for a call that never came: there is nothing held
+  // and nothing to let go of.
+  assert.ok(!context.calls.includes("microphone-requested"));
 });
 
-test("the credential and the device are asked for together, not in turn", async () => {
-  // The mint is a network round trip and the device open is a hardware one.
-  // The press that started the connect is waiting on both, so the device must
-  // not queue behind the mint.
+test("the press asks for the device; the connect asks only for the credential", async () => {
+  // The microphone is user-driven: opening a call — for a typed ask, say —
+  // must not touch the device. Only the press that takes a turn opens it.
   const context = harness({ connectionDelayMs: 20 });
 
   assert.equal(await context.session.connect(), true);
-  assert.deepEqual(context.calls, [
-    "credential-requested",
-    "microphone-requested",
-    "credential-resolved",
-  ]);
+  assert.deepEqual(context.calls, ["credential-requested", "credential-resolved"]);
+
+  await holdTurn(context);
+  assert.deepEqual(context.calls.at(-1), "microphone-requested");
+  assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
 });
 
 test("a refused call fails without leaking the ephemeral secret", async () => {
@@ -339,11 +402,18 @@ test("a refused call fails without leaking the ephemeral secret", async () => {
   assert.ok(!reported.includes(CONNECTION.value));
 });
 
-test("a denied microphone fails the connection rather than half-opening it", async () => {
+test("a denied microphone fails the call at the press, not before", async () => {
   const context = harness({ microphoneError: new Error("Permission denied") });
 
-  assert.equal(await context.session.connect(), false);
+  // The call itself opens fine: no device is asked for until a turn is.
+  assert.equal(await context.session.connect(), true);
+
+  await holdTurn(context);
+
+  // The press found the device refused, and a call that cannot listen is
+  // failed rather than left looking able to.
   assert.equal(context.session.status, REALTIME_STATUS.FAILED);
+  assert.equal(context.session.turnPending, false);
   assert.ok(context.errors.includes("Permission denied"));
 });
 
@@ -351,13 +421,23 @@ test("push-to-talk opens the microphone only while held, then asks for a reply",
   const context = harness();
   await context.session.connect();
 
-  context.session.startListening();
+  await holdTurn(context);
   assert.equal(context.microphoneEnabled(), true);
   assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
 
   context.session.stopListening(true);
   assert.equal(context.microphoneEnabled(), false);
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+  // The device is not closed at the commit — closing it is audible on shared
+  // hardware, and Luke is just starting to answer — but the track is off, so
+  // nothing is sent while he speaks.
+  assert.equal(context.microphoneStopped(), false);
+
+  settleReply(context);
+
+  // The exchange settling is what closes it, in the quiet after the reply.
+  assert.equal(context.microphoneStopped(), true);
+  assert.equal(context.replacedTracks().at(-1), null);
   assert.deepEqual(
     context.sent.map((event) => event.type),
     [
@@ -372,7 +452,7 @@ test("an abandoned turn clears the buffer instead of answering it", async () => 
   const context = harness();
   await context.session.connect();
 
-  context.session.startListening();
+  await holdTurn(context);
   context.session.stopListening(false);
 
   assert.equal(context.microphoneEnabled(), false);
@@ -424,7 +504,7 @@ test("a held turn lasts exactly as long as the key is down", async () => {
   const context = harness();
   await context.session.connect();
 
-  context.session.beginTurn();
+  await holdTurn(context);
   assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
   assert.equal(context.microphoneEnabled(), true);
 
@@ -441,9 +521,9 @@ test("a turn let go of before the call opened is dropped, not sent", async () =>
 
   context.session.beginTurn();
   const opening = context.session.connect();
-  // The microphone opens with the call, so a key held and released during the
-  // handshake was held over nothing. Committing it would ask the server to
-  // answer an empty buffer, which comes back as an error rather than a reply.
+  // The microphone opens for the press's turn, and neither the call nor the
+  // device was up yet: the key was held over nothing. Committing it would ask
+  // the server to answer an empty buffer, which comes back as an error.
   context.session.endTurn(true);
   await opening;
 
@@ -459,11 +539,11 @@ test("holding the key through a reply takes the turn back", async () => {
   const context = harness();
   await context.session.connect();
   context.deliverRemoteTrack();
-  context.session.beginTurn();
+  await holdTurn(context);
   context.session.endTurn(true);
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
 
-  context.session.beginTurn();
+  await holdTurn(context);
 
   assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
   assert.equal(context.lukeAudible(), false);
@@ -476,6 +556,7 @@ test("a press during the handshake opens the turn it was asking for", async () =
   // it starts. Nothing is captured until the microphone opens at the far end.
   context.session.toggleTurn();
   await context.session.connect();
+  await deviceArrives();
 
   assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
   assert.equal(context.microphoneEnabled(), true);
@@ -519,6 +600,7 @@ test("a reply that runs out before the model says so still ends", async () => {
   const context = harness();
   await context.session.connect();
   context.session.toggleTurn();
+  await deviceArrives();
   context.session.toggleTurn();
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
 
@@ -535,7 +617,7 @@ test("a reply that runs out before the model says so still ends", async () => {
 test("the reply ends when the server says the audio ran out", async () => {
   const context = harness();
   await context.session.connect();
-  context.session.beginTurn();
+  await holdTurn(context);
   context.session.endTurn(true);
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
 
@@ -550,7 +632,7 @@ test("the reply ends when the server says the audio ran out", async () => {
 test("a reply the server says made no sound ends at response.done", async () => {
   const context = harness();
   await context.session.connect();
-  context.session.beginTurn();
+  await holdTurn(context);
   context.session.endTurn(true);
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
 
@@ -572,14 +654,14 @@ test("two sentences are one reply, whatever the pause between them", async () =>
 
   // One reply that ends properly, which is how this call shows it reports the
   // end of its own audio.
-  context.session.beginTurn();
+  await holdTurn(context);
   context.session.endTurn(true);
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
   context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
   assert.equal(context.session.status, REALTIME_STATUS.READY);
 
   // A longer one. Generation finishes while he is still on the first sentence.
-  context.session.beginTurn();
+  await holdTurn(context);
   context.session.endTurn(true);
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED });
   context.session.reportRemoteAudioActive();
@@ -600,7 +682,7 @@ test("a call that never reports an ending still ends its replies", async () => {
   const context = harness();
   await context.session.connect();
   context.deliverRemoteTrack();
-  context.session.beginTurn();
+  await holdTurn(context);
   context.session.endTurn(true);
   context.session.reportRemoteAudioActive();
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
@@ -616,6 +698,7 @@ test("a pause mid-reply is not the reply running out", async () => {
   const context = harness();
   await context.session.connect();
   context.session.toggleTurn();
+  await deviceArrives();
   context.session.toggleTurn();
 
   // Long enough between two sentences for the meter to call it quiet, and then
@@ -635,7 +718,7 @@ test("a sentence pause is not the reply running out", async (t) => {
   const context = harness();
   await context.session.connect();
   context.deliverRemoteTrack();
-  context.session.beginTurn();
+  await holdTurn(context);
   context.session.endTurn(true);
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED });
   context.session.reportRemoteAudioLevel(true);
@@ -681,6 +764,7 @@ test("a reply is not over when the model stops producing it", async () => {
   const context = harness();
   await context.session.connect();
   context.session.toggleTurn();
+  await deviceArrives();
   context.session.toggleTurn();
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
 
@@ -697,6 +781,7 @@ test("quiet before the model has finished is a pause, not the end", async () => 
   const context = harness();
   await context.session.connect();
   context.session.toggleTurn();
+  await deviceArrives();
   context.session.toggleTurn();
 
   // Luke draws breath mid-sentence; the reply is still coming.
@@ -709,6 +794,7 @@ test("a finished response returns the session to ready", async () => {
   const context = harness();
   await context.session.connect();
   context.session.toggleTurn();
+  await deviceArrives();
   context.session.toggleTurn();
 
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
@@ -733,7 +819,7 @@ test("a changed pace reaches the live call without waiting for the next one", as
 test("a pace changed mid-reply waits for the reply to end", async () => {
   const context = harness();
   await context.session.connect();
-  context.session.beginTurn();
+  await holdTurn(context);
   context.session.endTurn(true);
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
 
@@ -795,9 +881,12 @@ test("malformed server data never breaks the session", async () => {
 });
 
 test("a failed call releases the microphone instead of stranding it", async () => {
-  const context = harness({ sdpResponse: new Response("nope", { status: 403 }) });
-
+  const context = harness();
   await context.session.connect();
+  await holdTurn(context);
+  assert.equal(context.microphoneEnabled(), true);
+
+  context.setConnectionState("failed");
 
   assert.equal(context.session.status, REALTIME_STATUS.FAILED);
   // FAILED offers "Start voice" again, so nothing may still hold the device.
@@ -810,7 +899,8 @@ test("a stalled handshake times out instead of hanging on connecting", async () 
 
   assert.equal(await context.session.connect(), false);
   assert.equal(context.session.status, REALTIME_STATUS.FAILED);
-  assert.equal(context.microphoneStopped(), true);
+  // No press, no device: the stall held nothing that needs releasing.
+  assert.ok(!context.calls.includes("microphone-requested"));
   assert.ok(context.errors.some((message) => message?.includes("timed out")));
 });
 
@@ -831,6 +921,7 @@ test("a recoverable disconnect does not end the call", async () => {
 test("an unexpected channel close releases the microphone", async () => {
   const context = harness();
   await context.session.connect();
+  await holdTurn(context);
 
   context.closeChannel();
 
@@ -843,6 +934,7 @@ test("an error instead of response.done still frees the turn", async () => {
   const context = harness();
   await context.session.connect();
   context.session.toggleTurn();
+  await deviceArrives();
   context.session.toggleTurn();
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
 
@@ -854,7 +946,8 @@ test("an error instead of response.done still frees the turn", async () => {
 
   assert.equal(context.session.status, REALTIME_STATUS.READY);
   // Turn-taking still works rather than being stuck forever.
-  assert.equal(context.session.startListening(), true);
+  await holdTurn(context);
+  assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
 });
 
 test("the conversation is told which sessions Luke can see, at the turn that reads them", async () => {
@@ -870,7 +963,7 @@ test("the conversation is told which sessions Luke can see, at the turn that rea
   assert.deepEqual(context.sent, []);
   assert.equal(context.session.status, REALTIME_STATUS.READY);
 
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
 
   const item = context.sent.find(
     (event) => event.type === REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE,
@@ -900,7 +993,7 @@ test("a roster that churns between turns is only ever said once", async () => {
   }
   assert.deepEqual(context.sent, []);
 
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
 
   const rosters = contextItems(context, "[observed session status");
   assert.equal(rosters.length, 1);
@@ -913,14 +1006,14 @@ test("a fresh roster replaces the item the last one occupied", async () => {
   await context.session.connect();
 
   context.session.updateSessions([observedSession("session-a", { recap: "Editing." })]);
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   const first = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.SESSIONS);
   assert.ok(first);
 
   context.session.updateSessions([observedSession("session-a", { recap: "Waiting on input." })]);
   context.session.stopSpeaking();
   const sentBefore = context.sent.length;
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
 
   // The old item is deleted, then the new one created — in that order, on a
   // channel that keeps it, so the conversation never holds two rosters.
@@ -942,12 +1035,12 @@ test("a supersede the server refuses is this call's own business", async () => {
   await context.session.connect();
 
   context.session.updateSessions([observedSession("session-a", { recap: "Editing." })]);
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   const superseded = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.SESSIONS);
 
   context.session.updateSessions([observedSession("session-a", { recap: "Waiting." })]);
   context.session.stopSpeaking();
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   const supersede = context.sent.findLast((event) => event.type === CONVERSATION_ITEM_DELETE) as {
     event_id?: string;
   };
@@ -973,7 +1066,7 @@ test("an error that is not ours is still reported and still ends the turn", asyn
   const context = harness();
   await context.session.connect();
   context.session.updateSessions([observedSession("session-a")]);
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
 
   context.emit({
     type: REALTIME_SERVER_EVENT.ERROR,
@@ -989,14 +1082,14 @@ test("an unchanged session roster is not resent", async () => {
   await context.session.connect();
 
   context.session.updateSessions([observedSession("session-a")]);
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   const sentBefore = context.sent.length;
 
   // The same roster again, and another turn: there is nothing new to say, so
   // nothing is said and the item already standing keeps its place.
   context.session.updateSessions([observedSession("session-a")]);
   context.session.stopSpeaking();
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
 
   assert.deepEqual(contextItems(context, "[observed session status", sentBefore), []);
   assert.equal(
@@ -1022,7 +1115,7 @@ test("the session under discussion travels with the roster, carrying its identit
   });
   assert.deepEqual(context.sent, []);
 
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
 
   const items = contextItems(context, "[session under discussion");
   assert.equal(items.length, 1);
@@ -1044,7 +1137,7 @@ test("a reference to a session Luke was never shown says nothing", async () => {
     providerId: "claude-code",
     providerSessionId: "session-unknown",
   });
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
 
   assert.deepEqual(contextItems(context, "[session under discussion"), []);
 });
@@ -1058,7 +1151,7 @@ test("the reference is rendered from the roster as it now stands", async () => {
     providerId: "claude-code",
     providerSessionId: "session-a",
   });
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
 
   // Providers rewrite titles as work moves — the very churn that makes a
   // title a bad anchor — so the line is re-rendered rather than kept as the
@@ -1068,7 +1161,7 @@ test("the reference is rendered from the roster as it now stands", async () => {
   ]);
   context.session.stopSpeaking();
   const sentBefore = context.sent.length;
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
 
   const items = contextItems(context, "[session under discussion", sentBefore);
   assert.equal(items.length, 1);
@@ -1085,12 +1178,12 @@ test("a reference whose session leaves the roster is withdrawn", async () => {
     providerId: "claude-code",
     providerSessionId: "session-a",
   });
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
 
   context.session.updateSessions([]);
   context.session.stopSpeaking();
   const sentBefore = context.sent.length;
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
 
   // The conversation held a line pointing at the session, so it is told the
   // line no longer stands rather than left resolving "that chat" to an
@@ -1125,7 +1218,7 @@ test("the last announcement travels with the roster, carrying the words said", a
   // Remembered, not sent: the words go in at the turn that reads them.
   assert.deepEqual(context.sent, []);
 
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
 
   const items = contextItems(context, "[last announcement");
   assert.equal(items.length, 1);
@@ -1144,14 +1237,14 @@ test("a fresh announcement replaces the one before it", async () => {
   context.session.updateLastAnnouncement(
     announcementSpeech("Claude Code finished checkout-service."),
   );
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   const first = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.LAST_ANNOUNCEMENT);
   assert.ok(first);
 
   context.session.stopSpeaking();
   context.session.updateLastAnnouncement(announcementSpeech("Codex failed in payments."));
   const sentBefore = context.sent.length;
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
 
   // One live item per kind: the old words are deleted before the new go in,
   // so the conversation never holds two last announcements.
@@ -1177,7 +1270,7 @@ test("a fresh announcement replaces the one before it", async () => {
   context.session.stopSpeaking();
   context.session.updateLastAnnouncement(announcementSpeech("Codex failed in payments."));
   const repeatBefore = context.sent.length;
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   assert.deepEqual(contextItems(context, "[last announcement", repeatBefore), []);
 });
 
@@ -1202,7 +1295,8 @@ test("a deadline that fired during the exchange does not hang the handshake", as
 
   assert.equal(await context.session.connect(), false);
   assert.equal(context.session.status, REALTIME_STATUS.FAILED);
-  assert.equal(context.microphoneStopped(), true);
+  // No press was waiting, so the stalled handshake held no device either.
+  assert.ok(!context.calls.includes("microphone-requested"));
 });
 
 test("a stop during minting is not reported as unavailable", async () => {
@@ -1240,21 +1334,26 @@ test("push-to-talk reports whether it opened a turn", async () => {
   assert.equal(context.session.startListening(), false);
 
   await context.session.connect();
-  assert.equal(context.session.startListening(), true);
+  // Connected but deviceless is still not a turn: the press opens the device
+  // first, and only a device already at hand opens a turn on the spot.
+  assert.equal(context.session.startListening(), false);
+  await holdTurn(context);
+  assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
 });
 
-test("stopping after the device is open still releases it", async () => {
-  // The mint resolves immediately and the SDP exchange is slow, so the stop
-  // lands once the microphone exists but before the call is up. Closing during
-  // the mint is a different case, covered above, where nothing is held yet.
-  const context = harness({ sdpDelayMs: 40 });
+test("a stop that beats the device still releases it", async () => {
+  // The press asks for the device and the stop lands before it arrives, so
+  // the device shows up with nobody left to hold it. Adopting it would leave
+  // the indicator lit with nothing to close it; it is stopped instead.
+  const context = harness();
+  await context.session.connect();
 
-  const connecting = context.session.connect();
-  await new Promise((resolve) => setTimeout(resolve, 5));
+  context.session.beginTurn();
   await context.session.close();
+  await deviceArrives();
 
-  assert.equal(await connecting, false);
   assert.equal(context.microphoneStopped(), true);
+  assert.equal(context.microphoneEnabled(), false);
   assert.equal(context.session.status, REALTIME_STATUS.IDLE);
   assert.equal(context.session.isConnected, false);
 });
@@ -1272,7 +1371,7 @@ test("a turn is refused while another is already under way", async () => {
   };
 
   // While the developer holds the microphone open.
-  context.session.startListening();
+  await holdTurn(context);
   assert.equal(context.session.speak(speech), false);
   assert.equal(context.session.startListening(), false);
 
@@ -1304,6 +1403,7 @@ test("a turn opens from an empty buffer and the key ends it", async () => {
 
   // One key: press to open a turn, press again to send it.
   context.session.toggleTurn();
+  await deviceArrives();
   assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
   assert.equal(context.microphoneEnabled(), true);
   // A muted track still transmits, so a turn has to start from an empty buffer.
@@ -1328,14 +1428,16 @@ test("the tail of an interrupted reply is not heard as the answer to the next", 
   const context = harness();
   await context.session.connect();
   context.deliverRemoteTrack();
-  context.session.beginTurn();
+  await holdTurn(context);
   context.session.endTurn(true);
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED });
   assert.equal(context.lukeAudible(), true);
 
-  // Cut him off, say something else, and send it.
+  // Cut him off, say something else, and send it. The cut lands at the
+  // press; the turn itself opens once its device does.
   context.session.beginTurn();
   assert.equal(context.lukeAudible(), false);
+  await deviceArrives();
   context.session.endTurn(true);
 
   // The rest of the old reply is still arriving — the server sent it before it
@@ -1352,7 +1454,7 @@ test("an interrupted reply is trimmed to the part that was heard", async () => {
   const context = harness({ now: () => clock });
   await context.session.connect();
   context.deliverRemoteTrack();
-  context.session.beginTurn();
+  await holdTurn(context);
   context.session.endTurn(true);
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED });
   context.emit({
@@ -1383,7 +1485,7 @@ test("a reply cut off before it was heard leaves nothing to correct", async () =
   const context = harness({ now: () => clock });
   await context.session.connect();
   context.deliverRemoteTrack();
-  context.session.beginTurn();
+  await holdTurn(context);
   context.session.endTurn(true);
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED });
   context.emit({
@@ -1410,14 +1512,14 @@ test("each reply is measured from its own first word", async () => {
   await context.session.connect();
   context.deliverRemoteTrack();
 
-  context.session.beginTurn();
+  await holdTurn(context);
   context.session.endTurn(true);
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED });
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED, item: { id: "first" } });
   clock = 1_100;
   context.session.reportRemoteAudioActive();
   clock = 5_000;
-  context.session.beginTurn();
+  await holdTurn(context);
 
   // A second reply, and the clock starts again with it.
   context.session.endTurn(true);
@@ -1441,7 +1543,7 @@ test("an interrupt asks the server to drop what it already sent", async () => {
   const context = harness();
   await context.session.connect();
   context.deliverRemoteTrack();
-  context.session.beginTurn();
+  await holdTurn(context);
   context.session.endTurn(true);
   const before = context.sent.length;
 
@@ -1463,10 +1565,10 @@ test("a reply that never starts does not leave Luke silenced", async () => {
   const context = harness();
   await context.session.connect();
   context.deliverRemoteTrack();
-  context.session.beginTurn();
+  await holdTurn(context);
   context.session.endTurn(true);
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED });
-  context.session.beginTurn();
+  await holdTurn(context);
   context.session.endTurn(true);
   assert.equal(context.lukeAudible(), false);
 
@@ -1482,6 +1584,7 @@ test("taking the turn silences Luke rather than only stopping generation", async
   await context.session.connect();
   context.deliverRemoteTrack();
   context.session.toggleTurn();
+  await deviceArrives();
   context.session.toggleTurn();
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
   // Audible once the server says the reply is under way, rather than when it
@@ -1492,8 +1595,10 @@ test("taking the turn silences Luke rather than only stopping generation", async
   context.session.toggleTurn();
 
   // Cancelling stops the model producing more; it does not stop what is already
-  // on its way down the connection. Only this end can.
+  // on its way down the connection. Only this end can — and at the press, not
+  // once the device arrives.
   assert.equal(context.lukeAudible(), false);
+  await deviceArrives();
   assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
 
   // The next reply has to be audible again.
@@ -1506,11 +1611,13 @@ test("taking the turn cuts Luke off mid-reply", async () => {
   const context = harness();
   await context.session.connect();
   context.session.toggleTurn();
+  await deviceArrives();
   context.session.toggleTurn();
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
   context.sent.length = 0;
 
   context.session.toggleTurn();
+  await deviceArrives();
 
   // The developer's turn always wins: the reply is stopped, not queued behind.
   assert.deepEqual(
@@ -1532,7 +1639,7 @@ test("a stop cuts the reply where it stands and opens nothing in its place", asy
   const context = harness({ now: () => clock });
   await context.session.connect();
   context.deliverRemoteTrack();
-  context.session.beginTurn();
+  await holdTurn(context);
   context.session.endTurn(true);
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED });
   context.emit({
@@ -1569,7 +1676,7 @@ test("a stop cuts the reply where it stands and opens nothing in its place", asy
   assert.equal(events.at(-1)?.audio_end_ms, 1_500);
 
   // The next reply has to be audible again.
-  context.session.beginTurn();
+  await holdTurn(context);
   context.session.endTurn(true);
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED });
   assert.equal(context.lukeAudible(), true);
@@ -1583,7 +1690,7 @@ test("a stop with nothing being spoken reports so and sends nothing", async () =
   // Ready is not a reply, and neither is the developer's own open microphone:
   // the key that asked keeps its other meanings.
   assert.equal(context.session.stopSpeaking(), false);
-  context.session.startListening();
+  await holdTurn(context);
   assert.equal(context.session.stopSpeaking(), false);
   assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
 
@@ -1606,7 +1713,7 @@ test("a stop that races the reply's confirmation still holds", async () => {
   context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
   // The stop lands in the gap between asking for the reply and the server
   // confirming it: the cancel and the confirmation cross on the wire.
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   assert.equal(context.session.stopSpeaking(), true);
 
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-a" } });
@@ -1667,7 +1774,7 @@ test("a stopped reply's tool follow-up stands down instead of speaking over the 
   });
   await context.session.connect();
   context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-a" } });
   context.emit({
     type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
@@ -1708,6 +1815,7 @@ test("a stopped reply's tool follow-up stands down instead of speaking over the 
 test("closing stops the microphone track", async () => {
   const context = harness();
   await context.session.connect();
+  await holdTurn(context);
 
   await context.session.close();
 
@@ -1715,8 +1823,8 @@ test("closing stops the microphone track", async () => {
   assert.equal(context.session.status, REALTIME_STATUS.IDLE);
 });
 /** Opens and commits a developer turn, which is the only turn a tool may run in. */
-function armDeveloperTurn(context: Harness): void {
-  context.session.startListening();
+async function armDeveloperTurn(context: Harness): Promise<void> {
+  await holdTurn(context);
   context.session.stopListening(true);
 }
 
@@ -1785,7 +1893,7 @@ test("a typed ask interrupts the reply it arrives over", async () => {
   const context = harness({ now: () => now });
   await context.session.connect();
   context.deliverRemoteTrack();
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   context.emit({
     type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
     item: { id: "item-1" },
@@ -1830,7 +1938,7 @@ test("a cancelled reply's late finish cannot act in the turn that replaced it", 
   await context.session.connect();
   context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
   // A spoken turn opens reply A, and the server confirms it by name.
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-a" } });
   // The developer types over it, opening a new armed turn.
   assert.equal(context.session.sendText("never mind — what needs me?"), true);
@@ -1900,7 +2008,7 @@ test("a cancelled reply's late finish does not end the turn that replaced it", a
   const context = harness();
   await context.session.connect();
   context.deliverRemoteTrack();
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-a" } });
   context.session.sendText("actually, open the codex session");
 
@@ -1917,7 +2025,7 @@ test("a cancelled reply's late finish does not end the turn that replaced it", a
 test("a typed ask does not interrupt the developer's own open microphone", async () => {
   const context = harness();
   await context.session.connect();
-  context.session.startListening();
+  await holdTurn(context);
   const sentBefore = context.sent.length;
 
   // Half a spoken question is still theirs: the keystroke is refused rather
@@ -1956,7 +2064,7 @@ test("a spoken ask is carried through the carrier and its outcome is voiced", as
   await context.session.connect();
   context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
   // The tool call arrives inside a turn the developer opened by speaking.
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   const sentBefore = context.sent.length;
 
   context.emit({
@@ -2004,7 +2112,7 @@ test("a session carrier that throws is refused with the error that caused it", a
   });
   await context.session.connect();
   context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   const sentBefore = context.sent.length;
 
   context.emit({
@@ -2051,7 +2159,7 @@ test("a spoken ask to open a session is carried, and one with no address is refu
     observedSession("session-a", { detail: { link: "https://claude.ai/session/session-a" } }),
     observedSession("session-b"),
   ]);
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   const sentBefore = context.sent.length;
 
   context.emit({
@@ -2116,7 +2224,7 @@ test("a spoken ask for a new workspace is carried, and an unlisted project is re
   // The projects travel as context the way the roster does, and an identical
   // list is not resent.
   context.session.updateWorkspaceProjects([project]);
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   assert.equal(contextItems(context, "[workspace projects").length, 1);
 
   // The default provider is part of the same answer, so choosing one is news
@@ -2124,7 +2232,7 @@ test("a spoken ask for a new workspace is carried, and an unlisted project is re
   const sentBeforeDefault = context.sent.length;
   context.session.updateWorkspaceProjects([project], "conductor");
   context.session.stopSpeaking();
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   const chosen = contextItems(context, "[workspace projects", sentBeforeDefault);
   assert.equal(chosen.length, 1);
   assert.match(itemText(chosen[0]), /default provider for new workspaces is Conductor/);
@@ -2206,7 +2314,7 @@ test("a spoken ask to add an agent is carried, and an unlisted kind is refused",
   context.session.updateSessions([
     observedSession("chat-1", { spawnableAgents: ["claude", "codex", "cursor"] }),
   ]);
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   const sentBefore = context.sent.length;
 
   context.emit({
@@ -2268,7 +2376,7 @@ test("a tool call outside the roster is refused before any carrier runs", async 
   await context.session.connect();
   // The roster names one session that takes nothing.
   context.session.updateSessions([observedSession("session-a")]);
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   const sentBefore = context.sent.length;
 
   context.emit({
@@ -2369,7 +2477,7 @@ test("a tool outcome is not spoken over a turn the developer has taken", async (
   });
   await context.session.connect();
   context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   const sentBefore = context.sent.length;
 
   context.emit({
@@ -2389,7 +2497,8 @@ test("a tool outcome is not spoken over a turn the developer has taken", async (
   // Let the answer reach the point where it is awaiting the write.
   await Promise.resolve();
   // The developer takes the turn while the write is still in flight.
-  context.session.startListening();
+  context.session.beginTurn();
+  await deviceArrives();
   resolveWrite?.({ status: "accepted" });
   await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -2408,7 +2517,7 @@ test("a tool outcome is not spoken over a turn the developer has taken", async (
 test("the caption grows with the deltas and the final text supersedes them", async () => {
   const context = harness();
   await context.session.connect();
-  context.session.beginTurn();
+  await holdTurn(context);
   context.session.endTurn(true);
 
   context.emit({
@@ -2436,7 +2545,7 @@ test("the caption grows with the deltas and the final text supersedes them", asy
 test("the caption leaves when the reply does", async () => {
   const context = harness();
   await context.session.connect();
-  context.session.beginTurn();
+  await holdTurn(context);
   context.session.endTurn(true);
   context.emit({
     type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
@@ -2482,7 +2591,7 @@ test("an announcement's caption names its session; a conversation's names none",
   assert.equal(context.captionSubjects.at(-1), undefined);
 
   // A conversation reply is nobody's announcement, whatever was said before.
-  context.session.beginTurn();
+  await holdTurn(context);
   context.session.endTurn(true);
   context.emit({
     type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
@@ -2496,7 +2605,7 @@ test("taking the turn cuts the caption with the audio", async () => {
   const context = harness();
   await context.session.connect();
   context.deliverRemoteTrack();
-  context.session.beginTurn();
+  await holdTurn(context);
   context.session.endTurn(true);
   context.emit({
     type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
@@ -2505,8 +2614,9 @@ test("taking the turn cuts the caption with the audio", async () => {
 
   // The caption already holds words the room has not heard — the text runs
   // ahead of the speech — so an interrupt must take it down at once rather
-  // than leaving Luke finishing a sentence he was stopped from saying.
-  context.session.startListening();
+  // than leaving Luke finishing a sentence he was stopped from saying. The
+  // cut lands at the press, before the device has even opened.
+  context.session.beginTurn();
 
   assert.equal(context.captions.at(-1), undefined);
   assert.equal(context.captions.length, 2);
@@ -2516,7 +2626,7 @@ test("a cancelled reply's late transcript cannot pollute the next caption", asyn
   const context = harness();
   await context.session.connect();
   context.deliverRemoteTrack();
-  context.session.beginTurn();
+  await holdTurn(context);
   context.session.endTurn(true);
   context.emit({
     type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
@@ -2531,12 +2641,13 @@ test("a cancelled reply's late transcript cannot pollute the next caption", asyn
   // Talking over the reply cuts it, but the server had already produced the
   // rest of its transcript, which keeps arriving — around the interrupt, and
   // even after the next reply has been asked for.
-  context.session.startListening();
+  context.session.beginTurn();
   context.emit({
     type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
     item_id: "item-first",
     delta: ", still streaming in",
   });
+  await deviceArrives();
   context.session.stopListening(true);
   context.emit({
     type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE,
@@ -2584,7 +2695,7 @@ test("the app guide reaches the conversation, and identical guides are not resen
   // The same knowledge again is not news; a changed value is. Neither is worth
   // an item on its own — the turn that asks is what collects the latest.
   context.session.updateGuide({ ...CAPTIONS_GUIDE });
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   assert.equal(contextItems(context, "[app guide").length, 1);
 
   const sentBefore = context.sent.length;
@@ -2595,7 +2706,7 @@ test("the app guide reaches the conversation, and identical guides are not resen
     ],
   });
   context.session.stopSpeaking();
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
 
   const guideEvents = contextItems(context, "[app guide", sentBefore);
   assert.equal(guideEvents.length, 1);
@@ -2612,7 +2723,7 @@ test("a spoken settings change is validated against the guide and carried", asyn
   });
   await context.session.connect();
   context.session.updateGuide(CAPTIONS_GUIDE);
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
 
   context.emit({
     type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
@@ -2684,7 +2795,7 @@ test("the second call of a turn is validated against the guide the first call's 
   });
   await context.session.connect();
   context.session.updateGuide(MODEL_ONLY_GUIDE);
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
 
   context.emit({
     type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
@@ -2721,7 +2832,7 @@ test("an app carrier that throws is refused with the error that caused it", asyn
   });
   await context.session.connect();
   context.session.updateGuide(CAPTIONS_GUIDE);
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   const sentBefore = context.sent.length;
 
   context.emit({
@@ -2762,7 +2873,7 @@ test("a spoken ask about a setting the guide does not carry is refused before th
   });
   await context.session.connect();
   // The guide was never provided, so the conversation was told about nothing.
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   const sentBefore = context.sent.length;
 
   context.emit({
@@ -2802,7 +2913,7 @@ test("a spoken panel ask is validated against the roster and carried", async () 
   await context.session.connect();
   context.session.updateGuide(CAPTIONS_GUIDE);
   context.session.updateSessions([observedSession("session-a")]);
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
 
   context.emit({
     type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
@@ -2825,7 +2936,7 @@ test("a spoken panel ask is validated against the roster and carried", async () 
 
   // Switching to the settings tab is the same ask carried with a tab, not a
   // different act — the carrier presses the tab an open panel already shows.
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   context.emit({
     type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
     response: {
@@ -2854,7 +2965,7 @@ test("a spoken composer open is validated against the fixed kinds and carried, n
   });
   await context.session.connect();
   context.session.updateGuide(CAPTIONS_GUIDE);
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   const sentBefore = context.sent.length;
 
   context.emit({
@@ -2926,7 +3037,7 @@ test("the conversation is told which issues the tracker lists", async () => {
   await context.session.connect();
 
   context.session.updateIssues([trackedIssue()]);
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
 
   const [contextEvent] = contextItems(context, "[observed issue tracker");
   assert.ok(contextEvent, "the issue roster was sent");
@@ -2937,7 +3048,7 @@ test("the conversation is told which issues the tracker lists", async () => {
   const sentBefore = context.sent.length;
   context.session.updateIssues([trackedIssue()]);
   context.session.stopSpeaking();
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   assert.deepEqual(contextItems(context, "[observed issue tracker", sentBefore), []);
 });
 
@@ -2951,7 +3062,7 @@ test("a spoken issue ask is carried through its own carrier and voiced", async (
   });
   await context.session.connect();
   context.session.updateIssues([trackedIssue()]);
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   const sentBefore = context.sent.length;
 
   context.emit({
@@ -2996,7 +3107,7 @@ test("an issue carrier that throws is refused with the error that caused it", as
   });
   await context.session.connect();
   context.session.updateIssues([trackedIssue()]);
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   const sentBefore = context.sent.length;
 
   context.emit({
@@ -3037,7 +3148,7 @@ test("an issue call with no tracker connected is refused before any carrier runs
   });
   await context.session.connect();
   // No updateIssues call: no roster was ever sent.
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   const sentBefore = context.sent.length;
 
   context.emit({
@@ -3077,7 +3188,7 @@ test("an issue call outside the roster is refused before any carrier runs", asyn
   });
   await context.session.connect();
   context.session.updateIssues([trackedIssue({ canComment: false })]);
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   const sentBefore = context.sent.length;
 
   context.emit({
@@ -3155,7 +3266,7 @@ test("a tracker that disconnects withdraws the roster, and a reconnect resends i
   const context = harness();
   await context.session.connect();
   context.session.updateIssues([trackedIssue()]);
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   const board = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.ISSUES);
   assert.ok(board);
   const sentBefore = context.sent.length;
@@ -3164,7 +3275,7 @@ test("a tracker that disconnects withdraws the roster, and a reconnect resends i
   context.session.updateIssues(undefined);
   context.session.updateIssues(undefined);
   context.session.stopSpeaking();
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
 
   const withdrawals = contextItems(context, "[observed issue tracker", sentBefore).filter((event) =>
     itemText(event).includes("no longer connected"),
@@ -3187,7 +3298,7 @@ test("a tracker that disconnects withdraws the roster, and a reconnect resends i
   const reconnectBefore = context.sent.length;
   context.session.updateIssues([trackedIssue()]);
   context.session.stopSpeaking();
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
   const rosters = contextItems(context, "[observed issue tracker", reconnectBefore).filter(
     (event) => itemText(event).includes("LUKE-123"),
   );
@@ -3198,7 +3309,7 @@ test("a tracker that disconnects withdraws the roster, and a reconnect resends i
   const fresh = harness();
   await fresh.session.connect();
   fresh.session.updateIssues(undefined);
-  armDeveloperTurn(fresh);
+  await armDeveloperTurn(fresh);
   assert.deepEqual(contextItems(fresh, "[observed issue tracker"), []);
 });
 
@@ -3286,23 +3397,23 @@ test("an idle call is put away, and a call being used is not", async () => {
 
   // A turn stops it. A call someone is talking on is never put away underneath
   // them, however long the turn runs.
-  context.session.startListening();
+  await holdTurn(context);
   assert.equal(context.idleArmed(), false);
   context.session.stopListening(false);
   assert.equal(context.idleArmed(), true);
+  // The device never waits for the retirement: it left with the turn.
+  assert.equal(context.microphoneStopped(), true);
 
   context.fireIdle();
 
-  // The device is released with the call: the whole point of retiring one is
-  // that the macOS microphone indicator stops standing for nothing.
+  // What the retirement puts away is the conversation; the device is long gone.
   assert.equal(context.session.status, REALTIME_STATUS.IDLE);
-  assert.equal(context.microphoneStopped(), true);
 });
 
 test("an idle call that was taken up in the meantime is left alone", async () => {
   const context = harness();
   await context.session.connect();
-  context.session.startListening();
+  await holdTurn(context);
 
   // Ten minutes is long enough for the timer to fire against a call that has
   // since been taken up, so the decision is made again at the moment of it.
@@ -3320,11 +3431,157 @@ test("Luke's own call is not on the developer's idle clock", async () => {
   assert.equal(context.idleArmed(), false);
 });
 
+test("the device closes with the exchange and the conversation stays", async () => {
+  const context = harness();
+  await context.session.connect();
+  await holdTurn(context);
+  assert.equal(context.microphoneEnabled(), true);
+
+  context.session.stopListening(true);
+  settleReply(context);
+
+  // The settle is the device's end — tracks stopped, the sender emptied —
+  // while the call, and the conversation on it, stay warm and stay the
+  // developer's: the next press reopens the device, never replaces the call.
+  assert.equal(context.microphoneStopped(), true);
+  assert.equal(context.replacedTracks().at(-1), null);
+  assert.equal(context.session.isConnected, true);
+  assert.equal(context.session.microphoneCall, true);
+});
+
+test("each exchange opens its own device on the same call", async () => {
+  const context = harness();
+  await context.session.connect();
+  await holdTurn(context);
+  context.session.endTurn(true);
+  settleReply(context);
+  const before = context.calls.length;
+
+  context.session.beginTurn();
+  // The press is an intention while the device opens, not a turn yet.
+  assert.equal(context.session.turnPending, true);
+  await deviceArrives();
+
+  assert.deepEqual(context.calls.slice(before), ["microphone-requested"]);
+  assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
+  assert.equal(context.microphoneEnabled(), true);
+  // The fresh track rode the sender the last one vacated: no new call.
+  assert.notEqual(context.replacedTracks().at(-1), null);
+  assert.equal(context.session.isConnected, true);
+});
+
+test("two presses while the device opens ask for it once", async () => {
+  const context = harness();
+  await context.session.connect();
+  const before = context.calls.length;
+
+  context.session.beginTurn();
+  context.session.beginTurn();
+  await deviceArrives();
+
+  assert.deepEqual(context.calls.slice(before), ["microphone-requested"]);
+  assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
+});
+
+test("a press let go while the device opens drops the turn", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  context.session.beginTurn();
+  context.session.endTurn(true);
+  await deviceArrives();
+
+  // Nothing was captured, so nothing is sent — and the device that arrived
+  // for the dropped press closes as fast as it came.
+  assert.deepEqual(context.sent, []);
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+  assert.equal(context.microphoneEnabled(), false);
+  assert.equal(context.microphoneStopped(), true);
+});
+
+test("typing never opens the device", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  assert.equal(context.session.sendText("How is the checkout fix going?"), true);
+
+  // A typed ask needs no capture device: the ask went, and the device — the
+  // part other audio can hear — was never touched.
+  assert.ok(!context.calls.includes("microphone-requested"));
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+});
+
+test("a device that arrives for a replaced call is stopped, not adopted", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.gateMicrophone();
+  context.session.beginTurn();
+  // The call is closed and a fresh one opened while the device is still on
+  // its way; the old press's device belongs to nobody.
+  await context.session.close();
+  await context.session.connect();
+  context.ungateMicrophone();
+  await deviceArrives();
+
+  assert.equal(context.microphoneStopped(), true);
+  assert.equal(context.microphoneEnabled(), false);
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+  // Nothing rode the fresh call's sender: no track, not even a release.
+  assert.deepEqual(context.replacedTracks(), []);
+});
+
+test("a device refused after its call was replaced fails nothing", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.failMicrophone();
+  context.session.beginTurn();
+  await context.session.close();
+  await context.session.connect();
+  await deviceArrives();
+
+  // The refusal belonged to the closed call and died with it: the call now
+  // up keeps standing, ready for its own press.
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+  assert.ok(!reportedErrors(context).some((message) => /microphone went away/i.test(message)));
+});
+
+test("a press against a fresh call is served once a stale open clears", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.gateMicrophone();
+  context.session.beginTurn();
+  await context.session.close();
+  await context.session.connect();
+  // The new call's own press lands while the stale open still holds the
+  // single-flight slot; it must wait its turn, not be dropped.
+  context.session.beginTurn();
+  context.ungateMicrophone();
+  await deviceArrives();
+
+  assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
+  assert.equal(context.microphoneEnabled(), true);
+});
+
+test("a device that vanishes mid-conversation fails the call at the press", async () => {
+  const context = harness();
+  await context.session.connect();
+  await armDeveloperTurn(context);
+  settleReply(context);
+  context.failMicrophone();
+
+  context.session.beginTurn();
+  await deviceArrives();
+
+  assert.equal(context.session.status, REALTIME_STATUS.FAILED);
+  assert.equal(context.session.turnPending, false);
+  assert.ok(reportedErrors(context).some((message) => /microphone went away/i.test(message)));
+});
+
 test("a call that drops mid-conversation says the thread is lost", async () => {
   const context = harness();
   await context.session.connect();
   context.session.updateSessions([observedSession("session-a")]);
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
 
   // The service ends every session at an hour, so this is how a long
   // conversation ordinarily ends rather than an exotic failure.
@@ -3349,7 +3606,7 @@ test("a call that drops before anything was said goes quietly", async () => {
 test("a call put away on purpose does not report itself as lost", async () => {
   const context = harness();
   await context.session.connect();
-  armDeveloperTurn(context);
+  await armDeveloperTurn(context);
 
   await context.session.close();
 

@@ -167,6 +167,8 @@ export interface PreferenceWrites {
   onVoiceCaptionsChange: (enabled: boolean) => Promise<string | undefined>;
   /** Turns the quieting of Music and Spotify during a spoken exchange on or off. */
   onDuckOtherMediaChange: (enabled: boolean) => Promise<string | undefined>;
+  /** Turns the Mac-microphone-over-Bluetooth-headset preference on or off. */
+  onPreferBuiltInMicrophoneChange: (enabled: boolean) => Promise<string | undefined>;
   /**
    * Turns the holding of announcements during calendar meetings on or off.
    * The store answers with why when it refuses, and the row is where that
@@ -787,7 +789,8 @@ function voiceSettingsChanged(settings: AppSettings): boolean {
     settings.voice !== REALTIME_DEFAULTS.VOICE ||
     settings.voiceSpeed !== REALTIME_DEFAULTS.SPEED ||
     settings.voiceCaptions !== APP_SETTING_DEFAULTS.voiceCaptions ||
-    settings.duckOtherMedia !== APP_SETTING_DEFAULTS.duckOtherMedia
+    settings.duckOtherMedia !== APP_SETTING_DEFAULTS.duckOtherMedia ||
+    settings.preferBuiltInMicrophone !== APP_SETTING_DEFAULTS.preferBuiltInMicrophone
   );
 }
 
@@ -1827,6 +1830,20 @@ function VoiceControlsSection({
         changed={settings.duckOtherMedia !== APP_SETTING_DEFAULTS.duckOtherMedia}
         checked={settings.duckOtherMedia}
         onChange={preferences.onDuckOtherMediaChange}
+      />
+      <SwitchRow
+        label="Prefer the Mac's microphone"
+        ariaLabel="Listen through the Mac's own microphone instead of a Bluetooth headset's"
+        errand={APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE}
+        detail={
+          /* The why is the headset's music codec: capturing from its own
+             microphone turns everything it plays phone-grade. The Microphone
+             row above says so while the case is live. */
+          "Keeps Bluetooth headphones on their full music quality while you talk."
+        }
+        changed={settings.preferBuiltInMicrophone !== APP_SETTING_DEFAULTS.preferBuiltInMicrophone}
+        checked={settings.preferBuiltInMicrophone}
+        onChange={preferences.onPreferBuiltInMicrophoneChange}
       />
     </section>
   );

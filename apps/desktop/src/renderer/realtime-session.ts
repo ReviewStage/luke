@@ -56,6 +56,7 @@ import {
   workspaceProjectContextText,
 } from "@sidecar/core";
 import { workspaceAgentModels } from "../shared/workspace-agents";
+import { MICROPHONE_PROCESSING } from "./microphone-choice";
 
 const SDP_CONTENT_TYPE = "application/sdp";
 
@@ -72,12 +73,12 @@ const REALTIME_SETTLE_TIMEOUT_MS = 20_000;
 /**
  * How long the developer's call stays open with nothing being said on it.
  *
- * A call costs something to hold whether or not it is used: the capture device
- * stays open and the macOS microphone indicator stays lit, which on a sidecar
- * that sits on a desk all day is the whole difference between a companion and
- * something listening. The service ends the session at an hour regardless, so
- * the choice was never between keeping this conversation and losing it — only
- * between letting go of it deliberately and being cut off mid-sentence.
+ * The capture device never rides this clock — it opens with a press and
+ * closes with the turn — so what ten minutes buys is the conversation itself:
+ * the thread Luke would otherwise lose. The service ends the session at an
+ * hour regardless, so the choice was never between keeping this conversation
+ * and losing it — only between letting go of it deliberately and being cut
+ * off mid-sentence.
  *
  * Ten minutes is longer than any pause inside a conversation and shorter than
  * the walk to get a coffee. Coming back costs one handshake.
@@ -228,10 +229,20 @@ export function quietIsLukesOwn(input: { status: RealtimeStatus; heardLuke: bool
 /**
  * Drives one Realtime conversation over WebRTC.
  *
- * The microphone track is created once and kept disabled, so push-to-talk
- * enables an existing track rather than reopening the device. That keeps the
- * macOS microphone indicator honest: it lights up while Luke is connected, and
- * the UI states separately whether audio is actually being sent.
+ * The capture device is the developer's, not the call's: it opens when a
+ * press takes a turn and closes when the exchange that press started settles,
+ * and nothing else — not connecting, not typing, not an announcement — ever
+ * touches it. The call negotiates its sending half up front as a bare
+ * transceiver, so each turn's fresh track rides the same sender without
+ * renegotiating. The press is held as a pending intention while the device
+ * opens, exactly as a press that beats the call's handshake is. The close
+ * waits for the settle rather than the key coming up because closing a
+ * capture device is itself audible on shared hardware — a Bluetooth headset
+ * renegotiates its codec — and the key comes up exactly as Luke starts to
+ * answer; the track is disabled at that moment, and the device follows in
+ * the quiet after the reply. What this buys is that the microphone and its
+ * indicator are user-driven — one exchange, opened by one press — and that
+ * other audio is never degraded by a device held while nobody is talking.
  */
 export class RealtimeVoiceSession {
   readonly #options: RealtimeVoiceSessionOptions;
@@ -239,6 +250,14 @@ export class RealtimeVoiceSession {
   #channel: RTCDataChannel | undefined;
   #microphone: MediaStreamTrack | undefined;
   #stream: MediaStream | undefined;
+  /**
+   * The sender the microphone track rides. It outlives the track on purpose:
+   * a released device leaves the sender on the call, silent, which is what
+   * lets the next press attach a fresh track without renegotiating.
+   */
+  #microphoneSender: RTCRtpSender | undefined;
+  /** The device being reopened, held so two presses cannot open it twice. */
+  #acquiring: Promise<void> | undefined;
   /**
    * Whether the current connect attempt — and the call it opens — includes the
    * microphone. A developer's call does; one Luke opens for himself, to read a
@@ -453,10 +472,12 @@ export class RealtimeVoiceSession {
    * Whether the call that is up — or coming up — is one the developer can take
    * a turn on. A call Luke opened to read a notice out has no microphone and
    * answers false, which is how a talk-key press knows it still has a call of
-   * its own to open.
+   * its own to open. The developer's call whose device is resting between
+   * turns still answers true: the call can take the turn, and the device
+   * rejoins it on the press rather than a fresh call replacing it.
    */
   get microphoneCall(): boolean {
-    if (this.isConnected) return this.#microphone !== undefined;
+    if (this.isConnected) return this.#withMicrophone;
     if (this.isConnecting) return this.#withMicrophone;
     return false;
   }
@@ -502,59 +523,36 @@ export class RealtimeVoiceSession {
     this.#setStatus(REALTIME_STATUS.CONNECTING);
     this.#options.onError(undefined);
 
-    // The whole of the wait before the handshake is these two, and neither
-    // needs the other: the credential is minted over the network while the
-    // capture device opens. `allSettled` rather than `all`, because whichever
-    // one loses still has to be dealt with — a device that opened after a
-    // failed mint would be held with nobody left to release it. A speak-only
-    // call never asks for the device at all: nothing is captured, so there is
-    // nothing to consent to and nothing to hold.
-    const [connectionResult, streamResult] = await Promise.allSettled([
-      this.#options.requestConnection(),
-      this.#withMicrophone
-        ? (this.#options.requestMicrophoneStream?.() ??
-          navigator.mediaDevices.getUserMedia({
-            audio: { autoGainControl: true, echoCancellation: true, noiseSuppression: true },
-            video: false,
-          }))
-        : Promise.resolve(undefined),
-    ]);
-    // Adopt the device before deciding anything, so every exit from here — a
-    // stop that landed mid-mint, a failed mint, no credential at all — releases
-    // it through the same teardown as the rest.
-    if (streamResult.status === "fulfilled") this.#stream = streamResult.value;
-
-    // A stop that lands while the credential is being minted is not a fault
-    // to report. Every exit from here has to ask, not just the ones after the
-    // handshake starts.
-    if (this.#closed) return this.#abandonConnect();
-    if (connectionResult.status === "rejected") {
-      return this.#fail(
-        `Could not reach the main process: ${errorMessage(connectionResult.reason)}`,
-      );
+    // Connecting opens no capture device: the microphone is the developer's,
+    // not the call's, and it opens only when a press takes a turn. All the
+    // wait before the handshake is the credential being minted.
+    let connection: RealtimeConnection | undefined;
+    try {
+      connection = await this.#options.requestConnection();
+    } catch (error) {
+      // A stop that lands while the credential is being minted is not a fault
+      // to report. Every exit from here has to ask, not just the ones after
+      // the handshake starts.
+      if (this.#closed) return this.#abandonConnect();
+      return this.#fail(`Could not reach the main process: ${errorMessage(error)}`);
     }
-    const connection = connectionResult.value;
+    if (this.#closed) return this.#abandonConnect();
     if (!connection) {
       this.#teardown();
       this.#setStatus(REALTIME_STATUS.UNAVAILABLE);
       return false;
     }
-    if (streamResult.status === "rejected") {
-      return this.#fail(errorMessage(streamResult.reason));
-    }
 
     try {
       const peer = this.#options.createPeerConnection?.() ?? new RTCPeerConnection();
       this.#peer = peer;
-      const stream = streamResult.value;
       if (this.#withMicrophone) {
-        const [microphone] = stream?.getAudioTracks() ?? [];
-        if (!microphone || !stream) throw new Error("No microphone track was available");
-        // Push-to-talk starts closed. Nothing is sent until the developer asks.
-        microphone.enabled = false;
-        this.#microphone = microphone;
-        this.#options.onLocalStream(stream);
-        peer.addTrack(microphone, stream);
+        // The developer's call declares its sending half as a bare
+        // transceiver: the line is negotiated now, and each turn's track
+        // joins the kept sender later without renegotiating. No track, no
+        // device, no consent asked — until a press asks for a turn.
+        const transceiver = peer.addTransceiver("audio", { direction: "sendrecv" });
+        this.#microphoneSender = transceiver.sender;
       } else {
         // Luke's own call receives audio and offers none: the transceiver says
         // so up front, so the connection is speak-only by shape rather than by
@@ -621,13 +619,11 @@ export class RealtimeVoiceSession {
       // credential this call answered may have been minted before the change.
       this.#flushPendingSpeed();
       // Whoever pressed the talk key to get here has been waiting through the
-      // handshake for their turn to open. A speak-only call leaves the press
-      // pending instead — it has no microphone to open a turn with, and the
-      // developer's own call is already replacing it.
-      if (this.#pendingTurn && this.#microphone) {
-        this.#pendingTurn = false;
-        this.startListening();
-      }
+      // handshake for their turn to open, and the device opens now, for that
+      // press. A speak-only call leaves the press pending instead — it has no
+      // sending half to open a turn with, and the developer's own call is
+      // already replacing it.
+      if (this.#pendingTurn && this.#withMicrophone) this.#acquireMicrophone();
       return true;
     } catch (error) {
       if (this.#closed) return this.#abandonConnect();
@@ -643,6 +639,19 @@ export class RealtimeVoiceSession {
     this.#teardown();
     this.#setStatus(REALTIME_STATUS.IDLE);
     return false;
+  }
+
+  /**
+   * How the device is asked for — only ever on behalf of a press. The caller
+   * usually injects the route-aware opener; the fallback opens the browser's
+   * default with the same processing (`MICROPHONE_PROCESSING` says why echo
+   * cancellation is off), so a bare session still captures correctly.
+   */
+  #requestStream(): Promise<MediaStream> {
+    return (
+      this.#options.requestMicrophoneStream?.() ??
+      navigator.mediaDevices.getUserMedia({ audio: { ...MICROPHONE_PROCESSING }, video: false })
+    );
   }
 
   async #exchangeDescription(
@@ -703,11 +712,17 @@ export class RealtimeVoiceSession {
    * key is held cannot be left open by forgetting to press again.
    */
   beginTurn(): void {
-    // A call without a microphone cannot take the turn, however open it is:
-    // the press waits as an intention while the developer's own call — the
-    // one that will replace Luke's — comes up.
+    // Every press opens the device: it lives exactly as long as the turn it
+    // was pressed for. Until the device is live — and, on a first press, the
+    // call it rides — the press waits as an intention and the turn opens the
+    // moment both exist.
     if (!this.isConnected || !this.#microphone) {
+      // The developer's turn wins at the press, not at the device: a reply
+      // under way is cut off now, exactly as the stop key cuts one, and the
+      // turn itself opens when the device arrives.
+      this.stopSpeaking();
       this.#pendingTurn = true;
+      this.#acquireMicrophone();
       return;
     }
     this.startListening();
@@ -716,10 +731,19 @@ export class RealtimeVoiceSession {
   /**
    * The talk key coming up on a held turn, or a second press ending a latched
    * one. A turn that never opened is dropped rather than committed: the
-   * microphone opens with the call, so there is nothing behind it to send.
+   * microphone opens with the press, and one that was let go of before the
+   * device arrived captured nothing to send.
    */
   endTurn(commit: boolean): void {
     if (!this.isConnected) {
+      this.#pendingTurn = false;
+      return;
+    }
+    // A press let go of while its device was still opening held nothing to
+    // send: the turn it was owed is dropped rather than opened under a key
+    // that is already up. A press against Luke's speak-only call is a
+    // different wait — for the developer's call — and keeps its meaning.
+    if (!this.#microphone && this.#withMicrophone) {
       this.#pendingTurn = false;
       return;
     }
@@ -727,16 +751,21 @@ export class RealtimeVoiceSession {
   }
 
   toggleTurn(): void {
-    // Before the call is up there is no turn to take: the microphone is enabled
-    // only once the connection exists, so a press here cannot have captured
-    // anything. It is remembered and applied when the call opens — and a second
-    // press cancels the first rather than queueing another, because two presses
-    // have always meant a turn opened and closed, and one that held nothing is
-    // one with nothing to send. A connected call without a microphone is the
-    // same case: Luke's own call cannot take a turn, so the press waits for
-    // the one that can.
+    // Until the device this press opens is live — and, before the call is up,
+    // the call too — there is no turn to take yet: the press is remembered
+    // and applied the moment there is. A second press cancels the first
+    // rather than queueing another, because two presses have always meant a
+    // turn opened and closed, and one that held nothing is one with nothing
+    // to send. A connected speak-only call is the waiting case too: Luke's
+    // own call cannot take a turn, so the press waits for the one that can.
     if (!this.isConnected || !this.#microphone) {
       this.#pendingTurn = !this.#pendingTurn;
+      if (this.#pendingTurn) {
+        // The same early cut a held press makes: the reply stops at the
+        // press, and the turn opens when the device arrives.
+        this.stopSpeaking();
+        this.#acquireMicrophone();
+      }
       return;
     }
     if (this.#status === REALTIME_STATUS.LISTENING) {
@@ -768,6 +797,110 @@ export class RealtimeVoiceSession {
    */
   dropPendingTurn(): void {
     this.#pendingTurn = false;
+    // A device already opened for that press has no turn left to serve, and
+    // nobody is talking into it: it closes now, not on any clock.
+    if (this.#status !== REALTIME_STATUS.LISTENING) this.#releaseMicrophone();
+  }
+
+  /**
+   * Opens the capture device for the press waiting on it. One request at a
+   * time: a second press mid-open joins the first rather than racing it.
+   */
+  #acquireMicrophone(): void {
+    if (!this.isConnected || !this.#withMicrophone || this.#microphone) return;
+    if (this.#acquiring) return;
+    this.#acquiring = this.#openMicrophone().finally(() => {
+      this.#acquiring = undefined;
+      // A press that arrived while a stale open was still in flight was told
+      // to wait by the guard above; with the flight over, it is served now.
+      if (this.#pendingTurn && !this.#microphone) this.#acquireMicrophone();
+    });
+  }
+
+  async #openMicrophone(): Promise<void> {
+    // The sender names the call this open belongs to, captured before the
+    // wait: a call closed and replaced while the device was opening keeps its
+    // own fresh sender, which is how this open knows it has gone stale.
+    const sender = this.#microphoneSender;
+    let stream: MediaStream;
+    try {
+      stream = await this.#requestStream();
+    } catch (error) {
+      // A refusal belongs to the call whose press asked for the device. If
+      // that call is gone — closed, or replaced mid-open — the refusal died
+      // with it, and the call now up must not be torn down for it. For the
+      // call still standing, it is failed rather than left looking able to
+      // listen, and `FAILED` offers "Start voice" again.
+      if (!this.#closed && this.isConnected && sender === this.#microphoneSender) {
+        this.#fail(errorMessage(error));
+      }
+      return;
+    }
+    // The call may have gone away — or been replaced, bringing a fresh
+    // sender — while this one was opening. A device nobody adopts is
+    // released here, or it would hold the indicator lit with nothing left to
+    // close it.
+    if (
+      this.#closed ||
+      !this.isConnected ||
+      !sender ||
+      sender !== this.#microphoneSender ||
+      this.#microphone
+    ) {
+      for (const track of stream.getTracks()) track.stop();
+      return;
+    }
+    const [microphone] = stream.getAudioTracks();
+    if (!microphone) {
+      for (const track of stream.getTracks()) track.stop();
+      this.#fail("No microphone track was available");
+      return;
+    }
+    // Closed until the turn opens it, so nothing is sent before the state
+    // machine says the turn is on.
+    microphone.enabled = false;
+    this.#stream = stream;
+    this.#microphone = microphone;
+    this.#options.onLocalStream(stream);
+    try {
+      // Onto the sender the call has kept since its handshake: no
+      // renegotiation, the same line, the same call.
+      await sender.replaceTrack(microphone);
+    } catch (error) {
+      // Guarded like the open's own refusal: a sender that rejected because
+      // its call was torn down mid-replace is not the live call's fault.
+      if (!this.#closed && this.isConnected && sender === this.#microphoneSender) {
+        this.#fail(errorMessage(error));
+      }
+      return;
+    }
+    if (this.#closed || !this.isConnected) return;
+    if (this.#pendingTurn) {
+      this.#pendingTurn = false;
+      this.startListening();
+      return;
+    }
+    // Opened for a press that has since been let go: nobody is talking, so
+    // the device closes as fast as it arrived.
+    this.#releaseMicrophone();
+  }
+
+  /**
+   * Puts the capture device away without touching the call: the tracks stop,
+   * the sender stays to take the next track, and the meter lets go of a
+   * stream that no longer exists. From here the microphone indicator is dark
+   * and Bluetooth audio is back on its music codec.
+   */
+  #releaseMicrophone(): void {
+    if (!this.#stream && !this.#microphone) return;
+    const stream = this.#stream;
+    this.#stream = undefined;
+    this.#microphone = undefined;
+    stream?.getTracks().forEach((track) => {
+      track.stop();
+    });
+    void this.#microphoneSender?.replaceTrack(null);
+    this.#options.onLocalStream(undefined);
   }
 
   /**
@@ -817,11 +950,18 @@ export class RealtimeVoiceSession {
     this.#microphone.enabled = false;
     if (!commit) {
       this.#send(clearInputAudioEvents());
+      // Settling to READY is what releases the device: nothing is coming
+      // that its closing could talk over.
       this.#setStatus(REALTIME_STATUS.READY);
       return;
     }
     // A turn a tool may run in: the developer opened it and spoke into it, so
-    // a tool call it emits is the developer's own ask.
+    // a tool call it emits is the developer's own ask. The device is NOT
+    // released here, deliberately: closing a capture device is itself audible
+    // on shared hardware — a Bluetooth headset renegotiates its codec and
+    // playback drops out for a beat — and this is the very moment Luke starts
+    // to answer. The track is disabled, so nothing is sent; the device itself
+    // is let go when the exchange settles, in the quiet after the reply.
     this.#startResponse(pushToTalkCommitEvents(), true);
   }
 
@@ -841,8 +981,9 @@ export class RealtimeVoiceSession {
     // A typed ask runs only on the developer's own call. Luke's speak-only
     // call has been sent no roster, no guide, and no issues, so a turn armed
     // for tools has nothing real to validate against there — the caller
-    // stands that call down and opens the full one before asking.
-    if (!this.isConnected || !this.#microphone) return false;
+    // stands that call down and opens the full one before asking. A typed ask
+    // needs no capture device, so one this call put away stays put away.
+    if (!this.isConnected || !this.#withMicrophone) return false;
     if (this.#status === REALTIME_STATUS.LISTENING) return false;
     const events = typedAskEvents(text);
     if (events.length === 0) return false;
@@ -965,6 +1106,7 @@ export class RealtimeVoiceSession {
     this.#peer = undefined;
     this.#remoteTrack = undefined;
     this.#microphone = undefined;
+    this.#microphoneSender = undefined;
     this.#stream?.getTracks().forEach((track) => {
       track.stop();
     });
@@ -1722,6 +1864,13 @@ export class RealtimeVoiceSession {
     if (this.#status === status) return;
     this.#status = status;
     this.#restIdleTimer(status);
+    // The exchange settling is what closes the device the press opened — not
+    // the commit itself, because closing a capture device is audible on
+    // shared hardware (a Bluetooth headset renegotiates its codec), and at
+    // the commit Luke is just starting to answer. Here the reply is over and
+    // the blip lands in the quiet. A press already waiting keeps the device:
+    // its turn is about to reuse it.
+    if (status === REALTIME_STATUS.READY && !this.#pendingTurn) this.#releaseMicrophone();
     this.#options.onStatus(status);
   }
 
@@ -1730,7 +1879,7 @@ export class RealtimeVoiceSession {
    *
    * Only the developer's own call is retired this way. The call Luke opens to
    * read a notice out already puts itself away once the queue is quiet, and it
-   * holds no capture device to be worth hurrying.
+   * holds no conversation worth a clock of its own.
    *
    * A settled call restarts the clock however it settled, so a notice read out
    * counts as the call being used. It reached the developer, and a call that
@@ -1738,13 +1887,13 @@ export class RealtimeVoiceSession {
    */
   #restIdleTimer(status: RealtimeStatus): void {
     this.#clearIdleTimer();
-    if (status !== REALTIME_STATUS.READY || !this.#microphone) return;
+    if (status !== REALTIME_STATUS.READY || !this.#withMicrophone) return;
     const timeoutMs = positiveInteger(this.#options.idleTimeoutMs, VOICE_IDLE_TIMEOUT_MS);
     this.#idleTimer = (this.#options.schedule ?? setTimeout)(() => {
       this.#idleTimer = undefined;
       // Re-checked at the moment of closing, because ten minutes is long: a
       // turn may have opened, or the call may already be gone.
-      if (this.#status !== REALTIME_STATUS.READY || !this.#microphone) return;
+      if (this.#status !== REALTIME_STATUS.READY || !this.#withMicrophone) return;
       void this.close();
     }, timeoutMs);
   }

@@ -67,6 +67,7 @@ export const APP_SETTING_ID = {
   VOICE_SPEED: "voice_speed",
   VOICE_CAPTIONS: "voice_captions",
   DUCK_OTHER_MEDIA: "duck_other_media",
+  PREFER_BUILT_IN_MICROPHONE: "prefer_built_in_microphone",
   QUIET_DURING_MEETINGS: "quiet_during_meetings",
   SHOW_IN_MENU_BAR: "show_in_menu_bar",
   SHOW_IN_DOCK: "show_in_dock",
@@ -212,6 +213,19 @@ const SETTING_GUIDE: Record<
     kind: APP_SETTING_KIND.TOGGLE,
     value: appToggleText(settings.duckOtherMedia),
     defaultValue: appToggleText(APP_SETTING_DEFAULTS.duckOtherMedia),
+    adjustable: true,
+    manual: VOICE_PAGE,
+  }),
+  preferBuiltInMicrophone: (settings) => ({
+    id: APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE,
+    label: "Prefer the Mac's microphone",
+    description:
+      "Whether Luke listens through the Mac's own microphone when the system input is a " +
+      "Bluetooth headset, so the headset keeps its full music quality. A shut lid keeps the " +
+      "headset's microphone either way.",
+    kind: APP_SETTING_KIND.TOGGLE,
+    value: appToggleText(settings.preferBuiltInMicrophone),
+    defaultValue: appToggleText(APP_SETTING_DEFAULTS.preferBuiltInMicrophone),
     adjustable: true,
     manual: VOICE_PAGE,
   }),
@@ -454,7 +468,10 @@ function askKeyFact(askKey: string | undefined): AppGuideFact {
 }
 
 const MICROPHONE_DETAIL: Record<MicrophoneStatus, string> = {
-  granted: "Granted. The microphone only opens while the talk key holds a turn.",
+  granted:
+    "Granted. The microphone opens only when the talk key takes a turn, sends nothing after " +
+    "the key comes up, and closes once the exchange settles. Typing to Luke never opens it. " +
+    "Which device it opens is the Prefer the Mac's microphone setting's to say.",
   denied:
     "Denied. It can only be granted back in System Settings, under Privacy & Security, Microphone.",
   restricted: "Restricted by a system policy, which only the system's manager can change.",
@@ -887,6 +904,7 @@ export async function applySpokenSetting(
     | "setVoiceSpeed"
     | "setVoiceCaptions"
     | "setDuckOtherMedia"
+    | "setPreferBuiltInMicrophone"
     | "setQuietDuringMeetings"
     | "setShowInMenuBar"
     | "setShowInDock"
@@ -923,22 +941,24 @@ export async function applySpokenSetting(
       ? await bridge.setVoiceCaptions(enabled)
       : action.setting.id === APP_SETTING_ID.DUCK_OTHER_MEDIA
         ? await bridge.setDuckOtherMedia(enabled)
-        : action.setting.id === APP_SETTING_ID.QUIET_DURING_MEETINGS
-          ? await bridge.setQuietDuringMeetings(enabled)
-          : action.setting.id === APP_SETTING_ID.SHOW_IN_MENU_BAR
-            ? await bridge.setShowInMenuBar(enabled)
-            : action.setting.id === APP_SETTING_ID.SHOW_IN_DOCK
-              ? await bridge.setShowInDock(enabled)
-              : action.setting.id === APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS
-                ? await bridge.setShowOnAllDisplays(enabled)
-                : action.setting.id === APP_SETTING_ID.VOICE_SPEED && speed !== undefined
-                  ? await bridge.setVoiceSpeed(speed)
-                  : action.setting.id === APP_SETTING_ID.VOICE && isRealtimeVoice(action.value)
-                    ? await bridge.setVoice(action.value)
-                    : action.setting.id === APP_SETTING_ID.FORM_FACTOR &&
-                        isPanelFormFactor(action.value)
-                      ? await bridge.setFormFactor(action.value)
-                      : undefined;
+        : action.setting.id === APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE
+          ? await bridge.setPreferBuiltInMicrophone(enabled)
+          : action.setting.id === APP_SETTING_ID.QUIET_DURING_MEETINGS
+            ? await bridge.setQuietDuringMeetings(enabled)
+            : action.setting.id === APP_SETTING_ID.SHOW_IN_MENU_BAR
+              ? await bridge.setShowInMenuBar(enabled)
+              : action.setting.id === APP_SETTING_ID.SHOW_IN_DOCK
+                ? await bridge.setShowInDock(enabled)
+                : action.setting.id === APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS
+                  ? await bridge.setShowOnAllDisplays(enabled)
+                  : action.setting.id === APP_SETTING_ID.VOICE_SPEED && speed !== undefined
+                    ? await bridge.setVoiceSpeed(speed)
+                    : action.setting.id === APP_SETTING_ID.VOICE && isRealtimeVoice(action.value)
+                      ? await bridge.setVoice(action.value)
+                      : action.setting.id === APP_SETTING_ID.FORM_FACTOR &&
+                          isPanelFormFactor(action.value)
+                        ? await bridge.setFormFactor(action.value)
+                        : undefined;
   if (!result) {
     // An adjustable entry with no carrier is a guide ahead of its wiring;
     // refuse honestly rather than claim a change that never happened.

@@ -122,6 +122,7 @@ export const APP_SETTING_DEFAULTS = {
   showInMenuBar: true,
   voiceCaptions: false,
   duckOtherMedia: true,
+  preferBuiltInMicrophone: true,
   quietDuringMeetings: true,
   showOnAllDisplays: false,
 } as const satisfies Partial<Record<keyof AppSettings, boolean>>;
@@ -268,6 +269,15 @@ export interface AppSettings {
    */
   duckOtherMedia: boolean;
   /**
+   * Whether a press listens through the Mac's own microphone when the system
+   * input is a Bluetooth headset. On by default: capturing from a headset's
+   * microphone pulls the whole headset onto its call codec, so everything it
+   * plays turns phone-grade for the exchange. Off means the system default is
+   * used exactly as chosen. A shut lid keeps the headset microphone either
+   * way, because a muffled question is worse than a degraded song.
+   */
+  preferBuiltInMicrophone: boolean;
+  /**
    * Whether announcements wait out the user's meetings. While the connected
    * calendar shows a meeting on, a session's spoken notices are held and read
    * out together once it ends. On by default: speaking into a meeting is the
@@ -326,6 +336,42 @@ export interface OutputAudioState {
   muted: boolean;
   /** The output volume as macOS reports it, 0–1. */
   volume: number;
+}
+
+/** How the default input device reaches the Mac, as CoreAudio classifies it. */
+export const MICROPHONE_TRANSPORT = {
+  BUILT_IN: "built-in",
+  BLUETOOTH: "bluetooth",
+  OTHER: "other",
+  /** No input device at all. */
+  NONE: "none",
+} as const;
+
+export type MicrophoneTransport = (typeof MICROPHONE_TRANSPORT)[keyof typeof MICROPHONE_TRANSPORT];
+
+/** The lid over the built-in microphone. A desktop keeps no lid: `unknown`. */
+export const LID_STATE = {
+  OPEN: "open",
+  SHUT: "shut",
+  UNKNOWN: "unknown",
+} as const;
+
+export type LidState = (typeof LID_STATE)[keyof typeof LID_STATE];
+
+/**
+ * Where the developer's voice would be captured from: the default input's
+ * transport, the built-in microphone's name when the machine has one, and
+ * whether the lid over it is open. Read by a helper that reads nothing else
+ * and can write nothing. What it decides is bounded to one act — which device
+ * the renderer asks the browser to open when a press takes a turn, so a
+ * Bluetooth headset keeps its music codec while the Mac's own microphone
+ * listens, and is listened to itself when a shut lid would muffle the Mac's.
+ * Absent wherever it cannot be read, and absence means the browser's default.
+ */
+export interface MicrophoneRoute {
+  defaultTransport: MicrophoneTransport;
+  lid: LidState;
+  builtInName?: string;
 }
 
 /** A rejected update reports why without echoing the submitted value. */
@@ -483,6 +529,13 @@ export interface AppBridge {
   setPointerInterception(interceptsPointer: boolean): void;
   requestMicrophone(): Promise<MicrophoneStatus>;
   /**
+   * Where the developer's voice would be captured from, as last read — and a
+   * fresh read is asked for behind the answer, so the next press sees a lid
+   * that has closed meanwhile. `undefined` wherever the route cannot be read,
+   * which the caller must take as "use the browser's default".
+   */
+  getMicrophoneRoute(): Promise<MicrophoneRoute | undefined>;
+  /**
    * Opens Privacy & Security in System Settings, where the system's own grant
    * lives. Luke can ask for the microphone and stop using it; only the user can
    * withdraw it, and only there.
@@ -561,6 +614,8 @@ export interface AppBridge {
   resetSettings(scope: SettingsResetScope): Promise<SettingsUpdateResult>;
   /** Turns the quieting of Music and Spotify during a spoken exchange on or off. */
   setDuckOtherMedia(enabled: boolean): Promise<SettingsUpdateResult>;
+  /** Turns the Mac-microphone-over-Bluetooth-headset preference on or off. */
+  setPreferBuiltInMicrophone(enabled: boolean): Promise<SettingsUpdateResult>;
   /**
    * Asks GitHub for the latest release name, right now, because the row's
    * button was pressed. The answer is the same snapshot the broadcast
@@ -838,6 +893,7 @@ export const channels = {
   setExpanded: "app:set-expanded",
   setPointerInterception: "app:set-pointer-interception",
   requestMicrophone: "app:request-microphone",
+  microphoneRoute: "app:microphone-route",
   openMicrophoneSettings: "app:open-microphone-settings",
   setProviderApiKey: "app:set-provider-api-key",
   setVoice: "app:set-voice",
@@ -847,6 +903,7 @@ export const channels = {
   setAskHotkey: "app:set-ask-hotkey",
   setStopHotkey: "app:set-stop-hotkey",
   setDuckOtherMedia: "app:set-duck-other-media",
+  setPreferBuiltInMicrophone: "app:set-prefer-built-in-microphone",
   setQuietDuringMeetings: "app:set-quiet-during-meetings",
   connectGoogleCalendar: "app:connect-google-calendar",
   cancelGoogleCalendarSignIn: "app:cancel-google-calendar-sign-in",

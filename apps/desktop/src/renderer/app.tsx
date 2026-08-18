@@ -663,6 +663,12 @@ export function App(): React.JSX.Element {
     [applySettingsReply],
   );
 
+  const changePreferBuiltInMicrophone = useCallback(
+    async (enabled: boolean) =>
+      applySettingsReply(await window.sidecar.setPreferBuiltInMicrophone(enabled)),
+    [applySettingsReply],
+  );
+
   const changeQuietDuringMeetings = useCallback(
     async (enabled: boolean) =>
       applySettingsReply(await window.sidecar.setQuietDuringMeetings(enabled)),
@@ -1582,6 +1588,7 @@ export function App(): React.JSX.Element {
     syncGuide,
     syncIssues,
   } = useVoiceConversation({
+    preferBuiltInMicrophone: (settings ?? bootstrap?.settings)?.preferBuiltInMicrophone ?? true,
     sessions,
     noticeAsks,
     workspaceProjects,
@@ -2219,6 +2226,7 @@ export function App(): React.JSX.Element {
   const preferences: PreferenceWrites = {
     onVoiceCaptionsChange: changeVoiceCaptions,
     onDuckOtherMediaChange: changeDuckOtherMedia,
+    onPreferBuiltInMicrophoneChange: changePreferBuiltInMicrophone,
     onQuietDuringMeetingsChange: changeQuietDuringMeetings,
     onVoiceChange: changeVoice,
     onVoiceSpeedChange: changeVoiceSpeed,

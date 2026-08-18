@@ -57,6 +57,7 @@ const SETTINGS_FIELD = {
   ASK_HOTKEY: "askHotkey",
   DEFAULT_WORKSPACE_PROVIDER: "defaultWorkspaceProvider",
   DUCK_OTHER_MEDIA: "duckOtherMedia",
+  PREFER_BUILT_IN_MICROPHONE: "preferBuiltInMicrophone",
   FEEDBACK_SENDS: "feedbackSends",
   FORM_FACTOR: "formFactor",
   LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
@@ -185,6 +186,7 @@ interface PersistedSettings {
    * and a corrupt value both land on doing it.
    */
   duckOtherMedia: boolean;
+  preferBuiltInMicrophone: boolean;
   /**
    * How many feedback sends have landed from this machine, so the composer's
    * confirmation can pick which little celebration each delivery gets.
@@ -517,6 +519,10 @@ function parsePersistedSettings(source: string): PersistedSettings {
       record[SETTINGS_FIELD.DUCK_OTHER_MEDIA],
       APP_SETTING_DEFAULTS.duckOtherMedia,
     ),
+    preferBuiltInMicrophone: booleanSetting(
+      record[SETTINGS_FIELD.PREFER_BUILT_IN_MICROPHONE],
+      APP_SETTING_DEFAULTS.preferBuiltInMicrophone,
+    ),
     // A count that is not a whole non-negative number reads as none yet: the
     // worst a corrupt value can cost is replaying the first send's scene.
     ...(feedbackSends !== undefined ? { feedbackSends } : {}),
@@ -614,6 +620,7 @@ export class SettingsStore {
       ...(persisted.askHotkey ? { askHotkey: persisted.askHotkey } : {}),
       ...(persisted.stopHotkey ? { stopHotkey: persisted.stopHotkey } : {}),
       duckOtherMedia: persisted.duckOtherMedia,
+      preferBuiltInMicrophone: persisted.preferBuiltInMicrophone,
       quietDuringMeetings: persisted.quietDuringMeetings,
       showOnAllDisplays: persisted.showOnAllDisplays,
       formFactor: persisted.formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
@@ -865,6 +872,13 @@ export class SettingsStore {
    * off. A plain preference like the caption's: no cipher, no invalid value,
    * so the write either lands or throws.
    */
+  async setPreferBuiltInMicrophone(enabled: boolean): Promise<SettingsUpdateResult> {
+    return this.#setField((persisted) => {
+      if (persisted.preferBuiltInMicrophone === enabled) return;
+      return { ...persisted, preferBuiltInMicrophone: enabled };
+    });
+  }
+
   async setDuckOtherMedia(enabled: boolean): Promise<SettingsUpdateResult> {
     return this.#setField((persisted) => {
       if (persisted.duckOtherMedia === enabled) return;
@@ -1299,6 +1313,7 @@ export class SettingsStore {
           delete next.voiceSpeed;
           next.voiceCaptions = APP_SETTING_DEFAULTS.voiceCaptions;
           next.duckOtherMedia = APP_SETTING_DEFAULTS.duckOtherMedia;
+          next.preferBuiltInMicrophone = APP_SETTING_DEFAULTS.preferBuiltInMicrophone;
           break;
         case SETTINGS_RESET_SCOPE.APPEARANCE:
           next.showInMenuBar = APP_SETTING_DEFAULTS.showInMenuBar;
