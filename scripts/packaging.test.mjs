@@ -16,6 +16,7 @@ import {
   resolveSigningMode,
   SIGNING_MODE,
   SWIFT_TARGET_TRIPLE,
+  signingModeDefine,
   swiftCompilerArguments,
 } from "../apps/desktop/scripts/package-config.mjs";
 import { NATIVE_HELPERS, packagedAppExecutable } from "../apps/desktop/scripts/package-layout.mjs";
@@ -267,6 +268,22 @@ test("signing configuration separates ad-hoc and Developer ID modes", () => {
     hardenedRuntime: true,
     entitlements: entitlementsPath,
   });
+});
+
+test("the baked signing define mirrors the signing mode and carries no identity", () => {
+  // app-identity.ts reads this define to decide which name — and so which
+  // state directory and Keychain entry — a run answers to, so it must say
+  // Developer ID exactly when the packager signs with one.
+  assert.deepEqual(signingModeDefine({}), { PACKAGED_WITH_DEVELOPER_ID_SIGNING: "false" });
+  const defined = signingModeDefine({
+    LUKE_CODESIGN_IDENTITY: "Developer ID Application: X (TEAM)",
+  });
+  assert.deepEqual(defined, { PACKAGED_WITH_DEVELOPER_ID_SIGNING: "true" });
+  // Only the fact travels into the bundle: a boolean literal, never the
+  // identity's own name.
+  for (const value of Object.values(defined)) {
+    assert.equal(value.includes("Developer ID"), false);
+  }
 });
 
 test("release entitlements allow required capabilities without unsigned executable memory", () => {

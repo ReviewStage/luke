@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
+import { signingModeDefine } from "./package-config.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(scriptDirectory, "..");
@@ -41,6 +42,10 @@ await Promise.all([
       PACKAGED_GOOGLE_CALENDAR_CLIENT_SECRET: JSON.stringify(
         process.env.GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET ?? "",
       ),
+      // Whether this bundle rides in a Developer ID release, which is what
+      // decides the name — and so the state directory and Keychain entry —
+      // the run answers to; see app-identity.ts.
+      ...signingModeDefine(process.env),
     },
     sourcemap: true,
     logLevel: "info",
