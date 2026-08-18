@@ -1742,6 +1742,11 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   flex-direction: column;
   padding: calc(max(var(--notch-top-inset), 32px) + 14px) var(--panel-inset) 18px;
   border-radius: 0 0 var(--panel-radius) var(--panel-radius);
+  /* A page lands in layout at once, while the black surface takes one spring
+     to its new height. The panel follows that same edge so newly mounted rows
+     cannot paint onto the transparent window below it. */
+  clip-path: inset(0 0 calc(100% - var(--panel-height, 520px)) 0);
+  transition: clip-path var(--duration-shape) var(--spring);
 }
 
 .app-stage[data-presentation="panel"] .expanded-panel {

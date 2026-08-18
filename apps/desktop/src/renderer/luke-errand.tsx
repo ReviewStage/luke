@@ -150,6 +150,8 @@ export const ERRAND_WAIT = {
   AT_ONCE: "at-once",
   /** The panel opened for this, so a whole page of content is arriving. */
   CONTENT: "content",
+  /** An instant page swap changed the black surface's height. */
+  SURFACE: "surface",
 } as const;
 
 export type ErrandWait = (typeof ERRAND_WAIT)[keyof typeof ERRAND_WAIT];
@@ -258,16 +260,21 @@ export function errandFlies(tokens: ErrandTokens): boolean {
  *
  * The wait before setting off is the whole of what the act it signs has set in
  * motion. A panel that had to open costs the shape's travel plus the delay and
- * stagger its content arrives on. An errand that set off inside it would be
- * crossing a surface still growing and landing where a row had not finished
- * arriving.
+ * stagger its content arrives on. An instant page swap has no content motion,
+ * but its flight still waits for the surface's edge when the destination page
+ * changes its height.
  */
 export function errandBeats(tokens: ErrandTokens, wait: ErrandWait): ErrandBeats {
   const duration = tokens.shape * 2 + tokens.quick;
   const arrival = tokens.shape / duration;
   const arriving = tokens.expand + tokens.stagger * tokens.fanLimit + tokens.shape;
   return {
-    delay: wait === ERRAND_WAIT.AT_ONCE ? tokens.quick : arriving,
+    delay:
+      wait === ERRAND_WAIT.AT_ONCE
+        ? tokens.quick
+        : wait === ERRAND_WAIT.SURFACE
+          ? tokens.shape
+          : arriving,
     duration,
     arrival,
     departure: (tokens.shape + tokens.quick) / duration,

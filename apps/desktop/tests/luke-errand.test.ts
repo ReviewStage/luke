@@ -198,6 +198,10 @@ test("an errand that opened the panel trails the whole opening", () => {
   assert.equal(errandBeats(TOKENS, ERRAND_WAIT.CONTENT).delay, 200 + 32 * 5 + 460);
 });
 
+test("an errand crossing an instant page swap waits for the black surface", () => {
+  assert.equal(errandBeats(TOKENS, ERRAND_WAIT.SURFACE).delay, TOKENS.shape);
+});
+
 /** The window, and the black drawn in the middle of it: a 620-wide open panel. */
 const STAGE = { left: 0, top: 0, width: 1512, height: 600 };
 const SURFACE = { left: 446, top: 0, width: 620, height: 520 };

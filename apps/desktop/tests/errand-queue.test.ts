@@ -252,7 +252,8 @@ test("a panel asked for out loud is nobody's to take away afterwards", () => {
   assert.equal(errandBorrowedPanel(false, shows(true)), false);
 });
 
-test("a flight waits only when it had to open the panel", () => {
-  assert.equal(errandWait(true), ERRAND_WAIT.CONTENT);
-  assert.equal(errandWait(false), ERRAND_WAIT.AT_ONCE);
+test("a flight waits for every surface edge its act moves", () => {
+  assert.equal(errandWait({ opening: true, surfaceChanging: true }), ERRAND_WAIT.CONTENT);
+  assert.equal(errandWait({ opening: false, surfaceChanging: true }), ERRAND_WAIT.SURFACE);
+  assert.equal(errandWait({ opening: false, surfaceChanging: false }), ERRAND_WAIT.AT_ONCE);
 });

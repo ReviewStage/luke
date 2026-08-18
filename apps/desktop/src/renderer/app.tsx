@@ -260,7 +260,9 @@ export function App(): React.JSX.Element {
   );
   const [display, setDisplay] = useState<DisplayDiagnostic>();
   const [tab, setTab, tabNow] = useStateWithRef<PanelTab>(PANEL_TAB.SESSIONS);
-  const [settingsView, setSettingsView] = useState<SettingsView>(SETTINGS_VIEW.ROOT);
+  const [settingsView, setSettingsView, settingsViewNow] = useStateWithRef<SettingsView>(
+    SETTINGS_VIEW.ROOT,
+  );
   const [sessionView, setSessionView] = useState<SessionView>(DEFAULT_SESSION_VIEW);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -491,7 +493,7 @@ export function App(): React.JSX.Element {
       // starts in it — set their page right after this reset.
       setSettingsView(SETTINGS_VIEW.ROOT);
     },
-    [setTab],
+    [setSettingsView, setTab],
   );
 
   // A choice made in the sheet puts the sheet away. It is drawn over the list
@@ -587,7 +589,12 @@ export function App(): React.JSX.Element {
       const { run, launch } = nextErrand(errandRun.current);
       errandRun.current = run;
       if (launch === undefined) return;
-      const wait = errandWait(launch.opening);
+      const wait = errandWait({
+        opening: launch.opening,
+        surfaceChanging:
+          launch.page !== undefined &&
+          (tabNow() !== launch.tab || settingsViewNow() !== launch.page),
+      });
       // The control has to be drawn to be flown to, and a settings page that is
       // not open is not drawn at all — so the tab comes forward and then the
       // page the setting lives on, in that order, because arriving at the tab
@@ -612,7 +619,7 @@ export function App(): React.JSX.Element {
       errandRun.current = finished.run;
       drawErrandHold(finished.hold);
     }
-  }, [changeTab, drawErrandHold, presentationOf]);
+  }, [changeTab, drawErrandHold, presentationOf, setSettingsView, settingsViewNow, tabNow]);
 
   /** Adds an act to the run, and sends Luke off if he is not already out. */
   const armErrandFlight = useCallback(
@@ -636,7 +643,7 @@ export function App(): React.JSX.Element {
     // note was written — would land on a page nobody is looking at.
     setSettingsView(standDownPage.current);
     expand();
-  }, [changeTab, expand]);
+  }, [changeTab, expand, setSettingsView]);
 
   /**
    * Applies a settings write's reply: the snapshot the store actually holds,
@@ -1866,6 +1873,7 @@ export function App(): React.JSX.Element {
     cancelHover,
     changeTab,
     setMicrophoneStatus,
+    setSettingsView,
     startMicrophone,
     stopMicrophone,
     summonAsk,
@@ -2051,6 +2059,7 @@ export function App(): React.JSX.Element {
     optionsOpen,
     presentation,
     searchOpen,
+    setSettingsView,
     settingsView,
     signInWaitNow,
     stopSpeaking,

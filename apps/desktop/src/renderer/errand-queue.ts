@@ -200,10 +200,11 @@ export function errandBorrowedPanel(borrowed: boolean, launch: PendingErrand): b
 }
 
 /**
- * A panel that had to open is a whole page of content arriving. Once the panel
- * is open, settings pages swap without motion, so every control owes nothing
- * but the beat that lets its newly mounted row enter the layout.
+ * A panel that had to open is a whole page of content arriving. Settings pages
+ * swap without motion, but a page whose height changes still has to wait for
+ * the black surface to reach its newly mounted control.
  */
-export function errandWait(opening: boolean): ErrandWait {
-  return opening ? ERRAND_WAIT.CONTENT : ERRAND_WAIT.AT_ONCE;
+export function errandWait(input: { opening: boolean; surfaceChanging: boolean }): ErrandWait {
+  if (input.opening) return ERRAND_WAIT.CONTENT;
+  return input.surfaceChanging ? ERRAND_WAIT.SURFACE : ERRAND_WAIT.AT_ONCE;
 }
