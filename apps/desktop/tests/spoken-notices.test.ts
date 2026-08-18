@@ -315,6 +315,31 @@ test("a backlog stranded by a call that ended is picked up by the retry clock", 
   );
 });
 
+test("a notice refused mid-reply keeps a clock of its own beside the READY edge", () => {
+  const session = fakeSession();
+  session.microphone = true;
+  session.setStatus(REALTIME_STATUS.RESPONDING);
+  const timers = fakeTimers();
+  const subject = announcer(session, timers);
+
+  // Arrives mid-reply and is refused the turn. The READY edge is the
+  // session's promise, not this class's, so the backlog arms its own retry
+  // rather than depending on that edge alone.
+  subject.enqueue([speech("a")]);
+  assert.deepEqual(session.spoken, []);
+  assert.equal(timers.armed(), 1);
+  assert.deepEqual(timers.delays, [ANNOUNCER_RETRY_DELAY_MS]);
+
+  // The edge never lands; the clock fires into a call that has since settled
+  // and the notice is spoken rather than stranded.
+  session.setStatus(REALTIME_STATUS.READY);
+  timers.fire();
+  assert.deepEqual(
+    session.spoken.map((item) => item.providerSessionId),
+    ["a"],
+  );
+});
+
 test("a sentence that went stale in the queue is dropped, not read as news", () => {
   const session = fakeSession();
   session.setStatus(REALTIME_STATUS.RESPONDING);

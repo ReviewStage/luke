@@ -65,10 +65,11 @@ const CONNECT_TIMEOUT_MS = 15_000;
 
 /**
  * How long a finished generation may go on playing before the turn is ended
- * anyway. It is a backstop for a reply that produced no audio at all, not the
+ * anyway. It is a backstop for a reply that produced no audio at all — or one
+ * whose audio drained while its `response.done` never arrived — not the
  * normal path: a spoken reply ends when it goes quiet.
  */
-const REALTIME_SETTLE_TIMEOUT_MS = 20_000;
+export const REALTIME_SETTLE_TIMEOUT_MS = 20_000;
 
 /**
  * How long the developer's call stays open with nothing being said on it.
@@ -356,6 +357,25 @@ export class RealtimeVoiceSession {
    * be.
    */
   #remoteQuiet = false;
+  /**
+   * Whether the server still owes this turn a `response.done`: raised when a
+   * reply is asked for, lowered when the server concludes it — its own
+   * `done`, the error that refused it outright, or the cancel an interrupt
+   * sends ahead of anything newer. The client's side of the turn can settle
+   * first — the audio drains before the `done` arrives — and in that window
+   * the conversation still holds an active response: a `response.create`
+   * sent into it is refused as a conversation already in progress, with the
+   * refusal read out to the developer as a voice error and the reply it was
+   * meant to open lost. Nothing may end the turn while this stands.
+   */
+  #responseOutstanding = false;
+  /**
+   * Whether the reply's audio ran out while the server still owed its
+   * `done`. The ending the drain would have made is remembered here and
+   * lands when the `done` arrives, so the turn still closes on the second of
+   * the two events whichever order they come in.
+   */
+  #audioDrained = false;
   /**
    * Whether Luke has actually been heard during this reply. Committing a turn
    * swaps the meter from the microphone to Luke, and the meter reports quiet as
@@ -1022,6 +1042,12 @@ export class RealtimeVoiceSession {
     // that opens a new developer turn arms it afresh in #startResponse; left
     // true here, the cancelled reply's late calls would find it still standing.
     this.#toolTurnArmed = false;
+    // The cancel concludes the reply at the server before anything sent after
+    // it is read — the channel is ordered — so nothing is outstanding from
+    // here, and whatever `done` the cancelled reply still sends matches no
+    // active response above.
+    this.#responseOutstanding = false;
+    this.#audioDrained = false;
     this.#generationDone = false;
     this.#remoteQuiet = false;
     this.#heardLuke = false;
@@ -1124,6 +1150,8 @@ export class RealtimeVoiceSession {
     this.#pendingSupersedes.clear();
     this.#conversationBegan = false;
     this.#clearIdleTimer();
+    this.#responseOutstanding = false;
+    this.#audioDrained = false;
     this.#generationDone = false;
     this.#remoteQuiet = false;
     this.#heardLuke = false;
@@ -1167,6 +1195,10 @@ export class RealtimeVoiceSession {
     this.#generationDone = false;
     this.#remoteQuiet = false;
     this.#heardLuke = false;
+    // The reply now being asked for is the server's until it concludes it:
+    // nothing else may ask for one over it.
+    this.#responseOutstanding = true;
+    this.#audioDrained = false;
     this.#clearQuietTimer();
     this.#responseItemId = undefined;
     // Nothing has been confirmed for this turn yet: whatever `response.done`
@@ -1266,6 +1298,14 @@ export class RealtimeVoiceSession {
     if (this.#remoteTrack) this.#remoteTrack.enabled = true;
   }
 
+  /** Starts the backstop for a reply whose proper ending never arrives. */
+  #armSettleTimer(): void {
+    this.#settleTimer ??= setTimeout(() => {
+      this.#settleTimer = undefined;
+      this.#finishResponse();
+    }, REALTIME_SETTLE_TIMEOUT_MS);
+  }
+
   #clearSettleTimer(): void {
     if (this.#settleTimer === undefined) return;
     clearTimeout(this.#settleTimer);
@@ -1291,6 +1331,11 @@ export class RealtimeVoiceSession {
   /** Ends the turn once the reply is done, so the next one can start. */
   #finishResponse(): void {
     this.#generationDone = false;
+    // However the turn ended — the settle backstop included — whatever the
+    // server still owed it is treated as concluded, so a `done` that never
+    // comes cannot leave every later reply refused against it.
+    this.#responseOutstanding = false;
+    this.#audioDrained = false;
     // The caption is of speech, and the speech is over. Whatever ended the
     // reply — the audio draining, an error, the settle timer — the words leave
     // with the meter and the face rather than lingering under a quiet capsule.
@@ -1651,6 +1696,21 @@ export class RealtimeVoiceSession {
         return;
       case REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED:
         this.#audioEndingsReported = true;
+        // The audio can run out while the server still owes the reply its
+        // `done` — generation finishing and playback finishing have no fixed
+        // order — and until that `done` the conversation holds an active
+        // response. A turn ended here would offer READY to a caller with a
+        // reply to ask for — the announcer reading out a notice that queued
+        // behind this reply is the one that takes it — and the create it
+        // sends would be refused as a conversation already in progress, the
+        // refusal read out as a voice error and the notice lost. So the
+        // drain is remembered and the `done` ends the turn, with the settle
+        // backstop for a `done` that never comes.
+        if (this.#responseOutstanding) {
+          this.#audioDrained = true;
+          this.#armSettleTimer();
+          return;
+        }
         // The reply is over because the server says the audio ran out, not
         // because this end guessed from a stretch of quiet. A pause between two
         // sentences is quiet too, and guessing ended the turn in the middle of
@@ -1666,11 +1726,18 @@ export class RealtimeVoiceSession {
         // end that turn early: its calls are answered refused so the model is
         // not left waiting, and everything else about it is ignored.
         const fresh = event.responseId === this.#activeResponseId;
+        // Whatever this reply turns out to be below, the server has concluded
+        // it: from here the conversation can take a new `response.create`.
+        if (fresh) this.#responseOutstanding = false;
         // A reply that asked for tools has not finished talking: the calls are
         // answered and the reply resumes over their outcomes, so the turn stays
         // open rather than ending on a reply that was only half made.
         if (event.calls.length > 0) {
           void this.#answerToolCalls(event.calls, fresh && this.#toolTurnArmed);
+          // The spoken half's audio already drained — its ending deferred to
+          // this `done` — so the ending lands now, exactly as the drain would
+          // have made it; an armed follow-up re-opens the turn on its own.
+          if (fresh && this.#audioDrained) this.#finishResponse();
           return;
         }
         if (!fresh) return;
@@ -1689,6 +1756,13 @@ export class RealtimeVoiceSession {
         // being audible, which the caller reports from the audio itself rather
         // than from an event — the one that would say so is undocumented.
         this.#generationDone = true;
+        // The server said the audio ran out before it said the reply was
+        // over. That ending waited for this `done` — the conversation held
+        // an active response until it — and lands now.
+        if (this.#audioDrained) {
+          this.#finishResponse();
+          return;
+        }
         // The audio can run out before the event that says generation is over.
         // The meter has already reported its quiet and will not report it twice,
         // so waiting for another would hold the turn open until the settle
@@ -1697,10 +1771,7 @@ export class RealtimeVoiceSession {
           this.#finishResponse();
           return;
         }
-        this.#settleTimer ??= setTimeout(() => {
-          this.#settleTimer = undefined;
-          this.#finishResponse();
-        }, REALTIME_SETTLE_TIMEOUT_MS);
+        this.#armSettleTimer();
         return;
       }
       case REALTIME_SERVER_EVENT.CONVERSATION_ITEM_DELETED:
@@ -1716,7 +1787,16 @@ export class RealtimeVoiceSession {
         this.#options.onError(event.message);
         // An error can arrive *instead of* `response.done` — an empty push-to-talk
         // commit is the common case — which would otherwise leave the session
-        // stuck in `responding` and unable to take another turn.
+        // stuck in `responding` and unable to take another turn. But only a
+        // reply the server never confirmed ends this way: behind a confirmed
+        // one an error is an aside — the reply is still the server's, its own
+        // `done` still ends the turn, and ending it here would offer READY
+        // while the conversation still holds an active response. The settle
+        // backstop covers a `done` that never comes.
+        if (this.#activeResponseId !== undefined) {
+          this.#armSettleTimer();
+          return;
+        }
         this.#finishResponse();
     }
   }
