@@ -2497,6 +2497,11 @@ function AccountSection({
                 </p>
               );
             }
+            // Decided, not missed: a same-day reviews reading may trail a
+            // fresher voice mint, because mints say nothing about reviews —
+            // dropping it would delete the only reviews count for no accuracy
+            // gained. The skew is bounded by the refresh riding every settings
+            // change and tab turn, and a different day still discards it.
             const reviews =
               hostedUsage && hostedUsage.attention.resetsAt === voiceQuota.resetsAt
                 ? hostedUsage.attention
