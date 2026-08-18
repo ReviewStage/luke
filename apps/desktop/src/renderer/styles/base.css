@@ -1745,7 +1745,9 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   /* A page lands in layout at once, while the black surface takes one spring
      to its new height. The panel follows that same edge so newly mounted rows
      cannot paint onto the transparent window below it. */
-  clip-path: inset(0 0 calc(100% - var(--panel-height, 520px)) 0);
+  clip-path: inset(
+    0 0 calc(100% - var(--panel-height, 520px)) 0 round 0 0 var(--panel-radius) var(--panel-radius)
+  );
   transition: clip-path var(--duration-shape) var(--spring);
 }
 
