@@ -91,7 +91,7 @@ export function KeySlot({
   const ready = isSubmittable(entry);
 
   return (
-    <div className="slot-stage" aria-hidden={!live} inert={!live}>
+    <div className="slot-stage" data-drawn={String(drawn)} aria-hidden={!live} inert={!live}>
       {/* No grouping role: the field names the provider itself, and everything
           beside it acts on that one field. */}
       <div className="key-slot" ref={measure} data-hit-region={HIT_REGION.SLOT}>

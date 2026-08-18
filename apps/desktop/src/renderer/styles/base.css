@@ -1071,7 +1071,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transform: translateX(-50%) translateY(calc(var(--shape-top) - 6px));
 }
 
-.app-stage[data-notch="false"][data-presentation="slot"] .slot-stage {
+.app-stage[data-notch="false"][data-presentation="slot"] .slot-stage[data-drawn="true"] {
   transform: translateX(-50%) translateY(var(--shape-top));
 }
 
@@ -2357,7 +2357,11 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   will-change: opacity, transform;
 }
 
-.app-stage[data-presentation="slot"] .slot-stage {
+/* Only the stage whose entry holds the slot comes forward: the others keep
+   whatever pill they last held — that is what lets an exit finish saying what
+   it was saying — so without the drawn gate a stale pill would resurface
+   under another occupant's wait. */
+.app-stage[data-presentation="slot"] .slot-stage[data-drawn="true"] {
   opacity: 1;
   visibility: visible;
   transform: translateX(-50%) translateY(0);
@@ -2379,7 +2383,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   border-radius: 0 0 var(--slot-radius) var(--slot-radius);
 }
 
-.app-stage[data-presentation="slot"] .key-slot {
+.app-stage[data-presentation="slot"] .slot-stage[data-drawn="true"] .key-slot {
   pointer-events: auto;
 }
 

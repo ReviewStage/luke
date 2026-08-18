@@ -44,7 +44,7 @@ export function CalendarConnectSlot({
   if (!held) return null;
 
   return (
-    <div className="slot-stage" aria-hidden={!live} inert={!live}>
+    <div className="slot-stage" data-drawn={String(drawn)} aria-hidden={!live} inert={!live}>
       <div className="key-slot sign-in-slot" ref={measure} data-hit-region={HIT_REGION.SLOT}>
         {/* One line, worded and dressed like the account sign-in's wait: the
             mark, what is being waited for, and the one way to stop waiting —

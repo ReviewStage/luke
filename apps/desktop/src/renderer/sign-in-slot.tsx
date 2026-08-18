@@ -41,7 +41,7 @@ export function SignInSlot({
 
   const name = shown === ACCOUNT_PROVIDER.GITHUB ? "GitHub" : "Google";
   return (
-    <div className="slot-stage" aria-hidden={!live} inert={!live}>
+    <div className="slot-stage" data-drawn={String(drawn)} aria-hidden={!live} inert={!live}>
       <div className="key-slot sign-in-slot" ref={measure} data-hit-region={HIT_REGION.SLOT}>
         <div className="key-slot-row">
           <span className="key-slot-mark sign-in-slot-mark">
