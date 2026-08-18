@@ -595,30 +595,35 @@ async function signOutAccount(options: { revokeRemote?: boolean } = {}): Promise
 
 /**
  * Erases the account at the service, then signs this machine out of it. The
- * hosted delete runs first and a refusal keeps the account signed in: a
- * sign-out ahead of a failed delete would read as deletion while the service
- * still holds everything. An expired access token is routine — refresh through
- * the same single flight every hosted call shares, and retry once on whatever
- * it produced.
+ * hosted delete runs first and any failure keeps the account signed in: a
+ * sign-out ahead of a confirmed delete would read as deletion while the
+ * service still holds everything.
  */
 async function deleteAccountEverywhere(): Promise<AccountSnapshot> {
   const stored = await settingsStore.readAccount();
-  if (stored) {
-    try {
-      await deleteHostedAccount({
-        serviceBaseUrl: HOSTED_SERVICE_BASE_URL,
-        accessToken: stored.accessToken,
-      });
-    } catch (error) {
-      if (!accessTokenNeedsRefresh(error)) throw error;
-      await refreshStoredAccountOnce();
-      const refreshed = await settingsStore.readAccount();
-      if (!refreshed || refreshed.accessToken === stored.accessToken) throw error;
-      await deleteHostedAccount({
-        serviceBaseUrl: HOSTED_SERVICE_BASE_URL,
-        accessToken: refreshed.accessToken,
-      });
-    }
+  // No stored credential is a refusal, not a sign-out: without one there is
+  // no way to prove the ask to the service, and resolving here would read as
+  // a finished delete while the service still holds the account.
+  if (!stored) throw new Error("No stored account credential to delete with");
+  try {
+    await deleteHostedAccount({
+      serviceBaseUrl: HOSTED_SERVICE_BASE_URL,
+      accessToken: stored.accessToken,
+    });
+  } catch (error) {
+    if (!accessTokenNeedsRefresh(error)) throw error;
+    // Routine expiry of an hour-lived token. Refreshed directly rather than
+    // through the shared single flight, because that flight answers a revoked
+    // grant by signing the machine out — which here would dress a failed
+    // delete as a finished one. The rotation is stored before the retry so a
+    // retry that fails cannot strand the account on a spent token.
+    const generation = accountGeneration;
+    const tokens = await accountClient.refresh(stored.refreshToken);
+    await storeCurrentAccount(generation, { ...stored, ...tokens });
+    await deleteHostedAccount({
+      serviceBaseUrl: HOSTED_SERVICE_BASE_URL,
+      accessToken: tokens.accessToken,
+    });
   }
   // The user's rows at the service died with the delete — tokens included —
   // so a remote revocation has nothing left to act on.
