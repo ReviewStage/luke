@@ -144,24 +144,22 @@ export function openedFeedbackEntry(
 }
 
 /**
- * Each kind in its own words: the line that offers it in settings, and the
+ * Each kind in its own words: the button that offers it in settings, and the
  * label, hint, and field the shape opens with. Two kinds rather than one form
  * with a switch, because they are read differently on arrival — feedback is
  * about Luke, and a prompt is a candidate for the product itself.
  */
 export const FEEDBACK_COPY: Record<
   FeedbackKind,
-  { title: string; opener: string; label: string; placeholder: string; detail?: string }
+  { title: string; label: string; placeholder: string; detail?: string }
 > = {
   [FEEDBACK_KIND.FEEDBACK]: {
     title: "Send feedback",
-    opener: "Write feedback",
     label: "Feedback",
     placeholder: "What happened, and what did you expect?",
   },
   [FEEDBACK_KIND.PROMPT]: {
     title: "Submit a prompt",
-    opener: "Share a prompt",
     label: "The prompt",
     placeholder: "Describe a feature…",
     detail:
