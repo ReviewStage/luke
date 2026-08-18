@@ -27,26 +27,11 @@ const bridge: AppBridge = {
   getMicrophoneRoute: invoke(channels.microphoneRoute),
   openMicrophoneSettings: () => ipcRenderer.send(channels.openMicrophoneSettings),
   setProviderApiKey: invoke(channels.setProviderApiKey),
-  setVoice: invoke(channels.setVoice),
-  setVoiceSpeed: invoke(channels.setVoiceSpeed),
+  updateSetting: invoke(channels.updateSetting),
   openProviderApiKeys: (providerId) => {
     ipcRenderer.send(channels.openProviderApiKeys, providerId);
   },
-  setShowInDock: invoke(channels.setShowInDock),
-  setShowOnAllDisplays: invoke(channels.setShowOnAllDisplays),
-  setFormFactor: invoke(channels.setFormFactor),
-  setDefaultWorkspaceProvider: invoke(channels.setDefaultWorkspaceProvider),
-  setWorkspaceAgentDefault: invoke(channels.setWorkspaceAgentDefault),
-  setWorkspaceProjectDefault: invoke(channels.setWorkspaceProjectDefault),
-  setVoiceCaptions: invoke(channels.setVoiceCaptions),
   resetSettings: invoke(channels.resetSettings),
-  setVoiceHotkey: invoke(channels.setVoiceHotkey),
-  setAskHotkey: invoke(channels.setAskHotkey),
-  setStopHotkey: invoke(channels.setStopHotkey),
-  setDuckOtherMedia: invoke(channels.setDuckOtherMedia),
-  setVoiceSource: invoke(channels.setVoiceSource),
-  setPreferBuiltInMicrophone: invoke(channels.setPreferBuiltInMicrophone),
-  setQuietDuringMeetings: invoke(channels.setQuietDuringMeetings),
   connectGoogleCalendar: invoke(channels.connectGoogleCalendar),
   cancelGoogleCalendarSignIn: () => {
     ipcRenderer.send(channels.cancelGoogleCalendarSignIn);

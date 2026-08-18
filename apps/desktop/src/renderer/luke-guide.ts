@@ -21,14 +21,11 @@
 
 import {
   APP_SETTING_KIND,
-  APP_TOGGLE_VALUE,
   type AppGuideFact,
   type AppGuideSetting,
   type AppGuideSnapshot,
   appToggleText,
   DEFAULT_PANEL_FORM_FACTOR,
-  isPanelFormFactor,
-  isRealtimeVoice,
   PANEL_FORM_FACTOR_LIST,
   PROVIDER_ID,
   type ProviderId,
@@ -44,6 +41,7 @@ import type {
   AppSettings,
   CredentialSource,
   MicrophoneStatus,
+  SettingsUpdateResult,
   VoiceSource,
 } from "../shared/contracts";
 import {
@@ -61,37 +59,17 @@ import {
   isCredentialProviderId,
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "../shared/credential-providers";
+import {
+  APP_SETTING_ID,
+  type AppSettingId,
+  settingFieldForGuideId,
+  spokenSettingValue,
+} from "../shared/settings-schema";
 import { workspaceAgentModelLabel, workspaceAgentModels } from "../shared/workspace-agents";
 
+export type { AppSettingId } from "../shared/settings-schema";
 /** The ids a spoken change names Luke's settings by. */
-export const APP_SETTING_ID = {
-  VOICE: "voice",
-  VOICE_SPEED: "voice_speed",
-  VOICE_CAPTIONS: "voice_captions",
-  DUCK_OTHER_MEDIA: "duck_other_media",
-  PREFER_BUILT_IN_MICROPHONE: "prefer_built_in_microphone",
-  QUIET_DURING_MEETINGS: "quiet_during_meetings",
-  SHOW_IN_DOCK: "show_in_dock",
-  SHOW_ON_ALL_DISPLAYS: "show_on_all_displays",
-  FORM_FACTOR: "form_factor",
-  DEFAULT_WORKSPACE_PROVIDER: "default_workspace_provider",
-  WORKSPACE_AGENT_MODEL: "workspace_agent_model",
-  WORKSPACE_AGENT_EFFORT: "workspace_agent_effort",
-  VOICE_SOURCE: "voice_source",
-} as const;
-
-export type AppSettingId = (typeof APP_SETTING_ID)[keyof typeof APP_SETTING_ID];
-
-const APP_SETTING_ID_LIST: readonly AppSettingId[] = Object.values(APP_SETTING_ID);
-
-/**
- * Whether an id read back off a guide entry is one of Luke's own settings. A
- * guide entry carries its id as plain text — the snapshot is data on its way
- * out to a conversation — so anything reading one back has to ask.
- */
-export function isAppSettingId(value: string): value is AppSettingId {
-  return APP_SETTING_ID_LIST.includes(value as AppSettingId);
-}
+export { APP_SETTING_ID, isAppSettingId } from "../shared/settings-schema";
 
 /** Where the switches live, said once so every entry words it the same way. */
 const SETTINGS_TAB = "the panel's Settings tab";
@@ -156,12 +134,6 @@ function voiceSpeedMultiple(speed: RealtimeVoiceSpeed): string {
 
 function voiceSpeedWord(speed: RealtimeVoiceSpeed): string {
   return VOICE_SPEED_WORDS.find((candidate) => candidate.speed === speed)?.word ?? "normal";
-}
-
-function voiceSpeedFromWord(word: string): RealtimeVoiceSpeed | undefined {
-  return VOICE_SPEED_WORDS.find(
-    (candidate) => candidate.word === word || voiceSpeedMultiple(candidate.speed) === word,
-  )?.speed;
 }
 
 /** The name a provider is known by on its rows, falling back to its id. */
@@ -984,23 +956,12 @@ function spokenWorkspaceAgentSelection(
  * so a model or effort change composes against the selection actually stored.
  */
 export async function applySpokenSetting(
-  bridge: Pick<
-    AppBridge,
-    | "setVoice"
-    | "setVoiceSpeed"
-    | "setVoiceCaptions"
-    | "setDuckOtherMedia"
-    | "setPreferBuiltInMicrophone"
-    | "setQuietDuringMeetings"
-    | "setShowInDock"
-    | "setShowOnAllDisplays"
-    | "setFormFactor"
-    | "setWorkspaceAgentDefault"
-  >,
+  bridge: Pick<AppBridge, "updateSetting">,
   action: { setting: AppGuideSetting; value: string; effort?: string },
   onSettings: (settings: AppSettings) => void,
   current?: AppSettings,
 ): Promise<Record<string, unknown>> {
+  let result: SettingsUpdateResult;
   if (
     action.setting.id === APP_SETTING_ID.WORKSPACE_AGENT_MODEL ||
     action.setting.id === APP_SETTING_ID.WORKSPACE_AGENT_EFFORT
@@ -1012,46 +973,23 @@ export async function applySpokenSetting(
       current?.workspaceAgentDefaults?.[PROVIDER_ID.CONDUCTOR],
     );
     if ("refused" in composed) return { status: "refused", reason: composed.refused };
-    const answered = await bridge.setWorkspaceAgentDefault(
-      PROVIDER_ID.CONDUCTOR,
-      composed.selection,
+    const defaults = { ...current?.workspaceAgentDefaults };
+    if (composed.selection) defaults[PROVIDER_ID.CONDUCTOR] = composed.selection;
+    else delete defaults[PROVIDER_ID.CONDUCTOR];
+    result = await bridge.updateSetting(
+      "workspaceAgentDefaults",
+      Object.keys(defaults).length > 0 ? defaults : undefined,
     );
-    onSettings(answered.settings);
-    if (answered.reason) return { status: "refused", reason: answered.reason };
-    return {
-      status: "changed",
-      setting: action.setting.label,
-      value: action.value,
-      ...(action.effort !== undefined ? { effort: action.effort } : {}),
-    };
-  }
-  const enabled = action.value === APP_TOGGLE_VALUE.ON;
-  const speed = voiceSpeedFromWord(action.value);
-  const result =
-    action.setting.id === APP_SETTING_ID.VOICE_CAPTIONS
-      ? await bridge.setVoiceCaptions(enabled)
-      : action.setting.id === APP_SETTING_ID.DUCK_OTHER_MEDIA
-        ? await bridge.setDuckOtherMedia(enabled)
-        : action.setting.id === APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE
-          ? await bridge.setPreferBuiltInMicrophone(enabled)
-          : action.setting.id === APP_SETTING_ID.QUIET_DURING_MEETINGS
-            ? await bridge.setQuietDuringMeetings(enabled)
-            : action.setting.id === APP_SETTING_ID.SHOW_IN_DOCK
-              ? await bridge.setShowInDock(enabled)
-              : action.setting.id === APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS
-                ? await bridge.setShowOnAllDisplays(enabled)
-                : action.setting.id === APP_SETTING_ID.VOICE_SPEED && speed !== undefined
-                  ? await bridge.setVoiceSpeed(speed)
-                  : action.setting.id === APP_SETTING_ID.VOICE && isRealtimeVoice(action.value)
-                    ? await bridge.setVoice(action.value)
-                    : action.setting.id === APP_SETTING_ID.FORM_FACTOR &&
-                        isPanelFormFactor(action.value)
-                      ? await bridge.setFormFactor(action.value)
-                      : undefined;
-  if (!result) {
-    // An adjustable entry with no carrier is a guide ahead of its wiring;
-    // refuse honestly rather than claim a change that never happened.
-    return { status: "refused", reason: "That setting cannot be changed from here." };
+  } else {
+    const field = settingFieldForGuideId(action.setting.id as AppSettingId);
+    if (!field) {
+      return { status: "refused", reason: "That setting cannot be changed from here." };
+    }
+    const value = spokenSettingValue(field, action.value);
+    if (value === undefined) {
+      return { status: "refused", reason: "That setting cannot be changed from here." };
+    }
+    result = await bridge.updateSetting(field, value);
   }
   onSettings(result.settings);
   if (result.reason) return { status: "refused", reason: result.reason };
@@ -1059,10 +997,7 @@ export async function applySpokenSetting(
     status: "changed",
     setting: action.setting.label,
     value: action.value,
-    // What each change means for the call now open, so the outcome Luke
-    // voices matches what actually happens. The API locks a session's voice
-    // once the model has spoken, so a changed voice is heard by starting the
-    // conversation afresh; a pace rides a session update and needs no restart.
+    ...(action.effort !== undefined ? { effort: action.effort } : {}),
     ...(action.setting.id === APP_SETTING_ID.VOICE
       ? {
           note: "The new voice takes over as soon as this reply ends, and the conversation starts afresh in it.",

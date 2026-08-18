@@ -27,8 +27,27 @@ import type {
 } from "@sidecar/core";
 import type { CredentialProviderId } from "./credential-providers";
 import type { FeedbackKind, FeedbackResult, FeedbackSubmission } from "./feedback";
+import type {
+  AppSettingField,
+  AppSettingValue,
+  SettingsResetScope,
+  VoiceSource,
+} from "./settings-schema";
 
 export type { WindowMode } from "@sidecar/core";
+export type {
+  AppSettingField,
+  AppSettingValue,
+  SettingsResetScope,
+  VoiceSource,
+} from "./settings-schema";
+export {
+  APP_SETTING_DEFAULTS,
+  isSettingsResetScope,
+  isVoiceSource,
+  SETTINGS_RESET_SCOPE,
+  VOICE_SOURCE,
+} from "./settings-schema";
 
 export const ACCOUNT_PROVIDER = {
   GOOGLE: "google",
@@ -130,51 +149,6 @@ export interface ObservedAccountCalendars {
  * being spent — without one, connecting a key would be the choice, and the
  * only way back would be deleting it.
  */
-export const VOICE_SOURCE = {
-  ACCOUNT: "account",
-  KEY: "key",
-} as const;
-
-export type VoiceSource = (typeof VOICE_SOURCE)[keyof typeof VOICE_SOURCE];
-
-/** Guards the source an IPC message carries, which the renderer chooses. */
-export function isVoiceSource(value: unknown): value is VoiceSource {
-  return value === VOICE_SOURCE.ACCOUNT || value === VOICE_SOURCE.KEY;
-}
-
-export const APP_SETTING_DEFAULTS = {
-  showInDock: false,
-  voiceCaptions: false,
-  duckOtherMedia: true,
-  preferBuiltInMicrophone: true,
-  quietDuringMeetings: true,
-  showOnAllDisplays: false,
-} as const satisfies Partial<Record<keyof AppSettings, boolean>>;
-
-/**
- * The groups of preferences a reset control returns to their defaults, each
- * scoped to exactly the rows the control stands over: a settings page, or the
- * Workspaces group on the Connections page. A fixed vocabulary rather than a
- * field list on the wire, so a renderer can only ever name a grouping this
- * build documents — and no scope reaches a credential, an account, or the
- * Conductor agent pairing, whose own row already offers its default.
- */
-export const SETTINGS_RESET_SCOPE = {
-  VOICE: "voice",
-  APPEARANCE: "appearance",
-  SHORTCUTS: "shortcuts",
-  WORKSPACES: "workspaces",
-} as const;
-
-export type SettingsResetScope = (typeof SETTINGS_RESET_SCOPE)[keyof typeof SETTINGS_RESET_SCOPE];
-
-const SETTINGS_RESET_SCOPE_LIST: readonly SettingsResetScope[] =
-  Object.values(SETTINGS_RESET_SCOPE);
-
-export function isSettingsResetScope(value: unknown): value is SettingsResetScope {
-  return SETTINGS_RESET_SCOPE_LIST.includes(value as SettingsResetScope);
-}
-
 /**
  * Where the app stands against the latest published release, as last learned.
  * `UNKNOWN` is the state before any check has answered — at launch, and
@@ -571,63 +545,17 @@ export interface AppBridge {
     providerId: CredentialProviderId,
     apiKey: string | undefined,
   ): Promise<SettingsUpdateResult>;
-  /**
-   * Chooses the voice Luke speaks with, from the set fixed by this build. It
-   * reaches the next conversation to connect; the renderer makes it heard now
-   * by reopening a call already up, because the API locks a session's voice
-   * once the model has spoken.
-   */
-  setVoice(voice: RealtimeVoice): Promise<SettingsUpdateResult>;
-  /**
-   * Chooses the pace Luke speaks at, from the set fixed by this build. It
-   * reaches the next conversation the way the voice does, and the renderer
-   * carries it onto a call already open as a session update.
-   */
-  setVoiceSpeed(speed: RealtimeVoiceSpeed): Promise<SettingsUpdateResult>;
+  /** Updates one declared preference; main validates its field and value again. */
+  updateSetting<Field extends AppSettingField>(
+    field: Field,
+    value: AppSettingValue<Field>,
+  ): Promise<SettingsUpdateResult>;
   /**
    * Opens a provider's own API-key page in the default browser. The renderer
    * names the provider, not the address, so the set of pages Luke can open is
    * fixed by this build.
    */
   openProviderApiKeys(providerId: CredentialProviderId): void;
-  /** Shows or hides the Dock icon, and remembers the choice. */
-  setShowInDock(show: boolean): Promise<SettingsUpdateResult>;
-  /**
-   * Stands Luke on every connected display, or brings him back to the main
-   * one alone, and remembers the choice.
-   */
-  setShowOnAllDisplays(show: boolean): Promise<SettingsUpdateResult>;
-  /** Chooses how Luke stands on a display without a housing, and remembers it. */
-  setFormFactor(formFactor: PanelFormFactor): Promise<SettingsUpdateResult>;
-  /**
-   * Chooses the provider a conversational ask creates a workspace in when the
-   * ask names none, or returns to asking each time when omitted. The same
-   * store write the main process makes on the first creation, offered to the
-   * settings row so the choice can be changed or cleared by hand.
-   */
-  setDefaultWorkspaceProvider(providerId: ProviderId | undefined): Promise<SettingsUpdateResult>;
-  /**
-   * Chooses the agent kind and model one provider starts new workspaces with,
-   * or returns to that provider's own defaults when omitted. The pairing must
-   * be one the build's documented table lists for the provider; the main
-   * process validates it again before the store keeps it.
-   */
-  setWorkspaceAgentDefault(
-    providerId: ProviderId,
-    selection: WorkspaceAgentSelection | undefined,
-  ): Promise<SettingsUpdateResult>;
-  /**
-   * Chooses the project one provider creates nameless-ask workspaces in, or
-   * returns to letting the first creation choose when omitted. The project
-   * must be one the provider's adapter currently offers; the main process
-   * validates that again before the store keeps it.
-   */
-  setWorkspaceProjectDefault(
-    providerId: ProviderId,
-    providerProjectId: string | undefined,
-  ): Promise<SettingsUpdateResult>;
-  /** Turns the on-screen caption of Luke's speech on or off. */
-  setVoiceCaptions(enabled: boolean): Promise<SettingsUpdateResult>;
   /**
    * Returns one group of preferences to its defaults in a single stored write:
    * the choices behind the named scope are forgotten, the way each row's own
@@ -636,17 +564,6 @@ export interface AppBridge {
    * fixed by this build, never a field list, and no scope reaches a credential.
    */
   resetSettings(scope: SettingsResetScope): Promise<SettingsUpdateResult>;
-  /** Turns the quieting of Music and Spotify during a spoken exchange on or off. */
-  setDuckOtherMedia(enabled: boolean): Promise<SettingsUpdateResult>;
-  /**
-   * Chooses which credential Luke speaks and reviews sessions on. A choice
-   * only ever withholds a stored key while the account can serve instead — it
-   * can turn spending off, never on, so nothing here can start spending a key
-   * that is not there or an allowance that is not signed in.
-   */
-  setVoiceSource(source: VoiceSource): Promise<SettingsUpdateResult>;
-  /** Turns the Mac-microphone-over-Bluetooth-headset preference on or off. */
-  setPreferBuiltInMicrophone(enabled: boolean): Promise<SettingsUpdateResult>;
   /**
    * Asks GitHub for the latest release name, right now, because the row's
    * button was pressed. The answer is the same snapshot the broadcast
@@ -659,11 +576,6 @@ export interface AppBridge {
    * process, so nothing an update check read can steer where this goes.
    */
   openLatestRelease(): void;
-  /**
-   * Turns the holding of announcements during calendar meetings on or off.
-   * The hold itself lives in the main process, beside the calendar it reads.
-   */
-  setQuietDuringMeetings(enabled: boolean): Promise<SettingsUpdateResult>;
   /**
    * Runs the Google Calendar sign-in: the browser opens Google's own consent
    * page, the grant comes back over a loopback redirect that never leaves the
@@ -704,26 +616,6 @@ export interface AppBridge {
    * because the exchange must never wait on the players.
    */
   setVoiceExchangeActive(active: boolean): void;
-  /**
-   * Moves the talk key to a chord of the user's own, or back to the defaults
-   * when omitted. The change is registered with the system at once, and the
-   * key the panel shows follows the same announcement it always has.
-   */
-  setVoiceHotkey(accelerator: string | undefined): Promise<SettingsUpdateResult>;
-  /**
-   * Moves the ask key the same way, or back to its defaults when omitted. The
-   * one extra rule is the standing one: a chord the talk key holds — or could
-   * fall back to on a later launch — is refused with a reason rather than
-   * stored and left to race it.
-   */
-  setAskHotkey(accelerator: string | undefined): Promise<SettingsUpdateResult>;
-  /**
-   * Moves the stop key the same way, or back to its default when omitted,
-   * under the same standing rule one rung further down: a chord either other
-   * Luke key holds — or could fall back to — is refused with a reason rather
-   * than stored and left to race it.
-   */
-  setStopHotkey(accelerator: string | undefined): Promise<SettingsUpdateResult>;
   /**
    * Opens an observed session where its provider keeps it. The renderer names
    * the session rather than its address, for the same reason it names a
@@ -942,16 +834,7 @@ export const channels = {
   microphoneRoute: "app:microphone-route",
   openMicrophoneSettings: "app:open-microphone-settings",
   setProviderApiKey: "app:set-provider-api-key",
-  setVoice: "app:set-voice",
-  setVoiceSpeed: "app:set-voice-speed",
-  setVoiceCaptions: "app:set-voice-captions",
-  setVoiceHotkey: "app:set-voice-hotkey",
-  setAskHotkey: "app:set-ask-hotkey",
-  setStopHotkey: "app:set-stop-hotkey",
-  setDuckOtherMedia: "app:set-duck-other-media",
-  setVoiceSource: "app:set-voice-source",
-  setPreferBuiltInMicrophone: "app:set-prefer-built-in-microphone",
-  setQuietDuringMeetings: "app:set-quiet-during-meetings",
+  updateSetting: "app:update-setting",
   connectGoogleCalendar: "app:connect-google-calendar",
   cancelGoogleCalendarSignIn: "app:cancel-google-calendar-sign-in",
   reopenGoogleCalendarSignIn: "app:reopen-google-calendar-sign-in",
@@ -964,12 +847,6 @@ export const channels = {
   updateChanged: "app:update-changed",
   setVoiceExchange: "app:set-voice-exchange",
   openProviderApiKeys: "app:open-provider-api-keys",
-  setShowInDock: "app:set-show-in-dock",
-  setShowOnAllDisplays: "app:set-show-on-all-displays",
-  setFormFactor: "app:set-form-factor",
-  setDefaultWorkspaceProvider: "app:set-default-workspace-provider",
-  setWorkspaceAgentDefault: "app:set-workspace-agent-default",
-  setWorkspaceProjectDefault: "app:set-workspace-project-default",
   resetSettings: "app:reset-settings",
   openSession: "app:open-session",
   openSessionChange: "app:open-session-change",

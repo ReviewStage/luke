@@ -56,6 +56,7 @@ import {
 } from "../shared/credential-providers";
 import type { FeedbackImage, FeedbackKind } from "../shared/feedback";
 import { FEEDBACK_KIND, FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from "../shared/feedback";
+import { APP_SETTING_SCHEMA } from "../shared/settings-schema";
 import { voiceHotkeyLabel, voiceHotkeyToShow } from "../shared/voice-hotkey";
 import { ASK_LUKE_INPUT_ID, focusAskField } from "./ask-luke";
 import { type CalendarConnectEntry, CalendarConnectSlot } from "./calendar-connect-slot";
@@ -712,29 +713,45 @@ export function App(): React.JSX.Element {
   );
 
   const changeVoiceCaptions = useCallback(
-    async (enabled: boolean) => applySettingsReply(await window.sidecar.setVoiceCaptions(enabled)),
+    async (enabled: boolean) =>
+      applySettingsReply(
+        await window.sidecar.updateSetting(APP_SETTING_SCHEMA.voiceCaptions.field, enabled),
+      ),
     [applySettingsReply],
   );
 
   const changeDuckOtherMedia = useCallback(
-    async (enabled: boolean) => applySettingsReply(await window.sidecar.setDuckOtherMedia(enabled)),
+    async (enabled: boolean) =>
+      applySettingsReply(
+        await window.sidecar.updateSetting(APP_SETTING_SCHEMA.duckOtherMedia.field, enabled),
+      ),
     [applySettingsReply],
   );
 
   const changeVoiceSource = useCallback(
-    async (source: VoiceSource) => applySettingsReply(await window.sidecar.setVoiceSource(source)),
+    async (source: VoiceSource) =>
+      applySettingsReply(
+        await window.sidecar.updateSetting(APP_SETTING_SCHEMA.voiceSource.field, source),
+      ),
     [applySettingsReply],
   );
 
   const changePreferBuiltInMicrophone = useCallback(
     async (enabled: boolean) =>
-      applySettingsReply(await window.sidecar.setPreferBuiltInMicrophone(enabled)),
+      applySettingsReply(
+        await window.sidecar.updateSetting(
+          APP_SETTING_SCHEMA.preferBuiltInMicrophone.field,
+          enabled,
+        ),
+      ),
     [applySettingsReply],
   );
 
   const changeQuietDuringMeetings = useCallback(
     async (enabled: boolean) =>
-      applySettingsReply(await window.sidecar.setQuietDuringMeetings(enabled)),
+      applySettingsReply(
+        await window.sidecar.updateSetting(APP_SETTING_SCHEMA.quietDuringMeetings.field, enabled),
+      ),
     [applySettingsReply],
   );
 
@@ -944,18 +961,26 @@ export function App(): React.JSX.Element {
   }, [expand, presentationOf, setSignInWait, signInWaitNow]);
 
   const changeShowInDock = useCallback(
-    async (show: boolean) => applySettingsReply(await window.sidecar.setShowInDock(show)),
+    async (show: boolean) =>
+      applySettingsReply(
+        await window.sidecar.updateSetting(APP_SETTING_SCHEMA.showInDock.field, show),
+      ),
     [applySettingsReply],
   );
 
   const changeShowOnAllDisplays = useCallback(
-    async (show: boolean) => applySettingsReply(await window.sidecar.setShowOnAllDisplays(show)),
+    async (show: boolean) =>
+      applySettingsReply(
+        await window.sidecar.updateSetting(APP_SETTING_SCHEMA.showOnAllDisplays.field, show),
+      ),
     [applySettingsReply],
   );
 
   const changeFormFactor = useCallback(
     async (formFactor: PanelFormFactor) =>
-      applySettingsReply(await window.sidecar.setFormFactor(formFactor)),
+      applySettingsReply(
+        await window.sidecar.updateSetting(APP_SETTING_SCHEMA.formFactor.field, formFactor),
+      ),
     [applySettingsReply],
   );
 
@@ -964,14 +989,28 @@ export function App(): React.JSX.Element {
   // or returned to asking each time.
   const changeDefaultWorkspaceProvider = useCallback(
     async (providerId: ProviderId | undefined) =>
-      applySettingsReply(await window.sidecar.setDefaultWorkspaceProvider(providerId)),
+      applySettingsReply(
+        await window.sidecar.updateSetting(
+          APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
+          providerId,
+        ),
+      ),
     [applySettingsReply],
   );
 
   const changeWorkspaceAgentDefault = useCallback(
-    async (providerId: ProviderId, selection: WorkspaceAgentSelection | undefined) =>
-      applySettingsReply(await window.sidecar.setWorkspaceAgentDefault(providerId, selection)),
-    [applySettingsReply],
+    async (providerId: ProviderId, selection: WorkspaceAgentSelection | undefined) => {
+      const defaults = { ...settings?.workspaceAgentDefaults };
+      if (selection) defaults[providerId] = selection;
+      else delete defaults[providerId];
+      return applySettingsReply(
+        await window.sidecar.updateSetting(
+          "workspaceAgentDefaults",
+          Object.keys(defaults).length > 0 ? defaults : undefined,
+        ),
+      );
+    },
+    [applySettingsReply, settings?.workspaceAgentDefaults],
   );
 
   // One group of settings back to its defaults — the same store forgetting
@@ -987,11 +1026,18 @@ export function App(): React.JSX.Element {
   // write the first creation there makes on its own, offered by hand so the
   // choice can be changed or returned to the first creation.
   const changeWorkspaceProjectDefault = useCallback(
-    async (providerId: ProviderId, providerProjectId: string | undefined) =>
-      applySettingsReply(
-        await window.sidecar.setWorkspaceProjectDefault(providerId, providerProjectId),
-      ),
-    [applySettingsReply],
+    async (providerId: ProviderId, providerProjectId: string | undefined) => {
+      const defaults = { ...settings?.workspaceProjectDefaults };
+      if (providerProjectId) defaults[providerId] = providerProjectId;
+      else delete defaults[providerId];
+      return applySettingsReply(
+        await window.sidecar.updateSetting(
+          "workspaceProjectDefaults",
+          Object.keys(defaults).length > 0 ? defaults : undefined,
+        ),
+      );
+    },
+    [applySettingsReply, settings?.workspaceProjectDefaults],
   );
 
   /**
@@ -1263,7 +1309,9 @@ export function App(): React.JSX.Element {
   // pressed, so what is shown as chosen is always what was actually saved.
   const changeVoice = useCallback(
     (voice: RealtimeVoice) => {
-      void window.sidecar.setVoice(voice).then(applySettingsReply);
+      void window.sidecar
+        .updateSetting(APP_SETTING_SCHEMA.voice.field, voice)
+        .then(applySettingsReply);
     },
     [applySettingsReply],
   );
@@ -1271,7 +1319,9 @@ export function App(): React.JSX.Element {
   // The pace, under the same rule as the voice above.
   const changeVoiceSpeed = useCallback(
     (speed: RealtimeVoiceSpeed) => {
-      void window.sidecar.setVoiceSpeed(speed).then(applySettingsReply);
+      void window.sidecar
+        .updateSetting(APP_SETTING_SCHEMA.voiceSpeed.field, speed)
+        .then(applySettingsReply);
     },
     [applySettingsReply],
   );
@@ -1284,7 +1334,9 @@ export function App(): React.JSX.Element {
    */
   const changeVoiceHotkey = useCallback(
     async (accelerator: string | undefined) =>
-      applySettingsReply(await window.sidecar.setVoiceHotkey(accelerator)),
+      applySettingsReply(
+        await window.sidecar.updateSetting(APP_SETTING_SCHEMA.voiceHotkey.field, accelerator),
+      ),
     [applySettingsReply],
   );
 
@@ -1292,14 +1344,18 @@ export function App(): React.JSX.Element {
   // process's own announcement of what actually registered.
   const changeAskHotkey = useCallback(
     async (accelerator: string | undefined) =>
-      applySettingsReply(await window.sidecar.setAskHotkey(accelerator)),
+      applySettingsReply(
+        await window.sidecar.updateSetting(APP_SETTING_SCHEMA.askHotkey.field, accelerator),
+      ),
     [applySettingsReply],
   );
 
   // The stop key, under the same rule again.
   const changeStopHotkey = useCallback(
     async (accelerator: string | undefined) =>
-      applySettingsReply(await window.sidecar.setStopHotkey(accelerator)),
+      applySettingsReply(
+        await window.sidecar.updateSetting(APP_SETTING_SCHEMA.stopHotkey.field, accelerator),
+      ),
     [applySettingsReply],
   );
 
