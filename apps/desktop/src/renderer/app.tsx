@@ -1604,7 +1604,7 @@ export function App(): React.JSX.Element {
     stopMicrophone,
     askLuke,
     voiceTurn,
-    lukeCaption,
+    lukeCaptions,
     captionShownAt,
     announcedSession,
     remoteAudio,
@@ -2229,8 +2229,14 @@ export function App(): React.JSX.Element {
     voice: voiceTurn,
     error: voiceError,
   });
-  const captionText = lukeCaption ?? voiceErrorNotice;
-  const captionIsError = lukeCaption === undefined && voiceErrorNotice !== undefined;
+  const captionTexts =
+    lukeCaptions ?? (voiceErrorNotice === undefined ? undefined : [voiceErrorNotice]);
+  const captionIsError = lukeCaptions === undefined && voiceErrorNotice !== undefined;
+  // Two responses spoken back-to-back stack as two captions: the settled one
+  // above, the one still arriving below, in the always-mounted slot the lone
+  // caption also uses.
+  const settledCaption = captionTexts && captionTexts.length > 1 ? captionTexts.at(-2) : undefined;
+  const liveCaption = captionTexts?.at(-1);
   // How long the words on screen have been readable, or nothing while the
   // output is audible: the reading clock only paces words nobody can hear.
   const captionReadingElapsed =
@@ -2243,7 +2249,7 @@ export function App(): React.JSX.Element {
   const volumeHint =
     fixtureMuted ||
     (outputIsSilent &&
-      lukeCaption !== undefined &&
+      lukeCaptions !== undefined &&
       !volumeHintDismissed(hintDismissal, silenceStretch, Date.now()));
   const panelOpen = presentation === PANEL_PRESENTATION.PANEL;
   const slotOpen = presentation === PANEL_PRESENTATION.SLOT;
@@ -2312,7 +2318,7 @@ export function App(): React.JSX.Element {
       // Whether there are words to draw under the shape — a caption or a
       // failure borrowing its strip — so the surface can grow the room they
       // are drawn in.
-      data-caption={String(Boolean(captionText))}
+      data-caption={String(Boolean(captionTexts))}
       // Whether those words need the volume hint under them, which shares the
       // caption block's room.
       data-volume-hint={String(volumeHint)}
@@ -2509,9 +2515,13 @@ export function App(): React.JSX.Element {
           foot when it opens, so the words travel with the morph instead of
           jumping between two copies. Not in a wing — the wings clip at the
           capsule's height — and always mounted, like the count's caption, so
-          both edges of its fade can run. The inner text is what is measured:
-          its wrapped height is the only honest answer to how much room the
-          words need. Hidden from readers while it captions speech — it
+          both edges of its fade can run. The inner stack is what is measured —
+          two responses spoken back-to-back are two blocks in it, the settled
+          words above the ones still arriving — and its wrapped height is the
+          only honest answer to how much room the words need. The newest block
+          is always mounted like the stack itself; the settled one mounts only
+          while it has words, so a lone reply pays no gap for a block that is
+          not there. Hidden from readers while it captions speech — it
           duplicates what is already audible — and announced as a status line
           when it carries a failure, which was never audible at all. */}
       <span
@@ -2520,8 +2530,11 @@ export function App(): React.JSX.Element {
         data-error={String(captionIsError)}
         {...(captionIsError ? { role: "status" } : { "aria-hidden": true })}
       >
-        <span className="voice-caption-text" ref={captionTextElement}>
-          {captionText}
+        <span className="voice-caption-stack" ref={captionTextElement}>
+          {settledCaption === undefined ? null : (
+            <span className="voice-caption-text">{settledCaption}</span>
+          )}
+          <span className="voice-caption-text">{liveCaption}</span>
         </span>
       </span>
 

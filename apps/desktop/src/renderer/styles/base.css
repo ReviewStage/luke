@@ -1318,13 +1318,26 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   padding-bottom: calc(18px + var(--caption-size, 28px));
 }
 
-/* The translate is how a reply that outgrows the block rolls its oldest lines
-   up under the capsule band. The cut lands where black meets black, so lines
-   slide under the shape rather than being sliced in the open. Heard words
-   keep the newest line on screen — the half of the reply the voice has not
-   reached yet; words landing on a silent output scroll at reading pace
-   instead, oldest unread line first, because there the caption is the speech.
-   The line height is mirrored by CAPTION_LINE_HEIGHT in caption-reading.ts —
+/* The stack holds one block per response, so two responses spoken
+   back-to-back sit apart instead of running together. The gap between them is
+   one caption line — it mirrors CAPTION_LINE_HEIGHT in caption-reading.ts —
+   so the reading clock's whole-line scroll stays whole-line with two blocks
+   up. The translate is how words that outgrow the block roll their oldest
+   lines up under the capsule band. The cut lands where black meets black, so
+   lines slide under the shape rather than being sliced in the open. Heard
+   words keep the newest line on screen — the half of the reply the voice has
+   not reached yet; words landing on a silent output scroll at reading pace
+   instead, oldest unread line first, because there the caption is the speech. */
+.voice-caption-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  transform: translateY(calc(var(--caption-scroll, 0px) * -1));
+  transition: transform var(--duration-fast) var(--spring-fast);
+}
+
+/* The line height is mirrored by CAPTION_LINE_HEIGHT in caption-reading.ts —
    the two must agree, or the reading clock releases part-lines. */
 .voice-caption-text {
   display: block;
@@ -1335,8 +1348,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   letter-spacing: 0.1px;
   line-height: 14px;
   text-align: center;
-  transform: translateY(calc(var(--caption-scroll, 0px) * -1));
-  transition: transform var(--duration-fast) var(--spring-fast);
 }
 
 /* A voice failure borrows the caption's strip — same box, same travel — in
