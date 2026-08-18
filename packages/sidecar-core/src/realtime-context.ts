@@ -58,6 +58,26 @@ function sessionCapabilityText(session: NormalizedSession): string {
 }
 
 /**
+ * How long ago Luke last observed this session, as a prose phrase. "Updated"
+ * names what observedAt actually measures — when Luke last received fresh data
+ * from the provider — without implying anything about the session's current
+ * activity level, which the status field already covers. Spelled out in full
+ * units so it reads naturally in the conversation context and quotes back
+ * clearly when the voice model names it aloud.
+ */
+function sessionAgeText(observedAt: number, now: number): string {
+  const elapsedMinutes = Math.floor((now - observedAt) / 60_000);
+  if (elapsedMinutes < 1) return "updated just now";
+  if (elapsedMinutes < 60)
+    return `updated ${elapsedMinutes} ${elapsedMinutes === 1 ? "minute" : "minutes"} ago`;
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24)
+    return `updated ${elapsedHours} ${elapsedHours === 1 ? "hour" : "hours"} ago`;
+  const elapsedDays = Math.floor(elapsedHours / 24);
+  return `updated ${elapsedDays} ${elapsedDays === 1 ? "day" : "days"} ago`;
+}
+
+/**
  * The checkout, current tool, and reported failure a session's line carries —
  * the same bounded about-fields the attention update already sends, worded as
  * short labelled phrases so Luke can say what a session is doing or stuck on
@@ -95,16 +115,21 @@ function noticeAsksByIdentity(
  * Renders the session roster the conversation is allowed to know about.
  *
  * These are the same bounded, redacted fields the attention layer already
- * sends — provider, title, status, repository or branch, current tool,
- * reported error, and the provider's own recap — plus the workspace a chat
- * belongs to when its provider groups them, the developer's standing ask
- * where one stands, what each session can be asked to do, and the identity a
- * tool call names it by. No transcript, file path, or command output is ever
- * included.
+ * sends — provider, title, status, when last seen, repository or branch,
+ * current tool, reported error, and the provider's own recap — plus the
+ * workspace a chat belongs to when its provider groups them, the developer's
+ * standing ask where one stands, what each session can be asked to do, and the
+ * identity a tool call names it by. No transcript, file path, or command output
+ * is ever included.
+ *
+ * `now` is the wall clock against which each session's age is read. Pass
+ * `Date.now()` for live use; pass a fixed epoch for reproducible fixture or
+ * test snapshots.
  */
 export function sessionContextText(
   sessions: readonly NormalizedSession[],
   noticeAsks: readonly SessionNoticeAsk[] = [],
+  now: number = Date.now(),
 ): string {
   if (sessions.length === 0) return "No coding-agent sessions are currently observed.";
 
@@ -124,6 +149,7 @@ export function sessionContextText(
         // the machine, the same rule the attention update follows.
         ...(session.workspace?.name ? [`a chat in workspace ${session.workspace.name}`] : []),
         session.status,
+        sessionAgeText(session.observedAt, now),
         ...sessionAboutText(session),
         session.recap ?? "no recap reported",
         // Only this segment speaks for the developer, on the attention
@@ -240,11 +266,12 @@ export function sessionContextEvents(
   sessions: readonly NormalizedSession[],
   itemId: string,
   noticeAsks: readonly SessionNoticeAsk[] = [],
+  now: number = Date.now(),
 ): readonly Record<string, unknown>[] {
   return [
     labeledContextEvent(
       "observed session status, sent automatically",
-      sessionContextText(sessions, noticeAsks),
+      sessionContextText(sessions, noticeAsks, now),
       itemId,
     ),
   ];

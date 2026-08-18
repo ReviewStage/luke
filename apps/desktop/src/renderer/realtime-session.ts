@@ -1493,10 +1493,11 @@ export class RealtimeVoiceSession {
     noticeAsks: readonly SessionNoticeAsk[] = [],
   ): void {
     this.#sessions = sessions;
+    const now = Date.now();
     this.#rememberContext(
       CONTEXT_ITEM_KIND.SESSIONS,
-      sessionContextText(sessions, noticeAsks),
-      (itemId) => sessionContextEvents(sessions, itemId, noticeAsks),
+      sessionContextText(sessions, noticeAsks, now),
+      (itemId) => sessionContextEvents(sessions, itemId, noticeAsks, now),
     );
     // The reference is rendered from the roster, so a fresh roster re-renders
     // it: a renamed session keeps its line true, and one that left the roster
