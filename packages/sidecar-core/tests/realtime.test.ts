@@ -242,6 +242,28 @@ test("the spoken instructions state what Luke cannot see, and when he may act", 
   assert.match(instructions, /never restate the intent or the result/);
 });
 
+test("a bare ask for a new agent defaults to a new workspace", () => {
+  const instructions = realtimeInstructions();
+
+  // "Create a new agent" with no workspace named is a create_workspace ask,
+  // even mid-conversation about a session; adding an agent beside one needs
+  // the developer's own words to name the target, never an inferred one.
+  assert.match(instructions, /bare ask for a new agent[^.]*is a create_workspace ask/);
+  assert.match(instructions, /even while a session is under discussion/);
+  assert.match(instructions, /never a target you inferred/);
+
+  // The tool schemas carry the same default, so a model reading only the
+  // tools lands on the same side of it.
+  assert.match(
+    REALTIME_TOOLS.CREATE_WORKSPACE.schema.description,
+    /unless its own words name the existing workspace/,
+  );
+  assert.match(
+    REALTIME_TOOLS.ADD_WORKSPACE_AGENT.schema.description,
+    /bare ask for a new agent creates a workspace instead/,
+  );
+});
+
 test("a mint response yields a credential with a millisecond expiry", () => {
   const credential = realtimeCredentialFromResponse({
     value: "ek_test_secret",
