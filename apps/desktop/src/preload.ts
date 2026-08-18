@@ -95,7 +95,6 @@ const bridge: AppBridge = {
   onStopHotkeyPress: subscribe(channels.stopHotkeyPress),
   onStopHotkeyChanged: subscribe(channels.stopHotkeyChanged),
   onOutputAudioChanged: subscribe(channels.outputAudioChanged),
-  onMicrophoneRouteChanged: subscribe(channels.microphoneRouteChanged),
   onAttentionSpeech: subscribe(channels.attentionSpeech),
 };
 

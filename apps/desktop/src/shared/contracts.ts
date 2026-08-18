@@ -479,8 +479,6 @@ export interface AppBootstrap {
    * arrives — or forever, where there is no helper to ask.
    */
   outputAudio?: OutputAudioState;
-  /** The capture route as first read, absent wherever it cannot be read. */
-  microphoneRoute?: MicrophoneRoute;
   display: DisplayDiagnostic;
   /** Where the app stands against the latest release, as last learned. */
   update: UpdateSnapshot;
@@ -877,12 +875,6 @@ export interface AppBridge {
    * unreadable, which arrives as `undefined` and must be drawn as audible.
    */
   onOutputAudioChanged(callback: (state: OutputAudioState | undefined) => void): () => void;
-  /**
-   * The capture route changing under the machine's own life — a headset
-   * connecting, a lid closing — or becoming unreadable, which arrives as
-   * `undefined` and must be drawn as the system's default microphone.
-   */
-  onMicrophoneRouteChanged(callback: (route: MicrophoneRoute | undefined) => void): () => void;
 }
 
 export const channels = {
@@ -905,7 +897,6 @@ export const channels = {
   setStopHotkey: "app:set-stop-hotkey",
   setDuckOtherMedia: "app:set-duck-other-media",
   setPreferBuiltInMicrophone: "app:set-prefer-built-in-microphone",
-  microphoneRouteChanged: "app:microphone-route-changed",
   setQuietDuringMeetings: "app:set-quiet-during-meetings",
   connectGoogleCalendar: "app:connect-google-calendar",
   cancelGoogleCalendarSignIn: "app:cancel-google-calendar-sign-in",

@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   type EnumeratedMicrophone,
-  listeningThroughDetail,
   MICROPHONE_PROCESSING,
   microphoneConstraints,
   openPreferredMicrophone,
@@ -133,35 +132,6 @@ test("an unreadable route is the browser's default, never a gate", async () => {
 
   assert.equal(result, stream);
   assert.deepEqual(asked, [{ ...MICROPHONE_PROCESSING }]);
-});
-
-test("the listens-through clause speaks only while the routing is in play", () => {
-  assert.equal(
-    listeningThroughDetail(BLUETOOTH_DEFAULT, true),
-    "With a Bluetooth headset connected, Luke listens through the Mac's own microphone.",
-  );
-  assert.equal(
-    listeningThroughDetail({ ...BLUETOOTH_DEFAULT, lid: LID_STATE.SHUT }, true),
-    "With the lid shut, Luke listens through the Bluetooth headset.",
-  );
-  // Everywhere else the row reads exactly as it always did: the switch off,
-  // no headset in play, no Mac microphone to stand in, or no route at all.
-  assert.equal(listeningThroughDetail(BLUETOOTH_DEFAULT, false), undefined);
-  assert.equal(
-    listeningThroughDetail(
-      { ...BLUETOOTH_DEFAULT, defaultTransport: MICROPHONE_TRANSPORT.BUILT_IN },
-      true,
-    ),
-    undefined,
-  );
-  assert.equal(
-    listeningThroughDetail(
-      { defaultTransport: MICROPHONE_TRANSPORT.BLUETOOTH, lid: LID_STATE.OPEN },
-      true,
-    ),
-    undefined,
-  );
-  assert.equal(listeningThroughDetail(undefined, true), undefined);
 });
 
 test("a default already on the Mac's microphone never enumerates at all", async () => {

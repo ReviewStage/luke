@@ -33,7 +33,6 @@ import type {
   AppBootstrap,
   AppSettings,
   DisplayDiagnostic,
-  MicrophoneRoute,
   ObservedAccountCalendars,
   OutputAudioState,
   SessionOpenResult,
@@ -92,7 +91,6 @@ import { type Errand, errandTargets, LukeErrand } from "./luke-errand";
 import { LukeFace } from "./luke-face";
 import { usePrefersReducedMotion } from "./luke-face-mood";
 import { applySpokenSetting, buildLukeGuide, isAppSettingId } from "./luke-guide";
-import { listeningThroughDetail } from "./microphone-choice";
 import { NotchWings } from "./notch-wings";
 import { PanelBody, type SessionWriteHandlers } from "./panel-body";
 import { HIT_REGION, PANEL_PRESENTATION } from "./panel-state";
@@ -316,8 +314,6 @@ export function App(): React.JSX.Element {
    * preference says, and a hint under them asks for volume.
    */
   const [outputAudio, setOutputAudio] = useState<OutputAudioState>();
-  /** Which device a press would open, for the Voice page's own line about it. */
-  const [microphoneRoute, setMicrophoneRoute] = useState<MicrophoneRoute>();
   /** Each connected account's calendars, for the settings rows' checkboxes. */
   const [calendars, setCalendars] = useState<readonly ObservedAccountCalendars[]>([]);
   /** Whether the calendar's quiet is holding announcements — the face sleeps on it. */
@@ -1696,11 +1692,6 @@ export function App(): React.JSX.Element {
     (onChange) => window.sidecar.onOutputAudioChanged(onChange),
     setOutputAudio,
   );
-  // Which device a press would open, for the line under the Microphone row.
-  const acceptMicrophoneRouteBootstrap = useBootstrapRacedChannel(
-    (onChange) => window.sidecar.onMicrophoneRouteChanged(onChange),
-    setMicrophoneRoute,
-  );
   // Each connected account's calendars, for the checkboxes on its rows.
   const acceptCalendarsBootstrap = useBootstrapRacedChannel(
     (onChange) => window.sidecar.onCalendarsChanged(onChange),
@@ -1813,7 +1804,6 @@ export function App(): React.JSX.Element {
       // Only fill in what no push has said yet, like the issue roster: the
       // bootstrap snapshot is older than any change that raced past it.
       if (value.outputAudio) acceptOutputAudioBootstrap(value.outputAudio);
-      if (value.microphoneRoute) acceptMicrophoneRouteBootstrap(value.microphoneRoute);
       if (value.profile === "microphone") {
         window.setTimeout(() => void startMicrophone(), 500);
       }
@@ -1857,7 +1847,6 @@ export function App(): React.JSX.Element {
     acceptCalendarsBootstrap,
     acceptIssuesBootstrap,
     acceptMeetingQuietBootstrap,
-    acceptMicrophoneRouteBootstrap,
     acceptOutputAudioBootstrap,
     acceptProjectsBootstrap,
     acceptSettingsBootstrap,
@@ -2219,14 +2208,9 @@ export function App(): React.JSX.Element {
     credentialsEntry.entry && settings
       ? settings.credentialSources[credentialsEntry.entry.providerId]
       : CREDENTIAL_SOURCE.NONE;
-  const listensThrough = listeningThroughDetail(
-    microphoneRoute,
-    (settings ?? bootstrap.settings).preferBuiltInMicrophone,
-  );
   const microphone: MicrophoneControl = {
     status: microphoneStatus,
     voiceAvailable: (settings ?? bootstrap.settings).voiceAvailable,
-    ...(listensThrough ? { listensThrough } : {}),
     onRequest: () => void requestMicrophoneAccess(),
     onOpenSettings: () => window.sidecar.openMicrophoneSettings(),
   };

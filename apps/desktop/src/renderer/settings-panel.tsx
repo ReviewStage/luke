@@ -133,11 +133,6 @@ export interface MicrophoneControl {
   status: MicrophoneStatus;
   /** Whether there is anything to talk to, which is the microphone's only use. */
   voiceAvailable: boolean;
-  /**
-   * One added clause for the row's small text while a Bluetooth headset is
-   * the system input — the only moment the routing is worth a word.
-   */
-  listensThrough?: string;
   /** Asks the system for access. Using the microphone is the talk key's job. */
   onRequest: () => void;
   /** Opens the one place the system's own grant can be changed. */
