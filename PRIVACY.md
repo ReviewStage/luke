@@ -19,6 +19,14 @@ not make that identity a Copilot credential. Browser sign-out does not sign the
 desktop out; the desktop keeps its own refresh token until you sign out in
 Luke, or the auth service reports that token revoked or invalid.
 
+You can delete the account from the same place you sign out: the Account
+section at the foot of Luke's Settings tab, behind a confirmation. Deleting
+erases the service's user record and everything referencing it — the sign-in
+records above and the usage counters below — in one cascading database delete,
+then signs the desktop out. It does not touch the Google or GitHub identity
+you signed in with, and anything stored only on your Mac (provider API keys,
+settings, calendar grants) stays until you remove it in Luke.
+
 ## Hosted voice and review
 
 A signed-in account includes Luke's voice and attention review under a daily

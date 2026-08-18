@@ -18,6 +18,7 @@ const bridge: AppBridge = {
   beginSignIn: invoke(channels.beginSignIn),
   cancelSignIn: invoke(channels.cancelSignIn),
   signOut: invoke(channels.signOut),
+  deleteAccount: invoke(channels.deleteAccount),
   setExpanded: invoke(channels.setExpanded),
   setPointerInterception: (interceptsPointer) => {
     ipcRenderer.send(channels.setPointerInterception, interceptsPointer);

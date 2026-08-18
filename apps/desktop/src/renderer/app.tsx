@@ -2320,6 +2320,16 @@ export function App(): React.JSX.Element {
               onSignOut: async () => {
                 setAccount(await window.sidecar.signOut());
               },
+              // The delete happens at the service before anything local moves,
+              // so a failure resolves to why and the account is still standing.
+              onDeleteAccount: async () => {
+                try {
+                  setAccount(await window.sidecar.deleteAccount());
+                  return undefined;
+                } catch {
+                  return "Luke's service could not delete the account, so it still stands. Try again in a moment.";
+                }
+              },
               view: settingsView,
               onViewChange: setSettingsView,
               microphone,

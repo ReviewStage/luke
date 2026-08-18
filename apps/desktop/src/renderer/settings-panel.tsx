@@ -291,6 +291,11 @@ export interface SettingsPanelProps {
   account: AccountSnapshot;
   onSignOut: () => Promise<void>;
   /**
+   * Asks the service to erase the account, resolving to why when it refuses —
+   * the row keeps drawing the account it still has, with the answer under it.
+   */
+  onDeleteAccount: () => Promise<string | undefined>;
+  /**
    * Which settings page is showing: the front page, or one of the pages a
    * front-page row opens. Held by the app rather than here because Escape
    * unwinds it and a credential entry has to survive a trip to the key slot
@@ -2255,35 +2260,74 @@ function ShortcutSection({
   );
 }
 
+/* Which question the Account section is asking, at most one at a time: both
+   acts end in the same signed-out place, so their confirms never stand side
+   by side. */
+const ACCOUNT_ASK = {
+  NONE: "none",
+  SIGN_OUT: "sign-out",
+  DELETE: "delete",
+} as const;
+
+type AccountAsk = (typeof ACCOUNT_ASK)[keyof typeof ACCOUNT_ASK];
+
 function AccountSection({
   account,
   onSignOut,
+  onDeleteAccount,
   panelOpen,
 }: {
   account: Extract<AccountSnapshot, { status: typeof ACCOUNT_STATUS.SIGNED_IN }>;
   onSignOut: () => Promise<void>;
+  onDeleteAccount: () => Promise<string | undefined>;
   panelOpen: boolean;
 }): React.JSX.Element {
   // Signing out asks first, the way deleting a key does: getting back in costs
   // a whole trip through the browser, so the button asks and only the answer
-  // acts. The question follows the removal confirm's one rule about surfaces —
-  // it does not survive the panel closing — corrected during the render that
-  // discovers it rather than from an effect.
-  const [asking, setAsking] = useState(false);
+  // acts. Deleting asks harder still — it erases the account at the service,
+  // which no sign-in brings back. Each question follows the removal confirm's
+  // one rule about surfaces — it does not survive the panel closing —
+  // corrected during the render that discovers it rather than from an effect.
+  const [asking, setAsking] = useState<AccountAsk>(ACCOUNT_ASK.NONE);
   const [busy, setBusy] = useState(false);
-  const keep = useRef<HTMLButtonElement | null>(null);
-  if (asking && !panelOpen && !busy) setAsking(false);
+  const [rejection, setRejection] = useState<string>();
+  const keepSignedIn = useRef<HTMLButtonElement | null>(null);
+  const keepAccount = useRef<HTMLButtonElement | null>(null);
+  if (asking !== ACCOUNT_ASK.NONE && !panelOpen && !busy) setAsking(ACCOUNT_ASK.NONE);
+  const askingSignOut = asking === ACCOUNT_ASK.SIGN_OUT;
+  const askingDelete = asking === ACCOUNT_ASK.DELETE;
 
   // The question takes the focus to the answer that changes nothing, exactly
   // as the delete confirm does: the control that asked is inert by the time
   // the confirm is drawn.
-  useStagedFocus(keep, asking && !busy);
+  useStagedFocus(keepSignedIn, askingSignOut && !busy);
+  useStagedFocus(keepAccount, askingDelete && !busy);
+
+  // Escape withdraws the question rather than closing the panel it was asked
+  // on — but only while it is still a question.
+  const withdrawOnEscape = (event: React.KeyboardEvent) => {
+    if (event.key !== "Escape" || busy) return;
+    event.stopPropagation();
+    setAsking(ACCOUNT_ASK.NONE);
+  };
 
   const signOut = () => {
     setBusy(true);
     void onSignOut().finally(() => {
       setBusy(false);
-      setAsking(false);
+      setAsking(ACCOUNT_ASK.NONE);
+    });
+  };
+
+  // Success signs out, which unmounts this whole section; a refusal keeps the
+  // account and says so under the row it was asked on.
+  const deleteAccount = () => {
+    setBusy(true);
+    setRejection(undefined);
+    void onDeleteAccount().then((reason) => {
+      setRejection(reason);
+      setBusy(false);
+      setAsking(ACCOUNT_ASK.NONE);
     });
   };
 
@@ -2326,9 +2370,9 @@ function AccountSection({
         <span className="credential-actions">
           <span
             className="settings-actions credential-controls"
-            data-drawn={String(!asking)}
-            aria-hidden={asking}
-            inert={asking}
+            data-drawn={String(!askingSignOut)}
+            aria-hidden={askingSignOut}
+            inert={askingSignOut}
           >
             <button
               type="button"
@@ -2336,7 +2380,7 @@ function AccountSection({
               disabled={busy}
               /* The ellipsis is the promise that it asks first. */
               title="Sign out…"
-              onClick={() => setAsking(true)}
+              onClick={() => setAsking(ACCOUNT_ASK.SIGN_OUT)}
             >
               Sign out
             </button>
@@ -2344,24 +2388,18 @@ function AccountSection({
           <fieldset
             className="settings-actions credential-confirm"
             aria-label={`Sign out of ${account.email}?`}
-            data-drawn={String(asking)}
-            aria-hidden={!asking}
-            inert={!asking}
-            onKeyDown={(event) => {
-              // Escape withdraws the question rather than closing the panel it
-              // was asked on — but only while it is still a question.
-              if (event.key !== "Escape" || busy) return;
-              event.stopPropagation();
-              setAsking(false);
-            }}
+            data-drawn={String(askingSignOut)}
+            aria-hidden={!askingSignOut}
+            inert={!askingSignOut}
+            onKeyDown={withdrawOnEscape}
           >
             <button
               type="button"
-              ref={keep}
+              ref={keepSignedIn}
               className="quiet-button"
               style={answerOrder(REMOVAL_ANSWER_INDEX.KEEP)}
               disabled={busy}
-              onClick={() => setAsking(false)}
+              onClick={() => setAsking(ACCOUNT_ASK.NONE)}
             >
               Cancel
             </button>
@@ -2372,11 +2410,68 @@ function AccountSection({
               disabled={busy}
               onClick={signOut}
             >
-              {busy ? "Signing out…" : "Sign out"}
+              {busy && askingSignOut ? "Signing out…" : "Sign out"}
             </button>
           </fieldset>
         </span>
       </div>
+      <div className="settings-row">
+        <span className="settings-copy">
+          <strong>Delete account</strong>
+          <small>
+            Erases your account and everything Luke's service holds for it. Keys and settings on
+            this Mac stay until cleared here.
+          </small>
+        </span>
+        <span className="credential-actions">
+          <span
+            className="settings-actions credential-controls"
+            data-drawn={String(!askingDelete)}
+            aria-hidden={askingDelete}
+            inert={askingDelete}
+          >
+            <button
+              type="button"
+              className="quiet-button account-delete"
+              disabled={busy}
+              /* The ellipsis is the promise that it asks first. */
+              title="Delete account…"
+              onClick={() => setAsking(ACCOUNT_ASK.DELETE)}
+            >
+              Delete
+            </button>
+          </span>
+          <fieldset
+            className="settings-actions credential-confirm"
+            aria-label={`Delete the account ${account.email}? This cannot be undone.`}
+            data-drawn={String(askingDelete)}
+            aria-hidden={!askingDelete}
+            inert={!askingDelete}
+            onKeyDown={withdrawOnEscape}
+          >
+            <button
+              type="button"
+              ref={keepAccount}
+              className="quiet-button"
+              style={answerOrder(REMOVAL_ANSWER_INDEX.KEEP)}
+              disabled={busy}
+              onClick={() => setAsking(ACCOUNT_ASK.NONE)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="danger-button"
+              style={answerOrder(REMOVAL_ANSWER_INDEX.DELETE)}
+              disabled={busy}
+              onClick={deleteAccount}
+            >
+              {busy && askingDelete ? "Deleting…" : "Delete account"}
+            </button>
+          </fieldset>
+        </span>
+      </div>
+      {rejection ? <p className="error-message">{rejection}</p> : null}
     </section>
   );
 }
@@ -2462,6 +2557,7 @@ function UpdatesSection({ control }: { control: UpdateControl }): React.JSX.Elem
 export function SettingsPanel({
   account,
   onSignOut,
+  onDeleteAccount,
   view,
   onViewChange,
   microphone,
@@ -2622,7 +2718,12 @@ export function SettingsPanel({
               quitting are the two acts that end the session, so they live
               together at the foot rather than above the sections still in use. */}
           {account.status === ACCOUNT_STATUS.SIGNED_IN ? (
-            <AccountSection account={account} onSignOut={onSignOut} panelOpen={panelOpen} />
+            <AccountSection
+              account={account}
+              onSignOut={onSignOut}
+              onDeleteAccount={onDeleteAccount}
+              panelOpen={panelOpen}
+            />
           ) : null}
 
           <button
