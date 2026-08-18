@@ -275,6 +275,15 @@ test("the facts describe creating a workspace, so Luke does not deny the capabil
   // And so is what the new agent runs, because a model the user never chose
   // is exactly the surprise this setting exists to end.
   assert.match(rendered, /its model, and its effort/);
+  // Where a bare "new agent" ask lands rides with both facts, so the guide
+  // explains the default the same way the conversation acts on it: a new
+  // workspace, unless the ask itself names the existing one to join.
+  assert.match(rendered, /bare ask for a new agent lands here/);
+  // The join exception names both handles a developer might say — the
+  // workspace and a session in it — so a named session is not steered into
+  // a fresh workspace it did not ask for.
+  assert.match(rendered, /names the existing workspace or session/);
+  assert.match(rendered, /bare ask for a new agent creates a new workspace instead/);
 });
 
 test("the guide offers what a new Conductor agent runs, by the names people know", () => {

@@ -891,7 +891,9 @@ export const REALTIME_TOOLS = {
     schema: {
       description:
         "Create a new workspace — a new agent — the developer just asked for, in one project " +
-        "a provider listed. Only projects the [workspace projects] context lists exist.",
+        "a provider listed. An ask for a new agent means this unless its own words name the " +
+        "existing workspace or session the agent should join. Only projects the " +
+        "[workspace projects] context lists exist.",
       parameters: {
         type: "object",
         properties: {
@@ -939,8 +941,10 @@ export const REALTIME_TOOLS = {
     family: REALTIME_TOOL_FAMILY.SESSION,
     schema: {
       description:
-        "Start another agent in the workspace one observed session runs in. Only sessions " +
-        "whose roster entry lists new agents can take one, only as an agent kind it lists.",
+        "Start another agent in the workspace one observed session runs in, only when the " +
+        "developer's own words named that workspace or session; a bare ask for a new agent " +
+        "creates a workspace instead. Only sessions whose roster entry lists new agents can " +
+        "take one, only as an agent kind it lists.",
       parameters: {
         type: "object",
         properties: {

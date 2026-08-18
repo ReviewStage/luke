@@ -733,7 +733,9 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "an ask in conversation, spoken or typed, can create a new workspace in one of the " +
         "projects that provider reports, optionally under a name the developer chose, and can " +
         "hand the new agent an opening task in the developer's own words where the project takes " +
-        "one. Only reported projects can be named, a project that needs a task cannot be created " +
+        "one. A bare ask for a new agent lands here: only an ask that itself names the existing " +
+        "workspace or session the agent should join adds one beside it instead. Only reported " +
+        "projects can be named, a project that needs a task cannot be created " +
         "without one, and a provider that reports none takes no ask. An ask that names no " +
         "provider goes to the default workspace provider; until one is chosen Luke asks when " +
         "more than one provider could take it, and the first workspace created saves its " +
@@ -758,7 +760,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "Where a session's provider documents it — Conductor today — the same kind of ask can " +
         "start another agent in the workspace an observed session runs in, as one of the agent " +
         "kinds that session's roster entry lists, optionally named and optionally with an " +
-        "opening task. A model named in the ask — with an effort where its agent takes one — " +
+        "opening task. The ask must name that workspace or session in its own words; a bare " +
+        "ask for a new agent creates a new workspace instead. A model named in the ask — with an effort where its agent takes one — " +
         "rides that agent alone; unnamed, the Conductor row's choice rides along only when it " +
         "names the same agent kind. A session whose entry lists no new agents takes no such ask.",
     },
