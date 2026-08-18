@@ -1,13 +1,7 @@
 import {
   agedStatus,
-  type ControllableSessionProviderAdapter,
   isRecord,
-  type MessageCapableSessionProviderAdapter,
   OBSERVATION_WINDOW,
-  type ProviderControlRequest,
-  type ProviderControlResult,
-  type ProviderMessageResult,
-  type ProviderSessionMessage,
   type ProviderSessionObservation,
   SESSION_STATUS,
   type SessionControl,
@@ -202,10 +196,7 @@ const JULES_MESSAGEABLE_STATES: ReadonlySet<JulesState> = new Set([
  * approval, each through Jules's own custom method on a session that
  * advertised it.
  */
-export class JulesSessionAdapter
-  extends CloudSessionAdapter
-  implements MessageCapableSessionProviderAdapter, ControllableSessionProviderAdapter
-{
+export class JulesSessionAdapter extends CloudSessionAdapter {
   constructor(options: JulesAdapterOptions) {
     super(
       {
@@ -218,14 +209,6 @@ export class JulesSessionAdapter
       },
       options,
     );
-  }
-
-  async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
-    return this.sendObservedMessage(message);
-  }
-
-  async executeControl(request: ProviderControlRequest): Promise<ProviderControlResult> {
-    return this.executeObservedControl(request);
   }
 
   protected async collect(

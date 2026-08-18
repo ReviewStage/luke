@@ -1,6 +1,5 @@
 import {
   isRecord,
-  OBSERVATION_WINDOW,
   PROVIDER_ACT_RESULT_STATUS,
   type ProviderActResult,
   type ProviderControlRequest,
@@ -14,11 +13,9 @@ import {
   positiveInteger,
   resolveOptions,
   SESSION_LOCATION,
-  SESSION_STATUS,
   type SessionControl,
   type SessionProvider,
-  type SessionProviderAdapter,
-  type SessionStatus,
+  SessionProviderAdapterBase,
   sessionMessageText,
   text,
   UNKNOWN_WORKSPACE_LABEL,
@@ -247,19 +244,15 @@ function resolveBaseUrl(profile: CloudAdapterProfile, configured: string | undef
 /**
  * The shared half of every cloud provider adapter: credential handling, its own
  * refresh cadence, the failure rules that decide whether a snapshot survives,
- * and bounded read-only requests. A subclass supplies the provider's routes,
- * how its reported state maps onto Luke's, and — by declaring the matching
- * interfaces — which writes it actually routes.
+ * and bounded read-only requests. A subclass supplies the provider's routes
+ * and how its reported state maps onto Luke's.
  *
- * Write machinery lives here as protected helpers so a subclass that does not
- * route a capability does not grow the method the probe looks for: capability
- * is which interfaces the adapter declares, the same meaning local adapters
- * already have. Each helper acts on nothing but what a user asked for against
- * something the last pass observed — a session that advertised the capability
- * being used, or a project the provider itself listed. Observation itself
- * stays read-only.
+ * Every operation is explicit on the adapter interface. The base answers
+ * unsupported unless a subclass supplies the matching route, and each routed
+ * operation acts on nothing but what a user asked for against something the
+ * last pass observed. Observation itself stays read-only.
  */
-export abstract class CloudSessionAdapter implements SessionProviderAdapter {
+export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
   readonly provider: SessionProvider;
 
   readonly #readApiKey: () => Promise<string | undefined>;
@@ -283,6 +276,7 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
   #collectPass = 0;
 
   constructor(profile: CloudAdapterProfile, options: CloudAdapterOptions) {
+    super();
     this.provider = profile.provider;
     this.#readApiKey = options.readApiKey;
     this.#baseUrl = resolveBaseUrl(profile, options.baseUrl);
@@ -357,9 +351,7 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
    * text outside the message bound, and a missing credential all answer
    * without touching the network.
    */
-  protected async sendObservedMessage(
-    message: ProviderSessionMessage,
-  ): Promise<ProviderMessageResult> {
+  override async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
     const observation = this.#observations.find(
       (candidate) => candidate.providerSessionId === message.providerSessionId,
     );
@@ -402,9 +394,7 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
    * not observe, for a control that session did not advertise, or without a
    * credential.
    */
-  protected async executeObservedControl(
-    request: ProviderControlRequest,
-  ): Promise<ProviderControlResult> {
+  override async executeControl(request: ProviderControlRequest): Promise<ProviderControlResult> {
     const observation = this.#observations.find(
       (candidate) => candidate.providerSessionId === request.providerSessionId,
     );
@@ -429,7 +419,7 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
    * its observation did not list, a name or task outside its bound, and a
    * missing credential all answer without touching the network.
    */
-  protected async spawnObservedWorkspaceAgent(
+  override async spawnWorkspaceAgent(
     request: ProviderWorkspaceAgentRequest,
   ): Promise<ProviderWorkspaceResult> {
     const observation = this.#observations.find(
@@ -497,10 +487,10 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
    * outside its bound, a task a project does not take or the absence of one it
    * needs, and a missing credential all answer without touching the network.
    */
-  protected async createObservedWorkspace(
+  override async createWorkspace(
     request: ProviderWorkspaceRequest,
-    projects: readonly WorkspaceProject[],
   ): Promise<ProviderWorkspaceResult> {
+    const projects = this.workspaceProjects();
     const project = projects.find(
       (candidate) => candidate.providerProjectId === request.providerProjectId,
     );
@@ -665,21 +655,6 @@ export abstract class CloudSessionAdapter implements SessionProviderAdapter {
    * reported as another.
    */
   protected forgetCachedIdentity(): void {}
-
-  /**
-   * Holds a status only while its timestamp is recent. Luke cannot tell a turn
-   * that just finished from a chat abandoned hours ago once a session goes
-   * stale, and reporting the stale state would speak at the wrong moment.
-   */
-  protected statusWhileRecent(
-    status: SessionStatus,
-    observedAt: number,
-    now: number,
-  ): SessionStatus {
-    return now - observedAt <= OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS
-      ? status
-      : SESSION_STATUS.UNKNOWN;
-  }
 
   /**
    * The headers every request carries besides the credential. A subclass

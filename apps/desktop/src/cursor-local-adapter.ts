@@ -2,22 +2,22 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  agedStatus,
-  OBSERVATION_WINDOW,
   type ProviderSessionObservation,
   resolveOptions,
   SESSION_STATUS,
   type SessionDetail,
-  type SessionProviderAdapter,
   type SessionStatus,
   UNKNOWN_WORKSPACE_LABEL,
 } from "@sidecar/core";
 import { CURSOR_PROVIDER } from "./cursor-adapter";
+import { readCursorSessionTranscript } from "./cursor-transcript";
 import {
   type DirectoryEntry,
   discoverSessionFiles,
   fileStats,
   LOCAL_ADAPTER_DEFAULTS,
+  LocalFileSessionAdapter,
+  localSessionStatus,
   readDirectory,
   readTail,
   readTextFile,
@@ -88,6 +88,8 @@ export interface CursorLocalAdapterOptions {
   now?: () => number;
   maximumProjectDirectories?: number;
   activeSessionFreshnessMs?: number;
+  transcriptReadTailBytes?: number;
+  transcriptMaximumRenderedLength?: number;
   readTailBytes?: number;
 }
 
@@ -264,10 +266,7 @@ function statusFromTurn(
 ): SessionStatus {
   if (turn?.failed) return SESSION_STATUS.ERROR;
   const status = turn ? SESSION_STATUS.WAITING : SESSION_STATUS.WORKING;
-  if (status === SESSION_STATUS.WORKING && now - observedAt > freshnessMs) {
-    return SESSION_STATUS.UNKNOWN;
-  }
-  return agedStatus(status, observedAt, now, freshnessMs);
+  return localSessionStatus(status, observedAt, now, freshnessMs);
 }
 
 /**
@@ -302,85 +301,69 @@ function defaultWorkspaceStorageDirectory(): string {
  * Cursor already writes for itself. It reads no message content, needs no
  * credential, and reports nothing that Cursor has not written down.
  */
-export class CursorLocalSessionAdapter implements SessionProviderAdapter {
+export class CursorLocalSessionAdapter extends LocalFileSessionAdapter<
+  CursorTranscriptCandidate,
+  { failed: boolean } | undefined
+> {
   readonly provider = CURSOR_PROVIDER;
 
   readonly #cursorHome: string;
   readonly #workspaceLabels: CursorWorkspaceLabels;
-  readonly #now: () => number;
   readonly #maximumProjectDirectories: number;
-  readonly #activeSessionFreshnessMs: number;
   readonly #readTailBytes: number;
-  /**
-   * The parsed turn of each transcript as of the mtime it was read at.
-   * Sessions are never capped, so this is what keeps a pass cheap: a
-   * transcript is re-read only when it has been written to, and status decay
-   * is recomputed each pass from the cached turn.
-   */
-  readonly #parsedTurns = new Map<
-    string,
-    { mtimeMs: number; turn: { failed: boolean } | undefined }
-  >();
+  readonly #transcriptReadTailBytes: number | undefined;
+  readonly #transcriptMaximumRenderedLength: number | undefined;
 
   constructor(options: CursorLocalAdapterOptions = {}) {
+    super(options);
     this.#cursorHome = options.cursorHome ?? defaultCursorHome();
     this.#workspaceLabels = new CursorWorkspaceLabels(
       options.workspaceStorageDirectory ?? defaultWorkspaceStorageDirectory(),
     );
-    this.#now = options.now ?? Date.now;
     const resolved = resolveOptions(
       options,
       {
         maximumProjectDirectories: CURSOR_LOCAL_ADAPTER_DEFAULTS.MAXIMUM_PROJECT_DIRECTORIES,
-        activeSessionFreshnessMs: OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
         readTailBytes: LOCAL_ADAPTER_DEFAULTS.READ_TAIL_BYTES,
       },
       {
         positive: ["maximumProjectDirectories", "readTailBytes"],
-        nonNegative: ["activeSessionFreshnessMs"],
       },
     );
     this.#maximumProjectDirectories = resolved.maximumProjectDirectories;
-    this.#activeSessionFreshnessMs = resolved.activeSessionFreshnessMs;
     this.#readTailBytes = resolved.readTailBytes;
+    this.#transcriptReadTailBytes = options.transcriptReadTailBytes;
+    this.#transcriptMaximumRenderedLength = options.transcriptMaximumRenderedLength;
   }
 
-  async observe(): Promise<readonly ProviderSessionObservation[]> {
-    const now = this.#now();
-    const candidates = await discoverSessionFiles({
+  protected discover(): Promise<CursorTranscriptCandidate[]> {
+    return discoverSessionFiles({
       projectsDirectory: path.join(this.#cursorHome, CURSOR_DIRECTORY.PROJECTS),
       sessionsDirectoryName: CURSOR_DIRECTORY.TRANSCRIPTS,
       maximumProjectDirectories: this.#maximumProjectDirectories,
       sessionFilesIn: transcriptsIn,
     });
-    // Only the sessions this pass reports are worth naming a folder for.
-    await this.#workspaceLabels.resolve(
-      candidates.map((candidate) => candidate.projectDirectoryName),
-    );
-
-    const observations = new Map<string, ProviderSessionObservation>();
-    for (const candidate of candidates) {
-      if (observations.has(candidate.providerSessionId)) continue;
-      observations.set(candidate.providerSessionId, await this.#observationFor(candidate, now));
-    }
-
-    // A file no longer discovered was deleted, so its parse must not outlive it.
-    const discovered = new Set(candidates.map((candidate) => candidate.filePath));
-    for (const filePath of this.#parsedTurns.keys()) {
-      if (!discovered.has(filePath)) this.#parsedTurns.delete(filePath);
-    }
-
-    return [...observations.values()];
   }
 
-  async #parsedTurn(
+  protected override prepare(candidates: readonly CursorTranscriptCandidate[]): Promise<void> {
+    return this.#workspaceLabels.resolve(
+      candidates.map((candidate) => candidate.projectDirectoryName),
+    );
+  }
+
+  override readTranscript(providerSessionId: string): Promise<string | undefined> {
+    return readCursorSessionTranscript({
+      cursorHome: this.#cursorHome,
+      providerSessionId,
+      readTailBytes: this.#transcriptReadTailBytes,
+      maximumRenderedLength: this.#transcriptMaximumRenderedLength,
+    });
+  }
+
+  protected async parse(
     candidate: CursorTranscriptCandidate,
   ): Promise<{ failed: boolean } | undefined> {
-    const cached = this.#parsedTurns.get(candidate.filePath);
-    if (cached && cached.mtimeMs === candidate.mtimeMs) return cached.turn;
-    const turn = closedTurn(await readTail(candidate.filePath, this.#readTailBytes));
-    this.#parsedTurns.set(candidate.filePath, { mtimeMs: candidate.mtimeMs, turn });
-    return turn;
+    return closedTurn(await readTail(candidate.filePath, this.#readTailBytes));
   }
 
   /**
@@ -389,17 +372,14 @@ export class CursorLocalSessionAdapter implements SessionProviderAdapter {
    * reaches an observation — and the location is left unsaid, which is how an
    * adapter reading this machine reports one that runs on it.
    */
-  async #observationFor(
+  protected observation(
     candidate: CursorTranscriptCandidate,
+    turn: { failed: boolean } | undefined,
     now: number,
-  ): Promise<ProviderSessionObservation> {
+    activeSessionFreshnessMs: number,
+  ): ProviderSessionObservation {
     const label = this.#workspaceLabels.label(candidate.projectDirectoryName);
-    const status = statusFromTurn(
-      await this.#parsedTurn(candidate),
-      candidate.mtimeMs,
-      now,
-      this.#activeSessionFreshnessMs,
-    );
+    const status = statusFromTurn(turn, candidate.mtimeMs, now, activeSessionFreshnessMs);
     return {
       providerSessionId: candidate.providerSessionId,
       title: label,

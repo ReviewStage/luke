@@ -32,10 +32,60 @@ export function isProviderId(value: string): value is ProviderId {
   return PROVIDER_IDS.has(value);
 }
 
-/** A provider adapter has no dependency on Electron, a renderer, or live UI state. */
+/**
+ * A provider adapter has no dependency on Electron, a renderer, or live UI
+ * state. Every adapter answers every act, because unsupported is already an
+ * answer rather than a failure: one whose provider documents no way to do a
+ * thing inherits that answer from `SessionProviderAdapterBase` and says so,
+ * where a missing method would leave each caller asking whether the question
+ * could be put at all. Overriding one is what taking on its constraint means.
+ */
 export interface SessionProviderAdapter {
   readonly provider: SessionProvider;
   observe(): Promise<readonly ProviderSessionObservation[]>;
+
+  /**
+   * Runs a control against a session the adapter has already observed.
+   * Adapters must reject any request whose control that session's latest
+   * observation did not advertise.
+   */
+  executeControl(request: ProviderControlRequest): Promise<ProviderControlResult>;
+
+  /**
+   * Hands a message to an already-observed session through the provider's own
+   * documented endpoint. It is one of the three places an adapter may change
+   * provider state, and only ever with text a user chose to send: adapters
+   * must refuse any session that did not advertise `canReceiveMessage` on its
+   * latest observation, and nothing that decides on the user's behalf — the
+   * attention evaluator above all — may reach it.
+   */
+  sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult>;
+
+  /** The projects the latest observation pass reported, or none. */
+  workspaceProjects(): readonly WorkspaceProject[];
+
+  /**
+   * Creates a workspace in a project the latest observation pass reported. The
+   * same rules bind it that bind a message: it acts only on what a user just
+   * asked for, through the provider's own documented endpoint, and nothing
+   * that decides on the user's behalf may reach it.
+   */
+  createWorkspace(request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult>;
+
+  /**
+   * Starts another agent in the workspace an observed session already runs in,
+   * under the same rules and one more: the agent must be one of the kinds that
+   * session's latest observation listed.
+   */
+  spawnWorkspaceAgent(request: ProviderWorkspaceAgentRequest): Promise<ProviderWorkspaceResult>;
+
+  /**
+   * Renders one observed session's own transcript, read from the provider's
+   * file on this machine, into a bounded conversation kept nowhere. The read
+   * performs nothing and reaches no provider; an adapter whose stored shape
+   * this build cannot render faithfully reports nothing rather than guessing.
+   */
+  readTranscript(providerSessionId: string): Promise<string | undefined>;
 }
 
 /**
@@ -72,22 +122,6 @@ export interface ProviderControlRequest {
  */
 export type ProviderControlResult = ProviderActResult;
 
-/**
- * Optional extension for adapters with a reliable provider-owned control path.
- * Adapters must reject any request whose control was not advertised for the
- * observed session.
- */
-export interface ControllableSessionProviderAdapter extends SessionProviderAdapter {
-  executeControl(request: ProviderControlRequest): Promise<ProviderControlResult>;
-}
-
-/** Whether an adapter can run a control at all, before asking it to. */
-export function isControllableAdapter(
-  adapter: SessionProviderAdapter,
-): adapter is ControllableSessionProviderAdapter {
-  return adapterHasFunctions(adapter, "executeControl");
-}
-
 /** A user-authored message for one session the adapter has already observed. */
 export interface ProviderSessionMessage {
   providerSessionId: string;
@@ -100,25 +134,6 @@ export interface ProviderSessionMessage {
  * way to message this session, which is an answer rather than a failure.
  */
 export type ProviderMessageResult = ProviderActResult;
-
-/**
- * Optional extension for adapters whose provider documents a way to hand a
- * message to an existing session. It is the one place an adapter may change
- * provider state, and only ever with text a user chose to send: adapters must
- * refuse any session that did not advertise `canReceiveMessage` on its latest
- * observation, and nothing that decides on the user's behalf — the attention
- * evaluator above all — may reach this interface.
- */
-export interface MessageCapableSessionProviderAdapter extends SessionProviderAdapter {
-  sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult>;
-}
-
-/** Whether an adapter can carry a message at all, before asking it to. */
-export function isMessageCapableAdapter(
-  adapter: SessionProviderAdapter,
-): adapter is MessageCapableSessionProviderAdapter {
-  return adapterHasFunctions(adapter, "sendMessage");
-}
 
 /**
  * Whether a new workspace in a project carries an opening task — the
@@ -310,26 +325,6 @@ export type ProviderWorkspaceResult =
   | { status: typeof PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
 
 /**
- * Optional extension for adapters whose provider documents an endpoint that
- * creates a workspace. The same rules bind it that bind a message: it acts
- * only on what a user just asked for, only in a project the latest observation
- * pass reported, through the provider's own documented endpoint — and nothing
- * that decides on the user's behalf may reach it.
- */
-export interface WorkspaceCapableSessionProviderAdapter extends SessionProviderAdapter {
-  /** The projects the latest observation pass reported, or none. */
-  workspaceProjects(): readonly WorkspaceProject[];
-  createWorkspace(request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult>;
-}
-
-/** Whether an adapter can create a workspace at all, before asking it to. */
-export function isWorkspaceCapableAdapter(
-  adapter: SessionProviderAdapter,
-): adapter is WorkspaceCapableSessionProviderAdapter {
-  return adapterHasFunctions(adapter, "workspaceProjects", "createWorkspace");
-}
-
-/**
  * A user-asked request for another agent in the workspace an observed session
  * already runs in. The session names the workspace; the agent must be one that
  * session's latest observation listed as spawnable.
@@ -354,29 +349,38 @@ export interface ProviderWorkspaceAgentRequest {
 }
 
 /**
- * Optional extension for adapters whose provider documents starting another
- * agent in an existing workspace. The same rules bind it that bind a message:
- * it acts only on what a user just asked for, only against a session the
- * latest observation reported with the agent it listed, through the provider's
- * own documented endpoint — and nothing that decides on the user's behalf may
- * reach it.
+ * The explicit answers an adapter gives for acts its provider does not
+ * document: unsupported for every write, no projects, and no transcript.
+ * Concrete adapters override only the acts their provider routes, and an
+ * override takes on that act's constraint above along with it.
  */
-export interface WorkspaceAgentCapableSessionProviderAdapter extends SessionProviderAdapter {
-  spawnWorkspaceAgent(request: ProviderWorkspaceAgentRequest): Promise<ProviderWorkspaceResult>;
-}
+export abstract class SessionProviderAdapterBase implements SessionProviderAdapter {
+  abstract readonly provider: SessionProvider;
+  abstract observe(): Promise<readonly ProviderSessionObservation[]>;
 
-/** Whether an adapter can start another agent at all, before asking it to. */
-export function isWorkspaceAgentCapableAdapter(
-  adapter: SessionProviderAdapter,
-): adapter is WorkspaceAgentCapableSessionProviderAdapter {
-  return adapterHasFunctions(adapter, "spawnWorkspaceAgent");
-}
+  async executeControl(_request: ProviderControlRequest): Promise<ProviderControlResult> {
+    return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+  }
 
-/** Whether every named method is actually a function on this adapter. */
-function adapterHasFunctions(
-  adapter: SessionProviderAdapter,
-  ...methods: readonly string[]
-): boolean {
-  const candidate = adapter as unknown as Record<string, unknown>;
-  return methods.every((method) => typeof candidate[method] === "function");
+  async sendMessage(_message: ProviderSessionMessage): Promise<ProviderMessageResult> {
+    return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+  }
+
+  workspaceProjects(): readonly WorkspaceProject[] {
+    return [];
+  }
+
+  async createWorkspace(_request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult> {
+    return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+  }
+
+  async spawnWorkspaceAgent(
+    _request: ProviderWorkspaceAgentRequest,
+  ): Promise<ProviderWorkspaceResult> {
+    return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+  }
+
+  async readTranscript(_providerSessionId: string): Promise<string | undefined> {
+    return undefined;
+  }
 }

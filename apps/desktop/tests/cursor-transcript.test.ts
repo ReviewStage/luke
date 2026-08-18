@@ -3,7 +3,20 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
-import { readCursorSessionTranscript } from "../src/cursor-transcript";
+import { CursorLocalSessionAdapter } from "../src/cursor-local-adapter";
+
+function readCursorSessionTranscript(request: {
+  cursorHome?: string;
+  providerSessionId: string;
+  readTailBytes?: number;
+  maximumRenderedLength?: number;
+}): Promise<string | undefined> {
+  return new CursorLocalSessionAdapter({
+    cursorHome: request.cursorHome,
+    transcriptReadTailBytes: request.readTailBytes,
+    transcriptMaximumRenderedLength: request.maximumRenderedLength,
+  }).readTranscript(request.providerSessionId);
+}
 
 const TEST_SESSION_ID = "8b21b0b2-98c1-4f52-a1c1-0f9a53b2f001";
 const TEST_PROJECT_DIRECTORY = "Users-test-luke";

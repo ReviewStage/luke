@@ -3,10 +3,23 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
-import { readClaudeSessionTranscript } from "../src/claude-code-transcript";
+import { ClaudeCodeSessionAdapter } from "../src/claude-code-adapter";
 
 const TEST_SESSION_ID = "3f9a1b2c-4d5e-6789-abcd-ef0123456789";
 const CLAUDE_PROJECTS_DIRECTORY = "projects";
+
+function readClaudeSessionTranscript(request: {
+  claudeHome: string;
+  providerSessionId: string;
+  readTailBytes?: number;
+  maximumRenderedLength?: number;
+}): Promise<string | undefined> {
+  return new ClaudeCodeSessionAdapter({
+    claudeHome: request.claudeHome,
+    transcriptReadTailBytes: request.readTailBytes,
+    transcriptMaximumRenderedLength: request.maximumRenderedLength,
+  }).readTranscript(request.providerSessionId);
+}
 
 async function temporaryClaudeHome(t: TestContext): Promise<string> {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "luke-claude-transcript-"));

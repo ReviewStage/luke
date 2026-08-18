@@ -4,7 +4,21 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
-import { readOpenCodeSessionTranscript } from "../src/opencode-transcript";
+import type { SqliteModuleLoader } from "../src/local-sqlite";
+import { OpenCodeSessionAdapter } from "../src/opencode-adapter";
+
+function readOpenCodeSessionTranscript(request: {
+  dataDirectory?: string;
+  providerSessionId: string;
+  sqlite?: SqliteModuleLoader;
+  maximumRenderedLength?: number;
+}): Promise<string | undefined> {
+  return new OpenCodeSessionAdapter({
+    dataDirectory: request.dataDirectory,
+    sqlite: request.sqlite,
+    transcriptMaximumRenderedLength: request.maximumRenderedLength,
+  }).readTranscript(request.providerSessionId);
+}
 
 const TEST_SESSION_ID = "ses_8f2f6a01aa";
 const OPENCODE_DATABASE = "opencode.db";

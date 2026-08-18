@@ -4,20 +4,16 @@ import {
   isRecord,
   maximumSessionRecapLength,
   maximumSessionTitleLength,
-  OBSERVATION_WINDOW,
   oneLine,
   PROVIDER_ID,
   type ProviderSessionObservation,
   recordFromJsonLine,
-  resolveOptions,
   SESSION_COMPLETION_CAUSE,
   SESSION_ROSTER_RETENTION_MS,
   SESSION_STATUS,
   type SessionDetail,
   type SessionProvider,
-  type SessionProviderAdapter,
   text,
-  wholeNumber,
 } from "@sidecar/core";
 import {
   CODEX_HOOK_EVENT,
@@ -25,12 +21,23 @@ import {
   type ObservedCodexHookEvent,
   readCodexHookEvent,
 } from "./codex-hooks";
-import { readTail, readTextFile, uniquePaths, workspaceLabel } from "./local-session-adapter";
+import { readCodexSessionTranscript } from "./codex-transcript";
+import {
+  type HookStatusRefinement,
+  LocalSessionAdapter,
+  readTail,
+  readTextFile,
+  refineStatusWithHookEvent,
+  uniquePaths,
+  workspaceLabel,
+} from "./local-session-adapter";
 import {
   canIgnoreSqliteError,
   defaultSqliteModule,
+  numberFromRow,
   openReadOnlyDatabase,
   type SqliteModuleLoader,
+  textFromRow,
 } from "./local-sqlite";
 
 const CODEX_PROVIDER_ID = PROVIDER_ID.CODEX;
@@ -173,6 +180,7 @@ export interface CodexAdapterOptions {
   now?: () => number;
   activeSessionFreshnessMs?: number;
   sqlite?: SqliteModuleLoader;
+  transcriptMaximumRenderedLength?: number;
   /**
    * Where the observation hook spools its events, when hooks are on at all.
    * Read lazily like the cloud adapters' credentials, because the app decides
@@ -285,14 +293,6 @@ function parseCodexRolloutTail(tail: string): ParsedCodexRollout {
     }
   }
   return parsed;
-}
-
-function numberFromRow(row: CodexThreadRow, key: string): number | undefined {
-  return wholeNumber(row[key]);
-}
-
-function textFromRow(row: CodexThreadRow, key: string): string | undefined {
-  return text(row[key]);
 }
 
 function timestampFromRow(row: CodexThreadRow): number {
@@ -440,33 +440,25 @@ function statusFromRow(
  * database cannot show: a tool call holding for approval writes no records
  * while it holds, and a turn's true end can sit past the rollout's read.
  */
+const CODEX_HOOK_STATUS_REFINEMENT = {
+  definitive: [{ event: CODEX_HOOK_EVENT.SESSION_END, fresh: SESSION_STATUS.COMPLETE }],
+  fresh: [
+    {
+      event: CODEX_HOOK_EVENT.NOTIFICATION,
+      fresh: SESSION_STATUS.WAITING,
+      stale: SESSION_STATUS.UNKNOWN,
+    },
+    { event: CODEX_HOOK_EVENT.PROMPT, fresh: SESSION_STATUS.WORKING },
+    { event: CODEX_HOOK_EVENT.STOP, fresh: SESSION_STATUS.WAITING },
+  ],
+} as const satisfies HookStatusRefinement<CodexHookEvent>;
+
 function statusWithHookEvent(
   status: ProviderSessionObservation["status"],
   event: CodexHookEvent,
   isFresh: boolean,
 ): ProviderSessionObservation["status"] {
-  if (event === CODEX_HOOK_EVENT.SESSION_END) return SESSION_STATUS.COMPLETE;
-  // Codex fires no failure hook, so `stop` fires for a failed turn too: a
-  // stop or prompt standing for the same turn the rollout saw fail must not
-  // talk the row out of the error. The rollout itself is what clears it — the
-  // next pass reads the new turn's `task_started` — so a genuinely newer turn
-  // costs one observation pass, never the failure.
-  if (status === SESSION_STATUS.COMPLETE || status === SESSION_STATUS.ERROR) return status;
-  // A notification still standing means the approval is still open — its zero
-  // staleness tolerance drops it the moment the thread moves — so it outranks
-  // a mid-turn row however long the hold has run: Codex holds a long turn at
-  // working, and a long hold must not read as active work. It still ages the
-  // way every waiting verdict does, because a Codex killed mid-hold fires
-  // nothing further, and a hold that old is a session left behind.
-  if (event === CODEX_HOOK_EVENT.NOTIFICATION) {
-    return isFresh ? SESSION_STATUS.WAITING : SESSION_STATUS.UNKNOWN;
-  }
-  if (!isFresh) return status;
-  if (event === CODEX_HOOK_EVENT.PROMPT) return SESSION_STATUS.WORKING;
-  if (event === CODEX_HOOK_EVENT.STOP) return SESSION_STATUS.WAITING;
-  // A session that started or resumed proves only that it moved: the bumped
-  // clock above is the whole refinement, and the row says the rest.
-  return status;
+  return refineStatusWithHookEvent(status, event, isFresh, CODEX_HOOK_STATUS_REFINEMENT);
 }
 
 function detailFromRow(
@@ -539,31 +531,21 @@ export function defaultCodexHome(): string {
   return configuredHome || path.join(os.homedir(), ".codex");
 }
 
-export class CodexSessionAdapter implements SessionProviderAdapter {
+export class CodexSessionAdapter extends LocalSessionAdapter {
   readonly provider = CODEX_PROVIDER;
 
   readonly #codexHome: string;
   readonly #sqliteHome: string | undefined;
-  readonly #now: () => number;
-  readonly #activeSessionFreshnessMs: number;
   readonly #sqlite: SqliteModuleLoader;
+  readonly #transcriptMaximumRenderedLength: number | undefined;
   readonly #hookEventsDirectory: (() => string | undefined) | undefined;
 
   constructor(options: CodexAdapterOptions = {}) {
+    super(options);
     this.#codexHome = options.codexHome ?? defaultCodexHome();
     this.#sqliteHome = options.sqliteHome;
-    this.#now = options.now ?? Date.now;
-    const resolved = resolveOptions(
-      options,
-      {
-        activeSessionFreshnessMs: OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
-      },
-      {
-        nonNegative: ["activeSessionFreshnessMs"],
-      },
-    );
-    this.#activeSessionFreshnessMs = resolved.activeSessionFreshnessMs;
     this.#sqlite = options.sqlite ?? defaultSqliteModule;
+    this.#transcriptMaximumRenderedLength = options.transcriptMaximumRenderedLength;
     this.#hookEventsDirectory = options.hookEventsDirectory;
   }
 
@@ -574,7 +556,7 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
       let rows: CodexThreadRow[];
       let now: number;
       try {
-        now = this.#now();
+        now = this.observationTime();
         rows = database
           .prepare(CODEX_THREAD_QUERY)
           .all(now - SESSION_ROSTER_RETENTION_MS.SETTLED_MS)
@@ -597,7 +579,7 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
             row,
             rollouts.get(textFromRow(row, CODEX_THREAD_COLUMN.ID) ?? ""),
             now,
-            this.#activeSessionFreshnessMs,
+            this.activeSessionFreshnessMs,
             hookEvents.get(textFromRow(row, CODEX_THREAD_COLUMN.ID) ?? ""),
           ),
         )
@@ -606,6 +588,16 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
         );
     }
     return [];
+  }
+
+  override readTranscript(providerSessionId: string): Promise<string | undefined> {
+    return readCodexSessionTranscript({
+      codexHome: this.#codexHome,
+      sqliteHome: this.#sqliteHome,
+      providerSessionId,
+      sqlite: this.#sqlite,
+      maximumRenderedLength: this.#transcriptMaximumRenderedLength,
+    });
   }
 
   /**
