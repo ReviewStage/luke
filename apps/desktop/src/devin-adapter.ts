@@ -1,13 +1,7 @@
 import {
   agedStatus,
-  type ControllableSessionProviderAdapter,
   isRecord,
-  type MessageCapableSessionProviderAdapter,
   OBSERVATION_WINDOW,
-  type ProviderControlRequest,
-  type ProviderControlResult,
-  type ProviderMessageResult,
-  type ProviderSessionMessage,
   type ProviderSessionObservation,
   SESSION_STATUS,
   type SessionControl,
@@ -291,10 +285,7 @@ function sessionFromRecord(
  * for a settled session, through Devin's own archive endpoint on a session
  * that advertised it.
  */
-export class DevinSessionAdapter
-  extends CloudSessionAdapter
-  implements MessageCapableSessionProviderAdapter, ControllableSessionProviderAdapter
-{
+export class DevinSessionAdapter extends CloudSessionAdapter {
   /** The identity, or `null` once Devin has named one Luke cannot observe as. */
   #principal: DevinIdentity | null | undefined;
 
@@ -307,14 +298,6 @@ export class DevinSessionAdapter
       },
       options,
     );
-  }
-
-  async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
-    return this.sendObservedMessage(message);
-  }
-
-  async executeControl(request: ProviderControlRequest): Promise<ProviderControlResult> {
-    return this.executeObservedControl(request);
   }
 
   protected override forgetCachedIdentity(): void {

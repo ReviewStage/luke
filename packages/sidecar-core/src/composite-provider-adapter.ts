@@ -1,10 +1,4 @@
 import {
-  type ControllableSessionProviderAdapter,
-  isControllableAdapter,
-  isMessageCapableAdapter,
-  isWorkspaceAgentCapableAdapter,
-  isWorkspaceCapableAdapter,
-  type MessageCapableSessionProviderAdapter,
   PROVIDER_ACT_RESULT_STATUS,
   type ProviderActResult,
   type ProviderControlRequest,
@@ -15,8 +9,7 @@ import {
   type ProviderWorkspaceRequest,
   type ProviderWorkspaceResult,
   type SessionProviderAdapter,
-  type WorkspaceAgentCapableSessionProviderAdapter,
-  type WorkspaceCapableSessionProviderAdapter,
+  SessionProviderAdapterBase,
   type WorkspaceProject,
 } from "./providers.js";
 import type { ProviderSessionObservation, SessionProvider } from "./session.js";
@@ -34,19 +27,13 @@ export interface CompositeProviderAdapterOptions {
  * arrive as one adapter: registered separately, each pass would retire the
  * other's sessions.
  */
-export class CompositeSessionProviderAdapter
-  implements
-    SessionProviderAdapter,
-    MessageCapableSessionProviderAdapter,
-    ControllableSessionProviderAdapter,
-    WorkspaceCapableSessionProviderAdapter,
-    WorkspaceAgentCapableSessionProviderAdapter
-{
+export class CompositeSessionProviderAdapter extends SessionProviderAdapterBase {
   readonly provider: SessionProvider;
 
   readonly #adapters: readonly SessionProviderAdapter[];
 
   constructor(options: CompositeProviderAdapterOptions) {
+    super();
     for (const adapter of options.adapters) {
       // Observing one provider's sessions under another's identity is a wiring
       // mistake rather than something a user can correct.
@@ -85,20 +72,18 @@ export class CompositeSessionProviderAdapter
    * still reachable — so the question moves on rather than settling. Any firm
    * answer, accepted or rejected, is the session's own and ends the search.
    */
-  async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
-    return this.#dispatchAct(isMessageCapableAdapter, (adapter) => adapter.sendMessage(message));
+  override async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
+    return this.#dispatchAct((adapter) => adapter.sendMessage(message));
   }
 
   /** A control finds its observer the same way a message does. */
-  async executeControl(request: ProviderControlRequest): Promise<ProviderControlResult> {
-    return this.#dispatchAct(isControllableAdapter, (adapter) => adapter.executeControl(request));
+  override async executeControl(request: ProviderControlRequest): Promise<ProviderControlResult> {
+    return this.#dispatchAct((adapter) => adapter.executeControl(request));
   }
 
   /** Every project any observer offered, in the order the observers stand in. */
-  workspaceProjects(): readonly WorkspaceProject[] {
-    return this.#adapters.flatMap((adapter) =>
-      isWorkspaceCapableAdapter(adapter) ? adapter.workspaceProjects() : [],
-    );
+  override workspaceProjects(): readonly WorkspaceProject[] {
+    return this.#adapters.flatMap((adapter) => adapter.workspaceProjects());
   }
 
   /**
@@ -106,19 +91,25 @@ export class CompositeSessionProviderAdapter
    * answers unsupported never offered the project, so the question moves on,
    * and any firm answer is the project's own and ends the search.
    */
-  async createWorkspace(request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult> {
-    return this.#dispatchAct(isWorkspaceCapableAdapter, (adapter) =>
-      adapter.createWorkspace(request),
-    );
+  override async createWorkspace(
+    request: ProviderWorkspaceRequest,
+  ): Promise<ProviderWorkspaceResult> {
+    return this.#dispatchAct((adapter) => adapter.createWorkspace(request));
   }
 
   /** A new agent finds the observer holding its workspace the same way. */
-  async spawnWorkspaceAgent(
+  override async spawnWorkspaceAgent(
     request: ProviderWorkspaceAgentRequest,
   ): Promise<ProviderWorkspaceResult> {
-    return this.#dispatchAct(isWorkspaceAgentCapableAdapter, (adapter) =>
-      adapter.spawnWorkspaceAgent(request),
-    );
+    return this.#dispatchAct((adapter) => adapter.spawnWorkspaceAgent(request));
+  }
+
+  override async readTranscript(providerSessionId: string): Promise<string | undefined> {
+    for (const adapter of this.#adapters) {
+      const transcript = await adapter.readTranscript(providerSessionId);
+      if (transcript !== undefined) return transcript;
+    }
+    return undefined;
   }
 
   /**
@@ -126,12 +117,10 @@ export class CompositeSessionProviderAdapter
    * never seen the subject, so the question moves on; any firm answer is the
    * subject's own and ends the search.
    */
-  async #dispatchAct<Capable extends SessionProviderAdapter, Result extends ProviderActResult>(
-    isCapable: (adapter: SessionProviderAdapter) => adapter is Capable,
-    act: (adapter: Capable) => Promise<Result>,
+  async #dispatchAct<Result extends ProviderActResult>(
+    act: (adapter: SessionProviderAdapter) => Promise<Result>,
   ): Promise<Result | { status: typeof PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED }> {
     for (const adapter of this.#adapters) {
-      if (!isCapable(adapter)) continue;
       const result = await act(adapter);
       if (result.status !== PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED) return result;
     }

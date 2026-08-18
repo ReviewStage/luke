@@ -3,7 +3,6 @@ import test from "node:test";
 import {
   CompositeSessionProviderAdapter,
   InMemorySessionRegistry,
-  type MessageCapableSessionProviderAdapter,
   PROVIDER_ACT_RESULT_STATUS,
   type ProviderMessageResult,
   type ProviderSessionMessage,
@@ -14,13 +13,31 @@ import {
   SESSION_STATUS,
   type SessionProvider,
   type SessionProviderAdapter,
+  SessionProviderAdapterBase,
   WORKSPACE_TASK_SUPPORT,
-  type WorkspaceCapableSessionProviderAdapter,
   type WorkspaceProject,
 } from "../src";
 
 const cursor: SessionProvider = { id: "cursor", displayName: "Cursor" };
 const codex: SessionProvider = { id: "codex", displayName: "Codex" };
+
+class TestProviderAdapter extends SessionProviderAdapterBase {
+  readonly provider: SessionProvider;
+  readonly #observations: () => Promise<readonly ProviderSessionObservation[]>;
+
+  constructor(
+    provider: SessionProvider,
+    observations: () => Promise<readonly ProviderSessionObservation[]>,
+  ) {
+    super();
+    this.provider = provider;
+    this.#observations = observations;
+  }
+
+  observe(): Promise<readonly ProviderSessionObservation[]> {
+    return this.#observations();
+  }
+}
 
 function observation(
   providerSessionId: string,
@@ -39,16 +56,13 @@ function observerOf(
   provider: SessionProvider,
   observations: readonly ProviderSessionObservation[],
 ): SessionProviderAdapter {
-  return { provider, observe: async () => observations };
+  return new TestProviderAdapter(provider, async () => observations);
 }
 
 function failingObserver(provider: SessionProvider): SessionProviderAdapter {
-  return {
-    provider,
-    observe: async () => {
-      throw new Error("session state is unreadable");
-    },
-  };
+  return new TestProviderAdapter(provider, async () => {
+    throw new Error("session state is unreadable");
+  });
 }
 
 test("reports every observer's sessions as one provider snapshot", async () => {
@@ -145,12 +159,10 @@ test("refuses to observe one provider's sessions under another's identity", () =
 function messenger(
   provider: SessionProvider,
   answer: (message: ProviderSessionMessage) => ProviderMessageResult,
-): MessageCapableSessionProviderAdapter {
-  return {
-    provider,
-    observe: async () => [],
-    sendMessage: async (message) => answer(message),
-  };
+): SessionProviderAdapter {
+  return Object.assign(new TestProviderAdapter(provider, async () => []), {
+    sendMessage: async (message: ProviderSessionMessage) => answer(message),
+  });
 }
 
 test("carries a message past observers that have never seen the session", async () => {
@@ -213,13 +225,11 @@ function workspaceCreator(
   provider: SessionProvider,
   projects: readonly WorkspaceProject[],
   answer: (request: ProviderWorkspaceRequest) => ProviderWorkspaceResult,
-): WorkspaceCapableSessionProviderAdapter {
-  return {
-    provider,
-    observe: async () => [],
+): SessionProviderAdapter {
+  return Object.assign(new TestProviderAdapter(provider, async () => []), {
     workspaceProjects: () => projects,
-    createWorkspace: async (request) => answer(request),
-  };
+    createWorkspace: async (request: ProviderWorkspaceRequest) => answer(request),
+  });
 }
 
 test("offers every observer's projects and carries a creation ask to the one that offered it", async () => {

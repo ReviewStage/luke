@@ -86,13 +86,7 @@ export {
 
 // Providers — adapters and the acts they advertise.
 export {
-  type ControllableSessionProviderAdapter,
-  isControllableAdapter,
-  isMessageCapableAdapter,
   isProviderId,
-  isWorkspaceAgentCapableAdapter,
-  isWorkspaceCapableAdapter,
-  type MessageCapableSessionProviderAdapter,
   maximumObservedWorkspaceProjects,
   normalizeObservedWorkspaceProjects,
   type ObservedWorkspaceProject,
@@ -109,11 +103,10 @@ export {
   type ProviderWorkspaceRequest,
   type ProviderWorkspaceResult,
   type SessionProviderAdapter,
+  SessionProviderAdapterBase,
   WORKSPACE_TASK_SUPPORT,
-  type WorkspaceAgentCapableSessionProviderAdapter,
   type WorkspaceAgentModels,
   type WorkspaceAgentSelection,
-  type WorkspaceCapableSessionProviderAdapter,
   type WorkspaceProject,
   workspaceNameText,
 } from "./providers.js";

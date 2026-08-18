@@ -4,20 +4,16 @@ import {
   isRecord,
   maximumSessionRecapLength,
   maximumSessionTitleLength,
-  OBSERVATION_WINDOW,
   oneLine,
   PROVIDER_ID,
   type ProviderSessionObservation,
   recordFromJsonLine,
-  resolveOptions,
   SESSION_COMPLETION_CAUSE,
   SESSION_ROSTER_RETENTION_MS,
   SESSION_STATUS,
   type SessionDetail,
   type SessionProvider,
-  type SessionProviderAdapter,
   text,
-  wholeNumber,
 } from "@sidecar/core";
 import {
   CODEX_HOOK_EVENT,
@@ -25,13 +21,25 @@ import {
   type ObservedCodexHookEvent,
   readCodexHookEvent,
 } from "./codex-hooks";
-import { readTail, readTextFile, uniquePaths, workspaceLabel } from "./local-session-adapter";
+import {
+  type HookStatusRefinement,
+  LocalSessionAdapter,
+  readTail,
+  readTextFile,
+  refineStatusWithHookEvent,
+  tailRecords,
+  uniquePaths,
+  workspaceLabel,
+} from "./local-session-adapter";
 import {
   canIgnoreSqliteError,
   defaultSqliteModule,
+  numberFromRow,
   openReadOnlyDatabase,
   type SqliteModuleLoader,
+  textFromRow,
 } from "./local-sqlite";
+import { boundedTranscript, TRANSCRIPT_BOUNDS } from "./local-transcript";
 
 const CODEX_PROVIDER_ID = PROVIDER_ID.CODEX;
 const CODEX_PROVIDER_NAME = "Codex";
@@ -173,6 +181,7 @@ export interface CodexAdapterOptions {
   now?: () => number;
   activeSessionFreshnessMs?: number;
   sqlite?: SqliteModuleLoader;
+  transcriptMaximumRenderedLength?: number;
   /**
    * Where the observation hook spools its events, when hooks are on at all.
    * Read lazily like the cloud adapters' credentials, because the app decides
@@ -285,14 +294,6 @@ function parseCodexRolloutTail(tail: string): ParsedCodexRollout {
     }
   }
   return parsed;
-}
-
-function numberFromRow(row: CodexThreadRow, key: string): number | undefined {
-  return wholeNumber(row[key]);
-}
-
-function textFromRow(row: CodexThreadRow, key: string): string | undefined {
-  return text(row[key]);
 }
 
 function timestampFromRow(row: CodexThreadRow): number {
@@ -440,33 +441,25 @@ function statusFromRow(
  * database cannot show: a tool call holding for approval writes no records
  * while it holds, and a turn's true end can sit past the rollout's read.
  */
+const CODEX_HOOK_STATUS_REFINEMENT = {
+  definitive: [{ event: CODEX_HOOK_EVENT.SESSION_END, fresh: SESSION_STATUS.COMPLETE }],
+  fresh: [
+    {
+      event: CODEX_HOOK_EVENT.NOTIFICATION,
+      fresh: SESSION_STATUS.WAITING,
+      stale: SESSION_STATUS.UNKNOWN,
+    },
+    { event: CODEX_HOOK_EVENT.PROMPT, fresh: SESSION_STATUS.WORKING },
+    { event: CODEX_HOOK_EVENT.STOP, fresh: SESSION_STATUS.WAITING },
+  ],
+} as const satisfies HookStatusRefinement<CodexHookEvent>;
+
 function statusWithHookEvent(
   status: ProviderSessionObservation["status"],
   event: CodexHookEvent,
   isFresh: boolean,
 ): ProviderSessionObservation["status"] {
-  if (event === CODEX_HOOK_EVENT.SESSION_END) return SESSION_STATUS.COMPLETE;
-  // Codex fires no failure hook, so `stop` fires for a failed turn too: a
-  // stop or prompt standing for the same turn the rollout saw fail must not
-  // talk the row out of the error. The rollout itself is what clears it — the
-  // next pass reads the new turn's `task_started` — so a genuinely newer turn
-  // costs one observation pass, never the failure.
-  if (status === SESSION_STATUS.COMPLETE || status === SESSION_STATUS.ERROR) return status;
-  // A notification still standing means the approval is still open — its zero
-  // staleness tolerance drops it the moment the thread moves — so it outranks
-  // a mid-turn row however long the hold has run: Codex holds a long turn at
-  // working, and a long hold must not read as active work. It still ages the
-  // way every waiting verdict does, because a Codex killed mid-hold fires
-  // nothing further, and a hold that old is a session left behind.
-  if (event === CODEX_HOOK_EVENT.NOTIFICATION) {
-    return isFresh ? SESSION_STATUS.WAITING : SESSION_STATUS.UNKNOWN;
-  }
-  if (!isFresh) return status;
-  if (event === CODEX_HOOK_EVENT.PROMPT) return SESSION_STATUS.WORKING;
-  if (event === CODEX_HOOK_EVENT.STOP) return SESSION_STATUS.WAITING;
-  // A session that started or resumed proves only that it moved: the bumped
-  // clock above is the whole refinement, and the row says the rest.
-  return status;
+  return refineStatusWithHookEvent(status, event, isFresh, CODEX_HOOK_STATUS_REFINEMENT);
 }
 
 function detailFromRow(
@@ -539,31 +532,21 @@ export function defaultCodexHome(): string {
   return configuredHome || path.join(os.homedir(), ".codex");
 }
 
-export class CodexSessionAdapter implements SessionProviderAdapter {
+export class CodexSessionAdapter extends LocalSessionAdapter {
   readonly provider = CODEX_PROVIDER;
 
   readonly #codexHome: string;
   readonly #sqliteHome: string | undefined;
-  readonly #now: () => number;
-  readonly #activeSessionFreshnessMs: number;
   readonly #sqlite: SqliteModuleLoader;
+  readonly #transcriptMaximumRenderedLength: number | undefined;
   readonly #hookEventsDirectory: (() => string | undefined) | undefined;
 
   constructor(options: CodexAdapterOptions = {}) {
+    super(options);
     this.#codexHome = options.codexHome ?? defaultCodexHome();
     this.#sqliteHome = options.sqliteHome;
-    this.#now = options.now ?? Date.now;
-    const resolved = resolveOptions(
-      options,
-      {
-        activeSessionFreshnessMs: OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
-      },
-      {
-        nonNegative: ["activeSessionFreshnessMs"],
-      },
-    );
-    this.#activeSessionFreshnessMs = resolved.activeSessionFreshnessMs;
     this.#sqlite = options.sqlite ?? defaultSqliteModule;
+    this.#transcriptMaximumRenderedLength = options.transcriptMaximumRenderedLength;
     this.#hookEventsDirectory = options.hookEventsDirectory;
   }
 
@@ -574,7 +557,7 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
       let rows: CodexThreadRow[];
       let now: number;
       try {
-        now = this.#now();
+        now = this.observationTime();
         rows = database
           .prepare(CODEX_THREAD_QUERY)
           .all(now - SESSION_ROSTER_RETENTION_MS.SETTLED_MS)
@@ -597,7 +580,7 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
             row,
             rollouts.get(textFromRow(row, CODEX_THREAD_COLUMN.ID) ?? ""),
             now,
-            this.#activeSessionFreshnessMs,
+            this.activeSessionFreshnessMs,
             hookEvents.get(textFromRow(row, CODEX_THREAD_COLUMN.ID) ?? ""),
           ),
         )
@@ -606,6 +589,16 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
         );
     }
     return [];
+  }
+
+  override readTranscript(providerSessionId: string): Promise<string | undefined> {
+    return CodexTranscript.read({
+      codexHome: this.#codexHome,
+      sqliteHome: this.#sqliteHome,
+      providerSessionId,
+      sqlite: this.#sqlite,
+      maximumRenderedLength: this.#transcriptMaximumRenderedLength,
+    });
   }
 
   /**
@@ -659,5 +652,265 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
         }),
     );
     return events;
+  }
+}
+
+namespace CodexTranscript {
+  /**
+   * On-demand reading of one Codex session's transcript, for a question the
+   * developer just asked. The rollout JSONL named by the thread's own
+   * `rollout_path` is the transcript — the same file the adapter already reads
+   * a boundary event from, and the one the hook envelope's `transcript_path`
+   * names — so this reads it the way the adapter reads its tail, only deeper: a
+   * bounded slice, parsed in memory, rendered into a bounded conversation, and
+   * discarded. Nothing here is retained, watched, or written; a session is
+   * re-read the next time it is asked about.
+   */
+
+  const CODEX_SPEAKER_NAME = "Codex";
+
+  /** The rollout line kinds a rendering reads; everything else is bookkeeping. */
+  const CODEX_ROLLOUT_LINE_TYPE = {
+    RESPONSE_ITEM: "response_item",
+    EVENT_MSG: "event_msg",
+  } as const;
+
+  /**
+   * The response items a conversation is made of. Messages and calls are read
+   * from these alone — the `event_msg` lines duplicate them for Codex's own
+   * UI, and rendering both would say everything twice.
+   */
+  const CODEX_ITEM_TYPE = {
+    MESSAGE: "message",
+    FUNCTION_CALL: "function_call",
+    FUNCTION_CALL_OUTPUT: "function_call_output",
+    CUSTOM_TOOL_CALL: "custom_tool_call",
+    CUSTOM_TOOL_CALL_OUTPUT: "custom_tool_call_output",
+    LOCAL_SHELL_CALL: "local_shell_call",
+    WEB_SEARCH_CALL: "web_search_call",
+  } as const;
+
+  const CODEX_MESSAGE_ROLE = {
+    USER: "user",
+    ASSISTANT: "assistant",
+  } as const;
+
+  /** The one event kind rendered: the failure that ended a turn early. */
+  const CODEX_EVENT_TYPE = {
+    ERROR: "error",
+    TASK_COMPLETE: "task_complete",
+  } as const;
+
+  /**
+   * The marker Codex writes between its injected context and the words the
+   * developer actually typed, when it folds both into one user message.
+   */
+  const CODEX_USER_MESSAGE_MARKER = "## My request for Codex:";
+
+  /**
+   * A user message that is entirely one XML-tagged block is Codex's own
+   * scaffolding — instructions, environment context, and their relatives —
+   * not something the developer said.
+   */
+  const CODEX_SCAFFOLDING_SHAPE = /^<([a-z_]+)>[\s\S]*<\/\1>$/;
+
+  const CODEX_ROLLOUT_TAIL_BYTES = TRANSCRIPT_BOUNDS.READ_TAIL_BYTES;
+
+  const CODEX_THREAD_ROLLOUT_QUERY = `
+    SELECT rollout_path
+    FROM threads
+    WHERE id = ?
+  `;
+
+  interface Request {
+    codexHome?: string;
+    sqliteHome?: string;
+    providerSessionId: string;
+    sqlite?: SqliteModuleLoader;
+    maximumRenderedLength?: number;
+  }
+
+  /** The words of one message's content blocks, whichever direction they face. */
+  function messageWords(content: unknown): string | undefined {
+    if (!Array.isArray(content)) return undefined;
+    const parts = content
+      .filter(isRecord)
+      .filter((block) => block.type === "input_text" || block.type === "output_text")
+      .map((block) => text(block.text))
+      .filter((part): part is string => part !== undefined);
+    return parts.length > 0 ? parts.join(" ") : undefined;
+  }
+
+  /**
+   * The developer's own words in a user message, or nothing when the message is
+   * Codex's scaffolding. Codex wraps instructions and environment context in
+   * XML-tagged user messages, and sometimes folds context and prompt into one
+   * message with a marker between them; only what follows the marker — or the
+   * whole message when there is neither wrapper nor marker — was typed.
+   */
+  function developerWords(words: string): string | undefined {
+    const markerIndex = words.indexOf(CODEX_USER_MESSAGE_MARKER);
+    if (markerIndex >= 0) {
+      return text(words.slice(markerIndex + CODEX_USER_MESSAGE_MARKER.length));
+    }
+    if (CODEX_SCAFFOLDING_SHAPE.test(words.trim())) return undefined;
+    return text(words);
+  }
+
+  /** Names the tool Codex called, preferring whichever argument says what it is for. */
+  function callLine(payload: Record<string, unknown>): string | undefined {
+    const name = text(payload.name);
+    if (!name) return undefined;
+    const parsedArguments = text(payload.arguments)
+      ? recordFromJsonLine(payload.arguments as string)
+      : undefined;
+    for (const key of CODEX_CALL_ARGUMENT_KEY) {
+      const detail = oneLine(
+        argumentPhrase(parsedArguments?.[key]),
+        TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH,
+      );
+      if (detail) return `→ ${name}: ${detail}`;
+    }
+    return `→ ${name}`;
+  }
+
+  /**
+   * The words a call answered with, wherever this build finds them. Codex wrote
+   * the output as a plain string for years, then as a list of text blocks; the
+   * string itself often holds one more JSON layer whose `output` key carries
+   * the human-readable text of a shell call.
+   */
+  function callOutputText(output: unknown): string | undefined {
+    if (typeof output === "string") {
+      const wrapped = recordFromJsonLine(output);
+      if (wrapped && typeof wrapped.output === "string") return text(wrapped.output);
+      return text(output);
+    }
+    if (Array.isArray(output)) {
+      const parts = output
+        .filter(isRecord)
+        .filter((block) => block.type === "input_text")
+        .map((block) => text(block.text))
+        .filter((part): part is string => part !== undefined);
+      return parts.length > 0 ? parts.join(" ") : undefined;
+    }
+    return undefined;
+  }
+
+  function linesFromResponseItem(payload: Record<string, unknown>): string[] {
+    if (payload.type === CODEX_ITEM_TYPE.MESSAGE) {
+      const words = messageWords(payload.content);
+      if (!words) return [];
+      if (payload.role === CODEX_MESSAGE_ROLE.USER) {
+        const typed = oneLine(developerWords(words), TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
+        return typed ? [`Developer: ${typed}`] : [];
+      }
+      if (payload.role === CODEX_MESSAGE_ROLE.ASSISTANT) {
+        const said = oneLine(words, TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
+        return said ? [`${CODEX_SPEAKER_NAME}: ${said}`] : [];
+      }
+      return [];
+    }
+    if (payload.type === CODEX_ITEM_TYPE.FUNCTION_CALL) {
+      const line = callLine(payload);
+      return line ? [line] : [];
+    }
+    if (payload.type === CODEX_ITEM_TYPE.CUSTOM_TOOL_CALL) {
+      const name = text(payload.name);
+      if (!name) return [];
+      const detail = oneLine(text(payload.input), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
+      return [detail ? `→ ${name}: ${detail}` : `→ ${name}`];
+    }
+    if (
+      payload.type === CODEX_ITEM_TYPE.FUNCTION_CALL_OUTPUT ||
+      payload.type === CODEX_ITEM_TYPE.CUSTOM_TOOL_CALL_OUTPUT
+    ) {
+      const answer = oneLine(callOutputText(payload.output), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
+      return answer ? [`← ${answer}`] : [];
+    }
+    if (payload.type === CODEX_ITEM_TYPE.LOCAL_SHELL_CALL) {
+      const action = isRecord(payload.action) ? payload.action : undefined;
+      const command = oneLine(
+        argumentPhrase(action?.command),
+        TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH,
+      );
+      return command ? [`→ shell: ${command}`] : [`→ shell`];
+    }
+    if (payload.type === CODEX_ITEM_TYPE.WEB_SEARCH_CALL) {
+      const action = isRecord(payload.action) ? payload.action : undefined;
+      const query = oneLine(text(action?.query), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
+      return query ? [`→ web_search: ${query}`] : [`→ web_search`];
+    }
+    return [];
+  }
+
+  /**
+   * The failure an event line recorded, when it recorded one. Errors ride
+   * `task_complete` in current builds and stood alone in older ones; either
+   * way the message is the one thing worth a line, because the response items
+   * around it never say why a turn stopped.
+   */
+  function linesFromEvent(payload: Record<string, unknown>): string[] {
+    if (payload.type === CODEX_EVENT_TYPE.ERROR) {
+      const words = oneLine(text(payload.message), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
+      return words ? [`Error: ${words}`] : [];
+    }
+    if (payload.type === CODEX_EVENT_TYPE.TASK_COMPLETE && isRecord(payload.error)) {
+      const words = oneLine(text(payload.error.message), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
+      return words ? [`Error: ${words}`] : [];
+    }
+    return [];
+  }
+
+  /** Renders one rollout line into the lines a conversation can carry. */
+  function linesFromRecord(record: Record<string, unknown>): string[] {
+    const payload = isRecord(record.payload) ? record.payload : undefined;
+    if (!payload) return [];
+    if (record.type === CODEX_ROLLOUT_LINE_TYPE.RESPONSE_ITEM) {
+      return linesFromResponseItem(payload);
+    }
+    if (record.type === CODEX_ROLLOUT_LINE_TYPE.EVENT_MSG) return linesFromEvent(payload);
+    return [];
+  }
+
+  /**
+   * Finds the session's rollout file the way observation does: named by the
+   * thread's own row in the state database, read through a parameterized
+   * lookup, never composed from the id. A compressed rollout is left unread —
+   * a bounded tail cannot be cut from it — and answers as no transcript.
+   */
+  async function rolloutPathForThread(request: Request): Promise<string | undefined> {
+    const codexHome = request.codexHome ?? defaultCodexHome();
+    const sqlite = request.sqlite ?? defaultSqliteModule;
+    for (const databasePath of await stateDatabasePaths(codexHome, request.sqliteHome)) {
+      const database = await openReadOnlyDatabase(sqlite, databasePath);
+      if (!database) continue;
+      try {
+        const row = database.prepare(CODEX_THREAD_ROLLOUT_QUERY).all(request.providerSessionId)[0];
+        const rolloutPath = isRecord(row) ? text(row.rollout_path) : undefined;
+        if (rolloutPath) return rolloutPath.endsWith(".zst") ? undefined : rolloutPath;
+      } catch (error) {
+        if (!canIgnoreSqliteError(error)) throw error;
+      } finally {
+        database.close();
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Reads one session's recent transcript into a bounded rendering, or nothing
+   * when no rollout file exists for that id.
+   */
+  export async function read(request: Request): Promise<string | undefined> {
+    const rolloutPath = await rolloutPathForThread(request);
+    if (!rolloutPath) return undefined;
+
+    const tail = await readTail(rolloutPath, CODEX_ROLLOUT_TAIL_BYTES);
+    const lines = tailRecords(tail).flatMap(linesFromRecord);
+    return boundedTranscript(
+      lines,
+      request.maximumRenderedLength ?? TRANSCRIPT_BOUNDS.MAXIMUM_RENDERED_LENGTH,
+    );
   }
 }

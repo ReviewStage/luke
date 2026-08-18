@@ -250,7 +250,9 @@ export class InMemorySessionRegistry {
   }
 
   /** Reads a provider adapter and applies its newest full observation as one update. */
-  async refresh(adapter: SessionProviderAdapter): Promise<SessionRegistrySnapshot> {
+  async refresh(
+    adapter: Pick<SessionProviderAdapter, "provider" | "observe">,
+  ): Promise<SessionRegistrySnapshot> {
     const providerId = normalizedProviderId(adapter.provider);
     const mutationEpoch = this.#providerMutationEpochs.get(providerId) ?? 0;
     const attempt = this.#startProviderRefreshAttempt(providerId);

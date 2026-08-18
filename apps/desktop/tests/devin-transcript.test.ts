@@ -4,8 +4,19 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
-import { readDevinSessionTranscript } from "../src/devin-transcript";
+import { DevinLocalSessionAdapter } from "../src/devin-local-adapter";
 import { OMISSION_MARKER } from "../src/local-transcript";
+
+function readDevinSessionTranscript(request: {
+  cliDirectory?: string;
+  providerSessionId: string;
+  maximumRenderedLength?: number;
+}): Promise<string | undefined> {
+  return new DevinLocalSessionAdapter({
+    cliDirectory: request.cliDirectory,
+    transcriptMaximumRenderedLength: request.maximumRenderedLength,
+  }).readTranscript(request.providerSessionId);
+}
 
 const TEST_TIME_S = Math.floor(Date.parse("2026-08-18T21:30:00.000Z") / 1000);
 const DEVIN_DATABASE = "sessions.db";

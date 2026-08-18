@@ -1,4 +1,13 @@
+import { text, wholeNumber } from "@sidecar/core";
 import { canIgnoreFilesystemError, fileStats } from "./local-session-adapter";
+
+export function numberFromRow(row: Record<string, unknown>, key: string): number | undefined {
+  return wholeNumber(row[key]);
+}
+
+export function textFromRow(row: Record<string, unknown>, key: string): string | undefined {
+  return text(row[key]);
+}
 
 /**
  * The shared half of every adapter that reads a provider's SQLite state:

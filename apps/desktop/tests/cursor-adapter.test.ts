@@ -1,12 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  isControllableAdapter,
-  isMessageCapableAdapter,
-  isWorkspaceAgentCapableAdapter,
-  isWorkspaceCapableAdapter,
-  SESSION_STATUS,
-} from "@sidecar/core";
+import { SESSION_STATUS } from "@sidecar/core";
 import type { CloudFetch } from "../src/cloud-session-adapter";
 import { CURSOR_PROVIDER, CursorSessionAdapter } from "../src/cursor-adapter";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "./support/http-fake";
@@ -213,12 +207,12 @@ function adapterFor(
   });
 }
 
-test("routes messages, controls, and workspace creation, and nothing else", () => {
+test("declares every provider operation on one adapter interface", () => {
   const adapter = adapterFor(async () => new Response("{}", { status: 200 }));
-  assert.equal(isMessageCapableAdapter(adapter), true);
-  assert.equal(isControllableAdapter(adapter), true);
-  assert.equal(isWorkspaceCapableAdapter(adapter), true);
-  assert.equal(isWorkspaceAgentCapableAdapter(adapter), false);
+  assert.equal(typeof adapter.sendMessage, "function");
+  assert.equal(typeof adapter.executeControl, "function");
+  assert.equal(typeof adapter.createWorkspace, "function");
+  assert.equal(typeof adapter.spawnWorkspaceAgent, "function");
 });
 
 function runningAgent(id: string, updatedAt: number): TestAgent {

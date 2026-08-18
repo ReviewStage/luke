@@ -1,10 +1,8 @@
 import path from "node:path";
 import {
-  agedStatus,
   isRecord,
   maximumSessionRecapLength,
   maximumSessionTitleLength,
-  OBSERVATION_WINDOW,
   oneLine,
   PROVIDER_ID,
   type ProviderSessionObservation,
@@ -14,7 +12,6 @@ import {
   SESSION_STATUS,
   type SessionDetail,
   type SessionProvider,
-  type SessionProviderAdapter,
   text,
   wholeNumber,
 } from "@sidecar/core";
@@ -27,15 +24,21 @@ import {
 } from "./claude-code-hooks";
 import {
   discoverSessionFiles,
+  type HookStatusRefinement,
   LOCAL_ADAPTER_DEFAULTS,
+  LocalFileSessionAdapter,
+  localSessionStatus,
   readDirectory,
   readHead,
   readTail,
+  refineStatusWithHookEvent,
   type SessionFileCandidate,
+  sessionIdFromFileName,
   statDirectoryEntry,
   tailRecords,
   workspaceLabel,
 } from "./local-session-adapter";
+import { boundedTranscript, TRANSCRIPT_BOUNDS } from "./local-transcript";
 
 const CLAUDE_CODE_PROVIDER_ID = PROVIDER_ID.CLAUDE_CODE;
 const CLAUDE_CODE_PROVIDER_NAME = "Claude Code";
@@ -126,6 +129,8 @@ export interface ClaudeCodeAdapterOptions {
   activeSessionFreshnessMs?: number;
   readTailBytes?: number;
   readHeadBytes?: number;
+  transcriptReadTailBytes?: number;
+  transcriptMaximumRenderedLength?: number;
   /**
    * Where the observation hook spools its events, when hooks are on at all.
    * Read lazily like the cloud adapters' credentials, because the app decides
@@ -151,18 +156,12 @@ interface ParsedClaudeSessionTail {
   usedTool?: boolean;
 }
 
-function sessionIdFromFileName(fileName: string): string | undefined {
-  if (!fileName.endsWith(CLAUDE_SESSION_FILE_EXTENSION)) return undefined;
-  const providerSessionId = fileName.slice(0, -CLAUDE_SESSION_FILE_EXTENSION.length).trim();
-  return providerSessionId || undefined;
-}
-
 /** Claude Code keeps a session's transcript directly in its project directory. */
 async function sessionFilesIn(projectDirectory: string): Promise<SessionFileCandidate[]> {
   const entries = await readDirectory(projectDirectory);
   const candidates = await Promise.all(
     entries.map(async (entry) => {
-      const providerSessionId = sessionIdFromFileName(entry.name);
+      const providerSessionId = sessionIdFromFileName(entry.name, CLAUDE_SESSION_FILE_EXTENSION);
       if (!providerSessionId) return undefined;
       const candidate = await statDirectoryEntry(projectDirectory, entry.name);
       if (!candidate?.stats.isFile()) return undefined;
@@ -391,10 +390,7 @@ function statusFromTail(
       : SESSION_STATUS.WORKING;
   // A transcript has no heartbeat, so an open turn that has gone quiet is
   // unknown rather than still working.
-  if (status === SESSION_STATUS.WORKING && now - observedAt > activeSessionFreshnessMs) {
-    return SESSION_STATUS.UNKNOWN;
-  }
-  return agedStatus(status, observedAt, now, activeSessionFreshnessMs);
+  return localSessionStatus(status, observedAt, now, activeSessionFreshnessMs);
 }
 
 /**
@@ -408,21 +404,24 @@ function statusFromTail(
  * the transcript cannot show: a tool call holding for permission writes no
  * records while it holds, and a turn's true end can sit past the tail's read.
  */
+const CLAUDE_HOOK_STATUS_REFINEMENT = {
+  definitive: [
+    { event: CLAUDE_HOOK_EVENT.STOP_FAILURE, fresh: SESSION_STATUS.ERROR },
+    { event: CLAUDE_HOOK_EVENT.SESSION_END, fresh: SESSION_STATUS.COMPLETE },
+  ],
+  fresh: [
+    { event: CLAUDE_HOOK_EVENT.PROMPT, fresh: SESSION_STATUS.WORKING },
+    { event: CLAUDE_HOOK_EVENT.STOP, fresh: SESSION_STATUS.WAITING },
+    { event: CLAUDE_HOOK_EVENT.NOTIFICATION, fresh: SESSION_STATUS.WAITING },
+  ],
+} as const satisfies HookStatusRefinement<ClaudeHookEvent>;
+
 function statusWithHookEvent(
   status: ProviderSessionObservation["status"],
   event: ClaudeHookEvent,
   isFresh: boolean,
 ): ProviderSessionObservation["status"] {
-  if (event === CLAUDE_HOOK_EVENT.STOP_FAILURE) return SESSION_STATUS.ERROR;
-  if (event === CLAUDE_HOOK_EVENT.SESSION_END) return SESSION_STATUS.COMPLETE;
-  if (status === SESSION_STATUS.COMPLETE || status === SESSION_STATUS.ERROR) return status;
-  if (!isFresh) return status;
-  if (event === CLAUDE_HOOK_EVENT.PROMPT) return SESSION_STATUS.WORKING;
-  if (event === CLAUDE_HOOK_EVENT.STOP) return SESSION_STATUS.WAITING;
-  if (event === CLAUDE_HOOK_EVENT.NOTIFICATION) return SESSION_STATUS.WAITING;
-  // A session that started or resumed proves only that it moved: the bumped
-  // clock above is the whole refinement, and the tail says the rest.
-  return status;
+  return refineStatusWithHookEvent(status, event, isFresh, CLAUDE_HOOK_STATUS_REFINEMENT);
 }
 
 /**
@@ -508,50 +507,43 @@ function observationFromSessionFile(
   };
 }
 
-export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
+export class ClaudeCodeSessionAdapter extends LocalFileSessionAdapter<
+  SessionFileCandidate,
+  ParsedClaudeSessionTail
+> {
   readonly provider = CLAUDE_CODE_PROVIDER;
 
   readonly #claudeHome: string;
-  readonly #now: () => number;
   readonly #maximumProjectDirectories: number;
-  readonly #activeSessionFreshnessMs: number;
   readonly #readTailBytes: number;
   readonly #readHeadBytes: number;
-  /**
-   * The parse of each file as of the mtime it was read at. Sessions are never
-   * capped, so this is what keeps a pass cheap: a transcript is re-read only
-   * when it has been written to, and everything derived from `now` — status
-   * decay above all — is recomputed each pass from the cached parse.
-   */
-  readonly #parsedTails = new Map<string, { mtimeMs: number; parsed: ParsedClaudeSessionTail }>();
+  readonly #transcriptReadTailBytes: number | undefined;
+  readonly #transcriptMaximumRenderedLength: number | undefined;
   readonly #hookEventsDirectory: (() => string | undefined) | undefined;
 
   constructor(options: ClaudeCodeAdapterOptions = {}) {
+    super(options);
     this.#claudeHome = options.claudeHome ?? defaultClaudeHome();
-    this.#now = options.now ?? Date.now;
     const resolved = resolveOptions(
       options,
       {
         maximumProjectDirectories: CLAUDE_ADAPTER_DEFAULTS.MAXIMUM_PROJECT_DIRECTORIES,
-        activeSessionFreshnessMs: OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
         readTailBytes: LOCAL_ADAPTER_DEFAULTS.READ_TAIL_BYTES,
         readHeadBytes: CLAUDE_ADAPTER_DEFAULTS.READ_HEAD_BYTES,
       },
       {
         positive: ["maximumProjectDirectories", "readTailBytes", "readHeadBytes"],
-        nonNegative: ["activeSessionFreshnessMs"],
       },
     );
     this.#maximumProjectDirectories = resolved.maximumProjectDirectories;
-    this.#activeSessionFreshnessMs = resolved.activeSessionFreshnessMs;
     this.#readTailBytes = resolved.readTailBytes;
     this.#readHeadBytes = resolved.readHeadBytes;
+    this.#transcriptReadTailBytes = options.transcriptReadTailBytes;
+    this.#transcriptMaximumRenderedLength = options.transcriptMaximumRenderedLength;
     this.#hookEventsDirectory = options.hookEventsDirectory;
   }
 
-  async #parsedTail(candidate: SessionFileCandidate): Promise<ParsedClaudeSessionTail> {
-    const cached = this.#parsedTails.get(candidate.filePath);
-    if (cached && cached.mtimeMs === candidate.mtimeMs) return cached.parsed;
+  protected async parse(candidate: SessionFileCandidate): Promise<ParsedClaudeSessionTail> {
     const tail = await readTail(candidate.filePath, this.#readTailBytes);
     let parsed = parseClaudeSessionTail(tail);
     // A truncated tail holding no conversation clock says nothing about when
@@ -572,47 +564,217 @@ export class ClaudeCodeSessionAdapter implements SessionProviderAdapter {
     if (!parsed.aiTitle) {
       parsed.aiTitle = titleFromHead(await readHead(candidate.filePath, this.#readHeadBytes));
     }
-    this.#parsedTails.set(candidate.filePath, { mtimeMs: candidate.mtimeMs, parsed });
     return parsed;
   }
 
-  async observe(): Promise<readonly ProviderSessionObservation[]> {
-    const now = this.#now();
-    const hookEventsDirectory = this.#hookEventsDirectory?.();
-    const candidates = await discoverSessionFiles({
+  protected discover(): Promise<SessionFileCandidate[]> {
+    return discoverSessionFiles({
       projectsDirectory: path.join(this.#claudeHome, CLAUDE_PROJECTS_DIRECTORY),
       maximumProjectDirectories: this.#maximumProjectDirectories,
       sessionFilesIn,
     });
-    const observations = new Map<string, ProviderSessionObservation>();
+  }
 
-    for (const candidate of candidates) {
-      // The spool is a refinement, never a dependency: a directory that is
-      // missing, unreadable, or holding something unexpected reads as no
-      // event, and the transcript's own verdict stands.
-      const hookEvent = hookEventsDirectory
-        ? await readClaudeHookEvent(hookEventsDirectory, candidate.providerSessionId).catch(
-            () => undefined,
+  protected async observation(
+    candidate: SessionFileCandidate,
+    parsed: ParsedClaudeSessionTail,
+    now: number,
+    activeSessionFreshnessMs: number,
+  ): Promise<ProviderSessionObservation> {
+    const hookEventsDirectory = this.#hookEventsDirectory?.();
+    const hookEvent = hookEventsDirectory
+      ? await readClaudeHookEvent(hookEventsDirectory, candidate.providerSessionId).catch(
+          () => undefined,
+        )
+      : undefined;
+    return observationFromSessionFile(candidate, parsed, now, activeSessionFreshnessMs, hookEvent);
+  }
+
+  override readTranscript(providerSessionId: string): Promise<string | undefined> {
+    return ClaudeTranscript.read({
+      claudeHome: this.#claudeHome,
+      providerSessionId,
+      readTailBytes: this.#transcriptReadTailBytes,
+      maximumRenderedLength: this.#transcriptMaximumRenderedLength,
+    });
+  }
+}
+
+namespace ClaudeTranscript {
+  /**
+   * On-demand reading of one Claude Code session's transcript, for a question
+   * the developer just asked. The JSONL file under the provider's own projects
+   * directory is the transcript — Claude Code documents no other local source,
+   * and the hook envelope's `transcript_path` names these same files — so this
+   * reads it the way the adapter reads its tail, only deeper: a bounded slice,
+   * parsed in memory, rendered into a bounded conversation, and discarded.
+   * Nothing here is retained, watched, or written; a session is re-read the
+   * next time it is asked about.
+   */
+
+  const CLAUDE_PROJECTS_DIRECTORY = "projects";
+  const CLAUDE_SESSION_FILE_EXTENSION = ".jsonl";
+
+  /** The same shape the observation hook accepts: the ids Claude Code mints. */
+  const CLAUDE_SESSION_ID_SHAPE = /^[0-9a-fA-F-]{8,64}$/;
+
+  /** Tool inputs whose value names the work, in the order they read best. */
+  const TOOL_INPUT_KEYS = ["description", "file_path", "pattern", "command", "prompt"] as const;
+
+  interface Request {
+    claudeHome: string;
+    providerSessionId: string;
+    readTailBytes?: number;
+    maximumRenderedLength?: number;
+  }
+
+  function contentBlocks(record: Record<string, unknown>): Record<string, unknown>[] {
+    const message = record.message;
+    const content = isRecord(message) ? message.content : record.content;
+    return Array.isArray(content) ? content.filter(isRecord) : [];
+  }
+
+  /** The words of a message, whether the content is a string or text blocks. */
+  function messageText(record: Record<string, unknown>): string | undefined {
+    const message = record.message;
+    const content = isRecord(message) ? message.content : record.content;
+    if (typeof content === "string") return text(content);
+    const parts = contentBlocks(record)
+      .filter((block) => block.type === "text")
+      .map((block) => text(block.text))
+      .filter((part): part is string => part !== undefined);
+    return parts.length > 0 ? parts.join(" ") : undefined;
+  }
+
+  function toolLine(block: Record<string, unknown>): string | undefined {
+    const name = text(block.name);
+    if (!name) return undefined;
+    const input = isRecord(block.input) ? block.input : {};
+    for (const key of TOOL_INPUT_KEYS) {
+      const detail = oneLine(text(input[key]), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
+      if (detail) return `→ ${name}: ${detail}`;
+    }
+    return `→ ${name}`;
+  }
+
+  /** The words inside one value, whether it is a string or text blocks. */
+  function wordsFromContent(content: unknown): string | undefined {
+    if (typeof content === "string") return text(content);
+    if (Array.isArray(content)) {
+      const parts = content
+        .filter(isRecord)
+        .filter((part) => part.type === "text")
+        .map((part) => text(part.text))
+        .filter((part): part is string => part !== undefined);
+      if (parts.length > 0) return parts.join(" ");
+    }
+    return undefined;
+  }
+
+  /**
+   * The words a tool answered with, wherever this build finds them. The
+   * `tool_result` blocks carry what the model was shown and are preferred;
+   * `toolUseResult` is the fallback, because Claude Code often writes a record
+   * with only that bookkeeping shape — a string outright, or an object whose
+   * output rides `stdout`, `stderr`, or `content`.
+   */
+  function toolResultText(record: Record<string, unknown>): string | undefined {
+    for (const block of contentBlocks(record)) {
+      if (block.type !== "tool_result") continue;
+      const words = wordsFromContent(block.content);
+      if (words) return words;
+    }
+    const result = record.toolUseResult;
+    if (typeof result === "string") return text(result);
+    if (isRecord(result)) {
+      return (
+        wordsFromContent(result.content) ?? text(result.stdout) ?? text(result.stderr) ?? undefined
+      );
+    }
+    return undefined;
+  }
+
+  function isToolResult(record: Record<string, unknown>): boolean {
+    if (record.toolUseResult !== undefined) return true;
+    return contentBlocks(record).some((block) => block.type === "tool_result");
+  }
+
+  /** Renders one record into the lines a conversation can carry, oldest first. */
+  function linesFromRecord(record: Record<string, unknown>): string[] {
+    if (record.type === "user") {
+      if (isToolResult(record)) {
+        const answer = oneLine(toolResultText(record), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
+        return answer ? [`← ${answer}`] : [];
+      }
+      const prompt = oneLine(messageText(record), TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
+      return prompt ? [`Developer: ${prompt}`] : [];
+    }
+    if (record.type === "assistant") {
+      const lines: string[] = [];
+      const words = oneLine(messageText(record), TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
+      if (words) lines.push(`Claude: ${words}`);
+      for (const block of contentBlocks(record)) {
+        if (block.type !== "tool_use") continue;
+        const line = toolLine(block);
+        if (line) lines.push(line);
+      }
+      return lines;
+    }
+    if (record.type === "system" && record.subtype === "api_error") {
+      const error = record.error;
+      const words = isRecord(error)
+        ? oneLine(
+            text(error.formatted) ?? text(error.message),
+            TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH,
           )
         : undefined;
-      const observation = observationFromSessionFile(
-        candidate,
-        await this.#parsedTail(candidate),
-        now,
-        this.#activeSessionFreshnessMs,
-        hookEvent,
-      );
-      if (!observations.has(observation.providerSessionId)) {
-        observations.set(observation.providerSessionId, observation);
-      }
+      return words ? [`Error: ${words}`] : [];
     }
-
-    // A file no longer discovered was deleted, so its parse must not outlive it.
-    const discovered = new Set(candidates.map((candidate) => candidate.filePath));
-    for (const filePath of this.#parsedTails.keys()) {
-      if (!discovered.has(filePath)) this.#parsedTails.delete(filePath);
+    if (record.type === "result") {
+      const words = oneLine(text(record.result), TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
+      return words ? [`Result: ${words}`] : [];
     }
+    return [];
+  }
 
-    return [...observations.values()];
+  /**
+   * Finds the session's transcript file the way discovery does — the file named
+   * by the session's own id, directly inside one of the project directories —
+   * without trusting the id as a path: an id outside the shape Claude Code
+   * mints names nothing.
+   */
+  async function transcriptFilePath(
+    claudeHome: string,
+    providerSessionId: string,
+  ): Promise<string | undefined> {
+    if (!CLAUDE_SESSION_ID_SHAPE.test(providerSessionId)) return undefined;
+    const projectsDirectory = path.join(claudeHome, CLAUDE_PROJECTS_DIRECTORY);
+    const fileName = `${providerSessionId}${CLAUDE_SESSION_FILE_EXTENSION}`;
+    for (const entry of await readDirectory(projectsDirectory)) {
+      const projectDirectory = await statDirectoryEntry(projectsDirectory, entry.name);
+      if (!projectDirectory?.stats.isDirectory()) continue;
+      const candidate = await statDirectoryEntry(projectDirectory.directoryPath, fileName);
+      if (candidate?.stats.isFile()) return candidate.directoryPath;
+    }
+    return undefined;
+  }
+
+  /**
+   * Reads one session's recent transcript into a bounded rendering, or nothing
+   * when no transcript file exists for that id.
+   */
+  export async function read(request: Request): Promise<string | undefined> {
+    const filePath = await transcriptFilePath(request.claudeHome, request.providerSessionId);
+    if (!filePath) return undefined;
+
+    const tail = await readTail(
+      filePath,
+      request.readTailBytes ?? TRANSCRIPT_BOUNDS.READ_TAIL_BYTES,
+    );
+    const lines = tailRecords(tail).flatMap(linesFromRecord);
+    return boundedTranscript(
+      lines,
+      request.maximumRenderedLength ?? TRANSCRIPT_BOUNDS.MAXIMUM_RENDERED_LENGTH,
+    );
   }
 }

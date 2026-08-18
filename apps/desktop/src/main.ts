@@ -10,7 +10,6 @@ import {
   activeMeetingEnd,
   attentionRequestText,
   attentionSpeechFromReviews,
-  CompositeSessionProviderAdapter,
   CreatedWorkspaceOpenTracker,
   DEFAULT_PANEL_FORM_FACTOR,
   fixtureSnapshot,
@@ -18,21 +17,15 @@ import {
   InMemorySessionRegistry,
   ISSUE_ACTION_KIND,
   type IssueIdentity,
-  isControllableAdapter,
-  isMessageCapableAdapter,
   isProviderId,
   issueCommentText,
-  isWorkspaceAgentCapableAdapter,
-  isWorkspaceCapableAdapter,
   type MeetingInterval,
   type NormalizedSession,
   normalizeObservedWorkspaceProjects,
   normalizeTrackedIssue,
   type ObservedWorkspaceProject,
   PROVIDER_ACT_RESULT_STATUS,
-  PROVIDER_ID,
   type ProviderControlResult,
-  type ProviderId,
   type ProviderMessageResult,
   type ProviderWorkspaceResult,
   realtimeMintExplanation,
@@ -80,33 +73,13 @@ import {
 } from "./account-loopback";
 import { singleFlight, withIssuedAccountTokens } from "./account-token-lifecycle";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
-import { CLAUDE_CODE_PROVIDER, ClaudeCodeSessionAdapter } from "./claude-code-adapter";
 import {
   CLAUDE_HOOK_SCRIPT_NAME,
-  CLAUDE_HOOK_SPOOL_MAXIMUM_AGE_MS,
   type ClaudeCodeHookInstallation,
   defaultClaudeHome,
-  installClaudeCodeObservationHooks,
-  pruneClaudeHookSpool,
 } from "./claude-code-hooks";
-import { readClaudeSessionTranscript } from "./claude-code-transcript";
-import { CODEX_PROVIDER, CodexSessionAdapter, defaultCodexHome } from "./codex-adapter";
-import {
-  CODEX_HOOK_SCRIPT_NAME,
-  CODEX_HOOK_SPOOL_MAXIMUM_AGE_MS,
-  type CodexHookInstallation,
-  installCodexObservationHooks,
-  pruneCodexHookSpool,
-} from "./codex-hooks";
-import { readCodexSessionTranscript } from "./codex-transcript";
-import { ConductorSessionAdapter } from "./conductor-adapter";
-import { CopilotSessionAdapter } from "./copilot-adapter";
-import { CURSOR_PROVIDER, CursorSessionAdapter } from "./cursor-adapter";
-import { CursorLocalSessionAdapter } from "./cursor-local-adapter";
-import { readCursorSessionTranscript } from "./cursor-transcript";
-import { DEVIN_PROVIDER, DevinSessionAdapter } from "./devin-adapter";
-import { DevinLocalSessionAdapter } from "./devin-local-adapter";
-import { readDevinSessionTranscript } from "./devin-transcript";
+import { defaultCodexHome } from "./codex-adapter";
+import { CODEX_HOOK_SCRIPT_NAME, type CodexHookInstallation } from "./codex-hooks";
 import { DockPresence } from "./dock-presence";
 import { feedbackDeliveryFromEnvironment } from "./feedback-delivery";
 import { GoogleCalendarReader } from "./google-calendar";
@@ -115,7 +88,6 @@ import { HostedAttentionEvaluator } from "./hosted-attention-evaluator";
 import { HostedRealtimeCredentialMinter } from "./hosted-realtime-credentials";
 import { HostedUsageReader } from "./hosted-usage";
 import { HOTKEY_RANK, HotkeyRegistrar } from "./hotkey-registrar";
-import { JulesSessionAdapter } from "./jules-adapter";
 import { LinearCredentials } from "./linear-credentials";
 import { LinearSignIn } from "./linear-oauth";
 import { LinearIssueTracker } from "./linear-tracker";
@@ -126,10 +98,9 @@ import {
   openAiRealtimeCredentials,
   unavailableRealtimeDiagnostics,
 } from "./openai-realtime-credentials";
-import { OpenCodeSessionAdapter } from "./opencode-adapter";
-import { readOpenCodeSessionTranscript } from "./opencode-transcript";
 import { OutputVolumeWatcher } from "./output-volume";
 import { PanelManager } from "./panel-manager";
+import { providerRegistrations } from "./provider-registrations";
 import type { RealtimeCredentialMinter } from "./realtime-minter";
 import { runModeFor } from "./run-mode";
 import { sessionNoticeSpeech } from "./session-notifications";
@@ -251,51 +222,6 @@ let signInRunning: Promise<AccountSnapshot> | undefined;
 let signInCancel: (() => void) | undefined;
 let accountGeneration = 0;
 let observationGeneration = 0;
-const conductorAdapter = new ConductorSessionAdapter({
-  readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.CONDUCTOR),
-});
-const copilotAdapter = new CopilotSessionAdapter({
-  readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.COPILOT),
-});
-// Cursor runs sessions in two places: on this machine, which needs no
-// credential and is observed from the transcripts Cursor writes for itself, and
-// in its cloud, which needs a key. They are one provider wherever they ran, so
-// they are observed as one adapter — a provider's sessions are replaced in a
-// single commit, and two adapters sharing an id would retire each other's.
-const cursorAdapter = new CompositeSessionProviderAdapter({
-  provider: CURSOR_PROVIDER,
-  adapters: [
-    new CursorLocalSessionAdapter(),
-    new CursorSessionAdapter({
-      readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.CURSOR),
-    }),
-  ],
-});
-// Devin runs sessions in two places the same way Cursor does: in a terminal
-// on this machine, observed from the session database its CLI writes for
-// itself, and in its cloud, which needs a key. One provider, one commit.
-const devinAdapter = new CompositeSessionProviderAdapter({
-  provider: DEVIN_PROVIDER,
-  adapters: [
-    new DevinLocalSessionAdapter(),
-    new DevinSessionAdapter({
-      readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.DEVIN),
-    }),
-  ],
-});
-const julesAdapter = new JulesSessionAdapter({
-  readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.JULES),
-});
-// Saving a key affects only the provider it belongs to, so this maps each
-// credential to the one observer that reads it.
-const adapterByCredentialProvider: ReadonlyMap<CredentialProviderId, SessionProviderAdapter> =
-  new Map<CredentialProviderId, SessionProviderAdapter>([
-    [CREDENTIAL_PROVIDER_ID.CONDUCTOR, conductorAdapter],
-    [CREDENTIAL_PROVIDER_ID.COPILOT, copilotAdapter],
-    [CREDENTIAL_PROVIDER_ID.CURSOR, cursorAdapter],
-    [CREDENTIAL_PROVIDER_ID.DEVIN, devinAdapter],
-    [CREDENTIAL_PROVIDER_ID.JULES, julesAdapter],
-  ]);
 // Luke's own corners of the application data, holding each provider's
 // observation hook script and the spool it writes into. Resolved lazily like
 // the settings store's directory, and reproduced by the installation
@@ -319,20 +245,11 @@ function codexHookInstallation(): CodexHookInstallation {
     spoolDirectory: path.join(directory, HOOK_SPOOL_DIRECTORY_NAME),
   };
 }
-const sessionAdapters = [
-  new ClaudeCodeSessionAdapter({
-    hookEventsDirectory: () => claudeHookInstallation().spoolDirectory,
-  }),
-  new CodexSessionAdapter({
-    hookEventsDirectory: () => codexHookInstallation().spoolDirectory,
-  }),
-  conductorAdapter,
-  copilotAdapter,
-  cursorAdapter,
-  devinAdapter,
-  julesAdapter,
-  new OpenCodeSessionAdapter(),
-] as const;
+const providerRegistry = providerRegistrations({
+  readApiKey: (providerId) => settingsStore.readApiKey(providerId),
+  claudeHookInstallation,
+  codexHookInstallation,
+});
 // The issue tracker is not a session provider: its issues feed the voice
 // roster rather than the registry, so it stands beside the adapters rather
 // than among them.
@@ -1056,7 +973,11 @@ async function applyVoiceCredential(): Promise<void> {
 }
 
 function adapterFor(providerId: string) {
-  return sessionAdapters.find((candidate) => candidate.provider.id === providerId);
+  return providerRegistry.find((entry) => entry.adapter.provider.id === providerId)?.adapter;
+}
+
+function adapterForCredential(providerId: CredentialProviderId) {
+  return providerRegistry.find((entry) => entry.credential?.id === providerId)?.adapter;
 }
 
 /**
@@ -1075,7 +996,7 @@ function boundedField(
 /** Whether a provider is currently offering the project a default would name. */
 function workspaceProjectOffered(providerId: string, providerProjectId: string): boolean {
   const adapter = adapterFor(providerId);
-  if (!adapter || !isWorkspaceCapableAdapter(adapter)) return false;
+  if (!adapter) return false;
   return adapter
     .workspaceProjects()
     .some((project) => project.providerProjectId === providerProjectId);
@@ -1299,7 +1220,7 @@ function registerIpc(): void {
       // Only the provider whose key changed is affected, so the local
       // observers are left alone rather than re-crawling the filesystem on
       // every save.
-      const adapter = adapterByCredentialProvider.get(providerId);
+      const adapter = adapterForCredential(providerId);
       if (!result.reason && adapter) void sessionRegistry.refresh(adapter);
       // The tracker's key connects the tracker, not a session provider, so
       // its save refreshes the roster instead of the registry.
@@ -1731,32 +1652,6 @@ function registerIpc(): void {
   // whose local transcripts this build documents reading; everything else —
   // above all a cloud session, whose conversation lives with its provider —
   // answers honestly rather than guessing at files never documented.
-  const transcriptReaders: ReadonlyMap<
-    ProviderId,
-    (providerSessionId: string) => Promise<string | undefined>
-  > = new Map([
-    [
-      PROVIDER_ID.CLAUDE_CODE,
-      (providerSessionId: string) =>
-        readClaudeSessionTranscript({ claudeHome: defaultClaudeHome(), providerSessionId }),
-    ],
-    [
-      PROVIDER_ID.CODEX,
-      (providerSessionId: string) => readCodexSessionTranscript({ providerSessionId }),
-    ],
-    [
-      PROVIDER_ID.CURSOR,
-      (providerSessionId: string) => readCursorSessionTranscript({ providerSessionId }),
-    ],
-    [
-      PROVIDER_ID.DEVIN,
-      (providerSessionId: string) => readDevinSessionTranscript({ providerSessionId }),
-    ],
-    [
-      PROVIDER_ID.OPENCODE,
-      (providerSessionId: string) => readOpenCodeSessionTranscript({ providerSessionId }),
-    ],
-  ]);
   ipcMain.handle(
     channels.readSessionTranscript,
     async (event, identity: unknown): Promise<SessionTranscriptResult> => {
@@ -1779,17 +1674,15 @@ function registerIpc(): void {
           reason: "A cloud session's conversation lives with its provider, not on this machine.",
         };
       }
-      const readTranscript = isProviderId(identity.providerId)
-        ? transcriptReaders.get(identity.providerId)
-        : undefined;
-      if (!readTranscript) {
+      const adapter = adapterFor(identity.providerId);
+      if (!adapter) {
         return {
           status: SESSION_TRANSCRIPT_RESULT_STATUS.UNSUPPORTED,
           reason: "That session's provider keeps no transcript this build can read.",
         };
       }
       try {
-        const transcript = await readTranscript(identity.providerSessionId);
+        const transcript = await adapter.readTranscript(identity.providerSessionId);
         if (!transcript) {
           return {
             status: SESSION_TRANSCRIPT_RESULT_STATUS.REJECTED,
@@ -1832,7 +1725,7 @@ function registerIpc(): void {
         return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       }
       const adapter = adapterFor(identity.providerId);
-      if (!adapter || !isMessageCapableAdapter(adapter)) {
+      if (!adapter) {
         return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       }
       const result = await adapter.sendMessage({
@@ -1863,7 +1756,7 @@ function registerIpc(): void {
       const control = session?.controls.find((candidate) => candidate.id === controlId);
       if (!control) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       const adapter = adapterFor(identity.providerId);
-      if (!adapter || !isControllableAdapter(adapter)) {
+      if (!adapter) {
         return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       }
       const result = await adapter.executeControl({
@@ -1974,7 +1867,7 @@ function registerIpc(): void {
       }
       if (!runMode.sendsNetwork) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       const adapter = adapterFor(providerId);
-      if (!adapter || !isWorkspaceCapableAdapter(adapter)) {
+      if (!adapter) {
         return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       }
       const offered = adapter
@@ -2191,7 +2084,7 @@ function registerIpc(): void {
         throw new Error("Invalid workspace agent request");
       }
       const adapter = adapterFor(identity.providerId);
-      if (!adapter || !isWorkspaceAgentCapableAdapter(adapter)) {
+      if (!adapter) {
         return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
       }
       const sessionName = boundedField(name, workspaceNameText);
@@ -2321,14 +2214,12 @@ function registerIpc(): void {
 function observedWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
   if (!runMode.observesProviders) return [];
   return normalizeObservedWorkspaceProjects(
-    sessionAdapters.flatMap((adapter) =>
-      isWorkspaceCapableAdapter(adapter)
-        ? adapter.workspaceProjects().map((project) => ({
-            ...project,
-            providerId: adapter.provider.id,
-            providerName: adapter.provider.displayName,
-          }))
-        : [],
+    providerRegistry.flatMap(({ adapter }) =>
+      adapter.workspaceProjects().map((project) => ({
+        ...project,
+        providerId: adapter.provider.id,
+        providerName: adapter.provider.displayName,
+      })),
     ),
   );
 }
@@ -2346,42 +2237,19 @@ function observedWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
  */
 async function applyLocalSessionHooks(): Promise<void> {
   if (fixtureMode) return;
-  const registrations = [
-    {
-      providerName: CLAUDE_CODE_PROVIDER.displayName,
-      register: async () => {
-        const installation = claudeHookInstallation();
-        await installClaudeCodeObservationHooks(installation);
-        await pruneClaudeHookSpool(
-          installation.spoolDirectory,
-          CLAUDE_HOOK_SPOOL_MAXIMUM_AGE_MS,
-          Date.now(),
-        );
-      },
-    },
-    {
-      providerName: CODEX_PROVIDER.displayName,
-      register: async () => {
-        const installation = codexHookInstallation();
-        await installCodexObservationHooks(installation);
-        await pruneCodexHookSpool(
-          installation.spoolDirectory,
-          CODEX_HOOK_SPOOL_MAXIMUM_AGE_MS,
-          Date.now(),
-        );
-      },
-    },
-  ];
   // Failures are logged under the provider they belong to and absorbed here:
   // one provider's broken configuration must neither reach the other's
   // registration nor the launch, and either costs only the sharper status.
   await Promise.all(
-    registrations.map(async ({ providerName, register }) => {
+    providerRegistry.map(async ({ adapter, registerObservationHook }) => {
+      if (!registerObservationHook) return;
       try {
-        await register();
+        await registerObservationHook();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        process.stderr.write(`${providerName} hook registration failed: ${message}\n`);
+        process.stderr.write(
+          `${adapter.provider.displayName} hook registration failed: ${message}\n`,
+        );
       }
     }),
   );
@@ -2403,7 +2271,7 @@ async function refreshProviderSessions(): Promise<void> {
     // can neither delay nor cancel the others. A network provider would
     // otherwise hold up the local ones for as long as its requests take.
     await Promise.all(
-      sessionAdapters.map(async (adapter) => {
+      providerRegistry.map(async ({ adapter }) => {
         try {
           await sessionRegistry.refresh(adapter);
         } catch (error) {
@@ -2764,7 +2632,7 @@ function stopSessionObservation(): void {
   sessionRefreshTimer = undefined;
   unsubscribeSessions?.();
   unsubscribeSessions = undefined;
-  for (const adapter of sessionAdapters) sessionRegistry.replaceProvider(adapter.provider, []);
+  for (const { adapter } of providerRegistry) sessionRegistry.replaceProvider(adapter.provider, []);
   panels.broadcast(channels.sessionsChanged, []);
   panels.broadcast(channels.workspaceProjectsChanged, []);
   lastWorkspaceProjects = undefined;

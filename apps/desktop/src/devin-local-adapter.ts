@@ -4,19 +4,17 @@ import {
   agedStatus,
   isRecord,
   maximumSessionTitleLength,
-  OBSERVATION_WINDOW,
   oneLine,
   type ProviderSessionObservation,
   recordFromJsonLine,
-  resolveOptions,
   SESSION_STATUS,
   type SessionDetail,
-  type SessionProviderAdapter,
   type SessionStatus,
   text,
 } from "@sidecar/core";
 import { DEVIN_PROVIDER, millisecondsFromRecord } from "./devin-adapter";
-import { uniquePaths, workspaceLabel } from "./local-session-adapter";
+import { readDevinSessionTranscript } from "./devin-transcript";
+import { LocalSessionAdapter, uniquePaths, workspaceLabel } from "./local-session-adapter";
 import {
   canIgnoreSqliteError,
   defaultSqliteModule,
@@ -169,6 +167,7 @@ export interface DevinLocalAdapterOptions {
   now?: () => number;
   activeSessionFreshnessMs?: number;
   sqlite?: SqliteModuleLoader;
+  transcriptMaximumRenderedLength?: number;
 }
 
 /**
@@ -342,28 +341,18 @@ function isObservableSessionRow(row: DevinRow): boolean {
   return row[DEVIN_SESSION_COLUMN.HIDDEN] !== 1;
 }
 
-export class DevinLocalSessionAdapter implements SessionProviderAdapter {
+export class DevinLocalSessionAdapter extends LocalSessionAdapter {
   readonly provider = DEVIN_PROVIDER;
 
   readonly #cliDirectory: string;
-  readonly #now: () => number;
-  readonly #activeSessionFreshnessMs: number;
   readonly #sqlite: SqliteModuleLoader;
+  readonly #transcriptMaximumRenderedLength: number | undefined;
 
   constructor(options: DevinLocalAdapterOptions = {}) {
+    super(options);
     this.#cliDirectory = options.cliDirectory ?? defaultDevinCliDirectory();
-    this.#now = options.now ?? Date.now;
-    const resolved = resolveOptions(
-      options,
-      {
-        activeSessionFreshnessMs: OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
-      },
-      {
-        nonNegative: ["activeSessionFreshnessMs"],
-      },
-    );
-    this.#activeSessionFreshnessMs = resolved.activeSessionFreshnessMs;
     this.#sqlite = options.sqlite ?? defaultSqliteModule;
+    this.#transcriptMaximumRenderedLength = options.transcriptMaximumRenderedLength;
   }
 
   async observe(): Promise<readonly ProviderSessionObservation[]> {
@@ -373,7 +362,7 @@ export class DevinLocalSessionAdapter implements SessionProviderAdapter {
       let snapshots: DevinLocalSessionSnapshot[] | undefined;
       let now = 0;
       try {
-        now = this.#now();
+        now = this.observationTime();
         snapshots = this.#databaseSnapshots(database, now);
       } finally {
         database.close();
@@ -382,10 +371,19 @@ export class DevinLocalSessionAdapter implements SessionProviderAdapter {
       // candidate may still answer.
       if (snapshots === undefined) continue;
       return snapshots.map((snapshot) =>
-        observationFromSnapshot(snapshot, now, this.#activeSessionFreshnessMs),
+        observationFromSnapshot(snapshot, now, this.activeSessionFreshnessMs),
       );
     }
     return [];
+  }
+
+  override readTranscript(providerSessionId: string): Promise<string | undefined> {
+    return readDevinSessionTranscript({
+      cliDirectory: this.#cliDirectory,
+      providerSessionId,
+      sqlite: this.#sqlite,
+      maximumRenderedLength: this.#transcriptMaximumRenderedLength,
+    });
   }
 
   /** The session rows, or nothing when neither query fits this database. */
@@ -422,7 +420,7 @@ export class DevinLocalSessionAdapter implements SessionProviderAdapter {
     for (const snapshot of snapshots) {
       snapshot.turn = this.#turnFor(database, snapshot);
       if (
-        statusFromTurn(snapshot.turn, snapshot.observedAt, now, this.#activeSessionFreshnessMs) ===
+        statusFromTurn(snapshot.turn, snapshot.observedAt, now, this.activeSessionFreshnessMs) ===
         SESSION_STATUS.WORKING
       ) {
         snapshot.activity = this.#activityFor(database, snapshot.providerSessionId);

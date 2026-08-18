@@ -4,7 +4,23 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
-import { readCodexSessionTranscript } from "../src/codex-transcript";
+import { CodexSessionAdapter } from "../src/codex-adapter";
+import type { SqliteModuleLoader } from "../src/local-sqlite";
+
+function readCodexSessionTranscript(request: {
+  codexHome?: string;
+  sqliteHome?: string;
+  providerSessionId: string;
+  sqlite?: SqliteModuleLoader;
+  maximumRenderedLength?: number;
+}): Promise<string | undefined> {
+  return new CodexSessionAdapter({
+    codexHome: request.codexHome,
+    sqliteHome: request.sqliteHome,
+    sqlite: request.sqlite,
+    transcriptMaximumRenderedLength: request.maximumRenderedLength,
+  }).readTranscript(request.providerSessionId);
+}
 
 const TEST_SESSION_ID = "0198c1f2-4d5e-7789-abcd-ef0123456789";
 const CODEX_STATE_DATABASE = "state_5.sqlite";

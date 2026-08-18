@@ -1,26 +1,17 @@
 import {
   agedStatus,
-  type ControllableSessionProviderAdapter,
   isRecord,
-  type MessageCapableSessionProviderAdapter,
   maximumObservedWorkspaceProjects,
   maximumSessionRecapLength,
   maximumSessionTitleLength,
   OBSERVATION_WINDOW,
-  type ProviderControlRequest,
-  type ProviderControlResult,
-  type ProviderMessageResult,
-  type ProviderSessionMessage,
   type ProviderSessionObservation,
-  type ProviderWorkspaceRequest,
-  type ProviderWorkspaceResult,
   SESSION_CONTROL_KIND,
   SESSION_STATUS,
   type SessionControl,
   type SessionProvider,
   type SessionStatus,
   WORKSPACE_TASK_SUPPORT,
-  type WorkspaceCapableSessionProviderAdapter,
   type WorkspaceProject,
 } from "@sidecar/core";
 import {
@@ -295,13 +286,7 @@ function agentFromRecord(record: Record<string, unknown>): CursorAgent | undefin
  * a new agent — asked for with the user's own opening task — in a repository
  * Cursor listed for this key, through its documented creation endpoint.
  */
-export class CursorSessionAdapter
-  extends CloudSessionAdapter
-  implements
-    MessageCapableSessionProviderAdapter,
-    ControllableSessionProviderAdapter,
-    WorkspaceCapableSessionProviderAdapter
-{
+export class CursorSessionAdapter extends CloudSessionAdapter {
   /**
    * The repositories the key may launch agents in, as Cursor last listed
    * them. They are where a new workspace — a new agent — can be created, so a
@@ -320,18 +305,6 @@ export class CursorSessionAdapter
       },
       options,
     );
-  }
-
-  async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
-    return this.sendObservedMessage(message);
-  }
-
-  async executeControl(request: ProviderControlRequest): Promise<ProviderControlResult> {
-    return this.executeObservedControl(request);
-  }
-
-  async createWorkspace(request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult> {
-    return this.createObservedWorkspace(request, this.workspaceProjects());
   }
 
   protected override forgetCachedIdentity(): void {
@@ -466,7 +439,7 @@ export class CursorSessionAdapter
    * the identifier because it is the identifier Cursor's own API uses; it is
    * still one the provider reported, never one an ask composed.
    */
-  workspaceProjects(): readonly WorkspaceProject[] {
+  override workspaceProjects(): readonly WorkspaceProject[] {
     return this.#repositories.map((url) => ({
       providerProjectId: url,
       repository: repositoryLabel(url, undefined),

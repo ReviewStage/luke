@@ -1,12 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  isControllableAdapter,
-  isMessageCapableAdapter,
-  isWorkspaceAgentCapableAdapter,
-  isWorkspaceCapableAdapter,
-  SESSION_STATUS,
-} from "@sidecar/core";
+import { PROVIDER_ACT_RESULT_STATUS, SESSION_STATUS } from "@sidecar/core";
 import type { CloudFetch } from "../src/cloud-session-adapter";
 import { COPILOT_PROVIDER, CopilotSessionAdapter } from "../src/copilot-adapter";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "./support/http-fake";
@@ -134,12 +128,12 @@ function workingTask(id: string, updatedAt: number): TestTask {
   return { id, state: TEST_STATE.IN_PROGRESS, createdAt: updatedAt, updatedAt };
 }
 
-test("is read-only at the adapter probe, matching the writes it does not route", () => {
+test("answers through the shared adapter interface while routing no writes", async () => {
   const adapter = adapterFor(fakeAgentTasksApi([]).fetch);
-  assert.equal(isMessageCapableAdapter(adapter), false);
-  assert.equal(isControllableAdapter(adapter), false);
-  assert.equal(isWorkspaceCapableAdapter(adapter), false);
-  assert.equal(isWorkspaceAgentCapableAdapter(adapter), false);
+  assert.deepEqual(await adapter.sendMessage({ providerSessionId: "missing", text: "hello" }), {
+    status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED,
+  });
+  assert.deepEqual(adapter.workspaceProjects(), []);
 });
 
 test("observes a task in progress without exposing prompt-derived text", async () => {

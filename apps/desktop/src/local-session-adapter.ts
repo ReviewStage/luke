@@ -1,7 +1,55 @@
 import type { Dirent, Stats } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { recordFromJsonLine, UNKNOWN_WORKSPACE_LABEL } from "@sidecar/core";
+import {
+  agedStatus,
+  OBSERVATION_WINDOW,
+  type ProviderSessionObservation,
+  recordFromJsonLine,
+  resolveOptions,
+  SESSION_STATUS,
+  type SessionProvider,
+  SessionProviderAdapterBase,
+  type SessionStatus,
+  UNKNOWN_WORKSPACE_LABEL,
+} from "@sidecar/core";
+
+export function localSessionStatus(
+  status: SessionStatus,
+  observedAt: number,
+  now: number,
+  freshnessMs: number,
+): SessionStatus {
+  if (status === SESSION_STATUS.WORKING && now - observedAt > freshnessMs) {
+    return SESSION_STATUS.UNKNOWN;
+  }
+  return agedStatus(status, observedAt, now, freshnessMs);
+}
+
+export interface HookEventStatus<Event extends string> {
+  event: Event;
+  fresh: SessionStatus;
+  stale?: SessionStatus;
+}
+
+export interface HookStatusRefinement<Event extends string> {
+  definitive: readonly HookEventStatus<Event>[];
+  fresh: readonly HookEventStatus<Event>[];
+}
+
+export function refineStatusWithHookEvent<Event extends string>(
+  status: SessionStatus,
+  event: Event,
+  isFresh: boolean,
+  refinement: HookStatusRefinement<Event>,
+): SessionStatus {
+  const definitive = refinement.definitive.find((candidate) => candidate.event === event);
+  if (definitive) return definitive.fresh;
+  if (status === SESSION_STATUS.COMPLETE || status === SESSION_STATUS.ERROR) return status;
+  const candidate = refinement.fresh.find((entry) => entry.event === event);
+  if (!candidate) return status;
+  return isFresh ? candidate.fresh : (candidate.stale ?? status);
+}
 
 /**
  * The shared half of every adapter that observes sessions on this machine:
@@ -25,6 +73,94 @@ export interface SessionFileCandidate {
   filePath: string;
   providerSessionId: string;
   mtimeMs: number;
+}
+
+export function sessionIdFromFileName(fileName: string, extension: string): string | undefined {
+  if (!fileName.endsWith(extension)) return undefined;
+  const providerSessionId = fileName.slice(0, -extension.length).trim();
+  return providerSessionId || undefined;
+}
+
+export interface LocalSessionAdapterOptions {
+  now?: () => number;
+  activeSessionFreshnessMs?: number;
+}
+
+/**
+ * The shared observation lifecycle for transcript-backed local providers:
+ * discover, prepare provider-specific lookup state, parse only changed files,
+ * assemble one observation per session, and prune parses for vanished files.
+ */
+export abstract class LocalSessionAdapter extends SessionProviderAdapterBase {
+  readonly #now: () => number;
+  protected readonly activeSessionFreshnessMs: number;
+
+  protected constructor(options: LocalSessionAdapterOptions = {}) {
+    super();
+    this.#now = options.now ?? Date.now;
+    const resolved = resolveOptions(
+      options,
+      { activeSessionFreshnessMs: OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS },
+      { nonNegative: ["activeSessionFreshnessMs"] },
+    );
+    this.activeSessionFreshnessMs = resolved.activeSessionFreshnessMs;
+  }
+
+  protected observationTime(): number {
+    return this.#now();
+  }
+}
+
+export abstract class LocalFileSessionAdapter<
+  Candidate extends SessionFileCandidate,
+  Parsed,
+> extends LocalSessionAdapter {
+  abstract override readonly provider: SessionProvider;
+
+  readonly #parsed = new Map<string, { mtimeMs: number; value: Parsed }>();
+
+  protected constructor(options: LocalSessionAdapterOptions = {}) {
+    super(options);
+  }
+
+  protected abstract discover(): Promise<readonly Candidate[]>;
+  protected abstract parse(candidate: Candidate): Promise<Parsed>;
+  protected abstract observation(
+    candidate: Candidate,
+    parsed: Parsed,
+    now: number,
+    activeSessionFreshnessMs: number,
+  ): Promise<ProviderSessionObservation> | ProviderSessionObservation;
+
+  protected prepare(_candidates: readonly Candidate[]): Promise<void> | void {}
+
+  async observe(): Promise<readonly ProviderSessionObservation[]> {
+    const now = this.observationTime();
+    const candidates = await this.discover();
+    await this.prepare(candidates);
+    const observations = new Map<string, ProviderSessionObservation>();
+    for (const candidate of candidates) {
+      if (observations.has(candidate.providerSessionId)) continue;
+      const cached = this.#parsed.get(candidate.filePath);
+      const parsed =
+        cached?.mtimeMs === candidate.mtimeMs ? cached.value : await this.parseAndCache(candidate);
+      observations.set(
+        candidate.providerSessionId,
+        await this.observation(candidate, parsed, now, this.activeSessionFreshnessMs),
+      );
+    }
+    const discovered = new Set(candidates.map((candidate) => candidate.filePath));
+    for (const filePath of this.#parsed.keys()) {
+      if (!discovered.has(filePath)) this.#parsed.delete(filePath);
+    }
+    return [...observations.values()];
+  }
+
+  private async parseAndCache(candidate: Candidate): Promise<Parsed> {
+    const value = await this.parse(candidate);
+    this.#parsed.set(candidate.filePath, { mtimeMs: candidate.mtimeMs, value });
+    return value;
+  }
 }
 
 /** How one provider's directory layout turns into session files. */

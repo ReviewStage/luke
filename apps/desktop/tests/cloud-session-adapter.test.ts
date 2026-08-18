@@ -1,16 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  type ControllableSessionProviderAdapter,
-  isControllableAdapter,
-  isMessageCapableAdapter,
-  isWorkspaceAgentCapableAdapter,
-  isWorkspaceCapableAdapter,
-  type MessageCapableSessionProviderAdapter,
-  type ProviderControlRequest,
-  type ProviderControlResult,
-  type ProviderMessageResult,
-  type ProviderSessionMessage,
+  agedStatus,
+  OBSERVATION_WINDOW,
+  PROVIDER_ACT_RESULT_STATUS,
   type ProviderSessionObservation,
   SESSION_LOCATION,
   SESSION_STATUS,
@@ -52,10 +45,7 @@ function observation(
 const STUB_APPROVE_CONTROL = { id: "approve", label: "Approve" } as const;
 
 /** Stands in for a real provider so the shared half can be tested on its own. */
-class StubCloudAdapter
-  extends CloudSessionAdapter
-  implements MessageCapableSessionProviderAdapter, ControllableSessionProviderAdapter
-{
+class StubCloudAdapter extends CloudSessionAdapter {
   passes = 0;
   forgottenIdentities = 0;
   collected: readonly ProviderSessionObservation[] = [];
@@ -63,14 +53,6 @@ class StubCloudAdapter
 
   constructor(options: CloudAdapterOptions) {
     super({ provider: STUB_PROVIDER, defaultBaseUrl: TEST_BASE_URL }, options);
-  }
-
-  async sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult> {
-    return this.sendObservedMessage(message);
-  }
-
-  async executeControl(request: ProviderControlRequest): Promise<ProviderControlResult> {
-    return this.executeObservedControl(request);
   }
 
   protected override forgetCachedIdentity(): void {
@@ -99,7 +81,12 @@ class StubCloudAdapter
     await request(["v0", "sessions", "id with/slash"], { limit: "2" });
     return this.collected.map((candidate) => ({
       ...candidate,
-      status: this.statusWhileRecent(candidate.status, candidate.observedAt, now),
+      status: agedStatus(
+        candidate.status,
+        candidate.observedAt,
+        now,
+        OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
+      ),
     }));
   }
 }
@@ -136,21 +123,18 @@ class ObservationOnlyAdapter extends CloudSessionAdapter {
   }
 }
 
-test("advertises only the writes a subclass has routed", () => {
+test("answers unsupported explicitly when no observed route exists", async () => {
   const stub = adapterFor(stubFetch().fetch);
-  assert.equal(isMessageCapableAdapter(stub), true);
-  assert.equal(isControllableAdapter(stub), true);
-  assert.equal(isWorkspaceCapableAdapter(stub), false);
-  assert.equal(isWorkspaceAgentCapableAdapter(stub), false);
-
   const observer = new ObservationOnlyAdapter({
     readApiKey: async () => TEST_API_KEY,
     baseUrl: TEST_BASE_URL,
   });
-  assert.equal(isMessageCapableAdapter(observer), false);
-  assert.equal(isControllableAdapter(observer), false);
-  assert.equal(isWorkspaceCapableAdapter(observer), false);
-  assert.equal(isWorkspaceAgentCapableAdapter(observer), false);
+  for (const adapter of [stub, observer]) {
+    assert.deepEqual(await adapter.sendMessage({ providerSessionId: "missing", text: "hello" }), {
+      status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED,
+    });
+    assert.deepEqual(adapter.workspaceProjects(), []);
+  }
 });
 
 test("accepts only a state this build knows", () => {

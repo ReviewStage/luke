@@ -1,12 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  isControllableAdapter,
-  isMessageCapableAdapter,
-  isWorkspaceAgentCapableAdapter,
-  isWorkspaceCapableAdapter,
-  SESSION_STATUS,
-} from "@sidecar/core";
+import { SESSION_STATUS } from "@sidecar/core";
 import type { CloudFetch } from "../src/cloud-session-adapter";
 import { DEVIN_PROVIDER, DevinSessionAdapter } from "../src/devin-adapter";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "./support/http-fake";
@@ -172,12 +166,12 @@ function workingSession(id: string, updatedAt: number): TestSession {
   return { id, status: TEST_STATUS.RUNNING, detail: TEST_DETAIL.WORKING, updatedAt };
 }
 
-test("routes messages and the archive control, and no other write", () => {
+test("declares every provider operation on one adapter interface", () => {
   const adapter = adapterFor(async () => new Response("{}", { status: 200 }));
-  assert.equal(isMessageCapableAdapter(adapter), true);
-  assert.equal(isControllableAdapter(adapter), true);
-  assert.equal(isWorkspaceCapableAdapter(adapter), false);
-  assert.equal(isWorkspaceAgentCapableAdapter(adapter), false);
+  assert.equal(typeof adapter.sendMessage, "function");
+  assert.equal(typeof adapter.executeControl, "function");
+  assert.equal(typeof adapter.createWorkspace, "function");
+  assert.equal(typeof adapter.spawnWorkspaceAgent, "function");
 });
 
 test("advertises the archive only for a session positively seen settled", async () => {

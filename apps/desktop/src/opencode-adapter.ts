@@ -1,19 +1,15 @@
 import os from "node:os";
 import path from "node:path";
 import {
-  agedStatus,
   isRecord,
   maximumSessionTitleLength,
-  OBSERVATION_WINDOW,
   oneLine,
   PROVIDER_ID,
   type ProviderSessionObservation,
   recordFromJsonLine,
-  resolveOptions,
   SESSION_STATUS,
   type SessionDetail,
   type SessionProvider,
-  type SessionProviderAdapter,
   type SessionStatus,
   text,
   wholeNumber,
@@ -21,9 +17,12 @@ import {
 import {
   discoverSessionFiles,
   fileStats,
+  LocalSessionAdapter,
+  localSessionStatus,
   readDirectory,
   readTextFile,
   type SessionFileCandidate,
+  sessionIdFromFileName,
   statDirectoryEntry,
   uniquePaths,
   workspaceLabel,
@@ -31,10 +30,13 @@ import {
 import {
   canIgnoreSqliteError,
   defaultSqliteModule,
+  numberFromRow,
   openReadOnlyDatabase,
   type SqliteDatabase,
   type SqliteModuleLoader,
+  textFromRow,
 } from "./local-sqlite";
+import { boundedTranscript, TRANSCRIPT_BOUNDS } from "./local-transcript";
 
 const OPENCODE_PROVIDER_ID = PROVIDER_ID.OPENCODE;
 const OPENCODE_PROVIDER_NAME = "OpenCode";
@@ -187,6 +189,7 @@ export interface OpenCodeAdapterOptions {
   now?: () => number;
   activeSessionFreshnessMs?: number;
   sqlite?: SqliteModuleLoader;
+  transcriptMaximumRenderedLength?: number;
 }
 
 /**
@@ -210,14 +213,6 @@ interface OpenCodeSessionSnapshot {
   observedAt: number;
   turn?: OpenCodeTurn;
   activity?: string;
-}
-
-function numberFromRow(row: OpenCodeRow, key: string): number | undefined {
-  return wholeNumber(row[key]);
-}
-
-function textFromRow(row: OpenCodeRow, key: string): string | undefined {
-  return text(row[key]);
 }
 
 /** OpenCode writes the session's model as JSON; older records carried an object. */
@@ -287,10 +282,7 @@ function statusFromTurn(
     turn?.role === OPENCODE_ROLE.ASSISTANT && (turn.completed || turn.aborted)
       ? SESSION_STATUS.WAITING
       : SESSION_STATUS.WORKING;
-  if (status === SESSION_STATUS.WORKING && now - observedAt > freshnessMs) {
-    return SESSION_STATUS.UNKNOWN;
-  }
-  return agedStatus(status, observedAt, now, freshnessMs);
+  return localSessionStatus(status, observedAt, now, freshnessMs);
 }
 
 /**
@@ -381,18 +373,12 @@ function isObservableSessionRow(row: OpenCodeRow): boolean {
   );
 }
 
-function sessionIdFromFileName(fileName: string): string | undefined {
-  if (!fileName.endsWith(OPENCODE_SESSION_FILE_EXTENSION)) return undefined;
-  const providerSessionId = fileName.slice(0, -OPENCODE_SESSION_FILE_EXTENSION.length).trim();
-  return providerSessionId || undefined;
-}
-
 /** Legacy storage keeps one JSON file per session inside its project directory. */
 async function legacySessionFilesIn(projectDirectory: string): Promise<SessionFileCandidate[]> {
   const entries = await readDirectory(projectDirectory);
   const candidates = await Promise.all(
     entries.map(async (entry) => {
-      const providerSessionId = sessionIdFromFileName(entry.name);
+      const providerSessionId = sessionIdFromFileName(entry.name, OPENCODE_SESSION_FILE_EXTENSION);
       if (!providerSessionId) return undefined;
       const candidate = await statDirectoryEntry(projectDirectory, entry.name);
       if (!candidate?.stats.isFile()) return undefined;
@@ -442,13 +428,12 @@ export function openCodeDatabasePaths(dataDirectory: string): string[] {
  * keeps, or the flat JSON files of the versions before it. It runs no server,
  * needs no credential, and opens everything read-only.
  */
-export class OpenCodeSessionAdapter implements SessionProviderAdapter {
+export class OpenCodeSessionAdapter extends LocalSessionAdapter {
   readonly provider = OPENCODE_PROVIDER;
 
   readonly #dataDirectory: string;
-  readonly #now: () => number;
-  readonly #activeSessionFreshnessMs: number;
   readonly #sqlite: SqliteModuleLoader;
+  readonly #transcriptMaximumRenderedLength: number | undefined;
   /**
    * What each legacy file said as of the mtime it was read at. Sessions are
    * never capped, so this is what keeps the no-database fallback's pass cheap:
@@ -466,19 +451,10 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
   >();
 
   constructor(options: OpenCodeAdapterOptions = {}) {
+    super(options);
     this.#dataDirectory = options.dataDirectory ?? defaultOpenCodeDataDirectory();
-    this.#now = options.now ?? Date.now;
-    const resolved = resolveOptions(
-      options,
-      {
-        activeSessionFreshnessMs: OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
-      },
-      {
-        nonNegative: ["activeSessionFreshnessMs"],
-      },
-    );
-    this.#activeSessionFreshnessMs = resolved.activeSessionFreshnessMs;
     this.#sqlite = options.sqlite ?? defaultSqliteModule;
+    this.#transcriptMaximumRenderedLength = options.transcriptMaximumRenderedLength;
   }
 
   async observe(): Promise<readonly ProviderSessionObservation[]> {
@@ -488,7 +464,7 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
       let snapshots: OpenCodeSessionSnapshot[] | undefined;
       let now = 0;
       try {
-        now = this.#now();
+        now = this.observationTime();
         snapshots = this.#databaseSnapshots(database, now);
       } finally {
         database.close();
@@ -497,10 +473,19 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
       // candidate, or the legacy files, may still answer.
       if (snapshots === undefined) continue;
       return snapshots.map((snapshot) =>
-        observationFromSnapshot(snapshot, now, this.#activeSessionFreshnessMs),
+        observationFromSnapshot(snapshot, now, this.activeSessionFreshnessMs),
       );
     }
     return this.#legacyObservations();
+  }
+
+  override readTranscript(providerSessionId: string): Promise<string | undefined> {
+    return OpenCodeTranscript.read({
+      dataDirectory: this.#dataDirectory,
+      providerSessionId,
+      sqlite: this.#sqlite,
+      maximumRenderedLength: this.#transcriptMaximumRenderedLength,
+    });
   }
 
   /** The session rows, or nothing when neither query fits this database. */
@@ -535,7 +520,7 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
     for (const snapshot of snapshots) {
       snapshot.turn = this.#turnFor(database, snapshot.providerSessionId);
       if (
-        statusFromTurn(snapshot.turn, snapshot.observedAt, now, this.#activeSessionFreshnessMs) ===
+        statusFromTurn(snapshot.turn, snapshot.observedAt, now, this.activeSessionFreshnessMs) ===
         SESSION_STATUS.WORKING
       ) {
         snapshot.activity = this.#activityFor(database, snapshot.providerSessionId);
@@ -576,7 +561,7 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
   }
 
   async #legacyObservations(): Promise<readonly ProviderSessionObservation[]> {
-    const now = this.#now();
+    const now = this.observationTime();
     const storageDirectory = path.join(this.#dataDirectory, OPENCODE_STORAGE_DIRECTORY);
     const candidates = await discoverSessionFiles({
       projectsDirectory: path.join(storageDirectory, OPENCODE_STORAGE_SEGMENT.SESSION),
@@ -611,7 +596,7 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
       snapshot.turn = await this.#legacyTurn(storageDirectory, candidate.providerSessionId);
       observations.set(
         candidate.providerSessionId,
-        observationFromSnapshot(snapshot, now, this.#activeSessionFreshnessMs),
+        observationFromSnapshot(snapshot, now, this.activeSessionFreshnessMs),
       );
     }
 
@@ -669,5 +654,226 @@ export class OpenCodeSessionAdapter implements SessionProviderAdapter {
     const turn = record ? turnFromMessage(record) : undefined;
     this.#legacyTurns.set(providerSessionId, { filePath, mtimeMs, turn });
     return turn;
+  }
+}
+
+namespace OpenCodeTranscript {
+  /**
+   * On-demand reading of one OpenCode session's transcript, for a question the
+   * developer just asked. The message and part rows in OpenCode's own database
+   * are the transcript — the same tables the adapter reads bookkeeping from,
+   * here opened for their words: a bounded slice of the newest messages, read
+   * through parameterized point queries against the read-only handle, rendered
+   * into a bounded conversation, and discarded. Nothing here is retained,
+   * watched, or written; a session is re-read the next time it is asked about.
+   *
+   * Installs from before OpenCode moved its sessions into the database keep
+   * their conversations in per-part JSON files this build does not read, so a
+   * legacy session answers as no transcript rather than a partial one.
+   */
+
+  const OPENCODE_SPEAKER_NAME = "OpenCode";
+
+  const OPENCODE_DATA_COLUMN = "data";
+
+  const OPENCODE_MESSAGE_ROLE = {
+    USER: "user",
+    ASSISTANT: "assistant",
+  } as const;
+
+  const OPENCODE_PART_TYPE = {
+    TEXT: "text",
+    TOOL: "tool",
+  } as const;
+
+  /** The tool states whose bookkeeping carries an answer worth a line. */
+  const OPENCODE_TOOL_STATUS = {
+    COMPLETED: "completed",
+    ERROR: "error",
+  } as const;
+
+  /**
+   * The error OpenCode records when its own user stops a turn. A stopped turn
+   * is something the developer did, not something that happened to them, so it
+   * takes no error line.
+   */
+  const OPENCODE_ABORT_ERROR_NAME = "MessageAbortedError";
+
+  const OPENCODE_TRANSCRIPT_BOUNDS = {
+    /** How many of the session's newest messages one read may load. */
+    MAXIMUM_MESSAGES: 40,
+    /** How many of a message's parts one read may load. */
+    MAXIMUM_PARTS: 32,
+  } as const;
+
+  /** Newest first, so the bound keeps the turns the question is about. */
+  const OPENCODE_RECENT_MESSAGE_QUERY = `
+    SELECT *
+    FROM message
+    WHERE session_id = ?
+    ORDER BY time_created DESC, id DESC
+    LIMIT ?
+  `;
+
+  // Newest first here too: a tool-heavy turn can outgrow the bound, and the
+  // concluding words sit on its newest parts. Ordered by the row's own clock
+  // before its id, like every other query over these tables — ids sort in
+  // creation order only until their timestamp half wraps — and put back in the
+  // order they were said before rendering.
+  const OPENCODE_MESSAGE_PART_QUERY = `
+    SELECT *
+    FROM part
+    WHERE message_id = ?
+    ORDER BY time_created DESC, id DESC
+    LIMIT ?
+  `;
+
+  type OpenCodeRow = Record<string, unknown>;
+
+  interface Request {
+    dataDirectory?: string;
+    providerSessionId: string;
+    sqlite?: SqliteModuleLoader;
+    maximumRenderedLength?: number;
+  }
+
+  function rowData(row: OpenCodeRow): Record<string, unknown> | undefined {
+    return recordFromJsonLine(text(row[OPENCODE_DATA_COLUMN]) ?? "");
+  }
+
+  function toolLine(part: Record<string, unknown>): string[] {
+    const name = text(part.tool);
+    if (!name) return [];
+    const state = isRecord(part.state) ? part.state : {};
+    const input = isRecord(state.input) ? state.input : {};
+    let call = `→ ${name}`;
+    for (const key of OPENCODE_TOOL_INPUT_KEY) {
+      const detail = oneLine(text(input[key]), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
+      if (detail) {
+        call = `→ ${name}: ${detail}`;
+        break;
+      }
+    }
+    const answer =
+      state.status === OPENCODE_TOOL_STATUS.COMPLETED
+        ? oneLine(text(state.output), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH)
+        : state.status === OPENCODE_TOOL_STATUS.ERROR
+          ? oneLine(text(state.error), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH)
+          : undefined;
+    return answer ? [call, `← ${answer}`] : [call];
+  }
+
+  /**
+   * The failure that ended a message's turn early, in the provider's words. An
+   * abort is left out: the developer stopping a turn is not news to them.
+   */
+  function errorLine(data: Record<string, unknown>): string | undefined {
+    const error = isRecord(data.error) ? data.error : undefined;
+    if (!error || error.name === OPENCODE_ABORT_ERROR_NAME) return undefined;
+    const errorData = isRecord(error.data) ? error.data : undefined;
+    const words = oneLine(
+      text(errorData?.message) ?? text(error.name),
+      TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH,
+    );
+    return words ? `Error: ${words}` : undefined;
+  }
+
+  /**
+   * Renders one message and its parts into the lines a conversation can carry.
+   * A text part's words are the message's own — the role rides the message row,
+   * not the part — and a synthetic or ignored text part is OpenCode's own
+   * scaffolding, not something anyone said.
+   */
+  function linesFromMessage(
+    data: Record<string, unknown>,
+    parts: readonly OpenCodeRow[],
+  ): string[] {
+    const role = text(data.role);
+    if (role !== OPENCODE_MESSAGE_ROLE.USER && role !== OPENCODE_MESSAGE_ROLE.ASSISTANT) return [];
+    const speaker = role === OPENCODE_MESSAGE_ROLE.USER ? "Developer" : OPENCODE_SPEAKER_NAME;
+
+    const lines: string[] = [];
+    const spokenParts: string[] = [];
+    for (const row of parts) {
+      const part = rowData(row);
+      if (!part) continue;
+      if (part.type === OPENCODE_PART_TYPE.TEXT) {
+        if (part.synthetic === true || part.ignored === true) continue;
+        const words = text(part.text);
+        if (words) spokenParts.push(words);
+        continue;
+      }
+      if (part.type === OPENCODE_PART_TYPE.TOOL && role === OPENCODE_MESSAGE_ROLE.ASSISTANT) {
+        lines.push(...toolLine(part));
+      }
+    }
+    const said = oneLine(spokenParts.join(" "), TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
+    if (said) lines.unshift(`${speaker}: ${said}`);
+
+    const failure = errorLine(data);
+    if (failure) lines.push(failure);
+    return lines;
+  }
+
+  function readRows(
+    database: SqliteDatabase,
+    query: string,
+    parameters: readonly unknown[],
+  ): OpenCodeRow[] {
+    try {
+      return database
+        .prepare(query)
+        .all(...parameters)
+        .filter((row): row is OpenCodeRow => isRecord(row));
+    } catch (error) {
+      if (canIgnoreSqliteError(error)) return [];
+      throw error;
+    }
+  }
+
+  function renderedFromDatabase(
+    database: SqliteDatabase,
+    providerSessionId: string,
+    maximumLength: number,
+  ): string | undefined {
+    const messages = readRows(database, OPENCODE_RECENT_MESSAGE_QUERY, [
+      providerSessionId,
+      OPENCODE_TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGES,
+    ]).toReversed();
+    const lines = messages.flatMap((message) => {
+      const data = rowData(message);
+      const messageId = text(message.id);
+      if (!data || !messageId) return [];
+      const parts = readRows(database, OPENCODE_MESSAGE_PART_QUERY, [
+        messageId,
+        OPENCODE_TRANSCRIPT_BOUNDS.MAXIMUM_PARTS,
+      ]).toReversed();
+      return linesFromMessage(data, parts);
+    });
+    return boundedTranscript(lines, maximumLength);
+  }
+
+  /**
+   * Reads one session's recent transcript into a bounded rendering, or nothing
+   * when no database holds messages for that id.
+   */
+  export async function read(request: Request): Promise<string | undefined> {
+    const dataDirectory = request.dataDirectory ?? defaultOpenCodeDataDirectory();
+    const sqlite = request.sqlite ?? defaultSqliteModule;
+    for (const databasePath of openCodeDatabasePaths(dataDirectory)) {
+      const database = await openReadOnlyDatabase(sqlite, databasePath);
+      if (!database) continue;
+      try {
+        const rendered = renderedFromDatabase(
+          database,
+          request.providerSessionId,
+          request.maximumRenderedLength ?? TRANSCRIPT_BOUNDS.MAXIMUM_RENDERED_LENGTH,
+        );
+        if (rendered) return rendered;
+      } finally {
+        database.close();
+      }
+    }
+    return undefined;
   }
 }
