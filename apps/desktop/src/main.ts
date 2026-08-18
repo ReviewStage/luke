@@ -1648,10 +1648,11 @@ function registerIpc(): void {
   // discarded — nothing reaches a provider, and nothing is kept. The renderer
   // names a session rather than a path, validated here against the registry
   // like every session act, so the set of transcripts Luke can read is the
-  // set of sessions currently observed. The readers below are the providers
-  // whose local transcripts this build documents reading; everything else —
-  // above all a cloud session, whose conversation lives with its provider —
-  // answers honestly rather than guessing at files never documented.
+  // set of sessions currently observed. The session's own adapter is what
+  // reads it, because the adapter is what knows the shape its provider wrote;
+  // everything else — above all a cloud session, whose conversation lives
+  // with its provider — answers honestly rather than guessing at files never
+  // documented.
   ipcMain.handle(
     channels.readSessionTranscript,
     async (event, identity: unknown): Promise<SessionTranscriptResult> => {
