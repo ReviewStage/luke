@@ -1,4 +1,5 @@
 export const REPOSITORY_URL = "https://github.com/ReviewStage/luke";
+export const DMG_URL = `${REPOSITORY_URL}/releases/latest/download/Luke.dmg`;
 
 /**
  * GitHub's mark, drawn in `currentColor` so the stylesheet holds the color in
@@ -66,7 +67,7 @@ export function SiteHeader(): React.JSX.Element {
 /** Shared between every page so the legal and license links never drift apart. */
 export function SiteFooter(): React.JSX.Element {
   return (
-    <footer className="site-footer shell">
+    <footer className="site-footer shell hairline">
       <div className="footer-meta">
         <span>Apache-2.0</span>
         <span>macOS 14+</span>
