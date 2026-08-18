@@ -13,10 +13,11 @@
  * it is the one part of the page that has to stay diffable against
  * `apps/desktop/src/renderer/styles/base.css` and `styles/sessions.css`.
  *
- * Deliberately not ported from the renderer: `overflow: clip` on the root,
- * `user-select: none`, and the transparent body. Those exist so an Electron
- * notch window can never scroll its capsule off screen, and a scrolling web
- * page needs the opposite of all three.
+ * Deliberately not ported from the renderer: the root's `overflow: clip` on
+ * both axes, `user-select: none`, and the transparent body. Those exist so an
+ * Electron notch window can never scroll its capsule off screen, and a
+ * scrolling web page needs the opposite of all three. The root clips `x`
+ * alone here for a reason of the page's own, written where it is set.
  */
 
 @import "tailwindcss";
@@ -138,6 +139,26 @@
 @layer base {
   html {
     font-family: var(--font-page);
+  }
+
+  /* Two places deliberately draw wider than the measure — the full-bleed
+     hairline and the mock's stage — and both size themselves in `vw`, which
+     counts a classic scrollbar's gutter that `100%` does not. Left alone that
+     gutter is a horizontal scrollbar on every page anywhere scrollbars take
+     space, which is everywhere the visitor is not on a Mac.
+
+     It has to be `clip` and not `hidden`, for the reason `.mock-pin` gives
+     below: `hidden` makes a scroll container, and a scroll container ancestor
+     is exactly what stops the pin from sticking. `overflow-y` is left alone,
+     which a `clip` on the other axis permits, so the page still scrolls down.
+
+     And it has to name both elements. The root's overflow propagates to the
+     viewport and the root itself is then drawn as `visible`, so `html` alone
+     clips nothing; `body` alone is likewise skipped while the root carries a
+     value. Only the pair actually holds. */
+  html,
+  body {
+    overflow-x: clip;
   }
 
   body {
