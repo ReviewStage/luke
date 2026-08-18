@@ -1,4 +1,4 @@
-import { CAPSULE_SIDE_WIDTH, PANEL_WIDTH, PEEK_SIDE_GROWTH } from "@sidecar/core";
+import { CAPSULE_SIDE_WIDTH, PANEL_WIDTH, peekWidth } from "@sidecar/core";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { errandOriginProps } from "./luke-errand";
 import { LukeFace } from "./luke-face";
@@ -64,11 +64,11 @@ const MARK_AND_GAP = 21;
 
 /**
  * How many marks fit beside the face in a wing of this width. The peek's side
- * is fixed at 124px whatever the housing measures, which is where its limit of
- * three comes from: the face and its gap cost 26px of the 95px between the
- * wing's insets, and each mark past the first costs 21px of the 55px that
- * remain. The panel's side is what is left of `--panel-width` after the
- * housing, so it holds roughly twice as many.
+ * is 124px beside the housing it was measured against, which is where its
+ * limit of three comes from: the face and its gap cost 26px of the 95px
+ * between the wing's insets, and each mark past the first costs 21px of the
+ * 55px that remain. The panel's side is what is left of `--panel-width` after
+ * the housing, so it holds roughly twice as many.
  */
 export function wingMarkCapacity(sideWidth: number): number {
   const beyondFirst = Math.floor(
@@ -77,7 +77,15 @@ export function wingMarkCapacity(sideWidth: number): number {
   return Math.max(1, 1 + beyondFirst);
 }
 
-const PEEK_SIDE_WIDTH = CAPSULE_SIDE_WIDTH + PEEK_SIDE_GROWTH;
+/**
+ * The peek's side beside this housing: what is left of the floored peek after
+ * the housing splits it. Beside the 14-inch housing and anything wider this is
+ * the 124px the wing was drawn at; a narrower housing — or the bubble's none —
+ * leaves the same floored shape more side to spend.
+ */
+export function peekSideWidth(housingWidth: number): number {
+  return (peekWidth(housingWidth) - housingWidth) / 2;
+}
 
 /**
  * What the count badge costs to draw, in the stylesheet's numbers:
@@ -129,7 +137,7 @@ export function countBadgeFit(
     presentation === PANEL_PRESENTATION.PANEL
       ? (PANEL_WIDTH - housingWidth) / 2
       : presentation === PANEL_PRESENTATION.PEEK
-        ? PEEK_SIDE_WIDTH
+        ? peekSideWidth(housingWidth)
         : CAPSULE_SIDE_WIDTH;
   const restingScale = presentation === PANEL_PRESENTATION.PANEL ? 1 : COUNT_RESTING_SCALE;
   const inset = flushToHousing ? SIGN_IN_INSET : COUNT_INSET;
@@ -232,7 +240,7 @@ export function NotchWings({
   const capacity =
     presentation === PANEL_PRESENTATION.PANEL
       ? wingMarkCapacity((PANEL_WIDTH - housingWidth) / 2)
-      : wingMarkCapacity(PEEK_SIDE_WIDTH);
+      : wingMarkCapacity(peekSideWidth(housingWidth));
   // Memoized because the roster below notices a new list by identity: the
   // slots may only change when what they summarize does, not on every render
   // a spoken word or a face gesture asks for.
