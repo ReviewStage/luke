@@ -1634,9 +1634,11 @@ export function App(): React.JSX.Element {
   // derived, not queued — the subject arrives with the caption and dies with
   // the reply, so it can never lag the words or stand for news Luke is not
   // saying — and it draws only for a session the roster still titles, because
-  // a press is a row press at one remove and needs a row to stand for. Only
-  // the resting shapes draw it: an open panel already shows the row, and the
-  // slot and the composer are shapes someone asked for.
+  // a press is a row press at one remove and needs a row to stand for. The
+  // resting shapes draw it under the housing, and the open panel keeps it at
+  // its foot: the row is up in the list, but the chip is what says which row
+  // Luke is talking about. Only the slot and the composer go without — those
+  // are shapes someone asked for.
   const announced = announcedSession
     ? sessions.find(
         (candidate) =>
@@ -1646,7 +1648,9 @@ export function App(): React.JSX.Element {
     : undefined;
   const noticeShown =
     announced !== undefined &&
-    (presentation === PANEL_PRESENTATION.CAPSULE || presentation === PANEL_PRESENTATION.PEEK);
+    (presentation === PANEL_PRESENTATION.CAPSULE ||
+      presentation === PANEL_PRESENTATION.PEEK ||
+      presentation === PANEL_PRESENTATION.PANEL);
   // The last announced fields, held so the notice fades out still worded
   // rather than emptying on the frame the reply ends.
   const lastAnnounced = useRef<{ title: string; providerId: string }>(undefined);
