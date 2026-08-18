@@ -149,6 +149,12 @@ export class SpokenNoticeAnnouncer {
       while (this.#queue.length > 0 && session.speak(this.#queue[0] as AttentionSpeech)) {
         this.#queue.shift();
       }
+      // A backlog waiting on a refused speak is normally resumed by the READY
+      // edge, but that edge is the session's promise, not this class's: the
+      // retry clock keeps the backlog from depending on it. Redundant on the
+      // ordinary path — the edge lands first and says everything — and what
+      // stands between an announcement and permanent silence when it does not.
+      this.#armRetry();
       return;
     }
     if (session.isConnecting) return;
