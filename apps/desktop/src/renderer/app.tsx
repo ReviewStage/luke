@@ -135,6 +135,7 @@ import {
 } from "./settings-views";
 import { useSignInFaceCycle } from "./sign-in-gate";
 import { SignInSlot } from "./sign-in-slot";
+import { pointOverStrip, type SpokenStripContent, stripHoldNext } from "./strip-hold";
 import { useBootstrapRacedChannel } from "./use-bootstrap-raced-channel";
 import { panelEntryOpen, usePanelEntry } from "./use-panel-entry";
 import { usePanelPresentation } from "./use-panel-presentation";
@@ -195,9 +196,20 @@ function captionSizeStyle(
   const scroll =
     readingElapsedMs === undefined ? overflow : pacedCaptionScroll(overflow, readingElapsedMs);
   return {
-    "--caption-size": `${Math.min(VOICE_CAPTION_MAX_HEIGHT - hintBand, textHeight + padding)}px`,
+    "--caption-size": `${captionBlockSize(textHeight, volumeHint, padding)}px`,
     "--caption-scroll": `${scroll}px`,
   } as CSSProperties;
+}
+
+/**
+ * The caption block's visible height — the `--caption-size` the clip ends the
+ * element at. The strip's hover test reads it too: the element's own box runs
+ * to the reserved maximum, and only this much of it is words rather than
+ * desktop.
+ */
+function captionBlockSize(textHeight: number, volumeHint: boolean, padding: number): number {
+  const hintBand = volumeHint ? VOLUME_HINT_BAND_HEIGHT : 0;
+  return Math.min(VOICE_CAPTION_MAX_HEIGHT - hintBand, textHeight + padding);
 }
 
 /**
@@ -1630,6 +1642,10 @@ export function App(): React.JSX.Element {
 
   const defaultWorkspaceProvider = (settings ?? bootstrap?.settings)?.defaultWorkspaceProvider;
   const workspaceProjectDefaults = (settings ?? bootstrap?.settings)?.workspaceProjectDefaults;
+  // The muted evidence run is the speaking run with the hint drawn over it: a
+  // capture has no system output to read, so the state is asked for directly.
+  const fixtureMuted = bootstrap?.profile === "muted";
+  const fixtureSpeaking = bootstrap?.profile === "speaking" || fixtureMuted;
   const {
     analyser,
     microphoneStatus,
@@ -1665,11 +1681,25 @@ export function App(): React.JSX.Element {
     voiceCaptions: settings?.voiceCaptions === true,
     voiceAvailable: settings?.voiceAvailable,
     outputSilent: outputSilent(outputAudio),
-    fixtureSpeaking: bootstrap?.profile === "speaking" || bootstrap?.profile === "muted",
+    fixtureSpeaking,
     capturingShortcut: () => shortcutCapture.current,
     openSession: openSessionAloud,
     carryAppAction,
   });
+
+  // A failed call is reported where its reply would have landed: on the
+  // caption strip, under the field or the key press that asked. It yields to
+  // live words, so it can never be drawn over a reply being spoken.
+  const voiceErrorNotice = voiceErrorToShow({
+    fixtureSpeaking,
+    voice: voiceTurn,
+    error: voiceError,
+  });
+  // What the caption block is being handed live this frame: Luke's words, or
+  // a failure borrowing their strip.
+  const liveCaptionTexts =
+    lukeCaptions ?? (voiceErrorNotice === undefined ? undefined : [voiceErrorNotice]);
+  const captionLiveIsError = lukeCaptions === undefined && voiceErrorNotice !== undefined;
 
   // The notices: the pressable faces of what the reply being spoken is about
   // — an announcement's one subject, or the several a conversation reply
@@ -1677,7 +1707,8 @@ export function App(): React.JSX.Element {
   // roster: a chat by its title, a whole workspace by name fronted by its
   // freshest chat, or a tracked issue by identifier or title. Derived, not
   // queued — the subjects arrive with the captions and die with the reply,
-  // so a chip can never lag the words or stand for news Luke is not saying —
+  // outliving it only under the strip hold's pointer, so a chip can never
+  // lag the words or stand for news Luke is not saying —
   // and each draws only for a session the roster still titles or an issue
   // the tracker still lists, because a press is a row press at one remove
   // and needs a row to stand for. A workspace chip wears the workspace's
@@ -1725,8 +1756,75 @@ export function App(): React.JSX.Element {
       }),
     ),
   ];
+  const chipsDrawn = spokenOf.length > 0;
+
+  /**
+   * The pointer's hold on the strip. The words and the chips leave with the
+   * reply that earned them, and a failure leaves on its own clock — but never
+   * out from under a pointer resting on them, which is someone mid-read or
+   * mid-press on a chip. The hold snapshots exactly what the strip was
+   * showing and keeps it drawn until the pointer moves away; it can start
+   * nothing, so nothing dismissed before the hover began is ever resurrected.
+   */
+  const [stripHovered, setStripHovered] = useState(false);
+  const [stripHold, setStripHold] = useState<SpokenStripContent>();
+  /** When the words now held first appeared, surviving the reply for the hold. */
+  const heldCaptionShownAt = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    setStripHold((held) =>
+      stripHoldNext({
+        hovered: stripHovered,
+        drawn:
+          liveCaptionTexts === undefined && !chipsDrawn
+            ? undefined
+            : { texts: liveCaptionTexts, isError: captionLiveIsError, chips: chipsDrawn },
+        held,
+      }),
+    );
+  }, [stripHovered, liveCaptionTexts, captionLiveIsError, chipsDrawn]);
+
+  /**
+   * The strip's hoverable boxes, kept current for the window's move listener:
+   * the caption block's visible height — zero while no words are drawn, so an
+   * invisible block holds nothing — and whether the chip band is drawn, on
+   * the same terms. Refs rather than state, because the listener reads them
+   * at each move and re-subscribing per frame would be work for nobody.
+   */
+  const captionHoverHeight = useRef(0);
+  const noticeHoverable = useRef(false);
+  useEffect(() => {
+    // Forwarded moves arrive even while the window is click-through, which is
+    // what lets a pointer resting on words that take no pointer be seen here
+    // at all.
+    const handleMove = (event: MouseEvent) => {
+      const caption = captionElement.current;
+      const band = noticeBand.current;
+      setStripHovered(
+        pointOverStrip({
+          x: event.clientX,
+          y: event.clientY,
+          caption:
+            caption && captionHoverHeight.current > 0
+              ? {
+                  box: caption.getBoundingClientRect(),
+                  visibleHeight: captionHoverHeight.current,
+                }
+              : undefined,
+          band: band && noticeHoverable.current ? band.getBoundingClientRect() : undefined,
+        }),
+      );
+    };
+    const handleLeave = () => setStripHovered(false);
+    window.addEventListener("mousemove", handleMove, { passive: true });
+    document.documentElement.addEventListener("mouseleave", handleLeave);
+    return () => {
+      window.removeEventListener("mousemove", handleMove);
+      document.documentElement.removeEventListener("mouseleave", handleLeave);
+    };
+  }, []);
+
   const noticeShown =
-    spokenOf.length > 0 &&
+    (chipsDrawn || stripHold?.chips === true) &&
     (presentation === PANEL_PRESENTATION.CAPSULE ||
       presentation === PANEL_PRESENTATION.PEEK ||
       presentation === PANEL_PRESENTATION.PANEL);
@@ -2349,23 +2447,14 @@ export function App(): React.JSX.Element {
   const shownHotkey = voiceHotkeyToShow(bootstrap, voiceHotkey);
   const shownAskHotkey = askHotkeyChange ? askHotkeyChange.accelerator : bootstrap.askHotkey;
   const shownStopHotkey = stopHotkeyChange ? stopHotkeyChange.accelerator : bootstrap.stopHotkey;
-  // The muted evidence run is the speaking run with the hint drawn over it: a
-  // capture has no system output to read, so the state is asked for directly.
-  const fixtureMuted = bootstrap.profile === "muted";
-  const fixtureSpeaking = bootstrap.profile === "speaking" || fixtureMuted;
   const hasAudioSignal = fixtureSpeaking || analyser !== undefined;
   const outputIsSilent = outputSilent(outputAudio);
-  // A failed call is reported where its reply would have landed: on the
-  // caption strip, under the field or the key press that asked. It yields to
-  // live words, so it can never be drawn over a reply being spoken.
-  const voiceErrorNotice = voiceErrorToShow({
-    fixtureSpeaking,
-    voice: voiceTurn,
-    error: voiceError,
-  });
-  const captionTexts =
-    lukeCaptions ?? (voiceErrorNotice === undefined ? undefined : [voiceErrorNotice]);
-  const captionIsError = lukeCaptions === undefined && voiceErrorNotice !== undefined;
+  // Live words win; the held snapshot only ever finishes being read. A held
+  // caption is drawn exactly as it was, failure red included.
+  const heldCaptionTexts = liveCaptionTexts === undefined ? stripHold?.texts : undefined;
+  const captionTexts = liveCaptionTexts ?? heldCaptionTexts;
+  const captionIsError =
+    liveCaptionTexts !== undefined ? captionLiveIsError : stripHold?.isError === true;
   // Two responses spoken back-to-back stack as two captions: the settled one
   // above, the one still arriving below, in the always-mounted slot the lone
   // caption also uses.
@@ -2373,9 +2462,15 @@ export function App(): React.JSX.Element {
   const liveCaption = captionTexts?.at(-1);
   // How long the words on screen have been readable, or nothing while the
   // output is audible: the reading clock only paces words nobody can hear.
+  // The clock's start survives the reply for the hold's sake: a held silent
+  // caption keeps the lines where the reader had them rather than snapping
+  // its unread ones away the moment the clock's own state clears.
+  if (captionShownAt !== undefined) heldCaptionShownAt.current = captionShownAt;
+  const captionClockStart =
+    captionShownAt ?? (heldCaptionTexts === undefined ? undefined : heldCaptionShownAt.current);
   const captionReadingElapsed =
-    outputIsSilent && captionShownAt !== undefined
-      ? Math.max(0, readingNow - captionShownAt)
+    outputIsSilent && captionClockStart !== undefined
+      ? Math.max(0, readingNow - captionClockStart)
       : undefined;
   // The hint rides the caption it explains, and only over a silence the
   // helper actually reported. "Got it" quiets it for this stretch of silence
@@ -2385,6 +2480,12 @@ export function App(): React.JSX.Element {
     (outputIsSilent &&
       lukeCaptions !== undefined &&
       !volumeHintDismissed(hintDismissal, silenceStretch, Date.now()));
+  // What the hover test may match this frame, now that both are known.
+  captionHoverHeight.current =
+    captionTexts === undefined || captionTextHeight === undefined
+      ? 0
+      : captionBlockSize(captionTextHeight, volumeHint, captionPadding);
+  noticeHoverable.current = noticeShown;
   const panelOpen = presentation === PANEL_PRESENTATION.PANEL;
   const slotOpen = presentation === PANEL_PRESENTATION.SLOT;
   const feedbackOpen = presentation === PANEL_PRESENTATION.FEEDBACK;
