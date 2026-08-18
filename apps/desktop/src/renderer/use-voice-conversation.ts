@@ -5,6 +5,7 @@ import {
   type CarriedSessionAction,
   dispatchByKind,
   EMPTY_APP_GUIDE,
+  mentionedIssues,
   mentionedSessions,
   type NormalizedSession,
   type ObservedWorkspaceProject,
@@ -312,6 +313,27 @@ export function replyMentions(input: {
 }
 
 /**
+ * The issue half of {@link replyMentions}, on its rules exactly: the tracked
+ * issues the replies being spoken name — by identifier like LUKE-123, or by
+ * whole title — each resolved against the observed issue roster and never
+ * from the model's words alone. An announcement's one validated subject is a
+ * session, and it stays the whole answer: identifiers riding along in its
+ * sentence earn nothing, because the update was about the session. The
+ * fixture sentence names no issues and a capture run observes no tracker, so
+ * a capture run draws none.
+ */
+export function replyIssueMentions(input: {
+  fixtureSpeaking: boolean;
+  about: SessionIdentity | undefined;
+  captions: readonly string[] | undefined;
+  issues: readonly TrackedIssue[] | undefined;
+}): readonly TrackedIssue[] {
+  if (input.about) return [];
+  const spoken = input.fixtureSpeaking ? FIXTURE_SPEAKING_CAPTION : input.captions?.join("\n");
+  return mentionedIssues(spoken, input.issues);
+}
+
+/**
  * The other half of {@link announcerNotices}: an unbidden evaluator summary is
  * a model's words on a session nobody asked about, so it keeps its original
  * bound — spoken only on a call the developer opened themselves.
@@ -409,6 +431,15 @@ export interface VoiceConversation {
    * preference, which only governs whether the words are drawn.
    */
   mentionedSessions: readonly SessionMention[];
+  /**
+   * The tracked issues the reply being spoken names — by identifier or by
+   * whole title — on the session mentions' own terms: resolved against the
+   * observed issue roster, present exactly as long as the reply, and empty
+   * for an announcement, whose one validated subject is a session. The rows
+   * are the roster's own, because no panel surface holds the issue roster
+   * for the chips to resolve against.
+   */
+  mentionedIssues: readonly TrackedIssue[];
   remoteAudio: RefObject<HTMLAudioElement | null>;
   /** Escape out of an open turn: forget the press and the latch, and stop listening. */
   discardListening: () => void;
@@ -482,6 +513,11 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   const workspaceProjectDefaultsRef = useRef(options.workspaceProjectDefaults);
   const guideRef = useRef<AppGuideSnapshot>(EMPTY_APP_GUIDE);
   const issuesRef = useRef<readonly TrackedIssue[] | undefined>(undefined);
+  // The same roster as state, because the issue chips are derived from it and
+  // a derivation only reruns on what React can see change.
+  const [trackedIssues, setTrackedIssues] = useState<readonly TrackedIssue[] | undefined>(
+    undefined,
+  );
   /**
    * The session under discussion, surviving here across calls: an announcement
    * is often read out on Luke's own speak-only call, which the talk-key press
@@ -802,6 +838,10 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
 
   const syncIssues = useCallback((issues: readonly TrackedIssue[] | undefined) => {
     issuesRef.current = issues;
+    // Held as state beside the ref, because the issue chips derive from it:
+    // the ref feeds a call being opened, the state re-renders the band when
+    // an observation pass moves the board under a reply already speaking.
+    setTrackedIssues(issues);
     voiceSession.current?.updateIssues(issues);
   }, []);
 
@@ -1008,6 +1048,18 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       }),
     [options.fixtureSpeaking, options.sessions, voiceCaption],
   );
+  // The issue half of the same derivation, against the tracker's roster
+  // instead of the sessions'.
+  const mentionedIssueRows = useMemo(
+    () =>
+      replyIssueMentions({
+        fixtureSpeaking: options.fixtureSpeaking,
+        about: voiceCaption.about,
+        captions: voiceCaption.texts,
+        issues: trackedIssues,
+      }),
+    [options.fixtureSpeaking, trackedIssues, voiceCaption],
+  );
 
   const voiceTurn = waveformVoice(voiceStatus);
   const lukeCaptions = lukeCaptionsToShow({
@@ -1046,6 +1098,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     lukeCaptions,
     captionShownAt,
     mentionedSessions: mentioned,
+    mentionedIssues: mentionedIssueRows,
     remoteAudio,
     discardListening,
     stopSpeaking,

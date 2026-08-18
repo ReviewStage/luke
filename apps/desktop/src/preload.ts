@@ -71,6 +71,7 @@ const bridge: AppBridge = {
   createSessionWorkspace: invoke(channels.createSessionWorkspace),
   addWorkspaceAgent: invoke(channels.addWorkspaceAgent),
   executeIssueAction: invoke(channels.executeIssueAction),
+  openIssue: invoke(channels.openIssue),
   sendFeedback: invoke(channels.sendFeedback),
   summonFeedback: invoke(channels.summonFeedback),
   focusPanel: () => ipcRenderer.send(channels.focusPanel),

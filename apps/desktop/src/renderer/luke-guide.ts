@@ -817,8 +817,10 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
               "with no page of its own. The same chips appear while a conversation reply " +
               "names observed sessions by title, or a workspace of grouped chats by its " +
               "name — asking what is being worked on draws one chip per thing named, up to " +
-              "a dozen, a workspace's opening its most recent chat. Past three rows the " +
-              "chips scroll in place, and each presses the same way. " +
+              "a dozen, a workspace's opening its most recent chat. A reply naming tracked " +
+              "issues — by identifier like LUKE-123, or by whole title — draws their chips " +
+              "on the same band, each opening its issue where the tracker keeps it. Past " +
+              "three rows the chips scroll in place, and each presses the same way. " +
               "Always on while voice is available; the panel and the capsule count show the " +
               "same states either way." +
               // Only a build that offers the calendar may describe the quiet:

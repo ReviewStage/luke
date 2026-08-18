@@ -72,6 +72,7 @@ export {
   type SessionMention,
   type SessionMentionKind,
 } from "./session-mentions.js";
+export { MAXIMUM_MENTIONED_ISSUES, mentionedIssues } from "./issue-mentions.js";
 
 // Calendar — when meetings start and end, and nothing else about them.
 export {
@@ -122,6 +123,7 @@ export { CompositeSessionProviderAdapter } from "./composite-provider-adapter.js
 export {
   ISSUE_ACTION_KIND,
   ISSUE_TRACKER_ID,
+  type IssueIdentity,
   type IssueTracker,
   type IssueTrackerAdapter,
   type IssueTransition,
