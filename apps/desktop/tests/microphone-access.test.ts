@@ -2,10 +2,21 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { REALTIME_DEFAULTS, REALTIME_MINT_OUTCOME, type RealtimeDiagnostics } from "@sidecar/core";
 import {
+  currentQuota,
+  fresherQuota,
   hostedVoiceNote,
+  hostedVoiceSpentNote,
   microphoneAccessRow,
+  QUOTA_LEVEL,
+  quotaLevel,
+  quotaResetsWhen,
+  VOICE_SOURCE_DETAIL,
+  VOICE_SOURCE_LABEL,
+  VOICE_SOURCE_PRICE,
   voiceAttentionNote,
+  voiceSourceLabel,
 } from "../src/renderer/microphone-access";
+import { VOICE_SOURCE } from "../src/shared/contracts";
 
 /** A hosted diagnostics report with only what a test wants to vary. */
 function diagnostics(overrides: Partial<RealtimeDiagnostics>): RealtimeDiagnostics {
@@ -134,29 +145,140 @@ test("the mark and the row agree on what ready means", () => {
   }
 });
 
-test("the hosted note says whose allowance voice runs on, and what remains once known", () => {
-  // Before any mint has answered, the note promises only the allowance.
-  assert.match(
+test("the fresher of two quota readings is decided from the readings themselves", () => {
+  const DAY_END = 1_800_003_600_000;
+  const older = { used: 3, limit: 50, remaining: 47, resetsAt: DAY_END };
+  const newerSameDay = { used: 10, limit: 50, remaining: 40, resetsAt: DAY_END };
+  const nextDay = { used: 0, limit: 50, remaining: 50, resetsAt: DAY_END + 86_400_000 };
+
+  // Within one day the smaller remainder is the newer fact; across days the
+  // later reset wins — yesterday's spent counter must not outrank a fresh day.
+  assert.equal(fresherQuota(older, newerSameDay), newerSameDay);
+  assert.equal(fresherQuota(newerSameDay, older), newerSameDay);
+  assert.equal(fresherQuota(newerSameDay, nextDay), nextDay);
+  assert.equal(fresherQuota(undefined, older), older);
+  assert.equal(fresherQuota(older, undefined), older);
+  assert.equal(fresherQuota(undefined, undefined), undefined);
+});
+
+test("the reset is worded on the reader's own clock, and says tomorrow when it is", () => {
+  const now = 1_800_000_000_000;
+  const clock = (at: number) =>
+    new Date(at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+
+  // Inside the same local day, the hour alone is unambiguous.
+  const soon = now + 60_000;
+  assert.equal(quotaResetsWhen(soon, now), `at ${clock(soon)}`);
+
+  // A reset landing on the next local date has to say so: a bare time reads
+  // as today, and the counters turn over at midnight UTC — somebody else's
+  // clock, and never the reader's.
+  const nextDay = new Date(now);
+  nextDay.setDate(nextDay.getDate() + 1);
+  assert.equal(quotaResetsWhen(nextDay.getTime(), now), `tomorrow at ${clock(nextDay.getTime())}`);
+});
+
+test("the spent sentence answers whether Luke is broken before it says when voice returns", () => {
+  const spent = hostedVoiceSpentNote("at 5:00 PM");
+  // The return, on the reader's own clock…
+  assert.match(spent, /back at 5:00 PM/);
+  // …and the reassurance the question is actually about: observation is local
+  // and unmetered, so the rows keep moving whatever the talking has cost.
+  assert.match(spent, /keeps watching your sessions/);
+  // With no reading in hand, the day boundary every counter shares.
+  assert.match(hostedVoiceSpentNote(), /back at midnight UTC/);
+});
+
+test("the numberless note stays short, and withholds the key from a machine that cannot store one", () => {
+  // Before any numbers are in hand, the note promises the allowance — free,
+  // and daily — and nothing else.
+  assert.equal(
     hostedVoiceNote(undefined),
-    /included with your Luke account, under a daily allowance/,
+    "Talking and session checks are included free with your account, up to a daily amount.",
   );
-  assert.match(hostedVoiceNote(undefined), /your own OpenAI key lifts the allowance/i);
 
-  const counted = hostedVoiceNote(
-    diagnostics({
-      lastOutcome: REALTIME_MINT_OUTCOME.SUCCEEDED,
-      quota: { used: 3, limit: 50, remaining: 47, resetsAt: 1_800_003_600_000 },
-    }),
-  );
-  assert.match(counted, /47 of 50 calls left today/);
+  // What a key of the developer's own would change is the toggle's to say,
+  // drawn directly above with the price on its face. A sentence here repeating
+  // it would be the panel selling one half of a choice it is already showing
+  // whole — and it was worded for a key row that no longer stands alone.
+  assert.doesNotMatch(hostedVoiceNote(undefined), /OpenAI/);
 
-  // A spent allowance is a state with its own return time, not an error.
+  // Only the minter's last outcome can speak here — a spent allowance is a
+  // state with its own return, not an error.
   const spent = hostedVoiceNote(
-    diagnostics({
-      lastOutcome: REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED,
-      quota: { used: 51, limit: 50, remaining: 0, resetsAt: 1_800_003_600_000 },
-    }),
+    diagnostics({ lastOutcome: REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED }),
   );
-  assert.match(spent, /used up — it returns at midnight UTC/);
-  assert.doesNotMatch(spent, /left today/);
+  assert.match(spent, /used today's free voice — back at midnight UTC/);
+});
+
+test("the toggle names both sources and what each one costs", () => {
+  // Each half carries its own name, its own price, and one line saying what
+  // running on it is like. A half missing any of the three is a choice made
+  // blind — and the dropdown beneath does not repeat them, so the toggle is
+  // where the whole comparison has to live.
+  for (const source of [VOICE_SOURCE.ACCOUNT, VOICE_SOURCE.KEY]) {
+    assert.ok(VOICE_SOURCE_LABEL[source].length > 0, source);
+    assert.ok(VOICE_SOURCE_PRICE[source].length > 0, source);
+    assert.ok(VOICE_SOURCE_DETAIL[source].length > 0, source);
+    // The spoken name folds the price in, because a control read aloud as
+    // "your OpenAI key" alone withholds the one fact worth knowing first.
+    assert.match(voiceSourceLabel(source), /\(free\)|\(you pay\)/);
+  }
+
+  // Free is free and the key is not: the two prices must never read the same.
+  assert.notEqual(VOICE_SOURCE_PRICE[VOICE_SOURCE.ACCOUNT], VOICE_SOURCE_PRICE[VOICE_SOURCE.KEY]);
+});
+
+test("a meter warns while there is still something left to spend differently", () => {
+  const day = { limit: 50, resetsAt: 1_800_003_600_000 };
+  const at = (remaining: number) => ({ ...day, remaining, used: day.limit - remaining });
+
+  // Running, most of the day.
+  assert.equal(quotaLevel(at(50)), QUOTA_LEVEL.RUNNING);
+  assert.equal(quotaLevel(at(11)), QUOTA_LEVEL.RUNNING);
+  // The last fifth is the warning, and it arrives with ten calls still in
+  // hand — a ceiling nobody saw coming is the thing a meter exists to stop.
+  assert.equal(quotaLevel(at(10)), QUOTA_LEVEL.LOW);
+  assert.equal(quotaLevel(at(1)), QUOTA_LEVEL.LOW);
+  assert.equal(quotaLevel(at(0)), QUOTA_LEVEL.SPENT);
+
+  // One fraction, both meters: the review ceiling is ten times the voice one,
+  // and warns at the same stretch of its own day rather than at a count
+  // copied from the other.
+  const reviews = { limit: 500, resetsAt: day.resetsAt };
+  assert.equal(quotaLevel({ ...reviews, remaining: 101, used: 399 }), QUOTA_LEVEL.RUNNING);
+  assert.equal(quotaLevel({ ...reviews, remaining: 100, used: 400 }), QUOTA_LEVEL.LOW);
+
+  // A meter with no ceiling has nothing to say, which is not the same as
+  // having nothing left: it must not sit there warning about nothing.
+  assert.equal(
+    quotaLevel({ limit: 0, remaining: 3, used: 0, resetsAt: day.resetsAt }),
+    QUOTA_LEVEL.RUNNING,
+  );
+});
+
+test("a reading past its own reset is no reading, and a stale spent outcome goes quiet", () => {
+  const now = 1_800_000_000_000;
+  const running = { used: 50, limit: 50, remaining: 0, resetsAt: now + 3_600_000 };
+  const expired = { used: 50, limit: 50, remaining: 0, resetsAt: now - 1 };
+
+  assert.equal(currentQuota(running, now), running);
+  assert.equal(currentQuota(expired, now), undefined);
+  assert.equal(currentQuota(undefined, now), undefined);
+
+  // Yesterday's refusal, dated by its own expired quota, describes an
+  // allowance that no longer exists — the fresh day promises numbers again.
+  const rolled = hostedVoiceNote(
+    diagnostics({ lastOutcome: REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED, quota: expired }),
+    { now },
+  );
+  assert.doesNotMatch(rolled, /used today's free voice/);
+  assert.match(rolled, /included free with your account/);
+
+  // Still inside its day, the refusal stands.
+  const standing = hostedVoiceNote(
+    diagnostics({ lastOutcome: REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED, quota: running }),
+    { now },
+  );
+  assert.match(standing, /used today's free voice/);
 });

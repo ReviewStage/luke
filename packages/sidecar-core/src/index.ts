@@ -215,10 +215,12 @@ export {
   type HostedMintAnswer,
   type HostedQuota,
   type HostedReviewAnswer,
+  type HostedUsageAnswer,
   hostedErrorFromWire,
   hostedMintAnswerFromWire,
   hostedQuotaFromWire,
   hostedReviewAnswerFromWire,
+  hostedUsageAnswerFromWire,
 } from "./hosted-service.js";
 export {
   REALTIME_CALLS_PATH,

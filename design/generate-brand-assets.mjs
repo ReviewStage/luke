@@ -885,6 +885,11 @@ function faceArtModule() {
 export const FACE_ART = {
   /** A square window centred on the face. Loud motions leave it, and may. */
   VIEW_BOX: "${box.map(fmt).join(" ")}",
+  /**
+   * The face cropped to itself, the way the static mark SVGs are cut. Only for
+   * a mark that never moves: it is tight enough that any motion would leave it.
+   */
+  MARK_VIEW_BOX: "${markBox().map(fmt).join(" ")}",
   /** The head's resting tilt, about the point the motions pivot on. */
   TILT: "rotate(${FACE.tilt} 120 124)",
   /** The capital-L nose, curling into the smile. */
@@ -998,9 +1003,20 @@ const svgOpenAt = (x, y, w, h) =>
 const svgOpen = (w, h) => svgOpenAt(0, 0, w, h);
 // Motion marks keep the full animation canvas; static artwork is cropped tight.
 const markSvg = (body) => `${svgOpen(240, 240)}${body}</svg>`;
-function tightMarkSvg(body, pad = 6) {
+/**
+ * The static mark's own window: the face's bounding box with a little air.
+ * Shared by the cut SVGs and by the app, which draws the same mark itself.
+ */
+const MARK_PAD = 6;
+
+function markBox(pad = MARK_PAD) {
   const b = faceBBox();
-  return `${svgOpenAt(b.x - pad, b.y - pad, b.w + 2 * pad, b.h + 2 * pad)}${body}</svg>`;
+  return [b.x - pad, b.y - pad, b.w + 2 * pad, b.h + 2 * pad];
+}
+
+function tightMarkSvg(body, pad = MARK_PAD) {
+  const [x, y, w, h] = markBox(pad);
+  return `${svgOpenAt(x, y, w, h)}${body}</svg>`;
 }
 // Words are trimmed vertically to the taller of the face and the letters.
 function wordSvg({ body, width }, pad = 6) {

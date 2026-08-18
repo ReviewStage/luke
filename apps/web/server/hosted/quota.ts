@@ -1,4 +1,5 @@
-import { sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
+import type { HostedQuota, HostedUsageAnswer } from "../core.js";
 import type { createDatabase } from "../db/index.js";
 import { hostedUsage } from "../db/usage-schema.js";
 
@@ -21,17 +22,19 @@ export const HOSTED_DAILY_LIMIT: Record<HostedMeter, number> = {
   [HOSTED_METER.ATTENTION_REVIEW]: 500,
 };
 
-export interface HostedQuota {
-  used: number;
-  limit: number;
-  remaining: number;
-  /** When the day's counters reset, as epoch milliseconds. */
-  resetsAt: number;
-}
+/* The quota shape is the wire contract's, imported rather than restated, so
+   the endpoint and the desktop reading it cannot drift. */
+export type { HostedQuota } from "../core.js";
 
 export interface HostedSpend {
   allowed: boolean;
   quota: HostedQuota;
+}
+
+/** Where one meter stands on one day, worded once for the spend and the read. */
+function meterStanding(used: number, meter: HostedMeter, day: string): HostedQuota {
+  const limit = HOSTED_DAILY_LIMIT[meter];
+  return { used, limit, remaining: Math.max(0, limit - used), resetsAt: utcDayEnd(day) };
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -79,14 +82,30 @@ export async function spendHostedMeter(
   if (!row) throw new Error("The usage upsert returned no row.");
 
   const used = spendsVoice ? row.voiceCalls : row.attentionReviews;
-  const limit = HOSTED_DAILY_LIMIT[input.meter];
   return {
-    allowed: used <= limit,
-    quota: {
-      used,
-      limit,
-      remaining: Math.max(0, limit - used),
-      resetsAt: utcDayEnd(day),
-    },
+    allowed: used <= HOSTED_DAILY_LIMIT[input.meter],
+    quota: meterStanding(used, input.meter, day),
+  };
+}
+
+type UsageReadDatabase = Pick<ReturnType<typeof createDatabase>, "select">;
+
+/**
+ * Reads where today's allowance stands on both meters without spending
+ * either. A day with no row yet has spent nothing, which is an answer, not
+ * an absence — the panel asks this before the first call of the day.
+ */
+export async function readHostedUsage(
+  database: UsageReadDatabase,
+  input: { userId: string; now: number },
+): Promise<HostedUsageAnswer> {
+  const day = utcDayKey(input.now);
+  const [row] = await database
+    .select()
+    .from(hostedUsage)
+    .where(and(eq(hostedUsage.userId, input.userId), eq(hostedUsage.day, day)));
+  return {
+    voice: meterStanding(row?.voiceCalls ?? 0, HOSTED_METER.VOICE_CALL, day),
+    attention: meterStanding(row?.attentionReviews ?? 0, HOSTED_METER.ATTENTION_REVIEW, day),
   };
 }

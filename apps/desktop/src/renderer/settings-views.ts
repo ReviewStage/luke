@@ -72,7 +72,7 @@ export function pageExitMs(element: Element | null): number {
  * each setting. That the two agree is a test rather than a type, because one
  * is a sentence and the other is a page.
  */
-export const SETTING_PAGE: Record<AppSettingId, SettingsSubview> = {
+export const SETTING_PAGE: Record<AppSettingId, SettingsView> = {
   [APP_SETTING_ID.VOICE]: SETTINGS_VIEW.VOICE,
   [APP_SETTING_ID.VOICE_SPEED]: SETTINGS_VIEW.VOICE,
   [APP_SETTING_ID.VOICE_CAPTIONS]: SETTINGS_VIEW.VOICE,
@@ -92,24 +92,79 @@ export const SETTING_PAGE: Record<AppSettingId, SettingsSubview> = {
   [APP_SETTING_ID.DEFAULT_WORKSPACE_PROVIDER]: SETTINGS_VIEW.CONNECTIONS,
   [APP_SETTING_ID.WORKSPACE_AGENT_MODEL]: SETTINGS_VIEW.CONNECTIONS,
   [APP_SETTING_ID.WORKSPACE_AGENT_EFFORT]: SETTINGS_VIEW.CONNECTIONS,
+  // The front page itself, which is why the value type is a view rather than
+  // a subview: the choice of what Luke runs on leads the page rather than
+  // living on one the page opens. By-hand-only like the three above, so
+  // nothing ever flies to it — but where it is drawn is a fact either way.
+  [APP_SETTING_ID.VOICE_SOURCE]: SETTINGS_VIEW.ROOT,
 };
 
 /**
  * Which page draws a provider's credential row. Every key lives under
- * Connections except the one voice runs on: the OpenAI row stands at the top
- * of the Voice page, beside the feature it turns on. This is what brings a
- * credential entry back from the key slot to the page it began on — restoring
- * Connections around an entry begun on Voice would land the answer on a page
- * nobody was looking at.
+ * Connections except the one voice runs on: the OpenAI row stands in the
+ * What Luke runs on section on the Settings front page, beside the allowance it
+ * replaces. This is what brings a credential entry back from the key slot to
+ * the page it began on — restoring Connections around an entry begun on the
+ * front page would land the answer on a page nobody was looking at.
  */
-export function credentialSettingsPage(providerId: CredentialProviderId): SettingsSubview {
+export function credentialSettingsPage(providerId: CredentialProviderId): SettingsView {
   return providerId === VOICE_CREDENTIAL_PROVIDER_ID
-    ? SETTINGS_VIEW.VOICE
+    ? SETTINGS_VIEW.ROOT
     : SETTINGS_VIEW.CONNECTIONS;
 }
 
+/**
+ * The three things that can stand the panel down and take its place: a key
+ * being entered, a calendar sign-in waiting on the browser, and a note being
+ * written. Each is begun from a row on one of Settings' pages, and each has to
+ * come back to that row.
+ */
+export const PANEL_STAND_DOWN = {
+  KEY: "key",
+  CALENDAR: "calendar",
+  FEEDBACK: "feedback",
+} as const;
+
+export type PanelStandDown = (typeof PANEL_STAND_DOWN)[keyof typeof PANEL_STAND_DOWN];
+
+/**
+ * The two of those three the slot shape is drawn around, never both at once.
+ * A note is not one of them: the composer is its own shape, at its own size.
+ */
+export type SlotOccupant = typeof PANEL_STAND_DOWN.KEY | typeof PANEL_STAND_DOWN.CALENDAR;
+
+/** What stood the panel down, and — for a key — whose row it was begun from. */
+export type StoodDown =
+  | { kind: typeof PANEL_STAND_DOWN.KEY; providerId: CredentialProviderId }
+  | { kind: typeof PANEL_STAND_DOWN.CALENDAR }
+  | { kind: typeof PANEL_STAND_DOWN.FEEDBACK };
+
+/**
+ * Which page a stand-down comes back to: the page its own row is drawn on.
+ * Returning is a fact about what was begun, not about what was begun last —
+ * one remembered page shared by all three lands a cancelled note on whichever
+ * page the last key entry happened to belong to.
+ *
+ * A key's row is its provider's; the calendar's block stands under
+ * Integrations on Connections; the feedback composer's section is on the front
+ * page itself, which is also where a return that knows nothing else belongs.
+ */
+export function standDownReturnPage(stood: StoodDown): SettingsView {
+  switch (stood.kind) {
+    case PANEL_STAND_DOWN.KEY:
+      return credentialSettingsPage(stood.providerId);
+    case PANEL_STAND_DOWN.CALENDAR:
+      return SETTINGS_VIEW.CONNECTIONS;
+    case PANEL_STAND_DOWN.FEEDBACK:
+      return SETTINGS_VIEW.ROOT;
+  }
+}
+
 /** How each page names itself, which is how the guide's by-hand paths word it. */
-export const SETTINGS_PAGE_LABEL: Record<SettingsSubview, string> = {
+export const SETTINGS_PAGE_LABEL: Record<SettingsView, string> = {
+  // Not a page a row opens, but a place a setting can be drawn — and the
+  // words the guide's by-hand paths use for it.
+  [SETTINGS_VIEW.ROOT]: "front page",
   [SETTINGS_VIEW.VOICE]: "Voice",
   [SETTINGS_VIEW.APPEARANCE]: "Appearance",
   [SETTINGS_VIEW.SHORTCUTS]: "Keyboard shortcuts",

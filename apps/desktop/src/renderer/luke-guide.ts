@@ -44,6 +44,7 @@ import type {
   AppSettings,
   CredentialSource,
   MicrophoneStatus,
+  VoiceSource,
 } from "../shared/contracts";
 import {
   ACCOUNT_PROVIDER,
@@ -51,6 +52,7 @@ import {
   APP_SETTING_DEFAULTS,
   CREDENTIAL_SOURCE,
   SECRET_STORAGE,
+  VOICE_SOURCE,
 } from "../shared/contracts";
 import {
   CLOUD_AGENT_PROVIDER_LIST,
@@ -76,6 +78,7 @@ export const APP_SETTING_ID = {
   DEFAULT_WORKSPACE_PROVIDER: "default_workspace_provider",
   WORKSPACE_AGENT_MODEL: "workspace_agent_model",
   WORKSPACE_AGENT_EFFORT: "workspace_agent_effort",
+  VOICE_SOURCE: "voice_source",
 } as const;
 
 export type AppSettingId = (typeof APP_SETTING_ID)[keyof typeof APP_SETTING_ID];
@@ -97,6 +100,10 @@ const SETTINGS_TAB = "the panel's Settings tab";
 /* The tab's front page opens pages, and each setting is changed by hand on
    one of them — so every by-hand path names its page, worded once each. */
 const VOICE_PAGE = `${SETTINGS_TAB}, on its Voice page`;
+/** Where the allowance meters and the OpenAI key row both live. */
+const VOICE_SOURCE_SECTION = `${SETTINGS_TAB}, on its front page, in the What Luke runs on section at the top`;
+/** Where the signed-in identity and the two ways out of it live. */
+const ACCOUNT_SECTION = `the Account section, at the foot of ${SETTINGS_TAB}'s front page`;
 const APPEARANCE_PAGE = `${SETTINGS_TAB}, on its Appearance page`;
 const SHORTCUTS_PAGE = `${SETTINGS_TAB}, on its Keyboard shortcuts page`;
 const CONNECTIONS_PAGE = `${SETTINGS_TAB}, on its Connections page`;
@@ -118,6 +125,16 @@ const CONDUCTOR_DEFAULT_CHOICE = "Conductor's default";
  * offers: while nothing is chosen, Luke asks which provider each time.
  */
 const ASK_EACH_TIME_CHOICE = "ask each time";
+
+/**
+ * How the two sources are named in the guide — the toggle's own words, minus
+ * the price tag beside them, because a spoken value is read aloud and "(you
+ * pay)" is a label rather than a name.
+ */
+const VOICE_SOURCE_CHOICE: Record<VoiceSource, string> = {
+  [VOICE_SOURCE.ACCOUNT]: "your Luke account",
+  [VOICE_SOURCE.KEY]: "your OpenAI key",
+};
 
 /**
  * The words a pace is asked for in, slowest to fastest, each paired with the
@@ -406,6 +423,28 @@ const SETTING_GUIDE: Record<
   // Described in the stopping-a-reply fact instead, on the same terms as the
   // other two keys' stored choices.
   stopHotkey: () => undefined,
+  voiceSource: (settings) => ({
+    id: APP_SETTING_ID.VOICE_SOURCE,
+    label: "What Luke runs on",
+    description:
+      "Which credential Luke speaks and reviews sessions on: the signed-in Luke account, free " +
+      "and metered daily, or the developer's own OpenAI key, unmetered and billed to them by " +
+      "OpenAI. A key stays stored either way, so the free allowance can be used without " +
+      "deleting it.",
+    kind: APP_SETTING_KIND.CHOICE,
+    value: VOICE_SOURCE_CHOICE[settings.voiceSource],
+    // Every install begins on the account: the allowance is what a sign-in
+    // carries, and a key is something the developer goes and gets.
+    defaultValue: VOICE_SOURCE_CHOICE[VOICE_SOURCE.ACCOUNT],
+    choices: Object.values(VOICE_SOURCE_CHOICE),
+    // By hand only, and deliberately: this is the one switch that decides
+    // whose money is spent. It is not a credential, so the guide may describe
+    // it — but moving it is the developer's own act on their own bill, and a
+    // spoken ask that could start spending their key is exactly the shape of
+    // thing the refusal exists for.
+    adjustable: false,
+    manual: VOICE_SOURCE_SECTION,
+  }),
   // Not a switch but a set of keys, so it is described in the facts instead:
   // which providers are connected, and that a key is only ever typed by hand.
   credentialSources: () => undefined,
@@ -557,17 +596,19 @@ function voiceKeyFact(settings: AppSettings, voiceAvailable: boolean): AppGuideF
   const source = settings.credentialSources[openai.id];
   const hosted = voiceAvailable && source === CREDENTIAL_SOURCE.NONE;
   return {
-    label: "OpenAI",
+    label: openai.displayName,
     detail:
       `${openai.displayName} (${connectionWord(source)}). ` +
       (hosted
-        ? `Voice and session review currently run on the signed-in Luke account, which includes ` +
-          `a daily allowance. Connecting a personal OpenAI key lifts the allowance and runs ` +
-          `voice on that key instead. `
-        : `Connecting OpenAI is what lets Luke speak, and review which sessions need a person; ` +
-          `a signed-in Luke account also includes both under a daily allowance without one. `) +
-      `The key is typed by hand into ${VOICE_PAGE}, at its top — never spoken, and never ` +
-      `repeated back.`,
+        ? `Voice and session review run on the signed-in Luke account's daily allowance, free; ` +
+          `connecting your own key removes the daily limit and runs them on it instead, billed ` +
+          `by OpenAI. `
+        : source === CREDENTIAL_SOURCE.NONE
+          ? `Signing in — or connecting a key — is what lets Luke speak and review sessions. `
+          : `Voice and session review run on this key: no daily limit, nothing through Luke's ` +
+            `service, and OpenAI bills you for what you use. `) +
+      `The key is typed by hand into ${VOICE_SOURCE_SECTION} — never read from the environment, ` +
+      `never spoken, and never repeated back.`,
   };
 }
 
@@ -618,15 +659,26 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "chat is its own row: a workspace holding several draws them inside one tray named by " +
         "the workspace at its top, one holding a single chat stays one row titled by the " +
         "workspace, and every chat can be seen, opened, and messaged individually. Settings " +
-        "holds a front page whose rows open its Voice, Appearance, Keyboard shortcuts, and " +
-        "Connections pages — each led back out by its back button or Escape — and keeps the " +
-        "Feedback section and Quit on the front page itself; the Voice page reveals itself in " +
-        "stages — the OpenAI key section alone until voice is available at all (the signed-in " +
-        "account includes it, so for most people the page opens whole, with a note saying " +
-        "whose allowance voice runs on and how much of today's remains), then the microphone " +
-        "permission under it, and the voice settings only once both stand — and a small " +
-        "exclamation mark sits on whichever stage still needs a hand, on the front page's " +
-        "Voice row while either does, and on the Keyboard shortcuts rows while voice is off, " +
+        "holds a front page led by the What Luke runs on section — a two-way toggle naming the " +
+        "signed-in Luke account (free, a daily amount) against the developer's own OpenAI key " +
+        "(unmetered, billed by OpenAI), with the live one marked and the other pressable to " +
+        "switch: choosing the key with none stored asks for one, and choosing the account " +
+        "parks a stored key without deleting it. Under the toggle stands whichever half is " +
+        "live, and only that one: on the account, small meters filling with the day's talking " +
+        "and announcements and checks on your sessions — blue until the last fifth of either " +
+        "is left and amber from there on — when they reset, and a folded How this works " +
+        "saying what spends each; on the key, the OpenAI row itself, typed by hand and never " +
+        "read from the environment, and a folded How your key is used saying it pays for " +
+        "those same two things, straight from the Mac to OpenAI with no daily limit " +
+        "— then rows that open its Voice, Appearance, Keyboard " +
+        "shortcuts, and Connections pages — each led back out by its back button or Escape — " +
+        "and keeps the Feedback section, the Account section, and Quit on the front page " +
+        "itself, the account last because signing out and deleting are done once or never; the Voice page " +
+        "holds the microphone permission and then the voice settings once voice is available, " +
+        "and only a pointer back to What Luke runs on while it is not — and a small " +
+        "exclamation mark sits on whatever still needs a hand: the What Luke runs on heading " +
+        "while voice has nothing to run on, the front page's Voice row and the microphone row " +
+        "while the permission is ungranted, and the Keyboard shortcuts rows while voice is off, " +
         "where each key's chord stays shown and changeable but answers nothing until voice is " +
         "available; the " +
         "menu bar item's Settings… opens the same tab, and Command-comma switches to it while " +
@@ -644,13 +696,13 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       label: "Account",
       detail:
         account.status === ACCOUNT_STATUS.SIGNED_IN
-          ? `Signed in as ${account.email} through ${account.provider === ACCOUNT_PROVIDER.GITHUB ? "GitHub" : "Google"}. Sign out by hand from Account, at the foot of the Settings tab's front page just above Quit — it asks before acting. The same section's Delete account row erases the account and everything Luke's service holds for it, cannot be undone, and is only ever done by hand — its button asks before acting, and no spoken ask can reach it.`
+          ? `Signed in as ${account.email} through ${account.provider === ACCOUNT_PROVIDER.GITHUB ? "GitHub" : "Google"}. Sign out by hand from ${ACCOUNT_SECTION} — it asks before acting. The same section's Delete account row erases the account and everything Luke's service holds for it, cannot be undone, and is only ever done by hand — its button asks before acting, and no spoken ask can reach it.`
           : "Not signed in. The sign-in screen greets the launch once with Google and GitHub, then closes like any panel. While signed out the strip beside the housing keeps Luke's face and a small Sign in label in place of the session count, and hovering or pressing it brings the sign-in screen back. Live sessions and Luke's controls stay off until sign-in finishes. Choosing a provider stands the panel down to a small waiting popup with a Cancel button while the browser finishes, and the panel opens itself once the sign-in lands.",
     },
     {
       label: "Feedback and prompts",
       detail:
-        "The Feedback section near the foot of the Settings tab, just above the Account section and Quit — or the menu bar item's Send " +
+        "The Feedback section near the foot of the Settings tab, just above Quit — or the menu bar item's Send " +
         "Feedback… and Submit a Prompt… — opens a composer under the notch. Send feedback is for " +
         "bugs and ideas; Submit a prompt sends a prompt to a coding agent, and one the founders " +
         "like ships in the next release. Either goes by email to the founders with an optional " +
@@ -817,8 +869,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
           {
             label: "Voice",
             detail:
-              "Off: no OpenAI key is connected, so no conversation can be opened. " +
-              `The key is entered in ${VOICE_PAGE}, at its top.`,
+              "Off: nothing to run voice on, so no conversation can be opened. " +
+              `Signing in turns it on with the included allowance; a key entered in ${VOICE_SOURCE_SECTION} also works.`,
           },
         ]),
     providersFact(input.settings),

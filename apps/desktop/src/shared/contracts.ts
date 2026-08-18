@@ -2,6 +2,7 @@ import type {
   AttentionRequestResult,
   AttentionSpeech,
   FixtureSnapshot,
+  HostedUsageAnswer,
   IssueToolAction,
   NormalizedSession,
   ObservedWorkspaceProject,
@@ -117,6 +118,29 @@ export interface ObservedAccountCalendars {
  * form factor keep their defaults beside their own types in `@sidecar/core`,
  * and the three keys' defaults live with the registrar that owns them.
  */
+/**
+ * The two credentials Luke can speak and review sessions on. Both paths reach
+ * OpenAI in the end; what differs is whose account pays and whether anything
+ * passes through Luke's service on the way.
+ *
+ * The account is free and metered daily; the key is the developer's own,
+ * unmetered, billed to them by OpenAI, and never touches Luke's service. A
+ * stored choice is what lets a key stay stored while the free allowance is
+ * being spent — without one, connecting a key would be the choice, and the
+ * only way back would be deleting it.
+ */
+export const VOICE_SOURCE = {
+  ACCOUNT: "account",
+  KEY: "key",
+} as const;
+
+export type VoiceSource = (typeof VOICE_SOURCE)[keyof typeof VOICE_SOURCE];
+
+/** Guards the source an IPC message carries, which the renderer chooses. */
+export function isVoiceSource(value: unknown): value is VoiceSource {
+  return value === VOICE_SOURCE.ACCOUNT || value === VOICE_SOURCE.KEY;
+}
+
 export const APP_SETTING_DEFAULTS = {
   showInDock: false,
   showInMenuBar: true,
@@ -202,6 +226,14 @@ export interface AppSettings {
    * they learn a deleted key turned it back off.
    */
   voiceAvailable: boolean;
+  /**
+   * Which credential Luke actually speaks and reviews sessions on right now,
+   * resolved rather than stored: the choice the user made where it can be
+   * honoured, and what is available where it cannot. The panel draws its
+   * toggle from this, so what is marked in use is always what a press of the
+   * talk key would really spend.
+   */
+  voiceSource: VoiceSource;
   /**
    * Whether this build can offer the Google Calendar sign-in: an OAuth client
    * registered and usable this run. Without one the integration is not drawn
@@ -614,6 +646,13 @@ export interface AppBridge {
   resetSettings(scope: SettingsResetScope): Promise<SettingsUpdateResult>;
   /** Turns the quieting of Music and Spotify during a spoken exchange on or off. */
   setDuckOtherMedia(enabled: boolean): Promise<SettingsUpdateResult>;
+  /**
+   * Chooses which credential Luke speaks and reviews sessions on. A choice
+   * only ever withholds a stored key while the account can serve instead — it
+   * can turn spending off, never on, so nothing here can start spending a key
+   * that is not there or an allowance that is not signed in.
+   */
+  setVoiceSource(source: VoiceSource): Promise<SettingsUpdateResult>;
   /** Turns the Mac-microphone-over-Bluetooth-headset preference on or off. */
   setPreferBuiltInMicrophone(enabled: boolean): Promise<SettingsUpdateResult>;
   /**
@@ -814,6 +853,12 @@ export interface AppBridge {
    * It carries no credential material, which is what lets it cross at all.
    */
   requestRealtimeDiagnostics(): Promise<RealtimeDiagnostics>;
+  /**
+   * Where today's hosted allowance stands on both meters, read from the
+   * service without spending either. Nothing on a keyed or signed-out run,
+   * where no allowance is in play.
+   */
+  requestHostedUsage(): Promise<HostedUsageAnswer | undefined>;
   notifyReady(): void;
   quit(): void;
   onLifecycle(callback: (eventName: string) => void): () => void;
@@ -903,6 +948,7 @@ export const channels = {
   setAskHotkey: "app:set-ask-hotkey",
   setStopHotkey: "app:set-stop-hotkey",
   setDuckOtherMedia: "app:set-duck-other-media",
+  setVoiceSource: "app:set-voice-source",
   setPreferBuiltInMicrophone: "app:set-prefer-built-in-microphone",
   setQuietDuringMeetings: "app:set-quiet-during-meetings",
   connectGoogleCalendar: "app:connect-google-calendar",
@@ -940,6 +986,7 @@ export const channels = {
   focusPanel: "app:focus-panel",
   requestRealtimeCredential: "app:request-realtime-credential",
   requestRealtimeDiagnostics: "app:request-realtime-diagnostics",
+  requestHostedUsage: "app:request-hosted-usage",
   attentionSpeech: "app:attention-speech",
   voiceHotkeyPress: "app:voice-hotkey-press",
   voiceHotkeyRelease: "app:voice-hotkey-release",

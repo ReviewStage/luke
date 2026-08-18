@@ -114,6 +114,7 @@ import { GoogleCalendarReader } from "./google-calendar";
 import { GoogleCalendarSignIn } from "./google-calendar-oauth";
 import { HostedAttentionEvaluator } from "./hosted-attention-evaluator";
 import { HostedRealtimeCredentialMinter } from "./hosted-realtime-credentials";
+import { HostedUsageReader } from "./hosted-usage";
 import { HOTKEY_RANK, HotkeyRegistrar } from "./hotkey-registrar";
 import { JulesSessionAdapter } from "./jules-adapter";
 import { LinearIssueTracker } from "./linear-tracker";
@@ -142,6 +143,7 @@ import {
   type AppBootstrap,
   channels,
   isSettingsResetScope,
+  isVoiceSource,
   type MicrophoneRoute,
   type MicrophoneStatus,
   type ObservedAccountCalendars,
@@ -151,6 +153,7 @@ import {
   SETTINGS_RESET_SCOPE,
   type SessionOpenResult,
   type SessionTranscriptResult,
+  VOICE_SOURCE,
 } from "./shared/contracts";
 import {
   CREDENTIAL_PROVIDER_ID,
@@ -408,6 +411,8 @@ let voiceUnavailableDiagnostics = unavailableRealtimeDiagnostics({
   fixtureMode: !runMode.sendsNetwork,
   apiKeyConfigured: false,
 });
+/** Reads the hosted allowance; exists exactly while the hosted minter does. */
+let hostedUsageReader: HostedUsageReader | undefined;
 // Quiets Music and Spotify while a spoken exchange is live. It lives here
 // rather than in the renderer because letting the players back up must survive
 // anything the renderer does — and only this process may run a helper.
@@ -919,14 +924,20 @@ async function applyVoiceCredential(): Promise<void> {
   // Keychain decrypt, which a run that would refuse to use it has no business
   // asking for. That is also why the report says no key resolved — for this run,
   // none did.
+  // Which of the two the store resolved — the user's choice where it can be
+  // honoured — decides whether the key is read at all, and it is asked last of
+  // the three for the reason above: every gate a run can fail is checked
+  // before anything reaches the Keychain.
   const apiKey =
-    runMode.sendsNetwork && accountCapabilitiesActive()
+    runMode.sendsNetwork &&
+    accountCapabilitiesActive() &&
+    (await settingsStore.readVoiceSource()) === VOICE_SOURCE.KEY
       ? await settingsStore.readApiKey(VOICE_CREDENTIAL_PROVIDER_ID)
       : undefined;
   // The hosted service stands in exactly where a key could have: a run that
-  // sends network traffic, signed in, with no key of the developer's own. The
-  // developer's key wins when both are present — it is unmetered, and it keeps
-  // voice and review off Luke's servers entirely.
+  // sends network traffic, signed in, and not running on a key of the
+  // developer's own — because none is stored, or because they chose the
+  // allowance over the one that is.
   const hosted =
     apiKey === undefined && runMode.sendsNetwork && account.status === ACCOUNT_STATUS.SIGNED_IN;
   const evaluator = apiKey
@@ -966,6 +977,7 @@ async function applyVoiceCredential(): Promise<void> {
     fixtureMode: !runMode.sendsNetwork,
     apiKeyConfigured: apiKey !== undefined,
   });
+  hostedUsageReader = hosted ? new HostedUsageReader(hostedServiceSeams()) : undefined;
   // Warm only when the next press would actually mint through the service.
   if (hosted) warmHostedVoice();
   reportVoiceAvailability(apiKey !== undefined);
@@ -1494,6 +1506,21 @@ function registerIpc(): void {
     },
     save: (enabled) => settingsStore.setDuckOtherMedia(enabled),
     apply: (result) => mediaDuck.setEnabled(result.settings.duckOtherMedia),
+    refusal: "Could not save that setting on this system.",
+  });
+
+  // Which credential Luke runs on, rebuilt at once rather than at the next
+  // launch: the whole point of the choice is that the next thing said runs on
+  // what was just chosen. The rebuild is the same one a key being saved or
+  // deleted triggers, so the minter, the reviewer, and the usage reader can
+  // never be left built for the source that was just switched away from.
+  registerSettingHandler(channels.setVoiceSource, {
+    validate(source: unknown) {
+      if (!isVoiceSource(source)) throw new Error("Invalid voice source request");
+      return source;
+    },
+    save: (source) => settingsStore.setVoiceSource(source),
+    apply: () => void applyVoiceCredential(),
     refusal: "Could not save that setting on this system.",
   });
 
@@ -2296,6 +2323,13 @@ function registerIpc(): void {
   ipcMain.handle(channels.requestRealtimeDiagnostics, (event) => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
     return realtimeCredentials?.diagnostics() ?? voiceUnavailableDiagnostics;
+  });
+
+  ipcMain.handle(channels.requestHostedUsage, async (event) => {
+    if (!trustedSender(event)) throw new Error("Untrusted renderer");
+    // Nothing rather than an error on a keyed or signed-out run: no allowance
+    // is in play, and the page words itself without numbers.
+    return hostedUsageReader?.read();
   });
 
   ipcMain.on(channels.quit, (event) => {

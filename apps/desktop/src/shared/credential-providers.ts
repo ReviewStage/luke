@@ -57,10 +57,6 @@ const LINEAR_ENVIRONMENT = {
   API_KEY: "LINEAR_API_KEY",
 } as const;
 
-const OPENAI_ENVIRONMENT = {
-  API_KEY: "OPENAI_API_KEY",
-} as const;
-
 /**
  * The only kind of credential Luke will hold for a provider that issues more
  * than one. Only a provider that publishes a format declares this; the rest
@@ -182,17 +178,27 @@ export const CREDENTIAL_PROVIDERS: Readonly<Record<CredentialProviderId, Credent
   },
   [CREDENTIAL_PROVIDER_ID.OPENAI]: {
     id: CREDENTIAL_PROVIDER_ID.OPENAI,
+    // The service, plainly. The row stands inside the section that already
+    // says what it is for — the other way voice can run — so the name has no
+    // acronym to carry: "BYOK" named the choice for anyone who already knew
+    // the word, and named nothing for everyone else.
     displayName: "OpenAI",
-    // The panel writes apostrophes as `&rsquo;` in JSX and this string is read
-    // as text, so the apostrophe here is the typographic one rather than a
-    // straight quote.
-    description: "The API key for Luke’s voice capabilities.",
+    // No description, alone among the providers, because its section says
+    // everything one could: the toggle above the row names both sources and
+    // what each costs, and the disclosure below it says what the key is spent
+    // on and who bills for it. A sentence between them could only repeat one
+    // of the two.
     // Realtime is what a spoken turn runs on, and an account that cannot reach
     // it fails at the first word rather than at the paste — so the line says so
     // before the key is entered rather than after.
     hint: "Create a key on the OpenAI platform under API keys. Talking uses the Realtime API, which needs billing enabled.",
     apiKeysUrl: "https://platform.openai.com/api-keys",
-    environmentVariables: [OPENAI_ENVIRONMENT.API_KEY],
+    // Deliberately no environment fallback, alone among the providers: an
+    // `OPENAI_API_KEY` exported for some other tool would silently start
+    // spending itself on voice and move review off the hosted path — a key
+    // that costs money and changes where session fields travel is connected
+    // by hand or not at all.
+    environmentVariables: [],
     // No key format. Every kind OpenAI issues carries `sk-`, so a prefix would
     // refuse nothing, and which of them can reach Realtime is something only
     // OpenAI can answer — it answers it on the first mint.

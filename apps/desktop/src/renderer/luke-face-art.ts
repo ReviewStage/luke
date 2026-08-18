@@ -9,6 +9,11 @@
 export const FACE_ART = {
   /** A square window centred on the face. Loud motions leave it, and may. */
   VIEW_BOX: "48 51 146 146",
+  /**
+   * The face cropped to itself, the way the static mark SVGs are cut. Only for
+   * a mark that never moves: it is tight enough that any motion would leave it.
+   */
+  MARK_VIEW_BOX: "53.85 62.67 134.29 122.37",
   /** The head's resting tilt, about the point the motions pivot on. */
   TILT: "rotate(-8 120 124)",
   /** The capital-L nose, curling into the smile. */
