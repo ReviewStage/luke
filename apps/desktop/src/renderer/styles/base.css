@@ -161,12 +161,16 @@
 }
 
 .app-stage {
-  /* Mirrors CAPSULE_SIDE_WIDTH and PEEK_SIDE_GROWTH in
+  /* Mirrors CAPSULE_SIDE_WIDTH, PEEK_SIDE_GROWTH, and PEEK_MIN_WIDTH in
      packages/sidecar-core/src/geometry.ts, so the drawn shapes match the window
-     the main process gives them. */
+     the main process gives them. The peek's floor is its width beside the
+     14-inch housing every proportion was measured against: Luke's words wrap
+     at the peek's width, and a bubble growing from no housing would wrap the
+     caption's four lines at barely half of it, cutting the reply off at the
+     block's edge. */
   --capsule-width: calc(var(--notch-housing-width) + 72px);
   --capsule-height: max(var(--notch-top-inset), 32px);
-  --peek-width: calc(var(--notch-housing-width) + 248px);
+  --peek-width: max(calc(var(--notch-housing-width) + 248px), 458px);
   /* The capsule with room for the meter beside the face rather than instead of
      it. Only the left wing needs it — that is where both are drawn — so only
      that side grows: 18px for the meter and the 8px between them, added to the

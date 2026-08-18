@@ -4,6 +4,7 @@ import {
   CAPSULE_SIDE_WIDTH,
   PANEL_FORM_FACTOR,
   PANEL_WIDTH,
+  PEEK_MIN_WIDTH,
   PEEK_SIDE_GROWTH,
   positionNotchWindow,
   SESSION_NOTICE_HEIGHT,
@@ -20,7 +21,7 @@ const notchedDisplay = {
 
 /** The widest shape a compact window ever draws, before spring overshoot. */
 const peekWidth = (housingWidth: number) =>
-  housingWidth + (CAPSULE_SIDE_WIDTH + PEEK_SIDE_GROWTH) * 2;
+  Math.max(housingWidth + (CAPSULE_SIDE_WIDTH + PEEK_SIDE_GROWTH) * 2, PEEK_MIN_WIDTH);
 
 test("anchors the compact window to the physical top edge", () => {
   const result = positionNotchWindow(notchedDisplay, "compact", {
@@ -74,7 +75,7 @@ test("uses a top-center fallback without inventing a notch", () => {
     "compact",
   );
 
-  assert.equal(result.x, -1124);
+  assert.equal(result.x, -1229);
   assert.equal(result.y, -200);
   assert.equal(result.width, peekWidth(0) + SURFACE_MARGIN * 2);
   assert.equal(
@@ -134,6 +135,22 @@ test("the notch form never argues with a real housing", () => {
     hasNotch: true,
     source: "appkit",
   });
+});
+
+test("a display without a housing keeps the peek's width beside the 14-inch one", () => {
+  const plainDisplay = {
+    bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+    workArea: { x: 0, y: 25, width: 1920, height: 1055 },
+  };
+
+  // Luke's words wrap at the peek's width, so the bubble's window holds the
+  // same floored peek the caption block's four lines were measured against —
+  // never the 248px left when no housing grows it.
+  assert.equal(PEEK_MIN_WIDTH, 210 + (CAPSULE_SIDE_WIDTH + PEEK_SIDE_GROWTH) * 2);
+  assert.equal(
+    positionNotchWindow(plainDisplay, "compact").width,
+    PEEK_MIN_WIDTH + SURFACE_MARGIN * 2,
+  );
 });
 
 test("the bubble form is the default and invents nothing", () => {

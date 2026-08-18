@@ -1,20 +1,25 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CAPSULE_SIDE_WIDTH, PANEL_WIDTH, PEEK_SIDE_GROWTH } from "@sidecar/core";
+import { CAPSULE_SIDE_WIDTH, PANEL_WIDTH, PEEK_MIN_WIDTH } from "@sidecar/core";
 import {
   countBadgeFit,
   OVERFLOW_SLOT_ID,
+  peekSideWidth,
   wingMarkCapacity,
   wingSlots,
 } from "../src/renderer/notch-wings";
 import { PANEL_PRESENTATION } from "../src/renderer/panel-state";
 import type { ProviderTally } from "../src/renderer/session-model";
 
-const peekSideWidth = CAPSULE_SIDE_WIDTH + PEEK_SIDE_GROWTH;
 const panelSideWidth = (housingWidth: number) => (PANEL_WIDTH - housingWidth) / 2;
 
-test("the peek's fixed side holds three marks now they start at the panel's inset", () => {
-  assert.equal(wingMarkCapacity(peekSideWidth), 3);
+test("the peek's side beside the 14-inch housing holds three marks", () => {
+  assert.equal(wingMarkCapacity(peekSideWidth(210)), 3);
+});
+
+test("the bubble's peek side is half the floored peek, so it holds more marks", () => {
+  assert.equal(peekSideWidth(0), PEEK_MIN_WIDTH / 2);
+  assert.ok(wingMarkCapacity(peekSideWidth(0)) > wingMarkCapacity(peekSideWidth(210)));
 });
 
 test("the panel's side holds what is left after the housing", () => {
@@ -75,7 +80,7 @@ test("exactly filling the wing needs no count", () => {
 // wing's 9px inset and the 2px kept off the shape's edge, and the peek's 124px
 // side minus the same.
 const capsuleRoom = CAPSULE_SIDE_WIDTH - 11;
-const peekRoom = peekSideWidth - 11;
+const peekRoom = peekSideWidth(210) - 11;
 
 test("the sign-in label starts at the housing and keeps clear of the strip's corner", () => {
   // Flush to the housing, the label spends no inset and keeps more from the
@@ -113,6 +118,10 @@ test("the peek fits the number and its caption together", () => {
   const fit = countBadgeFit(PANEL_PRESENTATION.PEEK, 210, 29, 100);
   assert.ok(fit < 1);
   assert.ok(0.88 * fit * (29 + 9 + 100) <= peekRoom + 1e-9);
+});
+
+test("the bubble's wider peek side keeps the same text at its resting scale", () => {
+  assert.equal(countBadgeFit(PANEL_PRESENTATION.PEEK, 0, 29, 100), 1);
 });
 
 test("the panel's wider side stands the same text down less than the peek's", () => {

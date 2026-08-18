@@ -100,6 +100,22 @@ export const SURFACE_MARGIN = 40;
 const peekSideWidth = CAPSULE_SIDE_WIDTH + PEEK_SIDE_GROWTH;
 const panelHeight = 520;
 
+/**
+ * The narrowest peek any display is given: the peek's width beside the
+ * 14-inch MacBook Pro's housing, the same housing every drawn proportion was
+ * measured against. Luke's words wrap at the peek's width, and the caption
+ * block's four lines were sized against this one — a bubble growing from no
+ * housing at all would wrap them at barely half the width and cut the reply
+ * off at the block's edge. Mirrored by `--peek-width`'s floor in the desktop
+ * stylesheet.
+ */
+export const PEEK_MIN_WIDTH = SIMULATED_HOUSING_WIDTH + peekSideWidth * 2;
+
+/** The peek's width beside this housing, never narrower than the floor. */
+export function peekWidth(housingWidth: number): number {
+  return Math.max(housingWidth + peekSideWidth * 2, PEEK_MIN_WIDTH);
+}
+
 function snapToDevicePixels(value: number, scaleFactor?: number): number {
   if (scaleFactor === undefined) return value;
   return Math.round(value * scaleFactor) / scaleFactor;
@@ -149,7 +165,7 @@ export function positionNotchWindow(
   const width =
     mode === "expanded"
       ? Math.min(PANEL_WIDTH + SURFACE_MARGIN * 2, display.bounds.width)
-      : Math.min(housingWidth + peekSideWidth * 2 + SURFACE_MARGIN * 2, display.bounds.width);
+      : Math.min(peekWidth(housingWidth) + SURFACE_MARGIN * 2, display.bounds.width);
   // A bubble panel floats `BUBBLE_LIFT` below the top edge, and the margin was
   // measured from a panel drawn at the edge, so the lift is added back or the
   // last of the shadow's tail meets the window edge as a faint line.
