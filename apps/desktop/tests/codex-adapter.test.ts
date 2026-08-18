@@ -26,6 +26,8 @@ interface TestThread {
   id: string;
   cwd: string;
   observedAt: number;
+  recencyAt?: number;
+  updatedAt?: number;
   archived?: number;
   title?: string;
   preview?: string;
@@ -80,7 +82,7 @@ function writeThread(database: DatabaseSync, thread: TestThread): void {
       thread.id,
       thread.rolloutPath ?? "",
       Math.floor(thread.observedAt / 1000),
-      Math.floor(thread.observedAt / 1000),
+      Math.floor((thread.updatedAt ?? thread.observedAt) / 1000),
       TEST_CODEX_SOURCE.CLI,
       TEST_CODEX_MODEL_PROVIDER.OPENAI_SSE,
       thread.cwd,
@@ -90,9 +92,9 @@ function writeThread(database: DatabaseSync, thread: TestThread): void {
       thread.archived ?? 0,
       thread.firstUserMessage ?? "",
       thread.observedAt,
-      thread.observedAt,
+      thread.updatedAt ?? thread.observedAt,
       thread.preview ?? "",
-      thread.observedAt,
+      thread.recencyAt ?? thread.observedAt,
       thread.gitBranch ?? null,
       thread.model ?? null,
       thread.reasoningEffort ?? null,
@@ -714,7 +716,9 @@ test("keeps archived Codex threads as closed completed rows", async (t) => {
     {
       id: "archived-session",
       cwd: "/Users/test/archived",
-      observedAt: TEST_TIME - 1_000,
+      observedAt: TEST_TIME - 3 * 24 * 60 * 60 * 1000,
+      recencyAt: TEST_TIME - 3 * 24 * 60 * 60 * 1000,
+      updatedAt: TEST_TIME - 1_000,
       archived: 1,
     },
     {

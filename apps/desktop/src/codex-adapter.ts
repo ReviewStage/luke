@@ -142,13 +142,13 @@ const CODEX_THREAD_QUERY = `
   WITH observed_threads AS (
     SELECT
       *,
-      CASE
-        WHEN recency_at_ms IS NOT NULL AND recency_at_ms > 0 THEN recency_at_ms
-        WHEN updated_at_ms IS NOT NULL AND updated_at_ms > 0 THEN updated_at_ms
-        WHEN created_at_ms IS NOT NULL AND created_at_ms > 0 THEN created_at_ms
-        WHEN updated_at IS NOT NULL AND updated_at > 0 THEN updated_at * 1000
-        ELSE created_at * 1000
-      END AS luke_observed_at_ms
+      MAX(
+        COALESCE(recency_at_ms, 0),
+        COALESCE(updated_at_ms, 0),
+        COALESCE(created_at_ms, 0),
+        COALESCE(updated_at, 0) * 1000,
+        COALESCE(created_at, 0) * 1000
+      ) AS luke_observed_at_ms
     FROM threads
   )
   SELECT *
