@@ -160,7 +160,11 @@ sidecar_require_node() {
 # with, the prompt is the cost of a development run and the bundle is left as
 # Electron shipped it.
 sidecar_sign_development_electron() {
-    local identity=${LUKE_DEV_CODESIGN_IDENTITY:-}
+    # Trimmed the way `developmentSigningIdentity` trims it, so a padded value
+    # reads as unset here too rather than reaching codesign as a name wrapped in
+    # spaces — which would fail the lookup and take the whole launch down.
+    local identity
+    read -r identity <<<"${LUKE_DEV_CODESIGN_IDENTITY:-}"
     if [[ -z $identity ]]; then
         return 0
     fi
@@ -174,8 +178,11 @@ sidecar_sign_development_electron() {
 
     # Electron's postinstall re-extracts the ad-hoc bundle, so the signature on
     # disk rather than a marker decides whether this run has anything to do.
+    # The signature line comes from `-dvv`; `--display` alone reports only the
+    # executable path, which would leave the ad-hoc half of this test matching
+    # nothing and a bundle that verifies while still ad-hoc unsigned.
     if codesign --verify "$electron_app" >/dev/null 2>&1 &&
-        ! codesign --display "$electron_app" 2>&1 | grep -qx 'Signature=adhoc'; then
+        ! codesign -dvv "$electron_app" 2>&1 | grep -qx 'Signature=adhoc'; then
         return 0
     fi
 
