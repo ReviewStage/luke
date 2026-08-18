@@ -1336,6 +1336,12 @@ export class RealtimeVoiceSession {
     // comes cannot leave every later reply refused against it.
     this.#responseOutstanding = false;
     this.#audioDrained = false;
+    // No reply is current once the turn is over, and the arming went with the
+    // turn: a `done` that outlives the settle backstop reads as a stranger's,
+    // its calls answered refused rather than run as writes out of a turn the
+    // developer was already told had ended.
+    this.#activeResponseId = undefined;
+    this.#toolTurnArmed = false;
     // The caption is of speech, and the speech is over. Whatever ended the
     // reply — the audio draining, an error, the settle timer — the words leave
     // with the meter and the face rather than lingering under a quiet capsule.
@@ -1735,9 +1741,13 @@ export class RealtimeVoiceSession {
         if (event.calls.length > 0) {
           void this.#answerToolCalls(event.calls, fresh && this.#toolTurnArmed);
           // The spoken half's audio already drained — its ending deferred to
-          // this `done` — so the ending lands now, exactly as the drain would
-          // have made it; an armed follow-up re-opens the turn on its own.
-          if (fresh && this.#audioDrained) this.#finishResponse();
+          // this `done`. A reply owing no follow-up ends here, exactly as the
+          // drain would have ended it; one that owes a follow-up keeps the
+          // turn, because the READY an ending would offer while the writes
+          // run is the edge the announcer rides — a reply taken there bumps
+          // the epoch, and the follow-up voicing the outcome stands down
+          // against it, the developer's answer abandoned for a notice.
+          if (fresh && this.#audioDrained && !this.#toolTurnArmed) this.#finishResponse();
           return;
         }
         if (!fresh) return;

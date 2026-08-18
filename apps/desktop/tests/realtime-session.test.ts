@@ -2660,6 +2660,113 @@ test("a tool outcome is not spoken over a turn the developer has taken", async (
   assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
 });
 
+test("a drained tool reply holds the turn for the follow-up it owes", async () => {
+  let resolveWrite: ((output: Record<string, unknown>) => void) | undefined;
+  const context = harness({
+    carryAction: () =>
+      new Promise<Record<string, unknown>>((resolve) => {
+        resolveWrite = resolve;
+      }),
+  });
+  await context.session.connect();
+  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
+  await armDeveloperTurn(context);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
+
+  // The spoken half's audio drains before the done that carries the calls.
+  context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      id: "resp-1",
+      output: [
+        {
+          type: "function_call",
+          name: "send_session_message",
+          call_id: "call-1",
+          arguments:
+            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"add tests"}',
+        },
+      ],
+    },
+  });
+  await Promise.resolve();
+
+  // The turn holds through the write: the READY an ending here would offer is
+  // the edge the announcer rides, and a reply taken there would abandon the
+  // follow-up that is the outcome's only voice.
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+  assert.equal(context.session.speak(announcedFinish("session-b")), false);
+
+  resolveWrite?.({ status: "accepted" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  // The follow-up opened: the outcome is voiced rather than abandoned.
+  assert.equal(
+    context.sent.filter((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE).length,
+    2,
+  );
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+});
+
+test("a done that outlives the settle backstop cannot act with the spent turn's arming", async (t) => {
+  const carried: unknown[] = [];
+  const context = harness({
+    carryAction: async (action) => {
+      carried.push(action);
+      return { status: "accepted" };
+    },
+  });
+  await context.session.connect();
+  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
+  await armDeveloperTurn(context);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
+
+  // The audio drains, the done never follows, and the backstop ends the turn.
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
+  t.mock.timers.tick(REALTIME_SETTLE_TIMEOUT_MS);
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+  t.mock.timers.reset();
+
+  const sentBefore = context.sent.length;
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      id: "resp-1",
+      output: [
+        {
+          type: "function_call",
+          name: "send_session_message",
+          call_id: "call-1",
+          arguments:
+            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"add tests"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  // The turn ended with the backstop and its arming went with it: the late
+  // calls are answered refused rather than run as writes out of a turn the
+  // developer was already told had ended, and no reply opens over the quiet.
+  assert.deepEqual(carried, []);
+  const events = context.sent.slice(sentBefore);
+  const output = events.find(
+    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+  );
+  assert.equal(
+    (
+      JSON.parse((output?.item as { output?: string } | undefined)?.output ?? "{}") as {
+        status?: string;
+      }
+    ).status,
+    "refused",
+  );
+  assert.ok(!events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE));
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+});
+
 test("the caption grows with the deltas and the final text supersedes them", async () => {
   const context = harness();
   await context.session.connect();
