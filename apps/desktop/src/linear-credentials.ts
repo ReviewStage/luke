@@ -40,17 +40,25 @@ export class LinearCredentials {
   readonly #options: LinearCredentialsOptions;
   readonly #now: () => number;
   readonly #renew: () => Promise<void>;
+  #disconnecting = false;
   #generation = 0;
 
   constructor(options: LinearCredentialsOptions) {
     this.#options = options;
     this.#now = options.now ?? Date.now;
     this.#renew = singleFlight(async () => {
+      const generation = this.#generation;
+      if (this.#disconnecting) return;
       const grant = await this.#options.readGrant();
       // Another ask may have renewed it while this one waited for the flight,
       // in which case there is nothing left to spend a rotation on.
-      if (!grant?.refreshToken || this.#current(grant)) return;
-      const generation = this.#generation;
+      if (
+        generation !== this.#generation ||
+        this.#disconnecting ||
+        !grant?.refreshToken ||
+        this.#current(grant)
+      )
+        return;
       const outcome = await refreshLinearGrant(grant.refreshToken, {
         ...(this.#options.environment ? { environment: this.#options.environment } : {}),
         ...(this.#options.fetchImplementation
@@ -81,8 +89,9 @@ export class LinearCredentials {
    * same thing to a caller: no request may be sent.
    */
   async accessToken(): Promise<string | undefined> {
+    if (this.#disconnecting) return undefined;
     const grant = await this.#options.readGrant();
-    if (!grant) return undefined;
+    if (this.#disconnecting || !grant) return undefined;
     if (this.#current(grant)) return grant.accessToken;
     if (!grant.refreshToken) {
       // Linear issues some registrations a long-lived token and no way to
@@ -92,8 +101,11 @@ export class LinearCredentials {
       return undefined;
     }
     await this.#renew();
+    if (this.#disconnecting) return undefined;
     const renewed = await this.#options.readGrant();
-    return renewed && this.#current(renewed) ? renewed.accessToken : undefined;
+    return !this.#disconnecting && renewed && this.#unexpired(renewed)
+      ? renewed.accessToken
+      : undefined;
   }
 
   /**
@@ -103,19 +115,28 @@ export class LinearCredentials {
    * message is no reason to keep the grant on this machine.
    */
   async disconnect(): Promise<void> {
+    this.#disconnecting = true;
     this.#generation += 1;
-    const grant = await this.#options.readGrant();
-    if (grant) {
-      await revokeLinearGrant(
-        grant.refreshToken ?? grant.accessToken,
-        grant.refreshToken ? "refresh_token" : "access_token",
-        this.#options.fetchImplementation ?? fetch,
-      );
+    try {
+      const grant = await this.#options.readGrant();
+      await this.#options.forgetGrant();
+      if (grant) {
+        await revokeLinearGrant(
+          grant.refreshToken ?? grant.accessToken,
+          grant.refreshToken ? "refresh_token" : "access_token",
+          this.#options.fetchImplementation ?? fetch,
+        );
+      }
+    } finally {
+      this.#disconnecting = false;
     }
-    await this.#options.forgetGrant();
   }
 
   #current(grant: LinearGrant): boolean {
     return grant.expiresAt - ACCESS_TOKEN_EXPIRY_SLACK_MS > this.#now();
+  }
+
+  #unexpired(grant: LinearGrant): boolean {
+    return grant.expiresAt > this.#now();
   }
 }

@@ -144,6 +144,18 @@ test("Linear refusing the renewal disconnects; a network that cannot answer does
   assert.equal(offline.state.grant?.refreshToken, "good-refresh");
 });
 
+test("a transient renewal failure can still use an access token until it lapses", async () => {
+  const store = grantStore({
+    accessToken: "nearly-lapsed-access",
+    refreshToken: "good-refresh",
+    expiresAt: NOW + 30_000,
+  });
+  const { credentials } = credentialsFor(store, () => jsonResponse({}, HTTP_STATUS.SERVER_ERROR));
+
+  assert.equal(await credentials.accessToken(), "nearly-lapsed-access");
+  assert.equal(store.state.forgets, 0);
+});
+
 test("a lapsed grant with nothing to renew it is let go", async () => {
   const store = grantStore({ accessToken: "stale-access", expiresAt: NOW - HOUR_MS });
   const { credentials, requests } = credentialsFor(store, () => renewed());
@@ -218,6 +230,44 @@ test("disconnecting while a refresh is in flight cannot restore the grant", asyn
 
   await disconnect;
   assert.equal(await access, undefined);
+  assert.equal(store.state.grant, undefined);
+  assert.equal(store.state.writes, 0);
+});
+
+test("a refresh cannot start while disconnect is revoking the grant", async () => {
+  const store = grantStore({
+    accessToken: "stale-access",
+    refreshToken: "current-refresh",
+    expiresAt: NOW - HOUR_MS,
+  });
+  let finishRevocation: ((response: Response) => void) | undefined;
+  const revocationResponse = new Promise<Response>((resolve) => {
+    finishRevocation = resolve;
+  });
+  const requests: RecordedRequest[] = [];
+  const credentials = new LinearCredentials({
+    readGrant: store.readGrant,
+    writeGrant: store.writeGrant,
+    forgetGrant: store.forgetGrant,
+    environment: ENVIRONMENT,
+    fetchImplementation: (async (input, init) => {
+      requests.push({
+        url: String(input),
+        authorization: new Headers(init?.headers).get("authorization"),
+        body: typeof init?.body === "string" ? init.body : undefined,
+      });
+      return revocationResponse;
+    }) as typeof globalThis.fetch,
+    now: () => NOW,
+  });
+
+  const disconnect = credentials.disconnect();
+  while (requests.length === 0) await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(await credentials.accessToken(), undefined);
+  assert.equal(requests.length, 1);
+  finishRevocation?.(jsonResponse({}, HTTP_STATUS.OK));
+  await disconnect;
   assert.equal(store.state.grant, undefined);
   assert.equal(store.state.writes, 0);
 });
