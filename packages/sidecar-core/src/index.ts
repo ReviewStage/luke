@@ -64,6 +64,14 @@ export {
   CreatedWorkspaceOpenTracker,
 } from "./workspace-opens.js";
 export { MAXIMUM_HELD_NOTICES, SessionNoticeHold } from "./session-notice-hold.js";
+export {
+  MAXIMUM_MENTIONED_SESSIONS,
+  MINIMUM_MENTION_TITLE_LENGTH,
+  mentionedSessions,
+  SESSION_MENTION_KIND,
+  type SessionMention,
+  type SessionMentionKind,
+} from "./session-mentions.js";
 
 // Calendar — when meetings start and end, and nothing else about them.
 export {
@@ -304,6 +312,7 @@ export {
   MOTION_DURATION_MS,
   PANEL_WIDTH,
   SESSION_NOTICE_HEIGHT,
+  SESSION_NOTICE_MAX_ROWS,
   VOICE_CAPTION_MAX_HEIGHT,
 } from "./motion-tokens.js";
 export {

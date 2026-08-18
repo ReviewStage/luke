@@ -5,18 +5,21 @@ import {
   type CarriedSessionAction,
   dispatchByKind,
   EMPTY_APP_GUIDE,
+  mentionedSessions,
   type NormalizedSession,
   type ObservedWorkspaceProject,
   REALTIME_STATUS,
   type RealtimeStatus,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
+  SESSION_MENTION_KIND,
   SESSION_TOOL_KIND,
   type SessionIdentity,
+  type SessionMention,
   type SessionNoticeAsk,
   type TrackedIssue,
 } from "@sidecar/core";
-import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MicrophoneStatus, SessionOpenResult, VoiceHotkeyState } from "../shared/contracts";
 import { TALK_KEY_RELEASE, talkKeyRelease } from "../shared/voice-hotkey";
 import { askRefusal } from "./ask-luke";
@@ -31,10 +34,13 @@ import { WAVEFORM_VOICE, type WaveformVoice } from "./waveform";
  * opens a call, so there are no words to draw unless the fixture supplies
  * them — and it must, or the caption strip ships unphotographed. Synthetic,
  * like every fixture, and long enough to wrap: a one-line fixture would leave
- * the wrapped form of the strip unphotographed too.
+ * the wrapped form of the strip unphotographed too. It names four of the
+ * fixture roster's own sessions and one of its workspaces, so the photograph
+ * holds both kinds of mention chip and the band at every row it can grow to,
+ * exactly as they would stand over a live reply walking the roster.
  */
 export const FIXTURE_SPEAKING_CAPTION =
-  "Claude Code finished checkout-service, and Codex is still migrating the payments schema. Two sessions are waiting on you.";
+  "Bootstrap the desktop shell and Review trust constraints are finished, lisbon-v2 is packaging the macOS build, and Follow a cloud agent and Watch a cloud session are waiting on you.";
 
 /**
  * What a changed voice on a live call should do. The API locks a session's
@@ -278,6 +284,34 @@ export function carriedSessionIdentity(action: CarriedSessionAction): SessionIde
 }
 
 /**
+ * The sessions the replies being spoken are about, for the surface to draw
+ * pressable previews of. An announcement already carries its one
+ * roster-validated subject, and that stays the whole answer: the update was
+ * about one session, whatever else its sentence brushes past. A conversation
+ * reply carries no subject, so its previews are read from the words
+ * themselves — the roster sessions whose own titles appear whole in the
+ * captions, and the workspaces whose names do, each resolved to its freshest
+ * observed chat — which is how "what are we working on?" is answered with a
+ * chip per thing named. Back-to-back replies stack their captions, and the
+ * chips follow every caption still on screen, because all of it is what Luke
+ * is currently telling the developer. The words select only among observed
+ * sessions; the identities never come from the model. A capture run has no
+ * reply, so its fixture words stand in for the captions — the chips the
+ * fixture sentence earns are photographed like everything else the surface
+ * draws.
+ */
+export function replyMentions(input: {
+  fixtureSpeaking: boolean;
+  about: SessionIdentity | undefined;
+  captions: readonly string[] | undefined;
+  sessions: readonly NormalizedSession[];
+}): readonly SessionMention[] {
+  if (input.about) return [{ ...input.about, kind: SESSION_MENTION_KIND.SESSION }];
+  const spoken = input.fixtureSpeaking ? FIXTURE_SPEAKING_CAPTION : input.captions?.join("\n");
+  return mentionedSessions(spoken, input.sessions);
+}
+
+/**
  * The other half of {@link announcerNotices}: an unbidden evaluator summary is
  * a model's words on a session nobody asked about, so it keeps its original
  * bound — spoken only on a call the developer opened themselves.
@@ -367,12 +401,14 @@ export interface VoiceConversation {
    */
   captionShownAt: number | undefined;
   /**
-   * The session the reply being spoken is announcing, or nothing for a
-   * conversation reply. Present exactly as long as the announcement is — it is
-   * what the surface anchors the pressable notice to — and independent of the
-   * captions preference, which only governs whether the words are drawn.
+   * The sessions the reply being spoken is about: an announcement's one
+   * validated subject, or what a conversation reply names in its words — a
+   * chat by its title, or a workspace by name, resolved to its freshest
+   * chat. Present exactly as long as the reply is — it is what the surface
+   * anchors the pressable notices to — and independent of the captions
+   * preference, which only governs whether the words are drawn.
    */
-  announcedSession: SessionIdentity | undefined;
+  mentionedSessions: readonly SessionMention[];
   remoteAudio: RefObject<HTMLAudioElement | null>;
   /** Escape out of an open turn: forget the press and the latch, and stop listening. */
   discardListening: () => void;
@@ -959,6 +995,20 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     [],
   );
 
+  // Derived, not queued: the subjects arrive with the captions and die with
+  // the reply, so a chip can never lag the words or stand for a session the
+  // reply is not talking about.
+  const mentioned = useMemo(
+    () =>
+      replyMentions({
+        fixtureSpeaking: options.fixtureSpeaking,
+        about: voiceCaption.about,
+        captions: voiceCaption.texts,
+        sessions: options.sessions,
+      }),
+    [options.fixtureSpeaking, options.sessions, voiceCaption],
+  );
+
   const voiceTurn = waveformVoice(voiceStatus);
   const lukeCaptions = lukeCaptionsToShow({
     fixtureSpeaking: options.fixtureSpeaking,
@@ -995,7 +1045,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     voiceTurn,
     lukeCaptions,
     captionShownAt,
-    announcedSession: voiceCaption.about,
+    mentionedSessions: mentioned,
     remoteAudio,
     discardListening,
     stopSpeaking,

@@ -79,5 +79,6 @@
   --bubble-lift: 4px;
   --caption-max: 70px;
   --notice-size: 26px;
+  --notice-max-rows: 3;
   --panel-width: 620px;
 }

@@ -14,6 +14,9 @@ import {
   type RealtimeDiagnostics,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
+  SESSION_MENTION_KIND,
+  SESSION_NOTICE_HEIGHT,
+  SESSION_NOTICE_MAX_ROWS,
   type SessionIdentity,
   type SessionNoticeAsk,
   VOICE_CAPTION_MAX_HEIGHT,
@@ -194,6 +197,23 @@ function captionSizeStyle(
     "--caption-size": `${Math.min(VOICE_CAPTION_MAX_HEIGHT - hintBand, textHeight + padding)}px`,
     "--caption-scroll": `${scroll}px`,
   } as CSSProperties;
+}
+
+/**
+ * Sizes the notice band's growth to the chips it currently holds — the
+ * caption block's own pattern. The chips size to their names and wrap where
+ * they wrap, so only a measurement can say how many rows they made. The
+ * band's own max-height already clamps the measurement to the rows the
+ * window reserved — past it the chips scroll instead of growing the shape —
+ * and the clamp here only restates that bound against a measurement landing
+ * mid-layout. The 6px around the measured chips is the band's 3px stand-off
+ * from the strip, top and bottom, which one reserved row already accounts
+ * for. Unmeasured falls back to `--notice-size`, one row, in the stylesheet.
+ */
+function noticeGrowthStyle(bandHeight: number | undefined): CSSProperties {
+  if (!bandHeight) return {};
+  const growth = Math.min(SESSION_NOTICE_HEIGHT * SESSION_NOTICE_MAX_ROWS, bandHeight + 6);
+  return { "--notice-growth": `${growth}px` } as CSSProperties;
 }
 
 function notchStyle(display: DisplayDiagnostic): CSSProperties {
@@ -1596,7 +1616,7 @@ export function App(): React.JSX.Element {
     voiceTurn,
     lukeCaptions,
     captionShownAt,
-    announcedSession,
+    mentionedSessions,
     remoteAudio,
     discardListening,
     stopSpeaking,
@@ -1620,53 +1640,110 @@ export function App(): React.JSX.Element {
     carryAppAction,
   });
 
-  // The notice: the pressable face of the announcement being spoken. It is
-  // derived, not queued — the subject arrives with the caption and dies with
-  // the reply, so it can never lag the words or stand for news Luke is not
-  // saying — and it draws only for a session the roster still titles, because
-  // a press is a row press at one remove and needs a row to stand for. The
-  // resting shapes draw it under the housing, and the open panel keeps it at
-  // its foot: the row is up in the list, but the chip is what says which row
-  // Luke is talking about. Only the slot and the composer go without — those
-  // are shapes someone asked for.
-  const announced = announcedSession
-    ? sessions.find(
-        (candidate) =>
-          candidate.providerId === announcedSession.providerId &&
-          candidate.providerSessionId === announcedSession.providerSessionId,
-      )
-    : undefined;
+  // The notices: the pressable faces of the sessions the reply being spoken
+  // is about — an announcement's one subject, or the several a conversation
+  // reply names when "what are we working on?" is answered with a walk
+  // through the roster: a chat by its title, or a whole workspace by name,
+  // fronted by its freshest chat. Derived, not queued — the subjects arrive
+  // with the captions and die with the reply, so a chip can never lag the
+  // words or stand for news Luke is not saying — and each draws only for a
+  // session the roster still titles, because a press is a row press at one
+  // remove and needs a row to stand for. A workspace chip wears the
+  // workspace's name, read off the same roster row, so the chip says what
+  // the words said. The resting shapes draw the band under the housing, and
+  // the open panel keeps it at its foot: the rows are up in the list, but
+  // the chips are what say which of them Luke is talking about. Only the
+  // slot and the composer go without — those are shapes someone asked for.
+  const spokenOf = mentionedSessions.flatMap((mention) => {
+    const session = sessions.find(
+      (candidate) =>
+        candidate.providerId === mention.providerId &&
+        candidate.providerSessionId === mention.providerSessionId,
+    );
+    if (!session) return [];
+    const title =
+      mention.kind === SESSION_MENTION_KIND.WORKSPACE && session.workspace?.name !== undefined
+        ? session.workspace.name
+        : session.title;
+    return [{ title, providerId: session.providerId, id: session.providerSessionId }];
+  });
   const noticeShown =
-    announced !== undefined &&
+    spokenOf.length > 0 &&
     (presentation === PANEL_PRESENTATION.CAPSULE ||
       presentation === PANEL_PRESENTATION.PEEK ||
       presentation === PANEL_PRESENTATION.PANEL);
-  // The last announced fields, held so the notice fades out still worded
+  // The last mentioned fields, held so the notices fade out still worded
   // rather than emptying on the frame the reply ends.
-  const lastAnnounced = useRef<{ title: string; providerId: string }>(undefined);
-  if (announced) {
-    lastAnnounced.current = { title: announced.title, providerId: announced.providerId };
+  const lastMentioned = useRef<readonly { title: string; providerId: string; id: string }[]>([]);
+  if (spokenOf.length > 0) {
+    lastMentioned.current = spokenOf;
   }
+  const noticeChipCount = lastMentioned.current.length;
 
   /**
-   * The notice's press: a row press at one remove. A session its provider
+   * Which of the band's folds have chips beyond them. A band that scrolls
+   * with no edge to say so hides its lower rows silently — the fades these
+   * drive are what tell the developer there is more to see. Measured, not
+   * derived from the count: the scroll position is the band's own, and only
+   * the element can say where it stands. The band's height is measured
+   * beside it, because naturally wrapped chips make however many rows their
+   * names need and the shape has to grow to the rows actually made.
+   */
+  const noticeBand = useRef<HTMLSpanElement | null>(null);
+  const [noticeBandElement, noticeBandHeight] = useShapeHeight();
+  const attachNoticeBand = useCallback(
+    (element: HTMLSpanElement | null) => {
+      noticeBand.current = element;
+      noticeBandElement(element);
+    },
+    [noticeBandElement],
+  );
+  const [noticeFold, setNoticeFold] = useState({ above: false, below: false });
+  const measureNoticeFold = useCallback(() => {
+    const band = noticeBand.current;
+    if (!band) return;
+    const above = band.scrollTop > 1;
+    const below = band.scrollTop + band.clientHeight < band.scrollHeight - 1;
+    setNoticeFold((held) =>
+      held.above === above && held.below === below ? held : { above, below },
+    );
+  }, []);
+  // Re-measured when the chips change, when their wrapped height moves, and
+  // when the band comes or goes — a scroll left behind by one reply must not
+  // start the next mid-list, so a band standing down rewinds to its first
+  // row.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the chip count and band height are not read here — either changing is the signal the fold moved, because content grows without any scroll event firing.
+  useEffect(() => {
+    const band = noticeBand.current;
+    if (band && !noticeShown) band.scrollTop = 0;
+    measureNoticeFold();
+  }, [noticeShown, noticeChipCount, noticeBandHeight, measureNoticeFold]);
+
+  /**
+   * A notice's press: a row press at one remove. A session its provider
    * gave an address goes to the system, exactly as pressing the row would;
    * one with no address — a local session — has the panel opened instead,
-   * where its row is already sorted to the top. Luke keeps talking: the
-   * press acts on the session, not on the sentence.
+   * where its row is already sorted near the top. Luke keeps talking: the
+   * press acts on the session, not on the sentence. Resolved against the
+   * roster at the press, because the chip may be one of several and only a
+   * session still observed has anywhere to go.
    */
-  const openAnnouncedSession = useCallback(() => {
-    if (!announced) return;
-    const identity: SessionIdentity = {
-      providerId: announced.providerId,
-      providerSessionId: announced.providerSessionId,
-    };
-    if (announced.detail.link !== undefined) {
-      void window.sidecar.openSession(identity);
-      return;
-    }
-    expand();
-  }, [announced, expand]);
+  const openMentionedSession = useCallback(
+    (identity: SessionIdentity) => {
+      const session = sessions.find(
+        (candidate) =>
+          candidate.providerId === identity.providerId &&
+          candidate.providerSessionId === identity.providerSessionId,
+      );
+      if (!session) return;
+      if (session.detail.link !== undefined) {
+        void window.sidecar.openSession(identity);
+        return;
+      }
+      expand();
+    },
+    [sessions, expand],
+  );
 
   /**
    * A live push beats a bootstrap snapshot still in flight. The main process
@@ -2314,9 +2391,9 @@ export function App(): React.JSX.Element {
       // Whether those words need the volume hint under them, which stands in
       // a band of its own below the caption block.
       data-volume-hint={String(volumeHint)}
-      // Whether the announcement being spoken has its pressable notice under
-      // the housing. Captioned words drop below it; with captions off it
-      // stands alone in a band of its own.
+      // Whether the reply being spoken has its pressable notices under the
+      // housing, and how many chip rows they need. Captioned words drop below
+      // them; with captions off the band stands alone.
       data-notice={String(noticeShown)}
       data-presentation={presentation}
       data-notch={String(display.notch.hasNotch)}
@@ -2335,6 +2412,7 @@ export function App(): React.JSX.Element {
           feedbackHeight,
         ),
         ...captionSizeStyle(captionTextHeight, volumeHint, captionPadding, captionReadingElapsed),
+        ...noticeGrowthStyle(noticeBandHeight),
       }}
     >
       {/* Capsule, peek, slot and panel are all this one shape at different
@@ -2552,30 +2630,50 @@ export function App(): React.JSX.Element {
         </button>
       </span>
 
-      {/* The session Luke is talking about, pressable while he says it. One
+      {/* The sessions Luke is talking about, pressable while he says them: an
+          announcement names one, and a conversation reply walking the roster
+          names several, each with a chip of its own on the same band. One
           press, and it is a row press at one remove — the session opens where
           its provider keeps it, or the panel comes forward for one with no
-          page of its own. Always mounted, like the caption, so both edges of
-          its fade can run, and holding the last announced fields through its
-          exit so the name leaves in place. Inert while away so nothing hidden
-          can be pressed or tabbed to; its own hit region keeps the pointer
-          resting on it from reading as leaving the shape. */}
-      <button
-        type="button"
-        className="session-notice"
-        data-hit-region={HIT_REGION.CAPSULE}
+          page of its own. The band is always mounted, like the caption, so
+          both edges of its fade can run, and holds the last mentioned fields
+          through its exit so the names leave in place. Inert while away so
+          nothing hidden can be pressed or tabbed to; each chip's own hit
+          region keeps the pointer resting on it from reading as leaving the
+          shape. */}
+      <span
+        className="session-notices"
+        ref={attachNoticeBand}
         inert={!noticeShown}
-        aria-label={announced ? `Open "${announced.title}"` : undefined}
-        // Keeps the press from moving focus here, like the capsule strip's
-        // own button, so a focused settings field keeps the caret.
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={openAnnouncedSession}
+        // The folds: which edges have chips beyond them, driving the fades
+        // that say the band scrolls. Both settle to false while everything
+        // fits, so a band of few chips wears no mask at all.
+        data-fold-above={String(noticeFold.above)}
+        data-fold-below={String(noticeFold.below)}
+        onScroll={measureNoticeFold}
       >
-        {lastAnnounced.current ? (
-          <ProviderMark providerId={lastAnnounced.current.providerId} />
-        ) : null}
-        <span className="session-notice-name">{lastAnnounced.current?.title}</span>
-      </button>
+        {lastMentioned.current.map((mention) => (
+          <button
+            key={mention.id}
+            type="button"
+            className="session-notice"
+            data-hit-region={HIT_REGION.CAPSULE}
+            aria-label={`Open "${mention.title}"`}
+            // Keeps the press from moving focus here, like the capsule strip's
+            // own button, so a focused settings field keeps the caret.
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() =>
+              openMentionedSession({
+                providerId: mention.providerId,
+                providerSessionId: mention.id,
+              })
+            }
+          >
+            <ProviderMark providerId={mention.providerId} />
+            <span className="session-notice-name">{mention.title}</span>
+          </button>
+        ))}
+      </span>
 
       <div className="compact-stage">
         {/* A button, not a hover target: hovering only peeks, pressing commits.
