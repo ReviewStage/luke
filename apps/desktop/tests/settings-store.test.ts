@@ -25,7 +25,12 @@ import {
   type CredentialProvider,
   type CredentialProviderId,
 } from "../src/shared/credential-providers";
-import { APP_SETTING_SCHEMA } from "../src/shared/settings-schema";
+import {
+  APP_SETTING_FIELDS,
+  APP_SETTING_SCHEMA,
+  isKeyedAppSettingField,
+  settingEntryGuard,
+} from "../src/shared/settings-schema";
 
 const TEST_API_KEY = "conductor-live-key";
 const SETTINGS_FILE_NAME = "settings.json";
@@ -1408,6 +1413,56 @@ test("keeps one provider's default project apart from another's", async (t) => {
   assert.deepEqual(cleared.settings.workspaceProjectDefaults, {
     [PROVIDER_ID.CURSOR]: "proj-2",
   });
+});
+
+test("an entry the field cannot hold is refused rather than quietly dropped", () => {
+  // The map guards drop what they cannot hold, which is right when reading a
+  // stored file and wrong for a write: a whole map of unholdable entries would
+  // read as valid and clear what is stored. Every write goes one entry at a
+  // time so the refusal is the guard's own answer.
+  assert.equal(
+    settingEntryGuard(
+      APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+      PROVIDER_ID.CONDUCTOR,
+      "   ",
+    ).valid,
+    false,
+  );
+  assert.equal(
+    settingEntryGuard(APP_SETTING_SCHEMA.workspaceAgentDefaults.field, PROVIDER_ID.CONDUCTOR, {
+      agent: "codex",
+      model: "no-such-model",
+    }).valid,
+    false,
+  );
+
+  // Clearing carries no value to check, and a holdable entry comes back whole.
+  assert.equal(
+    settingEntryGuard(
+      APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+      PROVIDER_ID.CONDUCTOR,
+      undefined,
+    ).valid,
+    true,
+  );
+  assert.deepEqual(
+    settingEntryGuard(APP_SETTING_SCHEMA.workspaceAgentDefaults.field, PROVIDER_ID.CONDUCTOR, {
+      agent: "codex",
+      model: "gpt-5.6-sol",
+    }),
+    { valid: true, value: { agent: "codex", model: "gpt-5.6-sol" } },
+  );
+});
+
+test("every map-valued setting is written one entry at a time", () => {
+  // The keyed set is what the whole-map write path refuses, so a new map field
+  // that forgot its entry declaration would be writable as a whole map again.
+  for (const field of APP_SETTING_FIELDS) {
+    const holdsMap =
+      field === APP_SETTING_SCHEMA.workspaceAgentDefaults.field ||
+      field === APP_SETTING_SCHEMA.workspaceProjectDefaults.field;
+    assert.equal(isKeyedAppSettingField(field), holdsMap, field);
+  }
 });
 
 test("overlapping default projects each survive the other's write", async (t) => {

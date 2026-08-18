@@ -78,7 +78,6 @@ const FRONT_PAGE = `${SETTINGS_TAB}, on its front page`;
  */
 const CONDUCTOR_DEFAULT_CHOICE = "Conductor's default";
 
-/**
 /** What the guide needs from the app to describe the current state of it. */
 export interface LukeGuideInput {
   /** Optional only for pure callers that predate accounts; the app always supplies it. */

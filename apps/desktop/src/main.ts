@@ -1352,6 +1352,11 @@ function registerIpc(): void {
   registerSettingHandler(channels.updateSetting, {
     async validate(field: unknown, value: unknown) {
       if (!isAppSettingField(field)) throw new Error("Unknown setting");
+      // A map-valued setting is written one entry at a time. Its own guard drops
+      // entries it cannot hold rather than refusing them — right for reading a
+      // stored file, wrong for a write, where a whole map of unholdable entries
+      // would read as valid and silently clear what is stored.
+      if (isKeyedAppSettingField(field)) throw new Error("Setting takes one entry at a time");
       const parsed = APP_SETTING_SCHEMA[field].guard(value);
       if (!parsed.valid) throw new Error("Invalid setting value");
       if (field === APP_SETTING_SCHEMA.askHotkey.field && typeof parsed.value === "string") {
@@ -1369,13 +1374,6 @@ function registerIpc(): void {
             settings: await settingsStore.snapshot(),
             reason: `That chord is reserved for the ${owner === HOTKEY_RANK.TALK ? "talk" : "ask"} key.`,
           });
-        }
-      }
-      if (field === APP_SETTING_SCHEMA.workspaceProjectDefaults.field && parsed.value) {
-        for (const [providerId, providerProjectId] of Object.entries(parsed.value)) {
-          if (!workspaceProjectOffered(providerId, providerProjectId)) {
-            throw new Error("Unknown workspace project");
-          }
         }
       }
       return { field, value: parsed.value };
