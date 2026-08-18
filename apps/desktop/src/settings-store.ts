@@ -58,7 +58,6 @@ const SETTINGS_FIELD = {
   DEFAULT_WORKSPACE_PROVIDER: "defaultWorkspaceProvider",
   DUCK_OTHER_MEDIA: "duckOtherMedia",
   PREFER_BUILT_IN_MICROPHONE: "preferBuiltInMicrophone",
-  FEEDBACK_SENDS: "feedbackSends",
   FORM_FACTOR: "formFactor",
   LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
   QUIET_DURING_MEETINGS: "quietDuringMeetings",
@@ -187,14 +186,6 @@ interface PersistedSettings {
    */
   duckOtherMedia: boolean;
   preferBuiltInMicrophone: boolean;
-  /**
-   * How many feedback sends have landed from this machine, so the composer's
-   * confirmation can pick which little celebration each delivery gets.
-   * Bookkeeping rather than a preference: it has no row, no reset scope
-   * forgets it, and it never reaches the renderer's settings snapshot. A
-   * missing field and a corrupt value both read as none yet.
-   */
-  feedbackSends?: number;
   /**
    * Whether announcements wait out calendar meetings. On unless the file says
    * `false` outright, on the media duck's own reasoning: this is what Luke
@@ -482,13 +473,6 @@ function parsePersistedSettings(source: string): PersistedSettings {
   const storedStopHotkey = record[SETTINGS_FIELD.STOP_HOTKEY];
   const stopHotkey =
     typeof storedStopHotkey === "string" ? parseVoiceHotkey(storedStopHotkey) : undefined;
-  const storedFeedbackSends = record[SETTINGS_FIELD.FEEDBACK_SENDS];
-  const feedbackSends =
-    typeof storedFeedbackSends === "number" &&
-    Number.isSafeInteger(storedFeedbackSends) &&
-    storedFeedbackSends > 0
-      ? storedFeedbackSends
-      : undefined;
   return {
     version: typeof version === "number" ? version : SETTINGS_FILE_VERSION,
     apiKeys: storedApiKeys(record),
@@ -523,9 +507,6 @@ function parsePersistedSettings(source: string): PersistedSettings {
       record[SETTINGS_FIELD.PREFER_BUILT_IN_MICROPHONE],
       APP_SETTING_DEFAULTS.preferBuiltInMicrophone,
     ),
-    // A count that is not a whole non-negative number reads as none yet: the
-    // worst a corrupt value can cost is replaying the first send's scene.
-    ...(feedbackSends !== undefined ? { feedbackSends } : {}),
     quietDuringMeetings: booleanSetting(
       record[SETTINGS_FIELD.QUIET_DURING_MEETINGS],
       APP_SETTING_DEFAULTS.quietDuringMeetings,
@@ -884,29 +865,6 @@ export class SettingsStore {
       if (persisted.duckOtherMedia === enabled) return;
       return { ...persisted, duckOtherMedia: enabled };
     });
-  }
-
-  /**
-   * Counts a landed send and answers how many landed before it, so the
-   * composer's confirmation can pick which celebration this delivery gets.
-   * Not `#setField`, because the caller needs the count the write was based
-   * on, not the settings snapshot — and the snapshot must never carry this:
-   * it is bookkeeping about the machine, not a preference with a row.
-   */
-  async countFeedbackSend(): Promise<number> {
-    let before = 0;
-    await this.#serialize(async () => {
-      const persisted = await this.#load();
-      before = persisted.feedbackSends ?? 0;
-      const next: PersistedSettings = {
-        ...persisted,
-        feedbackSends: before + 1,
-        version: SETTINGS_FILE_VERSION,
-      };
-      await this.#write(next);
-      this.#loading = Promise.resolve(next);
-    });
-    return before;
   }
 
   /**

@@ -2282,9 +2282,9 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   }
 }
 
-/* The first landing's shockwave: the success motion lands its squash at 65%
-   of its 2s cycle, and the two text lines duck on that landing, the sub a
-   beat behind the headline. The delays and durations inside this block are
+/* The shockwave landing: the success motion lands its squash at 65% of its
+   2s cycle, and the two text lines duck on that landing, the sub a beat
+   behind the headline. The delays and durations inside this block are
    literal because they are the artwork's own timing — a face motion carries
    literal seconds for the same reason — and they answer `--face-motion`
    exactly as the gesture they follow does, so a capture run and reduced

@@ -2272,13 +2272,7 @@ function registerIpc(): void {
       if (!runMode.sendsNetwork) {
         return { delivered: false, reason: "A fixture run sends nothing." };
       }
-      const result = await feedbackDelivery.deliver(parsed);
-      if (!result.delivered) return result;
-      // The count picks which celebration this landing gets, never whether it
-      // landed: a store that cannot write still answers, with the first
-      // send's scene.
-      const sequence = await settingsStore.countFeedbackSend().catch(() => 0);
-      return { ...result, sequence };
+      return feedbackDelivery.deliver(parsed);
     },
   );
 

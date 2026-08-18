@@ -98,13 +98,6 @@ export interface FeedbackSubmission {
 export interface FeedbackResult {
   delivered: boolean;
   reason?: string;
-  /**
-   * How many sends landed before this one, so the composer can pick which
-   * little celebration this delivery gets. Bookkeeping about the machine's own
-   * history, never about the note: absent on a refusal, and `0` when the count
-   * cannot be read, which lands on the first send's scene.
-   */
-  sequence?: number;
 }
 
 /** Standard base64: whole quartets of the alphabet, padded or not at the end. */
