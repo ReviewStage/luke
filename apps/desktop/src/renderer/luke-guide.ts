@@ -611,7 +611,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       label: "Account",
       detail:
         account.status === ACCOUNT_STATUS.SIGNED_IN
-          ? `Signed in as ${account.email} through ${account.provider === ACCOUNT_PROVIDER.GITHUB ? "GitHub" : "Google"}. Sign out by hand from Account, at the foot of the Settings tab's front page just above Quit — it asks before acting.`
+          ? `Signed in as ${account.email} through ${account.provider === ACCOUNT_PROVIDER.GITHUB ? "GitHub" : "Google"}. Sign out by hand from Account, at the foot of the Settings tab's front page just above Quit — it asks before acting. The same section's Delete account row erases the account and everything Luke's service holds for it, cannot be undone, and is only ever done by hand — its button asks before acting, and no spoken ask can reach it.`
           : "Not signed in. The sign-in screen greets the launch once with Google and GitHub, then closes like any panel. While signed out the strip beside the housing keeps Luke's face and a small Sign in label in place of the session count, and hovering or pressing it brings the sign-in screen back. Live sessions and Luke's controls stay off until sign-in finishes. Choosing a provider stands the panel down to a small waiting popup with a Cancel button while the browser finishes, and the panel opens itself once the sign-in lands.",
     },
     {

@@ -563,8 +563,11 @@
 
 /* Signing out is destructive the way deleting a key is — getting back in costs
    a trip through the browser — so it says so on hover rather than sitting in
-   red beside the identity it would end. */
-.account-signout:hover:not(:disabled) {
+   red beside the identity it would end. Deleting the account is more so — the
+   service erases it and no sign-in brings it back — and wears the same warning
+   the same way. */
+.account-signout:hover:not(:disabled),
+.account-delete:hover:not(:disabled) {
   background: color-mix(in srgb, var(--danger) 12%, transparent);
   color: var(--danger-text);
 }

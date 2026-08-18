@@ -18,6 +18,7 @@ import type { AttentionDecision } from "./session.js";
 export const HOSTED_SERVICE_PATH = {
   VOICE_MINT: "/api/voice/mint",
   ATTENTION_REVIEW: "/api/attention/review",
+  ACCOUNT_DELETE: "/api/account/delete",
 } as const;
 
 /** Every refusal a hosted endpoint answers with, by its reason. */

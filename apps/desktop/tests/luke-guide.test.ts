@@ -251,6 +251,10 @@ test("the guide names the signed-in identity and keeps sign-out manual", () => {
   assert.match(account?.detail ?? "", /developer@example.com/);
   assert.match(account?.detail ?? "", /GitHub/);
   assert.match(account?.detail ?? "", /by hand/);
+  // Deleting the account is described — and described as hand-only — so Luke
+  // neither denies the capability nor lets a spoken ask believe it can reach it.
+  assert.match(account?.detail ?? "", /Delete account/);
+  assert.match(account?.detail ?? "", /no spoken ask/);
 });
 
 test("the facts describe creating a workspace, so Luke does not deny the capability", () => {

@@ -473,6 +473,12 @@ export interface AppBridge {
    */
   cancelSignIn(): Promise<void>;
   signOut(): Promise<AccountSnapshot>;
+  /**
+   * Asks the hosted service to erase the signed-in account, then signs this
+   * machine out of it. Rejects with the account intact when the service could
+   * not be reached or refused, so the row can say the account still stands.
+   */
+  deleteAccount(): Promise<AccountSnapshot>;
   setExpanded(expanded: boolean, focus?: boolean): Promise<WindowMode>;
   setPointerInterception(interceptsPointer: boolean): void;
   requestMicrophone(): Promise<MicrophoneStatus>;
@@ -827,6 +833,7 @@ export const channels = {
   beginSignIn: "app:begin-sign-in",
   cancelSignIn: "app:cancel-sign-in",
   signOut: "app:sign-out",
+  deleteAccount: "app:delete-account",
   accountChanged: "app:account-changed",
   setExpanded: "app:set-expanded",
   setPointerInterception: "app:set-pointer-interception",

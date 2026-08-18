@@ -70,6 +70,7 @@ import {
   Tray,
 } from "electron";
 import { AccountClient, type AccountIdentity, type AccountTokens } from "./account-client";
+import { deleteHostedAccount } from "./account-deletion";
 import {
   ACCOUNT_FAILURE_ACTION,
   accessTokenNeedsRefresh,
@@ -592,6 +593,43 @@ async function signOutAccount(options: { revokeRemote?: boolean } = {}): Promise
   return account;
 }
 
+/**
+ * Erases the account at the service, then signs this machine out of it. The
+ * hosted delete runs first and any failure keeps the account signed in: a
+ * sign-out ahead of a confirmed delete would read as deletion while the
+ * service still holds everything.
+ */
+async function deleteAccountEverywhere(): Promise<AccountSnapshot> {
+  const stored = await settingsStore.readAccount();
+  // No stored credential is a refusal, not a sign-out: without one there is
+  // no way to prove the ask to the service, and resolving here would read as
+  // a finished delete while the service still holds the account.
+  if (!stored) throw new Error("No stored account credential to delete with");
+  try {
+    await deleteHostedAccount({
+      serviceBaseUrl: HOSTED_SERVICE_BASE_URL,
+      accessToken: stored.accessToken,
+    });
+  } catch (error) {
+    if (!accessTokenNeedsRefresh(error)) throw error;
+    // Routine expiry of an hour-lived token. Refreshed directly rather than
+    // through the shared single flight, because that flight answers a revoked
+    // grant by signing the machine out — which here would dress a failed
+    // delete as a finished one. The rotation is stored before the retry so a
+    // retry that fails cannot strand the account on a spent token.
+    const generation = accountGeneration;
+    const tokens = await accountClient.refresh(stored.refreshToken);
+    await storeCurrentAccount(generation, { ...stored, ...tokens });
+    await deleteHostedAccount({
+      serviceBaseUrl: HOSTED_SERVICE_BASE_URL,
+      accessToken: tokens.accessToken,
+    });
+  }
+  // The user's rows at the service died with the delete — tokens included —
+  // so a remote revocation has nothing left to act on.
+  return signOutAccount();
+}
+
 /** Stores credentials only while the account lifecycle that produced them is current. */
 async function storeCurrentAccount(generation: number, stored: StoredAccount): Promise<boolean> {
   if (generation !== accountGeneration) return false;
@@ -1063,6 +1101,11 @@ function registerIpc(): void {
   ipcMain.handle(channels.signOut, async (event) => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
     return signOutAccount({ revokeRemote: true });
+  });
+
+  ipcMain.handle(channels.deleteAccount, async (event) => {
+    if (!trustedSender(event)) throw new Error("Untrusted renderer");
+    return deleteAccountEverywhere();
   });
 
   ipcMain.handle(channels.setExpanded, (event, expanded: unknown, focus: unknown) => {

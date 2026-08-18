@@ -71,6 +71,12 @@ never spends the production key. `LUKE_REALTIME_MODEL` and
 `LUKE_ATTENTION_MODEL` optionally override the models, under the same names
 the desktop honours; a blank value is treated as absent.
 
+`api/account/delete.ts` erases the signed-in user on the same bearer
+resolution: the desktop's Delete account confirm is the only caller. Deleting
+the `user` row is the entire act — sessions, provider accounts, OAuth grants,
+and usage counters all reference it with `onDelete: "cascade"`, so nothing of
+the account outlives the request.
+
 Use is metered per user per UTC day in the Luke-owned `hosted_usage` table —
 one atomic upsert before each upstream call, checked against the ceilings in
 `server/hosted/quota.ts`. The ceilings bound how often calls open, not how
