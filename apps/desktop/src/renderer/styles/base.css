@@ -2194,6 +2194,16 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   height: 12px;
 }
 
+/* The settings section's two offers share one row, half the width each. */
+.feedback-offers {
+  display: flex;
+  gap: 7px;
+}
+
+.feedback-offer {
+  flex: 1 1 0;
+}
+
 /* A send that landed, said in the palette every settled answer uses. */
 .feedback-sent {
   display: flex;
