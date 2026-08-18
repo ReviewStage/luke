@@ -708,8 +708,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       label: "Reading a session's transcript",
       detail:
         "Asked what a local session did, said, or is stuck on, Luke can read that session's own " +
-        "recent transcript — Claude Code, Codex, OpenCode, and the Cursor agents running on " +
-        "this machine today — and answer from it. Cursor keeps tool outputs out of its own " +
+        "recent transcript — Claude Code, Codex, OpenCode, and the Devin and Cursor agents " +
+        "running on this machine today — and answer from it. Cursor keeps tool outputs out of its own " +
         "transcripts, so those readings carry the words and the calls but no results. " +
         "The reading happens when asked and is kept nowhere; cloud sessions keep their " +
         "conversations with their provider, so Luke answers about those from their roster " +
@@ -758,7 +758,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       label: "Archiving",
       detail:
         "Where a provider documents an archive endpoint — a Conductor workspace, a Cursor " +
-        "cloud agent, and a Devin session today — Archive is offered as a control once the " +
+        "cloud agent, and a Devin cloud session today — Archive is offered as a control once the " +
         "work there was positively seen to settle: pressed, or asked of Luke in " +
         "conversation, it files the work away through the provider's own endpoint. Archiving a " +
         "Conductor workspace files away every chat in it at once, so when several of its chats " +

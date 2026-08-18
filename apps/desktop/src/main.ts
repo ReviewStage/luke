@@ -106,7 +106,9 @@ import { CopilotSessionAdapter } from "./copilot-adapter";
 import { CURSOR_PROVIDER, CursorSessionAdapter } from "./cursor-adapter";
 import { CursorLocalSessionAdapter } from "./cursor-local-adapter";
 import { readCursorSessionTranscript } from "./cursor-transcript";
-import { DevinSessionAdapter } from "./devin-adapter";
+import { DEVIN_PROVIDER, DevinSessionAdapter } from "./devin-adapter";
+import { DevinLocalSessionAdapter } from "./devin-local-adapter";
+import { readDevinSessionTranscript } from "./devin-transcript";
 import { DockPresence } from "./dock-presence";
 import { feedbackDeliveryFromEnvironment } from "./feedback-delivery";
 import { GoogleCalendarReader } from "./google-calendar";
@@ -260,8 +262,17 @@ const cursorAdapter = new CompositeSessionProviderAdapter({
     }),
   ],
 });
-const devinAdapter = new DevinSessionAdapter({
-  readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.DEVIN),
+// Devin runs sessions in two places the same way Cursor does: in a terminal
+// on this machine, observed from the session database its CLI writes for
+// itself, and in its cloud, which needs a key. One provider, one commit.
+const devinAdapter = new CompositeSessionProviderAdapter({
+  provider: DEVIN_PROVIDER,
+  adapters: [
+    new DevinLocalSessionAdapter(),
+    new DevinSessionAdapter({
+      readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.DEVIN),
+    }),
+  ],
 });
 const julesAdapter = new JulesSessionAdapter({
   readApiKey: () => settingsStore.readApiKey(CREDENTIAL_PROVIDER_ID.JULES),
@@ -1825,6 +1836,10 @@ function registerIpc(): void {
     [
       PROVIDER_ID.CURSOR,
       (providerSessionId: string) => readCursorSessionTranscript({ providerSessionId }),
+    ],
+    [
+      PROVIDER_ID.DEVIN,
+      (providerSessionId: string) => readDevinSessionTranscript({ providerSessionId }),
     ],
     [
       PROVIDER_ID.OPENCODE,

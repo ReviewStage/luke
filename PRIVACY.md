@@ -90,6 +90,15 @@ Luke never modifies the running app.
   errors — not the message text, which observation never opens. Installs from
   before OpenCode moved its sessions into that database are read from its
   session and message JSON files with the same boundary.
+- For the Devin sessions running on this machine, Luke opens the Devin CLI's
+  local session database in read-only mode and reads session records plus the
+  bookkeeping of a session's newest turn — the roles along the conversation's
+  chain, whether the newest reply opened tool calls, and the stored name of a
+  tool call still running. The chain's message records are inspected in memory
+  for that bookkeeping alone and their words are never reported, and the
+  column holding a tool call's output is never read. Observation reports no
+  failure for a Devin session, because its database records none this build
+  reads.
 - For the Cursor agents running on this machine, Luke finds recent transcripts,
   opens bounded tails read-only, and reads only the markers around a turn — its
   end and how it ended. Observation does not read message content, and reports
@@ -129,8 +138,9 @@ trust it there; declining costs the same sharper status and nothing else.
 Cursor, "observation never opens message content" — have one bounded,
 on-demand counterpart: in a conversation you are holding with Luke, you can
 ask what a local session did, said, or is stuck on, and Luke reads that
-session's own transcript — Claude Code, Codex, OpenCode, and Cursor's local
-agents today — from the provider's own file or database on this machine. The
+session's own transcript — Claude Code, Codex, OpenCode, and the Devin and
+Cursor agents running on this machine today — from the provider's own file or
+database on this machine. The
 read happens when you ask, is validated against the observed roster, renders a
 bounded excerpt into that conversation's reply, and keeps nothing: no history
 is stored, watched, or indexed, and nothing is fetched from any provider.

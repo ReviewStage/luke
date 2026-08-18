@@ -224,7 +224,10 @@ interface DevinSession {
   observedAt: number;
 }
 
-function millisecondsFromRecord(record: Record<string, unknown>, key: string): number | undefined {
+export function millisecondsFromRecord(
+  record: Record<string, unknown>,
+  key: string,
+): number | undefined {
   const value = record[key];
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return undefined;
   return value < EARLIEST_MILLISECOND_TIMESTAMP ? value * 1000 : value;
