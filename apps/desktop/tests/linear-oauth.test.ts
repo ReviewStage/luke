@@ -239,6 +239,32 @@ test("an abandoned sign-in times out instead of listening forever", async () => 
   assert.ok("reason" in outcome && /timed out/i.test(outcome.reason));
 });
 
+test("a claimed callback is allowed to finish after the waiting timeout", async () => {
+  let finishExchange: ((response: Response) => void) | undefined;
+  const exchangeResponse = new Promise<Response>((resolve) => {
+    finishExchange = resolve;
+  });
+  const opened: string[] = [];
+  const signIn = new LinearSignIn({
+    openExternal: (url) => opened.push(url),
+    environment: environment(),
+    fetchImplementation: (() => exchangeResponse) as typeof globalThis.fetch,
+    now: () => NOW,
+    timeoutMs: 20,
+  });
+
+  const pending = signIn.signIn();
+  const authorization = await openedUrl(opened);
+  const state = authorization.searchParams.get("state") ?? "";
+  const callback = answerCallback(opened[0] as string, { state, code: "auth-code" });
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  signIn.cancel();
+  finishExchange?.(grantResponse());
+
+  assert.equal((await callback).status, 200);
+  assert.equal("accessToken" in (await pending), true);
+});
+
 test("one sign-in at a time", async () => {
   const { signIn, opened } = signInWith(() => grantResponse());
 
@@ -308,19 +334,25 @@ test("Linear saying no and Linear saying nothing are different answers", async (
 test("revoking posts the grant to Linear and never throws", async () => {
   const { fetch: fakeFetch, requests } = recordingFetch(() => jsonResponse({}, HTTP_STATUS.OK));
   assert.equal(
-    await revokeLinearGrant("lin_oauth_access", fakeFetch as typeof globalThis.fetch),
+    await revokeLinearGrant(
+      "lin_oauth_refresh",
+      "refresh_token",
+      fakeFetch as typeof globalThis.fetch,
+    ),
     true,
   );
 
   const revoke = requests[0] as RecordedRequest;
   assert.equal(revoke.url, LINEAR_REVOKE_URL);
-  assert.equal(revoke.authorization, "Bearer lin_oauth_access");
-  assert.equal(new URLSearchParams(revoke.body ?? "").get("token"), "lin_oauth_access");
+  assert.equal(revoke.authorization, undefined);
+  const revokeBody = new URLSearchParams(revoke.body ?? "");
+  assert.equal(revokeBody.get("token"), "lin_oauth_refresh");
+  assert.equal(revokeBody.get("token_type_hint"), "refresh_token");
 
   // Best effort by design: the developer asked to disconnect, and a network
   // that cannot carry the message is no reason to keep the grant here.
   assert.equal(
-    await revokeLinearGrant("lin_oauth_access", (() =>
+    await revokeLinearGrant("lin_oauth_refresh", "refresh_token", (() =>
       Promise.reject(new Error("offline"))) as typeof globalThis.fetch),
     false,
   );

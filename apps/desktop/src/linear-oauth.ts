@@ -232,6 +232,7 @@ export class LinearSignIn {
     // — no request can arrive ahead of it.
     let redirectUri = "";
     let callbackClaimed = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
 
     const server = http.createServer((request, response) => {
       const url = new URL(request.url ?? "/", `http://${LOOPBACK_HOST}`);
@@ -247,6 +248,8 @@ export class LinearSignIn {
         return;
       }
       callbackClaimed = true;
+      if (timeout) clearTimeout(timeout);
+      this.#abandon = undefined;
       const refused = url.searchParams.get("error");
       const code = url.searchParams.get("code");
       if (refused || !code) {
@@ -287,7 +290,7 @@ export class LinearSignIn {
     authorization.searchParams.set("prompt", "consent");
     authorization.searchParams.set("state", state);
 
-    const timeout = setTimeout(() => {
+    timeout = setTimeout(() => {
       finish({ reason: "Sign-in timed out. Try again from the Linear row." });
     }, this.#options.timeoutMs ?? SIGN_IN_TIMEOUT_MS);
     timeout.unref();
@@ -379,17 +382,17 @@ export class LinearSignIn {
  * either way, and Linear's own settings remain the certain way to withdraw.
  */
 export async function revokeLinearGrant(
-  accessToken: string,
+  token: string,
+  tokenType: "access_token" | "refresh_token",
   fetchImplementation: typeof fetch = fetch,
 ): Promise<boolean> {
   try {
     const response = await fetchImplementation(LINEAR_REVOKE_URL, {
       method: "POST",
       headers: {
-        authorization: `Bearer ${accessToken}`,
         "content-type": "application/x-www-form-urlencoded",
       },
-      body: new URLSearchParams({ token: accessToken }).toString(),
+      body: new URLSearchParams({ token, token_type_hint: tokenType }).toString(),
       signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
     });
     return response.ok;

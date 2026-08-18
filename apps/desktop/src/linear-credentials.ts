@@ -106,7 +106,11 @@ export class LinearCredentials {
     this.#generation += 1;
     const grant = await this.#options.readGrant();
     if (grant) {
-      await revokeLinearGrant(grant.accessToken, this.#options.fetchImplementation ?? fetch);
+      await revokeLinearGrant(
+        grant.refreshToken ?? grant.accessToken,
+        grant.refreshToken ? "refresh_token" : "access_token",
+        this.#options.fetchImplementation ?? fetch,
+      );
     }
     await this.#options.forgetGrant();
   }

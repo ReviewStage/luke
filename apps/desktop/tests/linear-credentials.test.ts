@@ -164,7 +164,9 @@ test("disconnecting revokes at Linear and forgets here either way", async () => 
   const { credentials, requests } = credentialsFor(store, () => jsonResponse({}, HTTP_STATUS.OK));
 
   await credentials.disconnect();
-  assert.equal(requests[0]?.authorization, "Bearer current-access");
+  const revokeBody = new URLSearchParams(requests[0]?.body ?? "");
+  assert.equal(revokeBody.get("token"), "current-refresh");
+  assert.equal(revokeBody.get("token_type_hint"), "refresh_token");
   assert.equal(store.state.grant, undefined);
 
   const stubborn = grantStore({
