@@ -212,6 +212,14 @@ test("the standing instructions count the tools from the table", () => {
   assert.match(instructions, new RegExp(`You have ${spokenRealtimeToolCount()} tools:`));
 });
 
+test("the standing instructions make Luke the coding agents' engineering manager", () => {
+  const instructions = realtimeInstructions();
+
+  assert.match(instructions, /engineering manager for the developer's coding agents/i);
+  assert.match(instructions, /developer is your CTO/i);
+  assert.match(instructions, /direct, candid, calm, and familiar with the work/i);
+});
+
 test("the spoken instructions state what Luke cannot see, and when he may act", () => {
   const instructions = realtimeInstructions();
 
