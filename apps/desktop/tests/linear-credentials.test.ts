@@ -180,3 +180,42 @@ test("disconnecting revokes at Linear and forgets here either way", async () => 
   // revocation is no reason to keep the grant on this machine.
   assert.equal(stubborn.state.grant, undefined);
 });
+
+test("disconnecting while a refresh is in flight cannot restore the grant", async () => {
+  const store = grantStore({
+    accessToken: "stale-access",
+    refreshToken: "current-refresh",
+    expiresAt: NOW - HOUR_MS,
+  });
+  let finishRefresh: ((response: Response) => void) | undefined;
+  const refreshResponse = new Promise<Response>((resolve) => {
+    finishRefresh = resolve;
+  });
+  const requests: RecordedRequest[] = [];
+  const credentials = new LinearCredentials({
+    readGrant: store.readGrant,
+    writeGrant: store.writeGrant,
+    forgetGrant: store.forgetGrant,
+    environment: ENVIRONMENT,
+    fetchImplementation: (async (input, init) => {
+      requests.push({
+        url: String(input),
+        authorization: new Headers(init?.headers).get("authorization"),
+        body: typeof init?.body === "string" ? init.body : undefined,
+      });
+      return requests.length === 1 ? refreshResponse : jsonResponse({}, HTTP_STATUS.OK);
+    }) as typeof globalThis.fetch,
+    now: () => NOW,
+  });
+
+  const access = credentials.accessToken();
+  while (requests.length === 0) await new Promise((resolve) => setImmediate(resolve));
+  const disconnect = credentials.disconnect();
+  while (requests.length < 2) await new Promise((resolve) => setImmediate(resolve));
+  finishRefresh?.(renewed());
+
+  await disconnect;
+  assert.equal(await access, undefined);
+  assert.equal(store.state.grant, undefined);
+  assert.equal(store.state.writes, 0);
+});

@@ -40,6 +40,7 @@ export class LinearCredentials {
   readonly #options: LinearCredentialsOptions;
   readonly #now: () => number;
   readonly #renew: () => Promise<void>;
+  #generation = 0;
 
   constructor(options: LinearCredentialsOptions) {
     this.#options = options;
@@ -49,6 +50,7 @@ export class LinearCredentials {
       // Another ask may have renewed it while this one waited for the flight,
       // in which case there is nothing left to spend a rotation on.
       if (!grant?.refreshToken || this.#current(grant)) return;
+      const generation = this.#generation;
       const outcome = await refreshLinearGrant(grant.refreshToken, {
         ...(this.#options.environment ? { environment: this.#options.environment } : {}),
         ...(this.#options.fetchImplementation
@@ -57,6 +59,7 @@ export class LinearCredentials {
         now: this.#now,
       });
       if (outcome.status === LINEAR_REFRESH_STATUS.RENEWED) {
+        if (generation !== this.#generation) return;
         await this.#options.writeGrant(outcome.grant);
         return;
       }
@@ -65,6 +68,7 @@ export class LinearCredentials {
       // turns the row back into an offer to connect, which is the only thing
       // that helps.
       if (outcome.status === LINEAR_REFRESH_STATUS.REFUSED) {
+        if (generation !== this.#generation) return;
         await this.#options.forgetGrant();
       }
     });
@@ -99,6 +103,7 @@ export class LinearCredentials {
    * message is no reason to keep the grant on this machine.
    */
   async disconnect(): Promise<void> {
+    this.#generation += 1;
     const grant = await this.#options.readGrant();
     if (grant) {
       await revokeLinearGrant(grant.accessToken, this.#options.fetchImplementation ?? fetch);

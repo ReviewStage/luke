@@ -231,6 +231,7 @@ export class LinearSignIn {
     // Assigned once a registered port has bound, before the browser is opened
     // — no request can arrive ahead of it.
     let redirectUri = "";
+    let callbackClaimed = false;
 
     const server = http.createServer((request, response) => {
       const url = new URL(request.url ?? "/", `http://${LOOPBACK_HOST}`);
@@ -241,6 +242,11 @@ export class LinearSignIn {
         response.writeHead(404, { "content-type": "text/plain" }).end("Not found");
         return;
       }
+      if (callbackClaimed) {
+        response.writeHead(404, { "content-type": "text/plain" }).end("Not found");
+        return;
+      }
+      callbackClaimed = true;
       const refused = url.searchParams.get("error");
       const code = url.searchParams.get("code");
       if (refused || !code) {
@@ -450,13 +456,20 @@ export async function refreshLinearGrant(
   } catch {
     return { status: LINEAR_REFRESH_STATUS.UNREACHABLE };
   }
-  // Linear answering at all, but not with a grant, is Linear saying no. A
-  // fault on its own side is the exception: a 500 is not a withdrawn grant,
-  // and a developer should not be disconnected by someone else's outage.
   if (!response.ok) {
-    return response.status >= 500
-      ? { status: LINEAR_REFRESH_STATUS.UNREACHABLE }
-      : { status: LINEAR_REFRESH_STATUS.REFUSED };
+    try {
+      const payload: unknown = await response.json();
+      if (
+        payload !== null &&
+        typeof payload === "object" &&
+        (payload as Record<string, unknown>).error === "invalid_grant"
+      ) {
+        return { status: LINEAR_REFRESH_STATUS.REFUSED };
+      }
+    } catch {
+      // An unreadable refusal proves nothing about the grant.
+    }
+    return { status: LINEAR_REFRESH_STATUS.UNREACHABLE };
   }
   let grant: LinearGrant | undefined;
   try {
@@ -464,12 +477,6 @@ export async function refreshLinearGrant(
   } catch {
     return { status: LINEAR_REFRESH_STATUS.UNREACHABLE };
   }
-  if (!grant) return { status: LINEAR_REFRESH_STATUS.REFUSED };
-  // Linear may answer a refresh without repeating the refresh token. The one
-  // just spent is the only one there is, so it carries forward rather than
-  // leaving a grant that can never be refreshed again.
-  return {
-    status: LINEAR_REFRESH_STATUS.RENEWED,
-    grant: grant.refreshToken ? grant : { ...grant, refreshToken },
-  };
+  if (!grant?.refreshToken) return { status: LINEAR_REFRESH_STATUS.UNREACHABLE };
+  return { status: LINEAR_REFRESH_STATUS.RENEWED, grant };
 }

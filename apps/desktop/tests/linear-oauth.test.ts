@@ -179,6 +179,41 @@ test("a redirect with the wrong state is refused without ending the wait", async
   assert.equal("accessToken" in (await pending), true);
 });
 
+test("the first valid callback exclusively claims the one-time code exchange", async () => {
+  let finishExchange: ((response: Response) => void) | undefined;
+  const exchangeResponse = new Promise<Response>((resolve) => {
+    finishExchange = resolve;
+  });
+  const opened: string[] = [];
+  const requests: RecordedRequest[] = [];
+  const signIn = new LinearSignIn({
+    openExternal: (url) => opened.push(url),
+    environment: environment(),
+    fetchImplementation: (async (input, init) => {
+      requests.push({
+        url: String(input),
+        authorization: new Headers(init?.headers).get("authorization"),
+        body: typeof init?.body === "string" ? init.body : undefined,
+      });
+      return exchangeResponse;
+    }) as typeof globalThis.fetch,
+    now: () => NOW,
+  });
+
+  const pending = signIn.signIn();
+  const authorization = await openedUrl(opened);
+  const state = authorization.searchParams.get("state") ?? "";
+  const first = answerCallback(opened[0] as string, { state, code: "auth-code" });
+  while (requests.length === 0) await new Promise((resolve) => setImmediate(resolve));
+  const duplicate = await answerCallback(opened[0] as string, { state, code: "auth-code" });
+  assert.equal(duplicate.status, 404);
+  assert.equal(requests.length, 1);
+
+  finishExchange?.(grantResponse());
+  assert.equal((await first).status, 200);
+  assert.equal("accessToken" in (await pending), true);
+});
+
 test("a refusal from Linear is an answer, not an exchange", async () => {
   const { signIn, opened, requests } = signInWith(() => grantResponse());
 
@@ -216,10 +251,7 @@ test("one sign-in at a time", async () => {
   assert.deepEqual(await first, { reason: "Sign-in was cancelled." });
 });
 
-test("a renewed grant carries forward the refresh token Linear left out", async () => {
-  // Linear rotates the refresh token when it is spent, but does not always
-  // repeat it. The one just spent is then the only one there is, so dropping
-  // it would leave a grant that could never be renewed again.
+test("a refresh answer without its rotated refresh token is not persisted", async () => {
   const { fetch: fakeFetch } = recordingFetch(() =>
     grantResponse({ refresh_token: undefined, expires_in: 3_600 }),
   );
@@ -229,14 +261,7 @@ test("a renewed grant carries forward the refresh token Linear left out", async 
     now: () => NOW,
   });
 
-  assert.deepEqual(outcome, {
-    status: LINEAR_REFRESH_STATUS.RENEWED,
-    grant: {
-      accessToken: "lin_oauth_access",
-      refreshToken: "spent-refresh",
-      expiresAt: NOW + 3_600_000,
-    },
-  });
+  assert.deepEqual(outcome, { status: LINEAR_REFRESH_STATUS.UNREACHABLE });
 });
 
 test("Linear saying no and Linear saying nothing are different answers", async () => {
@@ -262,6 +287,22 @@ test("Linear saying no and Linear saying nothing are different answers", async (
     fetchImplementation: (() => Promise.reject(new Error("offline"))) as typeof globalThis.fetch,
   });
   assert.deepEqual(unreachable, { status: LINEAR_REFRESH_STATUS.UNREACHABLE });
+
+  for (const status of [408, HTTP_STATUS.TOO_MANY_REQUESTS]) {
+    const transient = await refreshLinearGrant("good-refresh", {
+      environment: environment(),
+      fetchImplementation: recordingFetch(() => jsonResponse({ error: "try_again" }, status))
+        .fetch as typeof globalThis.fetch,
+    });
+    assert.deepEqual(transient, { status: LINEAR_REFRESH_STATUS.UNREACHABLE });
+  }
+
+  const malformed = await refreshLinearGrant("good-refresh", {
+    environment: environment(),
+    fetchImplementation: recordingFetch(() => jsonResponse({ expires_in: 86_400 }))
+      .fetch as typeof globalThis.fetch,
+  });
+  assert.deepEqual(malformed, { status: LINEAR_REFRESH_STATUS.UNREACHABLE });
 });
 
 test("revoking posts the grant to Linear and never throws", async () => {
