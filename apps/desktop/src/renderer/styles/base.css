@@ -1488,12 +1488,15 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   height: calc(var(--capsule-height) - var(--shape-top) * 2 + var(--caption-growth));
 }
 
-/* The chip itself: the one raised, pressable pill on the compact shape, named
-   like the session's row — its provider's mark and its title. It stands
-   still, directly under the housing, and the words are what move: a single
-   row wants a fade crossing the last of the shape's travel, not a clip or a
-   journey of its own. Above the hover strip (z-index 4) because the press
-   has to open the session. */
+/* The chip itself: the one raised, pressable pill on the shape, named like
+   the session's row — its provider's mark and its title. In the compact
+   states it stands directly under the housing and the words are what move: a
+   single row wants a fade crossing the last of the shape's travel, not a
+   clip or a journey of its own. `--notice-rest` is its one journey — the
+   ride to the open panel's foot, the caption's own travel — and the
+   transform waits out `--duration-exit` like the caption's does, so leaving
+   a state the chip travels with the shape rather than ahead of it. Above the
+   hover strip (z-index 4) because the press has to open the session. */
 .session-notice {
   position: absolute;
   z-index: 5;
@@ -1512,9 +1515,10 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   font-weight: 640;
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, calc(3px - var(--shape-top, 0px)));
+  transform: translate(-50%, calc(3px - var(--shape-top, 0px) + var(--notice-rest, 0px)));
   transition:
     opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-shape) var(--spring) var(--duration-exit),
     background-color var(--duration-hover) ease;
 }
 
@@ -1528,7 +1532,53 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transition:
     opacity var(--duration-quick) var(--motion-exit)
     calc(var(--duration-shape) - var(--duration-quick)),
+    transform var(--duration-shape) var(--spring) var(--duration-exit),
     background-color var(--duration-hover) ease;
+}
+
+/* The open panel keeps the chip at its foot, the way it keeps the caption's
+   words: the announced session's row is up in the list, but the chip is what
+   says which row Luke is talking about, and its press stays one press either
+   way. It stands above the caption's block when one is drawn — the compact
+   order, chip first and words below. `--notice-rest` is the travel from
+   under the housing to the foot the panel's measured height puts there.
+   Expanding, the chip leads with the surface — no delay, the panel's own
+   timing — and collapsing, the compact rule above holds it back by
+   `--duration-exit` so it leaves with the shape. */
+.app-stage[data-presentation="panel"][data-notice="true"] {
+  --notice-rest: calc(var(--panel-height, 520px) - var(--capsule-height) - var(--notice-size));
+}
+
+.app-stage[data-presentation="panel"][data-caption="true"][data-notice="true"] {
+  --notice-rest: calc(
+    var(--panel-height, 520px) -
+    var(--capsule-height) -
+    var(--caption-size, 28px) -
+    var(--notice-size)
+  );
+}
+
+.app-stage[data-presentation="panel"][data-notice="true"] .session-notice {
+  opacity: 1;
+  pointer-events: auto;
+  transition:
+    opacity var(--duration-quick) var(--motion-exit)
+    calc(var(--duration-shape) - var(--duration-quick)),
+    transform var(--duration-shape) var(--spring),
+    background-color var(--duration-hover) ease;
+}
+
+/* The chip is drawn on the shape, not in the panel's flow, so the body
+   reserves its band under the same padding the caption block takes — and
+   both at once stack, the caption's room under the chip's. Reserved whenever
+   the notice stands rather than only while the panel is up, so the height
+   the panel reports is already right when an expand begins mid-announcement. */
+.app-stage[data-notice="true"] .expanded-panel {
+  padding-bottom: calc(18px + var(--notice-size));
+}
+
+.app-stage[data-caption="true"][data-notice="true"] .expanded-panel {
+  padding-bottom: calc(18px + var(--caption-size, 28px) + var(--notice-size));
 }
 
 .session-notice:hover {

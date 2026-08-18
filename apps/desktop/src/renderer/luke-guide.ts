@@ -823,9 +823,10 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
               "stops on an error, or finishes — in his own words, naming the session and saying " +
               "what it needs, from the agent's parting words or the provider's error line when " +
               "one was reported. No conversation needs to be open, and the microphone stays " +
-              "off. While he says it, a pressable notice under the housing names the session " +
-              "he is talking about: pressing it opens the session where its provider keeps it, " +
-              "or opens the panel for a local session with no page of its own. " +
+              "off. While he says it, a pressable notice names the session he is talking " +
+              "about — under the housing, or at the open panel's foot: pressing it opens the " +
+              "session where its provider keeps it, or opens the panel for a local session " +
+              "with no page of its own. " +
               "Always on while voice is available; the panel and the capsule count show the " +
               "same states either way." +
               // Only a build that offers the calendar may describe the quiet:
