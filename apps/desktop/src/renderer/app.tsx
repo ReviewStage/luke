@@ -1702,8 +1702,14 @@ export function App(): React.JSX.Element {
   const measureNoticeFold = useCallback(() => {
     const band = noticeBand.current;
     if (!band) return;
-    const above = band.scrollTop > 1;
-    const below = band.scrollTop + band.clientHeight < band.scrollHeight - 1;
+    // Folds only on a band that genuinely scrolls. Subpixel rounding can
+    // leave scrollHeight a pixel or two past clientHeight on a band whose
+    // chips all fit, and a fold drawn for that fades a chip nobody can
+    // scroll to. Real overflow is at least a row of chips; half of one
+    // tells the two apart at any display scale.
+    const scrollable = band.scrollHeight - band.clientHeight > SESSION_NOTICE_HEIGHT / 2;
+    const above = scrollable && band.scrollTop > 1;
+    const below = scrollable && band.scrollTop + band.clientHeight < band.scrollHeight - 1;
     setNoticeFold((held) =>
       held.above === above && held.below === below ? held : { above, below },
     );
