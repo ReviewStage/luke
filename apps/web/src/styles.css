@@ -315,7 +315,9 @@
   --surface-shadow: 0 10px 26px rgba(0, 0, 0, 0.46), 0 2px 7px rgba(0, 0, 0, 0.3);
 
   --panel-radius: 30px;
+  --panel-inset: 20px;
   --wing-inset: 9px;
+  --scroll-fade: 26px;
 
   --capsule-width: calc(var(--notch-housing-width) + 72px);
   --capsule-height: max(var(--notch-top-inset), 32px);
@@ -492,6 +494,20 @@
   right: calc(50% + var(--notch-housing-width) / 2);
   left: calc(50% - var(--wing-bound) / 2);
   justify-content: flex-end;
+  /* The marks rest against this edge, and this edge is the one a morph moves.
+     In the product session-motion glides them along it on the surface's own
+     spring; here the edge itself takes the surface's exact timing — both
+     travel 50% minus half a springing width — so the marks track the black
+     without a frame of being drawn past it. The handful of fixed-size glyphs
+     inside re-lay out for pennies, and no text is re-shaped. */
+  transition: left var(--duration-shape) var(--spring) var(--duration-exit);
+}
+
+/* Growing, the far edge leads with the surface; shrinking, the base rule's
+   delay holds both back together — the two edges never part. */
+.mock[data-mode="peek"] .wing-left,
+.mock[data-mode="panel"] .wing-left {
+  transition-delay: 0s;
 }
 
 .mock .wing-right {
@@ -507,16 +523,28 @@
   padding: 0 var(--wing-inset);
 }
 
-/* Reversed so the first agent — the one that needs a person soonest — is the
-   mark nearest the face, and therefore the first to come out from behind it.
-   Every mark holds its place and only fades, so none of them moves during the
-   morph. */
+/* The left wing's inner spans the whole strip rather than shrinking to its
+   contents: the face keeps the notch's edge it always had, and the marks' own
+   auto margin is what holds them against the shape's far edge instead of
+   beside the face. */
+.mock .wing-left .wing-inner {
+  flex: 1;
+  justify-content: flex-end;
+}
+
+/* Anchored to the shape's far edge — the auto margin holds it there — and
+   starting at `--panel-inset` from it, so the first mark lines up with the tab
+   bar and the rows below. The wing already pads `--wing-inset`; the margin
+   makes up the difference. Read the way a list is: the first provider — the
+   one that needs a person soonest — holds the leftmost slot, and the overflow
+   count trails the rest. */
 .mock .wing-marks {
   display: flex;
   height: 22px;
-  flex-direction: row-reverse;
   align-items: center;
   gap: 7px;
+  margin-right: auto;
+  margin-left: calc(var(--panel-inset) - var(--wing-inset));
 }
 
 .mock .wing-mark {
@@ -715,7 +743,7 @@
   display: flex;
   max-height: 520px;
   flex-direction: column;
-  padding: calc(max(var(--notch-top-inset), 32px) + 14px) 20px 18px;
+  padding: calc(max(var(--notch-top-inset), 32px) + 14px) var(--panel-inset) 18px;
   border-radius: 0 0 var(--panel-radius) var(--panel-radius);
   /* The hero centers its own copy; the panel is a recreation of a real
      left-aligned product surface and must not inherit that. */
@@ -794,12 +822,36 @@
   flex: 0 0 auto;
 }
 
+/* Rows dissolve into the panel rather than being cut off at its edge — the
+   renderer's own treatment for a fixture taller than the shape. A scroll
+   timeline is exactly the right tool: with nothing to scroll it never becomes
+   active, so content that fits is left alone without asking JavaScript
+   whether it overflows. */
+@keyframes scroll-edge-fade {
+  from {
+    mask-image: linear-gradient(to bottom, #000 calc(100% - var(--scroll-fade)), transparent 100%);
+  }
+
+  to {
+    mask-image: linear-gradient(to bottom, #000 100%, transparent 100%);
+  }
+}
+
+/* `min-height: 0` is what actually permits the clip: a flex child defaults to
+   its content size, which would push the list past the panel instead of
+   containing it. The renderer shows a thin scrollbar here; the mock is an
+   illustration nobody can scroll, so it draws none. */
 .mock .session-list {
   display: flex;
   min-height: 0;
   flex: 1;
   flex-direction: column;
   gap: 9px;
+  overflow-x: clip;
+  overflow-y: auto;
+  animation: scroll-edge-fade linear both;
+  animation-timeline: scroll(self block);
+  scrollbar-width: none;
 }
 
 /* Content arrives behind the surface on the same spring the surface is
@@ -1142,6 +1194,7 @@
 
   .mock .panel-surface,
   .mock .expanded-stage,
+  .mock .wing-left,
   .mock .wing-mark,
   .mock .wing-more,
   .mock .count-badge,

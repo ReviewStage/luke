@@ -81,9 +81,11 @@ const WING_PROVIDERS = MOCK_SESSIONS.map((session) => session.providerId).filter
 /**
  * `wingMarkCapacity` and its constants in the renderer's notch-wings.tsx: what
  * one wing costs to fill, so the peek counts its remainder and the panel does
- * not have to.
+ * not have to. The insets are `--panel-inset` on the far side, where the marks
+ * start level with the tab bar and the rows, plus `--wing-inset` beside the
+ * housing.
  */
-const WING_INSETS = 18;
+const WING_INSETS = 29;
 const FACE_AND_GAP = 26;
 const MARK_WIDTH = 14;
 const MARK_AND_GAP = 21;
@@ -387,8 +389,9 @@ export function NotchMock(): React.JSX.Element {
             </section>
           </div>
 
-          {/* The wings: Luke nearest the housing, what he is watching unfolding
-              outward on one side, the count and its caption on the other. */}
+          {/* The wings: Luke nearest the housing, what he is watching resting
+              against the shape's far edge, the count and its caption on the
+              other side. */}
           <div className="wing wing-left">
             <div className="wing-inner">
               <span className="wing-marks">
