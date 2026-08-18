@@ -211,6 +211,10 @@
   top: max(72px, 14svh);
   display: flex;
   justify-content: center;
+  /* The stage is wider than the shell's content box, whose padding belongs to
+     the prose. Give the display the viewport width at every breakpoint so the
+     clip keeps its rounded corners instead of shaving them to the measure. */
+  margin-inline: calc(50% - 50vw);
   /* `transform: scale()` leaves the layout box at full size, so the pin
      tracks the scale itself or a phone reserves 560px for a 300px visual.
      `clip` keeps the untransformed art width from opening a horizontal
@@ -247,7 +251,7 @@
   --raised: rgba(255, 255, 255, 0.05);
   --raised-strong: rgba(255, 255, 255, 0.09);
   --frame-top: #14171c;
-  --frame-bottom: #0a0b0e;
+  --frame-bottom: #101318;
 
   /* Provider brand colours, used only by the marks and ported with them:
      Claude Code's published coral, the vertical gradient Codex draws its mark
@@ -315,44 +319,16 @@
   --accent: var(--state-idle);
 }
 
-/* The display the capsule is cut into, kept as its own layer so it can end
-   well before the mock's bottom edge: the capsule reads as the top of a
-   screen rather than as a container with nothing in it, and the flares at its
-   corners have a surface to turn into.
-
-   A strip rather than the full box, because the page is light. Fading a black
-   rectangle out over the mock's whole height means fading it through every
-   grey on the way, which on a dark page was invisible and on this one is a
-   bank of fog behind the art. Short enough to read as an edge, and opaque for
-   most of its own height so it reads as an object with a bottom rather than
-   as a gradient. */
+/* The persistent display the capsule is cut into. It stays in place while the
+   surface grows, so the panel remains inside the same rounded stage instead
+   of exposing the square ends of a narrower strip. */
 .mock-frame {
   position: absolute;
   z-index: 0;
-  top: 0;
-  right: 0;
-  left: 0;
-  height: 104px;
+  inset: 0;
   border: 1px solid var(--hairline-strong);
-  border-bottom: 0;
-  border-radius: 18px 18px 0 0;
+  border-radius: 18px;
   background: linear-gradient(180deg, var(--frame-top) 0%, var(--frame-bottom) 100%);
-  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 74%, transparent 100%);
-  mask-image: linear-gradient(180deg, #000 0%, #000 74%, transparent 100%);
-  /* Returning: held back until the shape has shrunk, or the display is drawn
-     beside a panel that has not closed yet — the very artifact below. */
-  transition: opacity var(--duration-quick) ease var(--duration-shape);
-}
-
-/* The display is what the capsule is cut into, and only the capsule. Once the
-   surface has grown past the housing it is its own object, with its own shadow
-   and its own edge; the display is 700px wide against a 620px panel, so left
-   drawn it puts a square slab either side of the panel's rounded corners.
-   Leaving leads the growing edge — immediately, over the exit duration — so
-   the display is gone before the surface reaches where it was. */
-.mock:not([data-mode="capsule"]) .mock-frame {
-  opacity: 0;
-  transition: opacity var(--duration-exit) ease;
 }
 
 /* The black surface is the whole animation: one leaf element with no children
@@ -1068,13 +1044,6 @@
     --mock-scale: 0.75;
   }
 
-  /* A notch lives on an edge-to-edge display, and a phone has one: the pin
-     escapes the shell's column so the art is sized by the screen rather than
-     by the text measure. The copy above keeps the shell's padding. */
-  .mock-pin {
-    margin-inline: calc(50% - 50vw);
-  }
-
   /* The 700px box exists for the desktop shadow's room, and a phone spends
      that room on nothing but feeding the frame's own corners to the pin's
      clip. 660 still holds the 620px panel with margin for its shadow, and is
@@ -1130,7 +1099,6 @@
   }
 
   .mock .panel-surface,
-  .mock .mock-frame,
   .mock .expanded-stage,
   .mock .wing-mark,
   .mock .wing-more,
