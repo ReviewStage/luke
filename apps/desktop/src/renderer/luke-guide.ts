@@ -41,8 +41,8 @@ import {
 } from "../shared/contracts";
 import {
   CLOUD_AGENT_PROVIDER_LIST,
+  CREDENTIAL_PROVIDER_ID,
   CREDENTIAL_PROVIDERS,
-  INTEGRATION_PROVIDER_LIST,
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "../shared/credential-providers";
 import {
@@ -171,13 +171,16 @@ function providersFact(settings: AppSettings): AppGuideFact {
 }
 
 function integrationsFact(settings: AppSettings): AppGuideFact {
-  const roster = INTEGRATION_PROVIDER_LIST.map(
-    (provider) =>
-      `${provider.displayName} (${connectionWord(settings.credentialSources[provider.id])})`,
-  );
-  // The calendar is an integration too, connected by sign-in rather than by a
-  // key — and only a build carrying the sign-in offers it at all, so a build
-  // without one says nothing rather than describing a row that is not drawn.
+  const linearProvider = CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.LINEAR];
+  const linear = !settings.linearSignInAvailable
+    ? ""
+    : `${linearProvider.displayName} ` +
+      `(${connectionWord(settings.credentialSources[linearProvider.id])}) connects by signing ` +
+      `in with Linear from its row in ${CONNECTIONS_PAGE}, under Integrations — Linear's own ` +
+      `consent page opens in the browser, and no key is ever typed or spoken. Connecting it ` +
+      `lets Luke read the developer's assigned issues and, only when asked in a turn the ` +
+      `developer opened, move one to another state or comment on it. Disconnecting from the ` +
+      `same row ends the access at Linear as well as here.`;
   const accounts = settings.calendarAccounts.length;
   const calendar = !settings.calendarSignInAvailable
     ? ""
@@ -191,11 +194,7 @@ function integrationsFact(settings: AppSettings): AppGuideFact {
         "can be added from the same row.";
   return {
     label: "Integrations",
-    detail:
-      `${roster.join(", ")}. Connecting Linear lets Luke read the developer's issues and, only ` +
-      `when asked in a turn the developer opened, move or comment on one. Its key is typed by ` +
-      `hand into ${CONNECTIONS_PAGE}, under Integrations — never spoken, and never repeated ` +
-      `back.${calendar}`,
+    detail: `${linear}${calendar}`.trim() || "No integrations are available in this build.",
   };
 }
 
