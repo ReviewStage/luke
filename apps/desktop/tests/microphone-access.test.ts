@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { REALTIME_DEFAULTS, REALTIME_MINT_OUTCOME, type RealtimeDiagnostics } from "@sidecar/core";
 import {
+  currentQuota,
   fresherQuota,
   hostedVoiceNote,
   hostedVoiceSpentNote,
@@ -186,4 +187,30 @@ test("the numberless note stays short, and withholds the key from a machine that
 
   const locked = hostedVoiceNote(undefined, { offersKey: false });
   assert.doesNotMatch(locked, /OpenAI key/);
+});
+
+test("a reading past its own reset is no reading, and a stale spent outcome goes quiet", () => {
+  const now = 1_800_000_000_000;
+  const running = { used: 50, limit: 50, remaining: 0, resetsAt: now + 3_600_000 };
+  const expired = { used: 50, limit: 50, remaining: 0, resetsAt: now - 1 };
+
+  assert.equal(currentQuota(running, now), running);
+  assert.equal(currentQuota(expired, now), undefined);
+  assert.equal(currentQuota(undefined, now), undefined);
+
+  // Yesterday's refusal, dated by its own expired quota, describes an
+  // allowance that no longer exists — the fresh day promises numbers again.
+  const rolled = hostedVoiceNote(
+    diagnostics({ lastOutcome: REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED, quota: expired }),
+    { now },
+  );
+  assert.doesNotMatch(rolled, /used up/);
+  assert.match(rolled, /included with your account/);
+
+  // Still inside its day, the refusal stands.
+  const standing = hostedVoiceNote(
+    diagnostics({ lastOutcome: REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED, quota: running }),
+    { now },
+  );
+  assert.match(standing, /used up/);
 });

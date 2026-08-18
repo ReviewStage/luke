@@ -52,6 +52,16 @@ export function fresherQuota(a?: HostedQuota, b?: HostedQuota): HostedQuota | un
 }
 
 /**
+ * A reading only while its day is still running. Past its own reset a quota
+ * describes an allowance that no longer exists — a spent yesterday must not
+ * be drawn as an almost-back today — so it reads as no reading at all, and
+ * the surface falls back to words that promise no numbers.
+ */
+export function currentQuota(quota: HostedQuota | undefined, now: number): HostedQuota | undefined {
+  return quota && quota.resetsAt > now ? quota : undefined;
+}
+
+/**
  * The BYOK hint, worded once. It names no page: the key row it means stands
  * directly below the one place this sentence is drawn.
  */
@@ -67,11 +77,17 @@ export function hostedVoiceLift(): string {
  */
 export function hostedVoiceNote(
   diagnostics: RealtimeDiagnostics | undefined,
-  options: { offersKey?: boolean } = {},
+  options: { offersKey?: boolean; now?: number } = {},
 ): string {
+  const now = options.now ?? Date.now();
   // A machine that cannot store a key is not offered one to connect.
   const lift = options.offersKey === false ? "" : ` ${hostedVoiceLift()}`;
-  if (diagnostics?.lastOutcome === REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED) {
+  // A spent outcome speaks only while its own day runs: past the reset it
+  // describes yesterday, and the fresh day has an allowance again.
+  const spentStands =
+    diagnostics?.lastOutcome === REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED &&
+    (diagnostics.quota === undefined || currentQuota(diagnostics.quota, now) !== undefined);
+  if (spentStands) {
     return `${hostedVoiceSpentNote()}${lift}`;
   }
   return `Voice and session review are included with your account.${lift}`;

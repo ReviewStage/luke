@@ -75,6 +75,7 @@ import { Keycaps } from "./keycaps";
 import { type ErrandTarget, errandTargetProps } from "./luke-errand";
 import { APP_SETTING_ID } from "./luke-guide";
 import {
+  currentQuota,
   fresherQuota,
   hostedVoiceLift,
   hostedVoiceNote,
@@ -2477,11 +2478,25 @@ function AccountSection({
           {(() => {
             // The freshest reading of each meter, wherever it came from: the
             // usage read against the quota the last mint carried, day and
-            // remainder telling the two apart. Reviews only ride while the
-            // read shares the freshest day — an older read's reviews would be
-            // an older day's.
-            const voiceQuota = fresherQuota(hostedUsage?.voice, voiceService?.quota);
-            if (!voiceQuota) return null;
+            // remainder telling the two apart — and neither counted past its
+            // own reset, because a spent yesterday must not be drawn as an
+            // almost-back today. Reviews only ride while the read shares the
+            // freshest day — an older read's reviews would be an older day's.
+            const now = Date.now();
+            const voiceQuota = fresherQuota(
+              currentQuota(hostedUsage?.voice, now),
+              currentQuota(voiceService?.quota, now),
+            );
+            if (!voiceQuota) {
+              // Every reading in hand has outlived its day: fall back to the
+              // words that promise no numbers, exactly as before the first
+              // read of a day.
+              return (
+                <p className="settings-note">
+                  {hostedVoiceNote(voiceService, { offersKey: !storageLocked })}
+                </p>
+              );
+            }
             const reviews =
               hostedUsage && hostedUsage.attention.resetsAt === voiceQuota.resetsAt
                 ? hostedUsage.attention
