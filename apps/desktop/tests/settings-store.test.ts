@@ -759,6 +759,21 @@ test("carries a key belonging to a provider this build does not know", async (t)
   });
 });
 
+test("drops the retired menu bar preference on the next settings write", async (t) => {
+  const directory = await temporaryDirectory(t);
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({ version: 2, apiKeys: {}, showInMenuBar: false }),
+  );
+  const store = storeIn(directory);
+
+  await store.setShowInDock(true);
+
+  const persisted = JSON.parse(await readSettingsFile(directory));
+  assert.equal(persisted.showInMenuBar, undefined);
+  assert.equal(persisted.showInDock, true);
+});
+
 test("keeps Luke out of the Dock until asked, and remembers the answer", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
