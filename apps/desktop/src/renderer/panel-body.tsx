@@ -137,9 +137,11 @@ function RowActionButton({
  * message field that is simply there, the way every chat surface keeps its
  * composer on screen, and each advertised action beside it — a stop as the
  * square glyph, anything else as a chip in the provider's own words.
- * Everything here answers back onto the same line — sending, sent, or the
- * provider's refusal — because a write is the user's own act and its outcome
- * may not vanish into a log.
+ * Every outcome that needs words answers back onto the same line — sending, an
+ * action's acceptance, or the provider's refusal — because a write is the
+ * user's own act and its outcome may not vanish into a log. An accepted
+ * message alone answers silently: the draft emptying is the confirmation, and
+ * a line saying so again only holds the row taller than it needs to be.
  */
 function SessionRowActions({
   session,
@@ -179,9 +181,9 @@ function SessionRowActions({
     try {
       const result = await writes.sendMessage(session, text);
       if (result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
-        // The draft has become the session's; the field empties for the next.
+        // The draft has become the session's; the field emptying for the next
+        // message is the whole confirmation, so no line repeats it.
         setDraft("");
-        setFeedback(`Sent to ${session.provider}`);
       } else {
         // The draft stays: a refused message is still the user's words.
         setFeedback(feedbackFor(result));
