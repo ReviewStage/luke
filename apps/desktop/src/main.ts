@@ -140,6 +140,7 @@ import {
   type AccountSnapshot,
   APP_SETTING_DEFAULTS,
   type AppBootstrap,
+  type AppSettings,
   channels,
   isSettingsResetScope,
   type MicrophoneRoute,
@@ -148,7 +149,6 @@ import {
   type OutputAudioState,
   SESSION_OPEN_RESULT_STATUS,
   SESSION_TRANSCRIPT_RESULT_STATUS,
-  SETTINGS_RESET_SCOPE,
   type SessionOpenResult,
   type SessionTranscriptResult,
   VOICE_SOURCE,
@@ -167,7 +167,10 @@ import {
   isFeedbackKind,
 } from "./shared/feedback";
 import {
+  APP_SETTING_FIELDS,
   APP_SETTING_SCHEMA,
+  type AppSettingField,
+  type AppSettingValue,
   isAppSettingField,
   SETTING_SIDE_EFFECT,
 } from "./shared/settings-schema";
@@ -1278,6 +1281,60 @@ function registerIpc(): void {
     refusal: "Could not save that API key on this system.",
   });
 
+  async function applySettingSideEffect(
+    field: AppSettingField,
+    value: AppSettingValue<AppSettingField>,
+    settings: AppSettings,
+    event: IpcMainInvokeEvent,
+    waitForDeferredEffects = false,
+  ): Promise<void> {
+    switch (APP_SETTING_SCHEMA[field].mainProcessSideEffect) {
+      case SETTING_SIDE_EFFECT.DOCK:
+        dock.apply(settings.showInDock, panels.displayIdFor(event.sender));
+        break;
+      case SETTING_SIDE_EFFECT.DISPLAYS:
+        panels.setShowOnAllDisplays(settings.showOnAllDisplays);
+        panels.reconcile();
+        break;
+      case SETTING_SIDE_EFFECT.FORM_FACTOR:
+        panels.setFormFactor(settings.formFactor);
+        panels.positionAll();
+        break;
+      case SETTING_SIDE_EFFECT.VOICE:
+        realtimeCredentials?.setVoice(settings.voice);
+        break;
+      case SETTING_SIDE_EFFECT.VOICE_SPEED:
+        realtimeCredentials?.setSpeed(settings.voiceSpeed);
+        break;
+      case SETTING_SIDE_EFFECT.TALK_HOTKEY:
+        hotkeys.setChosen(HOTKEY_RANK.TALK, value as string | undefined);
+        await hotkeys.reapply(HOTKEY_RANK.TALK);
+        break;
+      case SETTING_SIDE_EFFECT.ASK_HOTKEY:
+        hotkeys.setChosen(HOTKEY_RANK.ASK, value as string | undefined);
+        if (waitForDeferredEffects) await hotkeys.reapply(HOTKEY_RANK.ASK);
+        else void hotkeys.reapply(HOTKEY_RANK.ASK);
+        break;
+      case SETTING_SIDE_EFFECT.STOP_HOTKEY:
+        hotkeys.setChosen(HOTKEY_RANK.STOP, value as string | undefined);
+        if (waitForDeferredEffects) await hotkeys.reapply(HOTKEY_RANK.STOP);
+        else void hotkeys.reapply(HOTKEY_RANK.STOP);
+        break;
+      case SETTING_SIDE_EFFECT.MEDIA_DUCK:
+        mediaDuck.setEnabled(settings.duckOtherMedia);
+        break;
+      case SETTING_SIDE_EFFECT.VOICE_SOURCE:
+        void applyVoiceCredential();
+        break;
+      case SETTING_SIDE_EFFECT.MEETING_QUIET:
+        void refreshMeetingQuiet();
+        void releaseHeldNotices();
+        break;
+      case SETTING_SIDE_EFFECT.NONE:
+        break;
+    }
+  }
+
   registerSettingHandler(channels.updateSetting, {
     async validate(field: unknown, value: unknown) {
       if (!isAppSettingField(field)) throw new Error("Unknown setting");
@@ -1317,49 +1374,7 @@ function registerIpc(): void {
     save: ({ field, value }) => settingsStore.set(field, value),
     async apply(result, { field, value }, event) {
       if (result.reason) return;
-      switch (APP_SETTING_SCHEMA[field].mainProcessSideEffect) {
-        case SETTING_SIDE_EFFECT.DOCK:
-          dock.apply(result.settings.showInDock, panels.displayIdFor(event.sender));
-          break;
-        case SETTING_SIDE_EFFECT.DISPLAYS:
-          panels.setShowOnAllDisplays(result.settings.showOnAllDisplays);
-          panels.reconcile();
-          break;
-        case SETTING_SIDE_EFFECT.FORM_FACTOR:
-          panels.setFormFactor(result.settings.formFactor);
-          panels.positionAll();
-          break;
-        case SETTING_SIDE_EFFECT.VOICE:
-          realtimeCredentials?.setVoice(result.settings.voice);
-          break;
-        case SETTING_SIDE_EFFECT.VOICE_SPEED:
-          realtimeCredentials?.setSpeed(result.settings.voiceSpeed);
-          break;
-        case SETTING_SIDE_EFFECT.TALK_HOTKEY:
-          hotkeys.setChosen(HOTKEY_RANK.TALK, value as string | undefined);
-          await hotkeys.reapply(HOTKEY_RANK.TALK);
-          break;
-        case SETTING_SIDE_EFFECT.ASK_HOTKEY:
-          hotkeys.setChosen(HOTKEY_RANK.ASK, value as string | undefined);
-          void hotkeys.reapply(HOTKEY_RANK.ASK);
-          break;
-        case SETTING_SIDE_EFFECT.STOP_HOTKEY:
-          hotkeys.setChosen(HOTKEY_RANK.STOP, value as string | undefined);
-          void hotkeys.reapply(HOTKEY_RANK.STOP);
-          break;
-        case SETTING_SIDE_EFFECT.MEDIA_DUCK:
-          mediaDuck.setEnabled(result.settings.duckOtherMedia);
-          break;
-        case SETTING_SIDE_EFFECT.VOICE_SOURCE:
-          void applyVoiceCredential();
-          break;
-        case SETTING_SIDE_EFFECT.MEETING_QUIET:
-          void refreshMeetingQuiet();
-          void releaseHeldNotices();
-          break;
-        case SETTING_SIDE_EFFECT.NONE:
-          break;
-      }
+      await applySettingSideEffect(field, value, result.settings, event);
     },
     refusal: "Could not save that setting on this system.",
   });
@@ -1379,37 +1394,10 @@ function registerIpc(): void {
     save: (scope) => settingsStore.resetSettings(scope),
     async apply(result, scope, event) {
       if (result.reason) return;
-      switch (scope) {
-        case SETTINGS_RESET_SCOPE.VOICE:
-          // The next credential is minted for the default voice and pace; the
-          // renderer carries the change onto a conversation already open the
-          // same way it does for the rows' own saves.
-          realtimeCredentials?.setVoice(result.settings.voice);
-          realtimeCredentials?.setSpeed(result.settings.voiceSpeed);
-          mediaDuck.setEnabled(result.settings.duckOtherMedia);
-          break;
-        case SETTINGS_RESET_SCOPE.APPEARANCE:
-          dock.apply(result.settings.showInDock, panels.displayIdFor(event.sender));
-          panels.setShowOnAllDisplays(result.settings.showOnAllDisplays);
-          panels.reconcile();
-          panels.setFormFactor(result.settings.formFactor);
-          panels.positionAll();
-          break;
-        case SETTINGS_RESET_SCOPE.SHORTCUTS:
-          // All three keys back to their defaults, re-registered in rank
-          // order and awaited, so the renderer's controls stay at rest until
-          // the keys the rows are about to show have actually answered.
-          hotkeys.setChosen(HOTKEY_RANK.TALK, undefined);
-          hotkeys.setChosen(HOTKEY_RANK.ASK, undefined);
-          hotkeys.setChosen(HOTKEY_RANK.STOP, undefined);
-          await hotkeys.reapply(HOTKEY_RANK.TALK);
-          await hotkeys.reapply(HOTKEY_RANK.ASK);
-          await hotkeys.reapply(HOTKEY_RANK.STOP);
-          break;
-        case SETTINGS_RESET_SCOPE.WORKSPACES:
-          // Nothing to re-run: the workspace defaults only steer the next
-          // creation ask, which reads the store when it happens.
-          break;
+      for (const field of APP_SETTING_FIELDS) {
+        const definition = APP_SETTING_SCHEMA[field];
+        if (!("resetScope" in definition) || definition.resetScope !== scope) continue;
+        await applySettingSideEffect(field, result.settings[field], result.settings, event, true);
       }
     },
     refusal: "Could not reset those settings on this system.",

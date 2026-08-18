@@ -1,19 +1,31 @@
 import {
+  APP_SETTING_KIND,
   APP_TOGGLE_VALUE,
+  type AppGuideSetting,
+  appToggleText,
   DEFAULT_PANEL_FORM_FACTOR,
   isPanelFormFactor,
   isProviderId,
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
+  PANEL_FORM_FACTOR_LIST,
   type PanelFormFactor,
+  PROVIDER_ID,
   type ProviderId,
   REALTIME_DEFAULTS,
+  REALTIME_VOICE_LIST,
+  REALTIME_VOICE_SPEED,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
   type WorkspaceAgentSelection,
 } from "@sidecar/core";
+import { CREDENTIAL_PROVIDERS, isCredentialProviderId } from "./credential-providers";
 import { parseVoiceHotkey } from "./voice-hotkey";
-import { isWorkspaceAgentSelection } from "./workspace-agents";
+import {
+  isWorkspaceAgentSelection,
+  workspaceAgentModelLabel,
+  workspaceAgentModels,
+} from "./workspace-agents";
 
 export const APP_SETTING_ID = {
   VOICE: "voice",
@@ -113,9 +125,85 @@ interface SettingDefinition<Field extends AppSettingField> {
   guard(value: unknown): SettingGuardResult<AppSettingValue<Field>>;
   settingsPage: SettingsPage;
   resetScope?: SettingsResetScope;
-  guideEntry: AppSettingId | readonly AppSettingId[] | undefined;
+  guideEntry: {
+    ids: readonly AppSettingId[];
+    build(
+      settings: AppSettingGuideSettings,
+      defaultValue: AppSettingValue<Field>,
+    ): AppGuideSetting | readonly AppGuideSetting[] | undefined;
+  };
   mainProcessSideEffect: SettingSideEffect;
   spokenValue?: (value: string) => AppSettingValue<Field> | undefined;
+}
+
+export type AppSettingGuideSettings = Omit<
+  StoredAppSettings,
+  "voice" | "voiceSpeed" | "voiceSource" | "formFactor"
+> & {
+  voice: RealtimeVoice;
+  voiceSpeed: RealtimeVoiceSpeed;
+  voiceSource: VoiceSource;
+  formFactor: PanelFormFactor;
+};
+
+const SETTINGS_TAB = "the panel's Settings tab";
+const VOICE_PAGE = `${SETTINGS_TAB}, on its Voice page`;
+const VOICE_SOURCE_SECTION = `${SETTINGS_TAB}, on its front page, in the What Luke runs on section at the top`;
+const APPEARANCE_PAGE = `${SETTINGS_TAB}, on its Appearance page`;
+const CONNECTIONS_PAGE = `${SETTINGS_TAB}, on its Connections page`;
+const CONDUCTOR_ROW_PATH = `the Conductor row under Cloud Agent API keys, in ${CONNECTIONS_PAGE} — drawn once Conductor is connected`;
+const CONDUCTOR_DEFAULT_CHOICE = "Conductor's default";
+const ASK_EACH_TIME_CHOICE = "ask each time";
+
+const VOICE_SOURCE_CHOICE: Record<VoiceSource, string> = {
+  [VOICE_SOURCE.ACCOUNT]: "your Luke account",
+  [VOICE_SOURCE.KEY]: "your OpenAI key",
+};
+
+const VOICE_SPEED_WORD = {
+  SLOW: "slow",
+  NORMAL: "normal",
+  QUICK: "quick",
+  FAST: "fast",
+} as const;
+
+const VOICE_SPEED_WORDS = [
+  { word: VOICE_SPEED_WORD.SLOW, speed: REALTIME_VOICE_SPEED.SLOW },
+  { word: VOICE_SPEED_WORD.NORMAL, speed: REALTIME_VOICE_SPEED.NORMAL },
+  { word: VOICE_SPEED_WORD.QUICK, speed: REALTIME_VOICE_SPEED.QUICK },
+  { word: VOICE_SPEED_WORD.FAST, speed: REALTIME_VOICE_SPEED.FAST },
+] as const;
+
+const VOICE_SPEED_BY_SPOKEN_VALUE: Readonly<Record<string, RealtimeVoiceSpeed>> =
+  Object.fromEntries(
+    VOICE_SPEED_WORDS.flatMap(({ word, speed }) => [
+      [word, speed],
+      [`${speed}×`, speed],
+    ]),
+  );
+
+function voiceSpeedMultiple(speed: RealtimeVoiceSpeed): string {
+  return `${speed}×`;
+}
+
+function voiceSpeedWord(speed: RealtimeVoiceSpeed): string {
+  return (
+    VOICE_SPEED_WORDS.find((candidate) => candidate.speed === speed)?.word ??
+    VOICE_SPEED_WORD.NORMAL
+  );
+}
+
+function workspaceProviderName(providerId: ProviderId): string {
+  return isCredentialProviderId(providerId)
+    ? CREDENTIAL_PROVIDERS[providerId].displayName
+    : providerId;
+}
+
+function settingGuideEntry(
+  ids: readonly AppSettingId[],
+  build: SettingDefinition<AppSettingField>["guideEntry"]["build"],
+): SettingDefinition<AppSettingField>["guideEntry"] {
+  return { ids, build };
 }
 
 const valid = <Value>(value: Value): SettingGuardResult<Value> => ({ valid: true, value });
@@ -184,7 +272,16 @@ export const APP_SETTING_SCHEMA = {
     guard: boolean(false),
     settingsPage: SETTINGS_PAGE.APPEARANCE,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
-    guideEntry: APP_SETTING_ID.SHOW_IN_DOCK,
+    guideEntry: settingGuideEntry([APP_SETTING_ID.SHOW_IN_DOCK], (settings, defaultValue) => ({
+      id: APP_SETTING_ID.SHOW_IN_DOCK,
+      label: "Show Luke in the Dock",
+      description: "Whether Luke also stands in the Dock as an app icon.",
+      kind: APP_SETTING_KIND.TOGGLE,
+      value: appToggleText(settings.showInDock),
+      defaultValue: appToggleText(defaultValue as boolean),
+      adjustable: true,
+      manual: APPEARANCE_PAGE,
+    })),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.DOCK,
     spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
   },
@@ -194,7 +291,18 @@ export const APP_SETTING_SCHEMA = {
     guard: (value: unknown) => optional(value, isRealtimeVoice),
     settingsPage: SETTINGS_PAGE.VOICE,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
-    guideEntry: APP_SETTING_ID.VOICE,
+    guideEntry: settingGuideEntry([APP_SETTING_ID.VOICE], (settings, defaultValue) => ({
+      id: APP_SETTING_ID.VOICE,
+      label: "Voice",
+      description:
+        "Which voice Luke speaks with; a change is heard right away — a conversation under way starts afresh in the new voice.",
+      kind: APP_SETTING_KIND.CHOICE,
+      value: settings.voice,
+      defaultValue: defaultValue as RealtimeVoice,
+      choices: REALTIME_VOICE_LIST,
+      adjustable: true,
+      manual: VOICE_PAGE,
+    })),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.VOICE,
     spokenValue: (value: string) => (isRealtimeVoice(value) ? value : undefined),
   },
@@ -204,20 +312,24 @@ export const APP_SETTING_SCHEMA = {
     guard: (value: unknown) => optional(value, isRealtimeVoiceSpeed),
     settingsPage: SETTINGS_PAGE.VOICE,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
-    guideEntry: APP_SETTING_ID.VOICE_SPEED,
+    guideEntry: settingGuideEntry([APP_SETTING_ID.VOICE_SPEED], (settings, defaultValue) => ({
+      id: APP_SETTING_ID.VOICE_SPEED,
+      label: "Speed",
+      description:
+        "How fast Luke talks — slow is 0.75×, normal 1×, quick 1.25×, fast 1.5× the voice's natural rate, and an ask may use the word or the multiple; a change is heard from the next reply on.",
+      kind: APP_SETTING_KIND.CHOICE,
+      value: voiceSpeedWord(settings.voiceSpeed),
+      defaultValue: voiceSpeedWord(defaultValue as RealtimeVoiceSpeed),
+      choices: VOICE_SPEED_WORDS.flatMap((candidate) => [
+        candidate.word,
+        voiceSpeedMultiple(candidate.speed),
+      ]),
+      adjustable: true,
+      manual: VOICE_PAGE,
+    })),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.VOICE_SPEED,
     spokenValue: (value: string) => {
-      const words: Record<string, RealtimeVoiceSpeed> = {
-        slow: 0.75,
-        normal: 1,
-        quick: 1.25,
-        fast: 1.5,
-        "0.75×": 0.75,
-        "1×": 1,
-        "1.25×": 1.25,
-        "1.5×": 1.5,
-      };
-      return words[value];
+      return VOICE_SPEED_BY_SPOKEN_VALUE[value];
     },
   },
   voiceCaptions: {
@@ -226,7 +338,19 @@ export const APP_SETTING_SCHEMA = {
     guard: boolean(false),
     settingsPage: SETTINGS_PAGE.VOICE,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
-    guideEntry: APP_SETTING_ID.VOICE_CAPTIONS,
+    guideEntry: settingGuideEntry([APP_SETTING_ID.VOICE_CAPTIONS], (settings, defaultValue) => ({
+      id: APP_SETTING_ID.VOICE_CAPTIONS,
+      label: "Captions",
+      description:
+        "Luke's words on screen while he speaks; nothing is kept. They also appear on their own, " +
+        "whatever this says, for a reply answering a typed ask and while the Mac's output is " +
+        "muted or at zero.",
+      kind: APP_SETTING_KIND.TOGGLE,
+      value: appToggleText(settings.voiceCaptions),
+      defaultValue: appToggleText(defaultValue as boolean),
+      adjustable: true,
+      manual: VOICE_PAGE,
+    })),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
     spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
   },
@@ -236,7 +360,8 @@ export const APP_SETTING_SCHEMA = {
     guard: hotkey,
     settingsPage: SETTINGS_PAGE.SHORTCUTS,
     resetScope: SETTINGS_RESET_SCOPE.SHORTCUTS,
-    guideEntry: undefined,
+    // The talk-key fact reports the registered chord and its manual path.
+    guideEntry: settingGuideEntry([], () => undefined),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.TALK_HOTKEY,
   },
   askHotkey: {
@@ -245,7 +370,8 @@ export const APP_SETTING_SCHEMA = {
     guard: hotkey,
     settingsPage: SETTINGS_PAGE.SHORTCUTS,
     resetScope: SETTINGS_RESET_SCOPE.SHORTCUTS,
-    guideEntry: undefined,
+    // The ask-key fact reports the registered chord and its manual path.
+    guideEntry: settingGuideEntry([], () => undefined),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.ASK_HOTKEY,
   },
   stopHotkey: {
@@ -254,7 +380,8 @@ export const APP_SETTING_SCHEMA = {
     guard: hotkey,
     settingsPage: SETTINGS_PAGE.SHORTCUTS,
     resetScope: SETTINGS_RESET_SCOPE.SHORTCUTS,
-    guideEntry: undefined,
+    // The stop-key fact reports the registered chord and its manual path.
+    guideEntry: settingGuideEntry([], () => undefined),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.STOP_HOTKEY,
   },
   duckOtherMedia: {
@@ -263,7 +390,17 @@ export const APP_SETTING_SCHEMA = {
     guard: boolean(true),
     settingsPage: SETTINGS_PAGE.VOICE,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
-    guideEntry: APP_SETTING_ID.DUCK_OTHER_MEDIA,
+    guideEntry: settingGuideEntry([APP_SETTING_ID.DUCK_OTHER_MEDIA], (settings, defaultValue) => ({
+      id: APP_SETTING_ID.DUCK_OTHER_MEDIA,
+      label: "Quiet Music and Spotify",
+      description:
+        "Whether Music and Spotify are turned down while a spoken exchange is live, and back up after.",
+      kind: APP_SETTING_KIND.TOGGLE,
+      value: appToggleText(settings.duckOtherMedia),
+      defaultValue: appToggleText(defaultValue as boolean),
+      adjustable: true,
+      manual: VOICE_PAGE,
+    })),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.MEDIA_DUCK,
     spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
   },
@@ -272,7 +409,21 @@ export const APP_SETTING_SCHEMA = {
     default: undefined,
     guard: (value: unknown) => optional(value, isVoiceSource),
     settingsPage: SETTINGS_PAGE.ROOT,
-    guideEntry: APP_SETTING_ID.VOICE_SOURCE,
+    guideEntry: settingGuideEntry([APP_SETTING_ID.VOICE_SOURCE], (settings) => ({
+      id: APP_SETTING_ID.VOICE_SOURCE,
+      label: "What Luke runs on",
+      description:
+        "Which credential Luke speaks and reviews sessions on: the signed-in Luke account, free " +
+        "and metered daily, or the developer's own OpenAI key, unmetered and billed to them by " +
+        "OpenAI. A key stays stored either way, so the free allowance can be used without " +
+        "deleting it.",
+      kind: APP_SETTING_KIND.CHOICE,
+      value: VOICE_SOURCE_CHOICE[settings.voiceSource],
+      defaultValue: VOICE_SOURCE_CHOICE[VOICE_SOURCE.ACCOUNT],
+      choices: Object.values(VOICE_SOURCE_CHOICE),
+      adjustable: false,
+      manual: VOICE_SOURCE_SECTION,
+    })),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.VOICE_SOURCE,
   },
   preferBuiltInMicrophone: {
@@ -281,7 +432,22 @@ export const APP_SETTING_SCHEMA = {
     guard: boolean(true),
     settingsPage: SETTINGS_PAGE.VOICE,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
-    guideEntry: APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE,
+    guideEntry: settingGuideEntry(
+      [APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE],
+      (settings, defaultValue) => ({
+        id: APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE,
+        label: "Prefer the Mac's microphone",
+        description:
+          "Whether Luke listens through the Mac's own microphone when the system input is a " +
+          "Bluetooth headset, so the headset keeps its full music quality. A shut lid keeps the " +
+          "headset's microphone either way.",
+        kind: APP_SETTING_KIND.TOGGLE,
+        value: appToggleText(settings.preferBuiltInMicrophone),
+        defaultValue: appToggleText(defaultValue as boolean),
+        adjustable: true,
+        manual: VOICE_PAGE,
+      }),
+    ),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
     spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
   },
@@ -290,7 +456,20 @@ export const APP_SETTING_SCHEMA = {
     default: true,
     guard: boolean(true),
     settingsPage: SETTINGS_PAGE.CONNECTIONS,
-    guideEntry: APP_SETTING_ID.QUIET_DURING_MEETINGS,
+    guideEntry: settingGuideEntry(
+      [APP_SETTING_ID.QUIET_DURING_MEETINGS],
+      (settings, defaultValue) => ({
+        id: APP_SETTING_ID.QUIET_DURING_MEETINGS,
+        label: "Quiet during meetings",
+        description:
+          "Whether spoken announcements wait while a connected calendar shows a meeting on, and are read out together once it ends. It changes nothing until a Google Calendar account is connected.",
+        kind: APP_SETTING_KIND.TOGGLE,
+        value: appToggleText(settings.quietDuringMeetings),
+        defaultValue: appToggleText(defaultValue as boolean),
+        adjustable: true,
+        manual: `${CONNECTIONS_PAGE} — drawn once a calendar account is connected`,
+      }),
+    ),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.MEETING_QUIET,
     spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
   },
@@ -300,7 +479,20 @@ export const APP_SETTING_SCHEMA = {
     guard: boolean(false),
     settingsPage: SETTINGS_PAGE.APPEARANCE,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
-    guideEntry: APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS,
+    guideEntry: settingGuideEntry(
+      [APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS],
+      (settings, defaultValue) => ({
+        id: APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS,
+        label: "Show Luke on all displays",
+        description:
+          "Whether Luke stands on every connected display at once; off keeps him to the main display alone.",
+        kind: APP_SETTING_KIND.TOGGLE,
+        value: appToggleText(settings.showOnAllDisplays),
+        defaultValue: appToggleText(defaultValue as boolean),
+        adjustable: true,
+        manual: APPEARANCE_PAGE,
+      }),
+    ),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.DISPLAYS,
     spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
   },
@@ -310,7 +502,18 @@ export const APP_SETTING_SCHEMA = {
     guard: (value: unknown) => optional(value, isPanelFormFactor),
     settingsPage: SETTINGS_PAGE.APPEARANCE,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
-    guideEntry: APP_SETTING_ID.FORM_FACTOR,
+    guideEntry: settingGuideEntry([APP_SETTING_ID.FORM_FACTOR], (settings, defaultValue) => ({
+      id: APP_SETTING_ID.FORM_FACTOR,
+      label: "Form factor",
+      description:
+        "How Luke stands on a display without a camera housing — notch draws him one pressed into the top edge, bubble floats him just under it. A display with a real notch ignores this.",
+      kind: APP_SETTING_KIND.CHOICE,
+      value: settings.formFactor,
+      defaultValue: defaultValue as PanelFormFactor,
+      choices: PANEL_FORM_FACTOR_LIST,
+      adjustable: true,
+      manual: APPEARANCE_PAGE,
+    })),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.FORM_FACTOR,
     spokenValue: (value: string) => (isPanelFormFactor(value) ? value : undefined),
   },
@@ -325,7 +528,26 @@ export const APP_SETTING_SCHEMA = {
       ),
     settingsPage: SETTINGS_PAGE.CONNECTIONS,
     resetScope: SETTINGS_RESET_SCOPE.WORKSPACES,
-    guideEntry: APP_SETTING_ID.DEFAULT_WORKSPACE_PROVIDER,
+    guideEntry: settingGuideEntry([APP_SETTING_ID.DEFAULT_WORKSPACE_PROVIDER], (settings) => ({
+      id: APP_SETTING_ID.DEFAULT_WORKSPACE_PROVIDER,
+      label: "Default workspace provider",
+      description:
+        "Which provider a conversational ask creates a new workspace in when the ask names none. " +
+        "Until one is chosen Luke asks when more than one provider could take it, and the first " +
+        "workspace created saves its provider as the default.",
+      kind: APP_SETTING_KIND.CHOICE,
+      value: settings.defaultWorkspaceProvider
+        ? workspaceProviderName(settings.defaultWorkspaceProvider)
+        : ASK_EACH_TIME_CHOICE,
+      choices: [
+        ASK_EACH_TIME_CHOICE,
+        workspaceProviderName(PROVIDER_ID.CONDUCTOR),
+        workspaceProviderName(PROVIDER_ID.CURSOR),
+      ],
+      defaultValue: ASK_EACH_TIME_CHOICE,
+      adjustable: false,
+      manual: `${CONNECTIONS_PAGE}, under Workspaces`,
+    })),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
   },
   workspaceAgentDefaults: {
@@ -333,7 +555,63 @@ export const APP_SETTING_SCHEMA = {
     default: undefined,
     guard: workspaceAgentDefaults,
     settingsPage: SETTINGS_PAGE.CONNECTIONS,
-    guideEntry: [APP_SETTING_ID.WORKSPACE_AGENT_MODEL, APP_SETTING_ID.WORKSPACE_AGENT_EFFORT],
+    guideEntry: settingGuideEntry(
+      [APP_SETTING_ID.WORKSPACE_AGENT_MODEL, APP_SETTING_ID.WORKSPACE_AGENT_EFFORT],
+      (settings) => {
+        const chosen = settings.workspaceAgentDefaults?.[PROVIDER_ID.CONDUCTOR];
+        const chosenAgent = chosen
+          ? workspaceAgentModels(PROVIDER_ID.CONDUCTOR).find(
+              (entry) => entry.agent === chosen.agent,
+            )
+          : undefined;
+        return [
+          {
+            id: APP_SETTING_ID.WORKSPACE_AGENT_MODEL,
+            label: "New Conductor agents run",
+            description:
+              "Which model a Conductor workspace or agent created through Luke starts with. Unset, " +
+              "Conductor's own defaults decide. An effort the model's agent documents may be named " +
+              "in the same change.",
+            kind: APP_SETTING_KIND.CHOICE,
+            value: chosen
+              ? workspaceAgentModelLabel(PROVIDER_ID.CONDUCTOR, chosen)
+              : CONDUCTOR_DEFAULT_CHOICE,
+            choices: [
+              CONDUCTOR_DEFAULT_CHOICE,
+              ...workspaceAgentModels(PROVIDER_ID.CONDUCTOR).flatMap((entry) =>
+                entry.models.map((model) => model.label),
+              ),
+            ],
+            efforts: Object.fromEntries(
+              workspaceAgentModels(PROVIDER_ID.CONDUCTOR).flatMap((entry) =>
+                entry.efforts.length > 0
+                  ? entry.models.map((model) => [model.label, entry.efforts] as const)
+                  : [],
+              ),
+            ),
+            defaultValue: CONDUCTOR_DEFAULT_CHOICE,
+            adjustable: true,
+            manual: CONDUCTOR_ROW_PATH,
+          },
+          ...(chosen && chosenAgent && chosenAgent.efforts.length > 0
+            ? [
+                {
+                  id: APP_SETTING_ID.WORKSPACE_AGENT_EFFORT,
+                  label: "New Conductor agents' effort",
+                  description:
+                    "How hard the chosen model thinks. Unset, Conductor's own default decides.",
+                  kind: APP_SETTING_KIND.CHOICE,
+                  value: chosen.effort ?? CONDUCTOR_DEFAULT_CHOICE,
+                  choices: [CONDUCTOR_DEFAULT_CHOICE, ...chosenAgent.efforts],
+                  defaultValue: CONDUCTOR_DEFAULT_CHOICE,
+                  adjustable: true,
+                  manual: CONDUCTOR_ROW_PATH,
+                },
+              ]
+            : []),
+        ];
+      },
+    ),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
   },
   workspaceProjectDefaults: {
@@ -342,7 +620,8 @@ export const APP_SETTING_SCHEMA = {
     guard: workspaceProjectDefaults,
     settingsPage: SETTINGS_PAGE.CONNECTIONS,
     resetScope: SETTINGS_RESET_SCOPE.WORKSPACES,
-    guideEntry: undefined,
+    // Observed project names and defaults travel in the workspace-project context.
+    guideEntry: settingGuideEntry([], () => undefined),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
   },
 } as const satisfies {
@@ -364,9 +643,15 @@ export function isAppSettingId(value: string): value is AppSettingId {
 }
 
 export function settingFieldForGuideId(id: AppSettingId): AppSettingField | undefined {
-  return APP_SETTING_FIELDS.find((field) => {
-    const entry = APP_SETTING_SCHEMA[field].guideEntry;
-    return Array.isArray(entry) ? entry.includes(id) : entry === id;
+  return APP_SETTING_FIELDS.find((field) => APP_SETTING_SCHEMA[field].guideEntry.ids.includes(id));
+}
+
+export function settingGuideEntries(settings: AppSettingGuideSettings): AppGuideSetting[] {
+  return APP_SETTING_FIELDS.flatMap((field) => {
+    const definition = APP_SETTING_SCHEMA[field];
+    const entry = definition.guideEntry.build(settings, definition.default);
+    if (entry === undefined) return [];
+    return Array.isArray(entry) ? entry : [entry as AppGuideSetting];
   });
 }
 
@@ -381,26 +666,15 @@ export function spokenSettingValue(
   return convert?.(value);
 }
 
-export const APP_SETTING_DEFAULTS = {
-  showInDock: APP_SETTING_SCHEMA.showInDock.default,
-  voice: REALTIME_DEFAULTS.VOICE,
-  voiceSpeed: REALTIME_DEFAULTS.SPEED,
-  voiceCaptions: APP_SETTING_SCHEMA.voiceCaptions.default,
-  duckOtherMedia: APP_SETTING_SCHEMA.duckOtherMedia.default,
-  preferBuiltInMicrophone: APP_SETTING_SCHEMA.preferBuiltInMicrophone.default,
-  quietDuringMeetings: APP_SETTING_SCHEMA.quietDuringMeetings.default,
-  showOnAllDisplays: APP_SETTING_SCHEMA.showOnAllDisplays.default,
-  formFactor: DEFAULT_PANEL_FORM_FACTOR,
-} as const;
+export const APP_SETTING_DEFAULTS = Object.fromEntries(
+  APP_SETTING_FIELDS.map((field) => [field, APP_SETTING_SCHEMA[field].default]),
+) as {
+  readonly [Field in AppSettingField]: (typeof APP_SETTING_SCHEMA)[Field]["default"];
+};
 
 export const SETTING_PAGE = Object.fromEntries(
   Object.values(APP_SETTING_SCHEMA).flatMap((definition) => {
-    const entries = definition.guideEntry;
-    if (entries === undefined) return [];
-    return (Array.isArray(entries) ? entries : [entries]).map((id) => [
-      id,
-      definition.settingsPage,
-    ]);
+    return definition.guideEntry.ids.map((id) => [id, definition.settingsPage]);
   }),
 ) as Record<AppSettingId, SettingsPage>;
 

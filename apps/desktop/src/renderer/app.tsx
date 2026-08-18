@@ -1005,7 +1005,7 @@ export function App(): React.JSX.Element {
       else delete defaults[providerId];
       return applySettingsReply(
         await window.sidecar.updateSetting(
-          "workspaceAgentDefaults",
+          APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
           Object.keys(defaults).length > 0 ? defaults : undefined,
         ),
       );
@@ -1032,7 +1032,7 @@ export function App(): React.JSX.Element {
       else delete defaults[providerId];
       return applySettingsReply(
         await window.sidecar.updateSetting(
-          "workspaceProjectDefaults",
+          APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
           Object.keys(defaults).length > 0 ? defaults : undefined,
         ),
       );
