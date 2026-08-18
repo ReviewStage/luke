@@ -98,20 +98,10 @@ export function quotaLevel(quota: HostedQuota): QuotaLevel {
     : QUOTA_LEVEL.RUNNING;
 }
 
-/**
- * The two sources as the toggle names them, and what each one costs. Held
- * apart from the labels so the price reads as the tag it is drawn as, and
- * together in one place so the toggle, its spoken name, and the disclosure
- * beneath can never word the same choice three ways.
- */
+/** The two sources as the toggle names them. */
 export const VOICE_SOURCE_LABEL: Record<VoiceSource, string> = {
   [VOICE_SOURCE.ACCOUNT]: "Your Luke account",
   [VOICE_SOURCE.KEY]: "Your OpenAI key",
-};
-
-export const VOICE_SOURCE_PRICE: Record<VoiceSource, string> = {
-  [VOICE_SOURCE.ACCOUNT]: "Free",
-  [VOICE_SOURCE.KEY]: "You pay",
 };
 
 /** The one line under each name: what running on it is like, day to day. */
@@ -122,7 +112,7 @@ export const VOICE_SOURCE_DETAIL: Record<VoiceSource, string> = {
 
 /** The toggle's name for a source, as a control says it aloud. */
 export function voiceSourceLabel(source: VoiceSource): string {
-  return `${VOICE_SOURCE_LABEL[source]} (${VOICE_SOURCE_PRICE[source].toLowerCase()})`;
+  return VOICE_SOURCE_LABEL[source];
 }
 
 /**
@@ -188,9 +178,9 @@ export function hostedVoiceNote(
     diagnostics?.lastOutcome === REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED &&
     (diagnostics.quota === undefined || currentQuota(diagnostics.quota, now) !== undefined);
   if (spentStands) return hostedVoiceSpentNote();
-  // What a key of your own would change is not said here: the toggle
-  // above draws both sources side by side, with what each costs on its face,
-  // and a sentence repeating one of them would be selling the other.
+  // What a key of your own would change is not said here: the toggle above
+  // draws both sources side by side, and a sentence repeating one of them
+  // would be selling the other.
   return "Talking and session checks are included free with your account, up to a daily amount.";
 }
 

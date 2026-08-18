@@ -12,7 +12,6 @@ import {
   quotaResetsWhen,
   VOICE_SOURCE_DETAIL,
   VOICE_SOURCE_LABEL,
-  VOICE_SOURCE_PRICE,
   voiceAttentionNote,
   voiceSourceLabel,
 } from "../src/renderer/microphone-access";
@@ -197,10 +196,9 @@ test("the numberless note stays short, and withholds the key from a machine that
     "Talking and session checks are included free with your account, up to a daily amount.",
   );
 
-  // What a key of the developer's own would change is the toggle's to say,
-  // drawn directly above with the price on its face. A sentence here repeating
-  // it would be the panel selling one half of a choice it is already showing
-  // whole.
+  // What a key of the developer's own would change is the toggle's to say. A
+  // sentence here repeating it would be the panel selling one half of a choice
+  // it is already showing whole.
   assert.doesNotMatch(hostedVoiceNote(undefined), /OpenAI/);
 
   // Only the minter's last outcome can speak here — a spent allowance is a
@@ -211,22 +209,12 @@ test("the numberless note stays short, and withholds the key from a machine that
   assert.match(spent, /used today's free voice — back at midnight UTC/);
 });
 
-test("the toggle names both sources and what each one costs", () => {
-  // Each half carries its own name, its own price, and one line saying what
-  // running on it is like. A half missing any of the three is a choice made
-  // blind — and the dropdown beneath does not repeat them, so the toggle is
-  // where the whole comparison has to live.
+test("the toggle names both sources and explains each one", () => {
   for (const source of [VOICE_SOURCE.ACCOUNT, VOICE_SOURCE.KEY]) {
     assert.ok(VOICE_SOURCE_LABEL[source].length > 0, source);
-    assert.ok(VOICE_SOURCE_PRICE[source].length > 0, source);
     assert.ok(VOICE_SOURCE_DETAIL[source].length > 0, source);
-    // The spoken name folds the price in, because a control read aloud as
-    // "your OpenAI key" alone withholds the one fact worth knowing first.
-    assert.match(voiceSourceLabel(source), /\(free\)|\(you pay\)/);
+    assert.equal(voiceSourceLabel(source), VOICE_SOURCE_LABEL[source]);
   }
-
-  // Free is free and the key is not: the two prices must never read the same.
-  assert.notEqual(VOICE_SOURCE_PRICE[VOICE_SOURCE.ACCOUNT], VOICE_SOURCE_PRICE[VOICE_SOURCE.KEY]);
 });
 
 test("a meter warns while there is still something left to spend differently", () => {
