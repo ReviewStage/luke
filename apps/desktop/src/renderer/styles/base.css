@@ -2396,13 +2396,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   padding-left: calc(var(--slot-mark-size) + var(--slot-gutter-gap));
 }
 
-/* The connect slot's words take the room between the mark and the Cancel
-   beside them, so the one line holds all three. */
-.calendar-connect-copy {
-  flex: 1;
-  min-width: 0;
-}
-
 /* Larger than the mark on a settings line: here it is the only thing naming the
    provider, rather than a glyph beside its name. The badge grows with it. */
 .key-slot-mark {

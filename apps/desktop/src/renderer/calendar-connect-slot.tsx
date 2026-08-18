@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { GOOGLE_CALENDAR_ID, GOOGLE_CALENDAR_NAME } from "../shared/google-calendar";
+import { GOOGLE_CALENDAR_ID } from "../shared/google-calendar";
 import { HIT_REGION } from "./panel-state";
 import { ProviderMark } from "./provider-marks";
 import { ExternalIcon } from "./settings-icons";
@@ -45,20 +45,19 @@ export function CalendarConnectSlot({
 
   return (
     <div className="slot-stage" aria-hidden={!live} inert={!live}>
-      <div className="key-slot" ref={measure} data-hit-region={HIT_REGION.SLOT}>
-        <span className="settings-label key-slot-label">{GOOGLE_CALENDAR_NAME}</span>
-        {/* One line: the mark, what is being waited for, and the one way to
-            stop waiting — a second row would grow the slot for nothing. */}
+      <div className="key-slot sign-in-slot" ref={measure} data-hit-region={HIT_REGION.SLOT}>
+        {/* One line, worded and dressed like the account sign-in's wait: the
+            mark, what is being waited for, and the one way to stop waiting —
+            only the calendar mark and the way back to a lost tab tell the two
+            popups apart. */}
         <div className="key-slot-row">
           <span className="key-slot-mark">
             <ProviderMark providerId={GOOGLE_CALENDAR_ID} />
           </span>
-          <span className="settings-copy calendar-connect-copy">
-            <span className="settings-name">
-              {held.rejection ? "Not connected" : "Waiting for Google…"}
-            </span>
+          <span className="sign-in-slot-copy" role="status">
+            <strong>{held.rejection ? "Not connected" : "Waiting for Google…"}</strong>
             <small>
-              {held.rejection ?? "Finish signing in with Google in your browser."}{" "}
+              {held.rejection ?? "Finish signing in in your browser."}{" "}
               {/* The lost-tab way back in, on the key slot's own terms: a
                   button, not an anchor — the main process reopens the page
                   the waiting flow built, and no address crosses from here.
