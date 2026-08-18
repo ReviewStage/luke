@@ -26,6 +26,7 @@ import {
   sessionTally,
   tallyCaption,
   tallySummary,
+  tallyValue,
   workspaceTrayActions,
 } from "../src/renderer/session-model";
 import type { AppBootstrap } from "../src/shared/contracts";
@@ -312,15 +313,42 @@ test("the badge urgency follows the most urgent session", () => {
   assert.equal(empty.urgency, SESSION_URGENCY.UNKNOWN);
 });
 
-test("the caption names its own number so the count is never misread", () => {
+test("the badge number counts the state its colour names", () => {
+  // The fixture holds 1 attention, 3 working, 1 complete, and 1 idle session:
+  // the badge says 1 in the attention colour, never a 6 posing as urgent.
+  const attention = sessionTally(displaySessions(bootstrap(true), []));
+  const working = sessionTally(
+    displaySessions(bootstrap(false), [
+      liveSession(CODEX_PROVIDER, "a", SESSION_STATUS.WORKING),
+      liveSession(CODEX_PROVIDER, "b", SESSION_STATUS.WORKING),
+    ]),
+  );
+  const complete = sessionTally(
+    displaySessions(bootstrap(false), [liveSession(CODEX_PROVIDER, "a", SESSION_STATUS.COMPLETE)]),
+  );
+
+  assert.equal(tallyValue(attention), 1);
+  assert.equal(tallyValue(working), 2);
+  assert.equal(tallyValue(complete), 1);
+  assert.equal(tallyValue(sessionTally([])), 0);
+});
+
+test("the caption names the badge's state and counts the work behind it", () => {
   const tally = sessionTally(displaySessions(bootstrap(true), []));
 
-  assert.equal(tallyCaption(tally), "1 needs you");
-  assert.equal(tallySummary(tally), "6 sessions tracked, 1 needing you");
-  assert.equal(tallyCaption({ ...tally, attention: 2 }), "2 need you");
-  assert.equal(tallyCaption({ ...tally, attention: 0, working: 3 }), "3 working");
-  assert.equal(tallyCaption({ ...tally, attention: 0, working: 0 }), "1 complete");
+  assert.equal(tallyCaption(tally), "needs you · 3 working");
+  assert.equal(tallySummary(tally), "1 session needs you, 3 working");
+  assert.equal(tallyCaption({ ...tally, attention: 2 }), "need you · 3 working");
+  assert.equal(tallyCaption({ ...tally, working: 0 }), "needs you");
+  assert.equal(tallyCaption({ ...tally, attention: 0, working: 3 }), "working");
+  assert.equal(tallySummary({ ...tally, attention: 0, working: 3 }), "3 sessions working");
+  assert.equal(tallyCaption({ ...tally, attention: 0, working: 0 }), "complete");
+  assert.equal(tallySummary({ ...tally, attention: 0, working: 0 }), "1 session complete");
   assert.equal(tallyCaption({ ...tally, attention: 0, working: 0, complete: 0 }), "tracked");
+  assert.equal(
+    tallySummary({ ...tally, attention: 0, working: 0, complete: 0 }),
+    "6 sessions tracked",
+  );
   assert.equal(tallyCaption(sessionTally([])), "none tracked");
   assert.equal(tallySummary(sessionTally([])), "No sessions tracked");
 });

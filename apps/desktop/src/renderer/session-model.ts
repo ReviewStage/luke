@@ -773,15 +773,44 @@ function dominantUrgency(counts: {
   return SESSION_URGENCY.UNKNOWN;
 }
 
+/**
+ * The number the badge draws: the count of the state its colour names, so the
+ * numeral and the tint state one fact. A "12" that meant "12 tracked" while
+ * its colour meant "something needs you" made the reader hold two channels
+ * apart; here an attention-coloured 2 is 2 sessions needing you. The total
+ * only stands in when nothing is live enough to colour, because "how many
+ * need me" and "how many are working" are the questions the badge exists to
+ * answer, and the total answers neither.
+ */
+export function tallyValue(tally: SessionTally): number {
+  switch (tally.urgency) {
+    case SESSION_URGENCY.ATTENTION:
+      return tally.attention;
+    case SESSION_URGENCY.WORKING:
+      return tally.working;
+    case SESSION_URGENCY.COMPLETE:
+      return tally.complete;
+    default:
+      return tally.total;
+  }
+}
+
 /** One sentence that reads correctly for a screen reader in either mode. */
 export function tallySummary(tally: SessionTally): string {
   if (tally.total === 0) return "No sessions tracked";
-  const sessionWord = tally.total === 1 ? "session" : "sessions";
   if (tally.attention > 0) {
-    return `${tally.total} ${sessionWord} tracked, ${tally.attention} needing you`;
+    const needing = `${tally.attention} ${
+      tally.attention === 1 ? "session needs" : "sessions need"
+    } you`;
+    return tally.working > 0 ? `${needing}, ${tally.working} working` : needing;
   }
-  if (tally.working > 0) return `${tally.total} ${sessionWord} tracked, ${tally.working} working`;
-  return `${tally.total} ${sessionWord} tracked`;
+  if (tally.working > 0) {
+    return `${tally.working} ${tally.working === 1 ? "session" : "sessions"} working`;
+  }
+  if (tally.complete > 0) {
+    return `${tally.complete} ${tally.complete === 1 ? "session" : "sessions"} complete`;
+  }
+  return `${tally.total} ${tally.total === 1 ? "session" : "sessions"} tracked`;
 }
 
 /**
@@ -805,16 +834,20 @@ export function observedAgoLabel(observedAt: number, now: number): string {
 }
 
 /**
- * The caption beside the count once the panel has room for it. The badge shows
- * how many sessions are tracked, so the caption has to name its own number:
- * "4 · 1 needs you" rather than "4 · needs you".
+ * The caption beside the count once the panel has room for it. The badge's
+ * number is the count of the state its colour names, so the caption's first
+ * words say which state that is — never a number of their own, which would
+ * stand two numerals with different denominators side by side. Only the
+ * second fact behind the separator names its number, because it is a second
+ * count: "2 need you · 3 working" reads as two counts because it is two.
  */
 export function tallyCaption(tally: SessionTally): string {
   if (tally.total === 0) return "none tracked";
   if (tally.attention > 0) {
-    return `${tally.attention} ${tally.attention === 1 ? "needs" : "need"} you`;
+    const needing = tally.attention === 1 ? "needs you" : "need you";
+    return tally.working > 0 ? `${needing} · ${tally.working} working` : needing;
   }
-  if (tally.working > 0) return `${tally.working} working`;
-  if (tally.complete > 0) return `${tally.complete} complete`;
+  if (tally.working > 0) return "working";
+  if (tally.complete > 0) return "complete";
   return "tracked";
 }
