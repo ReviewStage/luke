@@ -377,6 +377,16 @@ export class RealtimeVoiceSession {
    */
   #audioDrained = false;
   /**
+   * Whether an armed reply's calls are being answered and the follow-up
+   * voicing their outcomes is still owed. The turn holds through the writes
+   * — a READY offered mid-write is the edge the announcer rides, and a reply
+   * taken there bumps the epoch and abandons the follow-up — so the audio
+   * draining then is remembered rather than an ending. Lowered by whatever
+   * reply comes next, the finish that ends the hold, or the interrupt of a
+   * developer moving on.
+   */
+  #followUpPending = false;
+  /**
    * Whether Luke has actually been heard during this reply. Committing a turn
    * swaps the meter from the microphone to Luke, and the meter reports quiet as
    * it lets go of the old stream — a silence that belongs to the developer, not
@@ -1048,6 +1058,7 @@ export class RealtimeVoiceSession {
     // active response above.
     this.#responseOutstanding = false;
     this.#audioDrained = false;
+    this.#followUpPending = false;
     this.#generationDone = false;
     this.#remoteQuiet = false;
     this.#heardLuke = false;
@@ -1152,6 +1163,7 @@ export class RealtimeVoiceSession {
     this.#clearIdleTimer();
     this.#responseOutstanding = false;
     this.#audioDrained = false;
+    this.#followUpPending = false;
     this.#generationDone = false;
     this.#remoteQuiet = false;
     this.#heardLuke = false;
@@ -1196,9 +1208,11 @@ export class RealtimeVoiceSession {
     this.#remoteQuiet = false;
     this.#heardLuke = false;
     // The reply now being asked for is the server's until it concludes it:
-    // nothing else may ask for one over it.
+    // nothing else may ask for one over it — and whatever follow-up was being
+    // waited on, this is the reply that answers or supersedes the wait.
     this.#responseOutstanding = true;
     this.#audioDrained = false;
+    this.#followUpPending = false;
     this.#clearQuietTimer();
     this.#responseItemId = undefined;
     // Nothing has been confirmed for this turn yet: whatever `response.done`
@@ -1336,6 +1350,7 @@ export class RealtimeVoiceSession {
     // comes cannot leave every later reply refused against it.
     this.#responseOutstanding = false;
     this.#audioDrained = false;
+    this.#followUpPending = false;
     // No reply is current once the turn is over, and the arming went with the
     // turn: a `done` that outlives the settle backstop reads as a stranger's,
     // its calls answered refused rather than run as writes out of a turn the
@@ -1712,7 +1727,11 @@ export class RealtimeVoiceSession {
         // refusal read out as a voice error and the notice lost. So the
         // drain is remembered and the `done` ends the turn, with the settle
         // backstop for a `done` that never comes.
-        if (this.#responseOutstanding) {
+        // An armed reply whose `done` has landed but whose follow-up is still
+        // owed holds the same way, in the mirror order: the write is under
+        // way, the READY an ending would offer is the same edge, and the
+        // `done` already gave the hold a clock of its own.
+        if (this.#responseOutstanding || this.#followUpPending) {
           this.#audioDrained = true;
           this.#armSettleTimer();
           return;
@@ -1740,14 +1759,26 @@ export class RealtimeVoiceSession {
         // open rather than ending on a reply that was only half made.
         if (event.calls.length > 0) {
           void this.#answerToolCalls(event.calls, fresh && this.#toolTurnArmed);
+          if (fresh && this.#toolTurnArmed) {
+            this.#followUpPending = true;
+            // The turn now holds for the follow-up, because the READY an
+            // ending here would offer while the writes run is the edge the
+            // announcer rides — a reply taken there bumps the epoch, and the
+            // follow-up voicing the outcome stands down against it, the
+            // developer's answer abandoned for a notice. The hold is the
+            // write's, so it gets a clock of its own: whatever backstop the
+            // drain or an aside armed was watching for this `done` and may
+            // have seconds left on it, while a write that hangs past a whole
+            // window still meets a backstop — a turn that never ends is
+            // worse than one that ends early.
+            this.#clearSettleTimer();
+            this.#armSettleTimer();
+            return;
+          }
           // The spoken half's audio already drained — its ending deferred to
-          // this `done`. A reply owing no follow-up ends here, exactly as the
-          // drain would have ended it; one that owes a follow-up keeps the
-          // turn, because the READY an ending would offer while the writes
-          // run is the edge the announcer rides — a reply taken there bumps
-          // the epoch, and the follow-up voicing the outcome stands down
-          // against it, the developer's answer abandoned for a notice.
-          if (fresh && this.#audioDrained && !this.#toolTurnArmed) this.#finishResponse();
+          // this `done`, and a reply owing no follow-up ends here, exactly
+          // as the drain would have ended it.
+          if (fresh && this.#audioDrained) this.#finishResponse();
           return;
         }
         if (!fresh) return;
