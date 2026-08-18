@@ -10,6 +10,8 @@ import {
   type ProviderSessionObservation,
   recordFromJsonLine,
   resolveOptions,
+  SESSION_COMPLETION_CAUSE,
+  SESSION_ROSTER_RETENTION_MS,
   SESSION_STATUS,
   type SessionDetail,
   type SessionProvider,
@@ -137,19 +139,24 @@ const CODEX_ADAPTER_DEFAULTS = {
 // Codex adds columns by migration, and naming one this build expects but an
 // older install lacks would fail the whole query rather than one field.
 const CODEX_THREAD_QUERY = `
+  WITH observed_threads AS (
+    SELECT
+      *,
+      MAX(
+        COALESCE(recency_at_ms, 0),
+        COALESCE(updated_at_ms, 0),
+        COALESCE(created_at_ms, 0),
+        COALESCE(updated_at, 0) * 1000,
+        COALESCE(created_at, 0) * 1000
+      ) AS luke_observed_at_ms
+    FROM threads
+  )
   SELECT *
-  FROM threads
-  WHERE archived = 0
-    AND id <> ''
+  FROM observed_threads
+  WHERE id <> ''
     AND cwd <> ''
-  ORDER BY
-    CASE
-      WHEN recency_at_ms IS NOT NULL AND recency_at_ms > 0 THEN recency_at_ms
-      WHEN updated_at_ms IS NOT NULL AND updated_at_ms > 0 THEN updated_at_ms
-      WHEN created_at_ms IS NOT NULL AND created_at_ms > 0 THEN created_at_ms
-      WHEN updated_at IS NOT NULL AND updated_at > 0 THEN updated_at * 1000
-      ELSE created_at * 1000
-    END DESC,
+    AND (archived = 0 OR luke_observed_at_ms >= ?)
+  ORDER BY luke_observed_at_ms DESC,
     id DESC
 `;
 
@@ -510,10 +517,17 @@ function observationFromThreadRow(
     const isFresh = now - observedAt <= activeSessionFreshnessMs;
     status = statusWithHookEvent(status, hookEvent.event, isFresh);
   }
+  const archived = (numberFromRow(row, CODEX_THREAD_COLUMN.ARCHIVED) ?? 0) !== 0;
+  const completionCause =
+    status === SESSION_STATUS.COMPLETE &&
+    (archived || (eventStands && hookEvent.event === CODEX_HOOK_EVENT.SESSION_END))
+      ? SESSION_COMPLETION_CAUSE.SESSION_CLOSED
+      : undefined;
   return {
     providerSessionId,
     title: titleFromRow(row),
     status,
+    ...(completionCause ? { completionCause } : {}),
     observedAt,
     ...(rollout?.lastAgentMessage ? { recap: rollout.lastAgentMessage } : {}),
     detail: detailFromRow(row, rollout),
@@ -563,7 +577,7 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
         now = this.#now();
         rows = database
           .prepare(CODEX_THREAD_QUERY)
-          .all()
+          .all(now - SESSION_ROSTER_RETENTION_MS.SETTLED_MS)
           .filter((row): row is CodexThreadRow => row !== null && typeof row === "object");
       } catch (error) {
         if (canIgnoreSqliteError(error)) continue;
@@ -635,12 +649,14 @@ export class CodexSessionAdapter implements SessionProviderAdapter {
     const hookEventsDirectory = this.#hookEventsDirectory?.();
     if (!hookEventsDirectory) return events;
     await Promise.all(
-      rows.map(async (row) => {
-        const id = textFromRow(row, CODEX_THREAD_COLUMN.ID);
-        if (!id) return;
-        const event = await readCodexHookEvent(hookEventsDirectory, id).catch(() => undefined);
-        if (event) events.set(id, event);
-      }),
+      rows
+        .filter((row) => (numberFromRow(row, CODEX_THREAD_COLUMN.ARCHIVED) ?? 0) === 0)
+        .map(async (row) => {
+          const id = textFromRow(row, CODEX_THREAD_COLUMN.ID);
+          if (!id) return;
+          const event = await readCodexHookEvent(hookEventsDirectory, id).catch(() => undefined);
+          if (event) events.set(id, event);
+        }),
     );
     return events;
   }

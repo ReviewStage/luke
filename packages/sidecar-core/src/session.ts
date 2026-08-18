@@ -22,6 +22,14 @@ export const SESSION_STATUS = {
 
 export type SessionStatus = (typeof SESSION_STATUS)[keyof typeof SESSION_STATUS];
 
+export const SESSION_COMPLETION_CAUSE = {
+  WORK_FINISHED: "work-finished",
+  SESSION_CLOSED: "session-closed",
+} as const;
+
+export type SessionCompletionCause =
+  (typeof SESSION_COMPLETION_CAUSE)[keyof typeof SESSION_COMPLETION_CAUSE];
+
 /**
  * Only waiting decays; a failure does not heal by going stale. Providers
  * report live state, or a timestamp that marks when that state was entered,
@@ -257,6 +265,8 @@ export interface ProviderSessionObservation {
   providerSessionId: string;
   title: string;
   status: SessionStatus;
+  /** Why a completed row became complete, when the provider can distinguish it. */
+  completionCause?: SessionCompletionCause;
   observedAt: number;
   /** Omitted by an adapter that reads sessions off this machine. */
   location?: SessionLocation;
@@ -302,6 +312,7 @@ export interface NormalizedSession extends SessionIdentity {
   provider: SessionProvider;
   title: string;
   status: SessionStatus;
+  completionCause?: SessionCompletionCause;
   observedAt: number;
   location: SessionLocation;
   recap?: string;
@@ -395,6 +406,20 @@ function normalizeStatus(status: SessionStatus): SessionStatus {
     throw new Error(`Unknown session status: ${status}`);
   }
   return status;
+}
+
+function normalizeCompletionCause(
+  cause: SessionCompletionCause | undefined,
+  status: SessionStatus,
+): SessionCompletionCause | undefined {
+  if (cause === undefined) return undefined;
+  if (!Object.values(SESSION_COMPLETION_CAUSE).includes(cause)) {
+    throw new Error(`Unknown session completion cause: ${cause}`);
+  }
+  if (status !== SESSION_STATUS.COMPLETE) {
+    throw new Error("A session completion cause requires complete status");
+  }
+  return cause;
 }
 
 function normalizeLocation(location: SessionLocation | undefined): SessionLocation {
@@ -533,6 +558,8 @@ export function normalizeSession(
     providerSessionId: observation.providerSessionId,
   });
   const observedAt = timestamp(observation.observedAt, "observedAt");
+  const status = normalizeStatus(observation.status);
+  const completionCause = normalizeCompletionCause(observation.completionCause, status);
   const recap = boundedText(observation.recap, maximumSessionRecapLength);
   const spawnTarget = boundedText(observation.spawnTarget, maximumSessionDetailLength);
   const workspace = normalizeWorkspace(observation.workspace);
@@ -545,7 +572,8 @@ export function normalizeSession(
       displayName: boundedText(provider.displayName, maximumSessionTitleLength) ?? providerId,
     },
     title: boundedText(observation.title, maximumSessionTitleLength) ?? "Untitled session",
-    status: normalizeStatus(observation.status),
+    status,
+    ...(completionCause ? { completionCause } : {}),
     observedAt,
     location: normalizeLocation(observation.location),
     ...(recap ? { recap } : {}),

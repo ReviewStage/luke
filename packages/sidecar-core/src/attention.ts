@@ -6,6 +6,7 @@ import {
   type NormalizedSession,
   normalizeAttention,
   normalizeSessionIdentity,
+  SESSION_COMPLETION_CAUSE,
   type SessionDetail,
   type SessionIdentity,
   type SessionStatus,
@@ -593,9 +594,14 @@ export class SessionAttentionReviewer {
     // Developments whose events are already old: consumed without a model
     // call, but their baselines still advance, so history never resurfaces.
     const staleConsumed: AttentionCandidate[] = [];
+    const closedConsumed: NormalizedSession[] = [];
     const now = this.#now();
     for (const session of sessions) {
       if (this.#isPending(session)) continue;
+      if (session.completionCause === SESSION_COMPLETION_CAUSE.SESSION_CLOSED) {
+        closedConsumed.push(session);
+        continue;
+      }
       const update = attentionUpdate(
         session,
         this.#observedSession(session),
@@ -622,7 +628,11 @@ export class SessionAttentionReviewer {
     // development is derived again once a slot frees up. A stale development
     // advances its baseline exactly as a reviewed one does: it was decided —
     // deterministically, to silence — not deferred.
-    this.#observed = this.#nextObserved(sessions, [...selected, ...staleConsumed]);
+    this.#observed = this.#nextObserved(sessions, [
+      ...selected.map((candidate) => candidate.session),
+      ...staleConsumed.map((candidate) => candidate.session),
+      ...closedConsumed,
+    ]);
     for (const candidate of selected) this.#markPending(candidate.session);
 
     try {
@@ -755,6 +765,7 @@ export class SessionAttentionReviewer {
     if (!this.#currentSession) return false;
     const current = this.#currentSession(identity);
     if (!current) return true;
+    if (current.completionCause === SESSION_COMPLETION_CAUSE.SESSION_CLOSED) return true;
     return ATTENTION_DEVELOPMENT.some(
       (dimension) => dimension.ofSession(current) !== dimension.ofUpdate(update),
     );
@@ -784,13 +795,13 @@ export class SessionAttentionReviewer {
 
   #nextObserved(
     sessions: readonly NormalizedSession[],
-    selected: readonly AttentionCandidate[],
+    consumed: readonly NormalizedSession[],
   ): Map<string, Map<string, NormalizedSession>> {
     const reviewed = new Map<string, Set<string>>();
-    for (const candidate of selected) {
-      const providerSessionIds = reviewed.get(candidate.session.providerId) ?? new Set<string>([]);
-      providerSessionIds.add(candidate.session.providerSessionId);
-      reviewed.set(candidate.session.providerId, providerSessionIds);
+    for (const session of consumed) {
+      const providerSessionIds = reviewed.get(session.providerId) ?? new Set<string>([]);
+      providerSessionIds.add(session.providerSessionId);
+      reviewed.set(session.providerId, providerSessionIds);
     }
 
     const next = new Map<string, Map<string, NormalizedSession>>();

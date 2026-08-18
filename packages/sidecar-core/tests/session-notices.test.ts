@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   type NormalizedSession,
   normalizeSession,
+  SESSION_COMPLETION_CAUSE,
   SESSION_NOTICE_STATUS,
   SESSION_STATUS,
   SessionNoticeTracker,
@@ -30,6 +31,7 @@ function session(
     recap?: string;
     workspace?: string;
     canReceiveMessage?: boolean;
+    completionCause?: (typeof SESSION_COMPLETION_CAUSE)[keyof typeof SESSION_COMPLETION_CAUSE];
   } = {},
 ): NormalizedSession {
   return normalizeSession(provider, {
@@ -37,6 +39,7 @@ function session(
     title: `Session ${providerSessionId}`,
     status,
     observedAt: overrides.observedAt ?? 100,
+    ...(overrides.completionCause ? { completionCause: overrides.completionCause } : {}),
     ...(overrides.recap ? { recap: overrides.recap } : {}),
     ...(overrides.workspace
       ? { workspace: { providerWorkspaceId: "ws-1", name: overrides.workspace } }
@@ -106,6 +109,51 @@ test("every notice-worthy arrival is one, and the quiet statuses are not", () =>
     ],
   );
   assert.equal(notices[1]?.error, "API rate limit");
+});
+
+test("closing a session is tracked as complete without producing a notice", () => {
+  const tracker = new SessionNoticeTracker();
+  tracker.notices([session(claude, "closed", SESSION_STATUS.WAITING)], 1_000);
+
+  assert.deepEqual(
+    tracker.notices(
+      [
+        session(claude, "closed", SESSION_STATUS.COMPLETE, {
+          completionCause: SESSION_COMPLETION_CAUSE.SESSION_CLOSED,
+        }),
+      ],
+      2_000,
+    ),
+    [],
+  );
+  assert.deepEqual(
+    tracker.notices(
+      [
+        session(claude, "closed", SESSION_STATUS.COMPLETE, {
+          completionCause: SESSION_COMPLETION_CAUSE.SESSION_CLOSED,
+        }),
+      ],
+      3_000,
+    ),
+    [],
+  );
+});
+
+test("finishing work still produces a completion notice", () => {
+  const tracker = new SessionNoticeTracker();
+  tracker.notices([session(claude, "finished", SESSION_STATUS.WORKING)], 1_000);
+
+  const notices = tracker.notices(
+    [
+      session(claude, "finished", SESSION_STATUS.COMPLETE, {
+        completionCause: SESSION_COMPLETION_CAUSE.WORK_FINISHED,
+      }),
+    ],
+    2_000,
+  );
+
+  assert.equal(notices.length, 1);
+  assert.equal(notices[0]?.status, SESSION_NOTICE_STATUS.COMPLETE);
 });
 
 test("the provider's own context rides the notice", () => {

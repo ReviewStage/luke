@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
-import { SESSION_STATUS } from "@sidecar/core";
+import { SESSION_COMPLETION_CAUSE, SESSION_STATUS } from "@sidecar/core";
 import { CODEX_PROVIDER, CodexSessionAdapter } from "../src/codex-adapter";
 
 const TEST_TIME = Date.parse("2026-08-11T23:45:00.000Z");
@@ -26,6 +26,8 @@ interface TestThread {
   id: string;
   cwd: string;
   observedAt: number;
+  recencyAt?: number;
+  updatedAt?: number;
   archived?: number;
   title?: string;
   preview?: string;
@@ -80,7 +82,7 @@ function writeThread(database: DatabaseSync, thread: TestThread): void {
       thread.id,
       thread.rolloutPath ?? "",
       Math.floor(thread.observedAt / 1000),
-      Math.floor(thread.observedAt / 1000),
+      Math.floor((thread.updatedAt ?? thread.observedAt) / 1000),
       TEST_CODEX_SOURCE.CLI,
       TEST_CODEX_MODEL_PROVIDER.OPENAI_SSE,
       thread.cwd,
@@ -90,9 +92,9 @@ function writeThread(database: DatabaseSync, thread: TestThread): void {
       thread.archived ?? 0,
       thread.firstUserMessage ?? "",
       thread.observedAt,
-      thread.observedAt,
+      thread.updatedAt ?? thread.observedAt,
       thread.preview ?? "",
-      thread.observedAt,
+      thread.recencyAt ?? thread.observedAt,
       thread.gitBranch ?? null,
       thread.model ?? null,
       thread.reasoningEffort ?? null,
@@ -703,7 +705,7 @@ test("keeps stale unarchived Codex sessions unknown instead of inventing activit
   assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
 });
 
-test("filters archived Codex threads while keeping sessions however old", async (t) => {
+test("keeps archived Codex threads as closed completed rows", async (t) => {
   const codexHome = await temporaryCodexHome(t);
   await writeCodexState(codexHome, [
     {
@@ -714,7 +716,15 @@ test("filters archived Codex threads while keeping sessions however old", async 
     {
       id: "archived-session",
       cwd: "/Users/test/archived",
-      observedAt: TEST_TIME - 1_000,
+      observedAt: TEST_TIME - 3 * 24 * 60 * 60 * 1000,
+      recencyAt: TEST_TIME - 3 * 24 * 60 * 60 * 1000,
+      updatedAt: TEST_TIME - 1_000,
+      archived: 1,
+    },
+    {
+      id: "expired-archived-session",
+      cwd: "/Users/test/expired-archived",
+      observedAt: TEST_TIME - 3 * 24 * 60 * 60 * 1000,
       archived: 1,
     },
     {
@@ -734,17 +744,26 @@ test("filters archived Codex threads while keeping sessions however old", async 
     observations.map((observation) => ({
       providerSessionId: observation.providerSessionId,
       status: observation.status,
+      completionCause: observation.completionCause,
       title: observation.title,
     })),
     [
       {
+        providerSessionId: "archived-session",
+        status: SESSION_STATUS.COMPLETE,
+        completionCause: SESSION_COMPLETION_CAUSE.SESSION_CLOSED,
+        title: "archived",
+      },
+      {
         providerSessionId: "new-session",
         status: SESSION_STATUS.WORKING,
+        completionCause: undefined,
         title: "new",
       },
       {
         providerSessionId: "old-session",
         status: SESSION_STATUS.WORKING,
+        completionCause: undefined,
         title: "old",
       },
     ],
@@ -865,6 +884,7 @@ test("a session-end event settles a row the rollout would leave waiting", async 
   const [observation] = await adapter.observe();
 
   assert.equal(observation?.status, SESSION_STATUS.COMPLETE);
+  assert.equal(observation?.completionCause, SESSION_COMPLETION_CAUSE.SESSION_CLOSED);
 });
 
 test("a stop event keeps a finished turn waiting past the freshness decay", async (t) => {
