@@ -45,6 +45,7 @@ const bridge: AppBridge = {
   setAskHotkey: invoke(channels.setAskHotkey),
   setStopHotkey: invoke(channels.setStopHotkey),
   setDuckOtherMedia: invoke(channels.setDuckOtherMedia),
+  setVoiceSource: invoke(channels.setVoiceSource),
   setPreferBuiltInMicrophone: invoke(channels.setPreferBuiltInMicrophone),
   setQuietDuringMeetings: invoke(channels.setQuietDuringMeetings),
   connectGoogleCalendar: invoke(channels.connectGoogleCalendar),

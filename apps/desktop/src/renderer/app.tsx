@@ -40,6 +40,7 @@ import type {
   SettingsResetScope,
   SettingsUpdateResult,
   UpdateSnapshot,
+  VoiceSource,
 } from "../shared/contracts";
 import { ACCOUNT_STATUS, CREDENTIAL_SOURCE, SESSION_OPEN_RESULT_STATUS } from "../shared/contracts";
 import type { CredentialProviderId } from "../shared/credential-providers";
@@ -671,6 +672,11 @@ export function App(): React.JSX.Element {
 
   const changeDuckOtherMedia = useCallback(
     async (enabled: boolean) => applySettingsReply(await window.sidecar.setDuckOtherMedia(enabled)),
+    [applySettingsReply],
+  );
+
+  const changeVoiceSource = useCallback(
+    async (source: VoiceSource) => applySettingsReply(await window.sidecar.setVoiceSource(source)),
     [applySettingsReply],
   );
 
@@ -2267,6 +2273,7 @@ export function App(): React.JSX.Element {
   const preferences: PreferenceWrites = {
     onVoiceCaptionsChange: changeVoiceCaptions,
     onDuckOtherMediaChange: changeDuckOtherMedia,
+    onVoiceSourceChange: changeVoiceSource,
     onPreferBuiltInMicrophoneChange: changePreferBuiltInMicrophone,
     onQuietDuringMeetingsChange: changeQuietDuringMeetings,
     onVoiceChange: changeVoice,

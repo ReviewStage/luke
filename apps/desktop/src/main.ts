@@ -143,6 +143,7 @@ import {
   type AppBootstrap,
   channels,
   isSettingsResetScope,
+  isVoiceSource,
   type MicrophoneRoute,
   type MicrophoneStatus,
   type ObservedAccountCalendars,
@@ -152,6 +153,7 @@ import {
   SETTINGS_RESET_SCOPE,
   type SessionOpenResult,
   type SessionTranscriptResult,
+  VOICE_SOURCE,
 } from "./shared/contracts";
 import {
   CREDENTIAL_PROVIDER_ID,
@@ -922,14 +924,20 @@ async function applyVoiceCredential(): Promise<void> {
   // Keychain decrypt, which a run that would refuse to use it has no business
   // asking for. That is also why the report says no key resolved — for this run,
   // none did.
+  // Which of the two the store resolved — the user's choice where it can be
+  // honoured — decides whether the key is read at all. Asked before the read
+  // for the reason above: a run that would not use the key has no business
+  // decrypting it, and a developer parked on the free allowance is such a run.
+  const runsOnKey =
+    runMode.sendsNetwork && (await settingsStore.readVoiceSource()) === VOICE_SOURCE.KEY;
   const apiKey =
-    runMode.sendsNetwork && accountCapabilitiesActive()
+    runsOnKey && accountCapabilitiesActive()
       ? await settingsStore.readApiKey(VOICE_CREDENTIAL_PROVIDER_ID)
       : undefined;
   // The hosted service stands in exactly where a key could have: a run that
-  // sends network traffic, signed in, with no key of the developer's own. The
-  // developer's key wins when both are present — it is unmetered, and it keeps
-  // voice and review off Luke's servers entirely.
+  // sends network traffic, signed in, and not running on a key of the
+  // developer's own — because none is stored, or because they chose the
+  // allowance over the one that is.
   const hosted =
     apiKey === undefined && runMode.sendsNetwork && account.status === ACCOUNT_STATUS.SIGNED_IN;
   const evaluator = apiKey
@@ -1498,6 +1506,21 @@ function registerIpc(): void {
     },
     save: (enabled) => settingsStore.setDuckOtherMedia(enabled),
     apply: (result) => mediaDuck.setEnabled(result.settings.duckOtherMedia),
+    refusal: "Could not save that setting on this system.",
+  });
+
+  // Which credential Luke runs on, rebuilt at once rather than at the next
+  // launch: the whole point of the choice is that the next thing said runs on
+  // what was just chosen. The rebuild is the same one a key being saved or
+  // deleted triggers, so the minter, the reviewer, and the usage reader can
+  // never be left built for the source that was just switched away from.
+  registerSettingHandler(channels.setVoiceSource, {
+    validate(source: unknown) {
+      if (!isVoiceSource(source)) throw new Error("Invalid voice source request");
+      return source;
+    },
+    save: (source) => settingsStore.setVoiceSource(source),
+    apply: () => void applyVoiceCredential(),
     refusal: "Could not save that setting on this system.",
   });
 

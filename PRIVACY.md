@@ -281,11 +281,23 @@ microphone on its own.
 
 ## Optional spoken conversation
 
-Voice runs one of two ways. Signed in with no OpenAI key of your own, calls
-open through the hosted service described above, under its daily allowance.
-With a key connected, everything below runs on that key directly against
-OpenAI, and Luke's service sees none of it. The key is connected by hand in
-Settings, under Account and usage at the top of its front page — alone among
+Voice runs one of two ways, and which one is yours to choose. Running on your
+Luke account, calls open through the hosted service described above, under its
+daily allowance. Running on an OpenAI key of your own, everything below runs on
+that key directly against OpenAI, and Luke's service sees none of it. The
+choice is the two-way toggle under What Luke runs on, at the top of the
+Settings tab's front page: with no key stored the account is the only source
+there is, connecting a key chooses it, and choosing the account again parks a
+stored key without deleting it — so trying your own key does not cost you the
+free allowance, and returning to the allowance does not cost you the key.
+
+The choice can only ever move spending away from your key, never onto it. A
+key that is stored but not chosen is not read at all, and if the account it was
+parked in favour of stops being able to answer — you sign out — the stored key
+is what is left rather than voice going off. Nothing else falls back: a chosen
+account with no key behind it simply has no key to fall back to.
+
+The key is connected by hand in the same section — alone among
 Luke's credentials it is never read from the environment, because an
 `OPENAI_API_KEY` exported for some other tool must not silently start being
 spent on voice or move the review path. A stored key is held encrypted through

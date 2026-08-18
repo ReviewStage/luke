@@ -36,6 +36,8 @@ import {
   CREDENTIAL_SOURCE,
   SECRET_STORAGE,
   SETTINGS_RESET_SCOPE,
+  VOICE_SOURCE,
+  type VoiceSource,
 } from "../shared/contracts";
 import type { CredentialProvider } from "../shared/credential-providers";
 import {
@@ -76,15 +78,23 @@ import { type ErrandTarget, errandTargetProps } from "./luke-errand";
 import { APP_SETTING_ID } from "./luke-guide";
 import {
   currentQuota,
+  dailyLimitWords,
   fresherQuota,
-  hostedVoiceLift,
+  HOSTED_METER_LABEL,
+  HOSTED_METER_MEANING,
   hostedVoiceNote,
   hostedVoiceSpentNote,
+  KEY_USE_NOTE,
   MICROPHONE_UNGRANTED_NOTE,
   microphoneAccessRow,
-  quotaResetsInWords,
+  quotaLevel,
+  quotaResetsWhen,
   VOICE_KEYLESS_NOTE,
+  VOICE_SOURCE_DETAIL,
+  VOICE_SOURCE_LABEL,
+  VOICE_SOURCE_PRICE,
   voiceAttentionNote,
+  voiceSourceLabel,
 } from "./microphone-access";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import { CloudBadge, ProviderMark } from "./provider-marks";
@@ -99,6 +109,7 @@ import {
   FolderIcon,
   KeyboardIcon,
   KeyIcon,
+  LukeIcon,
   PencilIcon,
   PlugIcon,
   PopUpIcon,
@@ -174,6 +185,12 @@ export interface PreferenceWrites {
   onVoiceCaptionsChange: (enabled: boolean) => Promise<string | undefined>;
   /** Turns the quieting of Music and Spotify during a spoken exchange on or off. */
   onDuckOtherMediaChange: (enabled: boolean) => Promise<string | undefined>;
+  /**
+   * Chooses which credential Luke speaks and reviews sessions on. The store
+   * answers with why when it refuses, and the toggle is where that answer
+   * belongs.
+   */
+  onVoiceSourceChange: (source: VoiceSource) => Promise<string | undefined>;
   /** Turns the Mac-microphone-over-Bluetooth-headset preference on or off. */
   onPreferBuiltInMicrophoneChange: (enabled: boolean) => Promise<string | undefined>;
   /**
@@ -2274,13 +2291,18 @@ type AccountAsk = (typeof ACCOUNT_ASK)[keyof typeof ACCOUNT_ASK];
  * One meter of today's allowance, drawn as a track the day fills. The native
  * `meter` rather than a progressbar, because nothing is underway: it reports
  * a level against a limit. Nothing about it animates — a changed value snaps
- * in place and only the section's arrival staggers — and a spent meter turns
- * to the attention color, so the bar and the sentence beside it agree.
+ * in place and only the section's arrival staggers.
+ *
+ * The fill is the working blue every live thing on the surface wears, and it
+ * turns to the attention orange while the day is running out — at the same
+ * level, and for the same reason, a session row wears it: something is about
+ * to need the developer. The bar and the sentence beside it therefore say the
+ * same thing at the same moment.
  */
 function UsageMeter({ label, quota }: { label: string; quota: HostedQuota }): React.JSX.Element {
   const capped = Math.min(quota.used, quota.limit);
   return (
-    <div className="usage-meter" data-spent={String(quota.remaining === 0)}>
+    <div className="usage-meter" data-level={quotaLevel(quota)}>
       <span className="usage-words" aria-hidden="true">
         <small>{label}</small>
         <small>
@@ -2298,37 +2320,309 @@ function UsageMeter({ label, quota }: { label: string; quota: HostedQuota }): Re
   );
 }
 
-function AccountSection({
-  account,
-  onSignOut,
-  onDeleteAccount,
+/**
+ * What counts as usage, folded away until asked, and only that: the two
+ * sources say what they are on their own faces, so repeating either here
+ * would make the one question the meters cannot answer — what spends them —
+ * the hardest thing in the dropdown to find.
+ *
+ * A `details` rather than a held-open state: the panel's own scroll takes the
+ * growth, the surface is not measured off this content, and nothing here
+ * animates.
+ */
+function UsageDisclosure({
+  voice,
+  reviews,
+}: {
+  /** Today's voice ceiling, where a reading has arrived to state it. */
+  voice?: number;
+  /** Today's review ceiling, on the same terms. */
+  reviews?: number;
+}): React.JSX.Element {
+  return (
+    <details className="settings-disclosure">
+      <summary>How this works</summary>
+      <dl className="settings-definitions">
+        <dt>{HOSTED_METER_LABEL.VOICE}</dt>
+        <dd>
+          {dailyLimitWords(voice)}
+          {HOSTED_METER_MEANING.VOICE}
+        </dd>
+        <dt>{HOSTED_METER_LABEL.REVIEWS}</dt>
+        <dd>
+          {dailyLimitWords(reviews)}
+          {HOSTED_METER_MEANING.REVIEWS}
+        </dd>
+      </dl>
+    </details>
+  );
+}
+
+/**
+ * The same question asked of a key instead: what is this being spent on? The
+ * two uses are the two the meters count, worded exactly as the allowance's
+ * disclosure words them — Luke does one job either way, and only whose
+ * credential does it changes — minus the counts a key has none of. The line
+ * beneath is the one thing that is different, and the one no meter could ever
+ * show: where the work goes, and who is billed for it.
+ */
+function KeyUseDisclosure(): React.JSX.Element {
+  return (
+    <details className="settings-disclosure">
+      <summary>How your key is used</summary>
+      <dl className="settings-definitions">
+        <dt>{HOSTED_METER_LABEL.VOICE}</dt>
+        <dd>{HOSTED_METER_MEANING.VOICE}</dd>
+        <dt>{HOSTED_METER_LABEL.REVIEWS}</dt>
+        <dd>{HOSTED_METER_MEANING.REVIEWS}</dd>
+      </dl>
+      {/* Set apart from the list rather than trailing it: it speaks for both
+          entries above, so it must not read as a third one. */}
+      <p className="settings-note settings-disclosure-close">{KEY_USE_NOTE}</p>
+    </details>
+  );
+}
+
+/**
+ * The choice itself: two halves side by side, each carrying its own name and
+ * its own price, with the live one marked. A radio group rather than two
+ * buttons, because it is one value from a small fixed set — the same thing a
+ * pop-up would be, drawn open because there are only two and the whole point
+ * is seeing them together.
+ *
+ * Pressing the half that is already live does nothing. Pressing the other
+ * either switches to a key already stored, or — with none — begins the entry
+ * that would store one, which is the same act the row's Connect was: a source
+ * you have not supplied yet has to be supplied before it can be chosen.
+ */
+function VoiceSourceToggle({
+  source,
+  keyStored,
+  storageLocked,
+  onChoose,
+  onConnect,
+}: {
+  /** Which source is actually running, as the store resolved it. */
+  source: VoiceSource;
+  /** Whether a key is stored at all, which decides what its half does. */
+  keyStored: boolean;
+  /** Whether this system can hold a key, which decides whether it can at all. */
+  storageLocked: boolean;
+  onChoose: (source: VoiceSource) => Promise<string | undefined>;
+  /** Begins the entry, which stands the panel down to the slot. */
+  onConnect: () => void;
+}): React.JSX.Element {
+  const { busy, rejection, run } = useSettingWrite(onChoose);
+  return (
+    <>
+      {/* Real radios under the drawing, the way the calendar's choices are
+          real checkboxes: one value from a set of two is exactly what a radio
+          group is, and taking the native one means the arrow keys, the
+          grouping, and the announcement all come with it. */}
+      <div className="source-toggle">
+        {[VOICE_SOURCE.ACCOUNT, VOICE_SOURCE.KEY].map((candidate) => {
+          const live = candidate === source;
+          // The key's half is the one that can be unavailable: a machine with
+          // no encrypted storage has nowhere to put one, so it can neither be
+          // supplied nor chosen. The account's half is always there — this
+          // section is only drawn for a signed-in account.
+          const blocked = candidate === VOICE_SOURCE.KEY && storageLocked;
+          // A key not yet supplied cannot be chosen, so its half says what
+          // pressing it will actually do.
+          const asksForKey = candidate === VOICE_SOURCE.KEY && !keyStored;
+          return (
+            <label
+              key={candidate}
+              className="source-choice"
+              data-live={String(live)}
+              title={blocked ? STORAGE_UNAVAILABLE_NOTE : undefined}
+            >
+              <input
+                type="radio"
+                className="visually-hidden"
+                name="voice-source"
+                value={candidate}
+                checked={live}
+                disabled={busy || blocked}
+                aria-label={voiceSourceLabel(candidate)}
+                onChange={() => {
+                  // With no key stored there is nothing to switch to yet, so
+                  // the press asks for one instead of storing a choice that
+                  // would resolve straight back to where it started.
+                  if (asksForKey) onConnect();
+                  else run(candidate);
+                }}
+              />
+              <span className="source-name">
+                {VOICE_SOURCE_LABEL[candidate]}
+                {/* Hidden from the reading because the radio's own name
+                    already carries the price; drawn because it is the fact
+                    worth seeing before choosing. */}
+                <span className="source-price" aria-hidden="true">
+                  {VOICE_SOURCE_PRICE[candidate]}
+                </span>
+                {/* The check rides beside the price rather than at the end of
+                    the line: the two facts a glance wants — what this costs,
+                    and that it is the one running — read as one mark. The
+                    radio already says it to a reader, so this is the drawing
+                    alone. */}
+                {live ? <CheckIcon /> : null}
+              </span>
+              <small>
+                {asksForKey ? "Connect a key to use it" : VOICE_SOURCE_DETAIL[candidate]}
+              </small>
+            </label>
+          );
+        })}
+      </div>
+      {rejection ? <p className="error-message">{rejection}</p> : null}
+    </>
+  );
+}
+
+/**
+ * The one question this section settles: which credential Luke speaks and
+ * reviews sessions on. Both answers stand here, side by side and switchable,
+ * because a choice split across two places — an allowance here, a key row
+ * there — is a choice nobody knows they have. It leads the front page: what
+ * Luke is running on, and what is left of it today, is the first thing worth
+ * knowing.
+ *
+ * The account itself is not here. Signing out and deleting are rare acts that
+ * cannot be taken back, and they sit at the foot of the page with the other
+ * ways out; this section is only ever read and switched.
+ */
+function WhatLukeRunsOnSection({
   panelOpen,
-  hosted,
-  keyed,
   storageLocked,
   settings,
   credentials,
+  preferences,
   voiceService,
   hostedUsage,
 }: {
-  account: Extract<AccountSnapshot, { status: typeof ACCOUNT_STATUS.SIGNED_IN }>;
-  onSignOut: () => Promise<void>;
-  onDeleteAccount: () => Promise<string | undefined>;
   panelOpen: boolean;
-  /** Whether voice currently runs on this account's included allowance. */
-  hosted: boolean;
-  /** Whether voice runs on the developer's own key instead. */
-  keyed: boolean;
   /**
-   * Whether this system cannot store a key at all. The key row's connect
-   * invitation is withheld then, and so is every hint pointing at it.
+   * Whether this system cannot store a key at all. The key half cannot be
+   * chosen or supplied then, and it says why rather than going quiet.
    */
   storageLocked: boolean;
   settings: AppSettings;
   /** The one credential being entered anywhere; the key row here uses it. */
   credentials: CredentialEntryControl;
+  preferences: PreferenceWrites;
   voiceService?: RealtimeDiagnostics;
   hostedUsage?: HostedUsageAnswer;
+}): React.JSX.Element {
+  const keySource = settings.credentialSources[VOICE_CREDENTIAL_PROVIDER.id];
+  const keyStored = keySource !== CREDENTIAL_SOURCE.NONE;
+  const entering = entryForProvider(credentials, VOICE_CREDENTIAL_PROVIDER.id) !== undefined;
+  const hosted = settings.voiceSource === VOICE_SOURCE.ACCOUNT;
+  // Which half's contents stand below. The live one, except while a key is
+  // being entered: an entry in flight is that half being supplied, and the
+  // panel brought back around it has to find the field still drawn — the
+  // source itself does not move until the key lands.
+  const keyBody = !hosted || entering;
+  // The freshest reading of each meter, wherever it came from: the usage read
+  // against the quota the last mint carried, day and remainder telling the two
+  // apart — and neither counted past its own reset, because a spent yesterday
+  // must not be drawn as an almost-back today.
+  const now = Date.now();
+  const voiceQuota = hosted
+    ? fresherQuota(currentQuota(hostedUsage?.voice, now), currentQuota(voiceService?.quota, now))
+    : undefined;
+  // Decided, not missed: a same-day reviews reading may trail a fresher voice
+  // mint, because mints say nothing about reviews — dropping it would delete
+  // the only reviews count for no accuracy gained. The skew is bounded by the
+  // refresh riding every settings change and tab turn, and a different day
+  // still discards it.
+  const reviewQuota =
+    voiceQuota && hostedUsage && hostedUsage.attention.resetsAt === voiceQuota.resetsAt
+      ? hostedUsage.attention
+      : undefined;
+  return (
+    <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
+      <h2>
+        <LukeIcon />
+        What Luke runs on
+        {/* The mark for voice having nothing to run on sits where both ways
+            in are drawn: the two halves of the toggle below. */}
+        {settings.voiceAvailable ? null : <AttentionMark note={VOICE_KEYLESS_NOTE} />}
+      </h2>
+      <VoiceSourceToggle
+        source={settings.voiceSource}
+        keyStored={keyStored}
+        storageLocked={storageLocked}
+        onChoose={preferences.onVoiceSourceChange}
+        onConnect={() => credentials.begin(VOICE_CREDENTIAL_PROVIDER.id)}
+      />
+      {/* Each half's own contents, drawn under the toggle for whichever is
+          live. They answer the same two questions in the two ways the sources
+          differ: the allowance is a quantity, so it draws bars and says when
+          they return; a key is a connection, so it draws the connection and
+          says what runs on it. Neither half explains the other — the toggle
+          above is where they are compared. */}
+      {keyBody ? (
+        <>
+          <ProviderCredential
+            provider={VOICE_CREDENTIAL_PROVIDER}
+            source={keySource}
+            storageUnavailable={storageLocked}
+            control={credentials}
+            panelOpen={panelOpen}
+          />
+          <KeyUseDisclosure />
+        </>
+      ) : (
+        <>
+          {/* The day's allowance from the usage read, or the voice meter alone
+              from the quota the last mint carried while no read has answered.
+              Every reading in hand having outlived its day reads as no reading
+              at all, and falls back to the words that promise no numbers. */}
+          {voiceQuota ? (
+            <>
+              <UsageMeter label={HOSTED_METER_LABEL.VOICE} quota={voiceQuota} />
+              {reviewQuota ? (
+                <UsageMeter label={HOSTED_METER_LABEL.REVIEWS} quota={reviewQuota} />
+              ) : null}
+              <p className="settings-note">
+                {voiceQuota.remaining === 0
+                  ? hostedVoiceSpentNote(quotaResetsWhen(voiceQuota.resetsAt, now))
+                  : `Resets ${quotaResetsWhen(voiceQuota.resetsAt, now)}.`}
+              </p>
+            </>
+          ) : (
+            <p className="settings-note">{hostedVoiceNote(voiceService)}</p>
+          )}
+          {/* The numbers come off whichever reading is in hand, so the
+              dropdown can never name a ceiling the service is not enforcing. */}
+          <UsageDisclosure
+            {...(voiceQuota ? { voice: voiceQuota.limit } : {})}
+            {...(reviewQuota ? { reviews: reviewQuota.limit } : {})}
+          />
+        </>
+      )}
+      {storageLocked ? <p className="settings-note">{STORAGE_UNAVAILABLE_NOTE}</p> : null}
+    </section>
+  );
+}
+
+/**
+ * Who is signed in, and the two ways out of that. It sits at the foot of the
+ * front page rather than at its head: what an account is spending is checked
+ * daily and belongs up top, where What Luke runs on now draws it, while signing
+ * out and deleting are done once or never. Both ways out ask before they act.
+ */
+function AccountSection({
+  account,
+  onSignOut,
+  onDeleteAccount,
+  panelOpen,
+}: {
+  account: Extract<AccountSnapshot, { status: typeof ACCOUNT_STATUS.SIGNED_IN }>;
+  onSignOut: () => Promise<void>;
+  onDeleteAccount: () => Promise<string | undefined>;
+  panelOpen: boolean;
 }): React.JSX.Element {
   // Signing out asks first, the way deleting a key does: getting back in costs
   // a whole trip through the browser, so the button asks and only the answer
@@ -2380,13 +2674,10 @@ function AccountSection({
   };
 
   return (
-    <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
+    <section className="settings-section" style={{ "--row-index": 5 } as React.CSSProperties}>
       <h2>
         <UserIcon />
-        Account and usage
-        {/* The mark for voice having nothing to run on sits where both ways
-            in now live: the sign-in above and the key row below. */}
-        {settings.voiceAvailable ? null : <AttentionMark note={VOICE_KEYLESS_NOTE} />}
+        Account
       </h2>
       <div className="settings-row">
         <span className="settings-copy account-identity">
@@ -2466,81 +2757,6 @@ function AccountSection({
           </fieldset>
         </span>
       </div>
-      {/* What the account is buying right now, said where the account is: the
-          day's allowance drawn as meters while voice runs on it — both from
-          the usage read, or the voice meter alone from the quota the last
-          mint carried while no read has answered — with the note beneath
-          keeping only what the bars cannot say. A key of the developer's own
-          is named instead. The wording is the Voice page's own, worded once,
-          with the key row named because it is a page away from here. */}
-      {hosted && (hostedUsage || voiceService?.quota) ? (
-        <>
-          {(() => {
-            // The freshest reading of each meter, wherever it came from: the
-            // usage read against the quota the last mint carried, day and
-            // remainder telling the two apart — and neither counted past its
-            // own reset, because a spent yesterday must not be drawn as an
-            // almost-back today. Reviews only ride while the read shares the
-            // freshest day — an older read's reviews would be an older day's.
-            const now = Date.now();
-            const voiceQuota = fresherQuota(
-              currentQuota(hostedUsage?.voice, now),
-              currentQuota(voiceService?.quota, now),
-            );
-            if (!voiceQuota) {
-              // Every reading in hand has outlived its day: fall back to the
-              // words that promise no numbers, exactly as before the first
-              // read of a day.
-              return (
-                <p className="settings-note">
-                  {hostedVoiceNote(voiceService, { offersKey: !storageLocked })}
-                </p>
-              );
-            }
-            // Decided, not missed: a same-day reviews reading may trail a
-            // fresher voice mint, because mints say nothing about reviews —
-            // dropping it would delete the only reviews count for no accuracy
-            // gained. The skew is bounded by the refresh riding every settings
-            // change and tab turn, and a different day still discards it.
-            const reviews =
-              hostedUsage && hostedUsage.attention.resetsAt === voiceQuota.resetsAt
-                ? hostedUsage.attention
-                : undefined;
-            const resetsIn = quotaResetsInWords(voiceQuota.resetsAt, Date.now());
-            const parts = [
-              voiceQuota.remaining === 0 ? hostedVoiceSpentNote(resetsIn) : `Resets ${resetsIn}.`,
-              ...(storageLocked ? [] : [hostedVoiceLift()]),
-            ];
-            return (
-              <>
-                <UsageMeter label="Voice calls" quota={voiceQuota} />
-                {reviews ? <UsageMeter label="Session reviews" quota={reviews} /> : null}
-                {parts.length > 0 ? <p className="settings-note">{parts.join(" ")}</p> : null}
-              </>
-            );
-          })()}
-        </>
-      ) : hosted ? (
-        <p className="settings-note">
-          {hostedVoiceNote(voiceService, { offersKey: !storageLocked })}
-        </p>
-      ) : keyed ? (
-        <p className="settings-note">Voice runs on your OpenAI key — no daily limits.</p>
-      ) : null}
-      {/* The key row lives with the account because they are the two ways
-          voice can run, and the meters above are what the key changes. The
-          same storage refusal every key section shows replaces the entry
-          while this system cannot store one; the keyless state needs no note
-          of its own here — the heading's mark and the sign-in above already
-          say both ways in. */}
-      <ProviderCredential
-        provider={VOICE_CREDENTIAL_PROVIDER}
-        source={settings.credentialSources[VOICE_CREDENTIAL_PROVIDER.id]}
-        storageUnavailable={storageLocked}
-        control={credentials}
-        panelOpen={panelOpen}
-      />
-      {storageLocked ? <p className="settings-note">{STORAGE_UNAVAILABLE_NOTE}</p> : null}
       <div className="settings-row">
         <span className="settings-copy">
           <strong>Delete account</strong>
@@ -2769,29 +2985,20 @@ export function SettingsPanel({
       ) : null}
 
       {drawnView === SETTINGS_VIEW.ROOT ? (
-        /* The front page: whose account this is and what it is buying right
-           now, then one row per page, then the sections that answer at a
-           glance — what Luke is allowed, the way to the founders, and the way
-           out. The account leads because the allowance it carries is the first
-           thing worth knowing about a hosted run, and its sign-out asks before
-           it acts, so leading with it costs no accidental exits. */
+        /* The front page: what voice runs on and what is left of it today,
+           then one row per page, then the sections that answer at a glance —
+           what Luke is allowed, the way to the founders, whose account this
+           is, and the way out. The allowance leads because it is the one
+           thing here worth checking daily; the account itself follows the
+           page down to the ways out, which are done once or never. */
         <>
           {account.status === ACCOUNT_STATUS.SIGNED_IN && settings ? (
-            <AccountSection
-              account={account}
-              onSignOut={onSignOut}
-              onDeleteAccount={onDeleteAccount}
+            <WhatLukeRunsOnSection
               panelOpen={panelOpen}
-              hosted={
-                settings.voiceAvailable &&
-                settings.credentialSources[VOICE_CREDENTIAL_PROVIDER.id] === CREDENTIAL_SOURCE.NONE
-              }
-              keyed={
-                settings.credentialSources[VOICE_CREDENTIAL_PROVIDER.id] !== CREDENTIAL_SOURCE.NONE
-              }
               storageLocked={settings.secretStorage === SECRET_STORAGE.UNAVAILABLE}
               settings={settings}
               credentials={credentials}
+              preferences={preferences}
               {...(voiceService ? { voiceService } : {})}
               {...(hostedUsage ? { hostedUsage } : {})}
             />
@@ -2857,10 +3064,22 @@ export function SettingsPanel({
 
           <FeedbackSection control={feedback} />
 
+          {/* The account and the two ways out of it, last of the sections:
+              signing out and deleting are rare, cannot be taken back, and
+              have nothing to do with the allowance the page opens on. */}
+          {account.status === ACCOUNT_STATUS.SIGNED_IN ? (
+            <AccountSection
+              account={account}
+              onSignOut={onSignOut}
+              onDeleteAccount={onDeleteAccount}
+              panelOpen={panelOpen}
+            />
+          ) : null}
+
           <button
             type="button"
             className="quit-button"
-            style={{ "--row-index": 5 } as React.CSSProperties}
+            style={{ "--row-index": 6 } as React.CSSProperties}
             onClick={onQuit}
           >
             <PowerIcon />

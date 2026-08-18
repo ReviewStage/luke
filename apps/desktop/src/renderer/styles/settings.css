@@ -362,11 +362,203 @@
 
 .usage-track::-webkit-meter-optimum-value {
   border-radius: 999px;
-  background: color-mix(in srgb, var(--state-complete) 62%, transparent);
+  background: color-mix(in srgb, var(--state-working) 62%, transparent);
 }
 
-.usage-meter[data-spent="true"] .usage-track::-webkit-meter-optimum-value {
+/* Getting close, and gone: the same attention orange a session row wears when
+   it is about to need the developer, at the same weight — the warning arrives
+   while there is still something left to spend differently, rather than only
+   once there is not. */
+.usage-meter[data-level="low"] .usage-track::-webkit-meter-optimum-value,
+.usage-meter[data-level="spent"] .usage-track::-webkit-meter-optimum-value {
   background: color-mix(in srgb, var(--state-attention) 72%, transparent);
+}
+
+/* The two credentials Luke can run on, side by side: one value from a set of
+   two, drawn open rather than as a pop-up because seeing both at once — with
+   what each costs on its face — is the entire point of the control.
+
+   Two buttons rather than a segmented control in a well of its own: they are
+   the same pair of offers the Feedback section makes a few rows down, so they
+   are drawn in the same vocabulary — the quiet button's ground and radius at
+   rest, lifting to the ground and edge a chosen filter chip takes for the one
+   that is live. Chosen is a state, not an act: the accent belongs to the
+   meters below, which say what the choice is costing, and a button wearing it
+   too would read as the thing to press rather than the thing already true. */
+.source-toggle {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.source-choice {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  /* The quiet button's box, opened up for a second line. The edge is carried
+     transparent at rest so taking one on the live half re-shapes nothing. */
+  padding: 8px 11px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--raised);
+  color: var(--text-secondary);
+  font-family: inherit;
+  gap: 2px;
+  text-align: left;
+  cursor: pointer;
+  /* Ground, edge and colour only — the box never re-shapes as the choice
+     moves, so the words inside it are laid out once. */
+  transition:
+    background-color var(--duration-hover) ease,
+    border-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.source-choice:hover:not([data-live="true"]):not(:has(input:disabled)) {
+  background: var(--raised-strong);
+  color: var(--text-primary);
+}
+
+.source-choice[data-live="true"] {
+  border-color: var(--selected-edge);
+  background: var(--selected);
+  color: var(--text-primary);
+}
+
+.source-choice:has(input:disabled) {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.source-choice small {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 9.5px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The live half's second line comes up with the rest of it, a step behind the
+   name so the two lines keep their order. */
+.source-choice[data-live="true"] small {
+  color: var(--text-secondary);
+}
+
+.source-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  /* The button's own weight, at the size a two-line button's first line
+     wants. */
+  font-size: 10.5px;
+  font-weight: 640;
+}
+
+/* What the half costs, as a tag rather than a sentence: two words that have
+   to be read before the name is chosen, not after. Free wears the same green
+   the meters and the switches wear for a state that is simply on. */
+.source-price {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--raised-strong);
+  color: var(--text-tertiary);
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.source-choice:first-child .source-price {
+  background: color-mix(in srgb, var(--state-complete) 20%, transparent);
+  color: color-mix(in srgb, var(--state-complete) 85%, white);
+}
+
+/* The check sits beside the price, not at the end of the line: what this half
+   costs and that it is the one running are the two things a glance is after,
+   and they read fastest as one mark. Sized to the words rather than to the
+   12px a credential row's check takes, because here it is a letter in a
+   label — and it keeps that row's green, which is the one accent on a button
+   that is otherwise the surface's own grays. */
+.source-choice .credential-check {
+  width: 10px;
+  height: 10px;
+  margin-left: -1px;
+}
+
+/* What a meter counts, folded away until asked. The panel's own scroll takes
+   the growth — the surface in panel mode is a fixed height and is not
+   measured off this content — so opening one costs no resize and nothing here
+   animates. The marker is drawn rather than the system's, because Chromium's
+   own triangle cannot be coloured with the rest of the line. */
+.settings-disclosure > summary {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  list-style: none;
+  /* Pressable, like every other control in the panel that answers a press. */
+  cursor: pointer;
+  transition: color var(--duration-hover) ease;
+}
+
+.settings-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-disclosure > summary::before {
+  color: var(--text-tertiary);
+  content: "›";
+  font-size: 11px;
+  /* Rotation only: the glyph turns in place, so the words beside it never
+     re-shape. */
+  transition: transform var(--duration-quick) var(--spring-fast);
+}
+
+.settings-disclosure[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.settings-disclosure > summary:hover {
+  color: var(--text-primary);
+}
+
+/* One term per line with its meaning beneath. Flush with the summary rather
+   than indented under its marker: the disclosure is already the indent, and a
+   second one inside it pushed the answer away from the section's own column
+   for no reading it bought. */
+.settings-definitions {
+  display: flex;
+  flex-direction: column;
+  margin: 6px 0 2px;
+  gap: 2px;
+}
+
+.settings-definitions dt {
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 620;
+}
+
+.settings-definitions dt:not(:first-of-type) {
+  margin-top: 7px;
+}
+
+.settings-definitions dd {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+/* A line that speaks for every entry above it rather than being another one:
+   it takes a gap wider than the ones between the terms, so the list closes
+   before it starts. */
+.settings-disclosure-close {
+  margin-top: 10px;
 }
 
 /* The panel's switches. On is the palette connected and complete

@@ -178,13 +178,16 @@ export const CREDENTIAL_PROVIDERS: Readonly<Record<CredentialProviderId, Credent
   },
   [CREDENTIAL_PROVIDER_ID.OPENAI]: {
     id: CREDENTIAL_PROVIDER_ID.OPENAI,
-    // "BYOK" — bring your own key — because the row's whole meaning is the
-    // choice it offers against the account's included allowance beside it.
-    displayName: "OpenAI BYOK",
-    // The panel writes apostrophes as `&rsquo;` in JSX and this string is read
-    // as text, so the apostrophe here is the typographic one rather than a
-    // straight quote.
-    description: "The API key for Luke’s voice capabilities.",
+    // The service, plainly. The row stands inside the section that already
+    // says what it is for — the other way voice can run — so the name has no
+    // acronym to carry: "BYOK" named the choice for anyone who already knew
+    // the word, and named nothing for everyone else.
+    displayName: "OpenAI",
+    // No description, alone among the providers, because its section says
+    // everything one could: the toggle above the row names both sources and
+    // what each costs, and the disclosure below it says what the key is spent
+    // on and who bills for it. A sentence between them could only repeat one
+    // of the two.
     // Realtime is what a spoken turn runs on, and an account that cannot reach
     // it fails at the first word rather than at the paste — so the line says so
     // before the key is entered rather than after.

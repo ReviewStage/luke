@@ -16,6 +16,7 @@ import {
   CREDENTIAL_SOURCE,
   SECRET_STORAGE,
   SETTINGS_RESET_SCOPE,
+  VOICE_SOURCE,
 } from "../src/shared/contracts";
 import {
   CREDENTIAL_PROVIDER_ID,
@@ -1625,4 +1626,91 @@ test("a reset leaves a stored key standing", async (t) => {
   assert.deepEqual(contents.apiKeys, { [CONDUCTOR]: sealed(TEST_API_KEY) });
   assert.equal(contents.voiceCaptions, false);
   assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
+});
+
+/** A signed-in account, which is what makes the free allowance answerable. */
+const TEST_ACCOUNT = {
+  accessToken: "access-token-secret",
+  refreshToken: "refresh-token-secret",
+  email: "developer@example.com",
+  name: "Developer",
+  provider: "github" as const,
+};
+
+test("with no key stored there is only one source to run on", async (t) => {
+  const store = storeIn(await temporaryDirectory(t));
+  await store.setAccount(TEST_ACCOUNT);
+
+  assert.equal(await store.readVoiceSource(), VOICE_SOURCE.ACCOUNT);
+  assert.equal((await store.snapshot()).voiceSource, VOICE_SOURCE.ACCOUNT);
+
+  // Choosing the key with none stored changes nothing about what runs: there
+  // is nothing there to spend, and a resolution that answered otherwise would
+  // send the minter to a credential that does not exist.
+  await store.setVoiceSource(VOICE_SOURCE.KEY);
+  assert.equal(await store.readVoiceSource(), VOICE_SOURCE.ACCOUNT);
+});
+
+test("connecting the voice key chooses it, and the allowance can take it back", async (t) => {
+  const store = storeIn(await temporaryDirectory(t));
+  await store.setAccount(TEST_ACCOUNT);
+  await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-developers-own");
+
+  // Connecting is choosing: someone who pastes a key means to use it, and a
+  // stored preference quietly ignoring it would look like the save failed.
+  assert.equal(await store.readVoiceSource(), VOICE_SOURCE.KEY);
+
+  // And back again, with the key still stored — the whole point of the
+  // choice. Before it existed, the only way back was deleting the key.
+  await store.setVoiceSource(VOICE_SOURCE.ACCOUNT);
+  assert.equal(await store.readVoiceSource(), VOICE_SOURCE.ACCOUNT);
+  assert.equal(
+    (await store.snapshot()).credentialSources[CREDENTIAL_PROVIDER_ID.OPENAI],
+    CREDENTIAL_SOURCE.ENCRYPTED_FILE,
+    "parking on the allowance keeps the key",
+  );
+  // Voice is still on: what changed is whose credential answers, not whether
+  // one does.
+  assert.equal((await store.snapshot()).voiceAvailable, true);
+});
+
+test("a choice that would start spending a key is never made by fallback", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+  await store.setAccount(TEST_ACCOUNT);
+  await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-developers-own");
+  await store.setVoiceSource(VOICE_SOURCE.ACCOUNT);
+  assert.equal(await store.readVoiceSource(), VOICE_SOURCE.ACCOUNT);
+
+  // Signed out, the allowance they chose cannot answer. The stored key is
+  // what is left, so voice keeps working exactly as it did before the choice
+  // existed — the fallback that costs nothing is the account's, and this one
+  // only runs when the free half has gone.
+  await store.clearAccount();
+  assert.equal(await store.readVoiceSource(), VOICE_SOURCE.KEY);
+
+  // Signing back in returns them to what they chose: the preference was
+  // stored, not spent.
+  await store.setAccount(TEST_ACCOUNT);
+  assert.equal(await store.readVoiceSource(), VOICE_SOURCE.ACCOUNT);
+});
+
+test("the chosen source survives a reopen, and a corrupt one reads as no choice", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+  await store.setAccount(TEST_ACCOUNT);
+  await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-developers-own");
+  await store.setVoiceSource(VOICE_SOURCE.ACCOUNT);
+  assert.equal(await storeIn(directory).readVoiceSource(), VOICE_SOURCE.ACCOUNT);
+
+  // A source this build does not offer is dropped rather than carried, and
+  // dropping it lands on the behaviour that existed before the field did:
+  // whichever credential is there, the key first.
+  const contents = JSON.parse(await readSettingsFile(directory));
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({ ...contents, voiceSource: "someone-elses-account" }),
+    "utf8",
+  );
+  assert.equal(await storeIn(directory).readVoiceSource(), VOICE_SOURCE.KEY);
 });

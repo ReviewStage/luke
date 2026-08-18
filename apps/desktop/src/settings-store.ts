@@ -27,11 +27,14 @@ import {
   type AppSettings,
   CREDENTIAL_SOURCE,
   type CredentialSource,
+  isVoiceSource,
   SECRET_STORAGE,
   SETTINGS_RESET_SCOPE,
   type SecretStorage,
   type SettingsResetScope,
   type SettingsUpdateResult,
+  VOICE_SOURCE,
+  type VoiceSource,
 } from "./shared/contracts";
 import {
   CREDENTIAL_PROVIDER_ID,
@@ -68,6 +71,7 @@ const SETTINGS_FIELD = {
   VERSION: "version",
   VOICE: "voice",
   VOICE_CAPTIONS: "voiceCaptions",
+  VOICE_SOURCE: "voiceSource",
   VOICE_SPEED: "voiceSpeed",
   VOICE_HOTKEY: "voiceHotkey",
   WORKSPACE_AGENT_DEFAULTS: "workspaceAgentDefaults",
@@ -185,6 +189,14 @@ interface PersistedSettings {
    * and a corrupt value both land on doing it.
    */
   duckOtherMedia: boolean;
+  /**
+   * Which credential the user chose to speak and review on, absent until they
+   * choose. Absent means "whichever is there, the key first", which is what
+   * connecting a key meant before the choice existed — so an install that
+   * never touches the toggle behaves exactly as it always did, and only an
+   * explicit choice of the account holds a stored key back.
+   */
+  voiceSource?: VoiceSource;
   preferBuiltInMicrophone: boolean;
   /**
    * Whether announcements wait out calendar meetings. On unless the file says
@@ -458,6 +470,7 @@ function parsePersistedSettings(source: string): PersistedSettings {
   const version = record[SETTINGS_FIELD.VERSION];
   const calendarAccounts = storedCalendarAccounts(record);
   const voice = record[SETTINGS_FIELD.VOICE];
+  const voiceSource = record[SETTINGS_FIELD.VOICE_SOURCE];
   const voiceSpeed = record[SETTINGS_FIELD.VOICE_SPEED];
   const formFactor = record[SETTINGS_FIELD.FORM_FACTOR];
   const defaultWorkspaceProvider = record[SETTINGS_FIELD.DEFAULT_WORKSPACE_PROVIDER];
@@ -503,6 +516,11 @@ function parsePersistedSettings(source: string): PersistedSettings {
       record[SETTINGS_FIELD.DUCK_OTHER_MEDIA],
       APP_SETTING_DEFAULTS.duckOtherMedia,
     ),
+    // A source this build does not offer is dropped rather than carried, the
+    // way an unknown voice is: absent is a meaning of its own here — take
+    // whichever credential is there — so there is always somewhere safe to
+    // land.
+    ...(isVoiceSource(voiceSource) ? { voiceSource } : {}),
     preferBuiltInMicrophone: booleanSetting(
       record[SETTINGS_FIELD.PREFER_BUILT_IN_MICROPHONE],
       APP_SETTING_DEFAULTS.preferBuiltInMicrophone,
@@ -575,6 +593,9 @@ export class SettingsStore {
       // actually happen — and it travels with every settings reply, so storing a
       // key is what turns voice on and deleting one is what turns it off.
       voiceAvailable: await this.#voiceAvailable(),
+      // Resolved, not stored: the panel's toggle marks what a press of the
+      // talk key would actually spend, which is not always what was chosen.
+      voiceSource: await this.#resolveVoiceSource(),
       // Whether this build can offer the Google Calendar sign-in at all: a
       // registered OAuth client resolved, and this run would use what it
       // grants. Without one the integration is not drawn at all.
@@ -1036,6 +1057,48 @@ export class SettingsStore {
   }
 
   /**
+   * Which credential Luke actually runs on, from what is stored and what the
+   * user chose. The choice can only ever withhold a key that is there in
+   * favour of an account that can serve — never the other way round: falling
+   * back from an absent account onto a stored key would start spending the
+   * developer's money because something they did not touch went missing, and
+   * a fallback that costs money is not a fallback.
+   *
+   * Which leaves one rule, in one place, read by the panel and by the minter:
+   * the account serves when it was chosen and is signed in, or when there is
+   * no key to run on; otherwise the key does.
+   */
+  async #resolveVoiceSource(): Promise<VoiceSource> {
+    if (!this.#credentialsUsable) return VOICE_SOURCE.ACCOUNT;
+    const keyed = (await this.readApiKey(VOICE_CREDENTIAL_PROVIDER_ID)) !== undefined;
+    if (!keyed) return VOICE_SOURCE.ACCOUNT;
+    const chosen = (await this.#load()).voiceSource;
+    if (chosen !== VOICE_SOURCE.ACCOUNT) return VOICE_SOURCE.KEY;
+    // Chosen, but only honoured while the allowance it names can actually
+    // answer. Signed out, the stored key is what is left, and voice keeps
+    // working the way it did before the choice existed.
+    return (await this.readAccount()) !== undefined ? VOICE_SOURCE.ACCOUNT : VOICE_SOURCE.KEY;
+  }
+
+  /** Main-process only: the source the minter and the reviewer are built for. */
+  async readVoiceSource(): Promise<VoiceSource> {
+    return this.#resolveVoiceSource();
+  }
+
+  /**
+   * Chooses which credential Luke runs on. Stored as asked even where it
+   * cannot be honoured yet — choosing the account before signing in is a
+   * standing preference, not a refusal — because the resolution above is what
+   * decides what actually runs, every time it is asked.
+   */
+  async setVoiceSource(source: VoiceSource): Promise<SettingsUpdateResult> {
+    return this.#setField((persisted) => {
+      if (persisted.voiceSource === source) return;
+      return { ...persisted, voiceSource: source };
+    });
+  }
+
+  /**
    * Main-process only: the resolved key used to authenticate that provider's
    * reads. A provider with no key resolves to nothing, so its adapter observes
    * nothing and issues no request.
@@ -1082,6 +1145,15 @@ export class SettingsStore {
         version: SETTINGS_FILE_VERSION,
         apiKeys,
       };
+      // Connecting the key voice runs on is choosing it: someone who parked on
+      // the free allowance and later pastes a fresh key means to use that key,
+      // and a stored preference quietly ignoring it would look like the key
+      // failed to save. Deleting one leaves the choice alone — there is
+      // nothing left for it to hold back, and it says where to land if another
+      // key ever arrives.
+      if (providerId === VOICE_CREDENTIAL_PROVIDER_ID && ciphertext) {
+        next.voiceSource = VOICE_SOURCE.KEY;
+      }
       await this.#write(next);
       this.#loading = Promise.resolve(next);
       this.#resolved.delete(providerId);
