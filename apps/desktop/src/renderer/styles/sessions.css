@@ -608,6 +608,16 @@ html[data-keyboard="true"] button.session-row:focus-visible {
   white-space: nowrap;
 }
 
+/* A workspace act keeps the chip a row's actions wear, but the chip is pulled
+   toward the name's own line with negative margins — the way a settings
+   heading holds its reset — so a header with an act to offer stays the height
+   of one without. The chip still draws its full size; it spends the header's
+   padding instead of growing it. */
+.workspace-tray-header .row-action {
+  margin-top: -6px;
+  margin-bottom: -6px;
+}
+
 /* Rows inside the tray hand their box to it: no border, no radius, no fill of
    their own, a hairline seam between neighbours. The attention tint keeps its
    ground — a chat that needs a person says so inside a tray exactly as loudly
