@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
 import test from "node:test";
 import {
+  AD_HOC_APP_NAME,
   buildCarriesDeveloperIdSigning,
   DEVELOPMENT_APP_NAME,
   RELEASE_APP_NAME,
@@ -12,10 +14,8 @@ test("only a packaged Developer ID build answers to the product name", () => {
   assert.equal(resolveAppName({ packaged: true, developerIdSigned: true }), RELEASE_APP_NAME);
 });
 
-test("a packaged build without the release identity answers to the development name", () => {
-  // An ad-hoc signature changes with every build, so sharing the release's
-  // Keychain entry would poison it for the released app.
-  assert.equal(resolveAppName({ packaged: true, developerIdSigned: false }), DEVELOPMENT_APP_NAME);
+test("an ad-hoc package is isolated from unpackaged development credentials", () => {
+  assert.equal(resolveAppName({ packaged: true, developerIdSigned: false }), AD_HOC_APP_NAME);
 });
 
 test("an unpackaged run answers to the development name whatever it was built for", () => {
@@ -43,6 +43,17 @@ test("the names hold to the manifest and to the shell derivation", async () => {
   // scripts/lib/workspace.sh derives the development instance's lock directory
   // as "<product name> Dev"; this is the pin that keeps the two together.
   assert.equal(DEVELOPMENT_APP_NAME, `${productName} Dev`);
+  assert.equal(AD_HOC_APP_NAME, `${productName} Test`);
+  const shellNames = execFileSync(
+    "bash",
+    ["-c", "source scripts/lib/workspace.sh; sidecar_app_names"],
+    { cwd: new URL("../../..", import.meta.url), encoding: "utf8" },
+  );
+  assert.deepEqual(shellNames.trim().split("\n"), [
+    DEVELOPMENT_APP_NAME,
+    AD_HOC_APP_NAME,
+    RELEASE_APP_NAME,
+  ]);
 });
 
 test("main.ts applies the identity before the lock that lives under it", async () => {

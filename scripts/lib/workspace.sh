@@ -56,11 +56,12 @@ sidecar_wait_for_exit() {
 # worktree: the lock is keyed on the app name, which every checkout shares.
 #
 # The app chooses its own name at launch — the product name for a Developer ID
-# release, and "<product name> Dev" for every development run, so the two never
-# share a Keychain entry (see apps/desktop/src/app-identity.ts). Each name keeps
-# a lock of its own, so a caller replacing "the running instance" asks about
-# both. The product name is still derived the way Electron derives its default,
-# from the manifest: `productName` when it sets one, the package name otherwise.
+# release, "<product name> Dev" for an unpackaged run, and "<product name> Test"
+# for an ad-hoc package, so differently signed builds never share a Keychain
+# entry (see apps/desktop/src/app-identity.ts). Each name keeps a lock of its own,
+# so a caller replacing "the running instance" asks about all three. The product
+# name is still derived the way Electron derives its default, from the manifest:
+# `productName` when it sets one, the package name otherwise.
 sidecar_app_names() {
     local app_name
     if ! app_name=$(cd "$SIDECAR_DESKTOP_APP_ROOT" &&
@@ -68,7 +69,7 @@ sidecar_app_names() {
         printf 'error: could not read the desktop app name\n' >&2
         return 1
     fi
-    printf '%s Dev\n%s\n' "$app_name" "$app_name"
+    printf '%s Dev\n%s Test\n%s\n' "$app_name" "$app_name" "$app_name"
 }
 
 sidecar_app_lock_holder_pid() {
@@ -99,8 +100,8 @@ sidecar_app_lock_holder_pid() {
 }
 
 # Stopping a holder has to wait for it to exit, because the lock is released
-# as that process goes away rather than when it is signalled. Development and
-# release instances hold separate locks, so both are stopped: a launch means
+# as that process goes away rather than when it is signalled. Development, test,
+# and release instances hold separate locks, so all are stopped: a launch means
 # "this build owns the screen now", whichever build was there before.
 sidecar_stop_running_app() {
     local app_names
