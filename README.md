@@ -48,7 +48,7 @@ Visit [tryluke.dev](https://tryluke.dev) to see Luke in action.
 | Conductor | Cloud sessions | Yes |
 | GitHub Copilot | Cloud agent tasks | Yes |
 | Cursor | Local and cloud sessions | Cloud only |
-| Devin | Cloud sessions | Yes |
+| Devin | Local and cloud sessions | Cloud only |
 | Jules | Cloud sessions | Yes |
 | OpenCode | Local sessions | No |
 | Linear | Assigned issues | Yes |
