@@ -31,8 +31,14 @@ test("describes every provider it lists", () => {
     assert.equal(CREDENTIAL_PROVIDERS[provider.id], provider, "a provider is filed under its id");
     assert.ok(provider.displayName.length > 0);
     assert.ok(provider.hint.length > 0);
-    // The environment fallback every provider offers is `<PROVIDER>_API_KEY`.
-    assert.ok(provider.environmentVariables[0]?.endsWith("_API_KEY"), provider.id);
+    // The environment fallback is `<PROVIDER>_API_KEY` — except OpenAI, which
+    // deliberately offers none: a key that costs money and moves the review
+    // path is connected by hand or not at all.
+    if (provider.id === CREDENTIAL_PROVIDER_ID.OPENAI) {
+      assert.deepEqual(provider.environmentVariables, [], provider.id);
+    } else {
+      assert.ok(provider.environmentVariables[0]?.endsWith("_API_KEY"), provider.id);
+    }
     // A declared format has to say what it wants as well as refuse, because
     // the reason is the only thing the user has to act on.
     if (!provider.keyFormat) continue;
@@ -130,12 +136,14 @@ test("takes only the Linear key kind a person holds", () => {
 test("holds the key Luke speaks through, apart from the agents he observes", () => {
   const openai = CREDENTIAL_PROVIDERS[VOICE_CREDENTIAL_PROVIDER_ID];
 
-  // Voice is a credential like any other now: it can be pasted in, replaced and
-  // deleted, rather than reaching the app only through the environment it was
-  // launched with — which an app opened from Finder never has.
+  // Voice is a credential like any other in the panel — pasted in, replaced,
+  // deleted — and stricter than the rest outside it: never read from the
+  // environment, because an OPENAI_API_KEY exported for some other tool must
+  // not silently start being spent on voice or move the review path.
   assert.equal(isCredentialProviderId(CREDENTIAL_PROVIDER_ID.OPENAI), true);
-  assert.equal(openai.displayName, "OpenAI");
-  assert.deepEqual(openai.environmentVariables, ["OPENAI_API_KEY"]);
+  // Named for the choice the row offers against the included allowance beside it.
+  assert.equal(openai.displayName, "OpenAI BYOK");
+  assert.deepEqual(openai.environmentVariables, []);
   // Realtime is what a spoken turn runs on, and an account that cannot reach it
   // fails at the first word rather than at the paste.
   assert.match(openai.hint, /Realtime/);

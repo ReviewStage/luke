@@ -284,10 +284,12 @@ microphone on its own.
 Voice runs one of two ways. Signed in with no OpenAI key of your own, calls
 open through the hosted service described above, under its daily allowance.
 With a key connected, everything below runs on that key directly against
-OpenAI, and Luke's service sees none of it. The key can be connected in
-Settings, at the top of the Voice page, or read from `OPENAI_API_KEY` in the
-environment when nothing is stored; a stored key is held encrypted through the
-macOS Keychain, is never sent to the panel, and can be deleted in the same
+OpenAI, and Luke's service sees none of it. The key is connected by hand in
+Settings, under Account and usage at the top of its front page — alone among
+Luke's credentials it is never read from the environment, because an
+`OPENAI_API_KEY` exported for some other tool must not silently start being
+spent on voice or move the review path. A stored key is held encrypted through
+the macOS Keychain, is never sent to the panel, and can be deleted in the same
 place it was entered. Deleting it returns voice to the hosted path while you
 are signed in, and turns voice off entirely otherwise — along with the
 attention review described below, which follows the same two paths.
@@ -382,9 +384,8 @@ bounded fields listed below go to Luke's review endpoint instead, as the
 Hosted voice and review section describes, and the service forwards them to
 OpenAI under Luke's key with the same fixed instructions.
 
-With a key of your own — the same key the spoken conversation uses, from
-either place it can come from — Luke sends the configured Responses-compatible
-endpoint
+With a key of your own — the same stored key the spoken conversation uses —
+Luke sends the configured Responses-compatible endpoint
 the provider name, displayed session title, the name of the workspace a chat
 belongs to where its provider groups them, previous and current status, review
 trigger, repository, branch, current tool activity, reported error, and the

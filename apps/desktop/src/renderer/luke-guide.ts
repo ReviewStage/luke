@@ -97,6 +97,8 @@ const SETTINGS_TAB = "the panel's Settings tab";
 /* The tab's front page opens pages, and each setting is changed by hand on
    one of them — so every by-hand path names its page, worded once each. */
 const VOICE_PAGE = `${SETTINGS_TAB}, on its Voice page`;
+/** Where the account, the usage meters, and the OpenAI key row all live. */
+const ACCOUNT_SECTION = `the Account and usage section, at the top of ${SETTINGS_TAB}'s front page`;
 const APPEARANCE_PAGE = `${SETTINGS_TAB}, on its Appearance page`;
 const SHORTCUTS_PAGE = `${SETTINGS_TAB}, on its Keyboard shortcuts page`;
 const CONNECTIONS_PAGE = `${SETTINGS_TAB}, on its Connections page`;
@@ -541,17 +543,17 @@ function voiceKeyFact(settings: AppSettings, voiceAvailable: boolean): AppGuideF
   const source = settings.credentialSources[openai.id];
   const hosted = voiceAvailable && source === CREDENTIAL_SOURCE.NONE;
   return {
-    label: "OpenAI",
+    label: openai.displayName,
     detail:
       `${openai.displayName} (${connectionWord(source)}). ` +
       (hosted
-        ? `Voice and session review currently run on the signed-in Luke account, which includes ` +
-          `a daily allowance. Connecting a personal OpenAI key lifts the allowance and runs ` +
-          `voice on that key instead. `
-        : `Connecting OpenAI is what lets Luke speak, and review which sessions need a person; ` +
-          `a signed-in Luke account also includes both under a daily allowance without one. `) +
-      `The key is typed by hand into ${VOICE_PAGE}, at its top — never spoken, and never ` +
-      `repeated back.`,
+        ? `Voice and session review run on the signed-in Luke account's daily allowance; ` +
+          `connecting your own key lifts the limits and runs them on it instead. `
+        : source === CREDENTIAL_SOURCE.NONE
+          ? `Signing in — or connecting a key — is what lets Luke speak and review sessions. `
+          : `Voice and session review run on this key — no daily limits. `) +
+      `The key is typed by hand into ${ACCOUNT_SECTION} — never read from the environment, ` +
+      `never spoken, and never repeated back.`,
   };
 }
 
@@ -602,18 +604,18 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "chat is its own row: a workspace holding several draws them inside one tray named by " +
         "the workspace at its top, one holding a single chat stays one row titled by the " +
         "workspace, and every chat can be seen, opened, and messaged individually. Settings " +
-        "holds a front page led by the Account section — who is signed in, and what the " +
-        "account is buying right now: two small meters filling with the day's used voice " +
+        "holds a front page led by the Account and usage section — who is signed in, what " +
+        "the account is buying right now (small meters filling with the day's used voice " +
         "calls and session reviews while voice runs on its included allowance, or a note " +
-        "that it runs on the developer's own key — then rows that open its Voice, Appearance, Keyboard " +
+        "that it runs on the developer's own key), and the OpenAI BYOK row itself, typed by " +
+        "hand and never read from the environment — then rows that open its Voice, Appearance, Keyboard " +
         "shortcuts, and Connections pages — each led back out by its back button or Escape — " +
-        "and keeps the Feedback section and Quit on the front page itself; the Voice page reveals itself in " +
-        "stages — the OpenAI key section alone until voice is available at all (the signed-in " +
-        "account includes it, so for most people the page opens whole, with a note saying " +
-        "whose allowance voice runs on and how much of today's remains), then the microphone " +
-        "permission under it, and the voice settings only once both stand — and a small " +
-        "exclamation mark sits on whichever stage still needs a hand, on the front page's " +
-        "Voice row while either does, and on the Keyboard shortcuts rows while voice is off, " +
+        "and keeps the Feedback section and Quit on the front page itself; the Voice page " +
+        "holds the microphone permission and then the voice settings once voice is available, " +
+        "and only a pointer back to Account and usage while it is not — and a small " +
+        "exclamation mark sits on whatever still needs a hand: the Account and usage heading " +
+        "while voice has nothing to run on, the front page's Voice row and the microphone row " +
+        "while the permission is ungranted, and the Keyboard shortcuts rows while voice is off, " +
         "where each key's chord stays shown and changeable but answers nothing until voice is " +
         "available; the " +
         "menu bar item's Settings… opens the same tab, and Command-comma switches to it while " +
@@ -804,8 +806,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
           {
             label: "Voice",
             detail:
-              "Off: no OpenAI key is connected, so no conversation can be opened. " +
-              `The key is entered in ${VOICE_PAGE}, at its top.`,
+              "Off: nothing to run voice on, so no conversation can be opened. " +
+              `Signing in turns it on with the included allowance; a key entered in ${ACCOUNT_SECTION} also works.`,
           },
         ]),
     providersFact(input.settings),

@@ -1,8 +1,4 @@
-import {
-  type HostedUsageAnswer,
-  REALTIME_MINT_OUTCOME,
-  type RealtimeDiagnostics,
-} from "@sidecar/core";
+import { type HostedQuota, REALTIME_MINT_OUTCOME, type RealtimeDiagnostics } from "@sidecar/core";
 import type { MicrophoneStatus } from "../shared/contracts";
 
 /**
@@ -15,60 +11,70 @@ import type { MicrophoneStatus } from "../shared/contracts";
  */
 export const VOICE_KEYLESS_NOTE = "Voice is off: sign in, or connect an OpenAI key.";
 
-/** The one sentence a spent allowance is worded with, wherever it shows. */
-export const HOSTED_VOICE_SPENT_NOTE =
-  "Today's included voice is used up — it returns at midnight UTC.";
-
 /**
- * The BYOK hint, worded once for every surface that carries it. Away from the
- * key's own row, the hint says where that row lives; beside it, naming the
- * page would send the reader to where they already are.
+ * When the day's counters return, in words a sentence can hold: the quota's
+ * own `resetsAt` against the clock in hand. Rounded deliberately — a counter
+ * nobody can spend by the minute earns no seconds precision.
  */
-export function hostedVoiceLift(options: { namesKeyRow?: boolean } = {}): string {
-  return options.namesKeyRow
-    ? "Connecting your own OpenAI key — on the Voice page — lifts the allowance and runs voice on it instead."
-    : "Connecting your own OpenAI key lifts the allowance and runs voice on it instead.";
+export function quotaResetsInWords(resetsAt: number, now: number): string {
+  const msLeft = resetsAt - now;
+  if (msLeft <= 60_000) return "in under a minute";
+  const minutes = Math.round(msLeft / 60_000);
+  if (minutes < 90) return `in about ${minutes < 60 ? `${minutes} minutes` : "an hour"}`;
+  return `in about ${Math.round(minutes / 60)} hours`;
 }
 
 /**
- * What the key section says while voice runs on the signed-in account: whose
- * allowance is speaking, how much of today's remains, and what connecting a
- * key of one's own changes. The numbers prefer the usage read — it answers
- * before the first call of the day and counts the reviews the mint's own
- * diagnostics never see — and fall back to the quota the last mint carried.
- * The refusal a spent allowance answers with is a state here, not an error —
- * nothing is broken, and the sentence says when voice returns on its own.
+ * The one sentence a spent allowance is worded with, wherever it shows: with
+ * the reset in hand it says when voice returns, and without one it falls back
+ * to the day boundary every counter shares.
+ */
+export function hostedVoiceSpentNote(resetsIn?: string): string {
+  return resetsIn
+    ? `Voice is used up — back ${resetsIn}.`
+    : "Voice is used up — back at midnight UTC.";
+}
+
+/**
+ * The fresher of two readings of the same meter, decided from the readings
+ * themselves: `resetsAt` names the day, so a later one is a later day, and
+ * within one day `remaining` only ever falls — the usage read and the quota a
+ * mint carried have no timestamps of their own, but the smaller remainder is
+ * the newer fact. This is what lets a held usage read and a newer mint's
+ * quota disagree without the surface showing yesterday's allowance, or
+ * allowance a spent mint has already refused.
+ */
+export function fresherQuota(a?: HostedQuota, b?: HostedQuota): HostedQuota | undefined {
+  if (!a) return b;
+  if (!b) return a;
+  if (a.resetsAt !== b.resetsAt) return a.resetsAt > b.resetsAt ? a : b;
+  return a.remaining <= b.remaining ? a : b;
+}
+
+/**
+ * The BYOK hint, worded once. It names no page: the key row it means stands
+ * directly below the one place this sentence is drawn.
+ */
+export function hostedVoiceLift(): string {
+  return "Your own OpenAI key below lifts the limits.";
+}
+
+/**
+ * The Account section's words while voice runs on the account but no numbers
+ * are in hand yet — every state with a quota draws the meters instead. Only
+ * the minter's last outcome can speak here, and a spent allowance is a state,
+ * not an error: the sentence says voice comes back on its own.
  */
 export function hostedVoiceNote(
   diagnostics: RealtimeDiagnostics | undefined,
-  usage?: HostedUsageAnswer,
-  options: { namesKeyRow?: boolean; offersKey?: boolean } = {},
+  options: { offersKey?: boolean } = {},
 ): string {
-  // A machine that cannot store a key is not sent to go connect one: the
-  // Voice page withholds that invitation while storage is unavailable, and a
-  // note pointing there from a page away must withhold it the same way.
-  const lift = options.offersKey === false ? "" : ` ${hostedVoiceLift(options)}`;
-  // When a fresh read is in hand it alone decides spent-ness: the minter's
-  // last outcome survives midnight, and yesterday's refusal must not outrank
-  // today's full allowance.
-  const voiceSpent = usage
-    ? usage.voice.remaining === 0
-    : diagnostics?.lastOutcome === REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED;
-  if (voiceSpent) {
-    return `${HOSTED_VOICE_SPENT_NOTE}${lift}`;
+  // A machine that cannot store a key is not offered one to connect.
+  const lift = options.offersKey === false ? "" : ` ${hostedVoiceLift()}`;
+  if (diagnostics?.lastOutcome === REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED) {
+    return `${hostedVoiceSpentNote()}${lift}`;
   }
-  if (usage) {
-    return (
-      `Voice is included with your Luke account — ${usage.voice.remaining} of ` +
-      `${usage.voice.limit} calls and ${usage.attention.remaining} of ` +
-      `${usage.attention.limit} session reviews left today.${lift}`
-    );
-  }
-  const quota = diagnostics?.quota;
-  if (quota) {
-    return `Voice is included with your Luke account — ${quota.remaining} of ${quota.limit} calls left today.${lift}`;
-  }
-  return `Voice is included with your Luke account, under a daily allowance.${lift}`;
+  return `Voice and session review are included with your account.${lift}`;
 }
 
 /** Why Luke can speak but not listen: the system's grant is still missing. */

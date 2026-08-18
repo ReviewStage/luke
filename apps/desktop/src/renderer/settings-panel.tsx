@@ -75,11 +75,13 @@ import { Keycaps } from "./keycaps";
 import { type ErrandTarget, errandTargetProps } from "./luke-errand";
 import { APP_SETTING_ID } from "./luke-guide";
 import {
-  HOSTED_VOICE_SPENT_NOTE,
+  fresherQuota,
   hostedVoiceLift,
   hostedVoiceNote,
+  hostedVoiceSpentNote,
   MICROPHONE_UNGRANTED_NOTE,
   microphoneAccessRow,
+  quotaResetsInWords,
   VOICE_KEYLESS_NOTE,
   voiceAttentionNote,
 } from "./microphone-access";
@@ -1649,73 +1651,41 @@ function SettingsPageHeader({
 function VoiceSection({
   settings,
   preferences,
-  credentials,
-  panelOpen,
   microphone,
-  voiceService,
-  hostedUsage,
 }: {
   settings: AppSettings;
   preferences: PreferenceWrites;
-  credentials: CredentialEntryControl;
-  panelOpen: boolean;
   microphone: MicrophoneControl;
-  voiceService?: RealtimeDiagnostics;
-  hostedUsage?: HostedUsageAnswer;
 }): React.JSX.Element {
-  const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
   const microphoneRow = microphoneAccessRow({
     voiceAvailable: microphone.voiceAvailable,
     status: microphone.status,
   });
   return (
     <>
-      <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
-        <h2>
-          <KeyIcon />
-          OpenAI API key
-          {/* The same mark, for the same missing key, as the front page's
-              Voice row wears: the row someone pressed a mark to reach is the
-              row that has to carry it. */}
-          {settings.voiceAvailable ? null : <AttentionMark note={VOICE_KEYLESS_NOTE} />}
-        </h2>
-        <ProviderCredential
-          provider={VOICE_CREDENTIAL_PROVIDER}
-          source={settings.credentialSources[VOICE_CREDENTIAL_PROVIDER.id]}
-          storageUnavailable={storageUnavailable}
-          control={credentials}
-          panelOpen={panelOpen}
-        />
-        {/* Said only while it is true, and as a state rather than an error:
-            nothing is broken, the page is waiting on the one thing that turns
-            it on. `voiceAvailable` rather than the credential source, because
-            availability is the store's own answer — a fixture run or a key
-            that failed to resolve leaves voice off however the row reads.
-            While voice runs on the account instead, the note says whose
-            allowance is speaking and what a key of one's own changes, so an
-            unconnected row above a working feature does not read as a step
-            still owed. While this system cannot store a key at all, the
-            storage refusal replaces the invitation: a Connect stilled by
-            missing storage needs its why here exactly as it does in the other
-            key sections, and a note urging a key the panel will not store
-            would only send someone to a disabled control. */}
-        {storageUnavailable ? (
-          <p className="settings-note">{STORAGE_UNAVAILABLE_NOTE}</p>
-        ) : !settings.voiceAvailable ? (
+      {/* The key row lives with the account on the front page now — voice's
+          two ways in stand together there. This page holds what voice does
+          once it runs; while it cannot run, the one section says where to
+          turn it on rather than drawing settings for a feature two steps
+          from working. */}
+      {settings.voiceAvailable ? null : (
+        <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
+          <h2>
+            <KeyIcon />
+            Voice
+            <AttentionMark note={VOICE_KEYLESS_NOTE} />
+          </h2>
           <p className="settings-note">
-            Voice is off until you sign in or connect a key — Luke cannot talk, listen, or announce
-            sessions.
+            Voice is off until you sign in or connect an OpenAI key — both live under Account and
+            usage, at the top of Settings. Luke cannot talk, listen, or announce sessions.
           </p>
-        ) : settings.credentialSources[VOICE_CREDENTIAL_PROVIDER.id] === CREDENTIAL_SOURCE.NONE ? (
-          <p className="settings-note">{hostedVoiceNote(voiceService, hostedUsage)}</p>
-        ) : null}
-      </section>
+        </section>
+      )}
       {/* Drawn only once there is a voice for the microphone to reach: until
-          the key connects, the permission guards a feature that cannot run,
-          and the page holds the one thing to do next rather than a queue of
-          them. */}
+          then, the permission guards a feature that cannot run, and the page
+          holds the one thing to do next rather than a queue of them. */}
       {settings.voiceAvailable ? (
-        <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
+        <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
           <h2>
             <ShieldIcon />
             Permissions
@@ -1773,7 +1743,7 @@ function VoiceSection({
   );
 }
 
-/** The voice controls themselves, below the key that powers them. */
+/** The voice controls themselves, below the permission that lets Luke listen. */
 function VoiceControlsSection({
   settings,
   preferences,
@@ -1784,7 +1754,7 @@ function VoiceControlsSection({
   return (
     <section
       className="settings-section settings-plain"
-      style={{ "--row-index": 3 } as React.CSSProperties}
+      style={{ "--row-index": 2 } as React.CSSProperties}
     >
       <SelectRow
         label="Voice"
@@ -2335,6 +2305,8 @@ function AccountSection({
   hosted,
   keyed,
   storageLocked,
+  settings,
+  credentials,
   voiceService,
   hostedUsage,
 }: {
@@ -2347,10 +2319,13 @@ function AccountSection({
   /** Whether voice runs on the developer's own key instead. */
   keyed: boolean;
   /**
-   * Whether this system cannot store a key at all. The Voice page withholds
-   * its connect invitation then, so the hint pointing there must too.
+   * Whether this system cannot store a key at all. The key row's connect
+   * invitation is withheld then, and so is every hint pointing at it.
    */
   storageLocked: boolean;
+  settings: AppSettings;
+  /** The one credential being entered anywhere; the key row here uses it. */
+  credentials: CredentialEntryControl;
   voiceService?: RealtimeDiagnostics;
   hostedUsage?: HostedUsageAnswer;
 }): React.JSX.Element {
@@ -2407,7 +2382,10 @@ function AccountSection({
     <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
       <h2>
         <UserIcon />
-        Account
+        Account and usage
+        {/* The mark for voice having nothing to run on sits where both ways
+            in now live: the sign-in above and the key row below. */}
+        {settings.voiceAvailable ? null : <AttentionMark note={VOICE_KEYLESS_NOTE} />}
       </h2>
       <div className="settings-row">
         <span className="settings-copy account-identity">
@@ -2497,18 +2475,26 @@ function AccountSection({
       {hosted && (hostedUsage || voiceService?.quota) ? (
         <>
           {(() => {
-            const voiceQuota = hostedUsage?.voice ?? voiceService?.quota;
+            // The freshest reading of each meter, wherever it came from: the
+            // usage read against the quota the last mint carried, day and
+            // remainder telling the two apart. Reviews only ride while the
+            // read shares the freshest day — an older read's reviews would be
+            // an older day's.
+            const voiceQuota = fresherQuota(hostedUsage?.voice, voiceService?.quota);
             if (!voiceQuota) return null;
+            const reviews =
+              hostedUsage && hostedUsage.attention.resetsAt === voiceQuota.resetsAt
+                ? hostedUsage.attention
+                : undefined;
+            const resetsIn = quotaResetsInWords(voiceQuota.resetsAt, Date.now());
             const parts = [
-              ...(voiceQuota.remaining === 0 ? [HOSTED_VOICE_SPENT_NOTE] : []),
-              ...(storageLocked ? [] : [hostedVoiceLift({ namesKeyRow: true })]),
+              voiceQuota.remaining === 0 ? hostedVoiceSpentNote(resetsIn) : `Resets ${resetsIn}.`,
+              ...(storageLocked ? [] : [hostedVoiceLift()]),
             ];
             return (
               <>
                 <UsageMeter label="Voice calls" quota={voiceQuota} />
-                {hostedUsage ? (
-                  <UsageMeter label="Session reviews" quota={hostedUsage.attention} />
-                ) : null}
+                {reviews ? <UsageMeter label="Session reviews" quota={reviews} /> : null}
                 {parts.length > 0 ? <p className="settings-note">{parts.join(" ")}</p> : null}
               </>
             );
@@ -2516,16 +2502,25 @@ function AccountSection({
         </>
       ) : hosted ? (
         <p className="settings-note">
-          {hostedVoiceNote(voiceService, hostedUsage, {
-            namesKeyRow: true,
-            offersKey: !storageLocked,
-          })}
+          {hostedVoiceNote(voiceService, { offersKey: !storageLocked })}
         </p>
       ) : keyed ? (
-        <p className="settings-note">
-          Voice and session review run on your own OpenAI key, unmetered.
-        </p>
+        <p className="settings-note">Voice runs on your OpenAI key — no daily limits.</p>
       ) : null}
+      {/* The key row lives with the account because they are the two ways
+          voice can run, and the meters above are what the key changes. The
+          same storage refusal every key section shows replaces the entry
+          while this system cannot store one; the keyless state needs no note
+          of its own here — the heading's mark and the sign-in above already
+          say both ways in. */}
+      <ProviderCredential
+        provider={VOICE_CREDENTIAL_PROVIDER}
+        source={settings.credentialSources[VOICE_CREDENTIAL_PROVIDER.id]}
+        storageUnavailable={storageLocked}
+        control={credentials}
+        panelOpen={panelOpen}
+      />
+      {storageLocked ? <p className="settings-note">{STORAGE_UNAVAILABLE_NOTE}</p> : null}
       <div className="settings-row">
         <span className="settings-copy">
           <strong>Delete account</strong>
@@ -2685,11 +2680,12 @@ export function SettingsPanel({
   // Why the front page's Voice row wears its mark, or nothing while voice is
   // fully set up. Judged here rather than on the Voice page because the mark
   // has to stand while that page is not drawn: it is the front page saying a
-  // page one press away still needs a hand.
-  const voiceNote = voiceAttentionNote({
-    voiceAvailable: microphone.voiceAvailable,
-    status: microphone.status,
-  });
+  // page one press away still needs a hand. The keyless half moved to the
+  // Account and usage heading with the ways in, so the row marks only a
+  // microphone still ungranted for a voice that can run.
+  const voiceNote = microphone.voiceAvailable
+    ? voiceAttentionNote({ voiceAvailable: true, status: microphone.status })
+    : undefined;
   // The page as drawn, trailing the page as asked: turning one is a leave and
   // then an arrival, and the leaving page must be held mounted through its own
   // exit — the surface never resizes out from under something still drawn.
@@ -2774,6 +2770,8 @@ export function SettingsPanel({
                 settings.credentialSources[VOICE_CREDENTIAL_PROVIDER.id] !== CREDENTIAL_SOURCE.NONE
               }
               storageLocked={settings.secretStorage === SECRET_STORAGE.UNAVAILABLE}
+              settings={settings}
+              credentials={credentials}
               {...(voiceService ? { voiceService } : {})}
               {...(hostedUsage ? { hostedUsage } : {})}
             />
@@ -2795,15 +2793,7 @@ export function SettingsPanel({
       ) : null}
 
       {drawnView === SETTINGS_VIEW.VOICE && settings ? (
-        <VoiceSection
-          settings={settings}
-          preferences={preferences}
-          credentials={credentials}
-          panelOpen={panelOpen}
-          microphone={microphone}
-          {...(voiceService ? { voiceService } : {})}
-          {...(hostedUsage ? { hostedUsage } : {})}
-        />
+        <VoiceSection settings={settings} preferences={preferences} microphone={microphone} />
       ) : null}
 
       {drawnView === SETTINGS_VIEW.APPEARANCE && settings ? (

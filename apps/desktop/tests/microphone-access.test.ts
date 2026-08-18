@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { REALTIME_DEFAULTS, REALTIME_MINT_OUTCOME, type RealtimeDiagnostics } from "@sidecar/core";
 import {
+  fresherQuota,
   hostedVoiceNote,
+  hostedVoiceSpentNote,
   microphoneAccessRow,
+  quotaResetsInWords,
   voiceAttentionNote,
 } from "../src/renderer/microphone-access";
 
@@ -134,66 +137,53 @@ test("the mark and the row agree on what ready means", () => {
   }
 });
 
-test("the usage read words both meters, and a spent voice reads the same from either source", () => {
-  const usage = {
-    voice: { used: 3, limit: 50, remaining: 47, resetsAt: 1_800_003_600_000 },
-    attention: { used: 37, limit: 500, remaining: 463, resetsAt: 1_800_003_600_000 },
-  };
-  const counted = hostedVoiceNote(undefined, usage);
-  assert.match(counted, /47 of 50 calls and 463 of 500 session reviews left today/);
+test("the fresher of two quota readings is decided from the readings themselves", () => {
+  const DAY_END = 1_800_003_600_000;
+  const older = { used: 3, limit: 50, remaining: 47, resetsAt: DAY_END };
+  const newerSameDay = { used: 10, limit: 50, remaining: 40, resetsAt: DAY_END };
+  const nextDay = { used: 0, limit: 50, remaining: 50, resetsAt: DAY_END + 86_400_000 };
 
-  // The usage read outranks the quota a mint carried: it is fresher and it
-  // counts the reviews the mint's own diagnostics never see.
-  const both = hostedVoiceNote(
-    diagnostics({ quota: { used: 10, limit: 50, remaining: 40, resetsAt: 1_800_003_600_000 } }),
-    usage,
-  );
-  assert.match(both, /47 of 50 calls/);
-
-  const spentByUsage = hostedVoiceNote(undefined, {
-    ...usage,
-    voice: { used: 50, limit: 50, remaining: 0, resetsAt: 1_800_003_600_000 },
-  });
-  assert.match(spentByUsage, /used up — it returns at midnight UTC/);
-
-  // Yesterday's refusal must not outrank today's full allowance: the minter's
-  // last outcome survives midnight, the fresh read decides.
-  const rolledOver = hostedVoiceNote(
-    diagnostics({ lastOutcome: REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED }),
-    usage,
-  );
-  assert.match(rolledOver, /47 of 50 calls/);
-  assert.doesNotMatch(rolledOver, /used up/);
-
-  // A machine that cannot store a key is not sent to go connect one.
-  const locked = hostedVoiceNote(undefined, usage, { offersKey: false });
-  assert.doesNotMatch(locked, /OpenAI key/);
-  assert.match(locked, /left today\.$/);
+  // Within one day the smaller remainder is the newer fact; across days the
+  // later reset wins — yesterday's spent counter must not outrank a fresh day.
+  assert.equal(fresherQuota(older, newerSameDay), newerSameDay);
+  assert.equal(fresherQuota(newerSameDay, older), newerSameDay);
+  assert.equal(fresherQuota(newerSameDay, nextDay), nextDay);
+  assert.equal(fresherQuota(undefined, older), older);
+  assert.equal(fresherQuota(older, undefined), older);
+  assert.equal(fresherQuota(undefined, undefined), undefined);
 });
 
-test("the hosted note says whose allowance voice runs on, and what remains once known", () => {
-  // Before any mint has answered, the note promises only the allowance.
-  assert.match(
+test("the reset is worded at the coarseness a daily counter earns", () => {
+  const now = 1_800_000_000_000;
+  assert.equal(quotaResetsInWords(now + 30_000, now), "in under a minute");
+  assert.equal(quotaResetsInWords(now + 25 * 60_000, now), "in about 25 minutes");
+  assert.equal(quotaResetsInWords(now + 70 * 60_000, now), "in about an hour");
+  assert.equal(quotaResetsInWords(now + 7 * 3_600_000, now), "in about 7 hours");
+});
+
+test("the spent sentence says when voice returns, at whatever precision is in hand", () => {
+  assert.equal(
+    hostedVoiceSpentNote("in about 7 hours"),
+    "Voice is used up — back in about 7 hours.",
+  );
+  assert.equal(hostedVoiceSpentNote(), "Voice is used up — back at midnight UTC.");
+});
+
+test("the numberless note stays short, and withholds the key from a machine that cannot store one", () => {
+  // Before any numbers are in hand, the note promises the allowance and
+  // offers the key row directly below it.
+  assert.equal(
     hostedVoiceNote(undefined),
-    /included with your Luke account, under a daily allowance/,
+    "Voice and session review are included with your account. Your own OpenAI key below lifts the limits.",
   );
-  assert.match(hostedVoiceNote(undefined), /your own OpenAI key lifts the allowance/i);
 
-  const counted = hostedVoiceNote(
-    diagnostics({
-      lastOutcome: REALTIME_MINT_OUTCOME.SUCCEEDED,
-      quota: { used: 3, limit: 50, remaining: 47, resetsAt: 1_800_003_600_000 },
-    }),
-  );
-  assert.match(counted, /47 of 50 calls left today/);
-
-  // A spent allowance is a state with its own return time, not an error.
+  // Only the minter's last outcome can speak here — a spent allowance is a
+  // state with its own return, not an error.
   const spent = hostedVoiceNote(
-    diagnostics({
-      lastOutcome: REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED,
-      quota: { used: 51, limit: 50, remaining: 0, resetsAt: 1_800_003_600_000 },
-    }),
+    diagnostics({ lastOutcome: REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED }),
   );
-  assert.match(spent, /used up — it returns at midnight UTC/);
-  assert.doesNotMatch(spent, /left today/);
+  assert.match(spent, /used up — back at midnight UTC/);
+
+  const locked = hostedVoiceNote(undefined, { offersKey: false });
+  assert.doesNotMatch(locked, /OpenAI key/);
 });

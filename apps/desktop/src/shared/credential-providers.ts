@@ -57,10 +57,6 @@ const LINEAR_ENVIRONMENT = {
   API_KEY: "LINEAR_API_KEY",
 } as const;
 
-const OPENAI_ENVIRONMENT = {
-  API_KEY: "OPENAI_API_KEY",
-} as const;
-
 /**
  * The only kind of credential Luke will hold for a provider that issues more
  * than one. Only a provider that publishes a format declares this; the rest
@@ -182,7 +178,9 @@ export const CREDENTIAL_PROVIDERS: Readonly<Record<CredentialProviderId, Credent
   },
   [CREDENTIAL_PROVIDER_ID.OPENAI]: {
     id: CREDENTIAL_PROVIDER_ID.OPENAI,
-    displayName: "OpenAI",
+    // "BYOK" — bring your own key — because the row's whole meaning is the
+    // choice it offers against the account's included allowance beside it.
+    displayName: "OpenAI BYOK",
     // The panel writes apostrophes as `&rsquo;` in JSX and this string is read
     // as text, so the apostrophe here is the typographic one rather than a
     // straight quote.
@@ -192,7 +190,12 @@ export const CREDENTIAL_PROVIDERS: Readonly<Record<CredentialProviderId, Credent
     // before the key is entered rather than after.
     hint: "Create a key on the OpenAI platform under API keys. Talking uses the Realtime API, which needs billing enabled.",
     apiKeysUrl: "https://platform.openai.com/api-keys",
-    environmentVariables: [OPENAI_ENVIRONMENT.API_KEY],
+    // Deliberately no environment fallback, alone among the providers: an
+    // `OPENAI_API_KEY` exported for some other tool would silently start
+    // spending itself on voice and move review off the hosted path — a key
+    // that costs money and changes where session fields travel is connected
+    // by hand or not at all.
+    environmentVariables: [],
     // No key format. Every kind OpenAI issues carries `sk-`, so a prefix would
     // refuse nothing, and which of them can reach Realtime is something only
     // OpenAI can answer — it answers it on the first mint.

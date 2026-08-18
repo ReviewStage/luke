@@ -219,18 +219,18 @@ test("the facts say what is connected, never what connects it", () => {
   );
   assert.match(connected, /Google Calendar \(2 accounts connected\)/);
   assert.match(connected, /checkboxes under each account/);
-  // The voice key stands in a fact of its own, saying what connecting it buys
-  // and naming the page its row actually lives on — the Voice page, not the
-  // Integrations section it once shared with Linear. With voice available and
-  // no key connected, the fact says whose account voice is running on; with
-  // voice unavailable, it says what connecting a key would turn on.
-  assert.match(rendered, /OpenAI \(not connected\)/);
-  assert.match(rendered, /run on the signed-in Luke account/);
-  assert.match(rendered, /daily allowance/);
-  assert.match(rendered, /Voice page, at its top/);
+  // The voice key stands in a fact of its own, named for the choice it offers
+  // — BYOK against the account's included allowance — and placed where its
+  // row actually lives: the Account and usage section, not the Voice page or
+  // the Integrations section it once shared with Linear. With voice available
+  // and no key connected, the fact says whose allowance voice runs on; with
+  // voice unavailable, it says both ways in.
+  assert.match(rendered, /OpenAI BYOK \(not connected\)/);
+  assert.match(rendered, /signed-in Luke account's daily allowance/);
+  assert.match(rendered, /Account and usage section, at the top/);
   const voiceless = JSON.stringify(buildLukeGuide(guideInput({ voiceAvailable: false })).facts);
-  assert.match(voiceless, /Connecting OpenAI is what lets Luke speak/);
-  assert.doesNotMatch(rendered, /OpenAI[^"]*under Integrations/);
+  assert.match(voiceless, /Signing in — or connecting a key — is what lets Luke speak/);
+  assert.doesNotMatch(rendered, /OpenAI BYOK[^"]*under Integrations/);
   // The guide leaves the machine, so no key, prefix, or environment variable
   // value has any business in it.
   assert.doesNotMatch(rendered, /API key:/);
@@ -534,10 +534,10 @@ test("the facts follow the talk key, the microphone, and the storage the system 
   assert.match(denied, /Privacy & Security/);
 
   const voiceless = buildLukeGuide(guideInput({ voiceAvailable: false }));
-  assert.match(JSON.stringify(voiceless.facts), /no OpenAI key is connected/);
-  // The refusal carries the way out: the key's row is at the top of the Voice
-  // page, and a fact that stopped at "off" would leave the ask unanswerable.
-  assert.match(JSON.stringify(voiceless.facts), /Voice page, at its top/);
+  assert.match(JSON.stringify(voiceless.facts), /nothing to run voice on/);
+  // The refusal carries the way out: both ways in live under Account and
+  // usage, and a fact that stopped at "off" would leave the ask unanswerable.
+  assert.match(JSON.stringify(voiceless.facts), /Account and usage section, at the top/);
   // The muted-output behavior belongs to speech, so it is described exactly
   // where speech exists: with a voice it is a fact, without one it would
   // describe captions no reply will ever draw.
