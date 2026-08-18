@@ -55,9 +55,8 @@ export interface HotkeyRegistrarOptions {
 /**
  * Owns the talk, ask, and stop keys and the pecking order between them.
  *
- * Eight pieces of state that used to live beside each other in the main
- * process — the registered chord, the stored choice, and the talk-key helper —
- * are one reservation table here: `reserve` is the answer the settings
+ * The registered chord, the stored choice, and the talk-key helper are one
+ * reservation table here: `reserve` is the answer the settings
  * handlers ask instead of re-deriving who sits on a chord, and `reapply`
  * is the one operation that knows `unregisterAll` takes the lower keys down
  * and puts them back in rank order.
@@ -219,7 +218,7 @@ export class HotkeyRegistrar {
         this.#send(this.#voiceHostContents(), channels.voiceHotkeyPress);
         // A toggle has only the one edge, so it reports a release immediately and
         // one short enough to read as a tap. Every press then latches or ends a
-        // turn, which is the old behaviour exactly.
+        // turn.
         this.#send(this.#voiceHostContents(), channels.voiceHotkeyRelease);
       });
       if (!registered) continue;

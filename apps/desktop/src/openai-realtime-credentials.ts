@@ -250,9 +250,8 @@ export class OpenAiRealtimeCredentialMinter {
  * Explains why no minter exists, which is the state the panel shows as "voice
  * unavailable". Distinguishing a missing key from a fixture run matters: they
  * look identical from the UI and have completely different fixes. Whether a key
- * resolved is passed in rather than read here, because it can now come from the
- * settings store as well as from the environment and only the caller knows
- * which.
+ * resolved is passed in rather than read here, because it comes from either the
+ * settings store or the environment and only the caller knows which.
  */
 export function unavailableRealtimeDiagnostics(input: {
   fixtureMode: boolean;

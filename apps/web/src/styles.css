@@ -283,9 +283,9 @@
 
   /* Luke's surface is pure black and the page around it is not, so the mock is
      the one dark object on a light page and every token it draws with has to
-     be declared here. These were the page's until the page went light:
-     inherited now, white-on-white becomes black-on-black and the interior
-     disappears. The frame is the display the capsule is cut into, which is why
+     be declared here: inherited from the light page, white-on-white becomes
+     black-on-black and the interior disappears. The frame is the display the
+     capsule is cut into, which is why
      it alone is allowed to end on the page's own ground. */
   --text-secondary: rgba(255, 255, 255, 0.56);
   --hairline: rgba(255, 255, 255, 0.08);

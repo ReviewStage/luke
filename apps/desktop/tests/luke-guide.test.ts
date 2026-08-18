@@ -220,8 +220,8 @@ test("the facts say what is connected, never what connects it", () => {
   assert.match(connected, /Google Calendar \(2 accounts connected\)/);
   assert.match(connected, /checkboxes under each account/);
   // The voice key stands in a fact of its own, placed where its row actually
-  // lives: the What Luke runs on section, not the Voice page or the Integrations
-  // section it once shared with Linear. With voice available and no key
+  // lives: the What Luke runs on section, not the Voice page or the
+  // Integrations section. With voice available and no key
   // connected, the fact says whose allowance voice runs on — and what a key
   // of your own would cost instead; with voice unavailable, it says both ways
   // in.

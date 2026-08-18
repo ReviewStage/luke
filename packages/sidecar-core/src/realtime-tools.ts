@@ -757,10 +757,9 @@ function validateOpenFeedbackComposer(
   if (!isFeedbackComposerKind(composer)) {
     return { kind: "refused", reason: "The composer writes feedback or a prompt, nothing else." };
   }
-  // The draft is the developer's ask restated, so it is bounded like a typed
-  // one; a blank draft is no draft, and the composer simply opens empty.
-  // Same bound as maximumFeedbackDraftLength: the draft is the developer's
-  // ask restated in their words, not a document.
+  // The draft is the developer's ask restated in their words, not a document,
+  // so it is bounded like a typed one; a blank draft is no draft, and the
+  // composer simply opens empty.
   const draft = textArgument(parsed, "draft")?.slice(0, maximumSessionMessageLength);
   return { kind: APP_TOOL_KIND.FEEDBACK, composer, ...(draft ? { draft } : {}) };
 }

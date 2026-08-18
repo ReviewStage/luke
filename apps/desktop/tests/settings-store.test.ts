@@ -1661,7 +1661,7 @@ test("connecting the voice key chooses it, and the allowance can take it back", 
   assert.equal(await store.readVoiceSource(), VOICE_SOURCE.KEY);
 
   // And back again, with the key still stored — the whole point of the
-  // choice. Before it existed, the only way back was deleting the key.
+  // choice: changing sources never costs a credential.
   await store.setVoiceSource(VOICE_SOURCE.ACCOUNT);
   assert.equal(await store.readVoiceSource(), VOICE_SOURCE.ACCOUNT);
   assert.equal(
@@ -1683,9 +1683,8 @@ test("a choice that would start spending a key is never made by fallback", async
   assert.equal(await store.readVoiceSource(), VOICE_SOURCE.ACCOUNT);
 
   // Signed out, the allowance they chose cannot answer. The stored key is
-  // what is left, so voice keeps working exactly as it did before the choice
-  // existed — the fallback that costs nothing is the account's, and this one
-  // only runs when the free half has gone.
+  // what is left, so voice keeps working — the fallback that costs nothing
+  // is the account's, and this one only runs when the free half has gone.
   await store.clearAccount();
   assert.equal(await store.readVoiceSource(), VOICE_SOURCE.KEY);
 
@@ -1704,8 +1703,8 @@ test("the chosen source survives a reopen, and a corrupt one reads as no choice"
   assert.equal(await storeIn(directory).readVoiceSource(), VOICE_SOURCE.ACCOUNT);
 
   // A source this build does not offer is dropped rather than carried, and
-  // dropping it lands on the behaviour that existed before the field did:
-  // whichever credential is there, the key first.
+  // dropping it lands where no choice lands: whichever credential is there,
+  // the key first.
   const contents = JSON.parse(await readSettingsFile(directory));
   await fs.writeFile(
     path.join(directory, SETTINGS_FILE_NAME),

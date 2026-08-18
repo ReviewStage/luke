@@ -54,7 +54,7 @@ export const OBSERVATION_WINDOW = {
 
 /**
  * How long a status keeps its session on the roster, measured from the moment
- * the status was entered. This is what bounds the roster now that no adapter
+ * the status was entered. This is the one bound on the roster — no adapter
  * ages out or caps its sessions: relevance follows what the status asks of the
  * user, never a blanket clock over every conversation. A failure does not heal
  * by going stale, but a rescue nobody made for days is a session the user has

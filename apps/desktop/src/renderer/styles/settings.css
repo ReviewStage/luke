@@ -62,8 +62,8 @@
   color: var(--text-secondary);
   font-size: 11.5px;
   font-weight: 620;
-  /* Arrival on the stack's stagger, feedback with none. The order no longer
-     matters to anything outside this declaration. */
+  /* Arrival on the stack's stagger, feedback with none. The order matters to
+     nothing outside this declaration. */
   transition:
     opacity var(--duration-exit) var(--motion-exit) var(--row-delay),
     transform var(--duration-shape) var(--spring) var(--row-delay),

@@ -136,9 +136,9 @@ export interface AttentionUpdate extends SessionIdentity {
   title: string;
   /**
    * The workspace the session is one chat of, by name, when its provider
-   * groups them. A deliberate widening: this name used to leave the machine as
-   * the title itself when a workspace was one row, and a readout that cannot
-   * say which workspace a chat belongs to cannot identify the work out loud.
+   * groups them. A deliberate widening of what leaves the machine: a readout
+   * that cannot say which workspace a chat belongs to cannot identify the
+   * work out loud.
    */
   workspace?: string;
   status: SessionStatus;

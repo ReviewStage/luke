@@ -814,9 +814,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
               `default restored, in ${SHORTCUTS_PAGE}.`,
           },
           {
-            // A behavior rather than a setting since the switch was retired:
-            // stated here so Luke neither denies announcing nor offers to
-            // turn it off.
+            // A behavior rather than a setting: stated here so Luke neither
+            // denies announcing nor offers to turn it off.
             label: "Announcements",
             detail:
               "Luke says it out loud when an observed session starts waiting on the developer, " +

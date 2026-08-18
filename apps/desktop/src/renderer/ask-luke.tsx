@@ -202,9 +202,9 @@ export function AskLuke({
               event.currentTarget.blur();
               return;
             }
-            // Enter is the send a one-line field taught, kept now the field
+            // Enter is the send a one-line field taught, kept though the field
             // wraps; Shift-Enter is the line break, the way every chat
-            // composer splits the two. A textarea's Enter no longer submits
+            // composer splits the two. A textarea's Enter does not submit
             // the form on its own, so the send is asked for here — but not
             // mid-composition: an IME's Enter is choosing a character, not
             // taking a turn.

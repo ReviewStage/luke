@@ -241,7 +241,6 @@ export function MicrophoneIcon(): React.JSX.Element {
   );
 }
 
-/** Drawn rather than typed: a ↗ character depends on a font having one. */
 /** Heads the Updates section: the arrival a newer release waits as. */
 export function DownloadIcon(): React.JSX.Element {
   return (
@@ -253,6 +252,7 @@ export function DownloadIcon(): React.JSX.Element {
   );
 }
 
+/** Drawn rather than typed: a ↗ character depends on a font having one. */
 export function ExternalIcon(): React.JSX.Element {
   return (
     <Glyph className="link-icon">

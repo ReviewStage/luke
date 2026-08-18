@@ -65,10 +65,10 @@ node "$SIDECAR_REPO_ROOT/design/generate-surface-shared.mjs" --check
 # Every relative import inside sidecar-core must carry its .js extension.
 # Vercel's builder compiles the package's TypeScript into the web functions
 # but leaves the specifiers alone, and Node's ESM loader refuses an
-# extensionless one at run time — a break the build cannot see, which has
-# twice reached production as FUNCTION_INVOCATION_FAILED (#202, and again
-# with app-update). The desktop's esbuild and the web's Vite both accept the
-# .js form, so the stricter spelling costs the other consumers nothing.
+# extensionless one at run time — a break the build cannot see and production
+# reports only as FUNCTION_INVOCATION_FAILED. The desktop's esbuild and the
+# web's Vite both accept the .js form, so the stricter spelling costs the
+# other consumers nothing.
 extensionless_imports=$(grep -rEn 'from "\.\.?/[^"]*"' "$SIDECAR_REPO_ROOT/packages/sidecar-core/src" |
     grep -vE '\.(js|css)"' || true)
 if [[ -n "$extensionless_imports" ]]; then

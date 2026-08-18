@@ -1122,8 +1122,8 @@ test("lets a crowded workspace keep every chat beside its quiet neighbour", asyn
   const observations = await adapterFor(api.fetch).observe();
   const observedIds = observations.map((observation) => observation.providerSessionId);
 
-  // A crowded workspace no longer costs anyone anything: all of its chats are
-  // rows, and its quiet neighbour's chat is one too.
+  // A crowded workspace costs no one anything: all of its chats are rows, and
+  // its quiet neighbour's chat is one too.
   assert.equal(observedIds.filter((id) => id.startsWith("crowded-")).length, 8);
   assert.equal(observedIds.includes("quiet-session"), true);
   assert.equal(observations.length, 9);

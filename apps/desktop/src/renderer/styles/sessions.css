@@ -484,8 +484,8 @@ html[data-keyboard="true"] button.session-row:focus-visible {
   outline-offset: -3px;
 }
 
-/* The mark stands bare. The tile it used to sit in was the one box on the row
-   that carried no information — a hairline square inside a hairline card — and
+/* The mark stands bare — no tile around it: a hairline square inside a
+   hairline card would be the one box on the row carrying no information, and
    the mark's own colour and silhouette are the identification. The slot keeps a
    fixed size so every title starts on the same column whatever shape the mark
    is, and so the cloud badge has a corner to hold whichever mark it rides. */
@@ -790,7 +790,7 @@ html[data-keyboard="true"] button.session-row:focus-visible {
   text-align: left;
 }
 
-/* The whole openable row is the press target now, controls excepted, so the
+/* The whole openable row is the press target, controls excepted, so the
    whole row takes the hand and the lift. The one place neither belongs is a
    pointer that is on a control: a press there is about the message or the
    action, and a lift under it would promise a window it will not open. */

@@ -591,7 +591,7 @@ function broadcastAccount(): void {
 
 /**
  * Tells every panel what an account transition just did to the settings.
- * `voiceAvailable` rides the settings snapshot and now moves with the account
+ * `voiceAvailable` rides the settings snapshot and moves with the account
  * — a sign-in carries the hosted allowance, a sign-out takes it — but the
  * transitions themselves only broadcast `accountChanged`, so without this the
  * renderer keeps drawing the voice state of the account it no longer has.
@@ -910,16 +910,6 @@ function warmHostedVoice(): void {
 }
 
 /**
- * Reads the OpenAI key and rebuilds everything that runs on it.
- *
- * This is the whole of turning voice on and off. It runs once at startup and
- * again on every change to that key, so a key pasted into the panel takes effect
- * where it was pasted rather than on the next launch — and a key deleted there
- * takes voice away just as immediately, ephemeral secret included. The talk key
- * is not moved here: only a change while the app is running needs that, and
- * `hotkeys.reapply` is what does it.
- */
-/**
  * The seams the hosted clients reach the account through. The token is read
  * fresh from the store on every use — the lifecycle owns rotation — and a 401
  * asks that same lifecycle for a refresh rather than growing a second one.
@@ -937,6 +927,16 @@ function hostedServiceSeams() {
   };
 }
 
+/**
+ * Reads the OpenAI key and rebuilds everything that runs on it.
+ *
+ * This is the whole of turning voice on and off. It runs once at startup and
+ * again on every change to that key, so a key pasted into the panel takes effect
+ * where it was pasted rather than on the next launch — and a key deleted there
+ * takes voice away just as immediately, ephemeral secret included. The talk key
+ * is not moved here: only a change while the app is running needs that, and
+ * `hotkeys.reapply` is what does it.
+ */
 async function applyVoiceCredential(): Promise<void> {
   // A fixture run does not ask for the key at all: reading a stored one means a
   // Keychain decrypt, which a run that would refuse to use it has no business
@@ -2498,9 +2498,9 @@ async function reviewSessionAttention(generation = observationGeneration): Promi
   try {
     // Only sessions still worth a row are worth a model call: an attention
     // decision about a session with no row surfaces nowhere, and the registry
-    // holds every conversation ever observed — reviewing all of it sent an
-    // update about each one to OpenAI on every launch, hundreds of requests
-    // that rate-limited the same key the voice opens calls with.
+    // holds every conversation ever observed — reviewing all of it would send
+    // an update about each one to OpenAI on every launch, hundreds of requests
+    // rate-limiting the same key the voice opens calls with.
     const reviews = await attentionReviewer.review(
       rosterRelevantSessions(sessionRegistry.list(), Date.now()),
     );
@@ -2515,7 +2515,7 @@ async function reviewSessionAttention(generation = observationGeneration): Promi
       // An answered standing ask opens Luke's own call the way a status edge
       // does, so the meeting quiet holds it the same way; the summaries that
       // only ride an open conversation pass, because a developer mid-call is
-      // already talking to Luke, meeting or not. The pressable notice now
+      // already talking to Luke, meeting or not. The pressable notice
       // anchors to the spoken announcement, so it waits out the quiet with it.
       let sendable: readonly AttentionSpeech[] = speech;
       if (await announcementsQuietNow(Date.now())) {
@@ -2765,13 +2765,6 @@ let lastRosterRevision = -1;
 let lastRosterIds = "";
 
 /**
- * Hands the renderer the sessions still worth a row. The registry keeps every
- * observation — announcements and attention read it whole — but the panel and
- * the voice roster it feeds see only what `isRosterRelevant` keeps: adapters
- * no longer age out or cap anything, so this one gate is where a session that
- * settled long ago stops being a row.
- */
-/**
  * Hands every panel the standing asks as they now stand, so the rows marking
  * them never describe an ask already withdrawn or let go. The words are the
  * developer's own; nothing here reaches a provider or leaves the machine.
@@ -2780,6 +2773,13 @@ function broadcastNoticeAsks(): void {
   panels.broadcast(channels.noticeAsksChanged, attentionRequests.list());
 }
 
+/**
+ * Hands the renderer the sessions still worth a row. The registry keeps every
+ * observation — announcements and attention read it whole — but the panel and
+ * the voice roster it feeds see only what `isRosterRelevant` keeps: adapters
+ * age out and cap nothing, so this one gate is where a session that settled
+ * long ago stops being a row.
+ */
 function broadcastRelevantSessions(): void {
   const snapshot = sessionRegistry.snapshot();
   const roster = rosterRelevantSessions(snapshot.sessions, Date.now());

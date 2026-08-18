@@ -20,7 +20,7 @@ import {
 
 test("the default is the chord a macOS voice assistant is reached for", () => {
   // Option-Space is where Superwhisper, the ChatGPT desktop app and Alfred
-  // sit. It stands alone: Option-S belongs to the stop key now, and a talk
+  // sit. It stands alone: Option-S belongs to the stop key, and a talk
   // key that sometimes fell back onto it would make which key does what
   // depend on what else is installed.
   assert.deepEqual(DEFAULT_VOICE_HOTKEYS, ["Alt+Space"]);

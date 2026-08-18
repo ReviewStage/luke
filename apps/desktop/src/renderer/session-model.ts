@@ -250,9 +250,9 @@ function sessionNeedsAttention(session: NormalizedSession): boolean {
  * outranks the recap of a turn that has already ended.
  *
  * When a provider reported none of them, the line says the state in so many
- * words. This sentence is the one place the row states it — there is no chip at
- * the other end any more — so a session whose provider said nothing still reads
- * as Working or Complete rather than as a row with a line missing.
+ * words. This sentence is the one place the row states it, so a session whose
+ * provider said nothing still reads as Working or Complete rather than as a
+ * row with a line missing.
  */
 function sessionDetail(session: NormalizedSession, urgency: SessionUrgency): string {
   const flaggedSummary =

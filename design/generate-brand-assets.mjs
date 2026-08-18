@@ -1061,7 +1061,6 @@ function emitModes(baseName, svgWithCurrentColor, title) {
   }
 }
 
-// Static mark and wordmark, per mode.
 emitModes("luke-mark", tightMarkSvg(face()), "Luke");
 emitModes("luke-wordmark", wordSvg(wordmark()), "LUKE");
 
@@ -1152,7 +1151,6 @@ const dmg =
   `fill="none" stroke="#6e6e73" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 emit("dmg/luke-dmg-background.svg", dmg, "Drag Luke to Applications");
 
-// Animated state marks, per mode.
 for (const name of MOTION_NAMES) {
   emitModes(`motion/luke-${name}`, markSvg(motionSvg(MOTIONS[name])), `Luke — ${name}`);
 }

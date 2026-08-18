@@ -548,7 +548,7 @@ export function App(): React.JSX.Element {
     expand,
   } = usePanelPresentation({
     // True while a field someone could be part-way through is actually on
-    // screen. An entry outlives the tab it was started on now, so holding the
+    // screen. An entry outlives the tab it was started on, so holding the
     // panel open for one that is not drawn would leave the pointer unable to
     // close a panel showing nothing but sessions.
     entryDrawn: () => credentialHeld.current && tabNow() === PANEL_TAB.SETTINGS,
@@ -1384,7 +1384,7 @@ export function App(): React.JSX.Element {
    * a flight whose shape goes out from under it is cut short where it stands.
    *
    * Every beat is acted on, with no test for whether the flight reporting it is
-   * still the current one. There is no such thing as a stale flight any more —
+   * still the current one. There is no such thing as a stale flight —
    * a second act waits its turn rather than overtaking the one in the air — and
    * a guard here would be worse than redundant: this is what advances the run,
    * so a beat it declined to act on would strand every act still waiting and

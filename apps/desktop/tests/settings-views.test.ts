@@ -49,9 +49,7 @@ test("a credential entry returns to the page its row is drawn on", () => {
 
 test("every stand-down comes back to the page its own row is drawn on", () => {
   // A note is written from the Feedback section on the front page, so leaving
-  // the composer — or the thank-you a send lands in — belongs there. It went
-  // to Connections for as long as all three shapes shared one remembered
-  // page, which only ever held whichever key row was last opened.
+  // the composer — or the thank-you a send lands in — belongs there.
   assert.equal(
     standDownReturnPage({ kind: PANEL_STAND_DOWN.FEEDBACK }),
     SETTINGS_VIEW.ROOT,
@@ -72,8 +70,8 @@ test("every stand-down comes back to the page its own row is drawn on", () => {
     );
   }
 
-  // No two of them can be the same rule read from the same place: the whole
-  // bug was one page standing in for three.
+  // No two of them can be the same rule read from the same place: one
+  // remembered page cannot stand in for three.
   const pages = new Set([
     standDownReturnPage({ kind: PANEL_STAND_DOWN.FEEDBACK }),
     standDownReturnPage({ kind: PANEL_STAND_DOWN.CALENDAR }),

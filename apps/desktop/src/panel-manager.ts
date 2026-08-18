@@ -344,7 +344,7 @@ export class PanelManager {
    * Resizes without AppKit's frame animation. An animated setBounds re-lays out
    * the renderer at a new viewport width on every frame — and its duration scales
    * with the distance moved, so a 482px growth ran far longer than the panel's
-   * own motion. The window now snaps to the size the mode needs and the renderer
+   * own motion. The window instead snaps to the size the mode needs and the renderer
    * animates the capsule into the panel inside it, where the viewport is constant
    * and the work stays on the compositor.
    */
