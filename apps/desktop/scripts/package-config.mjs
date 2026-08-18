@@ -34,6 +34,9 @@ export const SIGNING_MODE = {
   DEVELOPER_ID: "developer-id",
 };
 
+/** `codesign`'s own name for signing without an identity. */
+export const AD_HOC_IDENTITY = "-";
+
 export function addonCompilerArguments(source, output, frameworks = ["AppKit"]) {
   return [
     "clang",
@@ -73,6 +76,25 @@ export function resolveSigningMode(env) {
   const identity =
     typeof env.LUKE_CODESIGN_IDENTITY === "string" ? env.LUKE_CODESIGN_IDENTITY.trim() : "";
   return identity ? { mode: SIGNING_MODE.DEVELOPER_ID, identity } : { mode: SIGNING_MODE.AD_HOC };
+}
+
+/**
+ * The identity a development package is signed with, ad-hoc unless one is
+ * named. An ad-hoc signature carries no identity, so macOS derives the
+ * designated requirement from the bytes themselves — a bare `cdhash`, new on
+ * every build. The Keychain binds an item's trust to that requirement, so each
+ * rebuild is a program it has never seen and the login-password dialog returns,
+ * however many times "Always Allow" was pressed before. An identity moves the
+ * requirement onto the certificate, which every later build satisfies.
+ *
+ * This decides nothing else: `resolveSigningMode` still reads ad-hoc, so the
+ * build is still not a release, still answers to the development name, and
+ * still keeps the development Keychain entry apart from the released app's.
+ */
+export function developmentSigningIdentity(env) {
+  const identity =
+    typeof env.LUKE_DEV_CODESIGN_IDENTITY === "string" ? env.LUKE_DEV_CODESIGN_IDENTITY.trim() : "";
+  return identity || AD_HOC_IDENTITY;
 }
 
 /**

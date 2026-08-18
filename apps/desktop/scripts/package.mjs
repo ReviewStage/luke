@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { packager } from "@electron/packager";
 import {
   createPackagerOptions,
+  developmentSigningIdentity,
   ICONSET_SOURCES,
   iconutilArguments,
   LICENSE_RESOURCE_NAME,
@@ -91,9 +92,11 @@ if (!fs.readFileSync(packagedIconPath).equals(fs.readFileSync(iconPath))) {
 }
 
 if (signing.mode === SIGNING_MODE.AD_HOC) {
-  execFileSync("codesign", ["--force", "--deep", "--sign", "-", appPath], {
-    stdio: "inherit",
-  });
+  execFileSync(
+    "codesign",
+    ["--force", "--deep", "--sign", developmentSigningIdentity(process.env), appPath],
+    { stdio: "inherit" },
+  );
 }
 execFileSync("codesign", ["--verify", "--deep", "--strict", appPath], {
   stdio: "inherit",
