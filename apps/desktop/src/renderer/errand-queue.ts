@@ -2,7 +2,7 @@ import type { AppSettings } from "../shared/contracts";
 import { ERRAND_WAIT, type ErrandTarget, type ErrandWait } from "./luke-errand";
 import type { PanelTab } from "./panel-tabs";
 import type { SessionView } from "./session-model";
-import type { SettingsSubview, SettingsView } from "./settings-views";
+import type { SettingsView } from "./settings-views";
 
 /**
  * The order Luke signs his own work in, when one reply asked for more than one
@@ -64,7 +64,7 @@ export interface PendingErrand {
   /** The tab its control is drawn on. */
   tab: PanelTab;
   /** The settings page it is drawn on, when it is drawn on one at all. */
-  page?: SettingsSubview;
+  page?: SettingsView;
   /** Whether this act is what stood the panel up. */
   opening: boolean;
   /**
@@ -215,7 +215,7 @@ export function errandBorrowedPanel(borrowed: boolean, launch: PendingErrand): b
 export function errandWait(input: {
   opening: boolean;
   tab: PanelTab;
-  page?: SettingsSubview;
+  page?: SettingsView;
   drawnTab: PanelTab;
   drawnPage: SettingsView;
 }): ErrandWait {

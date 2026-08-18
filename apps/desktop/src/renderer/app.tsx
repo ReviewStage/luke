@@ -121,9 +121,12 @@ import type {
 } from "./settings-panel";
 import {
   credentialSettingsPage,
+  PANEL_STAND_DOWN,
   SETTING_PAGE,
   SETTINGS_VIEW,
   type SettingsView,
+  type SlotOccupant,
+  standDownReturnPage,
 } from "./settings-views";
 import { useSignInFaceCycle } from "./sign-in-gate";
 import { SignInSlot } from "./sign-in-slot";
@@ -339,12 +342,16 @@ export function App(): React.JSX.Element {
    */
   const credentialHeld = useRef(false);
   /**
-   * The settings page the held credential's row is drawn on — Voice for the
-   * OpenAI key, Connections for every other — so the trip to the key slot
-   * ends back on the page it began on. A ref rather than state: it is read
+   * The settings page whatever is standing in the panel's place was begun
+   * from — a key's provider row, the calendar's block under Integrations, or
+   * the Feedback section on the front page — so leaving that shape ends back
+   * on the page it began on. Written by each begin, because the return is a
+   * fact about what was begun rather than about what was begun last: one page
+   * remembered for all three landed a cancelled note on Connections, wherever
+   * the note had actually been started. A ref rather than state: it is read
    * only when the panel is restored, by a callback that has to stay stable.
    */
-  const credentialPage = useRef<SettingsView>(SETTINGS_VIEW.CONNECTIONS);
+  const standDownPage = useRef<SettingsView>(SETTINGS_VIEW.ROOT);
   const feedbackHeld = useRef(false);
   /** Whether a calendar sign-in holds the slot, mirrored like the other two. */
   const calendarConnectHeld = useRef(false);
@@ -353,7 +360,7 @@ export function App(): React.JSX.Element {
    * sign-in being waited out. One shape, two occupants, never both: beginning
    * either is refused while the other is held.
    */
-  const slotOccupant = useRef<"key" | "calendar">("key");
+  const slotOccupant = useRef<SlotOccupant>(PANEL_STAND_DOWN.KEY);
   const feedbackNoticeTimer = useRef<number | undefined>(undefined);
   /**
    * The landing the latest send drew, held so the confirmation's hold waits
@@ -636,12 +643,11 @@ export function App(): React.JSX.Element {
    */
   const restorePanel = useCallback(() => {
     changeTab(PANEL_TAB.SETTINGS);
-    // The line the entry belongs to lives on the page it was begun from —
-    // Voice for the OpenAI key, Connections for the rest — and changeTab has
-    // just reset the tab to its front page: without this, the check appearing
-    // beside the provider — the answer to what was just done — would land on
-    // a page nobody is looking at.
-    setSettingsView(credentialPage.current);
+    // The row this shape was begun from lives on one page, and changeTab has
+    // just reset the tab to its front page: without this, the answer to what
+    // was just done — the check beside a provider, the thank-you where the
+    // note was written — would land on a page nobody is looking at.
+    setSettingsView(standDownPage.current);
     expand();
   }, [changeTab, expand, setSettingsView]);
 
@@ -726,7 +732,10 @@ export function App(): React.JSX.Element {
   const beginCalendarSignIn = useCallback(() => {
     // One slot, one occupant: a key mid-paste is not disturbed by a sign-in.
     if (credentialHeld.current || calendarConnectHeld.current) return;
-    slotOccupant.current = "calendar";
+    slotOccupant.current = PANEL_STAND_DOWN.CALENDAR;
+    // The calendar's block stands under Integrations, so that is where a
+    // cancelled or refused sign-in comes back to.
+    standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.CALENDAR });
     calendarConnect.begin({ busy: false });
     calendarConnect.commit();
   }, [calendarConnect.begin, calendarConnect.commit]);
@@ -769,8 +778,8 @@ export function App(): React.JSX.Element {
     (providerId: CredentialProviderId) => {
       // Where the entry's row is drawn, remembered before the trip to the
       // slot so coming back lands on the page the entry began on.
-      credentialPage.current = credentialSettingsPage(providerId);
-      slotOccupant.current = "key";
+      standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.KEY, providerId });
+      slotOccupant.current = PANEL_STAND_DOWN.KEY;
       credentialsEntry.begin({ providerId, draft: "", busy: false, away: false });
     },
     [credentialsEntry.begin],
@@ -1097,6 +1106,9 @@ export function App(): React.JSX.Element {
   const beginFeedback = useCallback(
     (kind: FeedbackKind, fromPanel: boolean, draft?: string): boolean => {
       setFeedbackNotice(undefined);
+      // The Feedback section is on the front page, so that is where leaving
+      // the composer — or the thank-you the send lands in — comes back to.
+      standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.FEEDBACK });
       // Asking to write again is the confirmation's end: the composer takes
       // the shape back, and the return the landing held is dropped unrun.
       dropFeedbackConfirmation();
@@ -2312,7 +2324,7 @@ export function App(): React.JSX.Element {
           panelHeight,
           signInWait !== undefined
             ? signInSlotHeight
-            : slotOccupant.current === "calendar"
+            : slotOccupant.current === PANEL_STAND_DOWN.CALENDAR
               ? connectHeight
               : slotHeight,
           feedbackHeight,
@@ -2407,14 +2419,14 @@ export function App(): React.JSX.Element {
           <KeySlot
             control={credentials}
             source={slotSource}
-            drawn={slotOpen && slotOccupant.current === "key"}
+            drawn={slotOpen && slotOccupant.current === PANEL_STAND_DOWN.KEY}
             measure={slotElement}
           />
           {/* The panel stood down while a calendar sign-in waits on the
               browser, on the key slot's exact terms. */}
           <CalendarConnectSlot
             entry={calendarConnect.entry}
-            drawn={slotOpen && slotOccupant.current === "calendar"}
+            drawn={slotOpen && slotOccupant.current === PANEL_STAND_DOWN.CALENDAR}
             onCancel={cancelCalendarSignIn}
             onReopen={() => window.sidecar.reopenGoogleCalendarSignIn()}
             measure={connectElement}
