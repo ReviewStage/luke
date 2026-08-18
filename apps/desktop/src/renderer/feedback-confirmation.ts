@@ -3,21 +3,17 @@ import { FACE_MOTION, FACE_MOTION_CYCLE_MS, type FaceMotion } from "./luke-face-
 
 /**
  * The moment after a send lands: Luke swoops down into the composer's shape,
- * lands beside "Sent — thank you!", and plays one gesture from the artwork's
- * own vocabulary before the panel returns. Which gesture is a function of how
- * many sends have landed from this machine — the very first gets the loud
- * one, and every send after walks a fixed ring — so the confirmation is warm
- * without ever being the same twice in a row.
+ * lands beside "Sent — thank you!", and plays one of two dressed landings
+ * before the panel returns. Which one is a coin flip per send, so the
+ * confirmation is warm without being the same every time.
  */
 
 /** How the confirmation dresses the landing: what the text does alongside. */
 export const CONFIRMATION_SCENE = {
-  /** The first landing: a stomp whose impact ducks the text lines under him. */
+  /** A stomp whose impact ducks the text lines under him. */
   SHOCKWAVE: "shockwave",
   /** A puff at the exclamation mark, which tips over and springs back up. */
   BOOP: "boop",
-  /** The plain landing: Luke arrives, plays his gesture, and that is all. */
-  LANDING: "landing",
 } as const;
 
 export type ConfirmationScene = (typeof CONFIRMATION_SCENE)[keyof typeof CONFIRMATION_SCENE];
@@ -27,39 +23,30 @@ export interface FeedbackConfirmation {
   scene: ConfirmationScene;
 }
 
-/** The first-ever landing gets the loud one: the squash-and-stretch stomp. */
-const FIRST_CONFIRMATION: FeedbackConfirmation = {
+const SHOCKWAVE_CONFIRMATION: FeedbackConfirmation = {
   motion: FACE_MOTION.SUCCESS,
   scene: CONFIRMATION_SCENE.SHOCKWAVE,
 };
 
-/**
- * Every send after the first walks this ring in order and wraps. Each entry is
- * a motion the artwork already defines; the two dressed scenes lead so the
- * text tricks are seen early, and the quieter face-only gestures follow.
- */
-export const CONFIRMATION_CYCLE: readonly FeedbackConfirmation[] = [
-  { motion: FACE_MOTION.BOOP, scene: CONFIRMATION_SCENE.BOOP },
-  { motion: FACE_MOTION.REVIEWING, scene: CONFIRMATION_SCENE.LANDING },
-  { motion: FACE_MOTION.DIZZY, scene: CONFIRMATION_SCENE.LANDING },
-  { motion: FACE_MOTION.FLOATING, scene: CONFIRMATION_SCENE.LANDING },
-  { motion: FACE_MOTION.WINK, scene: CONFIRMATION_SCENE.LANDING },
-  { motion: FACE_MOTION.IDLE, scene: CONFIRMATION_SCENE.LANDING },
-  { motion: FACE_MOTION.YES, scene: CONFIRMATION_SCENE.LANDING },
-  { motion: FACE_MOTION.REFRESH, scene: CONFIRMATION_SCENE.LANDING },
-  { motion: FACE_MOTION.SHIMMY, scene: CONFIRMATION_SCENE.LANDING },
-  { motion: FACE_MOTION.GLANCE, scene: CONFIRMATION_SCENE.LANDING },
+const BOOP_CONFIRMATION: FeedbackConfirmation = {
+  motion: FACE_MOTION.BOOP,
+  scene: CONFIRMATION_SCENE.BOOP,
+};
+
+/** The two landings a send may draw. Each motion is one the artwork defines. */
+export const CONFIRMATIONS: readonly FeedbackConfirmation[] = [
+  SHOCKWAVE_CONFIRMATION,
+  BOOP_CONFIRMATION,
 ];
 
 /**
- * The confirmation a landed send plays, from how many landed before it. A
- * sequence the store could not supply reads as the first send, because the
- * worst that costs is replaying the welcome.
+ * The confirmation a landed send plays: a coin flip between the two
+ * landings. The flip is injectable so a test can watch both faces of the
+ * coin, and a fixture run never reaches here at all — a send is refused
+ * before it lands.
  */
-export function feedbackConfirmation(sequence: number): FeedbackConfirmation {
-  if (!Number.isSafeInteger(sequence) || sequence <= 0) return FIRST_CONFIRMATION;
-  const step = CONFIRMATION_CYCLE[(sequence - 1) % CONFIRMATION_CYCLE.length];
-  return step ?? FIRST_CONFIRMATION;
+export function feedbackConfirmation(random: () => number = Math.random): FeedbackConfirmation {
+  return random() < 0.5 ? SHOCKWAVE_CONFIRMATION : BOOP_CONFIRMATION;
 }
 
 /**

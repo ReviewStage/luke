@@ -354,8 +354,12 @@ export function App(): React.JSX.Element {
    */
   const slotOccupant = useRef<"key" | "calendar">("key");
   const feedbackNoticeTimer = useRef<number | undefined>(undefined);
-  /** How many sends landed before the one just delivered, from its reply. */
-  const feedbackSequence = useRef(0);
+  /**
+   * The landing the latest send drew, held so the confirmation's hold waits
+   * out the same gesture the slot is playing. The initial flip is fixed
+   * because it is never played: a landing is always drawn again on delivery.
+   */
+  const feedbackLanding = useRef(feedbackConfirmation(() => 0));
   /** Counts confirmations so each landing's swoop is replayed, not reused. */
   const feedbackConfirmPlays = useRef(0);
   const feedbackConfirmTimer = useRef<number | undefined>(undefined);
@@ -1032,7 +1036,6 @@ export function App(): React.JSX.Element {
         if (!result.delivered) {
           return { rejection: result.reason ?? "Could not send that. Try again." };
         }
-        feedbackSequence.current = result.sequence ?? 0;
         return {};
       } catch {
         return { rejection: "Could not send that. Try again." };
@@ -1041,16 +1044,19 @@ export function App(): React.JSX.Element {
     onDelivered: () => {
       showFeedbackNotice("Sent — thank you.");
       // The landing plays in the shape the note left from: Luke swoops down
-      // beside the thank-you and plays this send's gesture from the ring.
+      // beside the thank-you and plays this send's flip of the coin. The pick
+      // is held on a ref so the hold below waits out the same gesture.
+      const confirmation = feedbackConfirmation();
+      feedbackLanding.current = confirmation;
       feedbackConfirmPlays.current += 1;
       setFeedbackConfirming({
-        confirmation: feedbackConfirmation(feedbackSequence.current),
+        confirmation,
         play: feedbackConfirmPlays.current,
       });
     },
     afterDelivery: (finish) => {
       feedbackFinish.current = finish;
-      const { motion } = feedbackConfirmation(feedbackSequence.current);
+      const { motion } = feedbackLanding.current;
       if (feedbackConfirmTimer.current !== undefined) {
         window.clearTimeout(feedbackConfirmTimer.current);
       }

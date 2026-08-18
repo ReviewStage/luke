@@ -347,45 +347,6 @@ test("a corrupt microphone preference reads as the default rather than as off", 
   assert.equal((await storeIn(directory).snapshot()).preferBuiltInMicrophone, true);
 });
 
-test("counts feedback sends from none, and the count survives a reopen", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const store = storeIn(directory);
-
-  // Each landing answers how many landed before it, so the first is zero.
-  assert.equal(await store.countFeedbackSend(), 0);
-  assert.equal(await store.countFeedbackSend(), 1);
-  assert.equal(await storeIn(directory).countFeedbackSend(), 2);
-});
-
-test("a corrupt send count reads as none yet and never reaches the snapshot", async (t) => {
-  const directory = await temporaryDirectory(t);
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 2, apiKeys: {}, feedbackSends: "many" }),
-    "utf8",
-  );
-  const store = storeIn(directory);
-
-  // The worst a corrupt count can cost is replaying the first send's scene —
-  // and bookkeeping about the machine is not a setting, so the snapshot the
-  // renderer sees carries no trace of it.
-  assert.equal(await store.countFeedbackSend(), 0);
-  assert.equal("feedbackSends" in (await store.snapshot()), false);
-});
-
-test("a settings reset never forgets how many sends have landed", async (t) => {
-  const directory = await temporaryDirectory(t);
-  const store = storeIn(directory);
-  await store.countFeedbackSend();
-  await store.countFeedbackSend();
-
-  await store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
-
-  // The count is history, not a preference: there is no default to return
-  // it to, so no scope may touch it.
-  assert.equal(await store.countFeedbackSend(), 2);
-});
-
 test("a calendar account stores its grant encrypted and survives a reopen", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
