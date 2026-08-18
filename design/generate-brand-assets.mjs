@@ -1130,6 +1130,42 @@ emit(
 // design/brand/README.md.
 emitModes("logo/luke-logo", wordSvg(wordmark()), "LUKE");
 
+// Social card: the image the web pages' `og:image` points at. 1200x630 is the
+// one size every link unfurler renders whole — Facebook and LinkedIn ask for
+// 1.91:1, X's large summary card cuts a 2:1 crop out of it, and Slack,
+// Discord, iMessage, WhatsApp, and Telegram read the same Open Graph tags —
+// so one card serves them all. The ground is the landing page's own dark
+// background rather than an icon tile, so the preview reads as a corner of
+// the site, and the wordmark keeps air on every side because the 2:1 crops
+// take the top and bottom edges. One card, dark only: a link preview follows
+// no UI theme. Its PNG is cut into apps/web/public/ — see
+// design/brand/README.md.
+const CARD = { WIDTH: 1200, HEIGHT: 630, GROUND: "#08090b", WORDMARK_FILL: 0.56 };
+{
+  const wm = wordmark();
+  const s = WORDMARK.scale;
+  const ty = 170 - 164 * s;
+  const lw2 = (FACE.sw * s) / 2;
+  // The lockup's ink box, stroke caps included: the face's tilted bounding
+  // box scaled into word coordinates, and the letters' cap height and final
+  // stem from capsUKE (top 44, baseline 170, end at wm.width - 20).
+  const inkLeft = 20 - 66 * s + bbox.x * s;
+  const inkRight = wm.width - 20 + lw2;
+  const inkTop = Math.min(bbox.y * s + ty, 44 - lw2);
+  const inkBottom = Math.max((bbox.y + bbox.h) * s + ty, 170 + lw2);
+  const k = (CARD.WIDTH * CARD.WORDMARK_FILL) / (inkRight - inkLeft);
+  const cardTx = CARD.WIDTH / 2 - (k * (inkLeft + inkRight)) / 2;
+  const cardTy = CARD.HEIGHT / 2 - (k * (inkTop + inkBottom)) / 2;
+  const card =
+    `${svgOpen(CARD.WIDTH, CARD.HEIGHT)}` +
+    `<rect width="${CARD.WIDTH}" height="${CARD.HEIGHT}" fill="${CARD.GROUND}"/>` +
+    `<g transform="translate(${fmt(cardTx)} ${fmt(cardTy)}) scale(${fmt(k)})">${wm.body}</g></svg>`;
+  emit(
+    "social/luke-og-card.svg",
+    card.replaceAll("currentColor", INKS.dark),
+    "Luke — your AI engineering manager",
+  );
+}
 // DMG background: a quiet field with the same rounded monoline language as the
 // face. Shared window geometry keeps the arrow centered between the two icons.
 const dmgBackground = DMG_WINDOW.BACKGROUND.PNG;
