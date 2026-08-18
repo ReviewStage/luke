@@ -48,6 +48,7 @@ export {
   type SessionLocation,
   type SessionProvider,
   type SessionStatus,
+  sessionChangeNumber,
   sessionMessageText,
   UNKNOWN_WORKSPACE_LABEL,
 } from "./session.js";

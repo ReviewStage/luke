@@ -638,8 +638,9 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "than pretending there are none — Escape clears the query and then closes the field, " +
         "no spoken ask can search, and no search survives the panel closing. " +
         "A row can be opened, messaged, or controlled where its " +
-        "provider allows; a session whose provider reported a pull request grows a Pull request " +
-        "chip that opens it in the browser; and a row the developer asked Luke to listen for — " +
+        "provider allows; a session whose provider reported a pull request grows a chip that " +
+        "opens it in the browser, titled by the request's own number — #245 — or reading " +
+        "Pull request when its address names none; and a row the developer asked Luke to listen for — " +
         "“tell me when this finishes” — wears a small listening mark beside its age, whose hover " +
         "says the ask in the developer's own words. Luke's own composer at the foot of the list " +
         "takes a typed ask — Enter sends it, Shift-Enter breaks the line, and the field grows " +
