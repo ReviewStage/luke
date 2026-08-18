@@ -366,10 +366,9 @@ test("the guide offers what a new Conductor agent runs, by the names people know
 test("a spoken model or effort change composes the one stored selection", async () => {
   const carried: (WorkspaceAgentSelection | undefined)[] = [];
   const bridge = {
-    updateSetting: async (_field: string, value: unknown) => {
-      const defaults = value as Partial<Record<string, WorkspaceAgentSelection>> | undefined;
-      const selection = defaults?.[PROVIDER_ID.CONDUCTOR];
-      carried.push(selection);
+    updateSettingEntry: async (_field: string, key: string, value: unknown) => {
+      assert.equal(key, PROVIDER_ID.CONDUCTOR);
+      carried.push(value as WorkspaceAgentSelection | undefined);
       return { settings: settings() };
     },
   } as unknown as Parameters<typeof applySpokenSetting>[0];
@@ -437,9 +436,9 @@ test("a spoken model or effort change composes the one stored selection", async 
 test("a model and its effort named in one change land as one stored pairing", async () => {
   const carried: (WorkspaceAgentSelection | undefined)[] = [];
   const bridge = {
-    updateSetting: async (_field: string, value: unknown) => {
-      const defaults = value as Partial<Record<string, WorkspaceAgentSelection>> | undefined;
-      carried.push(defaults?.[PROVIDER_ID.CONDUCTOR]);
+    updateSettingEntry: async (_field: string, key: string, value: unknown) => {
+      assert.equal(key, PROVIDER_ID.CONDUCTOR);
+      carried.push(value as WorkspaceAgentSelection | undefined);
       return { settings: settings() };
     },
   } as unknown as Parameters<typeof applySpokenSetting>[0];
@@ -498,9 +497,9 @@ test("a model and its effort named in one change land as one stored pairing", as
 test("a model and its effort asked in one breath compose through the held answer", async () => {
   const carried: (WorkspaceAgentSelection | undefined)[] = [];
   const bridge = {
-    updateSetting: async (_field: string, value: unknown) => {
-      const defaults = value as Partial<Record<string, WorkspaceAgentSelection>> | undefined;
-      const selection = defaults?.[PROVIDER_ID.CONDUCTOR];
+    updateSettingEntry: async (_field: string, key: string, value: unknown) => {
+      assert.equal(key, PROVIDER_ID.CONDUCTOR);
+      const selection = value as WorkspaceAgentSelection | undefined;
       carried.push(selection);
       return {
         settings: settings(
@@ -684,13 +683,12 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
   const answered: SettingsUpdateResult = { settings: settings() };
   const bridge = {
     updateSetting: async (field: string, value: unknown) => {
-      const rendered =
-        field === "workspaceAgentDefaults"
-          ? ((value as Partial<Record<string, WorkspaceAgentSelection>> | undefined)?.[
-              PROVIDER_ID.CONDUCTOR
-            ]?.model ?? "default")
-          : String(value);
-      calls.push(`${field}:${rendered}`);
+      calls.push(`${field}:${String(value)}`);
+      return answered;
+    },
+    updateSettingEntry: async (field: string, _key: string, value: unknown) => {
+      const selection = value as WorkspaceAgentSelection | undefined;
+      calls.push(`${field}:${selection?.model ?? "default"}`);
       return answered;
     },
   };

@@ -30,6 +30,8 @@ import type { FeedbackKind, FeedbackResult, FeedbackSubmission } from "./feedbac
 import type {
   AppSettingField,
   AppSettingValue,
+  KeyedAppSettingField,
+  SettingEntryValue,
   SettingsResetScope,
   VoiceSource,
 } from "./settings-schema";
@@ -38,6 +40,8 @@ export type { WindowMode } from "@sidecar/core";
 export type {
   AppSettingField,
   AppSettingValue,
+  KeyedAppSettingField,
+  SettingEntryValue,
   SettingsResetScope,
   VoiceSource,
 } from "./settings-schema";
@@ -551,6 +555,17 @@ export interface AppBridge {
     value: AppSettingValue<Field>,
   ): Promise<SettingsUpdateResult>;
   /**
+   * Updates one key of a map-valued preference, or forgets it when the value is
+   * omitted. Named rather than merged here because the renderer cannot hold the
+   * store's lock across the bridge: a map merged from a snapshot this side would
+   * put back whatever a write it overlapped had already stored.
+   */
+  updateSettingEntry<Field extends KeyedAppSettingField>(
+    field: Field,
+    key: string,
+    value: SettingEntryValue<Field> | undefined,
+  ): Promise<SettingsUpdateResult>;
+  /**
    * Opens a provider's own API-key page in the default browser. The renderer
    * names the provider, not the address, so the set of pages Luke can open is
    * fixed by this build.
@@ -835,6 +850,7 @@ export const channels = {
   openMicrophoneSettings: "app:open-microphone-settings",
   setProviderApiKey: "app:set-provider-api-key",
   updateSetting: "app:update-setting",
+  updateSettingEntry: "app:update-setting-entry",
   connectGoogleCalendar: "app:connect-google-calendar",
   cancelGoogleCalendarSignIn: "app:cancel-google-calendar-sign-in",
   reopenGoogleCalendarSignIn: "app:reopen-google-calendar-sign-in",

@@ -156,13 +156,7 @@ async function setWorkspaceAgentDefault(
   providerId: ProviderId,
   selection: WorkspaceAgentSelection | undefined,
 ) {
-  const defaults = { ...(await store.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field)) };
-  if (selection) defaults[providerId] = selection;
-  else delete defaults[providerId];
-  return store.set(
-    "workspaceAgentDefaults",
-    Object.keys(defaults).length > 0 ? defaults : undefined,
-  );
+  return store.setEntry(APP_SETTING_SCHEMA.workspaceAgentDefaults.field, providerId, selection);
 }
 
 async function readWorkspaceProjectDefault(store: SettingsStore, providerId: ProviderId) {
@@ -174,12 +168,10 @@ async function setWorkspaceProjectDefault(
   providerId: ProviderId,
   providerProjectId: string | undefined,
 ) {
-  const defaults = { ...(await store.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field)) };
-  if (providerProjectId) defaults[providerId] = providerProjectId;
-  else delete defaults[providerId];
-  return store.set(
-    "workspaceProjectDefaults",
-    Object.keys(defaults).length > 0 ? defaults : undefined,
+  return store.setEntry(
+    APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+    providerId,
+    providerProjectId,
   );
 }
 
@@ -1414,6 +1406,42 @@ test("keeps one provider's default project apart from another's", async (t) => {
 
   const cleared = await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, undefined);
   assert.deepEqual(cleared.settings.workspaceProjectDefaults, {
+    [PROVIDER_ID.CURSOR]: "proj-2",
+  });
+});
+
+test("overlapping default projects each survive the other's write", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  // Both start before either lands, the way two provider rows saved in quick
+  // succession do. The merge belongs to the store for exactly this reason: a
+  // caller holding the map it read before the first write would put that stale
+  // copy back, and the later write would drop the other provider's choice.
+  await Promise.all([
+    setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-1"),
+    setWorkspaceProjectDefault(store, PROVIDER_ID.CURSOR, "proj-2"),
+  ]);
+
+  assert.deepEqual((await storeIn(directory).snapshot()).workspaceProjectDefaults, {
+    [PROVIDER_ID.CONDUCTOR]: "proj-1",
+    [PROVIDER_ID.CURSOR]: "proj-2",
+  });
+});
+
+test("an overlapping clear forgets its own entry and no other", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+  await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-1");
+
+  // A row cleared while another row is being saved forgets one entry, never
+  // the map the clear was composed against.
+  await Promise.all([
+    setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, undefined),
+    setWorkspaceProjectDefault(store, PROVIDER_ID.CURSOR, "proj-2"),
+  ]);
+
+  assert.deepEqual((await storeIn(directory).snapshot()).workspaceProjectDefaults, {
     [PROVIDER_ID.CURSOR]: "proj-2",
   });
 });

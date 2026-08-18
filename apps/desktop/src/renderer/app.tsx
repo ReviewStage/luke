@@ -999,18 +999,15 @@ export function App(): React.JSX.Element {
   );
 
   const changeWorkspaceAgentDefault = useCallback(
-    async (providerId: ProviderId, selection: WorkspaceAgentSelection | undefined) => {
-      const defaults = { ...settings?.workspaceAgentDefaults };
-      if (selection) defaults[providerId] = selection;
-      else delete defaults[providerId];
-      return applySettingsReply(
-        await window.sidecar.updateSetting(
+    async (providerId: ProviderId, selection: WorkspaceAgentSelection | undefined) =>
+      applySettingsReply(
+        await window.sidecar.updateSettingEntry(
           APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
-          Object.keys(defaults).length > 0 ? defaults : undefined,
+          providerId,
+          selection,
         ),
-      );
-    },
-    [applySettingsReply, settings?.workspaceAgentDefaults],
+      ),
+    [applySettingsReply],
   );
 
   // One group of settings back to its defaults — the same store forgetting
@@ -1026,18 +1023,15 @@ export function App(): React.JSX.Element {
   // write the first creation there makes on its own, offered by hand so the
   // choice can be changed or returned to the first creation.
   const changeWorkspaceProjectDefault = useCallback(
-    async (providerId: ProviderId, providerProjectId: string | undefined) => {
-      const defaults = { ...settings?.workspaceProjectDefaults };
-      if (providerProjectId) defaults[providerId] = providerProjectId;
-      else delete defaults[providerId];
-      return applySettingsReply(
-        await window.sidecar.updateSetting(
+    async (providerId: ProviderId, providerProjectId: string | undefined) =>
+      applySettingsReply(
+        await window.sidecar.updateSettingEntry(
           APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
-          Object.keys(defaults).length > 0 ? defaults : undefined,
+          providerId,
+          providerProjectId,
         ),
-      );
-    },
-    [applySettingsReply, settings?.workspaceProjectDefaults],
+      ),
+    [applySettingsReply],
   );
 
   /**

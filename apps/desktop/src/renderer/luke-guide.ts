@@ -604,7 +604,7 @@ function spokenWorkspaceAgentSelection(
  * so a model or effort change composes against the selection actually stored.
  */
 export async function applySpokenSetting(
-  bridge: Pick<AppBridge, "updateSetting">,
+  bridge: Pick<AppBridge, "updateSetting" | "updateSettingEntry">,
   action: { setting: AppGuideSetting; value: string; effort?: string },
   onSettings: (settings: AppSettings) => void,
   current?: AppSettings,
@@ -621,12 +621,10 @@ export async function applySpokenSetting(
       current?.workspaceAgentDefaults?.[PROVIDER_ID.CONDUCTOR],
     );
     if ("refused" in composed) return { status: "refused", reason: composed.refused };
-    const defaults = { ...current?.workspaceAgentDefaults };
-    if (composed.selection) defaults[PROVIDER_ID.CONDUCTOR] = composed.selection;
-    else delete defaults[PROVIDER_ID.CONDUCTOR];
-    result = await bridge.updateSetting(
+    result = await bridge.updateSettingEntry(
       APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
-      Object.keys(defaults).length > 0 ? defaults : undefined,
+      PROVIDER_ID.CONDUCTOR,
+      composed.selection,
     );
   } else {
     const field = settingFieldForGuideId(action.setting.id as AppSettingId);

@@ -28,6 +28,7 @@ const bridge: AppBridge = {
   openMicrophoneSettings: () => ipcRenderer.send(channels.openMicrophoneSettings),
   setProviderApiKey: invoke(channels.setProviderApiKey),
   updateSetting: invoke(channels.updateSetting),
+  updateSettingEntry: invoke(channels.updateSettingEntry),
   openProviderApiKeys: (providerId) => {
     ipcRenderer.send(channels.openProviderApiKeys, providerId);
   },

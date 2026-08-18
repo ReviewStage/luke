@@ -172,7 +172,10 @@ import {
   type AppSettingField,
   type AppSettingValue,
   isAppSettingField,
+  isKeyedAppSettingField,
+  isSettingEntryKey,
   SETTING_SIDE_EFFECT,
+  settingEntryGuard,
 } from "./shared/settings-schema";
 import { isWorkspaceAgentSelection } from "./shared/workspace-agents";
 import { UPDATE_ENDPOINT, UpdateService } from "./update-service";
@@ -1045,6 +1048,15 @@ function boundedField(
   return value === undefined ? { ok: false } : { ok: true, value };
 }
 
+/** Whether a provider is currently offering the project a default would name. */
+function workspaceProjectOffered(providerId: string, providerProjectId: string): boolean {
+  const adapter = adapterFor(providerId);
+  if (!adapter || !isWorkspaceCapableAdapter(adapter)) return false;
+  return adapter
+    .workspaceProjects()
+    .some((project) => project.providerProjectId === providerProjectId);
+}
+
 /**
  * The first workspace that lands chooses the default provider — and its
  * project, and a model named for that creation, the default agent — only
@@ -1074,14 +1086,15 @@ async function rememberWorkspaceDefaults(
     // the model below. The id was validated against the adapter's offered
     // projects before the creation ran, so what is remembered is one the
     // provider itself listed.
-    const workspaceProjectDefaults = await settingsStore.get(
-      APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
-    );
-    if (workspaceProjectDefaults?.[providerId] === undefined) {
-      const saved = await settingsStore.set(APP_SETTING_SCHEMA.workspaceProjectDefaults.field, {
-        ...workspaceProjectDefaults,
-        [providerId]: providerProjectId,
-      });
+    if (
+      (await settingsStore.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field))?.[providerId] ===
+      undefined
+    ) {
+      const saved = await settingsStore.setEntry(
+        APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+        providerId,
+        providerProjectId,
+      );
       panels.broadcast(channels.settingsChanged, saved.settings);
     }
     // A model named for this creation becomes the default on the same
@@ -1096,10 +1109,11 @@ async function rememberWorkspaceDefaults(
       (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[providerId] ===
         undefined
     ) {
-      const saved = await settingsStore.set(APP_SETTING_SCHEMA.workspaceAgentDefaults.field, {
-        ...(await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field)),
-        [providerId]: namedSelection,
-      });
+      const saved = await settingsStore.setEntry(
+        APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
+        providerId,
+        namedSelection,
+      );
       panels.broadcast(channels.settingsChanged, saved.settings);
     }
   } catch {
@@ -1359,14 +1373,9 @@ function registerIpc(): void {
       }
       if (field === APP_SETTING_SCHEMA.workspaceProjectDefaults.field && parsed.value) {
         for (const [providerId, providerProjectId] of Object.entries(parsed.value)) {
-          const adapter = adapterFor(providerId);
-          const offered =
-            adapter && isWorkspaceCapableAdapter(adapter)
-              ? adapter
-                  .workspaceProjects()
-                  .some((project) => project.providerProjectId === providerProjectId)
-              : false;
-          if (!offered) throw new Error("Unknown workspace project");
+          if (!workspaceProjectOffered(providerId, providerProjectId)) {
+            throw new Error("Unknown workspace project");
+          }
         }
       }
       return { field, value: parsed.value };
@@ -1375,6 +1384,32 @@ function registerIpc(): void {
     async apply(result, { field, value }, event) {
       if (result.reason) return;
       await applySettingSideEffect(field, value, result.settings, event);
+    },
+    refusal: "Could not save that setting on this system.",
+  });
+
+  // One key of a map-valued preference. The merge belongs to the store, so what
+  // arrives here is the single entry and the renderer never sends back a map it
+  // read before an overlapping write landed.
+  registerSettingHandler(channels.updateSettingEntry, {
+    async validate(field: unknown, key: unknown, value: unknown) {
+      if (!isKeyedAppSettingField(field)) throw new Error("Unknown setting");
+      if (!isSettingEntryKey(field, key)) throw new Error("Unknown setting entry");
+      const parsed = settingEntryGuard(field, key, value);
+      if (!parsed.valid) throw new Error("Invalid setting value");
+      if (
+        field === APP_SETTING_SCHEMA.workspaceProjectDefaults.field &&
+        typeof parsed.value === "string" &&
+        !workspaceProjectOffered(key, parsed.value)
+      ) {
+        throw new Error("Unknown workspace project");
+      }
+      return { field, key, value: parsed.value };
+    },
+    save: ({ field, key, value }) => settingsStore.setEntry(field, key, value),
+    async apply(result, { field }, event) {
+      if (result.reason) return;
+      await applySettingSideEffect(field, result.settings[field], result.settings, event);
     },
     refusal: "Could not save that setting on this system.",
   });

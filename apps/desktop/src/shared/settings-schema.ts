@@ -119,10 +119,28 @@ export interface SettingGuardResult<Value> {
   value: Value;
 }
 
+/** What one key of a map-valued setting holds. */
+export type SettingEntryValue<Field extends AppSettingField> = NonNullable<
+  NonNullable<AppSettingValue<Field>>[keyof NonNullable<AppSettingValue<Field>>]
+>;
+
+/**
+ * Declares a setting whose value is a map of per-key entries, so one entry can
+ * be written under the store's own lock. A caller that read the map, merged an
+ * entry, and wrote the whole thing back would drop any entry saved while its
+ * write was in flight — the lost update `#serialize` exists to prevent.
+ */
+interface SettingEntryDefinition<Value> {
+  isKey(value: unknown): boolean;
+  /** Whether the stored entry already says what a write would say. */
+  same(current: Value | undefined, next: Value | undefined): boolean;
+}
+
 interface SettingDefinition<Field extends AppSettingField> {
   field: Field;
   default: AppSettingValue<Field>;
   guard(value: unknown): SettingGuardResult<AppSettingValue<Field>>;
+  entry?: SettingEntryDefinition<SettingEntryValue<Field>>;
   settingsPage: SettingsPage;
   resetScope?: SettingsResetScope;
   guideEntry: {
@@ -554,6 +572,13 @@ export const APP_SETTING_SCHEMA = {
     field: "workspaceAgentDefaults",
     default: undefined,
     guard: workspaceAgentDefaults,
+    entry: {
+      isKey: isProviderId,
+      same: (current, next) =>
+        current?.agent === next?.agent &&
+        current?.model === next?.model &&
+        current?.effort === next?.effort,
+    },
     settingsPage: SETTINGS_PAGE.CONNECTIONS,
     guideEntry: settingGuideEntry(
       [APP_SETTING_ID.WORKSPACE_AGENT_MODEL, APP_SETTING_ID.WORKSPACE_AGENT_EFFORT],
@@ -618,6 +643,10 @@ export const APP_SETTING_SCHEMA = {
     field: "workspaceProjectDefaults",
     default: undefined,
     guard: workspaceProjectDefaults,
+    entry: {
+      isKey: isProviderId,
+      same: (current, next) => current === next,
+    },
     settingsPage: SETTINGS_PAGE.CONNECTIONS,
     resetScope: SETTINGS_RESET_SCOPE.WORKSPACES,
     // Observed project names and defaults travel in the workspace-project context.
@@ -632,6 +661,52 @@ export const APP_SETTING_FIELDS = Object.keys(APP_SETTING_SCHEMA) as AppSettingF
 
 export function isAppSettingField(value: unknown): value is AppSettingField {
   return typeof value === "string" && value in APP_SETTING_SCHEMA;
+}
+
+/** The settings whose value is a map, and so can be written one entry at a time. */
+export type KeyedAppSettingField = {
+  [Field in AppSettingField]: "entry" extends keyof (typeof APP_SETTING_SCHEMA)[Field]
+    ? Field
+    : never;
+}[AppSettingField];
+
+export function isKeyedAppSettingField(value: unknown): value is KeyedAppSettingField {
+  return isAppSettingField(value) && "entry" in APP_SETTING_SCHEMA[value];
+}
+
+function settingEntry(field: KeyedAppSettingField): SettingEntryDefinition<never> {
+  return (APP_SETTING_SCHEMA[field] as { entry: SettingEntryDefinition<never> }).entry;
+}
+
+export function isSettingEntryKey(field: KeyedAppSettingField, key: unknown): key is string {
+  return settingEntry(field).isKey(key);
+}
+
+export function sameSettingEntry(
+  field: KeyedAppSettingField,
+  current: unknown,
+  next: unknown,
+): boolean {
+  return settingEntry(field).same(current as never, next as never);
+}
+
+/**
+ * Validates one entry by running the field's own whole-map guard over a map
+ * holding only that entry: an entry the guard drops is one the map would have
+ * dropped, so the two readings of what is valid cannot drift apart. Clearing an
+ * entry carries no value to check.
+ */
+export function settingEntryGuard(
+  field: KeyedAppSettingField,
+  key: string,
+  value: unknown,
+): SettingGuardResult<unknown> {
+  if (value === undefined) return { valid: true, value: undefined };
+  const parsed = APP_SETTING_SCHEMA[field].guard({ [key]: value });
+  const kept = parsed.valid
+    ? (parsed.value as Record<string, unknown> | undefined)?.[key]
+    : undefined;
+  return kept === undefined ? { valid: false, value: undefined } : { valid: true, value: kept };
 }
 
 export function isSettingsResetScope(value: unknown): value is SettingsResetScope {

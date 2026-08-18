@@ -34,7 +34,10 @@ import {
   APP_SETTING_SCHEMA,
   type AppSettingField,
   type AppSettingValue,
+  type KeyedAppSettingField,
+  type SettingEntryValue,
   type StoredAppSettings,
+  sameSettingEntry,
 } from "./shared/settings-schema";
 
 const SETTINGS_FILE_NAME = "settings.json";
@@ -326,6 +329,42 @@ export class SettingsStore {
       const next: PersistedSettings = { ...persisted };
       if (value === undefined) delete next[field];
       else Object.assign(next, { [field]: value });
+      return next;
+    });
+  }
+
+  /**
+   * Writes one entry of a map-valued setting, or forgets it when the value is
+   * omitted. The merge happens inside the mutation rather than in the caller so
+   * one key's write cannot drop another's: a caller holding the map it read
+   * before an overlapping write landed would put the stale copy back. A map
+   * left with no entries is deleted, so an emptied setting reads as unset
+   * rather than as an empty object.
+   */
+  async setEntry<Field extends KeyedAppSettingField>(
+    field: Field,
+    key: string,
+    value: SettingEntryValue<Field> | undefined,
+  ): Promise<SettingsUpdateResult>;
+  async setEntry(
+    field: KeyedAppSettingField,
+    key: string,
+    value: unknown,
+  ): Promise<SettingsUpdateResult>;
+  async setEntry(
+    field: KeyedAppSettingField,
+    key: string,
+    value: unknown,
+  ): Promise<SettingsUpdateResult> {
+    return this.#setField((persisted) => {
+      const current = persisted[field] as Record<string, unknown> | undefined;
+      if (sameSettingEntry(field, current?.[key], value)) return;
+      const entries = { ...current };
+      if (value === undefined) delete entries[key];
+      else entries[key] = value;
+      const next: PersistedSettings = { ...persisted };
+      if (Object.keys(entries).length > 0) Object.assign(next, { [field]: entries });
+      else delete next[field];
       return next;
     });
   }
