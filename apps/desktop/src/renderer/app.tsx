@@ -60,7 +60,6 @@ import { FEEDBACK_KIND, FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from ".
 import { APP_SETTING_SCHEMA } from "../shared/settings-schema";
 import { voiceHotkeyLabel, voiceHotkeyToShow } from "../shared/voice-hotkey";
 import { ASK_LUKE_INPUT_ID, focusAskField } from "./ask-luke";
-import { CAPTION_LINE_READ_MS, pacedCaptionScroll } from "./caption-reading";
 import { type ConsentConnectEntry, ConsentConnectSlot } from "./consent-connect-slot";
 import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";
 import { isSubmittable, removalEndsEntry } from "./credential-entry";
@@ -172,12 +171,13 @@ const FEEDBACK_KIND_FOR_COMPOSER: Record<FeedbackComposerKind, FeedbackKind> = {
 /**
  * Sizes the caption block to the words it currently holds. The text wraps, so
  * only a measurement can say how tall it is; the size drives the surface's
- * growth and the clip that reveals the text, and past the reserved maximum
- * the remainder becomes scroll, rolling the oldest lines up under the shape.
+ * growth and the clip that reveals the text. The whole reply stays on screen —
+ * the reserved maximum is sized past what a spoken reply wraps to, so the
+ * clamp below is the window's physical bound rather than a working edge.
  * The volume hint stands in a band of its own below the block: while it is
- * drawn, the band comes off the block's maximum — and off the words' budget
- * with it — so the block and the band partition the reserved room instead of
- * sharing it, and the stack never asks for more height than the window holds.
+ * drawn, the band comes off the block's maximum, so the block and the band
+ * partition the reserved room instead of sharing it, and the stack never asks
+ * for more height than the window holds.
  * Padding is the caption's own computed padding, not a restated number, so a
  * retune in the stylesheet grows the surface by exactly what the text is
  * inset — including the bottom inset the stylesheet hands to the band while
@@ -187,19 +187,10 @@ function captionSizeStyle(
   textHeight: number | undefined,
   volumeHint: boolean,
   padding: number,
-  readingElapsedMs: number | undefined,
 ): CSSProperties {
   if (!textHeight) return {};
-  const hintBand = volumeHint ? VOLUME_HINT_BAND_HEIGHT : 0;
-  const overflow = Math.max(0, textHeight - (VOICE_CAPTION_MAX_HEIGHT - padding - hintBand));
-  // Heard words keep the newest line on screen — the half of the reply the
-  // voice has not reached yet. Words landing on a silent output are read, not
-  // heard, so the oldest unread line holds instead, leaving at reading pace.
-  const scroll =
-    readingElapsedMs === undefined ? overflow : pacedCaptionScroll(overflow, readingElapsedMs);
   return {
     "--caption-size": `${captionBlockSize(textHeight, volumeHint, padding)}px`,
-    "--caption-scroll": `${scroll}px`,
   } as CSSProperties;
 }
 
@@ -1732,7 +1723,6 @@ export function App(): React.JSX.Element {
     askLuke,
     voiceTurn,
     lukeCaptions,
-    captionShownAt,
     mentionedSessions,
     mentionedIssues,
     remoteAudio,
@@ -1838,8 +1828,6 @@ export function App(): React.JSX.Element {
    * nothing, so nothing dismissed before the hover began is ever resurrected.
    */
   const [stripHovered, setStripHovered] = useState(false);
-  /** When the words now held first appeared, surviving the reply for the hold. */
-  const heldCaptionShownAt = useRef<number | undefined>(undefined);
   // Derived in the render, never advanced after paint: the frame that brings
   // a new reply's content composes the hold against that same content, so a
   // held snapshot can never paint one frame beside live words it should have
@@ -2218,20 +2206,6 @@ export function App(): React.JSX.Element {
   }, [outputAudio]);
 
   /**
-   * The reading clock as last glanced at. Words paced across a silent output
-   * scroll on elapsed time, and a quiet stretch between deltas re-renders
-   * nothing else — so a tick at half the line pace keeps the scroll honest
-   * without chasing every frame.
-   */
-  const [readingNow, setReadingNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!outputSilent(outputAudio) || captionShownAt === undefined) return;
-    setReadingNow(Date.now());
-    const timer = window.setInterval(() => setReadingNow(Date.now()), CAPTION_LINE_READ_MS / 2);
-    return () => window.clearInterval(timer);
-  }, [outputAudio, captionShownAt]);
-
-  /**
    * The hint's own button. It quiets the hint, never the captions: the words
    * stay for as long as the silence does, because they are what "got it"
    * leaves the user reading Luke by.
@@ -2533,18 +2507,6 @@ export function App(): React.JSX.Element {
   // caption also uses.
   const settledCaption = captionTexts && captionTexts.length > 1 ? captionTexts.at(-2) : undefined;
   const liveCaption = captionTexts?.at(-1);
-  // How long the words on screen have been readable, or nothing while the
-  // output is audible: the reading clock only paces words nobody can hear.
-  // The clock's start survives the reply for the hold's sake: a held silent
-  // caption keeps the lines where the reader had them rather than snapping
-  // its unread ones away the moment the clock's own state clears.
-  if (captionShownAt !== undefined) heldCaptionShownAt.current = captionShownAt;
-  const captionClockStart =
-    captionShownAt ?? (heldCaptionTexts === undefined ? undefined : heldCaptionShownAt.current);
-  const captionReadingElapsed =
-    outputIsSilent && captionClockStart !== undefined
-      ? Math.max(0, readingNow - captionClockStart)
-      : undefined;
   // The hint rides the caption it explains, and only over a silence the
   // helper actually reported. "Got it" quiets it for this stretch of silence
   // and any that follows too soon; the captions above it stay either way.
@@ -2649,7 +2611,7 @@ export function App(): React.JSX.Element {
               : slotHeight,
           feedbackHeight,
         ),
-        ...captionSizeStyle(captionTextHeight, volumeHint, captionPadding, captionReadingElapsed),
+        ...captionSizeStyle(captionTextHeight, volumeHint, captionPadding),
         ...noticeGrowthStyle(noticeBandHeight),
       }}
     >

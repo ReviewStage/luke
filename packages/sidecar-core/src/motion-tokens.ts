@@ -24,8 +24,9 @@ export const MOTION_DELAY_MS = {
 /** How far a bubble floats off the display's top edge. CSS: `--bubble-lift`. */
 export const BUBBLE_LIFT = 4;
 
-/** Tallest compact caption block the window holds. CSS: `--caption-max`. */
-export const VOICE_CAPTION_MAX_HEIGHT = 70;
+/** Tallest caption block the window holds — sized past a whole spoken reply,
+ * because the block grows to the words and nothing scrolls. CSS: `--caption-max`. */
+export const VOICE_CAPTION_MAX_HEIGHT = 210;
 
 /** One chip row of the session notice band. CSS: `--notice-size`. */
 export const SESSION_NOTICE_HEIGHT = 26;

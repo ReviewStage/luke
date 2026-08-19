@@ -65,7 +65,13 @@ const ROW_FAN_LIMIT = 5;
 // stays at the edge.
 const SURFACE_GEOMETRY_PX = {
   BUBBLE_LIFT: 4,
-  VOICE_CAPTION_MAX_HEIGHT: 70,
+  // The caption block shows a spoken reply whole — the block grows to the
+  // words and nothing scrolls — so the reservation must sit past what a
+  // reply wraps to at the peek's width: fourteen 14px lines plus the block's
+  // own padding, room enough for two long responses stacked. The window
+  // cannot resize for speech, so this bound is physical: a reply taller
+  // still clips at the block's edge rather than growing the window.
+  VOICE_CAPTION_MAX_HEIGHT: 210,
   // The notice band under the housing: one row of the pressable chips naming
   // the sessions the reply being spoken is about. The chips size to their
   // names and wrap naturally, so the renderer measures the rows they made
@@ -276,7 +282,8 @@ ${tsRecord(Object.entries(MOTION_DELAY_MS).map(([key, value]) => [key, value]))}
 /** How far a bubble floats off the display's top edge. CSS: \`--bubble-lift\`. */
 export const BUBBLE_LIFT = ${SURFACE_GEOMETRY_PX.BUBBLE_LIFT};
 
-/** Tallest compact caption block the window holds. CSS: \`--caption-max\`. */
+/** Tallest caption block the window holds — sized past a whole spoken reply,
+ * because the block grows to the words and nothing scrolls. CSS: \`--caption-max\`. */
 export const VOICE_CAPTION_MAX_HEIGHT = ${SURFACE_GEOMETRY_PX.VOICE_CAPTION_MAX_HEIGHT};
 
 /** One chip row of the session notice band. CSS: \`--notice-size\`. */

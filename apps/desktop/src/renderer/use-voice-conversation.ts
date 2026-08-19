@@ -416,13 +416,6 @@ export interface VoiceConversation {
    */
   lukeCaptions: readonly string[] | undefined;
   /**
-   * When the words now on screen first appeared. It is the reading clock's
-   * start: the surface paces a silent caption's scroll from it, so the words
-   * scroll as read rather than as generated. Absent whenever no words are
-   * drawn.
-   */
-  captionShownAt: number | undefined;
-  /**
    * The sessions the reply being spoken is about: an announcement's one
    * validated subject, or what a conversation reply names in its words — a
    * chat by its title, or a workspace by name, resolved to its freshest
@@ -490,13 +483,6 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    * developer chose. Cleared the moment the turn moves on.
    */
   const [typedAsk, setTypedAsk] = useState(false);
-  /**
-   * When the words now on screen first appeared — the reading clock a muted
-   * output is captioned against. It is the caption's clock, not the reply's:
-   * words first drawn mid-reply, by a mute landing while Luke was already
-   * speaking, start it then, because that is when reading could have started.
-   */
-  const [captionShownAt, setCaptionShownAt] = useState<number>();
 
   const audioContext = useRef<AudioContext | undefined>(undefined);
   const remoteAudio = useRef<HTMLAudioElement | null>(null);
@@ -1071,15 +1057,6 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     captions: voiceCaption.texts,
   });
 
-  // The reading clock starts when words appear and ends when they leave; the
-  // text growing between those edges is the same block of words, still on its
-  // own clock, however fast the deltas behind it streamed in — a second
-  // response stacking under the first grows the block the same way.
-  const captionDrawn = lukeCaptions !== undefined;
-  useEffect(() => {
-    setCaptionShownAt(captionDrawn ? Date.now() : undefined);
-  }, [captionDrawn]);
-
   return {
     analyser,
     microphoneStatus,
@@ -1096,7 +1073,6 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     askLuke,
     voiceTurn,
     lukeCaptions,
-    captionShownAt,
     mentionedSessions: mentioned,
     mentionedIssues: mentionedIssueRows,
     remoteAudio,

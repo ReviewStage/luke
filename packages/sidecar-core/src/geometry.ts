@@ -106,10 +106,10 @@ const panelHeight = 520;
  * The narrowest peek any display is given: the peek's width beside the
  * 14-inch MacBook Pro's housing, the same housing every drawn proportion was
  * measured against. Luke's words wrap at the peek's width, and the caption
- * block's four lines were sized against this one — a bubble growing from no
- * housing at all would wrap them at barely half the width and cut the reply
- * off at the block's edge. Mirrored by `--peek-width`'s floor in the desktop
- * stylesheet.
+ * block's reservation was sized against lines this wide — a bubble growing
+ * from no housing at all would wrap them at barely half the width and run a
+ * reply past the room the window reserved. Mirrored by `--peek-width`'s floor
+ * in the desktop stylesheet.
  */
 export const PEEK_MIN_WIDTH = SIMULATED_HOUSING_WIDTH + peekSideWidth * 2;
 

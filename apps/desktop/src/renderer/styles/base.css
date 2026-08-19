@@ -165,9 +165,10 @@
      packages/sidecar-core/src/geometry.ts, so the drawn shapes match the window
      the main process gives them. The peek's floor is its width beside the
      14-inch housing every proportion was measured against: Luke's words wrap
-     at the peek's width, and a bubble growing from no housing would wrap the
-     caption's four lines at barely half of it, cutting the reply off at the
-     block's edge. */
+     at the peek's width, and the caption block's reservation was sized
+     against lines that wide — a bubble growing from no housing would wrap
+     them at barely half of it and run a reply past the room the window
+     reserved. */
   --capsule-width: calc(var(--notch-housing-width) + 72px);
   --capsule-height: max(var(--notch-top-inset), 32px);
   --peek-width: max(calc(var(--notch-housing-width) + 248px), 458px);
@@ -183,8 +184,8 @@
   /* Growing one side moves the shape's centre half the growth away from it, so
      the right edge stays exactly where it was and only the left one travels. */
   --capsule-voice-shift: calc(var(--capsule-voice-growth) / 2);
-  /* Luke's words under the housing, wrapping to at most four lines as they
-     stream in. `--caption-max` arrives from the shared surface tokens, the
+  /* Luke's words under the housing, wrapping as they stream in and shown
+     whole. `--caption-max` arrives from the shared surface tokens, the
      same number the compact window already holds below the capsule, so growing
      into it costs no IPC. `--caption-size` is the block's height right now —
      measured off the wrapped text by the renderer, padding included, never
@@ -1331,26 +1332,17 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 }
 
 /* The stack holds one block per response, so two responses spoken
-   back-to-back sit apart instead of running together. The gap between them is
-   one caption line — it mirrors CAPTION_LINE_HEIGHT in caption-reading.ts —
-   so the reading clock's whole-line scroll stays whole-line with two blocks
-   up. The translate is how words that outgrow the block roll their oldest
-   lines up under the capsule band. The cut lands where black meets black, so
-   lines slide under the shape rather than being sliced in the open. Heard
-   words keep the newest line on screen — the half of the reply the voice has
-   not reached yet; words landing on a silent output scroll at reading pace
-   instead, oldest unread line first, because there the caption is the speech. */
+   back-to-back sit apart instead of running together. Nothing here moves:
+   the whole reply stays on screen — the block grows to the words, and the
+   window reserves room past what a spoken reply wraps to — so the clip on
+   the caption above is the only reveal. */
 .voice-caption-stack {
   display: flex;
   flex-direction: column;
   gap: 14px;
   width: 100%;
-  transform: translateY(calc(var(--caption-scroll, 0px) * -1));
-  transition: transform var(--duration-fast) var(--spring-fast);
 }
 
-/* The line height is mirrored by CAPTION_LINE_HEIGHT in caption-reading.ts —
-   the two must agree, or the reading clock releases part-lines. */
 .voice-caption-text {
   display: block;
   width: 100%;
@@ -1376,10 +1368,10 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    block: `--volume-hint-size` mirrors VOLUME_HINT_BAND_HEIGHT in
    volume-hint.ts — the 22px row this element draws plus the caption's 9px
    bottom inset, which the rule below moves under the row — and the renderer
-   takes the band off the block's maximum, so the words scroll a row sooner.
-   The block and the band partition the reserved room rather than layering in
-   it: the caption's clip ends where the band begins, so no pace of scroll can
-   reveal a line over the hint. The travel is the caption's own transform plus
+   takes the band off the block's maximum. The block and the band partition
+   the reserved room rather than layering in it: the caption's clip ends
+   where the band begins, so no line can be revealed over the hint. The
+   travel is the caption's own transform plus
    the block's current size, so the row springs down the shape's edge exactly
    as the shape grows for new lines. Above the hover strip (z-index 4) because
    it holds the one button on the compact shape that is not the strip: Got it
