@@ -242,7 +242,7 @@ export const VOICE_CREDENTIAL_PROVIDER_ID = CREDENTIAL_PROVIDER_ID.OPENAI;
 export const VOICE_CREDENTIAL_PROVIDER: CredentialProvider =
   CREDENTIAL_PROVIDERS[VOICE_CREDENTIAL_PROVIDER_ID];
 
-/** The coding-agent providers, in the order the Cloud Agent API keys section lists them. */
+/** The coding-agent providers, in the order the Providers section lists them. */
 export const CLOUD_AGENT_PROVIDER_LIST: readonly CredentialProvider[] =
   CREDENTIAL_PROVIDER_LIST.filter(
     (provider) => !INTEGRATION_IDS.has(provider.id) && provider.id !== VOICE_CREDENTIAL_PROVIDER_ID,

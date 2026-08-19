@@ -176,7 +176,7 @@ function providersFact(settings: AppSettings): AppGuideFact {
     label: "Cloud providers",
     detail:
       `${roster.join(", ")}. Connecting one takes the key its row names, typed by hand into ` +
-      `${CONNECTIONS_PAGE}, under Cloud Agent API keys — never spoken, and never repeated back. ` +
+      `${CONNECTIONS_PAGE}, under Providers — never spoken, and never repeated back. ` +
       // SAFETY: The preceding check establishes the asserted contract.
       "Local providers such as Claude Code need no key and are observed on their own. " +
       `Codex cloud tasks (${CODEX_CLOUD_CONNECTION_WORD[settings.codexCloudConnection]}) take ` +
@@ -217,7 +217,7 @@ function integrationsFact(settings: AppSettings): AppGuideFact {
     "with an agent in a project and host Superset currently lists; connect from Luke's " +
     "Settings, finish Superset's own sign-in flow in the browser, and paste its one-time code " +
     "into Luke. Superset's CLI exchanges that code, stores the login, and switches organizations; " +
-    "Luke never reads its token or clipboard. Superset's row sits with the cloud agents on the " +
+    "Luke never reads its token or clipboard. Superset's row sits under Providers on the " +
     "Connections page, and disconnecting from it runs the CLI's own sign-out, clearing the " +
     "login the CLI stored. The default agent for a creation ask that names " +
     "none is chosen under Superset in Settings; until one is chosen, Luke asks.";
@@ -383,11 +383,11 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "provider as the default — changed or cleared by hand in the Settings tab. An ask that " +
         "names no project goes the same way: each provider remembers a default project, filled " +
         "in by the first workspace created there and changed or cleared by hand on the " +
-        "Connections page, on that provider's own row — under Cloud Agent API keys for a " +
+        "Connections page, on that provider's own row — under Providers for a " +
         "provider connected by key, and under Superset for Superset; until one is chosen Luke " +
         "asks when the provider lists more than one project. What a new " +
         "Conductor agent runs — its model, and its effort where the model's agent takes one — " +
-        "follows the choice on the Conductor row under Cloud Agent API keys, or Conductor's own " +
+        "follows the choice on the Conductor row under Providers, or Conductor's own " +
         "defaults while none is made. A model named in a creation ask rides that creation alone " +
         // SAFETY: The preceding check establishes the asserted contract.
         "and is saved as the default only while none is chosen; the settings themselves change " +

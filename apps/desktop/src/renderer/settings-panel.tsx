@@ -1286,7 +1286,7 @@ function CredentialsSection({
     <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
       <h2>
         <KeyIcon />
-        Cloud Agent API keys
+        Providers
       </h2>
       {/* First because the list reads alphabetically, like the key rows below. */}
       <CodexCloudConnection
