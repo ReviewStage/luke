@@ -1167,7 +1167,9 @@
    `line-height: 1` because an inline-block's whole box — padding and borders
    included — sizes the line it sits on: at the inherited leading the cap
    overflows the 25.6px line box and stretches keycap lines ~2px taller than
-   their neighbours. */
+   their neighbours. The vertical-align raise is measured, not chosen: on the
+   baseline the cap's box centres 2.4px below the text's font box, and
+   `middle` (keyed to half the x-height) still leaves it 1.3px low. */
 .document kbd {
   display: inline-block;
   padding: 0.1em 0.45em;
@@ -1178,6 +1180,7 @@
   font-family: var(--font-code);
   font-size: 0.8em;
   line-height: 1;
+  vertical-align: 0.18em;
 }
 
 .document kbd + kbd {
