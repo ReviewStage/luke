@@ -1608,7 +1608,7 @@ function SupersetIntegration({
       <div className="credential-row">
         <span className="credential-identity">
           <span className="credential-mark">
-            <PlugIcon />
+            <ProviderMark providerId={SUPERSET_WORKSPACE_PROVIDER_ID} />
           </span>
           <span className="credential-name">Superset</span>
           {control.connected ? <CheckIcon /> : null}

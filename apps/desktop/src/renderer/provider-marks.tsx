@@ -16,10 +16,12 @@ import {
   OPENCODE_FRAME_PATH,
   PROVIDER_ID,
   type ProviderId,
+  SUPERSET_PATH,
 } from "@sidecar/core";
 import { useId } from "react";
 import { CREDENTIAL_PROVIDER_ID } from "../shared/credential-providers";
 import { GOOGLE_CALENDAR_ID } from "../shared/google-calendar";
+import { SUPERSET_WORKSPACE_PROVIDER_ID } from "../shared/superset";
 
 /**
  * The provider marks, and the one badge that rides them.
@@ -44,8 +46,11 @@ import { GOOGLE_CALENDAR_ID } from "../shared/google-calendar";
  * and site header, Google Calendar via Simple Icons (CC0-1.0, sourced from
  * https://developers.google.com/calendar), Jules via Simple Icons (CC0-1.0, sourced from
  * https://jules.google), OpenAI via Simple Icons (CC0-1.0), Linear via Simple Icons (CC0-1.0, sourced from
- * https://linear.app), and OpenCode's two-tone terminal mark verbatim from
- * the favicon https://opencode.ai serves. Each keeps its own brand colour
+ * https://linear.app), OpenCode's two-tone terminal mark verbatim from
+ * the favicon https://opencode.ai serves, and Superset's bracket mark traced
+ * from the pixel grid of the favicon https://superset.sh serves — the one
+ * square mark Superset publishes — keeping the vertical metallic gradient the
+ * favicon draws it with. Each keeps its own brand colour
  * (see the `--mark-*` custom properties), so a mark says which provider a
  * session belongs to while the chips and row tints say what state it is in.
  * Copilot, Cursor, and Devin each publish one silhouette rather than a
@@ -249,6 +254,37 @@ function OpenCodeMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
+function SupersetMark({ className }: MarkProps): React.JSX.Element {
+  // Superset's favicon draws its bracket mark in a vertical metallic gradient
+  // rather than a flat colour, so like Codex it needs its own paint server.
+  const gradientId = `superset-mark-${useId()}`;
+
+  return (
+    <svg
+      className={className}
+      data-mark={SUPERSET_WORKSPACE_PROVIDER_ID}
+      viewBox="0 0 180 72"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <defs>
+        <linearGradient
+          id={gradientId}
+          gradientUnits="userSpaceOnUse"
+          x1="90"
+          x2="90"
+          y1="0"
+          y2="72"
+        >
+          <stop stopColor="var(--mark-superset-top, #b9b7b5)" />
+          <stop offset="1" stopColor="var(--mark-superset-bottom, #858483)" />
+        </linearGradient>
+      </defs>
+      <path fill={`url(#${gradientId})`} d={SUPERSET_PATH} />
+    </svg>
+  );
+}
+
 /** Drawn here, not a brand: a provider Luke has no mark for still needs a slot. */
 function UnknownProviderMark({ className }: MarkProps): React.JSX.Element {
   return (
@@ -263,7 +299,8 @@ export type MarkId =
   | ProviderId
   | IssueTrackerId
   | typeof GOOGLE_CALENDAR_ID
-  | typeof CREDENTIAL_PROVIDER_ID.OPENAI;
+  | typeof CREDENTIAL_PROVIDER_ID.OPENAI
+  | typeof SUPERSET_WORKSPACE_PROVIDER_ID;
 
 const PROVIDER_MARKS = {
   [PROVIDER_ID.CLAUDE_CODE]: ClaudeCodeMark,
@@ -277,6 +314,7 @@ const PROVIDER_MARKS = {
   [ISSUE_TRACKER_ID.LINEAR]: LinearMark,
   [CREDENTIAL_PROVIDER_ID.OPENAI]: OpenAiMark,
   [PROVIDER_ID.OPENCODE]: OpenCodeMark,
+  [SUPERSET_WORKSPACE_PROVIDER_ID]: SupersetMark,
 } as const satisfies Readonly<Record<MarkId, (props: MarkProps) => React.JSX.Element>>;
 
 export function ProviderMark({
