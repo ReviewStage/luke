@@ -61,3 +61,35 @@ test("effect action handlers map effect failures through failure", async () => {
     message: "boom",
   });
 });
+
+test("effect action handlers support async acts and business rejections as success", async () => {
+  const handlers = new Map<
+    string,
+    (event: IpcMainInvokeEvent, ...args: [string]) => Promise<{ status: string }>
+  >();
+  const register = createEffectActionHandler({
+    trustedSender: () => true,
+    handle: (channel, handler) => handlers.set(channel, handler),
+  });
+  register<[string], { status: string }>("open", {
+    validate: ([value]) => {
+      if (Object.prototype.toString.call(value) !== "[object String]") return undefined;
+      // SAFETY: Object.prototype.toString confirmed a string before validation tuple.
+      return [value as string];
+    },
+    act: (url) =>
+      Effect.gen(function* () {
+        if (url === "missing") return { status: "unsupported" };
+        yield* Effect.tryPromise(async () => {
+          await Promise.resolve();
+        });
+        return { status: "opened" };
+      }),
+    failure: () => ({ status: "rejected" }),
+  });
+  const handler = handlers.get("open");
+  // SAFETY: Fixture invoke event carries only sender.id for trust validation.
+  const event = { sender: { id: 1 } } as IpcMainInvokeEvent;
+  assert.deepEqual(await handler?.(event, "https://example.com"), { status: "opened" });
+  assert.deepEqual(await handler?.(event, "missing"), { status: "unsupported" });
+});

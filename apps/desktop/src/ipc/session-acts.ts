@@ -28,8 +28,9 @@ import {
   workspaceNameText,
 } from "@sidecar/core";
 import type { PromiseSessionRegistry } from "@sidecar/core/effect";
+import { Effect } from "effect";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
-import { createActionHandler } from "../action-handler";
+import { createEffectActionHandler } from "../effect-action-handler";
 import type { LinearIssueTracker } from "../linear-tracker";
 import type { SettingsStore } from "../settings-store";
 import {
@@ -96,24 +97,33 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     supersetContext,
     supersetCli,
   } = dependencies;
-  const registerAction = createActionHandler({
+  const registerAction = createEffectActionHandler({
     trustedSender,
     handle: (channel, handler) => ipcMain.handle(channel, handler),
   });
   // Capability checks stay in their handlers so no act can inherit another act's authority.
-  async function performSessionAct<Result extends ProviderActResult>(
+  function performSessionAct<Result extends ProviderActResult>(
     identity: SessionIdentity,
-    act: (adapter: SessionProviderAdapter, session: NormalizedSession) => Promise<Result>,
-  ): Promise<Result | { status: typeof PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED }> {
-    const session = sessionRegistry.get(identity);
-    if (!session) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-    const adapter = adapterFor(identity.providerId);
-    if (!adapter) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-    const result = await act(adapter, session);
-    if (result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
-      void sessionRegistry.refresh(adapter);
-    }
-    return result;
+    act: (
+      adapter: SessionProviderAdapter,
+      session: NormalizedSession,
+    ) => Effect.Effect<Result, Error, never>,
+  ): Effect.Effect<
+    Result | { status: typeof PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED },
+    Error,
+    never
+  > {
+    return Effect.gen(function* () {
+      const session = sessionRegistry.get(identity);
+      if (!session) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      const adapter = adapterFor(identity.providerId);
+      if (!adapter) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      const result = yield* act(adapter, session);
+      if (result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
+        void sessionRegistry.refresh(adapter);
+      }
+      return result;
+    });
   }
   const registerOpenAction = (
     channel: string,
@@ -130,12 +140,13 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         );
         return [identity];
       },
-      async act(identity) {
-        const url = address(identity);
-        if (!url) return { status: SESSION_OPEN_RESULT_STATUS.UNSUPPORTED };
-        await openExternal(url);
-        return { status: SESSION_OPEN_RESULT_STATUS.OPENED };
-      },
+      act: (identity) =>
+        Effect.gen(function* () {
+          const url = address(identity);
+          if (!url) return { status: SESSION_OPEN_RESULT_STATUS.UNSUPPORTED };
+          yield* Effect.tryPromise(() => openExternal(url));
+          return { status: SESSION_OPEN_RESULT_STATUS.OPENED };
+        }),
       failure: () => ({ status: SESSION_OPEN_RESULT_STATUS.REJECTED, reason: failureReason }),
     });
   registerOpenAction(
@@ -166,16 +177,17 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       );
       return [identity];
     },
-    async act(identity) {
-      const url = trackedIssues()?.find(
-        (candidate) =>
-          candidate.trackerId === identity.trackerId &&
-          candidate.identifier === identity.identifier,
-      )?.url;
-      if (!url) return { status: SESSION_OPEN_RESULT_STATUS.UNSUPPORTED };
-      await openExternal(url);
-      return { status: SESSION_OPEN_RESULT_STATUS.OPENED };
-    },
+    act: (identity) =>
+      Effect.gen(function* () {
+        const url = trackedIssues()?.find(
+          (candidate) =>
+            candidate.trackerId === identity.trackerId &&
+            candidate.identifier === identity.identifier,
+        )?.url;
+        if (!url) return { status: SESSION_OPEN_RESULT_STATUS.UNSUPPORTED };
+        yield* Effect.tryPromise(() => openExternal(url));
+        return { status: SESSION_OPEN_RESULT_STATUS.OPENED };
+      }),
     failure: () => ({
       status: SESSION_OPEN_RESULT_STATUS.REJECTED,
       reason: "The system could not open that issue.",
@@ -270,12 +282,16 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       }
       const managed = supersetContext(identity);
       if (managed) return supersetCli.sendMessage(managed, messageText);
-      return performSessionAct(identity, (adapter) => {
-        return adapter.sendMessage({
-          providerSessionId: identity.providerSessionId,
-          text: messageText,
-        });
-      });
+      return Effect.runPromise(
+        performSessionAct(identity, (adapter) =>
+          Effect.tryPromise(() =>
+            adapter.sendMessage({
+              providerSessionId: identity.providerSessionId,
+              text: messageText,
+            }),
+          ),
+        ),
+      );
     },
   );
 
@@ -302,12 +318,16 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       if (managed && isSupersetControlId(control.id)) {
         return supersetCli.executeControl(managed, control.id);
       }
-      return performSessionAct(identity, (adapter) => {
-        return adapter.executeControl({
-          providerSessionId: identity.providerSessionId,
-          control,
-        });
-      });
+      return Effect.runPromise(
+        performSessionAct(identity, (adapter) =>
+          Effect.tryPromise(() =>
+            adapter.executeControl({
+              providerSessionId: identity.providerSessionId,
+              control,
+            }),
+          ),
+        ),
+      );
     },
   );
 
@@ -632,28 +652,34 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       }
       const managed = supersetContext(identity);
       if (managed) return supersetCli.createAgent(managed, advertised, openingTask.value);
-      return performSessionAct(identity, async (adapter) => {
-        const stored: WorkspaceAgentSelection | undefined = isProviderId(identity.providerId)
-          ? (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[
-              identity.providerId
-            ]
-          : undefined;
-        const fallback = stored?.agent === advertised ? stored : undefined;
-        const model = namedModel ?? fallback?.model;
-        const effort = namedModel !== undefined ? namedEffort : fallback?.effort;
-        const result = await adapter.spawnWorkspaceAgent({
-          providerSessionId: identity.providerSessionId,
-          agent: advertised,
-          ...(sessionName.value ? { name: sessionName.value } : undefined),
-          ...(openingTask.value ? { task: openingTask.value } : undefined),
-          ...(model ? { model } : undefined),
-          ...(effort ? { effort } : undefined),
-        });
-        if (result.status === PROVIDER_ACT_RESULT_STATUS.REJECTED) {
-          void sessionRegistry.refresh(adapter);
-        }
-        return result;
-      });
+      return Effect.runPromise(
+        performSessionAct(identity, (adapter) =>
+          Effect.gen(function* () {
+            const stored: WorkspaceAgentSelection | undefined = isProviderId(identity.providerId)
+              ? (yield* Effect.tryPromise(() =>
+                  settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field),
+                ))?.[identity.providerId]
+              : undefined;
+            const fallback = stored?.agent === advertised ? stored : undefined;
+            const model = namedModel ?? fallback?.model;
+            const effort = namedModel !== undefined ? namedEffort : fallback?.effort;
+            const result = yield* Effect.tryPromise(() =>
+              adapter.spawnWorkspaceAgent({
+                providerSessionId: identity.providerSessionId,
+                agent: advertised,
+                ...(sessionName.value ? { name: sessionName.value } : undefined),
+                ...(openingTask.value ? { task: openingTask.value } : undefined),
+                ...(model ? { model } : undefined),
+                ...(effort ? { effort } : undefined),
+              }),
+            );
+            if (result.status === PROVIDER_ACT_RESULT_STATUS.REJECTED) {
+              void sessionRegistry.refresh(adapter);
+            }
+            return result;
+          }),
+        ),
+      );
     },
   );
 }
