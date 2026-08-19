@@ -232,17 +232,24 @@ try {
       throw new Error("Apple did not return a notarization submission ID");
     }
 
+    // A lookup that fails or answers unreadably is a blip in the poll, not a
+    // verdict on a submission Apple already holds: reporting no status leaves
+    // the loop waiting, and notarytool's own complaint has reached stderr.
+    const readNotarizationStatus = () => {
+      try {
+        return JSON.parse(
+          execFileSync("xcrun", notaryInfoArguments(submission.id, notaryCredentials), {
+            encoding: "utf8",
+            stdio: ["ignore", "pipe", "inherit"],
+          }),
+        ).status;
+      } catch {
+        return undefined;
+      }
+    };
+
     try {
-      await awaitNotarizationDecision({
-        readStatus: () =>
-          JSON.parse(
-            execFileSync("xcrun", notaryInfoArguments(submission.id, notaryCredentials), {
-              encoding: "utf8",
-              stdio: ["ignore", "pipe", "inherit"],
-            }),
-          ).status,
-        wait: sleep,
-      });
+      await awaitNotarizationDecision({ readStatus: readNotarizationStatus, wait: sleep });
     } catch (error) {
       process.stderr.write(`${error.message}\n`);
       execFileSync("xcrun", notaryLogArguments(submission.id, notaryCredentials), {

@@ -53,8 +53,11 @@ xcrun notarytool submit "$submission_path" \
 cat "$result_path"
 submission_id=$(jq -r '.id // empty' "$result_path")
 
-if [[ "$submit_exit" -ne 0 || -z "$submission_id" ]]; then
-    printf 'error: notarization failed before Apple returned a submission ID\n' >&2
+# notarytool can fail after the upload has already landed, so the id it wrote
+# decides whether there is a submission to poll — never the exit status.
+if [[ -z "$submission_id" ]]; then
+    printf 'error: notarization failed before Apple returned a submission ID (exit %d)\n' \
+        "$submit_exit" >&2
     exit 1
 fi
 

@@ -428,6 +428,18 @@ test("neither notarization path asks notarytool to wait", () => {
   assert.ok(notarizeScript.includes("notarytool info"));
 });
 
+test("the CI notarization path polls the submission id, not the submit exit status", () => {
+  const notarizeScript = fs.readFileSync(
+    path.join(repoRoot, "scripts", "release", "notarize.sh"),
+    "utf8",
+  );
+
+  // notarytool can fail after the upload lands, so only a missing id may end
+  // the run before the poll — the JS path continues from that stdout the same way.
+  assert.ok(notarizeScript.includes('if [[ -z "$submission_id" ]]; then'));
+  assert.ok(!/\$submit_exit"?\s+-ne\s+0\s*\|\|/.test(notarizeScript));
+});
+
 test("notarization polling settles on each status Apple reports", async () => {
   const acceptedAfter = async (statuses) => {
     const waits = [];
