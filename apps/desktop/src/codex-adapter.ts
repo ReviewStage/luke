@@ -55,6 +55,8 @@ const CODEX_DATABASE_FILE = {
   STATE: "state_5.sqlite",
 } as const;
 
+const CODEX_SESSION_INDEX_FILE = "session_index.jsonl";
+
 const CODEX_CONFIG_FILE = {
   USER: "config.toml",
 } as const;
@@ -71,6 +73,14 @@ const CODEX_CONFIG_KEY = {
  * the row and the address it opens name one thread rather than two.
  */
 const CODEX_THREAD_LINK_PREFIX = "codex://threads/";
+
+/**
+ * Codex uses this synthetic title for locally-created delegation sessions.
+ * It identifies the source chat for Codex itself, but is not a user-facing
+ * title and can be misleading when shown in Luke's session list.
+ */
+const CODEX_DELEGATION_TITLE =
+  /<codex_delegation>\s*<source_thread_id>\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\s*<\/source_thread_id>/i;
 
 const CODEX_THREAD_COLUMN = {
   ID: "id",
@@ -404,11 +414,33 @@ export async function stateDatabasePaths(
  * Codex names its own threads, and that name is what a developer is looking
  * for. The workspace is the fallback for a thread too new to have been named.
  */
-function titleFromRow(row: CodexThreadRow): string {
-  return (
-    oneLine(textFromRow(row, CODEX_THREAD_COLUMN.TITLE), maximumSessionTitleLength) ??
-    workspaceLabel(textFromRow(row, CODEX_THREAD_COLUMN.CWD))
-  );
+function titleFromRow(row: CodexThreadRow, sessionTitles: ReadonlyMap<string, string>): string {
+  const title = oneLine(textFromRow(row, CODEX_THREAD_COLUMN.TITLE), maximumSessionTitleLength);
+  if (title) {
+    const sourceThreadId = CODEX_DELEGATION_TITLE.exec(title)?.[1];
+    if (sourceThreadId) {
+      return (
+        sessionTitles.get(textFromRow(row, CODEX_THREAD_COLUMN.ID) ?? "") ??
+        sessionTitles.get(sourceThreadId) ??
+        workspaceLabel(textFromRow(row, CODEX_THREAD_COLUMN.CWD))
+      );
+    }
+    return title;
+  }
+  return workspaceLabel(textFromRow(row, CODEX_THREAD_COLUMN.CWD));
+}
+
+async function readCodexSessionTitles(codexHome: string): Promise<Map<string, string>> {
+  const titles = new Map<string, string>();
+  const contents = await readTextFile(path.join(codexHome, CODEX_SESSION_INDEX_FILE));
+  if (!contents) return titles;
+  for (const line of contents.split(/\r?\n/u)) {
+    const record = recordFromJsonLine(line);
+    const id = text(record?.id);
+    const title = oneLine(text(record?.thread_name), maximumSessionTitleLength);
+    if (id && title) titles.set(id, title);
+  }
+  return titles;
 }
 
 function modelFromRow(row: CodexThreadRow): string | undefined {
@@ -497,6 +529,7 @@ function detailFromRow(
 function observationFromThreadRow(
   row: CodexThreadRow,
   rollout: ParsedCodexRollout | undefined,
+  sessionTitles: ReadonlyMap<string, string>,
   now: number,
   activeSessionFreshnessMs: number,
   hookEvent?: ObservedCodexHookEvent,
@@ -531,7 +564,7 @@ function observationFromThreadRow(
       : undefined;
   return {
     providerSessionId,
-    title: titleFromRow(row),
+    title: titleFromRow(row, sessionTitles),
     status,
     ...(completionCause ? { completionCause } : undefined),
     observedAt,
@@ -587,11 +620,13 @@ export class CodexSessionAdapter extends LocalSessionAdapter {
       // writing.
       const rollouts = await this.#rollouts(rows);
       const hookEvents = await this.#hookEvents(rows);
+      const sessionTitles = await readCodexSessionTitles(this.#codexHome);
       return rows
         .map((row) =>
           observationFromThreadRow(
             row,
             rollouts.get(textFromRow(row, CODEX_THREAD_COLUMN.ID) ?? ""),
+            sessionTitles,
             now,
             this.activeSessionFreshnessMs,
             hookEvents.get(textFromRow(row, CODEX_THREAD_COLUMN.ID) ?? ""),
