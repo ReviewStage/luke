@@ -3,6 +3,7 @@ import {
   type AttentionRequestRegistry,
   type AttentionRequestResult,
   attentionRequestText,
+  type InMemorySessionRegistry,
   ISSUE_ACTION_KIND,
   type IssueIdentity,
   isProviderId,
@@ -27,7 +28,6 @@ import {
   type WorkspaceAgentSelection,
   workspaceNameText,
 } from "@sidecar/core";
-import type { PromiseSessionRegistry } from "@sidecar/core/effect";
 import { Effect } from "effect";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import { createActionHandler } from "../action-handler";
@@ -52,7 +52,7 @@ import { unparsedWire, type WireBoundaryInput, wireRecord } from "../wire-bounda
 export interface SessionActsIpcDependencies {
   ipcMain: Pick<IpcMain, "handle">;
   trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
-  sessionRegistry: PromiseSessionRegistry;
+  sessionRegistry: InMemorySessionRegistry;
   openExternal: (url: string) => Promise<void>;
   adapterFor: (providerId: string) => SessionProviderAdapter | undefined;
   attentionReviewer: () => SessionAttentionReviewer | undefined;
@@ -282,7 +282,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
           unparsedWire(rawIdentity as WireBoundaryInput),
           "Invalid session message request",
         );
-        return [identity, text];
+        return [identity, unparsedWire(text as WireBoundaryInput)];
       },
       act: (identity, text) =>
         Effect.gen(function* () {
@@ -330,10 +330,11 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         unparsedWire(rawIdentity as WireBoundaryInput),
         "Invalid session control request",
       );
-      if (!isWireString(controlIdRaw) || !controlIdRaw.trim()) {
+      const controlId = unparsedWire(controlIdRaw as WireBoundaryInput);
+      if (!isWireString(controlId) || !controlId.trim()) {
         throw new Error("Invalid session control request");
       }
-      return [identity, controlIdRaw];
+      return [identity, controlId];
     },
     act: (identity, controlId) =>
       Effect.gen(function* () {
@@ -359,68 +360,93 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     }),
   });
 
-  // A standing ask runs the front half of the message gauntlet — a trusted
-  // sender, a bounded text, a session the registry actually observes — and
-  // then stops on this machine: it is kept for the attention evaluator to
-  // weigh updates against, and no adapter or provider ever sees it. It is
-  // refused while no evaluator is configured, because keeping an ask nothing
-  // will ever read is a promise Luke cannot keep.
-  ipcMain.handle(
+  registerAction<[SessionIdentity, UnparsedWireValue], AttentionRequestResult>(
     channels.requestSessionNotice,
-    (event, identityRaw: UnparsedWireValue, request: UnparsedWireValue): AttentionRequestResult => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      const identity = requireSessionIdentity(identityRaw, "Invalid session notice request");
-      const ask = attentionRequestText(request);
-      if (!ask) {
-        return {
-          status: ATTENTION_REQUEST_RESULT_STATUS.REJECTED,
-          reason: "An ask has to be one short request and longer than nothing.",
-        };
-      }
-      const session = sessionRegistry.get(identity);
-      if (!session) {
-        return {
-          status: ATTENTION_REQUEST_RESULT_STATUS.REJECTED,
-          reason: "No observed session matches that identity.",
-        };
-      }
-      if (!attentionReviewer()) {
-        return {
-          status: ATTENTION_REQUEST_RESULT_STATUS.REJECTED,
-          reason: "No OpenAI key is connected, so nothing would ever read the ask.",
-        };
-      }
-      attentionRequests.set(identity, ask);
-      broadcastNoticeAsks();
-      // The status rides the acceptance because the ask may already be
-      // answered: a session asked about after it finished has no later finish
-      // coming, and the reply should say so rather than promise one.
-      return { status: ATTENTION_REQUEST_RESULT_STATUS.ACCEPTED, sessionStatus: session.status };
+    {
+      validate: (args) => {
+        const [rawIdentity, request] = args;
+        // SAFETY: IPC validate receives structured-clone args; this channel's first arg is a session identity object.
+        const identity = requireSessionIdentity(
+          unparsedWire(rawIdentity as WireBoundaryInput),
+          "Invalid session notice request",
+        );
+        return [identity, unparsedWire(request as WireBoundaryInput)];
+      },
+      act: (identity, request) =>
+        Effect.sync(() => {
+          const ask = attentionRequestText(request);
+          if (!ask) {
+            return {
+              status: ATTENTION_REQUEST_RESULT_STATUS.REJECTED,
+              reason: "An ask has to be one short request and longer than nothing.",
+            };
+          }
+          const session = sessionRegistry.get(identity);
+          if (!session) {
+            return {
+              status: ATTENTION_REQUEST_RESULT_STATUS.REJECTED,
+              reason: "No observed session matches that identity.",
+            };
+          }
+          if (!attentionReviewer()) {
+            return {
+              status: ATTENTION_REQUEST_RESULT_STATUS.REJECTED,
+              reason: "No OpenAI key is connected, so nothing would ever read the ask.",
+            };
+          }
+          attentionRequests.set(identity, ask);
+          broadcastNoticeAsks();
+          // The status rides the acceptance because the ask may already be
+          // answered: a session asked about after it finished has no later finish
+          // coming, and the reply should say so rather than promise one.
+          return {
+            status: ATTENTION_REQUEST_RESULT_STATUS.ACCEPTED,
+            sessionStatus: session.status,
+          };
+        }),
+      failure: () => ({
+        status: ATTENTION_REQUEST_RESULT_STATUS.REJECTED,
+        reason: "The ask could not be recorded.",
+      }),
     },
   );
 
-  ipcMain.handle(
-    channels.withdrawSessionNotice,
-    (event, identityRaw: UnparsedWireValue): AttentionRequestResult => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      const identity = requireSessionIdentity(identityRaw, "Invalid session notice request");
-      const session = sessionRegistry.get(identity);
-      if (!session) {
-        return {
-          status: ATTENTION_REQUEST_RESULT_STATUS.REJECTED,
-          reason: "No observed session matches that identity.",
-        };
-      }
-      if (!attentionRequests.withdraw(identity)) {
-        return {
-          status: ATTENTION_REQUEST_RESULT_STATUS.REJECTED,
-          reason: "No ask was standing for that session.",
-        };
-      }
-      broadcastNoticeAsks();
-      return { status: ATTENTION_REQUEST_RESULT_STATUS.ACCEPTED, sessionStatus: session.status };
+  registerAction<[SessionIdentity], AttentionRequestResult>(channels.withdrawSessionNotice, {
+    validate: (args) => {
+      const [rawIdentity] = args;
+      // SAFETY: IPC validate receives structured-clone args; this channel's first arg is a session identity object.
+      const identity = requireSessionIdentity(
+        unparsedWire(rawIdentity as WireBoundaryInput),
+        "Invalid session notice request",
+      );
+      return [identity];
     },
-  );
+    act: (identity) =>
+      Effect.sync(() => {
+        const session = sessionRegistry.get(identity);
+        if (!session) {
+          return {
+            status: ATTENTION_REQUEST_RESULT_STATUS.REJECTED,
+            reason: "No observed session matches that identity.",
+          };
+        }
+        if (!attentionRequests.withdraw(identity)) {
+          return {
+            status: ATTENTION_REQUEST_RESULT_STATUS.REJECTED,
+            reason: "No ask was standing for that session.",
+          };
+        }
+        broadcastNoticeAsks();
+        return {
+          status: ATTENTION_REQUEST_RESULT_STATUS.ACCEPTED,
+          sessionStatus: session.status,
+        };
+      }),
+    failure: () => ({
+      status: ATTENTION_REQUEST_RESULT_STATUS.REJECTED,
+      reason: "The ask could not be withdrawn.",
+    }),
+  });
 
   // A new workspace runs the same gauntlet a message does, against the list
   // that offered it: the renderer names a project rather than a repository, and
@@ -428,140 +454,135 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   // the adapter itself, never from the request — reaches the provider's
   // documented creation endpoint. A fixture run offers no projects at all, so
   // it refuses every ask without touching a network.
-  ipcMain.handle(
+  registerAction<[CreateWorkspaceRequest], ProviderWorkspaceResult>(
     channels.createSessionWorkspace,
-    async (
-      event,
-      providerId: UnparsedWireValue,
-      providerProjectId: UnparsedWireValue,
-      providerTargetId: UnparsedWireValue,
-      agent: UnparsedWireValue,
-      name: UnparsedWireValue,
-      task: UnparsedWireValue,
-      namedSelection: UnparsedWireValue,
-    ): Promise<ProviderWorkspaceResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      if (
-        !isWireString(providerId) ||
-        !providerId.trim() ||
-        !isWireString(providerProjectId) ||
-        !providerProjectId.trim() ||
-        (providerTargetId !== undefined && !isWireString(providerTargetId)) ||
-        (agent !== undefined && !isWireString(agent)) ||
-        (name !== undefined && !isWireString(name)) ||
-        (task !== undefined && !isWireString(task))
-      ) {
-        throw new Error("Invalid workspace creation request");
-      }
-      // Its own statement so the guard's narrowing survives: past here the
-      // named selection is a documented pairing or nothing at all.
-      const parsedSelection =
-        namedSelection !== undefined
-          ? parseWorkspaceAgentSelection(providerId, namedSelection)
-          : undefined;
-      if (namedSelection !== undefined && !parsedSelection) {
-        throw new Error("Invalid workspace creation request");
-      }
-      if (!sendsNetwork) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-      const adapter = adapterFor(providerId);
-      if (!adapter) {
-        return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-      }
-      const offered = adapter
-        .workspaceProjects()
-        .some(
-          (project) =>
-            project.providerProjectId === providerProjectId &&
-            project.providerTargetId === providerTargetId &&
-            (!project.spawnableAgents ||
-              (!!agent && project.spawnableAgents.includes(agent.trim()))),
-        );
-      if (!offered) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-      const workspaceName = boundedField(name, workspaceNameText);
-      if (!workspaceName.ok) {
-        return {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-          reason: "That workspace name is empty or too long.",
-        };
-      }
-      // The task's own bound, and its fit to the project, are answered by the
-      // adapter, which validates both against the projects it actually offers.
-      const openingTask = boundedField(task, sessionMessageText);
-      if (!openingTask.ok) {
-        return {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-          reason: "That task is empty or too long.",
-        };
-      }
-      // A model the user named for this one creation outranks the stored
-      // choice for this act alone; the stored choice stands otherwise. Both
-      // are held to the build's documented table — the named one just above,
-      // the stored one when it was written — and the adapter holds whichever
-      // rides to its own table again before anything reaches the network.
-      const stored = isProviderId(providerId)
-        ? (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[providerId]
-        : undefined;
-      const agentSelection = parsedSelection ?? stored;
-      const createRequest: Parameters<SessionProviderAdapter["createWorkspace"]>[0] = {
-        providerProjectId,
-      };
-      if (isWireString(providerTargetId) && providerTargetId.trim()) {
-        createRequest.providerTargetId = providerTargetId.trim();
-      }
-      if (isWireString(agent) && agent.trim()) {
-        createRequest.agent = agent.trim();
-      }
-      if (workspaceName.value) createRequest.name = workspaceName.value;
-      if (openingTask.value) createRequest.task = openingTask.value;
-      if (agentSelection) createRequest.agentSelection = agentSelection;
-      const result = await adapter.createWorkspace(createRequest);
-      // A workspace that landed is a session the panel should be showing, so
-      // the next look must actually ask rather than serve the cache. A
-      // rejection refreshes too: a workspace can stand with its opening task
-      // undelivered, and the adapter answers a rejection that never reached
-      // the network from its cache anyway.
-      if (result.status !== PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED) {
-        // A workspace that landed is also one the developer just asked to be
-        // taken to, so the session the creation response named — an id the
-        // adapter reported, never an address — waits here for observation to
-        // report it, and is opened then like a pressed row. Noted before the
-        // refresh, so the very pass that first sees the session resolves it.
-        if (result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED && result.providerSessionId) {
-          expectCreatedWorkspace(
-            { providerId: adapter.provider.id, providerSessionId: result.providerSessionId },
-            Date.now(),
-          );
-          // An interval pass can commit the new session while the creation's
-          // own follow-up write is still in flight — before the entry above
-          // exists — and a registry already holding the session commits
-          // nothing further to resolve it. So the current picture is claimed
-          // against here, and future commits carry every later arrival.
-          openCreatedWorkspaces();
-        }
-        void sessionRegistry.refresh(adapter);
-      }
-      // The first workspace that actually lands chooses the default provider,
-      // so a later ask that names none has somewhere unsurprising to go. Only
-      // while nothing is chosen: a default the user holds is theirs to change,
-      // never a creation's. Deterministic on the validated act — nothing a
-      // model composed decides this — and losing the save loses only the
-      // remembered default, never the workspace that just landed.
-      if (result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
-        await rememberWorkspaceDefaults(
-          adapter,
-          providerProjectId,
-          isWireString(providerTargetId) ? providerTargetId.trim() : undefined,
-          parsedSelection,
-          isWireString(agent) ? agent.trim() : undefined,
-        );
-        // The named session was consumed above; the renderer's answer stays
-        // what became of the ask, so nothing rides this boundary that the
-        // roster will not report on its own.
-        return result.warning
-          ? { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED, warning: result.warning }
-          : { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
-      }
-      return result;
+    {
+      validate: (args) => {
+        const request = parseCreateWorkspaceRequest(args);
+        return [request];
+      },
+      act: (request) =>
+        Effect.gen(function* () {
+          const {
+            providerId,
+            providerProjectId,
+            providerTargetId,
+            agent,
+            name,
+            task,
+            parsedSelection,
+          } = request;
+          if (!sendsNetwork) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+          const adapter = adapterFor(providerId);
+          if (!adapter) {
+            return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+          }
+          const offered = adapter
+            .workspaceProjects()
+            .some(
+              (project) =>
+                project.providerProjectId === providerProjectId &&
+                project.providerTargetId === providerTargetId &&
+                (!project.spawnableAgents ||
+                  (isWireString(agent) &&
+                    !!agent.trim() &&
+                    project.spawnableAgents.includes(agent.trim()))),
+            );
+          if (!offered) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+          const workspaceName = boundedField(name, workspaceNameText);
+          if (!workspaceName.ok) {
+            return {
+              status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+              reason: "A workspace name has to be short enough to say and longer than nothing.",
+            };
+          }
+          // The task's own bound, and its fit to the project, are answered by the
+          // adapter, which validates both against the projects it actually offers.
+          const openingTask = boundedField(task, sessionMessageText);
+          if (!openingTask.ok) {
+            return {
+              status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+              reason: "A task has to be shorter than a document and longer than nothing.",
+            };
+          }
+          // A model the user named for this one creation outranks the stored
+          // choice for this act alone; the stored choice stands otherwise. Both
+          // are held to the build's documented table — the named one just above,
+          // the stored one when it was written — and the adapter holds whichever
+          // rides to its own table again before anything reaches the network.
+          const stored = isProviderId(providerId)
+            ? (yield* Effect.tryPromise(() =>
+                settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field),
+              ))?.[providerId]
+            : undefined;
+          const agentSelection = parsedSelection ?? stored;
+          const createRequest: Parameters<SessionProviderAdapter["createWorkspace"]>[0] = {
+            providerProjectId,
+          };
+          if (isWireString(providerTargetId) && providerTargetId.trim()) {
+            createRequest.providerTargetId = providerTargetId.trim();
+          }
+          if (isWireString(agent) && agent.trim()) {
+            createRequest.agent = agent.trim();
+          }
+          if (workspaceName.value) createRequest.name = workspaceName.value;
+          if (openingTask.value) createRequest.task = openingTask.value;
+          if (agentSelection) createRequest.agentSelection = agentSelection;
+          const result = yield* Effect.tryPromise(() => adapter.createWorkspace(createRequest));
+          // A workspace that landed is a session the panel should be showing, so
+          // the next look must actually ask rather than serve the cache. A
+          // rejection refreshes too: a workspace can stand with its opening task
+          // undelivered, and the adapter answers a rejection that never reached
+          // the network from its cache anyway.
+          if (result.status !== PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED) {
+            // A workspace that landed is also one the developer just asked to be
+            // taken to, so the session the creation response named — an id the
+            // adapter reported, never an address — waits here for observation to
+            // report it, and is opened then like a pressed row. Noted before the
+            // refresh, so the very pass that first sees the session resolves it.
+            if (result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED && result.providerSessionId) {
+              expectCreatedWorkspace(
+                { providerId: adapter.provider.id, providerSessionId: result.providerSessionId },
+                Date.now(),
+              );
+              // An interval pass can commit the new session while the creation's
+              // own follow-up write is still in flight — before the entry above
+              // exists — and a registry already holding the session commits
+              // nothing further to resolve it. So the current picture is claimed
+              // against here, and future commits carry every later arrival.
+              openCreatedWorkspaces();
+            }
+            void sessionRegistry.refresh(adapter);
+          }
+          // The first workspace that actually lands chooses the default provider,
+          // so a later ask that names none has somewhere unsurprising to go. Only
+          // while nothing is chosen: a default the user holds is theirs to change,
+          // never a creation's. Deterministic on the validated act — nothing a
+          // model composed decides this — and losing the save loses only the
+          // remembered default, never the workspace that just landed.
+          if (result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
+            yield* Effect.tryPromise(() =>
+              rememberWorkspaceDefaults(
+                adapter,
+                providerProjectId,
+                isWireString(providerTargetId) ? providerTargetId.trim() : undefined,
+                parsedSelection,
+                isWireString(agent) ? agent.trim() : undefined,
+              ),
+            );
+            // The named session was consumed above; the renderer's answer stays
+            // what became of the ask, so nothing rides this boundary that the
+            // roster will not report on its own.
+            return result.warning
+              ? { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED, warning: result.warning }
+              : { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
+          }
+          return result;
+        }),
+      failure: () => ({
+        status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+        reason: "The workspace could not be created.",
+      }),
     },
   );
 
@@ -571,117 +592,108 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   // the issue by its identity, the transition by the id the tracker itself
   // listed — so what reaches a tracker client is built from observed state,
   // never from what a model composed.
-  ipcMain.handle(
-    channels.executeIssueAction,
-    async (event, action: UnparsedWireValue): Promise<TrackerActionResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      if (!isIssueActionAsk(action)) throw new Error("Invalid issue action request");
-      // A fixture run observes no tracker, so it refuses every act — a
-      // deterministic capture must not reach Linear.
-      const issue = trackedIssues()?.find(
-        (candidate) =>
-          candidate.trackerId === action.identity.trackerId &&
-          candidate.identifier === action.identity.identifier,
-      );
-      if (!issue) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
-      const tracker = issueTrackers.find((candidate) => candidate.tracker.id === issue.trackerId);
-      if (!tracker) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
-
-      let result: TrackerActionResult;
-      if (action.kind === "issue-state") {
-        const transition = issue.transitions.find(
-          (candidate) => candidate.id === action.transition?.id,
-        );
-        if (!transition) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
-        result = await tracker.execute({
-          kind: ISSUE_ACTION_KIND.SET_STATE,
-          trackerIssueId: issue.trackerIssueId,
-          transition,
-        });
-      } else {
-        if (!issue.canComment) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
-        const body = boundedField(action.body, issueCommentText);
-        if (!body.ok || body.value === undefined) {
-          return {
-            status: TRACKER_ACTION_RESULT_STATUS.REJECTED,
-            reason: "That comment is empty or too long.",
-          };
-        }
-        result = await tracker.execute({
-          kind: ISSUE_ACTION_KIND.COMMENT,
-          trackerIssueId: issue.trackerIssueId,
-          body: body.value,
-        });
-      }
-      // An act that landed changes the board, so the roster should catch up
-      // as soon as Linear will say.
-      if (result.status === TRACKER_ACTION_RESULT_STATUS.ACCEPTED) {
-        refreshIssues();
-      }
-      return result;
+  registerAction<[IssueActionAsk], TrackerActionResult>(channels.executeIssueAction, {
+    validate: (args) => {
+      const [actionRaw] = args;
+      const action = parseIssueActionAsk(unparsedWire(actionRaw as WireBoundaryInput));
+      if (!action) throw new Error("Invalid issue action request");
+      return [action];
     },
-  );
+    act: (action) =>
+      Effect.gen(function* () {
+        // A fixture run observes no tracker, so it refuses every act — a
+        // deterministic capture must not reach Linear.
+        const issue = trackedIssues()?.find(
+          (candidate) =>
+            candidate.trackerId === action.identity.trackerId &&
+            candidate.identifier === action.identity.identifier,
+        );
+        if (!issue) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
+        const tracker = issueTrackers.find((candidate) => candidate.tracker.id === issue.trackerId);
+        if (!tracker) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
+
+        let result: TrackerActionResult;
+        if (action.kind === "issue-state") {
+          const transition = issue.transitions.find(
+            (candidate) => candidate.id === action.transition?.id,
+          );
+          if (!transition) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
+          result = yield* Effect.tryPromise(() =>
+            tracker.execute({
+              kind: ISSUE_ACTION_KIND.SET_STATE,
+              trackerIssueId: issue.trackerIssueId,
+              transition,
+            }),
+          );
+        } else {
+          if (!issue.canComment) return { status: TRACKER_ACTION_RESULT_STATUS.UNSUPPORTED };
+          const body = boundedField(action.body, issueCommentText);
+          if (!body.ok || body.value === undefined) {
+            return {
+              status: TRACKER_ACTION_RESULT_STATUS.REJECTED,
+              reason: "A comment has to be shorter than a document and longer than nothing.",
+            };
+          }
+          const commentBody = body.value;
+          result = yield* Effect.tryPromise(() =>
+            tracker.execute({
+              kind: ISSUE_ACTION_KIND.COMMENT,
+              trackerIssueId: issue.trackerIssueId,
+              body: commentBody,
+            }),
+          );
+        }
+        // An act that landed changes the board, so the roster should catch up
+        // as soon as Linear will say.
+        if (result.status === TRACKER_ACTION_RESULT_STATUS.ACCEPTED) {
+          refreshIssues();
+        }
+        return result;
+      }),
+    failure: () => ({
+      status: TRACKER_ACTION_RESULT_STATUS.REJECTED,
+      reason: "The issue action could not be completed.",
+    }),
+  });
 
   // Another agent in an observed workspace runs the gauntlet a control does,
   // and one more: the agent kind the renderer names must be one the session's
   // latest observation actually listed. The registry is what advertised it, so
   // the registry is what answers whether it stands; the adapter then reads the
   // workspace back from its own last pass.
-  ipcMain.handle(
-    channels.addWorkspaceAgent,
-    async (
-      event,
-      identityRaw: UnparsedWireValue,
-      agent: UnparsedWireValue,
-      name: UnparsedWireValue,
-      task: UnparsedWireValue,
-      namedModel: UnparsedWireValue,
-      namedEffort: UnparsedWireValue,
-    ): Promise<ProviderWorkspaceResult> => {
-      if (!trustedSender(event)) throw new Error("Untrusted renderer");
-      const identity = requireSessionIdentity(identityRaw, "Invalid workspace agent request");
-      if (
-        !isWireString(agent) ||
-        !agent.trim() ||
-        (name !== undefined && !isWireString(name)) ||
-        (task !== undefined && !isWireString(task)) ||
-        (namedModel !== undefined && !isWireString(namedModel)) ||
-        (namedEffort !== undefined && (!isWireString(namedEffort) || namedModel === undefined))
-      ) {
-        throw new Error("Invalid workspace agent request");
-      }
-      const session = sessionRegistry.get(identity);
-      if (!session) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-      const advertised = session.spawnableAgents.find((candidate) => candidate === agent.trim());
-      if (!advertised) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-      // A model named for this one agent must be a documented pairing of
-      // exactly the asked-for kind: the user's chosen agent is never
-      // re-decided by the model named beside it.
-      if (namedModel !== undefined) {
-        const selection: WorkspaceAgentSelection = { agent: advertised, model: namedModel };
-        if (namedEffort !== undefined) selection.effort = namedEffort;
-        if (!isListedWorkspaceAgentModel(identity.providerId, selection)) {
-          throw new Error("Invalid workspace agent request");
+  registerAction<[AddWorkspaceAgentRequest], ProviderWorkspaceResult>(channels.addWorkspaceAgent, {
+    validate: (args) => {
+      const request = parseAddWorkspaceAgentRequest(args);
+      return [request];
+    },
+    act: (request) =>
+      Effect.gen(function* () {
+        const { identity, agent, name, task, namedModel, namedEffort } = request;
+        const session = sessionRegistry.get(identity);
+        if (!session) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+        const advertised = session.spawnableAgents.find((candidate) => candidate === agent);
+        if (!advertised) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+        const sessionName = boundedField(name, workspaceNameText);
+        if (!sessionName.ok) {
+          return {
+            status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+            reason: "A session name has to be short enough to say and longer than nothing.",
+          };
         }
-      }
-      const sessionName = boundedField(name, workspaceNameText);
-      if (!sessionName.ok) {
-        return {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-          reason: "That session name is empty or too long.",
-        };
-      }
-      const openingTask = boundedField(task, sessionMessageText);
-      if (!openingTask.ok) {
-        return {
-          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-          reason: "That task is empty or too long.",
-        };
-      }
-      const managed = supersetContext(identity);
-      if (managed) return supersetCli.createAgent(managed, advertised, openingTask.value);
-      return Effect.runPromise(
-        performSessionAct(identity, (adapter) =>
+        const openingTask = boundedField(task, sessionMessageText);
+        if (!openingTask.ok) {
+          return {
+            status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+            reason: "A task has to be shorter than a document and longer than nothing.",
+          };
+        }
+        const managed = supersetContext(identity);
+        if (managed) {
+          return yield* Effect.tryPromise(() =>
+            supersetCli.createAgent(managed, advertised, openingTask.value),
+          );
+        }
+        return yield* performSessionAct(identity, (adapter) =>
           Effect.gen(function* () {
             const stored: WorkspaceAgentSelection | undefined = isProviderId(identity.providerId)
               ? (yield* Effect.tryPromise(() =>
@@ -706,10 +718,126 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
             }
             return result;
           }),
-        ),
-      );
-    },
+        );
+      }),
+    failure: () => ({
+      status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+      reason: "The agent could not be added.",
+    }),
+  });
+}
+
+interface IssueActionAsk {
+  kind: "issue-state" | "issue-comment";
+  identity: { trackerId: string; identifier: string };
+  transition?: { id: string; name: string };
+  body?: UnparsedWireValue;
+}
+
+interface CreateWorkspaceRequest {
+  providerId: string;
+  providerProjectId: string;
+  providerTargetId: UnparsedWireValue;
+  agent: UnparsedWireValue;
+  name: UnparsedWireValue;
+  task: UnparsedWireValue;
+  parsedSelection: WorkspaceAgentSelection | undefined;
+}
+
+interface AddWorkspaceAgentRequest {
+  identity: SessionIdentity;
+  agent: string;
+  name: UnparsedWireValue;
+  task: UnparsedWireValue;
+  namedModel: string | undefined;
+  namedEffort: string | undefined;
+}
+
+function parseCreateWorkspaceRequest(args: readonly unknown[]): CreateWorkspaceRequest {
+  const wireArgs = args as readonly UnparsedWireValue[];
+  const [providerId, providerProjectId, providerTargetId, agent, name, task, namedSelection] =
+    wireArgs;
+  if (
+    !isWireString(providerId) ||
+    !providerId.trim() ||
+    !isWireString(providerProjectId) ||
+    !providerProjectId.trim() ||
+    (providerTargetId !== undefined && !isWireString(providerTargetId)) ||
+    (agent !== undefined && !isWireString(agent)) ||
+    (name !== undefined && !isWireString(name)) ||
+    (task !== undefined && !isWireString(task))
+  ) {
+    throw new Error("Invalid workspace creation request");
+  }
+  // Its own statement so the guard's narrowing survives: past here the
+  // named selection is a documented pairing or nothing at all.
+  const parsedSelection =
+    namedSelection !== undefined
+      ? parseWorkspaceAgentSelection(providerId, namedSelection)
+      : undefined;
+  if (namedSelection !== undefined && !parsedSelection) {
+    throw new Error("Invalid workspace creation request");
+  }
+  return {
+    providerId,
+    providerProjectId,
+    providerTargetId,
+    agent,
+    name,
+    task,
+    parsedSelection,
+  };
+}
+
+function parseAddWorkspaceAgentRequest(args: readonly unknown[]): AddWorkspaceAgentRequest {
+  const wireArgs = args as readonly UnparsedWireValue[];
+  const [identityRaw, agentRaw, name, task, namedModel, namedEffort] = wireArgs;
+  const identity = requireSessionIdentity(
+    unparsedWire(identityRaw as WireBoundaryInput),
+    "Invalid workspace agent request",
   );
+  if (
+    !isWireString(agentRaw) ||
+    !agentRaw.trim() ||
+    (name !== undefined && !isWireString(name)) ||
+    (task !== undefined && !isWireString(task)) ||
+    (namedModel !== undefined && !isWireString(namedModel)) ||
+    (namedEffort !== undefined && (!isWireString(namedEffort) || namedModel === undefined))
+  ) {
+    throw new Error("Invalid workspace agent request");
+  }
+  const agent = agentRaw.trim();
+  // A model named for this one agent must be a documented pairing of
+  // exactly the asked-for kind: the user's chosen agent is never
+  // re-decided by the model named beside it.
+  if (namedModel !== undefined) {
+    const selection: WorkspaceAgentSelection = { agent, model: namedModel };
+    if (namedEffort !== undefined) selection.effort = namedEffort;
+    if (!isListedWorkspaceAgentModel(identity.providerId, selection)) {
+      throw new Error("Invalid workspace agent request");
+    }
+  }
+  return {
+    identity,
+    agent,
+    name,
+    task,
+    namedModel: namedModel !== undefined ? namedModel : undefined,
+    namedEffort: namedEffort !== undefined ? namedEffort : undefined,
+  };
+}
+
+function parseIssueActionAsk(value: UnparsedWireValue): IssueActionAsk | undefined {
+  if (!isIssueActionAsk(value)) return undefined;
+  return {
+    kind: value.kind,
+    identity: {
+      trackerId: value.identity.trackerId,
+      identifier: value.identity.identifier,
+    },
+    ...(value.transition ? { transition: value.transition } : undefined),
+    ...(value.body !== undefined ? { body: value.body } : undefined),
+  };
 }
 
 /**

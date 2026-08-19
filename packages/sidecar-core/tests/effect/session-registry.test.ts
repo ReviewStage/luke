@@ -2,16 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Effect } from "effect";
 import type { EffectSessionProviderAdapter } from "../../src/effect/provider-adapter.js";
-import {
-  EffectInMemorySessionRegistry,
-  toPromiseSessionRegistry,
-} from "../../src/effect/session-registry.js";
+import { EffectInMemorySessionRegistry } from "../../src/effect/session-registry.js";
 import {
   ATTENTION_DISPOSITION,
   type ProviderSessionObservation,
   SESSION_STATUS,
   type SessionProvider,
 } from "../../src/session.js";
+import { InMemorySessionRegistry } from "../../src/session-registry.js";
 
 const codex: SessionProvider = { id: "codex", displayName: "Codex" };
 const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };
@@ -151,38 +149,34 @@ test("ignores a stale malformed refresh after a newer provider snapshot is appli
   );
 });
 
-test("toPromiseSessionRegistry wraps refresh for promise-based adapters", async () => {
-  const effectRegistry = new EffectInMemorySessionRegistry();
-  effectRegistry.upsert(codex, observation("active", 10));
-  const promiseRegistry = toPromiseSessionRegistry(effectRegistry);
+test("InMemorySessionRegistry wraps refresh for promise-based adapters", async () => {
+  const registry = new InMemorySessionRegistry();
+  registry.upsert(codex, observation("active", 10));
 
-  await promiseRegistry.refresh({
+  await registry.refresh({
     provider: codex,
-    observe: async () => [observation("active", 20, { title: "Refreshed through bridge" })],
+    observe: async () => [observation("active", 20, { title: "Refreshed through wrapper" })],
   });
 
   assert.equal(
-    promiseRegistry.get({ providerId: codex.id, providerSessionId: "active" })?.title,
-    "Refreshed through bridge",
+    registry.get({ providerId: codex.id, providerSessionId: "active" })?.title,
+    "Refreshed through wrapper",
   );
-  assert.equal(promiseRegistry.revision, effectRegistry.revision);
 });
 
-test("toPromiseSessionRegistry delegates synchronous operations", () => {
-  const effectRegistry = new EffectInMemorySessionRegistry();
-  const promiseRegistry = toPromiseSessionRegistry(effectRegistry);
+test("InMemorySessionRegistry delegates synchronous operations", () => {
+  const registry = new InMemorySessionRegistry();
   const revisions: number[] = [];
 
-  promiseRegistry.subscribe((snapshot) => {
+  registry.subscribe((snapshot) => {
     revisions.push(snapshot.revision);
   });
-  promiseRegistry.upsert(codex, observation("active", 10));
-  promiseRegistry.setAttention(
+  registry.upsert(codex, observation("active", 10));
+  registry.setAttention(
     { providerId: codex.id, providerSessionId: "active" },
     { disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN, decidedAt: 11 },
   );
 
   assert.deepEqual(revisions, [1, 2]);
-  assert.equal(promiseRegistry.list().length, 1);
-  assert.equal(effectRegistry.list().length, 1);
+  assert.equal(registry.list().length, 1);
 });

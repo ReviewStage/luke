@@ -377,6 +377,7 @@ export class EffectInMemorySessionRegistry implements EffectSessionRegistry {
   }
 }
 
+/** @deprecated Use {@link InMemorySessionRegistry} from `@sidecar/core` instead. */
 export interface PromiseSessionRegistry {
   readonly revision: number;
   get(identity: SessionIdentity): NormalizedSession | undefined;
@@ -399,6 +400,7 @@ export interface PromiseSessionRegistry {
   remove(identity: SessionIdentity): boolean;
 }
 
+/** @deprecated Use {@link InMemorySessionRegistry} from `@sidecar/core` instead. */
 export function toPromiseSessionRegistry(
   registry: EffectInMemorySessionRegistry,
 ): PromiseSessionRegistry {
