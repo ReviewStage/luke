@@ -221,9 +221,12 @@ login you gave that CLI for its own sake, never a credential of Luke's own.
 Luke reads no token and stores none: it first asks `codex login status`
 whether a login exists at all — an answer read from the exit code alone — and
 only then runs the CLI's documented read, `codex cloud list --json`, exactly
-as your own terminal would. Without the CLI installed, or with it signed out,
-Luke runs nothing further and reports no cloud tasks; the Codex sessions
-running on this machine are read from disk and are unaffected.
+as your own terminal would. Every few minutes that read also walks a bounded
+few pages further into your recent task history, following the CLI's own page
+cursor, so every environment in recent use can be offered when you ask Luke
+to start a task. Without the CLI installed, or with it signed out, Luke runs
+nothing further and reports no cloud tasks; the Codex sessions running on
+this machine are read from disk and are unaffected.
 
 What that read returns is what Luke processes: task identifiers, status,
 timestamps, the environment's repository label, and each task's own link. The
@@ -232,10 +235,15 @@ it and labels the row by repository instead, the same boundary every cloud
 provider's prompt-derived names get. Returned metadata is held in memory for
 display; command output is not persisted.
 
-Observation never invokes a command that could change anything: the CLI's
-write commands are never run, and Codex documents no way to message or steer
-a running cloud task, so its rows offer none. Signing the CLI out stops the
-reads on the next pass.
+Observation never invokes a command that could change anything. Luke runs
+exactly one Codex write command, and only to carry out something you just
+asked for: creating a new cloud task — spoken or typed in a turn you opened —
+runs the CLI's documented `codex cloud exec`, in an environment the latest
+observation listed, with your task text as a single argument. The command's
+answer is read only for the created task's id, so the next observation can
+show the task you asked for. Codex documents no way to message or steer a
+task already running, so its rows offer none. Signing the CLI out stops the
+reads, and refuses the write, on the next pass.
 
 ## Optional issue-tracker reads and spoken acts
 

@@ -36,7 +36,7 @@ What each provider's sessions report:
 | Provider | Id | Sessions | Credential | Lifecycle hook | Recap | Opens at |
 | --- | --- | --- | --- | --- | --- | --- |
 | Claude Code | `claude-code` | Local | None | `settings.json` merge | Designated away summary | — |
-| Codex | `codex` | Local | None | `hooks.json` merge, behind Codex's trust gate | Last agent message | `codex:` thread link |
+| Codex | `codex` | Local and cloud | None; cloud via the Codex CLI login | `hooks.json` merge, behind Codex's trust gate | Last agent message (local) | `codex:` thread link (local), task URL (cloud) |
 | Conductor | `conductor` | Cloud | API key | — | Final assistant message, only while idle | `conductor:` deep link |
 | Cursor | `cursor` | Local and cloud | Cloud only | — | Run result (cloud) | Agent URL (cloud) |
 | Devin | `devin` | Local and cloud | Cloud only | — | — | Session URL (cloud) |
@@ -51,7 +51,7 @@ developer opened:
 | Provider | Message | Controls | New workspace | Add agent | Transcript readout |
 | --- | --- | --- | --- | --- | --- |
 | Claude Code | — | — | — | — | Yes |
-| Codex | — | — | — | — | Yes |
+| Codex | — | — | Yes, task required (cloud) | — | Yes, local sessions |
 | Conductor | While idle or working | `cancel-turn`, `archive-workspace` | Yes, task optional | Yes | — |
 | Cursor | After a finished run | `cancel-run`, `archive-agent` | Yes, task required | — | Yes, local sessions |
 | Devin | While running or suspended | `archive-session` | — | — | Yes, local sessions |
@@ -84,17 +84,39 @@ end — into a spool under Luke's own application data.
 
 ## Codex
 
-Local sessions, no credential. Luke reads the read-only session index in
+Local sessions need no credential. Luke reads the read-only session index in
 `state_5.sqlite` under `~/.codex` (honoring `CODEX_HOME`), then bounded tails
 of each thread's rollout file. The observation hook merges into `hooks.json`
 and runs only after Codex's own review gate shows it to the user and they
 trust it; its events match Claude Code's minus stop failure.
 
-- Recap: the last agent message from the rollout tail; a failed turn reports
-  its error instead.
-- Opens at `codex://threads/<id>`.
-- No message path, no controls, no workspace acts.
-- Transcript readout: yes (`apps/desktop/src/codex-transcript.ts`).
+Cloud tasks are the one CLI-observed surface: Codex documents no key-scoped
+API, so observation runs the user's own Codex CLI — `codex login status` by
+exit code alone, then `codex cloud list --json` — under the ChatGPT login the
+user already gave that CLI. No token is read, stored, or forwarded, and a
+machine whose CLI is absent or signed out is observed as having nothing. The
+newest page is the roster; every few minutes a bounded walk of further pages,
+following the CLI's own cursor, gathers the environments in recent use so
+they can be offered for creation. The Connections page draws the login state
+as a read-only row.
+
+- Recap (local): the last agent message from the rollout tail; a failed turn
+  reports its error instead. Cloud tasks carry none.
+- Cloud rows are labelled by the environment's repository — the prompt-derived
+  task title is discarded as transcript content — and map `pending` to
+  working, `ready` and `applied` to complete, and `error` to a failure.
+- Opens at `codex://threads/<id>` locally; a cloud task opens its
+  `chatgpt.com` page.
+- New workspace (cloud): a task started with `codex cloud exec --env`, in an
+  environment the latest observation reported, by id where the list reports
+  one and by label otherwise. The opening task is required — the prompt is
+  the whole creation — a chosen name is refused because Codex names tasks
+  itself, and the one thing read from the answer is the created task's id.
+- No message path and no controls: Codex documents no way to message or steer
+  a task already running, so the honest absence stands.
+- Transcript readout: yes for local sessions
+  (`apps/desktop/src/codex-transcript.ts`); a cloud task's conversation lives
+  with its provider and is never fetched.
 
 ## Conductor
 

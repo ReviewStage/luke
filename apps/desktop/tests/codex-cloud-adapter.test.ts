@@ -26,6 +26,7 @@ const TEST_STATUS = {
 interface TestTask {
   id: string;
   status?: string;
+  environmentId?: string;
   environmentLabel?: string;
   omitEnvironmentLabel?: boolean;
   updatedAt: number;
@@ -40,7 +41,8 @@ function taskPayload(task: TestTask): Record<string, unknown> {
     title: `${SECRET_PROMPT_TEXT} title`,
     status: task.status ?? TEST_STATUS.PENDING,
     updated_at: new Date(task.updatedAt).toISOString(),
-    environment_id: "env-1",
+    // Real accounts routinely carry no environment id — only the label.
+    environment_id: task.environmentId ?? null,
     ...(task.omitEnvironmentLabel
       ? {}
       : { environment_label: task.environmentLabel ?? "reviewstage/luke" }),
@@ -55,12 +57,21 @@ interface RecordedInvocation {
   argv: readonly string[];
 }
 
+interface TestPage {
+  tasks: readonly TestTask[];
+  cursor?: string;
+}
+
 interface FakeCliBehavior {
   loggedIn?: boolean;
   binaryMissing?: boolean;
   listExitCode?: number;
   listStdout?: string;
   tasks?: readonly TestTask[];
+  /** Cursor-addressed pages, for the environment sweep; cursors are "page-N". */
+  pages?: readonly TestPage[];
+  execExitCode?: number;
+  createdTaskId?: string;
 }
 
 /** Serves the two invocations the adapter is allowed to make, recording each. */
@@ -74,9 +85,21 @@ function fakeCodexCli(behavior: FakeCliBehavior) {
     if (argv.join(" ") === LOGIN_PROBE_ARGV.join(" ")) {
       return { exitCode: (behavior.loggedIn ?? true) ? 0 : 1, stdout: "" };
     }
-    if (argv.join(" ") === LIST_TASKS_ARGV.join(" ")) {
+    if (argv.slice(0, LIST_TASKS_ARGV.length).join(" ") === LIST_TASKS_ARGV.join(" ")) {
       if (behavior.listExitCode !== undefined && behavior.listExitCode !== 0) {
         return { exitCode: behavior.listExitCode, stdout: "" };
+      }
+      if (behavior.pages) {
+        const cursorToken = argv.find((argument) => argument.startsWith("--cursor="));
+        const index = cursorToken ? Number(cursorToken.slice("--cursor=page-".length)) : 0;
+        const page = behavior.pages[index] ?? { tasks: [] };
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify({
+            tasks: page.tasks.map(taskPayload),
+            cursor: page.cursor ?? null,
+          }),
+        };
       }
       return {
         exitCode: 0,
@@ -86,6 +109,16 @@ function fakeCodexCli(behavior: FakeCliBehavior) {
             tasks: (behavior.tasks ?? []).map(taskPayload),
             cursor: null,
           }),
+      };
+    }
+    if (argv.slice(0, 3).join(" ") === "cloud exec --env") {
+      if (behavior.execExitCode !== undefined && behavior.execExitCode !== 0) {
+        return { exitCode: behavior.execExitCode, stdout: "" };
+      }
+      // The CLI's documented creation output: the new task's URL, one line.
+      return {
+        exitCode: 0,
+        stdout: `https://chatgpt.com/codex/tasks/${behavior.createdTaskId ?? "task-created"}\n`,
       };
     }
     throw new Error(`Unexpected invocation: ${binary} ${argv.join(" ")}`);
@@ -273,7 +306,7 @@ test("reports what each pass learned about the CLI login, and only that", async 
   assert.equal(adapter.connection(), CLI_CONNECTION.CONNECTED);
 });
 
-test("answers unsupported for every act its provider does not document", async () => {
+test("answers unsupported for every act but the creation its provider documents", async () => {
   const { run } = fakeCodexCli({ tasks: [{ id: "task-1", updatedAt: TEST_TIME }] });
   const adapter = adapterFor(run);
   await adapter.observe();
@@ -288,13 +321,180 @@ test("answers unsupported for every act its provider does not document", async (
     }),
     { status: "unsupported" },
   );
-  assert.deepEqual(await adapter.createWorkspace({ providerProjectId: "env-1", task: "Fix it" }), {
-    status: "unsupported",
-  });
   assert.deepEqual(await adapter.spawnWorkspaceAgent({ providerSessionId: "task-1", agent: "x" }), {
     status: "unsupported",
   });
-  assert.deepEqual(adapter.workspaceProjects(), []);
   // A cloud task's conversation lives with its provider and is never fetched.
   assert.equal(await adapter.readTranscript("task-1"), undefined);
+});
+
+test("offers one creation target per observed environment, and none signed out", async () => {
+  const behavior: FakeCliBehavior = {
+    tasks: [
+      { id: "task-1", updatedAt: TEST_TIME },
+      { id: "task-2", updatedAt: TEST_TIME - 1 },
+      {
+        id: "task-3",
+        updatedAt: TEST_TIME - 2,
+        environmentLabel: "reviewstage/site",
+        environmentId: "env-2",
+      },
+    ],
+  };
+  const { run } = fakeCodexCli(behavior);
+  const adapter = adapterFor(run);
+
+  // The label stands in where the list reported no id — which is what real
+  // accounts return — and the id is preferred where one exists.
+  await adapter.observe();
+  assert.deepEqual(adapter.workspaceProjects(), [
+    { providerProjectId: "reviewstage/luke", repository: "luke", taskSupport: "required" },
+    { providerProjectId: "env-2", repository: "site", taskSupport: "required" },
+  ]);
+
+  behavior.loggedIn = false;
+  await adapter.observe();
+  assert.deepEqual(adapter.workspaceProjects(), []);
+});
+
+test("creates a task in an observed environment through the documented command", async () => {
+  const { run, invocations } = fakeCodexCli({
+    tasks: [{ id: "task-1", updatedAt: TEST_TIME }],
+    createdTaskId: "task-created-9",
+  });
+  const adapter = adapterFor(run);
+  await adapter.observe();
+
+  const result = await adapter.createWorkspace({
+    providerProjectId: "reviewstage/luke",
+    task: "Fix the flaky login test",
+  });
+
+  assert.deepEqual(result, { status: "accepted", providerSessionId: "task-created-9" });
+  const exec = invocations.at(-1);
+  assert.deepEqual(exec?.argv, [
+    "cloud",
+    "exec",
+    "--env",
+    "reviewstage/luke",
+    "--",
+    "Fix the flaky login test",
+  ]);
+});
+
+test("refuses a creation the latest pass did not offer or cannot honour", async () => {
+  const behavior: FakeCliBehavior = { tasks: [{ id: "task-1", updatedAt: TEST_TIME }] };
+  const { run, invocations } = fakeCodexCli(behavior);
+  const adapter = adapterFor(run);
+  await adapter.observe();
+  const invocationsAfterObserve = invocations.length;
+
+  // An environment the pass never reported names nowhere a creation could go.
+  assert.deepEqual(await adapter.createWorkspace({ providerProjectId: "env-9", task: "Fix it" }), {
+    status: "unsupported",
+  });
+  // Codex names tasks itself, so a chosen name is refused rather than dropped.
+  const named = await adapter.createWorkspace({
+    providerProjectId: "reviewstage/luke",
+    name: "My workspace",
+    task: "Fix it",
+  });
+  assert.equal(named.status, "rejected");
+  // The task is the whole creation; without one there is nothing to start.
+  const taskless = await adapter.createWorkspace({ providerProjectId: "reviewstage/luke" });
+  assert.equal(taskless.status, "rejected");
+  // Every refusal above answered without running anything.
+  assert.equal(invocations.length, invocationsAfterObserve);
+
+  // A CLI that refuses the request is reported as a rejection, not a success.
+  behavior.execExitCode = 2;
+  const refused = await adapter.createWorkspace({
+    providerProjectId: "reviewstage/luke",
+    task: "Fix it",
+  });
+  assert.equal(refused.status, "rejected");
+
+  // A login gone since the pass refuses at the moment of the act.
+  behavior.execExitCode = 0;
+  behavior.loggedIn = false;
+  const signedOut = await adapter.createWorkspace({
+    providerProjectId: "reviewstage/luke",
+    task: "Fix it",
+  });
+  assert.equal(signedOut.status, "rejected");
+});
+
+test("a login lost at the moment of an act clears observed state immediately", async () => {
+  const behavior: FakeCliBehavior = { tasks: [{ id: "task-1", updatedAt: TEST_TIME }] };
+  const { run } = fakeCodexCli(behavior);
+  const adapter = adapterFor(run);
+  await adapter.observe();
+  assert.equal(adapter.workspaceProjects().length, 1);
+
+  behavior.loggedIn = false;
+  const rejected = await adapter.createWorkspace({
+    providerProjectId: "reviewstage/luke",
+    task: "Fix it",
+  });
+
+  assert.equal(rejected.status, "rejected");
+  assert.equal(adapter.connection(), CLI_CONNECTION.SIGNED_OUT);
+  // The write's probe already said the login is gone; the projects offered
+  // under it must not outlive it by even a pass.
+  assert.deepEqual(adapter.workspaceProjects(), []);
+});
+
+test("sweeps a bounded few pages for environments, on its own slower cadence", async () => {
+  const { run, invocations } = fakeCodexCli({
+    pages: [
+      { tasks: [{ id: "t1", updatedAt: TEST_TIME }], cursor: "page-1" },
+      {
+        tasks: [{ id: "t2", updatedAt: TEST_TIME - 1, environmentLabel: "reviewstage/site" }],
+        cursor: "page-2",
+      },
+      { tasks: [{ id: "t3", updatedAt: TEST_TIME - 2, environmentLabel: "reviewstage/docs" }] },
+    ],
+  });
+  const adapter = adapterFor(run);
+
+  await adapter.observe();
+
+  // Environments from every swept page are offered, newest first, and the
+  // sweep followed exactly the cursors the CLI handed back — each one token.
+  assert.deepEqual(
+    adapter.workspaceProjects().map((project) => project.providerProjectId),
+    ["reviewstage/luke", "reviewstage/site", "reviewstage/docs"],
+  );
+  const listArgv = invocations.filter((invocation) => invocation.argv[1] === "list");
+  assert.deepEqual(
+    listArgv.map((invocation) => invocation.argv.at(-1)),
+    ["20", "--cursor=page-1", "--cursor=page-2"],
+  );
+
+  // A pass inside the sweep interval reads the newest page alone and keeps
+  // the sweep's offer standing.
+  await adapter.observe();
+  assert.equal(
+    invocations.filter((invocation) => invocation.argv[1] === "list").length,
+    listArgv.length + 1,
+  );
+  assert.equal(adapter.workspaceProjects().length, 3);
+});
+
+test("a sweep stops at its page bound however deep the history goes", async () => {
+  const endlessPages = Array.from({ length: 9 }, (_, index) => ({
+    tasks: [
+      {
+        id: `task-${index}`,
+        updatedAt: TEST_TIME - index,
+        environmentLabel: `reviewstage/repo-${index}`,
+      },
+    ],
+    cursor: `page-${index + 1}`,
+  }));
+  const { run, invocations } = fakeCodexCli({ pages: endlessPages });
+
+  await adapterFor(run).observe();
+
+  assert.equal(invocations.filter((invocation) => invocation.argv[1] === "list").length, 5);
 });

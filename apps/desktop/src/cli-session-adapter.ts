@@ -2,6 +2,8 @@ import { execFile } from "node:child_process";
 import path from "node:path";
 import {
   isRecord,
+  PROVIDER_ACT_RESULT_STATUS,
+  type ProviderActResult,
   type ProviderSessionObservation,
   resolveOptions,
   SESSION_LOCATION,
@@ -37,6 +39,12 @@ export class CliCommandError extends Error {
 export const CLI_ADAPTER_DEFAULTS = {
   MINIMUM_REFRESH_INTERVAL_MS: 15 * 1000,
   COMMAND_TIMEOUT_MS: 8 * 1000,
+  /**
+   * A write command does more than a read answers for — Codex's creation
+   * resolves the environment and stands the task up before it prints — so it
+   * gets a wider deadline than the read's, and still a hard one.
+   */
+  WRITE_TIMEOUT_MS: 20 * 1000,
   /** A read that answers with more than this is not the bounded list it claims to be. */
   MAXIMUM_OUTPUT_BYTES: 4 * 1024 * 1024,
 } as const;
@@ -236,6 +244,84 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
     return this.#connection;
   }
 
+  /**
+   * Clears anything a subclass cached across passes — projects offered for
+   * creation, above all. It runs whenever the login goes away, so nothing
+   * observed under one login can be offered or acted on under another.
+   */
+  protected forgetCachedIdentity(): void {}
+
+  /**
+   * The one authenticated write: a single invocation of the provider's own
+   * CLI, for something the user just asked for against what the latest pass
+   * observed — a subclass validates before it builds the argv, exactly as the
+   * cloud base does. The login is probed at act time rather than held from
+   * the observation pass, so a CLI signed out since then refuses before
+   * anything runs, and the refusal wording is fixed here rather than echoing
+   * whatever the CLI printed. What the command wrote to stdout rides an
+   * acceptance for the subclass that needs the id a creation named — it
+   * travels no further than that subclass.
+   */
+  protected async performWrite(
+    argv: readonly string[],
+  ): Promise<{ outcome: ProviderActResult; stdout?: string }> {
+    const name = this.provider.displayName;
+    let connection: CliConnection;
+    try {
+      connection = await this.#probeLogin();
+    } catch {
+      return {
+        outcome: {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: `${name}'s CLI could not answer, so nothing was sent.`,
+        },
+      };
+    }
+    this.#connection = connection;
+    if (connection !== CLI_CONNECTION.CONNECTED) {
+      // The act just learned what the next pass would have: the login is
+      // gone. Observed state clears now rather than a tick later, and a pass
+      // still in flight is superseded so its answer cannot land what was read
+      // under the login that no longer stands.
+      this.#forgetLogin();
+      return {
+        outcome: {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason:
+            connection === CLI_CONNECTION.CLI_MISSING
+              ? `${name}'s CLI is not installed, so nothing was sent.`
+              : `${name}'s CLI is signed out, so nothing was sent.`,
+        },
+      };
+    }
+    let result: CliRunResult;
+    try {
+      result = await this.#run(this.#binary, argv, {
+        timeoutMs: CLI_ADAPTER_DEFAULTS.WRITE_TIMEOUT_MS,
+        maximumOutputBytes: CLI_ADAPTER_DEFAULTS.MAXIMUM_OUTPUT_BYTES,
+      });
+    } catch {
+      return {
+        outcome: {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: `${name}'s CLI could not answer, so the request may not have landed.`,
+        },
+      };
+    }
+    if (result.exitCode !== 0) {
+      return {
+        outcome: {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: `${name}'s CLI refused the request.`,
+        },
+      };
+    }
+    // A write that landed changes what the provider holds, so the refresh
+    // that follows must actually ask rather than serve the cached snapshot.
+    this.#lastAttemptAt = Number.NEGATIVE_INFINITY;
+    return { outcome: { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED }, stdout: result.stdout };
+  }
+
   async #probeLogin(): Promise<CliConnection> {
     try {
       const probe = await this.#run(this.#binary, this.#loginProbeArgv, {
@@ -295,6 +381,16 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
 
   #forgetObservedState(pass: number): void {
     if (pass !== this.#collectPass) return;
+    this.#forgetLogin();
+  }
+
+  /**
+   * Clears observed state and supersedes any pass still in flight, so nothing
+   * read under a login that no longer stands can land back over the clear.
+   */
+  #forgetLogin(): void {
+    this.#collectPass += 1;
+    this.forgetCachedIdentity();
     this.#observations = [];
   }
 }
