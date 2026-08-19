@@ -366,7 +366,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     if (!text) {
       return {
         status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: "A message has to be shorter than a document and longer than nothing.",
+        reason: "That message is empty or too long.",
       };
     }
 
@@ -438,14 +438,14 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     if (request.name !== undefined && !name) {
       return {
         status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: "A session name has to be short enough to say and longer than nothing.",
+        reason: "That session name is empty or too long.",
       };
     }
     const task = request.task === undefined ? undefined : sessionMessageText(request.task);
     if (request.task !== undefined && !task) {
       return {
         status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: "A task has to be shorter than a document and longer than nothing.",
+        reason: "That task is empty or too long.",
       };
     }
 
@@ -503,7 +503,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     if (request.name !== undefined && !name) {
       return {
         status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: "A workspace name has to be short enough to say and longer than nothing.",
+        reason: "That workspace name is empty or too long.",
       };
     }
 
@@ -514,7 +514,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     if (request.task !== undefined && !task) {
       return {
         status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: "A task has to be shorter than a document and longer than nothing.",
+        reason: "That task is empty or too long.",
       };
     }
     if (task && project.taskSupport === WORKSPACE_TASK_SUPPORT.NONE) {

@@ -159,8 +159,6 @@ export const FEEDBACK_COPY = {
     title: "Submit a prompt",
     label: "The prompt",
     placeholder: "Describe a feature…",
-    detail:
-      "Send a prompt to a coding agent. If we like the result, we'll add it in the next release.",
   },
 };
 

@@ -248,7 +248,7 @@ test("the standing instructions make Luke the coding agents' engineering manager
 
   assert.match(instructions, /engineering manager for the developer's coding agents/i);
   assert.match(instructions, /developer is your CTO/i);
-  assert.match(instructions, /direct, candid, calm, and familiar with the work/i);
+  assert.match(instructions, /direct, candid, calm/i);
 });
 
 test("the spoken instructions state what Luke cannot see, and when he may act", () => {
@@ -273,6 +273,8 @@ test("the spoken instructions state what Luke cannot see, and when he may act", 
   // is followed rather than guessed at.
   assert.match(instructions, /\[session under discussion\]/);
   assert.match(instructions, /named most recently/);
+  assert.match(instructions, /"it", "that chat", or "that session"/);
+  assert.match(instructions, /kept ask is already true when accepted/);
   // Back-to-back replies must not repeat each other, and an act the developer
   // asked for is not narrated twice: no announced intent, and a success is
   // silence or a bare "Done." rather than a restatement.

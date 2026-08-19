@@ -783,7 +783,6 @@ export function PanelBody({
             {rows.length === 0 ? (
               list.search ? (
                 <SearchEmptyState
-                  query={view.query}
                   beyondFilter={list.search.beyondFilter}
                   onWiden={() => onViewChange(widenedView(view))}
                 />

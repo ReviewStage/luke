@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { FeedbackImage } from "../shared/feedback";
-import { FEEDBACK_KIND, FEEDBACK_LIMITS } from "../shared/feedback";
+import { FEEDBACK_LIMITS } from "../shared/feedback";
 import { useStagedFocus } from "./credential-entry";
 import { CONFIRMATION_ENTRANCE_MS, type FeedbackConfirmation } from "./feedback-confirmation";
 import {
@@ -28,11 +28,9 @@ const MESSAGE_FIELD_ID = "feedback-message";
  */
 function FeedbackLanding({
   confirming,
-  kind,
   still,
 }: {
   confirming: { confirmation: FeedbackConfirmation; play: number };
-  kind: (typeof FEEDBACK_KIND)[keyof typeof FEEDBACK_KIND];
   still: boolean;
 }): React.JSX.Element {
   // Keyed on the landing's play by the caller, so each send mounts a fresh
@@ -60,11 +58,6 @@ function FeedbackLanding({
       <p className="feedback-confirm-msg" role="status">
         Sent — thank you<span className="feedback-confirm-bang">!</span>
       </p>
-      <small className="feedback-confirm-sub">
-        {kind === FEEDBACK_KIND.PROMPT
-          ? "Your prompt is on its way to the founders."
-          : "Your note is on its way to the founders."}
-      </small>
     </div>
   );
 }
@@ -203,12 +196,7 @@ export function FeedbackSlot({
     return (
       <div className="feedback-stage" inert>
         <div className="feedback-slot" ref={measure} data-hit-region={HIT_REGION.FEEDBACK}>
-          <FeedbackLanding
-            key={landing.play}
-            confirming={landing}
-            kind={entry?.kind ?? FEEDBACK_KIND.FEEDBACK}
-            still={still}
-          />
+          <FeedbackLanding key={landing.play} confirming={landing} still={still} />
         </div>
       </div>
     );
@@ -263,11 +251,6 @@ export function FeedbackSlot({
         <label className="settings-label" htmlFor={MESSAGE_FIELD_ID}>
           {copy.label}
         </label>
-        {/* What the prompt box is for, said where the prompt is written. The
-            feedback kind needs no explaining, so it carries no line. */}
-        {"detail" in copy && copy.detail ? (
-          <small className="settings-note">{copy.detail}</small>
-        ) : null}
         <textarea
           id={MESSAGE_FIELD_ID}
           ref={field}
@@ -423,10 +406,6 @@ export function FeedbackSlot({
             where it will end up. */}
         <div ref={followStack} className="feedback-follow" data-follow={String(previewMounted)}>
           <div className="settings-row feedback-foot">
-            {/* Where the words go, said before the send: this is the one thing
-                the panel writes to somewhere that is not this machine, and it
-                should never be a surprise. */}
-            <small className="settings-note">Goes by email to the founders.</small>
             <span className="settings-actions">
               <button
                 type="button"

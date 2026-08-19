@@ -93,7 +93,6 @@ export function EmptyState(): React.JSX.Element {
   return (
     <div className="empty-state">
       <strong>Nothing to watch yet</strong>
-      <small>Sessions appear here as soon as an agent starts working.</small>
     </div>
   );
 }

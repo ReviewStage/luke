@@ -66,7 +66,7 @@ export function updateRow(update: UpdateSnapshot): UpdateRow {
       return {
         // Not an answer: nothing has been learned yet, so the row only offers
         // to ask rather than posing an unknown as up to date.
-        detail: "The latest release has not been checked for yet.",
+        detail: "Not checked yet.",
         action: UPDATE_ROW_ACTION.CHECK,
         current: false,
       };

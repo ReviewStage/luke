@@ -97,8 +97,7 @@ export interface CredentialProvider {
   /**
    * Where the user creates a key, shown in the editor its row opens. Absent
    * for a provider connected by consent: there is no editor to say it in, and
-   * nothing for the user to go and fetch — what such a row says under itself
-   * is `description`, the same line every integration carries.
+   * nothing for the user to go and fetch.
    */
   hint?: string;
   /**
@@ -112,12 +111,6 @@ export interface CredentialProvider {
   environmentVariables: readonly string[];
   /** Present only for a provider that publishes more than one kind of key. */
   keyFormat?: CredentialFormat;
-  /**
-   * What connecting this service lets Luke do, said in one line under its row.
-   * Only an integration carries one: an agent provider's rows say it once for
-   * the whole section, because every key there buys the same observation.
-   */
-  description?: string;
 }
 
 /** Keyed by provider id so no caller has to build a key from an identifier. */
@@ -190,7 +183,6 @@ export const CREDENTIAL_PROVIDERS = {
     id: CREDENTIAL_PROVIDER_ID.LINEAR,
     connection: CREDENTIAL_CONNECTION.CONSENT,
     displayName: "Linear",
-    description: "Luke reads your issues and can move or comment on them when you ask.",
     // No key page and no environment variable, alone among the providers:
     // nothing is pasted here, so there is nowhere to send anyone to fetch a
     // credential and nothing for a launch environment to supply. What the

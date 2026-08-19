@@ -2571,16 +2571,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
     calc(var(--slot-delay) + var(--row-stagger)) backwards;
 }
 
-.feedback-confirm-sub {
-  font-size: 11px;
-  color: var(--text-secondary);
-  animation:
-    feedback-confirm-fade var(--duration-quick) var(--motion-exit)
-    calc(var(--slot-delay) + 2 * var(--row-stagger)) backwards,
-    feedback-confirm-rise var(--duration-shape) var(--spring)
-    calc(var(--slot-delay) + 2 * var(--row-stagger)) backwards;
-}
-
 @keyframes feedback-confirm-fade {
   from {
     opacity: 0;
@@ -2594,8 +2584,8 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 }
 
 /* The shockwave landing: the success motion lands its squash at 65% of its
-   2s cycle, and the two text lines duck on that landing, the sub a beat
-   behind the headline. The delays and durations inside this block are
+   2s cycle, and the headline ducks on that landing. The delays and durations
+   inside this block are
    literal because they are the artwork's own timing — a face motion carries
    literal seconds for the same reason — and they answer `--face-motion`
    exactly as the gesture they follow does, so a capture run and reduced
@@ -2603,11 +2593,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    motion the gesture is never asked for at all, so these never match.) */
 .feedback-confirm[data-scene="shockwave"][data-gesturing="true"] .feedback-confirm-msg {
   animation: feedback-confirm-duck 520ms var(--spring-fast) 1280ms backwards;
-  animation-play-state: var(--face-motion);
-}
-
-.feedback-confirm[data-scene="shockwave"][data-gesturing="true"] .feedback-confirm-sub {
-  animation: feedback-confirm-duck 520ms var(--spring-fast) 1370ms backwards;
   animation-play-state: var(--face-motion);
 }
 

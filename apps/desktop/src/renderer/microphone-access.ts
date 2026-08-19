@@ -1,4 +1,4 @@
-import { type HostedQuota, REALTIME_MINT_OUTCOME, type RealtimeDiagnostics } from "@sidecar/core";
+import type { HostedQuota } from "@sidecar/core";
 import { type MicrophoneStatus, VOICE_SOURCE, type VoiceSource } from "../shared/contracts";
 
 /**
@@ -33,14 +33,11 @@ export function quotaResetsWhen(resetsAt: number, now: number): string {
 }
 
 /**
- * The one sentence a spent allowance is worded with, wherever it shows. It
- * answers the question actually being asked — is Luke broken? — before it
- * says when voice returns: observation is local and unmetered, so the rows
- * keep moving whatever the day's talking has cost. With no reset in hand it
- * falls back to the day boundary every counter shares.
+ * The one sentence a spent allowance is worded with, wherever it shows. With
+ * no reset in hand it falls back to the day boundary every counter shares.
  */
 export function hostedVoiceSpentNote(resetsIn?: string): string {
-  return `You have used today's free voice — back ${resetsIn ?? "at midnight UTC"}. Luke keeps watching your sessions.`;
+  return `Today's voice is spent. Back ${resetsIn ?? "at midnight UTC"}.`;
 }
 
 /**
@@ -134,82 +131,31 @@ export const HOSTED_METER_LABEL = {
   REVIEWS: "Checks on your sessions",
 } as const;
 
-/**
- * What each meter actually spends, for the disclosure that answers "what
- // SAFETY: The preceding check establishes the asserted contract.
- * counts as one?" — folded away until asked, because the definitions are
- * needed once and the numbers are needed daily.
- */
-export const HOSTED_METER_MEANING = {
-  VOICE: "One conversation you open, or one thing Luke says on his own.",
-  REVIEWS:
-    "Each session update weighed in the background to decide whether it is worth telling you about.",
-} as const;
-
-/**
- * What is true of both uses once a key is what pays for them, said once
- * beneath the two the key disclosure lists. It is the only thing that half
- * says which the allowance's half does not: Luke does the same two jobs
- * either way, so they are worded identically in both, and what differs is
- * where the work goes and who is billed for it — the half no meter could ever
- * show.
- *
- * Not the place for the Realtime API's billing requirement: that matters
- * while a key is being got rather than while one is being spent, and the
- * entry's own hint says it there.
- */
-export const KEY_USE_NOTE =
-  "Both go straight from your Mac to OpenAI on this key. Luke's service sees none of it, there is no daily limit, and OpenAI bills you at their rates.";
-
-/**
- // SAFETY: The preceding check establishes the asserted contract.
- * A meter's ceiling as the disclosure says it, or nothing at all until a
- * reading has arrived. The number is the service's to state — it is read off
- * the quota in hand rather than written here, so the panel cannot drift from
- * the ceiling actually being enforced.
- */
-export function dailyLimitWords(limit?: number): string {
-  return limit === undefined ? "" : `${limit} a day. `;
-}
-
-/**
- * The Account section's words while voice runs on the account but no numbers
- * are in hand yet — every state with a quota draws the meters instead. Only
- * the minter's last outcome can speak here, and a spent allowance is a state,
- * not an error: the sentence says voice comes back on its own.
- */
-export function hostedVoiceNote(
-  diagnostics: RealtimeDiagnostics | undefined,
-  options: { now?: number } = {},
-): string {
-  const now = options.now ?? Date.now();
-  // A spent outcome speaks only while its own day runs: past the reset it
-  // describes yesterday, and the fresh day has an allowance again.
-  const spentStands =
-    diagnostics?.lastOutcome === REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED &&
-    (diagnostics.quota === undefined || currentQuota(diagnostics.quota, now) !== undefined);
-  if (spentStands) return hostedVoiceSpentNote();
-  // What a key of your own would change is not said here: the toggle above
-  // draws both sources side by side, and a sentence repeating one of them
-  // would be selling the other.
-  return "Talking and session checks are included free with your account, up to a daily amount.";
-}
-
 /** Why Luke can speak but not listen: the system's grant is still missing. */
 export const MICROPHONE_UNGRANTED_NOTE = "Luke cannot listen: the microphone is not allowed yet.";
 
-/** What the row says beneath its name, once the system has answered. */
-const MICROPHONE_STATUS_DETAIL = {
-  granted: "Speech is sent only while a turn is open, and never recorded.",
-  "not-determined": "macOS will ask the first time you press the talk key.",
-  denied: "Allow Luke in System Settings › Privacy & Security › Microphone.",
-  restricted: "This Mac does not permit microphone access.",
-  unknown: "Luke could not read the microphone permission.",
-};
-
+/**
+ * What the row says beneath its name, once the system has answered. Only a
+ * state the user has to act on or cannot act on says anything: a granted
+ * microphone is already shown as granted, and the row drawn before macOS has
+ * been asked carries the Allow button that is the whole answer.
+ */
+function microphoneStatusDetail(status: MicrophoneStatus): string | undefined {
+  switch (status) {
+    case "denied":
+      return "Allow Luke in System Settings › Privacy & Security › Microphone.";
+    case "restricted":
+      return "This Mac does not permit microphone access.";
+    case "unknown":
+      return "Luke could not read the microphone permission.";
+    default:
+      return undefined;
+  }
+}
 /** What the Microphone row says, and what it offers. */
 export interface MicrophoneAccessRow {
-  detail: string;
+  /** Absent wherever the row's name and its controls already say everything. */
+  detail?: string;
   /** Whether to offer the button that gives Luke the microphone. */
   offerAccess: boolean;
   /**
@@ -238,21 +184,19 @@ export function microphoneAccessRow(input: {
 }): MicrophoneAccessRow {
   if (!input.voiceAvailable) {
     return {
-      // The Voice page holds the key row alone while voice is off, so this
-      // detail is never drawn there — it only has to stay honest, not send
-      // anyone anywhere, and it names no other setting.
-      detail: "Luke opens the microphone only to talk.",
       offerAccess: false,
       offerSystemSettings: false,
       ready: false,
     };
   }
-  return {
-    detail: MICROPHONE_STATUS_DETAIL[input.status],
+  const row: MicrophoneAccessRow = {
     offerAccess: input.status === "not-determined",
     offerSystemSettings: input.status === "granted" || input.status === "denied",
     ready: input.status === "granted",
   };
+  const detail = microphoneStatusDetail(input.status);
+  if (detail !== undefined) row.detail = detail;
+  return row;
 }
 
 /**

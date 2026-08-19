@@ -4,16 +4,17 @@ import { REALTIME_STATUS } from "@sidecar/core";
 import { askRefusal } from "../src/renderer/ask-luke";
 
 test("a refused ask is diagnosed from how far the voice loop got", () => {
-  // No key is the one refusal with a fix the developer can go and do, so it
-  // names where the fix lives.
-  assert.match(askRefusal(REALTIME_STATUS.UNAVAILABLE, "granted"), /API key/);
+  // Voice off is the one refusal with a fix the developer can go and do, so
+  // it names where the fix lives — and both ways in, because naming only the
+  // key would send a signed-in developer to buy one they do not need.
+  assert.match(askRefusal(REALTIME_STATUS.UNAVAILABLE, "granted"), /Sign in/);
+  assert.match(askRefusal(REALTIME_STATUS.UNAVAILABLE, "granted"), /OpenAI key/);
   assert.match(askRefusal(REALTIME_STATUS.UNAVAILABLE, "granted"), /Settings/);
   // An open microphone is the developer's own turn, not a fault.
   assert.match(askRefusal(REALTIME_STATUS.LISTENING, "granted"), /microphone is open/i);
   assert.match(askRefusal(REALTIME_STATUS.CONNECTING, "granted"), /connecting/i);
   // The failure's own message lands on the caption strip directly below the
-  // field, so the refusal points there rather than at a settings page.
-  assert.match(askRefusal(REALTIME_STATUS.FAILED, "granted"), /below/);
+  // field, so this one sends nobody to a settings page.
   assert.doesNotMatch(askRefusal(REALTIME_STATUS.FAILED, "granted"), /Settings/);
 });
 

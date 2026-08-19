@@ -175,11 +175,9 @@ export function SessionSearch({
  * the silent narrowing this list refuses everywhere else.
  */
 export function SearchEmptyState({
-  query,
   beyondFilter,
   onWiden,
 }: {
-  query: string;
   beyondFilter: number;
   /** Widens the view to All, which is where the hidden matches are. */
   onWiden: () => void;
@@ -187,7 +185,6 @@ export function SearchEmptyState({
   return (
     <div className="empty-state">
       <strong>No sessions match</strong>
-      <small>Nothing shown says “{query.trim()}”.</small>
       {beyondFilter > 0 ? (
         <button type="button" className="empty-state-action" onClick={onWiden}>
           Show {beyondFilter} {beyondFilter === 1 ? "match" : "matches"} from all sessions

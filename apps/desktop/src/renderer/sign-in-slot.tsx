@@ -49,7 +49,7 @@ export function SignInSlot({
           </span>
           <span className="sign-in-slot-copy" role="status">
             <strong>Waiting for {name}…</strong>
-            <small>Finish signing in in your browser.</small>
+            <small>Finish in your browser.</small>
           </span>
           <button type="button" ref={cancel} className="quiet-button" onClick={onCancel}>
             Cancel

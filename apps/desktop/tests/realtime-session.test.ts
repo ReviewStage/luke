@@ -4728,7 +4728,7 @@ test("a device that vanishes mid-conversation fails the call at the press", asyn
   assert.ok(reportedErrors(context).some((message) => /microphone went away/i.test(message)));
 });
 
-test("a call that drops mid-conversation says the thread is lost", async () => {
+test("a call that drops mid-conversation says so, and how to start again", async () => {
   const context = harness();
   await context.session.connect();
   context.session.updateSessions([observedSession("session-a")]);
@@ -4739,7 +4739,11 @@ test("a call that drops mid-conversation says the thread is lost", async () => {
   context.closeChannel();
 
   assert.equal(context.session.status, REALTIME_STATUS.IDLE);
-  assert.match(reportedErrors(context).at(-1) ?? "", /lost the thread/i);
+  const reported = reportedErrors(context).at(-1) ?? "";
+  assert.match(reported, /call ended/i);
+  // Silence here is what made Luke seem to have forgotten on purpose, so the
+  // line carries the way back into a conversation.
+  assert.match(reported, /talk key/i);
 });
 
 test("a call that drops before anything was said goes quietly", async () => {

@@ -68,7 +68,7 @@ export function ConsentConnectSlot({
                 : `Waiting for ${CONSENT_SERVICE_NAME[held.serviceId]}…`}
             </strong>
             <small>
-              {held.rejection ?? "Finish signing in in your browser."}{" "}
+              {held.rejection ?? "Finish in your browser."}{" "}
               {/* The lost-tab way back in, on the key slot's own terms: a
                   button, not an anchor — the main process reopens the page
                   the waiting flow built, and no address crosses from here.

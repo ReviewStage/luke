@@ -738,9 +738,7 @@ export class RealtimeVoiceSession {
         // the next question was answered by someone who had never heard the
         // last one, and nothing said so.
         if (lost) {
-          this.#options.onError(
-            "The voice call ended, so Luke has lost the thread of this conversation. Press the talk key to start a new one.",
-          );
+          this.#options.onError("The call ended. Press the talk key to start again.");
         }
       };
 
@@ -863,7 +861,7 @@ export class RealtimeVoiceSession {
       deadline.addEventListener("abort", onDeadline, { once: true });
       channel.onopen = () => settle(resolve);
       channel.onerror = () =>
-        settle(() => reject(new Error("The voice data channel failed to open")));
+        settle(() => reject(new Error("The voice data channel failed to open.")));
     });
   }
 
@@ -1054,10 +1052,10 @@ export class RealtimeVoiceSession {
     if (!microphone) {
       for (const track of stream.getTracks()) track.stop();
       if (this.isConnected) {
-        this.#fail("No microphone track was available");
+        this.#fail("No microphone track was available.");
       } else {
         this.#pendingTurn = false;
-        this.#options.onError("No microphone track was available");
+        this.#options.onError("No microphone track was available.");
       }
       return;
     }

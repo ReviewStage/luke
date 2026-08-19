@@ -10,7 +10,7 @@ import type { CredentialProviderId } from "../shared/credential-providers";
    field is drawn carry that label, so both can use these. */
 export const CREDENTIAL_PLACEHOLDER = {
   [CREDENTIAL_SOURCE.NONE]: "Paste it here",
-  [CREDENTIAL_SOURCE.ENVIRONMENT]: "Paste one to use instead of the one from the environment",
+  [CREDENTIAL_SOURCE.ENVIRONMENT]: "Paste one to use instead",
   [CREDENTIAL_SOURCE.ENCRYPTED_FILE]: "Replace what is stored",
 } as const satisfies Record<CredentialSource, string>;
 
