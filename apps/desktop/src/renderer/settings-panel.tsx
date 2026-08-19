@@ -1263,12 +1263,14 @@ function CredentialsSection({
   control,
   panelOpen,
   preferences,
+  superset,
   workspaceProviders,
 }: {
   settings: AppSettings;
   control: CredentialEntryControl;
   panelOpen: boolean;
   preferences: PreferenceWrites;
+  superset: SupersetControl;
   workspaceProviders: readonly WorkspaceProviderOption[];
 }): React.JSX.Element {
   // Only a system Luke has actually asked, and been refused by, is reported as
@@ -1276,9 +1278,12 @@ function CredentialsSection({
   // about storage nobody has tried to use yet would be a guess.
   const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
   const codexWorkspace = workspaceProviders.find((option) => option.id === PROVIDER_ID.CODEX);
+  const supersetWorkspace = workspaceProviders.find(
+    (option) => option.id === SUPERSET_WORKSPACE_PROVIDER_ID,
+  );
   return (
     // SAFETY: The preceding check establishes the asserted contract.
-    <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
+    <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
       <h2>
         <KeyIcon />
         Cloud Agent API keys
@@ -1330,6 +1335,15 @@ function CredentialsSection({
           </ProviderCredential>
         );
       })}
+      {/* Last because the list reads alphabetically. Superset is the other
+          agent surface connected through its own CLI's login rather than a
+          key, so it stands as its own block the way the Codex row does. */}
+      <SupersetIntegration
+        control={superset}
+        settings={settings}
+        preferences={preferences}
+        {...(supersetWorkspace ? { workspaceProvider: supersetWorkspace } : {})}
+      />
       {/* The same refusal the trackers' section explains: a Connect stilled by
           missing storage needs its why in this section too. */}
       {storageUnavailable ? <p className="settings-note">{STORAGE_UNAVAILABLE_NOTE}</p> : null}
@@ -1585,6 +1599,8 @@ export interface SupersetControl {
   held: boolean;
   connecting: boolean;
   onConnect: () => void;
+  /** Runs the CLI's own documented sign-out, withdrawing the stored login. */
+  onDisconnect: () => Promise<string | undefined>;
   agents: readonly string[];
   defaultAgent?: string;
   onDefaultAgentChange: (agent: string | undefined) => Promise<string | undefined>;
@@ -1602,7 +1618,22 @@ function SupersetIntegration({
   /** Superset's own projects, absent until an observation pass reports any. */
   workspaceProvider?: WorkspaceProviderOption;
 }): React.JSX.Element | null {
+  // Disconnecting asks first, exactly like deleting a key: the sign-out
+  // clears the CLI's stored login, so a disconnect taken on the first press
+  // would cost a whole new sign-in to undo.
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [rejection, setRejection] = useState<string>();
+
   if (!control.installed) return null;
+
+  const disconnect = async () => {
+    setBusy(true);
+    setRejection(await control.onDisconnect());
+    setBusy(false);
+    setAsking(false);
+  };
+
   return (
     <div className="credential">
       <div className="credential-row">
@@ -1613,7 +1644,64 @@ function SupersetIntegration({
           <span className="credential-name">Superset</span>
           {control.connected ? <CheckIcon /> : null}
         </span>
-        {!control.connected ? (
+        {control.connected ? (
+          /* The trash and the confirm that stands in for it share one grid
+             cell, exactly as the credential rows' do: the cell is as wide and
+             as tall as the larger of the two whichever is showing, so asking
+             the question never re-shapes the line. */
+          <span className="credential-actions">
+            <span
+              className="settings-actions credential-controls"
+              data-drawn={String(!asking)}
+              aria-hidden={asking}
+              inert={asking}
+            >
+              <button
+                type="button"
+                className="icon-button credential-remove"
+                disabled={busy}
+                aria-label="Disconnect Superset"
+                /* The ellipsis is the promise that it asks first. */
+                title="Disconnect…"
+                onClick={() => {
+                  setRejection(undefined);
+                  setAsking(true);
+                }}
+              >
+                <TrashIcon />
+              </button>
+            </span>
+            <fieldset
+              className="settings-actions credential-confirm"
+              aria-label="Disconnect Superset?"
+              data-drawn={String(asking)}
+              aria-hidden={!asking}
+              inert={!asking}
+              onKeyDown={(event) => {
+                if (event.key !== "Escape" || busy) return;
+                event.stopPropagation();
+                setAsking(false);
+              }}
+            >
+              <button
+                type="button"
+                className="quiet-button"
+                disabled={busy}
+                onClick={() => setAsking(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="danger-button"
+                disabled={busy}
+                onClick={() => void disconnect()}
+              >
+                {busy ? "Disconnecting…" : "Disconnect"}
+              </button>
+            </fieldset>
+          </span>
+        ) : (
           <span className="settings-actions">
             <button
               type="button"
@@ -1624,8 +1712,9 @@ function SupersetIntegration({
               {control.connecting ? "Connecting…" : "Connect"}
             </button>
           </span>
-        ) : null}
+        )}
       </div>
+      {rejection ? <p className="error-message">{rejection}</p> : null}
       {control.connected && control.agents.length > 0 ? (
         <SelectRow
           label="New Superset sessions run"
@@ -1788,34 +1877,21 @@ function IntegrationsSection({
   preferences,
   calendar,
   linear,
-  superset,
-  workspaceProviders,
 }: {
   settings: AppSettings;
   preferences: PreferenceWrites;
   calendar: CalendarControl;
   linear: LinearControl;
-  superset: SupersetControl;
-  workspaceProviders: readonly WorkspaceProviderOption[];
 }): React.JSX.Element {
   const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
-  const supersetWorkspace = workspaceProviders.find(
-    (option) => option.id === SUPERSET_WORKSPACE_PROVIDER_ID,
-  );
   return (
     // SAFETY: The preceding check establishes the asserted contract.
-    <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
+    <section className="settings-section" style={{ "--row-index": 3 } as React.CSSProperties}>
       <h2>
         <PlugIcon />
         Integrations
       </h2>
       <LinearIntegration settings={settings} linear={linear} />
-      <SupersetIntegration
-        control={superset}
-        settings={settings}
-        preferences={preferences}
-        {...(supersetWorkspace ? { workspaceProvider: supersetWorkspace } : {})}
-      />
       <GoogleCalendarIntegration
         settings={settings}
         calendar={calendar}
@@ -2193,25 +2269,14 @@ function WorkspacesSection({
 }): React.JSX.Element {
   return (
     // SAFETY: The preceding check establishes the asserted contract.
-    <section className="settings-section" style={{ "--row-index": 3 } as React.CSSProperties}>
-      {/* The heading and the group's reset share a line. The reset groups by
-          meaning rather than by position: it covers every workspace-creation
-          default on this page, including the per-provider rows drawn beside
-          the providers they belong to. Only the keys are exempt — they are not
-          settings and are never reset. */}
-      <div className="settings-heading">
-        <h2>
-          <FolderIcon />
-          Workspaces
-        </h2>
-        {settingsScopeChanged(settings, SETTINGS_RESET_SCOPE.WORKSPACES) ? (
-          <ResetGroupButton
-            scope={SETTINGS_RESET_SCOPE.WORKSPACES}
-            label="the workspace defaults"
-            onReset={preferences.onSettingsReset}
-          />
-        ) : null}
-      </div>
+    <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
+      {/* No group reset here: the workspace-creation defaults live as rows
+          beside the providers they belong to, and a reset by this one select
+          would reach settings drawn under other headings. */}
+      <h2>
+        <FolderIcon />
+        Workspaces
+      </h2>
       <SelectRow
         label="Default workspace provider"
         changed={settings.defaultWorkspaceProvider !== undefined}
@@ -3258,11 +3323,19 @@ export function SettingsPanel({
 
       {view === SETTINGS_VIEW.CONNECTIONS && settings ? (
         <>
+          {/* The one choice spanning every provider leads the page; the
+              providers it chooses between follow. */}
+          <WorkspacesSection
+            settings={settings}
+            workspaceProviders={workspaceProviders}
+            preferences={preferences}
+          />
           <CredentialsSection
             settings={settings}
             control={credentials}
             panelOpen={panelOpen}
             preferences={preferences}
+            superset={superset}
             workspaceProviders={workspaceProviders}
           />
           <IntegrationsSection
@@ -3270,13 +3343,6 @@ export function SettingsPanel({
             preferences={preferences}
             calendar={calendar}
             linear={linear}
-            superset={superset}
-            workspaceProviders={workspaceProviders}
-          />
-          <WorkspacesSection
-            settings={settings}
-            workspaceProviders={workspaceProviders}
-            preferences={preferences}
           />
         </>
       ) : null}

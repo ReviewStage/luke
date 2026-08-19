@@ -948,6 +948,14 @@ export function App(): React.JSX.Element {
     if (presentationOf() === PANEL_PRESENTATION.SLOT) restorePanel();
   }, [presentationOf, restorePanel]);
 
+  const disconnectSuperset = useCallback(async () => {
+    const rejection = await window.sidecar.disconnectSuperset();
+    // The idle broadcast the sign-out fires says the same thing to every other
+    // window; this window should not wait a round trip to agree with itself.
+    if (rejection === undefined) setSupersetConnected(false);
+    return rejection;
+  }, []);
+
   /**
    * Asking to write a key is asking for one thing, so the panel gets out of the
    * way of it: the shape goes down to the slot, which is the field and nothing
@@ -2858,6 +2866,7 @@ export function App(): React.JSX.Element {
                   held: credentialHeld.current || consentConnectHeld.current,
                   connecting: supersetSignInHeld.current,
                   onConnect: beginSupersetSignIn,
+                  onDisconnect: disconnectSuperset,
                   agents: [
                     ...new Set(
                       workspaceProjects

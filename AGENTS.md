@@ -38,8 +38,12 @@ Trust constraints:
   preset returned by the CLI's latest read, and only through the documented
   `workspaces create` command invoked directly without a shell. Luke supplies
   the developer's opening task and a bounded generated branch, then may call
-  `workspaces open` for the identifier that creation returned. This does not
-  authorize arbitrary Superset CLI commands, deletion, tasks, automations,
+  `workspaces open` for the identifier that creation returned. The connection
+  itself is bounded the same way at both ends: Connect runs the CLI's own
+  `auth login` and Disconnect its documented `auth logout` — each only at the
+  developer's press on the Superset row, each invoked directly with arguments
+  fixed by the build, and the CLI owns the credential throughout. This does
+  not authorize arbitrary Superset CLI commands, deletion, tasks, automations,
   account changes, or settings changes.
 - Product behavior must not require provider MCP, plugins, hooks, wrappers,
   credentials, or live sessions. A provider whose sessions exist only in a cloud

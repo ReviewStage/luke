@@ -137,7 +137,10 @@ visible field until submission and is never logged or stored; the CLI performs
 the exchange and owns the resulting credential. If Superset returns several
 organizations, Luke shows only the identities from a fresh CLI list and asks
 the CLI to switch only to the choice you press. Cancelling, quitting Luke, or
-waiting three minutes ends the login process.
+waiting three minutes ends the login process. Disconnecting from the same
+Settings row runs the CLI's own documented `auth logout`, which clears the
+login the CLI stored — the same consent withdrawn through the same binary —
+and the next observation pass reports the signed-out state.
 
 Luke asks macOS's property-list utility whether the CLI config names an active
 organization and receives only that identifier; Luke never opens the config or

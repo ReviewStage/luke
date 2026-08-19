@@ -217,7 +217,9 @@ function integrationsFact(settings: AppSettings): AppGuideFact {
     "with an agent in a project and host Superset currently lists; connect from Luke's " +
     "Settings, finish Superset's own sign-in flow in the browser, and paste its one-time code " +
     "into Luke. Superset's CLI exchanges that code, stores the login, and switches organizations; " +
-    "Luke never reads its token or clipboard. The default agent for a creation ask that names " +
+    "Luke never reads its token or clipboard. Superset's row sits with the cloud agents on the " +
+    "Connections page, and disconnecting from it runs the CLI's own sign-out, clearing the " +
+    "login the CLI stored. The default agent for a creation ask that names " +
     "none is chosen under Superset in Settings; until one is chosen, Luke asks.";
   return {
     label: "Integrations",
@@ -322,8 +324,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       detail:
         "A dot beside a row marks a value changed from its default, and a page holding one " +
         "ends its head with a reset, pressed by hand and never spoken, returning that page's " +
-        "settings to their defaults. The Workspaces group on the Connections page carries its " +
-        "own reset. No reset touches a key, an account, or the Conductor agent choice. An " +
+        "settings to their defaults. The Connections page carries no group reset: its defaults " +
+        "are changed row by row. No reset touches a key, an account, or the Conductor agent choice. An " +
         "exclamation mark sits on whatever still needs a hand: the What Luke runs on heading " +
         "while voice has nothing to run on, the Voice and microphone rows while the permission " +
         "is ungranted, and the Keyboard shortcuts rows while voice is off, where each chord " +

@@ -777,6 +777,15 @@ function registerIpc(): void {
   ipcMain.on(channels.cancelSupersetSignIn, (event) => {
     if (trustedSender(event)) supersetSignIn.cancel();
   });
+  ipcMain.handle(channels.disconnectSuperset, async (event) => {
+    if (!trustedSender(event)) throw new Error("Untrusted renderer");
+    if (!(await supersetCli.signOut())) return "Superset could not sign out.";
+    // The sign-in machine returning to idle is what tells every renderer the
+    // login is gone; the refreshed pass retires the rows the login was buying.
+    supersetSignIn.cancel();
+    void sessionObservationLoop.refresh();
+    return undefined;
+  });
 
   registerAccountSessionIpc({ ipcMain, trustedSender, accountSession });
 
