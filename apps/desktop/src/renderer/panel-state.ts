@@ -39,8 +39,8 @@ export const PEEK_ENTER_DELAY_MS = 60;
 /**
  * Short, and the same whichever state is being left: a panel that lingered
  * after the pointer had gone felt like a different object from a peek that
- * did not. The settings tab opts out of pointer-driven closing entirely,
- * which is what protects someone reaching for the keyboard.
+ * did not. A key or ask being typed opts the panel out of pointer-driven
+ * closing entirely, which is what protects someone reaching for the keyboard.
  */
 export const LEAVE_DELAY_MS = 110;
 /**
