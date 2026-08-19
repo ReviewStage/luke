@@ -91,6 +91,7 @@ const CODEX_THREAD_COLUMN = {
   UPDATED_AT_MS: "updated_at_ms",
   RECENCY_AT_MS: "recency_at_ms",
   TITLE: "title",
+  FIRST_USER_MESSAGE: "first_user_message",
   GIT_BRANCH: "git_branch",
   MODEL: "model",
   REASONING_EFFORT: "reasoning_effort",
@@ -156,6 +157,8 @@ const CODEX_ADAPTER_DEFAULTS = {
    */
   HOOK_EVENT_TOLERANCE_MS: 5_000,
 } as const;
+
+const CODEX_REALTIME_DELEGATION_MARKER = "<realtime_delegation>";
 
 // Every column is read defensively from the row, so the projection stays `*`:
 // Codex adds columns by migration, and naming one this build expects but an
@@ -443,6 +446,23 @@ async function readCodexSessionTitles(codexHome: string): Promise<Map<string, st
   return titles;
 }
 
+/**
+ * Codex keeps the initial user message in the thread row even after it gives
+ * the chat a user-facing name. That makes it a more durable signal than the
+ * provisional title, while the title fallback covers older rows that do not
+ * carry the column's value.
+ */
+export function isCodexRealtimeDelegationText(value: unknown): boolean {
+  return text(value)?.trimStart().startsWith(CODEX_REALTIME_DELEGATION_MARKER) === true;
+}
+
+function isCodexRealtimeDelegationThread(row: CodexThreadRow): boolean {
+  return (
+    isCodexRealtimeDelegationText(textFromRow(row, CODEX_THREAD_COLUMN.FIRST_USER_MESSAGE)) ||
+    isCodexRealtimeDelegationText(textFromRow(row, CODEX_THREAD_COLUMN.TITLE))
+  );
+}
+
 function modelFromRow(row: CodexThreadRow): string | undefined {
   const model = textFromRow(row, CODEX_THREAD_COLUMN.MODEL);
   if (!model) return undefined;
@@ -565,6 +585,7 @@ function observationFromThreadRow(
   return {
     providerSessionId,
     title: titleFromRow(row, sessionTitles),
+    ...(isCodexRealtimeDelegationThread(row) ? { realtimeVoice: true } : {}),
     status,
     ...(completionCause ? { completionCause } : undefined),
     observedAt,

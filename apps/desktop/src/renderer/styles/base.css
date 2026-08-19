@@ -903,6 +903,22 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   height: auto;
 }
 
+/* The realtime voice badge uses the same out-of-flow corner treatment as the
+   cloud badge, so it cannot become a second grid item under the provider mark. */
+.audio-badge {
+  position: absolute;
+  display: grid;
+  border-radius: 50%;
+  background: var(--surface-fill);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  color: var(--text-secondary);
+  place-items: center;
+}
+
+.audio-badge svg {
+  height: auto;
+}
+
 /* Luke's face ------------------------------------------------------------ */
 
 /* The place nearest the housing is the one the capsule keeps, and Luke holds it

@@ -21,6 +21,7 @@ import {
   observedAgoLabel,
   SESSION_FILTER,
   SESSION_SORT,
+  sessionFilterFromSpoken,
   sessionListRuns,
   sessionRunKeys,
   sessionTally,
@@ -381,6 +382,33 @@ test("the filters offered run from everything to one agent, counted", () => {
     { filter: PROVIDER_ID.CURSOR, label: "Cursor", count: 1, providerId: PROVIDER_ID.CURSOR },
     { filter: PROVIDER_ID.DEVIN, label: "Devin", count: 1, providerId: PROVIDER_ID.DEVIN },
   ]);
+});
+
+test("the voice filter narrows to realtime voice chats and has a spoken name", () => {
+  const sessions = displaySessions(bootstrap(false), [
+    normalizeSession(CODEX_PROVIDER, {
+      providerSessionId: "codex-voice",
+      title: "Voice chat",
+      status: SESSION_STATUS.WORKING,
+      observedAt: 1_000,
+      realtimeVoice: true,
+    }),
+    liveSession(CODEX_PROVIDER, "codex-typed", SESSION_STATUS.COMPLETE),
+  ]);
+
+  const list = arrangeSessions(sessions, DEFAULT_SESSION_VIEW);
+  assert.deepEqual(list.options, [
+    { filter: SESSION_FILTER.ALL, label: "All", count: 2 },
+    { filter: SESSION_FILTER.VOICE, label: "Voice", count: 1 },
+  ]);
+  assert.deepEqual(
+    arrangeSessions(sessions, {
+      ...DEFAULT_SESSION_VIEW,
+      filter: SESSION_FILTER.VOICE,
+    }).sessions.map((session) => session.id),
+    ["codex-voice"],
+  );
+  assert.equal(sessionFilterFromSpoken(SESSION_FILTER.VOICE), SESSION_FILTER.VOICE);
 });
 
 // The fixture above covers the agents it happens to contain. Every agent the

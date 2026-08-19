@@ -147,6 +147,7 @@ const sameSession = exhaustiveSame<NormalizedSession>({
   status: (first, second) => first.status === second.status,
   completionCause: (first, second) => first.completionCause === second.completionCause,
   observedAt: (first, second) => first.observedAt === second.observedAt,
+  realtimeVoice: (first, second) => first.realtimeVoice === second.realtimeVoice,
   location: (first, second) => first.location === second.location,
   recap: (first, second) => first.recap === second.recap,
   detail: (first, second) => sameDetail(first.detail, second.detail),

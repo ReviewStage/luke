@@ -22,11 +22,11 @@ import type { AppBootstrap } from "../shared/contracts";
 
 /**
  * Which sessions the list draws: everything, everything running in one place,
- * or everything belonging to one agent. The two coarse values are the session
- * locations themselves and the rest are provider ids, so narrowing the list is
- * a comparison against something a row already carries rather than a second
- * vocabulary mapped onto it. The two sets cannot collide — no provider is
- * called `local` or `cloud`.
+ * or everything belonging to one agent. The coarse values are session
+ * locations plus the realtime voice kind, and the rest are provider ids, so
+ * narrowing the list is a comparison against something a row already carries
+ * rather than a second vocabulary mapped onto it. The values cannot collide —
+ * no provider is called `local`, `cloud`, or `voice`.
  *
  * Location belongs to the session rather than to the agent, so an agent with
  * work in both places is one chip that answers `Local` and `Cloud` both.
@@ -35,6 +35,7 @@ export const SESSION_FILTER = {
   ALL: "all",
   LOCAL: SESSION_LOCATION.LOCAL,
   CLOUD: SESSION_LOCATION.CLOUD,
+  VOICE: "voice",
 } as const;
 
 export type SessionFilter = (typeof SESSION_FILTER)[keyof typeof SESSION_FILTER] | ProviderId;
@@ -44,21 +45,22 @@ function matchesFilter(session: DisplaySession, filter: SessionFilter): boolean 
   if (filter === SESSION_FILTER.LOCAL || filter === SESSION_FILTER.CLOUD) {
     return session.location === filter;
   }
+  if (filter === SESSION_FILTER.VOICE) return session.realtimeVoice === true;
   return session.providerId === filter;
 }
 
 /**
  * Reads a spoken filter into the list's own vocabulary. The values are the
- * same strings the chips use — the coarse scopes and the provider ids — so a
- * validated spoken ask maps one-to-one; anything else is nothing rather than
- // SAFETY: The preceding check establishes the asserted contract.
- * a guess, and the list is left as it was.
+ * same strings the chips use — the coarse scopes, voice kind, and provider ids
+ * — so a validated spoken ask maps one-to-one; anything else is nothing rather
+ * than a guess, and the list is left as it was.
  */
 export function sessionFilterFromSpoken(value: string): SessionFilter | undefined {
   if (
     value === SESSION_FILTER.ALL ||
     value === SESSION_FILTER.LOCAL ||
-    value === SESSION_FILTER.CLOUD
+    value === SESSION_FILTER.CLOUD ||
+    value === SESSION_FILTER.VOICE
   ) {
     return value;
   }
@@ -149,6 +151,8 @@ export interface DisplaySession {
   urgency: SessionUrgency;
   label: string;
   location: SessionLocation;
+  /** Whether this is a realtime voice/delegation chat. */
+  realtimeVoice?: boolean;
   observedAt: number;
   /**
    * Whether the provider gave an address that opens this session, which is what
@@ -450,6 +454,7 @@ export function displaySessions(
           urgency,
           label: urgencyLabel(urgency),
           location: session.location,
+          ...(session.realtimeVoice ? { realtimeVoice: true } : {}),
           observedAt: session.observedAt,
           openable: session.detail.link !== undefined,
           canMessage: session.canReceiveMessage,
@@ -488,12 +493,14 @@ const LOCATION_LABEL = {
 /** The order the location chips read in: what runs here, then what runs away. */
 const LOCATION_ORDER: readonly SessionLocation[] = [SESSION_LOCATION.LOCAL, SESSION_LOCATION.CLOUD];
 
+const VOICE_FILTER_OPTION = { filter: SESSION_FILTER.VOICE, label: "Voice" } as const;
+
 /**
- * All, then where a session runs, then which agent is running it — coarse to
- * fine, left to right. Each level is offered only where it is a real choice: a
- * single location says nothing All has not already said, and neither does a
- * single agent. The counts make the row a breakdown of what is tracked before
- * it is a control, which is what earns it the line it costs.
+ * All, then where a session runs, then whether it is voice, then which agent is
+ * running it — coarse to fine, left to right. Each level is offered only where
+ * it is a real choice: a single location, voice kind, or agent says nothing
+ * All has not already said. The counts make the row a breakdown of what is
+ * tracked before it is a control, which is what earns it the line it costs.
  *
  * Agents are listed in the registry's own order rather than by how many
  * sessions they have, so a chip never moves out from under the pointer as
@@ -504,8 +511,10 @@ function filterOptions(sessions: readonly DisplaySession[]): readonly SessionFil
 
   const locations = new Map<SessionLocation, number>();
   const providers = new Map<ProviderId, { label: string; count: number }>();
+  let voiceCount = 0;
   for (const session of sessions) {
     locations.set(session.location, (locations.get(session.location) ?? 0) + 1);
+    if (session.realtimeVoice === true) voiceCount += 1;
     // An agent this build has no registry entry for has no mark to draw a chip
     // with, so it is counted under All and offered under nothing else.
     if (!isProviderId(session.providerId)) continue;
@@ -533,10 +542,15 @@ function filterOptions(sessions: readonly DisplaySession[]): readonly SessionFil
           providerId,
         }))
       : [];
+  const voiceOptions =
+    voiceCount > 0 && voiceCount < sessions.length
+      ? [{ ...VOICE_FILTER_OPTION, count: voiceCount }]
+      : [];
 
   return [
     { filter: SESSION_FILTER.ALL, label: "All", count: sessions.length },
     ...locationOptions,
+    ...voiceOptions,
     ...providerOptions,
   ];
 }
