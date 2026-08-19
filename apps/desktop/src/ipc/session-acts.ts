@@ -3,7 +3,6 @@ import {
   type AttentionRequestRegistry,
   type AttentionRequestResult,
   attentionRequestText,
-  type InMemorySessionRegistry,
   ISSUE_ACTION_KIND,
   type IssueIdentity,
   isProviderId,
@@ -28,6 +27,7 @@ import {
   type WorkspaceAgentSelection,
   workspaceNameText,
 } from "@sidecar/core";
+import type { PromiseSessionRegistry } from "@sidecar/core/effect";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import { createActionHandler } from "../action-handler";
 import type { LinearIssueTracker } from "../linear-tracker";
@@ -51,7 +51,7 @@ import { unparsedWire, type WireBoundaryInput, wireRecord } from "../wire-bounda
 export interface SessionActsIpcDependencies {
   ipcMain: Pick<IpcMain, "handle">;
   trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
-  sessionRegistry: InMemorySessionRegistry;
+  sessionRegistry: PromiseSessionRegistry;
   openExternal: (url: string) => Promise<void>;
   adapterFor: (providerId: string) => SessionProviderAdapter | undefined;
   attentionReviewer: () => SessionAttentionReviewer | undefined;

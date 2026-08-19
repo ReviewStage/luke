@@ -10,7 +10,6 @@ import {
   CreatedWorkspaceOpenTracker,
   DEFAULT_PANEL_FORM_FACTOR,
   fixtureSnapshot,
-  InMemorySessionRegistry,
   isProviderId,
   isWireString,
   type MeetingInterval,
@@ -30,6 +29,11 @@ import {
   type WorkspaceAgentSelection,
   workspaceProjectSelectionId,
 } from "@sidecar/core";
+import {
+  EffectInMemorySessionRegistry,
+  type PromiseSessionRegistry,
+  toPromiseSessionRegistry,
+} from "@sidecar/core/effect";
 
 import {
   app,
@@ -142,7 +146,9 @@ const ACCOUNT_BASE_URL =
 const HOSTED_SERVICE_BASE_URL = ACCOUNT_BASE_URL.replace(/\/api\/auth\/?$/, "");
 const ACCOUNT_CLIENT_ID = "luke-desktop";
 const SESSION_REFRESH_INTERVAL_MS = 5_000;
-const sessionRegistry = new InMemorySessionRegistry();
+const sessionRegistry: PromiseSessionRegistry = toPromiseSessionRegistry(
+  new EffectInMemorySessionRegistry(),
+);
 // Declared before the settings store because the store's snapshot asks it
 // what the latest pass learned about the Codex CLI's login. It observes only
 // inside the codex composite the provider registrations build; a fixture or
