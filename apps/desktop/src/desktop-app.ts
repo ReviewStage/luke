@@ -17,6 +17,7 @@ import {
   normalizeObservedWorkspaceProjects,
   normalizeTrackedIssue,
   type ObservedWorkspaceProject,
+  PROVIDER_ID_LIST,
   rosterRelevantSessions,
   SessionNoticeHold,
   SessionNoticeTracker,
@@ -178,6 +179,8 @@ const providerRegistry = providerRegistrations({
   codexHookInstallation: () => observationHooks.codexInstallation(),
   codexCloudAdapter,
 });
+// The record enforces completeness; the shared list preserves provider order.
+const orderedRegistrations = PROVIDER_ID_LIST.map((providerId) => providerRegistry[providerId]);
 // The issue tracker is not a session provider: its issues feed the voice
 // roster rather than the registry, so it stands beside the adapters rather
 // than among them.
@@ -495,11 +498,11 @@ async function applyVoiceCredential(): Promise<void> {
 }
 
 function adapterFor(providerId: string) {
-  return providerRegistry.find((entry) => entry.adapter.provider.id === providerId)?.adapter;
+  return isProviderId(providerId) ? providerRegistry[providerId].adapter : undefined;
 }
 
 function adapterForCredential(providerId: CredentialProviderId) {
-  return providerRegistry.find((entry) => entry.credential?.id === providerId)?.adapter;
+  return orderedRegistrations.find((entry) => entry.credential?.id === providerId)?.adapter;
 }
 
 /** Whether a provider is currently offering the project a default would name. */
@@ -782,7 +785,7 @@ function registerIpc(): void {
 function observedWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
   if (!runMode.observesProviders) return [];
   return normalizeObservedWorkspaceProjects(
-    providerRegistry.flatMap(({ adapter }) =>
+    orderedRegistrations.flatMap(({ adapter }) =>
       adapter.workspaceProjects().map((project) => ({
         ...project,
         providerId: adapter.provider.id,
@@ -809,7 +812,7 @@ async function applyLocalSessionHooks(): Promise<void> {
   // one provider's broken configuration must neither reach the other's
   // registration nor the launch, and either costs only the sharper status.
   await Promise.all(
-    providerRegistry.map(async ({ adapter, registerObservationHook }) => {
+    orderedRegistrations.map(async ({ adapter, registerObservationHook }) => {
       if (!registerObservationHook) return;
       try {
         await registerObservationHook();
@@ -829,7 +832,7 @@ async function refreshProviderSessions(generation: number): Promise<void> {
   // can neither delay nor cancel the others. A network provider would
   // otherwise hold up the local ones for as long as its requests take.
   await Promise.all(
-    providerRegistry.map(async ({ adapter }) => {
+    orderedRegistrations.map(async ({ adapter }) => {
       try {
         await sessionRegistry.refresh(adapter);
       } catch (error) {
@@ -1187,7 +1190,7 @@ function startSessionObservation(): void {
 function stopSessionObservation(): void {
   unsubscribeSessions?.();
   unsubscribeSessions = undefined;
-  for (const { adapter } of providerRegistry) {
+  for (const { adapter } of orderedRegistrations) {
     sessionRegistry.replaceProvider(adapter.provider, []);
   }
   panels.broadcast(channels.sessionsChanged, []);

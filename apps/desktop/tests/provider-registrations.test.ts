@@ -24,27 +24,24 @@ const registrations = providerRegistrations({
 });
 
 test("registers every provider exactly once", () => {
-  assert.deepEqual(
-    registrations.map(({ adapter }) => adapter.provider.id),
-    PROVIDER_ID_LIST,
-  );
-  assert.equal(new Set(registrations.map(({ adapter }) => adapter.provider.id)).size, 8);
+  for (const providerId of PROVIDER_ID_LIST) {
+    assert.equal(registrations[providerId].adapter.provider.id, providerId);
+  }
 });
 
 test("declares credentials and observation hooks beside their adapters", () => {
-  const byProvider = new Map(registrations.map((entry) => [entry.adapter.provider.id, entry]));
   assert.equal(
-    byProvider.get(PROVIDER_ID.CONDUCTOR)?.credential?.id,
+    registrations[PROVIDER_ID.CONDUCTOR].credential?.id,
     CREDENTIAL_PROVIDER_ID.CONDUCTOR,
   );
-  assert.equal(byProvider.get(PROVIDER_ID.CURSOR)?.credential?.id, CREDENTIAL_PROVIDER_ID.CURSOR);
-  assert.equal(typeof byProvider.get(PROVIDER_ID.CLAUDE_CODE)?.registerObservationHook, "function");
-  assert.equal(typeof byProvider.get(PROVIDER_ID.CODEX)?.registerObservationHook, "function");
-  assert.equal(byProvider.get(PROVIDER_ID.OPENCODE)?.credential, undefined);
+  assert.equal(registrations[PROVIDER_ID.CURSOR].credential?.id, CREDENTIAL_PROVIDER_ID.CURSOR);
+  assert.equal(typeof registrations[PROVIDER_ID.CLAUDE_CODE].registerObservationHook, "function");
+  assert.equal(typeof registrations[PROVIDER_ID.CODEX].registerObservationHook, "function");
+  assert.equal(registrations[PROVIDER_ID.OPENCODE].credential, undefined);
 });
 
 test("every registration exposes the one total adapter interface", () => {
-  for (const { adapter } of registrations) {
+  for (const { adapter } of Object.values(registrations)) {
     assert.equal(typeof adapter.observe, "function");
     assert.equal(typeof adapter.readTranscript, "function");
     assert.equal(typeof adapter.sendMessage, "function");

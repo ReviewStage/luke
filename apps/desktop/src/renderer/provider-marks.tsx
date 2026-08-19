@@ -8,12 +8,14 @@ import {
   DEVIN_PATH,
   GOOGLE_CALENDAR_MARK_LAYERS,
   ISSUE_TRACKER_ID,
+  type IssueTrackerId,
   JULES_PATH,
   LINEAR_PATH,
   OPENAI_PATH,
   OPENCODE_BLOCK_PATH,
   OPENCODE_FRAME_PATH,
   PROVIDER_ID,
+  type ProviderId,
 } from "@sidecar/core";
 import { useId } from "react";
 import { CREDENTIAL_PROVIDER_ID } from "../shared/credential-providers";
@@ -255,25 +257,31 @@ function UnknownProviderMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-const PROVIDER_MARKS = new Map<string, (props: MarkProps) => React.JSX.Element>([
-  [PROVIDER_ID.CLAUDE_CODE, ClaudeCodeMark],
-  [PROVIDER_ID.CODEX, CodexMark],
-  [PROVIDER_ID.CONDUCTOR, ConductorMark],
-  [PROVIDER_ID.COPILOT, CopilotMark],
-  [PROVIDER_ID.CURSOR, CursorMark],
-  [PROVIDER_ID.DEVIN, DevinMark],
-  [GOOGLE_CALENDAR_ID, GoogleCalendarMark],
-  [PROVIDER_ID.JULES, JulesMark],
-  [ISSUE_TRACKER_ID.LINEAR, LinearMark],
-  [CREDENTIAL_PROVIDER_ID.OPENAI, OpenAiMark],
-  [PROVIDER_ID.OPENCODE, OpenCodeMark],
-]);
+export type MarkId =
+  | ProviderId
+  | IssueTrackerId
+  | typeof GOOGLE_CALENDAR_ID
+  | typeof CREDENTIAL_PROVIDER_ID.OPENAI;
+
+const PROVIDER_MARKS: Readonly<Record<MarkId, (props: MarkProps) => React.JSX.Element>> = {
+  [PROVIDER_ID.CLAUDE_CODE]: ClaudeCodeMark,
+  [PROVIDER_ID.CODEX]: CodexMark,
+  [PROVIDER_ID.CONDUCTOR]: ConductorMark,
+  [PROVIDER_ID.COPILOT]: CopilotMark,
+  [PROVIDER_ID.CURSOR]: CursorMark,
+  [PROVIDER_ID.DEVIN]: DevinMark,
+  [GOOGLE_CALENDAR_ID]: GoogleCalendarMark,
+  [PROVIDER_ID.JULES]: JulesMark,
+  [ISSUE_TRACKER_ID.LINEAR]: LinearMark,
+  [CREDENTIAL_PROVIDER_ID.OPENAI]: OpenAiMark,
+  [PROVIDER_ID.OPENCODE]: OpenCodeMark,
+};
 
 export function ProviderMark({
   providerId,
   className,
 }: MarkProps & { providerId: string }): React.JSX.Element {
-  const Mark = PROVIDER_MARKS.get(providerId) ?? UnknownProviderMark;
+  const Mark = PROVIDER_MARKS[providerId as MarkId] ?? UnknownProviderMark;
   return <Mark className={className ? `provider-mark ${className}` : "provider-mark"} />;
 }
 

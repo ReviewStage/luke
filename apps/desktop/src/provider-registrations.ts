@@ -1,4 +1,9 @@
-import { CompositeSessionProviderAdapter, type SessionProviderAdapter } from "@sidecar/core";
+import {
+  CompositeSessionProviderAdapter,
+  PROVIDER_ID,
+  type ProviderId,
+  type SessionProviderAdapter,
+} from "@sidecar/core";
 import { ClaudeCodeSessionAdapter } from "./claude-code-adapter";
 import {
   CLAUDE_HOOK_SPOOL_MAXIMUM_AGE_MS,
@@ -51,7 +56,7 @@ export interface ProviderRegistrationOptions {
 
 export function providerRegistrations(
   options: ProviderRegistrationOptions,
-): readonly ProviderRegistration[] {
+): Readonly<Record<ProviderId, ProviderRegistration>> {
   const now = options.now ?? Date.now;
   const claude = new ClaudeCodeSessionAdapter({
     hookEventsDirectory: () => options.claudeHookInstallation().spoolDirectory,
@@ -87,8 +92,8 @@ export function providerRegistrations(
     ],
   });
 
-  return [
-    {
+  return {
+    [PROVIDER_ID.CLAUDE_CODE]: {
       adapter: claude,
       registerObservationHook: async () => {
         const installation = options.claudeHookInstallation();
@@ -100,7 +105,7 @@ export function providerRegistrations(
         );
       },
     },
-    {
+    [PROVIDER_ID.CODEX]: {
       adapter: codex,
       registerObservationHook: async () => {
         const installation = options.codexHookInstallation();
@@ -112,32 +117,32 @@ export function providerRegistrations(
         );
       },
     },
-    {
+    [PROVIDER_ID.CONDUCTOR]: {
       adapter: new ConductorSessionAdapter({
         readApiKey: () => options.readApiKey(CREDENTIAL_PROVIDER_ID.CONDUCTOR),
       }),
       credential: CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.CONDUCTOR],
     },
-    {
+    [PROVIDER_ID.COPILOT]: {
       adapter: new CopilotSessionAdapter({
         readApiKey: () => options.readApiKey(CREDENTIAL_PROVIDER_ID.COPILOT),
       }),
       credential: CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.COPILOT],
     },
-    {
+    [PROVIDER_ID.CURSOR]: {
       adapter: cursor,
       credential: CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.CURSOR],
     },
-    {
+    [PROVIDER_ID.DEVIN]: {
       adapter: devin,
       credential: CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.DEVIN],
     },
-    {
+    [PROVIDER_ID.JULES]: {
       adapter: new JulesSessionAdapter({
         readApiKey: () => options.readApiKey(CREDENTIAL_PROVIDER_ID.JULES),
       }),
       credential: CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.JULES],
     },
-    { adapter: new OpenCodeSessionAdapter() },
-  ];
+    [PROVIDER_ID.OPENCODE]: { adapter: new OpenCodeSessionAdapter() },
+  };
 }

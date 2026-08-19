@@ -120,6 +120,7 @@ export {
   type IssueIdentity,
   type IssueTracker,
   type IssueTrackerAdapter,
+  type IssueTrackerId,
   type IssueTransition,
   issueCommentText,
   maximumIssueTransitions,
