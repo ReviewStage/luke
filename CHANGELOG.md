@@ -5,10 +5,13 @@
      refuses a desktop version this file does not name. The landing page
      renders this document at tryluke.dev/changelog, and each release heading
      is a contract with that page: exactly `## <version> — <YYYY-MM-DD>`, which
-     becomes the release's sticky version-and-date rail. Inside a release,
-     `###` sections are free-form: name a big feature and describe it in prose
-     — with a screenshot where one helps — and gather the rest under
-     `### Improvements` and `### Fixes`. Link pull requests where relevant.
+     becomes the release's sticky version-and-date rail. Inside a release, a
+     big feature gets a `###` section of its own, named for the feature and
+     described in prose — with a screenshot where one helps. Everything else
+     gathers under the three standing sections, in this order: `### Improvements`
+     for what got better, `### Fixes` for what got repaired, and
+     `### Miscellaneous` for what fits neither — brand, packaging, and the
+     like. Link pull requests where relevant.
      Screenshots live in apps/web/public/changelog/ and are written here
      repository-relative (apps/web/public/changelog/<name>.png) so GitHub
      renders them too; the page rewrites that prefix to the site root. -->
@@ -73,6 +76,15 @@ even travel — and several accounts stand side by side.
 - Whole-picture questions are answered across every session, not just the one
   under discussion. ([#213](https://github.com/ReviewStage/luke/pull/213))
 
+### Miscellaneous
+
+- Square, transparent, and black variants of Luke's mark, and a shareable logo
+  set beside them. ([#191](https://github.com/ReviewStage/luke/pull/191),
+  [#196](https://github.com/ReviewStage/luke/pull/196))
+- The release workflow publishes the DMG beside the app archive, so the
+  landing page's download button always reaches the newest build.
+  ([#183](https://github.com/ReviewStage/luke/pull/183))
+
 ## 0.1.0 — 2026-08-17
 
 The first release: Luke stands beside the MacBook notch and watches every
@@ -113,7 +125,7 @@ this finishes" — decides when a session speaks.
 [#149](https://github.com/ReviewStage/luke/pull/149),
 [#173](https://github.com/ReviewStage/luke/pull/173))
 
-### Also in this release
+### Miscellaneous
 
 - Hook observation for Claude Code and Codex, so a turn that just ended reads
   differently from a session walked away from, and local transcripts read
