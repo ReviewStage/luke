@@ -44,7 +44,6 @@ import {
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "./shared/credential-providers";
 import {
-  APP_SETTING_DEFAULTS,
   APP_SETTING_FIELDS,
   APP_SETTING_SCHEMA,
   type AppSettingField,
@@ -348,14 +347,14 @@ function storedApiKeys(record: WireRecord, providers: readonly CredentialProvide
  * documented endpoint takes, so it is dropped the way an unknown voice is.
  */
 function readStoredSettings(record: WireRecord): StoredAppSettings {
-  let settings = { ...APP_SETTING_DEFAULTS };
-  for (const field of APP_SETTING_FIELDS) {
-    settings = {
+  return APP_SETTING_FIELDS.reduce(
+    (settings, field) => ({
       ...settings,
       [field]: APP_SETTING_SCHEMA[field].guard(record[field]).value,
-    };
-  }
-  return settings;
+    }),
+    // SAFETY: The reducer fills every StoredAppSettings field from the schema guards.
+    {} as StoredAppSettings,
+  );
 }
 
 function parsePersistedSettings(
@@ -1121,7 +1120,7 @@ export class SettingsStore {
     let persisted: PersistedSettings = {
       version: SETTINGS_FILE_VERSION,
       apiKeys: {},
-      ...APP_SETTING_DEFAULTS,
+      ...readStoredSettings({}),
     };
     if (source) {
       try {

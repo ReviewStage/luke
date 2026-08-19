@@ -17,6 +17,7 @@ type UsageReadDatabase = Parameters<typeof readHostedUsage>[0];
 function usageDatabase(
   rows: Array<{ voiceCalls: number; attentionReviews: number }>,
 ): UsageReadDatabase {
+  // SAFETY: Test double implements only the select chain readHostedUsage exercises.
   return {
     select() {
       return {
@@ -26,7 +27,6 @@ function usageDatabase(
         },
       };
     },
-    // SAFETY: Test double implements only the select chain readHostedUsage exercises.
   } as unknown as UsageReadDatabase;
 }
 

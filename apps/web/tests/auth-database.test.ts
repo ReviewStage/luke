@@ -77,6 +77,7 @@ test("seeding updates the one client identity instead of creating another", asyn
   let insertedRecord: ReturnType<typeof desktopOAuthClientRecord> | undefined;
   let conflict: { target?: unknown; set?: unknown } | undefined;
   type SeedDatabase = Parameters<typeof seedDesktopOAuthClient>[0];
+  // SAFETY: Test double implements only the insert chain seedDesktopOAuthClient exercises.
   const database = {
     insert(table: typeof oauthClient) {
       insertedTable = table;
@@ -91,7 +92,6 @@ test("seeding updates the one client identity instead of creating another", asyn
         },
       };
     },
-    // SAFETY: Test double implements only the insert chain seedDesktopOAuthClient exercises.
   } as unknown as SeedDatabase;
 
   const now = new Date("2026-08-17T00:00:00.000Z");

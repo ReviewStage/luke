@@ -6,6 +6,7 @@ import { migrateWithLock } from "../server/db/migrate";
 type MigrationConnection = Pick<Client, "connect" | "query" | "end">;
 
 function migrationConnection(events: string[]): MigrationConnection {
+  // SAFETY: Test double implements only the connect/query/end surface migrateWithLock uses.
   return {
     async connect() {
       events.push("connect");
@@ -19,7 +20,6 @@ function migrationConnection(events: string[]): MigrationConnection {
     async end() {
       events.push("end");
     },
-    // SAFETY: Test double implements only the connect/query/end surface migrateWithLock uses.
   } as MigrationConnection;
 }
 
@@ -49,11 +49,11 @@ test("an unlock failure still closes the database connection", async () => {
   const events: string[] = [];
   const connection = migrationConnection(events);
   const query = connection.query.bind(connection);
+  // SAFETY: Overrides the test double's query while preserving migrateWithLock's call shape.
   connection.query = (async (text: string, values?: unknown[]) => {
     const result = await query(text, values);
     if (text.includes("unlock")) throw new Error("unlock failed");
     return result;
-    // SAFETY: Overrides the test double's query while preserving migrateWithLock's call shape.
   }) as MigrationConnection["query"];
 
   await assert.rejects(

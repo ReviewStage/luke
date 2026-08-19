@@ -33,6 +33,7 @@ interface RecordedUpsert {
  */
 function usageDatabase(row: Pick<HostedUsageInsert, "voiceCalls" | "attentionReviews">) {
   const calls: RecordedUpsert = {};
+  // SAFETY: Test double implements only the insert chain spendHostedMeter exercises.
   const database = {
     insert(table: typeof hostedUsage) {
       assert.equal(table, hostedUsage);
@@ -50,7 +51,6 @@ function usageDatabase(row: Pick<HostedUsageInsert, "voiceCalls" | "attentionRev
         },
       };
     },
-    // SAFETY: Test double implements only the insert chain spendHostedMeter exercises.
   } as unknown as UsageDatabase;
   return { database, calls };
 }

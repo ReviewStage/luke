@@ -53,7 +53,6 @@ const REGISTERED_GOOGLE_CALENDAR_CLIENT_ID =
 
 /**
  * The registration's secret half. Google documents a desktop client's secret
- // SAFETY: The preceding check establishes the asserted contract.
  * as not confidential — every installed copy carries it, and PKCE over the
  * loopback is what actually protects the flow — but repository scanners
  * cannot tell it from a web client's real one, so it never sits in source:
@@ -62,9 +61,18 @@ const REGISTERED_GOOGLE_CALENDAR_CLIENT_ID =
  * variables supply one.
  */
 declare const PACKAGED_GOOGLE_CALENDAR_CLIENT_SECRET: string | undefined;
-const packagedClientSecret = isWireString(PACKAGED_GOOGLE_CALENDAR_CLIENT_SECRET)
-  ? PACKAGED_GOOGLE_CALENDAR_CLIENT_SECRET
-  : "";
+
+function readPackagedGoogleCalendarClientSecret(): string {
+  try {
+    // SAFETY: esbuild replaces this free identifier on packaged builds.
+    const packaged = PACKAGED_GOOGLE_CALENDAR_CLIENT_SECRET;
+    return isWireString(packaged) ? packaged : "";
+  } catch {
+    return "";
+  }
+}
+
+const packagedClientSecret = readPackagedGoogleCalendarClientSecret();
 
 /** The sign-in this run can offer, or nothing — which hides the button. */
 export function googleCalendarSignInConfig(

@@ -1,3 +1,5 @@
+import type { UnparsedWireValue } from "@sidecar/core";
+
 /**
  * Which Luke a process is: the released app, an unpackaged development run, or
  * a locally packaged test build. Each carries a different code signature — a
@@ -51,7 +53,6 @@ export function resolveAppName({ packaged, developerIdSigned }: AppIdentityConte
  * Baked by `build.mjs` from the same environment `resolveSigningMode` reads,
  * in the same `pnpm package` run, so the flag and the signature it stands for
  * cannot come apart. Absent under tsx — tests and tooling run the sources
- // SAFETY: The preceding check establishes the asserted contract.
  * directly — which reads as a development build, like every other unsigned run.
  */
 declare const PACKAGED_WITH_DEVELOPER_ID_SIGNING: boolean | undefined;
