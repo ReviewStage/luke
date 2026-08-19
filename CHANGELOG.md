@@ -32,6 +32,73 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.2.0 — 2026-08-19
+
+### Codex cloud tasks
+
+Luke observes your Codex cloud tasks through the login you already gave the
+Codex CLI — no key to paste, and a signed-out CLI simply reads as empty. Ask
+him for a new cloud task and he starts it the same way.
+([#256](https://github.com/ReviewStage/luke/pull/256),
+[#258](https://github.com/ReviewStage/luke/pull/258))
+
+### Previews you can press
+
+When a spoken reply names your sessions or tracked Linear issues, chips
+naming each appear under the notch for as long as the words last — press one
+to jump straight there.
+([#250](https://github.com/ReviewStage/luke/pull/250),
+[#257](https://github.com/ReviewStage/luke/pull/257),
+[#271](https://github.com/ReviewStage/luke/pull/271))
+
+### Improvements
+
+- Luke speaks as your agents' engineering manager — direct, candid, and calm
+  ([#265](https://github.com/ReviewStage/luke/pull/265))
+- Session rows carry each agent's diff: files touched, lines added and
+  removed ([#260](https://github.com/ReviewStage/luke/pull/260))
+- Luke observes Devin sessions running on your Mac
+  ([#255](https://github.com/ReviewStage/luke/pull/255))
+- Linear now connects through its own consent page instead of an API key
+  ([#261](https://github.com/ReviewStage/luke/pull/261))
+- Luke hears what you say while the call is still connecting, even on the
+  first press after launch
+  ([#220](https://github.com/ReviewStage/luke/pull/220))
+- The meeting quiet now starts and ends on the meeting's own instants, and
+  holds through a calendar misread
+  ([#270](https://github.com/ReviewStage/luke/pull/270),
+  [#272](https://github.com/ReviewStage/luke/pull/272))
+- A bare "new agent" ask opens a new workspace
+  ([#230](https://github.com/ReviewStage/luke/pull/230))
+- The pull-request chip is titled by the request's own number
+  ([#249](https://github.com/ReviewStage/luke/pull/249))
+
+### Fixes
+
+- Fixed completion notices firing as sessions closed
+  ([#246](https://github.com/ReviewStage/luke/pull/246))
+- Fixed announcements colliding with a reply Luke was still speaking
+  ([#231](https://github.com/ReviewStage/luke/pull/231))
+- Fixed back-to-back replies sharing one caption
+  ([#237](https://github.com/ReviewStage/luke/pull/237))
+- Fixed captions overlapping the volume hint, re-wrapping mid-display, and
+  vanishing under a resting pointer
+  ([#248](https://github.com/ReviewStage/luke/pull/248),
+  [#245](https://github.com/ReviewStage/luke/pull/245),
+  [#262](https://github.com/ReviewStage/luke/pull/262))
+
+### Miscellaneous
+
+- Updated the landing page with a direct download button
+  ([#221](https://github.com/ReviewStage/luke/pull/221))
+- Added the link card shared pages preview everywhere
+  ([#244](https://github.com/ReviewStage/luke/pull/244),
+  [#273](https://github.com/ReviewStage/luke/pull/273))
+- Removed the menu bar item
+  ([#242](https://github.com/ReviewStage/luke/pull/242))
+- Removed excessive panel animations
+  ([#243](https://github.com/ReviewStage/luke/pull/243))
+
 ## 0.1.1 — 2026-08-18
 
 ### Free daily allowance
