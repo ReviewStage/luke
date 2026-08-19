@@ -6,6 +6,7 @@ import {
   parsePixels,
   planReorder,
   rosterRows,
+  travelApplies,
   withoutDeparture,
 } from "../src/renderer/session-motion";
 
@@ -18,6 +19,23 @@ test("a row found somewhere new travels back by exactly the distance it moved", 
   // `a` moved down 75px, so it starts 75px up — where it was — and vice versa.
   assert.equal(plan.travels.get("a"), -75);
   assert.equal(plan.travels.get("b"), 75);
+});
+
+test("a slot hop leaves a hidden element to take its place", () => {
+  assert.equal(travelApplies({ boundMoved: false, visible: false }), false);
+});
+
+test("a bound-moved travel carries an element still transparent mid-entrance", () => {
+  // The wing's marks enter behind the shape's travel, so a panel opened
+  // before their fade begins finds them at opacity zero — and they will be
+  // visible before the spring settles. Skipped, they would fade in at their
+  // new seat while the surface's edge is still on its way there.
+  assert.equal(travelApplies({ boundMoved: true, visible: false }), true);
+});
+
+test("a visible element travels whichever gesture moved it", () => {
+  assert.equal(travelApplies({ boundMoved: false, visible: true }), true);
+  assert.equal(travelApplies({ boundMoved: true, visible: true }), true);
 });
 
 test("a row that kept its place is left alone", () => {
