@@ -15,8 +15,9 @@
      at the end. One voice per section: feature prose and Improvements speak
      in the present tense to "you", with Luke as the actor; Fixes each read
      "Fixed <symptom you could see>"; Miscellaneous bullets read
-     "Added/Updated …". Name things concretely and lead with the benefit.
-     Link pull requests where relevant.
+     "Added/Updated …". "Now" only where the old behavior is the contrast —
+     a new capability speaks in plain present tense. Name things concretely
+     and lead with the benefit. Link pull requests where relevant.
      Screenshots live in apps/web/public/changelog/<version>/, one file per
      `###` section named by the section heading's kebab-case slug (a second
      image for a section keeps the slug as its prefix), and are written here
@@ -53,13 +54,13 @@ meeting is over.
 
 ### Improvements
 
-- Luke now checks for updates on his own
+- Luke checks for updates on his own
   ([#186](https://github.com/ReviewStage/luke/pull/186))
 - Announcements now join a conversation you already have open, with a
   clickable chip that jumps to the session
   ([#180](https://github.com/ReviewStage/luke/pull/180),
   [#184](https://github.com/ReviewStage/luke/pull/184))
-- Every Settings page now marks changed rows and offers a reset to defaults
+- Every Settings page marks changed rows and offers a reset to defaults
   ([#192](https://github.com/ReviewStage/luke/pull/192))
 - You can delete your Luke account from Settings
   ([#222](https://github.com/ReviewStage/luke/pull/222))
@@ -67,10 +68,10 @@ meeting is over.
   ([#228](https://github.com/ReviewStage/luke/pull/228))
 - Signing in is smoother, from first launch to the finished account
   ([#190](https://github.com/ReviewStage/luke/pull/190))
-- The archive control now lives on the workspace tray header
-  ([#219](https://github.com/ReviewStage/luke/pull/219))
-- The microphone permission now lives on the Voice page
-  ([#200](https://github.com/ReviewStage/luke/pull/200))
+- The archive control now lives on the workspace tray header, and the
+  microphone permission on the Voice page
+  ([#219](https://github.com/ReviewStage/luke/pull/219),
+  [#200](https://github.com/ReviewStage/luke/pull/200))
 
 ### Fixes
 
