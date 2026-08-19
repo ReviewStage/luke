@@ -1139,13 +1139,18 @@
 
 /* Screenshots arrive through the generated markup, so their frame is drawn
    here: full measure, on the hairline card the rest of the site puts artwork
-   on. */
+   on. Each is a link to its own full-size file, and the cursor is what says
+   so. */
 .document img {
   display: block;
   width: 100%;
   margin: var(--space-5) 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
+}
+
+.document a > img {
+  cursor: zoom-in;
 }
 
 .document code {

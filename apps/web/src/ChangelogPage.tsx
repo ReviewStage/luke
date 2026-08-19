@@ -9,11 +9,28 @@ import { GitHubMark, REPOSITORY_URL, SiteFooter, SiteHeader } from "./SiteChrome
  * repository-relative in the markdown so GitHub renders them too; here the
  * public prefix comes off, because Vite serves that directory at the root.
  */
+const escapeAttribute = (value: string) =>
+  value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
+
 const changelogMarked = new Marked({
   walkTokens: (token) => {
     if (token.type === "image" && token.href.startsWith("apps/web/public/")) {
       token.href = token.href.slice("apps/web/public".length);
     }
+  },
+  /* A screenshot drawn at the column's measure is a preview of the full
+     capture, so it links out to the file itself, the same way GitHub wraps a
+     rendered markdown image. Lazy, because every release adds images above
+     the ones already here. */
+  renderer: {
+    image({ href, title, text }) {
+      const source = escapeAttribute(href);
+      const titleAttribute = title ? ` title="${escapeAttribute(title)}"` : "";
+      return (
+        `<a href="${source}" target="_blank" rel="noreferrer">` +
+        `<img src="${source}" alt="${escapeAttribute(text)}"${titleAttribute} loading="lazy"></a>`
+      );
+    },
   },
 });
 

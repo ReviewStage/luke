@@ -79,6 +79,19 @@ if [[ -n "$extensionless_imports" ]]; then
     exit 1
 fi
 
+# The changelog references its screenshots by repository path, and the page
+# serves them from the site root — a reference whose file is gone 404s
+# silently on the page and draws a broken image on GitHub. The paths are
+# word-splittable because the slug convention keeps them free of spaces.
+changelog_image_paths=$(grep -oE '\]\(apps/web/public/[^)]+\)' "$SIDECAR_REPO_ROOT/CHANGELOG.md" |
+    sed 's/^](//; s/)$//' || true)
+for image_path in $changelog_image_paths; do
+    if [[ ! -f "$SIDECAR_REPO_ROOT/$image_path" ]]; then
+        printf 'error: CHANGELOG.md references a missing screenshot: %s\n' "$image_path" >&2
+        exit 1
+    fi
+done
+
 # A release is its tag, and the tag must match apps/desktop/package.json — so
 # requiring the changelog to name the packaged version makes the version-bump
 # change carry the release's notes, which the landing page renders at
