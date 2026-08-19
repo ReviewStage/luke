@@ -11,7 +11,6 @@ import {
   type ProviderSessionObservation,
   recordFromJsonLine,
   SESSION_COMPLETION_CAUSE,
-  SESSION_ROSTER_RETENTION_MS,
   SESSION_STATUS,
   type SessionDetail,
   type SessionProvider,
@@ -76,7 +75,6 @@ const CODEX_THREAD_LINK_PREFIX = "codex://threads/";
 const CODEX_THREAD_COLUMN = {
   ID: "id",
   CWD: "cwd",
-  ARCHIVED: "archived",
   CREATED_AT: "created_at",
   UPDATED_AT: "updated_at",
   CREATED_AT_MS: "created_at_ms",
@@ -152,6 +150,10 @@ const CODEX_ADAPTER_DEFAULTS = {
 // Every column is read defensively from the row, so the projection stays `*`:
 // Codex adds columns by migration, and naming one this build expects but an
 // older install lacks would fail the whole query rather than one field.
+// An archived thread is one the user filed away in Codex's own UI, so it is
+// no row at all rather than a completed one — the same reading OpenCode's
+// archived sessions get — and archiving touches the row's clock, so anything
+// short of excluding it outright would resurface it as fresh.
 const CODEX_THREAD_QUERY = `
   WITH observed_threads AS (
     SELECT
@@ -169,7 +171,7 @@ const CODEX_THREAD_QUERY = `
   FROM observed_threads
   WHERE id <> ''
     AND cwd <> ''
-    AND (archived = 0 OR luke_observed_at_ms >= ?)
+    AND archived = 0
   ORDER BY luke_observed_at_ms DESC,
     id DESC
 `;
@@ -417,15 +419,11 @@ function modelFromRow(row: CodexThreadRow): string | undefined {
 }
 
 function statusFromRow(
-  row: CodexThreadRow,
   rollout: ParsedCodexRollout | undefined,
   observedAt: number,
   now: number,
   activeSessionFreshnessMs: number,
 ): ProviderSessionObservation["status"] {
-  if ((numberFromRow(row, CODEX_THREAD_COLUMN.ARCHIVED) ?? 0) !== 0) {
-    return SESSION_STATUS.COMPLETE;
-  }
   // A turn that failed is stuck until someone comes back to it, so the error
   // outranks freshness: going stale is exactly what a session waiting on a
   // rescue looks like, and decaying it to unknown would hide the one row
@@ -520,15 +518,15 @@ function observationFromThreadRow(
       : CODEX_ADAPTER_DEFAULTS.HOOK_EVENT_TOLERANCE_MS;
   const eventStands = hookEvent !== undefined && hookEvent.atMs + toleranceMs >= rowAt;
   const observedAt = eventStands ? Math.max(rowAt, hookEvent.atMs) : rowAt;
-  let status = statusFromRow(row, rollout, observedAt, now, activeSessionFreshnessMs);
+  let status = statusFromRow(rollout, observedAt, now, activeSessionFreshnessMs);
   if (eventStands) {
     const isFresh = now - observedAt <= activeSessionFreshnessMs;
     status = statusWithHookEvent(status, hookEvent.event, isFresh);
   }
-  const archived = (numberFromRow(row, CODEX_THREAD_COLUMN.ARCHIVED) ?? 0) !== 0;
   const completionCause =
     status === SESSION_STATUS.COMPLETE &&
-    (archived || (eventStands && hookEvent.event === CODEX_HOOK_EVENT.SESSION_END))
+    eventStands &&
+    hookEvent.event === CODEX_HOOK_EVENT.SESSION_END
       ? SESSION_COMPLETION_CAUSE.SESSION_CLOSED
       : undefined;
   return {
@@ -575,7 +573,7 @@ export class CodexSessionAdapter extends LocalSessionAdapter {
         now = this.observationTime();
         rows = database
           .prepare(CODEX_THREAD_QUERY)
-          .all(now - SESSION_ROSTER_RETENTION_MS.SETTLED_MS)
+          .all()
           .filter((row): row is CodexThreadRow => isRecord(row));
       } catch (error) {
         if (error instanceof Error && canIgnoreSqliteError(error)) continue;
@@ -617,13 +615,12 @@ export class CodexSessionAdapter extends LocalSessionAdapter {
   }
 
   /**
-   * Reads the turn boundary for the threads that can still change. An archived
-   * thread has already settled, and the cap keeps a crowded day from turning
-   * one observation pass into dozens of file reads.
+   * Reads the turn boundary for each observed thread, newest first. The cap
+   * keeps a crowded day from turning one observation pass into dozens of file
+   * reads.
    */
   async #rollouts(rows: readonly CodexThreadRow[]): Promise<Map<string, ParsedCodexRollout>> {
     const candidates = rows
-      .filter((row) => (numberFromRow(row, CODEX_THREAD_COLUMN.ARCHIVED) ?? 0) === 0)
       .slice(0, CODEX_ADAPTER_DEFAULTS.MAXIMUM_ROLLOUT_READS)
       .map((row) => ({
         id: textFromRow(row, CODEX_THREAD_COLUMN.ID),
@@ -658,14 +655,12 @@ export class CodexSessionAdapter extends LocalSessionAdapter {
     const hookEventsDirectory = this.#hookEventsDirectory?.();
     if (!hookEventsDirectory) return events;
     await Promise.all(
-      rows
-        .filter((row) => (numberFromRow(row, CODEX_THREAD_COLUMN.ARCHIVED) ?? 0) === 0)
-        .map(async (row) => {
-          const id = textFromRow(row, CODEX_THREAD_COLUMN.ID);
-          if (!id) return;
-          const event = await readCodexHookEvent(hookEventsDirectory, id).catch(() => undefined);
-          if (event) events.set(id, event);
-        }),
+      rows.map(async (row) => {
+        const id = textFromRow(row, CODEX_THREAD_COLUMN.ID);
+        if (!id) return;
+        const event = await readCodexHookEvent(hookEventsDirectory, id).catch(() => undefined);
+        if (event) events.set(id, event);
+      }),
     );
     return events;
   }

@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
-import { SESSION_COMPLETION_CAUSE, SESSION_STATUS } from "@sidecar/core";
+import { InMemorySessionRegistry, SESSION_COMPLETION_CAUSE, SESSION_STATUS } from "@sidecar/core";
 import { CODEX_PROVIDER, CodexSessionAdapter } from "../src/codex-adapter";
 import type { ParsedJsonObject } from "./support/json";
 
@@ -708,9 +708,11 @@ test("keeps stale unarchived Codex sessions unknown instead of inventing activit
   assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
 });
 
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("keeps archived Codex threads as closed completed rows", async (t) => {
+test("hides archived Codex threads however recently they were touched", async (t) => {
   const codexHome = await temporaryCodexHome(t);
+  // Archiving touches the row's clock, so the freshly-touched archived thread
+  // is the one that would resurface if anything short of the archive flag
+  // itself decided the roster.
   await writeCodexState(codexHome, [
     {
       id: "old-session",
@@ -718,7 +720,7 @@ test("keeps archived Codex threads as closed completed rows", async (t) => {
       observedAt: TEST_TIME - 90_000,
     },
     {
-      id: "archived-session",
+      id: "just-archived-session",
       cwd: "/Users/test/archived",
       observedAt: TEST_TIME - 3 * 24 * 60 * 60 * 1000,
       recencyAt: TEST_TIME - 3 * 24 * 60 * 60 * 1000,
@@ -726,8 +728,8 @@ test("keeps archived Codex threads as closed completed rows", async (t) => {
       archived: 1,
     },
     {
-      id: "expired-archived-session",
-      cwd: "/Users/test/expired-archived",
+      id: "long-archived-session",
+      cwd: "/Users/test/long-archived",
       observedAt: TEST_TIME - 3 * 24 * 60 * 60 * 1000,
       archived: 1,
     },
@@ -748,30 +750,54 @@ test("keeps archived Codex threads as closed completed rows", async (t) => {
     observations.map((observation) => ({
       providerSessionId: observation.providerSessionId,
       status: observation.status,
-      completionCause: observation.completionCause,
       title: observation.title,
     })),
     [
       {
-        providerSessionId: "archived-session",
-        status: SESSION_STATUS.COMPLETE,
-        completionCause: SESSION_COMPLETION_CAUSE.SESSION_CLOSED,
-        title: "archived",
-      },
-      {
         providerSessionId: "new-session",
         status: SESSION_STATUS.WORKING,
-        completionCause: undefined,
         title: "new",
       },
       {
         providerSessionId: "old-session",
         status: SESSION_STATUS.WORKING,
-        completionCause: undefined,
         title: "old",
       },
     ],
   );
+});
+
+test("a thread archived between passes leaves the roster and stays gone", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  await writeCodexState(codexHome, [
+    {
+      id: "codex-live",
+      cwd: "/Users/test/luke",
+      observedAt: TEST_TIME - 10_000,
+    },
+  ]);
+  const adapter = new CodexSessionAdapter({ codexHome, now: () => TEST_TIME });
+  const registry = new InMemorySessionRegistry();
+
+  await registry.refresh(adapter);
+  assert.deepEqual(
+    registry.list().map((session) => session.providerSessionId),
+    ["codex-live"],
+  );
+
+  const database = new DatabaseSync(path.join(codexHome, CODEX_STATE_DATABASE), {});
+  try {
+    // Codex touches the row's clock as it archives — exactly the touch that
+    // must not read as fresh news.
+    database
+      .prepare("UPDATE threads SET archived = 1, updated_at_ms = ?, recency_at_ms = ? WHERE id = ?")
+      .run(TEST_TIME, TEST_TIME, "codex-live");
+  } finally {
+    database.close();
+  }
+
+  await registry.refresh(adapter);
+  assert.deepEqual(registry.list(), []);
 });
 
 test("returns an empty snapshot when Codex has no local state database", async (t) => {
