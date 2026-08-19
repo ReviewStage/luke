@@ -11,7 +11,7 @@ import type {
   WorkspaceProject,
 } from "../providers.js";
 import type { ProviderSessionObservation, SessionProvider } from "../session.js";
-import { fromPromise } from "./runtime-bridge.js";
+import { fromPromise, runPromiseOrDie } from "./runtime-bridge.js";
 
 export interface EffectSessionProviderAdapter {
   readonly provider: SessionProvider;
@@ -31,7 +31,7 @@ export interface EffectSessionProviderAdapter {
 }
 
 function wrapPromise<A>(promise: () => Promise<A>): Effect.Effect<A, never, never> {
-  return Effect.tryPromise(promise).pipe(Effect.orDie);
+  return fromPromise(promise).pipe(Effect.orDie);
 }
 
 export function fromPromiseAdapter(adapter: SessionProviderAdapter): EffectSessionProviderAdapter {
@@ -51,12 +51,13 @@ export function fromPromiseAdapter(adapter: SessionProviderAdapter): EffectSessi
 export function toPromiseAdapter(adapter: EffectSessionProviderAdapter): SessionProviderAdapter {
   return {
     provider: adapter.provider,
-    observe: () => fromPromise(adapter.observe()),
-    executeControl: (request) => fromPromise(adapter.executeControl(request)),
-    sendMessage: (message) => fromPromise(adapter.sendMessage(message)),
+    observe: () => runPromiseOrDie(adapter.observe()),
+    executeControl: (request) => runPromiseOrDie(adapter.executeControl(request)),
+    sendMessage: (message) => runPromiseOrDie(adapter.sendMessage(message)),
     workspaceProjects: () => adapter.workspaceProjects(),
-    createWorkspace: (request) => fromPromise(adapter.createWorkspace(request)),
-    spawnWorkspaceAgent: (request) => fromPromise(adapter.spawnWorkspaceAgent(request)),
-    readTranscript: (providerSessionId) => fromPromise(adapter.readTranscript(providerSessionId)),
+    createWorkspace: (request) => runPromiseOrDie(adapter.createWorkspace(request)),
+    spawnWorkspaceAgent: (request) => runPromiseOrDie(adapter.spawnWorkspaceAgent(request)),
+    readTranscript: (providerSessionId) =>
+      runPromiseOrDie(adapter.readTranscript(providerSessionId)),
   };
 }
