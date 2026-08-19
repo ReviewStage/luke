@@ -1163,6 +1163,70 @@ const CARD = { WIDTH: 1200, HEIGHT: 630, GROUND: "#08090b", WORDMARK_FILL: 0.56 
     "Luke — your AI engineering manager",
   );
 }
+// README CTA buttons: the repository page's download and landing-page links,
+// drawn as the hero CTAs in apps/web/src/App.tsx so the README and the site
+// offer the same two doors. An SVG served as an image can reach no stylesheet,
+// so the hero's values are restated here — the filled button's --primary pair,
+// the quiet one's --border around --muted-foreground with their oklch values
+// resolved to hex, the 0.5rem radius, and the 14px/600 label; a change to the
+// hero's look belongs in both places or in neither. Each label is forced to
+// its designed advance with textLength, because the README renders on machines
+// without Geist and the padding must hold under whatever font answers.
+const CTA = {
+  HEIGHT: 44,
+  RADIUS: 8,
+  PAD_X: 24,
+  FONT: "'Geist Variable', -apple-system, blinkmacsystemfont, 'Segoe UI', sans-serif",
+  FONT_SIZE: 14,
+  WEIGHT: 600,
+};
+const CTA_INKS = {
+  // The filled pair carries no dark restatement on the site either: a filled
+  // button owns its own ground, so #04121a on #5cd5ff serves both modes.
+  light: { fill: "#5cd5ff", ink: "#04121a", border: "#e5e5e5", quietInk: "#737373" },
+  dark: {
+    fill: "#5cd5ff",
+    ink: "#04121a",
+    border: "rgba(255, 255, 255, 0.08)",
+    quietInk: "rgba(255, 255, 255, 0.56)",
+  },
+};
+const CTA_BUTTONS = [
+  {
+    name: "download",
+    label: "Download for macOS",
+    advance: 133,
+    filled: true,
+    title: "Download Luke for macOS",
+  },
+  {
+    name: "site",
+    label: "Visit tryluke.dev",
+    advance: 106,
+    filled: false,
+    title: "Visit tryluke.dev",
+  },
+];
+for (const { name, label, advance, filled, title } of CTA_BUTTONS) {
+  const width = advance + 2 * CTA.PAD_X;
+  for (const [mode, inks] of Object.entries(CTA_INKS)) {
+    const ground = filled
+      ? `<rect width="${width}" height="${CTA.HEIGHT}" rx="${CTA.RADIUS}" fill="${inks.fill}"/>`
+      : `<rect x="0.5" y="0.5" width="${width - 1}" height="${CTA.HEIGHT - 1}" rx="${CTA.RADIUS - 0.5}" stroke="${inks.border}"/>`;
+    const text =
+      `<text x="${fmt(width / 2)}" y="${fmt(CTA.HEIGHT / 2)}" text-anchor="middle" dominant-baseline="central" ` +
+      `font-family="${CTA.FONT}" font-size="${CTA.FONT_SIZE}" font-weight="${CTA.WEIGHT}" ` +
+      `textLength="${advance}" fill="${filled ? inks.ink : inks.quietInk}">${label}</text>`;
+    // Sized explicitly, unlike every asset above: an <img> gives a viewBox-only
+    // SVG no intrinsic size, and a button drawn at the browser's fallback size
+    // is no longer the hero's button.
+    const open =
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${CTA.HEIGHT}" ` +
+      `viewBox="0 0 ${width} ${CTA.HEIGHT}" fill="none">`;
+    emit(`button/luke-cta-${name}-${mode}.svg`, `${open}${ground}${text}</svg>`, title);
+  }
+}
+
 // DMG background: a quiet field with the same rounded monoline language as the
 // face. Shared window geometry keeps the arrow centered between the two icons.
 const dmgBackground = DMG_WINDOW.BACKGROUND.PNG;
