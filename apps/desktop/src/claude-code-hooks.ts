@@ -2,9 +2,13 @@ import os from "node:os";
 import path from "node:path";
 import {
   HOOK_SPOOL_MAXIMUM_AGE_MS,
+  installObservationHooks,
+  type ObservationHookInstallation,
   type ObservationHookSpec,
   type ObservedHookEvent,
-  observationHooksFor,
+  pruneObservationHookSpool,
+  readObservationHookEvent,
+  removeObservationHooks,
 } from "./observation-hooks";
 
 /**
@@ -98,12 +102,37 @@ export interface ClaudeCodeHookInstallation {
   spoolDirectory: string;
 }
 
-const claudeHooks = observationHooksFor(
-  CLAUDE_HOOK_SPEC,
-  (installation: ClaudeCodeHookInstallation) => installation.claudeHome,
-);
+function sharedInstallation(installation: ClaudeCodeHookInstallation): ObservationHookInstallation {
+  return {
+    providerHome: installation.claudeHome,
+    hookScriptPath: installation.hookScriptPath,
+    spoolDirectory: installation.spoolDirectory,
+  };
+}
 
-export const installClaudeCodeObservationHooks = claudeHooks.install;
-export const removeClaudeCodeObservationHooks = claudeHooks.remove;
-export const readClaudeHookEvent = claudeHooks.read;
-export const pruneClaudeHookSpool = claudeHooks.prune;
+export function installClaudeCodeObservationHooks(
+  installation: ClaudeCodeHookInstallation,
+): Promise<void> {
+  return installObservationHooks(CLAUDE_HOOK_SPEC, sharedInstallation(installation));
+}
+
+export function removeClaudeCodeObservationHooks(
+  installation: ClaudeCodeHookInstallation,
+): Promise<void> {
+  return removeObservationHooks(CLAUDE_HOOK_SPEC, sharedInstallation(installation));
+}
+
+export function readClaudeHookEvent(
+  spoolDirectory: string,
+  providerSessionId: string,
+): Promise<ObservedClaudeHookEvent | undefined> {
+  return readObservationHookEvent(CLAUDE_HOOK_SPEC, spoolDirectory, providerSessionId);
+}
+
+export function pruneClaudeHookSpool(
+  spoolDirectory: string,
+  maximumAgeMs: number,
+  now: number,
+): Promise<void> {
+  return pruneObservationHookSpool(spoolDirectory, maximumAgeMs, now);
+}

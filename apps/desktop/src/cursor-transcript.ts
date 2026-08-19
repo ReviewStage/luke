@@ -2,13 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import { isRecord, oneLine, text } from "@sidecar/core";
 import { readDirectory, readTail, statDirectoryEntry, tailRecords } from "./local-session-adapter";
-import {
-  boundedTranscript,
-  TRANSCRIPT_BOUNDS,
-  transcriptContentBlocks,
-  transcriptLine,
-  transcriptMessageText,
-} from "./local-transcript";
+import { boundedTranscript, TRANSCRIPT_BOUNDS } from "./local-transcript";
 
 /**
  * On-demand reading of one local Cursor session's transcript, for a question
@@ -21,8 +15,8 @@ import {
  *
  * Cursor deliberately keeps tool outputs out of these files, so the rendering
  * carries the developer's words, the agent's replies, its tool calls, and how
- * a failed turn failed — and no tool-result lines, because there is honestly
- * nothing to put on them.
+ * a failed turn failed — and no `←` lines, because there is honestly nothing
+ * to put on them.
  */
 
 const CURSOR_SPEAKER_NAME = "Cursor";
@@ -91,6 +85,24 @@ function defaultCursorHome(): string {
   return path.join(os.homedir(), ".cursor");
 }
 
+function contentBlocks(record: Record<string, unknown>): Record<string, unknown>[] {
+  const message = record.message;
+  const content = isRecord(message) ? message.content : undefined;
+  return Array.isArray(content) ? content.filter(isRecord) : [];
+}
+
+/** The words of a message, whether the content is a string or text blocks. */
+function messageText(record: Record<string, unknown>): string | undefined {
+  const message = record.message;
+  const content = isRecord(message) ? message.content : undefined;
+  if (typeof content === "string") return text(content);
+  const parts = contentBlocks(record)
+    .filter((block) => block.type === CURSOR_CONTENT_TYPE.TEXT)
+    .map((block) => text(block.text))
+    .filter((part): part is string => part !== undefined);
+  return parts.length > 0 ? parts.join(" ") : undefined;
+}
+
 /**
  * The developer's own words in a user record: the `user_query` blocks when
  * Cursor wrapped them, the whole text when it did not, and nothing when the
@@ -111,9 +123,9 @@ function toolLine(block: Record<string, unknown>): string | undefined {
   const input = isRecord(block.input) ? block.input : {};
   for (const key of CURSOR_TOOL_INPUT_KEY) {
     const detail = oneLine(text(input[key]), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
-    if (detail) return transcriptLine.toolCall(name, detail);
+    if (detail) return `→ ${name}: ${detail}`;
   }
-  return transcriptLine.toolCall(name);
+  return `→ ${name}`;
 }
 
 /** Renders one record into the lines a conversation can carry, oldest first. */
@@ -123,23 +135,20 @@ function linesFromRecord(record: Record<string, unknown>): string[] {
     const reason = isRecord(record.error)
       ? oneLine(text(record.error.message), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH)
       : undefined;
-    return [transcriptLine.error(reason ?? "The turn failed")];
+    return [reason ? `Error: ${reason}` : "Error: The turn failed"];
   }
   if (record.role === CURSOR_RECORD_ROLE.USER) {
-    const words = transcriptMessageText(record, false);
+    const words = messageText(record);
     const typed = words
       ? oneLine(developerWords(words), TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH)
       : undefined;
-    return typed ? [transcriptLine.developer(typed)] : [];
+    return typed ? [`Developer: ${typed}`] : [];
   }
   if (record.role === CURSOR_RECORD_ROLE.ASSISTANT) {
     const lines: string[] = [];
-    const words = oneLine(
-      transcriptMessageText(record, false),
-      TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH,
-    );
-    if (words) lines.push(transcriptLine.agent(CURSOR_SPEAKER_NAME, words));
-    for (const block of transcriptContentBlocks(record, false)) {
+    const words = oneLine(messageText(record), TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
+    if (words) lines.push(`${CURSOR_SPEAKER_NAME}: ${words}`);
+    for (const block of contentBlocks(record)) {
       if (block.type !== CURSOR_CONTENT_TYPE.TOOL_USE) continue;
       const line = toolLine(block);
       if (line) lines.push(line);

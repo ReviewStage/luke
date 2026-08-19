@@ -7,7 +7,7 @@ import {
   type SqliteDatabase,
   type SqliteModuleLoader,
 } from "./local-sqlite";
-import { boundedTranscript, TRANSCRIPT_BOUNDS, transcriptLine } from "./local-transcript";
+import { boundedTranscript, TRANSCRIPT_BOUNDS } from "./local-transcript";
 
 /**
  * On-demand reading of one local Devin session's transcript, for a question
@@ -100,9 +100,9 @@ function toolLine(call: Record<string, unknown>): string | undefined {
         : undefined));
   for (const key of DEVIN_TOOL_INPUT_KEY) {
     const detail = oneLine(text(rawArguments?.[key]), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
-    if (detail) return transcriptLine.toolCall(name, detail);
+    if (detail) return `→ ${name}: ${detail}`;
   }
-  return transcriptLine.toolCall(name);
+  return `→ ${name}`;
 }
 
 /**
@@ -114,14 +114,9 @@ function linesFromChatMessage(record: Record<string, unknown>): string[] {
   const role = text(record.role);
   if (role === DEVIN_ROLE.USER || role === DEVIN_ROLE.ASSISTANT) {
     const lines: string[] = [];
+    const speaker = role === DEVIN_ROLE.USER ? "Developer" : DEVIN_SPEAKER_NAME;
     const said = oneLine(text(record.content), TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
-    if (said) {
-      lines.push(
-        role === DEVIN_ROLE.USER
-          ? transcriptLine.developer(said)
-          : transcriptLine.agent(DEVIN_SPEAKER_NAME, said),
-      );
-    }
+    if (said) lines.push(`${speaker}: ${said}`);
     if (role === DEVIN_ROLE.ASSISTANT && Array.isArray(record.tool_calls)) {
       for (const call of record.tool_calls) {
         if (!isRecord(call)) continue;
@@ -133,7 +128,7 @@ function linesFromChatMessage(record: Record<string, unknown>): string[] {
   }
   if (role === DEVIN_ROLE.TOOL) {
     const answer = oneLine(text(record.content), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
-    return answer ? [transcriptLine.toolResult(answer)] : [];
+    return answer ? [`← ${answer}`] : [];
   }
   return [];
 }

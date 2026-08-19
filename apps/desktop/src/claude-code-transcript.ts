@@ -1,13 +1,7 @@
 import path from "node:path";
 import { isRecord, oneLine, text } from "@sidecar/core";
 import { readDirectory, readTail, statDirectoryEntry, tailRecords } from "./local-session-adapter";
-import {
-  boundedTranscript,
-  TRANSCRIPT_BOUNDS,
-  transcriptContentBlocks,
-  transcriptLine,
-  transcriptMessageText,
-} from "./local-transcript";
+import { boundedTranscript, TRANSCRIPT_BOUNDS } from "./local-transcript";
 
 /**
  * On-demand reading of one Claude Code session's transcript, for a question
@@ -36,15 +30,33 @@ export interface ClaudeTranscriptRequest {
   maximumRenderedLength?: number;
 }
 
+function contentBlocks(record: Record<string, unknown>): Record<string, unknown>[] {
+  const message = record.message;
+  const content = isRecord(message) ? message.content : record.content;
+  return Array.isArray(content) ? content.filter(isRecord) : [];
+}
+
+/** The words of a message, whether the content is a string or text blocks. */
+function messageText(record: Record<string, unknown>): string | undefined {
+  const message = record.message;
+  const content = isRecord(message) ? message.content : record.content;
+  if (typeof content === "string") return text(content);
+  const parts = contentBlocks(record)
+    .filter((block) => block.type === "text")
+    .map((block) => text(block.text))
+    .filter((part): part is string => part !== undefined);
+  return parts.length > 0 ? parts.join(" ") : undefined;
+}
+
 function toolLine(block: Record<string, unknown>): string | undefined {
   const name = text(block.name);
   if (!name) return undefined;
   const input = isRecord(block.input) ? block.input : {};
   for (const key of TOOL_INPUT_KEYS) {
     const detail = oneLine(text(input[key]), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
-    if (detail) return transcriptLine.toolCall(name, detail);
+    if (detail) return `→ ${name}: ${detail}`;
   }
-  return transcriptLine.toolCall(name);
+  return `→ ${name}`;
 }
 
 /** The words inside one value, whether it is a string or text blocks. */
@@ -69,7 +81,7 @@ function wordsFromContent(content: unknown): string | undefined {
  * output rides `stdout`, `stderr`, or `content`.
  */
 function toolResultText(record: Record<string, unknown>): string | undefined {
-  for (const block of transcriptContentBlocks(record, true)) {
+  for (const block of contentBlocks(record)) {
     if (block.type !== "tool_result") continue;
     const words = wordsFromContent(block.content);
     if (words) return words;
@@ -86,7 +98,7 @@ function toolResultText(record: Record<string, unknown>): string | undefined {
 
 function isToolResult(record: Record<string, unknown>): boolean {
   if (record.toolUseResult !== undefined) return true;
-  return transcriptContentBlocks(record, true).some((block) => block.type === "tool_result");
+  return contentBlocks(record).some((block) => block.type === "tool_result");
 }
 
 /** Renders one record into the lines a conversation can carry, oldest first. */
@@ -94,22 +106,16 @@ function linesFromRecord(record: Record<string, unknown>): string[] {
   if (record.type === "user") {
     if (isToolResult(record)) {
       const answer = oneLine(toolResultText(record), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
-      return answer ? [transcriptLine.toolResult(answer)] : [];
+      return answer ? [`← ${answer}`] : [];
     }
-    const prompt = oneLine(
-      transcriptMessageText(record, true),
-      TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH,
-    );
-    return prompt ? [transcriptLine.developer(prompt)] : [];
+    const prompt = oneLine(messageText(record), TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
+    return prompt ? [`Developer: ${prompt}`] : [];
   }
   if (record.type === "assistant") {
     const lines: string[] = [];
-    const words = oneLine(
-      transcriptMessageText(record, true),
-      TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH,
-    );
-    if (words) lines.push(transcriptLine.agent("Claude", words));
-    for (const block of transcriptContentBlocks(record, true)) {
+    const words = oneLine(messageText(record), TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
+    if (words) lines.push(`Claude: ${words}`);
+    for (const block of contentBlocks(record)) {
       if (block.type !== "tool_use") continue;
       const line = toolLine(block);
       if (line) lines.push(line);
@@ -121,7 +127,7 @@ function linesFromRecord(record: Record<string, unknown>): string[] {
     const words = isRecord(error)
       ? oneLine(text(error.formatted) ?? text(error.message), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH)
       : undefined;
-    return words ? [transcriptLine.error(words)] : [];
+    return words ? [`Error: ${words}`] : [];
   }
   if (record.type === "result") {
     const words = oneLine(text(record.result), TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);

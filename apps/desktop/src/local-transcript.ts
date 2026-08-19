@@ -7,16 +7,6 @@
  * same bounded size however the records differ.
  */
 
-import { isRecord, text } from "@sidecar/core";
-
-export const transcriptLine = {
-  developer: (words: string) => `Developer: ${words}`,
-  agent: (name: string, words: string) => `${name}: ${words}`,
-  toolCall: (name: string, detail?: string) => (detail ? `→ ${name}: ${detail}` : `→ ${name}`),
-  toolResult: (answer: string) => `← ${answer}`,
-  error: (reason: string) => `Error: ${reason}`,
-} as const;
-
 export const TRANSCRIPT_BOUNDS = {
   /** How much of the file's end one read may load. */
   READ_TAIL_BYTES: 256 * 1024,
@@ -33,37 +23,6 @@ export const TRANSCRIPT_BOUNDS = {
 } as const;
 
 export const OMISSION_MARKER = "[earlier turns omitted]";
-
-export function transcriptContentBlocks(
-  record: Record<string, unknown>,
-  fallbackToRecordContent: boolean,
-): Record<string, unknown>[] {
-  const message = record.message;
-  const content = isRecord(message)
-    ? message.content
-    : fallbackToRecordContent
-      ? record.content
-      : undefined;
-  return Array.isArray(content) ? content.filter(isRecord) : [];
-}
-
-export function transcriptMessageText(
-  record: Record<string, unknown>,
-  fallbackToRecordContent: boolean,
-): string | undefined {
-  const message = record.message;
-  const content = isRecord(message)
-    ? message.content
-    : fallbackToRecordContent
-      ? record.content
-      : undefined;
-  if (typeof content === "string") return text(content);
-  const parts = transcriptContentBlocks(record, fallbackToRecordContent)
-    .filter((block) => block.type === "text")
-    .map((block) => text(block.text))
-    .filter((part): part is string => part !== undefined);
-  return parts.length > 0 ? parts.join(" ") : undefined;
-}
 
 /**
  * Joins rendered lines into one bounded rendering, or nothing when there are

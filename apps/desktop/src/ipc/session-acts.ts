@@ -8,9 +8,7 @@ import {
   type IssueIdentity,
   isProviderId,
   issueCommentText,
-  type NormalizedSession,
   PROVIDER_ACT_RESULT_STATUS,
-  type ProviderActResult,
   type ProviderControlResult,
   type ProviderMessageResult,
   type ProviderWorkspaceResult,
@@ -85,21 +83,6 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     trustedSender,
     handle: (channel, handler) => ipcMain.handle(channel, handler),
   });
-  // Capability checks stay in their handlers so no act can inherit another act's authority.
-  async function performSessionAct<Result extends ProviderActResult>(
-    identity: SessionIdentity,
-    act: (adapter: SessionProviderAdapter, session: NormalizedSession) => Promise<Result>,
-  ): Promise<Result | { status: typeof PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED }> {
-    const session = sessionRegistry.get(identity);
-    if (!session) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-    const adapter = adapterFor(identity.providerId);
-    if (!adapter) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-    const result = await act(adapter, session);
-    if (result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
-      void sessionRegistry.refresh(adapter);
-    }
-    return result;
-  }
   const registerOpenAction = (
     channel: string,
     address: (identity: SessionIdentity) => string | undefined,
@@ -234,16 +217,26 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
           reason: "A message has to be shorter than a document and longer than nothing.",
         };
       }
-      const messageText = message.value;
-      return performSessionAct(identity, (adapter, session) => {
-        if (!session.canReceiveMessage) {
-          return Promise.resolve({ status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED });
-        }
-        return adapter.sendMessage({
-          providerSessionId: identity.providerSessionId,
-          text: messageText,
-        });
+      // A fixture run has an empty registry, so it refuses every send — a
+      // deterministic capture must not reach any provider.
+      const session = sessionRegistry.get(identity);
+      if (!session?.canReceiveMessage) {
+        return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      }
+      const adapter = adapterFor(identity.providerId);
+      if (!adapter) {
+        return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      }
+      const result = await adapter.sendMessage({
+        providerSessionId: identity.providerSessionId,
+        text: message.value,
       });
+      // A message that landed changes what the session is doing, so the row
+      // should catch up as soon as its provider will say.
+      if (result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
+        void sessionRegistry.refresh(adapter);
+      }
+      return result;
     },
   );
 
@@ -258,14 +251,21 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       if (!isSessionIdentity(identity) || typeof controlId !== "string" || !controlId.trim()) {
         throw new Error("Invalid session control request");
       }
-      return performSessionAct(identity, (adapter, session) => {
-        const control = session.controls.find((candidate) => candidate.id === controlId);
-        if (!control) return Promise.resolve({ status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED });
-        return adapter.executeControl({
-          providerSessionId: identity.providerSessionId,
-          control,
-        });
+      const session = sessionRegistry.get(identity);
+      const control = session?.controls.find((candidate) => candidate.id === controlId);
+      if (!control) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      const adapter = adapterFor(identity.providerId);
+      if (!adapter) {
+        return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      }
+      const result = await adapter.executeControl({
+        providerSessionId: identity.providerSessionId,
+        control,
       });
+      if (result.status === PROVIDER_ACT_RESULT_STATUS.ACCEPTED) {
+        void sessionRegistry.refresh(adapter);
+      }
+      return result;
     },
   );
 
@@ -535,53 +535,70 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       ) {
         throw new Error("Invalid workspace agent request");
       }
-      return performSessionAct(identity, async (adapter, session) => {
-        const advertised = session.spawnableAgents.find((candidate) => candidate === agent.trim());
-        if (!advertised) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
-        // A model named for this one agent must be a documented pairing of
-        // exactly the asked-for kind: the user's chosen agent is never
-        // re-decided by the model named beside it.
-        if (
-          namedModel !== undefined &&
-          !isWorkspaceAgentSelection(identity.providerId, {
-            agent: advertised,
-            model: namedModel,
-            ...(namedEffort !== undefined ? { effort: namedEffort } : {}),
-          })
-        ) {
-          throw new Error("Invalid workspace agent request");
-        }
-        const sessionName = boundedField(name, workspaceNameText);
-        if (!sessionName.ok) {
-          return {
-            status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-            reason: "A session name has to be short enough to say and longer than nothing.",
-          };
-        }
-        const openingTask = boundedField(task, sessionMessageText);
-        if (!openingTask.ok) {
-          return {
-            status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-            reason: "A task has to be shorter than a document and longer than nothing.",
-          };
-        }
-        const stored: WorkspaceAgentSelection | undefined = isProviderId(identity.providerId)
-          ? (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[
-              identity.providerId
-            ]
-          : undefined;
-        const fallback = stored?.agent === advertised ? stored : undefined;
-        const model = namedModel ?? fallback?.model;
-        const effort = namedModel !== undefined ? namedEffort : fallback?.effort;
-        return adapter.spawnWorkspaceAgent({
-          providerSessionId: identity.providerSessionId,
+      // A fixture run has an empty registry, so it refuses every ask.
+      const session = sessionRegistry.get(identity);
+      const advertised = session?.spawnableAgents.find((candidate) => candidate === agent.trim());
+      if (!advertised) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      // A model named for this one agent must be a documented pairing of
+      // exactly the asked-for kind: the user's chosen agent is never
+      // re-decided by the model named beside it.
+      if (
+        namedModel !== undefined &&
+        !isWorkspaceAgentSelection(identity.providerId, {
           agent: advertised,
-          ...(sessionName.value ? { name: sessionName.value } : {}),
-          ...(openingTask.value ? { task: openingTask.value } : {}),
-          ...(model ? { model } : {}),
-          ...(effort ? { effort } : {}),
-        });
+          model: namedModel,
+          ...(namedEffort !== undefined ? { effort: namedEffort } : {}),
+        })
+      ) {
+        throw new Error("Invalid workspace agent request");
+      }
+      const adapter = adapterFor(identity.providerId);
+      if (!adapter) {
+        return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
+      }
+      const sessionName = boundedField(name, workspaceNameText);
+      if (!sessionName.ok) {
+        return {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: "A session name has to be short enough to say and longer than nothing.",
+        };
+      }
+      const openingTask = boundedField(task, sessionMessageText);
+      if (!openingTask.ok) {
+        return {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: "A task has to be shorter than a document and longer than nothing.",
+        };
+      }
+      // A model named for this one agent outranks the stored choice for this
+      // act alone and never touches it. The stored model and effort otherwise
+      // ride along only when the asked-for agent kind is the very kind the
+      // stored selection names: the user's ask always wins over their
+      // preference, so "add a codex agent" is never quietly re-modelled by a
+      // choice made about claude.
+      const stored: WorkspaceAgentSelection | undefined = isProviderId(identity.providerId)
+        ? (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[
+            identity.providerId
+          ]
+        : undefined;
+      const fallback = stored?.agent === advertised ? stored : undefined;
+      const model = namedModel ?? fallback?.model;
+      const effort = namedModel !== undefined ? namedEffort : fallback?.effort;
+      const result = await adapter.spawnWorkspaceAgent({
+        providerSessionId: identity.providerSessionId,
+        agent: advertised,
+        ...(sessionName.value ? { name: sessionName.value } : {}),
+        ...(openingTask.value ? { task: openingTask.value } : {}),
+        ...(model ? { model } : {}),
+        ...(effort ? { effort } : {}),
       });
+      // A new agent is a session the panel should be showing, so the next
+      // look must actually ask rather than serve the cache — on a rejection
+      // too, for the same reason a partial workspace creation refreshes.
+      if (result.status !== PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED) {
+        void sessionRegistry.refresh(adapter);
+      }
+      return result;
     },
   );
 }

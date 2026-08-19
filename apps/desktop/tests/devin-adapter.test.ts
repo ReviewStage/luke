@@ -3,7 +3,6 @@ import test from "node:test";
 import { SESSION_STATUS } from "@sidecar/core";
 import type { CloudFetch } from "../src/cloud-session-adapter";
 import { DEVIN_PROVIDER, DevinSessionAdapter } from "../src/devin-adapter";
-import { describeCloudAdapterContract } from "./support/cloud-adapter-contract";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "./support/http-fake";
 
 const TEST_TIME = Date.parse("2026-08-13T02:45:00.000Z");
@@ -166,22 +165,6 @@ function adapterFor(
 function workingSession(id: string, updatedAt: number): TestSession {
   return { id, status: TEST_STATUS.RUNNING, detail: TEST_DETAIL.WORKING, updatedAt };
 }
-
-describeCloudAdapterContract("Devin", (options) => {
-  const api = fakeDevinApi([workingSession("contract-session", TEST_TIME - 1_000)]);
-  const fetch: CloudFetch = async (url, init) => {
-    if (options.failRequests()) throw new Error("network unreachable");
-    return api.fetch(url, init);
-  };
-  return {
-    adapter: adapterFor(fetch, options),
-    requestCount: () => api.requests.length,
-    credentials: () =>
-      api.requests
-        .map((request) => request.authorization?.replace("Bearer ", ""))
-        .filter((credential): credential is string => credential !== undefined),
-  };
-});
 
 test("declares every provider operation on one adapter interface", () => {
   const adapter = adapterFor(async () => new Response("{}", { status: 200 }));
@@ -590,6 +573,39 @@ test("drops a session it cannot place in time without losing the rest of the pas
   );
 });
 
+test("reports nothing and issues no request without an API key", async () => {
+  const api = fakeDevinApi([workingSession("devin-working", TEST_TIME - 1_000)]);
+
+  const observations = await adapterFor(api.fetch, { apiKey: undefined }).observe();
+
+  assert.deepEqual(observations, []);
+  assert.deepEqual(api.requests, []);
+});
+
+test("reuses the previous snapshot inside the minimum refresh interval", async () => {
+  const api = fakeDevinApi([workingSession("devin-working", TEST_TIME - 1_000)]);
+  let now = TEST_TIME;
+  const adapter = adapterFor(api.fetch, { now: () => now, minimumRefreshIntervalMs: 15_000 });
+
+  const first = await adapter.observe();
+  const requestsAfterFirstPass = api.requests.length;
+  now = TEST_TIME + 5_000;
+  const throttled = await adapter.observe();
+  const requestsAfterThrottledPass = api.requests.length;
+  now = TEST_TIME + 20_000;
+  const refreshed = await adapter.observe();
+
+  assert.equal(first.length, 1);
+  assert.deepEqual(throttled, first);
+  assert.equal(
+    requestsAfterThrottledPass,
+    requestsAfterFirstPass,
+    "throttled pass issued requests",
+  );
+  assert.ok(api.requests.length > requestsAfterThrottledPass, "refreshed pass issued no request");
+  assert.equal(refreshed.length, 1);
+});
+
 test("forgets who a replaced credential belonged to before reading as the new one", async () => {
   const api = fakeDevinApi([workingSession("devin-working", TEST_TIME - 1_000)]);
   let apiKey = TEST_API_KEY;
@@ -630,6 +646,23 @@ test("clears observations when Devin rejects the credential", async () => {
 
   assert.equal(authorized.length, 1);
   assert.deepEqual(rejected, []);
+});
+
+test("keeps the previous snapshot when the list request fails transiently", async () => {
+  const api = fakeDevinApi([workingSession("devin-working", TEST_TIME - 1_000)]);
+  let failRequests = false;
+  const gatedFetch: CloudFetch = async (url, init) => {
+    if (failRequests) throw new Error("network unreachable");
+    return api.fetch(url, init);
+  };
+  const adapter = adapterFor(gatedFetch);
+
+  const observed = await adapter.observe();
+  failRequests = true;
+  const duringOutage = await adapter.observe();
+
+  assert.equal(observed.length, 1);
+  assert.deepEqual(duringOutage, observed);
 });
 
 test("advertises a message only for sessions Devin will take one for", async () => {

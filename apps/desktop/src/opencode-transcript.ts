@@ -6,7 +6,7 @@ import {
   type SqliteDatabase,
   type SqliteModuleLoader,
 } from "./local-sqlite";
-import { boundedTranscript, TRANSCRIPT_BOUNDS, transcriptLine } from "./local-transcript";
+import { boundedTranscript, TRANSCRIPT_BOUNDS } from "./local-transcript";
 import {
   defaultOpenCodeDataDirectory,
   OPENCODE_TOOL_INPUT_KEY,
@@ -101,11 +101,11 @@ function toolLine(part: Record<string, unknown>): string[] {
   if (!name) return [];
   const state = isRecord(part.state) ? part.state : {};
   const input = isRecord(state.input) ? state.input : {};
-  let call = transcriptLine.toolCall(name);
+  let call = `→ ${name}`;
   for (const key of OPENCODE_TOOL_INPUT_KEY) {
     const detail = oneLine(text(input[key]), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
     if (detail) {
-      call = transcriptLine.toolCall(name, detail);
+      call = `→ ${name}: ${detail}`;
       break;
     }
   }
@@ -115,7 +115,7 @@ function toolLine(part: Record<string, unknown>): string[] {
       : state.status === OPENCODE_TOOL_STATUS.ERROR
         ? oneLine(text(state.error), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH)
         : undefined;
-  return answer ? [call, transcriptLine.toolResult(answer)] : [call];
+  return answer ? [call, `← ${answer}`] : [call];
 }
 
 /**
@@ -130,7 +130,7 @@ function errorLine(data: Record<string, unknown>): string | undefined {
     text(errorData?.message) ?? text(error.name),
     TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH,
   );
-  return words ? transcriptLine.error(words) : undefined;
+  return words ? `Error: ${words}` : undefined;
 }
 
 /**
@@ -142,6 +142,8 @@ function errorLine(data: Record<string, unknown>): string | undefined {
 function linesFromMessage(data: Record<string, unknown>, parts: readonly OpenCodeRow[]): string[] {
   const role = text(data.role);
   if (role !== OPENCODE_MESSAGE_ROLE.USER && role !== OPENCODE_MESSAGE_ROLE.ASSISTANT) return [];
+  const speaker = role === OPENCODE_MESSAGE_ROLE.USER ? "Developer" : OPENCODE_SPEAKER_NAME;
+
   const lines: string[] = [];
   const spokenParts: string[] = [];
   for (const row of parts) {
@@ -158,13 +160,7 @@ function linesFromMessage(data: Record<string, unknown>, parts: readonly OpenCod
     }
   }
   const said = oneLine(spokenParts.join(" "), TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
-  if (said) {
-    lines.unshift(
-      role === OPENCODE_MESSAGE_ROLE.USER
-        ? transcriptLine.developer(said)
-        : transcriptLine.agent(OPENCODE_SPEAKER_NAME, said),
-    );
-  }
+  if (said) lines.unshift(`${speaker}: ${said}`);
 
   const failure = errorLine(data);
   if (failure) lines.push(failure);
