@@ -21,11 +21,11 @@
     <meta property="og:url" content="https://tryluke.dev/" />
     <!-- The 1200x630 card every unfurler reads — Facebook, LinkedIn, Slack,
          Discord, iMessage, WhatsApp, and Telegram all take these Open Graph
-         tags, and X falls back to them under twitter:card. The URL is
-         absolute because scrapers resolve nothing, the dimensions let a
-         first share render before the image is fetched, and the alt is what
-         screen readers get on platforms that honor it. The PNG is cut from
-         design/brand/social/luke-og-card.svg — see design/brand/README.md. -->
+         tags. The URL is absolute because scrapers resolve nothing, the
+         dimensions let a first share render before the image is fetched, and
+         the alt is what screen readers get on platforms that honor it. The
+         PNG is cut from design/brand/social/luke-og-card.svg — see
+         design/brand/README.md. -->
     <meta property="og:image" content="https://tryluke.dev/luke-og-card.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -35,8 +35,20 @@
       content="The LUKE wordmark — a smiling L-face followed by U, K, E — on space black."
     />
     <!-- summary_large_image is what makes X and Discord show the card full
-         width instead of as a thumbnail. -->
+         width instead of as a thumbnail. X documents falling back to the
+         Open Graph tags, but its crawler renders no image on that fallback,
+         so the card is repeated under the twitter: names it reads. -->
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Luke — your AI engineering manager" />
+    <meta
+      name="twitter:description"
+      content="Luke is an open-source macOS app that watches your coding agent sessions and shows you which ones need you."
+    />
+    <meta name="twitter:image" content="https://tryluke.dev/luke-og-card.png" />
+    <meta
+      name="twitter:image:alt"
+      content="The LUKE wordmark — a smiling L-face followed by U, K, E — on space black."
+    />
 
     <!-- Luke's app icon: the L-face on its space-black tile, traced from the
          generated design/brand/icon/luke-icon-dark.svg — the dark set serves
