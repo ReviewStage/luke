@@ -12,8 +12,9 @@
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "evidence:record": "node scripts/record-evidence.mjs",
     "format": "biome format --write .",
-    "lint": "biome check .",
+    "lint": "biome check . && pnpm oxlint",
     "lint:fix": "biome check --write .",
+    "oxlint": "./scripts/oxlint.sh",
     "package": "pnpm --filter @luke/desktop package",
     "prepare": "husky",
     "release:macos": "./scripts/release-macos.sh",
@@ -30,7 +31,9 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.8",
+    "@oxlint/plugins": "1.79.0",
     "husky": "9.1.7",
-    "lint-staged": "17.3.0"
+    "lint-staged": "17.3.0",
+    "oxlint": "1.79.0"
   }
 }
