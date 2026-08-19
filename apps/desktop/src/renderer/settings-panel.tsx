@@ -3152,8 +3152,8 @@ function UsageDataSection({
              account, and the honest claim is the narrow one — a fixed list of
              events whose values this build chose, so nothing a session or a
              conversation contains has a shape to travel in. */
-          "Counts of Luke's own features — a launch, a provider connected, a call opened. " +
-          "Nothing about a session, and nothing you type or say."
+          "Counts of Luke's own features — a launch, a provider connected, a call opened — tied " +
+          "to your account. Nothing about a session, and nothing you type or say."
         }
         changed={settings.shareUsageData !== APP_SETTING_DEFAULTS.shareUsageData}
         checked={settings.shareUsageData}

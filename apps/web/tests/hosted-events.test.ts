@@ -3,7 +3,7 @@ import test from "node:test";
 import { PRODUCT_EVENT, PRODUCT_EVENT_BATCH_LIMIT, type WireValue } from "../server/core.js";
 import { type EventsOptions, handleEvents } from "../server/hosted/events";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
-import type { PosthogBatch } from "../server/hosted/posthog";
+import type { PosthogBatch, PosthogBatchItem } from "../server/hosted/posthog";
 
 const NOW = Date.parse("2026-08-19T12:00:00.000Z");
 const PROJECT_KEY = "phc_project";
@@ -14,13 +14,7 @@ const LAUNCH = {
   properties: { app_version: "0.2.0" },
 };
 
-type PropertyValue = string | number | boolean | undefined;
-
-interface BatchItem {
-  event: string;
-  timestamp: string;
-  properties: Readonly<Record<string, PropertyValue>>;
-}
+type BatchItem = PosthogBatchItem;
 
 interface Forwarded {
   url: string;
@@ -238,6 +232,69 @@ test("the forwarded document matches the processor's documented batch shape", as
   assert.equal(item.properties.$geoip_disable, true);
   assert.equal(item.timestamp, new Date(LAUNCH.at).toISOString());
   assert.match(item.timestamp, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+});
+
+test("the account's name and address ride as person properties, once per batch", async () => {
+  const posthog = upstream();
+  await handleEvents(
+    options({
+      request: eventsRequest({ events: [LAUNCH, LAUNCH] }),
+      readPerson: async () => ({ name: "Ada", email: "ada@example.test" }),
+      fetch: posthog.fetch,
+      resolveUserId: freshUser(),
+    }),
+  );
+
+  const { items } = onlyBatch(posthog.forwarded);
+  // `$set` names the person; a second copy on every item would say the same
+  // thing again for nothing.
+  assert.deepEqual(itemAt(items, 0).properties.$set, {
+    name: "Ada",
+    email: "ada@example.test",
+  });
+  assert.equal(itemAt(items, 1).properties.$set, undefined);
+  // Never an event property: the event stream is what the allowlist guards.
+  assert.equal(itemAt(items, 0).properties.name, undefined);
+  assert.equal(itemAt(items, 0).properties.email, undefined);
+});
+
+test("a deployment that reads no person, or fails to, still records the counts", async () => {
+  const withoutSeam = upstream();
+  const anonymous = await handleEvents(
+    options({ fetch: withoutSeam.fetch, resolveUserId: freshUser() }),
+  );
+  assert.equal(anonymous.status, 202);
+  assert.equal(itemAt(onlyBatch(withoutSeam.forwarded).items, 0).properties.$set, undefined);
+
+  const failing = upstream();
+  const survived = await handleEvents(
+    options({
+      readPerson: async () => {
+        throw new Error("database unreachable");
+      },
+      fetch: failing.fetch,
+      resolveUserId: freshUser(),
+    }),
+  );
+  assert.equal(survived.status, 202);
+  assert.equal(itemAt(onlyBatch(failing.forwarded).items, 0).properties.$set, undefined);
+});
+
+test("nothing the request body says can name the person", async () => {
+  const posthog = upstream();
+  await handleEvents(
+    options({
+      request: eventsRequest({
+        events: [{ ...LAUNCH, properties: { app_version: "0.2.0", $set: { email: "them@evil" } } }],
+      }),
+      readPerson: async () => ({ name: "Ada", email: "ada@example.test" }),
+      fetch: posthog.fetch,
+      resolveUserId: freshUser(),
+    }),
+  );
+
+  const item = itemAt(onlyBatch(posthog.forwarded).items, 0);
+  assert.deepEqual(item.properties.$set, { name: "Ada", email: "ada@example.test" });
 });
 
 test("a wrong desktop clock is clamped to the reader's own window", async () => {

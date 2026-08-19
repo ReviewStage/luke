@@ -50,8 +50,8 @@ Linear issues show as chips under the notch.
 ### Usage data
 
 Luke now counts how his own features are used — a launch, a provider connected,
-sessions observed, a call opened — and sends those counts to Luke's own service
-so we can see what is worth building next. This is on by default, and the
+sessions observed, a call opened — and sends those counts to Luke's own service,
+tied to your account, so we can see what is worth building next. This is on by default, and the
 switch is Share usage data in the new Usage data section on the Settings tab's
 front page; turning it off stops it at once. Every event name and every value
 is fixed by the build, so nothing about a session — no title, branch, path,

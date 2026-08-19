@@ -163,7 +163,11 @@ Trust constraints:
   a recap, a prompt, an error line — may reach a property, and no property may
   take free text; counts travel as buckets and versions as release versions.
   The desktop posts to Luke's own service and never to an analytics provider,
-  and the account is the bearer token's, so no identity travels with an event.
+  and the account is the bearer token's, so no identity travels from the
+  desktop at all. The service attaches the account's own name and address to
+  the analytics person record, read from its own user row — never from the
+  request, and never onto an event, because an event property is what the
+  allowlist governs and a person property is not.
   Nothing is sent in a fixture or evidence run, or while the developer has
   switched sharing off — a switch that is on by default, sits on the settings
   front page, and belongs to no reset scope, because a reset that turned

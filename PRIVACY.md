@@ -79,12 +79,17 @@ the voice and review endpoints use, and that service forwards them to PostHog
 (PostHog Cloud, US region) under a key that exists only in the deployment.
 **Because the account is resolved from the bearer token, the desktop transmits
 no identity at all** — there is no field in what it sends that could name a
-person, and a `distinct_id` written into the request body is discarded rather
-than honoured. Each forwarded event carries `$geoip_disable`, so PostHog never
+person, and a `distinct_id` or `$set` written into the request body is discarded
+rather than honoured. The service itself attaches your account's name and email
+address to the PostHog person record, read from its own user row, so that the
+counts can be read as belonging to an account rather than to an anonymous id.
+Those two fields sit on the person, never in an event.
+
+Each forwarded event carries `$geoip_disable`, so PostHog never
 resolves your Mac's network address or location; the address it would otherwise
 see is the data centre's, not yours.
 
-**There is no free-text field on the wire.** An event is one name from a fixed
+**No free text reaches the event stream.** An event is one name from a fixed
 list, and each of its properties is one value from a fixed set, a version
 number, or a bucket — enforced by a single validator in
 `packages/sidecar-core/src/product-events.ts` that both the desktop and the
@@ -134,17 +139,16 @@ and attributes of what you click and the contents of the page are not
 collected. But the browser talks to PostHog directly, which means **PostHog
 sees your network address and user agent on the website**, as it would for any
 third-party script. Visitors are not given a person record until they sign in;
-at that point the account's opaque database id — and only that id, never an
-email, name, or sign-in provider — is what links the visit to the account, so
-the website half and the desktop half of the funnel join.
+at that point the account's database id is what links the visit to the account, so the website
+half and the desktop half of the funnel join, and the same name and email
+address the account holds are set on the person record. The sign-in provider
+does not travel.
 
-Deleting your Luke account also asks PostHog to erase the person and the events
-recorded against them. That erasure is **asynchronous on PostHog's side and
-best-effort**: it is requested before the account row is deleted, but if PostHog
-refuses or is unreachable the account is still deleted and the request is not
-retried, because a third party's availability is not a condition of erasing
-your account. Turning the switch off stops future collection but does not by
-itself erase what was already collected.
+Deleting your Luke account removes it from Luke's own service, but does not by
+itself erase counts already sent to PostHog: those remain against the person
+record, which afterwards names an account that no longer exists. Turning the
+switch off stops further collection and likewise erases nothing already
+collected. Ask us and we will delete the person record and its events.
 
 ## Update check
 

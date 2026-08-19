@@ -8,6 +8,8 @@ import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } fro
 import {
   type FetchLike,
   type PosthogBatch,
+  type PosthogBatchItem,
+  type PosthogPerson,
   type PosthogUpstreamOptions,
   postPosthogBatch,
 } from "./posthog.js";
@@ -72,6 +74,11 @@ export interface EventsOptions {
   /** A deployment-configured ingestion host; the shared default otherwise. */
   host?: string;
   resolveUserId: (request: Request) => Promise<string | undefined>;
+  /**
+   * The account's own name and address, for the person record. Omitted by a
+   * deployment that would rather PostHog held neither; the counts still land.
+   */
+  readPerson?: (userId: string) => Promise<PosthogPerson | undefined>;
   fetch?: FetchLike;
   now?: () => number;
   timeoutMs?: number;
@@ -84,28 +91,39 @@ export interface EventsOptions {
  * `$geoip_disable` is what keeps the processor from resolving an event with no
  * address to the data centre's own location; and `historical_migration` stays
  * false because this is live traffic rather than a backfill.
+ *
+ * The account's name and address ride as person properties rather than event
+ * properties, and only on the first item of a batch — `$set` names the person
+ * the events belong to, where an event property would put free text in the
+ * event stream the allowlist exists to keep it out of. They are read from the
+ * service's own user row: nothing identifying arrives from the desktop, and
+ * nothing a caller sends can name a different person.
  */
 function batchDocument(
   events: ProductEventBatch,
   projectApiKey: string,
   userId: string,
   now: number,
+  person: PosthogPerson | undefined,
 ): PosthogBatch {
   return {
     api_key: projectApiKey,
     historical_migration: false,
-    batch: events.map((event) => ({
-      event: event.name,
-      timestamp: new Date(
-        Math.min(now, Math.max(event.at, now - MAXIMUM_EVENT_AGE_MS)),
-      ).toISOString(),
-      properties: {
+    batch: events.map((event, index) => {
+      const properties = {
         ...event.properties,
         distinct_id: userId,
         $geoip_disable: true,
         $lib: "luke-desktop",
-      },
-    })),
+      };
+      return {
+        event: event.name,
+        timestamp: new Date(
+          Math.min(now, Math.max(event.at, now - MAXIMUM_EVENT_AGE_MS)),
+        ).toISOString(),
+        properties: index === 0 && person ? { ...properties, $set: person } : properties,
+      } satisfies PosthogBatchItem;
+    }),
   };
 }
 
@@ -159,8 +177,10 @@ export async function handleEvents(options: EventsOptions): Promise<Response> {
   if (options.host !== undefined) upstream.host = options.host;
   if (options.fetch) upstream.fetch = options.fetch;
   if (options.timeoutMs !== undefined) upstream.timeoutMs = options.timeoutMs;
+  // A failed read costs the person's name, never the counts.
+  const person = await options.readPerson?.(userId).catch(() => undefined);
   const response = await postPosthogBatch(
-    batchDocument(events, projectApiKey, userId, now),
+    batchDocument(events, projectApiKey, userId, now, person),
     upstream,
   );
   if (!response) {

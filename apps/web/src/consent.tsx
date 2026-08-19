@@ -20,10 +20,11 @@ function Consent(): React.JSX.Element {
       // Where the two halves of the funnel join. The desktop's counts resolve
       // to the same account id from the bearer token, so naming the visitor by
       // it here links the page views they arrived through to the account they
-      // just made. The id alone travels: no email, no name, no provider.
-      const session = await authClient.getSession();
-      const userId = session.data?.user.id;
-      if (userId) identifySiteVisitor(userId);
+      // just made.
+      const account = (await authClient.getSession()).data?.user;
+      if (account) {
+        identifySiteVisitor(account.id, { name: account.name, email: account.email });
+      }
       captureSiteEvent(SITE_EVENT.SIGN_IN_COMPLETE);
     });
   }, []);

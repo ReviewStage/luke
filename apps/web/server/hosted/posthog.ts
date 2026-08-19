@@ -34,11 +34,25 @@ export const POSTHOG_DEFAULTS = {
 
 export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
+/**
+ * Who the account behind a batch is, as the person record should read. The
+ * service reads this from its own user row rather than taking it from the
+ * request, so the desktop still names nobody: these are the same fields the
+ * account itself already holds.
+ */
+export interface PosthogPerson {
+  name?: string;
+  email?: string;
+}
+
+/** Every kind of value one of this build's event properties may hold. */
+export type PosthogPropertyValue = string | number | boolean | PosthogPerson;
+
 /** One item of the documented batch document, as this build builds it. */
 export interface PosthogBatchItem {
   event: string;
   timestamp: string;
-  properties: Readonly<Record<string, string | number | boolean>>;
+  properties: Readonly<Record<string, PosthogPropertyValue>>;
 }
 
 /** The whole batch document, exactly as the capture endpoint documents it. */

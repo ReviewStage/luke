@@ -77,14 +77,21 @@ function withClient(use: (posthog: PostHog) => void): void {
   void client?.then((posthog) => posthog && use(posthog)).catch(() => undefined);
 }
 
+/** What the person record holds beyond the id it is keyed by. */
+export interface SiteVisitor {
+  name?: string;
+  email?: string;
+}
+
 /**
- * Names the visitor by the account they just created, and nothing else. The id
- * is the same opaque database id the desktop's events resolve to, so the two
- * halves of the funnel join; no email, name, or provider travels with it,
- * because a person record should be an id and not an identity.
+ * Names the visitor by the account they just created. The id is the same
+ * opaque database id the desktop's events resolve to, which is what joins the
+ * two halves of the funnel; the name and address ride as person properties,
+ * the same two fields the account itself holds and the service attaches to
+ * desktop events.
  */
-export function identifySiteVisitor(userId: string): void {
-  withClient((posthog) => posthog.identify(userId));
+export function identifySiteVisitor(userId: string, visitor: SiteVisitor = {}): void {
+  withClient((posthog) => posthog.identify(userId, visitor));
 }
 
 export function captureSiteEvent(event: SiteEvent): void {
