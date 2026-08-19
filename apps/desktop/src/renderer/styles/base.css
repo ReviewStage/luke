@@ -1063,7 +1063,14 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .app-stage[data-notch="false"] .panel-surface {
   height: calc(var(--capsule-height) - var(--shape-top) * 2 + var(--caption-growth));
   min-height: calc(var(--capsule-height) - var(--shape-top) * 2);
-  border-radius: 999px;
+  /* Half the resting strip, stated as that number rather than an overlarge
+     one: at rest the two draw the same pill, but an overlarge radius scales
+     with whatever box it is given, so a shape grown for captions or chips
+     curved its sides to half its new height — under bands laid out for the
+     resting corner, whose first line ran past the curve onto the desktop.
+     Stated once here, the growth extends the pill downward with the corners
+     it had, the same way the notch capsule keeps its convex radius. */
+  border-radius: calc((var(--capsule-height) - var(--shape-top) * 2) / 2);
 }
 
 /* The panel and the slot keep the pill's lift rather than gluing themselves to
@@ -1124,7 +1131,10 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .app-stage[data-notch="false"] .compact-hover-target {
   top: var(--shape-top);
   height: calc(var(--capsule-height) - var(--shape-top) * 2);
-  border-radius: 999px;
+  /* The surface's own radius above, for the surface's reason: the captioned
+     target grows with the shape, and an overlarge radius would round its hit
+     region past the corners the shape actually draws. */
+  border-radius: calc((var(--capsule-height) - var(--shape-top) * 2) / 2);
 }
 
 /* Inside an open panel the strip is surrounded by the shape rather than
