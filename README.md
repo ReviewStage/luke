@@ -45,21 +45,19 @@ key in Settings.
 Voice is the one feature that sends audio off your Mac. Refer to
 [PRIVACY.md](PRIVACY.md).
 
-## Supported integrations
+## Supported agents
 
-| Integration | Support | Credential required |
-| --- | --- | --- |
-| Claude Code | Local sessions | No |
-| Codex | Local and cloud sessions | Cloud via your Codex CLI login |
-| Conductor | Cloud sessions | Yes |
-| GitHub Copilot | Cloud agent tasks | Yes |
-| Cursor | Local and cloud sessions | Cloud only |
-| Devin | Local and cloud sessions | Cloud only |
-| Jules | Cloud sessions | Yes |
-| OpenCode | Local sessions | No |
-| Superset | Local workspace and terminal context | Actions only |
-| Linear | Assigned issues | Yes (sign-in) |
-| Google Calendar | Meeting busy times | Yes (sign-in) |
+| Provider | Local | Cloud |
+| --- | :---: | :---: |
+| Claude Code | ✅ | |
+| Codex | ✅ | ✅ |
+| Conductor | | ✅ |
+| GitHub Copilot | | ✅ |
+| Cursor | ✅ | ✅ |
+| Devin | ✅ | ✅ |
+| Jules | | ✅ |
+| OpenCode | ✅ | |
+| Superset | ✅ | |
 
 See [PROVIDERS.md](PROVIDERS.md) and [PRIVACY.md](PRIVACY.md) for more details.
 
