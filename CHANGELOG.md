@@ -12,9 +12,16 @@
      for what got better, `### Fixes` for what got repaired, and
      `### Miscellaneous` for what fits neither — brand, packaging, and the
      like. Link pull requests where relevant.
-     Screenshots live in apps/web/public/changelog/ and are written here
-     repository-relative (apps/web/public/changelog/<name>.png) so GitHub
-     renders them too; the page rewrites that prefix to the site root. -->
+     Screenshots live in apps/web/public/changelog/<version>/, one file per
+     `###` section named by the section heading's kebab-case slug (a second
+     image for a section keeps the slug as its prefix), and are written here
+     repository-relative (apps/web/public/changelog/<version>/<slug>.png) so
+     GitHub renders them too; the page rewrites that prefix to the site root.
+     A release's screenshots are frozen with it — they show what shipped, so
+     a UI change gets a new screenshot in the release that changed it, never
+     an edit to an old one — and every capture uses fixture data
+     (./scripts/run.sh --fixture smoke), because a real session's title or
+     branch committed to history stays there. -->
 
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
@@ -87,8 +94,8 @@ even travel — and several accounts stand side by side.
 
 ## 0.1.0 — 2026-08-17
 
-The first release: Luke stands beside the MacBook notch and watches every
-coding-agent session on the machine and in the cloud.
+The first release: Luke lives in the MacBook notch and watches every
+local and cloud coding agent session.
 
 ### One panel for every agent
 
