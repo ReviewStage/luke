@@ -657,6 +657,7 @@ export function App(): React.JSX.Element {
     changeMode,
     cancelHover,
     onHitRegionLeave,
+    panelReceded,
     changeAskEngagement,
     settle,
     leave,
@@ -684,6 +685,22 @@ export function App(): React.JSX.Element {
   });
 
   const leavingPanel = useLeavingPanel(presentation);
+
+  /**
+   * The panel following its content down is the one move that can take the
+   * shape out from under a resting pointer — a settings page opening shorter
+   * than the page it replaces. The mark lands here, on the measure that
+   * retargets the surface, so it is standing before the spring can pass the
+   * pointer and manufacture a leave nobody performed.
+   */
+  const previousPanelHeight = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    const previous = previousPanelHeight.current;
+    previousPanelHeight.current = panelHeight;
+    if (previous !== undefined && panelHeight !== undefined && panelHeight < previous) {
+      panelReceded();
+    }
+  }, [panelHeight, panelReceded]);
 
   /**
    * Sends Luke to sign the next act waiting on him, and puts the panel where
