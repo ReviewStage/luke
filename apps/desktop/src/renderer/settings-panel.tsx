@@ -86,13 +86,9 @@ import { type ErrandTarget, errandTargetProps } from "./luke-errand";
 import { APP_SETTING_ID } from "./luke-guide";
 import {
   currentQuota,
-  dailyLimitWords,
   fresherQuota,
   HOSTED_METER_LABEL,
-  HOSTED_METER_MEANING,
-  hostedVoiceNote,
   hostedVoiceSpentNote,
-  KEY_USE_NOTE,
   MICROPHONE_UNGRANTED_NOTE,
   microphoneAccessRow,
   quotaLevel,
@@ -691,10 +687,6 @@ function ProviderCredential({
         </span>
       </div>
 
-      {/* What connecting this one buys, for a provider whose section cannot
-          say it once for every row. */}
-      {provider.description ? <p className="settings-note">{provider.description}</p> : null}
-
       {entry ? (
         // SAFETY: The preceding check establishes the asserted contract.
         /* Named as a group, because Cancel, Save, and the link to the
@@ -1113,12 +1105,6 @@ function WorkspaceAgentRow({
       <SelectRow
         label="New agents run"
         ariaLabel={`The model new ${provider.displayName} workspaces run`}
-        detail={
-          /* Scope, because this row must not claim the provider's own app:
-             only what Luke itself creates — a workspace, or another agent in
-             one — starts on this choice. */
-          "For workspaces and agents created through Luke."
-        }
         value={chosenIndex >= 0 ? String(chosenIndex) : PROVIDER_DEFAULT_VALUE}
         options={[
           { value: PROVIDER_DEFAULT_VALUE, label: providerDefault },
@@ -1162,7 +1148,6 @@ function WorkspaceAgentRow({
         <SelectRow
           label="Effort"
           ariaLabel={`The effort new ${provider.displayName} agents think at`}
-          detail="How hard the chosen model thinks."
           value={
             selection?.effort && chosen.efforts.includes(selection.effort)
               ? selection.effort
@@ -1270,10 +1255,6 @@ function CredentialsSection({
         <KeyIcon />
         Cloud Agent API keys
       </h2>
-      {/* True of every key here, so it is said once rather than per provider. */}
-      <p className="settings-note">
-        Luke reads only cloud workspaces you created, and never sends a prompt or any other change.
-      </p>
       {/* First because the list reads alphabetically, like the key rows below. */}
       <CodexCloudConnection connection={settings.codexCloudConnection} />
       {CLOUD_AGENT_PROVIDER_LIST.map((provider) => {
@@ -1517,10 +1498,6 @@ function GoogleCalendarIntegration({
           </button>
         </span>
       </div>
-      <p className="settings-note">
-        Luke reads when your meetings start and end — never their titles — and can hold
-        announcements until they finish.
-      </p>
       {accounts.map((account) => (
         <CalendarAccountRow
           key={account.id}
@@ -1542,7 +1519,6 @@ function GoogleCalendarIntegration({
           label="Quiet during meetings"
           ariaLabel="Hold announcements while a calendar meeting is on"
           errand={APP_SETTING_ID.QUIET_DURING_MEETINGS}
-          detail="While a meeting is on, spoken announcements wait and are read out together after it ends."
           checked={settings.quietDuringMeetings}
           onChange={preferences.onQuietDuringMeetingsChange}
         />
@@ -1598,15 +1574,10 @@ function SupersetIntegration({ control }: { control: SupersetControl }): React.J
           </span>
         ) : null}
       </div>
-      <p className="settings-note">
-        Workspace grouping works automatically. Connecting enables messages, controls, and new
-        sessions.
-      </p>
       {control.connected && control.agents.length > 0 ? (
         <SelectRow
           label="New Superset sessions run"
           ariaLabel="Default agent for new Superset sessions"
-          detail="Used when a creation ask does not name an agent. Your first successful choice sets it."
           changed={control.defaultAgent !== undefined}
           value={control.defaultAgent ?? PROVIDER_DEFAULT_VALUE}
           options={[
@@ -1741,7 +1712,6 @@ function LinearIntegration({
           </span>
         )}
       </div>
-      <p className="settings-note">{provider.description}</p>
       {rejection ? <p className="error-message">{rejection}</p> : null}
     </div>
   );
@@ -1933,7 +1903,8 @@ function VoiceSection({
           two ways in stand together there. This page holds what voice does
           once it runs; while it cannot run, the one section says where to
           turn it on rather than drawing settings for a feature two steps
-          from working. */}
+          from working. The line stays because it is the way in, not a
+          description of one: without it the page is a heading and a tooltip. */}
       {settings.voiceAvailable ? null : (
         // SAFETY: The preceding check establishes the asserted contract.
         <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
@@ -1942,10 +1913,7 @@ function VoiceSection({
             Voice
             <AttentionMark note={VOICE_KEYLESS_NOTE} />
           </h2>
-          <p className="settings-note">
-            Voice is off until you sign in or connect an OpenAI key — both live under Account and
-            usage, at the top of Settings. Luke cannot talk, listen, or announce sessions.
-          </p>
+          <p className="settings-note">{VOICE_KEYLESS_NOTE}</p>
         </section>
       )}
       {/* Drawn only once there is a voice for the microphone to reach: until
@@ -2070,14 +2038,6 @@ function VoiceControlsSection({
         label="Quiet Music and Spotify"
         ariaLabel="Quiet Music and Spotify while talking with Luke"
         errand={APP_SETTING_ID.DUCK_OTHER_MEDIA}
-        detail={
-          // SAFETY: The preceding check establishes the asserted contract.
-          /* Named by app rather than as "other media": these two are the ones
-             macOS lets Luke turn down, and a switch claiming more would claim
-             a capability the system does not grant. The first duck is also
-             when macOS asks whether Luke may speak to each player at all. */
-          "Their volume dips while you and Luke are talking, and returns after."
-        }
         changed={settings.duckOtherMedia !== APP_SETTING_DEFAULTS.duckOtherMedia}
         checked={settings.duckOtherMedia}
         onChange={preferences.onDuckOtherMediaChange}
@@ -2086,12 +2046,6 @@ function VoiceControlsSection({
         label="Prefer the Mac's microphone"
         ariaLabel="Listen through the Mac's own microphone instead of a Bluetooth headset's"
         errand={APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE}
-        detail={
-          /* The why is the headset's music codec: capturing from its own
-             microphone turns everything it plays phone-grade. The Microphone
-             row above says so while the case is live. */
-          "Keeps Bluetooth headphones on their full music quality while you talk."
-        }
         changed={settings.preferBuiltInMicrophone !== APP_SETTING_DEFAULTS.preferBuiltInMicrophone}
         checked={settings.preferBuiltInMicrophone}
         onChange={preferences.onPreferBuiltInMicrophoneChange}
@@ -2138,11 +2092,6 @@ function AppearanceSection({
         label="Form factor"
         errand={APP_SETTING_ID.FORM_FACTOR}
         changed={settings.formFactor !== DEFAULT_PANEL_FORM_FACTOR}
-        detail={
-          /* Where the choice applies, because on a notched display this row
-             visibly does nothing: the real housing always wins. */
-          "On displays without a notch."
-        }
         value={settings.formFactor}
         options={PANEL_FORM_FACTOR_LIST.map((candidate) => ({
           value: candidate,
@@ -2194,13 +2143,6 @@ function WorkspacesSection({
       </div>
       <SelectRow
         label="Default workspace provider"
-        detail={
-          /* How the default comes to exist, because the row is most often
-             read before any choice was made here: the first workspace
-             created in conversation fills it in, and this select is where
-             that choice is seen, changed, or returned to asking. */
-          "Where an ask that names no provider creates a workspace. Your first creation sets it."
-        }
         changed={settings.defaultWorkspaceProvider !== undefined}
         value={settings.defaultWorkspaceProvider ?? ASK_EACH_TIME}
         options={[
@@ -2259,7 +2201,6 @@ function WorkspaceProjectRow({
     <SelectRow
       label={`Default ${provider.name} project`}
       ariaLabel={`The project a nameless ask creates ${provider.name} workspaces in`}
-      detail="Where an ask that names no project creates a workspace. Your first creation there sets it."
       changed={stored !== undefined}
       value={stored ?? PROJECT_ASK_EACH_TIME}
       options={[
@@ -2497,8 +2438,8 @@ function ShortcutSection({
         // toggle would leave them holding it and wondering.
         detail={
           shortcuts.voiceHotkeyHeld
-            ? "Hold to talk, let go to send. Tap instead to keep it open."
-            : "Press to talk, again to send, again to interrupt."
+            ? "Hold to talk, let go to send."
+            : "Press to talk, again to send."
         }
         {...(shownTalk ? { shown: shownTalk } : undefined)}
         chosen={shortcuts.voiceChosen}
@@ -2509,7 +2450,7 @@ function ShortcutSection({
       />
       <ShortcutRow
         title="Ask Luke"
-        detail="Press to type to Luke from any app. The same key puts it away."
+        detail="Press to type to Luke from any app."
         {...(shownAsk ? { shown: shownAsk } : undefined)}
         chosen={shortcuts.askChosen}
         defaultKey={DEFAULT_ASK_HOTKEYS[0] ?? ""}
@@ -2519,7 +2460,7 @@ function ShortcutSection({
       />
       <ShortcutRow
         title="Stop Luke"
-        detail="Press to cut off a reply mid-sentence, from any app. Escape does the same here."
+        detail="Press to cut off a reply, from any app."
         {...(shownStop ? { shown: shownStop } : undefined)}
         chosen={shortcuts.stopChosen}
         defaultKey={DEFAULT_STOP_HOTKEYS[0] ?? ""}
@@ -2573,72 +2514,6 @@ function UsageMeter({ label, quota }: { label: string; quota: HostedQuota }): Re
         aria-label={`${label}: ${quota.remaining} of ${quota.limit} left today`}
       />
     </div>
-  );
-}
-
-/**
- // SAFETY: The preceding check establishes the asserted contract.
- * What counts as usage, folded away until asked, and only that: the two
- * sources say what they are on their own faces, so repeating either here
- * would make the one question the meters cannot answer — what spends them —
- * the hardest thing in the dropdown to find.
- *
- * A `details` rather than a held-open state: the panel's own scroll takes the
- * growth, the surface is not measured off this content, and nothing here
- * animates.
- */
-function UsageDisclosure({
-  voice,
-  reviews,
-}: {
-  /** Today's voice ceiling, where a reading has arrived to state it. */
-  voice?: number;
-  /** Today's review ceiling, on the same terms. */
-  reviews?: number;
-}): React.JSX.Element {
-  return (
-    <details className="settings-disclosure">
-      <summary>How this works</summary>
-      <dl className="settings-definitions">
-        <dt>{HOSTED_METER_LABEL.VOICE}</dt>
-        <dd>
-          {dailyLimitWords(voice)}
-          {HOSTED_METER_MEANING.VOICE}
-        </dd>
-        <dt>{HOSTED_METER_LABEL.REVIEWS}</dt>
-        <dd>
-          {dailyLimitWords(reviews)}
-          {HOSTED_METER_MEANING.REVIEWS}
-        </dd>
-      </dl>
-    </details>
-  );
-}
-
-/**
- * The same question asked of a key instead: what is this being spent on? The
- // SAFETY: The preceding check establishes the asserted contract.
- * two uses are the two the meters count, worded exactly as the allowance's
- * disclosure words them — Luke does one job either way, and only whose
- * credential does it changes — minus the counts a key has none of. The line
- * beneath is the one thing that is different, and the one no meter could ever
- * show: where the work goes, and who is billed for it.
- */
-function KeyUseDisclosure(): React.JSX.Element {
-  return (
-    <details className="settings-disclosure">
-      <summary>How your key is used</summary>
-      <dl className="settings-definitions">
-        <dt>{HOSTED_METER_LABEL.VOICE}</dt>
-        <dd>{HOSTED_METER_MEANING.VOICE}</dd>
-        <dt>{HOSTED_METER_LABEL.REVIEWS}</dt>
-        <dd>{HOSTED_METER_MEANING.REVIEWS}</dd>
-      </dl>
-      {/* Set apart from the list rather than trailing it: it speaks for both
-          // SAFETY: The preceding check establishes the asserted contract.
-          entries above, so it must not read as a third one. */}
-      <p className="settings-note settings-disclosure-close">{KEY_USE_NOTE}</p>
-    </details>
   );
 }
 
@@ -2823,45 +2698,31 @@ function WhatLukeRunsOnSection({
           says what runs on it. Neither half explains the other — the toggle
           above is where they are compared. */}
       {keyBody ? (
-        <>
-          <ProviderCredential
-            provider={VOICE_CREDENTIAL_PROVIDER}
-            source={keySource}
-            storageUnavailable={storageLocked}
-            control={credentials}
-            panelOpen={panelOpen}
-          />
-          <KeyUseDisclosure />
-        </>
+        <ProviderCredential
+          provider={VOICE_CREDENTIAL_PROVIDER}
+          source={keySource}
+          storageUnavailable={storageLocked}
+          control={credentials}
+          panelOpen={panelOpen}
+        />
       ) : (
-        <>
-          {/* The day's allowance from the usage read, or the voice meter alone
-              from the quota the last mint carried while no read has answered.
-              // SAFETY: The preceding check establishes the asserted contract.
-              Every reading in hand having outlived its day reads as no reading
-              at all, and falls back to the words that promise no numbers. */}
-          {voiceQuota ? (
-            <>
-              <UsageMeter label={HOSTED_METER_LABEL.VOICE} quota={voiceQuota} />
-              {reviewQuota ? (
-                <UsageMeter label={HOSTED_METER_LABEL.REVIEWS} quota={reviewQuota} />
-              ) : null}
-              <p className="settings-note">
-                {voiceQuota.remaining === 0
-                  ? hostedVoiceSpentNote(quotaResetsWhen(voiceQuota.resetsAt, now))
-                  : `Resets ${quotaResetsWhen(voiceQuota.resetsAt, now)}.`}
-              </p>
-            </>
-          ) : (
-            <p className="settings-note">{hostedVoiceNote(voiceService)}</p>
-          )}
-          {/* The numbers come off whichever reading is in hand, so the
-              dropdown can never name a ceiling the service is not enforcing. */}
-          <UsageDisclosure
-            {...(voiceQuota ? { voice: voiceQuota.limit } : undefined)}
-            {...(reviewQuota ? { reviews: reviewQuota.limit } : undefined)}
-          />
-        </>
+        /* The day's allowance from the usage read, or the voice meter alone
+           from the quota the last mint carried while no read has answered.
+           Every reading in hand having outlived its day reads as no reading at
+           all, and draws no meters rather than promising numbers. */
+        voiceQuota && (
+          <>
+            <UsageMeter label={HOSTED_METER_LABEL.VOICE} quota={voiceQuota} />
+            {reviewQuota ? (
+              <UsageMeter label={HOSTED_METER_LABEL.REVIEWS} quota={reviewQuota} />
+            ) : null}
+            <p className="settings-note">
+              {voiceQuota.remaining === 0
+                ? hostedVoiceSpentNote(quotaResetsWhen(voiceQuota.resetsAt, now))
+                : `Resets ${quotaResetsWhen(voiceQuota.resetsAt, now)}.`}
+            </p>
+          </>
+        )
       )}
       {storageLocked ? <p className="settings-note">{STORAGE_UNAVAILABLE_NOTE}</p> : null}
     </section>
@@ -3024,7 +2885,6 @@ function AccountSection({
       <div className="settings-row">
         <span className="settings-copy">
           <strong>Delete account</strong>
-          <small>Erases your account and everything Luke's service holds for it.</small>
         </span>
         <span className="credential-actions">
           <span
@@ -3180,7 +3040,7 @@ function UpdatesSection({
             disabled={row.action === UPDATE_ROW_ACTION.CHECKING}
             onClick={() => void control.onCheck()}
           >
-            {row.action === UPDATE_ROW_ACTION.CHECKING ? "Checking…" : "Check for Updates"}
+            {row.action === UPDATE_ROW_ACTION.CHECKING ? "Checking…" : "Check for updates"}
           </button>
         )}
       </div>

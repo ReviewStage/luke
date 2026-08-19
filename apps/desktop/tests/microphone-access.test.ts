@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { REALTIME_DEFAULTS, REALTIME_MINT_OUTCOME, type RealtimeDiagnostics } from "@sidecar/core";
 import {
   currentQuota,
   fresherQuota,
-  hostedVoiceNote,
   hostedVoiceSpentNote,
   microphoneAccessRow,
   QUOTA_LEVEL,
@@ -17,21 +15,6 @@ import {
 } from "../src/renderer/microphone-access";
 import { VOICE_SOURCE } from "../src/shared/contracts";
 
-/** A hosted diagnostics report with only what a test wants to vary. */
-function diagnostics(overrides: Partial<RealtimeDiagnostics>): RealtimeDiagnostics {
-  return {
-    apiKeyConfigured: false,
-    hosted: true,
-    fixtureMode: false,
-    model: REALTIME_DEFAULTS.MODEL,
-    voice: REALTIME_DEFAULTS.VOICE,
-    speed: REALTIME_DEFAULTS.SPEED,
-    endpoint: "https://tryluke.dev/api/voice/mint",
-    lastOutcome: REALTIME_MINT_OUTCOME.NOT_ATTEMPTED,
-    ...overrides,
-  };
-}
-
 test("access is offered only where it can be used", () => {
   const offered = microphoneAccessRow({
     voiceAvailable: true,
@@ -39,7 +22,8 @@ test("access is offered only where it can be used", () => {
     status: "not-determined",
   });
   assert.equal(offered.offerAccess, true);
-  assert.match(offered.detail, /talk key/);
+  // The button is the whole answer, so the row says nothing beside it.
+  assert.equal(offered.detail, undefined);
 
   // The macOS prompt is where someone agrees to their voice reaching OpenAI.
   // Raising it for a feature that cannot run asks for that consent under a
@@ -51,11 +35,9 @@ test("access is offered only where it can be used", () => {
     status: "not-determined",
   });
   assert.equal(unavailable.offerAccess, false);
-  assert.ok(!unavailable.detail.includes("macOS will ask"));
   // The panel never draws this row while voice is off — the Voice page holds
-  // the key row alone then — so the detail only has to stay honest, and it
-  // names no other setting.
-  assert.ok(!unavailable.detail.includes("OpenAI"));
+  // the key row alone then — so there is nothing for it to say.
+  assert.equal(unavailable.detail, undefined);
 });
 
 test("a permission already granted is not a microphone in use", () => {
@@ -65,16 +47,27 @@ test("a permission already granted is not a microphone in use", () => {
   assert.equal(microphoneAccessRow({ voiceAvailable: false, status: "granted" }).ready, false);
 });
 
-test("every permission state says something of its own", () => {
-  const states = ["not-determined", "granted", "denied", "restricted", "unknown"] as const;
+test("only a state the developer must act on, or cannot, says anything", () => {
+  // A granted microphone is already drawn as granted, and the state before
+  // macOS has been asked carries the Allow button instead. What is left is the
+  // one state with somewhere to go and the two with nowhere.
+  const speaking = ["denied", "restricted", "unknown"] as const;
+  const silent = ["granted", "not-determined"] as const;
   const details = new Set<string>();
-  for (const status of states) {
+  for (const status of speaking) {
     const row = microphoneAccessRow({ voiceAvailable: true, status });
+    assert.ok(row.detail, `${status} says why`);
     details.add(row.detail);
-    // Only the two states someone can act on offer anything to press.
+  }
+  assert.equal(details.size, speaking.length, "no two states read the same");
+  for (const status of silent) {
+    assert.equal(microphoneAccessRow({ voiceAvailable: true, status }).detail, undefined, status);
+  }
+  // Only the state someone can answer offers anything to press.
+  for (const status of [...speaking, ...silent]) {
+    const row = microphoneAccessRow({ voiceAvailable: true, status });
     assert.equal(row.offerAccess, status === "not-determined");
   }
-  assert.equal(details.size, states.length, "no two states read the same");
 });
 
 test("System Settings is offered only where macOS has an answer to change", () => {
@@ -179,36 +172,10 @@ test("the reset is worded on the reader's own clock, and says tomorrow when it i
   assert.equal(quotaResetsWhen(nextDay.getTime(), now), `tomorrow at ${clock(nextDay.getTime())}`);
 });
 
-test("the spent sentence answers whether Luke is broken before it says when voice returns", () => {
-  const spent = hostedVoiceSpentNote("at 5:00 PM");
-  // The return, on the reader's own clock…
-  assert.match(spent, /back at 5:00 PM/);
-  // …and the reassurance the question is actually about: observation is local
-  // and unmetered, so the rows keep moving whatever the talking has cost.
-  assert.match(spent, /keeps watching your sessions/);
+test("the spent sentence says when voice returns, on the reader's own clock", () => {
+  assert.match(hostedVoiceSpentNote("at 5:00 PM"), /Back at 5:00 PM/);
   // With no reading in hand, the day boundary every counter shares.
-  assert.match(hostedVoiceSpentNote(), /back at midnight UTC/);
-});
-
-test("the numberless note stays short, and withholds the key from a machine that cannot store one", () => {
-  // Before any numbers are in hand, the note promises the allowance — free,
-  // and daily — and nothing else.
-  assert.equal(
-    hostedVoiceNote(undefined),
-    "Talking and session checks are included free with your account, up to a daily amount.",
-  );
-
-  // What a key of the developer's own would change is the toggle's to say. A
-  // sentence here repeating it would be the panel selling one half of a choice
-  // it is already showing whole.
-  assert.doesNotMatch(hostedVoiceNote(undefined), /OpenAI/);
-
-  // Only the minter's last outcome can speak here — a spent allowance is a
-  // state with its own return, not an error.
-  const spent = hostedVoiceNote(
-    diagnostics({ lastOutcome: REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED }),
-  );
-  assert.match(spent, /used today's free voice — back at midnight UTC/);
+  assert.match(hostedVoiceSpentNote(), /Back at midnight UTC/);
 });
 
 test("the toggle names both sources and explains each one", () => {
@@ -247,28 +214,13 @@ test("a meter warns while there is still something left to spend differently", (
   );
 });
 
-test("a reading past its own reset is no reading, and a stale spent outcome goes quiet", () => {
+test("a reading past its own reset is no reading", () => {
   const now = 1_800_000_000_000;
   const running = { used: 50, limit: 50, remaining: 0, resetsAt: now + 3_600_000 };
   const expired = { used: 50, limit: 50, remaining: 0, resetsAt: now - 1 };
 
+  // A spent yesterday must not draw itself over a fresh day's allowance.
   assert.equal(currentQuota(running, now), running);
   assert.equal(currentQuota(expired, now), undefined);
   assert.equal(currentQuota(undefined, now), undefined);
-
-  // Yesterday's refusal, dated by its own expired quota, describes an
-  // allowance that no longer exists — the fresh day promises numbers again.
-  const rolled = hostedVoiceNote(
-    diagnostics({ lastOutcome: REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED, quota: expired }),
-    { now },
-  );
-  assert.doesNotMatch(rolled, /used today's free voice/);
-  assert.match(rolled, /included free with your account/);
-
-  // Still inside its day, the refusal stands.
-  const standing = hostedVoiceNote(
-    diagnostics({ lastOutcome: REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED, quota: running }),
-    { now },
-  );
-  assert.match(standing, /used today's free voice/);
 });
