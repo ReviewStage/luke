@@ -249,9 +249,9 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
   /**
    * When the shape last receded out from under the pointer, undefined once
    * spent. Spent by the one leave it explains, by the pointer settling on the
-   * panel as it now stands, or by the panel closing some other way — a mark
-   * that survived into the next opening would swallow that panel's first,
-   * genuine leave.
+   * panel as it now stands, by the pointer arriving back from outside, or by
+   * the panel closing any way at all — a mark that survived into the next
+   * opening would swallow that panel's first, genuine leave.
    */
   const recededAt = useRef<number | undefined>(undefined);
 
@@ -314,6 +314,11 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
       const generation = modeGeneration.current + 1;
       modeGeneration.current = generation;
       presentationRef.current = expanded ? PANEL_PRESENTATION.PANEL : PANEL_PRESENTATION.CAPSULE;
+      // Spent here as well as on the confirmed presentation, because a newer
+      // generation can win the race and leave this call's applyPresentation
+      // unmade — a mark surviving that into a reopened panel would swallow
+      // its first genuine leave.
+      if (!expanded) recededAt.current = undefined;
       try {
         // Asking for focus is what makes Escape reach the panel someone opened.
         const confirmedMode = await window.sidecar.setExpanded(expanded, expanded);
@@ -331,6 +336,11 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
   const onHitRegionEnter = useCallback(() => {
     cancelHover();
     pointerInside.current = true;
+    // A pointer arriving from outside ends whatever story a mark was telling:
+    // it is back on the shape, so its next leave is its own act. The arrival
+    // cannot land between a recede and the leave it explains — the surface
+    // covers the pointer for that whole stretch, so no enter fires there.
+    recededAt.current = undefined;
     if (!pointerEnterPeeks(presentationRef.current)) return;
     hoverTimer.current = window.setTimeout(() => {
       hoverTimer.current = undefined;
