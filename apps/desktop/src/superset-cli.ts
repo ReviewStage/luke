@@ -9,6 +9,7 @@ import {
   type ProviderWorkspaceResult,
 } from "@sidecar/core";
 import { canIgnoreFilesystemError } from "./local-session-adapter";
+import type { SupersetOrganizationChoice } from "./shared/contracts";
 import type { SupersetSessionContext } from "./superset-workspaces";
 
 export const SUPERSET_CONTROL_ID = {
@@ -17,11 +18,23 @@ export const SUPERSET_CONTROL_ID = {
 } as const;
 
 const execFileAsync = promisify(execFile);
+const SUPERSET_QUERY_OUTPUT_LIMIT = 64 * 1024;
+const SUPERSET_ORGANIZATION_LIMIT = 20;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
 
 export type SupersetCommandRunner = (
   executable: string,
   arguments_: readonly string[],
 ) => Promise<void>;
+
+export type SupersetQueryRunner = (
+  executable: string,
+  arguments_: readonly string[],
+  timeoutMs: number,
+) => Promise<string>;
 
 async function defaultCommandRunner(
   executable: string,
@@ -36,15 +49,27 @@ async function defaultCommandRunner(
 export interface SupersetCliOptions {
   homeDirectory: string;
   run?: SupersetCommandRunner;
+  query?: SupersetQueryRunner;
 }
 
 export class SupersetCli {
   readonly #homeDirectory: string;
   readonly #run: SupersetCommandRunner;
+  readonly #query: SupersetQueryRunner;
 
   constructor(options: SupersetCliOptions) {
     this.#homeDirectory = options.homeDirectory;
     this.#run = options.run ?? defaultCommandRunner;
+    this.#query =
+      options.query ??
+      (async (executable, arguments_, timeoutMs) => {
+        const { stdout } = await execFileAsync(executable, [...arguments_], {
+          maxBuffer: SUPERSET_QUERY_OUTPUT_LIMIT,
+          timeout: timeoutMs,
+          windowsHide: true,
+        });
+        return stdout;
+      });
   }
 
   get executable(): string {
@@ -78,6 +103,46 @@ export class SupersetCli {
     } catch (error) {
       if (canIgnoreFilesystemError(error)) return false;
       throw error;
+    }
+  }
+
+  async chooseOrganization(slug: string): Promise<boolean> {
+    const choices = await this.organizations();
+    const choice = choices.find((organization) => organization.slug === slug);
+    if (!choice) return false;
+    try {
+      await this.#query(this.executable, ["organization", "switch", choice.slug, "--json"], 30_000);
+      return this.connected();
+    } catch {
+      return false;
+    }
+  }
+
+  async organizations(): Promise<readonly SupersetOrganizationChoice[]> {
+    try {
+      const output = await this.#query(this.executable, ["organization", "list", "--json"], 30_000);
+      const parsed: unknown = JSON.parse(output);
+      const values = Array.isArray(parsed)
+        ? parsed
+        : isRecord(parsed) && Array.isArray(parsed.data)
+          ? parsed.data
+          : [];
+      return values.slice(0, SUPERSET_ORGANIZATION_LIMIT).flatMap((value) => {
+        if (!isRecord(value)) return [];
+        const { id, name, slug } = value;
+        return typeof id === "string" &&
+          id.length > 0 &&
+          id.length <= 128 &&
+          typeof name === "string" &&
+          name.length > 0 &&
+          name.length <= 120 &&
+          typeof slug === "string" &&
+          /^[a-z0-9][a-z0-9-]{0,79}$/u.test(slug)
+          ? [{ id, name, slug }]
+          : [];
+      });
+    } catch {
+      return [];
     }
   }
 

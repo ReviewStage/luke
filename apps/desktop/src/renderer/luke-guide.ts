@@ -210,8 +210,10 @@ function integrationsFact(settings: AppSettings): AppGuideFact {
     " Superset workspaces on this Mac are recognized automatically from Superset's local " +
     "read-only host state, so agents from different providers group under the project and " +
     "workspace that owns them. When Superset's CLI is logged in, those rows can send the " +
-    "developer's own message and offer Superset workspace controls; connecting the CLI is " +
-    "done by running superset auth login in a terminal, and Luke never reads its token.";
+    "developer's own message and offer Superset workspace controls; connect from Luke's " +
+    "Settings, finish Superset's own sign-in flow in the browser, and paste its one-time code " +
+    "into Luke. Superset's CLI exchanges that code, stores the login, and switches organizations; " +
+    "Luke never reads its token or clipboard.";
   return {
     label: "Integrations",
     detail: `${linear}${calendar}${superset}`.trim(),

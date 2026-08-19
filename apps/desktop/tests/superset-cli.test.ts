@@ -45,6 +45,29 @@ test("a missing CLI login exposes no Superset actions", async (t) => {
   });
 });
 
+test("organization selection is refreshed and switched by exact slug", async (t) => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), "luke-superset-cli-"));
+  t.after(async () => fs.rm(home, { recursive: true, force: true }));
+  await fs.mkdir(path.join(home, "bin"), { recursive: true });
+  await fs.writeFile(path.join(home, "bin", "superset"), "#!/bin/sh\n");
+  const organizations = [
+    { id: "org-1", name: "Acme", slug: "acme" },
+    { id: "org-2", name: "Luke", slug: "luke" },
+  ];
+  const cli = new SupersetCli({
+    homeDirectory: home,
+    query: async (_executable, arguments_) => {
+      if (arguments_[1] === "list") return JSON.stringify({ data: organizations });
+      await fs.writeFile(path.join(home, "config.json"), '{"organizationId":"org-2"}');
+      return "{}";
+    },
+  });
+
+  assert.deepEqual(await cli.organizations(), organizations);
+  assert.equal(await cli.chooseOrganization("invented"), false);
+  assert.equal(await cli.chooseOrganization("luke"), true);
+});
+
 test("message and controls use fixed arguments without a shell", async (t) => {
   const home = await connectedHome(t);
   const calls: Array<{ executable: string; arguments_: readonly string[] }> = [];

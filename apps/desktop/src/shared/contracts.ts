@@ -540,6 +540,30 @@ export interface AppBootstrap {
   settings: AppSettings;
 }
 
+export const SUPERSET_SIGN_IN_STAGE = {
+  IDLE: "idle",
+  BROWSER_CODE: "browser-code",
+  EXCHANGING: "exchanging",
+  ORGANIZATION: "organization",
+  FAILURE: "failure",
+  CONNECTED: "connected",
+} as const;
+
+export type SupersetSignInStage =
+  (typeof SUPERSET_SIGN_IN_STAGE)[keyof typeof SUPERSET_SIGN_IN_STAGE];
+
+export interface SupersetOrganizationChoice {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+export interface SupersetSignInSnapshot {
+  stage: SupersetSignInStage;
+  failure?: string;
+  organizations: readonly SupersetOrganizationChoice[];
+}
+
 /** One validated issue act on its way to the main process. */
 export type IssueActionAsk = Extract<IssueToolAction, { kind: "issue-state" | "issue-comment" }>;
 
@@ -627,6 +651,13 @@ export interface AppBridge {
    * process, so nothing an update check read can steer where this goes.
    */
   openLatestRelease(): void;
+  /** Starts Superset's own OAuth login in one directly spawned CLI child. */
+  beginSupersetSignIn(): Promise<SupersetSignInSnapshot>;
+  /** Hands one explicit paste to that exact child; the code is never stored. */
+  submitSupersetSignInCode(code: string): Promise<SupersetSignInSnapshot>;
+  reopenSupersetSignIn(): void;
+  cancelSupersetSignIn(): void;
+  chooseSupersetOrganization(slug: string): Promise<SupersetSignInSnapshot>;
   /**
    * Runs the Google Calendar sign-in: the browser opens Google's own consent
    * page, the grant comes back over a loopback redirect that never leaves the
@@ -887,6 +918,7 @@ export interface AppBridge {
    * unreadable, which arrives as `undefined` and must be drawn as audible.
    */
   onOutputAudioChanged(callback: (state: OutputAudioState | undefined) => void): () => void;
+  onSupersetSignInChanged(callback: (state: SupersetSignInSnapshot) => void): () => void;
 }
 
 export const channels = {
@@ -917,6 +949,12 @@ export const channels = {
   meetingQuietChanged: "app:meeting-quiet-changed",
   checkForUpdates: "app:check-for-updates",
   openLatestRelease: "app:open-latest-release",
+  beginSupersetSignIn: "app:begin-superset-sign-in",
+  submitSupersetSignInCode: "app:submit-superset-sign-in-code",
+  reopenSupersetSignIn: "app:reopen-superset-sign-in",
+  cancelSupersetSignIn: "app:cancel-superset-sign-in",
+  chooseSupersetOrganization: "app:choose-superset-organization",
+  supersetSignInChanged: "app:superset-sign-in-changed",
   updateChanged: "app:update-changed",
   setVoiceExchange: "app:set-voice-exchange",
   openProviderApiKeys: "app:open-provider-api-keys",

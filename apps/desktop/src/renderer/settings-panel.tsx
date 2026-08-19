@@ -1525,11 +1525,12 @@ export interface LinearControl {
 export interface SupersetControl {
   installed: boolean;
   connected: boolean;
-  onCopyLogin: () => Promise<void>;
+  held: boolean;
+  connecting: boolean;
+  onConnect: () => void;
 }
 
 function SupersetIntegration({ control }: { control: SupersetControl }): React.JSX.Element | null {
-  const [copied, setCopied] = useState(false);
   if (!control.installed) return null;
   return (
     <div className="credential">
@@ -1546,17 +1547,16 @@ function SupersetIntegration({ control }: { control: SupersetControl }): React.J
             <button
               type="button"
               className="quiet-button"
-              onClick={() => {
-                void control.onCopyLogin().then(() => setCopied(true));
-              }}
+              disabled={control.held || control.connecting}
+              onClick={control.onConnect}
             >
-              {copied ? "Copied" : "Copy login command"}
+              {control.connecting ? "Connecting…" : "Connect"}
             </button>
           </span>
         ) : null}
       </div>
       <p className="settings-note">
-        Workspace grouping works automatically. CLI login enables messages and workspace controls.
+        Workspace grouping works automatically. Connecting enables messages and workspace controls.
       </p>
     </div>
   );

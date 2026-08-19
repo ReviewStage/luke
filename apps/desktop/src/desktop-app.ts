@@ -82,11 +82,13 @@ import {
   type MicrophoneStatus,
   type ObservedAccountCalendars,
   type OutputAudioState,
+  SUPERSET_SIGN_IN_STAGE,
 } from "./shared/contracts";
 import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "./shared/credential-providers";
 import { type FeedbackResult, feedbackSubmission } from "./shared/feedback";
 import { APP_SETTING_SCHEMA } from "./shared/settings-schema";
 import { SupersetCli } from "./superset-cli";
+import { SupersetSignIn } from "./superset-sign-in";
 import { SupersetWorkspaceReader, SupersetWorkspaceSnapshot } from "./superset-workspaces";
 import { UPDATE_ENDPOINT, UpdateService } from "./update-service";
 import { VoiceCapabilityAssembler } from "./voice-capability-assembler";
@@ -355,6 +357,14 @@ const panels = new PanelManager({
   preloadPath: path.join(__dirname, "preload.js"),
   rendererHtmlPath: path.join(__dirname, "renderer", "index.html"),
   rendererUrl: rendererUrl(),
+});
+const supersetSignIn = new SupersetSignIn({
+  cli: supersetCli,
+  openExternal: (url) => shell.openExternal(url),
+  onChange: (state) => {
+    panels.broadcast(channels.supersetSignInChanged, state);
+    if (state.stage === SUPERSET_SIGN_IN_STAGE.CONNECTED) void sessionObservationLoop.refresh();
+  },
 });
 const hotkeys = new HotkeyRegistrar({
   registersGlobalKeys: runMode.registersGlobalKeys,
@@ -663,6 +673,26 @@ function registerIpc(): void {
       meetingQuiet: accountCapabilitiesActive() && meetingQuietActive,
       settings: await settingsStore.snapshot(),
     };
+  });
+  ipcMain.handle(channels.beginSupersetSignIn, async (event) => {
+    if (!trustedSender(event)) throw new Error("Untrusted renderer");
+    return supersetSignIn.begin();
+  });
+  ipcMain.handle(channels.submitSupersetSignInCode, (event, code: unknown) => {
+    if (!trustedSender(event)) throw new Error("Untrusted renderer");
+    if (typeof code !== "string") throw new Error("Invalid Superset sign-in code");
+    return supersetSignIn.submitCode(code);
+  });
+  ipcMain.handle(channels.chooseSupersetOrganization, async (event, slug: string) => {
+    if (!trustedSender(event)) throw new Error("Untrusted renderer");
+    if (typeof slug !== "string") throw new Error("Invalid Superset organization");
+    return supersetSignIn.chooseOrganization(slug);
+  });
+  ipcMain.on(channels.reopenSupersetSignIn, (event) => {
+    if (trustedSender(event)) supersetSignIn.reopen();
+  });
+  ipcMain.on(channels.cancelSupersetSignIn, (event) => {
+    if (trustedSender(event)) supersetSignIn.cancel();
   });
 
   registerAccountSessionIpc({ ipcMain, trustedSender, accountSession });
@@ -1515,6 +1545,7 @@ export function startDesktopApp(): void {
     // it to bring the players back up, so quitting mid-sentence costs the user
     // nothing.
     mediaDuck.stop();
+    supersetSignIn.shutdown();
   });
 
   app.on("before-quit", () => {

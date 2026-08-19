@@ -129,9 +129,19 @@ for the narrow, user-requested writes Luke makes elsewhere.
 Superset observation never invokes its CLI and sends nothing to Superset. If
 Superset's CLI executable and its own `config.json` login both exist, Luke may
 offer controls on the exact workspaces and terminals the latest database pass
-  reported. Luke asks macOS's property-list utility whether the CLI config names
-  an active organization and receives only that identifier; Luke never opens
-  the config or receives its credential fields. A message or control runs only from the developer's press or a turn
+reported. You can start that login from Luke's Settings: Luke launches exactly
+one CLI login process, opens only the Superset HTTPS authorization page the CLI
+reports, and writes the one-time code you explicitly paste to that process's
+standard input. Luke does not read the clipboard. The code is kept only in the
+visible field until submission and is never logged or stored; the CLI performs
+the exchange and owns the resulting credential. If Superset returns several
+organizations, Luke shows only the identities from a fresh CLI list and asks
+the CLI to switch only to the choice you press. Cancelling, quitting Luke, or
+waiting three minutes ends the login process.
+
+Luke asks macOS's property-list utility whether the CLI config names an active
+organization and receives only that identifier; Luke never opens the config or
+receives its credential fields. A message or control runs only from the developer's press or a turn
 the developer opened, invokes the CLI executable directly without a shell, and
 passes only the observed host, workspace and terminal identifiers plus the
 developer's own message. Luke never reads, copies, or stores the CLI token. The

@@ -45,10 +45,16 @@ import type {
   SessionOpenResult,
   SettingsResetScope,
   SettingsUpdateResult,
+  SupersetSignInSnapshot,
   UpdateSnapshot,
   VoiceSource,
 } from "../shared/contracts";
-import { ACCOUNT_STATUS, CREDENTIAL_SOURCE, SESSION_OPEN_RESULT_STATUS } from "../shared/contracts";
+import {
+  ACCOUNT_STATUS,
+  CREDENTIAL_SOURCE,
+  SESSION_OPEN_RESULT_STATUS,
+  SUPERSET_SIGN_IN_STAGE,
+} from "../shared/contracts";
 import type { CredentialProviderId } from "../shared/credential-providers";
 import {
   CREDENTIAL_PROVIDER_LIST,
@@ -143,6 +149,7 @@ import {
 import { useSignInFaceCycle } from "./sign-in-gate";
 import { SignInSlot } from "./sign-in-slot";
 import { pointOverStrip, type SpokenStripContent, stripHoldNext } from "./strip-hold";
+import { SupersetSignInSlot } from "./superset-sign-in-slot";
 import { useBootstrapRacedChannel } from "./use-bootstrap-raced-channel";
 import { panelEntryOpen, usePanelEntry } from "./use-panel-entry";
 import { usePanelPresentation } from "./use-panel-presentation";
@@ -342,6 +349,11 @@ function useLeavingPanel(presentation: PanelPresentation): boolean {
 
 export function App(): React.JSX.Element {
   const [bootstrap, setBootstrap] = useState<AppBootstrap>();
+  const [supersetConnected, setSupersetConnected] = useState(false);
+  const [supersetSignIn, setSupersetSignIn] = useState<SupersetSignInSnapshot>({
+    stage: SUPERSET_SIGN_IN_STAGE.IDLE,
+    organizations: [],
+  });
   // Readable from a callback as well as rendered: opening the feedback
   // composer signs a fresh note from the account without re-wiring the
   // lifecycle subscription to every sign-in change.
@@ -446,10 +458,10 @@ export function App(): React.JSX.Element {
   const feedbackHeld = useRef(false);
   /** Whether a calendar sign-in holds the slot, mirrored like the other two. */
   const consentConnectHeld = useRef(false);
+  const supersetSignInHeld = useRef(false);
   /**
-   * Which entry the slot shape is drawn around — a key being pasted, or a
-   * sign-in being waited out. One shape, two occupants, never both: beginning
-   * either is refused while the other is held.
+   * Which entry the slot shape is drawn around — a key being pasted or either
+   * sign-in being waited out. One shape, three occupants, never together.
    */
   const slotOccupant = useRef<SlotOccupant>(PANEL_STAND_DOWN.KEY);
   const feedbackNoticeTimer = useRef<number | undefined>(undefined);
@@ -643,7 +655,10 @@ export function App(): React.JSX.Element {
     // close a panel showing nothing but sessions.
     entryDrawn: () => credentialHeld.current && tabNow() === PANEL_TAB.SETTINGS,
     composerHeld: () =>
-      credentialHeld.current || feedbackHeld.current || consentConnectHeld.current,
+      credentialHeld.current ||
+      feedbackHeld.current ||
+      consentConnectHeld.current ||
+      supersetSignInHeld.current,
     onNotPanel: () => setOptionsOpen(false),
     onCapsuleList: () => {
       // A search is a question about the list as it was, so it closes with
@@ -876,6 +891,32 @@ export function App(): React.JSX.Element {
     }
     consentConnect.cancel();
   }, [consentConnect.cancel, consentConnect.latest]);
+
+  const beginSupersetSignIn = useCallback(() => {
+    if (supersetSignInHeld.current) {
+      if (supersetSignIn.stage === SUPERSET_SIGN_IN_STAGE.FAILURE) {
+        setSupersetSignIn({ stage: SUPERSET_SIGN_IN_STAGE.BROWSER_CODE, organizations: [] });
+        void window.sidecar.beginSupersetSignIn().then(setSupersetSignIn);
+      }
+      return;
+    }
+    if (credentialHeld.current || consentConnectHeld.current) return;
+    supersetSignInHeld.current = true;
+    slotOccupant.current = PANEL_STAND_DOWN.SUPERSET;
+    standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.SUPERSET });
+    setSupersetSignIn({ stage: SUPERSET_SIGN_IN_STAGE.BROWSER_CODE, organizations: [] });
+    cancelHover();
+    applyPresentation(PANEL_PRESENTATION.SLOT);
+    void window.sidecar.beginSupersetSignIn().then(setSupersetSignIn);
+  }, [applyPresentation, cancelHover, supersetSignIn.stage]);
+
+  const cancelSupersetSignIn = useCallback(() => {
+    if (!supersetSignInHeld.current) return;
+    window.sidecar.cancelSupersetSignIn();
+    supersetSignInHeld.current = false;
+    setSupersetSignIn({ stage: SUPERSET_SIGN_IN_STAGE.IDLE, organizations: [] });
+    if (presentationOf() === PANEL_PRESENTATION.SLOT) restorePanel();
+  }, [presentationOf, restorePanel]);
 
   /**
    * Asking to write a key is asking for one thing, so the panel gets out of the
@@ -2204,12 +2245,21 @@ export function App(): React.JSX.Element {
     const removeDisplay = window.sidecar.onDisplayChanged(setDisplay);
     const removeSessions = window.sidecar.onSessionsChanged(setSessions);
     const removeNoticeAsks = window.sidecar.onNoticeAsksChanged(setNoticeAsks);
+    const removeSupersetSignIn = window.sidecar.onSupersetSignInChanged((next) => {
+      if (!supersetSignInHeld.current) return;
+      setSupersetSignIn(next);
+      if (next.stage !== SUPERSET_SIGN_IN_STAGE.CONNECTED) return;
+      supersetSignInHeld.current = false;
+      setSupersetConnected(true);
+      if (presentationOf() === PANEL_PRESENTATION.SLOT) restorePanel();
+    });
     return () => {
       cancelHover();
       removeLifecycle();
       removeDisplay();
       removeSessions();
       removeNoticeAsks();
+      removeSupersetSignIn();
       void stopMicrophone();
     };
   }, [
@@ -2233,6 +2283,8 @@ export function App(): React.JSX.Element {
     stopMicrophone,
     summonAsk,
     modeGenerationOf,
+    presentationOf,
+    restorePanel,
   ]);
 
   // The one greeting an unauthed launch gets: the panel opens on the sign-in
@@ -2661,7 +2713,8 @@ export function App(): React.JSX.Element {
           panelHeight,
           signInWait !== undefined
             ? signInSlotHeight
-            : slotOccupant.current === PANEL_STAND_DOWN.CONSENT
+            : slotOccupant.current === PANEL_STAND_DOWN.CONSENT ||
+                slotOccupant.current === PANEL_STAND_DOWN.SUPERSET
               ? connectHeight
               : slotHeight,
           feedbackHeight,
@@ -2749,8 +2802,10 @@ export function App(): React.JSX.Element {
               },
               superset: {
                 installed: bootstrap.supersetInstalled,
-                connected: bootstrap.supersetConnected,
-                onCopyLogin: () => navigator.clipboard.writeText("superset auth login"),
+                connected: supersetConnected || bootstrap.supersetConnected,
+                held: credentialHeld.current || consentConnectHeld.current,
+                connecting: supersetSignInHeld.current,
+                onConnect: beginSupersetSignIn,
               },
               onQuit: () => window.sidecar.quit(),
               shortcuts,
@@ -2792,6 +2847,18 @@ export function App(): React.JSX.Element {
             }}
             measure={connectElement}
           />
+          {supersetSignInHeld.current ? (
+            <SupersetSignInSlot
+              state={supersetSignIn}
+              drawn={slotOpen && slotOccupant.current === PANEL_STAND_DOWN.SUPERSET}
+              onSubmit={(code) => void window.sidecar.submitSupersetSignInCode(code)}
+              onReopen={() => window.sidecar.reopenSupersetSignIn()}
+              onCancel={cancelSupersetSignIn}
+              onRetry={beginSupersetSignIn}
+              onChooseOrganization={(slug) => void window.sidecar.chooseSupersetOrganization(slug)}
+              measure={connectElement}
+            />
+          ) : null}
         </>
       ) : null}
       {credentialsEntry.entry === undefined && consentConnect.entry === undefined ? (

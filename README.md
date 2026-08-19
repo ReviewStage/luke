@@ -59,8 +59,10 @@ Visit [tryluke.dev](https://tryluke.dev) to see Luke in action.
 Superset enrichment needs no connection: Luke reads Superset's live local host
 database in read-only mode and joins agents by their exact session identifiers.
 When the Superset CLI has its own login, workspace controls and messages appear;
-Luke never reads or stores that login. Run `superset auth login` in a terminal
-to connect the CLI.
+Luke never reads or stores that login. Connect from Luke's Settings and finish
+Superset's own sign-in flow in the browser, then explicitly paste its one-time
+code into Luke. Superset's CLI still exchanges the code, stores the login, and
+switches organizations; no Terminal command or copied-command fallback is used.
 
 Cloud integrations remain inactive until you add their credentials in Luke's
 Settings. Linear and Google Calendar are connected by signing in on the
