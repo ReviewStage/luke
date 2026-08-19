@@ -2024,6 +2024,20 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   color: var(--text-primary);
 }
 
+/* The dot the Settings tab wears while a newer release is waiting. News, not
+   urgency, so it takes the working blue the Download button answers in rather
+   than the attention orange. Absolutely positioned with auto insets: it holds
+   its inline spot just past the label without re-centring the word under a
+   pointer the moment the news lands. */
+.tab-note {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  margin: 1px 0 0 3px;
+  border-radius: 50%;
+  background: var(--state-working);
+}
+
 /* Session primitives ----------------------------------------------------- */
 
 /* Read by assistive tech and drawn nowhere: the rows carry state in colour and

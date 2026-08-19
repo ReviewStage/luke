@@ -535,9 +535,10 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         `The Updates section on ${FRONT_PAGE} says which version this is and whether a newer ` +
         "release exists. Its button checks GitHub on the spot, and Luke also checks on his own " +
         "a few times a day — always on; nothing about the developer or their sessions is sent, " +
-        "and only the release's version name is read back. A newer release is fetched by hand " +
-        "in the browser, from the fixed releases page: Luke never changes the running build " +
-        "himself.",
+        "and only the release's version name is read back. While a newer release is waiting, " +
+        "the Settings tab wears a dot, the section stands at the top of that page, and its " +
+        "button becomes Download. A newer release is fetched by hand in the browser, from the " +
+        "fixed releases page: Luke never changes the running build himself.",
     },
     {
       label: "Quitting",
