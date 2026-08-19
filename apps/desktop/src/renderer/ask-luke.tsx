@@ -65,19 +65,21 @@ export type AskHandler = (text: string) => Promise<string | undefined>;
  */
 export function askRefusal(status: RealtimeStatus, microphone: MicrophoneStatus): string {
   if (status === REALTIME_STATUS.LISTENING) {
-    return "The microphone is open — finish saying it instead.";
+    return "The microphone is open. Finish saying it.";
   }
   if (status === REALTIME_STATUS.UNAVAILABLE) {
-    return "Asking Luke needs an OpenAI API key — connect one in Settings.";
+    // Both ways in, because naming only the key would send a signed-in
+    // developer to buy one they do not need.
+    return "Sign in, or connect an OpenAI key, in Settings.";
   }
   if (status === REALTIME_STATUS.CONNECTING) {
-    return "Still connecting — ask again in a moment.";
+    return "Still connecting. Ask again in a moment.";
   }
   if (microphone !== "granted") {
-    return "Luke answers out loud, so the conversation needs the microphone — allow it in Settings.";
+    return "Luke answers out loud. Allow the microphone in Settings.";
   }
   if (status === REALTIME_STATUS.FAILED) {
-    return "The conversation could not be opened — the notice below says why.";
+    return "The conversation could not be opened.";
   }
   return "Luke could not take that just now.";
 }
