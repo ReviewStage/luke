@@ -80,7 +80,6 @@ export function SignInGate({
           over while the panel is the shape on screen. */}
       <span className="sign-in-face" aria-hidden="true" />
       <h1 id="sign-in-title">Meet Luke</h1>
-      <p>Sign in before Luke starts watching your coding agents.</p>
       <div className="sign-in-actions">
         <button
           type="button"

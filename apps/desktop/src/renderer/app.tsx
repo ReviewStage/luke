@@ -1271,7 +1271,7 @@ export function App(): React.JSX.Element {
       }
     },
     onDelivered: () => {
-      showFeedbackNotice("Sent — thank you.");
+      showFeedbackNotice("Sent — thank you!");
       // The landing plays in the shape the note left from: Luke swoops down
       // beside the thank-you and plays this send's flip of the coin. The pick
       // is held on a ref so the hold below waits out the same gesture.
