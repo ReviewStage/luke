@@ -3891,7 +3891,7 @@ const MODEL_GUIDE_ENTRY = {
   value: "Conductor's default",
   choices: ["Conductor's default", "Fable 5"],
   adjustable: true,
-  manual: "the Conductor row under Cloud Agent API keys",
+  manual: "the Conductor row under Providers",
 } as const;
 
 const MODEL_ONLY_GUIDE: AppGuideSnapshot = {
@@ -3911,7 +3911,7 @@ const MODEL_AND_EFFORT_GUIDE: AppGuideSnapshot = {
       value: "Conductor's default",
       choices: ["Conductor's default", "high", "max"],
       adjustable: true,
-      manual: "the Conductor row under Cloud Agent API keys",
+      manual: "the Conductor row under Providers",
     },
   ],
 };

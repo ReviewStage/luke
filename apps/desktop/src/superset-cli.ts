@@ -159,6 +159,22 @@ export class SupersetCli {
     }
   }
 
+  /**
+   * The CLI's own documented sign-out, `auth logout`, which clears the login
+   * the connect flow's `auth login` stored — the same consent withdrawn by
+   * the same hands, through the same binary. True only once the CLI itself
+   * reports the login gone, so a logout that silently failed cannot read as
+   * a disconnect.
+   */
+  async signOut(): Promise<boolean> {
+    try {
+      await this.#run(this.executable, ["auth", "logout", "--json"]);
+    } catch {
+      return false;
+    }
+    return !(await this.connected());
+  }
+
   async chooseOrganization(slug: string): Promise<boolean> {
     const choices = await this.organizations();
     const choice = choices.find((organization) => organization.slug === slug);

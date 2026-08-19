@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { SUPERSET_SIGN_IN_STAGE, type SupersetSignInSnapshot } from "../shared/contracts";
+import { SUPERSET_WORKSPACE_PROVIDER_ID } from "../shared/superset";
 import { HIT_REGION } from "./panel-state";
-import { ExternalIcon, PlugIcon } from "./settings-icons";
+import { ProviderMark } from "./provider-marks";
+import { ExternalIcon } from "./settings-icons";
 
 export function SupersetSignInSlot({
   state,
@@ -37,14 +39,13 @@ export function SupersetSignInSlot({
 
   return (
     <div className="slot-stage" data-drawn={String(drawn)} aria-hidden={!drawn} inert={!drawn}>
-      <div
-        className="key-slot superset-sign-in-slot"
-        ref={measure}
-        data-hit-region={HIT_REGION.SLOT}
-      >
+      {/* Dressed like every other slot: the same shape, and Superset's own
+          mark naming whose sign-in this is, the way the key and consent slots
+          introduce their providers. */}
+      <div className="key-slot sign-in-slot" ref={measure} data-hit-region={HIT_REGION.SLOT}>
         <div className="key-slot-row">
           <span className="key-slot-mark">
-            <PlugIcon />
+            <ProviderMark providerId={SUPERSET_WORKSPACE_PROVIDER_ID} />
           </span>
           <span className="sign-in-slot-copy" role="status">
             <strong>

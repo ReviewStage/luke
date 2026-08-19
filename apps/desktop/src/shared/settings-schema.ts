@@ -183,7 +183,7 @@ const VOICE_SOURCE_SECTION = `${SETTINGS_TAB}, on its front page, in the What Lu
 const USAGE_DATA_SECTION = `${SETTINGS_TAB}, on its front page, in the Usage data section`;
 const APPEARANCE_PAGE = `${SETTINGS_TAB}, on its Appearance page`;
 const CONNECTIONS_PAGE = `${SETTINGS_TAB}, on its Connections page`;
-const CONDUCTOR_ROW_PATH = `the Conductor row under Cloud Agent API keys, in ${CONNECTIONS_PAGE} — drawn once Conductor is connected`;
+const CONDUCTOR_ROW_PATH = `the Conductor row under Providers, in ${CONNECTIONS_PAGE} — drawn once Conductor is connected`;
 const CONDUCTOR_DEFAULT_CHOICE = "Conductor's default";
 const ASK_EACH_TIME_CHOICE = "ask each time";
 

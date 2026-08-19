@@ -317,7 +317,7 @@ test("the guide offers what a new Conductor agent runs, by the names people know
   assert.ok(unset.choices?.includes("GPT-5.6 Sol"));
   assert.equal(unset.choices?.includes("fable-5"), false);
   // The by-hand path names the provider's own row, not the Preferences list.
-  assert.match(unset.manual, /Conductor row under Cloud Agent API keys/);
+  assert.match(unset.manual, /Conductor row under Providers/);
 
   // The levels each model takes ride the model entry itself, keyed by the
   // labels the choices are said by, so a model and its effort can be asked

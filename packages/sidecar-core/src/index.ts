@@ -381,6 +381,7 @@ export {
   OPENAI_PATH,
   OPENCODE_BLOCK_PATH,
   OPENCODE_FRAME_PATH,
+  SUPERSET_PATH,
 } from "./provider-mark-paths.js";
 export {
   compareSessionsByUrgency,

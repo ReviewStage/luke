@@ -705,6 +705,12 @@ export interface AppBridge {
   cancelSupersetSignIn(): void;
   chooseSupersetOrganization(slug: string): Promise<SupersetSignInSnapshot>;
   /**
+   * Runs the CLI's own documented sign-out, withdrawing the login the connect
+   * flow stored. Resolves to a refusal to show on the row, or nothing when
+   * the CLI reports the login gone.
+   */
+  disconnectSuperset(): Promise<string | undefined>;
+  /**
    * Runs the Google Calendar sign-in: the browser opens Google's own consent
    * page, the grant comes back over a loopback redirect that never leaves the
    * machine, and the main process stores the resulting token encrypted and
@@ -1011,6 +1017,7 @@ export const channels = {
   reopenSupersetSignIn: "app:reopen-superset-sign-in",
   cancelSupersetSignIn: "app:cancel-superset-sign-in",
   chooseSupersetOrganization: "app:choose-superset-organization",
+  disconnectSuperset: "app:disconnect-superset",
   supersetSignInChanged: "app:superset-sign-in-changed",
   updateChanged: "app:update-changed",
   setVoiceExchange: "app:set-voice-exchange",

@@ -66,6 +66,41 @@ test("login state uses only the injected organization-id answer", async (t) => {
   assert.equal(await cli.connected(), false);
 });
 
+test("sign-out runs the documented logout and answers with the CLI's own state", async (t) => {
+  const home = await connectedHome(t);
+  const calls: Array<readonly string[]> = [];
+  const cli = new SupersetCli({
+    ...testCliOptions(home),
+    run: async (executable, arguments_) => {
+      calls.push(arguments_);
+      assert.equal(executable, path.join(home, "bin", "superset"));
+      await fs.writeFile(path.join(home, "config.json"), "{}");
+    },
+  });
+
+  assert.equal(await cli.signOut(), true);
+  assert.deepEqual(calls, [["auth", "logout", "--json"]]);
+  assert.equal(await cli.connected(), false);
+});
+
+test("a logout the CLI refused or ignored is not reported as a disconnect", async (t) => {
+  const home = await connectedHome(t);
+  const refused = new SupersetCli({
+    ...testCliOptions(home),
+    run: async () => {
+      throw new Error("refused");
+    },
+  });
+  assert.equal(await refused.signOut(), false);
+
+  const ignored = new SupersetCli({
+    ...testCliOptions(home),
+    run: async () => undefined,
+  });
+  assert.equal(await ignored.signOut(), false);
+  assert.equal(await ignored.connected(), true);
+});
+
 test("a missing CLI login exposes no Superset actions", async (t) => {
   const home = await fs.mkdtemp(path.join(os.tmpdir(), "luke-superset-cli-"));
   t.after(async () => fs.rm(home, { recursive: true, force: true }));

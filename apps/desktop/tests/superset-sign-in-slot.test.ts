@@ -29,6 +29,12 @@ test("the browser stage asks for an explicit paste and can reopen or cancel", ()
   assert.match(markup, /Superset sign-in code/);
 });
 
+test("the slot introduces itself the way every other slot does", () => {
+  const markup = render({ stage: SUPERSET_SIGN_IN_STAGE.BROWSER_CODE, organizations: [] });
+  assert.match(markup, /class="key-slot sign-in-slot"/);
+  assert.match(markup, /data-mark="superset"/);
+});
+
 test("the exchange disables the code field and says it is connecting", () => {
   const markup = render({ stage: SUPERSET_SIGN_IN_STAGE.EXCHANGING, organizations: [] });
   assert.match(markup, /disabled=""/);

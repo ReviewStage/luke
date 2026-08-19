@@ -80,6 +80,7 @@ const bridge: AppBridge = {
   chooseSupersetOrganization: invokeMethod<"chooseSupersetOrganization">(
     channels.chooseSupersetOrganization,
   ),
+  disconnectSuperset: invokeMethod<"disconnectSuperset">(channels.disconnectSuperset),
   setVoiceExchangeActive: (active) => {
     ipcRenderer.send(channels.setVoiceExchange, active);
   },
