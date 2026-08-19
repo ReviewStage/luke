@@ -120,7 +120,8 @@ function mentionCandidates(sessions: readonly NormalizedSession[]): Map<string, 
     // its freshest chat as the way in, and a different workspace — another
     // provider's, or another id under this one — kills the name.
     const sameWorkspace =
-      existing.session.providerId === session.providerId &&
+      (existing.session.workspace?.scopeId ?? existing.session.providerId) ===
+        (session.workspace?.scopeId ?? session.providerId) &&
       existing.session.workspace?.providerWorkspaceId === session.workspace?.providerWorkspaceId;
     if (!sameWorkspace) {
       existing.ambiguous = true;
@@ -179,12 +180,13 @@ export function mentionedSessions(
     if (entry.kind !== SESSION_MENTION_KIND.SESSION) continue;
     const workspaceId = entry.session.workspace?.providerWorkspaceId;
     if (workspaceId === undefined) continue;
-    let provider = chatNamedIn.get(entry.session.providerId);
-    if (!provider) {
-      provider = new Set();
-      chatNamedIn.set(entry.session.providerId, provider);
+    const scopeId = entry.session.workspace?.scopeId ?? entry.session.providerId;
+    let workspaceIds = chatNamedIn.get(scopeId);
+    if (!workspaceIds) {
+      workspaceIds = new Set();
+      chatNamedIn.set(scopeId, workspaceIds);
     }
-    provider.add(workspaceId);
+    workspaceIds.add(workspaceId);
   }
   // One chip per session falls out of the absorption: every candidate name is
   // distinct, a session-kind mention resolves only to its own title's session,
@@ -196,7 +198,7 @@ export function mentionedSessions(
         entry.kind !== SESSION_MENTION_KIND.WORKSPACE ||
         entry.session.workspace?.providerWorkspaceId === undefined ||
         !chatNamedIn
-          .get(entry.session.providerId)
+          .get(entry.session.workspace.scopeId ?? entry.session.providerId)
           ?.has(entry.session.workspace.providerWorkspaceId),
     )
     .sort((a, b) => a.at - b.at)
