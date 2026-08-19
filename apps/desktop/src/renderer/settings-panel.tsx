@@ -3147,14 +3147,9 @@ function UsageDataSection({
         label="Share usage data"
         ariaLabel="Share counts of how Luke's own features are used"
         errand={APP_SETTING_ID.SHARE_USAGE_DATA}
-        detail={
-          /* What travels, not that it is anonymous: the counts are tied to the
-             account, and the honest claim is the narrow one — a fixed list of
-             events whose values this build chose, so nothing a session or a
-             conversation contains has a shape to travel in. */
-          "Counts of Luke's own features — a launch, a provider connected, a call opened — tied " +
-          "to your account. Nothing about a session, and nothing you type or say."
-        }
+        // Tied to the account rather than anonymous, because that is the
+        // honest claim and the narrow one is what the allowlist buys.
+        detail="Counts of feature use, tied to your account. Never session contents."
         changed={settings.shareUsageData !== APP_SETTING_DEFAULTS.shareUsageData}
         checked={settings.shareUsageData}
         onChange={preferences.onShareUsageDataChange}

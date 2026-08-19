@@ -570,10 +570,9 @@ export const APP_SETTING_SCHEMA = {
       label: "Share usage data",
       description:
         "Whether Luke counts how his own features are used — a launch, a provider connected, " +
-        "sessions observed, a call opened — and sends those counts to Luke's own service, tied " +
-        "to the signed-in account by name and email. Every event and every value is fixed by " +
-        "this build: nothing about a session, and nothing typed or spoken, can travel in one. " +
-        "On to begin with; off stops it at once.",
+        "a call opened — and sends those counts to Luke's own service, tied to the signed-in " +
+        "account by name and email. Every event and value is fixed by this build, so nothing " +
+        "about a session and nothing typed or spoken can travel in one. On to begin with.",
       kind: APP_SETTING_KIND.TOGGLE,
       value: appToggleText(settings.shareUsageData),
       // SAFETY: The preceding check establishes the asserted contract.

@@ -569,12 +569,11 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       detail:
         "Luke counts how his own features are used — a launch, a provider connected, sessions " +
         "observed, a call opened, an announcement spoken — and sends those counts to Luke's own " +
-        "service, tied to the signed-in account by name and email. Every event and every value " +
-        "is fixed by this build: nothing about a session — " +
-        "no title, branch, path, recap, or transcript — and nothing typed or spoken can travel " +
-        `in one, and nothing is sent while signed out. The switch is Share usage data, in the ` +
-        `Usage data section on ${FRONT_PAGE}; it is on to begin with, and turning it off stops ` +
-        "it at once.",
+        "service, tied to the signed-in account by name and email. Every event and value is " +
+        "fixed by this build, so nothing about a session — no title, branch, path, recap, or " +
+        "transcript — and nothing typed or spoken can travel in one. Nothing is sent while " +
+        `signed out. The switch is Share usage data, in the Usage data section on ${FRONT_PAGE}; ` +
+        "it is on to begin with, and turning it off stops it at once.",
     },
     {
       label: "Quitting",

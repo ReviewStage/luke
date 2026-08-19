@@ -732,7 +732,7 @@ test("the usage-data fact describes the counting, and names no session field", (
   // the switch lives is the only useful thing to say next.
   assert.match(fact.detail, /on to begin with/);
   assert.match(fact.detail, /Usage data section on the panel's Settings tab, on its front page/);
-  assert.match(fact.detail, /nothing is sent while signed out/);
+  assert.match(fact.detail, /[Nn]othing is sent while signed out/);
   // The guide leaves the machine, so a fact that claimed a session field
   // travelled would be describing a Luke that must not exist.
   assert.match(fact.detail, /no title, branch, path, recap, or transcript/);
