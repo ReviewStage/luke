@@ -573,7 +573,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         const fallback = stored?.agent === advertised ? stored : undefined;
         const model = namedModel ?? fallback?.model;
         const effort = namedModel !== undefined ? namedEffort : fallback?.effort;
-        return adapter.spawnWorkspaceAgent({
+        const result = await adapter.spawnWorkspaceAgent({
           providerSessionId: identity.providerSessionId,
           agent: advertised,
           ...(sessionName.value ? { name: sessionName.value } : {}),
@@ -581,6 +581,10 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
           ...(model ? { model } : {}),
           ...(effort ? { effort } : {}),
         });
+        if (result.status === PROVIDER_ACT_RESULT_STATUS.REJECTED) {
+          void sessionRegistry.refresh(adapter);
+        }
+        return result;
       });
     },
   );
