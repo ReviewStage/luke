@@ -233,6 +233,59 @@ test("discovers host-scoped projects and creates a workspace with a generated br
   ]);
 });
 
+test("creates on an observed remote host and preserves success when opening fails", async (t) => {
+  const home = await connectedHome(t);
+  const cli = new SupersetCli({
+    homeDirectory: home,
+    query: async (_executable, arguments_) => {
+      if (arguments_[0] === "hosts") return JSON.stringify([{ id: "host-1", name: "Studio" }]);
+      if (arguments_[0] === "projects") {
+        return arguments_.includes("host-1")
+          ? JSON.stringify([{ id: "project-1", name: "Luke" }])
+          : "[]";
+      }
+      if (arguments_[0] === "agents") {
+        return arguments_.includes("host-1") ? JSON.stringify([{ presetId: "codex" }]) : "[]";
+      }
+      if (arguments_[0] === "workspaces") {
+        assert.deepEqual(arguments_.slice(0, 5), [
+          "workspaces",
+          "create",
+          "--host",
+          "host-1",
+          "--project",
+        ]);
+        return JSON.stringify({ workspaceId: "workspace-new" });
+      }
+      return "[]";
+    },
+    run: async (_executable, arguments_) => {
+      assert.deepEqual(arguments_, [
+        "workspaces",
+        "open",
+        "workspace-new",
+        "--host",
+        "host-1",
+        "--json",
+      ]);
+      throw new Error("Superset is not reachable");
+    },
+  });
+
+  assert.deepEqual(
+    await cli.createWorkspace({
+      providerProjectId: "project-1",
+      providerTargetId: "host-1",
+      agent: "codex",
+      task: "Review the branch",
+    }),
+    {
+      status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
+      warning: "The workspace was created, but Superset could not open it.",
+    },
+  );
+});
+
 test("workspace creation reports Superset's bounded first error line", async (t) => {
   const home = await connectedHome(t);
   const cli = new SupersetCli({

@@ -53,6 +53,7 @@ import {
   CREDENTIAL_SOURCE,
   SESSION_OPEN_RESULT_STATUS,
   SUPERSET_SIGN_IN_STAGE,
+  SUPERSET_WORKSPACE_PROVIDER_ID,
 } from "../shared/contracts";
 import type { CredentialProviderId } from "../shared/credential-providers";
 import {
@@ -2816,7 +2817,7 @@ export function App(): React.JSX.Element {
                 agents: [
                   ...new Set(
                     workspaceProjects
-                      .filter((project) => project.providerId === "superset")
+                      .filter((project) => project.providerId === SUPERSET_WORKSPACE_PROVIDER_ID)
                       .flatMap((project) => project.spawnableAgents ?? []),
                   ),
                 ],

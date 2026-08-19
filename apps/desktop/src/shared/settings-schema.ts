@@ -20,6 +20,7 @@ import {
   type WorkspaceAgentSelection,
 } from "@sidecar/core";
 import { CREDENTIAL_PROVIDERS, isCredentialProviderId } from "./credential-providers";
+import { SUPERSET_WORKSPACE_PROVIDER_ID } from "./superset";
 import { parseVoiceHotkey } from "./voice-hotkey";
 import {
   isWorkspaceAgentSelection,
@@ -214,7 +215,7 @@ function voiceSpeedWord(speed: RealtimeVoiceSpeed): string {
 }
 
 function workspaceProviderName(providerId: string): string {
-  if (providerId === "superset") return "Superset";
+  if (providerId === SUPERSET_WORKSPACE_PROVIDER_ID) return "Superset";
   if (isCredentialProviderId(providerId)) return CREDENTIAL_PROVIDERS[providerId].displayName;
   // The one workspace-capable provider with no credential row to take a
   // display name from.
@@ -289,7 +290,7 @@ function workspaceProjectDefaults(
 }
 
 function isWorkspaceProviderId(value: string): boolean {
-  return isProviderId(value) || value === "superset";
+  return isProviderId(value) || value === SUPERSET_WORKSPACE_PROVIDER_ID;
 }
 
 export const APP_SETTING_SCHEMA = {

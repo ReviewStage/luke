@@ -83,15 +83,12 @@ import {
   type ObservedAccountCalendars,
   type OutputAudioState,
   SUPERSET_SIGN_IN_STAGE,
+  SUPERSET_WORKSPACE_PROVIDER_ID,
 } from "./shared/contracts";
 import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "./shared/credential-providers";
 import { type FeedbackResult, feedbackSubmission } from "./shared/feedback";
 import { APP_SETTING_SCHEMA } from "./shared/settings-schema";
-import {
-  SUPERSET_WORKSPACE_PROVIDER_ID,
-  SupersetCli,
-  SupersetWorkspaceAdapter,
-} from "./superset-cli";
+import { SupersetCli, SupersetWorkspaceAdapter } from "./superset-cli";
 import { SupersetSignIn } from "./superset-sign-in";
 import { SupersetWorkspaceReader, SupersetWorkspaceSnapshot } from "./superset-workspaces";
 import { UPDATE_ENDPOINT, UpdateService } from "./update-service";

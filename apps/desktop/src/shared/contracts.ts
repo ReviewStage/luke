@@ -58,6 +58,8 @@ export const ACCOUNT_PROVIDER = {
   GITHUB: "github",
 } as const;
 
+export { SUPERSET_WORKSPACE_PROVIDER_ID } from "./superset";
+
 export type AccountProvider = (typeof ACCOUNT_PROVIDER)[keyof typeof ACCOUNT_PROVIDER];
 
 export function isAccountProvider(value: unknown): value is AccountProvider {

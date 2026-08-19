@@ -14,7 +14,10 @@ import {
   type WorkspaceProject,
 } from "@sidecar/core";
 import { canIgnoreFilesystemError } from "./local-session-adapter";
-import type { SupersetOrganizationChoice } from "./shared/contracts";
+import {
+  SUPERSET_WORKSPACE_PROVIDER_ID,
+  type SupersetOrganizationChoice,
+} from "./shared/contracts";
 import type { SupersetSessionContext } from "./superset-workspaces";
 
 export const SUPERSET_CONTROL_ID = {
@@ -28,7 +31,6 @@ const SUPERSET_ORGANIZATION_LIMIT = 20;
 const SUPERSET_TARGET_LIMIT = 20;
 const SUPERSET_PROJECT_LIMIT = 50;
 const SUPERSET_FAILURE_REASON_LIMIT = 300;
-export const SUPERSET_WORKSPACE_PROVIDER_ID = "superset";
 const LOCAL_TARGET_ID = "local";
 const ANSI_ESCAPE_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "gu");
 

@@ -8,9 +8,10 @@ import {
   type SqliteModuleLoader,
   textFromRow,
 } from "./local-sqlite";
+import { SUPERSET_WORKSPACE_PROVIDER_ID } from "./shared/contracts";
 import { SUPERSET_CONTROL_ID } from "./superset-cli";
 
-export const SUPERSET_WORKSPACE_SCOPE_ID = "superset";
+export const SUPERSET_WORKSPACE_SCOPE_ID = SUPERSET_WORKSPACE_PROVIDER_ID;
 
 const SUPERSET_AGENT_PROVIDER: Readonly<Record<string, string>> = {
   claude: PROVIDER_ID.CLAUDE_CODE,
