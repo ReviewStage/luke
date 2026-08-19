@@ -112,6 +112,7 @@ export {
   type ProviderWorkspaceResult,
   type SessionProviderAdapter,
   SessionProviderAdapterBase,
+  staleWorkspaceProjectDefaults,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceAgentModels,
   type WorkspaceAgentSelection,

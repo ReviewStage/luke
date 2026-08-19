@@ -295,6 +295,12 @@ test("the facts describe creating a workspace, so Luke does not deny the capabil
   // a fresh workspace it did not ask for.
   assert.match(rendered, /names the existing workspace or session/);
   assert.match(rendered, /bare ask for a new agent creates a new workspace instead/);
+  // Superset creates workspaces too, and asks for more than the others do —
+  // a guide that named only Conductor and Cursor would have Luke deny a
+  // capability he has, then be surprised by the refusal a task-less ask earns.
+  assert.match(rendered, /Superset/);
+  assert.match(rendered, /new Superset workspace needs that host, an agent/);
+  assert.match(rendered, /opening task/);
 });
 
 test("the guide offers what a new Conductor agent runs, by the names people know", () => {

@@ -40,6 +40,7 @@ import {
   CREDENTIAL_SOURCE,
   SECRET_STORAGE,
   SETTINGS_RESET_SCOPE,
+  SUPERSET_WORKSPACE_PROVIDER_ID,
   VOICE_SOURCE,
   type VoiceSource,
 } from "../shared/contracts";
@@ -138,8 +139,10 @@ export interface WorkspaceProviderOption {
   name: string;
   /**
    * The projects this provider's default-project row can offer: everything
-   * currently observed for it, plus a stored default it no longer offers — a
-   * choice the row cannot show is one that can be neither seen nor cleared.
+   * currently observed for it, and nothing else. A stored default the provider
+   * has stopped offering has no label of its own to be drawn under, and steers
+   * nothing until it is cleared, which the main process does on the same
+   * observation that stopped offering it.
    */
   projects: readonly { id: string; label: string }[];
 }
@@ -442,9 +445,9 @@ function ProviderCredential({
   control: CredentialEntryControl;
   panelOpen: boolean;
   /**
-   * The provider's own sub-rows — today, the agent defaults a connected
-   * Conductor offers. Drawn inside the credential block so the rule that
-   * separates providers falls under them, not between them and their line.
+   * The provider's own sub-rows — what a new agent runs, and where a nameless
+   * ask creates. Drawn inside the credential block so the rule that separates
+   * providers falls under them, not between them and their line.
    */
   children?: React.ReactNode;
 }): React.JSX.Element {
@@ -1207,7 +1210,22 @@ const CODEX_CLOUD_STATUS = {
  * signing that CLI out is what disconnects — so the words name that step
  * exactly when it is the missing one, and no control pretends otherwise.
  */
-function CodexCloudConnection({ connection }: { connection: CliConnection }): React.JSX.Element {
+function CodexCloudConnection({
+  connection,
+  settings,
+  preferences,
+  workspaceProvider,
+}: {
+  connection: CliConnection;
+  settings: AppSettings;
+  preferences: PreferenceWrites;
+  /**
+   * Codex's own projects, absent until an observation pass reports any. Codex
+   * connects by CLI login rather than by key, so it has no credential row to
+   * hang its creation defaults under and carries them here instead.
+   */
+  workspaceProvider?: WorkspaceProviderOption;
+}): React.JSX.Element {
   return (
     <div className="credential">
       <div className="credential-row">
@@ -1224,6 +1242,13 @@ function CodexCloudConnection({ connection }: { connection: CliConnection }): Re
         </span>
         <span className="credential-status">{CODEX_CLOUD_STATUS[connection]}</span>
       </div>
+      {connection === CLI_CONNECTION.CONNECTED && workspaceProvider ? (
+        <WorkspaceProjectRow
+          provider={workspaceProvider}
+          settings={settings}
+          preferences={preferences}
+        />
+      ) : null}
     </div>
   );
 }
@@ -1238,16 +1263,19 @@ function CredentialsSection({
   control,
   panelOpen,
   preferences,
+  workspaceProviders,
 }: {
   settings: AppSettings;
   control: CredentialEntryControl;
   panelOpen: boolean;
   preferences: PreferenceWrites;
+  workspaceProviders: readonly WorkspaceProviderOption[];
 }): React.JSX.Element {
   // Only a system Luke has actually asked, and been refused by, is reported as
   // one that cannot hold a key. Until then the rows stand as usual: a warning
   // about storage nobody has tried to use yet would be a guess.
   const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
+  const codexWorkspace = workspaceProviders.find((option) => option.id === PROVIDER_ID.CODEX);
   return (
     // SAFETY: The preceding check establishes the asserted contract.
     <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
@@ -1256,7 +1284,12 @@ function CredentialsSection({
         Cloud Agent API keys
       </h2>
       {/* First because the list reads alphabetically, like the key rows below. */}
-      <CodexCloudConnection connection={settings.codexCloudConnection} />
+      <CodexCloudConnection
+        connection={settings.codexCloudConnection}
+        settings={settings}
+        preferences={preferences}
+        {...(codexWorkspace ? { workspaceProvider: codexWorkspace } : {})}
+      />
       {CLOUD_AGENT_PROVIDER_LIST.map((provider) => {
         // The agent row belongs to providers the build documents a table for,
         // and only while connected: disconnected, there is nothing the choice
@@ -1267,6 +1300,7 @@ function CredentialsSection({
           workspaceAgentModels(provider.id).length > 0
             ? provider.id
             : undefined;
+        const workspaceProvider = workspaceProviders.find((option) => option.id === provider.id);
         return (
           <ProviderCredential
             key={provider.id}
@@ -1284,6 +1318,13 @@ function CredentialsSection({
                   ? { selection: settings.workspaceAgentDefaults[agentRow] }
                   : undefined)}
                 onChange={preferences.onWorkspaceAgentDefaultChange}
+              />
+            ) : null}
+            {workspaceProvider ? (
+              <WorkspaceProjectRow
+                provider={workspaceProvider}
+                settings={settings}
+                preferences={preferences}
               />
             ) : null}
           </ProviderCredential>
@@ -1549,7 +1590,18 @@ export interface SupersetControl {
   onDefaultAgentChange: (agent: string | undefined) => Promise<string | undefined>;
 }
 
-function SupersetIntegration({ control }: { control: SupersetControl }): React.JSX.Element | null {
+function SupersetIntegration({
+  control,
+  settings,
+  preferences,
+  workspaceProvider,
+}: {
+  control: SupersetControl;
+  settings: AppSettings;
+  preferences: PreferenceWrites;
+  /** Superset's own projects, absent until an observation pass reports any. */
+  workspaceProvider?: WorkspaceProviderOption;
+}): React.JSX.Element | null {
   if (!control.installed) return null;
   return (
     <div className="credential">
@@ -1590,6 +1642,13 @@ function SupersetIntegration({ control }: { control: SupersetControl }): React.J
           onChange={(agent) =>
             control.onDefaultAgentChange(agent === PROVIDER_DEFAULT_VALUE ? undefined : agent)
           }
+        />
+      ) : null}
+      {control.connected && workspaceProvider ? (
+        <WorkspaceProjectRow
+          provider={workspaceProvider}
+          settings={settings}
+          preferences={preferences}
         />
       ) : null}
     </div>
@@ -1730,14 +1789,19 @@ function IntegrationsSection({
   calendar,
   linear,
   superset,
+  workspaceProviders,
 }: {
   settings: AppSettings;
   preferences: PreferenceWrites;
   calendar: CalendarControl;
   linear: LinearControl;
   superset: SupersetControl;
+  workspaceProviders: readonly WorkspaceProviderOption[];
 }): React.JSX.Element {
   const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
+  const supersetWorkspace = workspaceProviders.find(
+    (option) => option.id === SUPERSET_WORKSPACE_PROVIDER_ID,
+  );
   return (
     // SAFETY: The preceding check establishes the asserted contract.
     <section className="settings-section" style={{ "--row-index": 2 } as React.CSSProperties}>
@@ -1746,7 +1810,12 @@ function IntegrationsSection({
         Integrations
       </h2>
       <LinearIntegration settings={settings} linear={linear} />
-      <SupersetIntegration control={superset} />
+      <SupersetIntegration
+        control={superset}
+        settings={settings}
+        preferences={preferences}
+        {...(supersetWorkspace ? { workspaceProvider: supersetWorkspace } : {})}
+      />
       <GoogleCalendarIntegration
         settings={settings}
         calendar={calendar}
@@ -2125,9 +2194,11 @@ function WorkspacesSection({
   return (
     // SAFETY: The preceding check establishes the asserted contract.
     <section className="settings-section" style={{ "--row-index": 3 } as React.CSSProperties}>
-      {/* The heading and the group's reset share a line: the reset stands
-          over exactly the rows below it, and nothing else on the Connections
-          page — the keys above are not settings and are never reset. */}
+      {/* The heading and the group's reset share a line. The reset groups by
+          meaning rather than by position: it covers every workspace-creation
+          default on this page, including the per-provider rows drawn beside
+          the providers they belong to. Only the keys are exempt — they are not
+          settings and are never reset. */}
       <div className="settings-heading">
         <h2>
           <FolderIcon />
@@ -2165,23 +2236,18 @@ function WorkspacesSection({
           if (provider) return preferences.onDefaultWorkspaceProviderChange(provider.id);
         }}
       />
-      {workspaceProviders.map((provider) => (
-        <WorkspaceProjectRow
-          key={provider.id}
-          provider={provider}
-          settings={settings}
-          preferences={preferences}
-        />
-      ))}
     </section>
   );
 }
 
 /**
- * Where one provider's nameless creation ask lands: a row per provider with
- * projects to choose between, filled in the way the provider default is — by
- * the first creation there — and this select is where that choice is seen,
- * changed, or returned to the first creation.
+ * Where one provider's nameless creation ask lands: filled in the way the
+ * provider default is — by the first creation there — and this select is where
+ * that choice is seen, changed, or returned to the first creation. Drawn under
+ * its own provider, beside what a new agent there runs, because both answer
+ * the same question about the same provider; the label leaves the provider to
+ * the heading above it and the aria-label carries it for a reader arriving
+ * without that context.
  */
 function WorkspaceProjectRow({
   provider,
@@ -2197,12 +2263,20 @@ function WorkspaceProjectRow({
   // to choose between, has nothing for the row to say.
   if (provider.projects.length === 0) return null;
   const stored = settings.workspaceProjectDefaults?.[providerId];
+  // A stored default the provider has stopped offering is on its way out: the
+  // main process clears it on the same observation, and until that write lands
+  // the row reads as the unchosen state it is about to become. Drawing the
+  // stored value instead would leave the select on an option it does not hold.
+  const shown =
+    stored !== undefined && provider.projects.some((project) => project.id === stored)
+      ? stored
+      : PROJECT_ASK_EACH_TIME;
   return (
     <SelectRow
-      label={`Default ${provider.name} project`}
+      label="Default project"
       ariaLabel={`The project a nameless ask creates ${provider.name} workspaces in`}
-      changed={stored !== undefined}
-      value={stored ?? PROJECT_ASK_EACH_TIME}
+      changed={shown !== PROJECT_ASK_EACH_TIME}
+      value={shown}
       options={[
         // The provider row's own words for the same state: until a default
         // exists, an ambiguous ask is asked about, and the two rows should
@@ -3189,6 +3263,7 @@ export function SettingsPanel({
             control={credentials}
             panelOpen={panelOpen}
             preferences={preferences}
+            workspaceProviders={workspaceProviders}
           />
           <IntegrationsSection
             settings={settings}
@@ -3196,6 +3271,7 @@ export function SettingsPanel({
             calendar={calendar}
             linear={linear}
             superset={superset}
+            workspaceProviders={workspaceProviders}
           />
           <WorkspacesSection
             settings={settings}
