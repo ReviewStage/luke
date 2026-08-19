@@ -6,7 +6,8 @@ import {
   installClaudeCodeObservationHooks,
   pruneClaudeHookSpool,
 } from "./claude-code-hooks";
-import { CodexSessionAdapter } from "./codex-adapter";
+import { CODEX_PROVIDER, CodexSessionAdapter } from "./codex-adapter";
+import type { CodexCloudSessionAdapter } from "./codex-cloud-adapter";
 import {
   CODEX_HOOK_SPOOL_MAXIMUM_AGE_MS,
   type CodexHookInstallation,
@@ -38,6 +39,13 @@ export interface ProviderRegistrationOptions {
   readApiKey: (providerId: CredentialProviderId) => Promise<string | undefined>;
   claudeHookInstallation: () => ClaudeCodeHookInstallation;
   codexHookInstallation: () => CodexHookInstallation;
+  /**
+   * Constructed by the caller rather than here, because the app also asks it
+   * what the latest pass learned about the Codex CLI login — the settings
+   * snapshot reports that beside the key sources — and the reference the
+   * settings read is the reference the composite observes with.
+   */
+  codexCloudAdapter: CodexCloudSessionAdapter;
   now?: () => number;
 }
 
@@ -48,8 +56,17 @@ export function providerRegistrations(
   const claude = new ClaudeCodeSessionAdapter({
     hookEventsDirectory: () => options.claudeHookInstallation().spoolDirectory,
   });
-  const codex = new CodexSessionAdapter({
-    hookEventsDirectory: () => options.codexHookInstallation().spoolDirectory,
+  // Codex runs sessions in two places: on this machine, observed from its own
+  // transcripts, and in Codex cloud, observed through the Codex CLI's
+  // documented read under the ChatGPT login the user already gave that CLI.
+  const codex = new CompositeSessionProviderAdapter({
+    provider: CODEX_PROVIDER,
+    adapters: [
+      new CodexSessionAdapter({
+        hookEventsDirectory: () => options.codexHookInstallation().spoolDirectory,
+      }),
+      options.codexCloudAdapter,
+    ],
   });
   const cursor = new CompositeSessionProviderAdapter({
     provider: CURSOR_PROVIDER,

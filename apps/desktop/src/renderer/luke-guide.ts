@@ -29,6 +29,7 @@ import type {
   AccountSnapshot,
   AppBridge,
   AppSettings,
+  CliConnection,
   CredentialSource,
   MicrophoneStatus,
   SettingsUpdateResult,
@@ -36,6 +37,7 @@ import type {
 import {
   ACCOUNT_PROVIDER,
   ACCOUNT_STATUS,
+  CLI_CONNECTION,
   CREDENTIAL_SOURCE,
   SECRET_STORAGE,
 } from "../shared/contracts";
@@ -156,6 +158,14 @@ function connectionWord(source: CredentialSource): string {
       : "connected";
 }
 
+/** The row's answer about the Codex CLI login, in words a fact can carry. */
+const CODEX_CLOUD_CONNECTION_WORD: Readonly<Record<CliConnection, string>> = {
+  [CLI_CONNECTION.CONNECTED]: "connected",
+  [CLI_CONNECTION.SIGNED_OUT]: "not connected; the CLI is signed out",
+  [CLI_CONNECTION.CLI_MISSING]: "not connected; the CLI is not installed",
+  [CLI_CONNECTION.UNKNOWN]: "not checked yet",
+};
+
 function providersFact(settings: AppSettings): AppGuideFact {
   const roster = CLOUD_AGENT_PROVIDER_LIST.map(
     (provider) =>
@@ -166,7 +176,11 @@ function providersFact(settings: AppSettings): AppGuideFact {
     detail:
       `${roster.join(", ")}. Connecting one takes the key its row names, typed by hand into ` +
       `${CONNECTIONS_PAGE}, under Cloud Agent API keys — never spoken, and never repeated back. ` +
-      "Local providers such as Claude Code need no key and are observed on their own.",
+      "Local providers such as Claude Code need no key and are observed on their own. " +
+      `Codex cloud tasks (${CODEX_CLOUD_CONNECTION_WORD[settings.codexCloudConnection]}) take ` +
+      "no key in Luke at all: they are observed through the Codex CLI's own login, and the " +
+      "Codex row on the same page reports that login's state. Running codex login once in a " +
+      "terminal connects them, and signing that CLI out stops them.",
   };
 }
 

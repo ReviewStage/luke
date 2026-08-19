@@ -213,6 +213,30 @@ By default, these requests go to the provider's own API. Changing
 to that configured endpoint, whose policies then govern the request and
 response data.
 
+## Optional Codex cloud reads through the Codex CLI
+
+Codex cloud tasks live in OpenAI's cloud and document no key-scoped API, so
+Luke observes them through the Codex CLI you already use — under the ChatGPT
+login you gave that CLI for its own sake, never a credential of Luke's own.
+Luke reads no token and stores none: it first asks `codex login status`
+whether a login exists at all — an answer read from the exit code alone — and
+only then runs the CLI's documented read, `codex cloud list --json`, exactly
+as your own terminal would. Without the CLI installed, or with it signed out,
+Luke runs nothing further and reports no cloud tasks; the Codex sessions
+running on this machine are read from disk and are unaffected.
+
+What that read returns is what Luke processes: task identifiers, status,
+timestamps, the environment's repository label, and each task's own link. The
+CLI also returns a title generated from the prompt you typed; Luke discards
+it and labels the row by repository instead, the same boundary every cloud
+provider's prompt-derived names get. Returned metadata is held in memory for
+display; command output is not persisted.
+
+Observation never invokes a command that could change anything: the CLI's
+write commands are never run, and Codex documents no way to message or steer
+a running cloud task, so its rows offer none. Signing the CLI out stops the
+reads on the next pass.
+
 ## Optional issue-tracker reads and spoken acts
 
 Linear is read the way the cloud providers are, but connected the way the

@@ -43,6 +43,7 @@ import { AccountClient } from "./account-client";
 import { accountGateOpen } from "./account-gate";
 import { AccountSessionManager } from "./account-session-manager";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
+import { CodexCloudSessionAdapter } from "./codex-cloud-adapter";
 import { DockPresence } from "./dock-presence";
 import { feedbackDeliveryFromEnvironment } from "./feedback-delivery";
 import { GoogleCalendarReader } from "./google-calendar";
@@ -131,6 +132,12 @@ const HOSTED_SERVICE_BASE_URL = ACCOUNT_BASE_URL.replace(/\/api\/auth\/?$/, "");
 const ACCOUNT_CLIENT_ID = "luke-desktop";
 const SESSION_REFRESH_INTERVAL_MS = 5_000;
 const sessionRegistry = new InMemorySessionRegistry();
+// Declared before the settings store because the store's snapshot asks it
+// what the latest pass learned about the Codex CLI's login. It observes only
+// inside the codex composite the provider registrations build; a fixture or
+// evidence run never refreshes it, so there its answer stays the honest
+// "unknown".
+const codexCloudAdapter = new CodexCloudSessionAdapter();
 // `directory` and the cipher are read lazily so the store can be declared before
 // the Electron app is ready.
 const settingsStore = new SettingsStore({
@@ -143,6 +150,7 @@ const settingsStore = new SettingsStore({
     encrypt: (plainText) => safeStorage.encryptString(plainText),
     decrypt: (cipherText) => safeStorage.decryptString(cipherText),
   },
+  codexCloudConnection: () => codexCloudAdapter.connection(),
 });
 const accountClient = new AccountClient({ baseUrl: ACCOUNT_BASE_URL, clientId: ACCOUNT_CLIENT_ID });
 let account: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
@@ -168,6 +176,7 @@ const providerRegistry = providerRegistrations({
   readApiKey: (providerId) => settingsStore.readApiKey(providerId),
   claudeHookInstallation: () => observationHooks.claudeInstallation(),
   codexHookInstallation: () => observationHooks.codexInstallation(),
+  codexCloudAdapter,
 });
 // The issue tracker is not a session provider: its issues feed the voice
 // roster rather than the registry, so it stands beside the adapters rather
@@ -441,6 +450,22 @@ function broadcastAccount(): void {
  * renderer keeps drawing the voice state of the account it no longer has.
  */
 async function broadcastVoiceAvailability(): Promise<void> {
+  panels.broadcast(channels.settingsChanged, await settingsStore.snapshot());
+}
+
+/**
+ * What the settings last told the panels about the Codex CLI login. The
+ * connection is not a setting anyone writes, so no save ever announces it
+ * moving: the observation loop is where it changes — the user ran codex
+ * login or logout in their own terminal — and without this the panels keep
+ * drawing the words of whatever snapshot they loaded.
+ */
+let announcedCodexCloudConnection = codexCloudAdapter.connection();
+
+async function broadcastCodexCloudConnection(): Promise<void> {
+  const connection = codexCloudAdapter.connection();
+  if (connection === announcedCodexCloudConnection) return;
+  announcedCodexCloudConnection = connection;
   panels.broadcast(channels.settingsChanged, await settingsStore.snapshot());
 }
 
@@ -1040,7 +1065,12 @@ const sessionObservationLoop = new ObservationLoop({
   gate: observationGate,
   intervalMs: SESSION_REFRESH_INTERVAL_MS,
   run: refreshProviderSessions,
-  afterRun: broadcastRelevantSessions,
+  // A pass is also when the Codex CLI login can have changed hands, and no
+  // settings save stands behind that to announce it.
+  afterRun: () => {
+    broadcastRelevantSessions();
+    void broadcastCodexCloudConnection();
+  },
 });
 const attentionObservationLoop = new ObservationLoop({
   gate: () => observationGate() && voiceCapabilities.attentionReviewer !== undefined,

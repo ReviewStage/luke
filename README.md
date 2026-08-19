@@ -44,7 +44,7 @@ Visit [tryluke.dev](https://tryluke.dev) to see Luke in action.
 | Integration | Support | Credential required |
 | --- | --- | --- |
 | Claude Code | Local sessions | No |
-| Codex | Local sessions | No |
+| Codex | Local and cloud sessions | Cloud via your Codex CLI login |
 | Conductor | Cloud sessions | Yes |
 | GitHub Copilot | Cloud agent tasks | Yes |
 | Cursor | Local and cloud sessions | Cloud only |
@@ -56,9 +56,12 @@ Visit [tryluke.dev](https://tryluke.dev) to see Luke in action.
 
 Cloud integrations remain inactive until you add their credentials in Luke's
 Settings. Linear and Google Calendar are connected by signing in on the
-provider's own consent page rather than by pasting a key. Voice and the optional attention review are included with the
-signed-in account under a daily allowance; connecting your own OpenAI API key
-lifts the allowance and runs both on that key instead.
+provider's own consent page rather than by pasting a key, and Codex cloud
+tasks take no credential in Luke at all: they are observed through the Codex
+CLI's own login — run `codex login` once and the rows follow; sign the CLI
+out and they stop. Voice and the optional attention review are included with
+the signed-in account under a daily allowance; connecting your own OpenAI API
+key lifts the allowance and runs both on that key instead.
 
 ## Calendar support
 
