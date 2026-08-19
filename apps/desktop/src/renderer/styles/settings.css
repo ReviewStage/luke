@@ -5,11 +5,15 @@
    at its foot through the same shared fade — a page taller than the panel must
    melt into the surface above Luke's caption, not be sliced off against it. */
 .settings {
+  /* Named because the pinned header's dissolve band below must span exactly
+     this: the two drifting apart is what would leave a passing row sliced
+     against the header's edge, or the resting page reading faded. */
+  --settings-gap: 14px;
   display: flex;
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--settings-gap);
   overflow-x: clip;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -17,6 +21,18 @@
   scrollbar-width: thin;
   animation: scroll-edge-fade linear both;
   animation-timeline: scroll(self block);
+}
+
+/* Native focus scrolling knows nothing of the pinned header, so a control
+   tabbed to near the page's top would be brought flush with the scroller's
+   edge — under the header rather than below it. Scroll padding is what that
+   scrolling reads. `--settings-header-height` is the back button's own 26px,
+   the header's height whenever its line has not wrapped; scoped to a page
+   that pins one, so the front page keeps its plain edge. */
+.settings:has(> .settings-header) {
+  --settings-header-height: 26px;
+
+  scroll-padding-top: calc(var(--settings-header-height) + var(--settings-gap));
 }
 
 .settings-section {
@@ -95,14 +111,38 @@
 
 /* A page's head: the way back beside the page's own name, above the sections
    it holds. It wraps so the reset's refusal, when there is one, lands on a
-   line of its own under the controls rather than crowding the title. */
+   line of its own under the controls rather than crowding the title. Pinned
+   to the scroller's top edge, so the way back never has to be scrolled back
+   to, in the surface's own fill so the rows slide under it rather than
+   through it. Raised above the sections, whose arrival transforms make each
+   its own stacking context. */
 .settings-header {
+  position: sticky;
+  z-index: 1;
+  top: 0;
   display: flex;
   flex: 0 0 auto;
   flex-wrap: wrap;
   align-items: center;
   gap: 9px;
   padding: 0 2px;
+  background: var(--surface-fill);
+}
+
+/* The band below the pinned header, where a passing row dissolves into the
+   surface the way every scroller's foot already does. It spans exactly the
+   scroller's own gap: any taller and the first section would read faded while
+   the page rests at its top, any shorter and a row would be sliced against
+   the header's edge on its way under. */
+.settings-header::after {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  left: 0;
+  height: var(--settings-gap);
+  background: linear-gradient(to bottom, var(--surface-fill), transparent);
+  content: "";
+  pointer-events: none;
 }
 
 .settings-header strong {
