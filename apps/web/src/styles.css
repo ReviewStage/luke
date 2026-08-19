@@ -1156,6 +1156,24 @@
   font-size: 0.9em;
 }
 
+/* The product draws a chord as the separate keys it is, so a shortcut in the
+   markdown is one <kbd> per key and the gap between caps is drawn here. The
+   heavier bottom edge is what reads as a keycap rather than a code span. */
+.document kbd {
+  display: inline-block;
+  padding: 0.1em 0.45em;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  font-family: var(--font-code);
+  font-size: 0.8em;
+}
+
+.document kbd + kbd {
+  margin-left: 0.3em;
+}
+
 /* Responsive
    The mock's scale steps. Everything else the page draws answers to Tailwind
    variants at its own call site.
