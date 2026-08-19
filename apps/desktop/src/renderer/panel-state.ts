@@ -56,3 +56,39 @@ export const SETTLE_DELAY_MS = 1_700;
 export function presentationForMode(mode: WindowMode): PanelPresentation {
   return mode === "expanded" ? PANEL_PRESENTATION.PANEL : PANEL_PRESENTATION.CAPSULE;
 }
+
+/**
+ * Whether a presentation change is the panel standing down to a compact
+ * shape. This is the one shrink that lands in states whose surface rules let
+ * growth lead, so the renderer marks it and the stylesheet holds the shape
+ * back behind the content it is still carrying. The slot and the composer
+ * are not it: they keep the expanded window, and the base surface timing
+ * already serves their shrink.
+ */
+export function leavesPanelForCompact(
+  previous: PanelPresentation,
+  next: PanelPresentation,
+): boolean {
+  return (
+    previous === PANEL_PRESENTATION.PANEL &&
+    (next === PANEL_PRESENTATION.CAPSULE || next === PANEL_PRESENTATION.PEEK)
+  );
+}
+
+/**
+ * Whether the collapse mark stands after a presentation change. Leaving the
+ * panel for a compact shape raises it; a move between the compact shapes
+ * keeps it, because a peek answering a hover mid-collapse is a width
+ * retarget on the same journey down from the panel, and dropping the mark
+ * there releases the surface from behind the content still riding. Any
+ * other shape ends the journey — the panel leads its own growth, and the
+ * slot and the composer run on the base timing.
+ */
+export function collapseMarkAfter(
+  previous: PanelPresentation,
+  next: PanelPresentation,
+  marked: boolean,
+): boolean {
+  if (leavesPanelForCompact(previous, next)) return true;
+  return marked && (next === PANEL_PRESENTATION.CAPSULE || next === PANEL_PRESENTATION.PEEK);
+}

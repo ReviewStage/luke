@@ -7,6 +7,7 @@ import {
   type HostedUsageAnswer,
   type IssueIdentity,
   isProviderId,
+  MOTION_DURATION_MS,
   type NormalizedSession,
   type ObservedWorkspaceProject,
   type PanelFormFactor,
@@ -101,7 +102,12 @@ import { usePrefersReducedMotion } from "./luke-face-mood";
 import { applySpokenSetting, buildLukeGuide, isAppSettingId } from "./luke-guide";
 import { NotchWings } from "./notch-wings";
 import { PanelBody, type SessionWriteHandlers } from "./panel-body";
-import { HIT_REGION, PANEL_PRESENTATION } from "./panel-state";
+import {
+  collapseMarkAfter,
+  HIT_REGION,
+  PANEL_PRESENTATION,
+  type PanelPresentation,
+} from "./panel-state";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { ProviderMark } from "./provider-marks";
 import type { AppActionCarrier } from "./realtime-session";
@@ -208,17 +214,19 @@ function captionBlockSize(textHeight: number, volumeHint: boolean, padding: numb
 /**
  * Sizes the notice band's growth to the chips it currently holds — the
  * caption block's own pattern. The chips size to their names and wrap where
- * they wrap, so only a measurement can say how many rows they made. The
- * band's own max-height already clamps the measurement to the rows the
- * window reserved — past it the chips scroll instead of growing the shape —
- * and the clamp here only restates that bound against a measurement landing
- * mid-layout. The 6px around the measured chips is the band's 3px stand-off
- * from the strip, top and bottom, which one reserved row already accounts
- * for. Unmeasured falls back to `--notice-size`, one row, in the stylesheet.
+ * they wrap, so only a measurement can say how many rows they made. Measured
+ * off the rows inside the band rather than the band itself: the band's box
+ * holds every reserved row so the growth can be revealed by its clip, which
+ * means only the inner stack's height says how many rows the chips actually
+ * made. The clamp is the rows the window reserved — past it the chips scroll
+ * inside the band instead of growing the shape. The 6px around the measured
+ * chips is the band's 3px stand-off from the strip, top and bottom, which
+ * one reserved row already accounts for. Unmeasured falls back to
+ * `--notice-size`, one row, in the stylesheet.
  */
-function noticeGrowthStyle(bandHeight: number | undefined): CSSProperties {
-  if (!bandHeight) return {};
-  const growth = Math.min(SESSION_NOTICE_HEIGHT * SESSION_NOTICE_MAX_ROWS, bandHeight + 6);
+function noticeGrowthStyle(rowsHeight: number | undefined): CSSProperties {
+  if (!rowsHeight) return {};
+  const growth = Math.min(SESSION_NOTICE_HEIGHT * SESSION_NOTICE_MAX_ROWS, rowsHeight + 6);
   return { "--notice-growth": `${growth}px` } as CSSProperties;
 }
 
@@ -303,6 +311,33 @@ function useShapeHeight(): [(element: HTMLElement | null) => void, number | unde
   useEffect(() => () => observer.current?.disconnect(), []);
 
   return [measured, height];
+}
+
+const COLLAPSE_ANIMATION_MS = MOTION_DURATION_MS.EXIT + MOTION_DURATION_MS.SHAPE;
+
+/**
+ * True from the render that leaves the panel for a compact shape until the
+ * collapse has settled — the window's own collapse clock, exit plus shape.
+ * The stylesheet spends it to hold the surface behind the content it is
+ * still carrying: the panel's rows fading out, and a caption block or
+ * notice band riding down from the panel's foot. Derived during render
+ * rather than in an effect, because the surface's transition reads its
+ * delay on the same style change that retargets it — an attribute landing
+ * one commit later finds the shape already moving.
+ */
+function useLeavingPanel(presentation: PanelPresentation): boolean {
+  const [leaving, setLeaving] = useState(false);
+  const [previous, setPrevious] = useState(presentation);
+  if (previous !== presentation) {
+    setPrevious(presentation);
+    setLeaving(collapseMarkAfter(previous, presentation, leaving));
+  }
+  useEffect(() => {
+    if (!leaving) return;
+    const timer = window.setTimeout(() => setLeaving(false), COLLAPSE_ANIMATION_MS);
+    return () => window.clearTimeout(timer);
+  }, [leaving]);
+  return leaving;
 }
 
 export function App(): React.JSX.Element {
@@ -619,6 +654,8 @@ export function App(): React.JSX.Element {
     },
     onCapsuleTab: () => changeTab(PANEL_TAB.SESSIONS),
   });
+
+  const leavingPanel = useLeavingPanel(presentation);
 
   /**
    * Sends Luke to sign the next act waiting on him, and puts the panel where
@@ -1903,19 +1940,33 @@ export function App(): React.JSX.Element {
    * with no edge to say so hides its lower rows silently — the fades these
    * drive are what tell the developer there is more to see. Measured, not
    * derived from the count: the scroll position is the band's own, and only
-   * the element can say where it stands. The band's height is measured
+   * the element can say where it stands. The rows' height is measured
    * beside it, because naturally wrapped chips make however many rows their
    * names need and the shape has to grow to the rows actually made.
    */
   const noticeBand = useRef<HTMLSpanElement | null>(null);
-  const [noticeBandElement, noticeBandHeight] = useShapeHeight();
-  const attachNoticeBand = useCallback(
-    (element: HTMLSpanElement | null) => {
-      noticeBand.current = element;
-      noticeBandElement(element);
-    },
-    [noticeBandElement],
-  );
+  // The growth is measured off the rows stack inside the band, not the band:
+  // the band's box holds every reserved row in every state so its clip can
+  // reveal the growth on the shape's own spring, which leaves the inner
+  // stack's wrapped height as the only box that says how many rows the chips
+  // made.
+  const [noticeRowsElement, noticeBandHeight] = useShapeHeight();
+  /**
+   * The measured caption and band heights the shape spends, held through a
+   * collapse out of the panel. The compact width lands at the flip and
+   * re-wraps the words and the chips while they are still riding down at the
+   * panel's foot, and a re-measure landing mid-ride would open the clips and
+   * retarget the surface past room nothing has made yet. The collapse
+   * travels on the panel's numbers; the compact re-measure lands when the
+   * shape has settled, and grows it there the way words arriving at rest do.
+   */
+  const heldShapeSizes = useRef<{ caption?: number; band?: number }>({});
+  useEffect(() => {
+    if (leavingPanel) return;
+    heldShapeSizes.current = { caption: captionTextHeight, band: noticeBandHeight };
+  });
+  const shownCaptionHeight = leavingPanel ? heldShapeSizes.current.caption : captionTextHeight;
+  const shownBandHeight = leavingPanel ? heldShapeSizes.current.band : noticeBandHeight;
   const [noticeFold, setNoticeFold] = useState({ above: false, below: false });
   const measureNoticeFold = useCallback(() => {
     const band = noticeBand.current;
@@ -2597,6 +2648,9 @@ export function App(): React.JSX.Element {
       // them; with captions off the band stands alone.
       data-notice={String(noticeShown)}
       data-presentation={presentation}
+      // Whether the shape is still on its way down from the panel, so the
+      // surface waits for the content it is carrying instead of leading it.
+      data-leaving-panel={String(leavingPanel)}
       data-notch={String(display.notch.hasNotch)}
       data-capture={String(bootstrap.captureMode)}
       style={{
@@ -2612,8 +2666,8 @@ export function App(): React.JSX.Element {
               : slotHeight,
           feedbackHeight,
         ),
-        ...captionSizeStyle(captionTextHeight, volumeHint, captionPadding),
-        ...noticeGrowthStyle(noticeBandHeight),
+        ...captionSizeStyle(shownCaptionHeight, volumeHint, captionPadding),
+        ...noticeGrowthStyle(shownBandHeight),
       }}
     >
       {/* Capsule, peek, slot and panel are all this one shape at different
@@ -2862,7 +2916,7 @@ export function App(): React.JSX.Element {
           shape. */}
       <span
         className="session-notices"
-        ref={attachNoticeBand}
+        ref={noticeBand}
         inert={!noticeShown}
         // The folds: which edges have chips beyond them, driving the fades
         // that say the band scrolls. Both settle to false while everything
@@ -2871,31 +2925,33 @@ export function App(): React.JSX.Element {
         data-fold-below={String(noticeFold.below)}
         onScroll={measureNoticeFold}
       >
-        {lastMentioned.current.map((mention) => (
-          <button
-            key={mention.id}
-            type="button"
-            className="session-notice"
-            data-hit-region={HIT_REGION.CAPSULE}
-            aria-label={`Open "${mention.title}"`}
-            // Keeps the press from moving focus here, like the capsule strip's
-            // own button, so a focused settings field keeps the caret.
-            onMouseDown={(event) => event.preventDefault()}
-            // An issue chip is the same press one roster over: the identity
-            // goes to the main process, which reads the tracker's own address
-            // back out of its observation and hands it to the system — and an
-            // issue that reported none is taken nowhere, because no panel
-            // surface holds a row to fall back to.
-            onClick={() =>
-              mention.kind === MENTION_CHIP_KIND.SESSION
-                ? openMentionedSession(mention.identity)
-                : void window.sidecar.openIssue(mention.identity)
-            }
-          >
-            <ProviderMark providerId={mention.markId} />
-            <span className="session-notice-name">{mention.title}</span>
-          </button>
-        ))}
+        <span className="session-notice-rows" ref={noticeRowsElement}>
+          {lastMentioned.current.map((mention) => (
+            <button
+              key={mention.id}
+              type="button"
+              className="session-notice"
+              data-hit-region={HIT_REGION.CAPSULE}
+              aria-label={`Open "${mention.title}"`}
+              // Keeps the press from moving focus here, like the capsule strip's
+              // own button, so a focused settings field keeps the caret.
+              onMouseDown={(event) => event.preventDefault()}
+              // An issue chip is the same press one roster over: the identity
+              // goes to the main process, which reads the tracker's own address
+              // back out of its observation and hands it to the system — and an
+              // issue that reported none is taken nowhere, because no panel
+              // surface holds a row to fall back to.
+              onClick={() =>
+                mention.kind === MENTION_CHIP_KIND.SESSION
+                  ? openMentionedSession(mention.identity)
+                  : void window.sidecar.openIssue(mention.identity)
+              }
+            >
+              <ProviderMark providerId={mention.markId} />
+              <span className="session-notice-name">{mention.title}</span>
+            </button>
+          ))}
+        </span>
       </span>
 
       <div className="compact-stage">
