@@ -78,6 +78,7 @@ export class VoiceCapabilityAssembler {
   #realtimeCredentials: RealtimeCredentialMinter | undefined;
   #unavailableDiagnostics: RealtimeDiagnostics;
   #hostedUsageReader: HostedUsageReader | undefined;
+  #voiceSource: VoiceSource = VOICE_SOURCE.ACCOUNT;
 
   constructor(options: VoiceCapabilityAssemblerOptions) {
     this.#options = options;
@@ -101,6 +102,11 @@ export class VoiceCapabilityAssembler {
 
   get hostedUsageReader(): HostedUsageReader | undefined {
     return this.#hostedUsageReader;
+  }
+
+  /** Which credential the last applied policy settled on, for a count to name. */
+  get voiceSource(): VoiceSource {
+    return this.#voiceSource;
   }
 
   async apply(): Promise<void> {
@@ -152,6 +158,7 @@ export class VoiceCapabilityAssembler {
       apiKeyConfigured: apiKey !== undefined,
     });
     this.#hostedUsageReader = policy.useHosted ? new HostedUsageReader(seams) : undefined;
+    this.#voiceSource = policy.source;
     if (policy.useHosted) this.#warmHostedVoice();
     this.#report(apiKey !== undefined);
   }

@@ -2,6 +2,7 @@ import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { createAuthClient } from "better-auth/react";
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { captureSiteEvent, identifySiteVisitor, SITE_EVENT, startSiteAnalytics } from "./analytics";
 import { AUTH_CARD, AUTH_PILL, AUTH_SHELL, AUTH_TITLE } from "./auth-surface";
 import { LukeMark } from "./SiteChrome";
 import "./styles.css";
@@ -11,8 +12,19 @@ const authClient = createAuthClient({ plugins: [oauthProviderClient()] });
 function Consent(): React.JSX.Element {
   const [failure, setFailure] = useState(false);
   useEffect(() => {
-    void authClient.oauth2.consent({ accept: true }).then((result) => {
-      if (result.error) setFailure(true);
+    void authClient.oauth2.consent({ accept: true }).then(async (result) => {
+      if (result.error) {
+        setFailure(true);
+        return;
+      }
+      // Where the two halves of the funnel join. The desktop's counts resolve
+      // to the same account id from the bearer token, so naming the visitor by
+      // it here links the page views they arrived through to the account they
+      // just made. The id alone travels: no email, no name, no provider.
+      const session = await authClient.getSession();
+      const userId = session.data?.user.id;
+      if (userId) identifySiteVisitor(userId);
+      captureSiteEvent(SITE_EVENT.SIGN_IN_COMPLETE);
     });
   }, []);
   return (
@@ -41,6 +53,8 @@ function Consent(): React.JSX.Element {
     </main>
   );
 }
+
+startSiteAnalytics();
 
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Root element is missing");

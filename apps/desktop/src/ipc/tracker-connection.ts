@@ -1,3 +1,4 @@
+import { ISSUE_TRACKER_ID, PRODUCT_EVENT, type RecordProductEvent } from "@sidecar/core";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import type { LinearCredentials } from "../linear-credentials";
 import type { LinearSignIn } from "../linear-oauth";
@@ -14,11 +15,20 @@ export interface TrackerConnectionIpcDependencies {
   credentials: LinearCredentials;
   signIn: LinearSignIn;
   refresh: () => void;
+  recordProductEvent: RecordProductEvent;
 }
 
 export function registerTrackerConnectionIpc(dependencies: TrackerConnectionIpcDependencies): void {
-  const { ipcMain, trustedSender, registerSetting, settingsStore, credentials, signIn, refresh } =
-    dependencies;
+  const {
+    ipcMain,
+    trustedSender,
+    registerSetting,
+    settingsStore,
+    credentials,
+    signIn,
+    refresh,
+    recordProductEvent,
+  } = dependencies;
   // The Linear sign-in runs whole inside `save`, exactly as the calendar's
   // does: the browser trip, the loopback redirect and the exchange all happen
   // in the main process, and the renderer's reply is the settings snapshot
@@ -38,7 +48,12 @@ export function registerTrackerConnectionIpc(dependencies: TrackerConnectionIpcD
     apply(result) {
       // The board is a minute stale at worst, but a row that just connected
       // and shows nothing reads as a connection that failed.
-      if (!result.reason) refresh();
+      if (!result.reason) {
+        refresh();
+        recordProductEvent(PRODUCT_EVENT.TRACKER_CONNECT, {
+          tracker_id: ISSUE_TRACKER_ID.LINEAR,
+        });
+      }
     },
     refusal: "Could not connect Linear on this system.",
   });

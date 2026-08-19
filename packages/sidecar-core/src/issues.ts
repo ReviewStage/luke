@@ -18,6 +18,13 @@ export const ISSUE_TRACKER_ID = {
 
 export type IssueTrackerId = (typeof ISSUE_TRACKER_ID)[keyof typeof ISSUE_TRACKER_ID];
 
+const ISSUE_TRACKER_IDS: ReadonlySet<string> = new Set(Object.values(ISSUE_TRACKER_ID));
+
+/** Whether this build knows the tracker an observation or an act names. */
+export function isIssueTrackerId(value: string): value is IssueTrackerId {
+  return ISSUE_TRACKER_IDS.has(value);
+}
+
 /** A stable tracker identity and the label that can be shown or spoken. */
 export interface IssueTracker {
   id: string;

@@ -45,6 +45,9 @@ key in Settings.
 Voice is the one feature that sends audio off your Mac. Refer to
 [PRIVACY.md](PRIVACY.md).
 
+Luke also counts how his own features are used, on by default — switch it off
+under **Share usage data** in Settings.
+
 ## Supported providers
 
 | Provider | Local | Cloud |

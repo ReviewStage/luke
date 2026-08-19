@@ -64,3 +64,38 @@ test("only POST reaches the resolver, and no token deletes nothing", async () =>
   assert.equal((await anonymous.json()).error, HOSTED_API_ERROR.INVALID_TOKEN);
   assert.equal(deleted, 0);
 });
+
+test("the analytics person is erased before the row that names them goes", async () => {
+  const order: string[] = [];
+  const response = await handleAccountDelete(
+    options({
+      forgetAnalytics: async (userId) => {
+        order.push(`forget:${userId}`);
+      },
+      deleteUser: async (userId) => {
+        order.push(`delete:${userId}`);
+      },
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(order, ["forget:user-1", "delete:user-1"]);
+});
+
+test("a processor that refuses erasure still deletes the account and answers 200", async () => {
+  let deleted = 0;
+  const response = await handleAccountDelete(
+    options({
+      forgetAnalytics: async () => {
+        throw new Error("processor unreachable");
+      },
+      deleteUser: async () => {
+        deleted += 1;
+      },
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { deleted: true });
+  assert.equal(deleted, 1);
+});

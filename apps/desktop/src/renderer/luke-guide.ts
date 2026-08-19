@@ -70,7 +70,7 @@ const VOICE_SOURCE_SECTION = `${SETTINGS_TAB}, on its front page, in the What Lu
 const ACCOUNT_SECTION = `the Account section, at the foot of ${SETTINGS_TAB}'s front page`;
 const SHORTCUTS_PAGE = `${SETTINGS_TAB}, on its Keyboard shortcuts page`;
 const CONNECTIONS_PAGE = `${SETTINGS_TAB}, on its Connections page`;
-/* Where the Updates section stands, for the fact that describes it. */
+/* Where the Updates and Usage data sections stand, for the facts about them. */
 const FRONT_PAGE = `${SETTINGS_TAB}, on its front page`;
 
 /**
@@ -560,6 +560,20 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "the Settings tab wears a dot, the section stands at the top of that page, and its " +
         "button becomes Download. A newer release is fetched by hand in the browser, from the " +
         "fixed releases page: Luke never changes the running build himself.",
+    },
+    {
+      label: "Usage data",
+      // The behaviour rather than the switch: the setting entry describes the
+      // switch, and a Luke who could describe only that would be one who could
+      // not say what it governs.
+      detail:
+        "Luke counts how his own features are used — a launch, a provider connected, sessions " +
+        "observed, a call opened, an announcement spoken — and sends those counts to Luke's own " +
+        "service. Every event and every value is fixed by this build: nothing about a session — " +
+        "no title, branch, path, recap, or transcript — and nothing typed or spoken can travel " +
+        `in one, and nothing is sent while signed out. The switch is Share usage data, in the ` +
+        `Usage data section on ${FRONT_PAGE}; it is on to begin with, and turning it off stops ` +
+        "it at once.",
     },
     {
       label: "Quitting",

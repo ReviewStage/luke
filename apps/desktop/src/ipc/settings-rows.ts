@@ -1,5 +1,10 @@
-import type { SessionProviderAdapter } from "@sidecar/core";
-import { isWireString, type UnparsedWireValue } from "@sidecar/core";
+import {
+  isWireString,
+  PRODUCT_EVENT,
+  type RecordProductEvent,
+  type SessionProviderAdapter,
+  type UnparsedWireValue,
+} from "@sidecar/core";
 import type { IpcMainInvokeEvent } from "electron";
 import type { DockPresence } from "../dock-presence";
 import { HOTKEY_RANK, type HotkeyRegistrar } from "../hotkey-registrar";
@@ -15,6 +20,7 @@ import {
   isCredentialProviderId,
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "../shared/credential-providers";
+import { CONNECTION_COUNTED_AS } from "../shared/product-vocabulary";
 import {
   APP_SETTING_FIELDS,
   APP_SETTING_SCHEMA,
@@ -24,6 +30,7 @@ import {
   isKeyedAppSettingField,
   isSettingEntryKey,
   SETTING_SIDE_EFFECT,
+  settingAnalytics,
   settingEntryGuard,
 } from "../shared/settings-schema";
 
@@ -42,6 +49,9 @@ export interface SettingsRowsIpcDependencies {
   workspaceProjectOffered: (providerId: string, providerProjectId: string) => boolean;
   refreshMeetingQuiet: () => void;
   releaseHeldNotices: () => void;
+  /** Moves the counting switch, which is also what records the move itself. */
+  setUsageSharing: (enabled: boolean) => void;
+  recordProductEvent: RecordProductEvent;
 }
 
 export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencies): void {
@@ -60,6 +70,8 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
     workspaceProjectOffered,
     refreshMeetingQuiet,
     releaseHeldNotices,
+    setUsageSharing,
+    recordProductEvent,
   } = dependencies;
   // The renderer can replace or clear a provider's credential but never reads
   // it back; the reply reports only where each key now comes from.
@@ -74,7 +86,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
       return { providerId, apiKey };
     },
     save: ({ providerId, apiKey }) => settingsStore.setApiKey(providerId, apiKey),
-    async apply(result, { providerId }) {
+    async apply(result, { providerId, apiKey }) {
       // Only the provider whose key changed is affected, so the local
       // observers are left alone rather than re-crawling the filesystem on
       // every save.
@@ -94,9 +106,32 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
         await applyVoiceCredential();
         await hotkeys.reapply(HOTKEY_RANK.TALK);
       }
+      // The store reads a blank key as a clearing, so the count reads it the
+      // same way rather than reporting a connection that did not happen.
+      if (!result.reason) {
+        recordProductEvent(
+          apiKey?.trim() ? PRODUCT_EVENT.PROVIDER_CONNECT : PRODUCT_EVENT.PROVIDER_DISCONNECT,
+          { connection_id: CONNECTION_COUNTED_AS[providerId] },
+        );
+      }
     },
     refusal: "Could not save that API key on this system.",
   });
+
+  /**
+   * Counts a setting that just moved, for a setting the schema says to count.
+   * The id travels and the shape of the new value does; the value itself never
+   * does, because several of these hold a project name or a chord the
+   * developer typed.
+   */
+  function recordSettingUpdate(field: AppSettingField, settings: AppSettings): void {
+    const analytics = settingAnalytics(field, settings);
+    if (!analytics) return;
+    recordProductEvent(PRODUCT_EVENT.SETTING_UPDATE, {
+      setting_id: analytics.id,
+      setting_value: analytics.value,
+    });
+  }
 
   async function applySettingSideEffect(
     field: AppSettingField,
@@ -150,6 +185,9 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
         refreshMeetingQuiet();
         releaseHeldNotices();
         break;
+      case SETTING_SIDE_EFFECT.USAGE_SHARING:
+        setUsageSharing(settings.shareUsageData);
+        break;
       case SETTING_SIDE_EFFECT.NONE:
         break;
     }
@@ -187,6 +225,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
     save: ({ field, value }) => settingsStore.set(field, value),
     async apply(result, { field, value }, event) {
       if (result.reason) return;
+      recordSettingUpdate(field, result.settings);
       await applySettingSideEffect(field, value, result.settings, event);
     },
     refusal: "Could not save that setting on this system.",
@@ -223,6 +262,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
       ),
     async apply(result, { field }, event) {
       if (result.reason) return;
+      recordSettingUpdate(field, result.settings);
       await applySettingSideEffect(field, result.settings[field], result.settings, event);
     },
     refusal: "Could not save that setting on this system.",

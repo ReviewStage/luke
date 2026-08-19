@@ -2,6 +2,7 @@ import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { createAuthClient } from "better-auth/react";
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { captureSiteEvent, SITE_EVENT, startSiteAnalytics } from "./analytics";
 import { AUTH_BUTTON, AUTH_CARD, AUTH_SHELL, AUTH_TITLE } from "./auth-surface";
 import { LukeMark } from "./SiteChrome";
 import {
@@ -30,6 +31,7 @@ function SignIn(): React.JSX.Element {
     if (!provider || startedFromHint.current) return;
     startedFromHint.current = true;
     setPending(provider);
+    captureSiteEvent(SITE_EVENT.SIGN_IN_START);
     void authClient.signIn.social({ provider }).then((result) => {
       if (!result.error) return;
       setPending(undefined);
@@ -41,6 +43,7 @@ function SignIn(): React.JSX.Element {
     if (!provider || pending) return;
     setPending(provider);
     setFailure(undefined);
+    captureSiteEvent(SITE_EVENT.SIGN_IN_START);
     const result = await authClient.signIn.social({ provider });
     if (result.error) {
       setPending(undefined);
@@ -87,6 +90,8 @@ function SignIn(): React.JSX.Element {
     </main>
   );
 }
+
+startSiteAnalytics();
 
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Root element is missing");

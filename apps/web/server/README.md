@@ -77,6 +77,32 @@ the `user` row is the entire act — sessions, provider accounts, OAuth grants,
 and usage counters all reference it with `onDelete: "cascade"`, so nothing of
 the account outlives the request.
 
+`api/events.ts` records what a signed-in desktop counted about its own use, on
+the same bearer resolution. The desktop never talks to the analytics processor:
+it posts an allowlisted batch here, and this is the one place a `distinct_id`
+is attached — from the resolved account, never from the body, which has no
+place to name one. `productEventBatchFromWire` in `@sidecar/core` is the whole
+admission policy, and it builds each event from that event's property
+allowlist, so nothing outside the vocabulary survives the read.
+
+It needs `POSTHOG_PROJECT_API_KEY`; without it the endpoint answers 503 and
+product analytics is simply off, which is the intended state for Preview
+deployments. `POSTHOG_HOST` optionally overrides the ingestion host.
+`POSTHOG_PERSONAL_API_KEY` and `POSTHOG_PROJECT_ID` are what let
+`api/account/delete.ts` ask PostHog to erase the person before the account row
+goes — a private endpoint, so it takes a personal key rather than the project
+token, and `POSTHOG_API_HOST` overrides *its* host, which is not the ingestion
+host. Without that pair the delete simply has no erasure seam to run. Every
+forwarded event carries `$geoip_disable`, without which an event arriving with
+no address resolves to the data centre's own location and the privacy claim in
+`PRIVACY.md` becomes false; the project's IP-capture setting should be set to
+discard as well, so the guarantee does not rest on one property in one file.
+
+The browser half of the funnel is separate and weaker: `VITE_POSTHOG_PROJECT_API_KEY`
+is a build-time variable that lets the site's own pages talk to PostHog
+directly, so PostHog sees a visitor's address there. A build without it never
+loads the library at all.
+
 Use is metered per user per UTC day in the Luke-owned `hosted_usage` table —
 one atomic upsert before each upstream call, checked against the ceilings in
 `server/hosted/quota.ts`. The ceilings bound how often calls open, not how

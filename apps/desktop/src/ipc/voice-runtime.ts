@@ -1,4 +1,4 @@
-import type { UnparsedWireValue } from "@sidecar/core";
+import { PRODUCT_EVENT, type RecordProductEvent, type UnparsedWireValue } from "@sidecar/core";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import type { HostedUsageReader } from "../hosted-usage";
 import type { PanelManager } from "../panel-manager";
@@ -9,6 +9,8 @@ import {
   CREDENTIAL_PROVIDERS,
   isCredentialProviderId,
 } from "../shared/credential-providers";
+import { VOICE_SOURCE_COUNTED_AS } from "../shared/product-vocabulary";
+import type { VoiceSource } from "../shared/settings-schema";
 
 export interface VoiceRuntimeIpcDependencies {
   ipcMain: Pick<IpcMain, "handle" | "on">;
@@ -18,6 +20,9 @@ export interface VoiceRuntimeIpcDependencies {
   realtimeCredentials: () => RealtimeCredentialMinter | undefined;
   unavailableDiagnostics: () => ReturnType<RealtimeCredentialMinter["diagnostics"]>;
   hostedUsageReader: () => HostedUsageReader | undefined;
+  /** Which credential the voice would run on, as the last applied policy decided. */
+  voiceSource: () => VoiceSource;
+  recordProductEvent: RecordProductEvent;
 }
 
 export function registerVoiceRuntimeIpc(dependencies: VoiceRuntimeIpcDependencies): void {
@@ -48,7 +53,14 @@ export function registerVoiceRuntimeIpc(dependencies: VoiceRuntimeIpcDependencie
   });
   ipcMain.handle(channels.requestRealtimeCredential, async (event) => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
-    return dependencies.realtimeCredentials()?.mint();
+    const credential = await dependencies.realtimeCredentials()?.mint();
+    // A credential in hand is a call about to open; a refused mint is not one.
+    if (credential) {
+      dependencies.recordProductEvent(PRODUCT_EVENT.VOICE_CALL_START, {
+        credential_source: VOICE_SOURCE_COUNTED_AS[dependencies.voiceSource()],
+      });
+    }
+    return credential;
   });
   ipcMain.handle(channels.requestRealtimeDiagnostics, (event) => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");

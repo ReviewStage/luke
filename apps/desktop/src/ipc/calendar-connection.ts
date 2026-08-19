@@ -1,4 +1,9 @@
-import { isWireString, type UnparsedWireValue } from "@sidecar/core";
+import {
+  isWireString,
+  PRODUCT_EVENT,
+  type RecordProductEvent,
+  type UnparsedWireValue,
+} from "@sidecar/core";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import type { GoogleCalendarReader } from "../google-calendar";
 import type { GoogleCalendarSignIn } from "../google-calendar-oauth";
@@ -15,13 +20,22 @@ export interface CalendarConnectionIpcDependencies {
   signIn: GoogleCalendarSignIn;
   observedCalendars: () => readonly ObservedAccountCalendars[];
   refresh: () => void;
+  recordProductEvent: RecordProductEvent;
 }
 
 export function registerCalendarConnectionIpc(
   dependencies: CalendarConnectionIpcDependencies,
 ): void {
-  const { ipcMain, trustedSender, registerSetting, settingsStore, calendar, signIn, refresh } =
-    dependencies;
+  const {
+    ipcMain,
+    trustedSender,
+    registerSetting,
+    settingsStore,
+    calendar,
+    signIn,
+    refresh,
+    recordProductEvent,
+  } = dependencies;
   registerSetting(channels.connectGoogleCalendar, {
     validate: () => undefined,
     async save() {
@@ -45,7 +59,10 @@ export function registerCalendarConnectionIpc(
       return settingsStore.addCalendarAccount(primaryId, outcome.refreshToken, [primaryId]);
     },
     apply(result) {
-      if (!result.reason) refresh();
+      if (!result.reason) {
+        refresh();
+        recordProductEvent(PRODUCT_EVENT.CALENDAR_CONNECT, {});
+      }
     },
     refusal: "Could not connect Google Calendar on this system.",
   });

@@ -1,9 +1,12 @@
 import {
+  APP_SETTING_ID,
   APP_SETTING_KIND,
   APP_TOGGLE_VALUE,
   type AppGuideSetting,
+  type AppSettingId,
   appToggleText,
   DEFAULT_PANEL_FORM_FACTOR,
+  isAppSettingId,
   isPanelFormFactor,
   isProviderId,
   isRealtimeVoice,
@@ -12,7 +15,9 @@ import {
   isWireString,
   PANEL_FORM_FACTOR_LIST,
   type PanelFormFactor,
+  PRODUCT_SETTING_VALUE,
   PROVIDER_ID,
+  type ProductSettingValue,
   type ProviderId,
   REALTIME_DEFAULTS,
   REALTIME_VOICE_LIST,
@@ -36,24 +41,9 @@ import {
   workspaceAgentModels,
 } from "./workspace-agents";
 
-export const APP_SETTING_ID = {
-  VOICE: "voice",
-  VOICE_SPEED: "voice_speed",
-  VOICE_CAPTIONS: "voice_captions",
-  DUCK_OTHER_MEDIA: "duck_other_media",
-  PREFER_BUILT_IN_MICROPHONE: "prefer_built_in_microphone",
-  QUIET_DURING_MEETINGS: "quiet_during_meetings",
-  SHOW_IN_DOCK: "show_in_dock",
-  SHOW_ON_ALL_DISPLAYS: "show_on_all_displays",
-  FORM_FACTOR: "form_factor",
-  DEFAULT_WORKSPACE_PROVIDER: "default_workspace_provider",
-  WORKSPACE_AGENT_MODEL: "workspace_agent_model",
-  WORKSPACE_AGENT_EFFORT: "workspace_agent_effort",
-  SUPERSET_AGENT: "superset_agent",
-  VOICE_SOURCE: "voice_source",
-} as const;
-
-export type AppSettingId = (typeof APP_SETTING_ID)[keyof typeof APP_SETTING_ID];
+// The ids themselves live in core, because the product-event vocabulary names
+// the same set and may not depend on anything here.
+export { APP_SETTING_ID, type AppSettingId, isAppSettingId };
 
 export const VOICE_SOURCE = {
   ACCOUNT: "account",
@@ -98,6 +88,7 @@ export const SETTING_SIDE_EFFECT = {
   MEDIA_DUCK: "media-duck",
   VOICE_SOURCE: "voice-source",
   MEETING_QUIET: "meeting-quiet",
+  USAGE_SHARING: "usage-sharing",
 } as const;
 
 export type SettingSideEffect = (typeof SETTING_SIDE_EFFECT)[keyof typeof SETTING_SIDE_EFFECT];
@@ -115,6 +106,7 @@ export interface StoredAppSettings {
   preferBuiltInMicrophone: boolean;
   quietDuringMeetings: boolean;
   showOnAllDisplays: boolean;
+  shareUsageData: boolean;
   formFactor?: PanelFormFactor;
   defaultWorkspaceProvider?: WorkspaceProviderId;
   workspaceAgentDefaults?: Readonly<Partial<Record<ProviderId, WorkspaceAgentSelection>>>;
@@ -163,6 +155,16 @@ interface SettingDefinition<Field extends AppSettingField> {
   };
   mainProcessSideEffect: SettingSideEffect;
   spokenValue?: (value: string) => AppSettingValue<Field> | undefined;
+  /**
+   * How a change to this setting is counted, for a setting worth counting.
+   * The id travels; the value never does — only whether a switch went on or
+   * off, or whether a choice was made or returned to nothing, because several
+   * choices here hold a project name or a chord the developer typed.
+   */
+  analytics?: {
+    id: AppSettingId;
+    value(value: AppSettingValue<Field>): ProductSettingValue;
+  };
 }
 
 export type AppSettingGuideSettings = Omit<
@@ -178,6 +180,7 @@ export type AppSettingGuideSettings = Omit<
 const SETTINGS_TAB = "the panel's Settings tab";
 const VOICE_PAGE = `${SETTINGS_TAB}, on its Voice page`;
 const VOICE_SOURCE_SECTION = `${SETTINGS_TAB}, on its front page, in the What Luke runs on section at the top`;
+const USAGE_DATA_SECTION = `${SETTINGS_TAB}, on its front page, in the Usage data section`;
 const APPEARANCE_PAGE = `${SETTINGS_TAB}, on its Appearance page`;
 const CONNECTIONS_PAGE = `${SETTINGS_TAB}, on its Connections page`;
 const CONDUCTOR_ROW_PATH = `the Conductor row under Cloud Agent API keys, in ${CONNECTIONS_PAGE} — drawn once Conductor is connected`;
@@ -249,6 +252,15 @@ function optional<Value extends UnparsedWireValue>(
   return guard(value) ? valid(value) : invalid(undefined);
 }
 
+/** Any stored setting's value, which is what a counter is handed. */
+type StoredSettingValue = AppSettingValue<AppSettingField>;
+
+const toggleAnalytics = (value: StoredSettingValue): ProductSettingValue =>
+  value ? PRODUCT_SETTING_VALUE.ON : PRODUCT_SETTING_VALUE.OFF;
+
+const choiceAnalytics = (value: StoredSettingValue): ProductSettingValue =>
+  value === undefined ? PRODUCT_SETTING_VALUE.CLEARED : PRODUCT_SETTING_VALUE.SET;
+
 function boolean(defaultValue: boolean) {
   return (value: UnparsedWireValue): SettingGuardResult<boolean> =>
     value === true || value === false ? valid(value) : invalid(defaultValue);
@@ -319,6 +331,7 @@ export const APP_SETTING_SCHEMA = {
     })),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.DOCK,
     spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
+    analytics: { id: APP_SETTING_ID.SHOW_IN_DOCK, value: toggleAnalytics },
   },
   voice: {
     field: "voice",
@@ -341,6 +354,7 @@ export const APP_SETTING_SCHEMA = {
     })),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.VOICE,
     spokenValue: (value: string) => (isRealtimeVoice(value) ? value : undefined),
+    analytics: { id: APP_SETTING_ID.VOICE, value: choiceAnalytics },
   },
   voiceSpeed: {
     field: "voiceSpeed",
@@ -368,6 +382,7 @@ export const APP_SETTING_SCHEMA = {
     spokenValue: (value: string) => {
       return VOICE_SPEED_BY_SPOKEN_VALUE[value];
     },
+    analytics: { id: APP_SETTING_ID.VOICE_SPEED, value: choiceAnalytics },
   },
   voiceCaptions: {
     field: "voiceCaptions",
@@ -391,6 +406,7 @@ export const APP_SETTING_SCHEMA = {
     })),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
     spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
+    analytics: { id: APP_SETTING_ID.VOICE_CAPTIONS, value: toggleAnalytics },
   },
   voiceHotkey: {
     field: "voiceHotkey",
@@ -442,6 +458,7 @@ export const APP_SETTING_SCHEMA = {
     })),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.MEDIA_DUCK,
     spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
+    analytics: { id: APP_SETTING_ID.DUCK_OTHER_MEDIA, value: toggleAnalytics },
   },
   voiceSource: {
     field: "voiceSource",
@@ -463,6 +480,7 @@ export const APP_SETTING_SCHEMA = {
       manual: VOICE_SOURCE_SECTION,
     })),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.VOICE_SOURCE,
+    analytics: { id: APP_SETTING_ID.VOICE_SOURCE, value: choiceAnalytics },
   },
   preferBuiltInMicrophone: {
     field: "preferBuiltInMicrophone",
@@ -489,6 +507,7 @@ export const APP_SETTING_SCHEMA = {
     ),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
     spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
+    analytics: { id: APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE, value: toggleAnalytics },
   },
   quietDuringMeetings: {
     field: "quietDuringMeetings",
@@ -512,6 +531,7 @@ export const APP_SETTING_SCHEMA = {
     ),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.MEETING_QUIET,
     spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
+    analytics: { id: APP_SETTING_ID.QUIET_DURING_MEETINGS, value: toggleAnalytics },
   },
   showOnAllDisplays: {
     field: "showOnAllDisplays",
@@ -536,6 +556,33 @@ export const APP_SETTING_SCHEMA = {
     ),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.DISPLAYS,
     spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
+    analytics: { id: APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS, value: toggleAnalytics },
+  },
+  shareUsageData: {
+    field: "shareUsageData",
+    default: true,
+    guard: boolean(true),
+    settingsPage: SETTINGS_PAGE.ROOT,
+    // No reset scope on purpose: a "reset appearance" that quietly turned
+    // sharing back on would be a consent the developer never gave.
+    guideEntry: settingGuideEntry([APP_SETTING_ID.SHARE_USAGE_DATA], (settings, defaultValue) => ({
+      id: APP_SETTING_ID.SHARE_USAGE_DATA,
+      label: "Share usage data",
+      description:
+        "Whether Luke counts how his own features are used — a launch, a provider connected, " +
+        "sessions observed, a call opened — and sends those counts to Luke's own service. " +
+        "Every event and every value is fixed by this build: nothing about a session, and " +
+        "nothing typed or spoken, can travel in one. On to begin with; off stops it at once.",
+      kind: APP_SETTING_KIND.TOGGLE,
+      value: appToggleText(settings.shareUsageData),
+      // SAFETY: The preceding check establishes the asserted contract.
+      defaultValue: appToggleText(defaultValue as boolean),
+      adjustable: true,
+      manual: USAGE_DATA_SECTION,
+    })),
+    mainProcessSideEffect: SETTING_SIDE_EFFECT.USAGE_SHARING,
+    spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
+    analytics: { id: APP_SETTING_ID.SHARE_USAGE_DATA, value: toggleAnalytics },
   },
   formFactor: {
     field: "formFactor",
@@ -558,6 +605,7 @@ export const APP_SETTING_SCHEMA = {
     })),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.FORM_FACTOR,
     spokenValue: (value: string) => (isPanelFormFactor(value) ? value : undefined),
+    analytics: { id: APP_SETTING_ID.FORM_FACTOR, value: choiceAnalytics },
   },
   defaultWorkspaceProvider: {
     field: "defaultWorkspaceProvider",
@@ -594,6 +642,7 @@ export const APP_SETTING_SCHEMA = {
       manual: `${CONNECTIONS_PAGE}, under Workspaces`,
     })),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
+    analytics: { id: APP_SETTING_ID.DEFAULT_WORKSPACE_PROVIDER, value: choiceAnalytics },
   },
   workspaceAgentDefaults: {
     field: "workspaceAgentDefaults",
@@ -778,11 +827,6 @@ export function isSettingsResetScope(value: UnparsedWireValue): value is Setting
   return Object.values(SETTINGS_RESET_SCOPE).includes(value as SettingsResetScope);
 }
 
-export function isAppSettingId(value: string): value is AppSettingId {
-  // SAFETY: The preceding check establishes the asserted contract.
-  return Object.values(APP_SETTING_ID).includes(value as AppSettingId);
-}
-
 export function settingFieldForGuideId(id: AppSettingId): AppSettingField | undefined {
   return APP_SETTING_FIELDS.find((field) => APP_SETTING_SCHEMA[field].guideEntry.ids.includes(id));
 }
@@ -807,6 +851,31 @@ export function spokenSettingValue(
     | ((candidate: string) => StoredAppSettings[AppSettingField])
     | undefined;
   return convert?.(value);
+}
+
+/** What a counted setting change reports: which setting, and the shape of its new value. */
+export interface SettingAnalytics {
+  id: AppSettingId;
+  value: ProductSettingValue;
+}
+
+/**
+ * How a change to this field is counted, or nothing for a field the schema
+ * does not count. The value itself never travels — only whether a switch went
+ * on or off, or whether a choice was made or returned to nothing.
+ */
+export function settingAnalytics(
+  field: AppSettingField,
+  settings: Pick<StoredAppSettings, AppSettingField>,
+): SettingAnalytics | undefined {
+  const definition = APP_SETTING_SCHEMA[field];
+  if (!("analytics" in definition)) return undefined;
+  // SAFETY: analytics exists only on fields that declare it; the branch narrows the union.
+  const analytics = definition.analytics as {
+    id: AppSettingId;
+    value: (value: StoredSettingValue) => ProductSettingValue;
+  };
+  return { id: analytics.id, value: analytics.value(settings[field]) };
 }
 
 export const APP_SETTING_DEFAULTS = APP_SETTING_FIELDS.reduce(

@@ -63,6 +63,89 @@ a status alone. What OpenAI receives on these paths is the same as on the
 keyed paths below, under Luke's key rather than yours, and OpenAI's policies
 govern it the same way.
 
+## Product analytics
+
+Luke counts how his own features are used, so that whether anyone launches him
+twice, which providers people actually connect, and where install-to-first-
+session loses them are answerable at all. **This is on by default.** The switch
+is **Share usage data**, in the Usage data section on Luke's Settings tab,
+front page — the same page as Updates. Turning it off stops it at once and
+sends one final `usage:sharing_stop` event so that opting out is itself
+countable; nothing is sent afterwards.
+
+The desktop never talks to an analytics provider. It posts a batch of events to
+Luke's own service, on the same origin and the same short-lived access token
+the voice and review endpoints use, and that service forwards them to PostHog
+(PostHog Cloud, US region) under a key that exists only in the deployment.
+**Because the account is resolved from the bearer token, the desktop transmits
+no identity at all** — there is no field in what it sends that could name a
+person, and a `distinct_id` written into the request body is discarded rather
+than honoured. Each forwarded event carries `$geoip_disable`, so PostHog never
+resolves your Mac's network address or location; the address it would otherwise
+see is the data centre's, not yours.
+
+**There is no free-text field on the wire.** An event is one name from a fixed
+list, and each of its properties is one value from a fixed set, a version
+number, or a bucket — enforced by a single validator in
+`packages/sidecar-core/src/product-events.ts` that both the desktop and the
+service run, and that builds each event from the allowlist rather than copying
+what arrived. A session title, branch, repository path, recap, prompt, tool
+output, error line, file name, or anything typed or spoken has no shape it
+could travel in.
+
+The events are, in full:
+
+| Event | When |
+| --- | --- |
+| `app:launch` | Luke started |
+| `app:day_active` | first activity of a UTC day, because one launch can run for a week |
+| `account:sign_in` | the desktop moved into signed-in |
+| `provider:connect`, `provider:disconnect` | a credential was saved or cleared |
+| `tracker:connect` | Linear was connected |
+| `calendar:connect` | a Google Calendar account was connected |
+| `session:observe` | once per provider per UTC day, that observation is happening |
+| `session:act_send` | a message, control, open, transcript read, workspace creation, or added agent was accepted |
+| `issue:act_send` | an issue state move or comment was accepted |
+| `voice:call_start` | a Realtime credential was minted for a call |
+| `voice:announcement_speak` | a session announcement was spoken |
+| `setting:update` | a setting was changed |
+| `usage:sharing_stop`, `usage:sharing_resume` | this switch moved |
+
+The properties are, in full: `app_version` (a `x.y.z` release version and
+nothing else); `provider_id`, `connection_id`, and `tracker_id` (ids from the
+build's own provider, credential, and tracker lists); `session_count` (never a
+count — one rung of the fixed ladder 0, 1, 2, 5, 10, 25, because "137 sessions"
+identifies a machine where "a crowd" does not); `session_status` (waiting,
+error, or complete); `credential_source` (account or key); `session_act` and
+`issue_act` (which kind of act, never what it carried); `setting_id` (which
+setting); and `setting_value` — on, off, set, or cleared, never the value
+itself, because some settings hold a project name or a keyboard chord you
+chose. No event carries more than two of these.
+
+Nothing is sent while sharing is off, while the desktop is signed out, or in a
+fixture or evidence run. Delivery is best-effort and held in memory only:
+a failed send drops those counts rather than retrying, and quitting drops
+whatever had not been sent. Nothing is written to disk.
+
+**The website is a separate matter and a weaker guarantee.** tryluke.dev counts
+page views and two sign-in steps (started, completed) through PostHog's browser
+library, with autocapture and session recording both switched off, so the text
+and attributes of what you click and the contents of the page are not
+collected. But the browser talks to PostHog directly, which means **PostHog
+sees your network address and user agent on the website**, as it would for any
+third-party script. Visitors are not given a person record until they sign in;
+at that point the account's opaque database id — and only that id, never an
+email, name, or sign-in provider — is what links the visit to the account, so
+the website half and the desktop half of the funnel join.
+
+Deleting your Luke account also asks PostHog to erase the person and the events
+recorded against them. That erasure is **asynchronous on PostHog's side and
+best-effort**: it is requested before the account row is deleted, but if PostHog
+refuses or is unreachable the account is still deleted and the request is not
+retried, because a third party's availability is not a condition of erasing
+your account. Turning the switch off stops future collection but does not by
+itself erase what was already collected.
+
 ## Update check
 
 Luke asks GitHub's public API for the name of this repository's latest

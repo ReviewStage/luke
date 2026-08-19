@@ -47,8 +47,22 @@ Linear issues show as chips under the notch.
 [#257](https://github.com/ReviewStage/luke/pull/257),
 [#271](https://github.com/ReviewStage/luke/pull/271))
 
+### Usage data
+
+Luke now counts how his own features are used — a launch, a provider connected,
+sessions observed, a call opened — and sends those counts to Luke's own service
+so we can see what is worth building next. This is on by default, and the
+switch is Share usage data in the new Usage data section on the Settings tab's
+front page; turning it off stops it at once. Every event name and every value
+is fixed by the build, so nothing about a session — no title, branch, path,
+recap, or transcript — and nothing you type or say can travel in one, and
+nothing is sent while you are signed out. [Privacy](PRIVACY.md) lists every
+event and property by name.
+
 ### Improvements
 
+- Luke counts how his own features are used, on by default and switched off
+  under Share usage data on the Settings tab's front page
 - Luke's role is an engineering manager
   ([#265](https://github.com/ReviewStage/luke/pull/265))
 - Session rows show number of files touched and lines changed when available

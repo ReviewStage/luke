@@ -131,6 +131,7 @@ export {
   type IssueTrackerAdapter,
   type IssueTrackerId,
   type IssueTransition,
+  isIssueTrackerId,
   issueCommentText,
   maximumIssueTransitions,
   normalizeTrackedIssue,
@@ -172,6 +173,12 @@ export {
 } from "./attention-prompt.js";
 
 // Guide — what the app knows about itself.
+export {
+  APP_SETTING_ID,
+  APP_SETTING_ID_LIST,
+  type AppSettingId,
+  isAppSettingId,
+} from "./app-settings.js";
 export {
   APP_PANEL_TAB,
   APP_SETTING_KIND,
@@ -246,6 +253,36 @@ export {
   hostedReviewAnswerFromWire,
   hostedUsageAnswerFromWire,
 } from "./hosted-service.js";
+// Product events — what the desktop may count about its own use.
+export {
+  PRODUCT_CONNECTION_ID,
+  PRODUCT_CREDENTIAL_SOURCE,
+  PRODUCT_EVENT,
+  PRODUCT_EVENT_BATCH_LIMIT,
+  PRODUCT_EVENT_PROPERTIES,
+  PRODUCT_EVENT_PROPERTY,
+  PRODUCT_EVENT_PROPERTY_VALUES,
+  PRODUCT_ISSUE_ACT,
+  PRODUCT_SESSION_ACT,
+  PRODUCT_SESSION_COUNT_BUCKET,
+  PRODUCT_SETTING_VALUE,
+  type ProductConnectionId,
+  type ProductCredentialSource,
+  type ProductEvent,
+  type ProductEventBatch,
+  type ProductEventName,
+  type ProductEventProperties,
+  type ProductEventPropertiesFor,
+  type ProductEventProperty,
+  type ProductIssueAct,
+  type ProductSessionAct,
+  type ProductSessionCountBucket,
+  type ProductSettingValue,
+  productEventBatchFromWire,
+  productEventFromWire,
+  productSessionCountBucket,
+  type RecordProductEvent,
+} from "./product-events.js";
 export {
   REALTIME_CALLS_PATH,
   REALTIME_CLIENT_SECRETS_PATH,
