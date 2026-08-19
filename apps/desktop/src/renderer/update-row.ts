@@ -21,6 +21,16 @@ export interface UpdateRow {
 }
 
 /**
+ * Whether a newer release is positively known to exist. This is what marks
+ * the Settings tab and moves the Updates section to the head of the front
+ * page — one judgment, so the dot, the section's place, and the Download
+ * button can never disagree about whether there is news.
+ */
+export function updateAvailable(update: UpdateSnapshot): boolean {
+  return update.status === UPDATE_STATUS.UPDATE_AVAILABLE;
+}
+
+/**
  * Reads the row from the last learned answer. Fetching an update is the
  * user's own act in the browser — the row only ever says where the build
  * stands and offers the next honest step: check again, wait for the check

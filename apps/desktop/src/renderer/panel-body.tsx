@@ -57,6 +57,7 @@ import {
 import { SendIcon, StopIcon } from "./settings-icons";
 import { SettingsPanel, type SettingsPanelProps } from "./settings-panel";
 import { SignInGate } from "./sign-in-gate";
+import { updateAvailable, updateRow } from "./update-row";
 
 /** Handed up rather than performed here: the row knows sessions, not IPC. */
 export interface SessionWriteHandlers {
@@ -722,13 +723,18 @@ export function PanelBody({
   const highlight = list.search?.tokens;
   const runs = sessionListRuns(rows.map((row) => row.item));
   const runKeys = sessionRunKeys(runs, rows);
+  // The tab wears the update row's own words, so the dot's hover and the row
+  // it leads to can never tell two different stories about the same release.
+  const settingsNote = updateAvailable(settings.updates.update)
+    ? updateRow(settings.updates.update).detail
+    : undefined;
   return (
     <div className="body">
       {/* The tab bar says what you are looking at; the buttons beside it say
           how it is being shown. One line, because the second is only ever a
           qualifier on the first. */}
       <div className="panel-header">
-        <TabBar tab={tab} onTabChange={onTabChange} />
+        <TabBar tab={tab} onTabChange={onTabChange} {...(settingsNote ? { settingsNote } : {})} />
         {offerSearch || offerOptions ? (
           <span className="header-controls">
             {offerSearch ? (

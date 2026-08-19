@@ -31,9 +31,16 @@ export function panelPanelId(tab: PanelTab): string {
 export function TabBar({
   tab,
   onTabChange,
+  settingsNote,
 }: {
   tab: PanelTab;
   onTabChange: (tab: PanelTab) => void;
+  /**
+   * News the Settings tab wears as a dot while it stands — a newer release
+   * waiting to be fetched. The words are the hover's and the screen
+   * reader's; the dot alone is the mark.
+   */
+  settingsNote?: string;
 }): React.JSX.Element {
   const activeIndex = PANEL_TABS.findIndex((candidate) => candidate.id === tab);
 
@@ -66,6 +73,11 @@ export function TabBar({
           onClick={() => onTabChange(candidate.id)}
         >
           {candidate.label}
+          {candidate.id === PANEL_TAB.SETTINGS && settingsNote ? (
+            <span className="tab-note" title={settingsNote}>
+              <span className="visually-hidden">({settingsNote})</span>
+            </span>
+          ) : null}
         </button>
       ))}
     </div>

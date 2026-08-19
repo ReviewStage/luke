@@ -131,7 +131,7 @@ import {
   type SettingsView,
   settingsNavRowId,
 } from "./settings-views";
-import { UPDATE_ROW_ACTION, updateRow } from "./update-row";
+import { UPDATE_ROW_ACTION, updateAvailable, updateRow } from "./update-row";
 
 /** One provider the default-workspace rows can offer, by id and display name. */
 export interface WorkspaceProviderOption {
@@ -2622,8 +2622,11 @@ function WhatLukeRunsOnSection({
   preferences,
   voiceService,
   hostedUsage,
+  rowIndex,
 }: {
   panelOpen: boolean;
+  /** Where the section stands in the page's arrival stagger, counted by the caller. */
+  rowIndex: number;
   /**
    * Whether this system cannot store a key at all. The key half cannot be
    * chosen or supplied then, and it says why rather than going quiet.
@@ -2663,7 +2666,10 @@ function WhatLukeRunsOnSection({
       ? hostedUsage.attention
       : undefined;
   return (
-    <section className="settings-section" style={{ "--row-index": 1 } as React.CSSProperties}>
+    <section
+      className="settings-section"
+      style={{ "--row-index": rowIndex } as React.CSSProperties}
+    >
       <h2>
         <LukeIcon />
         What Luke runs on
@@ -2991,10 +2997,26 @@ function pageResetControl(
   return undefined;
 }
 
-function UpdatesSection({ control }: { control: UpdateControl }): React.JSX.Element {
+/**
+ * Where the build stands against the latest release. It sits below the pages
+ * until a newer release is positively known, and leads the front page while
+ * one is — the place in the stack is itself the answer to "is there news",
+ * the same answer the Settings tab's dot gives from outside. The caller says
+ * where it stands, because the arrival stagger is counted by the page.
+ */
+function UpdatesSection({
+  control,
+  rowIndex,
+}: {
+  control: UpdateControl;
+  rowIndex: number;
+}): React.JSX.Element {
   const row = updateRow(control.update);
   return (
-    <section className="settings-section" style={{ "--row-index": 3 } as React.CSSProperties}>
+    <section
+      className="settings-section"
+      style={{ "--row-index": rowIndex } as React.CSSProperties}
+    >
       <h2>
         <DownloadIcon />
         Updates
@@ -3008,7 +3030,10 @@ function UpdatesSection({ control }: { control: UpdateControl }): React.JSX.Elem
           <small>{row.detail}</small>
         </span>
         {row.action === UPDATE_ROW_ACTION.GET ? (
-          <button type="button" className="quiet-button" onClick={control.onOpenLatest}>
+          /* The one button on the page with somewhere new to go, in the same
+             accent the tab's dot announced it with; every other state of this
+             row keeps the quiet button, because checking is maintenance. */
+          <button type="button" className="action-button" onClick={control.onOpenLatest}>
             Download
           </button>
         ) : (
@@ -3078,6 +3103,10 @@ export function SettingsPanel({
   }, [view, panelOpen]);
   // The drawn page's reset, absent while that page stands at its defaults.
   const pageReset = pageResetControl(view, settings, preferences);
+  // Whether the Updates section leads the front page instead of sitting below
+  // the pages: a newer release waiting is the one piece of news this page can
+  // hold, and news is not filed under maintenance.
+  const updateLeads = updateAvailable(updates.update);
   return (
     <div
       className="settings"
@@ -3100,10 +3129,16 @@ export function SettingsPanel({
            what Luke is allowed, the way to the founders, whose account this
            is, and the way out. The allowance leads because it is the one
            thing here worth checking daily; the account itself follows the
-           page down to the ways out, which are done once or never. */
+           page down to the ways out, which are done once or never. A newer
+           release waiting takes the head of the page for as long as it
+           stands, because it is the one thing here that is news rather than
+           state, and the row indexes below count past it so the arrival
+           stagger keeps one order with the sections. */
         <>
+          {updateLeads ? <UpdatesSection control={updates} rowIndex={1} /> : null}
           {account.status === ACCOUNT_STATUS.SIGNED_IN && settings ? (
             <WhatLukeRunsOnSection
+              rowIndex={updateLeads ? 2 : 1}
               panelOpen={panelOpen}
               storageLocked={settings.secretStorage === SECRET_STORAGE.UNAVAILABLE}
               settings={settings}
@@ -3115,7 +3150,7 @@ export function SettingsPanel({
           ) : null}
           <section
             className="settings-section settings-index"
-            style={{ "--row-index": 2 } as React.CSSProperties}
+            style={{ "--row-index": updateLeads ? 3 : 2 } as React.CSSProperties}
           >
             {SETTINGS_SUBVIEW_LIST.map((subview) => (
               <SettingsNavRow
@@ -3169,7 +3204,7 @@ export function SettingsPanel({
 
       {view !== SETTINGS_VIEW.ROOT ? null : (
         <>
-          <UpdatesSection control={updates} />
+          {updateLeads ? null : <UpdatesSection control={updates} rowIndex={3} />}
 
           <FeedbackSection control={feedback} />
 

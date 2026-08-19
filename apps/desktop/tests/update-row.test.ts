@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { UPDATE_ROW_ACTION, updateRow } from "../src/renderer/update-row";
+import { UPDATE_ROW_ACTION, updateAvailable, updateRow } from "../src/renderer/update-row";
 import { UPDATE_STATUS } from "../src/shared/contracts";
 
 test("an unasked question is an offer to ask, never an answer", () => {
@@ -36,4 +36,23 @@ test("an unreachable check says so and offers to try again", () => {
   const row = updateRow({ status: UPDATE_STATUS.UNREACHABLE, currentVersion: "0.1.0" });
   assert.equal(row.action, UPDATE_ROW_ACTION.CHECK);
   assert.equal(row.current, false);
+});
+
+test("only a positively known newer release counts as news", () => {
+  assert.equal(
+    updateAvailable({
+      status: UPDATE_STATUS.UPDATE_AVAILABLE,
+      currentVersion: "0.1.0",
+      latestVersion: "0.2.0",
+    }),
+    true,
+  );
+  for (const status of [
+    UPDATE_STATUS.UNKNOWN,
+    UPDATE_STATUS.CHECKING,
+    UPDATE_STATUS.UP_TO_DATE,
+    UPDATE_STATUS.UNREACHABLE,
+  ] as const) {
+    assert.equal(updateAvailable({ status, currentVersion: "0.1.0" }), false);
+  }
 });
