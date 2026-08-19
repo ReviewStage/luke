@@ -1238,21 +1238,6 @@ export function startDesktopApp(): void {
     );
     app.quit();
   } else {
-    // A repeat launch is usually someone checking the notch capsule, so re-assert
-    // the panel where it already is. Expanding hides the compact capsule, which is
-    // the one thing the relaunch was meant to show. An explicit `--expanded` is a
-    // stated intent rather than a side effect, so it is still honoured.
-    app.on("second-instance", (_event, argv) => {
-      panels.refreshGeometry();
-      if (argv.includes("--expanded")) {
-        const host = panels.voiceHost();
-        const displayId = host ? panels.displayIdFor(host.webContents) : undefined;
-        if (displayId !== undefined) panels.setMode(displayId, "expanded", true);
-        return;
-      }
-      panels.reconcile();
-      panels.showInactiveAll();
-    });
     void app.whenReady().then(async () => {
       if (process.platform === "darwin") app.setActivationPolicy("accessory");
       Menu.setApplicationMenu(null);
@@ -1352,6 +1337,27 @@ export function startDesktopApp(): void {
       // Reconcile in the background. Only an explicit invalid_grant removes the
       // stored account; network failures and service outages leave it active.
       void accountSession.refreshOnce();
+
+      // A repeat launch is usually someone checking the notch capsule, so re-assert
+      // the panel where it already is. Expanding hides the compact capsule, which is
+      // the one thing the relaunch was meant to show. An explicit `--expanded` is a
+      // stated intent rather than a side effect, so it is still honoured.
+      // Registered only now, once the launch has built what a relaunch re-asserts:
+      // the ping can arrive while this instance is still starting, where the screen
+      // module cannot be read yet — the crash — and where a reconcile would raise
+      // windows before the bootstrap handler exists to answer them. A ping that
+      // early is dropped, because startup is about to assert the panel anyway.
+      app.on("second-instance", (_event, argv) => {
+        panels.refreshGeometry();
+        if (argv.includes("--expanded")) {
+          const host = panels.voiceHost();
+          const displayId = host ? panels.displayIdFor(host.webContents) : undefined;
+          if (displayId !== undefined) panels.setMode(displayId, "expanded", true);
+          return;
+        }
+        panels.reconcile();
+        panels.showInactiveAll();
+      });
 
       screen.on("display-added", handleDisplayChange);
       screen.on("display-removed", handleDisplayChange);
