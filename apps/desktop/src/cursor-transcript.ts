@@ -36,7 +36,7 @@ const CURSOR_TRANSCRIPT_FILE_EXTENSION = ".jsonl";
  * shape is accepted at all: it must start on a letter or digit, and nothing
  * that could climb a directory gets past the first character.
  */
-const CURSOR_SESSION_ID_SHAPE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+const CURSOR_SESSION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 const CURSOR_RECORD_ROLE = {
   USER: "user",
@@ -72,13 +72,13 @@ const CURSOR_TOOL_INPUT_KEY = [
  * inside `user_query`; everything else a user record carries — timestamps,
  * attached files, reminders — is Cursor's own scaffolding.
  */
-const CURSOR_USER_QUERY_SHAPE = /<user_query>([\s\S]*?)<\/user_query>/g;
+const CURSOR_USER_QUERY_PATTERN = /<user_query>([\s\S]*?)<\/user_query>/g;
 
 /**
  * A user message that is entirely XML-tagged blocks with no query among them
  * is scaffolding alone, not something the developer said.
  */
-const CURSOR_SCAFFOLDING_SHAPE = /^(?:<([a-z_]+)>[\s\S]*?<\/\1>\s*)+$/;
+const CURSOR_SCAFFOLDING_PATTERN = /^(?:<([a-z_]+)>[\s\S]*?<\/\1>\s*)+$/;
 
 export interface CursorTranscriptRequest {
   cursorHome?: string;
@@ -97,11 +97,11 @@ function defaultCursorHome(): string {
  * record is scaffolding alone.
  */
 function developerWords(words: string): string | undefined {
-  const queries = [...words.matchAll(CURSOR_USER_QUERY_SHAPE)]
+  const queries = [...words.matchAll(CURSOR_USER_QUERY_PATTERN)]
     .map((match) => text(match[1]))
     .filter((query): query is string => query !== undefined);
   if (queries.length > 0) return queries.join(" ");
-  if (CURSOR_SCAFFOLDING_SHAPE.test(words.trim())) return undefined;
+  if (CURSOR_SCAFFOLDING_PATTERN.test(words.trim())) return undefined;
   return text(words);
 }
 
@@ -159,7 +159,7 @@ async function transcriptFilePath(
   cursorHome: string,
   providerSessionId: string,
 ): Promise<string | undefined> {
-  if (!CURSOR_SESSION_ID_SHAPE.test(providerSessionId)) return undefined;
+  if (!CURSOR_SESSION_ID_PATTERN.test(providerSessionId)) return undefined;
   const projectsDirectory = path.join(cursorHome, CURSOR_PROJECTS_DIRECTORY);
   const fileName = `${providerSessionId}${CURSOR_TRANSCRIPT_FILE_EXTENSION}`;
   for (const entry of await readDirectory(projectsDirectory)) {

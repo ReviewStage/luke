@@ -1,20 +1,47 @@
 /**
- * Defensive readers for values a provider, API, or model may have shaped
- * differently than this build expects. A missing or mistyped field is
- * undefined, never a throw, so one bad record cannot fail an observation.
+ * Defensive readers for values a provider, API, or model may have produced
+ * as JSON. A missing or mistyped field is undefined, never a throw, so one
+ * bad record cannot fail an observation.
  */
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
+export type JsonPrimitive = string | number | boolean | null;
+export type JsonObject = { readonly [key: string]: Json };
+export type Json = JsonPrimitive | readonly Json[] | JsonObject;
+
+export function isJsonString(value: Json): value is string {
+  return typeof value === "string";
+}
+
+export function isJsonNumber(value: Json): value is number {
+  return typeof value === "number";
+}
+
+export function isJsonObject(value: Json): value is JsonObject {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-export function text(value: unknown): string | undefined {
-  const normalized = typeof value === "string" ? value.trim() : "";
+export function isRecord(value: Json): value is JsonObject {
+  return isJsonObject(value);
+}
+
+export function parseJson(text: string): Json | undefined {
+  try {
+    // SAFETY: JSON.parse returns a JSON value; the readers below reject
+    // mistyped fields rather than trusting the tree's layout.
+    return JSON.parse(text) as Json;
+  } catch (error) {
+    if (error instanceof SyntaxError) return undefined;
+    throw error;
+  }
+}
+
+export function text(value: Json): string | undefined {
+  const normalized = isJsonString(value) ? value.trim() : "";
   return normalized || undefined;
 }
 
-export function wholeNumber(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+export function wholeNumber(value: Json): number | undefined {
+  return isJsonNumber(value) && Number.isFinite(value) ? value : undefined;
 }
 
 /**
@@ -31,14 +58,9 @@ export function oneLine(value: string | undefined, maximumLength: number): strin
     : normalized;
 }
 
-export function recordFromJsonLine(line: string): Record<string, unknown> | undefined {
-  try {
-    const parsed = JSON.parse(line) as unknown;
-    return isRecord(parsed) ? parsed : undefined;
-  } catch (error) {
-    if (error instanceof SyntaxError) return undefined;
-    throw error;
-  }
+export function recordFromJsonLine(line: string): JsonObject | undefined {
+  const parsed = parseJson(line);
+  return parsed !== undefined && isJsonObject(parsed) ? parsed : undefined;
 }
 
 export function positiveInteger(value: number | undefined, fallback: number): number {
@@ -69,7 +91,7 @@ export function resolveOptions<K extends string>(
   const resolved: { [P in K]: number } = { ...defaults };
   const assign = (key: K, kind: "positive" | "nonNegative"): void => {
     const fallback = defaults[key];
-    if (typeof fallback !== "number") return;
+    if (!isJsonNumber(fallback)) return;
     resolved[key] =
       kind === "positive"
         ? positiveInteger(options[key], fallback)

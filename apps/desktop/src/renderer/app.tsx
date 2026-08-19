@@ -313,7 +313,7 @@ function useShapeHeight(): [(element: HTMLElement | null) => void, number | unde
   return [measured, height];
 }
 
-const COLLAPSE_ANIMATION_MS = MOTION_DURATION_MS.EXIT + MOTION_DURATION_MS.SHAPE;
+const COLLAPSE_ANIMATION_MS = MOTION_DURATION_MS.EXIT + MOTION_DURATION_MS.SURFACE;
 
 /**
  * True from the render that leaves the panel for a compact shape until the

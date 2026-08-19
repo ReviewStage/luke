@@ -37,7 +37,7 @@ export interface PanelManagerOptions {
  * content leaves, then the surface closes on the spring, and only then may the
  * window follow.
  */
-const COLLAPSE_ANIMATION_MS = MOTION_DURATION_MS.EXIT + MOTION_DURATION_MS.SHAPE;
+const COLLAPSE_ANIMATION_MS = MOTION_DURATION_MS.EXIT + MOTION_DURATION_MS.SURFACE;
 
 /** The mode every window is born in; only the dev and capture flags change it. */
 function initialWindowMode(runMode: RunMode, argv: readonly string[]): WindowMode {

@@ -168,7 +168,7 @@ test("a stage offset from the viewport is subtracted out of every reading", () =
 });
 
 const TOKENS: ErrandTokens = {
-  shape: 460,
+  surface: 460,
   quick: 140,
   exit: 90,
   expand: 200,
@@ -200,7 +200,7 @@ test("an errand that opened the panel trails the whole opening", () => {
 });
 
 test("an errand crossing an instant page swap waits for the black surface", () => {
-  assert.equal(errandBeats(TOKENS, ERRAND_WAIT.SURFACE).delay, TOKENS.shape);
+  assert.equal(errandBeats(TOKENS, ERRAND_WAIT.SURFACE).delay, TOKENS.surface);
 });
 
 /** The window, and the black drawn in the middle of it: a 620-wide open panel. */
@@ -341,12 +341,12 @@ test("a control drawn where the face already is has no way home to float", () =>
 test("tokens held still leave no flight to run", () => {
   assert.equal(errandFlies(TOKENS), true);
   // What a capture run zeroes, so every PNG lands on the same frame.
-  assert.equal(errandFlies({ ...TOKENS, shape: 0, quick: 0, exit: 0, expand: 0 }), false);
+  assert.equal(errandFlies({ ...TOKENS, surface: 0, quick: 0, exit: 0, expand: 0 }), false);
   // What reduced motion collapses to. The three durations still sum past the
   // stillness floor, which is exactly why the flight is decided on the shape
   // token rather than on the total: someone who asked for no motion must not
   // get a face crossing the panel in three milliseconds.
-  assert.equal(errandFlies({ ...TOKENS, shape: 1, quick: 1, exit: 1 }), false);
+  assert.equal(errandFlies({ ...TOKENS, surface: 1, quick: 1, exit: 1 }), false);
 });
 
 test("every setting is signed on the page it is actually drawn on", () => {

@@ -215,7 +215,7 @@ export function errandJourney(stage: ErrandBox, face: ErrandBox, target: ErrandB
 
 /** The motion tokens a flight is timed by, already read as milliseconds. */
 export interface ErrandTokens {
-  shape: number;
+  surface: number;
   quick: number;
   exit: number;
   expand: number;
@@ -249,7 +249,7 @@ export interface ErrandBeats {
  * to stay under. Neither wants a face crossing the panel at any speed.
  */
 export function errandFlies(tokens: ErrandTokens): boolean {
-  return tokens.shape >= STILL_MS;
+  return tokens.surface >= STILL_MS;
 }
 
 /**
@@ -265,19 +265,19 @@ export function errandFlies(tokens: ErrandTokens): boolean {
  * changes its height.
  */
 export function errandBeats(tokens: ErrandTokens, wait: ErrandWait): ErrandBeats {
-  const duration = tokens.shape * 2 + tokens.quick;
-  const arrival = tokens.shape / duration;
-  const arriving = tokens.expand + tokens.stagger * tokens.fanLimit + tokens.shape;
+  const duration = tokens.surface * 2 + tokens.quick;
+  const arrival = tokens.surface / duration;
+  const arriving = tokens.expand + tokens.stagger * tokens.fanLimit + tokens.surface;
   return {
     delay:
       wait === ERRAND_WAIT.AT_ONCE
         ? tokens.quick
         : wait === ERRAND_WAIT.SURFACE
-          ? tokens.shape
+          ? tokens.surface
           : arriving,
     duration,
     arrival,
-    departure: (tokens.shape + tokens.quick) / duration,
+    departure: (tokens.surface + tokens.quick) / duration,
     home: (duration - tokens.exit) / duration,
   };
 }
@@ -469,7 +469,7 @@ export function errandDrift(
 const MOTION_TOKEN = {
   SPRING: "--spring",
   SPRING_FAST: "--spring-fast",
-  SHAPE_DURATION: "--duration-shape",
+  SURFACE_DURATION: "--duration-shape",
   QUICK_DURATION: "--duration-quick",
   EXIT_DURATION: "--duration-exit",
   EXIT_EASING: "--motion-exit",
@@ -640,7 +640,7 @@ export function LukeErrand({ errand, onLanded, onReturned }: LukeErrandProps): R
     const style = getComputedStyle(stage);
     const token = (name: MotionToken) => style.getPropertyValue(name);
     const tokens: ErrandTokens = {
-      shape: parseMilliseconds(token(MOTION_TOKEN.SHAPE_DURATION)),
+      surface: parseMilliseconds(token(MOTION_TOKEN.SURFACE_DURATION)),
       quick: parseMilliseconds(token(MOTION_TOKEN.QUICK_DURATION)),
       exit: parseMilliseconds(token(MOTION_TOKEN.EXIT_DURATION)),
       expand: parseMilliseconds(token(MOTION_TOKEN.EXPAND_DELAY)),

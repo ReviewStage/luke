@@ -77,7 +77,7 @@ export const LEAVING_ATTRIBUTE = "data-leaving";
 const MOTION_TOKEN = {
   SPRING: "--spring",
   SPRING_FAST: "--spring-fast",
-  SHAPE_DURATION: "--duration-shape",
+  SURFACE_DURATION: "--duration-shape",
   FAST_DURATION: "--duration-fast",
   EXIT_DURATION: "--duration-exit",
   EXIT_EASING: "--motion-exit",
@@ -360,7 +360,7 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
     // inside the surface's edge for every frame of the morph, where the fast
     // spring would carry it past the edge onto the desktop.
     const travelDuration = boundMoved
-      ? parseMilliseconds(token(MOTION_TOKEN.SHAPE_DURATION))
+      ? parseMilliseconds(token(MOTION_TOKEN.SURFACE_DURATION))
       : fastDuration;
     const travelSpring = boundMoved ? token(MOTION_TOKEN.SPRING).trim() || "ease" : springFast;
 

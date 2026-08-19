@@ -70,7 +70,7 @@ const CODEX_USER_MESSAGE_MARKER = "## My request for Codex:";
  * scaffolding — instructions, environment context, and their relatives —
  * not something the developer said.
  */
-const CODEX_SCAFFOLDING_SHAPE = /^<([a-z_]+)>[\s\S]*<\/\1>$/;
+const CODEX_SCAFFOLDING_PATTERN = /^<([a-z_]+)>[\s\S]*<\/\1>$/;
 
 const CODEX_ROLLOUT_TAIL_BYTES = TRANSCRIPT_BOUNDS.READ_TAIL_BYTES;
 
@@ -111,7 +111,7 @@ function developerWords(words: string): string | undefined {
   if (markerIndex >= 0) {
     return text(words.slice(markerIndex + CODEX_USER_MESSAGE_MARKER.length));
   }
-  if (CODEX_SCAFFOLDING_SHAPE.test(words.trim())) return undefined;
+  if (CODEX_SCAFFOLDING_PATTERN.test(words.trim())) return undefined;
   return text(words);
 }
 

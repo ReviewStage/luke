@@ -16,6 +16,7 @@ required_files=(
     pnpm-lock.yaml
     pnpm-workspace.yaml
     biome.json
+    .oxlintrc.json
     .nvmrc
     .husky/pre-commit
     tsconfig.base.json

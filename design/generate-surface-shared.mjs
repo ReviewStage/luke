@@ -44,7 +44,7 @@ const SPRING_FAST = [
 
 const MOTION_DURATION_MS = {
   FAST: 280,
-  SHAPE: 460,
+  SURFACE: 460,
   EXIT: 90,
   QUICK: 140,
   HOVER: 70,
@@ -238,7 +238,7 @@ function motionTokensCss() {
   --spring-fast: ${linearCss(SPRING_FAST)};
   --duration-fast: ${ms(MOTION_DURATION_MS.FAST)};
   --motion-exit: ${MOTION_EXIT};
-  --duration-shape: ${ms(MOTION_DURATION_MS.SHAPE)};
+  --duration-shape: ${ms(MOTION_DURATION_MS.SURFACE)};
   --duration-exit: ${ms(MOTION_DURATION_MS.EXIT)};
   --duration-quick: ${ms(MOTION_DURATION_MS.QUICK)};
   --duration-hover: ${ms(MOTION_DURATION_MS.HOVER)};

@@ -316,7 +316,8 @@ untracked.
 
 Biome is the executable style policy for TypeScript, JavaScript, JSON,
 Markdown, and CSS. Husky runs the same checks against staged files as a local
-convenience; `./scripts/check.sh` and CI remain authoritative.
+convenience; `./scripts/check.sh` and CI remain authoritative. Oxlint runs the
+vendored anti-slop rules from `tools/oxlint/anti-slop/` as part of `pnpm lint`.
 
 ## Git workflow
 
@@ -525,8 +526,9 @@ noise.
   belongs in the commit message.
 - No commented-out code. Delete it; history keeps it.
 - A comment the toolchain demands must still explain: a `biome-ignore` states
-  why the rule is wrong at that line, and a `SETTING_GUIDE` entry returning
-  `undefined` states how the guide covers the setting instead.
+  why the rule is wrong at that line, an Oxlint `SAFETY:` comment states the
+  checked invariant that makes a type assertion valid, and a `SETTING_GUIDE`
+  entry returning `undefined` states how the guide covers the setting instead.
 
 ## TypeScript value sets and keys
 

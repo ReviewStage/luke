@@ -24,7 +24,7 @@ const CLAUDE_PROJECTS_DIRECTORY = "projects";
 const CLAUDE_SESSION_FILE_EXTENSION = ".jsonl";
 
 /** The same shape the observation hook accepts: the ids Claude Code mints. */
-const CLAUDE_SESSION_ID_SHAPE = /^[0-9a-fA-F-]{8,64}$/;
+const CLAUDE_SESSION_ID_PATTERN = /^[0-9a-fA-F-]{8,64}$/;
 
 /** Tool inputs whose value names the work, in the order they read best. */
 const TOOL_INPUT_KEYS = ["description", "file_path", "pattern", "command", "prompt"] as const;
@@ -140,7 +140,7 @@ async function transcriptFilePath(
   claudeHome: string,
   providerSessionId: string,
 ): Promise<string | undefined> {
-  if (!CLAUDE_SESSION_ID_SHAPE.test(providerSessionId)) return undefined;
+  if (!CLAUDE_SESSION_ID_PATTERN.test(providerSessionId)) return undefined;
   const projectsDirectory = path.join(claudeHome, CLAUDE_PROJECTS_DIRECTORY);
   const fileName = `${providerSessionId}${CLAUDE_SESSION_FILE_EXTENSION}`;
   for (const entry of await readDirectory(projectsDirectory)) {

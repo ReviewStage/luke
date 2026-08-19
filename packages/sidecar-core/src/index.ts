@@ -8,9 +8,16 @@
 
 // JSON — defensive readers for untrusted payloads.
 export {
+  isJsonNumber,
+  isJsonObject,
+  isJsonString,
   isRecord,
+  type Json,
+  type JsonObject,
+  type JsonPrimitive,
   nonNegativeNumber,
   oneLine,
+  parseJson,
   positiveInteger,
   recordFromJsonLine,
   resolveOptions,
