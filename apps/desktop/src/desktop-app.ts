@@ -928,12 +928,16 @@ async function refreshProviderSessions(generation: number): Promise<void> {
   observedSupersetWorkspaces = supersetSnapshot;
   observedSupersetActionsEnabled = supersetActionsEnabled;
   if (actionsWereEnabled !== supersetActionsEnabled) {
-    panels.broadcast(
-      channels.supersetSignInChanged,
-      supersetActionsEnabled
-        ? { stage: SUPERSET_SIGN_IN_STAGE.CONNECTED }
-        : { stage: SUPERSET_SIGN_IN_STAGE.IDLE },
-    );
+    if (supersetActionsEnabled) {
+      panels.broadcast(channels.supersetSignInChanged, {
+        stage: SUPERSET_SIGN_IN_STAGE.CONNECTED,
+      });
+    } else {
+      // The CLI withdrawing its login is also what makes a later Connect a
+      // new attempt. `cancel` returns the machine to idle and broadcasts that
+      // same state to every renderer.
+      supersetSignIn.cancel();
+    }
   }
   // Providers are observed concurrently and reported independently: the
   // registry commits each provider atomically, so one that is slow or failing
