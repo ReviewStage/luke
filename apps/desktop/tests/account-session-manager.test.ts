@@ -17,11 +17,12 @@ function manager(options: { stored?: StoredAccount; revoke?: (token: string) => 
   const changes: string[] = [];
   const events: string[] = [];
   const instance = new AccountSessionManager({
+    // SAFETY: Fixture client implements only the AccountClient methods the manager calls.
     client: {
       revoke: options.revoke ?? (async () => undefined),
       userInfo: async () => STORED,
       refresh: async () => ({ accessToken: "new-access", refreshToken: "new-refresh" }),
-    } as unknown as AccountClient,
+    } as AccountClient,
     store: {
       readAccount: async () => stored,
       setAccount: async (next) => {

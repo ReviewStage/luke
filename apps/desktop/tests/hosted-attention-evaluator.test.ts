@@ -31,7 +31,7 @@ const SPOKEN_ANSWER = {
     disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN,
     decidedAt: NOW - 99_999,
     summary: "Claude Code is waiting on you in checkout-service.",
-    answersAsk: true,
+    answers_ask: true,
   },
   quota: { used: 9, limit: 500, remaining: 491, resetsAt: NOW + 3_600_000 },
 };

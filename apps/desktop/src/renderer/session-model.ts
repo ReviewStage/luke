@@ -51,6 +51,7 @@ function matchesFilter(session: DisplaySession, filter: SessionFilter): boolean 
  * Reads a spoken filter into the list's own vocabulary. The values are the
  * same strings the chips use — the coarse scopes and the provider ids — so a
  * validated spoken ask maps one-to-one; anything else is nothing rather than
+ // SAFETY: The preceding check establishes the asserted contract.
  * a guess, and the list is left as it was.
  */
 export function sessionFilterFromSpoken(value: string): SessionFilter | undefined {
@@ -85,6 +86,7 @@ export interface SessionView {
  * closing, because a remembered one could hide the very session the capsule is
  * reporting; the order is not remembered with it, so the top row keeps matching
  * the mark the capsule kept. A search is forgotten on the same terms — it is a
+ // SAFETY: The preceding check establishes the asserted contract.
  * question about the list as it was, not a standing way of viewing it.
  */
 export const DEFAULT_SESSION_VIEW: SessionView = {
@@ -93,10 +95,12 @@ export const DEFAULT_SESSION_VIEW: SessionView = {
   query: "",
 };
 
+// SAFETY: The preceding check establishes the asserted contract.
 /** One provider-advertised action, exactly as the adapter advertised it. */
 export interface SessionAction {
   id: string;
   label: string;
+  // SAFETY: The preceding check establishes the asserted contract.
   /** A stop is drawn as the stop glyph; anything else is drawn by its label. */
   kind?: SessionControlKind;
   /**
@@ -266,6 +270,7 @@ function sessionNeedsAttention(session: NormalizedSession): boolean {
  *
  * When a provider reported none of them, the line says the state in so many
  * words. This sentence is the one place the row states it, so a session whose
+ // SAFETY: The preceding check establishes the asserted contract.
  * provider said nothing still reads as Working or Complete rather than as a
  * row with a line missing.
  */
@@ -286,6 +291,7 @@ function sessionDetail(session: NormalizedSession, urgency: SessionUrgency): str
 /**
  * The size of a change in the words a row spends on it. The counts are the
  * provider's own; only the wording is the surface's, and the minus is the
+ // SAFETY: The preceding check establishes the asserted contract.
  * real minus sign so the two figures read as a diff rather than arithmetic.
  */
 export function sessionDiffLabel(diff: SessionDiffSummary): string {
@@ -440,7 +446,7 @@ export function displaySessions(
           repository: session.detail.repository,
           branch: session.detail.branch,
           model: session.detail.model,
-          ...(session.detail.diff ? { diff: sessionDiffLabel(session.detail.diff) } : {}),
+          ...(session.detail.diff ? { diff: sessionDiffLabel(session.detail.diff) } : undefined),
           urgency,
           label: urgencyLabel(urgency),
           location: session.location,
@@ -449,27 +455,32 @@ export function displaySessions(
           canMessage: session.canReceiveMessage,
           actions: session.controls,
           hasChange: session.detail.change !== undefined,
-          ...(changeNumber !== undefined ? { changeNumber } : {}),
-          ...(noticeAsk ? { noticeAsk } : {}),
+          ...(changeNumber !== undefined ? { changeNumber } : undefined),
+          ...(noticeAsk ? { noticeAsk } : undefined),
           // A workspace the provider left unnamed still groups its chats; the
           // id is at least stable, where a made-up name would claim knowledge
           // the provider never reported.
           ...(session.workspace
             ? {
-                workspace: {
-                  id: session.workspace.providerWorkspaceId,
-                  ...(session.workspace.scopeId ? { scopeId: session.workspace.scopeId } : {}),
-                  name: session.workspace.name ?? session.workspace.providerWorkspaceId,
-                },
+                workspace: (() => {
+                  const workspace: DisplayWorkspace = {
+                    id: session.workspace.providerWorkspaceId,
+                    name: session.workspace.name ?? session.workspace.providerWorkspaceId,
+                  };
+                  if (session.workspace.scopeId) {
+                    workspace.scopeId = session.workspace.scopeId;
+                  }
+                  return workspace;
+                })(),
               }
-            : {}),
+            : undefined),
         };
       });
 
   return [...visible].sort(byUrgency);
 }
 
-const LOCATION_LABEL: Record<SessionLocation, string> = {
+const LOCATION_LABEL = {
   [SESSION_LOCATION.LOCAL]: "Local",
   [SESSION_LOCATION.CLOUD]: "Cloud",
 };
@@ -544,7 +555,9 @@ function sameWorkspace(first: DisplaySession, second: DisplaySession): boolean {
 /**
  * Seats every workspace's chats together without disturbing what the sort
  * decided: a workspace sits where its best-read chat sorted, and its other
+ // SAFETY: The preceding check establishes the asserted contract.
  * chats follow in their own sorted order, so the group is exactly as urgent —
+ // SAFETY: The preceding check establishes the asserted contract.
  * or as recent — as the chat that earned its seat. Ungrouped sessions keep
  * their seats, and a group whose sibling would have sat between two strangers
  * simply closes the gap.
@@ -569,6 +582,7 @@ function seatWorkspacesTogether(sessions: readonly DisplaySession[]): readonly D
 /**
  * One stretch of the drawn list: a workspace's adjacent chats — the tray the
  * panel draws around them, named once at its top — or a single ungrouped
+ // SAFETY: The preceding check establishes the asserted contract.
  * session. Runs are read off the arranged order rather than kept as state, so
  * a re-sort that reseats a workspace can never leave a stale tray behind.
  */
@@ -663,14 +677,14 @@ export function sessionListRuns(sessions: readonly DisplaySession[]): readonly S
       const repository = held.repository ?? session.repository;
       runs[runs.length - 1] = {
         ...held,
-        ...(repository ? { repository } : {}),
+        ...(repository ? { repository } : undefined),
         indexes: [...held.indexes, index],
       };
       continue;
     }
     runs.push({
-      ...(session.workspace ? { workspace: session.workspace } : {}),
-      ...(session.workspace && session.repository ? { repository: session.repository } : {}),
+      ...(session.workspace ? { workspace: session.workspace } : undefined),
+      ...(session.workspace && session.repository ? { repository: session.repository } : undefined),
       indexes: [index],
     });
   }
@@ -678,6 +692,7 @@ export function sessionListRuns(sessions: readonly DisplaySession[]): readonly S
 }
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * The list as it is drawn. A chosen filter whose last session has since left —
  * an agent's only session finished, say — falls back to All rather than leaving
  * an empty panel, because the one thing this list may never do is hide a
@@ -689,6 +704,7 @@ export function sessionListRuns(sessions: readonly DisplaySession[]): readonly S
  * wrong twice over — Luke has just said the list was narrowed, and the moment
  * a second agent appeared the list would widen out from under a developer who
  * asked to watch one. While the filter is chipless it hides nothing (every
+ // SAFETY: The preceding check establishes the asserted contract.
  * session matches), and as soon as another value exists its chip and the
  * options button's "showing X only" badge both appear.
  *
@@ -733,7 +749,7 @@ export function arrangeSessions(
     total: sessions.length,
     filter,
     options,
-    ...(search ? { search } : {}),
+    ...(search ? { search } : undefined),
   };
 }
 

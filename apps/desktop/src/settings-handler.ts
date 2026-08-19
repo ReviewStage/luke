@@ -1,3 +1,4 @@
+import type { UnparsedWireValue } from "@sidecar/core";
 import { type IpcMainInvokeEvent, ipcMain } from "electron";
 import type { AppSettings, SettingsUpdateResult } from "./shared/contracts";
 
@@ -12,7 +13,9 @@ export class SettingsRefusal {
 }
 
 export interface SettingsHandlerSpec<Value> {
-  validate: (...args: unknown[]) => Value | SettingsRefusal | Promise<Value | SettingsRefusal>;
+  validate: (
+    ...args: UnparsedWireValue[]
+  ) => Value | SettingsRefusal | Promise<Value | SettingsRefusal>;
   save: (value: Value) => Promise<SettingsUpdateResult>;
   apply?: (
     result: SettingsUpdateResult,
@@ -32,7 +35,10 @@ export interface SettingsHandlerDeps {
    */
   handle?: (
     channel: string,
-    listener: (event: IpcMainInvokeEvent, ...args: unknown[]) => Promise<SettingsUpdateResult>,
+    listener: (
+      event: IpcMainInvokeEvent,
+      ...args: UnparsedWireValue[]
+    ) => Promise<SettingsUpdateResult>,
   ) => void;
 }
 
@@ -49,7 +55,7 @@ export function createSettingsHandler(deps: SettingsHandlerDeps) {
     channel: string,
     spec: SettingsHandlerSpec<Value>,
   ): void {
-    handle(channel, async (event, ...args: unknown[]): Promise<SettingsUpdateResult> => {
+    handle(channel, async (event, ...args: UnparsedWireValue[]): Promise<SettingsUpdateResult> => {
       if (!deps.trustedSender(event)) throw new Error("Untrusted renderer");
       const value = await spec.validate(...args);
       // A validate step that already answered — a chord spoken for, refused with

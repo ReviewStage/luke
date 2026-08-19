@@ -21,9 +21,9 @@ export const CONSENT_SERVICE_ID = {
 export type ConsentServiceId = (typeof CONSENT_SERVICE_ID)[keyof typeof CONSENT_SERVICE_ID];
 
 /** What the wait calls each service, which is the provider's own name for itself. */
-export const CONSENT_SERVICE_NAME: Readonly<Record<ConsentServiceId, string>> = {
+export const CONSENT_SERVICE_NAME = {
   [CONSENT_SERVICE_ID.GOOGLE_CALENDAR]: GOOGLE_CALENDAR_NAME,
   // Not the registry's `displayName` by lookup: the wait says "Waiting for
   // Linear…", and the two must be the same word.
   [CONSENT_SERVICE_ID.LINEAR]: "Linear",
-};
+} as const satisfies Readonly<Record<ConsentServiceId, string>>;

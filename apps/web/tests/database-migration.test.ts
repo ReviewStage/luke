@@ -3,10 +3,15 @@ import test from "node:test";
 import type { Client } from "pg";
 import { migrateWithLock } from "../server/db/migrate";
 
-function migrationConnection(events: string[]) {
+type MigrationConnection = Pick<Client, "connect" | "query" | "end">;
+
+function migrationConnection(events: string[]): MigrationConnection {
+  // SAFETY: Test double implements only the connect/query/end surface migrateWithLock uses.
   return {
     async connect() {
       events.push("connect");
+      // SAFETY: migrateWithLock awaits connect but never reads the return value.
+      return {} as Client;
     },
     async query(query: string) {
       events.push(query.includes("unlock") ? "unlock" : "lock");
@@ -15,7 +20,7 @@ function migrationConnection(events: string[]) {
     async end() {
       events.push("end");
     },
-  } as unknown as Pick<Client, "connect" | "query" | "end">;
+  } as MigrationConnection;
 }
 
 test("database migrations hold one session advisory lock", async () => {
@@ -44,11 +49,12 @@ test("an unlock failure still closes the database connection", async () => {
   const events: string[] = [];
   const connection = migrationConnection(events);
   const query = connection.query.bind(connection);
+  // SAFETY: Overrides the test double's query while preserving migrateWithLock's call shape.
   connection.query = (async (text: string, values?: unknown[]) => {
     const result = await query(text, values);
     if (text.includes("unlock")) throw new Error("unlock failed");
     return result;
-  }) as typeof connection.query;
+  }) as MigrationConnection["query"];
 
   await assert.rejects(
     migrateWithLock(connection, async () => undefined),

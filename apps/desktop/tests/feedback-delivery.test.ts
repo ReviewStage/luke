@@ -28,6 +28,7 @@ test("a landed send answers delivered, and the submission travels whole", async 
   assert.deepEqual(JSON.parse(requests[0]?.body ?? ""), SUBMISSION);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a refusing endpoint comes back as a reason, not a throw", async () => {
   const delivery = new FeedbackDelivery({
     fetch: () => Promise.resolve(new Response("", { status: 503 })),
@@ -39,6 +40,7 @@ test("a refusing endpoint comes back as a reason, not a throw", async () => {
   assert.ok(result.reason);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("an unreachable endpoint comes back as a reason, not a throw", async () => {
   const delivery = new FeedbackDelivery({
     fetch: () => Promise.reject(new Error("connection refused")),

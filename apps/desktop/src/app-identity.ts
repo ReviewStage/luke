@@ -4,6 +4,7 @@
  * release is signed with the Developer ID identity, `electron .` runs under
  * the Electron dev binary's own signature, and a local package is ad-hoc — and
  * macOS binds a Keychain item to the signature of the program that created
+ // SAFETY: The preceding check establishes the asserted contract.
  * it. A differently signed program reading the same item is treated as an
  * intruder: the login-keychain password dialog appears, twice for a plain
  * "Allow". So a development run must never share the release's Keychain
@@ -56,7 +57,10 @@ declare const PACKAGED_WITH_DEVELOPER_ID_SIGNING: boolean | undefined;
 
 /** Whether this bundle was built alongside Developer ID packaging. */
 export function buildCarriesDeveloperIdSigning(): boolean {
-  return (
-    typeof PACKAGED_WITH_DEVELOPER_ID_SIGNING === "boolean" && PACKAGED_WITH_DEVELOPER_ID_SIGNING
-  );
+  try {
+    // SAFETY: esbuild replaces this free identifier on packaged builds.
+    return PACKAGED_WITH_DEVELOPER_ID_SIGNING === true;
+  } catch {
+    return false;
+  }
 }

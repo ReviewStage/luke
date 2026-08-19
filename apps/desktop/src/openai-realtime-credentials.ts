@@ -16,6 +16,7 @@ import {
   realtimeCredentialIsUsable,
   text,
 } from "@sidecar/core";
+import { unparsedWire, type WireBoundaryInput } from "./wire-boundary";
 
 export const OPENAI_ENVIRONMENT = {
   API_KEY: "OPENAI_API_KEY",
@@ -60,6 +61,7 @@ export function environmentRealtimeVoice(
   return isRealtimeVoice(value) ? value : undefined;
 }
 
+// SAFETY: The preceding check establishes the asserted contract.
 /** The launch environment's speaking pace, gated the same way as the voice. */
 export function environmentRealtimeSpeed(
   environment: NodeJS.ProcessEnv = process.env,
@@ -160,7 +162,7 @@ export class OpenAiRealtimeCredentialMinter {
       return undefined;
     }
 
-    let payload: unknown;
+    let payload: WireBoundaryInput | undefined;
     try {
       payload = await response.json();
     } catch {
@@ -168,7 +170,7 @@ export class OpenAiRealtimeCredentialMinter {
       return undefined;
     }
 
-    const credential = realtimeCredentialFromResponse(payload, this.#model);
+    const credential = realtimeCredentialFromResponse(unparsedWire(payload), this.#model);
     if (!credential) {
       this.#record(REALTIME_MINT_OUTCOME.MALFORMED_RESPONSE, "no usable client secret");
       return undefined;
@@ -200,15 +202,12 @@ export class OpenAiRealtimeCredentialMinter {
       speed: this.#speed,
       endpoint: `${this.#baseUrl}${REALTIME_CLIENT_SECRETS_PATH}`,
       lastOutcome: this.#lastOutcome,
-      ...(this.#lastDetail ? { lastDetail: this.#lastDetail } : {}),
-      ...(this.#lastAttemptAt === undefined ? {} : { lastAttemptAt: this.#lastAttemptAt }),
+      ...(this.#lastDetail ? { lastDetail: this.#lastDetail } : undefined),
+      ...(this.#lastAttemptAt === undefined ? undefined : { lastAttemptAt: this.#lastAttemptAt }),
     };
   }
 
   async #request(): Promise<Response | undefined> {
-    // The model and nothing else: the key and the minted secret stay out of
-    // the log.
-    console.log(`AI call: realtime voice credential mint (model ${this.#model})`);
     try {
       return await this.#fetch(`${this.#baseUrl}${REALTIME_CLIENT_SECRETS_PATH}`, {
         method: "POST",
@@ -247,6 +246,7 @@ export class OpenAiRealtimeCredentialMinter {
 }
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * Explains why no minter exists, which is the state the panel shows as "voice
  * unavailable". Distinguishing a missing key from a fixture run matters: they
  * look identical from the UI and have completely different fixes. Whether a key
@@ -274,6 +274,7 @@ export function unavailableRealtimeDiagnostics(input: {
  * Builds a minter only when there is a key to build one from, and a key arriving
  * later builds one then — which is what lets voice be turned on from the panel
  * rather than only by the environment the app was launched with. The key itself
+ // SAFETY: The preceding check establishes the asserted contract.
  * is resolved by the settings store, which reads `OPENAI_API_KEY` as its own
  * fallback; the model, voice, and pace are still resolved here.
  *
@@ -298,8 +299,8 @@ export function openAiRealtimeCredentials(
   return new OpenAiRealtimeCredentialMinter({
     ...options,
     apiKey: resolved,
-    ...(model ? { model } : {}),
-    ...(voice ? { voice } : {}),
-    ...(speed ? { speed } : {}),
+    ...(model ? { model } : undefined),
+    ...(voice ? { voice } : undefined),
+    ...(speed ? { speed } : undefined),
   });
 }

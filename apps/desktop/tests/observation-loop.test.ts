@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ObservationLoop, ObservationSupervisor } from "../src/observation-loop";
 
-function deferred(): { promise: Promise<void>; resolve: () => void } {
+function deferred() {
   let resolve = () => undefined;
   const promise = new Promise<void>((settle) => {
     resolve = settle;
@@ -52,6 +52,7 @@ test("stop invalidates work already in flight and prevents gated work", async ()
   assert.equal(loop.generation, generation + 1);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("supervisor starts and stops every loop as one lifecycle", () => {
   let enabled = true;
   const events: string[] = [];

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { type CalendarAccountCredential, GoogleCalendarReader } from "../src/google-calendar";
 import { HTTP_STATUS, type RecordedRequest, recordingFetch } from "./support/http-fake";
+import type { JsonValue } from "./support/json";
 
 const NOW = Date.UTC(2026, 7, 17, 12, 0, 0);
 
@@ -15,7 +16,7 @@ const WORK_ACCOUNT: CalendarAccountCredential = {
   selectedCalendarIds: ["work@example.com", "team-calendar"],
 };
 
-function jsonOk(body: unknown): Response {
+function jsonOk(body: JsonValue): Response {
   return new Response(JSON.stringify(body), {
     status: HTTP_STATUS.OK,
     headers: { "content-type": "application/json" },
@@ -56,7 +57,7 @@ function routes(request: RecordedRequest): Response {
 function readerWith(
   respond: (request: RecordedRequest) => Response,
   accounts: readonly CalendarAccountCredential[],
-): { reader: GoogleCalendarReader; requests: RecordedRequest[] } {
+) {
   const { fetch, requests } = recordingFetch(respond);
   const reader = new GoogleCalendarReader({
     readAccounts: async () => accounts,
@@ -64,6 +65,7 @@ function readerWith(
       clientId: "test-client.apps.googleusercontent.com",
       clientSecret: "GOCSPX-test-secret",
     }),
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     fetchImplementation: fetch as typeof globalThis.fetch,
     now: () => NOW,
   });
@@ -233,7 +235,9 @@ test("one bad account never blinds the others, and keeps what it last showed", a
 });
 
 test("a calendar unread inside an OK answer is a failure, not a quieter calendar", async () => {
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // Google reports a calendar it could not read just then as an `errors`
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // entry inside a 200 answer, not as a failing request. Read as free, the
   // ongoing meeting would vanish for one pass — ending the quiet mid-meeting
   // and dumping the held announcements aloud — so the pass fails and the

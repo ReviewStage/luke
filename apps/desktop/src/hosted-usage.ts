@@ -5,6 +5,7 @@ import {
   positiveInteger,
   text,
 } from "@sidecar/core";
+import { unparsedWire } from "./wire-boundary";
 
 const HOSTED_DEFAULTS = {
   REQUEST_TIMEOUT_MS: 10_000,
@@ -69,8 +70,8 @@ export class HostedUsageReader {
     }
     if (!response?.ok) return undefined;
 
-    const payload: unknown = await response.json().catch(() => undefined);
-    return payload === undefined ? undefined : hostedUsageAnswerFromWire(payload);
+    const payload = await response.json().catch(() => undefined);
+    return payload === undefined ? undefined : hostedUsageAnswerFromWire(unparsedWire(payload));
   }
 
   async #request(token: string): Promise<Response | undefined> {

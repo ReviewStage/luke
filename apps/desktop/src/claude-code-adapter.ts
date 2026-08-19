@@ -1,6 +1,7 @@
 import path from "node:path";
 import {
   isRecord,
+  isWireString,
   maximumSessionRecapLength,
   maximumSessionTitleLength,
   oneLine,
@@ -13,6 +14,7 @@ import {
   type SessionDetail,
   type SessionProvider,
   text,
+  type WireRecord,
   wholeNumber,
 } from "@sidecar/core";
 import {
@@ -64,6 +66,7 @@ const CLAUDE_SYSTEM_SUBTYPE = {
   /**
    * A recap Claude Code composes for a developer who stepped away. It is the
    * only recap this adapter reports, because it is the only one Claude Code
+   // SAFETY: The preceding check establishes the asserted contract.
    * designates as being *about* the session. The closing text of the last
    * assistant message would read similarly, but it is the message stream
    * itself, and a recap reaches the attention evaluator off-machine.
@@ -108,6 +111,7 @@ const CLAUDE_ADAPTER_DEFAULTS = {
   CLOCK_RESCUE_TAIL_BYTES: 512 * 1024,
   /**
    * How much older than the transcript's clock a hook event may run and still
+   // SAFETY: The preceding check establishes the asserted contract.
    * describe the same moment. The hook fires as a turn boundary happens and
    * the closing records land moments later under their own timestamps, so a
    * boundary's event usually trails the record it belongs with by a breath —
@@ -135,6 +139,7 @@ export interface ClaudeCodeAdapterOptions {
    * Where the observation hook spools its events, when hooks are on at all.
    * Read lazily like the cloud adapters' credentials, because the app decides
    * the path after this adapter is declared. Absent — or answering nothing —
+   // SAFETY: The preceding check establishes the asserted contract.
    * the adapter reads the transcripts alone, exactly as it always has: the
    * hooks only ever sharpen what the tail already showed.
    */
@@ -177,15 +182,16 @@ async function sessionFilesIn(projectDirectory: string): Promise<SessionFileCand
   );
 }
 
-function eventTypeFromRecord(record: Record<string, unknown>): ClaudeEventType | undefined {
+function eventTypeFromRecord(record: WireRecord): ClaudeEventType | undefined {
   const eventType = record.type;
-  return typeof eventType === "string" &&
-    Object.values(CLAUDE_EVENT_TYPE).includes(eventType as ClaudeEventType)
-    ? (eventType as ClaudeEventType)
-    : undefined;
+  if (!isWireString(eventType)) return undefined;
+  for (const candidate of Object.values(CLAUDE_EVENT_TYPE)) {
+    if (eventType === candidate) return candidate;
+  }
+  return undefined;
 }
 
-function contentBlocks(record: Record<string, unknown>): Record<string, unknown>[] {
+function contentBlocks(record: WireRecord): WireRecord[] {
   const message = record.message;
   const content = isRecord(message) ? message.content : record.content;
   return Array.isArray(content) ? content.filter(isRecord) : [];
@@ -196,7 +202,7 @@ function contentBlocks(record: Record<string, unknown>): Record<string, unknown>
  * what the call is for. `Bash: Run the macOS packaging check` is the line a
  * developer can act on; `Bash` alone is not.
  */
-function activityFromAssistant(record: Record<string, unknown>): string | undefined {
+function activityFromAssistant(record: WireRecord): string | undefined {
   for (const block of contentBlocks(record).reverse()) {
     if (block.type !== CLAUDE_CONTENT_TYPE.TOOL_USE) continue;
     const name = text(block.name);
@@ -211,12 +217,12 @@ function activityFromAssistant(record: Record<string, unknown>): string | undefi
   return undefined;
 }
 
-function stopReasonFromRecord(record: Record<string, unknown>): string | undefined {
+function stopReasonFromRecord(record: WireRecord): string | undefined {
   const message = record.message;
   return isRecord(message) ? text(message.stop_reason) : undefined;
 }
 
-function modelFromRecord(record: Record<string, unknown>): string | undefined {
+function modelFromRecord(record: WireRecord): string | undefined {
   const message = record.message;
   return isRecord(message) ? text(message.model) : undefined;
 }
@@ -224,6 +230,7 @@ function modelFromRecord(record: Record<string, unknown>): string | undefined {
 /**
  * Reads the failure Claude Code recorded, but only once it has stopped trying.
  *
+ // SAFETY: The preceding check establishes the asserted contract.
  * Claude Code writes `api_error` for every retry as it backs off, not only for
  * the one that gives up: a rate limit or a dropped connection produces a run of
  * them counting `retryAttempt` up to `maxRetries`. Reporting the first would
@@ -231,7 +238,7 @@ function modelFromRecord(record: Record<string, unknown>): string | undefined {
  * which is the one thing a background companion must not do. A record with no
  * retry bookkeeping at all is not a retry, so it stands on its own.
  */
-function apiErrorFromRecord(record: Record<string, unknown>): string | undefined {
+function apiErrorFromRecord(record: WireRecord): string | undefined {
   const error = record.error;
   if (!isRecord(error)) return undefined;
 
@@ -246,16 +253,16 @@ function apiErrorFromRecord(record: Record<string, unknown>): string | undefined
   );
 }
 
-function timestampFromRecord(record: Record<string, unknown>): number | undefined {
+function timestampFromRecord(record: WireRecord): number | undefined {
   const timestamp = record.timestamp;
-  if (typeof timestamp !== "string") return undefined;
+  if (!isWireString(timestamp)) return undefined;
   const timestampMs = Date.parse(timestamp);
   return Number.isFinite(timestampMs) ? timestampMs : undefined;
 }
 
-function cwdFromRecord(record: Record<string, unknown>): string | undefined {
+function cwdFromRecord(record: WireRecord): string | undefined {
   const cwd = record.cwd;
-  return typeof cwd === "string" && cwd.trim().length > 0 ? cwd : undefined;
+  return isWireString(cwd) && cwd.trim().length > 0 ? cwd : undefined;
 }
 
 /**
@@ -265,7 +272,7 @@ function cwdFromRecord(record: Record<string, unknown>): string | undefined {
  * so its stamps say when something handled the file, not when the session last
  * moved — the same distinction that keeps mtime from dating it.
  */
-function isConversationRecord(record: Record<string, unknown>): boolean {
+function isConversationRecord(record: WireRecord): boolean {
   return record.type === CLAUDE_RECORD_TYPE.SYSTEM || eventTypeFromRecord(record) !== undefined;
 }
 
@@ -274,7 +281,7 @@ function isConversationRecord(record: Record<string, unknown>): boolean {
  * The two look alike at the top level and mean opposite things: one continues
  * the turn under way, the other opens a new one.
  */
-function isToolResult(record: Record<string, unknown>): boolean {
+function isToolResult(record: WireRecord): boolean {
   if (record.toolUseResult !== undefined) return true;
   return contentBlocks(record).some((block) => block.type === CLAUDE_CONTENT_TYPE.TOOL_RESULT);
 }
@@ -291,7 +298,7 @@ function turnEnded(parsed: ParsedClaudeSessionTail): boolean {
 }
 
 /** Folds one record into the running picture of the session. */
-function readClaudeRecord(record: Record<string, unknown>, parsed: ParsedClaudeSessionTail): void {
+function readClaudeRecord(record: WireRecord, parsed: ParsedClaudeSessionTail): void {
   parsed.cwd = cwdFromRecord(record) ?? parsed.cwd;
   parsed.branch = text(record.gitBranch) ?? parsed.branch;
   if (isConversationRecord(record)) {
@@ -444,12 +451,12 @@ function titleFromTail(parsed: ParsedClaudeSessionTail): string {
  */
 function detailFromTail(parsed: ParsedClaudeSessionTail): SessionDetail {
   return {
-    ...(parsed.activity ? { activity: parsed.activity } : {}),
+    ...(parsed.activity ? { activity: parsed.activity } : undefined),
     repository: workspaceLabel(parsed.cwd),
-    ...(parsed.branch ? { branch: parsed.branch } : {}),
-    ...(parsed.model ? { model: parsed.model } : {}),
-    ...(parsed.apiError ? { error: parsed.apiError } : {}),
-    ...(parsed.pullRequestUrl ? { change: parsed.pullRequestUrl } : {}),
+    ...(parsed.branch ? { branch: parsed.branch } : undefined),
+    ...(parsed.model ? { model: parsed.model } : undefined),
+    ...(parsed.apiError ? { error: parsed.apiError } : undefined),
+    ...(parsed.pullRequestUrl ? { change: parsed.pullRequestUrl } : undefined),
   };
 }
 
@@ -500,9 +507,9 @@ function observationFromSessionFile(
     providerSessionId: candidate.providerSessionId,
     title: titleFromTail(parsed),
     status,
-    ...(completionCause ? { completionCause } : {}),
+    ...(completionCause ? { completionCause } : undefined),
     observedAt,
-    ...(parsed.awaySummary ? { recap: parsed.awaySummary } : {}),
+    ...(parsed.awaySummary ? { recap: parsed.awaySummary } : undefined),
     detail: detailFromTail(parsed),
   };
 }

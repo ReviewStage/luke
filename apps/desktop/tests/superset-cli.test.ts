@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
-import { PROVIDER_ACT_RESULT_STATUS, PROVIDER_ID } from "@sidecar/core";
+import { isRecord, PROVIDER_ACT_RESULT_STATUS, PROVIDER_ID, text } from "@sidecar/core";
 import {
   isSupersetControlId,
   SUPERSET_CONTROL_ID,
@@ -31,9 +31,7 @@ function testCliOptions(homeDirectory: string) {
         const parsed: unknown = JSON.parse(
           await fs.readFile(path.join(homeDirectory, "config.json"), "utf8"),
         );
-        return typeof parsed === "object" && parsed !== null && "organizationId" in parsed
-          ? String(parsed.organizationId)
-          : undefined;
+        return isRecord(parsed) ? text(parsed.organizationId) : undefined;
       } catch {
         return undefined;
       }
@@ -203,6 +201,7 @@ test("a CLI failure becomes a bounded rejection", async (t) => {
 test("discovers host-scoped projects and creates a workspace with a generated branch", async (t) => {
   const home = await connectedHome(t);
   const commands: readonly string[][] = [];
+  // SAFETY: Test harness mutates the captured command list for assertions.
   const mutableCommands = commands as string[][];
   const cli = new SupersetCli({
     ...testCliOptions(home),

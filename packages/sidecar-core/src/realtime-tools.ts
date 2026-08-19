@@ -41,7 +41,13 @@ import {
   issueCommentText,
   type TrackedIssue,
 } from "./issues.js";
-import { isRecord } from "./json.js";
+import {
+  isRecord,
+  isWireString,
+  type UnparsedWireValue,
+  type WireRecord,
+  text as wireText,
+} from "./json.js";
 import {
   maximumWorkspaceNameLength,
   type ObservedWorkspaceProject,
@@ -193,25 +199,48 @@ export interface AppToolContext {
   sessions: readonly NormalizedSession[];
 }
 
-type SessionToolValidate = (
-  parsed: Record<string, unknown>,
-  context: SessionToolContext,
-) => SessionToolAction;
+type JsonSchemaStringProperty = {
+  type: "string";
+  description?: string;
+  enum?: readonly string[];
+};
 
-type IssueToolValidate = (
-  parsed: Record<string, unknown>,
-  context: IssueToolContext,
-) => IssueToolAction;
+type JsonSchemaObjectProperty = {
+  type: "object";
+  description?: string;
+  properties?: JsonSchemaPropertyMap;
+  required?: readonly string[];
+  additionalProperties?: boolean;
+};
 
-type AppToolValidate = (parsed: Record<string, unknown>, context: AppToolContext) => AppToolAction;
+type JsonSchemaProperty = JsonSchemaStringProperty | JsonSchemaObjectProperty;
+
+type JsonSchemaPropertyMap = {
+  readonly [key: string]: JsonSchemaProperty;
+};
+
+interface RealtimeToolParameters {
+  type: "object";
+  properties: JsonSchemaPropertyMap;
+  required: readonly string[];
+}
+
+export interface RealtimeToolWireDefinition {
+  type: "function";
+  name: string;
+  description: string;
+  parameters: RealtimeToolParameters;
+}
+
+type SessionToolValidate = (parsed: WireRecord, context: SessionToolContext) => SessionToolAction;
+
+type IssueToolValidate = (parsed: WireRecord, context: IssueToolContext) => IssueToolAction;
+
+type AppToolValidate = (parsed: WireRecord, context: AppToolContext) => AppToolAction;
 
 interface RealtimeToolSchema {
   description: string;
-  parameters: {
-    type: "object";
-    properties: Record<string, unknown>;
-    required: readonly string[];
-  };
+  parameters: RealtimeToolParameters;
 }
 
 type SessionToolSpec = {
@@ -260,18 +289,17 @@ const ISSUE_IDENTITY_PARAMETERS = {
   },
 } as const;
 
-function textArgument(record: Record<string, unknown>, key: string): string | undefined {
-  const value = record[key];
-  const normalized = typeof value === "string" ? value.trim() : "";
-  return normalized || undefined;
+function textArgument(record: WireRecord, key: string): string | undefined {
+  return wireText(record[key]);
 }
 
 function parseToolArguments(
   call: RealtimeFunctionCall,
-): { ok: true; value: Record<string, unknown> } | { ok: false; reason: string } {
-  let parsed: unknown;
+): { ok: true; value: WireRecord } | { ok: false; reason: string } {
+  let parsed: UnparsedWireValue;
   try {
-    parsed = JSON.parse(call.argumentsJson);
+    // SAFETY: JSON.parse returns a runtime value; isRecord validates the object contract.
+    parsed = JSON.parse(call.argumentsJson) as UnparsedWireValue;
   } catch {
     return { ok: false, reason: "The tool call's arguments were not readable." };
   }
@@ -282,7 +310,7 @@ function parseToolArguments(
 }
 
 function sessionFromArguments(
-  parsed: Record<string, unknown>,
+  parsed: WireRecord,
   sessions: readonly NormalizedSession[],
 ): { session: NormalizedSession; identity: SessionIdentity } | { kind: "refused"; reason: string } {
   const providerId = textArgument(parsed, "provider_id");
@@ -304,7 +332,7 @@ function sessionFromArguments(
 }
 
 function issueFromArguments(
-  parsed: Record<string, unknown>,
+  parsed: WireRecord,
   issues: readonly TrackedIssue[],
 ): { issue: TrackedIssue; identity: IssueIdentity } | { kind: "refused"; reason: string } {
   const trackerId = textArgument(parsed, "tracker_id");
@@ -357,13 +385,16 @@ function resolveWorkspaceAgentModel(
       };
     }
   }
-  return {
-    selection: { agent: named.entry.agent, model: named.model.id, ...(effort ? { effort } : {}) },
+  const selection: WorkspaceAgentSelection = {
+    agent: named.entry.agent,
+    model: named.model.id,
   };
+  if (effort) selection.effort = effort;
+  return { selection };
 }
 
 function validateSendSessionMessage(
-  parsed: Record<string, unknown>,
+  parsed: WireRecord,
   context: SessionToolContext,
 ): SessionToolAction {
   const found = sessionFromArguments(parsed, context.sessions);
@@ -372,18 +403,18 @@ function validateSendSessionMessage(
   if (!session.canReceiveMessage) {
     return { kind: "refused", reason: "That session does not take messages right now." };
   }
-  const text = sessionMessageText(parsed.text);
-  if (!text) {
+  const messageText = sessionMessageText(parsed.text);
+  if (!messageText) {
     return {
       kind: "refused",
       reason: "A message has to be shorter than a document and longer than nothing.",
     };
   }
-  return { kind: SESSION_TOOL_KIND.MESSAGE, identity, text };
+  return { kind: SESSION_TOOL_KIND.MESSAGE, identity, text: messageText };
 }
 
 function validateRunSessionControl(
-  parsed: Record<string, unknown>,
+  parsed: WireRecord,
   context: SessionToolContext,
 ): SessionToolAction {
   const found = sessionFromArguments(parsed, context.sessions);
@@ -397,10 +428,7 @@ function validateRunSessionControl(
   return { kind: SESSION_TOOL_KIND.CONTROL, identity, control };
 }
 
-function validateOpenSession(
-  parsed: Record<string, unknown>,
-  context: SessionToolContext,
-): SessionToolAction {
+function validateOpenSession(parsed: WireRecord, context: SessionToolContext): SessionToolAction {
   const found = sessionFromArguments(parsed, context.sessions);
   if ("kind" in found) return found;
   const { session, identity } = found;
@@ -413,7 +441,7 @@ function validateOpenSession(
 }
 
 function validateRequestSessionNotice(
-  parsed: Record<string, unknown>,
+  parsed: WireRecord,
   context: SessionToolContext,
 ): SessionToolAction {
   const found = sessionFromArguments(parsed, context.sessions);
@@ -433,7 +461,7 @@ function validateRequestSessionNotice(
 }
 
 function validateWithdrawSessionNotice(
-  parsed: Record<string, unknown>,
+  parsed: WireRecord,
   context: SessionToolContext,
 ): SessionToolAction {
   const found = sessionFromArguments(parsed, context.sessions);
@@ -442,7 +470,7 @@ function validateWithdrawSessionNotice(
 }
 
 function validateReadSessionTranscript(
-  parsed: Record<string, unknown>,
+  parsed: WireRecord,
   context: SessionToolContext,
 ): SessionToolAction {
   const found = sessionFromArguments(parsed, context.sessions);
@@ -460,7 +488,7 @@ function validateReadSessionTranscript(
 }
 
 function validateCreateWorkspace(
-  parsed: Record<string, unknown>,
+  parsed: WireRecord,
   context: SessionToolContext,
 ): SessionToolAction {
   // A creation ask names a project rather than a session, so it is validated
@@ -555,20 +583,21 @@ function validateCreateWorkspace(
     if ("refused" in resolved) return { kind: "refused", reason: resolved.refused };
     agentSelection = resolved.selection;
   }
-  return {
+  const action: SessionToolAction = {
     kind: SESSION_TOOL_KIND.CREATE_WORKSPACE,
     providerId: project.providerId,
     providerProjectId: project.providerProjectId,
-    ...(project.providerTargetId ? { providerTargetId: project.providerTargetId } : {}),
-    ...(agent ? { agent } : {}),
-    ...(name ? { name } : {}),
-    ...(task ? { task } : {}),
-    ...(agentSelection ? { agentSelection } : {}),
   };
+  if (project.providerTargetId) action.providerTargetId = project.providerTargetId;
+  if (agent) action.agent = agent;
+  if (name) action.name = name;
+  if (task) action.task = task;
+  if (agentSelection) action.agentSelection = agentSelection;
+  return action;
 }
 
 function validateAddWorkspaceAgent(
-  parsed: Record<string, unknown>,
+  parsed: WireRecord,
   context: SessionToolContext,
 ): SessionToolAction {
   const found = sessionFromArguments(parsed, context.sessions);
@@ -625,21 +654,19 @@ function validateAddWorkspaceAgent(
     }
     selection = resolved.selection;
   }
-  return {
+  const action: SessionToolAction = {
     kind: SESSION_TOOL_KIND.ADD_AGENT,
     identity,
     agent,
-    ...(name ? { name } : {}),
-    ...(task ? { task } : {}),
-    ...(selection ? { model: selection.model } : {}),
-    ...(selection?.effort ? { effort: selection.effort } : {}),
   };
+  if (name) action.name = name;
+  if (task) action.task = task;
+  if (selection) action.model = selection.model;
+  if (selection?.effort) action.effort = selection.effort;
+  return action;
 }
 
-function validateUpdateIssueState(
-  parsed: Record<string, unknown>,
-  context: IssueToolContext,
-): IssueToolAction {
+function validateUpdateIssueState(parsed: WireRecord, context: IssueToolContext): IssueToolAction {
   const found = issueFromArguments(parsed, context.issues);
   if ("kind" in found) return found;
   const { issue, identity } = found;
@@ -660,10 +687,7 @@ function validateUpdateIssueState(
   return { kind: ISSUE_TOOL_KIND.ISSUE_STATE, identity, transition };
 }
 
-function validateCommentOnIssue(
-  parsed: Record<string, unknown>,
-  context: IssueToolContext,
-): IssueToolAction {
+function validateCommentOnIssue(parsed: WireRecord, context: IssueToolContext): IssueToolAction {
   const found = issueFromArguments(parsed, context.issues);
   if ("kind" in found) return found;
   const { issue, identity } = found;
@@ -686,9 +710,10 @@ function validateCommentOnIssue(
  * a choice takes exactly one of the values the guide listed. Anything else is
  * refused with the accepted set, so the refusal is also the correction.
  */
-function appSettingValue(setting: AppGuideSetting, value: unknown): string | undefined {
+function appSettingValue(setting: AppGuideSetting, value: UnparsedWireValue): string | undefined {
   if (setting.kind === APP_SETTING_KIND.TOGGLE) return appToggleValue(value);
-  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (!isWireString(value)) return undefined;
+  const normalized = value.trim().toLowerCase();
   return setting.choices?.find((choice) => choice.toLowerCase() === normalized);
 }
 
@@ -711,10 +736,7 @@ function panelFilterAction(
   return { reason: "No observed session belongs to that provider." };
 }
 
-function validateChangeAppSetting(
-  parsed: Record<string, unknown>,
-  context: AppToolContext,
-): AppToolAction {
+function validateChangeAppSetting(parsed: WireRecord, context: AppToolContext): AppToolAction {
   const setting = appGuideSetting(context.guide, textArgument(parsed, "setting_id"));
   if (!setting) {
     return { kind: "refused", reason: "The app guide lists no such setting." };
@@ -755,10 +777,7 @@ function validateChangeAppSetting(
   return { kind: APP_TOOL_KIND.SETTING, setting, value, effort };
 }
 
-function validateShowPanel(
-  parsed: Record<string, unknown>,
-  context: AppToolContext,
-): AppToolAction {
+function validateShowPanel(parsed: WireRecord, context: AppToolContext): AppToolAction {
   const tab = parsed.tab ?? APP_PANEL_TAB.SESSIONS;
   if (!isAppPanelTab(tab)) {
     return { kind: "refused", reason: "The panel has no such tab." };
@@ -769,26 +788,22 @@ function validateShowPanel(
   }
   const filter = textArgument(parsed, "filter");
   if (filter === undefined) {
-    return {
-      kind: APP_TOOL_KIND.PANEL,
-      tab,
-      ...(sort !== undefined ? { sort } : {}),
-    };
+    const action: AppToolAction = { kind: APP_TOOL_KIND.PANEL, tab };
+    if (sort !== undefined) action.sort = sort;
+    return action;
   }
   const outcome = panelFilterAction(filter, context.sessions);
   if ("reason" in outcome) return { kind: "refused", reason: outcome.reason };
-  return {
+  const action: AppToolAction = {
     kind: APP_TOOL_KIND.PANEL,
     tab,
     filter: outcome.filter,
-    ...(sort !== undefined ? { sort } : {}),
   };
+  if (sort !== undefined) action.sort = sort;
+  return action;
 }
 
-function validateOpenFeedbackComposer(
-  parsed: Record<string, unknown>,
-  _context: AppToolContext,
-): AppToolAction {
+function validateOpenFeedbackComposer(parsed: WireRecord, _context: AppToolContext): AppToolAction {
   const composer = parsed.kind;
   if (!isFeedbackComposerKind(composer)) {
     return { kind: "refused", reason: "The composer writes feedback or a prompt, nothing else." };
@@ -797,7 +812,9 @@ function validateOpenFeedbackComposer(
   // so it is bounded like a typed one; a blank draft is no draft, and the
   // composer simply opens empty.
   const draft = textArgument(parsed, "draft")?.slice(0, maximumSessionMessageLength);
-  return { kind: APP_TOOL_KIND.FEEDBACK, composer, ...(draft ? { draft } : {}) };
+  const action: AppToolAction = { kind: APP_TOOL_KIND.FEEDBACK, composer };
+  if (draft) action.draft = draft;
+  return action;
 }
 
 /**
@@ -1163,11 +1180,11 @@ export const REALTIME_TOOLS = {
   },
 } as const satisfies Record<string, RealtimeToolSpec>;
 
-function namesFromToolTable<T extends Record<string, { readonly name: string }>>(
-  table: T,
-): { [K in keyof T]: T[K]["name"] } {
+function namesFromToolTable<T extends Record<string, { readonly name: string }>>(table: T) {
+  // SAFETY: keys are drawn from the same table object; each entry's name field is the tool id.
   const names = {} as { [K in keyof T]: T[K]["name"] };
-  for (const key of Object.keys(table) as (keyof T)[]) {
+  // SAFETY: Object.keys returns string[]; every key exists on table because keys are table's own keys.
+  for (const key of Object.keys(table) as (keyof T & string)[]) {
     const tool = table[key];
     if (tool) names[key] = tool.name;
   }
@@ -1241,11 +1258,12 @@ const SPOKEN_CARDINAL = {
 /** How many tools Luke has, as he says it in the standing instructions. */
 export function spokenRealtimeToolCount(): string {
   const count = REALTIME_TOOL_LIST.length;
+  // SAFETY: count is a small cardinal; SPOKEN_CARDINAL keys are the documented spoken counts.
   return SPOKEN_CARDINAL[count as keyof typeof SPOKEN_CARDINAL] ?? String(count);
 }
 
 /** The tool schemas a Realtime session is configured with. */
-export function realtimeToolDefinitions(): readonly Record<string, unknown>[] {
+export function realtimeToolDefinitions(): readonly RealtimeToolWireDefinition[] {
   return REALTIME_TOOL_LIST.map((tool) => ({
     type: "function",
     name: tool.name,
@@ -1330,10 +1348,12 @@ export function appToolAction(
  */
 export function dispatchByKind<
   T extends { kind: string },
-  M extends { [K in T["kind"]]: (action: Extract<T, { kind: K }>) => unknown },
->(action: T, handlers: M): ReturnType<M[T["kind"] & keyof M]> {
-  const handle = handlers[action.kind as T["kind"] & keyof M] as unknown as (
-    next: T,
-  ) => ReturnType<M[T["kind"] & keyof M]>;
-  return handle(action);
+  R,
+  M extends { [K in T["kind"]]: (action: Extract<T, { kind: K }>) => R },
+>(action: T, handlers: M): R {
+  const kind = action.kind;
+  // SAFETY: action.kind is T["kind"]; M is keyed by every member of that union.
+  const handle = handlers[kind as T["kind"]];
+  // SAFETY: M is keyed by T["kind"]; kind selects the handler that accepts this action shape.
+  return handle(action as Extract<T, { kind: typeof kind }>);
 }

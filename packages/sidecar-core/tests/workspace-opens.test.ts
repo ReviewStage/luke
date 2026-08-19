@@ -23,7 +23,7 @@ function session(
     title: `Session ${providerSessionId}`,
     status: SESSION_STATUS.WORKING,
     observedAt: 100,
-    detail: { ...(link ? { link } : {}) },
+    detail: link ? { link } : {},
   });
 }
 

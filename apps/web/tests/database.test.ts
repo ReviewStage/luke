@@ -34,7 +34,7 @@ test("DATABASE_URL is read lazily and a missing value is not cached", () => {
   try {
     assert.throws(
       () => getDatabase(),
-      (error: unknown) => {
+      (error) => {
         assert.ok(error instanceof Error);
         assert.match(error.message, /DATABASE_URL/);
         assert.doesNotMatch(error.message, /secret|postgresql:\/\//);

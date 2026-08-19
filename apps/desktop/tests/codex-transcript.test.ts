@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import { CodexSessionAdapter } from "../src/codex-adapter";
 import type { SqliteModuleLoader } from "../src/local-sqlite";
+import type { ParsedJsonObject } from "./support/json";
 
 function readCodexSessionTranscript(request: {
   codexHome?: string;
@@ -60,22 +61,20 @@ async function writeThreadRow(
   }
 }
 
-async function writeRollout(
-  filePath: string,
-  records: readonly Record<string, unknown>[],
-): Promise<void> {
+async function writeRollout(filePath: string, records: readonly ParsedJsonObject[]): Promise<void> {
   await fs.writeFile(filePath, `${records.map((record) => JSON.stringify(record)).join("\n")}\n`);
 }
 
 async function writeSession(
   codexHome: string,
-  records: readonly Record<string, unknown>[],
+  records: readonly ParsedJsonObject[],
 ): Promise<void> {
   const rolloutPath = path.join(codexHome, `rollout-${TEST_SESSION_ID}.jsonl`);
   await writeThreadRow(codexHome, TEST_SESSION_ID, rolloutPath);
   await writeRollout(rolloutPath, records);
 }
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("renders a session's turns as a bounded conversation", async (t) => {
   const codexHome = await temporaryCodexHome(t);
   await writeSession(codexHome, [

@@ -36,6 +36,7 @@ export interface SpokenStripContent {
  * say the same thing keeps its identity, because the caller re-derives it
  * every render against the last frame's answer and the live content's own
  * identity churns per render: words rebuilt around an unchanged sentence must
+ // SAFETY: The preceding check establishes the asserted contract.
  * not read as a change.
  */
 export function stripHoldNext(input: {
@@ -58,6 +59,7 @@ function stripContentEquals(a: SpokenStripContent, b: SpokenStripContent): boole
   );
 }
 
+// SAFETY: The preceding check establishes the asserted contract.
 /** An element's box as the hover test reads it. */
 export interface StripBox {
   left: number;

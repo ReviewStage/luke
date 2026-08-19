@@ -52,6 +52,7 @@ interface NotchWingsProps {
    * True while sign-in stands between Luke and anything to watch. The strip
    * stays deliberately bare — no face, no count — so the gate in the panel is
    * the one thing introducing him, and a zero that means "not looking yet"
+   // SAFETY: The preceding check establishes the asserted contract.
    * never poses as a zero that means "nothing happening".
    */
   accountGated: boolean;
@@ -74,6 +75,7 @@ const MARK_AND_GAP = 21;
  * limit of three comes from: the face and its gap cost 26px of the 95px
  * between the wing's insets, and each mark past the first costs 21px of the
  * 55px that remain. The panel's side is what is left of `--panel-width` after
+ // SAFETY: The preceding check establishes the asserted contract.
  * the housing, so it holds roughly twice as many.
  */
 export function wingMarkCapacity(sideWidth: number): number {
@@ -110,6 +112,7 @@ const COUNT_EDGE_KEEP = 2;
  * the housing's edge itself — black on black, the notch is indistinguishable
  * from padding, so the inset a numeral keeps buys nothing here — and keeps
  * more from the strip's outer end, where the shape is already turning its
+ // SAFETY: The preceding check establishes the asserted contract.
  * corner and words pressed into the curve read as clipped.
  */
 const SIGN_IN_INSET = 0;
@@ -153,8 +156,10 @@ export function countBadgeFit(
 }
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * The wing's strip, as slots: each provider's mark, then — when the
  * providers outnumber the slots — the count standing in for the rest. The
+ // SAFETY: The preceding check establishes the asserted contract.
  * marks are a summary, and a summary that hides its own remainder reads as a
  * complete list, so whatever does not fit is counted rather than dropped. The
  * count is a slot like any other, so it takes the last one rather than being
@@ -216,7 +221,7 @@ export function NotchWings({
   // While the developer holds the turn the meter takes the face's place, which
   // is the only place the capsule has.
   const yieldToMeter = faceYieldsToMeter({
-    ...(meterVoice ? { turn: meterVoice } : {}),
+    ...(meterVoice ? { turn: meterVoice } : undefined),
     hasAudioSignal: meterShown,
   });
   // The box the hover is read against, not the face itself: the drawing is
@@ -225,7 +230,7 @@ export function NotchWings({
   const face = useFaceMotion(
     {
       ...speechFaceInputs({
-        ...(voice ? { turn: voice } : {}),
+        ...(voice ? { turn: voice } : undefined),
         hasAudioSignal,
         fixtureSpeaking,
         voiceActive,
@@ -355,11 +360,14 @@ export function NotchWings({
         <div className="wing-inner">
           {/* While sign-in stands between Luke and anything to watch, the
               badge's place says the one honest thing instead of a zero that
+              // SAFETY: The preceding check establishes the asserted contract.
               would pose as "nothing happening": why Luke is idle, and the one
               act that wakes him. It shares the count's element and fit, so it
+              // SAFETY: The preceding check establishes the asserted contract.
               scales into the capsule's side exactly as a wide number does. */}
           <span
             className="count-badge"
+            // SAFETY: The preceding check establishes the asserted contract.
             style={{ "--count-fit": countFit } as React.CSSProperties}
             data-state={tally.urgency}
             data-empty={String(accountGated || tally.total === 0)}

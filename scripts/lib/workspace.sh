@@ -143,9 +143,9 @@ sidecar_require_node() {
     sidecar_require_command pnpm
     if ! node -e '
         const [major, minor] = process.versions.node.split(".").map(Number);
-        process.exit(major > 22 || (major === 22 && minor >= 12) ? 0 : 1);
+        process.exit(major > 22 || (major === 22 && minor >= 18) ? 0 : 1);
     '; then
-        printf 'error: Node.js 22.12 or newer is required (found %s)\n' "$(node --version)" >&2
+        printf 'error: Node.js 22.18 or newer is required (found %s)\n' "$(node --version)" >&2
         return 1
     fi
 }

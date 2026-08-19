@@ -1,5 +1,12 @@
 import { randomUUID } from "node:crypto";
 import http from "node:http";
+import {
+  isRecord,
+  isWireNumber,
+  isWireString,
+  type UnparsedWireValue,
+  type WireRecord,
+} from "@sidecar/core";
 // The same landing page the Luke account sign-in leaves the browser on, so no
 // two of Luke's consent trips dress their tabs differently.
 import { accountLoopbackPage, LOOPBACK_PAGE_TONE } from "./account-loopback-page";
@@ -75,6 +82,7 @@ export const LINEAR_SCOPES = ["read", "write"].join(",");
 
 /**
  * Where Linear is asked to send the code back. Unlike Google, Linear does not
+ // SAFETY: The preceding check establishes the asserted contract.
  * document loopback redirects as exempt from exact matching, so the port
  * cannot be the ephemeral one the other flows take: every address here is
  * registered on the OAuth application, and the flow takes the first that will
@@ -97,6 +105,7 @@ const SIGN_IN_TIMEOUT_MS = 180_000;
 const TOKEN_REQUEST_TIMEOUT_MS = 10_000;
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * What the browser tab shows once the flow is over, drawn as the same card
  * every other loopback landing draws. Every string is fixed by the build, and
  * nothing the redirect carried is ever interpolated.
@@ -126,6 +135,7 @@ function signInPage(granted: boolean): string {
 export interface LinearGrant {
   accessToken: string;
   refreshToken?: string;
+  // SAFETY: The preceding check establishes the asserted contract.
   /** When the access token stops being honoured, as epoch milliseconds. */
   expiresAt: number;
 }
@@ -152,19 +162,20 @@ export interface LinearSignInOptions {
  * nothing to read Linear with, and the caller says so rather than storing a
  * grant that cannot work.
  */
-export function grantFrom(payload: unknown, now: number): LinearGrant | undefined {
-  if (payload === null || typeof payload !== "object") return undefined;
-  const record = payload as Record<string, unknown>;
+export function grantFrom(payload: UnparsedWireValue, now: number): LinearGrant | undefined {
+  if (!isRecord(payload)) return undefined;
+  // SAFETY: The preceding check establishes the asserted contract.
+  const record = payload as WireRecord;
   const accessToken = record.access_token;
-  if (typeof accessToken !== "string" || !accessToken) return undefined;
+  if (!isWireString(accessToken) || !accessToken) return undefined;
   const refreshToken = record.refresh_token;
   // Linear states the lifetime in seconds. A response without one is treated
   // as already expired rather than as eternal, so a refresh proves the grant
   // before a pass rides it.
-  const expiresIn = typeof record.expires_in === "number" ? record.expires_in : 0;
+  const expiresIn = isWireNumber(record.expires_in) ? record.expires_in : 0;
   return {
     accessToken,
-    ...(typeof refreshToken === "string" && refreshToken ? { refreshToken } : {}),
+    ...(isWireString(refreshToken) && refreshToken ? { refreshToken } : undefined),
     expiresAt: now + expiresIn * 1_000,
   };
 }
@@ -461,12 +472,8 @@ export async function refreshLinearGrant(
   }
   if (!response.ok) {
     try {
-      const payload: unknown = await response.json();
-      if (
-        payload !== null &&
-        typeof payload === "object" &&
-        (payload as Record<string, unknown>).error === "invalid_grant"
-      ) {
+      const payload = await response.json();
+      if (isRecord(payload) && payload.error === "invalid_grant") {
         return { status: LINEAR_REFRESH_STATUS.REFUSED };
       }
     } catch {

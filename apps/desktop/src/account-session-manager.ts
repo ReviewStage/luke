@@ -25,7 +25,7 @@ export interface AccountSessionManagerOptions {
   store: AccountSessionStore;
   hostedServiceBaseUrl: string;
   requiresAccount: boolean;
-  openExternal: (url: string) => Promise<unknown>;
+  openExternal: (url: string) => Promise<void>;
   startCapabilities: () => Promise<void>;
   stopCapabilities: () => Promise<void>;
   onChange: (account: AccountSnapshot) => void;
@@ -80,7 +80,7 @@ export class AccountSessionManager {
     try {
       await this.#deleteHosted(stored.accessToken);
     } catch (error) {
-      if (!accessTokenNeedsRefresh(error)) throw error;
+      if (!(error instanceof Error) || !accessTokenNeedsRefresh(error)) throw error;
       const generation = this.#generation;
       const tokens = await this.#options.client.refresh(stored.refreshToken);
       await this.#storeCurrent(generation, { ...stored, ...tokens });
@@ -101,13 +101,14 @@ export class AccountSessionManager {
       }
       return;
     } catch (error) {
-      if (!accessTokenNeedsRefresh(error)) return;
+      if (!(error instanceof Error) || !accessTokenNeedsRefresh(error)) return;
     }
     let tokens: AccountTokens;
     try {
       tokens = await this.#options.client.refresh(stored.refreshToken);
     } catch (error) {
       if (
+        error instanceof Error &&
         accountFailureAction(error) === ACCOUNT_FAILURE_ACTION.SIGN_OUT &&
         this.#isCurrent(generation)
       ) {
@@ -177,7 +178,7 @@ export class AccountSessionManager {
         return this.#account;
       } catch (error) {
         if (this.#isCurrent(generation)) await this.signOut();
-        if (isSignInCancellation(error)) return this.#account;
+        if (error instanceof Error && isSignInCancellation(error)) return this.#account;
         throw error;
       } finally {
         this.#cancelSignIn = undefined;

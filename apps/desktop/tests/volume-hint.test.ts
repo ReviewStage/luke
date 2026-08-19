@@ -13,6 +13,7 @@ test("an output nobody can read is audible, never silent", () => {
   assert.equal(outputSilent(undefined), false);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("mute and a volume at nothing both read as silent", () => {
   assert.equal(outputSilent({ muted: true, volume: 0.6 }), true);
   assert.equal(outputSilent({ muted: false, volume: 0 }), true);

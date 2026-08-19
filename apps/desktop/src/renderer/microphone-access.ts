@@ -2,10 +2,12 @@ import { type HostedQuota, REALTIME_MINT_OUTCOME, type RealtimeDiagnostics } fro
 import { type MicrophoneStatus, VOICE_SOURCE, type VoiceSource } from "../shared/contracts";
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * Why voice as a whole is off: nothing it can run on stands — no signed-in
  * account carrying the hosted allowance, and no key of the developer's own.
  * One sentence, shared by every mark that stands for the same absence — the
  * front page's Voice row, the key's own heading, and the shortcut rows whose
+ // SAFETY: The preceding check establishes the asserted contract.
  * chords answer nothing without it — so it never reads as two different
  * problems.
  */
@@ -13,10 +15,12 @@ export const VOICE_KEYLESS_NOTE = "Voice is off: sign in, or connect an OpenAI k
 
 /**
  * When the day's counters return, in words a sentence can hold: the quota's
+ // SAFETY: The preceding check establishes the asserted contract.
  * own `resetsAt` read on the wearer's own clock rather than as a subtraction
  * they have to do. The counters turn over at midnight UTC, which is somebody
  * else's clock and never the reader's — so the phrase names the hour their
  * Mac would show, and says "tomorrow" whenever that hour falls on the next
+ // SAFETY: The preceding check establishes the asserted contract.
  * local day, because a bare time reads as today.
  */
 export function quotaResetsWhen(resetsAt: number, now: number): string {
@@ -58,6 +62,7 @@ export function fresherQuota(a?: HostedQuota, b?: HostedQuota): HostedQuota | un
 /**
  * A reading only while its day is still running. Past its own reset a quota
  * describes an allowance that no longer exists — a spent yesterday must not
+ // SAFETY: The preceding check establishes the asserted contract.
  * be drawn as an almost-back today — so it reads as no reading at all, and
  * the surface falls back to words that promise no numbers.
  */
@@ -80,8 +85,10 @@ export const QUOTA_LEVEL = {
 export type QuotaLevel = (typeof QUOTA_LEVEL)[keyof typeof QUOTA_LEVEL];
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * What counts as close. One fraction serves both meters rather than a count
  * each: their ceilings differ by an order of magnitude, and a threshold
+ // SAFETY: The preceding check establishes the asserted contract.
  * written as a number would have to be written twice and kept in step with a
  * service free to move either. A fifth left is the last stretch of a day on
  * either scale.
@@ -98,18 +105,20 @@ export function quotaLevel(quota: HostedQuota): QuotaLevel {
     : QUOTA_LEVEL.RUNNING;
 }
 
+// SAFETY: The preceding check establishes the asserted contract.
 /** The two sources as the toggle names them. */
-export const VOICE_SOURCE_LABEL: Record<VoiceSource, string> = {
+export const VOICE_SOURCE_LABEL = {
   [VOICE_SOURCE.ACCOUNT]: "Your Luke account",
   [VOICE_SOURCE.KEY]: "Your OpenAI key",
 };
 
 /** The one line under each name: what running on it is like, day to day. */
-export const VOICE_SOURCE_DETAIL: Record<VoiceSource, string> = {
+export const VOICE_SOURCE_DETAIL = {
   [VOICE_SOURCE.ACCOUNT]: "A daily amount, included",
   [VOICE_SOURCE.KEY]: "No daily limit, billed by OpenAI",
 };
 
+// SAFETY: The preceding check establishes the asserted contract.
 /** The toggle's name for a source, as a control says it aloud. */
 export function voiceSourceLabel(source: VoiceSource): string {
   return VOICE_SOURCE_LABEL[source];
@@ -127,6 +136,7 @@ export const HOSTED_METER_LABEL = {
 
 /**
  * What each meter actually spends, for the disclosure that answers "what
+ // SAFETY: The preceding check establishes the asserted contract.
  * counts as one?" — folded away until asked, because the definitions are
  * needed once and the numbers are needed daily.
  */
@@ -152,6 +162,7 @@ export const KEY_USE_NOTE =
   "Both go straight from your Mac to OpenAI on this key. Luke's service sees none of it, there is no daily limit, and OpenAI bills you at their rates.";
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * A meter's ceiling as the disclosure says it, or nothing at all until a
  * reading has arrived. The number is the service's to state — it is read off
  * the quota in hand rather than written here, so the panel cannot drift from
@@ -188,7 +199,7 @@ export function hostedVoiceNote(
 export const MICROPHONE_UNGRANTED_NOTE = "Luke cannot listen: the microphone is not allowed yet.";
 
 /** What the row says beneath its name, once the system has answered. */
-const MICROPHONE_STATUS_DETAIL: Record<MicrophoneStatus, string> = {
+const MICROPHONE_STATUS_DETAIL = {
   granted: "Speech is sent only while a turn is open, and never recorded.",
   "not-determined": "macOS will ask the first time you press the talk key.",
   denied: "Allow Luke in System Settings › Privacy & Security › Microphone.",

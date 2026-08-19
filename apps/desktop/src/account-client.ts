@@ -1,3 +1,10 @@
+import {
+  isRecord,
+  isWireString,
+  text,
+  type UnparsedWireValue,
+  type WireRecord,
+} from "@sidecar/core";
 import type { AccountProvider } from "./shared/contracts";
 
 export interface AccountTokens {
@@ -19,8 +26,8 @@ export interface AccountIdentity {
  * dropped rather than handed to a renderer whose CSP would refuse it — and the
  * set is fixed by this build, like every address the renderer is given.
  */
-export function accountPictureUrl(value: unknown): string | undefined {
-  if (typeof value !== "string" || !value) return undefined;
+export function accountPictureUrl(value: UnparsedWireValue): string | undefined {
+  if (!isWireString(value) || !value) return undefined;
   let url: URL;
   try {
     url = new URL(value);
@@ -54,22 +61,18 @@ export class AccountClientError extends Error {
   }
 }
 
-function record(value: unknown): Record<string, unknown> | undefined {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
+function record(value: UnparsedWireValue): WireRecord | undefined {
+  return isRecord(value) ? value : undefined;
 }
 
-async function responseRecord(response: Response): Promise<Record<string, unknown>> {
+async function responseRecord(response: Response): Promise<WireRecord> {
   const body = record(await response.json().catch(() => undefined));
   if (!response.ok) {
     throw new AccountClientError(
-      typeof body?.error_description === "string"
-        ? body.error_description
-        : `Account service returned ${response.status}`,
+      text(body?.error_description) ?? `Account service returned ${response.status}`,
       {
         status: response.status,
-        ...(typeof body?.error === "string" ? { oauthError: body.error } : {}),
+        ...(text(body?.error) ? { oauthError: text(body?.error) } : undefined),
       },
     );
   }
@@ -77,8 +80,8 @@ async function responseRecord(response: Response): Promise<Record<string, unknow
   return body;
 }
 
-function tokensFrom(body: Record<string, unknown>): AccountTokens {
-  if (typeof body.access_token !== "string" || typeof body.refresh_token !== "string") {
+function tokensFrom(body: WireRecord): AccountTokens {
+  if (!isWireString(body.access_token) || !isWireString(body.refresh_token)) {
     throw new AccountClientError("Account service did not return both tokens");
   }
   return { accessToken: body.access_token, refreshToken: body.refresh_token };
@@ -159,19 +162,19 @@ export class AccountClient {
       signal: AbortSignal.timeout(this.#timeoutMs),
     });
     const body = await responseRecord(response);
-    if (typeof body.email !== "string") {
+    if (!isWireString(body.email)) {
       throw new AccountClientError("Account service returned an invalid identity");
     }
     const pictureUrl = accountPictureUrl(body.picture);
     return {
       email: body.email,
-      ...(typeof body.name === "string" && body.name ? { name: body.name } : {}),
-      ...(pictureUrl ? { pictureUrl } : {}),
+      ...(isWireString(body.name) && body.name ? { name: body.name } : undefined),
+      ...(pictureUrl ? { pictureUrl } : undefined),
       provider,
     };
   }
 
-  async #token(fields: Record<string, string>): Promise<Record<string, unknown>> {
+  async #token(fields: Record<string, string>): Promise<WireRecord> {
     const response = await this.#fetch(`${this.#baseUrl}/oauth2/token`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },

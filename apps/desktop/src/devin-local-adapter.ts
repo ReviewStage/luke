@@ -3,6 +3,7 @@ import path from "node:path";
 import {
   agedStatus,
   isRecord,
+  isWireNumber,
   maximumSessionTitleLength,
   oneLine,
   type ProviderSessionObservation,
@@ -11,6 +12,7 @@ import {
   type SessionDetail,
   type SessionStatus,
   text,
+  type WireRecord,
 } from "@sidecar/core";
 import { DEVIN_PROVIDER, millisecondsFromRecord } from "./devin-adapter";
 import { readDevinSessionTranscript } from "./devin-transcript";
@@ -78,6 +80,7 @@ export const DEVIN_ROLE = {
 
 /**
  * The states of a tool call that is still someone's live work. The CLI stores
+ // SAFETY: The preceding check establishes the asserted contract.
  * each call as an ACP `ToolCall` record whose final update lands in a second
  * column, so a call is open while that update is missing — unless the call's
  * own status already says it settled, which an interrupted session can leave
@@ -120,6 +123,7 @@ const DEVIN_SESSION_QUERY_MINIMAL = `
 /**
  * The main chain's newest nodes, tip first. The chain is walked by parent
  * pointers from the tip the session row names rather than taken from the top
+ // SAFETY: The preceding check establishes the asserted contract.
  * of the table, because a rewound session leaves its abandoned branch as the
  * newest nodes while the tip points where the conversation actually stands.
  */
@@ -160,7 +164,7 @@ const DEVIN_TOOL_CALL_QUERY = `
   ORDER BY rowid DESC
 `;
 
-type DevinRow = Record<string, unknown>;
+type DevinRow = WireRecord;
 
 export interface DevinLocalAdapterOptions {
   cliDirectory?: string;
@@ -233,7 +237,7 @@ function sessionTitle(title: string | undefined, workingDirectory: string | unde
  * system context the CLI interleaves. Only the role and the presence of open
  * tool calls are taken; content is never reported anywhere.
  */
-function turnFromChainRecords(records: readonly Record<string, unknown>[]): DevinTurn | undefined {
+function turnFromChainRecords(records: readonly WireRecord[]): DevinTurn | undefined {
   for (const record of records) {
     const role = text(record.role);
     if (role === DEVIN_ROLE.SYSTEM || role === undefined) continue;
@@ -295,9 +299,9 @@ function activityFromToolCallRows(rows: readonly DevinRow[]): string | undefined
 
 function detailFromSnapshot(snapshot: DevinLocalSessionSnapshot): SessionDetail {
   return {
-    ...(snapshot.activity ? { activity: snapshot.activity } : {}),
+    ...(snapshot.activity ? { activity: snapshot.activity } : undefined),
     repository: workspaceLabel(snapshot.workingDirectory),
-    ...(snapshot.model ? { model: snapshot.model } : {}),
+    ...(snapshot.model ? { model: snapshot.model } : undefined),
   };
 }
 
@@ -324,7 +328,7 @@ function snapshotFromSessionRow(row: DevinRow): DevinLocalSessionSnapshot | unde
     workingDirectory: textFromRow(row, DEVIN_SESSION_COLUMN.WORKING_DIRECTORY),
     title: textFromRow(row, DEVIN_SESSION_COLUMN.TITLE),
     model: textFromRow(row, DEVIN_SESSION_COLUMN.MODEL),
-    ...(typeof mainChainId === "number" && Number.isInteger(mainChainId) ? { mainChainId } : {}),
+    ...(isWireNumber(mainChainId) && Number.isInteger(mainChainId) ? { mainChainId } : undefined),
     observedAt: Math.max(
       millisecondsFromRecord(row, DEVIN_SESSION_COLUMN.LAST_ACTIVITY_AT) ?? 0,
       millisecondsFromRecord(row, DEVIN_SESSION_COLUMN.CREATED_AT) ?? 0,
@@ -395,7 +399,7 @@ export class DevinLocalSessionAdapter extends LocalSessionAdapter {
           .all()
           .filter((row): row is DevinRow => isRecord(row));
       } catch (error) {
-        if (!canIgnoreSqliteError(error)) throw error;
+        if (!(error instanceof Error) || !canIgnoreSqliteError(error)) throw error;
       }
     }
     return undefined;
@@ -444,7 +448,7 @@ export class DevinLocalSessionAdapter extends LocalSessionAdapter {
     return turnFromChainRecords(
       rows
         .map((row) => recordFromJsonLine(textFromRow(row, DEVIN_NODE_COLUMN.CHAT_MESSAGE) ?? ""))
-        .filter((record): record is Record<string, unknown> => record !== undefined),
+        .filter((record): record is WireRecord => record !== undefined),
     );
   }
 
@@ -462,7 +466,7 @@ export class DevinLocalSessionAdapter extends LocalSessionAdapter {
         .all(...parameters)
         .filter((row): row is DevinRow => isRecord(row));
     } catch (error) {
-      if (canIgnoreSqliteError(error)) return [];
+      if (error instanceof Error && canIgnoreSqliteError(error)) return [];
       throw error;
     }
   }

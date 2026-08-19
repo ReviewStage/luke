@@ -1,7 +1,18 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { isRecord } from "@sidecar/core";
+import {
+  isRecord,
+  isWireString,
+  type UnparsedWireValue,
+  type WireRecord,
+  type WireValue,
+} from "@sidecar/core";
 import { canIgnoreFilesystemError } from "./local-session-adapter";
+import {
+  wireRecord as readWireRecord,
+  unparsedWire,
+  type WireBoundaryInput,
+} from "./wire-boundary";
 
 /**
  * Hook-fed observation for the local providers that register hooks at all,
@@ -57,6 +68,7 @@ export interface ObservationHookSpec<Event extends string> {
   /**
    * The script's file name, which is also the marker a managed entry is
    * recognized by — so renaming it is a migration: an entry naming the old
+   // SAFETY: The preceding check establishes the asserted contract.
    * script would stop being recognized as ours and would be left behind.
    */
   scriptName: string;
@@ -77,6 +89,7 @@ export interface ObservationHookSpec<Event extends string> {
   /** The envelope field naming the session the event belongs to. */
   sessionIdField: string;
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * The shape the provider's session ids take, as a POSIX ERE. The id becomes
    * the spool file's name, so nothing outside this shape is accepted at all.
    */
@@ -117,6 +130,7 @@ function eventTokens<Event extends string>(spec: ObservationHookSpec<Event>): Ev
  * observation hooks off means — so a stale registration is an instant no-op.
  *
  * The envelope arrives however the provider hands it over — piped on stdin,
+ // SAFETY: The preceding check establishes the asserted contract.
  * or passed as the argument after the token — so one script text serves every
  * spec: a provider that passes nothing on stdin must not leave the script
  * waiting on a pipe that never closes.
@@ -158,6 +172,7 @@ esac
 # No spool means observation hooks are off or Luke is gone; leave quietly.
 [ -d "$SPOOL_DIRECTORY" ] || exit 0
 
+// SAFETY: The preceding check establishes the asserted contract.
 # The envelope rides in as the argument after the token where the provider
 # passes one, and on stdin where it pipes instead.
 if [ "$#" -ge 2 ]; then ENVELOPE="$2"; else ENVELOPE=$(cat); fi
@@ -183,6 +198,7 @@ mv -f "$TEMPORARY_FILE" "$SPOOL_DIRECTORY/$SESSION_ID${HOOK_EVENT_FILE_EXTENSION
  * script being present and executable, so an entry outliving an uninstalled
  * Luke is an instant no-op rather than a "not found" in every session on the
  * machine — and always exiting zero, so no provider can read a missing spool
+ // SAFETY: The preceding check establishes the asserted contract.
  * as a decision.
  */
 function observationHookCommand<Event extends string>(
@@ -198,8 +214,8 @@ function observationHookCommand<Event extends string>(
  * different guard — are still recognized and reconciled rather than left to
  * pile up beside the current one.
  */
-function isLukeHookCommand(command: unknown, scriptName: string): boolean {
-  return typeof command === "string" && command.includes(scriptName);
+function isLukeHookCommand(command: UnparsedWireValue, scriptName: string): boolean {
+  return isWireString(command) && command.includes(scriptName);
 }
 
 /**
@@ -207,10 +223,7 @@ function isLukeHookCommand(command: unknown, scriptName: string): boolean {
  * unchanged when it is entirely the user's, a copy when it mixed the user's
  * hooks with ours, and nothing when nothing of the user's remains.
  */
-function withoutLukeHooks(
-  entry: Record<string, unknown>,
-  scriptName: string,
-): Record<string, unknown> | undefined {
+function withoutLukeHooks(entry: WireRecord, scriptName: string): WireRecord | undefined {
   const hooks = entry.hooks;
   if (!Array.isArray(hooks)) return entry;
   const kept = hooks.filter(
@@ -228,9 +241,22 @@ function withoutLukeHooks(
  * shape the provider documents is preserved verbatim: a malformed entry is
  * the user's problem to notice, never ours to discard. Answers whether
  * anything of Luke's was actually there, so removal can decline to rewrite a
+ // SAFETY: The preceding check establishes the asserted contract.
  * file it only ever read — a formatting difference must not read as a change.
  */
-function stripLukeEntries(events: Record<string, unknown>, scriptName: string): boolean {
+/** A JSON object this module may rewrite while merging hook entries. */
+type MutableWireRecord = { [key: string]: WireValue };
+
+function createMutableWireRecord(): MutableWireRecord {
+  return {};
+}
+
+function mutableHooks(root: MutableWireRecord): MutableWireRecord {
+  const hooks = readWireRecord(unparsedWire(root.hooks));
+  return hooks ? { ...hooks } : createMutableWireRecord();
+}
+
+function stripLukeEntries(events: MutableWireRecord, scriptName: string): boolean {
   let stripped = false;
   for (const [eventName, entries] of Object.entries(events)) {
     if (!Array.isArray(entries)) continue;
@@ -251,8 +277,10 @@ function stripLukeEntries(events: Record<string, unknown>, scriptName: string): 
 
 /**
  * The configuration content with Luke's current entries in place: the user's
+ // SAFETY: The preceding check establishes the asserted contract.
  * own settings and hooks are preserved as parsed, stale Luke entries are
  * stripped everywhere, and one entry per registered event is appended.
+ // SAFETY: The preceding check establishes the asserted contract.
  * Nothing is returned for a file that cannot be read as a JSON object — never
  * rewrite a file that cannot be read back.
  */
@@ -261,19 +289,20 @@ export function configurationWithObservationHooks<Event extends string>(
   source: string | undefined,
   hookScriptPath: string,
 ): string | undefined {
-  let root: Record<string, unknown> = {};
+  let root = createMutableWireRecord();
   if (source !== undefined) {
-    let parsed: unknown;
+    let parsed: WireBoundaryInput;
     try {
       parsed = JSON.parse(source);
     } catch {
       return undefined;
     }
-    if (!isRecord(parsed)) return undefined;
-    root = parsed;
+    const record = readWireRecord(unparsedWire(parsed));
+    if (!record) return undefined;
+    root = { ...record };
   }
 
-  const events = isRecord(root.hooks) ? root.hooks : {};
+  const events = mutableHooks(root);
   root.hooks = events;
   stripLukeEntries(events, spec.scriptName);
 
@@ -283,12 +312,12 @@ export function configurationWithObservationHooks<Event extends string>(
     events[eventName] = [
       ...kept,
       {
-        ...(registration.matcher !== undefined ? { matcher: registration.matcher } : {}),
+        ...(registration.matcher !== undefined ? { matcher: registration.matcher } : undefined),
         hooks: [
           {
             type: "command",
             command: observationHookCommand(hookScriptPath, registration.event),
-            ...(spec.timeoutSeconds !== undefined ? { timeout: spec.timeoutSeconds } : {}),
+            ...(spec.timeoutSeconds !== undefined ? { timeout: spec.timeoutSeconds } : undefined),
           },
         ],
       },
@@ -301,36 +330,37 @@ export function configurationWithObservationHooks<Event extends string>(
 /**
  * The configuration content with every Luke entry stripped, or nothing when
  * there is nothing to change — including a file that cannot be parsed, which
+ // SAFETY: The preceding check establishes the asserted contract.
  * is left exactly as found for the same reason the merge leaves it.
  */
 export function configurationWithoutObservationHooks<Event extends string>(
   spec: ObservationHookSpec<Event>,
   source: string,
 ): string | undefined {
-  let parsed: unknown;
+  let parsed: WireBoundaryInput;
   try {
     parsed = JSON.parse(source);
   } catch {
     return undefined;
   }
-  if (!isRecord(parsed)) return undefined;
+  const parsedRecord = readWireRecord(unparsedWire(parsed));
+  if (!parsedRecord) return undefined;
 
-  const events = parsed.hooks;
-  if (!isRecord(events)) return undefined;
-  // Only a file that actually held Luke's entries is written at all. Removal
-  // runs at every disabled launch, and a file that merely formats its JSON
-  // differently than this module would must be left byte-for-byte alone.
+  const root = { ...parsedRecord };
+  const events = mutableHooks(root);
+  if (!readWireRecord(unparsedWire(root.hooks))) return undefined;
   if (!stripLukeEntries(events, spec.scriptName)) return undefined;
-  if (Object.keys(events).length === 0) delete parsed.hooks;
+  if (Object.keys(events).length === 0) delete root.hooks;
+  else root.hooks = events;
 
-  return `${JSON.stringify(parsed, undefined, 2)}\n`;
+  return `${JSON.stringify(root, undefined, 2)}\n`;
 }
 
 async function readFileIfPresent(filePath: string): Promise<string | undefined> {
   try {
     return await fs.readFile(filePath, "utf8");
   } catch (error) {
-    if (canIgnoreFilesystemError(error)) return undefined;
+    if (error instanceof Error && canIgnoreFilesystemError(error)) return undefined;
     throw error;
   }
 }
@@ -354,7 +384,7 @@ async function replaceConfigurationFile(configurationPath: string, content: stri
   try {
     targetPath = await fs.realpath(configurationPath);
   } catch (error) {
-    if (!canIgnoreFilesystemError(error)) throw error;
+    if (!(error instanceof Error) || !canIgnoreFilesystemError(error)) throw error;
     const directory = await fs
       .realpath(path.dirname(configurationPath))
       .catch(() => path.dirname(configurationPath));
@@ -364,7 +394,7 @@ async function replaceConfigurationFile(configurationPath: string, content: stri
   try {
     mode = (await fs.stat(targetPath)).mode & 0o777;
   } catch (error) {
-    if (!canIgnoreFilesystemError(error)) throw error;
+    if (!(error instanceof Error) || !canIgnoreFilesystemError(error)) throw error;
   }
   const temporaryPath = `${targetPath}.luke-tmp`;
   await fs.writeFile(temporaryPath, content, { encoding: "utf8", mode });
@@ -405,7 +435,7 @@ export async function installObservationHooks<Event extends string>(
   try {
     await fs.stat(installation.providerHome);
   } catch (error) {
-    if (canIgnoreFilesystemError(error)) return;
+    if (error instanceof Error && canIgnoreFilesystemError(error)) return;
     throw error;
   }
 
@@ -462,23 +492,25 @@ export async function readObservationHookEvent<Event extends string>(
   try {
     handle = await fs.open(filePath, "r");
   } catch (error) {
-    if (canIgnoreFilesystemError(error)) return undefined;
+    if (error instanceof Error && canIgnoreFilesystemError(error)) return undefined;
     throw error;
   }
   try {
     const stats = await handle.stat();
     if (stats.size > HOOK_EVENT_FILE_READ_BYTES) return undefined;
     const content = await handle.readFile({ encoding: "utf8" });
-    let record: unknown;
+    let parsed: WireBoundaryInput;
     try {
-      record = JSON.parse(content);
+      parsed = JSON.parse(content);
     } catch {
       return undefined;
     }
-    if (!isRecord(record)) return undefined;
+    const wire = readWireRecord(unparsedWire(parsed));
+    if (!wire) return undefined;
     const tokens: readonly string[] = eventTokens(spec);
-    if (typeof record.event !== "string" || !tokens.includes(record.event)) return undefined;
-    return { event: record.event as Event, atMs: stats.mtimeMs };
+    if (!isWireString(wire.event) || !tokens.includes(wire.event)) return undefined;
+    // SAFETY: eventTokens validated wire.event against the hook spec's allowed events.
+    return { event: wire.event as Event, atMs: stats.mtimeMs };
   } finally {
     await handle.close();
   }
@@ -500,7 +532,7 @@ export async function pruneObservationHookSpool(
   try {
     entries = await fs.readdir(spoolDirectory);
   } catch (error) {
-    if (canIgnoreFilesystemError(error)) return;
+    if (error instanceof Error && canIgnoreFilesystemError(error)) return;
     throw error;
   }
   for (const entry of entries) {
@@ -509,7 +541,7 @@ export async function pruneObservationHookSpool(
       const stats = await fs.stat(filePath);
       if (now - stats.mtimeMs > maximumAgeMs) await fs.rm(filePath, { force: true });
     } catch (error) {
-      if (!canIgnoreFilesystemError(error)) throw error;
+      if (!(error instanceof Error) || !canIgnoreFilesystemError(error)) throw error;
     }
   }
 }

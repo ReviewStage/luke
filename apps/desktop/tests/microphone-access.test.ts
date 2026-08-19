@@ -80,6 +80,7 @@ test("every permission state says something of its own", () => {
 test("System Settings is offered only where macOS has an answer to change", () => {
   // Granted or refused, the system holds a decision and that is the one place
   // it can be changed — including while Luke is withholding a grant that,
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // as far as macOS is concerned, it still has.
   for (const status of ["granted", "denied"] as const) {
     const row = microphoneAccessRow({ voiceAvailable: true, status });
@@ -170,6 +171,7 @@ test("the reset is worded on the reader's own clock, and says tomorrow when it i
   assert.equal(quotaResetsWhen(soon, now), `at ${clock(soon)}`);
 
   // A reset landing on the next local date has to say so: a bare time reads
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // as today, and the counters turn over at midnight UTC — somebody else's
   // clock, and never the reader's.
   const nextDay = new Date(now);

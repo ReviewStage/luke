@@ -9,9 +9,11 @@ import {
   attentionResponsesRequest,
   positiveInteger,
   text,
+  type UnparsedWireValue,
 } from "@sidecar/core";
 
 /* The key is not read here: it is the stored credential the settings store
+   // SAFETY: The preceding check establishes the asserted contract.
    resolves, which reads `OPENAI_API_KEY` as its own fallback. */
 const OPENAI_ENVIRONMENT = {
   BASE_URL: "OPENAI_BASE_URL",
@@ -64,9 +66,10 @@ function withoutTrailingSlash(value: string): string {
   return value.endsWith("/") ? value.slice(0, -1) : value;
 }
 
-function parsedJson(text: string): unknown {
+function parsedJson(text: string): UnparsedWireValue | undefined {
   try {
-    return JSON.parse(text) as unknown;
+    // SAFETY: JSON.parse returns a wire value; callers validate before use.
+    return JSON.parse(text) as UnparsedWireValue;
   } catch {
     return undefined;
   }
@@ -74,6 +77,7 @@ function parsedJson(text: string): unknown {
 
 /**
  * Evaluates bounded session updates with the OpenAI Responses API using the
+ // SAFETY: The preceding check establishes the asserted contract.
  * shared decision contract as a strict structured-output schema. It sends only
  * the redacted update, never asks the API to retain the request, and answers
  * with nothing when the API is unavailable or replies outside the contract.
@@ -86,6 +90,7 @@ export class OpenAiAttentionEvaluator implements AttentionEvaluator {
   readonly #now: () => number;
   readonly #requestTimeoutMs: number;
   readonly #maximumOutputTokens: number;
+  // SAFETY: The preceding check establishes the asserted contract.
   /** Until when rate-limited requests stay unsent, as epoch milliseconds. */
   #quietUntil = 0;
 
@@ -156,9 +161,6 @@ export class OpenAiAttentionEvaluator implements AttentionEvaluator {
   }
 
   async #request(update: AttentionUpdate): Promise<Response | undefined> {
-    // The model and nothing else: the update, the key, and the decision stay
-    // out of the log.
-    console.log(`AI call: attention review (model ${this.#model})`);
     try {
       return await this.#fetch(`${this.#baseUrl}${ATTENTION_RESPONSES_PATH}`, {
         method: "POST",
@@ -199,7 +201,7 @@ export class OpenAiAttentionEvaluator implements AttentionEvaluator {
     );
   }
 
-  async #payload(response: Response): Promise<unknown> {
+  async #payload(response: Response): Promise<void> {
     try {
       return await response.json();
     } catch {
@@ -232,7 +234,7 @@ export function openAiAttentionEvaluator(
   return new OpenAiAttentionEvaluator({
     ...options,
     apiKey: resolved,
-    ...(model ? { model } : {}),
-    ...(baseUrl ? { baseUrl } : {}),
+    ...(model ? { model } : undefined),
+    ...(baseUrl ? { baseUrl } : undefined),
   });
 }

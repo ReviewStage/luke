@@ -66,7 +66,7 @@ export const FACE_MOTION = {
 export type FaceMotion = (typeof FACE_MOTION)[keyof typeof FACE_MOTION];
 
 /** One full cycle: how long a caller waits to see a motion out before moving on. */
-export const FACE_MOTION_CYCLE_MS: Record<FaceMotion, number> = {
+export const FACE_MOTION_CYCLE_MS = {
   talking: 650,
   yes: 2200,
   error: 3000,
@@ -90,13 +90,10 @@ export const FACE_MOTION_CYCLE_MS: Record<FaceMotion, number> = {
   shimmy: 2600,
   dizzy: 3200,
   glance: 3400,
-};
+} as const satisfies Record<FaceMotion, number>;
 
 /** What a motion needs drawn beyond the resting smile and eyes. */
-export const FACE_MOTION_PARTS: Record<
-  FaceMotion,
-  { brows: boolean; lids: boolean; sleepZ: boolean }
-> = {
+export const FACE_MOTION_PARTS = {
   talking: { brows: false, lids: false, sleepZ: false },
   yes: { brows: false, lids: false, sleepZ: false },
   error: { brows: false, lids: false, sleepZ: false },
@@ -120,4 +117,4 @@ export const FACE_MOTION_PARTS: Record<
   shimmy: { brows: false, lids: false, sleepZ: false },
   dizzy: { brows: false, lids: false, sleepZ: false },
   glance: { brows: false, lids: false, sleepZ: false },
-};
+} as const satisfies Record<FaceMotion, { brows: boolean; lids: boolean; sleepZ: boolean }>;

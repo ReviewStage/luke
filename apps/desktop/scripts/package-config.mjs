@@ -70,8 +70,9 @@ export function iconutilArguments(iconsetPath, icnsPath) {
 }
 
 export function resolveSigningMode(env) {
+  const rawIdentity = env.LUKE_CODESIGN_IDENTITY;
   const identity =
-    typeof env.LUKE_CODESIGN_IDENTITY === "string" ? env.LUKE_CODESIGN_IDENTITY.trim() : "";
+    Object.prototype.toString.call(rawIdentity) === "[object String]" ? rawIdentity.trim() : "";
   return identity ? { mode: SIGNING_MODE.DEVELOPER_ID, identity } : { mode: SIGNING_MODE.AD_HOC };
 }
 

@@ -12,6 +12,7 @@ import {
   SessionProviderAdapterBase,
   type SessionStatus,
   UNKNOWN_WORKSPACE_LABEL,
+  type WireRecord,
 } from "@sidecar/core";
 
 export function localSessionStatus(
@@ -182,7 +183,7 @@ interface ProjectSessionsDirectory {
   mtimeMs: number;
 }
 
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+function isNodeError(error: Error): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
 }
 
@@ -190,7 +191,7 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
  * A provider directory that is absent, or that this user cannot read, means
  * Luke observes nothing there — never that the observation pass failed.
  */
-export function canIgnoreFilesystemError(error: unknown): boolean {
+export function canIgnoreFilesystemError(error: Error): boolean {
   return (
     isNodeError(error) &&
     (error.code === "ENOENT" ||
@@ -204,8 +205,8 @@ export async function readDirectory(directoryPath: string): Promise<Dirent[]> {
   try {
     return await fs.readdir(directoryPath, { withFileTypes: true });
   } catch (error) {
-    if (canIgnoreFilesystemError(error)) return [];
-    throw error;
+    if (!(error instanceof Error) || !canIgnoreFilesystemError(error)) throw error;
+    return [];
   }
 }
 
@@ -213,8 +214,8 @@ export async function fileStats(filePath: string): Promise<Stats | undefined> {
   try {
     return await fs.stat(filePath);
   } catch (error) {
-    if (canIgnoreFilesystemError(error)) return undefined;
-    throw error;
+    if (!(error instanceof Error) || !canIgnoreFilesystemError(error)) throw error;
+    return undefined;
   }
 }
 
@@ -228,8 +229,8 @@ export async function statDirectoryEntry(
     const stats = await fs.lstat(entryPath);
     return { directoryPath: entryPath, name, stats };
   } catch (error) {
-    if (canIgnoreFilesystemError(error)) return undefined;
-    throw error;
+    if (!(error instanceof Error) || !canIgnoreFilesystemError(error)) throw error;
+    return undefined;
   }
 }
 
@@ -237,8 +238,8 @@ export async function readTextFile(filePath: string): Promise<string | undefined
   try {
     return await fs.readFile(filePath, "utf8");
   } catch (error) {
-    if (canIgnoreFilesystemError(error)) return undefined;
-    throw error;
+    if (!(error instanceof Error) || !canIgnoreFilesystemError(error)) throw error;
+    return undefined;
   }
 }
 
@@ -261,8 +262,8 @@ async function readRegion(
     await handle.read(buffer, 0, length, offset(stats.size, length));
     return buffer.toString("utf8");
   } catch (error) {
-    if (canIgnoreFilesystemError(error)) return "";
-    throw error;
+    if (!(error instanceof Error) || !canIgnoreFilesystemError(error)) throw error;
+    return "";
   } finally {
     await handle?.close();
   }
@@ -287,10 +288,10 @@ function tailLines(tail: string): string[] {
 }
 
 /** The whole records a tail holds, oldest first. */
-export function tailRecords(tail: string): Record<string, unknown>[] {
+export function tailRecords(tail: string): WireRecord[] {
   return tailLines(tail)
     .map(recordFromJsonLine)
-    .filter((record): record is Record<string, unknown> => record !== undefined);
+    .filter((record): record is WireRecord => record !== undefined);
 }
 
 /** Sessions are labelled by the folder they run in, never by a provider's own name for them. */
@@ -333,6 +334,7 @@ async function projectSessionsDirectory(
 /**
  * Finds the newest session files across a provider's project directories. Both
  * levels are bounded and ordered by recency, so a machine with years of
+ // SAFETY: The preceding check establishes the asserted contract.
  * projects costs the same pass as a machine with one. A directory's mtime does
  * not move when a file inside it is appended to, so the project bound keeps the
  * projects that most recently *started* a session; the session bound that

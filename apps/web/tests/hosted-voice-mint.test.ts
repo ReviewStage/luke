@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { RealtimeVoice, RealtimeVoiceSpeed } from "@sidecar/core";
 import { REALTIME_DEFAULTS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/core";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import type { HostedSpend } from "../server/hosted/quota";
@@ -18,12 +19,18 @@ const SPENT: HostedSpend = {
   quota: { used: 51, limit: 50, remaining: 0, resetsAt: NOW + 43_200_000 },
 };
 
-function mintRequest(body?: unknown, headers: Record<string, string> = {}): Request {
-  return new Request("https://luke.test/api/voice/mint", {
+interface VoiceMintRequestBody {
+  voice?: RealtimeVoice | string;
+  speed?: RealtimeVoiceSpeed | number;
+}
+
+function mintRequest(body?: VoiceMintRequestBody, headers: Record<string, string> = {}): Request {
+  const init: RequestInit = {
     method: "POST",
     headers: { authorization: "Bearer token-1", ...headers },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
+  };
+  if (body !== undefined) init.body = JSON.stringify(body);
+  return new Request("https://luke.test/api/voice/mint", init);
 }
 
 interface UpstreamCall {

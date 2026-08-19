@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import { DevinLocalSessionAdapter } from "../src/devin-local-adapter";
 import { OMISSION_MARKER } from "../src/local-transcript";
+import type { ParsedJsonObject } from "./support/json";
 
 function readDevinSessionTranscript(request: {
   cliDirectory?: string;
@@ -24,7 +25,7 @@ const DEVIN_DATABASE = "sessions.db";
 interface TestNode {
   nodeId: number;
   parentNodeId?: number;
-  message: Record<string, unknown>;
+  message: ParsedJsonObject;
 }
 
 async function temporaryCliDirectory(t: TestContext): Promise<string> {
@@ -91,16 +92,20 @@ async function writeDevinSession(
 function message(
   role: string,
   content: string,
-  options: { messageId?: string; toolCalls?: readonly Record<string, unknown>[] } = {},
-): Record<string, unknown> {
-  return {
+  options: { messageId?: string; toolCalls?: readonly ParsedJsonObject[] } = {},
+): ParsedJsonObject {
+  const payload: ParsedJsonObject = {
     message_id: options.messageId ?? `msg-${role}-${content.length}`,
     role,
     content,
-    ...(options.toolCalls ? { tool_calls: options.toolCalls } : {}),
   };
+  if (options.toolCalls) {
+    payload.tool_calls = options.toolCalls;
+  }
+  return payload;
 }
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("renders the main chain as a conversation with tool calls and answers", async (t) => {
   const cliDirectory = await temporaryCliDirectory(t);
   await writeDevinSession(cliDirectory, "leaf-flax", 4, [

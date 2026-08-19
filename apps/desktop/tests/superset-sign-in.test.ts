@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 import test, { type TestContext } from "node:test";
+import { isRecord, text } from "@sidecar/core";
 import { SUPERSET_SIGN_IN_STAGE } from "../src/shared/contracts";
 import { SupersetCli } from "../src/superset-cli";
 import { SupersetSignIn, validSupersetSignInCode } from "../src/superset-sign-in";
@@ -37,9 +38,7 @@ function testCliOptions(homeDirectory: string) {
         const parsed: unknown = JSON.parse(
           await fs.readFile(path.join(homeDirectory, "config.json"), "utf8"),
         );
-        return typeof parsed === "object" && parsed !== null && "organizationId" in parsed
-          ? String(parsed.organizationId)
-          : undefined;
+        return isRecord(parsed) ? text(parsed.organizationId) : undefined;
       } catch {
         return undefined;
       }

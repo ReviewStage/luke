@@ -45,16 +45,12 @@ function lastActivityAt(task: TestTask): number {
   return task.updatedAt ?? task.createdAt;
 }
 
-function taskPayload(task: TestTask): Record<string, unknown> {
+function taskPayload(task: TestTask) {
   const repository = task.repository ?? TEST_REPOSITORY;
-  return {
+  const payload = {
     id: task.id,
-    ...(task.omitUrl
-      ? {}
-      : {
-          url: `https://api.github.com/agents/repos/${TEST_OWNER}/${repository}/tasks/${task.id}`,
-        }),
     html_url: `https://github.com/${TEST_OWNER}/${repository}/copilot/tasks/${task.id}`,
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     // GitHub documents `name` as derived from the task prompt, and the branch
     // Copilot opens is named from the same text, so neither may reach a row.
     name: `${SECRET_PROMPT_TEXT} title`,
@@ -64,25 +60,28 @@ function taskPayload(task: TestTask): Record<string, unknown> {
     repository: { id: 1296269 },
     state: task.state ?? TEST_STATE.IN_PROGRESS,
     session_count: 1,
-    ...(task.omitArtifacts
-      ? { artifacts: [] }
-      : {
-          artifacts: [
-            { provider: "github", type: "pull", data: { id: 42, global_id: "PR_global" } },
-            {
-              provider: "github",
-              type: "branch",
-              data: {
-                head_ref: `copilot/${SECRET_PROMPT_TEXT}`,
-                base_ref: task.baseRef ?? "main",
-              },
-            },
-          ],
-        }),
+    artifacts: [],
     archived_at: task.archivedAt === undefined ? null : isoTimestamp(task.archivedAt),
     created_at: isoTimestamp(task.createdAt),
     updated_at: isoTimestamp(lastActivityAt(task)),
   };
+  if (!task.omitUrl) {
+    payload.url = `https://api.github.com/agents/repos/${TEST_OWNER}/${repository}/tasks/${task.id}`;
+  }
+  if (!task.omitArtifacts) {
+    payload.artifacts = [
+      { provider: "github", type: "pull", data: { id: 42, global_id: "PR_global" } },
+      {
+        provider: "github",
+        type: "branch",
+        data: {
+          head_ref: `copilot/${SECRET_PROMPT_TEXT}`,
+          base_ref: task.baseRef ?? "main",
+        },
+      },
+    ];
+  }
+  return payload;
 }
 
 /** Serves the read-only subset of the agent-tasks API the adapter may use. */
@@ -247,8 +246,10 @@ test("maps every state GitHub reports onto a state Luke can show", async () => {
   );
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("keeps reporting a long turn as working", async () => {
   // `updated_at` marks when the task last changed rather than a heartbeat, so
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // a turn that started an hour ago and is still going must not read as stale.
   const startedAt = TEST_TIME - 60 * 60 * 1000;
   const api = fakeAgentTasksApi([workingTask("task-long-turn", startedAt)]);
@@ -291,6 +292,7 @@ test("keeps a completed task complete however long ago it finished", async () =>
   assert.equal(observations[0]?.status, SESSION_STATUS.COMPLETE);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("reports a task the user filed away as settled whatever it was doing", async () => {
   const api = fakeAgentTasksApi([
     {

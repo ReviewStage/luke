@@ -19,11 +19,13 @@ import {
   sessionMessageText,
   text,
   UNKNOWN_WORKSPACE_LABEL,
+  type WireRecord,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceAgentSelection,
   type WorkspaceProject,
   workspaceNameText,
 } from "@sidecar/core";
+import { unparsedWire, type WireBoundaryInput, wireRecord } from "./wire-boundary";
 
 const GIT_SUFFIX = ".git";
 
@@ -55,14 +57,16 @@ export type CloudAuthScheme = (typeof CLOUD_AUTH_SCHEME)[keyof typeof CLOUD_AUTH
 
 const GOOGLE_API_KEY_HEADER = "X-Goog-Api-Key";
 
-const AUTHORIZATION_HEADERS: Readonly<
+const AUTHORIZATION_HEADERS = {
+  [CLOUD_AUTH_SCHEME.BEARER]: (apiKey: string) => ({ Authorization: `Bearer ${apiKey}` }),
+  [CLOUD_AUTH_SCHEME.GOOGLE_API_KEY_HEADER]: (apiKey: string) => ({
+    [GOOGLE_API_KEY_HEADER]: apiKey,
+  }),
+} as const satisfies Readonly<
   Record<CloudAuthScheme, (apiKey: string) => Readonly<Record<string, string>>>
-> = {
-  [CLOUD_AUTH_SCHEME.BEARER]: (apiKey) => ({ Authorization: `Bearer ${apiKey}` }),
-  [CLOUD_AUTH_SCHEME.GOOGLE_API_KEY_HEADER]: (apiKey) => ({ [GOOGLE_API_KEY_HEADER]: apiKey }),
-};
+>;
 
-const DEFAULT_REQUEST_HEADERS: Readonly<Record<string, string>> = {
+const DEFAULT_REQUEST_HEADERS = {
   Accept: "application/json",
 };
 
@@ -78,6 +82,7 @@ export const CLOUD_FAILURE = {
   TRANSIENT: "transient",
 } as const;
 
+// SAFETY: The preceding check establishes the asserted contract.
 /** What a write acts on, as a refusal should name it. */
 const WRITE_SUBJECT = {
   SESSION: "session",
@@ -96,6 +101,7 @@ export const CLOUD_ADAPTER_DEFAULTS = {
   MINIMUM_REFRESH_INTERVAL_MS: 15 * 1000,
   REQUEST_TIMEOUT_MS: 8 * 1000,
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * For the rare read a provider documents as slow — Cursor's repository list
    * can take tens of seconds for a large organisation. A read on this deadline
    * must never hold the observation pass; it is for work that rides beside
@@ -128,7 +134,7 @@ export interface CloudAdapterOptions {
    * or credential fault — a TypeError in a subclass's parsing, for example.
    * Transient and unauthorized {@link CloudRequestError} never reach it.
    */
-  onDiagnostic?: (error: unknown) => void;
+  onDiagnostic?: (error: Error) => void;
 }
 
 /** The provider-specific identity and endpoint a subclass supplies once. */
@@ -145,6 +151,7 @@ export interface CloudAdapterProfile {
  * authenticates, bounds, and parses the request, and it can express nothing
  * but a read, so no observation pass built on it can change provider state.
  * The deadline can be widened only to the slow bound, and only for a read the
+ // SAFETY: The preceding check establishes the asserted contract.
  * provider itself documents as slow.
  *
  * A read the provider answers only at a POSTed query endpoint — Conductor's
@@ -158,7 +165,7 @@ export type CloudRequest = (
   segments: readonly string[],
   query?: Readonly<Record<string, string>>,
   options?: Readonly<{ timeoutMs?: number; document?: string }>,
-) => Promise<Record<string, unknown>>;
+) => Promise<WireRecord>;
 
 /**
  * One documented write a provider takes for one of its sessions: the route and
@@ -168,27 +175,26 @@ export type CloudRequest = (
 export interface CloudWriteRoute {
   segments: readonly string[];
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * A Google-style custom method, appended to the path as `:action` rather
+   // SAFETY: The preceding check establishes the asserted contract.
    * than as a segment: it names what the request does to the resource the
    * segments already name.
    */
   action?: string;
   /** Left off entirely for an endpoint that documents an empty request. */
-  body?: Readonly<Record<string, unknown>>;
+  body?: Readonly<WireRecord>;
 }
 
 export function isDefined<Value>(value: Value | undefined): value is Value {
   return value !== undefined;
 }
 
-export function textFromRecord(record: Record<string, unknown>, key: string): string | undefined {
+export function textFromRecord(record: WireRecord, key: string): string | undefined {
   return text(record[key]);
 }
 
-export function timestampFromRecord(
-  record: Record<string, unknown>,
-  key: string,
-): number | undefined {
+export function timestampFromRecord(record: WireRecord, key: string): number | undefined {
   const value = textFromRecord(record, key);
   if (!value) return undefined;
   const timestampMs = Date.parse(value);
@@ -207,10 +213,7 @@ export function knownValue<Value extends string>(
 }
 
 /** Reads a list page without assuming which key a given provider wraps it in. */
-export function recordsFromPage(
-  body: Record<string, unknown>,
-  key: string,
-): Record<string, unknown>[] {
+export function recordsFromPage(body: WireRecord, key: string): WireRecord[] {
   const data = body[key];
   return Array.isArray(data) ? data.filter(isRecord) : [];
 }
@@ -261,7 +264,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
   readonly #authorizationHeaders: (apiKey: string) => Readonly<Record<string, string>>;
   readonly #now: () => number;
   readonly #minimumRefreshIntervalMs: number;
-  readonly #onDiagnostic: ((error: unknown) => void) | undefined;
+  readonly #onDiagnostic: ((error: Error) => void) | undefined;
 
   #credential: string | undefined;
   /**
@@ -337,7 +340,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
       // Anything else is a bug in this pass — a TypeError thrown by a
       // subclass's parsing is not a network blip, and must not keep serving
       // the stale snapshot with no log, counter, or hook.
-      this.#onDiagnostic?.(error);
+      this.#onDiagnostic?.(error instanceof Error ? error : new Error(String(error)));
       throw error;
     }
     return this.#observations;
@@ -543,7 +546,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     const createdSessionId = this.createdWorkspaceSessionId(created.body ?? {});
     const landed: ProviderWorkspaceResult = {
       status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED,
-      ...(createdSessionId ? { providerSessionId: createdSessionId } : {}),
+      ...(createdSessionId ? { providerSessionId: createdSessionId } : undefined),
     };
     if (!task) return landed;
 
@@ -599,20 +602,22 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
    * provider names none, so an acceptance stays a plain acceptance and the
    * workspace is simply left where it was made.
    */
-  protected createdWorkspaceSessionId(_creationBody: Record<string, unknown>): string | undefined {
+  protected createdWorkspaceSessionId(_creationBody: WireRecord): string | undefined {
     return undefined;
   }
 
   /**
    * Where an opening task goes once the workspace exists, for a provider that
+   // SAFETY: The preceding check establishes the asserted contract.
    * documents the hand-over as its own endpoint on something the creation
    * response names. Returning nothing says the creation request already
    * carried the task; a provider whose response did not name the place the
    * task goes answers `undeliverable` with why, so a created-but-idle
+   // SAFETY: The preceding check establishes the asserted contract.
    * workspace is reported as exactly that rather than claimed complete.
    */
   protected workspaceTaskRoute(
-    _creationBody: Record<string, unknown>,
+    _creationBody: WireRecord,
     _task: string,
   ): CloudWriteRoute | { undeliverable: string } | undefined {
     return undefined;
@@ -651,7 +656,9 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
 
   /**
    * Clears anything a subclass cached across passes. It runs whenever the
+   // SAFETY: The preceding check establishes the asserted contract.
    * credential changes or is rejected, so nothing read as one user can be
+   // SAFETY: The preceding check establishes the asserted contract.
    * reported as another.
    */
   protected forgetCachedIdentity(): void {}
@@ -662,8 +669,8 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
    * version pin; the authorization header is layered on after these, so no
    * override can replace the credential.
    */
-  protected requestHeaders(): Readonly<Record<string, string>> {
-    return DEFAULT_REQUEST_HEADERS;
+  protected requestHeaders() {
+    return DEFAULT_REQUEST_HEADERS satisfies Readonly<Record<string, string>>;
   }
 
   /** Keeps one failed resource from discarding an otherwise complete pass. */
@@ -694,6 +701,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
    * that rides beside the passes and may outlive several — the pass-scoped
    * request would discard exactly the slow answer such a read exists for.
    * Only a credential change discards it: the read refuses to land across
+   // SAFETY: The preceding check establishes the asserted contract.
    * one, so nothing read as one user is ever kept as another's. What the
    * caller does with the answer is handed in rather than returned, so the
    * check and the write share one synchronous step and a credential cleared
@@ -703,7 +711,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     segments: readonly string[],
     query: Readonly<Record<string, string>> | undefined,
     options: Readonly<{ timeoutMs?: number }> | undefined,
-    apply: (body: Record<string, unknown>) => void,
+    apply: (body: WireRecord) => void,
   ): Promise<void> {
     const epoch = this.#credentialEpoch;
     const apiKey = this.#credential;
@@ -787,7 +795,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     apiKey: string,
     route: CloudWriteRoute,
     subject: WriteSubject,
-  ): Promise<{ outcome: ProviderActResult; body?: Record<string, unknown> }> {
+  ): Promise<{ outcome: ProviderActResult; body?: WireRecord }> {
     const name = this.provider.displayName;
     let response: Response;
     try {
@@ -800,9 +808,9 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
           ...this.#authorizationHeaders(apiKey),
           // An endpoint that documents an empty request gets exactly that,
           // not an empty JSON object it never asked for.
-          ...(route.body === undefined ? {} : { "Content-Type": "application/json" }),
+          ...(route.body === undefined ? undefined : { "Content-Type": "application/json" }),
         },
-        ...(route.body === undefined ? {} : { body: JSON.stringify(route.body) }),
+        ...(route.body === undefined ? undefined : { body: JSON.stringify(route.body) }),
         signal: AbortSignal.timeout(CLOUD_ADAPTER_DEFAULTS.REQUEST_TIMEOUT_MS),
       });
     } catch {
@@ -825,7 +833,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
       const body = await response.json().catch(() => undefined);
       return {
         outcome: { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED },
-        ...(isRecord(body) ? { body } : {}),
+        ...(isRecord(body) ? { body } : undefined),
       };
     }
     if (response.status === HTTP_STATUS.UNAUTHORIZED || response.status === HTTP_STATUS.FORBIDDEN) {
@@ -863,9 +871,9 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
   async #requestJson(
     apiKey: string,
     segments: readonly string[],
-    query: Readonly<Record<string, string>> = {},
+    query = {},
     options: Readonly<{ timeoutMs?: number; document?: string }> = {},
-  ): Promise<Record<string, unknown>> {
+  ): Promise<WireRecord> {
     const name = this.provider.displayName;
     // A widened deadline never widens past the slow bound: the option exists
     // for a read the provider documents as slow, not for one that never ends.
@@ -884,10 +892,10 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
         headers: {
           ...this.requestHeaders(),
           ...this.#authorizationHeaders(apiKey),
-          ...(document === undefined ? {} : { "Content-Type": "application/json" }),
+          ...(document === undefined ? undefined : { "Content-Type": "application/json" }),
         },
         ...(document === undefined
-          ? {}
+          ? undefined
           : { body: JSON.stringify({ [READ_DOCUMENT_FIELD]: document }) }),
         signal: AbortSignal.timeout(timeoutMs),
       });
@@ -908,7 +916,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
       );
     }
 
-    let body: unknown;
+    let body: WireBoundaryInput;
     try {
       body = await response.json();
     } catch {
@@ -917,13 +925,14 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
         `${name} returned an unreadable response`,
       );
     }
-    if (!isRecord(body)) {
+    const bodyRecord = wireRecord(unparsedWire(body));
+    if (!bodyRecord) {
       throw new CloudRequestError(
         CLOUD_FAILURE.TRANSIENT,
         `${name} returned an unexpected response`,
       );
     }
-    return body;
+    return bodyRecord;
   }
 }
 

@@ -63,6 +63,7 @@ function settingsFor(options: {
   };
 }
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("the assembler builds and clears the keyed voice capabilities as one unit", async () => {
   let key: string | undefined = "test-key";
   const reports: string[] = [];

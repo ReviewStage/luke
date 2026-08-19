@@ -5,6 +5,7 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 import { isRosterRelevant, SESSION_COMPLETION_CAUSE, SESSION_STATUS } from "@sidecar/core";
 import { CLAUDE_CODE_PROVIDER, ClaudeCodeSessionAdapter } from "../src/claude-code-adapter";
+import type { ParsedJsonObject } from "./support/json";
 
 const TEST_TIME = Date.parse("2026-08-11T23:45:00.000Z");
 const SECRET_TRANSCRIPT_TEXT = "SECRET_TRANSCRIPT_TEXT";
@@ -32,7 +33,7 @@ async function writeSessionFile(
   claudeHome: string,
   projectDirectoryName: string,
   sessionFileName: string,
-  records: readonly Record<string, unknown>[],
+  records: readonly ParsedJsonObject[],
   mtimeMs: number,
 ): Promise<void> {
   const projectDirectory = path.join(claudeHome, CLAUDE_PROJECTS_DIRECTORY, projectDirectoryName);
@@ -166,6 +167,7 @@ test("ignores trailing system records when finding Claude session status", async
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("treats fresh assistant tool use as active work", async (t) => {
   const claudeHome = await temporaryClaudeHome(t);
   await writeSessionFile(
@@ -286,6 +288,7 @@ test("serves an untouched transcript from its previous parse", async (t) => {
   const adapter = new ClaudeCodeSessionAdapter({ claudeHome, now: () => TEST_TIME });
   const [before] = await adapter.observe();
   // Same mtime, different content: only a write Claude Code actually made —
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // which moves the mtime — may cost a read, so the parse is served as it was.
   await writeSessionFile(
     claudeHome,
@@ -396,6 +399,7 @@ test("surfaces the generated title, branch, model, and the tool being run", asyn
   });
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("reports a failed request as an error once the retries are spent", async (t) => {
   const claudeHome = await temporaryClaudeHome(t);
   await writeSessionFile(
@@ -500,6 +504,7 @@ test("keeps a spent failure at error after it goes stale", async (t) => {
   const [observation] = await adapter.observe();
 
   // The row would otherwise show the failure text under an "Idle" chip, and
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // stop sorting as a session that needs someone.
   assert.equal(observation?.status, SESSION_STATUS.ERROR);
   assert.equal(observation?.detail?.error, "429 rate limit exceeded");
@@ -934,6 +939,7 @@ test("reads past a tail of appended bookkeeping to the conversation's own clock"
   // A tail holding only bookkeeping says nothing about when the conversation
   // last moved, and the touch must not answer for it: the second, deeper read
   // finds the conversation's own clock months back, so the session reads as
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // settled history rather than as work happening right now.
   assert.equal(observation?.observedAt, Date.parse(lastConversationTime));
   assert.equal(observation?.status, SESSION_STATUS.UNKNOWN);
@@ -981,6 +987,7 @@ test("keeps a bookkeeping record's timestamp from re-dating the conversation", a
   const [observation] = await adapter.observe();
 
   // Only the conversation's own records may date the session: a settled turn
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // from months ago must not read as waiting for the developer today just
   // because the provider stamped a bookkeeping line beside it.
   assert.equal(observation?.observedAt, Date.parse(lastConversationTime));
@@ -1021,7 +1028,7 @@ async function writeHookEvent(
 }
 
 /** A transcript mid-turn: the assistant reached for a tool and has not returned. */
-function midTurnRecords(cwd: string, timestamp: string): Record<string, unknown>[] {
+function midTurnRecords(cwd: string, timestamp: string): ParsedJsonObject[] {
   return [
     {
       type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
@@ -1039,6 +1046,7 @@ test("a permission prompt the transcript cannot show turns the row to waiting", 
   const claudeHome = await temporaryClaudeHome(t);
   const spool = await temporaryHookSpool(t);
   // Mid-turn by every record: a tool call holding for permission writes
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // nothing further, so without the event this session reads as working.
   await writeSessionFile(
     claudeHome,

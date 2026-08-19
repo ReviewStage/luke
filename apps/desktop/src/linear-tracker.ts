@@ -4,14 +4,18 @@ import {
   type IssueTrackerAdapter,
   type IssueTransition,
   isRecord,
+  isWireNumber,
   maximumIssueTransitions,
   TRACKER_ACTION_RESULT_STATUS,
   type TrackerActionResult,
   type TrackerIssueAction,
   type TrackerIssueObservation,
   text,
+  type UnparsedWireValue,
+  type WireRecord,
 } from "@sidecar/core";
 import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "./shared/credential-providers";
+import { unparsedWire, wireRecord } from "./wire-boundary";
 
 // Shared with the credential registry so the key the user saves and the
 // tracker Luke reads with it can never name different things.
@@ -89,12 +93,12 @@ interface LinearState {
   position: number;
 }
 
-function stateFrom(value: unknown): LinearState | undefined {
+function stateFrom(value: UnparsedWireValue): LinearState | undefined {
   if (!isRecord(value)) return undefined;
   const id = text(value.id);
   const name = text(value.name);
   if (!id || !name) return undefined;
-  const position = typeof value.position === "number" ? value.position : 0;
+  const position = isWireNumber(value.position) ? value.position : 0;
   return { id, name, position };
 }
 
@@ -103,7 +107,7 @@ function stateFrom(value: unknown): LinearState | undefined {
  * minus the state it is already in. Linear accepts any state on the team, so
  * the whole workflow is the advertisement and the bound in core caps it.
  */
-function transitionsFrom(node: Record<string, unknown>, currentStateId: string): IssueTransition[] {
+function transitionsFrom(node: WireRecord, currentStateId: string): IssueTransition[] {
   const team = isRecord(node.team) ? node.team : undefined;
   const states = isRecord(team?.states) ? team.states : undefined;
   const nodes = Array.isArray(states?.nodes) ? states.nodes : [];
@@ -171,7 +175,7 @@ export class LinearIssueTracker implements IssueTrackerAdapter {
           title,
           stateName: state.name,
           observedAt,
-          ...(url ? { url } : {}),
+          ...(url ? { url } : undefined),
           transitions: transitionsFrom(node, state.id),
           canComment: true,
         },
@@ -226,7 +230,7 @@ export class LinearIssueTracker implements IssueTrackerAdapter {
   async #post(
     accessToken: string,
     document: string,
-    variables: Record<string, unknown>,
+    variables: WireRecord,
   ): Promise<GraphQlPayload> {
     const response = await this.#fetch(this.#endpoint, {
       method: "POST",
@@ -240,18 +244,20 @@ export class LinearIssueTracker implements IssueTrackerAdapter {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) throw new Error(`Linear answered ${response.status}`);
-    const payload: unknown = await response.json();
-    if (!isRecord(payload)) throw new Error("Linear answered with something other than GraphQL");
+    const payload = await response.json();
+    const wirePayload = wireRecord(unparsedWire(payload));
+    if (!wirePayload) throw new Error("Linear answered with something other than GraphQL");
+    const data = wireRecord(unparsedWire(wirePayload.data));
     return {
-      ...(isRecord(payload.data) ? { data: payload.data } : {}),
-      ...(Array.isArray(payload.errors) && payload.errors.length > 0
-        ? { errors: payload.errors }
-        : {}),
+      ...(data ? { data } : undefined),
+      ...(Array.isArray(wirePayload.errors) && wirePayload.errors.length > 0
+        ? { errors: wirePayload.errors }
+        : undefined),
     };
   }
 }
 
 interface GraphQlPayload {
-  data?: Record<string, unknown>;
+  data?: WireRecord;
   errors?: readonly unknown[];
 }

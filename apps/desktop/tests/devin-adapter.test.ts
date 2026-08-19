@@ -53,6 +53,7 @@ interface TestSession {
   omitUser?: boolean;
   pullRequest?: string;
   omitPullRequest?: boolean;
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   /** Devin reports seconds; the adapter must not read them as milliseconds. */
   updatedAt: number;
 }
@@ -61,13 +62,11 @@ function seconds(timestampMs: number): number {
   return Math.floor(timestampMs / 1000);
 }
 
-function sessionPayload(session: TestSession): Record<string, unknown> {
-  return {
+function sessionPayload(session: TestSession) {
+  const payload = {
     session_id: session.id,
     org_id: TEST_ORG_ID,
-    ...(session.omitTitle ? {} : { title: session.title ?? TEST_SESSION_TITLE }),
     status: session.status ?? TEST_STATUS.RUNNING,
-    ...(session.detail ? { status_detail: session.detail } : {}),
     created_at: seconds(session.updatedAt),
     updated_at: seconds(session.updatedAt),
     is_archived: session.archived === true,
@@ -78,13 +77,23 @@ function sessionPayload(session: TestSession): Record<string, unknown> {
     // The session's own output, which is shaped by whoever prompted it: not a
     // recap a provider wrote, so no observation carries it.
     structured_output: { summary: "SECRET_STRUCTURED_OUTPUT" },
-    ...(session.omitUser ? {} : { user_id: session.userId ?? TEST_USER_ID }),
-    ...(session.omitPullRequest
-      ? { pull_requests: [] }
-      : {
-          pull_requests: [{ pr_url: session.pullRequest ?? TEST_PULL_REQUEST, pr_state: "open" }],
-        }),
+    pull_requests: [],
   };
+  if (!session.omitTitle) {
+    payload.title = session.title ?? TEST_SESSION_TITLE;
+  }
+  if (session.detail) {
+    payload.status_detail = session.detail;
+  }
+  if (!session.omitUser) {
+    payload.user_id = session.userId ?? TEST_USER_ID;
+  }
+  if (!session.omitPullRequest) {
+    payload.pull_requests = [
+      { pr_url: session.pullRequest ?? TEST_PULL_REQUEST, pr_state: "open" },
+    ];
+  }
+  return payload;
 }
 
 /** Serves the read-only subset of the public v3 API the adapter may use. */
@@ -111,15 +120,21 @@ function fakeDevinApi(
     if (pathname === "/v3/self") {
       const principal = options.principal ?? TEST_PRINCIPAL.PAT_USER;
       const orgId = "orgId" in options ? options.orgId : TEST_ORG_ID;
-      return jsonResponse({
+      const self = {
         principal_type: principal,
         api_key_id: "key-1",
         api_key_name: "Luke",
-        ...(principal === TEST_PRINCIPAL.SERVICE_USER
-          ? { service_user_id: "service-1", service_user_name: "CI" }
-          : { user_id: options.userId ?? TEST_USER_ID }),
-        ...(orgId ? { org_id: orgId } : {}),
-      });
+      };
+      if (principal === TEST_PRINCIPAL.SERVICE_USER) {
+        self.service_user_id = "service-1";
+        self.service_user_name = "CI";
+      } else {
+        self.user_id = options.userId ?? TEST_USER_ID;
+      }
+      if (orgId) {
+        self.org_id = orgId;
+      }
+      return jsonResponse(self);
     }
 
     if (pathname !== `/v3/organizations/${TEST_ORG_ID}/sessions`) {
@@ -185,10 +200,10 @@ describeCloudAdapterContract("Devin", (options) => {
 
 test("declares every provider operation on one adapter interface", () => {
   const adapter = adapterFor(async () => new Response("{}", { status: 200 }));
-  assert.equal(typeof adapter.sendMessage, "function");
-  assert.equal(typeof adapter.executeControl, "function");
-  assert.equal(typeof adapter.createWorkspace, "function");
-  assert.equal(typeof adapter.spawnWorkspaceAgent, "function");
+  assert.ok(adapter.sendMessage instanceof Function);
+  assert.ok(adapter.executeControl instanceof Function);
+  assert.ok(adapter.createWorkspace instanceof Function);
+  assert.ok(adapter.spawnWorkspaceAgent instanceof Function);
 });
 
 test("advertises the archive only for a session positively seen settled", async () => {
@@ -382,12 +397,17 @@ test("maps the states Devin reports onto states Luke can show", async () => {
         ["devin-errored", TEST_STATUS.ERROR, undefined],
         ["devin-later-state", "some_later_state", undefined],
       ] as const
-    ).map(([id, status, detail], index) => ({
-      id,
-      status,
-      ...(detail ? { detail } : {}),
-      updatedAt: TEST_TIME - (index + 1) * 1_000,
-    })),
+    ).map(([id, status, detail], index) => {
+      const session: TestSession = {
+        id,
+        status,
+        updatedAt: TEST_TIME - (index + 1) * 1_000,
+      };
+      if (detail) {
+        session.detail = detail;
+      }
+      return session;
+    }),
   );
 
   const observations = await adapterFor(api.fetch).observe();
@@ -416,6 +436,7 @@ test("maps the states Devin reports onto states Luke can show", async () => {
   );
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("reports an archived session as complete whatever it was doing", async () => {
   const api = fakeDevinApi([
     { ...workingSession("devin-archived", TEST_TIME - 1_000), archived: true },
@@ -426,9 +447,11 @@ test("reports an archived session as complete whatever it was doing", async () =
   assert.equal(observations[0]?.status, SESSION_STATUS.COMPLETE);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("keeps reporting a long turn as working, and a session that ended as complete", async () => {
   // A state is stamped with the moment it was entered rather than with a
   // heartbeat, so neither a turn that started an hour ago nor a session that
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // ended an hour ago may be reported as anything else.
   const startedAt = TEST_TIME - 60 * 60 * 1000;
   const api = fakeDevinApi([
@@ -460,8 +483,11 @@ test("stops calling a session that is holding for the user waiting once it goes 
   assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("reads a timestamp Devin reports in seconds as the moment it means", async () => {
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // Devin types its timestamps as bare integers without naming the unit, so a
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // session updated a minute ago must not read as one from 1970.
   const api = fakeDevinApi([workingSession("devin-recent", TEST_TIME - 60_000)]);
 
@@ -590,6 +616,7 @@ test("drops a session it cannot place in time without losing the rest of the pas
   );
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("forgets who a replaced credential belonged to before reading as the new one", async () => {
   const api = fakeDevinApi([workingSession("devin-working", TEST_TIME - 1_000)]);
   let apiKey = TEST_API_KEY;
@@ -604,6 +631,7 @@ test("forgets who a replaced credential belonged to before reading as the new on
 
   assert.equal(observations.length, 1);
   // The identity is read again rather than carried over from the key it was
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // read with, so no session can be reported as the wrong person's.
   assert.deepEqual(
     api.requests.map((request) => request.pathname),

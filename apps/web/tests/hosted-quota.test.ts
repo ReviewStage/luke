@@ -11,21 +11,37 @@ import {
 
 const NOON_UTC = Date.parse("2026-08-17T12:00:00.000Z");
 
+type UsageDatabase = Parameters<typeof spendHostedMeter>[0];
+
+interface HostedUsageInsert {
+  userId: string;
+  day: string;
+  voiceCalls: number;
+  attentionReviews: number;
+}
+
+type HostedUsageConflictSet = { voiceCalls: unknown } | { attentionReviews: unknown };
+
+interface RecordedUpsert {
+  values?: HostedUsageInsert;
+  set?: HostedUsageConflictSet;
+}
+
 /**
  * A database that answers the one upsert the meter makes, recording what was
- * asked. The chain mirrors drizzle's fluent insert; the cast is the same seam
- * the migration tests use for `pg.Client`.
+ * asked. The chain mirrors drizzle's fluent insert.
  */
-function usageDatabase(row: { voiceCalls: number; attentionReviews: number }) {
-  const calls: { values?: Record<string, unknown>; set?: Record<string, unknown> } = {};
+function usageDatabase(row: Pick<HostedUsageInsert, "voiceCalls" | "attentionReviews">) {
+  const calls: RecordedUpsert = {};
+  // SAFETY: Test double implements only the insert chain spendHostedMeter exercises.
   const database = {
-    insert(table: unknown) {
+    insert(table: typeof hostedUsage) {
       assert.equal(table, hostedUsage);
       return {
-        values(values: Record<string, unknown>) {
+        values(values: HostedUsageInsert) {
           calls.values = values;
           return {
-            onConflictDoUpdate(update: { set: Record<string, unknown> }) {
+            onConflictDoUpdate(update: { set: HostedUsageConflictSet }) {
               calls.set = update.set;
               return {
                 returning: async () => [{ ...values, ...row }],
@@ -35,8 +51,8 @@ function usageDatabase(row: { voiceCalls: number; attentionReviews: number }) {
         },
       };
     },
-  };
-  return { database: database as Parameters<typeof spendHostedMeter>[0], calls };
+  } as unknown as UsageDatabase;
+  return { database, calls };
 }
 
 test("a day key is the UTC date and resets at the following midnight", () => {

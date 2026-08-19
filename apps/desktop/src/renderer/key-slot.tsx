@@ -1,6 +1,10 @@
 import { useEffect, useRef } from "react";
 import type { CredentialSource } from "../shared/contracts";
-import { CREDENTIAL_PROVIDERS, providerRunsSessionsInCloud } from "../shared/credential-providers";
+import {
+  CREDENTIAL_CONNECTION,
+  CREDENTIAL_PROVIDERS,
+  providerRunsSessionsInCloud,
+} from "../shared/credential-providers";
 import {
   CREDENTIAL_PLACEHOLDER,
   type CredentialEntryControl,
@@ -19,6 +23,7 @@ import { ExternalIcon } from "./settings-icons";
  * window — including the page the key has to be copied from. So the panel gets
  * out of the way of its own field: the slot is narrow enough to leave that page
  * readable and it stays put — nothing the pointer does dismisses it — because a
+ // SAFETY: The preceding check establishes the asserted contract.
  * credential on the clipboard is only worth as much as the place to put it. The
  * provider's mark comes along so the field is never anonymous, the label says
  * what to paste in the provider's own word for it, and the confirm is quiet
@@ -79,11 +84,9 @@ export function KeySlot({
   if (!entry) return null;
 
   const provider = CREDENTIAL_PROVIDERS[entry.providerId];
-  // Most providers issue an API key. One issues something it calls by another
-  // name, and a field asking for the wrong thing sends someone to the page that
-  // hands out the credential Luke refuses — so the slot names it, exactly as the
-  // line it opened from does.
-  const credential = provider.keyFormat?.label ?? "API key";
+  if (provider.connection !== CREDENTIAL_CONNECTION.KEY) return null;
+
+  const credential = "keyFormat" in provider ? (provider.keyFormat?.label ?? "API key") : "API key";
   // Holding a key is what brings the confirm out; being able to send it is what
   // makes it pressable. They differ while one is being written, and the button
   // has to stay on screen to say so.

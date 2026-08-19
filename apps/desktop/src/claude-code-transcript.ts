@@ -1,5 +1,12 @@
 import path from "node:path";
-import { isRecord, oneLine, text } from "@sidecar/core";
+import {
+  isRecord,
+  isWireString,
+  oneLine,
+  text,
+  type UnparsedWireValue,
+  type WireRecord,
+} from "@sidecar/core";
 import { readDirectory, readTail, statDirectoryEntry, tailRecords } from "./local-session-adapter";
 import {
   boundedTranscript,
@@ -24,7 +31,7 @@ const CLAUDE_PROJECTS_DIRECTORY = "projects";
 const CLAUDE_SESSION_FILE_EXTENSION = ".jsonl";
 
 /** The same shape the observation hook accepts: the ids Claude Code mints. */
-const CLAUDE_SESSION_ID_SHAPE = /^[0-9a-fA-F-]{8,64}$/;
+const CLAUDE_SESSION_ID_PATTERN = /^[0-9a-fA-F-]{8,64}$/;
 
 /** Tool inputs whose value names the work, in the order they read best. */
 const TOOL_INPUT_KEYS = ["description", "file_path", "pattern", "command", "prompt"] as const;
@@ -36,7 +43,7 @@ export interface ClaudeTranscriptRequest {
   maximumRenderedLength?: number;
 }
 
-function toolLine(block: Record<string, unknown>): string | undefined {
+function toolLine(block: WireRecord): string | undefined {
   const name = text(block.name);
   if (!name) return undefined;
   const input = isRecord(block.input) ? block.input : {};
@@ -48,8 +55,8 @@ function toolLine(block: Record<string, unknown>): string | undefined {
 }
 
 /** The words inside one value, whether it is a string or text blocks. */
-function wordsFromContent(content: unknown): string | undefined {
-  if (typeof content === "string") return text(content);
+function wordsFromContent(content: UnparsedWireValue): string | undefined {
+  if (isWireString(content)) return text(content);
   if (Array.isArray(content)) {
     const parts = content
       .filter(isRecord)
@@ -68,14 +75,14 @@ function wordsFromContent(content: unknown): string | undefined {
  * with only that bookkeeping shape — a string outright, or an object whose
  * output rides `stdout`, `stderr`, or `content`.
  */
-function toolResultText(record: Record<string, unknown>): string | undefined {
+function toolResultText(record: WireRecord): string | undefined {
   for (const block of transcriptContentBlocks(record, true)) {
     if (block.type !== "tool_result") continue;
     const words = wordsFromContent(block.content);
     if (words) return words;
   }
   const result = record.toolUseResult;
-  if (typeof result === "string") return text(result);
+  if (isWireString(result)) return text(result);
   if (isRecord(result)) {
     return (
       wordsFromContent(result.content) ?? text(result.stdout) ?? text(result.stderr) ?? undefined
@@ -84,13 +91,13 @@ function toolResultText(record: Record<string, unknown>): string | undefined {
   return undefined;
 }
 
-function isToolResult(record: Record<string, unknown>): boolean {
+function isToolResult(record: WireRecord): boolean {
   if (record.toolUseResult !== undefined) return true;
   return transcriptContentBlocks(record, true).some((block) => block.type === "tool_result");
 }
 
 /** Renders one record into the lines a conversation can carry, oldest first. */
-function linesFromRecord(record: Record<string, unknown>): string[] {
+function linesFromRecord(record: WireRecord): string[] {
   if (record.type === "user") {
     if (isToolResult(record)) {
       const answer = oneLine(toolResultText(record), TRANSCRIPT_BOUNDS.MAXIMUM_TOOL_LENGTH);
@@ -133,6 +140,7 @@ function linesFromRecord(record: Record<string, unknown>): string[] {
 /**
  * Finds the session's transcript file the way discovery does — the file named
  * by the session's own id, directly inside one of the project directories —
+ // SAFETY: The preceding check establishes the asserted contract.
  * without trusting the id as a path: an id outside the shape Claude Code
  * mints names nothing.
  */
@@ -140,7 +148,7 @@ async function transcriptFilePath(
   claudeHome: string,
   providerSessionId: string,
 ): Promise<string | undefined> {
-  if (!CLAUDE_SESSION_ID_SHAPE.test(providerSessionId)) return undefined;
+  if (!CLAUDE_SESSION_ID_PATTERN.test(providerSessionId)) return undefined;
   const projectsDirectory = path.join(claudeHome, CLAUDE_PROJECTS_DIRECTORY);
   const fileName = `${providerSessionId}${CLAUDE_SESSION_FILE_EXTENSION}`;
   for (const entry of await readDirectory(projectsDirectory)) {

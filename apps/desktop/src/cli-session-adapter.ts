@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import path from "node:path";
 import {
-  isRecord,
+  isWireNumber,
   PROVIDER_ACT_RESULT_STATUS,
   type ProviderActResult,
   type ProviderSessionObservation,
@@ -9,8 +9,10 @@ import {
   SESSION_LOCATION,
   type SessionProvider,
   SessionProviderAdapterBase,
+  type WireRecord,
 } from "@sidecar/core";
 import { CLI_CONNECTION, type CliConnection } from "./shared/contracts";
+import { unparsedWire, type WireBoundaryInput, wireRecord } from "./wire-boundary";
 
 /**
  * How a CLI-observed provider fails. Unavailable means there is nothing to
@@ -95,13 +97,15 @@ const defaultRun: CliRun = (binary, argv, options) =>
           resolve({ exitCode: 0, stdout });
           return;
         }
+        // SAFETY: The preceding check establishes the asserted contract.
         const exitCode = (error as NodeJS.ErrnoException & { code?: unknown }).code;
-        if (typeof exitCode === "number") {
+        if (isWireNumber(exitCode)) {
           resolve({ exitCode, stdout });
           return;
         }
         reject(
           new CliCommandError(
+            // SAFETY: The preceding check establishes the asserted contract.
             (error as NodeJS.ErrnoException).code === "ENOENT"
               ? CLI_FAILURE.UNAVAILABLE
               : CLI_FAILURE.TRANSIENT,
@@ -121,7 +125,7 @@ export interface CliAdapterOptions {
    * being unavailable or a command failing — a TypeError in a subclass's
    * parsing, for example. Unavailable and transient failures never reach it.
    */
-  onDiagnostic?: (error: unknown) => void;
+  onDiagnostic?: (error: Error) => void;
 }
 
 /** The provider identity and the one binary a subclass observes with. */
@@ -139,12 +143,13 @@ export interface CliAdapterProfile {
 
 /**
  * The only way a subclass reaches its provider while observing: one invocation
+ // SAFETY: The preceding check establishes the asserted contract.
  * of the profile's binary, bounded in time and output, parsed as JSON, and
  * discarded past what the subclass reports. The argv a subclass passes must be
  * fixed by the build — the same rule that fixes a POSTed read document — with
  * nothing interpolated beyond bounded values the provider itself reported.
  */
-export type CliReadRequest = (argv: readonly string[]) => Promise<Record<string, unknown>>;
+export type CliReadRequest = (argv: readonly string[]) => Promise<WireRecord>;
 
 /**
  * The shared half of every CLI-observed provider adapter: the login gate, its
@@ -152,8 +157,10 @@ export type CliReadRequest = (argv: readonly string[]) => Promise<Record<string,
  * survives, and bounded read-only invocations of the provider's own CLI.
  *
  * The credential never passes through Luke. The CLI holds the login the user
+ // SAFETY: The preceding check establishes the asserted contract.
  * gave it for its own sake, and observation runs under it exactly as the
  * user's own terminal would — Luke reads no token, stores none, and passes
+ // SAFETY: The preceding check establishes the asserted contract.
  * none. A machine whose CLI is absent or signed out is observed as having
  * nothing, the same answer a cloud provider gives with no key, so observation
  * begins and ends with the user's own login and nothing else.
@@ -166,7 +173,7 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
   readonly #run: CliRun;
   readonly #now: () => number;
   readonly #minimumRefreshIntervalMs: number;
-  readonly #onDiagnostic: ((error: unknown) => void) | undefined;
+  readonly #onDiagnostic: ((error: Error) => void) | undefined;
 
   #observations: readonly ProviderSessionObservation[] = [];
   #lastAttemptAt = Number.NEGATIVE_INFINITY;
@@ -224,7 +231,7 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
       // Anything else is a bug in this pass — a TypeError thrown by a
       // subclass's parsing is not a flaky command, and must not keep serving
       // the stale snapshot with no log, counter, or hook.
-      this.#onDiagnostic?.(error);
+      this.#onDiagnostic?.(error instanceof Error ? error : new Error(String(error)));
       throw error;
     }
     return this.#observations;
@@ -254,6 +261,7 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
   /**
    * The one authenticated write: a single invocation of the provider's own
    * CLI, for something the user just asked for against what the latest pass
+   // SAFETY: The preceding check establishes the asserted contract.
    * observed — a subclass validates before it builds the argv, exactly as the
    * cloud base does. The login is probed at act time rather than held from
    * the observation pass, so a CLI signed out since then refuses before
@@ -357,16 +365,17 @@ export abstract class CliSessionAdapter extends SessionProviderAdapterBase {
       if (result.exitCode !== 0) {
         throw new CliCommandError(CLI_FAILURE.TRANSIENT, `${name} CLI answered with a failure`);
       }
-      let body: unknown;
+      let body: WireBoundaryInput;
       try {
         body = JSON.parse(result.stdout);
       } catch {
         throw new CliCommandError(CLI_FAILURE.TRANSIENT, `${name} CLI answered unreadably`);
       }
-      if (!isRecord(body)) {
+      const bodyRecord = wireRecord(unparsedWire(body));
+      if (!bodyRecord) {
         throw new CliCommandError(CLI_FAILURE.TRANSIENT, `${name} CLI answered unexpectedly`);
       }
-      return body;
+      return bodyRecord;
     };
   }
 

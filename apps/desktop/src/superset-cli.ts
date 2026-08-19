@@ -4,12 +4,16 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import {
+  isRecord,
   PROVIDER_ACT_RESULT_STATUS,
   type ProviderControlResult,
   type ProviderMessageResult,
   type ProviderWorkspaceRequest,
   type ProviderWorkspaceResult,
   SessionProviderAdapterBase,
+  text,
+  type UnparsedWireValue,
+  type WireRecord,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceProject,
 } from "@sidecar/core";
@@ -19,6 +23,7 @@ import {
   type SupersetOrganizationChoice,
 } from "./shared/contracts";
 import type { SupersetSessionContext } from "./superset-workspaces";
+import { unparsedWire, wireRecord } from "./wire-boundary";
 
 export const SUPERSET_CONTROL_ID = {
   OPEN_WORKSPACE: "superset-open-workspace",
@@ -39,15 +44,13 @@ const SUPERSET_PROJECT_REFRESH_INTERVAL_MS = 60_000;
 const LOCAL_TARGET_ID = "local";
 const ANSI_ESCAPE_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "gu");
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function supersetFailureReason(error: unknown): string {
-  if (!isRecord(error) || typeof error.stderr !== "string") {
+function supersetFailureReason(error: UnparsedWireValue): string {
+  const record = wireRecord(error);
+  const stderr = record ? text(record.stderr) : undefined;
+  if (!stderr) {
     return "Superset could not create that workspace.";
   }
-  const reason = error.stderr
+  const reason = stderr
     .replace(ANSI_ESCAPE_PATTERN, "")
     .split(/\r?\n/u)
     .map((line) => line.trim())
@@ -151,7 +154,7 @@ export class SupersetCli {
     try {
       return (await fs.stat(this.executable)).isFile();
     } catch (error) {
-      if (canIgnoreFilesystemError(error)) return false;
+      if (error instanceof Error && canIgnoreFilesystemError(error)) return false;
       throw error;
     }
   }
@@ -171,22 +174,23 @@ export class SupersetCli {
   async organizations(): Promise<readonly SupersetOrganizationChoice[]> {
     try {
       const output = await this.#query(this.executable, ["organization", "list", "--json"], 30_000);
-      const parsed: unknown = JSON.parse(output);
+      const parsed = unparsedWire(JSON.parse(output));
+      const envelope = wireRecord(parsed);
       const values = Array.isArray(parsed)
         ? parsed
-        : isRecord(parsed) && Array.isArray(parsed.data)
-          ? parsed.data
+        : envelope && Array.isArray(envelope.data)
+          ? envelope.data
           : [];
       return values.slice(0, SUPERSET_ORGANIZATION_LIMIT).flatMap((value) => {
         if (!isRecord(value)) return [];
-        const { id, name, slug } = value;
-        return typeof id === "string" &&
-          id.length > 0 &&
+        const id = text(value.id);
+        const name = text(value.name);
+        const slug = text(value.slug);
+        return id &&
           id.length <= 128 &&
-          typeof name === "string" &&
-          name.length > 0 &&
+          name &&
           name.length <= 120 &&
-          typeof slug === "string" &&
+          slug &&
           /^[a-z0-9][a-z0-9-]{0,79}$/u.test(slug)
           ? [{ id, name, slug }]
           : [];
@@ -202,20 +206,8 @@ export class SupersetCli {
     const targets = [
       { id: LOCAL_TARGET_ID, name: "This Mac", arguments_: ["--local"] as const },
       ...remoteHosts.slice(0, SUPERSET_TARGET_LIMIT).flatMap((host) => {
-        const id =
-          typeof host.machineId === "string"
-            ? host.machineId
-            : typeof host.id === "string"
-              ? host.id
-              : undefined;
-        const name =
-          typeof host.name === "string"
-            ? host.name
-            : typeof host.displayName === "string"
-              ? host.displayName
-              : typeof host.hostname === "string"
-                ? host.hostname
-                : id;
+        const id = text(host.machineId) ?? text(host.id);
+        const name = text(host.name) ?? text(host.displayName) ?? text(host.hostname) ?? id;
         return id && name ? [{ id, name, arguments_: ["--host", id] as const }] : [];
       }),
     ];
@@ -228,7 +220,7 @@ export class SupersetCli {
         const agents = [
           ...new Set(
             agentRows.flatMap((row) => {
-              const presetId = typeof row.presetId === "string" ? row.presetId : undefined;
+              const presetId = text(row.presetId);
               return presetId ? [presetId] : [];
             }),
           ),
@@ -236,21 +228,21 @@ export class SupersetCli {
         const selectedDefault =
           defaultAgent && agents.includes(defaultAgent) ? defaultAgent : undefined;
         return projectRows.slice(0, SUPERSET_PROJECT_LIMIT).flatMap((row) => {
-          const id = typeof row.id === "string" ? row.id : undefined;
-          const name = typeof row.name === "string" ? row.name : undefined;
-          return id && name
-            ? [
-                {
-                  providerProjectId: id,
-                  repository: name,
-                  taskSupport: WORKSPACE_TASK_SUPPORT.REQUIRED,
-                  providerTargetId: target.id,
-                  targetName: target.name,
-                  spawnableAgents: agents,
-                  ...(selectedDefault ? { defaultAgent: selectedDefault } : {}),
-                },
-              ]
-            : [];
+          const id = text(row.id);
+          const name = text(row.name);
+          if (!id || !name) return [];
+          const project: WorkspaceProject = {
+            providerProjectId: id,
+            repository: name,
+            taskSupport: WORKSPACE_TASK_SUPPORT.REQUIRED,
+            providerTargetId: target.id,
+            targetName: target.name,
+            spawnableAgents: agents,
+          };
+          if (selectedDefault) {
+            project.defaultAgent = selectedDefault;
+          }
+          return [project];
         });
       }),
     );
@@ -296,13 +288,10 @@ export class SupersetCli {
     if (!(await this.connected())) return { status: PROVIDER_ACT_RESULT_STATUS.UNSUPPORTED };
     try {
       const output = await this.#query(this.executable, arguments_, 30_000);
-      const parsed: unknown = JSON.parse(output);
-      const workspaceId = isRecord(parsed)
-        ? typeof parsed.workspaceId === "string"
-          ? parsed.workspaceId
-          : typeof parsed.id === "string"
-            ? parsed.id
-            : undefined
+      const parsed = unparsedWire(JSON.parse(output));
+      const workspaceRecord = wireRecord(parsed);
+      const workspaceId = workspaceRecord
+        ? (text(workspaceRecord.workspaceId) ?? text(workspaceRecord.id))
         : undefined;
       if (!workspaceId) return { status: PROVIDER_ACT_RESULT_STATUS.ACCEPTED };
       try {
@@ -323,9 +312,22 @@ export class SupersetCli {
         };
       }
     } catch (error) {
+      if (error instanceof Error && "stderr" in error) {
+        return {
+          status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
+          reason: supersetFailureReason(
+            unparsedWire({
+              // SAFETY: execFile failures attach stderr to the thrown Error object.
+              stderr: (error as Error & { stderr?: UnparsedWireValue }).stderr,
+            }),
+          ),
+        };
+      }
       return {
         status: PROVIDER_ACT_RESULT_STATUS.REJECTED,
-        reason: supersetFailureReason(error),
+        reason: supersetFailureReason(
+          unparsedWire(error instanceof Error ? error.message : String(error)),
+        ),
       };
     }
   }
@@ -417,15 +419,21 @@ export class SupersetCli {
     }
   }
 
-  async #records(arguments_: readonly string[]): Promise<readonly Record<string, unknown>[]> {
+  async #records(arguments_: readonly string[]): Promise<readonly WireRecord[]> {
     try {
-      const parsed: unknown = JSON.parse(await this.#query(this.executable, arguments_, 30_000));
+      const parsed = unparsedWire(
+        JSON.parse(await this.#query(this.executable, arguments_, 30_000)),
+      );
+      const envelope = wireRecord(parsed);
       const values = Array.isArray(parsed)
         ? parsed
-        : isRecord(parsed) && Array.isArray(parsed.data)
-          ? parsed.data
+        : envelope && Array.isArray(envelope.data)
+          ? envelope.data
           : [];
-      return values.filter(isRecord);
+      return values.flatMap((value) => {
+        const record = wireRecord(value);
+        return record ? [record] : [];
+      });
     } catch {
       return [];
     }

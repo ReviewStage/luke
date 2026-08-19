@@ -17,10 +17,10 @@ export type HostedMeter = (typeof HOSTED_METER)[keyof typeof HOSTED_METER];
  * attention review is one session update weighed. The OpenAI project budget
  * behind the key is the backstop these ceilings exist to keep distant.
  */
-export const HOSTED_DAILY_LIMIT: Record<HostedMeter, number> = {
+export const HOSTED_DAILY_LIMIT = {
   [HOSTED_METER.VOICE_CALL]: 50,
   [HOSTED_METER.ATTENTION_REVIEW]: 500,
-};
+} as const satisfies Record<HostedMeter, number>;
 
 /* The quota shape is the wire contract's, imported rather than restated, so
    the endpoint and the desktop reading it cannot drift. */

@@ -120,7 +120,7 @@ export class VoiceCapabilityAssembler {
       serviceBaseUrl: this.#options.hostedServiceBaseUrl,
       readAccessToken: async () => (await this.#options.settings.readAccount())?.accessToken,
       refreshAccount: this.#options.refreshAccount,
-      ...(this.#options.fetch ? { fetch: this.#options.fetch } : {}),
+      ...(this.#options.fetch ? { fetch: this.#options.fetch } : undefined),
     };
     const evaluator = apiKey
       ? openAiAttentionEvaluator(apiKey)
@@ -139,8 +139,8 @@ export class VoiceCapabilityAssembler {
       this.#options.settings.get(APP_SETTING_SCHEMA.voiceSpeed.field).catch(() => undefined),
     ]);
     const preferences = {
-      ...(voice ? { voice } : {}),
-      ...(speed ? { speed } : {}),
+      ...(voice ? { voice } : undefined),
+      ...(speed ? { speed } : undefined),
     };
     this.#realtimeCredentials = apiKey
       ? openAiRealtimeCredentials(apiKey, preferences)

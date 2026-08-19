@@ -4,12 +4,14 @@ import {
   isRecord,
   REALTIME_CALLS_PATH,
   REALTIME_CLIENT_SECRETS_PATH,
+  type RealtimeSessionOptions,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
   realtimeClientSecretRequest,
   realtimeCredentialFromResponse,
   realtimeCredentialIsUsable,
   text as trimmedText,
+  type UnparsedWireValue,
 } from "../core.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 import { type FetchLike, HOSTED_OPENAI_DEFAULTS, postOpenAi } from "./openai.js";
@@ -48,15 +50,17 @@ export async function voiceMintPreferences(
   } catch {
     return undefined;
   }
-  if (!isRecord(payload)) return undefined;
+  // SAFETY: JSON.parse returns a runtime value; isRecord validates the object contract.
+  const wire = payload as UnparsedWireValue;
+  if (!isRecord(wire)) return undefined;
 
-  if (payload.voice !== undefined && !isRealtimeVoice(payload.voice)) return undefined;
-  if (payload.speed !== undefined && !isRealtimeVoiceSpeed(payload.speed)) return undefined;
+  if (wire.voice !== undefined && !isRealtimeVoice(wire.voice)) return undefined;
+  if (wire.speed !== undefined && !isRealtimeVoiceSpeed(wire.speed)) return undefined;
 
-  return {
-    ...(payload.voice !== undefined ? { voice: payload.voice } : {}),
-    ...(payload.speed !== undefined ? { speed: payload.speed } : {}),
-  };
+  const preferences: VoiceMintPreferences = {};
+  if (wire.voice !== undefined) preferences.voice = wire.voice;
+  if (wire.speed !== undefined) preferences.speed = wire.speed;
+  return preferences;
 }
 
 export interface VoiceMintOptions {
@@ -105,13 +109,14 @@ export async function handleVoiceMint(options: VoiceMintOptions): Promise<Respon
     });
   }
 
+  const sessionOptions: RealtimeSessionOptions = {};
+  if (model) sessionOptions.model = model;
+  if (preferences.voice) sessionOptions.voice = preferences.voice;
+  if (preferences.speed) sessionOptions.speed = preferences.speed;
+
   const response = await postOpenAi(
     REALTIME_CLIENT_SECRETS_PATH,
-    realtimeClientSecretRequest({
-      ...(model ? { model } : {}),
-      ...(preferences.voice ? { voice: preferences.voice } : {}),
-      ...(preferences.speed ? { speed: preferences.speed } : {}),
-    }),
+    realtimeClientSecretRequest(sessionOptions),
     { apiKey, fetch: options.fetch, timeoutMs: options.timeoutMs },
   );
   if (!response) {
@@ -129,7 +134,13 @@ export async function handleVoiceMint(options: VoiceMintOptions): Promise<Respon
   // minter: a payload that omits its model still labels the credential with
   // the model it was actually minted for.
   const credential =
-    payload === undefined ? undefined : realtimeCredentialFromResponse(payload, model);
+    payload === undefined
+      ? undefined
+      : realtimeCredentialFromResponse(
+          // SAFETY: response.json returns a runtime value; realtimeCredentialFromResponse validates the wire contract.
+          payload as UnparsedWireValue,
+          model,
+        );
   const now = options.now ?? Date.now;
   if (!credential || !realtimeCredentialIsUsable(credential, now())) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR);

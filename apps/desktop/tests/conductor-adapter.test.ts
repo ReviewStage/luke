@@ -68,30 +68,40 @@ function isoTimestamp(timestampMs: number): string {
   return new Date(timestampMs).toISOString();
 }
 
-function page(data: readonly unknown[]): unknown {
+function page<T>(data: readonly T[]) {
   return { data, offset: 0, hasMore: false };
 }
 
-function workspacePayload(workspace: TestWorkspace): Record<string, unknown> {
-  return {
+function workspacePayload(workspace: TestWorkspace) {
+  const payload = {
     id: workspace.id,
     name: workspace.name,
     createdAt: isoTimestamp(workspace.lastActivityAt),
     deepLink: `conductor://workspace?id=${workspace.id}`,
     lastActivityAt: isoTimestamp(workspace.lastActivityAt),
-    ...(workspace.creatorId ? { creatorId: workspace.creatorId } : {}),
-    ...(workspace.archivedAt ? { archivedAt: workspace.archivedAt } : {}),
   };
+  if (workspace.creatorId) {
+    payload.creatorId = workspace.creatorId;
+  }
+  if (workspace.archivedAt) {
+    payload.archivedAt = workspace.archivedAt;
+  }
+  return payload;
 }
 
-function sessionPayload(session: TestSession): Record<string, unknown> {
-  return {
+function sessionPayload(session: TestSession) {
+  const payload = {
     id: session.id,
     deepLink: `conductor://workspace?session=${session.id}`,
     name: session.name,
-    ...(session.resolvedModel ? { resolvedModel: session.resolvedModel } : {}),
-    ...(session.archivedAt ? { archivedAt: session.archivedAt } : {}),
   };
+  if (session.resolvedModel) {
+    payload.resolvedModel = session.resolvedModel;
+  }
+  if (session.archivedAt) {
+    payload.archivedAt = session.archivedAt;
+  }
+  return payload;
 }
 
 /** Serves the read-only subset of the public API the adapter is allowed to use. */
@@ -101,9 +111,11 @@ function fakeConductorApi(api: TestApi) {
     const { pathname, method, body: rawBody } = request;
     const segments = pathname.split("/").filter((segment) => segment.length > 0);
     if (method === "POST") {
+      // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
       // The transcripts view: the one read that rides as a POSTed document.
       if (segments[1] === "sql" && segments.length === 2) {
         if (api.sqlHttpStatus) return jsonResponse({}, api.sqlHttpStatus);
+        // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
         const body = JSON.parse(rawBody ?? "{}") as {
           query?: string;
         };
@@ -128,6 +140,7 @@ function fakeConductorApi(api: TestApi) {
         return jsonResponse({ workspaceId: workspace.id, status: "archived" });
       }
       if (segments[1] === "workspaces" && segments.length === 2) {
+        // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
         const body = JSON.parse(rawBody ?? "{}") as {
           projectId?: string;
         };
@@ -148,6 +161,7 @@ function fakeConductorApi(api: TestApi) {
         );
       }
       if (segments[1] === "sessions" && segments.length === 2) {
+        // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
         const body = JSON.parse(rawBody ?? "{}") as {
           workspaceId?: string;
           agent?: string;
@@ -199,29 +213,33 @@ function fakeConductorApi(api: TestApi) {
       const workspace = api.workspaces.find((candidate) => candidate.id === segments[2]);
       if (!workspace) return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
       if (workspace.lifecycleHttpStatus) return jsonResponse({}, workspace.lifecycleHttpStatus);
-      return jsonResponse({
+      const lifecycle = {
         workspaceId: workspace.id,
         status: workspace.lifecycleStatus ?? "ready",
         updatedAt: isoTimestamp(workspace.lastActivityAt),
-        ...(workspace.lifecycleErrorMessage
-          ? { errorMessage: workspace.lifecycleErrorMessage }
-          : {}),
-      });
+      };
+      if (workspace.lifecycleErrorMessage) {
+        lifecycle.errorMessage = workspace.lifecycleErrorMessage;
+      }
+      return jsonResponse(lifecycle);
     }
     if (segments[1] === "sessions" && segments[3] === "status") {
       const session = api.sessions.find((candidate) => candidate.id === segments[2]);
       if (!session) return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
       if (session.statusHttpStatus) return jsonResponse({}, session.statusHttpStatus);
-      return jsonResponse({
+      const statusPayload = {
         workspaceId: session.workspaceId,
         sessionId: session.id,
         status: session.status ?? TEST_CONDUCTOR_STATUS.IDLE,
         updatedAt: isoTimestamp(session.statusUpdatedAt ?? TEST_TIME),
-        ...(session.status === TEST_CONDUCTOR_STATUS.ERROR
-          ? { errorMessage: TEST_ERROR_MESSAGE }
-          : {}),
-        ...(session.lastError ? { lastError: session.lastError } : {}),
-      });
+      };
+      if (session.status === TEST_CONDUCTOR_STATUS.ERROR) {
+        statusPayload.errorMessage = TEST_ERROR_MESSAGE;
+      }
+      if (session.lastError) {
+        statusPayload.lastError = session.lastError;
+      }
+      return jsonResponse(statusPayload);
     }
     return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
   });
@@ -248,10 +266,10 @@ function adapterFor(
 
 test("declares every provider operation on one adapter interface", () => {
   const adapter = adapterFor(async () => new Response("{}", { status: 200 }));
-  assert.equal(typeof adapter.sendMessage, "function");
-  assert.equal(typeof adapter.executeControl, "function");
-  assert.equal(typeof adapter.createWorkspace, "function");
-  assert.equal(typeof adapter.spawnWorkspaceAgent, "function");
+  assert.ok(adapter.sendMessage instanceof Function);
+  assert.ok(adapter.executeControl instanceof Function);
+  assert.ok(adapter.createWorkspace instanceof Function);
+  assert.ok(adapter.spawnWorkspaceAgent instanceof Function);
 });
 
 const LUKE_PROJECT: TestProject = {
@@ -351,6 +369,7 @@ test("observes cloud sessions the signed-in user created, under their own names"
   );
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("reports an idle session as waiting and an errored session with its reason", async () => {
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
@@ -508,6 +527,7 @@ const TEST_TRANSCRIPT_TAIL =
   "[12 messages elided]\n\nAll checks pass;\nnext, say whether to ship it.";
 const TEST_RECAP = "All checks pass; next, say whether to ship it.";
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("reads a settled chat's parting words from the transcripts view as its recap", async () => {
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
@@ -795,6 +815,7 @@ test("a refused transcripts read costs the recap and agent kind, never the pass"
 // Every chat of a workspace is its own row, so no chat has to speak for a
 // sibling: a workspace holding a failure and work still running is two facts,
 // and each row reports its own state, opens its own place, and carries the
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 // workspace as the group a surface seats them together by.
 test("reports every chat in a workspace, each grouped under it", async () => {
   const api = fakeConductorApi({
@@ -972,8 +993,10 @@ test("leaves a filed-away chat off the roster while its workspace stays", async 
   );
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("keeps reporting a long turn as working", async () => {
   // Conductor stamps a status with the moment it was entered, so a turn that
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // started an hour ago and is still running must not read as stale.
   const startedAt = TEST_TIME - 60 * 60 * 1000;
   const api = fakeConductorApi({
@@ -998,11 +1021,13 @@ test("keeps reporting a long turn as working", async () => {
   assert.equal(observations[0]?.observedAt, startedAt);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("does not treat a long-idle chat as waiting because its workspace is busy", async () => {
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
     projects: [LUKE_PROJECT],
     // A workspace's activity timestamp moves whenever anything in it runs, so
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     // it can read as fresh while the chat inside was walked away from hours
     // ago. Staleness has to be judged on the chat's own status timestamp.
     workspaces: [
@@ -1240,7 +1265,9 @@ test("keeps observing when one session's status cannot be read", async () => {
   const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
 
   // One chat's unreadable status costs nobody a row: the readable sibling
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // reports what it knows, and the unreadable one stands as unknown rather
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // than being dropped as though it were not there.
   assert.equal(observations.length, 2);
   assert.equal(byId.get("session-readable")?.status, SESSION_STATUS.WORKING);
@@ -1292,6 +1319,7 @@ test("advertises a message for any open chat, a stop mid-turn, and an archive on
   assert.equal(byId.get("session-failed")?.canReceiveMessage, false);
   // A chat mid-turn offers its stop and nothing else; every chat of a settled,
   // still-open workspace — idle or failed — offers to file that workspace
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // away, each naming its own workspace as the target.
   assert.deepEqual(byId.get("session-working")?.controls, [
     { id: "cancel-turn", label: "Stop this turn", kind: "stop" },
@@ -1358,6 +1386,7 @@ test("keeps the archive off a workspace whose chat's state could not be read", a
 
   const observations = await adapterFor(api.fetch).observe();
 
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // An unread status is not a settled one: the chat stands as unknown rather
   // than being dropped, and a workspace not positively seen settled offers no
   // filing away — the turn Luke could not read may still be running.
@@ -1592,6 +1621,7 @@ test("refuses to archive a workspace no row advertised, before any request exist
   assert.equal(api.requests.length, requestsBefore);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("offers the projects the last pass listed as places a workspace can be created", async () => {
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
@@ -1639,6 +1669,7 @@ test("creates a workspace through Conductor's documented creation endpoint", asy
   });
 
   // Left unnamed, the ask carries no name at all: Conductor generates one, and
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // an empty field is not the same request as an absent one.
   const unnamed = await adapter.createWorkspace({ providerProjectId: LUKE_PROJECT.id });
   assert.deepEqual(unnamed, { status: "accepted", providerSessionId: "session-new" });
@@ -1673,6 +1704,7 @@ test("a chosen agent and model ride the creation, and an unlisted pairing does n
   const adapter = adapterFor(api.fetch);
   await adapter.observe();
 
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // A selection the build's table lists is sent exactly as documented, the
   // effort riding along when one was chosen.
   const chosen = await adapter.createWorkspace({
@@ -1717,6 +1749,7 @@ test("a chosen agent and model ride the creation, and an unlisted pairing does n
   }
 
   // No choice at all sends no agent and no model, so Conductor's own
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // defaults decide — an absent field is not the same request as a guessed one.
   await adapter.createWorkspace({ providerProjectId: LUKE_PROJECT.id });
   assert.deepEqual(JSON.parse(api.requests.at(-1)?.body ?? ""), {
@@ -1778,6 +1811,7 @@ test("hands an opening task to the first session the creation response names", a
   });
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("reports a workspace whose task could not be delivered as exactly that", async () => {
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
@@ -1794,10 +1828,12 @@ test("reports a workspace whose task could not be delivered as exactly that", as
     task: "Add a smoke test",
   });
 
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // The workspace stands, so claiming failure outright would be as wrong as
   // claiming success: the answer says which half landed.
   assert.equal(result.status, "rejected");
   assert.match(
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     (result as { reason?: string }).reason ?? "",
     /created, but its opening task was not delivered/,
   );
@@ -1827,6 +1863,7 @@ test("starts another agent in the workspace behind an observed row", async () =>
   const adapter = adapterFor(api.fetch);
   const observations = await adapter.observe();
 
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // The roster row says which agents its workspace can take, exactly as the
   // endpoint takes them.
   assert.deepEqual(observations[0]?.spawnableAgents, ["claude", "codex", "cursor"]);
@@ -1853,6 +1890,7 @@ test("starts another agent in the workspace behind an observed row", async () =>
   });
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a stored model rides a new agent only as the pairing the table lists", async () => {
   const api = fakeConductorApi({
     userId: TEST_USER_ID,

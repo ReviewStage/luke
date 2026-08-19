@@ -15,8 +15,10 @@ import {
   type RealtimeDiagnostics,
   type RealtimeMintOutcome,
   text,
+  type UnparsedWireValue,
 } from "@sidecar/core";
 import type { RealtimeCredentialMinter } from "./realtime-minter";
+import { unparsedWire } from "./wire-boundary";
 
 const HOSTED_DEFAULTS = {
   REQUEST_TIMEOUT_MS: 10_000,
@@ -136,14 +138,16 @@ export class HostedRealtimeCredentialMinter implements RealtimeCredentialMinter 
     }
     if (!response) return undefined;
 
-    const payload: unknown = await response.json().catch(() => undefined);
+    const payload = await response.json().catch(() => undefined);
     if (!response.ok) {
-      this.#refuse(response.status, payload);
+      this.#refuse(response.status, unparsedWire(payload));
       return undefined;
     }
 
     const answer =
-      payload === undefined ? undefined : hostedMintAnswerFromWire(payload, this.#now());
+      payload === undefined
+        ? undefined
+        : hostedMintAnswerFromWire(unparsedWire(payload), this.#now());
     if (!answer) {
       this.#record(REALTIME_MINT_OUTCOME.MALFORMED_RESPONSE, "no usable hosted credential");
       return undefined;
@@ -165,17 +169,19 @@ export class HostedRealtimeCredentialMinter implements RealtimeCredentialMinter 
       speed: this.#speed ?? REALTIME_DEFAULTS.SPEED,
       endpoint: this.#endpoint,
       lastOutcome: this.#lastOutcome,
-      ...(this.#lastDetail ? { lastDetail: this.#lastDetail } : {}),
-      ...(this.#lastAttemptAt === undefined ? {} : { lastAttemptAt: this.#lastAttemptAt }),
-      ...(this.#quota ? { quota: this.#quota } : {}),
+      ...(this.#lastDetail ? { lastDetail: this.#lastDetail } : undefined),
+      ...(this.#lastAttemptAt === undefined ? undefined : { lastAttemptAt: this.#lastAttemptAt }),
+      ...(this.#quota ? { quota: this.#quota } : undefined),
     };
   }
 
   /** Names a refusal from its status and reason, keeping the quota a 429 carries. */
-  #refuse(status: number, payload: unknown): void {
+  #refuse(status: number, payload: UnparsedWireValue): void {
     const reason = hostedErrorFromWire(payload);
     if (status === QUOTA_STATUS && reason === HOSTED_API_ERROR.QUOTA_EXHAUSTED) {
-      this.#quota = isRecord(payload) ? hostedQuotaFromWire(payload.quota) : undefined;
+      this.#quota = isRecord(payload)
+        ? hostedQuotaFromWire(unparsedWire(payload.quota))
+        : undefined;
       this.#record(REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED);
       return;
     }
@@ -191,10 +197,6 @@ export class HostedRealtimeCredentialMinter implements RealtimeCredentialMinter 
   }
 
   async #request(token: string): Promise<Response | undefined> {
-    // The kind of call and nothing else: the token, the preferences, and the
-    // minted secret stay out of the log. The model is the service's choice, so
-    // it has no name to log until the answer arrives.
-    console.log("AI call: hosted realtime voice credential mint");
     try {
       return await this.#fetch(this.#endpoint, {
         method: "POST",
@@ -205,8 +207,8 @@ export class HostedRealtimeCredentialMinter implements RealtimeCredentialMinter 
         // Only values inside the build's own sets travel; anything else lets
         // the service mint its default rather than sending a refusable field.
         body: JSON.stringify({
-          ...(isRealtimeVoice(this.#voice) ? { voice: this.#voice } : {}),
-          ...(isRealtimeVoiceSpeed(this.#speed) ? { speed: this.#speed } : {}),
+          ...(isRealtimeVoice(this.#voice) ? { voice: this.#voice } : undefined),
+          ...(isRealtimeVoiceSpeed(this.#speed) ? { speed: this.#speed } : undefined),
         }),
         signal: AbortSignal.timeout(this.#requestTimeoutMs),
       });

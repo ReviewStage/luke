@@ -168,7 +168,7 @@ test("a stage offset from the viewport is subtracted out of every reading", () =
 });
 
 const TOKENS: ErrandTokens = {
-  shape: 460,
+  surfaceMs: 460,
   quick: 140,
   exit: 90,
   expand: 200,
@@ -200,7 +200,7 @@ test("an errand that opened the panel trails the whole opening", () => {
 });
 
 test("an errand crossing an instant page swap waits for the black surface", () => {
-  assert.equal(errandBeats(TOKENS, ERRAND_WAIT.SURFACE).delay, TOKENS.shape);
+  assert.equal(errandBeats(TOKENS, ERRAND_WAIT.SURFACE).delay, TOKENS.surfaceMs);
 });
 
 /** The window, and the black drawn in the middle of it: a 620-wide open panel. */
@@ -285,6 +285,7 @@ test("the float is a gentle bow, never a manoeuvre", () => {
 
 test("the float leans toward the strip rather than out over the desktop", () => {
   // A control right of the face sends him home leftward, so the bow leans left
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // as well: leaning right would carry it toward the panel's edge.
   const rightward = homeward();
   assert.ok(rightward.journey.from.x < rightward.journey.to.x);
@@ -341,17 +342,18 @@ test("a control drawn where the face already is has no way home to float", () =>
 test("tokens held still leave no flight to run", () => {
   assert.equal(errandFlies(TOKENS), true);
   // What a capture run zeroes, so every PNG lands on the same frame.
-  assert.equal(errandFlies({ ...TOKENS, shape: 0, quick: 0, exit: 0, expand: 0 }), false);
+  assert.equal(errandFlies({ ...TOKENS, surfaceMs: 0, quick: 0, exit: 0, expand: 0 }), false);
   // What reduced motion collapses to. The three durations still sum past the
   // stillness floor, which is exactly why the flight is decided on the shape
   // token rather than on the total: someone who asked for no motion must not
   // get a face crossing the panel in three milliseconds.
-  assert.equal(errandFlies({ ...TOKENS, shape: 1, quick: 1, exit: 1 }), false);
+  assert.equal(errandFlies({ ...TOKENS, surfaceMs: 1, quick: 1, exit: 1 }), false);
 });
 
 test("every setting is signed on the page it is actually drawn on", () => {
   // A page that is not open is not rendered, so a flight to a control on the
   // wrong page finds nothing and quietly goes nowhere. The page each setting
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // lives on is stated twice — once as the page an errand opens, and once as
   // the by-hand path the guide offers — and the two have to be the same
   // answer, which a `Record` cannot enforce because one of them is a sentence.
@@ -422,6 +424,7 @@ test("a control taller than what is left keeps its own top on screen", () => {
 test("the drift is bounded by the shape that will still be there at the end", () => {
   // The captions borrow their room from the panel and give all of it back the
   // moment the reply ends, which can easily happen mid-flight. Bounded by the
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // shape as drawn, a drift could be left on the desktop by that shrink; the
   // room comes off the foot, so the settled shape is the drawn one less the
   // block.
@@ -429,6 +432,7 @@ test("the drift is bounded by the shape that will still be there at the end", ()
   assert.deepEqual(errandSettledBound(drawn, 70), { ...drawn, height: 450 });
   // No captions, nothing borrowed, nothing to take back.
   assert.deepEqual(errandSettledBound(drawn, 0), drawn);
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // An unreadable token reads as zero rather than as a negative reservation,
   // and a block somehow taller than the shape leaves no room rather than a
   // shape inside out.

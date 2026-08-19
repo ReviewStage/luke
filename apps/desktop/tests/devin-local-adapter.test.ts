@@ -7,6 +7,7 @@ import test, { type TestContext } from "node:test";
 import { SESSION_STATUS } from "@sidecar/core";
 import { DEVIN_PROVIDER } from "../src/devin-adapter";
 import { DevinLocalSessionAdapter } from "../src/devin-local-adapter";
+import type { ParsedJsonObject } from "./support/json";
 
 const TEST_TIME = Date.parse("2026-08-18T21:30:00.000Z");
 const DEVIN_DATABASE = "sessions.db";
@@ -20,6 +21,7 @@ const TEST_DEVIN_ENVIRONMENT = {
 /** Words that must never leave the records they are parsed from. */
 const SECRET_TRANSCRIPT_TEXT = "SECRET_ROTATION_TOKEN_ABC123";
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 /** The CLI stores every clock in seconds; the adapter must not read them as ms. */
 function seconds(timeMs: number): number {
   return Math.floor(timeMs / 1000);
@@ -40,28 +42,31 @@ interface TestNode {
   nodeId: number;
   parentNodeId?: number;
   time: number;
-  message: Record<string, unknown>;
+  message: ParsedJsonObject;
 }
 
 interface TestToolCall {
   sessionId: string;
   toolCallId: string;
-  call?: Record<string, unknown>;
-  update?: Record<string, unknown>;
+  call?: ParsedJsonObject;
+  update?: ParsedJsonObject;
 }
 
 function chatMessage(
   role: string,
   content: string,
-  options: { messageId?: string; toolCalls?: readonly Record<string, unknown>[] } = {},
-): Record<string, unknown> {
-  return {
+  options: { messageId?: string; toolCalls?: readonly ParsedJsonObject[] } = {},
+): ParsedJsonObject {
+  const payload: ParsedJsonObject = {
     message_id: options.messageId ?? `msg-${role}-${content.length}`,
     role,
     content,
     metadata: { is_user_input: role === "user" ? true : null, finish_reason: null },
-    ...(options.toolCalls ? { tool_calls: options.toolCalls } : {}),
   };
+  if (options.toolCalls) {
+    payload.tool_calls = options.toolCalls;
+  }
+  return payload;
 }
 
 async function temporaryCliDirectory(t: TestContext): Promise<string> {
@@ -328,6 +333,7 @@ test("falls back to the workspace while Devin has not named the session", async 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("reports a settled Devin turn as waiting for its developer", async (t) => {
   const cliDirectory = await temporaryCliDirectory(t);
   await writeDevinState(

@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import type { SqliteModuleLoader } from "../src/local-sqlite";
 import { OpenCodeSessionAdapter } from "../src/opencode-adapter";
+import type { ParsedJsonObject } from "./support/json";
 
 function readOpenCodeSessionTranscript(request: {
   dataDirectory?: string;
@@ -26,14 +27,14 @@ const OPENCODE_DATABASE = "opencode.db";
 interface TestMessage {
   id: string;
   time: number;
-  data: Record<string, unknown>;
+  data: ParsedJsonObject;
 }
 
 interface TestPart {
   id: string;
   messageId: string;
   time: number;
-  data: Record<string, unknown>;
+  data: ParsedJsonObject;
 }
 
 async function temporaryDataDirectory(t: TestContext): Promise<string> {
@@ -95,6 +96,7 @@ async function writeOpenCodeState(
   }
 }
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("renders a session's turns as a bounded conversation", async (t) => {
   const dataDirectory = await temporaryDataDirectory(t);
   await writeOpenCodeState(
@@ -242,6 +244,7 @@ test("reports a turn's failure but never the stop the developer asked for", asyn
   );
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("renders a failed tool call's own error as its answer", async (t) => {
   const dataDirectory = await temporaryDataDirectory(t);
   await writeOpenCodeState(

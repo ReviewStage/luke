@@ -33,8 +33,8 @@ interface TestTask {
   summary?: { files_changed: number; lines_added: number; lines_removed: number };
 }
 
-function taskPayload(task: TestTask): Record<string, unknown> {
-  return {
+function taskPayload(task: TestTask) {
+  const payload = {
     id: task.id,
     url: `https://chatgpt.com/codex/tasks/${task.id}`,
     // The CLI returns a title generated from the prompt the user typed, so it
@@ -44,13 +44,14 @@ function taskPayload(task: TestTask): Record<string, unknown> {
     updated_at: new Date(task.updatedAt).toISOString(),
     // Real accounts routinely carry no environment id — only the label.
     environment_id: task.environmentId ?? null,
-    ...(task.omitEnvironmentLabel
-      ? {}
-      : { environment_label: task.environmentLabel ?? "reviewstage/luke" }),
     summary: task.summary ?? { files_changed: 3, lines_added: 12, lines_removed: 4 },
     is_review: false,
     attempt_total: 1,
   };
+  if (!task.omitEnvironmentLabel) {
+    payload.environment_label = task.environmentLabel ?? "reviewstage/luke";
+  }
+  return payload;
 }
 
 interface RecordedInvocation {
@@ -138,6 +139,7 @@ function adapterFor(
   });
 }
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("observes cloud tasks as cloud sessions labelled by their environment's repository", async () => {
   const { run, invocations } = fakeCodexCli({
     tasks: [
@@ -204,6 +206,7 @@ test("maps every documented task state and refuses to guess at unknown ones", as
   );
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("labels a task with no environment label as an unnamed workspace", async () => {
   const { run } = fakeCodexCli({
     tasks: [{ id: "task-1", omitEnvironmentLabel: true, updatedAt: TEST_TIME }],
@@ -407,6 +410,7 @@ test("refuses a creation the latest pass did not offer or cannot honour", async 
   // Every refusal above answered without running anything.
   assert.equal(invocations.length, invocationsAfterObserve);
 
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // A CLI that refuses the request is reported as a rejection, not a success.
   behavior.execExitCode = 2;
   const refused = await adapter.createWorkspace({

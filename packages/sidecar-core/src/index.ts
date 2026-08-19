@@ -9,12 +9,18 @@
 // JSON — defensive readers for untrusted payloads.
 export {
   isRecord,
+  isWireNumber,
+  isWireString,
   nonNegativeNumber,
   oneLine,
   positiveInteger,
   recordFromJsonLine,
   resolveOptions,
   text,
+  type UnparsedWireValue,
+  type WirePrimitive,
+  type WireRecord,
+  type WireValue,
   wholeNumber,
 } from "./json.js";
 
@@ -247,6 +253,7 @@ export {
   type RealtimeConnection,
   type RealtimeDiagnostics,
   type RealtimeMintOutcome,
+  type RealtimeSessionOptions,
   realtimeClientSecretRequest,
   realtimeCredentialFromResponse,
   realtimeCredentialIsUsable,

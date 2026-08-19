@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   ATTENTION_DECISION_SCHEMA_NAME,
   ATTENTION_TRIGGER,
+  type AttentionPromptUpdate,
   attentionInstructions,
   SESSION_STATUS,
 } from "@sidecar/core";
@@ -35,7 +36,7 @@ const SPOKEN_DECISION = {
   answers_ask: false,
 };
 
-function reviewRequest(body: unknown): Request {
+function reviewRequest(body: AttentionPromptUpdate): Request {
   return new Request("https://luke.test/api/attention/review", {
     method: "POST",
     headers: { authorization: "Bearer token-1" },
@@ -117,8 +118,13 @@ test("an update that fails the wire contract is refused before anything is spent
     return OPEN_SPEND;
   };
 
+  const malformedUpdate = { ...UPDATE, status: "sleeping" };
   const malformed = await handleAttentionReview(
-    options({ request: reviewRequest({ ...UPDATE, status: "sleeping" }), spend }),
+    options({
+      // SAFETY: Malformed status exercises wire validation after JSON serialization.
+      request: reviewRequest(malformedUpdate as unknown as AttentionPromptUpdate),
+      spend,
+    }),
   );
   assert.equal(malformed.status, 400);
   assert.equal((await malformed.json()).error, HOSTED_API_ERROR.INVALID_REQUEST);

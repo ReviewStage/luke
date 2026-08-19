@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import { SESSION_STATUS } from "@sidecar/core";
 import { OPENCODE_PROVIDER, OpenCodeSessionAdapter } from "../src/opencode-adapter";
+import type { ParsedJsonObject } from "./support/json";
 
 const TEST_TIME = Date.parse("2026-08-13T21:30:00.000Z");
 const OPENCODE_DATABASE = "opencode.db";
@@ -32,7 +33,7 @@ interface TestMessage {
   id: string;
   sessionId: string;
   time: number;
-  data: Record<string, unknown>;
+  data: ParsedJsonObject;
 }
 
 interface TestPart {
@@ -40,7 +41,7 @@ interface TestPart {
   messageId: string;
   sessionId: string;
   time: number;
-  data: Record<string, unknown>;
+  data: ParsedJsonObject;
 }
 
 async function temporaryDataDirectory(t: TestContext): Promise<string> {
@@ -211,7 +212,7 @@ async function writeEarlyOpenCodeState(
 async function writeLegacySession(
   dataDirectory: string,
   projectId: string,
-  info: Record<string, unknown> & { id: string },
+  info: ParsedJsonObject & { id: string },
 ): Promise<void> {
   const sessionDirectory = path.join(dataDirectory, "storage", "session", projectId);
   await fs.mkdir(sessionDirectory, { recursive: true });
@@ -222,7 +223,7 @@ async function writeLegacyMessage(
   dataDirectory: string,
   sessionId: string,
   messageId: string,
-  record: Record<string, unknown>,
+  record: ParsedJsonObject,
 ): Promise<void> {
   const messageDirectory = path.join(dataDirectory, "storage", "message", sessionId);
   await fs.mkdir(messageDirectory, { recursive: true });
@@ -296,6 +297,7 @@ test("falls back to the workspace while OpenCode has not named the session", asy
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("reports a finished OpenCode turn as waiting for its developer", async (t) => {
   const dataDirectory = await temporaryDataDirectory(t);
   await writeOpenCodeState(
@@ -339,6 +341,7 @@ test("reports a finished OpenCode turn as waiting for its developer", async (t) 
   assert.equal(observation?.detail?.activity, undefined);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("reports a stopped OpenCode turn as waiting when its user aborted it", async (t) => {
   const dataDirectory = await temporaryDataDirectory(t);
   await writeOpenCodeState(
@@ -808,6 +811,7 @@ test("observes legacy JSON sessions when node sqlite is unavailable", async (t) 
     directory: "/Users/test/luke",
     time: { created: TEST_TIME - 5_000, updated: TEST_TIME - 1_000 },
   });
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   const error = new Error("No such built-in module: node:sqlite") as NodeJS.ErrnoException;
   error.code = TEST_SQLITE_ERROR.UNKNOWN_BUILTIN_MODULE;
 

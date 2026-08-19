@@ -35,18 +35,18 @@ test("declares credentials and observation hooks beside their adapters", () => {
     CREDENTIAL_PROVIDER_ID.CONDUCTOR,
   );
   assert.equal(registrations[PROVIDER_ID.CURSOR].credential?.id, CREDENTIAL_PROVIDER_ID.CURSOR);
-  assert.equal(typeof registrations[PROVIDER_ID.CLAUDE_CODE].registerObservationHook, "function");
-  assert.equal(typeof registrations[PROVIDER_ID.CODEX].registerObservationHook, "function");
+  assert.ok(registrations[PROVIDER_ID.CLAUDE_CODE].registerObservationHook instanceof Function);
+  assert.ok(registrations[PROVIDER_ID.CODEX].registerObservationHook instanceof Function);
   assert.equal(registrations[PROVIDER_ID.OPENCODE].credential, undefined);
 });
 
 test("every registration exposes the one total adapter interface", () => {
   for (const { adapter } of Object.values(registrations)) {
-    assert.equal(typeof adapter.observe, "function");
-    assert.equal(typeof adapter.readTranscript, "function");
-    assert.equal(typeof adapter.sendMessage, "function");
-    assert.equal(typeof adapter.executeControl, "function");
-    assert.equal(typeof adapter.createWorkspace, "function");
-    assert.equal(typeof adapter.spawnWorkspaceAgent, "function");
+    assert.ok(adapter.observe instanceof Function);
+    assert.ok(adapter.readTranscript instanceof Function);
+    assert.ok(adapter.sendMessage instanceof Function);
+    assert.ok(adapter.executeControl instanceof Function);
+    assert.ok(adapter.createWorkspace instanceof Function);
+    assert.ok(adapter.spawnWorkspaceAgent instanceof Function);
   }
 });

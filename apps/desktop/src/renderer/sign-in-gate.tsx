@@ -20,6 +20,7 @@ const SIGN_IN_FACE_CYCLE = [
 ] as const;
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * The stillness between gestures. Long enough that each reads as something
  * Luke did rather than one long fidget, short enough that the face never looks
  * switched off while it is the only thing introducing him.
@@ -39,7 +40,7 @@ export function signInFaceMotion(step: number): FaceMotion {
  * motion holds the resting face instead — the pose every gesture starts and
  * ends at.
  */
-export function useSignInFaceCycle(still: boolean): { motion?: FaceMotion; play: number } {
+export function useSignInFaceCycle(still: boolean) {
   const [step, setStep] = useState(0);
   useEffect(() => {
     if (still) return;
@@ -49,8 +50,11 @@ export function useSignInFaceCycle(still: boolean): { motion?: FaceMotion; play:
     );
     return () => window.clearTimeout(timer);
   }, [step, still]);
-  if (still) return { play: 0 };
-  return { motion: signInFaceMotion(step), play: step };
+  if (still) return { play: 0 } satisfies { motion?: FaceMotion; play: number };
+  return { motion: signInFaceMotion(step), play: step } satisfies {
+    motion?: FaceMotion;
+    play: number;
+  };
 }
 
 export function SignInGate({

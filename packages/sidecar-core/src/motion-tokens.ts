@@ -9,7 +9,7 @@
 
 export const MOTION_DURATION_MS = {
   FAST: 280,
-  SHAPE: 460,
+  SURFACE: 460,
   EXIT: 90,
   QUICK: 140,
   HOVER: 70,

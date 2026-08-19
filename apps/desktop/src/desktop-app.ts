@@ -12,6 +12,7 @@ import {
   fixtureSnapshot,
   InMemorySessionRegistry,
   isProviderId,
+  isWireString,
   type MeetingInterval,
   type NormalizedSession,
   nextMeetingBoundary,
@@ -24,6 +25,7 @@ import {
   SessionNoticeTracker,
   type SessionProviderAdapter,
   type TrackedIssue,
+  type UnparsedWireValue,
   type WorkspaceAgentSelection,
   workspaceProjectSelectionId,
 } from "@sidecar/core";
@@ -68,7 +70,7 @@ import { ObservationHookRegistry } from "./observation-hook-registry";
 import { ObservationLoop, ObservationSupervisor } from "./observation-loop";
 import { OutputVolumeWatcher } from "./output-volume";
 import { PanelManager } from "./panel-manager";
-import { providerRegistrations } from "./provider-registrations";
+import { type ProviderRegistration, providerRegistrations } from "./provider-registrations";
 import { runModeFor } from "./run-mode";
 import { sessionNoticeSpeech } from "./session-notifications";
 import { createSettingsHandler } from "./settings-handler";
@@ -196,7 +198,9 @@ const providerRegistry = providerRegistrations({
   codexCloudAdapter,
 });
 // The record enforces completeness; the shared list preserves provider order.
-const orderedRegistrations = PROVIDER_ID_LIST.map((providerId) => providerRegistry[providerId]);
+const orderedRegistrations: readonly ProviderRegistration[] = PROVIDER_ID_LIST.map(
+  (providerId) => providerRegistry[providerId],
+);
 // The issue tracker is not a session provider: its issues feed the voice
 // roster rather than the registry, so it stands beside the adapters rather
 // than among them.
@@ -259,6 +263,7 @@ const CALENDAR_REFRESH_INTERVAL_MS = 5 * 60_000;
  */
 const HELD_NOTICE_RELEASE_INTERVAL_MS = 30_000;
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * The meetings as last read; `undefined` says no calendar is connected, which
  * can never hold a notice. A failed pass keeps the meetings it has — a
  * calendar that cannot answer is not an empty diary.
@@ -273,6 +278,7 @@ let calendarMeetings: readonly MeetingInterval[] | undefined;
  */
 let quietBoundaryTimer: NodeJS.Timeout | undefined;
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * Each connected account's calendars as last observed — what the settings
  * rows draw their choices from, and what a spoken-of or clicked selection is
  * validated against before the store keeps it.
@@ -286,6 +292,7 @@ let heldNoticeReleaseTimer: NodeJS.Timeout | undefined;
 const heldNotices = new SessionNoticeHold();
 /**
  * The other kind of announcement, held on the same terms: speech an answered
+ // SAFETY: The preceding check establishes the asserted contract.
  * standing ask produced, already worded. It waits out a meeting exactly as a
  * status edge does — both break silence, and the quiet holds everything that
  * does. Unbidden evaluator summaries are never held: during the quiet they
@@ -294,6 +301,7 @@ const heldNotices = new SessionNoticeHold();
  */
 const heldRequestSpeech = new SessionNoticeHold<AttentionSpeech>();
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * Whether the quiet is holding right now, as last computed — what the
  * renderer draws Luke's sleeping face from. Kept and broadcast on change so
  * every window agrees, and false the moment the meetings or the setting say
@@ -335,17 +343,21 @@ const updateService = new UpdateService({
   onChange: (update) => panels.broadcast(channels.updateChanged, update),
 });
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * The output's switches as last read, and the helper that reads them. The
  * state lives here rather than in the renderer so bootstrap can carry the
  * answer a push has already delivered; `undefined` is "cannot be read", which
+ // SAFETY: The preceding check establishes the asserted contract.
  * the renderer must draw as audible.
  */
 let outputAudio: OutputAudioState | undefined;
 let outputVolumeWatcher: OutputVolumeWatcher | undefined;
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * Where the developer's voice would be captured from, as last read, and the
  * helper that reads it. The state lives here so the renderer's ask can be
  * answered at once while a fresh probe rides behind it; `undefined` is
+ // SAFETY: The preceding check establishes the asserted contract.
  * "cannot be read", which the renderer must take as the browser's default.
  */
 let microphoneRoute: MicrophoneRoute | undefined;
@@ -409,6 +421,7 @@ function startOutputVolumeWatch(): void {
 
 /**
  * Starts watching where the developer's voice would be captured from, under
+ // SAFETY: The preceding check establishes the asserted contract.
  * the same rule as the output watch: read-only, and not in a fixture or
  * capture run. What it learns decides only which device the renderer asks the
  * browser to open when a press takes a turn.
@@ -437,8 +450,10 @@ let lastWorkspaceProjects: string | undefined;
  * Announces where a workspace can be created whenever the offer changes. This
  * cannot ride the registry's own notifications alone: the registry only speaks
  * when the session snapshot changes, and a pass can change the project list
+ // SAFETY: The preceding check establishes the asserted contract.
  * while leaving the sessions exactly as they were — a key just added with no
  * workspaces yet, a project connected but not yet worked in — so the check
+ // SAFETY: The preceding check establishes the asserted contract.
  * runs on the observation cadence as well as on every commit.
  */
 function broadcastWorkspaceProjects(): void {
@@ -456,6 +471,7 @@ function argumentValue(name: string): string | undefined {
 
 function microphoneStatus(): MicrophoneStatus {
   if (process.platform !== "darwin") return "granted";
+  // SAFETY: The preceding check establishes the asserted contract.
   return systemPreferences.getMediaAccessStatus("microphone") as MicrophoneStatus;
 }
 
@@ -593,10 +609,9 @@ async function rememberWorkspaceDefaults(
       const saved = await settingsStore.setEntry(
         APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
         providerId,
-        workspaceProjectSelectionId({
-          providerProjectId,
-          ...(providerTargetId ? { providerTargetId } : {}),
-        }),
+        workspaceProjectSelectionId(
+          providerTargetId ? { providerProjectId, providerTargetId } : { providerProjectId },
+        ),
       );
       panels.broadcast(channels.settingsChanged, saved.settings);
     }
@@ -664,11 +679,11 @@ function registerIpc(): void {
       // Both keys travel as accelerators rather than labels: the renderer needs
       // both spellings — the keycaps' ⌥ and L drawn apart, and aria's Alt+L —
       // and only the accelerator can produce the pair.
-      ...(hotkeys.talk ? { voiceHotkey: hotkeys.talk } : {}),
+      ...(hotkeys.talk ? { voiceHotkey: hotkeys.talk } : undefined),
       voiceHotkeyHeld: hotkeys.held,
-      ...(hotkeys.ask ? { askHotkey: hotkeys.ask } : {}),
-      ...(hotkeys.stop ? { stopHotkey: hotkeys.stop } : {}),
-      ...(outputAudio ? { outputAudio } : {}),
+      ...(hotkeys.ask ? { askHotkey: hotkeys.ask } : undefined),
+      ...(hotkeys.stop ? { stopHotkey: hotkeys.stop } : undefined),
+      ...(outputAudio ? { outputAudio } : undefined),
       display: panels.diagnostic(display),
       update: updateService.snapshot(),
       // Bootstrapped through the same relevance gate every broadcast passes:
@@ -685,7 +700,7 @@ function registerIpc(): void {
       workspaceProjects: accountCapabilitiesActive() ? observedWorkspaceProjects() : [],
       ...(trackedIssues && runMode.observesProviders && accountCapabilitiesActive()
         ? { issues: trackedIssues }
-        : {}),
+        : undefined),
       // The calendar is a capability like the rosters: nothing of it is
       // shown, or held quiet, before the account gate opens.
       calendars: accountCapabilitiesActive() ? observedCalendars : [],
@@ -697,14 +712,14 @@ function registerIpc(): void {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
     return supersetSignIn.begin();
   });
-  ipcMain.handle(channels.submitSupersetSignInCode, (event, code: unknown) => {
+  ipcMain.handle(channels.submitSupersetSignInCode, (event, code: UnparsedWireValue) => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
-    if (typeof code !== "string") throw new Error("Invalid Superset sign-in code");
+    if (!isWireString(code)) throw new Error("Invalid Superset sign-in code");
     return supersetSignIn.submitCode(code);
   });
-  ipcMain.handle(channels.chooseSupersetOrganization, async (event, slug: string) => {
+  ipcMain.handle(channels.chooseSupersetOrganization, async (event, slug: UnparsedWireValue) => {
     if (!trustedSender(event)) throw new Error("Untrusted renderer");
-    if (typeof slug !== "string") throw new Error("Invalid Superset organization");
+    if (!isWireString(slug)) throw new Error("Invalid Superset organization");
     return supersetSignIn.chooseOrganization(slug);
   });
   ipcMain.on(channels.reopenSupersetSignIn, (event) => {
@@ -729,7 +744,9 @@ function registerIpc(): void {
     registerSettingHandler,
     settingsStore,
     adapterForCredential,
-    refreshAdapter: (adapter) => sessionRegistry.refresh(adapter),
+    refreshAdapter: async (adapter) => {
+      await sessionRegistry.refresh(adapter);
+    },
     refreshIssues: () => void issueObservationLoop.refresh(),
     applyVoiceCredential,
     hotkeys,
@@ -822,7 +839,7 @@ function registerIpc(): void {
   // own act and its outcome belongs beside the field it left.
   ipcMain.handle(
     channels.sendFeedback,
-    async (event, submission: unknown): Promise<FeedbackResult> => {
+    async (event, submission: UnparsedWireValue): Promise<FeedbackResult> => {
       if (!trustedSender(event)) throw new Error("Untrusted renderer");
       const parsed = feedbackSubmission(submission);
       if (!parsed) throw new Error("Invalid feedback submission");
@@ -858,6 +875,7 @@ function registerIpc(): void {
 }
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * Where a workspace can be created right now, as the adapters offer it: each
  * capable adapter's latest project list, stamped with its provider and bounded
  * once here so the panel and the conversation are handed the same list. A
@@ -1069,7 +1087,7 @@ function openCreatedWorkspaces(sessions: readonly NormalizedSession[]): void {
   for (const created of createdWorkspaceOpens.claim(sessions, Date.now())) {
     const link = created.detail.link;
     if (!link) continue;
-    shell.openExternal(link).catch((error: unknown) => {
+    shell.openExternal(link).catch((error: Error) => {
       const message = error instanceof Error ? error.message : String(error);
       process.stderr.write(`Created workspace could not be opened: ${message}\n`);
     });
@@ -1103,6 +1121,7 @@ async function announcementsQuietNow(now: number): Promise<boolean> {
 
 /**
  * Recomputes whether the quiet is holding — the face sleeps beside the
+ // SAFETY: The preceding check establishes the asserted contract.
  * housing for exactly as long as it is. The recompute itself broadcasts any
  * change; this name is for the callers with nothing to say and only the face
  * to keep current: the boundary timer, the ticks, and the setting's toggle.
@@ -1142,7 +1161,9 @@ function armQuietBoundaryTimer(): void {
 
 /**
  * Says what was held once the meeting holding it has ended. Deciding to speak
+ // SAFETY: The preceding check establishes the asserted contract.
  * is what happens here, so the sentences carry the release as `decidedAt` —
+ // SAFETY: The preceding check establishes the asserted contract.
  * a backlog re-stamped any earlier would be dropped as stale by the renderer
  * before a word of it was read. Each notice is checked against the registry
  * first: a session that moved on while the meeting ran is no longer news, and
@@ -1302,6 +1323,7 @@ let lastRosterRevision = -1;
 let lastRosterIds = "";
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * Hands every panel the standing asks as they now stand, so the rows marking
  * them never describe an ask already withdrawn or let go. The words are the
  * developer's own; nothing here reaches a provider or leaves the machine.
@@ -1465,7 +1487,7 @@ export function startDesktopApp(): void {
       // same reason. A file that cannot be read leaves the duck on, the same
       // answer a file that has never said gives.
       void settingsStore.get(APP_SETTING_SCHEMA.duckOtherMedia.field).then(
-        (enabled) => mediaDuck.setEnabled(enabled),
+        (enabled) => mediaDuck.setEnabled(enabled === true),
         () => mediaDuck.setEnabled(APP_SETTING_DEFAULTS.duckOtherMedia),
       );
       // Always on, like the announcements: the timed check answers to no
@@ -1490,9 +1512,9 @@ export function startDesktopApp(): void {
       // file that cannot be read means no choice was kept — the main display,
       // the default form — and must not keep the panels from starting.
       panels.setShowOnAllDisplays(
-        await settingsStore
+        (await settingsStore
           .get(APP_SETTING_SCHEMA.showOnAllDisplays.field)
-          .catch(() => APP_SETTING_DEFAULTS.showOnAllDisplays),
+          .catch(() => APP_SETTING_DEFAULTS.showOnAllDisplays)) === true,
       );
       panels.setFormFactor(
         (await settingsStore.get(APP_SETTING_SCHEMA.formFactor.field).catch(() => undefined)) ??

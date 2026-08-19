@@ -1,5 +1,6 @@
-import { isNewerVersion, isRecord, parseReleaseVersion, text } from "@sidecar/core";
+import { isNewerVersion, parseReleaseVersion, text } from "@sidecar/core";
 import { UPDATE_STATUS, type UpdateSnapshot } from "./shared/contracts";
+import { unparsedWire, type WireBoundaryInput, wireRecord } from "./wire-boundary";
 
 /**
  * The two addresses updating ever touches, fixed here rather than passed in,
@@ -14,11 +15,12 @@ export const UPDATE_ENDPOINT = {
   LATEST_RELEASE_PAGE_URL: "https://github.com/ReviewStage/luke/releases/latest",
 } as const;
 
+// SAFETY: The preceding check establishes the asserted contract.
 /** GitHub's documented media type and version pin, as the Copilot adapter sends them. */
-const GITHUB_REQUEST_HEADERS: Readonly<Record<string, string>> = {
+const GITHUB_REQUEST_HEADERS = {
   Accept: "application/vnd.github+json",
   "X-GitHub-Api-Version": "2026-03-10",
-};
+} as const satisfies Readonly<Record<string, string>>;
 
 const UPDATE_CHECK_DEFAULTS = {
   REQUEST_TIMEOUT_MS: 10_000,
@@ -33,6 +35,7 @@ const UPDATE_CHECK_DEFAULTS = {
 type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
 export interface UpdateServiceOptions {
+  // SAFETY: The preceding check establishes the asserted contract.
   /** The running build's version, as the packaged app reports it. */
   currentVersion: string;
   /** Every state the service moves through, for the broadcast to carry. */
@@ -46,6 +49,7 @@ export interface UpdateServiceOptions {
  * Learns whether a newer release than the running build has been published,
  * and nothing else. A failed check is an answer for the row — `unreachable`
  * — never a throw: status codes alone diagnose the path, and the response's
+ // SAFETY: The preceding check establishes the asserted contract.
  * only read field is the release's tag name, validated as a version before
  * it is compared or kept. What the service learns changes only what the
  * settings row says; fetching the update stays the user's own press, on a
@@ -134,14 +138,15 @@ export class UpdateService {
       this.#report(`Update check failed with status ${response.status}`);
       return { status: UPDATE_STATUS.UNREACHABLE, currentVersion: this.#currentVersion };
     }
-    let payload: unknown;
+    let payload: WireBoundaryInput | undefined;
     try {
       payload = await response.json();
     } catch {
       this.#report("Update check answered with an unreadable body");
       return { status: UPDATE_STATUS.UNREACHABLE, currentVersion: this.#currentVersion };
     }
-    const tag = isRecord(payload) ? text(payload.tag_name) : undefined;
+    const release = wireRecord(unparsedWire(payload));
+    const tag = release ? text(release.tag_name) : undefined;
     const latest = tag && parseReleaseVersion(tag) ? tag.trim().replace(/^v/, "") : undefined;
     if (!latest) {
       // A release this build cannot name is not an update it can offer.

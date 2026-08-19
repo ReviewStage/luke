@@ -7,12 +7,13 @@ import {
   meetingsFromBusyIntervals,
   nextMeetingBoundary,
 } from "../src";
+import type { UnparsedWireValue } from "../src/json.js";
 
 /** Noon UTC on a fixed Monday, so every expectation is a plain number. */
 const NOW = Date.UTC(2026, 7, 17, 12, 0, 0);
 
 test("a free/busy answer normalizes to bounded meetings", () => {
-  const busy = [
+  const busy: UnparsedWireValue = [
     { start: "2026-08-17T13:00:00Z", end: "2026-08-17T14:00:00Z" },
     // Already underway still matters; already over does not.
     { start: "2026-08-17T11:30:00Z", end: "2026-08-17T12:30:00Z" },

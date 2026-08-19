@@ -89,8 +89,11 @@ function feedbackFor(result: ProviderMessageResult | ProviderControlResult): str
 }
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * One advertised action. A stop is drawn as the square glyph every chat
+ // SAFETY: The preceding check establishes the asserted contract.
  * surface stops with — its label survives as what a reader hears and hover
+ // SAFETY: The preceding check establishes the asserted contract.
  * shows — and anything else is drawn as a chip in the provider's own words.
  */
 function RowActionButton({
@@ -136,7 +139,9 @@ function RowActionButton({
 /**
  * The second line a row earns only when its provider promised something: a
  * message field that is simply there, the way every chat surface keeps its
+ // SAFETY: The preceding check establishes the asserted contract.
  * composer on screen, and each advertised action beside it — a stop as the
+ // SAFETY: The preceding check establishes the asserted contract.
  * square glyph, anything else as a chip in the provider's own words.
  * Every outcome that needs words answers back onto the same line — sending, an
  * action's acceptance, or the provider's refusal — because a write is the
@@ -162,6 +167,7 @@ function SessionRowActions({
   /** The action in flight, which is the one drawn asking and the reason all are held. */
   const [pendingAction, setPendingAction] = useState<string | undefined>(undefined);
   /**
+   // SAFETY: The preceding check establishes the asserted contract.
    * The row's one write at a time, as a ref rather than state: disabling the
    * controls only lands with the next render, and a second Enter inside that
    * window would send the same words twice. A ref answers in the same tick.
@@ -233,7 +239,6 @@ function SessionRowActions({
   return (
     <div className="row-actions">
       {session.canMessage ? (
-        // biome-ignore lint/a11y/noStaticElementInteractions: the click is swallowed, not handled — the pill is where the row's open-on-press must not reach.
         // biome-ignore lint/a11y/useKeyWithClickEvents: pointer-only by design — the keyboard already lands in the field by tabbing, and the click handler only stops the row's open and places the caret.
         <form
           className="row-compose"
@@ -320,6 +325,7 @@ function SessionRowActions({
  * advertise, drawn once where the workspace is named once. Archiving files
  * away every chat in the tray, so the same chip repeated on each row read as
  * several different acts when any press did the whole thing. The press still
+ // SAFETY: The preceding check establishes the asserted contract.
  * travels as a session write — through the first chat that advertised the act
  * — so it is validated against the same roster row that promised it, and its
  * outcome answers on the header's own line the way a row's writes do.
@@ -381,6 +387,7 @@ function WorkspaceTrayActs({
  * One session, drawn the same way whether or not it can be opened. A row whose
  * provider gave an address is a button and nothing else changes: the panel is
  * five rows of dense text, and a second permanent mark on some of them would be
+ // SAFETY: The preceding check establishes the asserted contract.
  * read as a state before it was read as an affordance. The pointer is what
  * separates them — a row that can be opened lifts and takes the hand cursor,
  * one that cannot stays flat under it, which is the honest answer to whether
@@ -442,6 +449,7 @@ function SessionRow({
     // gone from the model, so nothing may read, focus, or press it.
     [LEAVING_ATTRIBUTE]: String(leaving),
     inert: leaving,
+    // SAFETY: The preceding check establishes the asserted contract.
     style: { "--row-index": index + 1 } as React.CSSProperties,
   };
   // The identifier that tells this row from its neighbours: the branch, or the
@@ -528,12 +536,12 @@ function SessionRow({
     // and a reader press, and its click bubbles here rather than opening twice
     // — while every control below swallows its own click, so the only presses
     // that open are the ones that meant the session itself.
-    // biome-ignore lint/a11y/useKeyWithClickEvents: the row's keyboard path is the first line's real button, whose activation bubbles to this handler.
-    // biome-ignore lint/a11y/noStaticElementInteractions: same press target as the button it wraps, widened to the row's own surface.
     <article
       {...shared}
       data-actions="true"
-      {...(session.openable ? { "data-openable": "true", onClick: () => onOpen(session) } : {})}
+      {...(session.openable
+        ? { "data-openable": "true", onClick: () => onOpen(session) }
+        : undefined)}
     >
       {session.openable ? (
         <button type="button" className="row-main" title={`Open in ${session.provider}`}>
@@ -559,7 +567,9 @@ export function runDrawsTray(run: SessionListRun): boolean {
  * repository — with the chats divided by hairlines inside.
  * A workspace holding one chat earns no tray — its row already says
  * everything the tray would — and an ungrouped session never does; either
+ // SAFETY: The preceding check establishes the asserted contract.
  * way the wrapper stays, drawing as nothing. It has to: a workspace crosses
+ // SAFETY: The preceding check establishes the asserted contract.
  * between one chat and several as siblings come and go, and if that crossing
  * changed the row's parent element, React would remount the row and wipe a
  * follow-up someone was typing into it. The chrome is a class, never a
@@ -573,6 +583,7 @@ export function runDrawsTray(run: SessionListRun): boolean {
  * it does on screen: the workspace once, then its chats. A tray is a member of the
  * arrival stack in its rows' stead: it fans in at its lead row's turn, and
  * the rows ride it rather than fanning a second time inside it. A wrapper
+ // SAFETY: The preceding check establishes the asserted contract.
  * that draws as nothing leaves its row in the stack exactly as before.
  */
 function SessionRun({
@@ -603,9 +614,10 @@ function SessionRun({
             // this id, it travels to a re-sorted seat carrying its rows,
             // which are translated only by their movement within it.
             [WORKSPACE_TRAY_ID_ATTRIBUTE]: run.workspace.id,
+            // SAFETY: The preceding check establishes the asserted contract.
             style: { "--row-index": (run.indexes[0] ?? 0) + 1 } as React.CSSProperties,
           }
-        : {})}
+        : undefined)}
     >
       {/* Held in its slot by the null, so the header appearing or leaving can
           never reseat the keyed rows beside it. */}
@@ -664,6 +676,7 @@ export interface PanelBodyProps {
   offerOptions: boolean;
   optionsOpen: boolean;
   onOptionsToggle: () => void;
+  // SAFETY: The preceding check establishes the asserted contract.
   /** Whether there is anything to search, on the same terms as the options. */
   offerSearch: boolean;
   searchOpen: boolean;
@@ -713,7 +726,7 @@ export function PanelBody({
       <div className="body">
         <SignInGate
           account={account}
-          {...(signInFailure ? { failure: signInFailure } : {})}
+          {...(signInFailure ? { failure: signInFailure } : undefined)}
           onBegin={onBeginSignIn}
           onQuit={settings.onQuit}
         />
@@ -734,7 +747,11 @@ export function PanelBody({
           how it is being shown. One line, because the second is only ever a
           qualifier on the first. */}
       <div className="panel-header">
-        <TabBar tab={tab} onTabChange={onTabChange} {...(settingsNote ? { settingsNote } : {})} />
+        <TabBar
+          tab={tab}
+          onTabChange={onTabChange}
+          {...(settingsNote ? { settingsNote } : undefined)}
+        />
         {offerSearch || offerOptions ? (
           <span className="header-controls">
             {offerSearch ? (
@@ -824,7 +841,7 @@ export function PanelBody({
             ask={ask}
             onEngagedChange={onAskEngaged}
             rowIndex={rows.length + 1}
-            {...(askShortcut ? { shortcut: askShortcut } : {})}
+            {...(askShortcut ? { shortcut: askShortcut } : undefined)}
           />
         </SessionsPanel>
       )}

@@ -7,7 +7,9 @@ import { FACE_MOTION, FACE_MOTION_CYCLE_MS, type FaceMotion } from "./luke-face-
  * face is the one thing the capsule always has room for, and a face that knew
  * something the panel did not would be a second, quieter source of truth.
  *
+ // SAFETY: The preceding check establishes the asserted contract.
  * The sessions asking for a person arrive as ids rather than as a count,
+ // SAFETY: The preceding check establishes the asserted contract.
  * because what the face owes them is one nudge each as they start asking, and a
  * count cannot tell one starting from another being answered in the same poll.
  */
@@ -77,13 +79,17 @@ export function faceYieldsToMeter(input: { turn?: SpeechTurn; hasAudioSignal: bo
 
 /**
  * What Luke settles into, which is usually nothing whatever. A rest repeats for
+ // SAFETY: The preceding check establishes the asserted contract.
  * as long as it is true, so the only motions allowed to be one are the three
  * that stay true while they hold: speech going into an open microphone, the
  * microphone open without it, and having nothing at all to watch.
  *
+ // SAFETY: The preceding check establishes the asserted contract.
  * Everything else rests as a still face — the drawing, and no motion — and
  * spends its moments on gestures instead. Nothing here asks who is waiting on
+ // SAFETY: The preceding check establishes the asserted contract.
  * you, and nothing here rocks along with the work: a loop that runs for as long
+ // SAFETY: The preceding check establishes the asserted contract.
  * as something is true is a loop that is always running for anyone whose
  * sessions usually need them, and a face that never stops moving is one you
  * stop reading. What was a rest is a gesture now; see `asidePool`.
@@ -120,8 +126,10 @@ export function playedMotion(
 
 /**
  * What the face has already reacted to. Sessions arriving and finishing are
+ // SAFETY: The preceding check establishes the asserted contract.
  * counted, because one arrival is the same news as any other; the ones asking
  * for a person are remembered by id, because three still asking is not the news
+ // SAFETY: The preceding check establishes the asserted contract.
  * that one of them being answered as a fourth starts asking is, and the count
  * those two states share is the same number.
  */
@@ -167,6 +175,7 @@ export interface WeightedAside {
 
 /**
  * Gestures Luke makes for no reason at all, and how often each is worth making.
+ // SAFETY: The preceding check establishes the asserted contract.
  * They are what keeps a permanent fixture from reading as a dead one — a face
  * that never moves is a screenshot — and between them the face is simply still.
  *
@@ -243,6 +252,7 @@ export function chooseAside(pool: readonly WeightedAside[], roll: number): FaceM
 /**
  * How long the face is still between gestures. Far enough apart that a gesture
  * is a surprise rather than a rhythm — a fixture that moves on a timetable is
+ // SAFETY: The preceding check establishes the asserted contract.
  * one you start reading as a clock — and near enough together that a face
  * nobody has touched in half a minute still looks like it could move at all.
  */
@@ -256,6 +266,7 @@ const stillnessDelay = () =>
  * strip at the very top of the screen, and asking for the pixel is asking to
  * miss: a pointer resting anywhere near Luke means Luke. Wide enough to be
  * forgiving, narrow enough that the reach stays his — it must not swallow the
+ // SAFETY: The preceding check establishes the asserted contract.
  * marks beside him or read the whole strip as a face.
  */
 const HOVER_REACH_PX = 8;

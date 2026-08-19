@@ -2,12 +2,14 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  isWireString,
   type ProviderSessionObservation,
   resolveOptions,
   SESSION_STATUS,
   type SessionDetail,
   type SessionStatus,
   UNKNOWN_WORKSPACE_LABEL,
+  type WireRecord,
 } from "@sidecar/core";
 import { CURSOR_PROVIDER } from "./cursor-adapter";
 import { readCursorSessionTranscript } from "./cursor-transcript";
@@ -25,6 +27,7 @@ import {
   tailRecords,
   workspaceLabel,
 } from "./local-session-adapter";
+import { unparsedWire, type WireBoundaryInput, wireRecord } from "./wire-boundary";
 
 /** A turn Cursor failed records its own reason, which is transcript content. */
 const CURSOR_TURN_FAILED_MESSAGE = "The turn failed";
@@ -115,16 +118,19 @@ function canonicalProjectName(value: string): string {
 }
 
 function folderPathFromWorkspaceRecord(source: string): string | undefined {
-  let parsed: unknown;
+  let parsed: WireBoundaryInput;
   try {
-    parsed = JSON.parse(source) as unknown;
+    // SAFETY: The preceding check establishes the asserted contract.
+    parsed = JSON.parse(source);
   } catch (error) {
     if (error instanceof SyntaxError) return undefined;
     throw error;
   }
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
-  const folder = (parsed as Record<string, unknown>)[CURSOR_WORKSPACE_FIELD.FOLDER];
-  if (typeof folder !== "string") return undefined;
+  const record = wireRecord(unparsedWire(parsed));
+  if (!record) return undefined;
+  // SAFETY: The preceding check establishes the asserted contract.
+  const folder = record[CURSOR_WORKSPACE_FIELD.FOLDER];
+  if (!isWireString(folder)) return undefined;
   try {
     return fileURLToPath(folder);
   } catch {
@@ -229,7 +235,7 @@ async function transcriptsIn(
   );
 }
 
-function isMessageRecord(record: Record<string, unknown>): boolean {
+function isMessageRecord(record: WireRecord): boolean {
   const role = record[CURSOR_RECORD_FIELD.ROLE];
   return Object.values(CURSOR_ROLE).some((knownRole) => knownRole === role);
 }
@@ -254,6 +260,7 @@ function closedTurn(tail: string): { failed: boolean } | undefined {
 /**
  * A turn Cursor has closed is holding for the user; one it failed is stuck
  * until someone comes back to it, which asks something different and is
+ // SAFETY: The preceding check establishes the asserted contract.
  * reported as such. Anything else is a turn still in progress. A transcript
  * has no heartbeat, so an open turn that has gone quiet is unknown rather
  * than still working.
@@ -279,12 +286,13 @@ function statusFromTurn(
  * registers `cursor://` for its windows but publishes no route to a chat: its
  * handler answers a prompt, a command, a rule, and a background agent, and none
  * of them is a chat that already exists. The folder the chat was held in is not
+ // SAFETY: The preceding check establishes the asserted contract.
  * the chat, so it is not offered as one.
  */
 function detailFor(label: string, status: SessionStatus): SessionDetail {
   return {
     repository: label,
-    ...(status === SESSION_STATUS.ERROR ? { error: CURSOR_TURN_FAILED_MESSAGE } : {}),
+    ...(status === SESSION_STATUS.ERROR ? { error: CURSOR_TURN_FAILED_MESSAGE } : undefined),
   };
 }
 

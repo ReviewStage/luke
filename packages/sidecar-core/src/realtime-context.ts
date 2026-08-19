@@ -1,9 +1,11 @@
 import type { SessionNoticeAsk } from "./attention.js";
 import { type AppGuideSnapshot, appGuideContextText } from "./guide.js";
 import type { TrackedIssue } from "./issues.js";
+import type { WireRecord } from "./json.js";
 import {
   type ObservedWorkspaceProject,
   WORKSPACE_TASK_SUPPORT,
+  type WorkspaceTaskSupport,
   workspaceProjectSelectionId,
 } from "./providers.js";
 import {
@@ -231,7 +233,7 @@ export function contextSupersedeEventId(sequence: number): string {
 export function contextSupersedeEvents(input: {
   itemId: string;
   eventId: string;
-}): readonly Record<string, unknown>[] {
+}): readonly WireRecord[] {
   if (!input.itemId.trim() || !input.eventId.trim()) return [];
   return [
     {
@@ -250,7 +252,7 @@ export function contextSupersedeEvents(input: {
  * The item is named on creation so a fresher answer of the same kind can take
  * its place rather than pile up beside it.
  */
-function labeledContextEvent(label: string, text: string, itemId: string): Record<string, unknown> {
+function labeledContextEvent(label: string, text: string, itemId: string): WireRecord {
   return {
     type: REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE,
     item: {
@@ -275,7 +277,7 @@ export function sessionContextEvents(
   itemId: string,
   noticeAsks: readonly SessionNoticeAsk[] = [],
   now: number = Date.now(),
-): readonly Record<string, unknown>[] {
+): readonly WireRecord[] {
   return [
     labeledContextEvent(
       "observed session status, sent automatically",
@@ -319,7 +321,7 @@ export function sessionReferenceContextText(session: NormalizedSession): string 
 export function sessionReferenceContextEvents(
   session: NormalizedSession,
   itemId: string,
-): readonly Record<string, unknown>[] {
+): readonly WireRecord[] {
   return [
     labeledContextEvent(
       "session under discussion, sent automatically",
@@ -339,9 +341,7 @@ export function sessionReferenceContextEvents(
 export const SESSION_REFERENCE_WITHDRAWN_TEXT =
   "The session that was under discussion is no longer observed.";
 
-export function sessionReferenceWithdrawnEvents(
-  itemId: string,
-): readonly Record<string, unknown>[] {
+export function sessionReferenceWithdrawnEvents(itemId: string): readonly WireRecord[] {
   return [
     labeledContextEvent(
       "session under discussion, sent automatically",
@@ -389,7 +389,7 @@ export function lastAnnouncementContextText(speech: AttentionSpeech): string | u
 export function lastAnnouncementContextEvents(
   speech: AttentionSpeech,
   itemId: string,
-): readonly Record<string, unknown>[] {
+): readonly WireRecord[] {
   const text = lastAnnouncementContextText(speech);
   if (text === undefined) return [];
   return [labeledContextEvent("last announcement, sent automatically", text, itemId)];
@@ -447,7 +447,7 @@ export function issueContextText(issues: readonly TrackedIssue[]): string {
 export function issueContextEvents(
   issues: readonly TrackedIssue[],
   itemId: string,
-): readonly Record<string, unknown>[] {
+): readonly WireRecord[] {
   return [
     labeledContextEvent(
       "observed issue tracker, sent automatically",
@@ -465,7 +465,7 @@ export function issueContextEvents(
  */
 export const ISSUE_TRACKER_DISCONNECTED_TEXT = "The issue tracker is no longer connected.";
 
-export function issueTrackerDisconnectedEvents(itemId: string): readonly Record<string, unknown>[] {
+export function issueTrackerDisconnectedEvents(itemId: string): readonly WireRecord[] {
   return [
     labeledContextEvent(
       "observed issue tracker, sent automatically",
@@ -600,11 +600,11 @@ function workspaceDefaultProjectLines(
  * so the ask and its validation share one vocabulary: the sentence Luke reads
  * is the rule the call is held to.
  */
-const TASK_SUPPORT_TEXT: Readonly<Record<string, string>> = {
+const TASK_SUPPORT_TEXT = {
   [WORKSPACE_TASK_SUPPORT.NONE]: "takes no task",
   [WORKSPACE_TASK_SUPPORT.OPTIONAL]: "takes an opening task",
   [WORKSPACE_TASK_SUPPORT.REQUIRED]: "needs an opening task",
-};
+} satisfies Record<WorkspaceTaskSupport, string>;
 
 /**
  * Builds the event that tells the conversation where a workspace can be
@@ -616,7 +616,7 @@ export function workspaceProjectContextEvents(
   itemId: string,
   defaultProviderId?: string,
   defaultProjectIds?: Readonly<Partial<Record<string, string>>>,
-): readonly Record<string, unknown>[] {
+): readonly WireRecord[] {
   return [
     labeledContextEvent(
       "workspace projects, sent automatically",
@@ -635,6 +635,6 @@ export function workspaceProjectContextEvents(
 export function appGuideContextEvents(
   guide: AppGuideSnapshot,
   itemId: string,
-): readonly Record<string, unknown>[] {
+): readonly WireRecord[] {
   return [labeledContextEvent("app guide, sent automatically", appGuideContextText(guide), itemId)];
 }

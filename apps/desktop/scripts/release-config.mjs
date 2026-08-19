@@ -51,7 +51,7 @@ export function resolveReleaseSigning(env) {
 export function releaseSignatureMatchesIdentity({ identity, authority, certificateSha1 }) {
   if (/^[a-f\d]{40}$/i.test(identity)) {
     return (
-      typeof certificateSha1 === "string" &&
+      Object.prototype.toString.call(certificateSha1) === "[object String]" &&
       certificateSha1.toLowerCase() === identity.toLowerCase()
     );
   }

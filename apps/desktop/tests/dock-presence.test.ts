@@ -38,10 +38,13 @@ function harness(options: { visible?: boolean; ignoreFirstHide?: boolean } = {})
         themeUpdated = listener;
       },
     },
-    loadIcon: () =>
-      ({
+    loadIcon: () => {
+      // SAFETY: Test double implements only NativeImage.isEmpty used by DockPresence.
+      return {
         isEmpty: () => false,
-      }) as Electron.NativeImage,
+        // SAFETY: Test double implements only the NativeImage surface this test reads.
+      } as Electron.NativeImage;
+    },
     delay: async (ms) => {
       delays.push(ms);
     },

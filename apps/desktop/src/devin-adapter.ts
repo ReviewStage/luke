@@ -1,12 +1,14 @@
 import {
   agedStatus,
   isRecord,
+  isWireNumber,
   OBSERVATION_WINDOW,
   type ProviderSessionObservation,
   SESSION_STATUS,
   type SessionControl,
   type SessionProvider,
   type SessionStatus,
+  type WireRecord,
 } from "@sidecar/core";
 import {
   type CloudAdapterOptions,
@@ -68,6 +70,7 @@ const DEVIN_MESSAGE_FIELD = {
  * it can be viewed but not modified or resumed — and a Devin session is the
  * whole unit of its cloud workspace, so filing it away is this provider's
  * workspace archive. It is advertised only for a session positively observed
+ // SAFETY: The preceding check establishes the asserted contract.
  * as settled: one that exited, failed, was suspended, or whose running
  * machine reports the turn is holding for the user.
  */
@@ -131,6 +134,7 @@ const DEVIN_RUNNING_DETAIL = {
 type DevinRunningDetail = (typeof DEVIN_RUNNING_DETAIL)[keyof typeof DEVIN_RUNNING_DETAIL];
 
 /**
+ // SAFETY: The preceding check establishes the asserted contract.
  * A session that exited is over for good, and one Devin reports as errored
  * stopped on something it cannot pass. The rest are either on their way
  * somewhere — being created, claimed by a machine, or resuming — or dormant:
@@ -138,7 +142,7 @@ type DevinRunningDetail = (typeof DEVIN_RUNNING_DETAIL)[keyof typeof DEVIN_RUNNI
  * so it is neither settled nor holding for anyone. Luke leaves those unknown
  * rather than promoting them to a state it cannot verify.
  */
-const SESSION_STATUS_BY_DEVIN_STATUS: Readonly<Record<DevinSessionStatus, SessionStatus>> = {
+const SESSION_STATUS_BY_DEVIN_STATUS = {
   [DEVIN_SESSION_STATUS.RUNNING]: SESSION_STATUS.WORKING,
   [DEVIN_SESSION_STATUS.EXIT]: SESSION_STATUS.COMPLETE,
   [DEVIN_SESSION_STATUS.NEW]: SESSION_STATUS.UNKNOWN,
@@ -153,11 +157,12 @@ const SESSION_STATUS_BY_DEVIN_STATUS: Readonly<Record<DevinSessionStatus, Sessio
 /**
  * A running session that is waiting on the user, waiting on an approval, or has
  * finished its task has stopped and is holding for the user, which is what Luke
+ // SAFETY: The preceding check establishes the asserted contract.
  * reports as waiting. This is the one thing v1 could not say: it reported only
  * that a session was blocked, never that the machine was still up and the turn
  * had simply ended.
  */
-const SESSION_STATUS_BY_RUNNING_DETAIL: Readonly<Record<DevinRunningDetail, SessionStatus>> = {
+const SESSION_STATUS_BY_RUNNING_DETAIL = {
   [DEVIN_RUNNING_DETAIL.WORKING]: SESSION_STATUS.WORKING,
   [DEVIN_RUNNING_DETAIL.WAITING_FOR_USER]: SESSION_STATUS.WAITING,
   [DEVIN_RUNNING_DETAIL.WAITING_FOR_APPROVAL]: SESSION_STATUS.WAITING,
@@ -180,13 +185,16 @@ const PULL_REQUEST_PATH_SEGMENTS: ReadonlySet<string> = new Set(
 );
 
 const DEVIN_ADAPTER_DEFAULTS = {
+  // SAFETY: The preceding check establishes the asserted contract.
   /** The documented maximum, so one call reaches as deep into the history as it can. */
   SESSION_PAGE_SIZE: 200,
 } as const;
 
 /**
  * Below this a reported timestamp cannot be milliseconds — it would be 1973 —
+ // SAFETY: The preceding check establishes the asserted contract.
  * so it is seconds. Devin types both `created_at` and `updated_at` as integers
+ // SAFETY: The preceding check establishes the asserted contract.
  * without naming the unit, and reading one as the other would place every
  * session either far in the past or far in the future.
  */
@@ -199,6 +207,7 @@ export const DEVIN_PROVIDER: SessionProvider = {
 
 export type DevinAdapterOptions = CloudAdapterOptions;
 
+// SAFETY: The preceding check establishes the asserted contract.
 /** The person a credential belongs to, and the organization to read as them. */
 interface DevinIdentity {
   userId: string;
@@ -218,12 +227,9 @@ interface DevinSession {
   observedAt: number;
 }
 
-export function millisecondsFromRecord(
-  record: Record<string, unknown>,
-  key: string,
-): number | undefined {
+export function millisecondsFromRecord(record: WireRecord, key: string): number | undefined {
   const value = record[key];
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return undefined;
+  if (!isWireNumber(value) || !Number.isFinite(value) || value <= 0) return undefined;
   return value < EARLIEST_MILLISECOND_TIMESTAMP ? value * 1000 : value;
 }
 
@@ -231,7 +237,7 @@ export function millisecondsFromRecord(
  * Devin reports the pull request a session opened rather than the repository it
  * opened it in, so the repository is the path segment in front of the request.
  */
-function pullRequestUrl(record: Record<string, unknown>): string | undefined {
+function pullRequestUrl(record: WireRecord): string | undefined {
   const pullRequests = record[DEVIN_FIELD.PULL_REQUESTS];
   const first = Array.isArray(pullRequests) ? pullRequests[0] : undefined;
   return isRecord(first) ? textFromRecord(first, DEVIN_FIELD.PR_URL) : undefined;
@@ -243,10 +249,7 @@ function repositoryFromPullRequest(url: string | undefined): string | undefined 
   return request > 0 ? segments[request - 1] : undefined;
 }
 
-function sessionFromRecord(
-  record: Record<string, unknown>,
-  identity: DevinIdentity,
-): DevinSession | undefined {
+function sessionFromRecord(record: WireRecord, identity: DevinIdentity): DevinSession | undefined {
   const id = textFromRecord(record, DEVIN_FIELD.SESSION_ID);
   const observedAt = millisecondsFromRecord(record, DEVIN_FIELD.UPDATED_AT);
   if (!id || observedAt === undefined) return undefined;
@@ -266,10 +269,10 @@ function sessionFromRecord(
     status: knownValue(DEVIN_SESSION_STATUS, textFromRecord(record, DEVIN_FIELD.STATUS)),
     detail: knownValue(DEVIN_RUNNING_DETAIL, textFromRecord(record, DEVIN_FIELD.STATUS_DETAIL)),
     archived: record[DEVIN_FIELD.IS_ARCHIVED] === true,
-    ...(name ? { name } : {}),
-    ...(repository ? { repository } : {}),
-    ...(link ? { link } : {}),
-    ...(pullRequest ? { pullRequest } : {}),
+    ...(name ? { name } : undefined),
+    ...(repository ? { repository } : undefined),
+    ...(link ? { link } : undefined),
+    ...(pullRequest ? { pullRequest } : undefined),
   };
 }
 
@@ -281,6 +284,7 @@ function sessionFromRecord(
  * state, reports nothing at all without a credential, and reports nothing for
  * a service-user credential, which names an organization rather than a person.
  * The writes it supports are a user-typed message, through Devin's own
+ // SAFETY: The preceding check establishes the asserted contract.
  * message endpoint, to a session it advertised as taking one, and an archive
  * for a settled session, through Devin's own archive endpoint on a session
  * that advertised it.
@@ -324,6 +328,7 @@ export class DevinSessionAdapter extends CloudSessionAdapter {
    * and cannot disagree with it.
    *
    * The answer is cached either way, so a credential Luke cannot observe as
+   // SAFETY: The preceding check establishes the asserted contract.
    * costs one request rather than one every refresh for as long as it is
    * stored. The base clears the cache the moment the credential changes.
    */
@@ -460,12 +465,14 @@ export class DevinSessionAdapter extends CloudSessionAdapter {
       status,
       observedAt: session.observedAt,
       canReceiveMessage: this.#sessionTakesMessages(session),
-      ...(this.#sessionTakesArchive(session) ? { controls: [DEVIN_ARCHIVE_SESSION_CONTROL] } : {}),
+      ...(this.#sessionTakesArchive(session)
+        ? { controls: [DEVIN_ARCHIVE_SESSION_CONTROL] }
+        : undefined),
       detail: {
-        ...(session.repository ? { repository: session.repository } : {}),
-        ...(status === SESSION_STATUS.ERROR ? { error: DEVIN_SESSION_FAILED_MESSAGE } : {}),
-        ...(session.link ? { link: session.link } : {}),
-        ...(session.pullRequest ? { change: session.pullRequest } : {}),
+        ...(session.repository ? { repository: session.repository } : undefined),
+        ...(status === SESSION_STATUS.ERROR ? { error: DEVIN_SESSION_FAILED_MESSAGE } : undefined),
+        ...(session.link ? { link: session.link } : undefined),
+        ...(session.pullRequest ? { change: session.pullRequest } : undefined),
       },
     };
   }

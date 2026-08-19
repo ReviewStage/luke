@@ -1,4 +1,4 @@
-import type { HostedApiError } from "../core.js";
+import type { HostedApiError, HostedQuota } from "../core.js";
 
 /**
  * The response vocabulary the hosted endpoints share. Every answer is JSON,
@@ -19,17 +19,25 @@ export const HOSTED_HTTP_STATUS = {
   SERVICE_UNAVAILABLE: 503,
 } as const;
 
-export function jsonResponse(status: number, body: unknown): Response {
+export function jsonResponse<Body extends object>(status: number, body: Body): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "content-type": "application/json" },
   });
 }
 
+export interface HostedErrorFields {
+  quota?: HostedQuota;
+  upstreamStatus?: number;
+}
+
 export function errorResponse(
   status: number,
   error: HostedApiError,
-  extra: Record<string, unknown> = {},
+  extra: HostedErrorFields = {},
 ): Response {
-  return jsonResponse(status, { error, ...extra });
+  const body: { error: HostedApiError } & HostedErrorFields = { error };
+  if (extra.quota !== undefined) body.quota = extra.quota;
+  if (extra.upstreamStatus !== undefined) body.upstreamStatus = extra.upstreamStatus;
+  return jsonResponse(status, body);
 }

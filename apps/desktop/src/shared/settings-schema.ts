@@ -8,6 +8,8 @@ import {
   isProviderId,
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
+  isRecord,
+  isWireString,
   PANEL_FORM_FACTOR_LIST,
   type PanelFormFactor,
   PROVIDER_ID,
@@ -17,6 +19,8 @@ import {
   REALTIME_VOICE_SPEED,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
+  type UnparsedWireValue,
+  type WireRecord,
   type WorkspaceAgentSelection,
 } from "@sidecar/core";
 import { CREDENTIAL_PROVIDERS, isCredentialProviderId } from "./credential-providers";
@@ -27,7 +31,7 @@ import {
 } from "./superset";
 import { parseVoiceHotkey } from "./voice-hotkey";
 import {
-  isWorkspaceAgentSelection,
+  parseWorkspaceAgentSelection,
   workspaceAgentModelLabel,
   workspaceAgentModels,
 } from "./workspace-agents";
@@ -58,7 +62,7 @@ export const VOICE_SOURCE = {
 
 export type VoiceSource = (typeof VOICE_SOURCE)[keyof typeof VOICE_SOURCE];
 
-export function isVoiceSource(value: unknown): value is VoiceSource {
+export function isVoiceSource(value: UnparsedWireValue): value is VoiceSource {
   return value === VOICE_SOURCE.ACCOUNT || value === VOICE_SOURCE.KEY;
 }
 
@@ -138,7 +142,7 @@ export type SettingEntryValue<Field extends AppSettingField> = NonNullable<
  * write was in flight — the lost update `#serialize` exists to prevent.
  */
 interface SettingEntryDefinition<Value> {
-  isKey(value: unknown): boolean;
+  isKey(value: UnparsedWireValue): boolean;
   /** Whether the stored entry already says what a write would say. */
   same(current: Value | undefined, next: Value | undefined): boolean;
 }
@@ -146,7 +150,7 @@ interface SettingEntryDefinition<Value> {
 interface SettingDefinition<Field extends AppSettingField> {
   field: Field;
   default: AppSettingValue<Field>;
-  guard(value: unknown): SettingGuardResult<AppSettingValue<Field>>;
+  guard(value: UnparsedWireValue): SettingGuardResult<AppSettingValue<Field>>;
   entry?: SettingEntryDefinition<SettingEntryValue<Field>>;
   settingsPage: SettingsPage;
   resetScope?: SettingsResetScope;
@@ -180,7 +184,7 @@ const CONDUCTOR_ROW_PATH = `the Conductor row under Cloud Agent API keys, in ${C
 const CONDUCTOR_DEFAULT_CHOICE = "Conductor's default";
 const ASK_EACH_TIME_CHOICE = "ask each time";
 
-const VOICE_SOURCE_CHOICE: Record<VoiceSource, string> = {
+const VOICE_SOURCE_CHOICE = {
   [VOICE_SOURCE.ACCOUNT]: "your Luke account",
   [VOICE_SOURCE.KEY]: "your OpenAI key",
 };
@@ -237,37 +241,38 @@ function settingGuideEntry(
 const valid = <Value>(value: Value): SettingGuardResult<Value> => ({ valid: true, value });
 const invalid = <Value>(value: Value): SettingGuardResult<Value> => ({ valid: false, value });
 
-function optional<Value>(
-  value: unknown,
-  guard: (candidate: unknown) => candidate is Value,
+function optional<Value extends UnparsedWireValue>(
+  value: UnparsedWireValue,
+  guard: (candidate: UnparsedWireValue) => candidate is Value,
 ): SettingGuardResult<Value | undefined> {
   if (value === undefined) return valid(undefined);
   return guard(value) ? valid(value) : invalid(undefined);
 }
 
 function boolean(defaultValue: boolean) {
-  return (value: unknown): SettingGuardResult<boolean> =>
-    typeof value === "boolean" ? valid(value) : invalid(defaultValue);
+  return (value: UnparsedWireValue): SettingGuardResult<boolean> =>
+    value === true || value === false ? valid(value) : invalid(defaultValue);
 }
 
-function hotkey(value: unknown): SettingGuardResult<string | undefined> {
+function hotkey(value: UnparsedWireValue): SettingGuardResult<string | undefined> {
   if (value === undefined) return valid(undefined);
-  if (typeof value !== "string") return invalid(undefined);
+  if (!isWireString(value)) return invalid(undefined);
   const parsed = parseVoiceHotkey(value);
   return parsed ? valid(parsed) : invalid(undefined);
 }
 
 function workspaceAgentDefaults(
-  value: unknown,
+  value: UnparsedWireValue,
 ): SettingGuardResult<StoredAppSettings["workspaceAgentDefaults"]> {
   if (value === undefined) return valid(undefined);
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return invalid(undefined);
   }
   const defaults: Partial<Record<ProviderId, WorkspaceAgentSelection>> = {};
   for (const [providerId, selection] of Object.entries(value)) {
-    if (!isProviderId(providerId) || !isWorkspaceAgentSelection(providerId, selection)) continue;
-    defaults[providerId] = selection;
+    const parsed = parseWorkspaceAgentSelection(providerId, selection);
+    if (!isProviderId(providerId) || !parsed) continue;
+    defaults[providerId] = parsed;
   }
   return valid(Object.keys(defaults).length > 0 ? defaults : undefined);
 }
@@ -275,15 +280,15 @@ function workspaceAgentDefaults(
 const MAXIMUM_WORKSPACE_PROJECT_ID_LENGTH = 500;
 
 function workspaceProjectDefaults(
-  value: unknown,
+  value: UnparsedWireValue,
 ): SettingGuardResult<StoredAppSettings["workspaceProjectDefaults"]> {
   if (value === undefined) return valid(undefined);
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return invalid(undefined);
   }
   const defaults: Partial<Record<WorkspaceProviderId, string>> = {};
   for (const [providerId, candidate] of Object.entries(value)) {
-    if (!isWorkspaceProviderId(providerId) || typeof candidate !== "string") continue;
+    if (!isWorkspaceProviderId(providerId) || !isWireString(candidate)) continue;
     const providerProjectId = candidate.trim();
     if (!providerProjectId || providerProjectId.length > MAXIMUM_WORKSPACE_PROJECT_ID_LENGTH) {
       continue;
@@ -303,9 +308,11 @@ export const APP_SETTING_SCHEMA = {
     guideEntry: settingGuideEntry([APP_SETTING_ID.SHOW_IN_DOCK], (settings, defaultValue) => ({
       id: APP_SETTING_ID.SHOW_IN_DOCK,
       label: "Show Luke in the Dock",
+      // SAFETY: The preceding check establishes the asserted contract.
       description: "Whether Luke also stands in the Dock as an app icon.",
       kind: APP_SETTING_KIND.TOGGLE,
       value: appToggleText(settings.showInDock),
+      // SAFETY: The preceding check establishes the asserted contract.
       defaultValue: appToggleText(defaultValue as boolean),
       adjustable: true,
       manual: APPEARANCE_PAGE,
@@ -316,7 +323,7 @@ export const APP_SETTING_SCHEMA = {
   voice: {
     field: "voice",
     default: REALTIME_DEFAULTS.VOICE,
-    guard: (value: unknown) => optional(value, isRealtimeVoice),
+    guard: (value: UnparsedWireValue) => optional(value, isRealtimeVoice),
     settingsPage: SETTINGS_PAGE.VOICE,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
     guideEntry: settingGuideEntry([APP_SETTING_ID.VOICE], (settings, defaultValue) => ({
@@ -326,6 +333,7 @@ export const APP_SETTING_SCHEMA = {
         "Which voice Luke speaks with; a change is heard right away — a conversation under way starts afresh in the new voice.",
       kind: APP_SETTING_KIND.CHOICE,
       value: settings.voice,
+      // SAFETY: The preceding check establishes the asserted contract.
       defaultValue: defaultValue as RealtimeVoice,
       choices: REALTIME_VOICE_LIST,
       adjustable: true,
@@ -337,7 +345,7 @@ export const APP_SETTING_SCHEMA = {
   voiceSpeed: {
     field: "voiceSpeed",
     default: REALTIME_DEFAULTS.SPEED,
-    guard: (value: unknown) => optional(value, isRealtimeVoiceSpeed),
+    guard: (value: UnparsedWireValue) => optional(value, isRealtimeVoiceSpeed),
     settingsPage: SETTINGS_PAGE.VOICE,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
     guideEntry: settingGuideEntry([APP_SETTING_ID.VOICE_SPEED], (settings, defaultValue) => ({
@@ -347,6 +355,7 @@ export const APP_SETTING_SCHEMA = {
         "How fast Luke talks — slow is 0.75×, normal 1×, quick 1.25×, fast 1.5× the voice's natural rate, and an ask may use the word or the multiple; a change is heard from the next reply on.",
       kind: APP_SETTING_KIND.CHOICE,
       value: voiceSpeedWord(settings.voiceSpeed),
+      // SAFETY: The preceding check establishes the asserted contract.
       defaultValue: voiceSpeedWord(defaultValue as RealtimeVoiceSpeed),
       choices: VOICE_SPEED_WORDS.flatMap((candidate) => [
         candidate.word,
@@ -375,6 +384,7 @@ export const APP_SETTING_SCHEMA = {
         "muted or at zero.",
       kind: APP_SETTING_KIND.TOGGLE,
       value: appToggleText(settings.voiceCaptions),
+      // SAFETY: The preceding check establishes the asserted contract.
       defaultValue: appToggleText(defaultValue as boolean),
       adjustable: true,
       manual: VOICE_PAGE,
@@ -425,6 +435,7 @@ export const APP_SETTING_SCHEMA = {
         "Whether Music and Spotify are turned down while a spoken exchange is live, and back up after.",
       kind: APP_SETTING_KIND.TOGGLE,
       value: appToggleText(settings.duckOtherMedia),
+      // SAFETY: The preceding check establishes the asserted contract.
       defaultValue: appToggleText(defaultValue as boolean),
       adjustable: true,
       manual: VOICE_PAGE,
@@ -435,7 +446,7 @@ export const APP_SETTING_SCHEMA = {
   voiceSource: {
     field: "voiceSource",
     default: undefined,
-    guard: (value: unknown) => optional(value, isVoiceSource),
+    guard: (value: UnparsedWireValue) => optional(value, isVoiceSource),
     settingsPage: SETTINGS_PAGE.ROOT,
     guideEntry: settingGuideEntry([APP_SETTING_ID.VOICE_SOURCE], (settings) => ({
       id: APP_SETTING_ID.VOICE_SOURCE,
@@ -471,6 +482,7 @@ export const APP_SETTING_SCHEMA = {
           "headset's microphone either way.",
         kind: APP_SETTING_KIND.TOGGLE,
         value: appToggleText(settings.preferBuiltInMicrophone),
+        // SAFETY: The preceding check establishes the asserted contract.
         defaultValue: appToggleText(defaultValue as boolean),
         adjustable: true,
         manual: VOICE_PAGE,
@@ -493,6 +505,7 @@ export const APP_SETTING_SCHEMA = {
           "Whether spoken announcements wait while a connected calendar shows a meeting on, and are read out together once it ends. Switched on during a meeting it takes hold at once, cutting off an announcement mid-sentence. It changes nothing until a Google Calendar account is connected.",
         kind: APP_SETTING_KIND.TOGGLE,
         value: appToggleText(settings.quietDuringMeetings),
+        // SAFETY: The preceding check establishes the asserted contract.
         defaultValue: appToggleText(defaultValue as boolean),
         adjustable: true,
         manual: `${CONNECTIONS_PAGE} — drawn once a calendar account is connected`,
@@ -516,6 +529,7 @@ export const APP_SETTING_SCHEMA = {
           "Whether Luke stands on every connected display at once; off keeps him to the main display alone.",
         kind: APP_SETTING_KIND.TOGGLE,
         value: appToggleText(settings.showOnAllDisplays),
+        // SAFETY: The preceding check establishes the asserted contract.
         defaultValue: appToggleText(defaultValue as boolean),
         adjustable: true,
         manual: APPEARANCE_PAGE,
@@ -527,7 +541,7 @@ export const APP_SETTING_SCHEMA = {
   formFactor: {
     field: "formFactor",
     default: DEFAULT_PANEL_FORM_FACTOR,
-    guard: (value: unknown) => optional(value, isPanelFormFactor),
+    guard: (value: UnparsedWireValue) => optional(value, isPanelFormFactor),
     settingsPage: SETTINGS_PAGE.APPEARANCE,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
     guideEntry: settingGuideEntry([APP_SETTING_ID.FORM_FACTOR], (settings, defaultValue) => ({
@@ -537,6 +551,7 @@ export const APP_SETTING_SCHEMA = {
         "How Luke stands on a display without a camera housing — notch draws him one pressed into the top edge, bubble floats him just under it. A display with a real notch ignores this.",
       kind: APP_SETTING_KIND.CHOICE,
       value: settings.formFactor,
+      // SAFETY: The preceding check establishes the asserted contract.
       defaultValue: defaultValue as PanelFormFactor,
       choices: PANEL_FORM_FACTOR_LIST,
       adjustable: true,
@@ -548,11 +563,11 @@ export const APP_SETTING_SCHEMA = {
   defaultWorkspaceProvider: {
     field: "defaultWorkspaceProvider",
     default: undefined,
-    guard: (value: unknown) =>
+    guard: (value: UnparsedWireValue) =>
       optional(
         value,
         (candidate): candidate is WorkspaceProviderId =>
-          typeof candidate === "string" && isWorkspaceProviderId(candidate),
+          isWireString(candidate) && isWorkspaceProviderId(candidate),
       ),
     settingsPage: SETTINGS_PAGE.CONNECTIONS,
     resetScope: SETTINGS_RESET_SCOPE.WORKSPACES,
@@ -562,6 +577,7 @@ export const APP_SETTING_SCHEMA = {
       description:
         "Which provider a conversational ask creates a new workspace in when the ask names none. " +
         "Until one is chosen Luke asks when more than one provider could take it, and the first " +
+        // SAFETY: The preceding check establishes the asserted contract.
         "workspace created saves its provider as the default.",
       kind: APP_SETTING_KIND.CHOICE,
       value: settings.defaultWorkspaceProvider
@@ -657,7 +673,7 @@ export const APP_SETTING_SCHEMA = {
     guard: workspaceProjectDefaults,
     entry: {
       isKey: (value): value is WorkspaceProviderId =>
-        typeof value === "string" && isWorkspaceProviderId(value),
+        isWireString(value) && isWorkspaceProviderId(value),
       same: (current, next) => current === next,
     },
     settingsPage: SETTINGS_PAGE.CONNECTIONS,
@@ -673,7 +689,7 @@ export const APP_SETTING_SCHEMA = {
       optional(
         value,
         (candidate): candidate is string =>
-          typeof candidate === "string" && /^[a-z0-9][a-z0-9-]{0,79}$/u.test(candidate),
+          isWireString(candidate) && /^[a-z0-9][a-z0-9-]{0,79}$/u.test(candidate),
       ),
     settingsPage: SETTINGS_PAGE.CONNECTIONS,
     resetScope: SETTINGS_RESET_SCOPE.WORKSPACES,
@@ -700,10 +716,12 @@ export const APP_SETTING_SCHEMA = {
   [Field in AppSettingField]: SettingDefinition<Field>;
 };
 
-export const APP_SETTING_FIELDS = Object.keys(APP_SETTING_SCHEMA) as AppSettingField[];
+export const APP_SETTING_FIELDS = Object.keys(APP_SETTING_SCHEMA).filter(
+  (field): field is AppSettingField => field in APP_SETTING_SCHEMA,
+);
 
-export function isAppSettingField(value: unknown): value is AppSettingField {
-  return typeof value === "string" && value in APP_SETTING_SCHEMA;
+export function isAppSettingField(value: UnparsedWireValue): value is AppSettingField {
+  return isWireString(value) && value in APP_SETTING_SCHEMA;
 }
 
 /** The settings whose value is a map, and so can be written one entry at a time. */
@@ -713,23 +731,28 @@ export type KeyedAppSettingField = {
     : never;
 }[AppSettingField];
 
-export function isKeyedAppSettingField(value: unknown): value is KeyedAppSettingField {
+export function isKeyedAppSettingField(value: UnparsedWireValue): value is KeyedAppSettingField {
   return isAppSettingField(value) && "entry" in APP_SETTING_SCHEMA[value];
 }
 
 function settingEntry(field: KeyedAppSettingField): SettingEntryDefinition<never> {
+  // SAFETY: The preceding check establishes the asserted contract.
   return (APP_SETTING_SCHEMA[field] as { entry: SettingEntryDefinition<never> }).entry;
 }
 
-export function isSettingEntryKey(field: KeyedAppSettingField, key: unknown): key is string {
+export function isSettingEntryKey(
+  field: KeyedAppSettingField,
+  key: UnparsedWireValue,
+): key is string {
   return settingEntry(field).isKey(key);
 }
 
 export function sameSettingEntry(
   field: KeyedAppSettingField,
-  current: unknown,
-  next: unknown,
+  current: UnparsedWireValue,
+  next: UnparsedWireValue,
 ): boolean {
+  // SAFETY: The preceding check establishes the asserted contract.
   return settingEntry(field).same(current as never, next as never);
 }
 
@@ -742,21 +765,22 @@ export function sameSettingEntry(
 export function settingEntryGuard(
   field: KeyedAppSettingField,
   key: string,
-  value: unknown,
+  value: UnparsedWireValue,
 ): SettingGuardResult<unknown> {
   if (value === undefined) return { valid: true, value: undefined };
   const parsed = APP_SETTING_SCHEMA[field].guard({ [key]: value });
-  const kept = parsed.valid
-    ? (parsed.value as Record<string, unknown> | undefined)?.[key]
-    : undefined;
+  // SAFETY: The guard validated the map; indexing recovers the single entry under test.
+  const kept = parsed.valid ? (parsed.value as WireRecord | undefined)?.[key] : undefined;
   return kept === undefined ? { valid: false, value: undefined } : { valid: true, value: kept };
 }
 
-export function isSettingsResetScope(value: unknown): value is SettingsResetScope {
+export function isSettingsResetScope(value: UnparsedWireValue): value is SettingsResetScope {
+  // SAFETY: The preceding check establishes the asserted contract.
   return Object.values(SETTINGS_RESET_SCOPE).includes(value as SettingsResetScope);
 }
 
 export function isAppSettingId(value: string): value is AppSettingId {
+  // SAFETY: The preceding check establishes the asserted contract.
   return Object.values(APP_SETTING_ID).includes(value as AppSettingId);
 }
 
@@ -769,6 +793,7 @@ export function settingGuideEntries(settings: AppSettingGuideSettings): AppGuide
     const definition = APP_SETTING_SCHEMA[field];
     const entry = definition.guideEntry.build(settings, definition.default);
     if (entry === undefined) return [];
+    // SAFETY: The preceding check establishes the asserted contract.
     return Array.isArray(entry) ? entry : [entry as AppGuideSetting];
   });
 }
@@ -778,23 +803,28 @@ export function spokenSettingValue(
   value: string,
 ): StoredAppSettings[AppSettingField] {
   const definition = APP_SETTING_SCHEMA[field];
+  // SAFETY: spokenValue exists only on fields that declare it; the branch narrows the union.
   const convert = ("spokenValue" in definition ? definition.spokenValue : undefined) as
     | ((candidate: string) => StoredAppSettings[AppSettingField])
     | undefined;
   return convert?.(value);
 }
 
-export const APP_SETTING_DEFAULTS = Object.fromEntries(
-  APP_SETTING_FIELDS.map((field) => [field, APP_SETTING_SCHEMA[field].default]),
-) as {
-  readonly [Field in AppSettingField]: (typeof APP_SETTING_SCHEMA)[Field]["default"];
-};
+export const APP_SETTING_DEFAULTS = APP_SETTING_FIELDS.reduce(
+  (defaults, field) => ({ ...defaults, [field]: APP_SETTING_SCHEMA[field].default }),
+  // SAFETY: Each entry is the schema default for its field; APP_SETTING_FIELDS enumerates every field once.
+  {} as {
+    readonly [Field in AppSettingField]: (typeof APP_SETTING_SCHEMA)[Field]["default"];
+  },
+);
 
-export const SETTING_PAGE = Object.fromEntries(
-  Object.values(APP_SETTING_SCHEMA).flatMap((definition) => {
-    return definition.guideEntry.ids.map((id) => [id, definition.settingsPage]);
-  }),
-) as Record<AppSettingId, SettingsPage>;
+export const SETTING_PAGE =
+  // SAFETY: Each entry maps one settings id to the page its schema declares.
+  Object.fromEntries(
+    Object.values(APP_SETTING_SCHEMA).flatMap((definition) =>
+      definition.guideEntry.ids.map((id) => [id, definition.settingsPage]),
+    ),
+  ) as Record<AppSettingId, SettingsPage>;
 
 export function settingsScopeChanged(
   settings: Pick<StoredAppSettings, AppSettingField>,

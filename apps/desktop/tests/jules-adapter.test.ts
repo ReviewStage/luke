@@ -44,30 +44,48 @@ function lastActivityAt(session: TestSession): number {
   return session.updateTime ?? session.createTime;
 }
 
-function sessionPayload(session: TestSession): Record<string, unknown> {
-  return {
+interface JulesSessionApiPayload {
+  name: string;
+  id: string;
+  prompt: string;
+  title: string;
+  sourceContext?: {
+    source: string;
+    environmentVariablesEnabled: boolean;
+    githubRepoContext: {
+      startingBranch: string;
+    };
+  };
+  state: string;
+  url: string;
+  createTime: string;
+  updateTime: string;
+  nextPageToken?: string;
+}
+
+function sessionPayload(session: TestSession) {
+  const payload: JulesSessionApiPayload = {
     name: `sessions/${session.id}`,
     id: session.id,
     // Jules returns the task the user typed and a title generated from it, so
     // both are transcript content that no observation may carry.
     prompt: `${SECRET_PROMPT_TEXT} please`,
     title: `${SECRET_PROMPT_TEXT} title`,
-    ...(session.omitSourceContext
-      ? {}
-      : {
-          sourceContext: {
-            source: session.source ?? TEST_SOURCE,
-            environmentVariablesEnabled: false,
-            githubRepoContext: {
-              startingBranch: session.startingBranch ?? "main",
-            },
-          },
-        }),
     state: session.state ?? TEST_STATE.IN_PROGRESS,
     url: `https://jules.google.com/task/${session.id}`,
     createTime: isoTimestamp(session.createTime),
     updateTime: isoTimestamp(lastActivityAt(session)),
   };
+  if (!session.omitSourceContext) {
+    payload.sourceContext = {
+      source: session.source ?? TEST_SOURCE,
+      environmentVariablesEnabled: false,
+      githubRepoContext: {
+        startingBranch: session.startingBranch ?? "main",
+      },
+    };
+  }
+  return payload;
 }
 
 /** Serves the subset of the alpha API the adapter is allowed to use. */
@@ -93,10 +111,13 @@ function fakeJulesApi(sessions: readonly TestSession[]) {
     // order it was given rather than newest-first.
     const pageSize = Number(searchParams.get("pageSize") ?? "30");
     const page = sessions.slice(0, pageSize);
-    return jsonResponse({
+    const response = {
       sessions: page.map(sessionPayload),
-      ...(page.length < sessions.length ? { nextPageToken: "next-page" } : {}),
-    });
+    };
+    if (page.length < sessions.length) {
+      response.nextPageToken = "next-page";
+    }
+    return jsonResponse(response);
   });
 }
 
@@ -141,10 +162,10 @@ describeCloudAdapterContract("Jules", (options) => {
 
 test("declares every provider operation on one adapter interface", () => {
   const adapter = adapterFor(async () => new Response("{}", { status: 200 }));
-  assert.equal(typeof adapter.sendMessage, "function");
-  assert.equal(typeof adapter.executeControl, "function");
-  assert.equal(typeof adapter.createWorkspace, "function");
-  assert.equal(typeof adapter.spawnWorkspaceAgent, "function");
+  assert.ok(adapter.sendMessage instanceof Function);
+  assert.ok(adapter.executeControl instanceof Function);
+  assert.ok(adapter.createWorkspace instanceof Function);
+  assert.ok(adapter.spawnWorkspaceAgent instanceof Function);
 });
 
 test("observes a session in progress without exposing prompt-derived text", async () => {
@@ -240,9 +261,11 @@ test("maps every state Jules reports onto a state Luke can show", async () => {
   );
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("keeps reporting a long turn as working", async () => {
   // `updateTime` marks when the session entered its state rather than a
   // heartbeat, so a turn that started an hour ago and is still going must not
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // read as stale.
   const startedAt = TEST_TIME - 60 * 60 * 1000;
   const api = fakeJulesApi([workingSession("session-long-turn", startedAt)]);
@@ -380,6 +403,7 @@ test("clears observations when Jules rejects the API key", async () => {
   assert.deepEqual(rejected, []);
 });
 
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("advertises a message only for the states Jules documents as active", async () => {
   const api = fakeJulesApi([
     { id: "session-planning", state: TEST_STATE.PLANNING, createTime: TEST_TIME - 1_000 },

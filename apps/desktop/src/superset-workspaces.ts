@@ -1,23 +1,32 @@
 import path from "node:path";
-import { PROVIDER_ID, type ProviderSessionObservation } from "@sidecar/core";
+import { PROVIDER_ID, type ProviderSessionObservation, type WireRecord } from "@sidecar/core";
 import { readDirectory } from "./local-session-adapter";
 import {
   canIgnoreSqliteError,
   defaultSqliteModule,
+  numberFromRow,
   openReadOnlyDatabase,
   type SqliteModuleLoader,
   textFromRow,
 } from "./local-sqlite";
 import { SUPERSET_WORKSPACE_PROVIDER_ID } from "./shared/contracts";
 import { SUPERSET_CONTROL_ID } from "./superset-cli";
+import { wireRecord } from "./wire-boundary";
 
-const SUPERSET_AGENT_PROVIDER: Readonly<Record<string, string>> = {
+const SUPERSET_AGENT_PROVIDER = {
   claude: PROVIDER_ID.CLAUDE_CODE,
   codex: PROVIDER_ID.CODEX,
   copilot: PROVIDER_ID.COPILOT,
   cursor: PROVIDER_ID.CURSOR,
   opencode: PROVIDER_ID.OPENCODE,
-};
+} as const satisfies Readonly<Record<string, string>>;
+
+function supersetProviderId(agentId: string): string | undefined {
+  for (const [key, providerId] of Object.entries(SUPERSET_AGENT_PROVIDER)) {
+    if (key === agentId) return providerId;
+  }
+  return undefined;
+}
 
 const SUPERSET_WORKSPACE_QUERY = `
   SELECT
@@ -58,18 +67,13 @@ export interface SupersetSessionContext {
   spawnableAgents: readonly string[];
 }
 
-function numberFromRow(row: Record<string, unknown>, key: string): number | undefined {
-  const value = row[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
 function contextFromRow(
   hostId: string,
-  row: Record<string, unknown>,
+  row: WireRecord,
   spawnableAgents: readonly string[],
 ): SupersetSessionContext | undefined {
   const agentId = textFromRow(row, "agent_id");
-  const providerId = agentId ? SUPERSET_AGENT_PROVIDER[agentId] : undefined;
+  const providerId = agentId ? supersetProviderId(agentId) : undefined;
   const providerSessionId = textFromRow(row, "agent_session_id");
   const workspaceId = textFromRow(row, "workspace_id");
   const workspaceName = textFromRow(row, "workspace_name");
@@ -89,7 +93,7 @@ function contextFromRow(
   const projectName = textFromRow(row, "project_name");
   const branch = textFromRow(row, "branch");
   const pullRequestUrl = textFromRow(row, "pull_request_url");
-  return {
+  const context: SupersetSessionContext = {
     providerId,
     providerSessionId,
     hostId,
@@ -98,10 +102,11 @@ function contextFromRow(
     terminalId,
     updatedAt,
     spawnableAgents,
-    ...(projectName ? { projectName } : {}),
-    ...(branch ? { branch } : {}),
-    ...(pullRequestUrl ? { pullRequestUrl } : {}),
   };
+  if (projectName) context.projectName = projectName;
+  if (branch) context.branch = branch;
+  if (pullRequestUrl) context.pullRequestUrl = pullRequestUrl;
+  return context;
 }
 
 export class SupersetWorkspaceSnapshot {
@@ -130,43 +135,48 @@ export class SupersetWorkspaceSnapshot {
     return observations.map((observation) => {
       const context = this.context(providerId, observation.providerSessionId);
       if (!context) return observation;
+      const detail = { ...observation.detail };
+      if (context.projectName) detail.repository = context.projectName;
+      if (context.branch) detail.branch = context.branch;
+      if (context.pullRequestUrl) detail.change = context.pullRequestUrl;
+      const workspace = {
+        providerWorkspaceId: context.workspaceId,
+        name: context.workspaceName,
+        scopeId: SUPERSET_WORKSPACE_PROVIDER_ID,
+        managerName: "Superset",
+      };
+      if (!actionsEnabled) {
+        return { ...observation, detail, workspace };
+      }
+      const controls = [
+        ...(observation.controls ?? []),
+        {
+          id: SUPERSET_CONTROL_ID.OPEN_WORKSPACE,
+          label: "Open in Superset",
+          target: context.workspaceId,
+        },
+        {
+          id: SUPERSET_CONTROL_ID.CLOSE_TERMINAL,
+          label: "Close terminal",
+        },
+      ];
+      if (context.spawnableAgents.length > 0) {
+        return {
+          ...observation,
+          detail,
+          workspace,
+          canReceiveMessage: true,
+          spawnableAgents: context.spawnableAgents,
+          spawnTarget: context.workspaceId,
+          controls,
+        };
+      }
       return {
         ...observation,
-        detail: {
-          ...observation.detail,
-          ...(context.projectName ? { repository: context.projectName } : {}),
-          ...(context.branch ? { branch: context.branch } : {}),
-          ...(context.pullRequestUrl ? { change: context.pullRequestUrl } : {}),
-        },
-        workspace: {
-          providerWorkspaceId: context.workspaceId,
-          name: context.workspaceName,
-          scopeId: SUPERSET_WORKSPACE_PROVIDER_ID,
-          managerName: "Superset",
-        },
-        ...(actionsEnabled
-          ? {
-              canReceiveMessage: true,
-              ...(context.spawnableAgents.length > 0
-                ? {
-                    spawnableAgents: context.spawnableAgents,
-                    spawnTarget: context.workspaceId,
-                  }
-                : {}),
-              controls: [
-                ...(observation.controls ?? []),
-                {
-                  id: SUPERSET_CONTROL_ID.OPEN_WORKSPACE,
-                  label: "Open in Superset",
-                  target: context.workspaceId,
-                },
-                {
-                  id: SUPERSET_CONTROL_ID.CLOSE_TERMINAL,
-                  label: "Close terminal",
-                },
-              ],
-            }
-          : {}),
+        detail,
+        workspace,
+        canReceiveMessage: true,
+        controls,
       };
     });
   }
@@ -212,20 +222,22 @@ export class SupersetWorkspaceReader {
         .prepare(SUPERSET_AGENT_QUERY)
         .all()
         .flatMap((value) => {
-          if (typeof value !== "object" || value === null) return [];
-          const presetId = textFromRow(value as Record<string, unknown>, "preset_id");
+          const row = wireRecord(value);
+          if (!row) return [];
+          const presetId = textFromRow(row, "preset_id");
           return presetId ? [presetId] : [];
         });
       return database
         .prepare(SUPERSET_WORKSPACE_QUERY)
         .all()
         .flatMap((value) => {
-          if (typeof value !== "object" || value === null) return [];
-          const context = contextFromRow(hostId, value as Record<string, unknown>, spawnableAgents);
+          const row = wireRecord(value);
+          if (!row) return [];
+          const context = contextFromRow(hostId, row, spawnableAgents);
           return context ? [context] : [];
         });
     } catch (error) {
-      if (canIgnoreSqliteError(error)) return [];
+      if (error instanceof Error && canIgnoreSqliteError(error)) return [];
       throw error;
     } finally {
       database.close();

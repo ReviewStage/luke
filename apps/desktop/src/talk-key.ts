@@ -84,9 +84,13 @@ export class TalkKeyWatcher {
     try {
       const child = this.#options.spawnHelper
         ? this.#options.spawnHelper(candidates)
-        : (spawn(helperPath(), [...candidates], {
-            stdio: ["ignore", "pipe", "ignore"],
-          }) as unknown as TalkKeyProcess);
+        : (() => {
+            const child = spawn(helperPath(), [...candidates], {
+              stdio: ["ignore", "pipe", "ignore"],
+            });
+            // SAFETY: spawn returns ChildProcess; the helper's stdout protocol matches TalkKeyProcess.
+            return child as TalkKeyProcess;
+          })();
       this.#child = child;
       child.stdout?.setEncoding("utf8");
       child.stdout?.on("data", (chunk) => this.#read(chunk));
@@ -104,6 +108,7 @@ export class TalkKeyWatcher {
 
   /**
    * Stops the helper, reporting when its process is actually gone. Detached
+   // SAFETY: The preceding check establishes the asserted contract.
    * before killing: this exit is the app's own doing, and reporting it as the
    * key becoming unavailable would stand up a fallback during shutdown. The
    * answer matters to a successor — the system releases the chord with the

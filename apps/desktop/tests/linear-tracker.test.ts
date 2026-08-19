@@ -8,23 +8,25 @@ import {
   type RecordedRequest,
   recordingFetch,
 } from "./support/http-fake";
+import type { ParsedJsonObject } from "./support/json";
 
 const OBSERVED_AT = 1_800_000_000_000;
 
 function graphqlDocument(request: RecordedRequest | undefined): {
   query: string;
-  variables: Record<string, unknown>;
+  variables: ParsedJsonObject;
 } {
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   return JSON.parse(request?.body ?? "{}") as {
     query: string;
-    variables: Record<string, unknown>;
+    variables: ParsedJsonObject;
   };
 }
 
 function trackerWith(
   payloads: readonly unknown[],
   options: { accessToken?: string; status?: number } = {},
-): { tracker: LinearIssueTracker; requests: RecordedRequest[] } {
+) {
   let call = 0;
   const { fetch, requests } = recordingFetch(() => {
     const payload = payloads[Math.min(call, payloads.length - 1)];
@@ -34,6 +36,7 @@ function trackerWith(
   const tracker = new LinearIssueTracker({
     readAccessToken: async () => options.accessToken,
     now: () => OBSERVED_AT,
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
     fetchImplementation: fetch as typeof fetch,
   });
   return { tracker, requests };
