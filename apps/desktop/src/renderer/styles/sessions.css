@@ -738,6 +738,12 @@ html[data-keyboard="true"] button.session-row:focus-visible {
   white-space: nowrap;
 }
 
+/* The change's size never truncates: it is short by construction, and the
+   checkout beside it is the field that can afford an ellipsis. */
+.row-place .row-diff {
+  flex: 0 0 auto;
+}
+
 .row-branch-glyph {
   width: 10px;
   height: 10px;

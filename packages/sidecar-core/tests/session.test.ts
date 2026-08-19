@@ -88,3 +88,38 @@ test("an address whose tail names no number yields none rather than a guess", ()
   );
   assert.equal(sessionChangeNumber("not an address"), undefined);
 });
+
+test("keeps a sound diff summary and drops a suspect or empty one whole", () => {
+  const withDiff = (diff: Parameters<typeof normalizeSession>[1]["detail"]) =>
+    normalizeSession(
+      { id: "codex", displayName: "Codex" },
+      {
+        providerSessionId: "task-1",
+        title: "workspace",
+        status: SESSION_STATUS.COMPLETE,
+        observedAt: TEST_NOW,
+        detail: diff,
+      },
+    ).detail.diff;
+
+  assert.deepEqual(withDiff({ diff: { filesChanged: 3, linesAdded: 12, linesRemoved: 4 } }), {
+    filesChanged: 3,
+    linesAdded: 12,
+    linesRemoved: 4,
+  });
+  // A summary of nothing says nothing a row should spend words on.
+  assert.equal(withDiff({ diff: { filesChanged: 0, linesAdded: 0, linesRemoved: 0 } }), undefined);
+  // One count outside sense makes the others suspect, so the summary drops whole.
+  assert.equal(
+    withDiff({ diff: { filesChanged: -1, linesAdded: 12, linesRemoved: 4 } }),
+    undefined,
+  );
+  assert.equal(
+    withDiff({ diff: { filesChanged: 3, linesAdded: 12.5, linesRemoved: 4 } }),
+    undefined,
+  );
+  assert.equal(
+    withDiff({ diff: { filesChanged: 3, linesAdded: 12, linesRemoved: 1_000_000 } }),
+    undefined,
+  );
+});

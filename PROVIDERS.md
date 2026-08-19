@@ -63,8 +63,10 @@ Transcript readout is Luke reading a local session's conversation aloud — or
 into his composer — when asked about that session; a cloud session's
 conversation lives with its provider and is never fetched. Every provider's
 rows also carry the shared observation fields where the provider writes them:
-title, status, repository, branch, model, current tool activity, error, and a
-change link such as a pull request.
+title, status, repository, branch, model, current tool activity, error, a
+change link such as a pull request, and the size of the change as its
+provider counts it — files touched, lines added and removed — drawn beside
+the checkout. Codex cloud tasks are the one source of those counts today.
 
 ## Claude Code
 

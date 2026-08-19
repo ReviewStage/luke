@@ -1,9 +1,11 @@
 import {
+  isRecord,
   PROVIDER_ACT_RESULT_STATUS,
   type ProviderSessionObservation,
   type ProviderWorkspaceRequest,
   type ProviderWorkspaceResult,
   SESSION_STATUS,
+  type SessionDiffSummary,
   type SessionStatus,
   sessionMessageText,
   WORKSPACE_TASK_SUPPORT,
@@ -51,6 +53,7 @@ const CODEX_TASK_FIELD = {
   ENVIRONMENT_LABEL: "environment_label",
   ID: "id",
   STATUS: "status",
+  SUMMARY: "summary",
   TASKS: "tasks",
   UPDATED_AT: "updated_at",
   URL: "url",
@@ -72,6 +75,13 @@ const CODEX_ADAPTER_DEFAULTS = {
   ENVIRONMENT_SWEEP_MAXIMUM_PAGES: 5,
   /** A cursor is an opaque token, not a document; longer is a report to distrust. */
   MAXIMUM_CURSOR_LENGTH: 400,
+} as const;
+
+/** The CLI's own names for the three counts inside a task's `summary`. */
+const CODEX_SUMMARY_FIELD = {
+  FILES_CHANGED: "files_changed",
+  LINES_ADDED: "lines_added",
+  LINES_REMOVED: "lines_removed",
 } as const;
 
 /** The CLI's documented task states, kebab-case as its JSON serializes them. */
@@ -111,6 +121,27 @@ interface CodexCloudTask {
   link?: string;
   environmentId?: string;
   environmentLabel?: string;
+  diff?: SessionDiffSummary;
+}
+
+/**
+ * The three counts the CLI reports for a task's change, or nothing: a summary
+ * missing any count is not half-reported, and the all-zero summary of a task
+ * still working is left to the normalizer to drop.
+ */
+function diffFromRecord(value: unknown): SessionDiffSummary | undefined {
+  if (!isRecord(value)) return undefined;
+  const filesChanged = value[CODEX_SUMMARY_FIELD.FILES_CHANGED];
+  const linesAdded = value[CODEX_SUMMARY_FIELD.LINES_ADDED];
+  const linesRemoved = value[CODEX_SUMMARY_FIELD.LINES_REMOVED];
+  if (
+    typeof filesChanged !== "number" ||
+    typeof linesAdded !== "number" ||
+    typeof linesRemoved !== "number"
+  ) {
+    return undefined;
+  }
+  return { filesChanged, linesAdded, linesRemoved };
 }
 
 function taskFromRecord(record: Record<string, unknown>): CodexCloudTask | undefined {
@@ -122,6 +153,7 @@ function taskFromRecord(record: Record<string, unknown>): CodexCloudTask | undef
   const link = textFromRecord(record, CODEX_TASK_FIELD.URL);
   const environmentId = textFromRecord(record, CODEX_TASK_FIELD.ENVIRONMENT_ID);
   const environmentLabel = textFromRecord(record, CODEX_TASK_FIELD.ENVIRONMENT_LABEL);
+  const diff = diffFromRecord(record[CODEX_TASK_FIELD.SUMMARY]);
 
   return {
     id,
@@ -135,6 +167,7 @@ function taskFromRecord(record: Record<string, unknown>): CodexCloudTask | undef
     ...(link ? { link } : {}),
     ...(environmentId ? { environmentId } : {}),
     ...(environmentLabel ? { environmentLabel } : {}),
+    ...(diff ? { diff } : {}),
   };
 }
 
@@ -354,6 +387,7 @@ function observationFor(task: CodexCloudTask): ProviderSessionObservation {
     detail: {
       repository: task.repositoryLabel,
       ...(task.link ? { link: task.link } : {}),
+      ...(task.diff ? { diff: task.diff } : {}),
     },
   };
 }

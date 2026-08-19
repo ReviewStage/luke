@@ -240,6 +240,20 @@ export interface SessionDetail {
   link?: string;
   /** The work the session has published, such as a pull request. */
   change?: string;
+  /** The size of the change the session holds, as its provider counts it. */
+  diff?: SessionDiffSummary;
+}
+
+/**
+ * A provider's own counts for a session's change: files touched, lines added,
+ * lines removed. Counts rather than words, because the surface words them —
+ * an adapter reports the numbers its provider actually returned and composes
+ * nothing.
+ */
+export interface SessionDiffSummary {
+  filesChanged: number;
+  linesAdded: number;
+  linesRemoved: number;
 }
 
 /**
@@ -414,6 +428,28 @@ export function sessionChangeNumber(change: string): number | undefined {
   return tail !== undefined && /^\d+$/.test(tail) ? Number(tail) : undefined;
 }
 
+/** A count a row can draw; anything past it is a report to distrust whole. */
+export const maximumSessionDiffCount = 999_999;
+
+/**
+ * A provider's diff counts, or nothing. Dropped whole rather than partially:
+ * one count outside sense makes the others' claim on the row suspect, and a
+ * summary of all zeroes says nothing a row should spend words on.
+ */
+function sessionDiff(diff: SessionDiffSummary | undefined): SessionDiffSummary | undefined {
+  if (!diff) return undefined;
+  const counts = [diff.filesChanged, diff.linesAdded, diff.linesRemoved];
+  const sound = counts.every(
+    (count) => Number.isSafeInteger(count) && count >= 0 && count <= maximumSessionDiffCount,
+  );
+  if (!sound || counts.every((count) => count === 0)) return undefined;
+  return {
+    filesChanged: diff.filesChanged,
+    linesAdded: diff.linesAdded,
+    linesRemoved: diff.linesRemoved,
+  };
+}
+
 function timestamp(value: number, field: string): number {
   if (!Number.isFinite(value) || value < 0) {
     throw new Error(`${field} must be a non-negative finite timestamp`);
@@ -489,6 +525,7 @@ export function normalizeSessionDetail(detail: SessionDetail | undefined): Sessi
   const error = boundedText(detail.error, maximumSessionDetailLength);
   const link = sessionLink(detail.link);
   const change = sessionChange(detail.change);
+  const diff = sessionDiff(detail.diff);
 
   return {
     ...(activity ? { activity } : {}),
@@ -498,6 +535,7 @@ export function normalizeSessionDetail(detail: SessionDetail | undefined): Sessi
     ...(error ? { error } : {}),
     ...(link ? { link } : {}),
     ...(change ? { change } : {}),
+    ...(diff ? { diff } : {}),
   };
 }
 

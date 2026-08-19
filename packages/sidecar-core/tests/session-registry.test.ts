@@ -377,3 +377,19 @@ test("a malformed provider snapshot leaves the previous registry state intact", 
     /provider id must not be empty/,
   );
 });
+
+test("a snapshot's diff summary is the caller's copy, never the store's", () => {
+  const registry = new InMemorySessionRegistry();
+  registry.replaceProvider(codex, [
+    observation("task-1", 1, {
+      detail: { diff: { filesChanged: 3, linesAdded: 12, linesRemoved: 4 } },
+    }),
+  ]);
+
+  const identity = { providerId: "codex", providerSessionId: "task-1" };
+  const held = registry.get(identity);
+  assert.ok(held?.detail.diff);
+  held.detail.diff.linesAdded = 999;
+
+  assert.equal(registry.get(identity)?.detail.diff?.linesAdded, 12);
+});

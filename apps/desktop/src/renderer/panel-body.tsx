@@ -482,12 +482,17 @@ function SessionRow({
             <Highlighted text={session.detail} tokens={highlight} />
           </span>
         </small>
-        {place ? (
-          <small className="row-place" title={place}>
+        {place || session.diff ? (
+          <small className="row-place" title={place ?? session.diff}>
             {session.branch ? <BranchGlyph /> : null}
-            <span>
-              <Highlighted text={place} tokens={highlight} />
-            </span>
+            {place ? (
+              <span>
+                <Highlighted text={place} tokens={highlight} />
+              </span>
+            ) : null}
+            {/* The change's size rides the place line: both say what the work
+                touched, and a session with neither spends no line on it. */}
+            {session.diff ? <span className="row-diff">{session.diff}</span> : null}
           </small>
         ) : null}
       </span>
