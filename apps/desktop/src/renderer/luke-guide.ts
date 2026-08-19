@@ -477,8 +477,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
             label: "Muted output",
             detail:
               "While the Mac is muted or its volume is at zero, Luke's replies are captioned on " +
-              "screen even with Captions off, and a hint under the words asks for volume. A " +
-              "reply longer than the caption block scrolls at reading pace, oldest line first. " +
+              "screen even with Captions off, and a hint under the words asks for volume. The " +
+              "whole reply stays on screen, the block growing to fit the words. " +
               "The hint's Got it button rests it for that stretch of silence and any that " +
               "begins within fifteen minutes; the captions stay.",
           },

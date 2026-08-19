@@ -39,8 +39,8 @@ test("anchors the compact window to the physical top edge", () => {
     width: 538,
     // The top inset, the caption block Luke's words wrap into below it, every
     // chip row the notice band can grow to under those words, and the margin
-    // the overshoot and the shadow fall in: 38 + 70 + 26 × 3 + 40.
-    height: 226,
+    // the overshoot and the shadow fall in: 38 + 210 + 26 × 3 + 40.
+    height: 366,
     notch: {
       topInset: 38,
       housingWidth: 210,
@@ -151,7 +151,7 @@ test("a display without a housing keeps the peek's width beside the 14-inch one"
   };
 
   // Luke's words wrap at the peek's width, so the bubble's window holds the
-  // same floored peek the caption block's four lines were measured against —
+  // same floored peek the caption block's reservation was measured against —
   // never the 248px left when no housing grows it.
   assert.equal(PEEK_MIN_WIDTH, 210 + (CAPSULE_SIDE_WIDTH + PEEK_SIDE_GROWTH) * 2);
   assert.equal(
