@@ -711,9 +711,43 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   }, [options.voiceAvailable, setVoiceStatus, stopMicrophone, voiceStatusNow]);
 
   /**
-   * Opens the call, answering with what the system said about the microphone —
-   * the one fact a caller that could not send anything needs in order to say
-   * why.
+   * Opens the developer's call and feeds it everything a turn is validated
+   * against. Nothing is asked of the system on the way: connecting declares a
+   * bare transceiver, no capture device opens, and the microphone permission
+   * has no part in it — the device stays the press's own act.
+   */
+  const startConversation = useCallback(async (): Promise<boolean> => {
+    setVoiceError(undefined);
+    const session = ensureVoiceSession();
+    if (!(await session.connect())) return false;
+    session.updateSessions(sessionsRef.current, noticeAsksRef.current);
+    // After the roster, which it is rendered against. The reference outlives
+    // the calls themselves on purpose: the announcement it points back at
+    // may have been read out on the speak-only call this one just replaced.
+    session.updateSessionReference(sessionReferenceRef.current);
+    // The announcement's own words re-feed on the same terms, so "what did
+    // you just say?" can be answered on the call that replaced the one that
+    // said it.
+    if (lastAnnouncementRef.current) {
+      session.updateLastAnnouncement(lastAnnouncementRef.current);
+    }
+    session.updateWorkspaceProjects(
+      workspaceProjectsRef.current,
+      defaultWorkspaceProviderRef.current,
+      workspaceProjectDefaultsRef.current,
+    );
+    session.updateGuide(guideRef.current);
+    session.updateIssues(issuesRef.current);
+    return true;
+  }, [ensureVoiceSession]);
+
+  /**
+   * The press's way in: asks the system about the microphone, then opens the
+   * call, answering with what the system said — the one fact a caller that
+   * could not send anything needs in order to say why. The gate belongs here
+   * and not on the call itself, because the press is what opens a capture
+   * device; a call opened for a typed ask goes through {@link startConversation}
+   * and never asks.
    */
   const startMicrophone = useCallback(async (): Promise<MicrophoneStatus> => {
     setVoiceError(undefined);
@@ -728,28 +762,9 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       setTalkOpening(false);
       return permission;
     }
-    if (await session.connect()) {
-      session.updateSessions(sessionsRef.current, noticeAsksRef.current);
-      // After the roster, which it is rendered against. The reference outlives
-      // the calls themselves on purpose: the announcement it points back at
-      // may have been read out on the speak-only call this one just replaced.
-      session.updateSessionReference(sessionReferenceRef.current);
-      // The announcement's own words re-feed on the same terms, so "what did
-      // you just say?" can be answered on the call that replaced the one that
-      // said it.
-      if (lastAnnouncementRef.current) {
-        session.updateLastAnnouncement(lastAnnouncementRef.current);
-      }
-      session.updateWorkspaceProjects(
-        workspaceProjectsRef.current,
-        defaultWorkspaceProviderRef.current,
-        workspaceProjectDefaultsRef.current,
-      );
-      session.updateGuide(guideRef.current);
-      session.updateIssues(issuesRef.current);
-    }
+    await startConversation();
     return permission;
-  }, [ensureVoiceSession]);
+  }, [ensureVoiceSession, startConversation]);
 
   /**
    * Luke's reply is over when it stops being audible, not when the model stops
@@ -775,9 +790,10 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    * the call before it can open a turn, which is what lets the key work without
    * the panel ever being visited.
    *
-   * The talk key going down. Every press goes to the session, including the one
-   * that has no call to press against yet: the microphone opens for the press,
-   * so one that beats the call is remembered and applied when it comes up.
+   * The talk key going down. Every press the system lets capture goes to the
+   * session, including the one that has no call to press against yet: the
+   * microphone opens for the press, so one that beats the call is remembered
+   * and applied when it comes up.
    */
   const beginTalk = useCallback(async () => {
     talkPressedAt.current = performance.now();
@@ -785,6 +801,30 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     // done, which is the release's to answer.
     if (talkLatched.current) return;
     const session = ensureVoiceSession();
+    // The press is what opens a capture device, and the call under it may
+    // have been opened by a typed ask, which asked the system for nothing.
+    // So a press against anything but a granted microphone asks before the
+    // turn opens: refused, the press is dropped here — before its device
+    // request could fail a standing call that was carrying the typed
+    // conversation fine.
+    if (microphoneStatus !== "granted") {
+      const pressedAt = talkPressedAt.current;
+      const permission = await window.sidecar.requestMicrophone();
+      setMicrophoneStatus(permission);
+      if (permission !== "granted") {
+        // Said where the device failure used to land it: the caption strip.
+        setVoiceError(
+          "The talk key needs the microphone. Allow it in System Settings, " +
+            "under Privacy & Security, Microphone — or type to Luke instead.",
+        );
+        return;
+      }
+      // The system's prompt can outlive the press that raised it. A key
+      // released — or pressed again — while it stood has no turn left to
+      // open here: opening one would put a live microphone under a key
+      // that is already up.
+      if (talkPressedAt.current !== pressedAt) return;
+    }
     session.beginTurn();
     const press = talkKeyPress({ latched: false, microphoneCall: session.microphoneCall });
     // A press against no call — or against Luke's own speak-only call, which
@@ -796,7 +836,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     // `connect` inside stands Luke's own call down if one is open: the
     // developer pressing the key always gets the developer's call.
     await startMicrophone();
-  }, [ensureVoiceSession, startMicrophone]);
+  }, [ensureVoiceSession, microphoneStatus, startMicrophone]);
 
   /**
    * The talk key coming up. How long it was held is the whole of the decision:
@@ -816,7 +856,17 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       latched: talkLatched.current,
     });
     if (release === TALK_KEY_RELEASE.LATCH) {
-      talkLatched.current = true;
+      // A latch keeps a turn open past the release, so it needs a turn to
+      // keep: pending counts — the tap-to-open flow latches while its call is
+      // still on the way — but a press that opened none, because the
+      // permission prompt or a failed device swallowed it, must not latch, or
+      // the next press would read as the end of a turn nobody is holding.
+      if (
+        voiceSession.current?.turnPending === true ||
+        voiceStatusNow() === REALTIME_STATUS.LISTENING
+      ) {
+        talkLatched.current = true;
+      }
       return;
     }
     talkLatched.current = false;
@@ -834,35 +884,36 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     ) {
       setTalkOpening(false);
     }
-  }, []);
+  }, [voiceStatusNow]);
 
   /**
-   * A typed ask to Luke himself. It rides the same call the talk key opens —
-   * permission, connect, then the turn — and opens the same kind of turn:
-   * typing is the developer asking in their own words, so the turn may carry
-   * a tool the way a spoken one may, behind the same roster gauntlet. Answers
-   * with why the ask could not go, or nothing when it did — the reply is
-   // SAFETY: The preceding check establishes the asserted contract.
-   * spoken, and its words land under the panel as the answer.
+   * A typed ask to Luke himself. It rides the same call the talk key opens
+   * and opens the same kind of turn: typing is the developer asking in their
+   * own words, so the turn may carry a tool the way a spoken one may, behind
+   * the same roster gauntlet. But it asks the system for nothing on the way:
+   * typing opens no capture device, and the reply arrives on the call's
+   * receiving half, so a typed ask goes whether or not the system would let
+   * a press capture. Answers with why the ask could not go, or nothing when
+   * it did — the reply is spoken, and its words land under the panel as the
+   * answer.
    */
   const askLuke = useCallback(
     async (text: string): Promise<string | undefined> => {
       const session = ensureVoiceSession();
-      let microphone: MicrophoneStatus = "granted";
       // Luke's own speak-only call cannot carry a typed ask — it was sent no
       // roster to validate one against — so it counts as no call here, and
       // `connect` inside stands it down for the developer's own. A microphone
       // call still connecting is awaited, not doubled.
       if (!session.isConnected || !session.microphoneCall) {
-        microphone = await startMicrophone();
+        await startConversation();
       }
       if (session.sendText(text)) {
         setTypedAsk(true);
         return undefined;
       }
-      return askRefusal(session.status, microphone);
+      return askRefusal(session.status);
     },
-    [ensureVoiceSession, startMicrophone],
+    [ensureVoiceSession, startConversation],
   );
 
   const discardListening = useCallback(() => {
@@ -911,11 +962,13 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     if (options.voice !== undefined) heardVoice.current = options.voice;
     voiceRestartDue.current = decided.due;
     if (decided.action !== VOICE_RESTART.RESTART) return;
+    // Reconnecting is the call's act, not a press: the device the old call
+    // held went with its close, and the next press asks for its own.
     void (async () => {
       await voiceSession.current?.close();
-      await startMicrophone();
+      await startConversation();
     })();
-  }, [options.voice, startMicrophone, voiceStatus]);
+  }, [options.voice, startConversation, voiceStatus]);
 
   const activeStream = activeVoiceStream({
     status: voiceStatus,
@@ -978,8 +1031,8 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
 
   // An exchange going live outranks the clock: the conversation has moved on,
   // and a fault the turn hid must not come back once the words finish.
-  // `startMicrophone` clears the calls that have to reconnect; this clears the
-  // one that carried a mid-call error and never dropped.
+  // `startConversation` clears the calls that have to reconnect; this clears
+  // the one that carried a mid-call error and never dropped.
   useEffect(() => {
     if (voiceExchangeActive(voiceStatus)) setVoiceError(undefined);
   }, [voiceStatus]);

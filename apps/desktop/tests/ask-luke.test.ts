@@ -7,27 +7,29 @@ test("a refused ask is diagnosed from how far the voice loop got", () => {
   // Voice off is the one refusal with a fix the developer can go and do, so
   // it names where the fix lives — and both ways in, because naming only the
   // key would send a signed-in developer to buy one they do not need.
-  assert.match(askRefusal(REALTIME_STATUS.UNAVAILABLE, "granted"), /Sign in/);
-  assert.match(askRefusal(REALTIME_STATUS.UNAVAILABLE, "granted"), /OpenAI key/);
-  assert.match(askRefusal(REALTIME_STATUS.UNAVAILABLE, "granted"), /Settings/);
+  assert.match(askRefusal(REALTIME_STATUS.UNAVAILABLE), /Sign in/);
+  assert.match(askRefusal(REALTIME_STATUS.UNAVAILABLE), /OpenAI key/);
+  assert.match(askRefusal(REALTIME_STATUS.UNAVAILABLE), /Settings/);
   // An open microphone is the developer's own turn, not a fault.
-  assert.match(askRefusal(REALTIME_STATUS.LISTENING, "granted"), /microphone is open/i);
-  assert.match(askRefusal(REALTIME_STATUS.CONNECTING, "granted"), /connecting/i);
+  assert.match(askRefusal(REALTIME_STATUS.LISTENING), /microphone is open/i);
+  assert.match(askRefusal(REALTIME_STATUS.CONNECTING), /connecting/i);
   // The failure's own message lands on the caption strip directly below the
   // field, so this one sends nobody to a settings page.
-  assert.doesNotMatch(askRefusal(REALTIME_STATUS.FAILED, "granted"), /Settings/);
+  assert.doesNotMatch(askRefusal(REALTIME_STATUS.FAILED), /Settings/);
 });
 
-test("a missing microphone explains the conversation, not the keystroke", () => {
-  // The reply is spoken, so the call needs the device even though typing does
-  // not — the sentence has to say why a text field wants a microphone.
-  for (const microphone of ["denied", "restricted", "not-determined", "unknown"] as const) {
-    const refusal = askRefusal(REALTIME_STATUS.IDLE, microphone);
-    assert.match(refusal, /microphone/i);
-    assert.match(refusal, /out loud/i);
+test("no refusal sends a typed ask after the microphone permission", () => {
+  // Typing opens no capture device and the reply arrives on the call's
+  // receiving half, so a typed ask goes whether or not the system would let
+  // a press capture. The one microphone sentence left is the developer's own
+  // open turn, which is a turn under way, not a permission.
+  for (const status of Object.values(REALTIME_STATUS)) {
+    if (status === REALTIME_STATUS.LISTENING) continue;
+    assert.doesNotMatch(askRefusal(status), /microphone/i);
+    assert.doesNotMatch(askRefusal(status), /allow/i);
   }
 });
 
 test("a failure the loop cannot name still answers with something to do", () => {
-  assert.ok(askRefusal(REALTIME_STATUS.READY, "granted").length > 0);
+  assert.ok(askRefusal(REALTIME_STATUS.READY).length > 0);
 });
